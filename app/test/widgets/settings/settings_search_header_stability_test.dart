@@ -32,7 +32,9 @@ Widget _buildHarness() {
         GlobalCupertinoLocalizations.delegate,
       ],
       supportedLocales: AppLocalizations.supportedLocales,
-      home: Scaffold(body: SettingsDrawer()),
+      home: Scaffold(
+        body: SettingsDrawer(),
+      ),
     ),
   );
 }

@@ -31,9 +31,9 @@ class TaskIntegrationProvider extends ChangeNotifier {
     Future<bool> Function(String appKey)? setDefaultTaskIntegrationFn,
     Future<TaskIntegrationsResponse?> Function()? fetchStatus,
     this.statusTimeout = const Duration(seconds: 45),
-  }) : _setDefaultTaskIntegration = setDefaultTaskIntegrationFn ?? setDefaultTaskIntegration,
-       _fetchStatus = fetchStatus ?? getTaskIntegrations,
-       _selectedApp = PlatformService.isApple ? TaskIntegrationApp.appleReminders : TaskIntegrationApp.googleTasks;
+  })  : _setDefaultTaskIntegration = setDefaultTaskIntegrationFn ?? setDefaultTaskIntegration,
+        _fetchStatus = fetchStatus ?? getTaskIntegrations,
+        _selectedApp = PlatformService.isApple ? TaskIntegrationApp.appleReminders : TaskIntegrationApp.googleTasks;
 
   TaskIntegrationApp get selectedApp => _selectedApp;
   Map<String, dynamic> get connectionDetails => _connectionDetails;
@@ -79,12 +79,16 @@ class TaskIntegrationProvider extends ChangeNotifier {
 
       // The server status DTO deliberately omits provider secrets. Its connected
       // verdict is authoritative; do not require a token on the client.
-      TodoistService().setAuthenticated(_connectionDetails['todoist']?['connected'] == true);
+      TodoistService().setAuthenticated(
+        _connectionDetails['todoist']?['connected'] == true,
+      );
       AsanaService().setAuthenticated(
         _connectionDetails['asana']?['connected'] == true,
         userGid: _connectionDetails['asana']?['user_gid'],
       );
-      GoogleTasksService().setAuthenticated(_connectionDetails['google_tasks']?['connected'] == true);
+      GoogleTasksService().setAuthenticated(
+        _connectionDetails['google_tasks']?['connected'] == true,
+      );
       ClickUpService().setAuthenticated(
         _connectionDetails['clickup']?['connected'] == true,
         userId: _connectionDetails['clickup']?['user_id'],

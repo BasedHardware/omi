@@ -142,7 +142,10 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin implemen
   }
 
   Future askForBluetoothPermissions() async {
-    final attempt = ProductTelemetry.instance.start(ProductJourney.permission, surface: ProductSurface.onboarding);
+    final attempt = ProductTelemetry.instance.start(
+      ProductJourney.permission,
+      surface: ProductSurface.onboarding,
+    );
     try {
       if (Platform.isIOS) {
         PermissionStatus bleStatus = await Permission.bluetooth.request();
@@ -176,7 +179,10 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin implemen
   }
 
   Future askForNotificationPermissions() async {
-    final attempt = ProductTelemetry.instance.start(ProductJourney.permission, surface: ProductSurface.onboarding);
+    final attempt = ProductTelemetry.instance.start(
+      ProductJourney.permission,
+      surface: ProductSurface.onboarding,
+    );
     try {
       var isAllowed = await NotificationService.instance.requestNotificationPermissions();
       updateNotificationPermission(isAllowed);
@@ -199,7 +205,10 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin implemen
   }
 
   Future askForBackgroundPermissions() async {
-    final attempt = ProductTelemetry.instance.start(ProductJourney.permission, surface: ProductSurface.onboarding);
+    final attempt = ProductTelemetry.instance.start(
+      ProductJourney.permission,
+      surface: ProductSurface.onboarding,
+    );
     try {
       await FlutterForegroundTask.requestIgnoreBatteryOptimization();
       var isAllowed = await ForegroundUtil().isIgnoringBatteryOptimizations;
@@ -221,7 +230,10 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin implemen
   }
 
   Future<(bool, PermissionStatus)> askForLocationPermissions() async {
-    final attempt = ProductTelemetry.instance.start(ProductJourney.permission, surface: ProductSurface.onboarding);
+    final attempt = ProductTelemetry.instance.start(
+      ProductJourney.permission,
+      surface: ProductSurface.onboarding,
+    );
     try {
       if (await Permission.location.serviceStatus.isDisabled) {
         Logger.debug('Location service is disabled');
@@ -264,7 +276,10 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin implemen
   }
 
   Future askForMicrophonePermissions() async {
-    final attempt = ProductTelemetry.instance.start(ProductJourney.permission, surface: ProductSurface.onboarding);
+    final attempt = ProductTelemetry.instance.start(
+      ProductJourney.permission,
+      surface: ProductSurface.onboarding,
+    );
     try {
       PermissionStatus micStatus = await Permission.microphone.request();
       Logger.debug('micStatus: $micStatus');
@@ -494,12 +509,12 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin implemen
   DevicePairingBlockedReason? _pairingBlockForAdapter(BluetoothAdapterState state) {
     return switch (state) {
       BluetoothAdapterState.unauthorized => pairingBlockBeforeScan(
-        isAndroid: Platform.isAndroid,
-        androidSdk: _osAndroidSdk,
-        bluetoothGranted: hasBluetoothPermission,
-        locationGranted: hasLocationPermission,
-        adapterOff: false,
-      ),
+          isAndroid: Platform.isAndroid,
+          androidSdk: _osAndroidSdk,
+          bluetoothGranted: hasBluetoothPermission,
+          locationGranted: hasLocationPermission,
+          adapterOff: false,
+        ),
       BluetoothAdapterState.on => null,
       _ => DevicePairingBlockedReason.bluetoothOff,
     };

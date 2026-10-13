@@ -24,11 +24,7 @@ Future<bool> guidedVoicePreflight({ApiSend? probe, Duration timeout = const Dura
         try {
           return await (probe?.call(request) ??
               sendUncaughtApiCall(
-                url: request.url,
-                method: request.method,
-                headers: request.headers,
-                body: request.body,
-              ));
+                  url: request.url, method: request.method, headers: request.headers, body: request.body));
         } on TimeoutException {
           slow = true;
           rethrow;
@@ -49,14 +45,13 @@ Future<bool> guidedVoicePreflight({ApiSend? probe, Duration timeout = const Dura
 }
 
 Future<String> transcribeGuidedAnswer(File file, String language, {Future<http.Response> Function()? upload}) async {
-  final response =
-      await (upload?.call() ??
-              makeMultipartApiCallUnpooled(
-                url: '${Env.apiBaseUrl}v2/voice-message/transcribe',
-                files: [file],
-                fields: {'language': language},
-              ))
-          .timeout(const Duration(seconds: 30));
+  final response = await (upload?.call() ??
+          makeMultipartApiCallUnpooled(
+            url: '${Env.apiBaseUrl}v2/voice-message/transcribe',
+            files: [file],
+            fields: {'language': language},
+          ))
+      .timeout(const Duration(seconds: 30));
   if (response.statusCode != 200) {
     throw const GuidedVoiceFailure('transcribe_http_error');
   }
@@ -70,14 +65,11 @@ Future<String> transcribeGuidedAnswer(File file, String language, {Future<http.R
 /// Device tools are deliberately absent: onboarding must not open a compose or
 /// permission sheet while producing this small receipt. Server quota remains
 /// enforced; its error is handled by the deterministic summary.
-Future<String> askGuidedPayoff(
-  String question,
-  List<String> savedAnswers, {
-  Stream<String> Function(String)? stream,
-  void Function()? onAccepted,
-  ApiStreamingSeams? seams,
-  Duration timeout = const Duration(seconds: 8),
-}) async {
+Future<String> askGuidedPayoff(String question, List<String> savedAnswers,
+    {Stream<String> Function(String)? stream,
+    void Function()? onAccepted,
+    ApiStreamingSeams? seams,
+    Duration timeout = const Duration(seconds: 8)}) async {
   final body = jsonEncode({
     'text': '$question\n\n${savedAnswers.map((s) => '> ${s.replaceAll('\n', '\n> ')}').join('\n\n')}',
     'device_tools': <String>[],
@@ -88,13 +80,12 @@ Future<String> askGuidedPayoff(
     if (!abort.isCompleted) abort.complete();
     client.close();
   });
-  final lines = StreamIterator(
-    stream?.call(body) ??
-        makeStreamingApiCall(
-          url: '${Env.apiBaseUrl}v2/messages',
-          headers: const {'X-Omi-Chat-Failure-Protocol': '1'},
-          body: body,
-          seams: ApiStreamingSeams(
+  final lines = StreamIterator(stream?.call(body) ??
+      makeStreamingApiCall(
+        url: '${Env.apiBaseUrl}v2/messages',
+        headers: const {'X-Omi-Chat-Failure-Protocol': '1'},
+        body: body,
+        seams: ApiStreamingSeams(
             headers: seams?.headers,
             auth: seams?.auth,
             transport: (request) async {
@@ -105,10 +96,8 @@ Future<String> askGuidedPayoff(
               final response = await (seams?.transport(bounded) ?? client.send(bounded));
               if (response.statusCode == 200) onAccepted?.call();
               return response;
-            },
-          ),
-        ),
-  );
+            }),
+      ));
   final deadline = DateTime.now().add(timeout);
   try {
     while (await lines.moveNext().timeout(deadline.difference(DateTime.now()))) {

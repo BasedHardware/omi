@@ -46,7 +46,11 @@ final class _TestEnvFields implements EnvFields {
   bool? get useWebAuth => false;
 }
 
-Widget _buildHarness({required Widget child, required double textScale, required double width}) {
+Widget _buildHarness({
+  required Widget child,
+  required double textScale,
+  required double width,
+}) {
   return ChangeNotifierProvider<AppProvider>.value(
     value: AppProvider(),
     child: MaterialApp(
@@ -58,7 +62,10 @@ Widget _buildHarness({required Widget child, required double textScale, required
       ],
       supportedLocales: AppLocalizations.supportedLocales,
       home: MediaQuery(
-        data: MediaQueryData(size: Size(width, 844), textScaler: TextScaler.linear(textScale)),
+        data: MediaQueryData(
+          size: Size(width, 844),
+          textScaler: TextScaler.linear(textScale),
+        ),
         child: child,
       ),
     ),
@@ -82,7 +89,13 @@ void main() {
     const testWidth = 390.0;
 
     for (final scale in textScales) {
-      await tester.pumpWidget(_buildHarness(textScale: scale, width: testWidth, child: const AiAppGeneratorPage()));
+      await tester.pumpWidget(
+        _buildHarness(
+          textScale: scale,
+          width: testWidth,
+          child: const AiAppGeneratorPage(),
+        ),
+      );
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 500));
 

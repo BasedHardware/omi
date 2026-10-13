@@ -20,10 +20,10 @@ class IntegrationProvider extends ChangeNotifier {
     IntegrationDeleter? deleteStatus,
     IntegrationPrefWriter? persistPref,
     this.statusTimeout = const Duration(seconds: 45),
-  }) : _fetchStatus = fetchStatus ?? getIntegration,
-       _saveStatus = saveStatus ?? saveIntegration,
-       _deleteStatus = deleteStatus ?? deleteIntegration,
-       _persistPref = persistPref ?? _defaultPersistPref;
+  })  : _fetchStatus = fetchStatus ?? getIntegration,
+        _saveStatus = saveStatus ?? saveIntegration,
+        _deleteStatus = deleteStatus ?? deleteIntegration,
+        _persistPref = persistPref ?? _defaultPersistPref;
 
   final IntegrationStatusFetcher _fetchStatus;
   final IntegrationSaver _saveStatus;
@@ -87,16 +87,14 @@ class IntegrationProvider extends ChangeNotifier {
     try {
       final keys = trackedAppKeys;
       // A malformed or unresponsive service must not strand all other rows.
-      final responses = await Future.wait(
-        keys.map((key) async {
-          try {
-            final response = await Future.sync(() => _fetchStatus(key)).timeout(statusTimeout);
-            return response?.appKey == key ? response : null;
-          } catch (_) {
-            return null;
-          }
-        }),
-      );
+      final responses = await Future.wait(keys.map((key) async {
+        try {
+          final response = await Future.sync(() => _fetchStatus(key)).timeout(statusTimeout);
+          return response?.appKey == key ? response : null;
+        } catch (_) {
+          return null;
+        }
+      }));
       if (!isCurrent()) {
         completeSync(ProductOutcome.superseded);
         return;

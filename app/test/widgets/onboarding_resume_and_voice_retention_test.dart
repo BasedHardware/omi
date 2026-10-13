@@ -3,12 +3,8 @@ import 'package:omi/pages/onboarding/guided_voice_controller.dart';
 import 'package:omi/pages/onboarding/wrapper.dart';
 import '../providers/guided_voice_controller_test.dart' show FakeVoiceIO;
 
-Future<void> _answerAll(
-  FakeVoiceIO io,
-  GuidedVoiceController flow, {
-  required String goal,
-  required String memory,
-}) async {
+Future<void> _answerAll(FakeVoiceIO io, GuidedVoiceController flow,
+    {required String goal, required String memory}) async {
   await flow.start();
   for (var i = 0; i < 4; i++) {
     io.text = i == 3 ? goal : '$memory $i';

@@ -193,8 +193,7 @@ class _TaskIntegrationsPageState extends State<TaskIntegrationsPage> with Widget
 
   bool _shouldShowSettingsIcon() {
     final selected = context.read<TaskIntegrationProvider>().selectedApp;
-    final hasSettings =
-        (selected == TaskIntegrationApp.asana && AsanaService().isAuthenticated) ||
+    final hasSettings = (selected == TaskIntegrationApp.asana && AsanaService().isAuthenticated) ||
         (selected == TaskIntegrationApp.clickup && ClickUpService().isAuthenticated) ||
         (selected == TaskIntegrationApp.todoist && TodoistService().isAuthenticated) ||
         (selected == TaskIntegrationApp.googleTasks && GoogleTasksService().isAuthenticated);
@@ -389,10 +388,7 @@ class _TaskIntegrationsPageState extends State<TaskIntegrationsPage> with Widget
       trailing = Container(
         width: 24,
         height: 24,
-        decoration: BoxDecoration(
-          shape: BoxShape.circle,
-          border: Border.all(color: OmiColors.border, width: 2),
-        ),
+        decoration: BoxDecoration(shape: BoxShape.circle, border: Border.all(color: OmiColors.border, width: 2)),
       );
     }
 
@@ -479,9 +475,8 @@ class _TaskIntegrationsPageState extends State<TaskIntegrationsPage> with Widget
               if (_pendingAuthApp != null) ...[
                 Text(context.l10n.completeAuthBrowser, style: OmiType.subhead),
                 TextButton(
-                  onPressed: isLoading ? null : () => _loadFromBackend(forceRefresh: true),
-                  child: Text(context.l10n.tryAgain),
-                ),
+                    onPressed: isLoading ? null : () => _loadFromBackend(forceRefresh: true),
+                    child: Text(context.l10n.tryAgain)),
               ],
               // App List
               Expanded(

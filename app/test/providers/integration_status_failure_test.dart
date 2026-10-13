@@ -21,12 +21,11 @@ void main() {
   test('one malformed status leaves a terminal retry row without hiding successful services', () async {
     var fail = true;
     final provider = IntegrationProvider(
-      fetchStatus: (key) async {
-        if (key == 'gmail' && fail) throw const FormatException('malformed response');
-        return IntegrationResponse(appKey: key, connected: true);
-      },
-      persistPref: (_, __) async {},
-    );
+        fetchStatus: (key) async {
+          if (key == 'gmail' && fail) throw const FormatException('malformed response');
+          return IntegrationResponse(appKey: key, connected: true);
+        },
+        persistPref: (_, __) async {});
     addTearDown(provider.dispose);
     await provider.loadFromBackend();
     expect(provider.hasLoaded, isTrue);
@@ -42,11 +41,10 @@ void main() {
   testWidgets('a nonresponding integration has a bounded status read and ignores its late reply', (tester) async {
     final pending = Completer<IntegrationResponse?>();
     final provider = IntegrationProvider(
-      statusTimeout: const Duration(seconds: 1),
-      fetchStatus: (key) =>
-          key == 'gmail' ? pending.future : Future.value(IntegrationResponse(appKey: key, connected: true)),
-      persistPref: (_, __) async {},
-    );
+        statusTimeout: const Duration(seconds: 1),
+        fetchStatus: (key) =>
+            key == 'gmail' ? pending.future : Future.value(IntegrationResponse(appKey: key, connected: true)),
+        persistPref: (_, __) async {});
     addTearDown(provider.dispose);
     final load = provider.loadFromBackend();
     await tester.pump(const Duration(seconds: 2));
@@ -63,9 +61,8 @@ void main() {
     final old = Completer<IntegrationResponse?>();
     var fresh = false;
     final provider = IntegrationProvider(
-      fetchStatus: (key) => fresh ? Future.value(IntegrationResponse(appKey: key, connected: true)) : old.future,
-      persistPref: (_, __) async {},
-    );
+        fetchStatus: (key) => fresh ? Future.value(IntegrationResponse(appKey: key, connected: true)) : old.future,
+        persistPref: (_, __) async {});
     addTearDown(provider.dispose);
     final first = provider.loadFromBackend();
     fresh = true;
@@ -77,12 +74,9 @@ void main() {
   });
 
   test('task read failures preserve verified grants and recover on retry', () async {
-    TaskIntegrationsResponse? response = TaskIntegrationsResponse(
-      integrations: {
-        'todoist': {'app_key': 'todoist', 'connected': true},
-      },
-      defaultApp: 'todoist',
-    );
+    TaskIntegrationsResponse? response = TaskIntegrationsResponse(integrations: {
+      'todoist': {'app_key': 'todoist', 'connected': true}
+    }, defaultApp: 'todoist');
     final provider = TaskIntegrationProvider(fetchStatus: () async => response);
     addTearDown(provider.dispose);
     provider.clearUserData();
@@ -104,10 +98,8 @@ void main() {
 
   testWidgets('task timeout ends loading and late results cannot resurrect a cleared account', (tester) async {
     final pending = Completer<TaskIntegrationsResponse?>();
-    final provider = TaskIntegrationProvider(
-      fetchStatus: () => pending.future,
-      statusTimeout: const Duration(seconds: 1),
-    );
+    final provider =
+        TaskIntegrationProvider(fetchStatus: () => pending.future, statusTimeout: const Duration(seconds: 1));
     addTearDown(provider.dispose);
     provider.clearUserData();
     final load = provider.loadFromBackend();
@@ -117,13 +109,9 @@ void main() {
     expect(provider.isLoading, isFalse);
     expect(provider.hasLoadError, isTrue);
     provider.clearUserData();
-    pending.complete(
-      TaskIntegrationsResponse(
-        integrations: {
-          'todoist': {'app_key': 'todoist', 'connected': true},
-        },
-      ),
-    );
+    pending.complete(TaskIntegrationsResponse(integrations: {
+      'todoist': {'app_key': 'todoist', 'connected': true}
+    }));
     await tester.pump();
     expect(provider.hasLoaded, isFalse);
     expect(provider.isAppConnected(TaskIntegrationApp.todoist), isFalse);
@@ -133,9 +121,8 @@ void main() {
     final old = Completer<TaskIntegrationsResponse?>();
     var fresh = false;
     final provider = TaskIntegrationProvider(
-      fetchStatus: () =>
-          fresh ? Future.value(TaskIntegrationsResponse(integrations: {}, defaultApp: 'asana')) : old.future,
-    );
+        fetchStatus: () =>
+            fresh ? Future.value(TaskIntegrationsResponse(integrations: {}, defaultApp: 'asana')) : old.future);
     addTearDown(provider.dispose);
     final first = provider.loadFromBackend();
     fresh = true;
@@ -147,9 +134,7 @@ void main() {
   testWidgets('default selection deadline preserves the previous choice and ignores late acceptance', (tester) async {
     final pending = Completer<bool>();
     final provider = TaskIntegrationProvider(
-      setDefaultTaskIntegrationFn: (_) => pending.future,
-      statusTimeout: const Duration(seconds: 1),
-    );
+        setDefaultTaskIntegrationFn: (_) => pending.future, statusTimeout: const Duration(seconds: 1));
     addTearDown(provider.dispose);
     final previous = provider.selectedApp;
     bool? saved;
@@ -164,10 +149,8 @@ void main() {
 
   test('a status read crossing a successful default write cannot restore the old default', () async {
     final pending = Completer<TaskIntegrationsResponse?>();
-    final provider = TaskIntegrationProvider(
-      fetchStatus: () => pending.future,
-      setDefaultTaskIntegrationFn: (_) async => true,
-    );
+    final provider =
+        TaskIntegrationProvider(fetchStatus: () => pending.future, setDefaultTaskIntegrationFn: (_) async => true);
     addTearDown(provider.dispose);
     final read = provider.loadFromBackend();
     await provider.setSelectedApp(TaskIntegrationApp.todoist);
@@ -182,7 +165,7 @@ void main() {
       'integrations': {
         for (final key in keys) key: {'app_key': key, 'connected': true},
       },
-      'default_app': 'google_tasks',
+      'default_app': 'google_tasks'
     });
     final provider = TaskIntegrationProvider(fetchStatus: () async => reply);
     addTearDown(provider.dispose);
@@ -193,7 +176,7 @@ void main() {
       TaskIntegrationApp.todoist,
       TaskIntegrationApp.asana,
       TaskIntegrationApp.googleTasks,
-      TaskIntegrationApp.clickup,
+      TaskIntegrationApp.clickup
     ]) {
       expect(provider.isAppConnected(app), isTrue, reason: app.key);
     }

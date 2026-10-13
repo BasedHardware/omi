@@ -61,10 +61,7 @@ void main() {
     expect(_produced(adapter), isEmpty);
 
     world.controller.onMessageEventReceived(
-      ConversationEvent(
-        memory: _conversation(id: 'late'),
-        messages: const [],
-      ),
+      ConversationEvent(memory: _conversation(id: 'late'), messages: const []),
     );
     await world.settle();
     await _flush();
@@ -91,10 +88,7 @@ void main() {
     world.emitNativeState(PhoneMicCaptureState.running);
     await world.settle();
     world.controller.onMessageEventReceived(
-      ConversationEvent(
-        memory: _conversation(id: 'finalized'),
-        messages: const [],
-      ),
+      ConversationEvent(memory: _conversation(id: 'finalized'), messages: const []),
     );
     await world.settle();
 
@@ -143,10 +137,7 @@ void main() {
     addTearDown(provider.dispose);
 
     provider.onMessageEventReceived(
-      ConversationEvent(
-        memory: _conversation(id: 'gone', discarded: true),
-        messages: const [],
-      ),
+      ConversationEvent(memory: _conversation(id: 'gone', discarded: true), messages: const []),
     );
     await _flush();
 

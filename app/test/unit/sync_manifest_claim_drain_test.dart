@@ -52,22 +52,19 @@ void main() {
       _Listener(),
       uploadGate: SyncUploadGate(
         limiter: SyncRateLimiter.instance,
-        uploader:
-            (
-              files, {
-              onUploadProgress,
-              conversationId,
-              captureEvidence,
-              recordingSessionId,
-              audioStartSeconds,
-              audioEndSeconds,
-              claimLiveCapture = false,
-              geolocation,
-            }) async {
-              claims.add(claimLiveCapture);
-              batchFileCounts.add(files.length);
-              return UploadFilesResult.queued('job-${claims.length}');
-            },
+        uploader: (files,
+            {onUploadProgress,
+            conversationId,
+            captureEvidence,
+            recordingSessionId,
+            audioStartSeconds,
+            audioEndSeconds,
+            claimLiveCapture = false,
+            geolocation}) async {
+          claims.add(claimLiveCapture);
+          batchFileCounts.add(files.length);
+          return UploadFilesResult.queued('job-${claims.length}');
+        },
         fairUseStatusLoader: () async => {'stage': 'none'},
       ),
     );
@@ -163,12 +160,10 @@ void main() {
         }
         root = parent;
       }
-      final spec =
-          jsonDecode(File('${root.path}/docs/api-reference/app-client-openapi.json').readAsStringSync())
-              as Map<String, dynamic>;
-      final files =
-          (((spec['components'] as Map)['schemas'] as Map)['SyncCaptureManifestRequest'] as Map)['properties']['files']
-              as Map;
+      final spec = jsonDecode(File('${root.path}/docs/api-reference/app-client-openapi.json').readAsStringSync())
+          as Map<String, dynamic>;
+      final files = (((spec['components'] as Map)['schemas'] as Map)['SyncCaptureManifestRequest'] as Map)['properties']
+          ['files'] as Map;
 
       expect(syncUploadBatchMaxFiles, lessThanOrEqualTo(files['maxItems'] as int));
     });

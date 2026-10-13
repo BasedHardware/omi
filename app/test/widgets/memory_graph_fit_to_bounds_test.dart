@@ -23,7 +23,7 @@ Future<Map<String, dynamic>> _sampleFiveNodeGraph() async => {
     {'source_id': '1', 'target_id': '3', 'label': 'works_at'},
     {'source_id': '1', 'target_id': '4', 'label': 'knows'},
     {'source_id': '1', 'target_id': '5', 'label': 'goes_to'},
-  ],
+  ]
 };
 
 Widget _app(Widget home) {
@@ -79,7 +79,15 @@ void main() {
     });
 
     testWidgets('OnboardingKnowledgeGraphStep configures MemoryGraphPage with fitToBounds', (tester) async {
-      await tester.pumpWidget(_app(Scaffold(body: OnboardingKnowledgeGraphStep(onContinue: () {}))));
+      await tester.pumpWidget(
+        _app(
+          Scaffold(
+            body: OnboardingKnowledgeGraphStep(
+              onContinue: () {},
+            ),
+          ),
+        ),
+      );
 
       final graphPage = tester.widget<MemoryGraphPage>(find.byType(MemoryGraphPage));
       expect(graphPage.fitToBounds, isTrue);

@@ -142,9 +142,8 @@ void main() {
     expect(flow.payoffSource, 'fallback');
   });
 
-  testWidgets('failure offers same-clip retry without claiming Recording Paused; confirmation can skip', (
-    tester,
-  ) async {
+  testWidgets('failure offers same-clip retry without claiming Recording Paused; confirmation can skip',
+      (tester) async {
     final io = ExperienceIO()..transcriptionFails = true;
     final flow = GuidedVoiceController(io);
     addTearDown(flow.dispose);

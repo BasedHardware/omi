@@ -13,7 +13,7 @@ abstract class BaseIntegrationService {
   final String oauthAppKey;
 
   BaseIntegrationService({required this.appKey, required this.prefKey, String? oauthAppKey})
-    : oauthAppKey = oauthAppKey ?? appKey;
+      : oauthAppKey = oauthAppKey ?? appKey;
 
   bool get isAuthenticated {
     return SharedPreferencesUtil().getBool(prefKey);

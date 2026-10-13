@@ -68,18 +68,18 @@ class _Syncs {
 
 class _TrackingCaptureProvider extends CaptureProvider {
   _TrackingCaptureProvider()
-    : super(
-        walService: _Wal(),
-        processInProgressConversation: () => Completer<CreateConversationResponse?>().future,
-        connectivity: CaptureConnectivityBoundary(
-          initiallyConnected: true,
-          changes: const Stream.empty(),
-          isConnected: () => true,
-        ),
-        bleListeners: _NoopBle(),
-        inProgressConversationLoader: () async {},
-        localSegmentStore: LocalSegmentStore.disabled(),
-      );
+      : super(
+          walService: _Wal(),
+          processInProgressConversation: () => Completer<CreateConversationResponse?>().future,
+          connectivity: CaptureConnectivityBoundary(
+            initiallyConnected: true,
+            changes: const Stream.empty(),
+            isConnected: () => true,
+          ),
+          bleListeners: _NoopBle(),
+          inProgressConversationLoader: () async {},
+          localSegmentStore: LocalSegmentStore.disabled(),
+        );
 
   var forceProcessingCalls = 0;
 
@@ -167,8 +167,10 @@ void main() {
         value: home,
         child: MaterialApp(
           home: Builder(
-            builder: (context) =>
-                TextButton(onPressed: () => switchHomeToConversationsTab(context), child: const Text('go')),
+            builder: (context) => TextButton(
+              onPressed: () => switchHomeToConversationsTab(context),
+              child: const Text('go'),
+            ),
           ),
         ),
       ),
@@ -255,9 +257,9 @@ Future<_Harness> _pumpCapturingPage(WidgetTester tester, {bool heard = true}) as
             body: Center(
               child: TextButton(
                 onPressed: () {
-                  Navigator.of(
-                    context,
-                  ).push(MaterialPageRoute<void>(builder: (_) => const ConversationCapturingPage()));
+                  Navigator.of(context).push(
+                    MaterialPageRoute<void>(builder: (_) => const ConversationCapturingPage()),
+                  );
                 },
                 child: const Text('open-capture'),
               ),

@@ -36,11 +36,13 @@ SignInFailedErrorClass classifySignInFailure(Object error) {
       'user-disabled' ||
       'user-not-found' ||
       'wrong-password' ||
-      'invalid-verification-code' => SignInFailedErrorClass.credential,
+      'invalid-verification-code' =>
+        SignInFailedErrorClass.credential,
       'operation-not-allowed' ||
       'app-not-authorized' ||
       'invalid-api-key' ||
-      'configuration-not-found' => SignInFailedErrorClass.configuration,
+      'configuration-not-found' =>
+        SignInFailedErrorClass.configuration,
       _ => SignInFailedErrorClass.unknown,
     };
   }

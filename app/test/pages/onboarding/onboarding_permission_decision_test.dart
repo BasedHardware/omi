@@ -31,7 +31,11 @@ void main() {
       isTrue,
     );
     expect(
-      log.claim(permission: OnboardingPermissionResultPermission.location, granted: false, permanentlyDenied: true),
+      log.claim(
+        permission: OnboardingPermissionResultPermission.location,
+        granted: false,
+        permanentlyDenied: true,
+      ),
       isTrue,
     );
     expect(
@@ -44,7 +48,11 @@ void main() {
       isTrue,
     );
     expect(
-      log.claim(permission: OnboardingPermissionResultPermission.location, granted: false, permanentlyDenied: false),
+      log.claim(
+        permission: OnboardingPermissionResultPermission.location,
+        granted: false,
+        permanentlyDenied: false,
+      ),
       isTrue,
     );
   });
@@ -60,9 +68,7 @@ void main() {
     expect(onboardingPermissionWireName('notifications'), OnboardingPermissionResultPermission.notifications);
     expect(onboardingPermissionWireName('location'), OnboardingPermissionResultPermission.location);
     expect(
-      onboardingPermissionWireName('background_activity'),
-      OnboardingPermissionResultPermission.backgroundActivity,
-    );
+        onboardingPermissionWireName('background_activity'), OnboardingPermissionResultPermission.backgroundActivity);
     expect(onboardingPermissionWireName('bluetooth'), isNull);
   });
 }

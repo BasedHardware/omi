@@ -170,20 +170,17 @@ class GuidedVoiceController extends ChangeNotifier {
   int _promptDurationMs() => _promptViewedAt == null ? 0 : DateTime.now().difference(_promptViewedAt!).inMilliseconds;
 
   void _recordCompletedPrompt({required String result, required bool transcriptPresent, String? failureClass}) {
-    PlatformManager.instance.analytics.track(
-      'Guided Intro Prompt Completed',
-      properties: {
-        'session_id': _sessionId,
-        'source': flowSource,
-        'variant': flowVariant,
-        'prompt_index': promptIndex,
-        'result': result,
-        'duration_ms': _promptDurationMs(),
-        'transcript_present': transcriptPresent,
-        'transcription_path': transcriptionPath,
-        if (failureClass != null) 'failure_class': failureClass,
-      },
-    );
+    PlatformManager.instance.analytics.track('Guided Intro Prompt Completed', properties: {
+      'session_id': _sessionId,
+      'source': flowSource,
+      'variant': flowVariant,
+      'prompt_index': promptIndex,
+      'result': result,
+      'duration_ms': _promptDurationMs(),
+      'transcript_present': transcriptPresent,
+      'transcription_path': transcriptionPath,
+      if (failureClass != null) 'failure_class': failureClass,
+    });
   }
 
   void _recordTerminal({required String completionMode}) {
@@ -199,16 +196,16 @@ class GuidedVoiceController extends ChangeNotifier {
       voiceResult: voiceSaved
           ? 'success'
           : completionMode == 'saved' && _voiceAttempts > 0
-          ? 'failed'
-          : 'skipped',
+              ? 'failed'
+              : 'skipped',
       memorySaved: savedMemoryCount,
       goalResult: goal == null
           ? 'not_present'
           : goal.saved
-          ? 'saved'
-          : goal.keep
-          ? 'failed'
-          : 'skipped',
+              ? 'saved'
+              : goal.keep
+                  ? 'failed'
+                  : 'skipped',
       elapsedMs: _startedAt == null ? 0 : DateTime.now().difference(_startedAt!).inMilliseconds,
     );
   }
@@ -261,10 +258,8 @@ class GuidedVoiceController extends ChangeNotifier {
       if (!_preflightPassed && io is GuidedVoiceExperienceIO) {
         // A slow health check is inconclusive; the final transcription still
         // has the same-clip retry and typed recovery paths.
-        final available = await (io as GuidedVoiceExperienceIO).preflight().timeout(
-          preflightTimeout,
-          onTimeout: () => true,
-        );
+        final available =
+            await (io as GuidedVoiceExperienceIO).preflight().timeout(preflightTimeout, onTimeout: () => true);
         if (!_current(generation)) return;
         if (!available) throw const GuidedVoiceFailure('transcription_unavailable');
         _preflightPassed = true;
@@ -316,19 +311,16 @@ class GuidedVoiceController extends ChangeNotifier {
       error = failure is GuidedVoiceFailure
           ? failure.failureClass
           : !_preflightPassed && io is GuidedVoiceExperienceIO
-          ? 'transcription_unavailable'
-          : 'engine_start_failed';
-      PlatformManager.instance.analytics.track(
-        'Guided Intro Recording Failed',
-        properties: {
-          'session_id': _sessionId,
-          'source': flowSource,
-          'variant': flowVariant,
-          'prompt_index': promptIndex,
-          'failure_class': error!,
-          'transcription_path': transcriptionPath,
-        },
-      );
+              ? 'transcription_unavailable'
+              : 'engine_start_failed';
+      PlatformManager.instance.analytics.track('Guided Intro Recording Failed', properties: {
+        'session_id': _sessionId,
+        'source': flowSource,
+        'variant': flowVariant,
+        'prompt_index': promptIndex,
+        'failure_class': error!,
+        'transcription_path': transcriptionPath,
+      });
       await io.stop();
     }
     _emit();
@@ -386,8 +378,8 @@ class GuidedVoiceController extends ChangeNotifier {
       error = failure is GuidedVoiceFailure
           ? failure.failureClass
           : failure is TimeoutException
-          ? 'transcribe_timeout'
-          : 'transcribe_http_error';
+              ? 'transcribe_timeout'
+              : 'transcribe_http_error';
       _recordCompletedPrompt(result: 'transcription_failed', transcriptPresent: false, failureClass: error);
       _emit();
     }
@@ -739,16 +731,14 @@ class GuidedVoiceController extends ChangeNotifier {
       payoffSource = 'chat';
     } catch (failure) {
       final kind = classifyChatStreamFailure(failure).kind;
-      recordFallback(
-        ApiFallbackEvent(
-          reason: kind == ChatStreamFailureClass.timeout
-              ? ApiFallbackReason.timeout
-              : kind == ChatStreamFailureClass.offline
-              ? ApiFallbackReason.offline
-              : ApiFallbackReason.error,
-          outcome: ApiFallbackOutcome.degraded,
-        ),
-      );
+      recordFallback(ApiFallbackEvent(
+        reason: kind == ChatStreamFailureClass.timeout
+            ? ApiFallbackReason.timeout
+            : kind == ChatStreamFailureClass.offline
+                ? ApiFallbackReason.offline
+                : ApiFallbackReason.error,
+        outcome: ApiFallbackOutcome.degraded,
+      ));
       // Saved cards and a short acknowledgment need no network or repeated text.
     } finally {
       if (!_disposed && !_payoffContinued) {
@@ -762,15 +752,13 @@ class GuidedVoiceController extends ChangeNotifier {
   void _recordPayoffShown() {
     if (_payoffShown) return;
     _payoffShown = true;
-    const TypedEvents().emit(
-      GuidedIntroPayoffShown(
-        memoriesCount: savedAnswers.length,
-        answerSource: payoffSource == 'chat'
-            ? GuidedIntroPayoffShownAnswerSource.chat
-            : GuidedIntroPayoffShownAnswerSource.fallback,
-        latencyMs: _payoffStartedAt == null ? 0 : DateTime.now().difference(_payoffStartedAt!).inMilliseconds,
-      ),
-    );
+    const TypedEvents().emit(GuidedIntroPayoffShown(
+      memoriesCount: savedAnswers.length,
+      answerSource: payoffSource == 'chat'
+          ? GuidedIntroPayoffShownAnswerSource.chat
+          : GuidedIntroPayoffShownAnswerSource.fallback,
+      latencyMs: _payoffStartedAt == null ? 0 : DateTime.now().difference(_payoffStartedAt!).inMilliseconds,
+    ));
   }
 
   void continuePayoff() {

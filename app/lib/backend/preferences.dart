@@ -125,8 +125,7 @@ class SharedPreferencesUtil {
 
     final lastVersion = prefs.get('lastKnownAppVersion');
     final bootSchema = prefs.get(BootRecovery.schemaKey);
-    final existingInstall =
-        prefs.get('onboardingCompleted') == true ||
+    final existingInstall = prefs.get('onboardingCompleted') == true ||
         (lastVersion is String && lastVersion.trim().isNotEmpty) ||
         (bootSchema is int && bootSchema > 0);
     final savedDefault = prefs.get(appearanceDefaultMigrationKey);

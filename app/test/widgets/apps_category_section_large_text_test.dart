@@ -37,7 +37,11 @@ App _testApp({required String id, required String name, required String category
   );
 }
 
-Widget _buildHarness({required Widget child, required double textScale, required double width}) {
+Widget _buildHarness({
+  required Widget child,
+  required double textScale,
+  required double width,
+}) {
   return MultiProvider(
     providers: [
       ChangeNotifierProvider<AppProvider>.value(value: AppProvider()),
@@ -52,8 +56,15 @@ Widget _buildHarness({required Widget child, required double textScale, required
       ],
       supportedLocales: AppLocalizations.supportedLocales,
       home: MediaQuery(
-        data: MediaQueryData(size: Size(width, 844), textScaler: TextScaler.linear(textScale)),
-        child: Scaffold(body: SingleChildScrollView(child: child)),
+        data: MediaQueryData(
+          size: Size(width, 844),
+          textScaler: TextScaler.linear(textScale),
+        ),
+        child: Scaffold(
+          body: SingleChildScrollView(
+            child: child,
+          ),
+        ),
       ),
     ),
   );
@@ -85,12 +96,20 @@ void main() {
         _buildHarness(
           textScale: scale,
           width: testWidth,
-          child: CategorySection(categoryName: 'Productivity', apps: testApps, onViewAll: () {}),
+          child: CategorySection(
+            categoryName: 'Productivity',
+            apps: testApps,
+            onViewAll: () {},
+          ),
         ),
       );
       await tester.pump();
 
-      expect(tester.takeException(), isNull, reason: 'CategorySection should not overflow at scale  on width ');
+      expect(
+        tester.takeException(),
+        isNull,
+        reason: 'CategorySection should not overflow at scale  on width ',
+      );
       expect(find.text('Productivity'), findsOneWidget);
       expect(find.text('Productivity Booster Pro'), findsOneWidget);
     }
@@ -101,7 +120,11 @@ void main() {
       _buildHarness(
         textScale: 1.3,
         width: 390.0,
-        child: CategorySection(categoryName: 'Productivity', apps: testApps, onViewAll: () {}),
+        child: CategorySection(
+          categoryName: 'Productivity',
+          apps: testApps,
+          onViewAll: () {},
+        ),
       ),
     );
     await tester.pump();

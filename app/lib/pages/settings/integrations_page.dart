@@ -473,12 +473,9 @@ class _IntegrationsPageState extends State<IntegrationsPage> with WidgetsBinding
                 children: [
                   if (provider.hasLoadError)
                     Padding(
-                      padding: const EdgeInsets.only(bottom: OmiSpacing.md),
-                      child: Semantics(
-                        liveRegion: true,
-                        child: Text(context.l10n.connectionErrorDesc, style: OmiType.subhead),
-                      ),
-                    ),
+                        padding: const EdgeInsets.only(bottom: OmiSpacing.md),
+                        child: Semantics(
+                            liveRegion: true, child: Text(context.l10n.connectionErrorDesc, style: OmiType.subhead))),
                   const ChatAppsIntegrationsEntry(),
                   ...IntegrationApp.values.map((app) => _buildAppTile(app, isLoading)),
                   Padding(

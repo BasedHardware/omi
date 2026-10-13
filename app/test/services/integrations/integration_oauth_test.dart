@@ -34,8 +34,7 @@ void main() {
     final url = Completer<String?>();
     bool? result;
     unawaited(
-      launchIntegrationOAuth(() => url.future, deadline: const Duration(seconds: 1)).then((value) => result = value),
-    );
+        launchIntegrationOAuth(() => url.future, deadline: const Duration(seconds: 1)).then((value) => result = value));
     await tester.pump(const Duration(seconds: 2));
     expect(result, isFalse);
     url.complete('https://example.test/oauth');
@@ -44,13 +43,9 @@ void main() {
 
     final launched = Completer<bool>();
     result = null;
-    unawaited(
-      launchIntegrationOAuth(
-        () async => 'https://example.test/oauth',
-        openBrowser: (_) => launched.future,
-        deadline: const Duration(seconds: 1),
-      ).then((value) => result = value),
-    );
+    unawaited(launchIntegrationOAuth(() async => 'https://example.test/oauth',
+            openBrowser: (_) => launched.future, deadline: const Duration(seconds: 1))
+        .then((value) => result = value));
     await tester.pump();
     await tester.pump(const Duration(seconds: 2));
     expect(result, isFalse);

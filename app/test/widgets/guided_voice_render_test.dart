@@ -64,7 +64,7 @@ void main() {
       'review',
       'payoff-chat',
       'payoff-fallback',
-      'paused',
+      'paused'
     ]) {
       testWidgets('${platform.name} $state at 393x852', (tester) async {
         debugDefaultTargetPlatformOverride = platform;
@@ -124,33 +124,26 @@ void main() {
         final family = platform == TargetPlatform.iOS ? 'SF Pro Display' : 'Roboto';
         final boundary = GlobalKey();
         var continued = false;
-        await tester.pumpWidget(
-          MaterialApp(
-            theme: theme.copyWith(
+        await tester.pumpWidget(MaterialApp(
+          theme: theme.copyWith(
               textTheme: theme.textTheme.apply(fontFamily: family),
-              primaryTextTheme: theme.primaryTextTheme.apply(fontFamily: family),
-            ),
-            localizationsDelegates: const [
-              AppLocalizations.delegate,
-              GlobalMaterialLocalizations.delegate,
-              GlobalWidgetsLocalizations.delegate,
-              GlobalCupertinoLocalizations.delegate,
-            ],
-            supportedLocales: AppLocalizations.supportedLocales,
-            home: RepaintBoundary(
+              primaryTextTheme: theme.primaryTextTheme.apply(fontFamily: family)),
+          localizationsDelegates: const [
+            AppLocalizations.delegate,
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate
+          ],
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: RepaintBoundary(
               key: boundary,
-              child: Scaffold(
-                body: SpeechProfileWidget(controller: flow, goNext: () => continued = true, onSkip: () {}),
-              ),
-            ),
-          ),
-        );
+              child:
+                  Scaffold(body: SpeechProfileWidget(controller: flow, goNext: () => continued = true, onSkip: () {}))),
+        ));
         await tester.pump(const Duration(milliseconds: 300));
         if (state == 'typing') {
           await tester.enterText(
-            find.byKey(const Key('introduction_typed_0')),
-            'I build bicycles and want to finish my next design.',
-          );
+              find.byKey(const Key('introduction_typed_0')), 'I build bicycles and want to finish my next design.');
           await tester.pump(const Duration(milliseconds: 300));
         }
         expect(tester.takeException(), isNull);
@@ -174,14 +167,13 @@ void main() {
               'typing',
               'review',
               'payoff-chat',
-              'payoff-fallback',
+              'payoff-fallback'
             ];
-            final ordinal =
-                (state == 'paused'
-                        ? (platform == TargetPlatform.iOS ? 19 : 20)
-                        : states.indexOf(state) + 1 + (platform == TargetPlatform.iOS ? 0 : 9))
-                    .toString()
-                    .padLeft(3, '0');
+            final ordinal = (state == 'paused'
+                    ? (platform == TargetPlatform.iOS ? 19 : 20)
+                    : states.indexOf(state) + 1 + (platform == TargetPlatform.iOS ? 0 : 9))
+                .toString()
+                .padLeft(3, '0');
             final platformSlug = platform == TargetPlatform.iOS ? 'mobile-ios' : 'mobile-android';
             final file = File('$output/$ordinal-$platformSlug-$state.png');
             await file.parent.create(recursive: true);

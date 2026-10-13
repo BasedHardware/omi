@@ -39,9 +39,8 @@ const _captureEvidenceV1DarkWrite = bool.fromEnvironment('CAPTURE_EVIDENCE_V1_DA
 
 const _captureEvidenceHeaderMaxBytes = 4096;
 
-final _captureClaimRootPattern = RegExp(
-  r'^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$',
-);
+final _captureClaimRootPattern =
+    RegExp(r'^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$');
 final _captureClaimNamePattern = RegExp(r'^[A-Za-z0-9_.\-]{1,255}$');
 
 String _walUploadFileName(Wal wal) =>
@@ -148,8 +147,7 @@ List<Wal> nextSyncUploadBatch(List<Wal> pending, int nowSeconds) {
       ),
     );
   }
-  final indexed = [for (var i = 0; i < pending.length; i++) (pending[i], i)]
-    ..sort((a, b) {
+  final indexed = [for (var i = 0; i < pending.length; i++) (pending[i], i)]..sort((a, b) {
       final byStart = b.$1.timerStart.compareTo(a.$1.timerStart);
       return byStart != 0 ? byStart : a.$2.compareTo(b.$2);
     });

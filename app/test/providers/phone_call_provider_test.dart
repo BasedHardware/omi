@@ -151,7 +151,11 @@ void main() {
   late _RecordingAnalyticsAdapter analytics;
 
   Future<void> emitEvent(Object? event) {
-    return messenger.handlePlatformMessage(eventChannelName, codec.encodeSuccessEnvelope(event), (ByteData? data) {});
+    return messenger.handlePlatformMessage(
+      eventChannelName,
+      codec.encodeSuccessEnvelope(event),
+      (ByteData? data) {},
+    );
   }
 
   setUp(() async {
@@ -204,7 +208,10 @@ void main() {
     await Future<void>.delayed(const Duration(milliseconds: 300));
 
     expect(provider.transcriptionStatus, TranscriptionStatus.noAudio);
-    expect(analytics.events.map((event) => event.$1), contains('Phone Call Transcript Session'));
+    expect(
+      analytics.events.map((event) => event.$1),
+      contains('Phone Call Transcript Session'),
+    );
     final stall = analytics.events.firstWhere((event) => event.$1 == 'Phone Call Transcript Session');
     expect(stall.$2?['ws_accepted'], true);
     expect(stall.$2?['audio_frames_sent'], 0);
@@ -230,7 +237,10 @@ void main() {
     await emitEvent({'type': 'callStateChanged', 'state': 'ended'});
     await Future<void>.delayed(const Duration(milliseconds: 100));
 
-    expect(analytics.events.map((event) => event.$1), contains('Phone Call Transcript Session'));
+    expect(
+      analytics.events.map((event) => event.$1),
+      contains('Phone Call Transcript Session'),
+    );
     final session = analytics.events.firstWhere((event) => event.$1 == 'Phone Call Transcript Session');
     expect(session.$2?['audio_frames_sent'], 0);
     expect(session.$2?['audio_bytes_sent'], 0);
@@ -259,15 +269,12 @@ void main() {
     await emitEvent({
       'type': 'audioData',
       'data': Uint8List.fromList([1, 2, 3, 4]),
-      'channel': 1,
+      'channel': 1
     });
     await Future<void>.delayed(const Duration(milliseconds: 100));
 
-    expect(
-      provider.transcriptionStatus,
-      TranscriptionStatus.active,
-      reason: 'frames flowing again must clear the stall chip',
-    );
+    expect(provider.transcriptionStatus, TranscriptionStatus.active,
+        reason: 'frames flowing again must clear the stall chip');
     expect(socket.sent.length, 1);
   });
 
@@ -329,12 +336,12 @@ void main() {
     await emitEvent({
       'type': 'audioData',
       'data': Uint8List.fromList([1, 2, 3, 4]),
-      'channel': 1,
+      'channel': 1
     });
     await emitEvent({
       'type': 'audioData',
       'data': Uint8List.fromList([5, 6, 7, 8]),
-      'channel': 1,
+      'channel': 1
     });
     await Future<void>.delayed(const Duration(milliseconds: 100));
 
@@ -346,7 +353,7 @@ void main() {
     await emitEvent({
       'type': 'audioData',
       'data': Uint8List.fromList([9, 10, 11, 12]),
-      'channel': 1,
+      'channel': 1
     });
     await Future<void>.delayed(const Duration(milliseconds: 100));
     await emitEvent({'type': 'callStateChanged', 'state': 'ended'});

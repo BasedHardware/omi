@@ -48,7 +48,11 @@ void main() {
       androidSdk: 30,
       iosVersion: 0,
     );
-    analytics.devicePairingBlocked(reason: DevicePairingBlockedReason.bluetoothOff, androidSdk: -1, iosVersion: -2);
+    analytics.devicePairingBlocked(
+      reason: DevicePairingBlockedReason.bluetoothOff,
+      androidSdk: -1,
+      iosVersion: -2,
+    );
     analytics.deviceScanEmpty(afterSeconds: 10);
     analytics.deviceConnectFailed(DeviceConnectFailedErrorClass.initializationFailed);
     analytics.recordingProducedNoConversation(
@@ -75,7 +79,11 @@ void main() {
       permanentlyDenied: false,
       servicesDisabled: true,
     );
-    analytics.devicePairingBlocked(reason: DevicePairingBlockedReason.noAdapter, androidSdk: 34, iosVersion: 0);
+    analytics.devicePairingBlocked(
+      reason: DevicePairingBlockedReason.noAdapter,
+      androidSdk: 34,
+      iosVersion: 0,
+    );
     analytics.devicePairingBlocked(
       reason: DevicePairingBlockedReason.scannerUnavailable,
       androidSdk: 34,

@@ -40,8 +40,7 @@ void main() {
           final loader = FontLoader(family);
           for (final weight in ['Regular', 'Medium', 'Bold']) {
             loader.addFont(
-              Future.value(ByteData.sublistView(File('${fonts.path}/Roboto-$weight.ttf').readAsBytesSync())),
-            );
+                Future.value(ByteData.sublistView(File('${fonts.path}/Roboto-$weight.ttf').readAsBytesSync())));
           }
           await loader.load();
         }
@@ -67,18 +66,16 @@ void main() {
     final previousPalette = OmiColors.active;
     OmiColors.active = OmiPalette.dark;
     addTearDown(() => OmiColors.active = previousPalette);
-    await tester.pumpWidget(
-      RepaintBoundary(
-        key: const Key('hanging-evidence'),
-        child: MaterialApp(
-          debugShowCheckedModeBanner: false,
-          theme: buildOmiTheme().copyWith(platform: TargetPlatform.android),
-          localizationsDelegates: AppLocalizations.localizationsDelegates,
-          supportedLocales: const [Locale('en')],
-          home: page,
-        ),
+    await tester.pumpWidget(RepaintBoundary(
+      key: const Key('hanging-evidence'),
+      child: MaterialApp(
+        debugShowCheckedModeBanner: false,
+        theme: buildOmiTheme().copyWith(platform: TargetPlatform.android),
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: const [Locale('en')],
+        home: page,
       ),
-    );
+    ));
     await tester.pumpAndSettle();
   }
 
@@ -123,12 +120,9 @@ void main() {
     expect(provider.hasLoadError, isTrue);
     expect(find.text('Try Again'), findsNWidgets(4));
     await evidence(tester, '003-mobile-android-integration-retry');
-    reply = TaskIntegrationsResponse(
-      integrations: {
-        'todoist': {'app_key': 'todoist', 'connected': true},
-      },
-      defaultApp: 'todoist',
-    );
+    reply = TaskIntegrationsResponse(integrations: {
+      'todoist': {'app_key': 'todoist', 'connected': true}
+    }, defaultApp: 'todoist');
     await tester.tap(find.text('Todoist'));
     await tester.pumpAndSettle();
     expect(provider.hasLoadError, isFalse);
@@ -141,12 +135,11 @@ void main() {
     final defaults = <String>[];
     final provider = TaskIntegrationProvider(
       fetchStatus: () async => TaskIntegrationsResponse(
-        integrations: connected
-            ? {
-                'todoist': {'app_key': 'todoist', 'connected': true},
-              }
-            : {},
-      ),
+          integrations: connected
+              ? {
+                  'todoist': {'app_key': 'todoist', 'connected': true}
+                }
+              : {}),
       setDefaultTaskIntegrationFn: (key) async {
         defaults.add(key);
         return true;
@@ -154,13 +147,8 @@ void main() {
     );
     addTearDown(provider.dispose);
     provider.clearUserData();
-    await pumpPage(
-      tester,
-      ChangeNotifierProvider.value(
-        value: provider,
-        child: TaskIntegrationsPage(authenticate: (app) async => true),
-      ),
-    );
+    await pumpPage(tester,
+        ChangeNotifierProvider.value(value: provider, child: TaskIntegrationsPage(authenticate: (app) async => true)));
     await tester.tap(find.text('Todoist'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Continue'));

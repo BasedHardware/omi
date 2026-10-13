@@ -45,11 +45,8 @@ class CategorySection extends StatelessWidget {
     final scaler = MediaQuery.textScalerOf(context);
     final direction = Directionality.of(context);
     double lineOf(TextStyle style) {
-      final painter = TextPainter(
-        text: TextSpan(text: 'Ag', style: style),
-        textScaler: scaler,
-        textDirection: direction,
-      )..layout();
+      final painter =
+          TextPainter(text: TextSpan(text: 'Ag', style: style), textScaler: scaler, textDirection: direction)..layout();
       final height = painter.height;
       painter.dispose();
       return height;
@@ -83,7 +80,10 @@ class CategorySection extends StatelessWidget {
             padding: const EdgeInsets.fromLTRB(20, 24, 20, 16),
             child: Row(
               children: [
-                Text(categoryName, style: OmiType.title3),
+                Text(
+                  categoryName,
+                  style: OmiType.title3,
+                ),
                 const Spacer(),
                 if (showViewAll)
                   GestureDetector(
@@ -96,10 +96,8 @@ class CategorySection extends StatelessWidget {
                           decoration: BoxDecoration(color: OmiColors.surface3, borderRadius: OmiRadius.smAll),
                           child: Text(
                             context.l10n.all,
-                            style: OmiType.caption.copyWith(
-                              color: OmiColors.textSecondary,
-                              fontWeight: FontWeight.w600,
-                            ),
+                            style:
+                                OmiType.caption.copyWith(color: OmiColors.textSecondary, fontWeight: FontWeight.w600),
                           ),
                         ),
                         // const SizedBox(width: 8),

@@ -38,16 +38,10 @@ void main() {
     await AnalyticsManager.flushPending(force: true);
     final recording = adapter.events.where((e) => e.eventName == 'Guided Intro Recording Failed').toList();
     final transcription = adapter.events.where((e) => e.eventName == 'Guided Intro Prompt Completed').toList();
-    expect(recording.map((e) => e.properties['failure_class']), [
-      'permission_denied',
-      'permission_permanently_denied',
-      'engine_start_failed',
-    ]);
-    expect(transcription.map((e) => e.properties['failure_class']), [
-      'transcribe_timeout',
-      'transcribe_http_error',
-      'transcribe_empty',
-    ]);
+    expect(recording.map((e) => e.properties['failure_class']),
+        ['permission_denied', 'permission_permanently_denied', 'engine_start_failed']);
+    expect(transcription.map((e) => e.properties['failure_class']),
+        ['transcribe_timeout', 'transcribe_http_error', 'transcribe_empty']);
     for (final event in [...recording, ...transcription]) {
       expect(event.properties['transcription_path'], 'cloud');
       expect(event.properties.keys, isNot(contains('transcript')));
@@ -145,16 +139,12 @@ void main() {
     }
     await AnalyticsManager.flushPending(force: true);
     expect(
-      adapter.events
-          .where((e) => e.eventName == 'Guided Intro Payoff Shown')
-          .map((e) => e.properties['memories_count']),
-      [2, 2, 2],
-    );
-    expect(adapter.events.where((e) => e.eventName == 'fallback_triggered').map((e) => e.properties['reason']), [
-      'timeout',
-      'offline',
-      'error',
-    ]);
+        adapter.events
+            .where((e) => e.eventName == 'Guided Intro Payoff Shown')
+            .map((e) => e.properties['memories_count']),
+        [2, 2, 2]);
+    expect(adapter.events.where((e) => e.eventName == 'fallback_triggered').map((e) => e.properties['reason']),
+        ['timeout', 'offline', 'error']);
   });
   test('guided intro events carry bounded funnel properties without content', () async {
     final adapter = _FakeAnalyticsAdapter();

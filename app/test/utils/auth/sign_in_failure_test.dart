@@ -32,7 +32,10 @@ void main() {
       classifySignInFailure(FirebaseAuthException(code: 'network-request-failed', message: 'secret')),
       SignInFailedErrorClass.network,
     );
-    expect(classifySignInFailure(FirebaseAuthException(code: 'invalid-credential')), SignInFailedErrorClass.credential);
+    expect(
+      classifySignInFailure(FirebaseAuthException(code: 'invalid-credential')),
+      SignInFailedErrorClass.credential,
+    );
     expect(
       classifySignInFailure(FirebaseAuthException(code: 'operation-not-allowed')),
       SignInFailedErrorClass.configuration,

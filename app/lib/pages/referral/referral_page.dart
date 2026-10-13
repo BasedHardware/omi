@@ -51,28 +51,26 @@ class _ReferralPageState extends State<ReferralPage> {
       appBar: AppBar(leading: const OmiBackButton(), title: Text(context.l10n.referralProgram)),
       body: SafeArea(
         child: LayoutBuilder(
-          builder: (context, constraints) => SingleChildScrollView(
-            child: ConstrainedBox(
-              constraints: BoxConstraints(minHeight: constraints.maxHeight),
-              child: _failed
-                  ? OmiErrorState(
-                      message: context.l10n.failedToStartAuth(context.l10n.referralProgram),
-                      onRetry: _openBrowser,
-                    )
-                  : OmiEmptyState(
-                      icon: Icons.open_in_browser,
-                      title: context.l10n.referralProgram,
-                      message: context.l10n.completeAuthInBrowser,
-                      action: OmiButton(
-                        key: const Key('referral-open-browser'),
-                        label: context.l10n.open,
-                        isLoading: _opening,
-                        onPressed: _openBrowser,
-                      ),
-                    ),
-            ),
-          ),
-        ),
+            builder: (context, constraints) => SingleChildScrollView(
+                  child: ConstrainedBox(
+                    constraints: BoxConstraints(minHeight: constraints.maxHeight),
+                    child: _failed
+                        ? OmiErrorState(
+                            message: context.l10n.failedToStartAuth(context.l10n.referralProgram),
+                            onRetry: _openBrowser)
+                        : OmiEmptyState(
+                            icon: Icons.open_in_browser,
+                            title: context.l10n.referralProgram,
+                            message: context.l10n.completeAuthInBrowser,
+                            action: OmiButton(
+                              key: const Key('referral-open-browser'),
+                              label: context.l10n.open,
+                              isLoading: _opening,
+                              onPressed: _openBrowser,
+                            ),
+                          ),
+                  ),
+                )),
       ),
     );
   }
