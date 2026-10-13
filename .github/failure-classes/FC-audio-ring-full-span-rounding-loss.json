@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "id": "FC-audio-ring-full-span-rounding-loss",
+  "violated_contract": "A window that reaches a stored PCM span end must retain every requested whole sample in that span. Floating-point epoch subtraction must not shorten physically sufficient audio below the unchanged live extraction/evidence floor, and physical byte proof must agree with extraction.",
+  "canonical_prevention": "Use the integer stored byte count at exact full-span ends in one shared PCM16 byte-window primitive; retain the existing floor for interior endpoints, skip real gaps and preserve ring eviction. Carry the restored-sample count only as observation metadata and count candidate windows that reach their current physical floor after correction. Pin complete sample delivery at realistic epoch times and multiple sample rates plus capture/send-proof-to-FIFO-runner owner recognition at exactly five seconds, with partial-window/gap/eviction and closed-counter negative guards.",
+  "canonical_prevention_artifact": [
+    "backend/tests/unit/test_owner_audio_placement.py",
+    "backend/tests/unit/test_audio_ring_buffer_alignment.py",
+    "backend/tests/unit/test_audio_ring_buffer_extract.py"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "backend/utils/audio.py",
+    "backend/routers/listen/speaker_audio.py",
+    "backend/utils/observability/speaker_embedding_budget.py"
+  ],
+  "status": "open"
+}

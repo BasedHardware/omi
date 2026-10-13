@@ -8,7 +8,6 @@ from typing import Any, Callable, Dict, List, Optional, TypeVar, cast
 from google.cloud.firestore_v1 import transactional  # type: ignore[reportUnknownMemberType]  # firestore SDK stub gap
 
 from database import _client as _client_mod
-from database import projection_repair
 from database.account_deletion_policy import account_deletion_blocks_access, normalize_account_deletion_status
 from database.firestore_transaction_retry import run_with_transaction_contention_retry
 from database.legal_holds import assert_no_destructive_operation_transaction
@@ -596,8 +595,6 @@ def append_commit(
         ),
         operation_name="memory_ledger_append",
     )
-    if result.get('applied'):
-        projection_repair.enqueue_projection_repairs(uid, result.get('commit'), firestore_client=database)
     return result
 
 
@@ -626,8 +623,6 @@ def append_commit_with_builder(
         ),
         operation_name="memory_ledger_append_with_builder",
     )
-    if result.get('applied'):
-        projection_repair.enqueue_projection_repairs(uid, result.get('commit'), firestore_client=database)
     return result
 
 

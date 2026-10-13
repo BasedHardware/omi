@@ -1499,25 +1499,24 @@ end
 """)
 
 
-def try_acquire_notifications_job_run_lock(token: str, ttl: int = 55 * 60) -> bool:
-    """Acquire the hourly notifications-job run lock. True iff this caller owns it.
+def release_token_lock(key: str, token: str) -> None:
+    """Release a shared Redis lease only while the caller's token owns it."""
+    _RELEASE_NOTIFICATIONS_JOB_RUN_LOCK_LUA(keys=[key], args=[token])
 
-    Cloud Scheduler fires hourly and the Cloud Run task timeout is 3600s, so two
-    executions can overlap. The lock lets an overlapping execution skip the
-    notification section instead of duplicating the pass.
+
+def try_acquire_notifications_job_run_lock(token: str, ttl: int = 55 * 60) -> bool:
+    """Coalesce overlapping hourly notification runs (task timeout: 3600s).
+
+    True only when this token acquires the lease.
     """
     result = r.set(_NOTIFICATIONS_JOB_RUN_LOCK_KEY, token, ex=ttl, nx=True)
     return result is not None
 
 
 def release_notifications_job_run_lock(token: str) -> None:
-    """Release the run lock only if ``token`` still owns it.
-
-    The token keeps a late release from deleting a newer run's lock. Redis
-    errors are swallowed: the key expires via TTL.
-    """
+    """Token-fenced release; Redis failures leave expiry to the TTL."""
     try:
-        _RELEASE_NOTIFICATIONS_JOB_RUN_LOCK_LUA(keys=[_NOTIFICATIONS_JOB_RUN_LOCK_KEY], args=[token])
+        release_token_lock(_NOTIFICATIONS_JOB_RUN_LOCK_KEY, token)
     except Exception as error:
         logger.warning('Failed to release notifications job run lock: %s', error)
 

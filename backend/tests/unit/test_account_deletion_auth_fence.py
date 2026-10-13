@@ -225,3 +225,45 @@ def test_auth_fence_fails_closed_when_the_resolved_data_plane_read_raises(monkey
 
     assert error.value.status_code == 503
     assert error.value.detail == {"code": "account_deletion_state_unavailable", "retryable": True}
+
+
+def test_reset_recovery_runs_only_after_auth_deletion_cutover_and_byok_checks(monkeypatch):
+    from types import SimpleNamespace
+    from utils import locked_content_recovery
+
+    events = []
+    monkeypatch.setattr(endpoints, 'get_user_deletion_wipe_status', lambda uid: events.append('deletion') or None)
+    monkeypatch.setattr(endpoints, '_enforce_cutover_http_if_request', lambda uid, request: events.append('cutover'))
+    monkeypatch.setattr(endpoints, 'validate_byok_request', lambda uid: events.append('byok'))
+    monkeypatch.setattr(locked_content_recovery, 'recover_locked_content', lambda uid: events.append('recovery'))
+    assert (
+        endpoints.get_current_user_uid(authorization='Bearer token', request=SimpleNamespace(method='GET')) == 'old-uid'
+    )
+    assert events == ['deletion', 'cutover', 'byok', 'recovery']
+
+
+def test_deleting_account_never_runs_reset_recovery(monkeypatch):
+    from types import SimpleNamespace
+    from utils import locked_content_recovery
+
+    recovery = MagicMock()
+    monkeypatch.setattr(endpoints, 'get_user_deletion_wipe_status', lambda uid: 'running')
+    monkeypatch.setattr(locked_content_recovery, 'recover_locked_content', recovery)
+    with pytest.raises(HTTPException):
+        endpoints.get_current_user_uid(authorization='Bearer token', request=SimpleNamespace(method='GET'))
+    recovery.assert_not_called()
+
+
+def test_delete_request_does_not_run_reset_recovery(monkeypatch):
+    from types import SimpleNamespace
+    from utils import locked_content_recovery
+
+    recovery = MagicMock()
+    monkeypatch.setattr(endpoints, 'get_user_deletion_wipe_status', lambda uid: None)
+    monkeypatch.setattr(endpoints, '_enforce_cutover_http_if_request', lambda uid, request: None)
+    monkeypatch.setattr(locked_content_recovery, 'recover_locked_content', recovery)
+    assert (
+        endpoints.get_current_user_uid(authorization='Bearer token', request=SimpleNamespace(method='DELETE'))
+        == 'old-uid'
+    )
+    recovery.assert_not_called()
