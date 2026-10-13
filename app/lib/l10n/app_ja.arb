@@ -4046,5 +4046,6 @@
     "onboardingActNoAudioPhone": "まだ声が聞こえません。少し大きな声で話してみてください。",
     "onboardingActDictateBodyOmi": "話すだけでOK。Omiが聞いています。",
     "voiceProfileCardDismissed": "ボイスプロフィールは設定からいつでも設定できます。",
-    "homeNewRecordingButton": "新規録音"
+    "homeNewRecordingButton": "新規録音",
+    "onboardingActNotesLater": "Omiがまだメモを作成中です。ホームに表示されます。"
 }

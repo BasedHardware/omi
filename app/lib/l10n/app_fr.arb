@@ -4081,5 +4081,6 @@
     "onboardingActNoAudioPhone": "On ne vous entend pas encore. Parlez un peu plus fort.",
     "onboardingActDictateBodyOmi": "Parlez simplement. Votre Omi vous écoute.",
     "voiceProfileCardDismissed": "Vous pouvez configurer votre profil vocal à tout moment dans les Réglages.",
-    "homeNewRecordingButton": "Nouvel enregistrement"
+    "homeNewRecordingButton": "Nouvel enregistrement",
+    "onboardingActNotesLater": "Omi rédige encore vos notes. Vous les trouverez sur l'accueil."
 }

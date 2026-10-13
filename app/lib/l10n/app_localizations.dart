@@ -23468,6 +23468,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'New Recording'**
   String get homeNewRecordingButton;
+
+  /// Onboarding activation: shown under the reader's words when Omi's notes took too long; they appear on Home later
+  ///
+  /// In en, this message translates to:
+  /// **'Omi is still writing your notes. You\'ll find them on Home.'**
+  String get onboardingActNotesLater;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

@@ -4088,5 +4088,6 @@
     "onboardingActNoAudioPhone": "Kan ikke høre dig endnu. Prøv at tale lidt højere.",
     "onboardingActDictateBodyOmi": "Bare tal. Din Omi lytter.",
     "voiceProfileCardDismissed": "Du kan altid oprette din stemmeprofil under Indstillinger.",
-    "homeNewRecordingButton": "Ny optagelse"
+    "homeNewRecordingButton": "Ny optagelse",
+    "onboardingActNotesLater": "Omi skriver stadig dine noter. Du finder dem på Hjem."
 }

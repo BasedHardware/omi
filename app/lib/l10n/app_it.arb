@@ -4046,5 +4046,6 @@
     "onboardingActNoAudioPhone": "Non ti sentiamo ancora. Prova a parlare un po' più forte.",
     "onboardingActDictateBodyOmi": "Parla e basta. Il tuo Omi ti ascolta.",
     "voiceProfileCardDismissed": "Puoi configurare il profilo vocale in qualsiasi momento nelle Impostazioni.",
-    "homeNewRecordingButton": "Nuova registrazione"
+    "homeNewRecordingButton": "Nuova registrazione",
+    "onboardingActNotesLater": "Omi sta ancora scrivendo le tue note. Le troverai nella Home."
 }

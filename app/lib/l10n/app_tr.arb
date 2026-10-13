@@ -4081,5 +4081,6 @@
     "onboardingActNoAudioPhone": "Henüz seni duyamıyoruz. Biraz daha yüksek sesle konuşmayı dene.",
     "onboardingActDictateBodyOmi": "Sadece konuş. Omi'n dinliyor.",
     "voiceProfileCardDismissed": "Ses profilini istediğin zaman Ayarlar'dan kurabilirsin.",
-    "homeNewRecordingButton": "Yeni Kayıt"
+    "homeNewRecordingButton": "Yeni Kayıt",
+    "onboardingActNotesLater": "Omi notlarını hâlâ yazıyor. Onları Ana Sayfa'da bulacaksın."
 }

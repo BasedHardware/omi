@@ -13230,4 +13230,7 @@ class AppLocalizationsTe extends AppLocalizations {
 
   @override
   String get homeNewRecordingButton => 'కొత్త రికార్డింగ్';
+
+  @override
+  String get onboardingActNotesLater => 'Omi ఇంకా మీ నోట్స్ రాస్తోంది. మీరు వాటిని హోమ్‌లో చూడవచ్చు.';
 }

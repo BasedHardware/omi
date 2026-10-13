@@ -13218,4 +13218,7 @@ class AppLocalizationsPl extends AppLocalizations {
 
   @override
   String get homeNewRecordingButton => 'Nowe nagranie';
+
+  @override
+  String get onboardingActNotesLater => 'Omi wciąż pisze Twoje notatki. Znajdziesz je na ekranie głównym.';
 }

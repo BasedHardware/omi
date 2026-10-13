@@ -13173,4 +13173,7 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get homeNewRecordingButton => 'Uus salvestus';
+
+  @override
+  String get onboardingActNotesLater => 'Omi kirjutab veel su märkmeid. Leiad need avalehelt.';
 }

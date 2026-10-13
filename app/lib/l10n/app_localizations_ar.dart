@@ -13103,4 +13103,7 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get homeNewRecordingButton => 'تسجيل جديد';
+
+  @override
+  String get onboardingActNotesLater => 'لا يزال Omi يكتب ملاحظاتك. ستجدها في الصفحة الرئيسية.';
 }

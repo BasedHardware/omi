@@ -11483,5 +11483,6 @@
     "onboardingActNoAudioPhone": "এখনও আপনাকে শোনা যাচ্ছে না। একটু জোরে বলে দেখুন।",
     "onboardingActDictateBodyOmi": "শুধু কথা বলুন। আপনার Omi শুনছে।",
     "voiceProfileCardDismissed": "সেটিংসে যেকোনো সময় ভয়েস প্রোফাইল সেট করতে পারেন।",
-    "homeNewRecordingButton": "নতুন রেকর্ডিং"
+    "homeNewRecordingButton": "নতুন রেকর্ডিং",
+    "onboardingActNotesLater": "Omi এখনও আপনার নোট লিখছে। আপনি সেগুলো হোমে পাবেন।"
 }

@@ -4142,5 +4142,6 @@
     "onboardingActNoAudioPhone": "Még nem hallunk. Próbálj kicsit hangosabban beszélni.",
     "onboardingActDictateBodyOmi": "Csak beszélj. Az Omid figyel.",
     "voiceProfileCardDismissed": "A hangprofilt bármikor beállíthatod a Beállításokban.",
-    "homeNewRecordingButton": "Új felvétel"
+    "homeNewRecordingButton": "Új felvétel",
+    "onboardingActNotesLater": "Az Omi még írja a jegyzeteidet. A kezdőlapon találod őket."
 }

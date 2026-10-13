@@ -11483,5 +11483,6 @@
     "onboardingActNoAudioPhone": "இன்னும் உங்கள் குரல் கேட்கவில்லை. சற்று சத்தமாகப் பேசிப் பாருங்கள்.",
     "onboardingActDictateBodyOmi": "பேசுங்கள் போதும். உங்கள் Omi கேட்டுக்கொண்டிருக்கிறது.",
     "voiceProfileCardDismissed": "அமைப்புகளில் எப்போது வேண்டுமானாலும் குரல் சுயவிவரத்தை அமைக்கலாம்.",
-    "homeNewRecordingButton": "புதிய பதிவு"
+    "homeNewRecordingButton": "புதிய பதிவு",
+    "onboardingActNotesLater": "Omi இன்னும் உங்கள் குறிப்புகளை எழுதுகிறது. அவற்றை முகப்பில் காணலாம்."
 }

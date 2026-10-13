@@ -4046,5 +4046,6 @@
     "onboardingActNoAudioPhone": "Suara anda belum kedengaran. Cuba bercakap lebih kuat sedikit.",
     "onboardingActDictateBodyOmi": "Cakap sahaja. Omi anda sedang mendengar.",
     "voiceProfileCardDismissed": "Anda boleh menyediakan Profil Suara pada bila-bila masa dalam Tetapan.",
-    "homeNewRecordingButton": "Rakaman Baharu"
+    "homeNewRecordingButton": "Rakaman Baharu",
+    "onboardingActNotesLater": "Omi masih menulis nota anda. Anda akan menemuinya di Laman Utama."
 }

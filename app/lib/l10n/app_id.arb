@@ -4081,5 +4081,6 @@
     "onboardingActNoAudioPhone": "Suaramu belum terdengar. Coba bicara sedikit lebih keras.",
     "onboardingActDictateBodyOmi": "Bicara saja. Omi kamu sedang mendengarkan.",
     "voiceProfileCardDismissed": "Anda dapat mengatur Profil Suara kapan saja di Pengaturan.",
-    "homeNewRecordingButton": "Rekaman Baru"
+    "homeNewRecordingButton": "Rekaman Baru",
+    "onboardingActNotesLater": "Omi masih menulis catatanmu. Kamu akan menemukannya di Beranda."
 }

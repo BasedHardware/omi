@@ -205,6 +205,10 @@ class CaptureController extends ChangeNotifier
   /// The conversation-capture recorder. Resolves an injected override first so
   /// deterministic scenarios can drive the real pipeline through the production
   /// decision path, then falls back to the shared service manager.
+  /// Receives a copy of the phone microphone's audio (16 kHz mono PCM16) as it arrives, for a caller
+  /// that needs the sound itself: onboarding enrolls the reader's voice from its first dictation.
+  void Function(List<int> pcm)? phoneMicAudioTap;
+
   IMicRecorderService get _phoneMic => _phoneMicRecorderOverride ?? ServiceManager.instance().phoneMic;
 
   DateTime _now() => _nowOverride?.call() ?? DateTime.now();
@@ -461,6 +465,7 @@ class CaptureController extends ChangeNotifier
     await _phoneMic.start(
       onByteReceived: (bytes) {
         if (!_admitsCapture(revision)) return;
+        phoneMicAudioTap?.call(bytes);
         _recordingTelemetry.observeAudio(bytes.length);
         if (bytes.isNotEmpty) _livenessWatchdog.observeFrame(_now());
         final frames = _activeSource?.processBytes(bytes) ?? [];
@@ -2731,6 +2736,7 @@ class CaptureController extends ChangeNotifier
       await _phoneMic.start(
         onByteReceived: (bytes) {
           if (!_admitsCapture(revision)) return;
+          phoneMicAudioTap?.call(bytes);
           _recordingTelemetry.observeAudio(bytes.length);
           if (bytes.isNotEmpty) _livenessWatchdog.observeFrame(_now());
           // Process through AudioSource for frame splitting and sync key generation

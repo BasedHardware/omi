@@ -4046,5 +4046,6 @@
     "onboardingActNoAudioPhone": "Me ei kuule sind veel. Proovi natuke valjemini rääkida.",
     "onboardingActDictateBodyOmi": "Lihtsalt räägi. Sinu Omi kuulab.",
     "voiceProfileCardDismissed": "Häälprofiili saad seadistada igal ajal seadetes.",
-    "homeNewRecordingButton": "Uus salvestus"
+    "homeNewRecordingButton": "Uus salvestus",
+    "onboardingActNotesLater": "Omi kirjutab veel su märkmeid. Leiad need avalehelt."
 }

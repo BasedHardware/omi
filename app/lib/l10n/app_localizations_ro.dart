@@ -13234,4 +13234,7 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get homeNewRecordingButton => 'Înregistrare nouă';
+
+  @override
+  String get onboardingActNotesLater => 'Omi încă îți scrie notițele. Le vei găsi pe pagina principală.';
 }

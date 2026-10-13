@@ -13209,4 +13209,7 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get homeNewRecordingButton => 'Новий запис';
+
+  @override
+  String get onboardingActNotesLater => 'Omi ще пише ваші нотатки. Ви знайдете їх на головному екрані.';
 }

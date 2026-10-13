@@ -13214,4 +13214,7 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get homeNewRecordingButton => 'Nieuwe opname';
+
+  @override
+  String get onboardingActNotesLater => 'Omi schrijft je notities nog. Je vindt ze op Home.';
 }

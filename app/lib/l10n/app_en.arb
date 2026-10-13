@@ -15944,5 +15944,9 @@
     "homeNewRecordingButton": "New Recording",
     "@homeNewRecordingButton": {
         "description": "Label on Home's main bottom button that starts a new recording with the phone."
+    },
+    "onboardingActNotesLater": "Omi is still writing your notes. You'll find them on Home.",
+    "@onboardingActNotesLater": {
+        "description": "Onboarding activation: shown under the reader's words when Omi's notes took too long; they appear on Home later"
     }
 }

@@ -13189,4 +13189,7 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get homeNewRecordingButton => 'Rekaman Baru';
+
+  @override
+  String get onboardingActNotesLater => 'Omi masih menulis catatanmu. Kamu akan menemukannya di Beranda.';
 }

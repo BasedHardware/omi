@@ -11483,5 +11483,6 @@
     "onboardingActNoAudioPhone": "ಇನ್ನೂ ನಿಮ್ಮ ಧ್ವನಿ ಕೇಳಿಸುತ್ತಿಲ್ಲ. ಸ್ವಲ್ಪ ಜೋರಾಗಿ ಮಾತಾಡಿ ನೋಡಿ.",
     "onboardingActDictateBodyOmi": "ಸುಮ್ಮನೆ ಮಾತಾಡಿ. ನಿಮ್ಮ Omi ಕೇಳುತ್ತಿದೆ.",
     "voiceProfileCardDismissed": "ಸೆಟ್ಟಿಂಗ್‌ಗಳಲ್ಲಿ ಯಾವಾಗ ಬೇಕಾದರೂ ಧ್ವನಿ ಪ್ರೊಫೈಲ್ ಹೊಂದಿಸಬಹುದು.",
-    "homeNewRecordingButton": "ಹೊಸ ರೆಕಾರ್ಡಿಂಗ್"
+    "homeNewRecordingButton": "ಹೊಸ ರೆಕಾರ್ಡಿಂಗ್",
+    "onboardingActNotesLater": "Omi ಇನ್ನೂ ನಿಮ್ಮ ಟಿಪ್ಪಣಿಗಳನ್ನು ಬರೆಯುತ್ತಿದೆ. ನೀವು ಅವುಗಳನ್ನು ಹೋಮ್‌ನಲ್ಲಿ ಕಾಣುವಿರಿ."
 }

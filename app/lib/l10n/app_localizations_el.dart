@@ -13264,4 +13264,7 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get homeNewRecordingButton => 'Νέα ηχογράφηση';
+
+  @override
+  String get onboardingActNotesLater => 'Το Omi γράφει ακόμα τις σημειώσεις σου. Θα τις βρεις στην Αρχική.';
 }

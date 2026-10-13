@@ -13214,4 +13214,7 @@ class AppLocalizationsBe extends AppLocalizations {
 
   @override
   String get homeNewRecordingButton => 'Новы запіс';
+
+  @override
+  String get onboardingActNotesLater => 'Omi яшчэ піша вашы нататкі. Вы знойдзеце іх на галоўнай.';
 }

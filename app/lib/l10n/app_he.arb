@@ -11483,5 +11483,6 @@
     "onboardingActNoAudioPhone": "עדיין לא שומעים אותך. נסה לדבר קצת יותר חזק.",
     "onboardingActDictateBodyOmi": "פשוט דבר. ה-Omi שלך מקשיב.",
     "voiceProfileCardDismissed": "אפשר להגדיר פרופיל קולי בכל עת בהגדרות.",
-    "homeNewRecordingButton": "הקלטה חדשה"
+    "homeNewRecordingButton": "הקלטה חדשה",
+    "onboardingActNotesLater": "Omi עדיין כותב את ההערות שלך. תמצא אותן במסך הבית."
 }

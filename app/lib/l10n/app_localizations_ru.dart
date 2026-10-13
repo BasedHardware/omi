@@ -13225,4 +13225,7 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get homeNewRecordingButton => 'Новая запись';
+
+  @override
+  String get onboardingActNotesLater => 'Omi ещё пишет ваши заметки. Вы найдёте их на главном экране.';
 }

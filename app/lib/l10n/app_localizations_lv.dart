@@ -13207,4 +13207,7 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get homeNewRecordingButton => 'Jauns ieraksts';
+
+  @override
+  String get onboardingActNotesLater => 'Omi vēl raksta jūsu piezīmes. Tās atradīsiet sākumlapā.';
 }

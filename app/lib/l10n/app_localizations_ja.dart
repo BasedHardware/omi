@@ -12989,4 +12989,7 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get homeNewRecordingButton => '新規録音';
+
+  @override
+  String get onboardingActNotesLater => 'Omiがまだメモを作成中です。ホームに表示されます。';
 }

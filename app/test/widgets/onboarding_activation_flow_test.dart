@@ -35,6 +35,15 @@ class _FakeCapture implements ActivationCapture {
   Future<void> cancel() async => cancelled = true;
 }
 
+/// Omi never finishes its notes (a slow network or a slow server).
+class _SlowCapture extends _FakeCapture {
+  _SlowCapture() : super(const ActivationResult(transcript: ''));
+
+  @override
+  Future<ActivationResult> finish({Duration timeout = const Duration(seconds: 30)}) =>
+      Completer<ActivationResult>().future;
+}
+
 void main() {
   setUp(() async {
     SharedPreferences.setMockInitialValues({});
@@ -234,5 +243,25 @@ void main() {
     await tapKey(tester, 'activation_continue_summary');
     expect(find.byKey(const Key('activation_continue_congrats')), findsOneWidget, reason: 'no tasks step');
     await tester.pump(const Duration(seconds: 3)); // Lets the celebration finish.
+  });
+
+  testWidgets('slow notes: after the deadline the reader moves on with their words, told notes are coming',
+      (tester) async {
+    final run = await pump(tester, capture: _SlowCapture.new);
+    await tester.pump(const Duration(seconds: 4));
+    run.capture.live.value = 'Lunch with Sam today';
+    await tester.pump();
+    await tester.tap(find.byKey(const Key('activation_dictation_done')));
+    await tester.pump(const Duration(seconds: 5));
+    expect(find.text('Summarizing…'), findsOneWidget, reason: 'still within the deadline');
+
+    await tester.pump(const Duration(seconds: 8)); // Past the 12 s deadline.
+    await tester.pump(const Duration(seconds: 5));
+    expect(find.text("Here's what you said"), findsOneWidget);
+    expect(find.text('Lunch with Sam today'), findsOneWidget);
+    expect(find.byKey(const Key('activation_notes_later')), findsOneWidget);
+    await tapKey(tester, 'activation_continue_summary');
+    expect(find.byKey(const Key('activation_continue_congrats')), findsOneWidget);
+    await tester.pump(const Duration(seconds: 3));
   });
 }

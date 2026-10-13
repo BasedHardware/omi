@@ -13203,4 +13203,7 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get homeNewRecordingButton => 'Naujas įrašas';
+
+  @override
+  String get onboardingActNotesLater => 'Omi dar rašo jūsų užrašus. Rasite juos pradžios ekrane.';
 }

@@ -1,18 +1,25 @@
 import 'dart:async';
+import 'dart:io' show File;
+import 'dart:typed_data';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 
+import 'package:path_provider/path_provider.dart';
 import 'package:permission_handler/permission_handler.dart';
 
 import 'package:provider/provider.dart';
 
+import 'package:omi/backend/http/api/speech_profile.dart';
+import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/services/capture/optimistic_processing.dart';
 import 'package:omi/utils/enums.dart';
+import 'package:omi/utils/audio/wav_bytes.dart';
 import 'package:omi/utils/logger.dart';
+import 'package:omi/utils/platform/platform_manager.dart';
 
 /// What the first-run dictation became: the conversation Omi wrote from it, or (when Omi could not
 /// make one in time, or judged it not worth keeping) just the words the reader said.
@@ -24,6 +31,7 @@ class ActivationResult {
     this.title = '',
     this.overview = '',
     this.tasks = const [],
+    this.notesPending = false,
   });
 
   final String transcript;
@@ -31,6 +39,9 @@ class ActivationResult {
   final String title;
   final String overview;
   final List<String> tasks;
+
+  /// Omi had not finished its notes when the reader was moved on; they land on Home later.
+  final bool notesPending;
 
   /// Omi wrote notes from it; otherwise only [transcript] is shown.
   bool get hasNotes => title.isNotEmpty || overview.isNotEmpty;
@@ -87,6 +98,18 @@ class PipelineActivationCapture implements ActivationCapture {
   /// not leave the phone microphone recording behind the next screen.
   bool _cancelled = false;
 
+  /// When the dictation began, to tell its conversation from the audio before it.
+  DateTime? _listeningSince;
+
+  /// The phone dictation's own audio, kept to enroll the reader's voice (the old voice step did this;
+  /// without it Omi cannot tell the reader apart from the people they talk to).
+  final BytesBuilder _voice = BytesBuilder(copy: false);
+
+  // 16 kHz mono PCM16. The server takes 5–180 s; a few sentences is plenty.
+  static const _bytesPerSecond = 16000 * 2;
+  static const _minVoiceSeconds = 6;
+  static const _maxVoiceSeconds = 170;
+
   @override
   bool get usesDevice => _device;
 
@@ -122,6 +145,11 @@ class PipelineActivationCapture implements ActivationCapture {
         if (!await Permission.microphone.isGranted) return ActivationStart.needsMicrophone;
         if (_cancelled) return ActivationStart.failed;
         _phoneStarted = true;
+        if (!SharedPreferencesUtil().hasSpeakerProfile) {
+          _capture.phoneMicAudioTap = (pcm) {
+            if (_voice.length < _maxVoiceSeconds * _bytesPerSecond) _voice.add(pcm);
+          };
+        }
         await _capture.streamRecording();
         // Skipped while the microphone was starting: cancel()'s stop may have run before it was on,
         // so stop it again now that it is.
@@ -133,6 +161,7 @@ class PipelineActivationCapture implements ActivationCapture {
       }
       if (_cancelled) return ActivationStart.failed;
       _startIndex = _capture.segments.length;
+      _listeningSince = DateTime.now();
       _listening = true;
       _capture.addListener(_onCapture);
       return ActivationStart.listening;
@@ -144,18 +173,60 @@ class PipelineActivationCapture implements ActivationCapture {
 
   bool get _isDeviceRecording => _capture.recordingState == RecordingState.deviceRecord;
 
-  /// Whether [conversation] holds the dictation: its transcript starts with words the reader said.
+  static final _word = RegExp(r"[\p{L}\p{N}']+", unicode: true);
+
+  static Iterable<String> _wordsOf(String text) => _word.allMatches(text.toLowerCase()).map((m) => m.group(0)!);
+
+  /// Whether [conversation] holds the dictation. The audio from before it (the unboxing, the screens
+  /// before this one) can become a conversation in the same moment, so: it must not have begun well
+  /// before the dictation, and its transcript must share most of the reader's first real words
+  /// (whole words; "a", "to" and the like match anything).
   bool _isDictation(ServerConversation conversation, String heard) {
-    final words = heard.toLowerCase().split(RegExp(r'\s+')).where((w) => w.isNotEmpty).take(4).toList();
+    final began = conversation.startedAt;
+    final since = _listeningSince;
+    // Server and phone clocks can differ a little; the earlier audio began minutes before.
+    if (began != null && since != null && began.isBefore(since.subtract(const Duration(seconds: 20)))) {
+      return false;
+    }
+    final words = _wordsOf(heard).where((w) => w.length > 2).take(6).toList();
     if (words.isEmpty) return true;
-    final transcript = conversation.transcriptSegments.map((s) => s.text).join(' ').toLowerCase();
-    if (transcript.isEmpty) return true; // Not loaded with the list; the newest new one is ours.
-    return words.where(transcript.contains).length >= (words.length / 2).ceil();
+    final said = _wordsOf(conversation.transcriptSegments.map((s) => s.text).join(' ')).toSet();
+    // Not loaded with the list: trust it only when its start time says it is the dictation.
+    if (said.isEmpty) return began != null && since != null;
+    return words.where(said.contains).length >= (words.length / 2).ceil();
   }
 
   void _stopListening() {
     _listening = false;
     _capture.removeListener(_onCapture);
+    _capture.phoneMicAudioTap = null;
+  }
+
+  /// Uploads the dictation as the reader's voice profile, in the background: it never holds up the
+  /// notes, and a failure only means the Home card or Settings asks for it later.
+  Future<void> _enrollVoice(Uint8List pcm) async {
+    if (pcm.length < _minVoiceSeconds * _bytesPerSecond || SharedPreferencesUtil().hasSpeakerProfile) return;
+    File? file;
+    try {
+      final directory = await getTemporaryDirectory();
+      file = await File('${directory.path}/omi-first-voice-${DateTime.now().millisecondsSinceEpoch}.wav')
+          .writeAsBytes(WavBytes.fromPcm(pcm, sampleRate: 16000, numChannels: 1).asBytes());
+      if (await uploadProfile(file).timeout(const Duration(seconds: 45))) {
+        SharedPreferencesUtil().hasSpeakerProfile = true;
+        PlatformManager.instance.analytics.speechProfileUploadSucceeded();
+        PlatformManager.instance.analytics.speechProfileEmbeddingStored();
+      }
+    } on SpeechProfileUploadException catch (e) {
+      PlatformManager.instance.analytics.speechProfileUploadFailed(
+        reason: 'http_${e.statusCode}',
+        statusCode: e.statusCode,
+      );
+    } catch (e) {
+      Logger.debug('Activation voice enrollment failed: $e');
+      PlatformManager.instance.analytics.speechProfileUploadFailed(reason: 'activation_upload_failed');
+    } finally {
+      if (file != null && await file.exists()) await file.delete();
+    }
   }
 
   @override
@@ -184,6 +255,7 @@ class PipelineActivationCapture implements ActivationCapture {
         await _capture.stopStreamRecording(resumeHandedOffPendant: expectDevice);
         _phoneStarted = false;
       }
+      unawaited(_enrollVoice(_voice.takeBytes()));
       // Ends the conversation now instead of after the usual silence, and adds it to Home.
       await _capture.forceProcessingCurrentConversation();
       final conversation = await created.future.timeout(timeout);
@@ -213,6 +285,7 @@ class PipelineActivationCapture implements ActivationCapture {
   Future<void> cancel() async {
     _cancelled = true;
     _stopListening();
+    _voice.clear();
     await _stopPhone();
   }
 

@@ -13271,4 +13271,7 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String get homeNewRecordingButton => 'புதிய பதிவு';
+
+  @override
+  String get onboardingActNotesLater => 'Omi இன்னும் உங்கள் குறிப்புகளை எழுதுகிறது. அவற்றை முகப்பில் காணலாம்.';
 }

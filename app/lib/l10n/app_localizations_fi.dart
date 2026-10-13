@@ -13184,4 +13184,7 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get homeNewRecordingButton => 'Uusi tallennus';
+
+  @override
+  String get onboardingActNotesLater => 'Omi kirjoittaa vielä muistiinpanojasi. Löydät ne Kotinäkymästä.';
 }

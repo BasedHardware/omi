@@ -13193,4 +13193,7 @@ class AppLocalizationsUr extends AppLocalizations {
 
   @override
   String get homeNewRecordingButton => 'نئی ریکارڈنگ';
+
+  @override
+  String get onboardingActNotesLater => 'Omi ابھی بھی آپ کے نوٹس لکھ رہا ہے۔ آپ انہیں ہوم پر پائیں گے۔';
 }

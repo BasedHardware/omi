@@ -11483,5 +11483,6 @@
     "onboardingActNoAudioPhone": "Še vas ne slišimo. Poskusite govoriti malo glasneje.",
     "onboardingActDictateBodyOmi": "Samo govorite. Vaš Omi posluša.",
     "voiceProfileCardDismissed": "Glasovni profil lahko kadar koli nastavite v Nastavitvah.",
-    "homeNewRecordingButton": "Novo snemanje"
+    "homeNewRecordingButton": "Novo snemanje",
+    "onboardingActNotesLater": "Omi še piše vaše zapiske. Našli jih boste na začetnem zaslonu."
 }

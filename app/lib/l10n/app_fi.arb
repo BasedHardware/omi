@@ -4046,5 +4046,6 @@
     "onboardingActNoAudioPhone": "Emme kuule sinua vielä. Kokeile puhua vähän kovempaa.",
     "onboardingActDictateBodyOmi": "Puhu vain. Omisi kuuntelee.",
     "voiceProfileCardDismissed": "Voit määrittää ääniprofiilin milloin tahansa asetuksissa.",
-    "homeNewRecordingButton": "Uusi tallennus"
+    "homeNewRecordingButton": "Uusi tallennus",
+    "onboardingActNotesLater": "Omi kirjoittaa vielä muistiinpanojasi. Löydät ne Kotinäkymästä."
 }

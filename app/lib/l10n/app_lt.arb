@@ -4046,5 +4046,6 @@
     "onboardingActNoAudioPhone": "Dar jūsų negirdime. Pabandykite kalbėti šiek tiek garsiau.",
     "onboardingActDictateBodyOmi": "Tiesiog kalbėkite. Jūsų Omi klauso.",
     "voiceProfileCardDismissed": "Balso profilį galite nustatyti bet kada nustatymuose.",
-    "homeNewRecordingButton": "Naujas įrašas"
+    "homeNewRecordingButton": "Naujas įrašas",
+    "onboardingActNotesLater": "Omi dar rašo jūsų užrašus. Rasite juos pradžios ekrane."
 }

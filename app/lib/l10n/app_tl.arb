@@ -11483,5 +11483,6 @@
     "onboardingActNoAudioPhone": "Hindi ka pa marinig. Subukang magsalita nang medyo malakas.",
     "onboardingActDictateBodyOmi": "Magsalita ka lang. Nakikinig ang Omi mo.",
     "voiceProfileCardDismissed": "Maaari mong i-set up ang Voice Profile anumang oras sa Settings.",
-    "homeNewRecordingButton": "Bagong Recording"
+    "homeNewRecordingButton": "Bagong Recording",
+    "onboardingActNotesLater": "Isinusulat pa ng Omi ang iyong mga tala. Makikita mo ang mga ito sa Home."
 }

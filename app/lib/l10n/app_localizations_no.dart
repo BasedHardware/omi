@@ -13180,4 +13180,7 @@ class AppLocalizationsNo extends AppLocalizations {
 
   @override
   String get homeNewRecordingButton => 'Ny opptak';
+
+  @override
+  String get onboardingActNotesLater => 'Omi skriver fortsatt notatene dine. Du finner dem på Hjem.';
 }

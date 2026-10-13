@@ -13174,4 +13174,7 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String get homeNewRecordingButton => 'ضبط جدید';
+
+  @override
+  String get onboardingActNotesLater => 'Omi هنوز در حال نوشتن یادداشت‌های شماست. آن‌ها را در صفحه اصلی پیدا می‌کنید.';
 }

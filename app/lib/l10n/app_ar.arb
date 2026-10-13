@@ -4046,5 +4046,6 @@
     "onboardingActNoAudioPhone": "لا أسمعك بعد. جرّب التحدث بصوت أعلى قليلاً.",
     "onboardingActDictateBodyOmi": "تحدّث فقط. Omi يستمع.",
     "voiceProfileCardDismissed": "يمكنك إعداد بصمة صوتك في أي وقت من الإعدادات.",
-    "homeNewRecordingButton": "تسجيل جديد"
+    "homeNewRecordingButton": "تسجيل جديد",
+    "onboardingActNotesLater": "لا يزال Omi يكتب ملاحظاتك. ستجدها في الصفحة الرئيسية."
 }

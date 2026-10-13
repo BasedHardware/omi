@@ -13210,4 +13210,7 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get homeNewRecordingButton => 'Rakaman Baharu';
+
+  @override
+  String get onboardingActNotesLater => 'Omi masih menulis nota anda. Anda akan menemuinya di Laman Utama.';
 }

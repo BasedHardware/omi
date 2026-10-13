@@ -13227,4 +13227,7 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String get homeNewRecordingButton => 'Нов запис';
+
+  @override
+  String get onboardingActNotesLater => 'Omi все още пише бележките ви. Ще ги намерите на началния екран.';
 }

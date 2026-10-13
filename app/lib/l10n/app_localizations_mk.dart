@@ -13240,4 +13240,7 @@ class AppLocalizationsMk extends AppLocalizations {
 
   @override
   String get homeNewRecordingButton => 'Ново снимање';
+
+  @override
+  String get onboardingActNotesLater => 'Omi сè уште ги пишува вашите белешки. Ќе ги најдете на почетната.';
 }

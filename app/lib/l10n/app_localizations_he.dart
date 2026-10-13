@@ -13084,4 +13084,7 @@ class AppLocalizationsHe extends AppLocalizations {
 
   @override
   String get homeNewRecordingButton => 'הקלטה חדשה';
+
+  @override
+  String get onboardingActNotesLater => 'Omi עדיין כותב את ההערות שלך. תמצא אותן במסך הבית.';
 }

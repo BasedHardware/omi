@@ -13209,4 +13209,7 @@ class AppLocalizationsSl extends AppLocalizations {
 
   @override
   String get homeNewRecordingButton => 'Novo snemanje';
+
+  @override
+  String get onboardingActNotesLater => 'Omi še piše vaše zapiske. Našli jih boste na začetnem zaslonu.';
 }

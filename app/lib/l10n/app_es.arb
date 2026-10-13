@@ -4046,5 +4046,6 @@
     "onboardingActNoAudioPhone": "Aún no te oímos. Prueba a hablar un poco más alto.",
     "onboardingActDictateBodyOmi": "Solo habla. Tu Omi te escucha.",
     "voiceProfileCardDismissed": "Puedes configurar tu perfil de voz cuando quieras en Ajustes.",
-    "homeNewRecordingButton": "Nueva grabación"
+    "homeNewRecordingButton": "Nueva grabación",
+    "onboardingActNotesLater": "Omi todavía está escribiendo tus notas. Las encontrarás en Inicio."
 }

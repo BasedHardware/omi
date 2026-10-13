@@ -4046,5 +4046,6 @@
     "onboardingActNoAudioPhone": "Encara no et sentim. Prova de parlar una mica més fort.",
     "onboardingActDictateBodyOmi": "Només parla. El teu Omi t'escolta.",
     "voiceProfileCardDismissed": "Pots configurar el perfil de veu quan vulguis a Configuració.",
-    "homeNewRecordingButton": "Nova gravació"
+    "homeNewRecordingButton": "Nova gravació",
+    "onboardingActNotesLater": "Omi encara està escrivint les teves notes. Les trobaràs a l'inici."
 }

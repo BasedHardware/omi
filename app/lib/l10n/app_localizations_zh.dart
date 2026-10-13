@@ -12970,4 +12970,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get homeNewRecordingButton => '新录音';
+
+  @override
+  String get onboardingActNotesLater => 'Omi 仍在撰写你的笔记，稍后可在首页查看。';
 }

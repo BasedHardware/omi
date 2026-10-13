@@ -13177,4 +13177,7 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get homeNewRecordingButton => 'Ghi âm mới';
+
+  @override
+  String get onboardingActNotesLater => 'Omi vẫn đang viết ghi chú của bạn. Bạn sẽ thấy chúng ở Trang chủ.';
 }

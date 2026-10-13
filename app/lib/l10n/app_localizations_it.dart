@@ -13249,4 +13249,7 @@ class AppLocalizationsIt extends AppLocalizations {
 
   @override
   String get homeNewRecordingButton => 'Nuova registrazione';
+
+  @override
+  String get onboardingActNotesLater => 'Omi sta ancora scrivendo le tue note. Le troverai nella Home.';
 }

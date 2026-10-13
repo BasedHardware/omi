@@ -13180,4 +13180,7 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get homeNewRecordingButton => 'Nový záznam';
+
+  @override
+  String get onboardingActNotesLater => 'Omi ještě píše vaše poznámky. Najdete je na domovské obrazovce.';
 }

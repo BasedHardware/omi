@@ -13174,4 +13174,7 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get homeNewRecordingButton => 'Nový záznam';
+
+  @override
+  String get onboardingActNotesLater => 'Omi ešte píše vaše poznámky. Nájdete ich na domovskej obrazovke.';
 }

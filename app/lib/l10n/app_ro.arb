@@ -4046,5 +4046,6 @@
     "onboardingActNoAudioPhone": "Încă nu te auzim. Încearcă să vorbești puțin mai tare.",
     "onboardingActDictateBodyOmi": "Doar vorbește. Omi te ascultă.",
     "voiceProfileCardDismissed": "Poți configura profilul vocal oricând din Setări.",
-    "homeNewRecordingButton": "Înregistrare nouă"
+    "homeNewRecordingButton": "Înregistrare nouă",
+    "onboardingActNotesLater": "Omi încă îți scrie notițele. Le vei găsi pe pagina principală."
 }

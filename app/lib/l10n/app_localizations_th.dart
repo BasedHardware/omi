@@ -13110,4 +13110,7 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get homeNewRecordingButton => 'บันทึกใหม่';
+
+  @override
+  String get onboardingActNotesLater => 'Omi ยังเขียนโน้ตของคุณอยู่ คุณจะพบได้ที่หน้าหลัก';
 }

@@ -48,6 +48,7 @@ class ActivationFlow extends StatefulWidget {
     this.microphoneGranted,
     this.requestMicrophone,
     this.requestReview,
+    this.notesDeadline = const Duration(seconds: 12),
   });
 
   /// The reader connected a wearable in onboarding: they dictate through it.
@@ -67,6 +68,10 @@ class ActivationFlow extends StatefulWidget {
   final Future<bool> Function()? microphoneGranted;
   final Future<bool> Function()? requestMicrophone;
   final Future<void> Function()? requestReview;
+
+  /// How long "Summarizing…" waits for Omi's notes. A few sentences usually take seconds; past this
+  /// the reader moves on with their own words, and the notes arrive on Home.
+  final Duration notesDeadline;
 
   /// Set when the reader skipped the dictation, so Home shows the welcome card.
   static const welcomeCardKey = 'onboarding/showWelcomeCard';
@@ -129,7 +134,11 @@ class _ActivationFlowState extends State<ActivationFlow> {
     _heard = heard;
     _go(ActivationStage.writing);
     // Keep "Summarizing…" up long enough to see the words being read, even when Omi is quick.
-    Future.wait([result, Future<void>.delayed(const Duration(milliseconds: 1800))]).then((values) {
+    final notes = result.timeout(
+      widget.notesDeadline,
+      onTimeout: () => ActivationResult(transcript: heard, notesPending: true),
+    );
+    Future.wait([notes, Future<void>.delayed(const Duration(milliseconds: 1800))]).then((values) {
       _result = values.first as ActivationResult;
       _go(ActivationStage.summary);
     });
@@ -774,9 +783,23 @@ class _SummaryCardState extends State<_SummaryCard> {
       duration: _duration,
       builder: (context, t) {
         if (!_r.hasNotes) {
-          return _WordsCard(
+          final card = _WordsCard(
             key: const Key('activation_summary_card'),
             child: WordReveal(text: _words, t: segment(t, 0, 1, Curves.linear), style: _wordsStyle),
+          );
+          if (!_r.notesPending) return card;
+          return Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              card,
+              const SizedBox(height: OmiSpacing.md),
+              Text(
+                l10n.onboardingActNotesLater,
+                key: const Key('activation_notes_later'),
+                textAlign: TextAlign.center,
+                style: OmiType.footnote.copyWith(color: OmiColors.textTertiary),
+              ),
+            ],
           );
         }
         return NoteCard(

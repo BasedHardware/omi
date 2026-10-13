@@ -13217,4 +13217,8 @@ class AppLocalizationsKn extends AppLocalizations {
 
   @override
   String get homeNewRecordingButton => 'ಹೊಸ ರೆಕಾರ್ಡಿಂಗ್';
+
+  @override
+  String get onboardingActNotesLater =>
+      'Omi ಇನ್ನೂ ನಿಮ್ಮ ಟಿಪ್ಪಣಿಗಳನ್ನು ಬರೆಯುತ್ತಿದೆ. ನೀವು ಅವುಗಳನ್ನು ಹೋಮ್‌ನಲ್ಲಿ ಕಾಣುವಿರಿ.';
 }

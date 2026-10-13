@@ -13192,4 +13192,7 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get homeNewRecordingButton => 'Yeni Kayıt';
+
+  @override
+  String get onboardingActNotesLater => 'Omi notlarını hâlâ yazıyor. Onları Ana Sayfa\'da bulacaksın.';
 }

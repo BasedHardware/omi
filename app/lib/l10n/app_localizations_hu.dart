@@ -13231,4 +13231,7 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get homeNewRecordingButton => 'Új felvétel';
+
+  @override
+  String get onboardingActNotesLater => 'Az Omi még írja a jegyzeteidet. A kezdőlapon találod őket.';
 }

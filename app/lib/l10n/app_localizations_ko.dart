@@ -12995,4 +12995,7 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get homeNewRecordingButton => '새 녹음';
+
+  @override
+  String get onboardingActNotesLater => 'Omi가 아직 노트를 작성하고 있어요. 홈에서 확인할 수 있어요.';
 }

@@ -4046,5 +4046,6 @@
     "onboardingActNoAudioPhone": "We horen je nog niet. Probeer iets harder te praten.",
     "onboardingActDictateBodyOmi": "Praat gewoon. Je Omi luistert.",
     "voiceProfileCardDismissed": "Je kunt je stemprofiel altijd instellen via Instellingen.",
-    "homeNewRecordingButton": "Nieuwe opname"
+    "homeNewRecordingButton": "Nieuwe opname",
+    "onboardingActNotesLater": "Omi schrijft je notities nog. Je vindt ze op Home."
 }

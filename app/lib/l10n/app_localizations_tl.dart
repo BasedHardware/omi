@@ -13284,4 +13284,7 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get homeNewRecordingButton => 'Bagong Recording';
+
+  @override
+  String get onboardingActNotesLater => 'Isinusulat pa ng Omi ang iyong mga tala. Makikita mo ang mga ito sa Home.';
 }

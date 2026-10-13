@@ -11483,5 +11483,6 @@
     "onboardingActNoAudioPhone": "Сè уште не ве слушаме. Обидете се да зборувате малку погласно.",
     "onboardingActDictateBodyOmi": "Само зборувајте. Вашиот Omi слуша.",
     "voiceProfileCardDismissed": "Гласовниот профил можете да го поставите во секое време во Поставки.",
-    "homeNewRecordingButton": "Ново снимање"
+    "homeNewRecordingButton": "Ново снимање",
+    "onboardingActNotesLater": "Omi сè уште ги пишува вашите белешки. Ќе ги најдете на почетната."
 }

@@ -4046,5 +4046,6 @@
     "onboardingActNoAudioPhone": "Hører deg ikke ennå. Prøv å snakke litt høyere.",
     "onboardingActDictateBodyOmi": "Bare snakk. Omi-en din lytter.",
     "voiceProfileCardDismissed": "Du kan sette opp stemmeprofilen når som helst i Innstillinger.",
-    "homeNewRecordingButton": "Ny opptak"
+    "homeNewRecordingButton": "Ny opptak",
+    "onboardingActNotesLater": "Omi skriver fortsatt notatene dine. Du finner dem på Hjem."
 }
