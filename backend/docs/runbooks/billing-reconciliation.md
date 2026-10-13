@@ -35,7 +35,9 @@ access or application authentication is involved.
 
 ```bash
 source ~/.local/bin/gcp-agent-env.sh ro-prod
-read -r -s -p 'Read-only restricted Stripe key: ' STRIPE_RECONCILE_READ_ONLY_KEY
+printf 'Read-only restricted Stripe key: ' >&2
+IFS= read -r -s STRIPE_RECONCILE_READ_ONLY_KEY
+printf '\n' >&2
 export STRIPE_RECONCILE_READ_ONLY_KEY
 backend/.venv/bin/python backend/scripts/billing_reconcile.py \
   --live --project based-hardware --as-of "$(date +%s)" \
