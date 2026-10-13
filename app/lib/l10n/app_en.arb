@@ -15775,5 +15775,17 @@
     "paywallNoPlans": "No Plans Available",
     "@paywallNoPlans": {
         "description": "Plans sheet empty state; this is distinct from a loading failure."
+    },
+    "paywallOtherPlans": "Other plans",
+    "@paywallOtherPlans": {
+        "description": "Expandable row for current and lower plans."
+    },
+    "paywallComparePlans": "Compare plans",
+    "@paywallComparePlans": {
+        "description": "Primary action in the nonblocking budget banner."
+    },
+    "paywallLegacyPlan": "Legacy plan",
+    "@paywallLegacyPlan": {
+        "description": "Marker beside the true name of a legacy subscription."
     }
 }

@@ -13057,4 +13057,13 @@ class AppLocalizationsSl extends AppLocalizations {
 
   @override
   String get paywallNoPlans => 'Ni razpoložljivih paketov';
+
+  @override
+  String get paywallOtherPlans => 'Drugi paketi';
+
+  @override
+  String get paywallComparePlans => 'Primerjaj pakete';
+
+  @override
+  String get paywallLegacyPlan => 'Stari paket';
 }

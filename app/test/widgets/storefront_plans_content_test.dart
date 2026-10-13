@@ -7,6 +7,8 @@ import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:omi/l10n/app_localizations.dart';
+import 'package:omi/backend/preferences.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:omi/models/plan_storefront.dart';
 import 'package:omi/pages/settings/widgets/plans/storefront_plans_content.dart';
 import 'package:omi/pages/settings/widgets/plans/contextual_plans.dart';
@@ -70,7 +72,7 @@ Future<void> pumpSheet(WidgetTester tester,
   final previousPalette = OmiColors.active;
   addTearDown(() => OmiColors.active = previousPalette);
   OmiColors.active = dark ? OmiPalette.dark : OmiPalette.light;
-  if (evidence.isNotEmpty) {
+  {
     await tester.runAsync(() async {
       final fonts = jsonDecode(await rootBundle.loadString('FontManifest.json')) as List<dynamic>;
       for (final entry in fonts) {
@@ -136,6 +138,20 @@ Future<void> pumpSheet(WidgetTester tester,
 }
 
 void main() {
+  test('budget dismissal persists for the server period and only the current account', () async {
+    SharedPreferences.setMockInitialValues({});
+    await SharedPreferencesUtil.init();
+    SharedPreferencesUtil().uid = 'fixture-a';
+    expect(BudgetNudgeDismissal.isDismissed('2026-10'), isFalse);
+    await BudgetNudgeDismissal.dismiss('2026-10');
+    expect(BudgetNudgeDismissal.isDismissed('2026-10'), isTrue);
+    expect(BudgetNudgeDismissal.isDismissed('2026-11'), isFalse);
+    SharedPreferencesUtil().uid = 'fixture-b';
+    expect(BudgetNudgeDismissal.isDismissed('2026-10'), isFalse);
+    expect(BudgetNudgeDismissal.isDismissed(null), isFalse);
+    expect(BudgetNudgeDismissal.isDismissed(''), isFalse);
+  });
+
   testWidgets('monthly default, explicit annual savings and exact checkout id', (tester) async {
     String? selectedId;
     await pumpSheet(tester,
@@ -145,12 +161,18 @@ void main() {
     await capture(tester, '001-mobile-ios-storefront-monthly.png');
     await tester.tap(find.byKey(const Key('storefront_year')));
     await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(find.byKey(const Key('storefront_other_plans')), 200,
+        scrollable: find.byType(Scrollable).first);
+    await tester.ensureVisible(find.byKey(const Key('storefront_other_plans')));
+    await tester.pump();
+    await tester.tap(find.byKey(const Key('storefront_other_plans')).hitTestable());
+    await tester.pumpAndSettle();
     await tester.scrollUntilVisible(find.byKey(const Key('storefront_buy_plus')), 200,
         scrollable: find.byType(Scrollable).first);
     expect(find.textContaining('Save 16.7%'), findsWidgets);
     await Scrollable.ensureVisible(tester.element(find.byKey(const Key('storefront_tier_plus'))), alignment: 0);
     await capture(tester, '002-mobile-ios-storefront-annual.png');
-    await tester.scrollUntilVisible(find.byKey(const Key('storefront_buy_operator')), 250,
+    await tester.scrollUntilVisible(find.byKey(const Key('storefront_buy_operator')), -250,
         scrollable: find.byType(Scrollable).first);
     expect(find.text('Recommended'), findsOneWidget);
     await Scrollable.ensureVisible(tester.element(find.byKey(const Key('storefront_tier_operator'))), alignment: 0);
@@ -216,8 +238,8 @@ void main() {
       'message': 'Your legacy plan stays unchanged unless you choose a different plan.'
     };
     await pumpSheet(tester, data: PlanStorefront.fromJson(json));
-    expect(find.text('Current · Unlimited'), findsOneWidget);
-    expect(find.textContaining('legacy plan stays unchanged'), findsOneWidget);
+    expect(find.text('Current · Unlimited · Legacy plan'), findsOneWidget);
+    expect(find.textContaining('legacy plan stays unchanged'), findsNothing);
     await capture(tester, '008-mobile-ios-storefront-legacy.png');
     expect(tester.takeException(), isNull);
   });
@@ -250,6 +272,8 @@ void main() {
     ];
     for (final (index, slug, title, message) in contexts) {
       final json = fixture();
+      json['usage_context'].remove('meter');
+      json['usage_context'].remove('budget_percent');
       json['usage_context']['title'] = title;
       json['usage_context']['message'] = message;
       await pumpSheet(tester, data: PlanStorefront.fromJson(json));
@@ -269,9 +293,13 @@ void main() {
         content: BudgetUpsellCard(data: data, onOpen: () async => opened = true));
     expect(find.byKey(const Key('budget_80_percent_banner')), findsOneWidget);
     await capture(tester, '013-mobile-ios-budget-banner.png');
-    await tester.tap(find.text('Manage Plan'));
+    await tester.tap(find.byKey(const Key('budget_nudge_compare')));
     await tester.pumpAndSettle();
     expect(opened, isTrue);
+    expect(tester.getSize(find.byKey(const Key('budget_80_percent_banner'))).height, lessThan(180));
+    await tester.tap(find.byKey(const Key('budget_nudge_dismiss')));
+    await tester.pump();
+    expect(find.byKey(const Key('budget_80_percent_banner')), findsNothing);
     for (final percent in [79, 100, 120]) {
       final json = fixture();
       json['usage_context']['budget_percent'] = percent;
@@ -297,18 +325,80 @@ void main() {
           as Map<String, dynamic>;
       await pumpSheet(tester,
           data: PlanStorefront.fromJson(json),
-          size: const Size(430, 1800),
+          size: const Size(320, 568),
           select: (_, price) async => selectedId = price.id);
       final card = find.byKey(Key('storefront_tier_${entry.value}'));
       expect(find.descendant(of: card, matching: find.text('Recommended')), findsOneWidget);
       expect(selectedId, isNull);
       final index =
           {'free_budget': '014', 'free_pro_gate': '015', 'plus_budget': '016', 'free_mcp_cap': '017'}[entry.key];
-      await Scrollable.ensureVisible(tester.element(card), alignment: 0);
+      final buy = find.byKey(Key('storefront_buy_${entry.value}'));
+      expect(buy.hitTestable(), findsOneWidget);
+      expect(tester.getBottomRight(buy).dy, lessThanOrEqualTo(568));
+      expect(tester.getBottomRight(find.byKey(Key('storefront_price_${entry.value}'))).dy, lessThan(568));
       await capture(tester, '$index-mobile-ios-${entry.key.replaceAll('_', '-')}.png');
       expect(tester.takeException(), isNull);
     });
   }
+
+  testWidgets('recommendation leads and current/lower plans remain expandable in backend order', (tester) async {
+    await pumpSheet(tester, data: PlanStorefront.fromJson(fixture()));
+    expect(find.byKey(const Key('storefront_tier_basic')), findsNothing);
+    expect(find.byKey(const Key('storefront_tier_plus')), findsNothing);
+    expect(find.text(r'Current · Plus · $19.99/mo · Renews Nov 1'), findsOneWidget);
+    await tester.scrollUntilVisible(find.byKey(const Key('storefront_other_plans')), 200,
+        scrollable: find.byType(Scrollable).first);
+    expect(find.text('Other plans · Free, Plus'), findsOneWidget);
+    await tester.ensureVisible(find.byKey(const Key('storefront_other_plans')));
+    await tester.ensureVisible(find.byKey(const Key('storefront_other_plans')));
+    await tester.pump();
+    await tester.tap(find.byKey(const Key('storefront_other_plans')).hitTestable());
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('storefront_tier_basic')), findsOneWidget);
+    expect(find.byKey(const Key('storefront_tier_plus')), findsOneWidget);
+    expect(tester.getTopLeft(find.byKey(const Key('storefront_tier_basic'))).dy,
+        lessThan(tester.getTopLeft(find.byKey(const Key('storefront_tier_plus'))).dy));
+  });
+
+  testWidgets('missing billing fields are omitted and a new period restores a dismissed nudge', (tester) async {
+    final json = fixture();
+    json['current'].remove('formatted_price');
+    json['current'].remove('renewal_label');
+    await pumpSheet(tester, data: PlanStorefront.fromJson(json));
+    expect(find.text('Current · Plus'), findsOneWidget);
+    final data = PlanStorefront.fromJson(json);
+    await pumpSheet(tester, content: BudgetUpsellCard(data: data, onOpen: () async {}));
+    await tester.tap(find.byKey(const Key('budget_nudge_dismiss')));
+    await tester.pump();
+    expect(find.byKey(const Key('budget_80_percent_banner')), findsNothing);
+    json['usage_context']['period_id'] = '2026-11';
+    await pumpSheet(tester, content: BudgetUpsellCard(data: PlanStorefront.fromJson(json), onOpen: () async {}));
+    expect(find.byKey(const Key('budget_80_percent_banner')), findsOneWidget);
+  });
+
+  testWidgets('small light phone opens with the recommended price and action in the viewport', (tester) async {
+    final json =
+        jsonDecode(File('test/fixtures/plan_storefront_free_budget.json').readAsStringSync()) as Map<String, dynamic>;
+    await pumpSheet(tester, data: PlanStorefront.fromJson(json), dark: false, size: const Size(320, 568));
+    final action = find.byKey(const Key('storefront_buy_plus'));
+    expect(action.hitTestable(), findsOneWidget);
+    expect(tester.getBottomRight(action).dy, lessThanOrEqualTo(568));
+    expect(tester.getSize(action).height, greaterThanOrEqualTo(44));
+    expect(find.byType(OmiCloseButton).hitTestable(), findsOneWidget);
+    await capture(tester, '018-mobile-ios-small-light-budget-fold.png');
+  });
+
+  testWidgets('expanded other plans retain current billing controls', (tester) async {
+    await pumpSheet(tester, data: PlanStorefront.fromJson(fixture()));
+    await tester.ensureVisible(find.byKey(const Key('storefront_other_plans')));
+    await tester.ensureVisible(find.byKey(const Key('storefront_other_plans')));
+    await tester.pump();
+    await tester.tap(find.byKey(const Key('storefront_other_plans')).hitTestable());
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.byKey(const Key('storefront_tier_basic')));
+    await capture(tester, '019-mobile-ios-storefront-other-plans.png');
+    expect(find.byKey(const Key('storefront_tier_plus')), findsOneWidget);
+  });
 
   testWidgets('hidden storefront never renders offers or actions', (tester) async {
     await pumpSheet(tester, data: PlanStorefront.fromJson(fixture()..['show_subscription_ui'] = false));

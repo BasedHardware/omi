@@ -13033,4 +13033,13 @@ class AppLocalizationsMr extends AppLocalizations {
 
   @override
   String get paywallNoPlans => 'कोणतीही योजना उपलब्ध नाही';
+
+  @override
+  String get paywallOtherPlans => 'इतर योजना';
+
+  @override
+  String get paywallComparePlans => 'योजनांची तुलना करा';
+
+  @override
+  String get paywallLegacyPlan => 'जुनी योजना';
 }

@@ -4006,5 +4006,8 @@
     "reviewProposalConflict": "Mục này đã thay đổi sau khi Dream đề xuất nên không có gì được áp dụng.",
     "itemLinkListTitle": "{count, plural, =0{Không có mục nào} =1{1 mục} other{{count} mục}}",
     "paywallRecommended": "Đề xuất",
-    "paywallNoPlans": "Chưa Có Gói Khả Dụng"
+    "paywallNoPlans": "Chưa Có Gói Khả Dụng",
+    "paywallOtherPlans": "Các gói khác",
+    "paywallComparePlans": "So sánh các gói",
+    "paywallLegacyPlan": "Gói cũ"
 }

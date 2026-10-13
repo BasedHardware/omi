@@ -13014,4 +13014,13 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String get paywallNoPlans => 'Ingen tilgængelige planer';
+
+  @override
+  String get paywallOtherPlans => 'Andre abonnementer';
+
+  @override
+  String get paywallComparePlans => 'Sammenlign abonnementer';
+
+  @override
+  String get paywallLegacyPlan => 'Ældre abonnement';
 }

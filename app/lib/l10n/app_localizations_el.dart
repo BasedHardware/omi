@@ -13110,4 +13110,13 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get paywallNoPlans => 'Δεν υπάρχουν διαθέσιμα προγράμματα';
+
+  @override
+  String get paywallOtherPlans => 'Άλλα προγράμματα';
+
+  @override
+  String get paywallComparePlans => 'Σύγκριση προγραμμάτων';
+
+  @override
+  String get paywallLegacyPlan => 'Παλαιό πρόγραμμα';
 }

@@ -1,4 +1,4 @@
-/// Presentation only. The backend owns ordering, copy, prices and entitlements.
+/// Presentation only. The backend owns tier rank, recommendation, copy, prices and entitlements.
 /// Unknown schema versions and malformed purchasable prices fail closed.
 class PlanStorefront {
   final List<StorefrontTier> tiers;
@@ -141,14 +141,24 @@ class StorefrontCurrentPlan {
   final String? priceId;
   final bool legacy;
   final String message;
+  final String? formattedPrice;
+  final String? renewalLabel;
   const StorefrontCurrentPlan(
-      {required this.id, required this.name, this.priceId, required this.legacy, required this.message});
+      {required this.id,
+      required this.name,
+      this.priceId,
+      required this.legacy,
+      required this.message,
+      this.formattedPrice,
+      this.renewalLabel});
   factory StorefrontCurrentPlan.fromJson(Map<String, dynamic> json) => StorefrontCurrentPlan(
       id: _text(json, 'id'),
       name: _text(json, 'name'),
       priceId: json['price_id'] as String?,
       legacy: _boolean(json, 'legacy'),
-      message: _text(json, 'message'));
+      message: _text(json, 'message'),
+      formattedPrice: json['formatted_price'] as String?,
+      renewalLabel: json['renewal_label'] as String?);
 }
 
 class StorefrontUsageContext {
@@ -158,6 +168,8 @@ class StorefrontUsageContext {
   final String? meter;
   final String? resetLabel;
   final double? budgetPercent;
+  final String? budgetNudgeLabel;
+  final String? periodId;
   final bool legacy;
 
   /// Server entitlement decision; never inferred from the displayed tier.
@@ -168,6 +180,8 @@ class StorefrontUsageContext {
       this.meter,
       this.resetLabel,
       this.budgetPercent,
+      this.budgetNudgeLabel,
+      this.periodId,
       required this.legacy,
       this.proGates = const {}});
   factory StorefrontUsageContext.fromJson(Map<String, dynamic> json) {
@@ -181,6 +195,8 @@ class StorefrontUsageContext {
         meter: json['meter'] as String?,
         resetLabel: json['reset_label'] as String?,
         budgetPercent: (percent as num?)?.toDouble(),
+        budgetNudgeLabel: json['budget_nudge_label'] as String?,
+        periodId: json['period_id'] as String?,
         legacy: _boolean(json, 'legacy'),
         proGates: Set.unmodifiable((json['pro_gates'] as List? ?? const []).cast<String>()));
   }

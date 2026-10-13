@@ -12846,4 +12846,13 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get paywallNoPlans => '이용 가능한 요금제가 없습니다';
+
+  @override
+  String get paywallOtherPlans => '다른 요금제';
+
+  @override
+  String get paywallComparePlans => '요금제 비교';
+
+  @override
+  String get paywallLegacyPlan => '기존 요금제';
 }

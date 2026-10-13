@@ -28,7 +28,7 @@
         "Keep the moments that matter",
         "Ask questions about your day"
       ],
-      "recording_equivalent": "≈ 5 hours of recording",
+      "recording_equivalent": "\u2248 5 hours of recording",
       "recommended": false,
       "prices": [],
       "action": "none",
@@ -42,7 +42,7 @@
         "Turn conversations into useful memories",
         "Find answers across your day"
       ],
-      "recording_equivalent": "≈ 90 hours of recording",
+      "recording_equivalent": "\u2248 90 hours of recording",
       "recommended": false,
       "prices": [
         {
@@ -77,7 +77,7 @@
         "Get timely follow-ups on commitments",
         "Connect what you see with what you remember"
       ],
-      "recording_equivalent": "≈ 243 hours of recording",
+      "recording_equivalent": "\u2248 243 hours of recording",
       "recommended": true,
       "prices": [
         {
@@ -112,7 +112,7 @@
         "Keep larger projects in context",
         "Give your agent more room to work"
       ],
-      "recording_equivalent": "≈ 900 hours of recording",
+      "recording_equivalent": "\u2248 900 hours of recording",
       "recommended": false,
       "prices": [
         {

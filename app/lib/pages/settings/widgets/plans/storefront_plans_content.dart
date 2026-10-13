@@ -4,7 +4,7 @@ import 'package:omi/models/plan_storefront.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 
-/// Pure presentation: prices, copy, order and eligibility arrive from the server.
+/// Pure presentation: rank, recommendation, prices, copy and eligibility arrive from the server.
 /// The host retains existing purchase/payment management calls and the close shell.
 class StorefrontPlansContent extends StatefulWidget {
   const StorefrontPlansContent(
@@ -34,41 +34,50 @@ class StorefrontPlansContent extends StatefulWidget {
 class _StorefrontPlansContentState extends State<StorefrontPlansContent> {
   // Annual is an explicit decision, never the default.
   String _interval = 'month';
+  bool _otherPlansExpanded = false;
 
   @override
   Widget build(BuildContext context) {
     final data = widget.storefront;
     if (data != null && !data.showSubscriptionUi) return const SizedBox.shrink();
+    final tiers = data?.tiers ?? const <StorefrontTier>[];
+    final currentIndex = tiers.indexWhere((tier) => tier.id == data?.current?.id);
+    final other = <StorefrontTier>[];
+    final visible = <StorefrontTier>[];
+    for (var i = 0; i < tiers.length; i++) {
+      final tier = tiers[i];
+      if (!tier.recommended && currentIndex >= 0 && i <= currentIndex) {
+        other.add(tier);
+      } else {
+        visible.add(tier);
+      }
+    }
+    // Stable partition: recommendation leads, server ordering breaks ties.
+    final ordered = [...visible.where((t) => t.recommended), ...visible.where((t) => !t.recommended)];
     return SizedBox(
-      height: MediaQuery.sizeOf(context).height * 0.72,
+      height: MediaQuery.sizeOf(context).height * 0.9,
       child: ListView(
         key: const Key('storefront_scroll'),
         padding: const EdgeInsets.all(OmiSpacing.md),
         children: [
           if (data?.usageContext case final usage?) ...[
-            Semantics(header: true, child: Text(usage.title, style: OmiType.title2)),
-            const SizedBox(height: OmiSpacing.xs),
-            Text(usage.message, style: OmiType.body.copyWith(color: OmiColors.textSecondary)),
-            if (usage.meter != null) ...[
-              const SizedBox(height: OmiSpacing.sm),
-              Text(usage.meter!, style: OmiType.callout),
-            ],
-            if (usage.resetLabel != null)
-              Text(usage.resetLabel!, style: OmiType.footnote.copyWith(color: OmiColors.textSecondary)),
-            const SizedBox(height: OmiSpacing.lg),
+            Semantics(header: true, child: Text(usage.title, style: OmiType.headline)),
+            const SizedBox(height: OmiSpacing.xxs),
+            Text(usage.message, style: OmiType.footnote.copyWith(color: OmiColors.textSecondary)),
+            const SizedBox(height: OmiSpacing.sm),
           ],
           if (data?.current case final current?) ...[
-            Container(
+            Text(
+              [
+                '${context.l10n.currentPlan} · ${current.name}',
+                if (current.legacy) context.l10n.paywallLegacyPlan,
+                if (current.formattedPrice?.isNotEmpty == true) current.formattedPrice!,
+                if (current.renewalLabel?.isNotEmpty == true) current.renewalLabel!,
+              ].join(' · '),
               key: const Key('storefront_current_plan'),
-              padding: const EdgeInsets.all(OmiSpacing.md),
-              decoration: BoxDecoration(color: OmiColors.surface2, borderRadius: OmiRadius.mdAll),
-              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Text('${context.l10n.currentPlan} · ${current.name}', style: OmiType.headline),
-                const SizedBox(height: OmiSpacing.xxs),
-                Text(current.message, style: OmiType.subhead.copyWith(color: OmiColors.textSecondary)),
-              ]),
+              style: OmiType.footnote.copyWith(color: OmiColors.textSecondary),
             ),
-            const SizedBox(height: OmiSpacing.md),
+            const SizedBox(height: OmiSpacing.sm),
           ],
           if (widget.loading)
             const OmiLoadingState()
@@ -95,13 +104,33 @@ class _StorefrontPlansContentState extends State<StorefrontPlansContent> {
                   selected: _interval == 'year',
                   onSelected: () => setState(() => _interval = 'year')),
             ]),
-            const SizedBox(height: OmiSpacing.md),
-            for (final tier in data.tiers) ...[
+            const SizedBox(height: OmiSpacing.sm),
+            for (final tier in ordered.where((tier) => tier.recommended)) ...[
+              _tierCard(tier, data.current),
+              const SizedBox(height: OmiSpacing.sm),
+            ],
+            if (other.isNotEmpty) ...[
+              Semantics(
+                expanded: _otherPlansExpanded,
+                child: OmiButton.tertiary(
+                  key: const Key('storefront_other_plans'),
+                  label: '${context.l10n.paywallOtherPlans} · ${other.map((t) => t.name).join(', ')}',
+                  expand: true,
+                  onPressed: () => setState(() => _otherPlansExpanded = !_otherPlansExpanded),
+                ),
+              ),
+              if (_otherPlansExpanded)
+                for (final tier in other) ...[
+                  _tierCard(tier, data.current),
+                  const SizedBox(height: OmiSpacing.sm),
+                ],
+            ],
+            for (final tier in ordered.where((tier) => !tier.recommended)) ...[
               _tierCard(tier, data.current),
               const SizedBox(height: OmiSpacing.sm),
             ],
           ],
-          const SizedBox(height: OmiSpacing.md),
+          const SizedBox(height: OmiSpacing.sm),
           OmiButton.tertiary(
               key: const Key('storefront_restore'),
               label: context.l10n.refresh,
@@ -142,31 +171,23 @@ class _StorefrontPlansContentState extends State<StorefrontPlansContent> {
                 Text(context.l10n.paywallRecommended, style: OmiType.footnote.copyWith(fontWeight: FontWeight.w600)),
             ]),
         const SizedBox(height: OmiSpacing.xxs),
-        Text(tier.description, style: OmiType.subhead.copyWith(color: OmiColors.textSecondary)),
-        const SizedBox(height: OmiSpacing.md),
+        const SizedBox(height: OmiSpacing.sm),
         if (price != null) ...[
-          Text(price.monthlyEquivalent, style: OmiType.title2),
+          Text(price.monthlyEquivalent, key: Key('storefront_price_${tier.id}'), style: OmiType.title3),
           Text(price.formatted, style: OmiType.subhead.copyWith(color: OmiColors.textSecondary)),
           if (_interval == 'year' && price.annualSavings != null)
             Padding(
                 padding: const EdgeInsets.only(top: OmiSpacing.xs),
                 child: Text(price.annualSavings!, style: OmiType.footnote)),
-          const SizedBox(height: OmiSpacing.md),
+          const SizedBox(height: OmiSpacing.sm),
         ],
-        if (tier.recordingEquivalent != null)
-          Padding(
-              padding: const EdgeInsets.only(bottom: OmiSpacing.xs),
-              child: Text(tier.recordingEquivalent!, style: OmiType.callout)),
-        for (final outcome in tier.outcomes)
-          Padding(
-              padding: const EdgeInsets.only(bottom: OmiSpacing.xs), child: Text('• $outcome', style: OmiType.subhead)),
         if (price != null) ...[
           const SizedBox(height: OmiSpacing.xs),
           Text(price.renewalTerms, style: OmiType.footnote.copyWith(color: OmiColors.textSecondary)),
         ],
         if (canBuy) ...[
-          const SizedBox(height: OmiSpacing.md),
-          OmiButton.secondary(
+          const SizedBox(height: OmiSpacing.sm),
+          OmiButton(
               key: Key('storefront_buy_${tier.id}'),
               label: tier.actionLabel,
               expand: true,
@@ -176,6 +197,15 @@ class _StorefrontPlansContentState extends State<StorefrontPlansContent> {
           const SizedBox(height: OmiSpacing.xs),
           Text(context.l10n.currentPlan, style: OmiType.footnote),
         ],
+        const SizedBox(height: OmiSpacing.sm),
+        Text(tier.description, style: OmiType.subhead.copyWith(color: OmiColors.textSecondary)),
+        if (tier.recordingEquivalent != null)
+          Padding(
+              padding: const EdgeInsets.only(bottom: OmiSpacing.xs),
+              child: Text(tier.recordingEquivalent!, style: OmiType.callout)),
+        for (final outcome in tier.outcomes)
+          Padding(
+              padding: const EdgeInsets.only(bottom: OmiSpacing.xs), child: Text('• $outcome', style: OmiType.subhead)),
       ]),
     );
   }

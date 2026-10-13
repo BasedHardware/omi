@@ -13037,4 +13037,13 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get paywallNoPlans => 'Tidak Ada Paket Tersedia';
+
+  @override
+  String get paywallOtherPlans => 'Paket lainnya';
+
+  @override
+  String get paywallComparePlans => 'Bandingkan paket';
+
+  @override
+  String get paywallLegacyPlan => 'Paket lama';
 }

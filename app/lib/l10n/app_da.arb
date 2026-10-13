@@ -4048,5 +4048,8 @@
     "reviewProposalConflict": "Dette er ændret, siden Dream foreslog det, så intet blev anvendt.",
     "itemLinkListTitle": "{count, plural, =0{Ingen elementer} =1{1 element} other{{count} elementer}}",
     "paywallRecommended": "Anbefalet",
-    "paywallNoPlans": "Ingen tilgængelige planer"
+    "paywallNoPlans": "Ingen tilgængelige planer",
+    "paywallOtherPlans": "Andre abonnementer",
+    "paywallComparePlans": "Sammenlign abonnementer",
+    "paywallLegacyPlan": "Ældre abonnement"
 }

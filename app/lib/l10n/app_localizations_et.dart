@@ -13021,4 +13021,13 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get paywallNoPlans => 'Plaane pole saadaval';
+
+  @override
+  String get paywallOtherPlans => 'Muud paketid';
+
+  @override
+  String get paywallComparePlans => 'Võrdle pakette';
+
+  @override
+  String get paywallLegacyPlan => 'Varasem pakett';
 }

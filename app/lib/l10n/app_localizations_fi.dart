@@ -13032,4 +13032,13 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get paywallNoPlans => 'Ei saatavilla olevia tilauksia';
+
+  @override
+  String get paywallOtherPlans => 'Muut tilaukset';
+
+  @override
+  String get paywallComparePlans => 'Vertaa tilauksia';
+
+  @override
+  String get paywallLegacyPlan => 'Vanha tilaus';
 }

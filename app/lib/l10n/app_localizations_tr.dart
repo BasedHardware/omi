@@ -13040,4 +13040,13 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get paywallNoPlans => 'Kullanılabilir Plan Yok';
+
+  @override
+  String get paywallOtherPlans => 'Diğer planlar';
+
+  @override
+  String get paywallComparePlans => 'Planları karşılaştır';
+
+  @override
+  String get paywallLegacyPlan => 'Eski plan';
 }

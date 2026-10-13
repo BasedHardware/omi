@@ -12961,4 +12961,13 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get paywallNoPlans => 'ไม่มีแพ็กเกจที่พร้อมใช้งาน';
+
+  @override
+  String get paywallOtherPlans => 'แผนอื่น ๆ';
+
+  @override
+  String get paywallComparePlans => 'เปรียบเทียบแผน';
+
+  @override
+  String get paywallLegacyPlan => 'แผนเดิม';
 }

@@ -4006,5 +4006,8 @@
     "reviewProposalConflict": "Ini telah berubah sejak Dream mencadangkannya, jadi tiada apa yang digunakan.",
     "itemLinkListTitle": "{count, plural, =0{Tiada Item} =1{1 Item} other{{count} Item}}",
     "paywallRecommended": "Disyorkan",
-    "paywallNoPlans": "Tiada Pelan Tersedia"
+    "paywallNoPlans": "Tiada Pelan Tersedia",
+    "paywallOtherPlans": "Pelan lain",
+    "paywallComparePlans": "Bandingkan pelan",
+    "paywallLegacyPlan": "Pelan lama"
 }

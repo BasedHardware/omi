@@ -4006,5 +4006,8 @@
     "reviewProposalConflict": "Dreamが提案した後に内容が変わったため、何も適用されませんでした。",
     "itemLinkListTitle": "{count, plural, =0{アイテムなし} =1{1件のアイテム} other{{count}件のアイテム}}",
     "paywallRecommended": "おすすめ",
-    "paywallNoPlans": "利用可能なプランはありません"
+    "paywallNoPlans": "利用可能なプランはありません",
+    "paywallOtherPlans": "その他のプラン",
+    "paywallComparePlans": "プランを比較",
+    "paywallLegacyPlan": "旧プラン"
 }

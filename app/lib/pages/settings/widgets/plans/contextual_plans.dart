@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import 'package:omi/backend/http/api_result.dart';
+import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/http/plan_storefront_api.dart';
 import 'package:omi/models/plan_storefront.dart';
 import 'package:omi/pages/settings/widgets/plans_sheet.dart';
@@ -80,6 +81,16 @@ Future<bool> showProGateUpsell(BuildContext context, {required String feature, r
   return openContextualPlans(context, source: source, storefront: data);
 }
 
+/// Local presentation preference; the backend period, not a client date, resets it.
+abstract final class BudgetNudgeDismissal {
+  static String get _key => 'budget_nudge_dismissed_period_${SharedPreferencesUtil().uid}';
+  static bool isDismissed(String? period) =>
+      period != null && period.isNotEmpty && SharedPreferencesUtil().getString(_key) == period;
+  static Future<void> dismiss(String? period) async {
+    if (period != null && period.isNotEmpty) await SharedPreferencesUtil().saveString(_key, period);
+  }
+}
+
 /// Nonblocking; absent flags/visibility/payload/usage keep the page exactly as before.
 class BudgetUpsellBanner extends StatefulWidget {
   const BudgetUpsellBanner({super.key});
@@ -114,7 +125,7 @@ class _BudgetUpsellBannerState extends State<BudgetUpsellBanner> {
       return;
     }
     if (!mounted || generation != _generation || !provider.showSubscriptionUI) return;
-    final result = await PlanStorefrontApi().load(source: 'budget_80_percent', locale: context.l10n.localeName);
+    final result = await PlanStorefrontApi().load(source: 'budget_80', locale: context.l10n.localeName);
     if (mounted && generation == _generation && result is ApiSuccess<PlanStorefront>) {
       setState(() => _data = result.data);
     }
@@ -124,22 +135,41 @@ class _BudgetUpsellBannerState extends State<BudgetUpsellBanner> {
   Widget build(BuildContext context) {
     final data = _data;
     if (!context.watch<UsageProvider>().showSubscriptionUI || data == null) return const SizedBox.shrink();
+    final period = data.usageContext?.periodId;
+    if (BudgetNudgeDismissal.isDismissed(period)) {
+      return const SizedBox.shrink();
+    }
     return BudgetUpsellCard(
         data: data,
+        onDismiss: () => BudgetNudgeDismissal.dismiss(period),
         onOpen: () async {
-          await openContextualPlans(context, source: 'budget_80_percent', storefront: data);
+          await openContextualPlans(context, source: 'budget_80', storefront: data);
         });
   }
 }
 
 /// Pure banner presentation; eligibility is from the backend budget snapshot.
-class BudgetUpsellCard extends StatelessWidget {
-  const BudgetUpsellCard({super.key, required this.data, required this.onOpen});
+class BudgetUpsellCard extends StatefulWidget {
+  const BudgetUpsellCard({super.key, required this.data, required this.onOpen, this.onDismiss});
   final PlanStorefront data;
   final Future<void> Function() onOpen;
+  final Future<void> Function()? onDismiss;
+  @override
+  State<BudgetUpsellCard> createState() => _BudgetUpsellCardState();
+}
+
+class _BudgetUpsellCardState extends State<BudgetUpsellCard> {
+  bool _dismissed = false;
+  @override
+  void didUpdateWidget(BudgetUpsellCard oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.data.usageContext?.periodId != widget.data.usageContext?.periodId) _dismissed = false;
+  }
+
   @override
   Widget build(BuildContext context) {
-    if (!data.showBudgetNudge) {
+    final data = widget.data;
+    if (_dismissed || !data.showBudgetNudge) {
       return const SizedBox.shrink();
     }
     return Container(
@@ -147,9 +177,40 @@ class BudgetUpsellCard extends StatelessWidget {
       margin: const EdgeInsets.only(top: OmiSpacing.sm),
       padding: const EdgeInsets.all(OmiSpacing.md),
       decoration: BoxDecoration(color: OmiColors.surface2, borderRadius: OmiRadius.mdAll),
-      child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-        Text(data.usageContext!.message, style: OmiType.subhead),
-        OmiButton.tertiary(label: context.l10n.managePlan, onPressed: onOpen),
+      child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+        Semantics(
+          label: data.usageContext!.budgetNudgeLabel ?? data.usageContext!.meter ?? data.usageContext!.message,
+          child: ExcludeSemantics(
+              child: LinearProgressIndicator(
+            key: const Key('budget_nudge_meter'),
+            value: data.usageContext!.budgetPercent! / 100,
+            minHeight: 2,
+            color: OmiColors.accent,
+            backgroundColor: OmiColors.border,
+          )),
+        ),
+        const SizedBox(height: OmiSpacing.sm),
+        Text(data.usageContext!.budgetNudgeLabel ?? data.usageContext!.meter ?? data.usageContext!.message,
+            style: OmiType.subhead),
+        const SizedBox(height: OmiSpacing.xs),
+        Row(children: [
+          Expanded(
+              child: OmiButton(
+            key: const Key('budget_nudge_compare'),
+            label: context.l10n.paywallComparePlans,
+            size: OmiButtonSize.compact,
+            onPressed: widget.onOpen,
+          )),
+          OmiButton.tertiary(
+            key: const Key('budget_nudge_dismiss'),
+            label: context.l10n.dismiss,
+            size: OmiButtonSize.compact,
+            onPressed: () async {
+              setState(() => _dismissed = true);
+              await widget.onDismiss?.call();
+            },
+          ),
+        ]),
       ]),
     );
   }

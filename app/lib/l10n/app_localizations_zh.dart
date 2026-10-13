@@ -12822,4 +12822,13 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get paywallNoPlans => '暂无可用套餐';
+
+  @override
+  String get paywallOtherPlans => '其他方案';
+
+  @override
+  String get paywallComparePlans => '比较方案';
+
+  @override
+  String get paywallLegacyPlan => '旧版方案';
 }

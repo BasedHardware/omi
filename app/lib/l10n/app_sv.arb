@@ -4006,5 +4006,8 @@
     "reviewProposalConflict": "Det här har ändrats sedan Dream föreslog det, så inget tillämpades.",
     "itemLinkListTitle": "{count, plural, =0{Inga objekt} =1{1 objekt} other{{count} objekt}}",
     "paywallRecommended": "Rekommenderas",
-    "paywallNoPlans": "Inga tillgängliga planer"
+    "paywallNoPlans": "Inga tillgängliga planer",
+    "paywallOtherPlans": "Andra abonnemang",
+    "paywallComparePlans": "Jämför abonnemang",
+    "paywallLegacyPlan": "Äldre abonnemang"
 }

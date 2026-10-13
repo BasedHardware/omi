@@ -4006,5 +4006,8 @@
     "reviewProposalConflict": "Це змінилося після пропозиції Dream, тому нічого не застосовано.",
     "itemLinkListTitle": "{count, plural, =0{Немає елементів} =1{1 елемент} other{{count} елементів}}",
     "paywallRecommended": "Рекомендовано",
-    "paywallNoPlans": "Немає доступних планів"
+    "paywallNoPlans": "Немає доступних планів",
+    "paywallOtherPlans": "Інші плани",
+    "paywallComparePlans": "Порівняти плани",
+    "paywallLegacyPlan": "Попередній план"
 }

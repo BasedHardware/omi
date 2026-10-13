@@ -13117,4 +13117,13 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String get paywallNoPlans => 'திட்டங்கள் எதுவும் கிடைக்கவில்லை';
+
+  @override
+  String get paywallOtherPlans => 'பிற திட்டங்கள்';
+
+  @override
+  String get paywallComparePlans => 'திட்டங்களை ஒப்பிடு';
+
+  @override
+  String get paywallLegacyPlan => 'பழைய திட்டம்';
 }

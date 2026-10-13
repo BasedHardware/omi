@@ -13024,4 +13024,13 @@ class AppLocalizationsBn extends AppLocalizations {
 
   @override
   String get paywallNoPlans => 'কোনো প্ল্যান উপলব্ধ নেই';
+
+  @override
+  String get paywallOtherPlans => 'অন্যান্য প্ল্যান';
+
+  @override
+  String get paywallComparePlans => 'প্ল্যান তুলনা করুন';
+
+  @override
+  String get paywallLegacyPlan => 'পুরনো প্ল্যান';
 }

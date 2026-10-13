@@ -2200,7 +2200,8 @@ enum PaywallOpenedSource {
   budget100Percent("budget_100_percent"),
   proactiveAgentGate("proactive_agent_gate"),
   screenContextGate("screen_context_gate"),
-  mcpDailyCap("mcp_daily_cap");
+  mcpDailyCap("mcp_daily_cap"),
+  budget80("budget_80");
   const PaywallOpenedSource(this.wireName);
   final String wireName;
 }
@@ -2269,7 +2270,8 @@ enum UpgradePlanSelectedSource {
   budget100Percent("budget_100_percent"),
   proactiveAgentGate("proactive_agent_gate"),
   screenContextGate("screen_context_gate"),
-  mcpDailyCap("mcp_daily_cap");
+  mcpDailyCap("mcp_daily_cap"),
+  budget80("budget_80");
   const UpgradePlanSelectedSource(this.wireName);
   final String wireName;
 }

@@ -13126,4 +13126,13 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get paywallNoPlans => 'Keine Tarife verfügbar';
+
+  @override
+  String get paywallOtherPlans => 'Weitere Tarife';
+
+  @override
+  String get paywallComparePlans => 'Tarife vergleichen';
+
+  @override
+  String get paywallLegacyPlan => 'Bestandstarif';
 }

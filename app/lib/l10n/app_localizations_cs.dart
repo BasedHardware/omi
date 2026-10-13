@@ -13029,4 +13029,13 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get paywallNoPlans => 'Nejsou dostupné žádné plány';
+
+  @override
+  String get paywallOtherPlans => 'Další plány';
+
+  @override
+  String get paywallComparePlans => 'Porovnat plány';
+
+  @override
+  String get paywallLegacyPlan => 'Původní plán';
 }

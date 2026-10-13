@@ -13088,4 +13088,13 @@ class AppLocalizationsMk extends AppLocalizations {
 
   @override
   String get paywallNoPlans => 'Нема достапни планови';
+
+  @override
+  String get paywallOtherPlans => 'Други планови';
+
+  @override
+  String get paywallComparePlans => 'Спореди планови';
+
+  @override
+  String get paywallLegacyPlan => 'Стар план';
 }

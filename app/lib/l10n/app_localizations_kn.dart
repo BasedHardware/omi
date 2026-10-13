@@ -13066,4 +13066,13 @@ class AppLocalizationsKn extends AppLocalizations {
 
   @override
   String get paywallNoPlans => 'ಯಾವುದೇ ಯೋಜನೆಗಳು ಲಭ್ಯವಿಲ್ಲ';
+
+  @override
+  String get paywallOtherPlans => 'ಇತರ ಯೋಜನೆಗಳು';
+
+  @override
+  String get paywallComparePlans => 'ಯೋಜನೆಗಳನ್ನು ಹೋಲಿಸಿ';
+
+  @override
+  String get paywallLegacyPlan => 'ಹಳೆಯ ಯೋಜನೆ';
 }

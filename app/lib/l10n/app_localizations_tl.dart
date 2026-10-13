@@ -13132,4 +13132,13 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get paywallNoPlans => 'Walang Available na Plano';
+
+  @override
+  String get paywallOtherPlans => 'Iba pang plano';
+
+  @override
+  String get paywallComparePlans => 'Ihambing ang mga plano';
+
+  @override
+  String get paywallLegacyPlan => 'Lumang plano';
 }

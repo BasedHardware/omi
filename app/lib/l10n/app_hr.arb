@@ -11443,5 +11443,8 @@
     "reviewProposalConflict": "Ovo se promijenilo otkako je Dream to predložio, pa ništa nije primijenjeno.",
     "itemLinkListTitle": "{count, plural, =0{Nema stavki} =1{1 stavka} other{{count} stavki}}",
     "paywallRecommended": "Preporučeno",
-    "paywallNoPlans": "Nema dostupnih planova"
+    "paywallNoPlans": "Nema dostupnih planova",
+    "paywallOtherPlans": "Ostali planovi",
+    "paywallComparePlans": "Usporedi planove",
+    "paywallLegacyPlan": "Stari plan"
 }

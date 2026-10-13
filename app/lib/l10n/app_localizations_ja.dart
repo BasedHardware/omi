@@ -12841,4 +12841,13 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get paywallNoPlans => '利用可能なプランはありません';
+
+  @override
+  String get paywallOtherPlans => 'その他のプラン';
+
+  @override
+  String get paywallComparePlans => 'プランを比較';
+
+  @override
+  String get paywallLegacyPlan => '旧プラン';
 }

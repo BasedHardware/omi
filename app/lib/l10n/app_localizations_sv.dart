@@ -13032,4 +13032,13 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get paywallNoPlans => 'Inga tillgängliga planer';
+
+  @override
+  String get paywallOtherPlans => 'Andra abonnemang';
+
+  @override
+  String get paywallComparePlans => 'Jämför abonnemang';
+
+  @override
+  String get paywallLegacyPlan => 'Äldre abonnemang';
 }

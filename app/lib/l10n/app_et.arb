@@ -4006,5 +4006,8 @@
     "reviewProposalConflict": "See on pärast Dreami soovitust muutunud, seega midagi ei rakendatud.",
     "itemLinkListTitle": "{count, plural, =0{Üksusi pole} =1{1 üksus} other{{count} üksust}}",
     "paywallRecommended": "Soovitatud",
-    "paywallNoPlans": "Plaane pole saadaval"
+    "paywallNoPlans": "Plaane pole saadaval",
+    "paywallOtherPlans": "Muud paketid",
+    "paywallComparePlans": "Võrdle pakette",
+    "paywallLegacyPlan": "Varasem pakett"
 }

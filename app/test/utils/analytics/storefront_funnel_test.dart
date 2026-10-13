@@ -21,6 +21,7 @@ void main() {
     await AnalyticsManager.init();
     final analytics = AnalyticsManager();
     const sources = [
+      'budget_80',
       'budget_80_percent',
       'budget_100_percent',
       'proactive_agent_gate',

@@ -13073,4 +13073,13 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get paywallNoPlans => 'Нет доступных тарифов';
+
+  @override
+  String get paywallOtherPlans => 'Другие планы';
+
+  @override
+  String get paywallComparePlans => 'Сравнить планы';
+
+  @override
+  String get paywallLegacyPlan => 'Прежний план';
 }

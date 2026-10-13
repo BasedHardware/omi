@@ -19,7 +19,9 @@
       "proactive_agent",
       "screen_context"
     ],
-    "source": "budget_80_percent"
+    "source": "budget_80",
+    "budget_nudge_label": "80% of this month's budget used \u00b7 resets Nov 1",
+    "period_id": "2026-10"
   },
   "tiers": [
     {

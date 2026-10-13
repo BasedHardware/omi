@@ -13022,4 +13022,13 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String get paywallNoPlans => 'هیچ طرحی در دسترس نیست';
+
+  @override
+  String get paywallOtherPlans => 'طرح‌های دیگر';
+
+  @override
+  String get paywallComparePlans => 'مقایسه طرح‌ها';
+
+  @override
+  String get paywallLegacyPlan => 'طرح قدیمی';
 }

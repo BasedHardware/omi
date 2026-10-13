@@ -4006,5 +4006,8 @@
     "reviewProposalConflict": "È cambiato da quando Dream lo ha suggerito, quindi non è stato applicato nulla.",
     "itemLinkListTitle": "{count, plural, =0{Nessun elemento} =1{1 elemento} other{{count} elementi}}",
     "paywallRecommended": "Consigliato",
-    "paywallNoPlans": "Nessun piano disponibile"
+    "paywallNoPlans": "Nessun piano disponibile",
+    "paywallOtherPlans": "Altri piani",
+    "paywallComparePlans": "Confronta i piani",
+    "paywallLegacyPlan": "Piano precedente"
 }

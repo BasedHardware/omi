@@ -4006,5 +4006,8 @@
     "reviewProposalConflict": "Dream이 제안한 후 내용이 바뀌어 아무것도 적용되지 않았습니다.",
     "itemLinkListTitle": "{count, plural, =0{항목 없음} =1{항목 1개} other{항목 {count}개}}",
     "paywallRecommended": "추천",
-    "paywallNoPlans": "이용 가능한 요금제가 없습니다"
+    "paywallNoPlans": "이용 가능한 요금제가 없습니다",
+    "paywallOtherPlans": "다른 요금제",
+    "paywallComparePlans": "요금제 비교",
+    "paywallLegacyPlan": "기존 요금제"
 }

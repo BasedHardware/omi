@@ -13079,4 +13079,13 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get paywallNoPlans => 'Nincs elérhető csomag';
+
+  @override
+  String get paywallOtherPlans => 'Más csomagok';
+
+  @override
+  String get paywallComparePlans => 'Csomagok összehasonlítása';
+
+  @override
+  String get paywallLegacyPlan => 'Korábbi csomag';
 }

@@ -13079,4 +13079,13 @@ class AppLocalizationsTe extends AppLocalizations {
 
   @override
   String get paywallNoPlans => 'ప్లాన్‌లు అందుబాటులో లేవు';
+
+  @override
+  String get paywallOtherPlans => 'ఇతర ప్లాన్‌లు';
+
+  @override
+  String get paywallComparePlans => 'ప్లాన్‌లను పోల్చండి';
+
+  @override
+  String get paywallLegacyPlan => 'పాత ప్లాన్';
 }

@@ -13008,4 +13008,13 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String get paywallNoPlans => 'कोई प्लान उपलब्ध नहीं है';
+
+  @override
+  String get paywallOtherPlans => 'अन्य प्लान';
+
+  @override
+  String get paywallComparePlans => 'प्लान की तुलना करें';
+
+  @override
+  String get paywallLegacyPlan => 'पुराना प्लान';
 }

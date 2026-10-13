@@ -12934,4 +12934,13 @@ class AppLocalizationsHe extends AppLocalizations {
 
   @override
   String get paywallNoPlans => 'אין תוכניות זמינות';
+
+  @override
+  String get paywallOtherPlans => 'תוכניות אחרות';
+
+  @override
+  String get paywallComparePlans => 'השוואת תוכניות';
+
+  @override
+  String get paywallLegacyPlan => 'תוכנית ותיקה';
 }

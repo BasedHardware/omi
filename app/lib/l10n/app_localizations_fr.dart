@@ -13130,4 +13130,13 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get paywallNoPlans => 'Aucune offre disponible';
+
+  @override
+  String get paywallOtherPlans => 'Autres forfaits';
+
+  @override
+  String get paywallComparePlans => 'Comparer les forfaits';
+
+  @override
+  String get paywallLegacyPlan => 'Ancien forfait';
 }

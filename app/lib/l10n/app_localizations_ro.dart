@@ -13082,4 +13082,13 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get paywallNoPlans => 'Nu există planuri disponibile';
+
+  @override
+  String get paywallOtherPlans => 'Alte planuri';
+
+  @override
+  String get paywallComparePlans => 'Compară planurile';
+
+  @override
+  String get paywallLegacyPlan => 'Plan vechi';
 }

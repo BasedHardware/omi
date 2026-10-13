@@ -13023,4 +13023,13 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get paywallNoPlans => 'Nie sú dostupné žiadne plány';
+
+  @override
+  String get paywallOtherPlans => 'Ďalšie plány';
+
+  @override
+  String get paywallComparePlans => 'Porovnať plány';
+
+  @override
+  String get paywallLegacyPlan => 'Pôvodný plán';
 }

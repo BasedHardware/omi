@@ -13095,4 +13095,13 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get paywallNoPlans => 'No hi ha plans disponibles';
+
+  @override
+  String get paywallOtherPlans => 'Altres plans';
+
+  @override
+  String get paywallComparePlans => 'Compara els plans';
+
+  @override
+  String get paywallLegacyPlan => 'Pla antic';
 }

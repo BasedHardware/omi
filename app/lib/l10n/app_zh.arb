@@ -4006,5 +4006,8 @@
     "reviewProposalConflict": "Dream 提出建议后内容已有变化，因此未应用任何更改。",
     "itemLinkListTitle": "{count, plural, =0{无项目} =1{1 个项目} other{{count} 个项目}}",
     "paywallRecommended": "推荐",
-    "paywallNoPlans": "暂无可用套餐"
+    "paywallNoPlans": "暂无可用套餐",
+    "paywallOtherPlans": "其他方案",
+    "paywallComparePlans": "比较方案",
+    "paywallLegacyPlan": "旧版方案"
 }

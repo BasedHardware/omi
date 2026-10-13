@@ -23228,6 +23228,24 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'No Plans Available'**
   String get paywallNoPlans;
+
+  /// Expandable row for current and lower plans.
+  ///
+  /// In en, this message translates to:
+  /// **'Other plans'**
+  String get paywallOtherPlans;
+
+  /// Primary action in the nonblocking budget banner.
+  ///
+  /// In en, this message translates to:
+  /// **'Compare plans'**
+  String get paywallComparePlans;
+
+  /// Marker beside the true name of a legacy subscription.
+  ///
+  /// In en, this message translates to:
+  /// **'Legacy plan'**
+  String get paywallLegacyPlan;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

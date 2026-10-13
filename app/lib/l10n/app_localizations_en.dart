@@ -13012,4 +13012,13 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get paywallNoPlans => 'No Plans Available';
+
+  @override
+  String get paywallOtherPlans => 'Other plans';
+
+  @override
+  String get paywallComparePlans => 'Compare plans';
+
+  @override
+  String get paywallLegacyPlan => 'Legacy plan';
 }

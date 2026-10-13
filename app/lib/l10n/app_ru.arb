@@ -4041,5 +4041,8 @@
     "reviewProposalConflict": "Это изменилось после предложения Dream, поэтому ничего не применено.",
     "itemLinkListTitle": "{count, plural, =0{Нет элементов} =1{1 элемент} other{{count} элементов}}",
     "paywallRecommended": "Рекомендуется",
-    "paywallNoPlans": "Нет доступных тарифов"
+    "paywallNoPlans": "Нет доступных тарифов",
+    "paywallOtherPlans": "Другие планы",
+    "paywallComparePlans": "Сравнить планы",
+    "paywallLegacyPlan": "Прежний план"
 }

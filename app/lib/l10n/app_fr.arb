@@ -4041,5 +4041,8 @@
     "reviewProposalConflict": "Ceci a changé depuis la suggestion de Dream, donc rien n'a été appliqué.",
     "itemLinkListTitle": "{count, plural, =0{Aucun élément} =1{1 élément} other{{count} éléments}}",
     "paywallRecommended": "Recommandé",
-    "paywallNoPlans": "Aucune offre disponible"
+    "paywallNoPlans": "Aucune offre disponible",
+    "paywallOtherPlans": "Autres forfaits",
+    "paywallComparePlans": "Comparer les forfaits",
+    "paywallLegacyPlan": "Ancien forfait"
 }

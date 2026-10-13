@@ -13041,4 +13041,13 @@ class AppLocalizationsUr extends AppLocalizations {
 
   @override
   String get paywallNoPlans => 'کوئی پلان دستیاب نہیں';
+
+  @override
+  String get paywallOtherPlans => 'دیگر پلان';
+
+  @override
+  String get paywallComparePlans => 'پلان کا موازنہ کریں';
+
+  @override
+  String get paywallLegacyPlan => 'پرانا پلان';
 }

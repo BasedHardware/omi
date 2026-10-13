@@ -4,119 +4,133 @@
     {
       "file": "001-mobile-ios-storefront-monthly.png",
       "platform": "mobile-ios",
-      "description": "storefront monthly (hermetic widget render, synthetic server payload)",
+      "description": "storefront monthly (PO revision; hermetic widget render, synthetic backend fields)",
       "captured_by": "agent",
       "source": "visual-audit"
     },
     {
       "file": "002-mobile-ios-storefront-annual.png",
       "platform": "mobile-ios",
-      "description": "storefront annual (hermetic widget render, synthetic server payload)",
+      "description": "storefront annual (PO revision; hermetic widget render, synthetic backend fields)",
       "captured_by": "agent",
       "source": "visual-audit"
     },
     {
       "file": "003-mobile-ios-storefront-pro.png",
       "platform": "mobile-ios",
-      "description": "storefront pro (hermetic widget render, synthetic server payload)",
+      "description": "storefront pro (PO revision; hermetic widget render, synthetic backend fields)",
       "captured_by": "agent",
       "source": "visual-audit"
     },
     {
       "file": "004-mobile-ios-storefront-architect.png",
       "platform": "mobile-ios",
-      "description": "storefront architect (hermetic widget render, synthetic server payload)",
+      "description": "storefront architect (PO revision; hermetic widget render, synthetic backend fields)",
       "captured_by": "agent",
       "source": "visual-audit"
     },
     {
       "file": "005-mobile-ios-storefront-loading.png",
       "platform": "mobile-ios",
-      "description": "storefront loading (hermetic widget render, synthetic server payload)",
+      "description": "storefront loading (PO revision; hermetic widget render, synthetic backend fields)",
       "captured_by": "agent",
       "source": "visual-audit"
     },
     {
       "file": "006-mobile-ios-storefront-empty.png",
       "platform": "mobile-ios",
-      "description": "storefront empty (hermetic widget render, synthetic server payload)",
+      "description": "storefront empty (PO revision; hermetic widget render, synthetic backend fields)",
       "captured_by": "agent",
       "source": "visual-audit"
     },
     {
       "file": "007-mobile-ios-storefront-error.png",
       "platform": "mobile-ios",
-      "description": "storefront error (hermetic widget render, synthetic server payload)",
+      "description": "storefront error (PO revision; hermetic widget render, synthetic backend fields)",
       "captured_by": "agent",
       "source": "visual-audit"
     },
     {
       "file": "008-mobile-ios-storefront-legacy.png",
       "platform": "mobile-ios",
-      "description": "storefront legacy (hermetic widget render, synthetic server payload)",
+      "description": "storefront legacy (PO revision; hermetic widget render, synthetic backend fields)",
       "captured_by": "agent",
       "source": "visual-audit"
     },
     {
       "file": "009-mobile-ios-storefront-small-light.png",
       "platform": "mobile-ios",
-      "description": "storefront small light (hermetic widget render, synthetic server payload)",
+      "description": "storefront small light (PO revision; hermetic widget render, synthetic backend fields)",
       "captured_by": "agent",
       "source": "visual-audit"
     },
     {
       "file": "010-mobile-ios-storefront-proactive-gate.png",
       "platform": "mobile-ios",
-      "description": "storefront proactive gate (hermetic widget render, synthetic server payload)",
+      "description": "storefront proactive gate (PO revision; hermetic widget render, synthetic backend fields)",
       "captured_by": "agent",
       "source": "visual-audit"
     },
     {
       "file": "011-mobile-ios-storefront-screen-gate.png",
       "platform": "mobile-ios",
-      "description": "storefront screen gate (hermetic widget render, synthetic server payload)",
+      "description": "storefront screen gate (PO revision; hermetic widget render, synthetic backend fields)",
       "captured_by": "agent",
       "source": "visual-audit"
     },
     {
       "file": "012-mobile-ios-storefront-mcp-cap.png",
       "platform": "mobile-ios",
-      "description": "storefront mcp cap (hermetic widget render, synthetic server payload)",
+      "description": "storefront mcp cap (PO revision; hermetic widget render, synthetic backend fields)",
       "captured_by": "agent",
       "source": "visual-audit"
     },
     {
       "file": "013-mobile-ios-budget-banner.png",
       "platform": "mobile-ios",
-      "description": "budget banner (hermetic widget render, synthetic server payload)",
+      "description": "budget banner (PO revision; hermetic widget render, synthetic backend fields)",
       "captured_by": "agent",
       "source": "visual-audit"
     },
     {
       "file": "014-mobile-ios-free-budget.png",
       "platform": "mobile-ios",
-      "description": "free budget (hermetic widget render, synthetic server payload)",
+      "description": "free budget (PO revision; hermetic widget render, synthetic backend fields)",
       "captured_by": "agent",
       "source": "visual-audit"
     },
     {
       "file": "015-mobile-ios-free-pro-gate.png",
       "platform": "mobile-ios",
-      "description": "free pro gate (hermetic widget render, synthetic server payload)",
+      "description": "free pro gate (PO revision; hermetic widget render, synthetic backend fields)",
       "captured_by": "agent",
       "source": "visual-audit"
     },
     {
       "file": "016-mobile-ios-plus-budget.png",
       "platform": "mobile-ios",
-      "description": "plus budget (hermetic widget render, synthetic server payload)",
+      "description": "plus budget (PO revision; hermetic widget render, synthetic backend fields)",
       "captured_by": "agent",
       "source": "visual-audit"
     },
     {
       "file": "017-mobile-ios-free-mcp-cap.png",
       "platform": "mobile-ios",
-      "description": "free mcp cap (hermetic widget render, synthetic server payload)",
+      "description": "free mcp cap (PO revision; hermetic widget render, synthetic backend fields)",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "018-mobile-ios-small-light-budget-fold.png",
+      "platform": "mobile-ios",
+      "description": "small light budget fold (PO revision; hermetic widget render, synthetic backend fields)",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "019-mobile-ios-storefront-other-plans.png",
+      "platform": "mobile-ios",
+      "description": "storefront other plans (PO revision; hermetic widget render, synthetic backend fields)",
       "captured_by": "agent",
       "source": "visual-audit"
     }

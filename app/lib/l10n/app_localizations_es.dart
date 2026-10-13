@@ -13066,4 +13066,13 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get paywallNoPlans => 'No Hay Planes Disponibles';
+
+  @override
+  String get paywallOtherPlans => 'Otros planes';
+
+  @override
+  String get paywallComparePlans => 'Comparar planes';
+
+  @override
+  String get paywallLegacyPlan => 'Plan anterior';
 }

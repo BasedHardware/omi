@@ -13057,4 +13057,13 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get paywallNoPlans => 'Немає доступних планів';
+
+  @override
+  String get paywallOtherPlans => 'Інші плани';
+
+  @override
+  String get paywallComparePlans => 'Порівняти плани';
+
+  @override
+  String get paywallLegacyPlan => 'Попередній план';
 }

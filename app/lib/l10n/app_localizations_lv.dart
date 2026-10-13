@@ -13056,4 +13056,13 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get paywallNoPlans => 'Nav pieejamu plānu';
+
+  @override
+  String get paywallOtherPlans => 'Citi plāni';
+
+  @override
+  String get paywallComparePlans => 'Salīdzināt plānus';
+
+  @override
+  String get paywallLegacyPlan => 'Iepriekšējais plāns';
 }

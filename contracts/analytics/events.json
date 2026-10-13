@@ -3417,7 +3417,8 @@
             "budget_100_percent",
             "proactive_agent_gate",
             "screen_context_gate",
-            "mcp_daily_cap"
+            "mcp_daily_cap",
+            "budget_80"
           ]
         },
         "currentPlan": {
@@ -3494,7 +3495,8 @@
             "budget_100_percent",
             "proactive_agent_gate",
             "screen_context_gate",
-            "mcp_daily_cap"
+            "mcp_daily_cap",
+            "budget_80"
           ]
         }
       },

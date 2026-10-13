@@ -4102,5 +4102,8 @@
     "reviewProposalConflict": "Ez megváltozott, mióta a Dream javasolta, így semmi sem lett alkalmazva.",
     "itemLinkListTitle": "{count, plural, =0{Nincsenek elemek} =1{1 elem} other{{count} elem}}",
     "paywallRecommended": "Ajánlott",
-    "paywallNoPlans": "Nincs elérhető csomag"
+    "paywallNoPlans": "Nincs elérhető csomag",
+    "paywallOtherPlans": "Más csomagok",
+    "paywallComparePlans": "Csomagok összehasonlítása",
+    "paywallLegacyPlan": "Korábbi csomag"
 }

@@ -13025,4 +13025,13 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get paywallNoPlans => 'Chưa Có Gói Khả Dụng';
+
+  @override
+  String get paywallOtherPlans => 'Các gói khác';
+
+  @override
+  String get paywallComparePlans => 'So sánh các gói';
+
+  @override
+  String get paywallLegacyPlan => 'Gói cũ';
 }

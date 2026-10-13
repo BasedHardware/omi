@@ -5,6 +5,20 @@ import 'package:omi/models/plan_storefront.dart';
 
 Map<String, dynamic> fixture() => jsonDecode(File('test/fixtures/plan_storefront.json').readAsStringSync());
 void main() {
+  test('optional presentation fields preserve backend billing copy and period identity', () {
+    final data = PlanStorefront.fromJson(fixture());
+    expect(data.current!.formattedPrice, r'$19.99/mo');
+    expect(data.current!.renewalLabel, 'Renews Nov 1');
+    expect(data.usageContext!.periodId, '2026-10');
+    expect(data.usageContext!.budgetNudgeLabel, contains('80%'));
+    final json = fixture();
+    json['current'].remove('formatted_price');
+    json['current'].remove('renewal_label');
+    json['usage_context'].remove('period_id');
+    expect(PlanStorefront.fromJson(json).current!.formattedPrice, isNull);
+    expect(PlanStorefront.fromJson(json).usageContext!.periodId, isNull);
+  });
+
   for (final entry in {
     'free_budget': 'plus',
     'free_mcp_cap': 'plus',

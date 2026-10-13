@@ -12954,4 +12954,13 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get paywallNoPlans => 'لا توجد خطط متاحة';
+
+  @override
+  String get paywallOtherPlans => 'خطط أخرى';
+
+  @override
+  String get paywallComparePlans => 'مقارنة الخطط';
+
+  @override
+  String get paywallLegacyPlan => 'خطة قديمة';
 }

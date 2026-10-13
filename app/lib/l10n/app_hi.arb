@@ -4006,5 +4006,8 @@
     "reviewProposalConflict": "Dream के सुझाव के बाद यह बदल गया, इसलिए कुछ भी लागू नहीं किया गया।",
     "itemLinkListTitle": "{count, plural, =0{कोई आइटम नहीं} =1{1 आइटम} other{{count} आइटम}}",
     "paywallRecommended": "सुझाया गया",
-    "paywallNoPlans": "कोई प्लान उपलब्ध नहीं है"
+    "paywallNoPlans": "कोई प्लान उपलब्ध नहीं है",
+    "paywallOtherPlans": "अन्य प्लान",
+    "paywallComparePlans": "प्लान की तुलना करें",
+    "paywallLegacyPlan": "पुराना प्लान"
 }

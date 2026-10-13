@@ -13058,4 +13058,13 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get paywallNoPlans => 'Tiada Pelan Tersedia';
+
+  @override
+  String get paywallOtherPlans => 'Pelan lain';
+
+  @override
+  String get paywallComparePlans => 'Bandingkan pelan';
+
+  @override
+  String get paywallLegacyPlan => 'Pelan lama';
 }

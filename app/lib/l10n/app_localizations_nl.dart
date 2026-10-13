@@ -13063,4 +13063,13 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get paywallNoPlans => 'Geen abonnementen beschikbaar';
+
+  @override
+  String get paywallOtherPlans => 'Andere abonnementen';
+
+  @override
+  String get paywallComparePlans => 'Abonnementen vergelijken';
+
+  @override
+  String get paywallLegacyPlan => 'Oud abonnement';
 }

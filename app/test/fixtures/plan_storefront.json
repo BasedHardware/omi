@@ -6,7 +6,9 @@
     "name": "Plus",
     "price_id": "fixture_plus_month",
     "legacy": false,
-    "message": "Your current plan is Plus. Your memories stay with you."
+    "message": "Your current plan is Plus. Your memories stay with you.",
+    "formatted_price": "$19.99/mo",
+    "renewal_label": "Renews Nov 1"
   },
   "usage_context": {
     "title": "More room for your everyday memories",
@@ -18,7 +20,9 @@
     "pro_gates": [
       "proactive_agent",
       "screen_context"
-    ]
+    ],
+    "budget_nudge_label": "80% of this month's budget used \u00b7 resets Nov 1",
+    "period_id": "2026-10"
   },
   "tiers": [
     {
