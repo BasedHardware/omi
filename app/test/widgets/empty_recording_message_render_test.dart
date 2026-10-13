@@ -76,7 +76,16 @@ void main() {
             final image = await boundary.toImage(pixelRatio: 3);
             final bytes = await image.toByteData(format: ui.ImageByteFormat.png);
             final dir = await Directory(evidence).create(recursive: true);
-            await File('${dir.path}/${item.$1}-${platform.name}.png').writeAsBytes(bytes!.buffer.asUint8List());
+            final platformSlug = platform == TargetPlatform.iOS ? 'mobile-ios' : 'mobile-android';
+            final ordinal = switch ((platform, item.$1)) {
+              (TargetPlatform.iOS, 'empty-result') => '001',
+              (TargetPlatform.android, 'empty-result') => '002',
+              (TargetPlatform.iOS, 'discarded-only') => '003',
+              (TargetPlatform.android, 'discarded-only') => '004',
+              _ => '009',
+            };
+            final slug = item.$1 == 'empty-result' ? 'empty-recording' : 'discarded-only';
+            await File('${dir.path}/$ordinal-$platformSlug-$slug.png').writeAsBytes(bytes!.buffer.asUint8List());
             image.dispose();
           });
         }
