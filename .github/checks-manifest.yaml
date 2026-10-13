@@ -75,6 +75,11 @@ checks:
     triggers: ["plugins/iq_rating/**", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "#13980: IQ rating plugin must filter human names, guard OpenAI API exceptions, retain batches on anomalous 200 responses, and run hermetic stdlib-only unit tests"
+  - id: iq-rating-security-tests
+    command: ["python3", "plugins/iq_rating/test_iq_rating_security.py"]
+    triggers: ["plugins/iq_rating/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "IQ rating plugin must prevent script-context breakouts in const uid and peopleData, and run hermetic stdlib-only unit tests"
   - id: open-meteo-app-tests
     command: ["python3", "plugins/omi-open-meteo-app/test_main.py"]
     triggers: ["plugins/omi-open-meteo-app/**", ".github/checks-manifest.yaml"]
