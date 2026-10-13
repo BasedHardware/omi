@@ -24,11 +24,14 @@ class PlanStorefront {
   /// Current and usage snapshots must both permit a nonblocking budget nudge.
   bool get showBudgetNudge => showSubscriptionUi && current?.legacy == false && usage?.showBudgetNudge == true;
 
-  /// Pro gates apply below Pro. A live or payload Pro/Architect (or higher) plan
-  /// already includes them, even when a stale payload still lists the gate.
+  /// Pro gates apply below Pro on the ladder. A live or payload Pro/Architect
+  /// plan already includes them. Non-ladder plans (`unlimited`, `unlimited_v2`)
+  /// and unknown ids are not gated: checkout refuses that payload, and opening
+  /// the paywall would skip the save.
   bool shouldGate(String feature, {PlanType? livePlan}) {
     if (!showSubscriptionUi || current == null || current!.legacy) return false;
     if (usage?.proGates.contains(feature) != true) return false;
+    if (_isOffLadderOrUnknown(current!.planId) || _isOffLadderOrUnknown(livePlan?.wireName)) return false;
     final rank = _higherRank(_storefrontLadderRank(current!.planId), _storefrontLadderRank(livePlan?.wireName));
     final proRank = _storefrontLadderRank('operator');
     if (rank != null && proRank != null && rank >= proRank) return false;
@@ -77,6 +80,12 @@ int? _storefrontLadderRank(String? id) {
 
 bool _isNonLadderLegacyPlan(PlanType plan) => plan == PlanType.unlimited || plan == PlanType.unlimitedV2;
 
+bool _isOffLadderOrUnknown(String? id) {
+  if (id == null) return false;
+  final plan = PlanType.fromWire(id);
+  return plan.isUnknown || _isNonLadderLegacyPlan(plan);
+}
+
 int? _higherRank(int? left, int? right) {
   if (left == null) return right;
   if (right == null) return left;
@@ -94,9 +103,12 @@ StorefrontPrice? _priceOnTier(StorefrontTier tier, String? id) {
 /// Single checkout boundary for rendering and every tap or handoff.
 ///
 /// Paid subscribers may move up the ladder, or from monthly to annual on the
-/// same tier. Legacy prices, unlimited plans, and unrecognized ids never
-/// check out. While a cancellation is scheduled the payment API rejects every
-/// other price, so the only purchase is resubscribe on the current price.
+/// same tier. Same-tier annual to monthly is refused from the held yearly
+/// price or from [StorefrontCurrentPlan.interval], including when the payload
+/// omits that yearly price. Legacy prices, unlimited plans, and unrecognized
+/// ids never check out. While a cancellation is scheduled the payment API
+/// rejects every other price, so the only purchase is resubscribe on the
+/// current price.
 StorefrontCheckoutDecision storefrontCheckoutDecision(
   StorefrontCurrentPlan? current,
   PlanType? livePlan,
@@ -120,7 +132,11 @@ StorefrontCheckoutDecision storefrontCheckoutDecision(
     return StorefrontCheckoutDecision.refuse;
   }
   final held = _priceOnTier(tier, current?.priceId);
-  if (held != null && held.interval == 'year' && price.interval == 'month') {
+  final sameTierAnnualToMonthly = price.interval == 'month' &&
+      current != null &&
+      current.interval == 'year' &&
+      PlanType.fromWire(current.planId) == PlanType.fromWire(tier.planId);
+  if ((held != null && held.interval == 'year' && price.interval == 'month') || sameTierAnnualToMonthly) {
     return StorefrontCheckoutDecision.refuse;
   }
   final targetRank = _storefrontLadderRank(tier.planId);

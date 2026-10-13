@@ -327,11 +327,14 @@ class _PlansSheetState extends State<PlansSheet> {
         (livePlan == PlanType.unlimited || livePlan == PlanType.unlimitedV2 || livePlan?.isUnknown == true)) {
       return;
     }
+    StorefrontCheckoutDecision? storefrontDecision;
     if (storefrontPrice != null) {
       final tier = _storefront?.tiers.where((item) => item.planId == selectedTierId).firstOrNull;
-      if (tier == null || _storefrontDecision(tier, storefrontPrice) == StorefrontCheckoutDecision.refuse) {
+      final decision = tier == null ? StorefrontCheckoutDecision.refuse : _storefrontDecision(tier, storefrontPrice);
+      if (tier == null || decision == StorefrontCheckoutDecision.refuse) {
         return;
       }
+      storefrontDecision = decision;
     }
     final availablePlans = usageProvider.availablePlans;
     if (availablePlans == null) {
@@ -430,6 +433,7 @@ class _PlansSheetState extends State<PlansSheet> {
       targetPlan: tierId ?? 'unknown',
       billingInterval: isYearly ? 'year' : 'month',
       releaseUpgradingLock: releaseUpgradingLock,
+      storefrontDecision: storefrontDecision,
     );
   }
 
@@ -438,6 +442,7 @@ class _PlansSheetState extends State<PlansSheet> {
     required String targetPlan,
     required String billingInterval,
     bool releaseUpgradingLock = true,
+    StorefrontCheckoutDecision? storefrontDecision,
   }) async {
     final provider = context.read<UsageProvider>();
     final l10n = context.l10n;
@@ -481,8 +486,14 @@ class _PlansSheetState extends State<PlansSheet> {
     try {
       Map<String, dynamic>? result;
 
-      // If user already has a paid plan and it's not canceled
-      if (currentSub.plan.isPaid && currentSub.status == SubscriptionStatus.active && !currentSub.cancelAtPeriodEnd) {
+      // Resubscribe reactivates through checkout. The sheet payload can already
+      // say cancel_at_period_end while UsageProvider is still false; upgrade
+      // returns 409 for every price in that state, including the current one.
+      final resubscribe = storefrontDecision == StorefrontCheckoutDecision.resubscribe;
+      if (currentSub.plan.isPaid &&
+          currentSub.status == SubscriptionStatus.active &&
+          !currentSub.cancelAtPeriodEnd &&
+          !resubscribe) {
         result = await provider.upgradeUserSubscription(
           priceId: priceId,
           promotionCode: promoCode.isNotEmpty ? promoCode : null,

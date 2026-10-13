@@ -350,6 +350,64 @@ void main() {
     expect(usage.upgradedPrice, isNull);
     expect(tester.takeException(), isNull);
   });
+  testWidgets('payload cancel resubscribes through checkout when UsageProvider is still active', (tester) async {
+    tester.view.physicalSize = const Size(1000, 2200);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final usage = _Usage();
+    addTearDown(usage.dispose);
+    final data = PlanStorefront.fromJson(
+        jsonDecode(File('test/fixtures/storefront_v2/cancel_scheduled.json').readAsStringSync()));
+    final price = _plan(data, 'plus').priceFor('month')!;
+    expect(data.current!.cancelAtPeriodEnd, isTrue);
+    usage.debugSetSubscription(UserSubscriptionResponse(
+      subscription: Subscription(
+          plan: PlanType.plus, status: SubscriptionStatus.active, cancelAtPeriodEnd: false, currentPriceId: price.id),
+      transcriptionSecondsUsed: 0,
+      transcriptionSecondsLimit: 0,
+      wordsTranscribedUsed: 0,
+      wordsTranscribedLimit: 0,
+      insightsGainedUsed: 0,
+      insightsGainedLimit: 0,
+      availablePlans: [
+        SubscriptionPlan(id: 'plus', title: 'Plus', prices: [
+          PricingOption(id: price.id, title: 'Monthly', priceString: price.headline),
+        ]),
+      ],
+    ));
+    usage.debugSetAvailablePlans({
+      'plans': [
+        {
+          'id': price.id,
+          'plan_id': 'plus',
+          'interval': 'month',
+          'unit_amount': price.amountMinor,
+          'title': 'Plus',
+          'price_string': price.headline,
+          'is_active': true
+        },
+      ]
+    });
+    await tester.pumpWidget(ChangeNotifierProvider<UsageProvider>.value(
+        value: usage,
+        child: MaterialApp(
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            supportedLocales: AppLocalizations.supportedLocales,
+            home: Scaffold(body: _Host(data)))));
+    await tester.pumpAndSettle();
+    expect(find.text('Resubscribe'), findsOneWidget);
+    await tester.ensureVisible(find.byKey(const Key('storefront_buy_plus')));
+    await tester.tap(find.byKey(const Key('storefront_buy_plus')).hitTestable());
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+    await tester.tap(find.text('Change Plan').hitTestable());
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(usage.sessionPrice, price.id);
+    expect(usage.upgradedPrice, isNull);
+    expect(tester.takeException(), isNull);
+  });
   testWidgets('transcription usage legacy does not check out from the sheet', (tester) async {
     tester.view.physicalSize = const Size(1000, 2200);
     tester.view.devicePixelRatio = 1;

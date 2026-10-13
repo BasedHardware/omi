@@ -147,6 +147,24 @@ void main() {
     expect(plus.shouldGate('screen_context', livePlan: PlanType.architect), isFalse);
   });
 
+  test('non-ladder and unknown plans are not gated', () {
+    for (final planId in ['unlimited', 'unlimited_v2', 'future_desktop']) {
+      final json = fixture();
+      json['current']['plan_id'] = planId;
+      json['current']['legacy'] = false;
+      final data = PlanStorefront.fromJson(json);
+      expect(data.usage!.proGates, contains('proactive_agent'));
+      expect(data.shouldGate('proactive_agent'), isFalse, reason: planId);
+      expect(data.shouldGate('screen_context'), isFalse, reason: planId);
+    }
+    final plus = PlanStorefront.fromJson(fixture());
+    expect(plus.shouldGate('proactive_agent'), isTrue);
+    expect(plus.shouldGate('proactive_agent', livePlan: PlanType.unlimited), isFalse);
+    expect(plus.shouldGate('proactive_agent', livePlan: PlanType.unlimitedV2), isFalse);
+    expect(plus.shouldGate('proactive_agent', livePlan: PlanType.unknown('future_desktop')), isFalse);
+    expect(plus.shouldGate('proactive_agent', livePlan: PlanType.plus), isTrue);
+  });
+
   test('Pro gates follow server decisions and never override legacy access', () {
     final json = fixture();
     expect(PlanStorefront.fromJson(json).shouldGate('proactive_agent'), isTrue);
@@ -193,15 +211,16 @@ void main() {
         prices: prices,
         action: 'checkout',
         ctaLabel: 'Continue');
-    StorefrontCurrentPlan current(String id, {String? priceId, bool legacy = false}) => StorefrontCurrentPlan(
-        planId: id,
-        name: id,
-        priceId: priceId,
-        interval: 'month',
-        legacy: legacy,
-        cancelAtPeriodEnd: false,
-        line: 'You\'re on $id',
-        legacyNote: legacy ? 'We don\'t sell this plan anymore, but yours stays exactly as it is.' : null);
+    StorefrontCurrentPlan current(String id, {String? priceId, bool legacy = false, String? interval = 'month'}) =>
+        StorefrontCurrentPlan(
+            planId: id,
+            name: id,
+            priceId: priceId,
+            interval: interval,
+            legacy: legacy,
+            cancelAtPeriodEnd: false,
+            line: 'You\'re on $id',
+            legacyNote: legacy ? 'We don\'t sell this plan anymore, but yours stays exactly as it is.' : null);
 
     final plusMonth = priced('plus_month', 'month');
     final plusYear = priced('plus_year', 'year');
@@ -239,6 +258,26 @@ void main() {
         PlanType.plus,
         plus,
         plusMonth,
+        false,
+        false
+      ),
+      (
+        'same-tier annual interval refuses monthly when the yearly price is omitted',
+        StorefrontCheckoutDecision.refuse,
+        current('plus', priceId: 'omitted_plus_year', interval: 'year'),
+        PlanType.plus,
+        tier('plus', [plusMonth]),
+        plusMonth,
+        false,
+        false
+      ),
+      (
+        'annual interval still checks out a higher monthly tier when the yearly price is omitted',
+        StorefrontCheckoutDecision.checkout,
+        current('plus', priceId: 'omitted_plus_year', interval: 'year'),
+        PlanType.plus,
+        operator,
+        operatorMonth,
         false,
         false
       ),
