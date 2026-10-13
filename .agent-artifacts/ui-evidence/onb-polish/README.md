@@ -5,7 +5,7 @@ Light theme, 393×852 logical pixels at 3×, Flutter 3.44.5. App FontManifest fo
 Reproduce from `app/`:
 
 ```sh
-ONB_POLISH_RENDER=1 flutter test test/widgets/onboarding_polish_test.dart
+ONB_POLISH_RENDER=1 flutter test test/widgets/onboarding_polish_test.dart test/providers/onboarding_provider_pairing_presentation_test.dart
 ```
 
 Watch is iOS only. The survey includes its initial and final scroll positions at 2.0 text scale. Connect uses inert providers seeded with the same closed failure enum as production. Nearby-devices/location reasons are Android-only runtime cases; their iOS images exercise the complete copy mapping, not iOS permission detection. Stale-bond detection currently uses the service's existing iOS latch. A swallowed connection error has only combined reachability guidance.
@@ -23,3 +23,7 @@ Watch is iOS only. The survey includes its initial and final scroll positions at
 | Connect: `not_found_or_dropped` | [PNG](006-mobile-ios-connect-not-found-or-dropped.png) | [PNG](016-mobile-android-connect-not-found-or-dropped.png) |
 | Connect: `stale_bond` | [PNG](007-mobile-ios-connect-stale-bond.png) | [PNG](017-mobile-android-connect-stale-bond.png) |
 | Connect: `unknown` | [PNG](008-mobile-ios-connect-unknown.png) | [PNG](018-mobile-android-connect-unknown.png) |
+
+| Empty scan after 10 seconds (real provider, scrolled to instructions) | [PNG](022-mobile-ios-connect-empty-scan.png) | [PNG](023-mobile-android-connect-empty-scan.png) |
+
+The empty-scan images execute the production OnboardingProvider scan timer with inert device I/O and an offline connectivity mock. Tests assert No Omi Found, its instructions, Contact Support, existing Device Scan Empty telemetry, and no Device Connect Failure Shown. They also verify discovered and saved-device reachability-card clearing; Bluetooth-off and unauthorized exceptions take precedence over the stale-bond latch.

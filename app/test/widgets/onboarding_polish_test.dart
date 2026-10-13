@@ -106,7 +106,7 @@ class PairingHomeProvider extends HomeProvider {
   Future<void> setupHasSpeakerProfile() async {}
 }
 
-Widget connect(PairingProvider pairing) => MultiProvider(providers: [
+Widget connect(OnboardingProvider pairing) => MultiProvider(providers: [
       ChangeNotifierProvider<OnboardingProvider>.value(value: pairing),
       ChangeNotifierProvider<DeviceProvider>(create: (_) => AuditDeviceProvider()),
       ChangeNotifierProvider<HomeProvider>(create: (_) => PairingHomeProvider()),
@@ -164,6 +164,10 @@ void main() {
         Reason.bluetoothOff);
     expect(connectFailureReason(const BluetoothAdapterUnavailableException(BluetoothAdapterState.unauthorized)),
         Reason.bluetoothPermissionDenied);
+    for (final state in [BluetoothAdapterState.off, BluetoothAdapterState.unauthorized]) {
+      expect(connectFailureReason(BluetoothAdapterUnavailableException(state), staleBond: true),
+          state == BluetoothAdapterState.off ? Reason.bluetoothOff : Reason.bluetoothPermissionDenied);
+    }
     expect(connectFailureReason(Exception('unknown')), Reason.unknown);
     expect(connectFailureReason(StateError('unrelated')), Reason.unknown);
     expect(blockedFailureReason(DevicePairingBlockedReason.nearbyDevicesDenied), Reason.nearbyDevicesDenied);

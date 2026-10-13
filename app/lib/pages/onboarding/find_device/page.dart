@@ -127,12 +127,17 @@ class _FindDevicesPageState extends State<FindDevicesPage> {
                   children: [
                     OmiButton(
                       key: const Key('find_devices_scan_again'),
+                      labelStyle: OmiType.callout.copyWith(
+                          fontWeight: FontWeight.w600, fontFamily: Theme.of(context).textTheme.labelLarge?.fontFamily),
                       label: context.l10n.scanAgain,
                       icon: Icons.refresh,
                       onPressed: _scanAgain,
                     ),
                     const SizedBox(height: OmiSpacing.xs),
-                    OmiButton.secondary(
+                    OmiButton(
+                      variant: OmiButtonVariant.secondary,
+                      labelStyle: OmiType.callout.copyWith(
+                          fontWeight: FontWeight.w600, fontFamily: Theme.of(context).textTheme.labelLarge?.fontFamily),
                       key: const Key('find_devices_how_to_pair'),
                       label: context.l10n.howToPair,
                       onPressed: _showConnectionGuide,
@@ -145,7 +150,8 @@ class _FindDevicesPageState extends State<FindDevicesPage> {
                         style: TextButton.styleFrom(
                           foregroundColor: OmiColors.textSecondary,
                           minimumSize: const Size(kOmiMinTapTarget, kOmiMinTapTarget),
-                          textStyle: OmiType.footnote,
+                          textStyle:
+                              OmiType.footnote.copyWith(fontFamily: Theme.of(context).textTheme.labelLarge?.fontFamily),
                         ),
                         child: Text(context.l10n.contactSupportAction),
                       ),

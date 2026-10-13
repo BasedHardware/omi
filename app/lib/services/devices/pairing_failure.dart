@@ -87,7 +87,6 @@ DeviceConnectFailureShownFailureReason blockedFailureReason(DevicePairingBlocked
 /// timeout, missing device or dropped link. Keep one reachability bucket and
 /// use the existing stale-bond latch for the distinct Bluetooth-settings action.
 DeviceConnectFailureShownFailureReason connectFailureReason(Object error, {bool staleBond = false}) {
-  if (staleBond) return DeviceConnectFailureShownFailureReason.staleBond;
   if (error is BluetoothAdapterUnavailableException) {
     return switch (error.state) {
       BluetoothAdapterState.off => DeviceConnectFailureShownFailureReason.bluetoothOff,
@@ -95,6 +94,7 @@ DeviceConnectFailureShownFailureReason connectFailureReason(Object error, {bool 
       _ => DeviceConnectFailureShownFailureReason.unknown,
     };
   }
+  if (staleBond) return DeviceConnectFailureShownFailureReason.staleBond;
   if (error is TimeoutException || (error is StateError && error.message == 'Device initialization did not complete')) {
     return DeviceConnectFailureShownFailureReason.notFoundOrDropped;
   }

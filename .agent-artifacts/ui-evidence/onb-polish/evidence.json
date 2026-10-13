@@ -155,6 +155,21 @@
       "description": "android find us large end",
       "captured_by": "agent",
       "source": "visual-audit"
+    },
+    {
+      "file": "022-mobile-ios-connect-empty-scan.png",
+      "platform": "mobile-ios",
+      "description": "ios real provider after the 10-second empty scan, scrolled to show instructions and Contact Support",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "023-mobile-android-connect-empty-scan.png",
+      "platform": "mobile-android",
+      "description": "android real provider after the 10-second empty scan, scrolled to show instructions and Contact Support",
+      "captured_by": "agent",
+      "source": "visual-audit"
     }
-  ]
+  ],
+  "empty_scan_command": "ONB_POLISH_RENDER=1 flutter test test/providers/onboarding_provider_pairing_presentation_test.dart"
 }

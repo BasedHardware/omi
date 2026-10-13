@@ -469,8 +469,6 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin implemen
     _didNotMakeItTimer = Timer(const Duration(seconds: deviceScanEmptyAfterSeconds), () {
       if (_isDisposed || epoch != _scanEpoch) return;
       if (shouldReportEmptyDeviceScan(deviceCount: deviceList.length)) {
-        pairingFailureVersion++;
-        pairingFailureReason = DeviceConnectFailureShownFailureReason.notFoundOrDropped;
         PlatformManager.instance.analytics.deviceScanEmpty(afterSeconds: deviceScanEmptyAfterSeconds);
       }
       enableInstructions = true;
@@ -597,7 +595,10 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin implemen
     // Convert the values of the map back to a list
     List<BtDevice> orderedDevices = foundDevicesMap.values.toList();
     deviceList = orderedDevices;
-    if (orderedDevices.isNotEmpty || savedDeviceList.isNotEmpty) {
+    if (visibleDeviceList.isNotEmpty) {
+      if (pairingFailureReason == DeviceConnectFailureShownFailureReason.notFoundOrDropped) {
+        pairingFailureReason = null;
+      }
       notifyListeners();
       _didNotMakeItTimer?.cancel();
     }
