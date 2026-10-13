@@ -36,7 +36,10 @@ access or application authentication is involved.
 ```bash
 source ~/.local/bin/gcp-agent-env.sh ro-prod
 printf 'Read-only restricted Stripe key: ' >&2
-IFS= read -r -s STRIPE_RECONCILE_READ_ONLY_KEY
+# Default read trims leading and trailing whitespace. Do not set IFS empty:
+# a pasted restricted key often keeps those spaces, and the script would
+# then reject the key.
+read -r -s STRIPE_RECONCILE_READ_ONLY_KEY
 printf '\n' >&2
 export STRIPE_RECONCILE_READ_ONLY_KEY
 backend/.venv/bin/python backend/scripts/billing_reconcile.py \

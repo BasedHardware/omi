@@ -1031,8 +1031,6 @@ async def _handle_stripe_event(event: dict, background_tasks: BackgroundTasks | 
                         )
 
             persisted = await run_blocking(stripe_executor, _update_subscription_from_session, uid, session)
-            if persisted is False and webhook_ledger_enabled():
-                return RetryableBillingSkip(status='success')
             await run_blocking(db_executor, set_credits_invalidation_signal, uid)
             await run_blocking(db_executor, clear_trial_paywall_cache, uid)
             subscription = await run_blocking(db_executor, users_db.get_user_subscription, uid)
@@ -1041,6 +1039,8 @@ async def _handle_stripe_event(event: dict, background_tasks: BackgroundTasks | 
                 await run_blocking(db_executor, memories_db.unlock_all_memories, uid)
                 await run_blocking(db_executor, action_items_db.unlock_all_action_items, uid)
                 await run_blocking(db_executor, clear_fair_use_on_upgrade, uid)
+            if persisted is False and webhook_ledger_enabled():
+                return RetryableBillingSkip(status='success')
             subscription_id = session.get('subscription')
             if subscription_id:
                 try:
