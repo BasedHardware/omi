@@ -136,7 +136,8 @@ def test_slo_rules_use_exact_budget_and_two_independent_window_pairs(journey, se
             assert 'outcome=~"failure|stale"' in expr
             assert 'cancelled' not in expr
             assert 'outcome="success"' not in expr
-        assert rule['for'] == '0s'
+        # Burn-rate pairs already debounce; the pending duration is the house floor for ratio rules.
+        assert rule['for'] == {'critical': '2m', 'warning': '15m'}[severity]
     assert rule['keep_firing_for'] == '0s'
     assert rule['noDataState'] == 'NoData'  # absent SLI must never resolve healthy
     assert rule['execErrState'] == 'Error'

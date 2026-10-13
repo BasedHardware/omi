@@ -69,7 +69,9 @@ phantom misses, so chat does not use that subtraction. A total chat outage
 (accepts with no successes) is already paged by
 `omi-journey-chat-success-critical` and `omi-journey-chat-fail` in
 `alerts/resilience.json`. Chat critical has no 10-minute zero-completion arm.
-Its pending period is five minutes.
+Its pending period is five minutes. The other critical rules pend for two
+minutes and the warnings for fifteen; the burn-rate window pairs already
+debounce, and the pending period is the floor for every ratio rule.
 
 Pusher bad events are `omi_journey_terminal_total{journey="pusher_session",outcome=~"failure|cancelled"}`.
 The denominator is every terminal outcome for that journey, not accepted work.
