@@ -49,8 +49,7 @@ class _AiConsentWidgetState extends State<AiConsentWidget> {
   @override
   Widget build(BuildContext context) {
     final l10n = context.l10n;
-    // The providers read as part of the same statement: same size and colour.
-    final body = OmiType.subhead.copyWith(height: 1.4);
+    final body = OmiType.callout.copyWith(color: OmiColors.textSecondary, height: 1.45);
     final fine = OmiType.caption.copyWith(color: OmiColors.textTertiary, height: 1.3);
     final link = fine.copyWith(color: OmiColors.textSecondary, decoration: TextDecoration.underline);
     // The other steps end their button `OmiSpacing.sm` above the safe area; this one keeps that
@@ -59,15 +58,25 @@ class _AiConsentWidgetState extends State<AiConsentWidget> {
     final belowButton = bottomInset + OmiSpacing.sm < 40 ? 40.0 : bottomInset + OmiSpacing.sm;
     return OnboardingStep(
       card: OnboardingCard(
-        crossAxisAlignment: CrossAxisAlignment.start,
         reserveBottomInset: false,
         padding: const EdgeInsets.fromLTRB(OmiSpacing.xl, OmiSpacing.xl, OmiSpacing.xl, 0),
         content: [
-          Semantics(header: true, child: Text(l10n.dataAndPrivacy, style: OmiType.title2)),
+          Semantics(
+            header: true,
+            child: Text(l10n.dataAndPrivacy, style: OmiType.title1, textAlign: TextAlign.center),
+          ),
           const SizedBox(height: OmiSpacing.xs),
-          Text(l10n.consentShortMessage, style: body),
+          ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 320),
+            child: Text(l10n.consentShortMessage, style: body, textAlign: TextAlign.center),
+          ),
           const SizedBox(height: OmiSpacing.xs),
-          Text(l10n.consentAiProviders(_aiProviders), style: body),
+          Text(
+            l10n.consentAiProviders(_aiProviders),
+            key: const Key('ai_consent_providers'),
+            style: OmiType.footnote.copyWith(color: OmiColors.textTertiary),
+            textAlign: TextAlign.center,
+          ),
         ],
         footer: [
           const SizedBox(height: OmiSpacing.xl),

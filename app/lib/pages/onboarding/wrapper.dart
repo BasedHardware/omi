@@ -481,7 +481,7 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
           child: Assets.images.omiPendantGlow.image(
             key: const Key('onboarding_pendant_hero'),
             width: media.size.width,
-            height: media.size.height * 0.56,
+            height: media.size.height * 0.6,
             fit: BoxFit.cover,
             alignment: Alignment.topCenter,
           ),

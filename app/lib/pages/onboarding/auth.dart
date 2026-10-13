@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:provider/provider.dart';
 
+import 'package:omi/gen/assets.gen.dart';
 import 'package:omi/pages/onboarding/widgets/onboarding_card.dart';
 import 'package:omi/providers/auth_provider.dart';
 import 'package:omi/ui/ui.dart';
@@ -35,20 +36,24 @@ class _AuthComponentState extends State<AuthComponent> {
                 child: provider.loading ? const Center(child: OmiSpinner(size: OmiSpinnerSize.small)) : null,
               ),
 
-              // Title text
+              // The omi wordmark is the headline; the promise sits under it, quieter.
+              Semantics(
+                header: true,
+                label: 'Omi',
+                child: Assets.images.logoTextWhite.image(
+                  key: const Key('onboarding_wordmark'),
+                  height: 40,
+                  color: OmiColors.textPrimary,
+                ),
+              ),
+              const SizedBox(height: OmiSpacing.sm),
               Text(
                 context.l10n.speakTranscribeSummarize,
-                style: TextStyle(
-                  color: OmiColors.textPrimary,
-                  fontSize: 32,
-                  fontWeight: FontWeight.bold,
-                  height: 1.2,
-                  fontFamily: 'Manrope',
-                ),
+                style: OmiType.title3.copyWith(color: OmiColors.textSecondary, fontWeight: FontWeight.w500),
                 textAlign: TextAlign.center,
               ),
 
-              const SizedBox(height: 32),
+              const SizedBox(height: OmiSpacing.xxl),
 
               // Sign in buttons
               if (!provider.isLocalDevProfile && (Platform.isIOS || Platform.isAndroid)) ...[
