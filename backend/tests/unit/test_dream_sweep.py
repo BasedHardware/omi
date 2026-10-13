@@ -13,7 +13,7 @@ from fastapi.testclient import TestClient
 
 from config.dream_agent import Caps, FULL_DRAIN_SECONDS
 from database import dream_history, dream_feedback, dream_store, dream_dirty
-from models.dream_agent import Feedback, Plan, Edit, Term, FrameQuestion, SlowTask
+from models.dream_agent import DreamReviewItem, Feedback, Plan, Edit, Term, FrameQuestion, SlowTask
 from models.review import ReviewItem, SpellingItem
 from routers import dream_sweep
 from tests.support.dream_firestore import DreamFirestore
@@ -156,10 +156,12 @@ def test_unset_salt_shadow_persists_complete_report_without_user_effects(store, 
         vocabulary=[Term(kind='jargon', spelling='Widget', evidence=['conversations/c1'])],
         slow_tasks=[SlowTask(description='Follow up later', evidence=['conversations/c1'])],
         questions=[
-            ReviewItem(
+            DreamReviewItem(
                 item_id='synthetic-question',
                 kind='spelling',
                 title='Which spelling?',
+                source_ref='conversations/c1',
+                quote='typo',
                 created_at=datetime.now(timezone.utc),
                 spelling=SpellingItem(term_id='synthetic-term', options=['one', 'two'], allow_custom=True),
             )

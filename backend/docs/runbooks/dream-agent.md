@@ -10,7 +10,7 @@ No deployment or cohort is enabled by this source change.
 
 Full mode bypasses triage and uses one reasoning turn in the existing `run_loop`.
 `DREAM_AGENT_FULL_CONTEXT_TOKENS` defaults to 400000 input tokens;
-`DREAM_AGENT_FULL_COMPLETION_TOKENS` defaults to 16000 (maximum 16000).
+`DREAM_AGENT_FULL_COMPLETION_TOKENS` defaults to 32768 (maximum 32768, including thinking).
 Input admission estimates serialized characters / 4 plus framing, including
 system instructions, schema, vocabulary and the complete projected records.
 A separate conservative UTF-8 byte upper bound plus completion must fit
@@ -19,7 +19,7 @@ less than the configured estimate, especially for multibyte text; the gateway
 has no count-tokens surface. Neither estimate is represented as observed usage.
 See [the provider model limits](https://cloud.google.com/vertex-ai/generative-ai/docs/models/gemini/2-5-flash).
 The existing reservation/USD accounting reserves the combined input/completion
-budget (416000 tokens, $4.16 at the default upper-bound rate); daily USD and
+budget plus one malformed-response retry (865536 tokens, $8.65536 at the default upper-bound rate); daily USD and
 per-user pass caps still apply.
 
 Dirty targets have first priority in oldest-first inspection order, then history
@@ -69,7 +69,7 @@ The repo's Luna cost card (`llm_gateway/config/cost_rate_cards.yaml`) has a
 context maximum is declared in the gateway. Official
 [GPT-6 Luna limits](https://developers.openai.com/api/docs/models/gpt-6-luna),
 verified 2026-10-13, give a 1050000-token context window and 128000-token maximum
-output. At the requested 16000-token output limit, that leaves 1034000 tokens
+output. At the requested 32768-token output limit, that leaves 1017232 tokens
 for input; the full-mode hard input-plus-completion fence is 1048576, below
 Luna's total window. No additional shrinking is needed, even at the maximum
 operator-configured full budget. Gemini request-rejection recovery can therefore
@@ -89,6 +89,54 @@ so it preserves the live setting; `scripts/verify_backend_release_vector.py`
 currently enforces only a 300-second minimum. Before enabling full mode on the
 dev HTTP host, raise its request timeout to at least 690 seconds (900 recommended).
 The code change does not alter live Cloud Run settings or enable full mode.
+
+Rung 1.1 makes the output interface self-describing: `Edit.before` is the exact
+wrong text in the target, `after` is the corrected text, and `other` is only a
+second merge record. Empty spelling/title/overview replacements, empty spelling
+sources, and non-merge `other` refs fail Pydantic validation as `invalid_edit`.
+One spelling edit fixes every occurrence in its target. Parsing retains valid
+items; deterministic filtering then keeps the first edit for each
+(kind, target, before, after), counts later copies as `duplicate_edit`, drops
+exact spelling no-ops as `noop`, and drops both reciprocal spelling edits for
+one target as `contradictory_spelling`. A standalone capitalization correction
+is retained. These are structural comparisons, with no new regex policy.
+
+Dream's question schema requires `source_ref` and `quote`; the ref must be
+supplied and the quote must occur verbatim inside one field in that record.
+Missing/mismatched evidence is counted once per question as
+`invalid_question_evidence`. Generated spelling questions use the edit's target
+and exact wrong text and obey the same evidence requirement. The prompt asks
+for a question only when its answer changes what future agents should believe,
+because it costs user attention. Existing client Review records keep the
+optional source field for compatibility; Dream's planning contract requires it.
+
+Full mode uses a 32768-token **total** completion limit and a high 16384-token
+thinking budget (capped to half a smaller configured completion allowance).
+[Google's thinking documentation](https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/thinking)
+allows explicit thinking on Gemini 2.5 Flash, and
+[output limits include thinking](https://ai.google.dev/gemini-api/docs/generate-content/thinking).
+Thus this is about 16k of JSON headroom when that thinking budget is used,
+not 32k of JSON plus thinking. Only the full Dream request sends high effort;
+the gateway applies `thinkingBudget=16384` to the actually reserved 2.5 Flash,
+or `thinkingLevel=high` to the declared 3.8 Flash migration target, after the
+shared adapter's default thinking normalization. Both use the existing
+`dedicated` request header and reservation endpoint; bounded and other lanes
+retain their existing settings. No PayGo Gemini route or reservation change.
+Thinking consumes provisioned output throughput, as described by the
+[PT burndown contract](https://docs.cloud.google.com/vertex-ai/generative-ai/docs/provisioned-throughput/measure-provisioned-throughput).
+No live high-thinking inference has been used to validate quality/latency.
+
+On `finish_reason=length`/`max_tokens` or invalid model-content JSON, full mode
+retries the identical request once inside the existing shaped-loop 480-second
+wall deadline and 600-second pass deadline. It does not replay partial edits
+or add malformed text to the prompt. Schema item failures remain isolated
+item rejections, not retries; capacity/HTTP failures retain their existing
+semantics. Both attempts' known usage contributes to settlement and returned
+tokens, and `response_retries` is a counts-only log field and Prometheus counter.
+Admission reserves two request budgets up front (default $8.65536); daily USD
+caps still apply. Each attempt still fits input plus completion inside the
+1048576 context fence. If the second response fails or time/token budget ends,
+the pass fails through its existing cleanup path without applying a plan.
 
 `dry_run(uid, records, vocabulary=...)` uses the same gated projection, planning
 and guards without storage reads, lease/admission, acknowledgement or effects.

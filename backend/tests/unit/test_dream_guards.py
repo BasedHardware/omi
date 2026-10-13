@@ -193,6 +193,8 @@ def test_short_spelling_options_are_dropped_and_counted():
                     'item_id': 'spelling:invented',
                     'kind': 'spelling',
                     'title': 'Which spelling?',
+                    'source_ref': 'conversations/c1',
+                    'quote': 'Invented',
                     'reason': 'Invented',
                     'created_at': '2026-10-11T00:00:00Z',
                     'spelling': {'term_id': 'invented', 'allow_custom': True, 'options': ['One']},

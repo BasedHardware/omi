@@ -4,7 +4,7 @@ from typing import Literal
 
 from pydantic import Field
 
-from models.review import ReviewItem
+from models.review import ReviewQuestionPayload
 from models.dream_edit import Edit, Term, Strict
 
 
@@ -39,9 +39,19 @@ class SlowTask(Strict):
     evidence: list[str] = Field(min_length=1, max_length=10)
 
 
+class DreamReviewItem(ReviewQuestionPayload):
+    source_ref: str = Field(
+        min_length=1, description='Supplied record ref containing the exact quote that motivates this question.'
+    )
+    quote: str = Field(
+        min_length=1,
+        description='Exact verbatim quote from source_ref. A question costs user attention; ask only if the answer changes what future agents should believe.',
+    )
+
+
 class Plan(Strict):
     edits: list[Edit] = Field(default_factory=list, max_length=50)
-    questions: list[ReviewItem] = Field(default_factory=list, max_length=3)
+    questions: list[DreamReviewItem] = Field(default_factory=list, max_length=3)
     vocabulary: list[Term] = Field(default_factory=list, max_length=100)
     frames: list[FrameQuestion] = Field(default_factory=list, max_length=3)
     feedback: list[Feedback] = Field(default_factory=list, max_length=10)
