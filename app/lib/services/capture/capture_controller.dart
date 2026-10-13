@@ -3922,6 +3922,9 @@ class CaptureController extends ChangeNotifier
         reason: reason,
       );
       if (!showCopy) return;
+      // First-run onboarding explains its own short or empty dictation (and the pendant's audio from
+      // before it); a "talk for 30 seconds" banner over it would only confuse.
+      if (!_preferences.onboardingCompleted) return;
       final ctx = globalNavigatorKey.currentContext;
       if (ctx != null) {
         AppSnackbar.showSnackbar(

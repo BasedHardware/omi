@@ -12871,12 +12871,6 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
-  String get onboardingActWearTitle => '戴上你的 Omi';
-
-  @override
-  String get onboardingActWearBody => '它会记住你的对话。按下按钮即可提问，再按一次发送。';
-
-  @override
   String get onboardingActIntro => '来试试 Omi 吧。';
 
   @override

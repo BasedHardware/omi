@@ -23271,18 +23271,6 @@ abstract class AppLocalizations {
   /// **'Processed with {providers}.'**
   String consentAiProviders(String providers);
 
-  /// Activation: title for device users before the demo
-  ///
-  /// In en, this message translates to:
-  /// **'Wear your Omi'**
-  String get onboardingActWearTitle;
-
-  /// Activation: how the device works, shown to device users
-  ///
-  /// In en, this message translates to:
-  /// **'It remembers your conversations. Press the button to ask it anything, and again to send.'**
-  String get onboardingActWearBody;
-
   /// Activation: animated line before the demo slides
   ///
   /// In en, this message translates to:

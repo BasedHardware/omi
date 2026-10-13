@@ -13128,13 +13128,6 @@ class AppLocalizationsHu extends AppLocalizations {
   }
 
   @override
-  String get onboardingActWearTitle => 'Viseld az Omid';
-
-  @override
-  String get onboardingActWearBody =>
-      'Emlékszik a beszélgetéseidre. Nyomd meg a gombot, ha kérdeznél, és újra a küldéshez.';
-
-  @override
   String get onboardingActIntro => 'Próbáljuk ki az Omit.';
 
   @override

@@ -11451,8 +11451,6 @@
     "onboardingConnectOmi": "Omi ಸಂಪರ್ಕಿಸಿ",
     "consentShortMessage": "Omi AI ಬಳಸಿ ನಿಮ್ಮ ಸಂಭಾಷಣೆಗಳನ್ನು ಟಿಪ್ಪಣಿಗಳಾಗಿ ಮಾಡುತ್ತದೆ. ಯಾವಾಗ ಬೇಕಾದರೂ ಅಳಿಸಬಹುದು.",
     "consentAiProviders": "{providers} ಮೂಲಕ ಸಂಸ್ಕರಿಸಲಾಗುತ್ತದೆ.",
-    "onboardingActWearTitle": "ನಿಮ್ಮ Omi ಧರಿಸಿ",
-    "onboardingActWearBody": "ಇದು ನಿಮ್ಮ ಸಂಭಾಷಣೆಗಳನ್ನು ನೆನಪಿಡುತ್ತದೆ. ಏನಾದರೂ ಕೇಳಲು ಬಟನ್ ಒತ್ತಿ, ಕಳುಹಿಸಲು ಮತ್ತೆ ಒತ್ತಿ.",
     "onboardingActIntro": "Omi ಪ್ರಯತ್ನಿಸೋಣ.",
     "onboardingActMicTitle": "Omi ಗೆ ನಿಮ್ಮ ಮೈಕ್ರೊಫೋನ್ ಬೇಕು",
     "onboardingActMicBody": "ನೀವು ಮಾತನಾಡಿದಾಗ Omi ಕೇಳಲು.",

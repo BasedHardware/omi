@@ -4014,8 +4014,6 @@
     "onboardingConnectOmi": "Συνδέστε το Omi",
     "consentShortMessage": "Το Omi χρησιμοποιεί AI για να μετατρέπει τις συνομιλίες σου σε σημειώσεις. Μπορείς να τις διαγράψεις οποιαδήποτε στιγμή.",
     "consentAiProviders": "Επεξεργασία μέσω {providers}.",
-    "onboardingActWearTitle": "Φορέστε το Omi σας",
-    "onboardingActWearBody": "Θυμάται τις συνομιλίες σου. Πάτησε το κουμπί για να ρωτήσεις οτιδήποτε και ξανά για αποστολή.",
     "onboardingActIntro": "Ας δοκιμάσουμε το Omi.",
     "onboardingActMicTitle": "Το Omi χρειάζεται το μικρόφωνό σας",
     "onboardingActMicBody": "Για να σας ακούει το Omi όταν του μιλάτε.",

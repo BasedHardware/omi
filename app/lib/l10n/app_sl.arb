@@ -11451,8 +11451,6 @@
     "onboardingConnectOmi": "Povežite Omi",
     "consentShortMessage": "Omi z umetno inteligenco spremeni vaše pogovore v zapiske. Kadar koli jih lahko izbrišete.",
     "consentAiProviders": "Obdelano z {providers}.",
-    "onboardingActWearTitle": "Nosite svoj Omi",
-    "onboardingActWearBody": "Zapomni si vaše pogovore. Pritisnite gumb, da kar koli vprašate, in znova, da pošljete.",
     "onboardingActIntro": "Preizkusimo Omi.",
     "onboardingActMicTitle": "Omi potrebuje mikrofon",
     "onboardingActMicBody": "Da vas Omi sliši, ko mu govorite.",

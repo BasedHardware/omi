@@ -13106,13 +13106,6 @@ class AppLocalizationsUk extends AppLocalizations {
   }
 
   @override
-  String get onboardingActWearTitle => 'Носіть свій Omi';
-
-  @override
-  String get onboardingActWearBody =>
-      'Він памʼятає ваші розмови. Натисніть кнопку, щоб запитати що завгодно, і ще раз, щоб надіслати.';
-
-  @override
   String get onboardingActIntro => 'Спробуймо Omi.';
 
   @override

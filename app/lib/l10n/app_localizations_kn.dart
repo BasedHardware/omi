@@ -13114,13 +13114,6 @@ class AppLocalizationsKn extends AppLocalizations {
   }
 
   @override
-  String get onboardingActWearTitle => 'ನಿಮ್ಮ Omi ಧರಿಸಿ';
-
-  @override
-  String get onboardingActWearBody =>
-      'ಇದು ನಿಮ್ಮ ಸಂಭಾಷಣೆಗಳನ್ನು ನೆನಪಿಡುತ್ತದೆ. ಏನಾದರೂ ಕೇಳಲು ಬಟನ್ ಒತ್ತಿ, ಕಳುಹಿಸಲು ಮತ್ತೆ ಒತ್ತಿ.';
-
-  @override
   String get onboardingActIntro => 'Omi ಪ್ರಯತ್ನಿಸೋಣ.';
 
   @override

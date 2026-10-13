@@ -13181,13 +13181,6 @@ class AppLocalizationsTl extends AppLocalizations {
   }
 
   @override
-  String get onboardingActWearTitle => 'Isuot ang iyong Omi';
-
-  @override
-  String get onboardingActWearBody =>
-      'Naaalala nito ang iyong mga usapan. Pindutin ang button para magtanong ng kahit ano, at muli para ipadala.';
-
-  @override
   String get onboardingActIntro => 'Subukan natin ang Omi.';
 
   @override

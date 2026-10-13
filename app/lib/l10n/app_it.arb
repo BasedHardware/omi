@@ -4014,8 +4014,6 @@
     "onboardingConnectOmi": "Connetti Omi",
     "consentShortMessage": "Omi usa l'IA per trasformare le tue conversazioni in note. Puoi eliminarle quando vuoi.",
     "consentAiProviders": "Elaborato con {providers}.",
-    "onboardingActWearTitle": "Indossa il tuo Omi",
-    "onboardingActWearBody": "Ricorda le tue conversazioni. Premi il pulsante per chiedergli qualsiasi cosa e di nuovo per inviare.",
     "onboardingActIntro": "Proviamo Omi.",
     "onboardingActMicTitle": "Omi ha bisogno del microfono",
     "onboardingActMicBody": "Così Omi ti sente quando gli parli.",

@@ -4049,8 +4049,6 @@
     "onboardingConnectOmi": "Omi'yi bağla",
     "consentShortMessage": "Omi, konuşmalarını yapay zekâ ile notlara dönüştürür. İstediğin zaman silebilirsin.",
     "consentAiProviders": "{providers} ile işlenir.",
-    "onboardingActWearTitle": "Omi'ni tak",
-    "onboardingActWearBody": "Konuşmalarını hatırlar. Bir şey sormak için düğmeye bas, göndermek için tekrar bas.",
     "onboardingActIntro": "Hadi Omi'yi deneyelim.",
     "onboardingActMicTitle": "Omi'nin mikrofonuna ihtiyacı var",
     "onboardingActMicBody": "Omi'yle konuştuğunda seni duyabilmesi için.",

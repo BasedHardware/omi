@@ -11451,8 +11451,6 @@
     "onboardingConnectOmi": "Omi-ஐ இணைக்கவும்",
     "consentShortMessage": "Omi AI மூலம் உங்கள் உரையாடல்களைக் குறிப்புகளாக மாற்றுகிறது. எப்போது வேண்டுமானாலும் நீக்கலாம்.",
     "consentAiProviders": "{providers} மூலம் செயலாக்கப்படுகிறது.",
-    "onboardingActWearTitle": "உங்கள் Omi-ஐ அணியுங்கள்",
-    "onboardingActWearBody": "இது உங்கள் உரையாடல்களை நினைவில் வைக்கும். எதையும் கேட்க பட்டனை அழுத்தவும், அனுப்ப மீண்டும் அழுத்தவும்.",
     "onboardingActIntro": "Omi-ஐ முயற்சிப்போம்.",
     "onboardingActMicTitle": "Omi-க்கு உங்கள் மைக்ரோஃபோன் தேவை",
     "onboardingActMicBody": "நீங்கள் பேசும்போது Omi கேட்க.",

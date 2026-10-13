@@ -13127,13 +13127,6 @@ class AppLocalizationsTe extends AppLocalizations {
   }
 
   @override
-  String get onboardingActWearTitle => 'మీ Omiని ధరించండి';
-
-  @override
-  String get onboardingActWearBody =>
-      'ఇది మీ సంభాషణలను గుర్తుంచుకుంటుంది. ఏదైనా అడగడానికి బటన్ నొక్కండి, పంపడానికి మళ్లీ నొక్కండి.';
-
-  @override
   String get onboardingActIntro => 'Omi ని ప్రయత్నిద్దాం.';
 
   @override

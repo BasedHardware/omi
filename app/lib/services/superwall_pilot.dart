@@ -30,6 +30,10 @@ class SuperwallPilot {
 
   bool get isEnabled => _configured;
 
+  /// The end of onboarding just offered a plan; the device tutorial that follows on Home skips its
+  /// own offer so nobody sees two paywalls in a row.
+  bool offeredDuringOnboarding = false;
+
   void configure() {
     if (_configured || !kDebugMode || !_testEnabled || !Platform.isIOS || _iosKey.isEmpty) {
       return;

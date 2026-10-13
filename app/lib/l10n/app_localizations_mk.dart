@@ -13137,13 +13137,6 @@ class AppLocalizationsMk extends AppLocalizations {
   }
 
   @override
-  String get onboardingActWearTitle => 'Носете го вашиот Omi';
-
-  @override
-  String get onboardingActWearBody =>
-      'Ги памети вашите разговори. Притиснете го копчето за да прашате нешто, и повторно за да испратите.';
-
-  @override
   String get onboardingActIntro => 'Да го пробаме Omi.';
 
   @override

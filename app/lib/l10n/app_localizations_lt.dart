@@ -13100,13 +13100,6 @@ class AppLocalizationsLt extends AppLocalizations {
   }
 
   @override
-  String get onboardingActWearTitle => 'Nešiokite savo Omi';
-
-  @override
-  String get onboardingActWearBody =>
-      'Jis prisimena jūsų pokalbius. Paspauskite mygtuką, kad ko nors paklaustumėte, ir dar kartą, kad išsiųstumėte.';
-
-  @override
   String get onboardingActIntro => 'Išbandykime Omi.';
 
   @override

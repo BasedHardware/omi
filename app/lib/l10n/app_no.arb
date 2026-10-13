@@ -4014,8 +4014,6 @@
     "onboardingConnectOmi": "Koble til Omi",
     "consentShortMessage": "Omi bruker KI til å gjøre samtalene dine om til notater. Du kan slette dem når som helst.",
     "consentAiProviders": "Behandles med {providers}.",
-    "onboardingActWearTitle": "Bruk Omi",
-    "onboardingActWearBody": "Den husker samtalene dine. Trykk på knappen for å spørre om hva som helst, og igjen for å sende.",
     "onboardingActIntro": "La oss prøve Omi.",
     "onboardingActMicTitle": "Omi trenger mikrofonen din",
     "onboardingActMicBody": "Så Omi hører deg når du snakker til den.",

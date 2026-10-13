@@ -13081,13 +13081,6 @@ class AppLocalizationsSv extends AppLocalizations {
   }
 
   @override
-  String get onboardingActWearTitle => 'Bär din Omi';
-
-  @override
-  String get onboardingActWearBody =>
-      'Den minns dina samtal. Tryck på knappen för att fråga vad som helst, och igen för att skicka.';
-
-  @override
   String get onboardingActIntro => 'Vi testar Omi.';
 
   @override

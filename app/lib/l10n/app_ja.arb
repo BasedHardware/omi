@@ -4014,8 +4014,6 @@
     "onboardingConnectOmi": "Omiを接続",
     "consentShortMessage": "OmiはAIで会話をメモにまとめます。メモはいつでも削除できます。",
     "consentAiProviders": "{providers} で処理されます。",
-    "onboardingActWearTitle": "Omiを身につけよう",
-    "onboardingActWearBody": "会話を覚えてくれます。ボタンを押して何でも質問し、もう一度押すと送信します。",
     "onboardingActIntro": "Omiを試してみましょう。",
     "onboardingActMicTitle": "Omiにマイクの許可が必要です",
     "onboardingActMicBody": "話しかけたときにOmiが聞き取れるようにします。",

@@ -13110,13 +13110,6 @@ class AppLocalizationsHr extends AppLocalizations {
   }
 
   @override
-  String get onboardingActWearTitle => 'Nosite svoj Omi';
-
-  @override
-  String get onboardingActWearBody =>
-      'Pamti vaše razgovore. Pritisnite gumb da pitate bilo što, pa ponovno da pošaljete.';
-
-  @override
   String get onboardingActIntro => 'Isprobajmo Omi.';
 
   @override

@@ -4014,8 +4014,6 @@
     "onboardingConnectOmi": "Ühenda Omi",
     "consentShortMessage": "Omi muudab tehisintellekti abil sinu vestlused märkmeteks. Saad need igal ajal kustutada.",
     "consentAiProviders": "Töödeldakse teenustega {providers}.",
-    "onboardingActWearTitle": "Kanna oma Omit",
-    "onboardingActWearBody": "See mäletab sinu vestlusi. Vajuta nuppu, et midagi küsida, ja uuesti saatmiseks.",
     "onboardingActIntro": "Proovime Omit.",
     "onboardingActMicTitle": "Omi vajab su mikrofoni",
     "onboardingActMicBody": "Et Omi kuuleks sind, kui sa temaga räägid.",

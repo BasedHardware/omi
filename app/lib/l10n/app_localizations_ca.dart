@@ -13144,13 +13144,6 @@ class AppLocalizationsCa extends AppLocalizations {
   }
 
   @override
-  String get onboardingActWearTitle => 'Porta el teu Omi';
-
-  @override
-  String get onboardingActWearBody =>
-      'Recorda les teves converses. Prem el botó per preguntar-li el que vulguis i torna-hi per enviar.';
-
-  @override
   String get onboardingActIntro => 'Provem Omi.';
 
   @override

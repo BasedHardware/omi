@@ -13074,13 +13074,6 @@ class AppLocalizationsVi extends AppLocalizations {
   }
 
   @override
-  String get onboardingActWearTitle => 'Đeo Omi của bạn';
-
-  @override
-  String get onboardingActWearBody =>
-      'Omi ghi nhớ các cuộc trò chuyện của bạn. Nhấn nút để hỏi bất cứ điều gì, nhấn lần nữa để gửi.';
-
-  @override
   String get onboardingActIntro => 'Cùng thử Omi nhé.';
 
   @override

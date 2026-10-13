@@ -4014,8 +4014,6 @@
     "onboardingConnectOmi": "Connecta l'Omi",
     "consentShortMessage": "Omi fa servir la IA per convertir les teves converses en notes. Les pots esborrar quan vulguis.",
     "consentAiProviders": "Processat amb {providers}.",
-    "onboardingActWearTitle": "Porta el teu Omi",
-    "onboardingActWearBody": "Recorda les teves converses. Prem el botó per preguntar-li el que vulguis i torna-hi per enviar.",
     "onboardingActIntro": "Provem Omi.",
     "onboardingActMicTitle": "Omi necessita el micròfon",
     "onboardingActMicBody": "Perquè Omi et senti quan li parlis.",

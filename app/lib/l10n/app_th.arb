@@ -4014,8 +4014,6 @@
     "onboardingConnectOmi": "เชื่อมต่อ Omi",
     "consentShortMessage": "Omi ใช้ AI เปลี่ยนบทสนทนาของคุณเป็นโน้ต คุณลบได้ทุกเมื่อ",
     "consentAiProviders": "ประมวลผลด้วย {providers}",
-    "onboardingActWearTitle": "สวม Omi ของคุณ",
-    "onboardingActWearBody": "จำบทสนทนาของคุณได้ กดปุ่มเพื่อถามอะไรก็ได้ แล้วกดอีกครั้งเพื่อส่ง",
     "onboardingActIntro": "มาลองใช้ Omi กัน",
     "onboardingActMicTitle": "Omi ต้องใช้ไมโครโฟน",
     "onboardingActMicBody": "เพื่อให้ Omi ได้ยินเมื่อคุณพูดด้วย",

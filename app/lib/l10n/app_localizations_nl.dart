@@ -13111,13 +13111,6 @@ class AppLocalizationsNl extends AppLocalizations {
   }
 
   @override
-  String get onboardingActWearTitle => 'Draag je Omi';
-
-  @override
-  String get onboardingActWearBody =>
-      'Hij onthoudt je gesprekken. Druk op de knop om iets te vragen, en nog eens om te versturen.';
-
-  @override
   String get onboardingActIntro => 'Probeer Omi eens.';
 
   @override

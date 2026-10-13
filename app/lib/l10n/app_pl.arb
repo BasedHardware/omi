@@ -4049,8 +4049,6 @@
     "onboardingConnectOmi": "Połącz Omi",
     "consentShortMessage": "Omi za pomocą AI zamienia Twoje rozmowy w notatki. Możesz je usunąć w każdej chwili.",
     "consentAiProviders": "Przetwarzane przez {providers}.",
-    "onboardingActWearTitle": "Noś swoje Omi",
-    "onboardingActWearBody": "Pamięta Twoje rozmowy. Naciśnij przycisk, aby o coś zapytać, i ponownie, aby wysłać.",
     "onboardingActIntro": "Wypróbujmy Omi.",
     "onboardingActMicTitle": "Omi potrzebuje mikrofonu",
     "onboardingActMicBody": "Aby Omi słyszał Cię, gdy do niego mówisz.",

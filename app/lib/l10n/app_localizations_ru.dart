@@ -13122,13 +13122,6 @@ class AppLocalizationsRu extends AppLocalizations {
   }
 
   @override
-  String get onboardingActWearTitle => 'Носите Omi';
-
-  @override
-  String get onboardingActWearBody =>
-      'Он помнит ваши разговоры. Нажмите кнопку, чтобы спросить что угодно, и ещё раз, чтобы отправить.';
-
-  @override
   String get onboardingActIntro => 'Попробуем Omi.';
 
   @override

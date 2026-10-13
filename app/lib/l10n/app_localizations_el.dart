@@ -13160,13 +13160,6 @@ class AppLocalizationsEl extends AppLocalizations {
   }
 
   @override
-  String get onboardingActWearTitle => 'Φορέστε το Omi σας';
-
-  @override
-  String get onboardingActWearBody =>
-      'Θυμάται τις συνομιλίες σου. Πάτησε το κουμπί για να ρωτήσεις οτιδήποτε και ξανά για αποστολή.';
-
-  @override
   String get onboardingActIntro => 'Ας δοκιμάσουμε το Omi.';
 
   @override

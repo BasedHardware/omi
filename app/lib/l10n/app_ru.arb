@@ -4049,8 +4049,6 @@
     "onboardingConnectOmi": "Подключите Omi",
     "consentShortMessage": "Omi с помощью ИИ превращает ваши разговоры в заметки. Их можно удалить в любой момент.",
     "consentAiProviders": "Обработка: {providers}.",
-    "onboardingActWearTitle": "Носите Omi",
-    "onboardingActWearBody": "Он помнит ваши разговоры. Нажмите кнопку, чтобы спросить что угодно, и ещё раз, чтобы отправить.",
     "onboardingActIntro": "Попробуем Omi.",
     "onboardingActMicTitle": "Omi нужен микрофон",
     "onboardingActMicBody": "Чтобы Omi слышал вас, когда вы с ним говорите.",

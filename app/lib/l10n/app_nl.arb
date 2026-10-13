@@ -4014,8 +4014,6 @@
     "onboardingConnectOmi": "Omi verbinden",
     "consentShortMessage": "Omi maakt met AI notities van je gesprekken. Je kunt ze altijd verwijderen.",
     "consentAiProviders": "Verwerkt met {providers}.",
-    "onboardingActWearTitle": "Draag je Omi",
-    "onboardingActWearBody": "Hij onthoudt je gesprekken. Druk op de knop om iets te vragen, en nog eens om te versturen.",
     "onboardingActIntro": "Probeer Omi eens.",
     "onboardingActMicTitle": "Omi heeft je microfoon nodig",
     "onboardingActMicBody": "Zodat Omi je hoort als je tegen hem praat.",

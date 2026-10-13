@@ -15807,14 +15807,6 @@
             }
         }
     },
-    "onboardingActWearTitle": "Wear your Omi",
-    "@onboardingActWearTitle": {
-        "description": "Activation: title for device users before the demo"
-    },
-    "onboardingActWearBody": "It remembers your conversations. Press the button to ask it anything, and again to send.",
-    "@onboardingActWearBody": {
-        "description": "Activation: how the device works, shown to device users"
-    },
     "onboardingActIntro": "Let's try Omi.",
     "@onboardingActIntro": {
         "description": "Activation: animated line before the demo slides"

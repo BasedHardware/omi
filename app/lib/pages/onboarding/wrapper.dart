@@ -8,7 +8,6 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:provider/provider.dart';
 
 import 'package:omi/backend/preferences.dart';
-import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/gen/assets.gen.dart';
 import 'package:omi/pages/home/page.dart';
 import 'package:omi/pages/onboarding/ai_consent_widget.dart';
@@ -230,6 +229,7 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
 
   /// The paywall inside the activation, between the celebration and the rating ask.
   Future<void> _showPaywall() async {
+    SuperwallPilot.instance.offeredDuringOnboarding = true;
     unawaited(context.read<UsageProvider>().fetchSubscription());
     if (await SuperwallPilot.instance.showPlacementAndWait(SuperwallPilot.deviceSetupCompletePlacement)) return;
     if (!mounted) return;
@@ -260,11 +260,9 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
   }
 
   void _leaveConnectOmi(OnboardingDeviceChoice choice) {
+    // Device setup is not marked done here: Home shows the Omi button tutorial once onboarding ends
+    // (it marks itself done), as it did before the redesign.
     _deviceChoice = choice;
-    if (choice == OnboardingDeviceChoice.connected) {
-      SharedPreferencesUtil().deviceOnboardingCompleted = true;
-      unawaited(OnboardingSyncRuntime.enqueue(deviceOnboardingCompleted: true));
-    }
     PlatformManager.instance.analytics.onboardingStepCompleted('Connect Omi');
     unawaited(_enterEnding());
   }
@@ -354,9 +352,6 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
         return ActivationFlow(
           hasDevice: _deviceChoice == OnboardingDeviceChoice.connected ||
               context.read<DeviceProvider>().isConnected ||
-              DemoActivationCapture.pretendsDevice,
-          // How to wear it and use its button applies to Omi itself, not other wearables.
-          showWearTips: context.read<DeviceProvider>().connectedDevice?.type == DeviceType.omi ||
               DemoActivationCapture.pretendsDevice,
           showPaywall: _showPaywall,
           onFinished: () {

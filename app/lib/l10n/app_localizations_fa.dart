@@ -13071,13 +13071,6 @@ class AppLocalizationsFa extends AppLocalizations {
   }
 
   @override
-  String get onboardingActWearTitle => 'Omi خود را بپوشید';
-
-  @override
-  String get onboardingActWearBody =>
-      'گفتگوهای شما را به خاطر می‌سپارد. برای پرسیدن هر چیزی دکمه را بزنید و برای ارسال دوباره بزنید.';
-
-  @override
   String get onboardingActIntro => 'بیایید Omi را امتحان کنیم.';
 
   @override

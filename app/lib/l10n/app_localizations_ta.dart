@@ -13166,13 +13166,6 @@ class AppLocalizationsTa extends AppLocalizations {
   }
 
   @override
-  String get onboardingActWearTitle => 'உங்கள் Omi-ஐ அணியுங்கள்';
-
-  @override
-  String get onboardingActWearBody =>
-      'இது உங்கள் உரையாடல்களை நினைவில் வைக்கும். எதையும் கேட்க பட்டனை அழுத்தவும், அனுப்ப மீண்டும் அழுத்தவும்.';
-
-  @override
   String get onboardingActIntro => 'Omi-ஐ முயற்சிப்போம்.';
 
   @override

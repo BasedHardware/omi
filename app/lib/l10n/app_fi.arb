@@ -4014,8 +4014,6 @@
     "onboardingConnectOmi": "Yhdistä Omi",
     "consentShortMessage": "Omi tekee keskusteluistasi muistiinpanoja tekoälyn avulla. Voit poistaa ne milloin tahansa.",
     "consentAiProviders": "Käsittely: {providers}.",
-    "onboardingActWearTitle": "Pidä Omia päälläsi",
-    "onboardingActWearBody": "Se muistaa keskustelusi. Kysy mitä vain painamalla painiketta, ja lähetä painamalla uudelleen.",
     "onboardingActIntro": "Kokeillaan Omia.",
     "onboardingActMicTitle": "Omi tarvitsee mikrofonisi",
     "onboardingActMicBody": "Jotta Omi kuulee sinut, kun puhut sille.",

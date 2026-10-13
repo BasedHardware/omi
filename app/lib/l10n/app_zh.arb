@@ -4014,8 +4014,6 @@
     "onboardingConnectOmi": "连接 Omi",
     "consentShortMessage": "Omi 用 AI 把你的对话整理成笔记。你可以随时删除。",
     "consentAiProviders": "由 {providers} 处理。",
-    "onboardingActWearTitle": "戴上你的 Omi",
-    "onboardingActWearBody": "它会记住你的对话。按下按钮即可提问，再按一次发送。",
     "onboardingActIntro": "来试试 Omi 吧。",
     "onboardingActMicTitle": "Omi 需要使用麦克风",
     "onboardingActMicBody": "这样你说话时 Omi 才能听到。",

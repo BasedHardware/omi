@@ -13060,13 +13060,6 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
-  String get onboardingActWearTitle => 'Wear your Omi';
-
-  @override
-  String get onboardingActWearBody =>
-      'It remembers your conversations. Press the button to ask it anything, and again to send.';
-
-  @override
   String get onboardingActIntro => 'Let\'s try Omi.';
 
   @override

@@ -11451,8 +11451,6 @@
     "onboardingConnectOmi": "Падключыце Omi",
     "consentShortMessage": "Omi з дапамогай ШІ ператварае вашы размовы ў нататкі. Іх можна выдаліць у любы момант.",
     "consentAiProviders": "Апрацоўка: {providers}.",
-    "onboardingActWearTitle": "Надзеньце Omi",
-    "onboardingActWearBody": "Ён памятае вашы размовы. Націсніце кнопку, каб спытаць што-небудзь, і яшчэ раз, каб адправіць.",
     "onboardingActIntro": "Паспрабуем Omi.",
     "onboardingActMicTitle": "Omi патрэбны мікрафон",
     "onboardingActMicBody": "Каб Omi чуў вас, калі вы з ім размаўляеце.",

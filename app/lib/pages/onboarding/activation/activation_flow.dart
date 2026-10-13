@@ -6,7 +6,6 @@ import 'package:in_app_review/in_app_review.dart';
 import 'package:permission_handler/permission_handler.dart';
 
 import 'package:omi/backend/preferences.dart';
-import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/pages/home/widgets/home_tab_switcher.dart';
 import 'package:omi/pages/onboarding/activation/activation_capture.dart';
@@ -14,7 +13,6 @@ import 'package:omi/pages/onboarding/activation/activation_visuals.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
-import 'package:omi/widgets/device_widget.dart';
 import 'package:omi/widgets/scanning_ripple.dart';
 
 /// Height of the row above every title: Skip sits in it on the dictation step.
@@ -28,13 +26,14 @@ const double _kHeadingGap = 76;
 /// for all four, so the card stays in the same place while the words turn into notes.
 const double _kControlHeight = 172;
 
-/// The stages of the first-run activation, in order. Some are skipped: [wear] without an Omi,
-/// [microphone] with one (or when already allowed), [taskList] when Omi found no tasks.
-enum ActivationStage { wear, intro, microphone, dictate, writing, summary, taskList, congrats, rating }
+/// The stages of the first-run activation, in order. Some are skipped: [microphone] with an Omi (or
+/// when already allowed), [taskList] when Omi found no tasks. How to wear and use an Omi is the
+/// device tutorial Home shows after onboarding.
+enum ActivationStage { intro, microphone, dictate, writing, summary, taskList, congrats, rating }
 
 /// Shows people what Omi does with their own words, then hands over to the paywall and Home.
 ///
-/// Omi users first learn how to wear it; everyone sees "Let's try Omi." and then says a few
+/// Everyone sees "Let's try Omi." and then says a few
 /// sentences. Omi turns them into a summary and to-dos (a real conversation, first on Home), then
 /// come a congratulations screen, the rating ask and the paywall. Skipping the dictation shows a
 /// welcome card on Home instead.
@@ -42,7 +41,6 @@ class ActivationFlow extends StatefulWidget {
   const ActivationFlow({
     super.key,
     required this.hasDevice,
-    this.showWearTips = false,
     required this.onFinished,
     this.showPaywall,
     this.capture,
@@ -54,9 +52,6 @@ class ActivationFlow extends StatefulWidget {
 
   /// The reader connected a wearable in onboarding: they dictate through it.
   final bool hasDevice;
-
-  /// The wearable is an Omi: show how to wear it and use its button first.
-  final bool showWearTips;
 
   /// Called once at the very end; Home follows.
   /// Saves onboarding as done and leaves for Home; false when the save failed (the reader can retry).
@@ -83,7 +78,7 @@ class ActivationFlow extends StatefulWidget {
 }
 
 class _ActivationFlowState extends State<ActivationFlow> {
-  late ActivationStage _stage = widget.hasDevice && widget.showWearTips ? ActivationStage.wear : ActivationStage.intro;
+  ActivationStage _stage = ActivationStage.intro;
   ActivationCapture? _capture;
 
   /// The connected wearable was not streaming, so this dictation uses the phone microphone.
@@ -182,13 +177,6 @@ class _ActivationFlowState extends State<ActivationFlow> {
   Widget build(BuildContext context) {
     final l10n = context.l10n;
     final Widget child = switch (_stage) {
-      ActivationStage.wear => _Stage(
-          key: const ValueKey('wear'),
-          title: l10n.onboardingActWearTitle,
-          subtitle: l10n.onboardingActWearBody,
-          body: const DeviceAnimationWidget(sizeMultiplier: 0.7, isConnected: true, deviceType: DeviceType.omi),
-          bottom: _ContinueButton(stage: 'wear', onPressed: () => _go(ActivationStage.intro)),
-        ),
       ActivationStage.intro => _IntroLine(
           key: const ValueKey('intro'),
           text: l10n.onboardingActIntro,

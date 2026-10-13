@@ -11451,8 +11451,6 @@
     "onboardingConnectOmi": "חיבור Omi",
     "consentShortMessage": "Omi משתמש בבינה מלאכותית כדי להפוך את השיחות שלך להערות. אפשר למחוק אותן בכל עת.",
     "consentAiProviders": "מעובד באמצעות {providers}.",
-    "onboardingActWearTitle": "ענדו את ה-Omi",
-    "onboardingActWearBody": "הוא זוכר את השיחות שלך. לחץ על הכפתור כדי לשאול כל דבר, ושוב כדי לשלוח.",
     "onboardingActIntro": "בואו ננסה את Omi.",
     "onboardingActMicTitle": "Omi צריך את המיקרופון",
     "onboardingActMicBody": "כדי ש-Omi ישמע אתכם כשאתם מדברים אליו.",

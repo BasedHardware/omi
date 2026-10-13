@@ -12895,12 +12895,6 @@ class AppLocalizationsKo extends AppLocalizations {
   }
 
   @override
-  String get onboardingActWearTitle => 'Omi를 착용하세요';
-
-  @override
-  String get onboardingActWearBody => '대화를 기억해요. 버튼을 눌러 무엇이든 묻고, 한 번 더 눌러 보내세요.';
-
-  @override
   String get onboardingActIntro => 'Omi를 써 볼까요?';
 
   @override

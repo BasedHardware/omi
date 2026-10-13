@@ -4110,8 +4110,6 @@
     "onboardingConnectOmi": "Omi csatlakoztatása",
     "consentShortMessage": "Az Omi mesterséges intelligenciával jegyzetekké alakítja a beszélgetéseidet. Bármikor törölheted őket.",
     "consentAiProviders": "Feldolgozás: {providers}.",
-    "onboardingActWearTitle": "Viseld az Omid",
-    "onboardingActWearBody": "Emlékszik a beszélgetéseidre. Nyomd meg a gombot, ha kérdeznél, és újra a küldéshez.",
     "onboardingActIntro": "Próbáljuk ki az Omit.",
     "onboardingActMicTitle": "Az Ominak kell a mikrofonod",
     "onboardingActMicBody": "Hogy az Omi halljon, amikor beszélsz hozzá.",

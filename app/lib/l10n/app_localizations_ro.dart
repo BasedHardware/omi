@@ -13131,13 +13131,6 @@ class AppLocalizationsRo extends AppLocalizations {
   }
 
   @override
-  String get onboardingActWearTitle => 'Poartă-ți Omi';
-
-  @override
-  String get onboardingActWearBody =>
-      'Își amintește conversațiile tale. Apasă butonul ca să întrebi orice și din nou ca să trimiți.';
-
-  @override
   String get onboardingActIntro => 'Hai să încercăm Omi.';
 
   @override

@@ -4014,8 +4014,6 @@
     "onboardingConnectOmi": "Pripojte Omi",
     "consentShortMessage": "Omi pomocou AI mení vaše konverzácie na poznámky. Kedykoľvek ich môžete vymazať.",
     "consentAiProviders": "Spracúva {providers}.",
-    "onboardingActWearTitle": "Noste svoj Omi",
-    "onboardingActWearBody": "Pamätá si vaše konverzácie. Stlačte tlačidlo a opýtajte sa čokoľvek, ďalším stlačením odošlite.",
     "onboardingActIntro": "Vyskúšajme Omi.",
     "onboardingActMicTitle": "Omi potrebuje mikrofón",
     "onboardingActMicBody": "Aby vás Omi počul, keď naň hovoríte.",

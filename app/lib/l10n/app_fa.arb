@@ -11451,8 +11451,6 @@
     "onboardingConnectOmi": "اتصال Omi",
     "consentShortMessage": "Omi با هوش مصنوعی گفتگوهای شما را به یادداشت تبدیل می‌کند. هر زمان بخواهید می‌توانید آن‌ها را حذف کنید.",
     "consentAiProviders": "پردازش با {providers}.",
-    "onboardingActWearTitle": "Omi خود را بپوشید",
-    "onboardingActWearBody": "گفتگوهای شما را به خاطر می‌سپارد. برای پرسیدن هر چیزی دکمه را بزنید و برای ارسال دوباره بزنید.",
     "onboardingActIntro": "بیایید Omi را امتحان کنیم.",
     "onboardingActMicTitle": "Omi به میکروفون شما نیاز دارد",
     "onboardingActMicBody": "تا Omi وقتی با او حرف می‌زنید صدایتان را بشنود.",

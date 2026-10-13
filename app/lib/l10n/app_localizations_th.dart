@@ -13009,12 +13009,6 @@ class AppLocalizationsTh extends AppLocalizations {
   }
 
   @override
-  String get onboardingActWearTitle => 'สวม Omi ของคุณ';
-
-  @override
-  String get onboardingActWearBody => 'จำบทสนทนาของคุณได้ กดปุ่มเพื่อถามอะไรก็ได้ แล้วกดอีกครั้งเพื่อส่ง';
-
-  @override
   String get onboardingActIntro => 'มาลองใช้ Omi กัน';
 
   @override

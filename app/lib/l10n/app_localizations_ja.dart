@@ -12890,12 +12890,6 @@ class AppLocalizationsJa extends AppLocalizations {
   }
 
   @override
-  String get onboardingActWearTitle => 'Omiを身につけよう';
-
-  @override
-  String get onboardingActWearBody => '会話を覚えてくれます。ボタンを押して何でも質問し、もう一度押すと送信します。';
-
-  @override
   String get onboardingActIntro => 'Omiを試してみましょう。';
 
   @override

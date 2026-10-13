@@ -13104,13 +13104,6 @@ class AppLocalizationsLv extends AppLocalizations {
   }
 
   @override
-  String get onboardingActWearTitle => 'Valkājiet savu Omi';
-
-  @override
-  String get onboardingActWearBody =>
-      'Tas atceras jūsu sarunas. Nospiediet pogu, lai jautātu jebko, un vēlreiz, lai nosūtītu.';
-
-  @override
   String get onboardingActIntro => 'Izmēģināsim Omi.';
 
   @override

@@ -4014,8 +4014,6 @@
     "onboardingConnectOmi": "Sambungkan Omi",
     "consentShortMessage": "Omi menggunakan AI untuk menukar perbualan anda kepada nota. Anda boleh memadamkannya bila-bila masa.",
     "consentAiProviders": "Diproses dengan {providers}.",
-    "onboardingActWearTitle": "Pakai Omi anda",
-    "onboardingActWearBody": "Ia mengingati perbualan anda. Tekan butang untuk bertanya apa sahaja, tekan lagi untuk menghantar.",
     "onboardingActIntro": "Jom cuba Omi.",
     "onboardingActMicTitle": "Omi perlukan mikrofon anda",
     "onboardingActMicBody": "Supaya Omi dapat mendengar anda bercakap.",

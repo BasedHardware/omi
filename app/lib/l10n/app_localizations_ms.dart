@@ -13107,13 +13107,6 @@ class AppLocalizationsMs extends AppLocalizations {
   }
 
   @override
-  String get onboardingActWearTitle => 'Pakai Omi anda';
-
-  @override
-  String get onboardingActWearBody =>
-      'Ia mengingati perbualan anda. Tekan butang untuk bertanya apa sahaja, tekan lagi untuk menghantar.';
-
-  @override
   String get onboardingActIntro => 'Jom cuba Omi.';
 
   @override

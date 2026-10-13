@@ -13077,13 +13077,6 @@ class AppLocalizationsCs extends AppLocalizations {
   }
 
   @override
-  String get onboardingActWearTitle => 'Noste svůj Omi';
-
-  @override
-  String get onboardingActWearBody =>
-      'Pamatuje si vaše konverzace. Stiskněte tlačítko a zeptejte se na cokoli, dalším stiskem odešlete.';
-
-  @override
   String get onboardingActIntro => 'Vyzkoušejme Omi.';
 
   @override

@@ -171,6 +171,7 @@ class _InteractiveDeviceOnboardingWrapperState extends State<InteractiveDeviceOn
   /// Device tutorial closed: offer the plan through Superwall (local pilot only). Superwall
   /// presents its own screen, so this runs after the tutorial route has closed.
   Future<void> _showSetupCompletePaywall() async {
+    if (SuperwallPilot.instance.offeredDuringOnboarding) return;
     final shown =
         await SuperwallPilot.instance.showPlacementForCurrentUser(SuperwallPilot.deviceSetupCompletePlacement);
     if (shown) PlatformManager.instance.analytics.paywallOpened('Device Setup Complete');

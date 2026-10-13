@@ -13081,13 +13081,6 @@ class AppLocalizationsFi extends AppLocalizations {
   }
 
   @override
-  String get onboardingActWearTitle => 'Pidä Omia päälläsi';
-
-  @override
-  String get onboardingActWearBody =>
-      'Se muistaa keskustelusi. Kysy mitä vain painamalla painiketta, ja lähetä painamalla uudelleen.';
-
-  @override
   String get onboardingActIntro => 'Kokeillaan Omia.';
 
   @override

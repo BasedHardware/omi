@@ -13090,13 +13090,6 @@ class AppLocalizationsUr extends AppLocalizations {
   }
 
   @override
-  String get onboardingActWearTitle => 'اپنا Omi پہنیں';
-
-  @override
-  String get onboardingActWearBody =>
-      'یہ آپ کی گفتگو یاد رکھتا ہے۔ کچھ بھی پوچھنے کے لیے بٹن دبائیں، بھیجنے کے لیے دوبارہ دبائیں۔';
-
-  @override
   String get onboardingActIntro => 'آئیے Omi آزمائیں۔';
 
   @override

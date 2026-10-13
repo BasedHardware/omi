@@ -12983,12 +12983,6 @@ class AppLocalizationsHe extends AppLocalizations {
   }
 
   @override
-  String get onboardingActWearTitle => 'ענדו את ה-Omi';
-
-  @override
-  String get onboardingActWearBody => 'הוא זוכר את השיחות שלך. לחץ על הכפתור כדי לשאול כל דבר, ושוב כדי לשלוח.';
-
-  @override
   String get onboardingActIntro => 'בואו ננסה את Omi.';
 
   @override

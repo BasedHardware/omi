@@ -62,7 +62,6 @@ void main() {
   Future<({_FakeCapture capture, List<String> events})> pump(
     WidgetTester tester, {
     bool hasDevice = false,
-    bool showWearTips = false,
     ActivationResult result = notes,
     Completer<void>? paywall,
     _FakeCapture Function()? capture,
@@ -86,7 +85,6 @@ void main() {
         home: Scaffold(
           body: ActivationFlow(
             hasDevice: hasDevice,
-            showWearTips: showWearTips,
             capture: (_) {
               if (!used) {
                 used = true;
@@ -188,12 +186,7 @@ void main() {
     expect(run.events, ['review', 'paywall', 'finished'], reason: 'the closed pop-up leads to the paywall');
   });
 
-  testWidgets('Omi owners see the wear step first; other wearables go straight to the intro', (tester) async {
-    await pump(tester, hasDevice: true, showWearTips: true);
-    await tester.pump(const Duration(seconds: 1));
-    expect(find.text('Wear your Omi'), findsOneWidget);
-    await tester.pumpWidget(const SizedBox());
-
+  testWidgets('Omi owners go straight to the intro (how to wear it is the tutorial on Home)', (tester) async {
     await pump(tester, hasDevice: true);
     await tester.pump(const Duration(seconds: 1));
     expect(find.text('Wear your Omi'), findsNothing);

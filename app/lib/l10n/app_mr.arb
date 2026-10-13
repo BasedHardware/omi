@@ -11451,8 +11451,6 @@
     "onboardingConnectOmi": "Omi कनेक्ट करा",
     "consentShortMessage": "Omi AI वापरून तुमच्या संभाषणांच्या नोट्स बनवते. तुम्ही त्या कधीही हटवू शकता.",
     "consentAiProviders": "{providers} द्वारे प्रक्रिया केली जाते.",
-    "onboardingActWearTitle": "तुमचा Omi घाला",
-    "onboardingActWearBody": "तो तुमची संभाषणे लक्षात ठेवतो. काहीही विचारण्यासाठी बटण दाबा, पाठवण्यासाठी पुन्हा दाबा.",
     "onboardingActIntro": "चला, Omi वापरून पाहू.",
     "onboardingActMicTitle": "Omi ला तुमचा मायक्रोफोन हवा आहे",
     "onboardingActMicBody": "तुम्ही बोलता तेव्हा Omi ला ऐकू यावे म्हणून.",

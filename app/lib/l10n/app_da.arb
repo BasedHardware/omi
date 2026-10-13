@@ -4056,8 +4056,6 @@
     "onboardingConnectOmi": "Forbind Omi",
     "consentShortMessage": "Omi bruger AI til at gøre dine samtaler til noter. Du kan slette dem når som helst.",
     "consentAiProviders": "Behandles med {providers}.",
-    "onboardingActWearTitle": "Bær din Omi",
-    "onboardingActWearBody": "Den husker dine samtaler. Tryk på knappen for at spørge om hvad som helst, og igen for at sende.",
     "onboardingActIntro": "Lad os prøve Omi.",
     "onboardingActMicTitle": "Omi skal bruge din mikrofon",
     "onboardingActMicBody": "Så Omi kan høre dig, når du taler til den.",

@@ -13111,13 +13111,6 @@ class AppLocalizationsBe extends AppLocalizations {
   }
 
   @override
-  String get onboardingActWearTitle => 'Надзеньце Omi';
-
-  @override
-  String get onboardingActWearBody =>
-      'Ён памятае вашы размовы. Націсніце кнопку, каб спытаць што-небудзь, і яшчэ раз, каб адправіць.';
-
-  @override
   String get onboardingActIntro => 'Паспрабуем Omi.';
 
   @override

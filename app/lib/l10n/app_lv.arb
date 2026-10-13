@@ -4014,8 +4014,6 @@
     "onboardingConnectOmi": "Savienot Omi",
     "consentShortMessage": "Omi ar MI palīdzību pārvērš jūsu sarunas piezīmēs. Tās var izdzēst jebkurā laikā.",
     "consentAiProviders": "Apstrādā {providers}.",
-    "onboardingActWearTitle": "Valkājiet savu Omi",
-    "onboardingActWearBody": "Tas atceras jūsu sarunas. Nospiediet pogu, lai jautātu jebko, un vēlreiz, lai nosūtītu.",
     "onboardingActIntro": "Izmēģināsim Omi.",
     "onboardingActMicTitle": "Omi vajag jūsu mikrofonu",
     "onboardingActMicBody": "Lai Omi jūs dzirdētu, kad ar to runājat.",

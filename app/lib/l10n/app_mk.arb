@@ -11451,8 +11451,6 @@
     "onboardingConnectOmi": "Поврзете Omi",
     "consentShortMessage": "Omi користи вештачка интелигенција за да ги претвори вашите разговори во белешки. Можете да ги избришете во секое време.",
     "consentAiProviders": "Се обработува со {providers}.",
-    "onboardingActWearTitle": "Носете го вашиот Omi",
-    "onboardingActWearBody": "Ги памети вашите разговори. Притиснете го копчето за да прашате нешто, и повторно за да испратите.",
     "onboardingActIntro": "Да го пробаме Omi.",
     "onboardingActMicTitle": "На Omi му треба микрофонот",
     "onboardingActMicBody": "За Omi да ве слуша кога зборувате со него.",

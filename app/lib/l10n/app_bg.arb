@@ -4014,8 +4014,6 @@
     "onboardingConnectOmi": "Свържете Omi",
     "consentShortMessage": "Omi използва ИИ, за да превърне разговорите ви в бележки. Можете да ги изтриете по всяко време.",
     "consentAiProviders": "Обработва се с {providers}.",
-    "onboardingActWearTitle": "Носете своя Omi",
-    "onboardingActWearBody": "Помни разговорите ви. Натиснете бутона, за да попитате нещо, и пак, за да изпратите.",
     "onboardingActIntro": "Да пробваме Omi.",
     "onboardingActMicTitle": "Omi се нуждае от микрофона ви",
     "onboardingActMicBody": "За да ви чува Omi, когато говорите с него.",

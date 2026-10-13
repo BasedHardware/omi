@@ -13072,12 +13072,6 @@ class AppLocalizationsBn extends AppLocalizations {
   }
 
   @override
-  String get onboardingActWearTitle => 'আপনার Omi পরুন';
-
-  @override
-  String get onboardingActWearBody => 'এটি আপনার কথোপকথন মনে রাখে। যেকোনো প্রশ্ন করতে বোতাম চাপুন, পাঠাতে আবার চাপুন।';
-
-  @override
   String get onboardingActIntro => 'চলুন Omi চেষ্টা করি।';
 
   @override

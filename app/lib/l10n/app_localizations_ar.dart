@@ -13002,12 +13002,6 @@ class AppLocalizationsAr extends AppLocalizations {
   }
 
   @override
-  String get onboardingActWearTitle => 'ارتدِ Omi';
-
-  @override
-  String get onboardingActWearBody => 'يتذكر محادثاتك. اضغط الزر لتسأله أي شيء، واضغط مجددًا للإرسال.';
-
-  @override
   String get onboardingActIntro => 'لنجرّب Omi.';
 
   @override

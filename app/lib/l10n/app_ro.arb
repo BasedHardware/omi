@@ -4014,8 +4014,6 @@
     "onboardingConnectOmi": "Conectează Omi",
     "consentShortMessage": "Omi folosește AI pentru a transforma conversațiile tale în notițe. Le poți șterge oricând.",
     "consentAiProviders": "Procesat cu {providers}.",
-    "onboardingActWearTitle": "Poartă-ți Omi",
-    "onboardingActWearBody": "Își amintește conversațiile tale. Apasă butonul ca să întrebi orice și din nou ca să trimiți.",
     "onboardingActIntro": "Hai să încercăm Omi.",
     "onboardingActMicTitle": "Omi are nevoie de microfon",
     "onboardingActMicBody": "Ca Omi să te audă când vorbești cu el.",

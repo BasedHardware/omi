@@ -13089,13 +13089,6 @@ class AppLocalizationsTr extends AppLocalizations {
   }
 
   @override
-  String get onboardingActWearTitle => 'Omi\'ni tak';
-
-  @override
-  String get onboardingActWearBody =>
-      'Konuşmalarını hatırlar. Bir şey sormak için düğmeye bas, göndermek için tekrar bas.';
-
-  @override
   String get onboardingActIntro => 'Hadi Omi\'yi deneyelim.';
 
   @override

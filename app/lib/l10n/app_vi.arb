@@ -4014,8 +4014,6 @@
     "onboardingConnectOmi": "Kết nối Omi",
     "consentShortMessage": "Omi dùng AI để biến các cuộc trò chuyện của bạn thành ghi chú. Bạn có thể xóa chúng bất cứ lúc nào.",
     "consentAiProviders": "Được xử lý bằng {providers}.",
-    "onboardingActWearTitle": "Đeo Omi của bạn",
-    "onboardingActWearBody": "Omi ghi nhớ các cuộc trò chuyện của bạn. Nhấn nút để hỏi bất cứ điều gì, nhấn lần nữa để gửi.",
     "onboardingActIntro": "Cùng thử Omi nhé.",
     "onboardingActMicTitle": "Omi cần micrô của bạn",
     "onboardingActMicBody": "Để Omi nghe được khi bạn nói.",

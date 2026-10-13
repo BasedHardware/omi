@@ -11451,8 +11451,6 @@
     "onboardingConnectOmi": "Omi সংযুক্ত করুন",
     "consentShortMessage": "Omi AI ব্যবহার করে আপনার কথোপকথনকে নোটে পরিণত করে। যেকোনো সময় মুছে ফেলতে পারেন।",
     "consentAiProviders": "{providers} দিয়ে প্রক্রিয়া করা হয়।",
-    "onboardingActWearTitle": "আপনার Omi পরুন",
-    "onboardingActWearBody": "এটি আপনার কথোপকথন মনে রাখে। যেকোনো প্রশ্ন করতে বোতাম চাপুন, পাঠাতে আবার চাপুন।",
     "onboardingActIntro": "চলুন Omi চেষ্টা করি।",
     "onboardingActMicTitle": "Omi-এর আপনার মাইক্রোফোন দরকার",
     "onboardingActMicBody": "যাতে আপনি কথা বললে Omi শুনতে পায়।",

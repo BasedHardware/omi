@@ -283,40 +283,47 @@ class _ConnectOmiStepState extends State<ConnectOmiStep> with SingleTickerProvid
                   ),
                 ),
                 // Once the reader is connecting their own Omi, "Don't have your Omi yet?" no longer applies.
-                if (!provider.isConnected && !provider.isClicked)
-                  _rise(
-                      _links,
-                      Column(mainAxisSize: MainAxisSize.min, children: [
-                        Text(
-                          l10n.onboardingNoOmiYet,
-                          style: OmiType.footnote.copyWith(color: OmiColors.textTertiary),
-                          textAlign: TextAlign.center,
-                        ),
-                        // Quiet links, not buttons: they must not compete with the device above.
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Flexible(
-                              child: OmiButton.tertiary(
-                                key: const Key('connect_omi_ordered'),
-                                label: l10n.onboardingOmiOrdered,
-                                size: OmiButtonSize.compact,
-                                onPressed: () => _finish(OnboardingDeviceChoice.ordered),
+                // It fades out but keeps its space, so the device and title above don't jump.
+                AnimatedOpacity(
+                  opacity: provider.isConnected || provider.isClicked ? 0 : 1,
+                  duration: const Duration(milliseconds: 200),
+                  child: IgnorePointer(
+                    ignoring: provider.isConnected || provider.isClicked,
+                    child: _rise(
+                        _links,
+                        Column(mainAxisSize: MainAxisSize.min, children: [
+                          Text(
+                            l10n.onboardingNoOmiYet,
+                            style: OmiType.footnote.copyWith(color: OmiColors.textTertiary),
+                            textAlign: TextAlign.center,
+                          ),
+                          // Quiet links, not buttons: they must not compete with the device above.
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Flexible(
+                                child: OmiButton.tertiary(
+                                  key: const Key('connect_omi_ordered'),
+                                  label: l10n.onboardingOmiOrdered,
+                                  size: OmiButtonSize.compact,
+                                  onPressed: () => _finish(OnboardingDeviceChoice.ordered),
+                                ),
                               ),
-                            ),
-                            Container(width: 1, height: 14, color: OmiColors.border),
-                            Flexible(
-                              child: OmiButton.tertiary(
-                                key: const Key('connect_omi_not_ordered'),
-                                label: l10n.onboardingOmiNotOrdered,
-                                size: OmiButtonSize.compact,
-                                onPressed: _notOrdered,
+                              Container(width: 1, height: 14, color: OmiColors.border),
+                              Flexible(
+                                child: OmiButton.tertiary(
+                                  key: const Key('connect_omi_not_ordered'),
+                                  label: l10n.onboardingOmiNotOrdered,
+                                  size: OmiButtonSize.compact,
+                                  onPressed: _notOrdered,
+                                ),
                               ),
-                            ),
-                          ],
-                        ),
-                      ]),
-                      distance: 8),
+                            ],
+                          ),
+                        ]),
+                        distance: 8),
+                  ),
+                ),
               ],
             ),
           ),

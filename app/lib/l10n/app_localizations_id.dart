@@ -13086,13 +13086,6 @@ class AppLocalizationsId extends AppLocalizations {
   }
 
   @override
-  String get onboardingActWearTitle => 'Pakai Omi Anda';
-
-  @override
-  String get onboardingActWearBody =>
-      'Omi mengingat percakapanmu. Tekan tombol untuk bertanya apa saja, tekan lagi untuk mengirim.';
-
-  @override
   String get onboardingActIntro => 'Ayo coba Omi.';
 
   @override

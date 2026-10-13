@@ -13070,13 +13070,6 @@ class AppLocalizationsEt extends AppLocalizations {
   }
 
   @override
-  String get onboardingActWearTitle => 'Kanna oma Omit';
-
-  @override
-  String get onboardingActWearBody =>
-      'See mäletab sinu vestlusi. Vajuta nuppu, et midagi küsida, ja uuesti saatmiseks.';
-
-  @override
   String get onboardingActIntro => 'Proovime Omit.';
 
   @override

@@ -4014,8 +4014,6 @@
     "onboardingConnectOmi": "Prijunkite Omi",
     "consentShortMessage": "Omi naudoja DI, kad jūsų pokalbius paverstų užrašais. Juos galite ištrinti bet kada.",
     "consentAiProviders": "Apdorojama su {providers}.",
-    "onboardingActWearTitle": "Nešiokite savo Omi",
-    "onboardingActWearBody": "Jis prisimena jūsų pokalbius. Paspauskite mygtuką, kad ko nors paklaustumėte, ir dar kartą, kad išsiųstumėte.",
     "onboardingActIntro": "Išbandykime Omi.",
     "onboardingActMicTitle": "Omi reikia mikrofono",
     "onboardingActMicBody": "Kad Omi girdėtų, kai su juo kalbate.",

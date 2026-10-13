@@ -4014,8 +4014,6 @@
     "onboardingConnectOmi": "Omi verbinden",
     "consentShortMessage": "Omi macht mit KI aus deinen Gesprächen Notizen. Du kannst sie jederzeit löschen.",
     "consentAiProviders": "Verarbeitet mit {providers}.",
-    "onboardingActWearTitle": "Trag dein Omi",
-    "onboardingActWearBody": "Es merkt sich deine Gespräche. Drück die Taste, um etwas zu fragen, und noch mal zum Senden.",
     "onboardingActIntro": "Probier Omi aus.",
     "onboardingActMicTitle": "Omi braucht dein Mikrofon",
     "onboardingActMicBody": "Damit Omi dich hört, wenn du mit ihm sprichst.",
