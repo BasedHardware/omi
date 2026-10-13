@@ -7,6 +7,7 @@ import 'package:omi/backend/preferences.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/widgets/shimmer_with_timeout.dart';
 import 'package:omi/ui/ui.dart';
+import 'package:omi/pages/settings/widgets/plans/contextual_plans.dart';
 import 'package:omi/pages/settings/widgets/live_activity_settings.dart';
 
 class NotificationsSettingsPage extends StatefulWidget {
@@ -108,6 +109,16 @@ class _NotificationsSettingsPageState extends State<NotificationsSettingsPage> {
   }
 
   Future<void> _updateNotificationFrequency(int value) async {
+    if (value > 0 &&
+        _notificationFrequency == 0 &&
+        await showProGateUpsell(
+          context,
+          feature: 'proactive_agent',
+          source: 'proactive_agent_gate',
+        )) {
+      return;
+    }
+    if (!mounted) return;
     PlatformManager.instance.analytics.notificationFrequencyChanged(
       oldFrequency: _notificationFrequency,
       newFrequency: value,
