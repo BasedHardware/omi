@@ -10,11 +10,9 @@ from utils.conversations.final_pass_assignment import (
     assign_words,
     name_centroids,
     skip_single_speaker,
-    select_live_match,
 )
 from utils.conversations.final_pass_remap import remap_final_record
 from utils.stt.diarization_eval import score_turns
-from utils.stt.speaker_match import select_speaker_match
 
 
 def test_triage_requires_one_evidenced_voice_and_coverage():
@@ -59,8 +57,6 @@ def test_centroid_naming_uses_existing_threshold_margin_evidence_owner_arbitrati
     centroids['other'] = {'embedding': [1, 0.01], 'evidence_seconds': 10}
     assert name_centroids(centroids, prints)['a'].person_id is None
     assert project_source({'is_user': True, 'speaker_match_source': 'final_centroid'}) == 'auto'
-    for row in ({'user': 0.64}, {'user': 0.66}, {'user': 0.4, 'person': 0.45}):
-        assert select_live_match(row) == select_speaker_match(row)
 
 
 def segment(id, **values):
@@ -177,7 +173,7 @@ def test_single_triage_skips_remote_backend_but_still_names_centroid(monkeypatch
 
     monkeypatch.setattr(pipeline, 'get_diarizer_backend', lambda: pytest.fail('remote backend must not run'))
     resolution = SimpleNamespace(coverage=1, speaker_ids={'old': 0})
-    old = SimpleNamespace(id='old', start=0, end=6)
+    old = SimpleNamespace(id='old', start=0, end=6, speaker_id=0, speaker_id_scope='legacy')
     segments, outcome = pipeline.run_final_pass(
         b'',
         [{'timestamp': [0, 6], 'text': 'synthetic', 'speaker': 'a'}],
@@ -247,3 +243,100 @@ def test_sync_adapter_uses_same_assignment_pipeline_and_raw_word_clock(monkeypat
     assert outcome['outcome'] == 'diarized'
     assert segments[0].start == 2 and segments[0].end == 6 and segments[0].is_user
     assert old.start == 0
+
+
+@pytest.mark.parametrize('stale_scope', [True, False])
+def test_remap_uses_current_manual_scope_and_segment_tie_precedence(stale_scope):
+    old = [segment('old', speaker_id_scope='current')]
+    new = [segment('new')]
+    new[0]['is_user'] = True
+    # A stale carried speaker decision has a higher generation; a current manual
+    # speaker decision ties the explicit segment decision. Neither may win here.
+    speaker = {
+        'is_user': True,
+        'generation': 3 if stale_scope else 2,
+        'source': 'carried' if stale_scope else 'manual',
+        'speaker_id_scope': 'previous' if stale_scope else 'current',
+    }
+    receipt = {'speakers': {'0': speaker}, 'segments': {'old': {'is_user': False, 'generation': 2}}}
+    patch = remap_final_record(old, new, receipt, {}, clock_offset=0)
+    assert patch['transcript_segments'][0]['is_user'] is False
+    assert patch['manual_speaker_assignments']['segments']['new']['generation'] == 2
+
+
+def test_agreement_uses_resolved_legacy_labels_not_reused_upload_local_ids(monkeypatch):
+    from utils.conversations import final_pass_pyannote as pipeline
+    from models.transcript_segment import TranscriptSegment
+
+    result = DiarizationResult(
+        turns=[{'start': 0, 'end': 1, 'speaker': 'x'}, {'start': 1, 'end': 2, 'speaker': 'y'}],
+        embedding_space=OMI_EMBEDDING_SPACE,
+        version='synthetic',
+        provenance={'backend': 'pyannote'},
+    )
+    monkeypatch.setattr(pipeline, 'get_diarizer_backend', lambda: SimpleNamespace(diarize=lambda *_a, **_kw: result))
+    words = [
+        {'timestamp': [0, 1], 'text': 'first', 'speaker': 'SPEAKER_00'},
+        {'timestamp': [1, 2], 'text': 'second', 'speaker': 'SPEAKER_00'},
+    ]
+    legacy = [
+        TranscriptSegment(
+            id='a', text='first', start=0, end=1, is_user=False, speaker_id=0, speaker_id_scope='conversation:synthetic'
+        ),
+        TranscriptSegment(
+            id='b',
+            text='second',
+            start=1,
+            end=2,
+            is_user=False,
+            speaker_id=1,
+            speaker_id_scope='conversation:synthetic',
+        ),
+    ]
+    _, outcome = pipeline.run_final_pass(
+        b'', words, None, {}, deadline=float('inf'), conversation_id='synthetic', segments=legacy
+    )
+    assert outcome['agreement'] == 1.0
+
+
+def test_http_adapter_stream_contract_and_remaining_deadline(monkeypatch):
+    import time
+    from utils.stt import diarization
+
+    result = DiarizationResult(
+        turns=[{'start': 0, 'end': 1, 'speaker': 'a'}],
+        embedding_space=OMI_EMBEDDING_SPACE,
+        version='fixture',
+        provenance={'backend': 'pyannote'},
+    )
+    calls = []
+
+    def post(url, **kwargs):
+        calls.append((url, kwargs))
+        return SimpleNamespace(raise_for_status=lambda: None, json=result.model_dump)
+
+    monkeypatch.setenv('HOSTED_DIARIZATION_API_URL', 'http://fixture.invalid/')
+    monkeypatch.setattr(diarization.httpx, 'post', post)
+    output = diarization.HttpDiarizer('pyannote').diarize(b'\x01\x00', deadline=time.monotonic() + 10)
+    assert output == result
+    url, request = calls[0]
+    assert url == 'http://fixture.invalid/v2/diarization'
+    assert request['content'] == b'\x01\x00'
+    assert request['headers'] == {'Content-Type': 'audio/pcm'}
+    assert 0 < request['timeout'].read <= 10
+    assert request['timeout'].connect == 5
+    with pytest.raises(TimeoutError):
+        diarization.HttpDiarizer('pyannote').diarize(b'', deadline=0)
+    assert len(calls) == 1
+
+
+def test_http_timeout_is_reported_without_changing_legacy_output(monkeypatch):
+    from utils.conversations import final_pass_pyannote as final
+
+    def timeout(*_a, **_kw):
+        raise final.httpx.ReadTimeout('synthetic timeout')
+
+    monkeypatch.setattr(final, 'get_diarizer_backend', lambda: SimpleNamespace(diarize=timeout))
+    segments, outcome = final.run_final_pass(b'', [], None, {}, deadline=float('inf'), conversation_id='fixture')
+    assert segments is None
+    assert outcome == {'outcome': 'failed:timeout'}

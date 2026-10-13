@@ -126,7 +126,7 @@ from utils.other.storage import (
 )
 from utils.observability.fallback import record_fallback
 from utils.observability.transcription import record_sync_transcription_outcome
-from utils.conversations.final_pass_sync import sync_enabled_for, run_sync_final_pass
+from config.transcription_final_pass import sync_enabled_for
 from utils.speaker_assignment import process_speaker_assigned_segments
 from utils.speaker_identification import detect_speaker_from_text
 from utils.speaker_learning_jobs import schedule_person_voice_learning_retries
@@ -1388,6 +1388,8 @@ def process_segment(
         try:
             final_segments = None
             if sync_enabled_for(uid) and audio_bytes is not None:
+                from utils.conversations.final_pass_sync import run_sync_final_pass
+
                 final_segments, final_outcome = run_sync_final_pass(
                     uid,
                     audio_bytes,

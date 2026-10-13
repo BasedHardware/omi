@@ -4,7 +4,7 @@ import os
 import time
 from typing import Protocol
 
-import requests
+import httpx
 
 from models.diarization import DiarizationResult, OMI_EMBEDDING_SPACE
 from utils.stt.diarization_turns import exclusive_from_activity, overlap_regions
@@ -27,11 +27,11 @@ class HttpDiarizer:
         remaining = deadline - time.monotonic()
         if remaining <= 0:
             raise TimeoutError
-        response = requests.post(
+        response = httpx.post(
             url + '/v2/diarization',
-            data=pcm,
+            content=pcm,
             headers={'Content-Type': 'audio/pcm'},
-            timeout=(min(5, remaining), remaining),
+            timeout=httpx.Timeout(remaining, connect=min(5, remaining)),
         )
         response.raise_for_status()
         result = DiarizationResult.model_validate(response.json())

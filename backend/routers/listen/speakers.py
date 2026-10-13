@@ -7,7 +7,6 @@ import logging
 import time
 from collections import deque
 from dataclasses import dataclass, replace
-from utils.conversations.final_pass_assignment import select_live_match as select_speaker_match
 from typing import Any, Deque, Dict, Mapping, Optional, Tuple, cast
 
 import config.speaker_match_scores as match_scores
@@ -34,6 +33,7 @@ from utils.stt.conversation_speakers import VOICE_MATCH_THRESHOLD
 from utils.stt.owner_profile import load_owner_embedding, validated_embedding
 from utils.stt.speaker_embedding import compare_embeddings, extract_embedding_from_bytes
 from utils.stt.speaker_match import (
+    select_speaker_match,
     SPEAKER_MATCH_MAX_CLIPS,
     SPEAKER_MATCH_MIN_EVIDENCE_SECONDS,
     SpeakerMatchDecision,

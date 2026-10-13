@@ -60,7 +60,6 @@ from utils.other.portability_read import (
     verified_encrypted_read,
 )
 from config.transcription_final_pass import authoritative_for
-from utils.conversations.final_pass_remap import remap_final_record
 import config.speaker_match_scores as match_scores
 import config.owner_recognition_diagnostics as owner_diagnostics
 import utils.firestore_document_size as document_size
@@ -3910,6 +3909,8 @@ def promote_final_pass_if_current(
     """Revision-fenced, protected record swap; every annotation remaps atomically."""
     if expected_updated_at is None or not authoritative_for(uid):
         return False
+    from utils.conversations.final_pass_remap import remap_final_record
+
     client = firestore_client if firestore_client is not None else get_firestore_client()
     parent = client.collection('users').document(uid).collection(conversations_collection).document(conversation_id)
     deletion = client.collection('account_deletions').document(uid)

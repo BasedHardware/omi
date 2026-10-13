@@ -15,3 +15,7 @@ def enabled_for(uid: str) -> bool:
 
 def authoritative_for(uid: str) -> bool:
     return enabled_for(uid) and os.getenv('TRANSCRIPTION_FINAL_PASS_AUTHORITATIVE', 'false').lower() == 'true'
+
+
+def sync_enabled_for(uid: str) -> bool:
+    return enabled_for(uid) and os.getenv('TRANSCRIPTION_FINAL_PASS_SYNC_ENABLED', 'false').lower() == 'true'

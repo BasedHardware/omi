@@ -8,7 +8,6 @@ from utils.stt.speaker_match import (
     SPEAKER_MATCH_MIN_EVIDENCE_SECONDS,
     arbitrate_owner_matches,
     select_speaker_match,
-    SpeakerMatchDecision,
 )
 
 
@@ -58,8 +57,3 @@ def name_centroids(centroids, voiceprints, *, owner_reserved=False):
 def skip_single_speaker(resolution):
     # Missing embeddings/partial evidence must never qualify for the cheap branch.
     return resolution is not None and resolution.coverage >= 0.9 and len(set(resolution.speaker_ids.values())) == 1
-
-
-def select_live_match(distances, **policy) -> SpeakerMatchDecision:
-    """Live lane adapter: preserve the existing calibrated clip policy exactly."""
-    return select_speaker_match(distances, **policy)

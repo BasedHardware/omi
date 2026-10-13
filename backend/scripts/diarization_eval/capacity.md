@@ -21,10 +21,10 @@ measurements, not an immutable-image qualification. Shared GPU baseline was
 stayed well below that cap. Device peak includes the other process and CUDA
 allocator reservations. Afterward device memory returned to 4052 MiB.
 
-At 6,300 audio-h/day and provisional 30% multi-speaker share, 1,890 h/day × worst
-measured RTF 0.03138 requires 59.3 GPU-h/day: 2.47 continuously busy workers.
-Use **four L4 replicas** as an initial floor (62% average inference occupancy),
-**max twelve**, one inference worker per pod, two waiting uploads. This excludes
+At 6,300 audio-h/day and measured 45% multi-speaker share (range 12–50%), 2,835 h/day × worst
+measured RTF 0.03138 requires 89.0 GPU-h/day: 3.71 continuously busy workers.
+Use a **separate batch endpoint/deployment**, preserving the existing live embedding endpoint. GPU calls inside one diarizer pod are serialized, so same-pod live embedding latency is not qualified by this run. Use **six L4 batch replicas** as an initial floor (62% average inference occupancy),
+**max eighteen**, one inference worker per pod, two waiting uploads. This excludes
 triage, existing embedding traffic, burst distributions, network and retries;
 qualify those during the gated cohort rather than treating arithmetic as an SLO.
 

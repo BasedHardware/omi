@@ -2,6 +2,7 @@
 
 from datetime import datetime, timezone
 from pathlib import Path
+import sys
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 import wave
@@ -9,7 +10,7 @@ import pytest
 
 from models.transcript_segment import TranscriptSegment
 from utils.conversations import transcription_shadow as shadow
-from utils.conversations import finalizer
+from utils.conversations import finalizer, final_pass_pyannote
 
 
 def test_finalizer_starts_shadow_only_for_enabled_admission(monkeypatch):
@@ -340,7 +341,10 @@ def test_flag_off_output_is_byte_identical_to_legacy(monkeypatch):
     monkeypatch.setattr(shadow, 'build_person_embeddings_cache', lambda _: {})
     monkeypatch.setattr(shadow, 'identify_speakers_for_segments', lambda *_a, **_kw: None)
     monkeypatch.setattr(shadow, 'speaker_embedding_configured', lambda: False)
-    monkeypatch.setattr(shadow, 'run_final_pass', lambda *_a, **_kw: pytest.fail('flag-off calls diarizer'))
+    monkeypatch.setattr(
+        final_pass_pyannote, 'run_final_pass', lambda *_a, **_kw: pytest.fail('flag-off calls diarizer')
+    )
+    monkeypatch.setitem(sys.modules, 'utils.conversations.final_pass_pyannote', None)
     monkeypatch.setattr(
         shadow,
         'parakeet_prerecorded_from_bytes',
@@ -386,7 +390,7 @@ def test_v2_audio_collection_and_duplicate_trim_stay_on_pcm16_sample_boundaries(
         captured.append(pcm)
         return None, {'outcome': 'skipped_single'}
 
-    monkeypatch.setattr(shadow, 'run_final_pass', final)
+    monkeypatch.setattr(final_pass_pyannote, 'run_final_pass', final)
     conversation = SimpleNamespace(
         id='fixture',
         language='en',

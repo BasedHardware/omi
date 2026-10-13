@@ -1,9 +1,9 @@
-"""Opt-in, bounded Parakeet final-pass comparison. Never mutates the record.
+"""Opt-in, bounded final-pass comparison and separately gated record promotion.
 
-Admission is deliberately cheap on the finalizer's path. A tracked background
-task waits for the pusher's 60-second upload flush, then a dedicated two-worker
-pool does storage, transcription and comparison. A restart can lose a shadow
-sample; it cannot lose finalization or alter the conversation.
+The default shadow path never mutates the record. A tracked background task
+waits for upload flush, then a bounded pool performs storage, transcription and
+comparison. Authoritative mode requires a safe remap and current record revision.
+A restart can lose a sample; finalization admission remains independent.
 """
 
 from __future__ import annotations
@@ -24,7 +24,6 @@ from prometheus_client import Counter, Histogram
 
 from database import conversations as conversations_db
 from config.transcription_final_pass import enabled_for, authoritative_for
-from utils.conversations.final_pass_pyannote import run_final_pass
 from utils.manual_speaker_assignments import manual_owner_reserved
 from database._client import db
 from database.redis_db import r as redis_client
@@ -380,6 +379,8 @@ def _make_pass(
     if started_origin is not None:
         audio_result['audio_origin_offset_seconds'] = round(origin - started_origin, 3)
     if final_result is not None and final_pcm is not None:
+        from utils.conversations.final_pass_pyannote import run_final_pass
+
         passed, metadata = run_final_pass(
             bytes(final_pcm),
             final_words,

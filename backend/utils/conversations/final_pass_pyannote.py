@@ -8,8 +8,9 @@ from models.speaker_label_provenance import project_source
 from utils.observability.fallback import record_fallback
 from utils.stt.diarization import get_diarizer_backend, LegacyAHC
 from utils.stt.diarization_eval import score_words
+from utils.stt.diarization_turns import exclusive_from_activity
 
-import requests
+import httpx
 from prometheus_client import Counter, Histogram
 
 from models.transcript_segment import TranscriptSegment
@@ -30,6 +31,14 @@ def run_final_pass(
         output = backend.diarize(
             pcm, deadline=deadline, segments=segments, vectors=vectors or {}, resolution=resolution
         ).model_dump()
+        # Legacy labels are scoped per upload until AHC resolves them. Compare
+        # the actual segment projection, never reused window-local SPEAKER_00.
+        legacy_turns = [
+            {'start': s.start, 'end': s.end, 'speaker': f'{s.speaker_id_scope or "legacy"}:{s.speaker_id}'}
+            for s in segments
+            if s.speaker_id is not None and s.speaker_id >= 0 and s.end > s.start
+        ]
+        legacy_words = assign_words(words, exclusive_from_activity(legacy_turns)) if legacy_turns else words
         assigned = assign_words(words, output['turns'])
         decisions = (
             name_centroids(
@@ -85,7 +94,7 @@ def run_final_pass(
         # Compare anonymous voices with a permutation-invariant overlap mapping.
         total = len(words)
         agreement = (
-            score_words([{'speaker': w.get('speaker')} for w in words], [w['speaker'] for w in assigned])[
+            score_words([{'speaker': w.get('speaker')} for w in legacy_words], [w['speaker'] for w in assigned])[
                 'accuracy_1to1'
             ]
             or 0.0
@@ -107,7 +116,7 @@ def run_final_pass(
             ),
         }
     except Exception as error:
-        reason = 'timeout' if isinstance(error, (TimeoutError, requests.Timeout)) else 'service'
+        reason = 'timeout' if isinstance(error, (TimeoutError, httpx.TimeoutException)) else 'service'
         OUTCOMES.labels(outcome='failed:' + reason).inc()
         record_fallback(
             component='stt_selection',

@@ -3,7 +3,11 @@
 from copy import deepcopy
 
 from utils.conversations.segment_remap import plan_segment_remap, remap_receipt, remap_translations, remap_source_ids
-from utils.manual_speaker_assignments import apply_manual_assignments
+from utils.manual_speaker_assignments import (
+    apply_manual_assignments,
+    manual_assignment_decision,
+    manual_rejected_speakers,
+)
 
 
 def remap_final_record(old, new, receipt, structured, *, clock_offset):
@@ -11,7 +15,16 @@ def remap_final_record(old, new, receipt, structured, *, clock_offset):
     plan = plan_segment_remap(old, new, offset_seconds=clock_offset)
     if not plan.safe:
         raise ValueError('unsafe final record remap')
-    remapped_receipt = remap_receipt(receipt, old, new, plan)
+    # Resolve scope, generation and rejection precedence with the same policy
+    # as the current manual writer before expanding decisions to new IDs.
+    rejected = manual_rejected_speakers(receipt)
+    current_receipt = {k: deepcopy(v) for k, v in receipt.items() if k not in {'segments', 'speakers'}}
+    current_receipt['segments'] = {
+        source['id']: decision
+        for source in old
+        if (decision := manual_assignment_decision(source, receipt, rejected)) is not None
+    }
+    remapped_receipt = remap_receipt(current_receipt, old, new, plan)
     translations = remap_translations(old, plan)
     by_id = {s['id']: s for s in new}
     edited = {}

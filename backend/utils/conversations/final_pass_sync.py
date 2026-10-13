@@ -1,21 +1,15 @@
 """Sync/WAL adapter for the shared triage, diarizer and assignment seam."""
 
 import io
-import os
 import time
 
 from pydub import AudioSegment
 
-from config.transcription_final_pass import enabled_for
 from utils.conversations.final_pass_pyannote import run_final_pass, OUTCOMES
 from utils.observability.fallback import record_fallback
 from utils.stt.conversation_speakers import resolve_conversation_speakers
 from utils.stt.speaker_embedding import extract_embedding_from_bytes, speaker_embedding_configured
 from utils.stt.sync_speaker_evidence import collect_speaker_audio
-
-
-def sync_enabled_for(uid):
-    return enabled_for(uid) and os.getenv('TRANSCRIPTION_FINAL_PASS_SYNC_ENABLED', 'false').lower() == 'true'
 
 
 def run_sync_final_pass(uid, audio, words, segments, cache, *, scope, owner_reserved):
