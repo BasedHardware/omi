@@ -173,6 +173,7 @@ def test_invalidation_failure_is_repaired_before_completion(env):
     env.cache.side_effect = RuntimeError('simulated')
     env.module.recover_locked_content('test-user', now=NOW)
     assert env.locks['conversations'] == 0 and not env.state_data
+    env.fakes['utils.fair_use'].invalidate_enforcement_cache.assert_called_once_with('test-user')
     env.cache.side_effect = None
     env.redis.next_request()
     env.module.recover_locked_content('test-user', now=NOW)

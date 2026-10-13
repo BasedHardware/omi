@@ -875,7 +875,19 @@ def test_assign_sync_conversation_invalidates_once_after_size_limit_retry(writer
     assert invalidated == ['u1']
 
 
-def test_unlock_all_conversations_invalidates_after_every_batch_commit(writer_env):
+def _allow_unlocked_data_plane(monkeypatch):
+    import database.account_deletion_marker as marker
+
+    miss = SimpleNamespace(exists=False, to_dict=lambda: None)
+    monkeypatch.setattr(
+        marker,
+        'get_data_plane_firestore_client',
+        lambda: SimpleNamespace(document=lambda path: SimpleNamespace(get=lambda *args, **kwargs: miss)),
+    )
+
+
+def test_unlock_all_conversations_invalidates_after_every_batch_commit(writer_env, monkeypatch):
+    _allow_unlocked_data_plane(monkeypatch)
     store, invalidated = writer_env
     for index in range(600):
         store.seed_conv('u1', f'l{index}', status='completed', is_locked=True)
@@ -1040,7 +1052,8 @@ def test_unconfigured_redis_disables_the_cache_without_error(monkeypatch):
     people_stats_cache.invalidate_people_stats_cache('u1')
 
 
-def test_reset_unlock_conversations_is_bounded_and_repairs_cache_on_empty_retry(writer_env):
+def test_reset_unlock_conversations_is_bounded_and_repairs_cache_on_empty_retry(writer_env, monkeypatch):
+    _allow_unlocked_data_plane(monkeypatch)
     store, invalidated = writer_env
     for index in range(101):
         store.seed_conv('u1', f'l{index}', status='completed', is_locked=True)

@@ -1418,7 +1418,7 @@ def unlock_all_action_items(uid: str, *, limit: Optional[int] = None) -> int:
     from database.locked_content import unlock_query_rows
     from database.legal_holds import external_write_fence
 
-    with external_write_fence(uid, firestore_client=db):
+    with external_write_fence(uid):
         total = unlock_query_rows(
             db,
             locked_items_query,

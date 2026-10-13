@@ -71,10 +71,13 @@ def recover_locked_content(uid: str, *, now: datetime | None = None) -> None:
             conversation_count = conversations.unlock_all_conversations(uid, limit=PAGE_SIZE)
         finally:
             # Repair access caches even when a later recheck denies or fails,
-            # or a helper raises after an already-committed page.
+            # or a helper raises after an already-committed page. A paywall
+            # cache error must not skip fair-use invalidation.
             redis_db.set_credits_invalidation_signal(uid)
-            clear_trial_paywall_cache(uid)
-            invalidate_enforcement_cache(uid)
+            try:
+                clear_trial_paywall_cache(uid)
+            finally:
+                invalidate_enforcement_cache(uid)
         # Two memory collections can each return PAGE_SIZE. A full page is
         # conservatively incomplete; a later request proves the empty tail.
         if memory_count < PAGE_SIZE and action_count < PAGE_SIZE and conversation_count < PAGE_SIZE:
