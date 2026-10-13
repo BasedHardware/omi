@@ -460,6 +460,10 @@ def _get_agentic_module():
 
     # Create mock tools with names that look like real LangChain tools
     tool_names = [
+        "update_conversation",
+        "rename_person",
+        "edit_memory",
+        "delete_memory",
         "get_conversations_tool",
         "search_conversations_tool",
         "get_memories_tool",
@@ -737,10 +741,10 @@ def test_static_prefix_exceeds_minimum_cache_tokens():
 # ---------------------------------------------------------------------------
 
 
-def test_core_tools_has_34_tools():
+def test_core_tools_has_38_tools():
     """CORE_TOOLS includes the three JIT-gated ledger write verbs; web search remains server-built-in."""
     agentic_mod = _get_agentic_module()
-    assert len(agentic_mod.CORE_TOOLS) == 34, f"CORE_TOOLS has {len(agentic_mod.CORE_TOOLS)} tools, expected 34"
+    assert len(agentic_mod.CORE_TOOLS) == 38, f"CORE_TOOLS has {len(agentic_mod.CORE_TOOLS)} tools, expected 38"
 
 
 def test_core_tools_list_creates_independent_copy():
@@ -763,9 +767,9 @@ def test_core_tools_list_creates_independent_copy():
     mock_app_tool.name = "custom_app_tool"
     tools_a.append(mock_app_tool)
 
-    assert len(tools_a) == 35
-    assert len(tools_b) == 34
-    assert len(agentic_mod.CORE_TOOLS) == 34, "CORE_TOOLS was mutated!"
+    assert len(tools_a) == 39
+    assert len(tools_b) == 38
+    assert len(agentic_mod.CORE_TOOLS) == 38, "CORE_TOOLS was mutated!"
 
 
 def test_core_tools_order_matches_exports():
@@ -783,6 +787,10 @@ def test_core_tools_order_matches_exports():
         "get_action_items_tool",
         "create_action_item_tool",
         "update_action_item_tool",
+        "update_conversation",
+        "rename_person",
+        "edit_memory",
+        "delete_memory",
         "get_omi_product_info_tool",
         "get_calendar_events_tool",
         "create_calendar_event_tool",

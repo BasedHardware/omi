@@ -1,7 +1,11 @@
 from datetime import datetime, timezone
-from typing import Optional
+from typing import Any, Mapping, Optional, TypedDict
 
 from database import user_usage as user_usage_db
+
+
+class _MetadataKwargs(TypedDict, total=False):
+    usage_metadata: Mapping[str, Any]
 
 
 def billable_transcription_seconds(
@@ -43,6 +47,7 @@ def record_usage(
     cost_usd: float | None = None,
     cost_status: str = 'missing',
     cost_exclusion: str | None = None,
+    usage_metadata: Mapping[str, Any] | None = None,
 ):
     """Records hourly usage stats for a user."""
     now = datetime.now(timezone.utc)
@@ -54,6 +59,7 @@ def record_usage(
         'memories_created': memories_created,
         'speech_seconds': speech_seconds,
     }
+    metadata_kwargs: _MetadataKwargs = {'usage_metadata': usage_metadata} if usage_metadata is not None else {}
     if idempotency_key:
         user_usage_db.update_hourly_usage_once(
             uid,
@@ -63,6 +69,7 @@ def record_usage(
             cost_usd=cost_usd,
             cost_status=cost_status,
             cost_exclusion=effective_cost_exclusion,
+            **metadata_kwargs,
         )
     else:
         user_usage_db.update_hourly_usage(
@@ -72,4 +79,14 @@ def record_usage(
             cost_usd=cost_usd,
             cost_status=cost_status,
             cost_exclusion=effective_cost_exclusion,
+            **metadata_kwargs,
         )
+
+
+def record_sync_v1_usage(uid: str, **usage: Any):
+    """Sync v1's existing counters plus explicit managed-source provenance.
+
+    Provider acceptance and successful-segment speech are not available here;
+    the shadow projection is estimated and keeps that gap visible.
+    """
+    return record_usage(uid, **usage, usage_metadata={'funding': 'omi', 'provider': 'unknown', 'source': 'sync_v1'})

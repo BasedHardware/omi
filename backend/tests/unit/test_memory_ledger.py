@@ -60,7 +60,9 @@ def _load_modules():
             "database.memory_ledger",
             os.path.join(str(_BACKEND), "database", "memory_ledger.py"),
         )
-        projection_repair = memory_ledger.projection_repair
+        projection_repair = load_module_fresh(
+            "database.projection_repair", str(_BACKEND / "database" / "projection_repair.py")
+        )
         globals()["memory_ledger"] = memory_ledger
         globals()["projection_repair"] = projection_repair
         yield
@@ -641,13 +643,7 @@ def test_contention_retry_rejects_invalid_attempt_count_before_transaction():
     assert opened is False
 
 
-def test_projection_repair_extracts_affected_fact_ids_and_metadata():
-    mutations = [
-        memory_ledger.add_fact({"id": "m1", "subject_entity_id": "user", "object_entity_ids": ["project"]}),
-        memory_ledger.supersede_fact("m2", by="m1"),
-    ]
-
-    assert projection_repair.affected_fact_ids(mutations) == ["m1", "m2"]
+def test_projection_metadata_preserves_fact_identity_and_tombstone_state():
     assert projection_repair.projection_metadata_for_fact(
         {
             "id": "m1",
@@ -687,8 +683,7 @@ def test_reconcile_projection_detects_and_repairs_drift_to_zero():
     assert repaired["projection_fail_count"] == 0
 
 
-def test_append_commit_enqueues_projection_repairs(monkeypatch):
-    queued = []
+def test_append_commit_does_not_enqueue_projection_repairs(monkeypatch):
     commit = memory_ledger.build_commit(None, [memory_ledger.add_fact({"id": "m1"})])
 
     monkeypatch.setattr(
@@ -696,20 +691,15 @@ def test_append_commit_enqueues_projection_repairs(monkeypatch):
         "_append_commit_transaction",
         lambda *args, **kwargs: {"commit": commit, "applied": True},
     )
-    monkeypatch.setattr(
-        memory_ledger.projection_repair,
-        "enqueue_projection_repairs",
-        lambda uid, item, **_kwargs: queued.append((uid, item)) or ["repair"],
-    )
 
-    result = memory_ledger.append_commit("uid-1", None, commit["mutations"])
+    database = MagicMock()
+    result = memory_ledger.append_commit("uid-1", None, commit["mutations"], firestore_client=database)
 
     assert result["applied"] is True
-    assert queued == [("uid-1", commit)]
+    database.batch.assert_not_called()
 
 
-def test_append_commit_retries_precommit_contention_and_enqueues_projection_once(monkeypatch):
-    queued = []
+def test_append_commit_retries_precommit_contention_without_projection_queue(monkeypatch):
     calls = 0
     commit = memory_ledger.build_commit(None, [memory_ledger.add_fact({"id": "m1"})])
 
@@ -731,21 +721,16 @@ def test_append_commit_retries_precommit_contention_and_enqueues_projection_once
 
     monkeypatch.setattr(memory_ledger, "_append_commit_transaction", append_transaction)
     monkeypatch.setattr(memory_ledger, "run_with_transaction_contention_retry", fast_retry)
-    monkeypatch.setattr(
-        memory_ledger.projection_repair,
-        "enqueue_projection_repairs",
-        lambda uid, item, **_kwargs: queued.append((uid, item)) or ["repair"],
-    )
 
-    result = memory_ledger.append_commit("uid-1", None, commit["mutations"])
+    database = MagicMock()
+    result = memory_ledger.append_commit("uid-1", None, commit["mutations"], firestore_client=database)
 
     assert result["applied"] is True
     assert calls == 2
-    assert queued == [("uid-1", commit)]
+    database.batch.assert_not_called()
 
 
-def test_append_commit_with_builder_retries_contention_and_enqueues_projection_once(monkeypatch):
-    queued = []
+def test_append_commit_with_builder_retries_contention_without_projection_queue(monkeypatch):
     seen_transactions = []
     commit = memory_ledger.build_commit(None, [memory_ledger.add_fact({"id": "m1"})])
     database = MagicMock()
@@ -768,11 +753,6 @@ def test_append_commit_with_builder_retries_contention_and_enqueues_projection_o
 
     monkeypatch.setattr(memory_ledger, "_append_commit_with_builder_transaction", append_transaction)
     monkeypatch.setattr(memory_ledger, "run_with_transaction_contention_retry", fast_retry)
-    monkeypatch.setattr(
-        memory_ledger.projection_repair,
-        "enqueue_projection_repairs",
-        lambda uid, item, **_kwargs: queued.append((uid, item)) or ["repair"],
-    )
 
     result = memory_ledger.append_commit_with_builder(
         "uid-1",
@@ -784,11 +764,10 @@ def test_append_commit_with_builder_retries_contention_and_enqueues_projection_o
     assert result["applied"] is True
     assert len(seen_transactions) == 2
     assert seen_transactions[0] is not seen_transactions[1]
-    assert queued == [("uid-1", commit)]
+    database.batch.assert_not_called()
 
 
 def test_append_commit_with_builder_exhaustion_never_enqueues_projection(monkeypatch):
-    queued = []
     database = MagicMock()
 
     def append_transaction(*args, **kwargs):
@@ -805,11 +784,6 @@ def test_append_commit_with_builder_exhaustion_never_enqueues_projection(monkeyp
 
     monkeypatch.setattr(memory_ledger, "_append_commit_with_builder_transaction", append_transaction)
     monkeypatch.setattr(memory_ledger, "run_with_transaction_contention_retry", fast_retry)
-    monkeypatch.setattr(
-        memory_ledger.projection_repair,
-        "enqueue_projection_repairs",
-        lambda *args, **kwargs: queued.append(args),
-    )
 
     with pytest.raises(firestore_transaction_retry.FirestoreContentionExhausted):
         memory_ledger.append_commit_with_builder(
@@ -820,111 +794,7 @@ def test_append_commit_with_builder_exhaustion_never_enqueues_projection(monkeyp
         )
 
     assert database.transaction.call_count == firestore_transaction_retry.DEFAULT_MAX_ATTEMPTS
-    assert queued == []
-
-
-def test_process_projection_repairs_applies_queued_vector_repairs(monkeypatch):
-    updates = []
-
-    class FakeDoc:
-        id = "repair1"
-
-        @property
-        def reference(self):
-            return self
-
-        def to_dict(self):
-            return {"repair_id": "repair1", "fact_id": "m1", "status": "queued"}
-
-        def update(self, payload):
-            updates.append(payload)
-
-    class FakeQuery:
-        def limit(self, value):
-            return self
-
-        def stream(self):
-            return [FakeDoc()]
-
-    class FakeCollection:
-        def document(self, value):
-            return self
-
-        def collection(self, value):
-            return self
-
-        def where(self, *args):
-            return FakeQuery()
-
-    class FakeDB:
-        def collection(self, value):
-            return FakeCollection()
-
-    monkeypatch.setattr(projection_repair, "db", FakeDB())
-
-    result = projection_repair.process_projection_repairs(
-        "uid-1",
-        fact_loader=lambda fact_id: {"id": fact_id, "invalid_at": datetime(2026, 6, 1, tzinfo=timezone.utc)},
-        repair_func=lambda uid, fact: "delete" if fact and fact.get("invalid_at") else "upsert",
-    )
-
-    assert result == {"repaired": ["repair1"], "failed": [], "processed": 1}
-    assert updates[0]["status"] == "repaired"
-    assert updates[0]["repair_action"] == "delete"
-
-
-def test_process_projection_repairs_dead_letters_after_max_attempts(monkeypatch):
-    updates = []
-
-    class FakeDoc:
-        id = "repair1"
-
-        @property
-        def reference(self):
-            return self
-
-        def to_dict(self):
-            return {"repair_id": "repair1", "fact_id": "m1", "status": "failed", "attempt_count": 1}
-
-        def update(self, payload):
-            updates.append(payload)
-
-    class FakeQuery:
-        def limit(self, value):
-            return self
-
-        def stream(self):
-            return [FakeDoc()]
-
-    class FakeCollection:
-        def document(self, value):
-            return self
-
-        def collection(self, value):
-            return self
-
-        def where(self, *args):
-            return FakeQuery()
-
-    class FakeDB:
-        def collection(self, value):
-            return FakeCollection()
-
-    monkeypatch.setattr(projection_repair, "db", FakeDB())
-
-    def _failing_repair(uid, fact):
-        raise RuntimeError("repair failed")
-
-    result = projection_repair.process_projection_repairs(
-        "uid-1",
-        fact_loader=lambda fact_id: {"id": fact_id},
-        repair_func=_failing_repair,
-        max_attempts=2,
-    )
-
-    assert result == {"repaired": [], "failed": ["repair1"], "processed": 1}
-    assert updates[0]["status"] == "dead_letter"
-    assert updates[0]["attempt_count"] == 2
+    database.batch.assert_not_called()
 
 
 def test_legacy_commit_live_item_with_override_tombstone_is_fenced():

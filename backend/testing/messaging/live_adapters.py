@@ -136,11 +136,19 @@ def build_app(config, secrets, transcript):
                 .stream()
             ]
 
-        def claim(self, path):
+        def _require_test_inbox(self, path):
             prefix = self.identity(self.adapter.channel, self.adapter.provider, self.external_id).path + '/inbox/'
             if not path.startswith(prefix):
                 raise PermissionError('Non-test inbox forbidden')
-            return super().claim(path)
+
+        def claim(self, path, *, now=None):
+            self._require_test_inbox(path)
+            return super().claim(path, now=now)
+
+        def claim_next(self, path, *, now=None):
+            # The worker claims through claim_next. The prefix check has to live here too.
+            self._require_test_inbox(path)
+            return super().claim_next(path, now=now)
 
     def admit(uid):
         if uid != config['test_uid']:
@@ -178,8 +186,10 @@ def build_app(config, secrets, transcript):
                 )
             return messages
 
-        async def observed_send(message, *, text=None, artifact=None, draft=False, send=send, channel=channel):
-            await send(message, text=text, artifact=artifact, draft=draft)
+        async def observed_send(
+            message, *, text=None, artifact=None, draft=False, link=None, send=send, channel=channel
+        ):
+            await send(message, text=text, artifact=artifact, draft=draft, link=link)
             if not draft:
                 transcript.append(
                     layer='live-dev',

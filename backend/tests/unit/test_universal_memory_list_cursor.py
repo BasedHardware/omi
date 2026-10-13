@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from itertools import count
+
 from datetime import datetime, timedelta, timezone
 from typing import List, Optional, Tuple
 from unittest.mock import MagicMock
@@ -19,11 +21,32 @@ from utils.memory.universal_list_cursor import (
 )
 
 
+@pytest.fixture(autouse=True)
+def _memory_read_burst(monkeypatch):
+    # The cursor suite pages thousands of rows through MemoryService in well
+    # under a second. #21227's process-wide RetryAllowance defaults to 8
+    # tokens refilling 1/sec, so read-page loops exhaust admission
+    # deterministically (attempts=0 → MemoryReadAdmissionDenied). Raise the
+    # burst for this suite and give every test a fresh allowance — the shared
+    # module-global instance otherwise carries spent tokens between tests.
+    import utils.memory.read_resilience as _rr
+
+    monkeypatch.setenv("OMI_MEMORY_READ_RETRY_BURST", "64")
+    monkeypatch.setattr(_rr, "_retry_allowance", _rr.RetryAllowance())
+
+
 @pytest.fixture
 def service_mod(monkeypatch):
     monkeypatch.setenv("MEMORY_ENABLED", "on")
     monkeypatch.setenv("MEMORY_V3_CURSOR_SECRET", "unit-test-universal-list-cursor-secret")
     module = _load_memory_service(monkeypatch)
+    from utils.memory import read_resilience
+
+    # Pagination tests issue independent page requests without wall-clock gaps.
+    # Model one second of refill per admission, keeping the actual default
+    # burst/in-flight policy and the request budgets intact. Isolate cases too.
+    ticks = count()
+    monkeypatch.setattr(read_resilience, "_retry_allowance", read_resilience.RetryAllowance(clock=lambda: next(ticks)))
     missing = object()
     original_seams = {
         name: getattr(module, name, missing)
@@ -1560,7 +1583,9 @@ class _ChargingLegacyDb:
             yield _LegacySnapshot(payload, exists=payload is not None, reference=ref)
 
 
-def _budgeted_unhydrated_legacy_read(service_mod, monkeypatch, *, max_documents: Optional[int] = None):
+def _budgeted_unhydrated_legacy_read(
+    service_mod, monkeypatch, *, max_documents: Optional[int] = None, spend_before_hydration=False
+):
     """Canonical keyset down, one unhydrated legacy row, real id-hydration that charges."""
     from tests.unit.test_memory_service_parity import _sample_memory_dict
     from utils.other.list_budget import ListReadBudget
@@ -1573,7 +1598,13 @@ def _budgeted_unhydrated_legacy_read(service_mod, monkeypatch, *, max_documents:
     before = {path: dict(payload) for path, payload in db.docs.items()}
     monkeypatch.setattr(service_mod.memories_db, "get_memories_by_ids", service_mod._prod_get_memories_by_ids)
     service = service_mod.MemoryService(db_client=db)
-    service_mod.read_canonical_scan_page = MagicMock(side_effect=RuntimeError("canonical index unavailable"))
+
+    def unavailable_scan(*args, **kwargs):
+        if spend_before_hydration and budget.remaining_documents:
+            budget.charge(1)
+        raise RuntimeError("canonical index unavailable")
+
+    service_mod.read_canonical_scan_page = MagicMock(side_effect=unavailable_scan)
     service_mod.read_canonical_memories = MagicMock(side_effect=AssertionError("offset read must not full-fetch"))
     stub = service_mod.HistoricalMemoryRecord(
         memory=_memory(service_mod, memory_id, content=""),
@@ -1609,11 +1640,16 @@ def test_budgeted_legacy_hydration_returns_the_row_truncated(service_mod, monkey
 
 def test_budgeted_legacy_hydration_keeps_rows_when_the_charge_exhausts(service_mod, monkeypatch):
     """Hydration that spends the last document still ships that row, truncated."""
-    rows, budget = _budgeted_unhydrated_legacy_read(service_mod, monkeypatch, max_documents=0)
+    # Admission now requires a positive entry budget. Spend its final document
+    # in the failed scan so the real hydration charge still exhausts it mid-read.
+    rows, budget = _budgeted_unhydrated_legacy_read(
+        service_mod, monkeypatch, max_documents=1, spend_before_hydration=True
+    )
 
     assert [memory.id for memory in rows] == ["leg-budget-1"]
     assert rows[0].content == "Legacy row hydrated under a live list budget"
     assert budget.truncated is True
+    assert budget.docs_scanned == 2, "scan plus real hydration must charge past the last document"
     service_mod.read_canonical_memories.assert_not_called()
 
 
