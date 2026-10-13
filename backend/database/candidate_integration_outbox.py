@@ -421,7 +421,7 @@ def read_candidate_integration_sweep_cursors(*, firestore_client: Any = None) ->
     payload = _snapshot_dict(snapshot)
     cursors: dict[str, str] = {}
     for status, path in payload.items():
-        if isinstance(status, str) and isinstance(path, str) and path:
+        if isinstance(path, str) and path:
             cursors[status] = path
     return cursors
 
@@ -434,7 +434,7 @@ def write_candidate_integration_sweep_cursors(
     """Replace the sweep cursor. One document write per pass."""
     client = _firestore(firestore_client)
     ref = client.collection(SWEEP_CURSOR_COLLECTION).document(SWEEP_CURSOR_DOCUMENT)
-    payload = {status: path for status, path in cursors.items() if isinstance(path, str) and path}
+    payload = {status: path for status, path in cursors.items() if path}
     transaction = client.transaction()
 
     @firestore.transactional

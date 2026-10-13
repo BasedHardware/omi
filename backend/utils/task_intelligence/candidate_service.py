@@ -23,7 +23,7 @@ from models.candidate import (
 from utils.executors import postprocess_executor, submit_with_context
 from utils.notifications import sync_action_item_reminder
 from utils.observability.fallback import record_fallback
-from utils.task_sync import _auto_sync_action_item_with_outcome
+from utils.task_sync import auto_sync_action_item_with_outcome
 from utils.task_intelligence import task_links
 from utils.task_intelligence.workstream_index import refresh_workstream_association_index
 
@@ -136,7 +136,7 @@ def _record_integration_result(
         return False
     try:
         result, outcome, external_task_id = asyncio.run(
-            _auto_sync_action_item_with_outcome(uid, task, skip_apple_reminders=False)
+            auto_sync_action_item_with_outcome(uid, task, skip_apple_reminders=False)
         )
     except Exception:
         integration_outbox_db.complete_candidate_integration_dispatch(

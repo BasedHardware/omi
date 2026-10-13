@@ -160,7 +160,7 @@ def _forbid_provider(monkeypatch):
     async def explode(*args, **kwargs):
         raise AssertionError('provider called')
 
-    monkeypatch.setattr(candidate_service, '_auto_sync_action_item_with_outcome', explode)
+    monkeypatch.setattr(candidate_service, 'auto_sync_action_item_with_outcome', explode)
     monkeypatch.setattr(
         candidate_service.action_items_db,
         'get_action_item',
@@ -176,7 +176,7 @@ def _allow_sync(monkeypatch, result):
         return _dispatch(result)
 
     monkeypatch.setattr(candidate_service.action_items_db, 'get_action_item', lambda uid, task_id: {'id': task_id})
-    monkeypatch.setattr(candidate_service, '_auto_sync_action_item_with_outcome', sync)
+    monkeypatch.setattr(candidate_service, 'auto_sync_action_item_with_outcome', sync)
     return calls
 
 
@@ -337,7 +337,7 @@ def _schedule_inline_job(store, monkeypatch):
         return _dispatch({'synced': True})
 
     monkeypatch.setattr(candidate_service.action_items_db, 'get_action_item', lambda uid, task_id: {'id': task_id})
-    monkeypatch.setattr(candidate_service, '_auto_sync_action_item_with_outcome', sync)
+    monkeypatch.setattr(candidate_service, 'auto_sync_action_item_with_outcome', sync)
 
     def capture(executor, function):
         scheduled.append(function)
@@ -397,7 +397,7 @@ def test_blocking_dispatch_skips_the_provider_when_the_lease_is_lost_before_the_
         return _dispatch({'synced': True})
 
     monkeypatch.setattr(candidate_service.action_items_db, 'get_action_item', steal_before_provider)
-    monkeypatch.setattr(candidate_service, '_auto_sync_action_item_with_outcome', sync)
+    monkeypatch.setattr(candidate_service, 'auto_sync_action_item_with_outcome', sync)
 
     recorded = candidate_service.dispatch_task_integration_blocking('user-1', 'due', 'task-1', account_generation=3)
 

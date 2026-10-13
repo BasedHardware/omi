@@ -1146,7 +1146,7 @@ def test_integration_outbox_dispatches_once_and_retry_observes_completion(fake_d
         return {'synced': True}, 'accepted', None
 
     monkeypatch.setattr(candidate_service.action_items_db, 'get_action_item', lambda uid, task_id: {'id': task_id})
-    monkeypatch.setattr(candidate_service, '_auto_sync_action_item_with_outcome', sync)
+    monkeypatch.setattr(candidate_service, 'auto_sync_action_item_with_outcome', sync)
     monkeypatch.setattr(candidate_service, 'submit_with_context', lambda executor, function: function())
 
     first = candidate_service.accept_candidate('user-1', record.candidate_id, account_generation=3)
@@ -1169,7 +1169,7 @@ def test_accept_schedules_integration_without_waiting_for_the_provider(fake_db, 
         return {'synced': True}, 'accepted', None
 
     monkeypatch.setattr(candidate_service.action_items_db, 'get_action_item', lambda uid, task_id: {'id': task_id})
-    monkeypatch.setattr(candidate_service, '_auto_sync_action_item_with_outcome', sync)
+    monkeypatch.setattr(candidate_service, 'auto_sync_action_item_with_outcome', sync)
     monkeypatch.setattr(candidate_service, 'submit_with_context', lambda executor, function: None)
 
     candidate_service.accept_candidate('user-1', record.candidate_id, account_generation=3)
@@ -1214,7 +1214,7 @@ def test_unsynced_integration_result_stays_retryable(fake_db, monkeypatch):
         return {'synced': False, 'platform': 'todoist', 'error': 'temporary'}, 'in_doubt', None
 
     monkeypatch.setattr(candidate_service.action_items_db, 'get_action_item', lambda uid, task_id: {'id': task_id})
-    monkeypatch.setattr(candidate_service, '_auto_sync_action_item_with_outcome', unsynced)
+    monkeypatch.setattr(candidate_service, 'auto_sync_action_item_with_outcome', unsynced)
     monkeypatch.setattr(candidate_service, 'submit_with_context', lambda executor, function: function())
 
     candidate_service.accept_candidate('user-1', record.candidate_id, account_generation=3)
@@ -1233,7 +1233,7 @@ def test_drain_recovers_crash_after_accept_commit(fake_db, monkeypatch):
         return {'synced': True}, 'accepted', None
 
     monkeypatch.setattr(candidate_service.action_items_db, 'get_action_item', lambda uid, task_id: {'id': task_id})
-    monkeypatch.setattr(candidate_service, '_auto_sync_action_item_with_outcome', sync)
+    monkeypatch.setattr(candidate_service, 'auto_sync_action_item_with_outcome', sync)
     monkeypatch.setattr(candidate_service, 'submit_with_context', lambda executor, function: function())
     monkeypatch.setattr(
         integration_outbox_db,

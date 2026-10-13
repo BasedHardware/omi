@@ -77,13 +77,13 @@ async def auto_sync_action_item(
     Returns:
         dict: {"synced": bool, "platform": str, "external_task_id": str, "error": str}
     """
-    result, _outcome, _external_task_id = await _auto_sync_action_item_with_outcome(
+    result, _outcome, _external_task_id = await auto_sync_action_item_with_outcome(
         uid, action_item, skip_apple_reminders=skip_apple_reminders
     )
     return result
 
 
-async def _auto_sync_action_item_with_outcome(
+async def auto_sync_action_item_with_outcome(
     uid: str, action_item: Dict[str, Any], skip_apple_reminders: bool = False
 ) -> tuple[Dict[str, Any], str, Optional[str]]:
     """Run auto-sync and report the provider attempt without changing the public dict.

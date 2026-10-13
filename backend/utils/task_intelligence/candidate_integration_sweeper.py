@@ -199,18 +199,19 @@ async def _dispose(
         return
     created_at = row.get('created_at')
     redriven_at = row.get('redriven_at')
-    has_created_at = isinstance(created_at, datetime)
-    has_redriven_at = isinstance(redriven_at, datetime)
-    if not has_created_at and not has_redriven_at:
+    if isinstance(redriven_at, datetime):
+        age_anchor = redriven_at
+    elif isinstance(created_at, datetime):
+        age_anchor = created_at
+    else:
         wrote = await _abandon(uid, candidate_id, 'missing_created_at', now, firestore_client)
         _bump(counts, 'dead_letter_missing_created_at' if wrote else 'skipped_not_claimed')
         return
-    age_anchor = redriven_at if has_redriven_at else created_at
     if _aware(age_anchor) < now - STALE_AFTER:
         wrote = await _abandon(uid, candidate_id, 'stale_abandoned', now, firestore_client)
         _bump(counts, 'dead_letter_stale_abandoned' if wrote else 'skipped_not_claimed')
         return
-    if has_created_at and row.get('status') == 'pending' and now - _aware(created_at) < PENDING_GRACE:
+    if isinstance(created_at, datetime) and row.get('status') == 'pending' and now - _aware(created_at) < PENDING_GRACE:
         _bump(counts, 'skipped_pending_young')
         return
     try:
