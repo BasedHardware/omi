@@ -218,7 +218,22 @@ def filter_plan(plan: Plan, records, *, usage_sink=None, targets=None):
     targets = set(records) if targets is None else set(targets)
     if full:
         targets = set(records)
+    unique = []
+    seen = set()
     for edit in plan.edits:
+        key = (edit.kind, edit.target, edit.before, edit.after)
+        if key in seen:
+            rejected['duplicate_edit'] += 1
+        elif edit.kind == 'spelling' and edit.before == edit.after:
+            rejected['noop'] += 1
+        else:
+            unique.append(edit)
+        seen.add(key)
+    spelling_pairs = {(edit.target, edit.before, edit.after) for edit in unique if edit.kind == 'spelling'}
+    for edit in unique:
+        if edit.kind == 'spelling' and (edit.target, edit.after, edit.before) in spelling_pairs:
+            rejected['contradictory_spelling'] += 1
+            continue
         reason = spelling_rejection(edit)
         if full and (
             edit.target not in records
@@ -258,7 +273,9 @@ def filter_plan(plan: Plan, records, *, usage_sink=None, targets=None):
     } - {''}
     questions = []
     for question in plan.questions:
-        if (
+        if question.source_ref not in records or not verbatim_quote(question.quote, records[question.source_ref]):
+            rejected['invalid_question_evidence'] += 1
+        elif (
             question.same_person
             and not {question.same_person.left.entity_id, question.same_person.right.entity_id} <= entities
         ):
@@ -309,6 +326,19 @@ def filter_plan(plan: Plan, records, *, usage_sink=None, targets=None):
             'frames': frames,
         }
     )
+
+
+def verbatim_quote(quote, value):
+    """A quote must occur inside one actual field, never across serialized field boundaries."""
+    if not quote or not quote.strip():
+        return False
+    if isinstance(value, str):
+        return quote in value
+    if isinstance(value, dict):
+        return any(verbatim_quote(quote, field) for field in value.values())
+    if isinstance(value, list):
+        return any(verbatim_quote(quote, field) for field in value)
+    return False
 
 
 def cap_feedback(feedback, *, usage_sink):

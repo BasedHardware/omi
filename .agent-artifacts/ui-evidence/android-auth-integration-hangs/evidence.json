@@ -1,0 +1,33 @@
+{
+  "version": 1,
+  "images": [
+    {
+      "file": "001-mobile-android-referral-retry.png",
+      "platform": "mobile-android",
+      "description": "Production Flutter widget with synthetic browser/status responses and Android theme. Headless layout only; some platform-default text uses test glyphs. No device OAuth completion.",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "002-mobile-android-referral-browser.png",
+      "platform": "mobile-android",
+      "description": "Production Flutter widget with synthetic browser/status responses and Android theme. Headless layout only; some platform-default text uses test glyphs. No device OAuth completion.",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "003-mobile-android-integration-retry.png",
+      "platform": "mobile-android",
+      "description": "Production Flutter widget with synthetic browser/status responses and Android theme. Headless layout only; some platform-default text uses test glyphs. No device OAuth completion.",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "004-mobile-android-integration-auth-pending.png",
+      "platform": "mobile-android",
+      "description": "Production Flutter widget with synthetic browser/status responses and Android theme. Headless layout only; some platform-default text uses test glyphs. No device OAuth completion.",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    }
+  ]
+}

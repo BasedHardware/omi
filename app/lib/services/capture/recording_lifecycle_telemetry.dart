@@ -1,3 +1,4 @@
+import 'package:omi/services/capture/empty_recording_notice.dart';
 import 'package:omi/utils/analytics/analytics_manager.dart';
 import 'package:uuid/uuid.dart';
 
@@ -16,10 +17,10 @@ class RecordingLifecycleTelemetry {
     RecordingIdFactory? idFactory,
     RecordingClock? clock,
     int Function()? identityEpoch,
-  })  : _emitter = emitter ?? _emitProductionEvent,
-        _idFactory = idFactory ?? _defaultId,
-        _clock = clock ?? DateTime.now,
-        _identityEpoch = identityEpoch ?? (() => AnalyticsManager.identityEpoch);
+  }) : _emitter = emitter ?? _emitProductionEvent,
+       _idFactory = idFactory ?? _defaultId,
+       _clock = clock ?? DateTime.now,
+       _identityEpoch = identityEpoch ?? (() => AnalyticsManager.identityEpoch);
 
   static const String requestedEvent = 'Recording Requested';
   static const String startedEvent = 'Recording Started';
@@ -68,19 +69,33 @@ class RecordingLifecycleTelemetry {
   }
 
   void _milestone(String stage) => _emit('Recording Observation', {
-        'recording_id': _recordingId,
-        'recording_source': _source,
-        'stage': stage,
-        'since_prepare_ms':
-            _preparedAt == null ? 0 : (_clock().difference(_preparedAt!).inMilliseconds).clamp(0, 2147483647),
-      });
+    'recording_id': _recordingId,
+    'recording_source': _source,
+    'stage': stage,
+    'since_prepare_ms': _preparedAt == null
+        ? 0
+        : (_clock().difference(_preparedAt!).inMilliseconds).clamp(0, 2147483647),
+  });
 
   String? _recordingId;
   String? _source;
   DateTime? _startedAt;
   bool _startedEmitted = false;
+  RecordingCompletionFacts? _lastCompletion;
 
   String? get recordingId => _recordingId;
+
+  /// Facts for the live session, or the session that most recently completed.
+  RecordingCompletionFacts? completionFacts() {
+    if (_recordingId != null && _startedEmitted && _startedAt != null && _source != null) {
+      return RecordingCompletionFacts(
+        source: _source!,
+        durationSeconds: _wholeSeconds(_startedAt!),
+        transcriptObserved: _transcriptObserved,
+      );
+    }
+    return _lastCompletion;
+  }
 
   /// When this recording started capturing, or null before it has.
   DateTime? get startedAt => _startedAt;
@@ -102,18 +117,18 @@ class RecordingLifecycleTelemetry {
   }
 
   void captureGap({required String reason, required String phase}) => _emit('Capture Gap Detected', {
-        'recording_id': _recordingId,
-        'recording_source': _source,
-        'reason': reason,
-        'phase': phase,
-        'recovery': 'wal_boundary',
-      });
+    'recording_id': _recordingId,
+    'recording_source': _source,
+    'reason': reason,
+    'phase': phase,
+    'recovery': 'wal_boundary',
+  });
 
   void subscriptionFailed() =>
       _emit('Recording Subscription Failed', {'recording_id': _recordingId, 'recording_source': _source});
 
-  void markStarted({String? evidence}) {
-    if (_recordingId == null || _source == null || _startedEmitted) return;
+  bool markStarted({String? evidence}) {
+    if (_recordingId == null || _source == null || _startedEmitted) return false;
     _startedAt = _clock();
     _startedEmitted = true;
     _emit(startedEvent, {
@@ -121,23 +136,30 @@ class RecordingLifecycleTelemetry {
       'recording_id': _recordingId,
       'recording_source': _source,
     });
+    return true;
   }
 
-  void complete({String reason = 'user_stopped'}) {
-    if (_recordingId == null) return;
+  bool complete({String reason = 'user_stopped'}) {
+    if (_recordingId == null) return false;
     if (!_startedEmitted) {
       failStart(failureClass: 'pipeline_closed');
-      return;
+      return false;
     }
-    if (_startedAt != null) {
+    if (_startedAt != null && _source != null) {
+      _lastCompletion = RecordingCompletionFacts(
+        source: _source!,
+        durationSeconds: _wholeSeconds(_startedAt!),
+        transcriptObserved: _transcriptObserved,
+      );
       _emit(completedEvent, {
         'recording_id': _recordingId,
         'recording_source': _source,
         'duration_seconds': _durationSeconds(_startedAt!),
         'reason': _normalizeReason(reason),
         'audio_observed': _audioObserved,
-        'audio_observation_coverage':
-            _source?.startsWith('phone_mic_batch') == true ? 'native_batch_unavailable' : 'dart_ingress',
+        'audio_observation_coverage': _source?.startsWith('phone_mic_batch') == true
+            ? 'native_batch_unavailable'
+            : 'dart_ingress',
         'transcript_observed': _transcriptObserved,
         'audio_bytes_observed': _audioBytes,
         'socket_bytes_submitted': _socketBytes,
@@ -146,6 +168,7 @@ class RecordingLifecycleTelemetry {
       });
     }
     _clear();
+    return true;
   }
 
   void failStart({required String failureClass}) {
@@ -165,6 +188,12 @@ class RecordingLifecycleTelemetry {
   double _durationSeconds(DateTime startedAt) {
     final milliseconds = _clock().difference(startedAt).inMilliseconds;
     return (milliseconds < 0 ? 0 : milliseconds) / 1000.0;
+  }
+
+  int _wholeSeconds(DateTime startedAt) {
+    final seconds = _durationSeconds(startedAt).round();
+    if (seconds < 0) return 0;
+    return seconds;
   }
 
   void _emit(String eventName, Map<String, dynamic> properties) {
@@ -192,17 +221,16 @@ class RecordingLifecycleTelemetry {
   }
 
   static String _normalizeReason(String reason) => switch (reason) {
-        'user_stopped' || 'device_disconnected' || 'mode_changed' || 'pipeline_closed' => reason,
-        _ => 'unknown',
-      };
+    'user_stopped' || 'device_disconnected' || 'mode_changed' || 'pipeline_closed' => reason,
+    _ => 'unknown',
+  };
 
   static String _normalizeFailureClass(String failureClass) => switch (failureClass) {
-        'permission_denied' ||
-        'capture_unavailable' ||
-        'pipeline_unavailable' ||
-        'pipeline_closed' ||
-        'unknown' =>
-          failureClass,
-        _ => 'unknown',
-      };
+    'permission_denied' ||
+    'capture_unavailable' ||
+    'pipeline_unavailable' ||
+    'pipeline_closed' ||
+    'unknown' => failureClass,
+    _ => 'unknown',
+  };
 }

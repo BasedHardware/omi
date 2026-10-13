@@ -500,13 +500,13 @@ class AppState: ObservableObject {
   }
   var captureGateInFlight = false
   var captureReconcilePending = false
-  var pendingCoreAudioCaptureRecoveryReason: String?
+  var pendingCoreAudioCaptureRecovery: CoreAudioCaptureRecoveryRequest?
   /// While ambient transcription is live, reapply a preferred mic when it reconnects (#10921).
   let preferredMicrophoneReconnectMonitor = PreferredMicrophoneReconnectMonitor()
-  /// Counts CoreAudio rebuilds caused by a zero-sample microphone during one
-  /// transcription session. This lives above `AudioCaptureService` because each
-  /// rebuild creates a fresh service (and therefore a fresh service-local watchdog).
+  /// Session-owned recovery budget survives microphone driver replacement.
   var silentMicRecoveryAttempts = 0
+  /// No microphone signal after bounded recovery; system audio can still be live.
+  @Published var isMicrophoneSignalMissing = false
   var armedMicrophoneTransitionInFlight = false
   @Published var isWaitingForMicrophone = false
   let armedMicrophoneRecovery = ArmedMicrophoneRecoveryCoordinator()

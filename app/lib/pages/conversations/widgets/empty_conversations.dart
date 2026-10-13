@@ -7,7 +7,10 @@ import 'package:omi/utils/l10n_extensions.dart';
 
 /// The unfiltered Home empty state, shared by initial and typed empty results.
 class NoConversationsHero extends StatelessWidget {
-  const NoConversationsHero({super.key});
+  const NoConversationsHero({super.key, this.message});
+
+  /// Why the list is empty after a recording that did not become a conversation.
+  final String? message;
 
   @override
   Widget build(BuildContext context) {
@@ -17,7 +20,8 @@ class NoConversationsHero extends StatelessWidget {
         icon: Icons.forum_rounded,
         title: context.l10n.noConversationsYet,
         titleLayoutReference: context.l10n.noTasksYet,
-        messageLayoutReference: context.l10n.tasksEmptyStateMessage,
+        message: message,
+        messageLayoutReference: message == null ? context.l10n.tasksEmptyStateMessage : null,
       ),
     );
   }
@@ -38,12 +42,12 @@ class EmptyConversationsWidget extends StatelessWidget {
       child: dateFilterLabel != null
           ? OmiEmptyState(icon: Icons.forum_rounded, title: l10n.noConversationsOnDate(dateFilterLabel!))
           : isStarredFilterActive
-              ? OmiEmptyState(
-                  glyph: const FaIcon(FontAwesomeIcons.star),
-                  title: l10n.noStarredConversations,
-                  message: l10n.starConversationHint,
-                )
-              : OmiEmptyState(icon: Icons.forum_rounded, title: l10n.noConversationsYet),
+          ? OmiEmptyState(
+              glyph: const FaIcon(FontAwesomeIcons.star),
+              title: l10n.noStarredConversations,
+              message: l10n.starConversationHint,
+            )
+          : OmiEmptyState(icon: Icons.forum_rounded, title: l10n.noConversationsYet),
     );
   }
 }

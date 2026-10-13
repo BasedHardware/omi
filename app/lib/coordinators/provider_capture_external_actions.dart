@@ -9,6 +9,7 @@ import 'package:omi/providers/message_provider.dart';
 import 'package:omi/providers/people_provider.dart';
 import 'package:omi/providers/usage_provider.dart';
 import 'package:omi/services/capture/capture_external_actions.dart';
+import 'package:omi/services/capture/empty_recording_notice.dart';
 
 class ProviderCaptureExternalActions implements CaptureExternalActions {
   ProviderCaptureExternalActions({
@@ -70,14 +71,28 @@ class ProviderCaptureExternalActions implements CaptureExternalActions {
   }
 
   @override
+  void showEmptyRecordingExplanation() => conversationProvider.showEmptyRecordingExplanation();
+
+  @override
+  DiscardedOnlyClaim claimDiscardedOnlyExplanation() => conversationProvider.claimDiscardedOnlyExplanation();
+
+  @override
+  void clearEmptyRecordingExplanation() => conversationProvider.clearEmptyRecordingExplanation();
+
+  @override
   Future<Person?> createPerson(String name) {
     return peopleProvider.createPersonProvider(name);
   }
 
   @override
   Future<bool> assignSpeaker(String conversationId, List<String> segmentIds, String personId, {int? speakerId}) =>
-      assignBulkConversationTranscriptSegments(conversationId, segmentIds,
-          isUser: personId == 'user', personId: personId == 'user' ? null : personId, speakerId: speakerId);
+      assignBulkConversationTranscriptSegments(
+        conversationId,
+        segmentIds,
+        isUser: personId == 'user',
+        personId: personId == 'user' ? null : personId,
+        speakerId: speakerId,
+      );
 
   @override
   Future<void> refreshPeople() {

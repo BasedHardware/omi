@@ -68,18 +68,18 @@ class _Syncs {
 
 class _TrackingCaptureProvider extends CaptureProvider {
   _TrackingCaptureProvider()
-      : super(
-          walService: _Wal(),
-          processInProgressConversation: () => Completer<CreateConversationResponse?>().future,
-          connectivity: CaptureConnectivityBoundary(
-            initiallyConnected: true,
-            changes: const Stream.empty(),
-            isConnected: () => true,
-          ),
-          bleListeners: _NoopBle(),
-          inProgressConversationLoader: () async {},
-          localSegmentStore: LocalSegmentStore.disabled(),
-        );
+    : super(
+        walService: _Wal(),
+        processInProgressConversation: () => Completer<CreateConversationResponse?>().future,
+        connectivity: CaptureConnectivityBoundary(
+          initiallyConnected: true,
+          changes: const Stream.empty(),
+          isConnected: () => true,
+        ),
+        bleListeners: _NoopBle(),
+        inProgressConversationLoader: () async {},
+        localSegmentStore: LocalSegmentStore.disabled(),
+      );
 
   var forceProcessingCalls = 0;
 
@@ -145,6 +145,20 @@ void main() {
     await tester.pump(const Duration(seconds: 1));
   });
 
+  testWidgets('with nothing heard, Finish saves nothing and stays on current Home tab', (tester) async {
+    final harness = await _pumpCapturingPage(tester, heard: false);
+    harness.home.setIndex(HomeProvider.tasksTab);
+
+    await _stopFromPage(tester, harness.capture);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+
+    expect(harness.capture.forceProcessingCalls, 0, reason: 'no empty Processing row');
+    expect(harness.home.selectedIndex, HomeProvider.tasksTab);
+    await tester.pump(const Duration(seconds: 1));
+    expect(find.byType(ConversationCapturingPage), findsNothing);
+  });
+
   testWidgets('switchHomeToConversationsTab returns to Home, where conversations live', (tester) async {
     final home = HomeProvider()..setIndex(HomeProvider.tasksTab);
     addTearDown(home.dispose);
@@ -153,10 +167,8 @@ void main() {
         value: home,
         child: MaterialApp(
           home: Builder(
-            builder: (context) => TextButton(
-              onPressed: () => switchHomeToConversationsTab(context),
-              child: const Text('go'),
-            ),
+            builder: (context) =>
+                TextButton(onPressed: () => switchHomeToConversationsTab(context), child: const Text('go')),
           ),
         ),
       ),
@@ -200,14 +212,14 @@ Future<void> _stopFromPage(WidgetTester tester, CaptureProvider capture) async {
   await tester.pump();
 }
 
-Future<_Harness> _pumpCapturingPage(WidgetTester tester) async {
+Future<_Harness> _pumpCapturingPage(WidgetTester tester, {bool heard = true}) async {
   tester.view.physicalSize = const Size(800, 1600);
   tester.view.devicePixelRatio = 1.0;
   addTearDown(tester.view.resetPhysicalSize);
   addTearDown(tester.view.resetDevicePixelRatio);
 
   final home = HomeProvider()..setIndex(HomeProvider.tasksTab); // Finish must bring Home back.
-  final capture = _TrackingCaptureProvider()..segments = [_segment()];
+  final capture = _TrackingCaptureProvider()..segments = [if (heard) _segment()];
   addTearDown(home.dispose);
   addTearDown(capture.dispose);
 
@@ -243,9 +255,9 @@ Future<_Harness> _pumpCapturingPage(WidgetTester tester) async {
             body: Center(
               child: TextButton(
                 onPressed: () {
-                  Navigator.of(context).push(
-                    MaterialPageRoute<void>(builder: (_) => const ConversationCapturingPage()),
-                  );
+                  Navigator.of(
+                    context,
+                  ).push(MaterialPageRoute<void>(builder: (_) => const ConversationCapturingPage()));
                 },
                 child: const Text('open-capture'),
               ),

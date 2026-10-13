@@ -56,10 +56,13 @@ end-to-end acceptance remains a separate check.
 
 Subscription upgrades restore access by clearing lock metadata on stored
 conversations, memories, and action items. The optional reset recovery path uses
-the same updates in bounded pages after an authenticated HTTP request, once per
-UTC quota month and only while the current plan allowance is available. It does
-not retranscribe audio or debit transcription usage. Partial recovery resumes on
-later requests; clients continue using the existing `is_locked` field.
+the same updates in bounded pages after authenticated HTTP requests while the
+current plan allowance is available. Unfinished UTC quota months retry on later
+requests until recovery completes. Initial enablement starts draining the current
+month’s already-locked backlog without waiting for a month boundary. Once that
+month is complete, content locked later waits until the next UTC quota month.
+Recovery does not retranscribe audio or debit transcription usage; clients continue
+using the existing `is_locked` field.
 
 ## Architecture Diagram
 

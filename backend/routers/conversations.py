@@ -1284,7 +1284,7 @@ def get_conversation_transcripts_by_models(conversation_id: str, uid: str = Depe
     return conversations_db.get_conversation_transcripts_by_model(uid, conversation_id)
 
 
-@router.delete("/v1/conversations/{conversation_id}", response_model=StatusResponse, tags=['conversations'])
+@router.delete("/v1/conversations/{conversation_id}", status_code=204, tags=['conversations'])
 def delete_conversation(
     conversation_id: str,
     background_tasks: BackgroundTasks,
@@ -1364,7 +1364,7 @@ def delete_conversation(
     delete_transcript_chunk_vectors(uid, conversation_id)
 
     record_product_event('conversation_deleted', request=http_request)
-    return {"status": "Ok"}
+    # 204, no body: released mobile clients gate delete success on exactly 204.
 
 
 @router.get(

@@ -2709,6 +2709,7 @@ _add(
 )
 
 
+_add(DriverEntry('database.locked_content.has_recoverable_locked_content', base={'uid': UID}))
 _add(
     CoveredByEntry(
         'database.locked_content.unlock_query_rows',

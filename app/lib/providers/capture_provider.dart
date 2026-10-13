@@ -26,6 +26,7 @@ class CaptureProvider extends CaptureController {
     super.openSocket,
     super.sessionOwner,
     super.processInProgressConversation,
+    super.processInProgressOutcome,
     super.deviceConnectionLoader,
     super.omiCallState,
     super.captureWedgeMonitor,
@@ -56,14 +57,16 @@ class CaptureProvider extends CaptureController {
     final pending = List.of(segments);
     final owner = sessionOwner;
     final token = owner?.token;
-    _liveSegmentWrite = _liveSegmentWrite.then((_) async {
-      if (owner != null && token != null && !owner.isCurrent(token)) return;
-      await localSegmentStore.replaceSession(sessionId, pending);
-      if (owner != null && token != null && !owner.isCurrent(token)) return;
-      _lastPersistedFingerprint = fingerprint;
-    }).catchError((Object e) {
-      Logger.debug('Error persisting live segments: $e');
-    });
+    _liveSegmentWrite = _liveSegmentWrite
+        .then((_) async {
+          if (owner != null && token != null && !owner.isCurrent(token)) return;
+          await localSegmentStore.replaceSession(sessionId, pending);
+          if (owner != null && token != null && !owner.isCurrent(token)) return;
+          _lastPersistedFingerprint = fingerprint;
+        })
+        .catchError((Object e) {
+          Logger.debug('Error persisting live segments: $e');
+        });
     unawaited(_liveSegmentWrite);
   }
 }

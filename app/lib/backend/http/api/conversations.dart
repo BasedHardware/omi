@@ -14,6 +14,7 @@ import 'package:omi/backend/schema/gen/misc_wire.g.dart' as misc_wire;
 import 'package:omi/backend/schema/schema.dart';
 import 'package:omi/env/env.dart';
 import 'package:omi/services/capture/calendar_capture_gap_monitor.dart';
+import 'package:omi/services/capture/empty_recording_notice.dart';
 import 'package:omi/services/integrations/google_calendar_service.dart';
 import 'package:omi/utils/debug_log_manager.dart';
 import 'package:omi/utils/logger.dart';
@@ -31,26 +32,34 @@ import 'package:omi/utils/wal_sync_upload.dart';
 bool isBenignInProgressConversationCreateStatus(int statusCode) => statusCode == 404;
 
 Future<CreateConversationResponse?> processInProgressConversation() async {
+  return (await processInProgressConversationOutcome()).response;
+}
+
+Future<InProgressProcessOutcome> processInProgressConversationOutcome() async {
   var response = await makeApiCall(
     url: '${Env.apiBaseUrl}v1/conversations',
     headers: {},
     method: 'POST',
     body: jsonEncode({}),
   );
-  if (response == null) return null;
+  if (response == null) return const InProgressProcessOutcome(absence: ProcessAbsence.transport);
   Logger.debug('createConversationServer: ${response.body}');
   if (response.statusCode == 200) {
-    return CreateConversationResponse.fromGeneratedWireJson(jsonDecode(response.body) as Map<String, dynamic>);
+    final parsed = CreateConversationResponse.fromGeneratedWireJson(jsonDecode(response.body) as Map<String, dynamic>);
+    if (parsed.conversation == null) {
+      return InProgressProcessOutcome(response: parsed, absence: ProcessAbsence.emptyBody);
+    }
+    return InProgressProcessOutcome(response: parsed);
   } else if (isBenignInProgressConversationCreateStatus(response.statusCode)) {
     Logger.debug('processInProgressConversation: no in-progress conversation (already finalized), skipping');
-  } else {
-    PlatformManager.instance.crashReporter.reportCrash(
-      Exception('Failed to create conversation'),
-      StackTrace.current,
-      userAttributes: {'response': response.body},
-    );
+    return const InProgressProcessOutcome(absence: ProcessAbsence.notFound);
   }
-  return null;
+  PlatformManager.instance.crashReporter.reportCrash(
+    Exception('Failed to create conversation'),
+    StackTrace.current,
+    userAttributes: {'response': response.body},
+  );
+  return const InProgressProcessOutcome(absence: ProcessAbsence.transport);
 }
 
 Future<List<ServerConversation>> getConversations({
@@ -312,8 +321,8 @@ String conversationCollectionUrl(
 /// stay for unmigrated callers; 403/503/missing are distinct here instead of null.
 class ConversationApi {
   ConversationApi({required String baseUrl, ApiSend? send})
-      : _baseUrl = baseUrl.endsWith('/') ? baseUrl : '$baseUrl/',
-        _send = send;
+    : _baseUrl = baseUrl.endsWith('/') ? baseUrl : '$baseUrl/',
+      _send = send;
 
   final String _baseUrl;
   final ApiSend? _send;
@@ -349,17 +358,17 @@ class ConversationApi {
     return switch (sent) {
       ApiFailure(:final problem) => ApiFailure(problem),
       ApiSuccess(:final data, :final truncated) => switch (decodeApiRows<ServerConversation>(
+        data,
+        ServerConversation.fromJson,
+        fallback: recordFallback,
+      )) {
+        ApiSuccess(:final data, :final rejectedRows) => ApiSuccess(
           data,
-          ServerConversation.fromJson,
-          fallback: recordFallback,
-        )) {
-          ApiSuccess(:final data, :final rejectedRows) => ApiSuccess(
-              data,
-              rejectedRows: rejectedRows,
-              truncated: truncated,
-            ),
-          ApiFailure(:final problem) => ApiFailure(problem),
-        },
+          rejectedRows: rejectedRows,
+          truncated: truncated,
+        ),
+        ApiFailure(:final problem) => ApiFailure(problem),
+      },
     };
   }
 
@@ -507,10 +516,7 @@ Future<bool> assignBulkConversationTranscriptSegments(
   var response = await makeApiCall(
     url: speakerId == null
         ? '${Env.apiBaseUrl}v1/conversations/$conversationId/segments/assign-bulk'
-        : '${Env.apiBaseUrl}v1/conversations/$conversationId/assign-speaker/$speakerId?${Uri(queryParameters: {
-                'assign_type': assignType,
-                'value': value ?? 'null'
-              }).query}',
+        : '${Env.apiBaseUrl}v1/conversations/$conversationId/assign-speaker/$speakerId?${Uri(queryParameters: {'assign_type': assignType, 'value': value ?? 'null'}).query}',
     headers: {},
     method: 'PATCH',
     body: jsonEncode({'segment_ids': segmentIds, 'assign_type': assignType, 'value': value}),
@@ -799,14 +805,14 @@ bool isSyncContentInProgressResponse(http.Response response) {
 @visibleForTesting
 UploadFilesResult? syncContentInProgressResult(http.Response response) {
   if (!isSyncContentInProgressResponse(response)) return null;
-  final body = wire.GeneratedSyncContentInProgressResponse.fromJson(
-    jsonDecode(response.body) as Map<String, dynamic>,
-  );
+  final body = wire.GeneratedSyncContentInProgressResponse.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
   final id = body.jobId;
   if (id == null || id.trim().isEmpty) return null;
   final pollAfterMs = body.pollAfterMs ?? 20000;
-  return UploadFilesResult.queued(id,
-      pollAfterMs: max(20000, max(pollAfterMs, (_parseRetryAfterSeconds(response) ?? 10) * 1000)));
+  return UploadFilesResult.queued(
+    id,
+    pollAfterMs: max(20000, max(pollAfterMs, (_parseRetryAfterSeconds(response) ?? 10) * 1000)),
+  );
 }
 
 /// Upload-only: POST files and return as soon as the server acknowledges
@@ -927,9 +933,7 @@ class SyncJobFetch {
   final SyncJobStatusResponse? status;
   final SyncRateLimitedException? rateLimit;
   const SyncJobFetch(this.outcome, [this.status]) : rateLimit = null;
-  const SyncJobFetch.throttled(this.rateLimit)
-      : outcome = SyncJobFetchOutcome.throttled,
-        status = null;
+  const SyncJobFetch.throttled(this.rateLimit) : outcome = SyncJobFetchOutcome.throttled, status = null;
 }
 
 /// Single GET of a sync job's status — no polling loop. The reconciler owns
@@ -947,11 +951,13 @@ Future<SyncJobFetch> fetchSyncJobStatus(String jobId) async {
   }
   final outcome = syncJobFetchOutcomeForStatusCode(response.statusCode);
   if (outcome == SyncJobFetchOutcome.throttled) {
-    return SyncJobFetch.throttled(SyncRateLimitedException(
-      kind: syncRateLimitKindForResponse(response),
-      retryAfterSeconds: _parseRetryAfterSeconds(response),
-      reasonCode: syncRateLimitReasonCode(response),
-    ));
+    return SyncJobFetch.throttled(
+      SyncRateLimitedException(
+        kind: syncRateLimitKindForResponse(response),
+        retryAfterSeconds: _parseRetryAfterSeconds(response),
+        reasonCode: syncRateLimitReasonCode(response),
+      ),
+    );
   }
   if (outcome == SyncJobFetchOutcome.notFound) {
     DebugLogManager.logEvent('fetch_sync_job_status', {
@@ -1008,10 +1014,10 @@ class ConversationSearchResult {
   });
 
   const ConversationSearchResult.failure({this.statusCode})
-      : items = const [],
-        currentPage = 0,
-        totalPages = 0,
-        outcome = ConversationSearchResultOutcome.failure;
+    : items = const [],
+      currentPage = 0,
+      totalPages = 0,
+      outcome = ConversationSearchResultOutcome.failure;
 
   bool get isSuccess => outcome == ConversationSearchResultOutcome.success;
 }

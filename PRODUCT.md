@@ -102,6 +102,11 @@ must remain available. Uncertain content stays kept. Long narration is not relia
 evidence of irrelevance, so it remains one retained recording rather than being
 silently discarded. Implementation and limits: `backend/utils/sync/ARCHITECTURE.md`.
 
+Selecting Process Now for a saved phone Transcribe Later recording is an explicit
+keep choice. Once transcription produces speech, preserve that choice across
+enrichment and later refreshes. Silence or an empty transcription creates no
+conversation. Automatic offline fallback continues to assess content normally.
+
 Silence-only audio creates nothing and cannot bridge conversations.
 Without an existing explicit target, sync intake groups connected speech intervals
 independently of arrival order within the same source/device/lock partition. Missing

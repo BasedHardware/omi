@@ -1,3 +1,4 @@
+import 'dart:math' as math;
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
@@ -107,7 +108,9 @@ class _AiAppGeneratorPageState extends State<_AiAppGeneratorPageView> {
 
                           // Suggestion cards (shimmer while they load)
                           SizedBox(
-                            height: 160,
+                            // Three lines and Try it grow with the reader's text size (a fixed 160pt
+                            // strip cut them at 1.3x).
+                            height: 160 * math.max(1.0, MediaQuery.textScalerOf(context).scale(16) / 16),
                             child: ListView.builder(
                               scrollDirection: Axis.horizontal,
                               padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.lg),
@@ -183,8 +186,10 @@ class _AiAppGeneratorPageState extends State<_AiAppGeneratorPageView> {
                           ),
                           child: Text(
                             '${(progress * 100).round()}%',
-                            style:
-                                OmiType.caption.copyWith(color: OmiColors.textSecondary, fontWeight: FontWeight.w600),
+                            style: OmiType.caption.copyWith(
+                              color: OmiColors.textSecondary,
+                              fontWeight: FontWeight.w600,
+                            ),
                           ),
                         ),
                       ),
@@ -194,11 +199,7 @@ class _AiAppGeneratorPageState extends State<_AiAppGeneratorPageView> {
 
                 // App name (shimmer until it is ready)
                 provider.generatedName != null
-                    ? Text(
-                        provider.generatedName!,
-                        style: OmiType.title3,
-                        textAlign: TextAlign.center,
-                      )
+                    ? Text(provider.generatedName!, style: OmiType.title3, textAlign: TextAlign.center)
                     : const _ShimmerBlock(width: 160, height: 24),
                 const SizedBox(height: OmiSpacing.sm),
 
@@ -286,12 +287,12 @@ class _AiAppGeneratorPageState extends State<_AiAppGeneratorPageView> {
                 child: isCompleted
                     ? FaIcon(FontAwesomeIcons.check, color: OmiColors.onAccent, size: 12)
                     : isActive
-                        ? const OmiSpinner(size: OmiSpinnerSize.small)
-                        : Container(
-                            width: 8,
-                            height: 8,
-                            decoration: BoxDecoration(shape: BoxShape.circle, color: OmiColors.textTertiary),
-                          ),
+                    ? const OmiSpinner(size: OmiSpinnerSize.small)
+                    : Container(
+                        width: 8,
+                        height: 8,
+                        decoration: BoxDecoration(shape: BoxShape.circle, color: OmiColors.textTertiary),
+                      ),
               ),
             ),
             const SizedBox(width: 14),
@@ -324,11 +325,7 @@ class _AiAppGeneratorPageState extends State<_AiAppGeneratorPageView> {
             padding: const EdgeInsets.only(left: 15),
             child: Row(
               children: [
-                Container(
-                  width: 2,
-                  height: OmiSpacing.xl,
-                  color: isCompleted ? OmiColors.accent : OmiColors.surface2,
-                ),
+                Container(width: 2, height: OmiSpacing.xl, color: isCompleted ? OmiColors.accent : OmiColors.surface2),
               ],
             ),
           ),
@@ -417,7 +414,10 @@ class _AiAppGeneratorPageState extends State<_AiAppGeneratorPageView> {
             if (hasText || isGenerating) ...[
               const SizedBox(width: OmiSpacing.xs),
               isGenerating
-                  ? const SizedBox.square(dimension: kOmiMinTapTarget, child: Center(child: OmiSpinner()))
+                  ? const SizedBox.square(
+                      dimension: kOmiMinTapTarget,
+                      child: Center(child: OmiSpinner()),
+                    )
                   : OmiIconButton.filled(
                       icon: const FaIcon(FontAwesomeIcons.arrowUp, size: 18),
                       label: context.l10n.send,
@@ -585,7 +585,9 @@ class _AiAppGeneratorPageState extends State<_AiAppGeneratorPageView> {
             child: Center(child: FaIcon(icon, color: OmiColors.textPrimary, size: 16)),
           ),
           const SizedBox(width: 14),
-          Expanded(child: Text(description, style: OmiType.subhead.copyWith(fontWeight: FontWeight.w600))),
+          Expanded(
+            child: Text(description, style: OmiType.subhead.copyWith(fontWeight: FontWeight.w600)),
+          ),
         ],
       ),
     );
@@ -797,7 +799,10 @@ class _Badge extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         children: [
           if (icon != null) ...[FaIcon(icon, color: color, size: 12), const SizedBox(width: 6)],
-          Text(label, style: OmiType.footnote.copyWith(color: color, fontWeight: FontWeight.w600)),
+          Text(
+            label,
+            style: OmiType.footnote.copyWith(color: color, fontWeight: FontWeight.w600),
+          ),
         ],
       ),
     );
@@ -833,11 +838,10 @@ class _SuggestionCardShimmer extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     Widget line(double width) => Container(
-          height: 16,
-          width: width,
-          decoration:
-              BoxDecoration(color: OmiColors.textPrimary, borderRadius: BorderRadius.circular(OmiRadius.sm / 2)),
-        );
+      height: 16,
+      width: width,
+      decoration: BoxDecoration(color: OmiColors.textPrimary, borderRadius: BorderRadius.circular(OmiRadius.sm / 2)),
+    );
     return ShimmerWithTimeout(
       baseColor: OmiColors.surface1,
       highlightColor: OmiColors.surface2,

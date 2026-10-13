@@ -3,13 +3,19 @@ import 'package:omi/pages/onboarding/guided_voice_controller.dart';
 import 'package:omi/pages/onboarding/wrapper.dart';
 import '../providers/guided_voice_controller_test.dart' show FakeVoiceIO;
 
-Future<void> _answerAll(FakeVoiceIO io, GuidedVoiceController flow,
-    {required String goal, required String memory}) async {
+Future<void> _answerAll(
+  FakeVoiceIO io,
+  GuidedVoiceController flow, {
+  required String goal,
+  required String memory,
+}) async {
   await flow.start();
   for (var i = 0; i < 4; i++) {
     io.text = i == 3 ? goal : '$memory $i';
     io.speak();
     await flow.next();
+    expect(flow.stage, IntroductionStage.confirmation);
+    await flow.confirmAnswer();
   }
 }
 
@@ -19,6 +25,7 @@ void main() {
       // Session 1: User runs guided voice introduction for account 'test-user-42'
       final io1 = FakeVoiceIO();
       final flow1 = GuidedVoiceController(io1, accountUid: 'test-user-42');
+      addTearDown(flow1.dispose);
       await _answerAll(io1, flow1, goal: 'Right now my goal is to ship Omi.', memory: 'Personal detail');
       expect(flow1.answers.length, 4);
       expect(flow1.answers.last.isGoal, isTrue);
@@ -33,6 +40,7 @@ void main() {
       // the goal idempotency key must be identical to prevent duplicate goals on backend.
       final io2 = FakeVoiceIO();
       final flow2 = GuidedVoiceController(io2, accountUid: 'test-user-42');
+      addTearDown(flow2.dispose);
       await _answerAll(io2, flow2, goal: 'Right now my goal is to ship Omi.', memory: 'Personal detail');
       expect(flow2.answers.length, 4);
       expect(flow2.answers.last.isGoal, isTrue);
@@ -47,6 +55,7 @@ void main() {
     test('completed voice introduction retains answers and done stage when controller is kept', () async {
       final io = FakeVoiceIO();
       final flow = GuidedVoiceController(io, accountUid: 'user-abc');
+      addTearDown(flow.dispose);
 
       await _answerAll(io, flow, goal: 'My primary goal is to build great AI.', memory: 'Memory fact');
       await flow.saveAll();

@@ -87,6 +87,7 @@ class BleBridge implements BleFlutterApi {
   }
 
   final Set<void Function(String state)> _bluetoothStateListeners = {};
+  final Set<void Function(String reason)> _scanBlockedListeners = {};
   void Function(BlePeripheral peripheral)? peripheralDiscoveredCallback;
   void Function(List<String> peripheralUuids)? stateRestoredCallback;
   VoidCallback? pairingLostCallback;
@@ -105,6 +106,12 @@ class BleBridge implements BleFlutterApi {
   VoidCallback addBluetoothStateListener(void Function(String state) listener) {
     _bluetoothStateListeners.add(listener);
     return () => _bluetoothStateListeners.remove(listener);
+  }
+
+  /// Android scan attempts that returned before discovery started.
+  VoidCallback addScanBlockedListener(void Function(String reason) listener) {
+    _scanBlockedListeners.add(listener);
+    return () => _scanBlockedListeners.remove(listener);
   }
 
   void registerPeripheral({
@@ -146,6 +153,13 @@ class BleBridge implements BleFlutterApi {
   }
 
   @override
+  void onScanBlocked(String reason) {
+    for (final listener in List.of(_scanBlockedListeners)) {
+      listener(reason);
+    }
+  }
+
+  @override
   void onPeripheralDiscovered(BlePeripheral peripheral) {
     peripheralDiscoveredCallback?.call(peripheral);
   }
@@ -182,8 +196,10 @@ class BleBridge implements BleFlutterApi {
       if (_connectionRevisions[key] != revision) return;
       final start = (jsonDecode(raw) as Map)['audio_outage_started_at'] as num?;
       if (start != null && start > 0) {
-        await DeviceHealthTelemetry.recordOutage(peripheralUuid,
-            at: DateTime.fromMillisecondsSinceEpoch(start.toInt()));
+        await DeviceHealthTelemetry.recordOutage(
+          peripheralUuid,
+          at: DateTime.fromMillisecondsSinceEpoch(start.toInt()),
+        );
       }
     } catch (_) {
       // Native has already durably recorded the start; import it on emission.

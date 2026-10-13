@@ -13939,11 +13939,13 @@
         "properties": {
           "after": {
             "default": "",
+            "description": "The corrected text, not a record ref. Required and nonempty for spelling, title and overview edits.",
             "title": "After",
             "type": "string"
           },
           "before": {
             "default": "",
+            "description": "Exact wrong text as it appears in the target, including its capitalization. For spelling, one edit fixes every occurrence of this text.",
             "title": "Before",
             "type": "string"
           },
@@ -13973,6 +13975,7 @@
           },
           "other": {
             "default": "",
+            "description": "Only the second supplied record ref for merge_people or merge_memories. Empty for every non-merge edit.",
             "title": "Other",
             "type": "string"
           },
@@ -13983,6 +13986,7 @@
             "type": "string"
           },
           "target": {
+            "description": "Supplied record ref to edit. One spelling edit fixes every occurrence in this target.",
             "title": "Target",
             "type": "string"
           }
@@ -26381,6 +26385,17 @@
               }
             ]
           },
+          "source_ref": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Ref"
+          },
           "speaker": {
             "anyOf": [
               {
@@ -26477,6 +26492,17 @@
                 "type": "null"
               }
             ]
+          },
+          "source_ref": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Ref"
           },
           "speaker": {
             "anyOf": [
@@ -45918,14 +45944,7 @@
           }
         ],
         "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/StatusResponse"
-                }
-              }
-            },
+          "204": {
             "description": "Successful Response"
           },
           "401": {
