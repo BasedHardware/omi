@@ -11469,5 +11469,7 @@
     "firstCaptureShortWarning": "A few more sentences help Omi understand you. About 30 seconds is ideal.",
     "firstCaptureCancelTitle": "Leave This Recording?",
     "firstCaptureCancelWarning": "Going back stops this recording. Keep talking to give Omi a few more sentences.",
-    "firstCaptureSiriTip": "Tip: Enable Omi in Shortcuts → Siri."
+    "firstCaptureSiriTip": "Tip: Enable Omi in Shortcuts → Siri.",
+    "connectAnAgent": "ஒரு ஏஜென்டை இணைக்கவும்",
+    "connectAnAgentSubtitle": "Claude, ChatGPT, Codex அல்லது எந்த ஏஜென்டுக்கும் அமைவு ப்ராம்ப்டைப் பெறுங்கள்"
 }

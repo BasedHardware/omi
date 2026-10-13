@@ -11469,5 +11469,7 @@
     "firstCaptureShortWarning": "A few more sentences help Omi understand you. About 30 seconds is ideal.",
     "firstCaptureCancelTitle": "Leave This Recording?",
     "firstCaptureCancelWarning": "Going back stops this recording. Keep talking to give Omi a few more sentences.",
-    "firstCaptureSiriTip": "Tip: Enable Omi in Shortcuts → Siri."
+    "firstCaptureSiriTip": "Tip: Enable Omi in Shortcuts → Siri.",
+    "connectAnAgent": "ಏಜೆಂಟ್ ಅನ್ನು ಸಂಪರ್ಕಿಸಿ",
+    "connectAnAgentSubtitle": "Claude, ChatGPT, Codex ಅಥವಾ ಯಾವುದೇ ಏಜೆಂಟ್‌ಗಾಗಿ ಸೆಟಪ್ ಪ್ರಾಂಪ್ಟ್ ಪಡೆಯಿರಿ"
 }

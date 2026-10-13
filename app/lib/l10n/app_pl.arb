@@ -4067,5 +4067,7 @@
     "firstCaptureShortWarning": "A few more sentences help Omi understand you. About 30 seconds is ideal.",
     "firstCaptureCancelTitle": "Leave This Recording?",
     "firstCaptureCancelWarning": "Going back stops this recording. Keep talking to give Omi a few more sentences.",
-    "firstCaptureSiriTip": "Tip: Enable Omi in Shortcuts → Siri."
+    "firstCaptureSiriTip": "Tip: Enable Omi in Shortcuts → Siri.",
+    "connectAnAgent": "Połącz agenta",
+    "connectAnAgentSubtitle": "Pobierz prompt konfiguracji dla Claude, ChatGPT, Codex lub dowolnego agenta"
 }

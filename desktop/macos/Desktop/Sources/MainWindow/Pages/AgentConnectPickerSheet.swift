@@ -88,6 +88,9 @@ struct ConnectDestinationSheet: View {
             ForEach(members, id: \.self) { d in
               ConnectOptionCard(destination: d, statuses: $statuses)
             }
+
+            DeveloperHomeLink()
+              .padding(.top, OmiSpacing.xs)
           }
           .padding(.horizontal, OmiSpacing.xxl)
           .padding(.bottom, OmiSpacing.xxl)
@@ -482,5 +485,23 @@ private enum ConnectOptionResultMessage {
     case .failure:
       return SettingsInk.notice
     }
+  }
+}
+
+/// Quiet door from a connect sheet to the web developer home, for agents without a one-click path
+/// here or for anyone who wants a copy-paste setup prompt or their own key.
+struct DeveloperHomeLink: View {
+  var body: some View {
+    Button(action: { NSWorkspace.shared.open(DesktopBackendEnvironment.developerHomeURL) }) {
+      HStack(spacing: OmiSpacing.xs) {
+        Text("Using another agent? Get a setup prompt or API key")
+          .scaledFont(size: OmiType.caption, weight: .medium)
+        Image(systemName: "arrow.up.right")
+          .scaledFont(size: OmiType.caption)
+      }
+      .foregroundColor(Ink.secondary)
+    }
+    .buttonStyle(.plain)
+    .accessibilityIdentifier("connect_sheet_developer_home")
   }
 }

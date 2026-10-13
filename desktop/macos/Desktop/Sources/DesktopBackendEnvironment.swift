@@ -7,6 +7,9 @@ enum DesktopBackendEnvironment {
   static let developmentRustBackendURL = "https://desktop-backend-dt5lrfkkoa-uc.a.run.app/"
   /// Public web share origin (conversation / chat / task links). Override with ``OMI_SHARE_BASE_URL``.
   static let productionShareBaseURL = "https://h.omi.me"
+  /// Web developer home: copy-paste agent prompts plus MCP and Developer API keys. Every client
+  /// links here rather than keeping its own copy of key management.
+  static let developerHomeURL = URL(string: "https://app.omi.me/developers")!
 
   static var shouldUseDevelopmentBackends: Bool {
     shouldUseDevelopmentBackends(

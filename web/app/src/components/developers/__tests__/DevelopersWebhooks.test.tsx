@@ -12,7 +12,6 @@ const { getDeveloperWebhook, getDeveloperWebhooksStatus, setDeveloperWebhook } =
 
 vi.mock('@tschk/moonshine-next/navigation', () => ({
   useRouter: () => ({ push: vi.fn(), replace: vi.fn() }),
-  useSearchParams: () => new URLSearchParams('section=developer'),
 }));
 vi.mock('@tschk/moonshine-next/link', () => ({
   default: ({ href, children }: { href: string; children: React.ReactNode }) => (
@@ -40,7 +39,7 @@ vi.mock('@/lib/api', async (importOriginal) => ({
   disableDeveloperWebhook: vi.fn(async () => {}),
 }));
 
-import { SettingsPage } from '@/components/settings/SettingsPage';
+import { DevelopersPage } from '@/components/developers/DevelopersPage';
 
 // The developer section touches localStorage while loading; this runner does not
 // always provide one.
@@ -55,13 +54,13 @@ vi.stubGlobal('localStorage', {
 const interval = () =>
   screen.getByPlaceholderText('Interval (seconds)') as HTMLInputElement;
 
-describe('Settings > Developer > Audio Bytes webhook', () => {
+describe('Developers > Audio Bytes webhook', () => {
   beforeEach(() => {
     setDeveloperWebhook.mockClear();
   });
 
   it('keeps the saved interval after saving it', async () => {
-    render(<SettingsPage />);
+    render(<DevelopersPage />);
 
     await waitFor(() => expect(interval().value).toBe('30'));
     await act(async () => {
@@ -76,7 +75,7 @@ describe('Settings > Developer > Audio Bytes webhook', () => {
   });
 
   it('sends the saved interval again when the url is edited afterwards', async () => {
-    render(<SettingsPage />);
+    render(<DevelopersPage />);
 
     await waitFor(() => expect(interval().value).toBe('30'));
     await act(async () => {

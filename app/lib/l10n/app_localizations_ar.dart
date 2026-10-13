@@ -13063,4 +13063,10 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get firstCaptureSiriTip => 'Tip: Enable Omi in Shortcuts → Siri.';
+
+  @override
+  String get connectAnAgent => 'ربط وكيل';
+
+  @override
+  String get connectAnAgentSubtitle => 'احصل على موجّه إعداد لـ Claude أو ChatGPT أو Codex أو أي وكيل';
 }

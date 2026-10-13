@@ -13188,4 +13188,10 @@ class AppLocalizationsTe extends AppLocalizations {
 
   @override
   String get firstCaptureSiriTip => 'Tip: Enable Omi in Shortcuts → Siri.';
+
+  @override
+  String get connectAnAgent => 'ఏజెంట్‌ను కనెక్ట్ చేయండి';
+
+  @override
+  String get connectAnAgentSubtitle => 'Claude, ChatGPT, Codex లేదా ఏ ఏజెంట్‌కైనా సెటప్ ప్రాంప్ట్ పొందండి';
 }

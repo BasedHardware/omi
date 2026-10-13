@@ -13159,4 +13159,11 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get firstCaptureSiriTip => 'Tip: Enable Omi in Shortcuts → Siri.';
+
+  @override
+  String get connectAnAgent => 'Conectar um agente';
+
+  @override
+  String get connectAnAgentSubtitle =>
+      'Obtenha um prompt de configuração para Claude, ChatGPT, Codex ou qualquer agente';
 }

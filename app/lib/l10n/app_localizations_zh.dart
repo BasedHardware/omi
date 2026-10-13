@@ -12931,4 +12931,10 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get firstCaptureSiriTip => 'Tip: Enable Omi in Shortcuts → Siri.';
+
+  @override
+  String get connectAnAgent => '连接智能体';
+
+  @override
+  String get connectAnAgentSubtitle => '获取适用于 Claude、ChatGPT、Codex 或任何智能体的设置提示词';
 }
