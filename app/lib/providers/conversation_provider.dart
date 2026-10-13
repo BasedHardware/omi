@@ -13,6 +13,7 @@ import 'package:omi/backend/http/api_result.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/structured.dart';
+import 'package:omi/services/capture/empty_recording_notice.dart';
 import 'package:omi/services/auth_service.dart';
 import 'package:omi/services/siri_integration.dart';
 import 'package:omi/services/notifications/merge_notification_handler.dart';
@@ -76,6 +77,7 @@ class ConversationProvider extends ChangeNotifier {
 
   bool isLoadingConversations = false;
   bool showDiscardedConversations = false;
+  HomeEmptyExplanation homeEmptyExplanation = HomeEmptyExplanation.none;
   bool showShortConversations = false;
   int shortConversationThreshold = 0; // in seconds
   bool showStarredOnly = false; // filter to show only starred conversations
@@ -109,6 +111,17 @@ class ConversationProvider extends ChangeNotifier {
 
   // Merge functionality state
   Set<String> mergingConversationIds = {};
+
+  // A merge settles on the server and its push says so ([onMergeCompleted]). A push can arrive late
+  // or not at all (notifications off, a build without push), which left rows on "Merging…" until a
+  // manual refresh, so the involved rows are also probed until the merge settles ([watchMerge]).
+  final Map<String, Timer> _mergeWatchers = {};
+
+  @visibleForTesting
+  Duration mergeProbeInterval = const Duration(seconds: 4);
+
+  @visibleForTesting
+  Duration mergeProbeLimit = const Duration(minutes: 3);
   bool isSelectionModeActive = false;
   Set<String> selectedConversationIds = {};
   StreamSubscription<MergeCompletedEvent>? _mergeCompletedSubscription;
@@ -268,6 +281,11 @@ class ConversationProvider extends ChangeNotifier {
   void _loadSettings() {
     final prefs = SharedPreferencesUtil();
     showDiscardedConversations = prefs.showDiscardedMemories;
+    homeEmptyExplanation = switch (prefs.homeEmptyExplanation) {
+      'tooShort' => HomeEmptyExplanation.tooShort,
+      'discardedOnly' => HomeEmptyExplanation.discardedOnly,
+      _ => HomeEmptyExplanation.none,
+    };
     showShortConversations = prefs.showShortConversations;
     shortConversationThreshold = prefs.shortConversationThreshold;
   }
@@ -283,6 +301,10 @@ class ConversationProvider extends ChangeNotifier {
   }
 
   void clearUserData() {
+    for (final watcher in _mergeWatchers.values) {
+      watcher.cancel();
+    }
+    _mergeWatchers.clear();
     _sessionGeneration++;
     _searchRequestGeneration++;
     _conversationFetchRevision++;
@@ -908,6 +930,7 @@ class ConversationProvider extends ChangeNotifier {
       // Only cache when viewing all folders
       SharedPreferencesUtil().cachedConversations = conversations;
     }
+    if (conversations.isNotEmpty) clearEmptyRecordingExplanation();
     if (searchedConversations.isEmpty) {
       searchedConversations = conversations;
     }
@@ -1435,6 +1458,43 @@ class ConversationProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  void showEmptyRecordingExplanation() {
+    if (conversations.any((conversation) => !conversation.discarded)) return;
+    _setHomeEmptyExplanation(HomeEmptyExplanation.tooShort);
+  }
+
+  /// Sets the discarded-only empty state whenever that is still true.
+  /// [DiscardedOnlyClaim.alreadyShown] still lets the caller emit once per capture.
+  DiscardedOnlyClaim claimDiscardedOnlyExplanation() {
+    if (showDiscardedConversations) return DiscardedOnlyClaim.notDiscardedOnly;
+    if (!onlyDiscardedConversations(conversations.map((conversation) => conversation.discarded))) {
+      return DiscardedOnlyClaim.notDiscardedOnly;
+    }
+    _setHomeEmptyExplanation(HomeEmptyExplanation.discardedOnly);
+    if (SharedPreferencesUtil().discardedOnlyExplained) return DiscardedOnlyClaim.alreadyShown;
+    SharedPreferencesUtil().discardedOnlyExplained = true;
+    return DiscardedOnlyClaim.shown;
+  }
+
+  void clearEmptyRecordingExplanation() {
+    if (homeEmptyExplanation == HomeEmptyExplanation.none) return;
+    homeEmptyExplanation = HomeEmptyExplanation.none;
+    SharedPreferencesUtil().homeEmptyExplanation = '';
+    notifyListeners();
+  }
+
+  void _setHomeEmptyExplanation(HomeEmptyExplanation next) {
+    final stored = switch (next) {
+      HomeEmptyExplanation.tooShort => 'tooShort',
+      HomeEmptyExplanation.discardedOnly => 'discardedOnly',
+      HomeEmptyExplanation.none => '',
+    };
+    final changed = homeEmptyExplanation != next;
+    homeEmptyExplanation = next;
+    SharedPreferencesUtil().homeEmptyExplanation = stored;
+    if (changed) notifyListeners();
+  }
+
   void upsertConversation(ServerConversation conversation) {
     int idx = conversations.indexWhere((m) => m.id == conversation.id);
     if (idx < 0) {
@@ -1442,6 +1502,7 @@ class ConversationProvider extends ChangeNotifier {
     } else {
       updateConversation(conversation, idx);
     }
+    if (!conversation.discarded) clearEmptyRecordingExplanation();
   }
 
   void updateConversationInSortedList(ServerConversation conversation) {
@@ -1675,6 +1736,10 @@ class ConversationProvider extends ChangeNotifier {
     _refreshDebounceTimer?.cancel();
     _initialFetchRetryTimer?.cancel();
     _mergeCompletedSubscription?.cancel();
+    for (final watcher in _mergeWatchers.values) {
+      watcher.cancel();
+    }
+    _mergeWatchers.clear();
     super.dispose();
   }
 
@@ -2006,17 +2071,101 @@ class ConversationProvider extends ChangeNotifier {
         }
         notifyListeners();
       }
-    } else if (conversationIds == null) {
-      mergingConversationIds.addAll(idsToMerge);
-      exitSelectionMode();
-      notifyListeners();
+    } else {
+      if (conversationIds == null) {
+        mergingConversationIds.addAll(idsToMerge);
+        exitSelectionMode();
+        notifyListeners();
+      }
+      watchMerge(response.conversationIds.length >= 2 ? response.conversationIds : idsToMerge);
     }
 
     return response;
   }
 
-  /// Handle merge completion from FCM notification
-  Future<void> onMergeCompleted(String mergedConversationId, List<String> removedConversationIds) async {
+  /// Probes the merging rows every [mergeProbeInterval] until the merge settles: once none is still
+  /// merging (or processing its merged summary), the one that remains replaces them as the push
+  /// would. The push settling it first ends the probe. A merge that never settles within
+  /// [mergeProbeLimit] — or leaves nothing readable (a locked result) — hands the rows back to a
+  /// list refresh, so they are never left on "Merging…".
+  @visibleForTesting
+  void watchMerge(List<String> ids) {
+    if (ids.length < 2) return;
+    final key = ids.join(',');
+    _mergeWatchers.remove(key)?.cancel();
+    final deadline = DateTime.now().add(mergeProbeLimit);
+    var probing = false;
+    late final Timer watcher;
+    void stop() {
+      watcher.cancel();
+      if (identical(_mergeWatchers[key], watcher)) _mergeWatchers.remove(key);
+    }
+
+    Future<void> handBackToList() async {
+      mergingConversationIds.removeAll(ids);
+      notifyListeners();
+      await forceRefreshConversations();
+    }
+
+    watcher = Timer.periodic(mergeProbeInterval, (_) async {
+      if (probing) return;
+      if (!ids.any(mergingConversationIds.contains)) {
+        stop(); // the push settled it
+        return;
+      }
+      if (DateTime.now().isAfter(deadline)) {
+        stop();
+        await handBackToList();
+        return;
+      }
+      probing = true;
+      try {
+        final results = <String, ({ServerConversation? item, bool ok})>{};
+        for (final id in ids) {
+          try {
+            results[id] = await _conversationLifecycleFetcher(id);
+          } catch (_) {
+            results[id] = (item: null, ok: false);
+          }
+        }
+        if (!ids.any(mergingConversationIds.contains)) {
+          stop();
+          return;
+        }
+        // Unreachable, or still merging: try again next time.
+        if (results.values.any((r) => !r.ok)) return;
+        if (results.values.any((r) => r.item != null && _isActiveProcessingStatus(r.item!.status))) return;
+        stop();
+        final survivors = <ServerConversation>[
+          for (final id in ids)
+            if (results[id]!.item != null) results[id]!.item!,
+        ];
+        if (survivors.length == 1) {
+          final merged = survivors.single;
+          await onMergeCompleted(
+              merged.id,
+              [
+                for (final id in ids)
+                  if (id != merged.id) id
+              ],
+              merged: merged);
+        } else {
+          await handBackToList();
+        }
+      } finally {
+        probing = false;
+      }
+    });
+    _mergeWatchers[key] = watcher;
+  }
+
+  /// Handle merge completion from FCM notification, or from [watchMerge] with the [merged]
+  /// conversation it already read.
+  Future<void> onMergeCompleted(
+    String mergedConversationId,
+    List<String> removedConversationIds, {
+    ServerConversation? merged,
+  }) async {
     final generation = _sessionGeneration;
     // Remove merging status for ALL involved conversations
     mergingConversationIds.remove(mergedConversationId);
@@ -2034,7 +2183,7 @@ class ConversationProvider extends ChangeNotifier {
 
     // Fetch updated merged conversation
     ServerConversation? mergedConvo;
-    mergedConvo = (await _conversationLifecycleFetcher(mergedConversationId)).item;
+    mergedConvo = merged ?? (await _conversationLifecycleFetcher(mergedConversationId)).item;
     if (generation != _sessionGeneration) return;
     if (mergedConvo != null) {
       final idx = conversations.indexWhere((c) => c.id == mergedConversationId);
