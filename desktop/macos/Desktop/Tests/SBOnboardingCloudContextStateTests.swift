@@ -204,6 +204,15 @@ final class SBOnboardingCloudContextStateTests: XCTestCase {
     XCTAssertNil(model.contextDetails["gmail"])
   }
 
+  func testGoogleSignInHandoffDoesNotRefocusOnboarding() {
+    let pending = ["gmail": "connecting"]
+    XCTAssertFalse(SBOnboardingModel.shouldRefocusContext(from: pending, to: ["gmail": "needsSignIn"]))
+    XCTAssertFalse(SBOnboardingModel.shouldRefocusContext(from: pending, to: pending))
+    XCTAssertTrue(SBOnboardingModel.shouldRefocusContext(from: pending, to: ["gmail": "on"]))
+    XCTAssertTrue(SBOnboardingModel.shouldRefocusContext(from: pending, to: ["gmail": "error"]))
+    XCTAssertFalse(SBOnboardingModel.shouldRefocusContext(from: pending, to: [:]))
+  }
+
   @MainActor
   func testContextCanAdvanceWhileGoogleConnectorsArePendingOrFailed() {
     for state in ["connecting", "needsSignIn", "error", "on"] {

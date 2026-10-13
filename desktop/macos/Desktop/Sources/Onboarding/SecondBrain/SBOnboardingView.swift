@@ -73,7 +73,6 @@ struct SBOnboardingView: View {
     .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
       if model.step == .context {
         refreshContextStates()
-        PermissionDragGuidance.returnToOmi()
       }
       // Granting a permission means leaving Omi for System Settings and coming
       // back, so this return is the signal a grant may have landed — not a 20s
@@ -85,14 +84,16 @@ struct SBOnboardingView: View {
     }
     .onChange(of: model.contextStates) { oldStates, newStates in
       guard model.step == .context else { return }
-      let finished = oldStates.contains { id, state in
-        state == "connecting" && newStates[id] != "connecting"
+      if SBOnboardingModel.shouldRefocusContext(from: oldStates, to: newStates) {
+        PermissionDragGuidance.returnToOmi()
       }
-      if finished { PermissionDragGuidance.returnToOmi() }
     }
     .onReceive(importConnectorStatusStore.connectorDidSync) { connectorID in
       model.markPersistedContextConnectorConnected(connectorID)
-      if model.step == .context { PermissionDragGuidance.returnToOmi() }
+      let contextID = connectorID == "email" ? "gmail" : connectorID
+      if model.step == .context, model.contextStates[contextID] == "on" {
+        PermissionDragGuidance.returnToOmi()
+      }
     }
     .dismissableSheet(item: $selectedImportConnector) { connector in
       ImportConnectorSheet(
@@ -303,7 +304,7 @@ struct SBOnboardingView: View {
         model.answerAutomation()
       }
     case .notifications:
-      permStepWidget("notifications", "Notifications", "daily recaps, meeting notes and follow-ups") {
+      permStepWidget("notifications", "Notifications", "an evening recap on days you record a conversation") {
         model.answerNotifications()
       }
     case .shortcutOpen: shortcutWidget(isTalk: false)

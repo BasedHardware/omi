@@ -559,13 +559,14 @@ extension SBOnboardingModel {
     installShortcutMonitors()
   }
 
-  /// Keep a revisited choice; fresh stages recommend the same chords as Settings.
-  func prepareShortcutSelection() {
+  /// Back keeps the current choice; a relaunch preserves saved chords before recommending a default.
+  func prepareShortcutSelection(defaults: UserDefaults = .standard) {
     let isTalk = step == .shortcutTalk
+    let saved = ShortcutSettings.savedOnboardingShortcut(isTalk: isTalk, defaults: defaults)
     let selection =
       isTalk
-      ? talkShortcutSelection ?? ShortcutSettings.KeyboardShortcut(modifierOnly: .option)
-      : openShortcutSelection ?? ShortcutSettings.askOmiControlCommandOShortcut
+      ? talkShortcutSelection ?? saved ?? ShortcutSettings.KeyboardShortcut(modifierOnly: .option)
+      : openShortcutSelection ?? saved ?? ShortcutSettings.askOmiControlCommandOShortcut
     pickShortcut(selection, isTalk: isTalk)
   }
 
@@ -1343,6 +1344,15 @@ extension SBOnboardingModel {
     case "calendar": markGoogleContextImported("calendar")
     case "email": markGoogleContextImported("gmail")
     default: markContextImportConnected(connectorID)
+    }
+  }
+
+  /// A reconnect failure intentionally hands focus to browser sign-in. Only terminal states
+  /// that keep the user in Omi should summon the onboarding window.
+  nonisolated static func shouldRefocusContext(from oldStates: [String: String], to newStates: [String: String]) -> Bool
+  {
+    oldStates.contains { id, state in
+      state == "connecting" && (newStates[id] == "on" || newStates[id] == "error")
     }
   }
 

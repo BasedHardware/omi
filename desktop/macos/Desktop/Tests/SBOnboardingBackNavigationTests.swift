@@ -366,7 +366,8 @@ final class SBOnboardingBackNavigationTests: XCTestCase {
     XCTAssertTrue(settings.pttEnabled)
   }
 
-  func testRecommendedShortcutsCanContinueWithoutATestPress() {
+  func testRecommendedShortcutsCanContinueWithoutATestPress() throws {
+    let defaults = try makeIsolatedDefaults()
     let settings = ShortcutSettings.shared
     let previousOpenShortcut = settings.askOmiShortcut
     let previousOpenEnabled = settings.askOmiEnabled
@@ -387,7 +388,7 @@ final class SBOnboardingBackNavigationTests: XCTestCase {
     let appState = AppState()
     let model = SBOnboardingModel(appState: appState, chatProvider: ChatProvider(), onComplete: nil)
     model.step = .shortcutOpen
-    model.prepareShortcutSelection()
+    model.prepareShortcutSelection(defaults: defaults)
     XCTAssertEqual(model.chosenShortcut, ShortcutSettings.askOmiControlCommandOShortcut)
     XCTAssertFalse(model.shortcutPressed)
     XCTAssertTrue(model.canContinueShortcut)
@@ -396,7 +397,7 @@ final class SBOnboardingBackNavigationTests: XCTestCase {
     XCTAssertEqual(model.step, .shortcutTalk)
     XCTAssertFalse(UserDefaults.standard.bool(forKey: completedKey))
 
-    model.prepareShortcutSelection()
+    model.prepareShortcutSelection(defaults: defaults)
     XCTAssertEqual(model.chosenShortcut, ShortcutSettings.KeyboardShortcut(modifierOnly: .option))
     XCTAssertFalse(model.shortcutPressed)
     XCTAssertTrue(model.canContinueShortcut)
@@ -405,6 +406,39 @@ final class SBOnboardingBackNavigationTests: XCTestCase {
     XCTAssertTrue(UserDefaults.standard.bool(forKey: completedKey))
     XCTAssertTrue(model.canSkipOnboarding)
     model.streamTask?.cancel()
+  }
+
+  func testResumedShortcutStagesPreservePersistedChoices() throws {
+    let defaults = try makeIsolatedDefaults()
+    let settings = ShortcutSettings.shared
+    let previousOpen = settings.askOmiShortcut
+    let previousOpenEnabled = settings.askOmiEnabled
+    let previousTalk = settings.pttShortcut
+    let previousTalkEnabled = settings.pttEnabled
+    defer {
+      settings.updateAskOmiRegistration(enabled: previousOpenEnabled, shortcut: previousOpen)
+      settings.pttShortcut = previousTalk
+      settings.pttEnabled = previousTalkEnabled
+    }
+    let open = ShortcutSettings.askOmiCommandReturnShortcut
+    let talk = ShortcutSettings.KeyboardShortcut(modifierOnly: .control)
+    let openData = try JSONEncoder().encode(open)
+    let talkData = try JSONEncoder().encode(talk)
+    defaults.set(openData, forKey: "shortcut_askOmiKey")
+    defaults.set(talkData, forKey: "shortcut_pttKey")
+    let appState = AppState()
+    let model = SBOnboardingModel(appState: appState, chatProvider: ChatProvider(), onComplete: nil)
+    for (step, expected) in [(SBOnboardingModel.Step.shortcutOpen, open), (.shortcutTalk, talk)] {
+      model.step = step
+      model.prepareShortcutSelection(defaults: defaults)
+      XCTAssertEqual(model.chosenShortcut, expected)
+      XCTAssertTrue(model.canContinueShortcut)
+      XCTAssertFalse(model.shortcutPressed)
+    }
+    XCTAssertEqual(settings.askOmiShortcut, open)
+    XCTAssertEqual(settings.pttShortcut, talk)
+    XCTAssertEqual(defaults.data(forKey: "shortcut_askOmiKey"), openData)
+    XCTAssertEqual(defaults.data(forKey: "shortcut_pttKey"), talkData)
   }
 
   func testRegistrationFailureRequiresAnotherChoiceAndCustomStillRequiresAChoice() {

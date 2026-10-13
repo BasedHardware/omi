@@ -332,7 +332,7 @@ final class SBOnboardingModel: ObservableObject {
       return "Turn on Automation, so I can help with tasks in the apps you choose."
     case .notifications:
       return
-        "Get your daily recap and a heads-up when meeting notes and follow-ups are ready. Turn on Notifications so I can let you know."
+        "On days you record a conversation, I can let you know when your evening recap is ready. Turn on Notifications to get that heads-up."
     // Both steps used to invite "press any key", and `acceptsRecordedChord` then refused a bare key
     // in silence — correct (a global bare `L` is unrecoverable) but unexplained. Name the rule.
     case .shortcutOpen:
