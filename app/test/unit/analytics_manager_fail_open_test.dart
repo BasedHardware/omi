@@ -274,7 +274,7 @@ void main() {
     expect(adapter.interactionContexts, [const _InteractionContext(screenName: 'Settings', target: 'screen')]);
   });
 
-  test('canonical app context cannot be overridden by a call site', () async {
+  test('event-owned app context survives globals; globals fill absent keys', () async {
     final adapter = _FakeAnalyticsAdapter();
     AnalyticsManager.configure(adapter);
     await AnalyticsManager.init();
@@ -285,9 +285,39 @@ void main() {
     );
     await AnalyticsManager.flushPending(force: true);
 
-    expect(adapter.events.single.properties, containsPair('app_platform', 'unknown'));
-    expect(adapter.events.single.properties, containsPair('app_version', '2.3.4'));
-    expect(adapter.events.single.properties, containsPair('app_build', '567'));
+    expect(adapter.events.single.properties, containsPair('app_platform', 'bad-value'));
+    expect(adapter.events.single.properties, containsPair('app_version', '0.0.0'));
+    expect(adapter.events.single.properties, containsPair('app_build', '0'));
+    AnalyticsManager().track('Context Missing', properties: {'app_version': 'observed'});
+    await AnalyticsManager.flushPending(force: true);
+    expect(adapter.events.last.properties, containsPair('app_version', 'observed'));
+    expect(adapter.events.last.properties, containsPair('app_build', '567'));
+  });
+
+  test('explicitly unknown event-owned globals are not filled or replaced at delivery', () async {
+    final adapter = _DeliveryAdapter();
+    AnalyticsManager.configure(adapter);
+    await AnalyticsManager.init();
+    AnalyticsManager().track(
+      'Capture Wedge Detected',
+      properties: {'app_version': null, 'app_build': 'observed-build', 'build': null},
+    );
+    await AnalyticsManager.flushPending(force: true);
+    expect(adapter.events.single.properties.containsKey('app_version'), false);
+    expect(adapter.events.single.properties.containsKey('build'), false);
+    expect(adapter.events.single.properties['app_build'], 'observed-build');
+    expect(adapter.events.single.properties['app_platform'], 'unknown');
+  });
+
+  test('delivery preserves positive integer event schema versions and defaults invalid ones', () async {
+    final adapter = _DeliveryAdapter();
+    AnalyticsManager.configure(adapter);
+    await AnalyticsManager.init();
+    for (final version in <Object?>[2, 3, null, 0, -1, '2', 2.5, true]) {
+      AnalyticsManager().track('Schema Event', properties: {'schema_version': version});
+    }
+    await AnalyticsManager.flushPending(force: true);
+    expect(adapter.events.map((event) => event.properties['schema_version']), [2, 3, 1, 1, 1, 1, 1, 1]);
   });
 
   test('recording upload lifecycle keeps one correlation schema through the analytics boundary', () async {
@@ -472,14 +502,39 @@ void main() {
     await AnalyticsManager.init();
 
     AnalyticsManager().upgradeSucceeded(previousPlan: 'basic', newPlan: 'plus', billingInterval: 'year');
+    AnalyticsManager().paywallOpened('Action Item', currentPlan: 'pro');
+    AnalyticsManager().upgradePlanSelected(plan: 'yearly', billingInterval: 'yearly', source: 'Usage Page Plan Sheet');
     await AnalyticsManager.flushPending(force: true);
 
-    expect(adapter.events.map((event) => event.eventName), ['Subscription Plan Changed', 'Upgrade Succeeded']);
+    expect(adapter.events.map((event) => event.eventName), [
+      'Subscription Plan Changed',
+      'Upgrade Succeeded Attributed',
+      'Upgrade Succeeded',
+      'Paywall Opened',
+      'Upgrade Plan Selected',
+    ]);
     expect(adapter.events.first.properties, {
       'previous_plan': 'basic',
       'new_plan': 'plus',
       'billing_interval': 'year',
       'change_source': 'mobile_checkout',
+      'app_platform': 'unknown',
+      'app_version': '2.3.4',
+      'app_build': '567',
+    });
+    expect(adapter.events[1].properties, {
+      'plan': 'plus',
+      'billing_interval': 'year',
+      'app_platform': 'unknown',
+      'app_version': '2.3.4',
+      'app_build': '567',
+    });
+    expect(adapter.events[3].properties['source'], 'unknown');
+    expect(adapter.events[3].properties['current_plan'], 'unknown');
+    expect(adapter.events[4].properties, {
+      'plan': 'unknown',
+      'billing_interval': 'year',
+      'source': 'unknown',
       'app_platform': 'unknown',
       'app_version': '2.3.4',
       'app_build': '567',

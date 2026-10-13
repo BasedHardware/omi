@@ -11,8 +11,8 @@ import yaml
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from config.dream_agent import Caps
-from database import dream_feedback, dream_store, dream_dirty
+from config.dream_agent import Caps, FULL_DRAIN_SECONDS
+from database import dream_history, dream_feedback, dream_store, dream_dirty
 from models.dream_agent import Feedback, Plan, Edit, Term, FrameQuestion, SlowTask
 from models.review import ReviewItem, SpellingItem
 from routers import dream_sweep
@@ -65,11 +65,11 @@ def test_authenticated_off_is_cheap_noop(client, monkeypatch):
             'email_verified': True,
         },
     )
-    monkeypatch.setattr(dream_store, 'candidates', lambda **k: pytest.fail('off read Firestore'))
+    monkeypatch.setattr(dream_agent.dream_scheduler, 'candidates', lambda **k: pytest.fail('off read Firestore'))
     monkeypatch.setattr(dream_store, 'acquire', lambda *a, **k: pytest.fail('off attempted admission'))
     response = client.post('/v2/dream-agent/sweep', headers={'Authorization': 'Bearer valid'})
     assert response.status_code == 200
-    assert response.json() == {'complete': 0, 'failed': 0, 'not_admitted': 0, 'deadline': 0}
+    assert response.json() == {'complete': 0, 'failed': 0, 'not_admitted': 0, 'deadline': 0, 'waiting': 0}
 
 
 def test_route_returns_counts_only(client, monkeypatch, caplog):
@@ -95,18 +95,25 @@ def test_route_returns_counts_only(client, monkeypatch, caplog):
     )
     with caplog.at_level('INFO', logger='routers.dream_sweep'):
         response = client.post('/v2/dream-agent/sweep', headers={'Authorization': 'Bearer valid'})
-    assert response.json() == {'complete': 1, 'failed': 1, 'not_admitted': 1, 'deadline': 1}
+    assert response.json() == {'complete': 1, 'failed': 1, 'not_admitted': 1, 'deadline': 1, 'waiting': 0}
     assert UID not in response.text and 'private' not in response.text
     logged = caplog.text
-    assert 'candidates=4 complete=1 failed=1 not_admitted=1 deadline=1 failure_types=synthetic:1' in logged
+    assert 'candidates=4 complete=1 failed=1 not_admitted=1 deadline=1 waiting=0 failure_types=synthetic:1' in logged
     assert UID not in logged and 'private' not in logged
 
 
 @pytest.fixture
 def store(monkeypatch):
+    monkeypatch.setattr(dream_agent.dream_capacity, 'claim', AsyncMock(return_value=('slot', 'token')))
+    monkeypatch.setattr(dream_agent.dream_capacity, 'release', AsyncMock())
+    monkeypatch.setattr(dream_agent.dream_capacity, 'available_model', AsyncMock(return_value='synthetic-model'))
     db = DreamFirestore()
     db.rows[('users', UID)] = {'name': 'Synthetic'}
     db.rows[('dream_users', UID)] = {'sequence': 1, 'watermark': 0, 'score': 1}
+    db.rows[('dream_users', UID, 'dirty', 'fixture')] = {
+        'version': 'fixture',
+        'last_changed_at': datetime.now(timezone.utc),
+    }
     monkeypatch.setenv('DREAM_AGENT_MODE', 'shadow')
     monkeypatch.setenv('DREAM_AGENT_UID_ALLOWLIST', UID)
     monkeypatch.setenv('DREAM_AGENT_TESTFLIGHT_ENABLED', 'false')
@@ -160,7 +167,7 @@ def test_unset_salt_shadow_persists_complete_report_without_user_effects(store, 
         frames=[FrameQuestion(screen_ref='screen/1', question='What image?')],
         feedback=[feedback],
     )
-    monkeypatch.setattr(dream_agent.dream_reads, 'read_changes', lambda *a: (records, []))
+    monkeypatch.setattr(dream_agent.dream_reads, 'read_changes', lambda *a, **k: (records, []))
     monkeypatch.setattr(dream_store, 'vocabulary', lambda *a: [])
     monkeypatch.setattr(dream_store, 'demoted_types', lambda *a: set())
     monkeypatch.setattr(dream_agent.review_changes, 'agent_change_allowed', lambda *a: True)
@@ -170,9 +177,16 @@ def test_unset_salt_shadow_persists_complete_report_without_user_effects(store, 
     def forbidden(*a, **k):
         pytest.fail('shadow wrote user data or developer feedback')
 
-    for name in ('apply_edit', 'ask', 'propose_task', 'request_frame'):
+    for name in (
+        'apply_edit',
+        'apply_vocabulary',
+        'suggest_edit',
+        'suggest_vocabulary',
+        'ask',
+        'propose_task',
+        'request_frame',
+    ):
         monkeypatch.setattr(dream_tools, name, forbidden)
-    monkeypatch.setattr(dream_store, 'save_vocabulary', forbidden)
     monkeypatch.setattr(dream_feedback, 'store', forbidden)
     result = asyncio.run(dream_agent.run_pass(UID))
     assert result['status'] == 'complete'
@@ -185,6 +199,8 @@ def test_unset_salt_shadow_persists_complete_report_without_user_effects(store, 
     assert set(store.rows) == {
         ('users', UID),
         ('dream_users', UID),
+        ('dream_users', UID, 'dirty', 'fixture'),
+        ('dream_users', UID, 'reviews', dream_history.review_id('conversations/c1')),
         ('dream_spend', datetime.now(timezone.utc).date().isoformat()),
         ('users', UID, 'dream_runs', result['run_id']),
     }
@@ -193,6 +209,12 @@ def test_unset_salt_shadow_persists_complete_report_without_user_effects(store, 
 @pytest.mark.parametrize('stalled_stage', ['query', 'plan', 'finish'])
 def test_wall_clock_bound_stops_drain_and_retains_ambiguous_lease(store, monkeypatch, stalled_stage):
     monkeypatch.setattr(dream_agent, 'DRAIN_TIMEOUT_SECONDS', 0.05)
+    monkeypatch.setattr(dream_agent, 'PASS_TIMEOUT_SECONDS', 0)
+    monkeypatch.setattr(dream_agent, 'FINISH_MARGIN_SECONDS', 0)
+    monkeypatch.setenv('DREAM_AGENT_CONCURRENCY', '1')
+    monkeypatch.setattr(dream_agent.dream_capacity, 'claim', AsyncMock(return_value=('slot', 'token')))
+    monkeypatch.setattr(dream_agent.dream_capacity, 'release', AsyncMock())
+    monkeypatch.setattr(dream_agent.dream_capacity, 'available_model', AsyncMock(return_value='synthetic-model'))
     entered = asyncio.Event()
     pending = asyncio.Event()
 
@@ -203,19 +225,19 @@ def test_wall_clock_bound_stops_drain_and_retains_ambiguous_lease(store, monkeyp
     real_blocking = dream_agent.run_blocking
 
     async def blocking(executor, fn, *a, **k):
-        if stalled_stage == 'query' and fn is dream_store.candidates:
+        if stalled_stage == 'query' and fn is dream_agent.dream_scheduler.candidates:
             return await stall()
         if stalled_stage == 'finish' and fn is dream_store.finish:
             return await stall()
         return await real_blocking(executor, fn, *a, **k)
 
     monkeypatch.setattr(dream_agent, 'run_blocking', blocking)
-    monkeypatch.setattr(dream_store, 'candidates', lambda **k: [UID, 'never-started'])
+    monkeypatch.setattr(dream_agent.dream_scheduler, 'candidates', lambda **k: [UID, 'never-started'])
     monkeypatch.setattr(
         dream_agent, 'plan_pass', stall if stalled_stage == 'plan' else AsyncMock(return_value=(Plan(), 0))
     )
     monkeypatch.setattr(
-        dream_agent.dream_reads, 'read_changes', lambda *a: ({'conversations/c1': {'content': 'synthetic'}}, [])
+        dream_agent.dream_reads, 'read_changes', lambda *a, **k: ({'conversations/c1': {'content': 'synthetic'}}, [])
     )
     monkeypatch.setattr(dream_store, 'vocabulary', lambda *a: [])
     monkeypatch.setattr(dream_store, 'demoted_types', lambda *a: set())
@@ -264,8 +286,13 @@ def test_prod_scheduler_and_writer_env_contract():
     )
     assert dream['target']['oidc'] == sequencer['target']['oidc']
     assert dream['retry'] == sequencer['retry']
-    assert dream['attempt_deadline'] == '180s'
-    assert dream_agent.DRAIN_TIMEOUT_SECONDS < 150 < int(dream['attempt_deadline'][:-1])
+    assert dream['attempt_deadline'] == '720s'
+    assert FULL_DRAIN_SECONDS + 30 < int(dream['attempt_deadline'][:-1])
+    assert (
+        dream_agent.PASS_TIMEOUT_SECONDS + dream_agent.FINISH_MARGIN_SECONDS
+        <= dream_agent.DRAIN_TIMEOUT_SECONDS
+        < int(dream['attempt_deadline'][:-1])
+    )
     assert not any(
         job['name'] == dream['name'] and job['state'] != 'PAUSED' for job in scheduler['environments']['dev']['jobs']
     )
@@ -273,8 +300,9 @@ def test_prod_scheduler_and_writer_env_contract():
     allowlist = '9OqYLlKJv4hmeYpIhwJcHBR975i2,vi7SA9ckQCe4ccobWNxlbdcNdC23'
     prod = manifest['environments']['prod']
     writers = [prod['gke']['backend-listen'], prod['gke']['pusher'], *prod['cloud_run']['services'].values()]
+    # 2026-10-11: owner dogfood promoted from shadow to on; the allowlist still limits it to the owner.
     for service in writers:
-        assert service['env']['DREAM_AGENT_MODE']['value'] == 'shadow'
+        assert service['env']['DREAM_AGENT_MODE']['value'] == 'on'
         assert service['env']['DREAM_AGENT_UID_ALLOWLIST']['value'] == allowlist
         assert 'DREAM_AGENT_TESTFLIGHT_ENABLED' not in service['env']
         assert not any(
@@ -287,9 +315,14 @@ def test_prod_scheduler_and_writer_env_contract():
                 'DREAM_AGENT_MANUAL_RUNS_PER_DAY',
                 'DREAM_AGENT_DAILY_USD',
                 'DREAM_AGENT_CANARY_UID',
+                'DREAM_AGENT_AUTO_APPLY_KINDS',
             }
             for key in service['env']
         )
+    # Spelling stays in Review until auto-apply requires supporting context, on both pass hosts.
+    for name in ('backend', 'backend-sync'):
+        kinds = prod['cloud_run']['services'][name]['env']['DREAM_AGENT_AUTO_APPLY_KINDS']['value']
+        assert set(kinds.split(',')) == {'title', 'overview', 'vocabulary'}
     services = prod['cloud_run']['services']
     # The sweep host and the report host present the same daily allowance; no other host declares one.
     dogfood_caps = {
@@ -319,8 +352,11 @@ def test_prod_scheduler_and_writer_env_contract():
     assert canary.startswith('dream-canary-') and canary not in allowlist.split(',')
     chart = load_yaml(ROOT / 'backend/charts/backend-listen/prod_omi_backend_listen_values.yaml')
     env = {entry['name']: entry.get('value') for entry in chart['env']}
-    assert env['DREAM_AGENT_MODE'] == 'shadow'
+    assert env['DREAM_AGENT_MODE'] == 'on'
     assert env['DREAM_AGENT_UID_ALLOWLIST'] == allowlist
+    # mode=on admission and Review proposals require the Review surface wherever passes run.
+    for name in ('backend', 'backend-sync'):
+        assert services[name]['env']['REVIEW_SURFACE_MODE']['value'] == 'on'
     dev = manifest['environments']['dev']
     for service in [dev['gke']['backend-listen'], *dev['cloud_run']['services'].values()]:
         assert service['env'].get('DREAM_AGENT_MODE', {}).get('value', 'off') == 'off'

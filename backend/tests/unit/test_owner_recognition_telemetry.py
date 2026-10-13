@@ -17,6 +17,7 @@ import numpy as np
 import pytest
 
 import routers.listen.speakers as speakers_mod
+from routers.listen import speaker_audio
 import utils.conversations.process_conversation as process_conversation_mod
 from models.client_processing import ClientProcessing, ProjectedStructure, ProjectionProvenance
 from models.conversation import Conversation, CreateConversation
@@ -346,8 +347,8 @@ def _matcher(monkeypatch, embedding):
     monkeypatch.setattr(speakers_mod, 'extract_embedding_from_bytes', lambda _audio, _name: embedding)
     # The decision path still builds a wav. Skip the encoder so the fast-unit
     # budget measures the matcher, not PyAV, under a loaded CI shard.
-    monkeypatch.setattr(speakers_mod.av, 'open', lambda *_args, **_kwargs: _Wav())
-    monkeypatch.setattr(speakers_mod.av, 'AudioFrame', _AudioFrame)
+    monkeypatch.setattr(speaker_audio.av, 'open', lambda *_args, **_kwargs: _Wav())
+    monkeypatch.setattr(speaker_audio.av, 'AudioFrame', _AudioFrame)
     return matcher
 
 

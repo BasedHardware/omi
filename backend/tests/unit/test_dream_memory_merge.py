@@ -135,7 +135,7 @@ def test_review_change_routes_duplicate_fact_edit_to_merge_journal(monkeypatch):
     )
     captured = []
     monkeypatch.setattr(review_changes.store, 'require_enabled', lambda: None)
-    monkeypatch.setattr(merges, 'record_merge', lambda *args: captured.append(args) or change)
+    monkeypatch.setattr(merges, 'record_merge', lambda *args, **kwargs: captured.append(args) or change)
 
     assert review_changes.record_agent_change(UID, change, [], edit_key='stable-merge', memory_edit=edit) == change
     assert captured == [(UID, change, edit, 'stable-merge')]
@@ -155,7 +155,7 @@ def test_review_change_routes_merge_undo_to_merge_journal(monkeypatch):
         lambda _uid: SimpleNamespace(collection=lambda _name: SimpleNamespace(document=lambda _key: Ref())),
     )
     captured = []
-    monkeypatch.setattr(merges, 'set_undone', lambda *args: captured.append(args) or change)
+    monkeypatch.setattr(merges, 'set_undone', lambda *args, **kwargs: captured.append(args) or change)
 
     assert review_changes.set_undone(UID, change.change_id, True, now=NOW) == change
     assert captured == [(UID, change.change_id, True, data)]

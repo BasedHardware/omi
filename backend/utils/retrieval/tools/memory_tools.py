@@ -23,6 +23,8 @@ from utils.messaging.memory_privacy import (
 from utils.retrieval.chat_scope import apply_chat_scope_dates, chat_scope_from_config
 from utils.retrieval.memory_evidence import MAX_MEMORY_EVIDENCE_CHARS, format_memory_evidence, render_memory_evidence
 from utils.retrieval.tools.result_bounds import cap_items_for_llm
+from utils.messaging.projection import surface_runtime
+
 import logging
 
 logger = logging.getLogger(__name__)
@@ -31,6 +33,19 @@ logger = logging.getLogger(__name__)
 # all of them floods the chat model's context, so it freezes or refuses (#4927). Bound how many
 # are handed to the model at once; the most recent are kept.
 MAX_MEMORIES_FOR_LLM = 300
+
+
+def _channel_empty_memories(date_info=''):
+    runtime = surface_runtime.get()
+    if runtime is None or runtime.surface == 'app':
+        return None
+    return (
+        f"No memories are available to this chat for this query{date_info}. "
+        "Privacy, review, and temporal filters can withhold saved memories. "
+        "This does not prove the user has no saved personal facts. "
+        "Use any supplied activity context accurately and distinguish it from retrieved memories."
+    )
+
 
 # Import agent_config_context for fallback config access
 try:
@@ -312,7 +327,9 @@ def get_memories_tool(
         elif end_dt:
             date_info = f" before {end_dt.strftime('%Y-%m-%d')}"
 
-        msg = f"No memories found{date_info}. The user may not have any recorded facts or memories yet in the system, or the date range may be outside their memory history."
+        msg = _channel_empty_memories(date_info)
+        if msg is None:
+            msg = f"No memories found{date_info}. The user may not have any recorded facts or memories yet in the system, or the date range may be outside their memory history."
         if scan_truncated:
             msg += " The bounded scan reached its safety limit; more memories may exist."
         logger.info(f"⚠️ get_memories_tool - {msg}")
@@ -329,6 +346,9 @@ def get_memories_tool(
             stamp = stamp.astimezone(timezone.utc)
         date_str = stamp.strftime('%Y-%m-%d %H:%M:%S UTC') if stamp else 'Unknown'
         memory_id = getattr(memory, 'id', None)
+        channel_items = configurable.get('channel_items')
+        if memory_id and isinstance(channel_items, list):
+            channel_items.append({'kind': 'memory', 'id': memory_id, 'title': memory.content[:100]})
         records.append(
             format_memory_evidence(
                 memory.content,
@@ -383,7 +403,7 @@ def search_memories_tool(
     Returns:
         Formatted string with semantically matching memories ranked by relevance.
     """
-    logger.info(f"🔧 search_memories_tool called with query: {query}, view: {view}")
+    logger.info('search_memories_tool called view=%s', view)
 
     # Get config from parameter or context variable
     cfg: Optional[Dict[str, Any]] = cast(Optional[Dict[str, Any]], config)
@@ -406,7 +426,7 @@ def search_memories_tool(
     if not uid:
         logger.info(f"❌ search_memories_tool - no user_id in config")
         return "Error: User ID not found in configuration"
-    logger.info(f"✅ search_memories_tool - uid: {uid}, query: {query}, limit: {limit}")
+    logger.info('search_memories_tool uid=%s limit=%s', uid, limit)
 
     try:
         requested_view = normalize_temporal_read_view(view)
@@ -487,10 +507,14 @@ def search_memories_tool(
                 )
             ][:limit]
         if not matches:
+            channel_msg = _channel_empty_memories()
+            if channel_msg is not None:
+                logger.info('search_memories_tool empty channel result')
+                return channel_msg
             msg = (
                 f"No memories found matching '{query}'. The user may not have any recorded facts about this topic yet."
             )
-            logger.info(f"⚠️ search_memories_tool - {msg}")
+            logger.info('search_memories_tool empty result')
             return msg
 
         records = []
@@ -500,6 +524,9 @@ def search_memories_tool(
             display_date = _memory_read_date(memory, temporal=effective_view != 'released')
             date_str = format_local_date(display_date, display_tz) if display_date else 'Unknown'
             memory_id = getattr(memory, 'id', None)
+            channel_items = configurable.get('channel_items')
+            if memory_id and isinstance(channel_items, list):
+                channel_items.append({'kind': 'memory', 'id': memory_id, 'title': memory.content[:100]})
             memory_id_prefix = f'memory_id: {memory_id}, ' if memory_id else ''
             suffix = f"{memory_id_prefix}relevance: {score:.2f}, category: {memory.category.value}, date: {date_str}"
             if effective_view != 'released':

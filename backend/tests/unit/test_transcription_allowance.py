@@ -454,3 +454,20 @@ def test_the_answer_serialises_for_the_plan_endpoint(monkeypatch, sub) -> None:
         'remaining_seconds': 10_000,
         'reason': 'plan_within_allowance',
     }
+
+
+@pytest.mark.parametrize('plan,cap', [(PlanType.basic, BASIC_CAP), (PlanType.plus, PLUS_CAP)])
+@pytest.mark.parametrize('failure', ['invalid_usage', 'lookup_error'])
+def test_closed_result_keeps_known_catalog_total(monkeypatch, sub, plan, cap, failure):
+    _situate(monkeypatch, sub, plan=plan, usage_record={'transcription_seconds': -1})
+    if failure == 'lookup_error':
+
+        def failed_lookup(uid):
+            raise RuntimeError('usage lookup unavailable')
+
+        monkeypatch.setattr(sub, 'get_monthly_usage_for_subscription', failed_lookup)
+    result = sub.resolve_transcription_allowance('uid')
+    assert result.mode == 'on_device'
+    assert result.remaining_seconds == 0
+    assert result.limit_seconds == cap
+    assert result.reason == ('usage_invalid' if failure == 'invalid_usage' else 'allowance_unavailable')

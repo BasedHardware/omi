@@ -105,10 +105,16 @@ final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate, AV
   private var hasEmittedFirstChunk = false
   private var audioPlayer: AVAudioPlayer?
   private var activePlayerFallbackText = ""
+  private var activePlayerAudienceAllows: (() -> Bool)?
   private var playbackGeneration: UInt64 = 0
   private var voiceSampleGeneration: UInt64 = 0
   var voiceSampleActive = false
   var voiceSampleSynthesizer: ((String) async throws -> Data)?
+  var oneShotSynthesizer: (@Sendable (_ text: String, _ voiceID: String, _ instructions: String) async throws -> Data)?
+  /// Where an audience-gated one-shot ended up, reported at the point it is decided, so
+  /// tests can await the outcome instead of inferring it from timing.
+  enum OneShotAudienceOutcome: Equatable { case played, fellBackToSystemVoice, withheld, droppedStale }
+  var oneShotAudienceObserver: ((OneShotAudienceOutcome) -> Void)?
   var voiceSampleBusyProbe: (() -> Bool)?
   var voiceSampleStarter: ((Data) -> Void)?
   // AVSpeechSynthesizer delegates arrive asynchronously, including after a
@@ -121,6 +127,66 @@ final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate, AV
   private var activeRealtimeSlowToolAcknowledgement: RealtimeSlowToolAcknowledgementKind?
   private var activeRealtimeSlowToolAcknowledgementTransport: String?
   private var lifecycleObservers: [NSObjectProtocol] = []
+
+  /// What this service has recently said, so ambient capture can recognise Omi's own voice
+  /// coming back through the microphone instead of treating it as the user
+  /// (`VoicePlaybackEchoPolicy`). Kept for a window *after* playback ends, because the
+  /// transcript of the last words arrives about a second behind the audio.
+  private var spokenWordHistory: [(word: String, at: Date)] = []
+  /// Last text recorded from an engine outside this service, so a streamed reply that
+  /// repeats or extends itself is entered once rather than once per event.
+  private var lastExternallySpokenText: String?
+  private static let spokenHistoryWordCap = 300
+
+  /// Each word expires on its own clock rather than the history being kept alive as a
+  /// block. Extending one shared deadline on every chunk left several turns of speech
+  /// matchable at once, and a few hundred words of ordinary English will align with almost
+  /// any short sentence — live, "Sorry my mistake it's taking" was deleted that way. An
+  /// Ambient transcript delivery has been measured 34–36 seconds behind playback,
+  /// so retain enough history to cover that tail without spanning multiple turns.
+  static let spokenWordLifetime: TimeInterval = 45
+
+  /// Playback from the last few seconds, which is all an echo can be an echo of.
+  var recentlySpokenWords: [String] {
+    let cutoff = Date().addingTimeInterval(-Self.spokenWordLifetime)
+    return spokenWordHistory.filter { $0.at > cutoff }.map(\.word)
+  }
+
+  /// Record speech this app produced through some other engine.
+  ///
+  /// The realtime session plays its own audio rather than routing through this service, so
+  /// nothing here would know what was said — and the microphone hears it identically. Left
+  /// unrecorded, the model's own answer comes back through ambient capture and is attributed
+  /// to the user, which is the exact defect `VoicePlaybackEchoPolicy` exists to prevent.
+  /// What matters to the echo check is that Omi said it out loud, not which engine spoke it.
+  /// Arrives as a stream, and providers differ on whether each event is the new fragment or
+  /// the whole reply so far. Recording every event verbatim would enter the same words over
+  /// and over, and a padded history matches more of what a person says — the direction that
+  /// deletes real speech. Only the part that extends what was already recorded is kept.
+  func recordExternallySpokenText(_ text: String) {
+    let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !trimmed.isEmpty else { return }
+    defer { lastExternallySpokenText = trimmed }
+    guard let previous = lastExternallySpokenText else { return recordSpokenText(trimmed) }
+    if trimmed == previous { return }
+    if trimmed.hasPrefix(previous) {
+      let addition = String(trimmed.dropFirst(previous.count))
+      return recordSpokenText(addition)
+    }
+    recordSpokenText(trimmed)
+  }
+
+  private func recordSpokenText(_ text: String) {
+    let words = VoicePlaybackEchoPolicy.words(text)
+    guard !words.isEmpty else { return }
+    let now = Date()
+    let cutoff = now.addingTimeInterval(-Self.spokenWordLifetime)
+    spokenWordHistory.removeAll { $0.at <= cutoff }
+    spokenWordHistory.append(contentsOf: words.map { (word: $0, at: now) })
+    if spokenWordHistory.count > Self.spokenHistoryWordCap {
+      spokenWordHistory.removeFirst(spokenWordHistory.count - Self.spokenHistoryWordCap)
+    }
+  }
 
   /// QueryTracer for the in-flight query, handed in by the floating-bar window.
   /// Used to bracket the `tts_start` span (first real chunk → first audio out).
@@ -401,12 +467,16 @@ final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate, AV
     audioPlayer?.stop()
     audioPlayer = nil
     activePlayerFallbackText = ""
+    activePlayerAudienceAllows = nil
     clearFloatingPillResponseGlowIfIdle()
   }
 
   /// Synthesize and play a single short phrase via the selected voice. Used by
   /// agent pills to speak a short acknowledgement like "On it" before the agent kicks off.
-  func speakOneShot(_ text: String, lease: VoiceOutputLease? = nil) {
+  /// `audienceAllows` is re-read wherever audio would actually start (after cloud
+  /// synthesis and before any system-voice fallback), so speech accepted in private
+  /// is dropped if the audience changes while it is being generated.
+  func speakOneShot(_ text: String, lease: VoiceOutputLease? = nil, audienceAllows: (() -> Bool)? = nil) {
     let trimmed = LegacyReplyTokenSanitizer.spokenText(from: text)
       .trimmingCharacters(in: .whitespacesAndNewlines)
     guard !trimmed.isEmpty else { return }
@@ -427,26 +497,33 @@ final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate, AV
     case .cloud(let voiceID, let instructions):
       let token = currentSynthesisToken()
       isOneShotSynthesizing = true
+      let synthesize = oneShotSynthesizer ?? Self.synthesizeCloudSpeech
       Task { [weak self] in
         do {
-          let audio = try await Self.synthesizeCloudSpeech(
-            text: trimmed, voiceID: voiceID, instructions: instructions)
+          let audio = try await synthesize(trimmed, voiceID, instructions)
           await MainActor.run {
-            guard let self, self.ownsCurrentSynthesisToken(token) else { return }
+            guard let self else { return }
+            guard self.ownsCurrentSynthesisToken(token) else {
+              if audienceAllows != nil { self.oneShotAudienceObserver?(.droppedStale) }
+              return
+            }
             self.isOneShotSynthesizing = false
-            self.startPlayback(audio, fallbackText: trimmed)
+            guard audienceAllows?() ?? true else { return self.withholdOneShotForAudience() }
+            self.startPlayback(audio, fallbackText: trimmed, audienceAllows: audienceAllows)
           }
         } catch {
           await MainActor.run {
             guard let self, self.ownsCurrentSynthesisToken(token) else { return }
             self.isOneShotSynthesizing = false
             guard self.canUseCloudTTSFallback(after: error, token: token, operation: "one_shot") else { return }
+            guard audienceAllows?() ?? true else { return self.withholdOneShotForAudience() }
             log(
               "FloatingBarVoicePlaybackService: one-shot synthesis failed; rendering the same response with system voice "
                 + "reason=\(Self.ttsFallbackReason(for: error))")
             self.recordSelectedVoiceFallback(
               to: "system_voice_fallback", reason: Self.ttsFallbackReason(for: error), outcome: .degraded)
             self.enqueueSystemSpeech(trimmed)
+            if audienceAllows != nil { self.oneShotAudienceObserver?(.fellBackToSystemVoice) }
           }
         }
       }
@@ -642,7 +719,15 @@ final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate, AV
     return true
   }
 
-  private func startPlayback(_ data: Data, fallbackText: String = "") {
+  /// Speech accepted for a private audience that is no longer private: say nothing.
+  /// The empty enqueue releases any output lease and clears the glow without speaking.
+  private func withholdOneShotForAudience() {
+    log("FloatingBarVoicePlaybackService: withholding one-shot speech because others can hear")
+    enqueueSystemSpeech("")
+    oneShotAudienceObserver?(.withheld)
+  }
+
+  private func startPlayback(_ data: Data, fallbackText: String = "", audienceAllows: (() -> Bool)? = nil) {
     do {
       if UserDefaults.standard.bool(forKey: "forceTTSPlaybackFail") {
         throw NSError(domain: "TTSPlayback", code: -1, userInfo: [NSLocalizedDescriptionKey: "forced playback failure"])
@@ -663,6 +748,9 @@ final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate, AV
       }
       audioPlayer = player
       activePlayerFallbackText = fallbackText
+      recordSpokenText(fallbackText)
+      activePlayerAudienceAllows = audienceAllows
+      if audienceAllows != nil { oneShotAudienceObserver?(.played) }
       if let lease = activePTTLease {
         _ = VoiceTurnCoordinator.shared.noteOutputProgress(lease)
       }
@@ -688,7 +776,9 @@ final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate, AV
       if activeRealtimeSlowToolAcknowledgement != nil {
         activeRealtimeSlowToolAcknowledgementTransport = "system_voice"
       }
+      guard audienceAllows?() ?? true else { return withholdOneShotForAudience() }
       enqueueSystemSpeech(fallbackText)
+      if audienceAllows != nil { oneShotAudienceObserver?(.fellBackToSystemVoice) }
     }
   }
 
@@ -800,6 +890,7 @@ final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate, AV
       utterance: utterance)
     activeSystemSpeechCompletion = completion
     speechSynthesizer.speak(utterance)
+    recordSpokenText(text)
     tracer?.end("tts_start")
   }
 
@@ -815,13 +906,16 @@ final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate, AV
         self.activeRealtimeSlowToolAcknowledgementTransport = nil
       }
       let fallbackText = self.activePlayerFallbackText
+      let audienceAllows = self.activePlayerAudienceAllows
       self.audioPlayer = nil
       self.activePlayerFallbackText = ""
+      self.activePlayerAudienceAllows = nil
       self.voiceSampleActive = false
       if !flag, !fallbackText.isEmpty {
         log("FloatingBarVoicePlaybackService: player ended unsuccessfully; using system voice")
         self.recordSelectedVoiceFallback(
           to: "system_voice_fallback", reason: "enqueue_failed", outcome: .degraded)
+        guard audienceAllows?() ?? true else { return self.withholdOneShotForAudience() }
         self.enqueueSystemSpeech(fallbackText)
         return
       }
@@ -912,6 +1006,7 @@ final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate, AV
     audioPlayer?.stop()
     audioPlayer = nil
     activePlayerFallbackText = ""
+    activePlayerAudienceAllows = nil
     voiceSampleGeneration &+= 1
     voiceSampleActive = false
     speechSynthesizer.stopSpeaking(at: .immediate)

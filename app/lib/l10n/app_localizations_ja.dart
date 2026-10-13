@@ -8982,6 +8982,9 @@ class AppLocalizationsJa extends AppLocalizations {
   String get syncCardRateLimited => '利用上限に達しました — 同期は自動的に再開されます';
 
   @override
+  String get syncCardThrottlePaused => '同期を一時停止しています — 自動的に再開します';
+
+  @override
   String get syncCardBackendBusy => 'Omi のサーバーが混雑しています — 空き容量が戻り次第、録音が同期されます';
 
   @override
@@ -9624,6 +9627,15 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get chatBlockMemory => 'メモリー';
+
+  @override
+  String get chatBlockPerson => '人物';
+
+  @override
+  String get chatBlockUndone => '元に戻しました';
+
+  @override
+  String get chatBlockUndoFailed => 'この変更を元に戻せませんでした';
 
   @override
   String get chatBlockQuestion => '質問';
@@ -10806,11 +10818,6 @@ class AppLocalizationsJa extends AppLocalizations {
   }
 
   @override
-  String transcriptionsPendingCount(int count) {
-    return '文字起こし待ち $count';
-  }
-
-  @override
   String get captureSourceCall => '通話';
 
   @override
@@ -11843,8 +11850,6 @@ class AppLocalizationsJa extends AppLocalizations {
         'likely': '候補',
         'soundsLike': '$nameさんの声に似ています',
         'notPerson': '$nameさんではない',
-        'carried': '引き続き$nameさんです。前回の会話から引き継ぎました。',
-        'change': '変更',
         'alsoTitle': 'これも$nameさんですか？',
         'alsoBody': 'Omi は過去の会話で同じ声を見つけました。',
         'confirmed': 'このラベルを確認済みです',
@@ -12780,4 +12785,54 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get chatAppsOmiPro => 'OMI PRO';
+
+  @override
+  String reviewProposalCloseTask(String task) {
+    return '「$task」を完了にしますか？';
+  }
+
+  @override
+  String reviewProposalRetireTask(String task) {
+    return 'タスク「$task」を削除しますか？';
+  }
+
+  @override
+  String reviewProposalMergePeople(String name, String other) {
+    return '「$name」と「$other」は同じ人ですか？';
+  }
+
+  @override
+  String get reviewProposalMergeMemories => '重複した2つの記憶を統合しますか？';
+
+  @override
+  String get reviewProposalMemory => 'この記憶を更新しますか？';
+
+  @override
+  String reviewProposalEntitySummary(String name) {
+    return '「$name」の概要を更新しますか？';
+  }
+
+  @override
+  String get reviewProposalGeneric => 'この修正案を適用しますか？';
+
+  @override
+  String get reviewProposalApply => '適用';
+
+  @override
+  String get reviewProposalSuggested => '提案';
+
+  @override
+  String get reviewProposalConflict => 'Dreamが提案した後に内容が変わったため、何も適用されませんでした。';
+
+  @override
+  String itemLinkListTitle(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count件のアイテム',
+      one: '1件のアイテム',
+      zero: 'アイテムなし',
+    );
+    return '$_temp0';
+  }
 }

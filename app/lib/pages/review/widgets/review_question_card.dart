@@ -24,7 +24,13 @@ class ReviewQuestionCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final provider = context.watch<ReviewProvider>();
     final question = reviewQuestion(context, item);
-    final quote = item.kind == ReviewItemKind.task ? null : item.quote;
+    // Suggestions show Dream's reason so they can be answered from the list; questions show the quote.
+    final quote = item.quote;
+    final subtitle = switch (item.kind) {
+      ReviewItemKind.task => null,
+      ReviewItemKind.agentProposal => item.agentProposal!.reason,
+      _ => quote == null ? null : '“$quote”',
+    };
     return Container(
       key: ValueKey('review_card_${item.itemId}'),
       margin: margin,
@@ -64,10 +70,10 @@ class ReviewQuestionCard extends StatelessWidget {
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
                                   Text(question, style: OmiType.headline, maxLines: 2, overflow: TextOverflow.ellipsis),
-                                  if (quote != null) ...[
+                                  if (subtitle != null) ...[
                                     const SizedBox(height: 3),
                                     Text(
-                                      '“$quote”',
+                                      subtitle,
                                       maxLines: 1,
                                       overflow: TextOverflow.ellipsis,
                                       style: OmiType.subhead.copyWith(color: OmiColors.textSecondary),
@@ -105,16 +111,24 @@ class ReviewQuestionCard extends StatelessWidget {
         return [
           for (final person in candidates)
             ReviewAnswerPill(
-                label: person.name, onPressed: () => give(ReviewAnswer.speaker(personId: person.personId))),
+              label: person.name,
+              onPressed: () => give(ReviewAnswer.speaker(personId: person.personId)),
+            ),
           if (candidates.isEmpty)
             ReviewAnswerPill(label: l10n.reviewAnswerMe, onPressed: () => give(const ReviewAnswer.speaker(isMe: true))),
           ReviewAnswerPill(
-              key: ValueKey('review_other_${item.itemId}'), label: l10n.reviewAnswerOther, onPressed: open),
+            key: ValueKey('review_other_${item.itemId}'),
+            label: l10n.reviewAnswerOther,
+            onPressed: open,
+          ),
         ];
       case ReviewItemKind.task:
         return [
           ReviewAnswerPill(
-              label: l10n.reviewAddTask, primary: true, onPressed: () => give(const ReviewAnswer.acceptTask())),
+            label: l10n.reviewAddTask,
+            primary: true,
+            onPressed: () => give(const ReviewAnswer.acceptTask()),
+          ),
           ReviewAnswerPill(label: l10n.dismiss, onPressed: () => give(const ReviewAnswer.dismissTask())),
         ];
       case ReviewItemKind.samePerson:
@@ -127,6 +141,15 @@ class ReviewQuestionCard extends StatelessWidget {
           for (final option in item.spelling!.options.take(3))
             ReviewAnswerPill(label: option, onPressed: () => give(ReviewAnswer.spelling(option))),
         ];
+      case ReviewItemKind.agentProposal:
+        return [
+          ReviewAnswerPill(
+            label: l10n.reviewProposalApply,
+            primary: true,
+            onPressed: () => give(const ReviewAnswer.acceptProposal()),
+          ),
+          ReviewAnswerPill(label: l10n.dismiss, onPressed: () => give(const ReviewAnswer.dismissProposal())),
+        ];
     }
   }
 }
@@ -137,12 +160,13 @@ Future<bool> answerReviewItem(BuildContext context, ReviewItem item, ReviewAnswe
   // A sheet may close before the answer settles; the root navigator outlives it.
   final host = Navigator.of(context, rootNavigator: true).context;
   final failedMessage = context.l10n.reviewAnswerFailed;
+  final conflictMessage = context.l10n.reviewProposalConflict;
   OmiHaptics.light();
   final saved = await provider.answer(item, answer);
   if (!saved) {
     OmiHaptics.error();
     final target = context.mounted ? context : host;
-    if (target.mounted) OmiFeedback.error(target, failedMessage);
+    if (target.mounted) OmiFeedback.error(target, provider.lastAnswerConflict ? conflictMessage : failedMessage);
   }
   return saved;
 }

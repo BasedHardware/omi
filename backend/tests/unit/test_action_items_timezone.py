@@ -102,6 +102,8 @@ for mod_name in [
 sys.modules["database.auth"].get_user_name = MagicMock(return_value="Test User")
 _stub_package("utils.messaging")
 _stub_module("utils.messaging.undo").record_write = MagicMock(return_value="")
+_stub_module("utils.messaging.projection").surface_runtime = types.SimpleNamespace(get=lambda: None)
+_load_module_from_file("utils.messaging.turn_context", BACKEND_DIR / "utils" / "messaging" / "turn_context.py")
 
 # Stub database.action_items (get_action_items is patched per-test)
 action_items_db = _stub_module("database.action_items")

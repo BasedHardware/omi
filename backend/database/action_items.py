@@ -2,6 +2,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone, timedelta, tzinfo
 import logging
 from typing import Any, Dict, Iterable, List, Optional, Protocol, cast
+from database import chat_edits
 from database.dream_dirty import after_write
 from google.api_core.exceptions import (
     DeadlineExceeded as FirestoreDeadlineExceeded,
@@ -959,7 +960,9 @@ def get_action_items_by_ids(uid: str, action_item_ids: List[str]) -> List[Dict[s
 
 
 @after_write('action_items')
-def update_action_item(uid: str, action_item_id: str, update_data: Dict[str, Any]) -> bool:
+def update_action_item(
+    uid: str, action_item_id: str, update_data: Dict[str, Any], *, expected_chat_state: Optional[Dict[str, Any]] = None
+) -> bool:
     """
     Update an action item.
 
@@ -1022,7 +1025,12 @@ def update_action_item(uid: str, action_item_id: str, update_data: Dict[str, Any
     update_data['updated_at'] = datetime.now(timezone.utc)
 
     # Update the document
-    action_item_ref.update(update_data)
+    if expected_chat_state is not None:
+        expected_chat_state['after'] = chat_edits.apply_update(
+            uid, 'task', action_item_id, expected_chat_state['before'], update_data, firestore_client=db
+        )
+    else:
+        action_item_ref.update(update_data)
     if update_data.get('completed') is True:
         _record_followup_completion(uid, action_item_id)
     bump_action_items_list_version(uid)
@@ -1402,27 +1410,24 @@ def batch_sync_update_action_items(uid: str, updates: List[Dict[str, Any]]) -> B
     return result
 
 
-def unlock_all_action_items(uid: str) -> None:
+def unlock_all_action_items(uid: str, *, limit: Optional[int] = None) -> int:
     """
     Finds all action items for a user with is_locked: True and updates them to is_locked = False.
     """
     action_items_ref = db.collection('users').document(uid).collection(action_items_collection)
     locked_items_query = action_items_ref.where(filter=FieldFilter('is_locked', '==', True))
 
-    batch = db.batch()
-    docs = locked_items_query.stream()
-    count = 0
-    for doc in docs:
-        batch.update(doc.reference, {'is_locked': False, 'updated_at': datetime.now(timezone.utc)})
-        count += 1
-        if count >= 499:  # Firestore batch limit is 500
-            batch.commit()
-            batch = db.batch()
-            count = 0
-    if count > 0:
-        batch.commit()
+    from database.locked_content import unlock_query_rows
+
+    total = unlock_query_rows(
+        db,
+        locked_items_query,
+        {'is_locked': False, 'updated_at': datetime.now(timezone.utc)},
+        limit=limit,
+    )
     bump_action_items_list_version(uid)
     logger.info(f"Unlocked all action items for user {uid}")
+    return total
 
 
 # ============================================================================

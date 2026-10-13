@@ -32,7 +32,10 @@
   "linq_ok": {
     "status": 200,
     "body": {
-      "id": "fixture-receipt"
+      "chat_id": "fixture-chat",
+      "message": {
+        "id": "fixture-receipt"
+      }
     },
     "headers": {}
   }

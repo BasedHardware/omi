@@ -56,7 +56,13 @@ from utils.metrics import (
     OMI_CONVERSATION_SPEAKER_RESOLUTION_VOICES,
 )
 from utils.observability.owner_recognition import record_owner_identity_repair
-from utils.observability.owner_identity_retry import identity_pass, record_retry, resolver_reason, resolver_trace
+from utils.observability import owner_recognition_diagnostics as owner_diagnostics
+from utils.observability.owner_identity_retry import (
+    identity_pass,
+    record_retry,
+    resolver_reason as retry_resolver_reason,
+    resolver_trace,
+)
 from utils.observability.fallback import record_fallback
 from utils.other.audio_chunks import (
     AudioChunkReadSession,
@@ -99,6 +105,11 @@ CAPTURE_SPAN_KEY_PREFIX = 'capture-span:'
 MAX_ADVISORY_PLACEMENTS = 1500
 MAX_PLACEMENT_SPANS = 10000
 ADVISORY_PLACEMENT_SECONDS = 0.25
+
+
+def resolver_reason(reason: str) -> None:
+    retry_resolver_reason(reason)
+    owner_diagnostics.resolver_reason(reason)
 
 
 def resolution_enabled() -> bool:
@@ -710,6 +721,7 @@ def _without_resolution(
     diagnostics: Optional[Mapping[str, Any]] = None,
 ) -> None:
     segments = conversation.transcript_segments
+    owner_diagnostics.resolver_counts(**(diagnostics or {}))
     # Independent sync batches can each accept an owner in isolation. Without
     # conversation audio there is no evidence that their capture IDs name the
     # same voice. Withdraw only automatic claims when several scoped voices
@@ -782,12 +794,27 @@ def apply_speaker_resolution(
     identities: Mapping[int, Identity],
     identity_statuses: Mapping[int, str],
     *,
+    owner_voiceprint_available: bool,
     contradicted_segment_ids: Optional[set[str]] = None,
 ) -> None:
     scope = f'conversation:{conversation.id}'
     origin = _started_at(conversation)
+    contradicted = contradicted_segment_ids or set()
+    preserved_voices = {
+        new_id
+        for segment in conversation.transcript_segments
+        if not owner_voiceprint_available
+        and segment.is_user
+        and segment.id is not None
+        and not (segment.id in contradicted and segment.speaker_label_source == 'auto')
+        and (new_id := speaker_ids.get(segment.id)) is not None
+        and (
+            ((identity := identities.get(new_id)) is not None and not identity.is_user)
+            or identity_statuses.get(new_id) == SpeakerIdentityStatus.no_match
+        )
+    }
     for segment in conversation.transcript_segments:
-        if segment.id in (contradicted_segment_ids or set()) and segment.speaker_label_source == 'auto':
+        if segment.id in contradicted and segment.speaker_label_source == 'auto':
             segment.is_user = False
             segment.person_id = None
             segment.speaker_identity_status = SpeakerIdentityStatus.unknown
@@ -814,6 +841,11 @@ def apply_speaker_resolution(
             }
         segment.assign_resolved_speaker(new_id, scope)
         identity = identities.get(new_id)
+        if new_id in preserved_voices:
+            # A reduced roster cannot reject an established owner or establish
+            # the owner-versus-person margin for any segment of its voice. Keep
+            # unlabeled members unlabeled. Manual receipts still win on write.
+            continue
         if identity is not None:
             segment.is_user = identity.is_user
             segment.person_id = identity.person_id
@@ -823,12 +855,9 @@ def apply_speaker_resolution(
             segment.speaker_match_source = MATCH_SOURCE
             segment.speaker_label_source = 'auto'
         elif new_id in identity_statuses:
-            if (
-                identity_statuses[new_id] == SpeakerIdentityStatus.unknown
-                and segment.speaker_match_source != MATCH_SOURCE
-            ):
+            if identity_statuses[new_id] == SpeakerIdentityStatus.unknown:
                 # No new identity evidence (missing prints/short audio) cannot
-                # revoke a capture decision that this stage did not make.
+                # revoke an existing decision, including a prior partial pass.
                 continue
             # Conversation-wide evidence supersedes capture's automatic owner
             # guesses too. Manual voices are absent from this map, and the
@@ -874,6 +903,7 @@ def _apply_receipt_overlay(conversation: Conversation, receipt: Mapping[str, Any
     return matched
 
 
+@owner_diagnostics.observe_resolver
 def resolve_speakers_for_processing(
     uid: str,
     conversation: Any,
@@ -1169,6 +1199,9 @@ def _resolve(
     input_ids = len({s.speaker_id for s in segments if s.speaker_id != OMI_SPEAKER_ID_SENTINEL})
     if not conversation.private_cloud_sync_enabled or not speaker_embedding_configured():
         resolver_reason('no_audio')
+        owner_diagnostics.resolver_reason(
+            'private_cloud_disabled' if not conversation.private_cloud_sync_enabled else 'endpoint_unconfigured'
+        )
         _without_resolution(conversation, 'no_audio')
         return
     spans_on = live_speaker_span_resolution_enabled()
@@ -1434,6 +1467,14 @@ def _resolve(
             evidence_seconds=clip_seconds,
             max_attempts=max_embedding_attempts,
         )
+        owner_diagnostics.resolver_counts(
+            attempted=diagnostics.attempted,
+            successful=new_embeddings,
+            failed=diagnostics.embed_failures,
+            embeddable=len(embeddable),
+            pending=len(pending),
+            stop=stop,
+        )
         if read_session is not None and read_session.limit_hit:
             resolver_reason('read_budget')
             _without_resolution(conversation, 'unaligned_audio', reason='unverified_inventory', force_unavailable=True)
@@ -1491,7 +1532,18 @@ def _resolve(
             seconds = min(seconds, sum(b - a for a, b in fresh))
             covered_windows.append((low, high))
         score_durations[sid] = seconds
+    owner_diagnostics.resolver_counts(
+        attempted=diagnostics.attempted,
+        successful=new_embeddings,
+        failed=diagnostics.embed_failures,
+        embeddable=len(embeddable),
+        pending=len(pending),
+        cache_hits=len(embeddable) - len(pending),
+        valid_vectors=len(vectors),
+        stop=stop,
+    )
     voiceprints = load_voiceprints_for_resolution(uid, allow_audio_repair=allow_owner_audio_repair)
+    owner_diagnostics.resolver_counts(owner_profile_available=int(OWNER_IDENTITY in voiceprints))
     manual_speakers = _manual_speakers(receipt)
     resolution = resolve_conversation_speakers(
         segments,
@@ -1540,8 +1592,10 @@ def _resolve(
         resolution.speaker_ids,
         resolution.voice_identities,
         resolution.voice_identity_statuses,
+        owner_voiceprint_available=resolution.owner_voiceprint_available,
         contradicted_segment_ids=resolution.contradicted_segment_ids,
     )
+    owner_diagnostics.resolver_counts(coverage=resolution.coverage)
     if resolution.coverage >= MIN_RESOLVED_COVERAGE:
         conversation.speaker_resolution = ConversationSpeakers(
             status='resolved', version=RESOLUTION_VERSION, participant_speaker_ids=resolution.significant_speaker_ids

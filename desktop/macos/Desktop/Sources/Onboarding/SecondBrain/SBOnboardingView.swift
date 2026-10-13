@@ -71,7 +71,9 @@ struct SBOnboardingView: View {
     .glassContent()
     .onAppear { model.begin() }
     .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
-      if model.step == .context { refreshContextStates() }
+      if model.step == .context {
+        refreshContextStates()
+      }
       // Granting a permission means leaving Omi for System Settings and coming
       // back, so this return is the signal a grant may have landed — not a 20s
       // poll that Full Disk Access and Accessibility routinely outlive.
@@ -80,8 +82,18 @@ struct SBOnboardingView: View {
     .onChange(of: model.step) { _, step in
       if step == .context { refreshContextStates() }
     }
+    .onChange(of: model.contextStates) { oldStates, newStates in
+      guard model.step == .context else { return }
+      if SBOnboardingModel.shouldRefocusContext(from: oldStates, to: newStates) {
+        PermissionDragGuidance.returnToOmi()
+      }
+    }
     .onReceive(importConnectorStatusStore.connectorDidSync) { connectorID in
       model.markPersistedContextConnectorConnected(connectorID)
+      let contextID = connectorID == "email" ? "gmail" : connectorID
+      if model.step == .context, model.contextStates[contextID] == "on" {
+        PermissionDragGuidance.returnToOmi()
+      }
     }
     .dismissableSheet(item: $selectedImportConnector) { connector in
       ImportConnectorSheet(
@@ -165,6 +177,13 @@ struct SBOnboardingView: View {
         // `SBOnboardingModel.widgetShape`: without it the Files step's Continue renders below the
         // card's lower edge and the step reads as having no way forward.
         .onChange(of: model.widgetShape) { _, _ in scrollDown(proxy) }
+      }
+      // Context imports can send the user to a browser and grow row details. Keep the exit
+      // outside the scrolling thread so neither a pending import nor long failure copy hides it.
+      if model.step == .context {
+        SBInkButton(title: "Continue", isDefaultAction: true) { model.answerContext() }
+          .padding(.horizontal, 28)
+          .padding(.vertical, 12)
       }
       // The band is a sibling of the scroll view, not an overlay on its content. It always claims the
       // same height, including while a step is streaming, so the current-step column never jumps when
@@ -285,7 +304,7 @@ struct SBOnboardingView: View {
         model.answerAutomation()
       }
     case .notifications:
-      permStepWidget("notifications", "Notifications", "so I can tell you when I notice something worth flagging") {
+      permStepWidget("notifications", "Notifications", "an evening recap on days you record a conversation") {
         model.answerNotifications()
       }
     case .shortcutOpen: shortcutWidget(isTalk: false)
@@ -703,17 +722,16 @@ struct SBOnboardingView: View {
           Text(
             model.shortcutPressed
               ? "Perfect, that works."
-              : "Now press it to test."
+              : "Try it now, or continue."
           )
           .inkStyle(InkType.rowCopy, color: model.shortcutPressed ? Ink.primary : Ink.secondary)
           .fixedSize(horizontal: false, vertical: true)
         }
         .padding(.top, 6)
       }
-      // Shortcut setup is required: Continue appears only after the selected shortcut has been
-      // pressed, and there is deliberately no skip action on either shortcut stage.
+      // Accepting a choice is required; the test press is optional encouragement.
       Group {
-        if model.shortcutPicked, model.shortcutPressed {
+        if model.canContinueShortcut {
           SBInkButton(title: "Continue", isDefaultAction: true) {
             isTalk ? model.answerShortcutTalk() : model.answerShortcutOpen()
           }
@@ -841,7 +859,6 @@ struct SBOnboardingView: View {
       }
       .padding(.horizontal, 14)
       .glassCard(cornerRadius: PageGlass.rowRadius)
-      SBInkButton(title: "Continue", isDefaultAction: true) { model.answerContext() }
     }
     .frame(maxWidth: 380, alignment: .leading)
   }

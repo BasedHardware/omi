@@ -23,8 +23,18 @@ enum NotificationSpeech {
   ///
   /// Only the message is spoken: the title is banner chrome ("Suggestion", "Insight")
   /// that would read as a spoken label prefix, not something a person would say.
-  static func utterance(message: String, isEnabled: Bool, isProactive: Bool) -> String? {
-    guard isEnabled, isProactive else { return nil }
+  ///
+  /// `othersCanHear` silences it outright. Speech has no private surface: a banner during
+  /// a call is seen by the user alone, the same text read aloud is heard by everyone in
+  /// the room and on the call. The visual delivery still goes through — see
+  /// `NotificationService.shouldWithholdSpeechForPresence`.
+  static func utterance(
+    message: String,
+    isEnabled: Bool,
+    isProactive: Bool,
+    othersCanHear: Bool = false
+  ) -> String? {
+    guard isEnabled, isProactive, !othersCanHear else { return nil }
     let trimmed = message.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !trimmed.isEmpty else { return nil }
     return trimmed
@@ -43,27 +53,50 @@ enum NotificationSpeech {
 @MainActor
 final class NotificationSpeechOnDelivery {
   private let text: String?
-  private let speak: (String) -> Void
+  private let speak: (_ text: String, _ audienceAllows: @escaping () -> Bool) -> Void
+  private let othersCanHearNow: () -> Bool
   private var hasSpoken = false
 
   init(
     text: String?,
-    speak: @escaping (String) -> Void = { FloatingBarVoicePlaybackService.shared.speakOneShot($0) }
+    speak: @escaping (_ text: String, _ audienceAllows: @escaping () -> Bool) -> Void = {
+      FloatingBarVoicePlaybackService.shared.speakOneShot($0, audienceAllows: $1)
+    },
+    othersCanHearNow: @escaping () -> Bool = {
+      NotificationService.shouldWithholdSpeechForPresence(presence: NotificationService.currentPresence())
+    }
   ) {
     self.text = text
     self.speak = speak
+    self.othersCanHearNow = othersCanHearNow
   }
 
-  convenience init(message: String, isProactive: Bool) {
+  convenience init(message: String, isProactive: Bool, othersCanHear: Bool = false) {
     self.init(
       text: NotificationSpeech.utterance(
-        message: message, isEnabled: NotificationSpeech.isEnabled(), isProactive: isProactive))
+        message: message,
+        isEnabled: NotificationSpeech.isEnabled(),
+        isProactive: isProactive,
+        othersCanHear: othersCanHear))
   }
+
+  /// Whether this delivery will actually say something. The card's presentation surface
+  /// depends on it: a spoken card stays in the notch, a silent one takes the panel.
+  var willSpeak: Bool { text != nil }
 
   func notificationWasPresented() {
     guard let text, !hasSpoken else { return }
+    // Admission and presentation can be separated by an arbitrarily long queue.
+    // Re-read the call state here so a card accepted in private never starts
+    // speaking after the user joins a call.
+    if othersCanHearNow() {
+      log("NotificationSpeech: withholding delivered notification because others can hear")
+      return
+    }
     hasSpoken = true
     log("NotificationSpeech: speaking delivered notification (\(text.count) chars)")
-    speak(text)
+    // Speech is generated before it plays; a call can start in between. The player
+    // re-checks this wherever audio would actually start, including fallbacks.
+    speak(text) { [othersCanHearNow] in !othersCanHearNow() }
   }
 }

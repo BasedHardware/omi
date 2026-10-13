@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { omiApi } from '../lib/apiClient'
 import {
   beliefCapabilityFromResponse,
+  canonicalLifecycleFromResponse,
   fetchAllMemoriesPaged,
   type FetchMemoriesOptions,
   type MemoriesResponse
@@ -26,9 +27,6 @@ export type Memory = KnowledgeLedgerMemory
 
 export type { MemoryReadView }
 
-// Axios lowercases response header keys.
-const CANONICAL_LIFECYCLE_HEADER = 'x-omi-memory-canonical-lifecycle-exposed'
-
 // Optional extra fields for a created memory. `tags` carries provenance (e.g.
 // 'omi-app-index'); `category` is sent best-effort — the server may ignore or
 // reassign it, so UI coloring must not depend on it.
@@ -36,12 +34,12 @@ export type CreateMemoryExtra = { category?: string; tags?: string[] }
 export type MemoryUseAction = 'suppress' | 'allow' | 'useful'
 
 // Fetch EVERY memory for the page via the shared pager (server page cap 500).
-// Read canonical-lifecycle capability header off the first response; sort
+// Read the existing device-scope capability (paired with lifecycle); sort
 // newest-first because the server does not guarantee created_at order.
 async function fetchMemories(view: MemoryReadView): Promise<Memory[]> {
   const onResponse = (r: MemoriesResponse): void => {
-    const header = r.headers?.[CANONICAL_LIFECYCLE_HEADER]
-    if (typeof header === 'string') cache.canonicalLifecycleExposed = header === 'true'
+    const lifecycleExposed = canonicalLifecycleFromResponse(r)
+    if (lifecycleExposed !== null) cache.canonicalLifecycleExposed = lifecycleExposed
     const beliefEnabled = beliefCapabilityFromResponse(r)
     // A missing or malformed capability header means this backend cannot safely
     // serve temporal reads. Clear a previously cached true value immediately so
@@ -94,11 +92,9 @@ export function useMemories(requestedView: MemoryReadView = 'useful_now'): {
   loading: boolean
   error: string | null
   beliefEnabled: boolean | null
-  // True only when the server advertises canonical memory tiering for this
-  // account. Gates the tier/device filters so they never render against a
-  // backend that would return nothing (prod runs MEMORY_MODE=off). Read at
-  // render time — every change to it lands alongside a list publish, which
-  // forces the re-render that surfaces the new value.
+  // True when the existing device-scope capability establishes lifecycle.
+  // Gates the layer filter, including for empty accounts.
+  // Read at render time; publish() surfaces the fresh value.
   canonicalLifecycleExposed: boolean
   createMemory: (content: string, extra?: CreateMemoryExtra) => Promise<void>
   editMemory: (id: string, content: string) => Promise<void>

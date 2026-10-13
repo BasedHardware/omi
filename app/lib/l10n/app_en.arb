@@ -10855,6 +10855,10 @@
     "@syncCardRateLimited": {
         "description": "Status card line when uploads are paused due to a fair-use/rate-limit (HTTP 429) cooldown. Reassures the user this is not an error and will resume on its own."
     },
+    "syncCardThrottlePaused": "Syncing paused briefly — it will resume automatically",
+    "@syncCardThrottlePaused": {
+        "description": "Offline Sync cooldown after a temporary request throttle; syncing resumes automatically, recording is unaffected."
+    },
     "syncCardBackendBusy": "Omi servers are busy — your recordings will sync once capacity returns",
     "@syncCardBackendBusy": {
         "description": "Status card line when the backend stale-guard has flagged queued jobs (i.e. workers are saturated, not the user being rate-limited). Distinct from the 429 fair-use case."
@@ -11646,6 +11650,18 @@
     "chatBlockMemory": "Memory",
     "@chatBlockMemory": {
         "description": "Eyebrow label on a chat memory link block"
+    },
+    "chatBlockPerson": "Person",
+    "@chatBlockPerson": {
+        "description": "Caption on a chat card for a change to one of the user's people"
+    },
+    "chatBlockUndone": "Undone",
+    "@chatBlockUndone": {
+        "description": "Shown on a chat change receipt after the change was undone"
+    },
+    "chatBlockUndoFailed": "Couldn't undo that change",
+    "@chatBlockUndoFailed": {
+        "description": "Error when undoing a change from chat fails"
     },
     "chatBlockQuestion": "Question",
     "@chatBlockQuestion": {
@@ -13067,15 +13083,6 @@
             }
         }
     },
-    "transcriptionsPendingCount": "Transcriptions pending {count}",
-    "@transcriptionsPendingCount": {
-        "description": "Phone-local recordings still waiting to be uploaded for transcription, on the conversations list banner.",
-        "placeholders": {
-            "count": {
-                "type": "int"
-            }
-        }
-    },
     "captureSourceCall": "Call",
     "@captureSourceCall": {
         "description": "Capture source label when an Omi phone call is being recorded, on the live card (e.g. 'Call · Listening · 3:10'). A noun."
@@ -14363,9 +14370,9 @@
             }
         }
     },
-    "speakerLabelText": "{part, select, likely{Likely} soundsLike{Sounds like {name}} notPerson{Not {name}} carried{Still {name}. Carried over from your last conversation.} change{Change} alsoTitle{Is this also {name}?} alsoBody{Omi found the same voice in earlier conversations.} confirmed{You confirmed this label} other{Review}}",
+    "speakerLabelText": "{part, select, likely{Likely} soundsLike{Sounds like {name}} notPerson{Not {name}} alsoTitle{Is this also {name}?} alsoBody{Omi found the same voice in earlier conversations.} confirmed{You confirmed this label} other{Review}}",
     "@speakerLabelText": {
-        "description": "Short speaker-label texts: likely badge, sounds-like question, reject button, carried-over banner, change button, earlier-voice card title and body, confirmed check label, and the Review button (other)",
+        "description": "Short speaker-label texts: likely badge, sounds-like question, reject button, earlier-voice card title and body, confirmed check label, and the Review button (other)",
         "placeholders": {
             "part": {
                 "type": "String"
@@ -15688,5 +15695,77 @@
     "@chatAppsIncludedWithPro": {
         "description": "Small all-caps tag: chat apps come with the Omi Pro plan"
     },
-    "chatAppsOmiPro": "OMI PRO"
+    "chatAppsOmiPro": "OMI PRO",
+    "reviewProposalCloseTask": "Mark “{task}” as done?",
+    "@reviewProposalCloseTask": {
+        "description": "Dream suggestion card: mark an open task as done",
+        "placeholders": {
+            "task": {
+                "type": "String"
+            }
+        }
+    },
+    "reviewProposalRetireTask": "Remove the task “{task}”?",
+    "@reviewProposalRetireTask": {
+        "description": "Dream suggestion card: remove (cancel) an open task",
+        "placeholders": {
+            "task": {
+                "type": "String"
+            }
+        }
+    },
+    "reviewProposalMergePeople": "Is “{name}” the same person as “{other}”?",
+    "@reviewProposalMergePeople": {
+        "description": "Dream suggestion card: merge two people who are the same person",
+        "placeholders": {
+            "name": {
+                "type": "String"
+            },
+            "other": {
+                "type": "String"
+            }
+        }
+    },
+    "reviewProposalMergeMemories": "Merge two duplicate memories?",
+    "@reviewProposalMergeMemories": {
+        "description": "Dream suggestion card: merge two duplicate memories"
+    },
+    "reviewProposalMemory": "Update this memory?",
+    "@reviewProposalMemory": {
+        "description": "Dream suggestion card: rewrite one memory"
+    },
+    "reviewProposalEntitySummary": "Update the summary for “{name}”?",
+    "@reviewProposalEntitySummary": {
+        "description": "Dream suggestion card: update a person, organization or project summary",
+        "placeholders": {
+            "name": {
+                "type": "String"
+            }
+        }
+    },
+    "reviewProposalGeneric": "Apply this suggested fix?",
+    "@reviewProposalGeneric": {
+        "description": "Dream suggestion card fallback when the change has no specific wording"
+    },
+    "reviewProposalApply": "Apply",
+    "@reviewProposalApply": {
+        "description": "Button: apply a change Dream suggested"
+    },
+    "reviewProposalSuggested": "Suggested",
+    "@reviewProposalSuggested": {
+        "description": "Label above the value Dream suggests, shown under the current value"
+    },
+    "reviewProposalConflict": "This changed since Dream suggested it, so nothing was applied.",
+    "@reviewProposalConflict": {
+        "description": "Error after Apply: the item changed after Dream suggested the change, so nothing was applied"
+    },
+    "itemLinkListTitle": "{count, plural, =0{No Items} =1{1 Item} other{{count} Items}}",
+    "@itemLinkListTitle": {
+        "description": "Title of the sheet that lists the items an Omi link points at (conversations, tasks, memories)",
+        "placeholders": {
+            "count": {
+                "type": "int"
+            }
+        }
+    }
 }

@@ -3,8 +3,10 @@ package com.friend.ios
 import android.content.Intent
 import android.content.IntentFilter
 import android.content.Context
+import android.os.Build
 import android.os.BatteryManager
 import android.os.PowerManager
+import android.os.SystemClock
 import com.friend.ios.ble.BleHostApiImpl
 import com.friend.ios.phonecalls.PhoneCallsPlugin
 import com.friend.ios.ble.OmiBleForegroundService
@@ -34,6 +36,14 @@ class MainActivity: FlutterActivity() {
 
     override fun configureFlutterEngine(@NonNull flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "com.omi/device_health_policy").setMethodCallHandler { call, result ->
+            if (call.method != "setPolicy") { result.notImplemented() } else {
+                com.friend.ios.ble.DeviceHealthPersistence.setPolicy(applicationContext,
+                    call.argument<Boolean>("enabled") == true, call.argument<Number>("epoch")!!.toLong(), call.argument<Boolean>("retire") == true)
+                result.success(null)
+            }
+        }
+
 
         // Read the sticky battery snapshot without registering a receiver.
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "com.omi/phone_battery").setMethodCallHandler {
@@ -53,7 +63,25 @@ class MainActivity: FlutterActivity() {
                     result.error("battery_unavailable", "Phone battery unavailable", null)
                 } else {
                     val power = getSystemService(Context.POWER_SERVICE) as PowerManager
+                    // Snapshot only. Older Android and failed/unknown reads
+                    // have no thermal coverage; never synthesize a normal state.
+                    val thermal = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                        try {
+                            when (power.currentThermalStatus) {
+                                PowerManager.THERMAL_STATUS_NONE -> "none"
+                                PowerManager.THERMAL_STATUS_LIGHT -> "light"
+                                PowerManager.THERMAL_STATUS_MODERATE -> "moderate"
+                                PowerManager.THERMAL_STATUS_SEVERE -> "severe"
+                                PowerManager.THERMAL_STATUS_CRITICAL -> "critical"
+                                PowerManager.THERMAL_STATUS_EMERGENCY -> "emergency"
+                                PowerManager.THERMAL_STATUS_SHUTDOWN -> "shutdown"
+                                else -> null
+                            }
+                        } catch (_: Exception) { null }
+                    } else { null }
                     result.success(mapOf(
+                        "elapsed_realtime_ms" to SystemClock.elapsedRealtime(),
+                        "thermal_state" to thermal,
                         "battery_level" to ((level.toDouble() / scale) * 100).toInt(),
                         "battery_charging" to (plugged != 0),
                         "os_battery_saver" to power.isPowerSaveMode

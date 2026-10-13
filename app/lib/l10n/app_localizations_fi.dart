@@ -9115,6 +9115,9 @@ class AppLocalizationsFi extends AppLocalizations {
   String get syncCardRateLimited => 'Kohtuullisen käytön raja saavutettu — synkronointi jatkuu automaattisesti';
 
   @override
+  String get syncCardThrottlePaused => 'Synkronointi on keskeytetty hetkeksi — se jatkuu automaattisesti';
+
+  @override
   String get syncCardBackendBusy =>
       'Omin palvelimet ovat ruuhkautuneet — tallenteesi synkronoidaan, kun kapasiteettia vapautuu';
 
@@ -9780,6 +9783,15 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get chatBlockMemory => 'Muisto';
+
+  @override
+  String get chatBlockPerson => 'Henkilö';
+
+  @override
+  String get chatBlockUndone => 'Kumottu';
+
+  @override
+  String get chatBlockUndoFailed => 'Muutosta ei voitu kumota';
 
   @override
   String get chatBlockQuestion => 'Kysymys';
@@ -10975,11 +10987,6 @@ class AppLocalizationsFi extends AppLocalizations {
   }
 
   @override
-  String transcriptionsPendingCount(int count) {
-    return 'Jonossa olevat transkriptiot $count';
-  }
-
-  @override
   String get captureSourceCall => 'Puhelu';
 
   @override
@@ -12024,8 +12031,6 @@ class AppLocalizationsFi extends AppLocalizations {
         'likely': 'Todennäköinen',
         'soundsLike': 'Kuulostaa henkilöltä $name',
         'notPerson': 'Ei $name',
-        'carried': 'Edelleen $name. Siirretty edellisestä keskustelustasi.',
-        'change': 'Vaihda',
         'alsoTitle': 'Onko tämä myös $name?',
         'alsoBody': 'Omi löysi saman äänen aiemmista keskusteluista.',
         'confirmed': 'Vahvistit tämän nimen',
@@ -12971,4 +12976,54 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get chatAppsOmiPro => 'OMI PRO';
+
+  @override
+  String reviewProposalCloseTask(String task) {
+    return 'Merkitäänkö ”$task” tehdyksi?';
+  }
+
+  @override
+  String reviewProposalRetireTask(String task) {
+    return 'Poistetaanko tehtävä ”$task”?';
+  }
+
+  @override
+  String reviewProposalMergePeople(String name, String other) {
+    return 'Onko ”$name” sama henkilö kuin ”$other”?';
+  }
+
+  @override
+  String get reviewProposalMergeMemories => 'Yhdistetäänkö kaksi päällekkäistä muistoa?';
+
+  @override
+  String get reviewProposalMemory => 'Päivitetäänkö tämä muisto?';
+
+  @override
+  String reviewProposalEntitySummary(String name) {
+    return 'Päivitetäänkö kohteen ”$name” yhteenveto?';
+  }
+
+  @override
+  String get reviewProposalGeneric => 'Otetaanko tämä ehdotettu korjaus käyttöön?';
+
+  @override
+  String get reviewProposalApply => 'Ota käyttöön';
+
+  @override
+  String get reviewProposalSuggested => 'Ehdotettu';
+
+  @override
+  String get reviewProposalConflict => 'Tämä on muuttunut Dreamin ehdotuksen jälkeen, joten mitään ei otettu käyttöön.';
+
+  @override
+  String itemLinkListTitle(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count kohdetta',
+      one: '1 kohde',
+      zero: 'Ei kohteita',
+    );
+    return '$_temp0';
+  }
 }

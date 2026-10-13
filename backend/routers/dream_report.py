@@ -4,6 +4,7 @@ import asyncio
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from config.dream_agent import context_mode, FULL_PASS_SECONDS, FULL_DRAIN_SECONDS
 
 from database.dream_store import AdmissionDenied
 from models.dream_report import DreamRun, DreamRunRequest, DreamRunsResponse
@@ -23,12 +24,19 @@ async def get_runs(limit: int = Query(default=10, ge=1, le=20), uid: str = Depen
 
 @router.post('/v1/dream/runs', response_model=DreamRun)
 async def run_now(body: DreamRunRequest, uid: str = Depends(auth.get_current_user_uid)):
+    full = context_mode(uid) == 'full'
     try:
-        async with asyncio.timeout(MANUAL_DEADLINE_SECONDS):
+        async with asyncio.timeout(FULL_DRAIN_SECONDS if full else MANUAL_DEADLINE_SECONDS):
             await run_blocking(db_executor, dream_report.require_owner, uid)
-            report = await dream_agent.run_pass(uid, trigger='manual', timeout_seconds=70)
+            report = await dream_agent.run_pass(
+                uid, trigger='manual', timeout_seconds=FULL_PASS_SECONDS if full else 70
+            )
             if report.get('run_id'):
                 return await run_blocking(db_executor, dream_report.finished_run, uid, report['run_id'])
+            if report.get('status') == 'waiting':
+                raise HTTPException(
+                    503, detail=report.get('reason', 'reserved_capacity'), headers={'Retry-After': '120'}
+                )
             return DreamRun(run_id='', created_at=datetime.now(timezone.utc), trigger='manual', status='idle')
     except AdmissionDenied as exc:
         code = 409 if exc.reason == 'dream_run_in_progress' else 429 if exc.reason == 'dream_manual_limit' else 503

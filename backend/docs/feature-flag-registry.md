@@ -1,4 +1,4 @@
-<!-- feature-flag-registry as-of: 2026-10-09 -->
+<!-- feature-flag-registry as-of: 2026-10-13 -->
 
 # Feature-flag authority registry
 
@@ -112,7 +112,7 @@ entries are exempt: they are queued for removal, not running.
 
 ## Overdue for a decision
 
-None as of 2026-10-09.
+None as of 2026-10-13.
 
 ## Flags
 
@@ -172,7 +172,9 @@ and an explicit empty literal renders as `''`.
 | `CONVERSATION_SMART_MERGE_MODE` | Fold a finished pendant conversation into its predecessor when Jev says same occasion (default merge; off\|shadow\|merge) | backend | env | open | — | — | — | — | graduate | 2026-10-29 | dazheng |
 | `CONVERSATION_SMART_MERGE_UID_ALLOWLIST` | Limit smart merge to listed UIDs; empty admits every user | backend | env | closed | — | — | — | — | pending | 2026-10-29 | dazheng |
 | `CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE` | Opt-in smart-merge gap policy for proven same-recording live pairs: off keeps the legacy speech-gap gate (code default), shadow logs/meters the corrected wall-clock verdict without acting on it, on rescues legacy-skipped pairs by created_at/finished_at wall clock (unset/blank/unknown = off) | backend | env | open | {value: 'off', category: rollout} | shadow (backend-listen (chart), pusher (chart)); {value: 'shadow', category: rollout} (cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, gke/backend-listen, gke/pusher) | shadow (backend-listen (chart), pusher (chart)); {value: 'shadow', category: rollout} (cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, gke/backend-listen, gke/pusher) | — | keep | 2026-11-05 | dazheng |
-| `DREAM_AGENT_MODE` | Dream-agent mode; unset, off, or unknown keeps the feature disabled | backend | env | closed | — | — | shadow (backend-listen (chart), pusher (chart)); {value: 'shadow', category: rollout} (cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, gke/backend-listen, gke/pusher) | — | pending | 2026-11-08 | dazheng |
+| `DREAM_AGENT_CONTEXT_MODE` | Dream context mode bounded (default) or full; full requires the separate UID allowlist | backend | env | closed | — | — | — | — | pending | 2026-11-12 | dazheng |
+| `DREAM_AGENT_FULL_CONTEXT_UIDS` | Comma allowlist for full Dream context; empty admits nobody; ordinary Dream eligibility still applies | backend | env | closed | — | — | — | — | pending | 2026-11-12 | dazheng |
+| `DREAM_AGENT_MODE` | Dream-agent mode; unset, off, or unknown keeps the feature disabled | backend | env | closed | — | — | on (backend-listen (chart), pusher (chart)); {value: 'on', category: rollout} (cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, gke/backend-listen, gke/pusher) | — | pending | 2026-11-08 | dazheng |
 | `DREAM_AGENT_TESTFLIGHT_ENABLED` | Enable the bounded TestFlight dream-agent cohort; default false | backend | env | closed | — | — | — | — | pending | 2026-11-08 | dazheng |
 | `DREAM_SELF_REPORT_MODE` | Owner dream reports and manual runs; off default, on enables cohort only | backend | env | closed | — | — | {value: 'on', category: rollout} | — | pending | 2026-11-08 | dazheng |
 | `FAIR_USE_ENABLED` | Enforce fair-use metering on selected hosts | backend | env | closed | — | true (backend-listen (chart)) | true (backend-listen (chart)) | — | pending | 2026-10-23 | unowned |
@@ -180,6 +182,7 @@ and an explicit empty literal renders as `''`.
 | `FREE_TIER_LOCAL_PROCESSING_COHORT` | Admitted UIDs for free-tier local processing | backend | env | closed | declared | config_map (gke/backend-listen, gke/pusher); env_var (cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, desktop-backend); valueFrom (backend-listen (chart), pusher (chart)) | '' (backend-listen (chart), cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, desktop-backend, gke/backend-listen, gke/pusher, pusher (chart)) | — | graduate | 2026-10-23 | dazheng |
 | `FREE_TIER_MEMORY_SUPPRESSION` | Suppress cloud memory extraction for eligible free users | backend | env | closed | — | — | — | — | pending | 2026-10-23 | unowned |
 | `FREE_TIER_MEMORY_SUPPRESSION_COHORT` | Admitted UIDs for free-tier memory suppression | backend | env | closed | — | — | — | — | pending | 2026-10-23 | unowned |
+| `HELD_CONTENT_ENABLED` | Default-off at-cap choice API; additionally requires X-Omi-Held-Content: 1. Capture custody and recovery must ship before enablement. | backend | env | closed | — | — | — | — | pending | 2026-11-12 | dazheng |
 | `KNOWLEDGE_LEDGER_DRAIN_ENABLED` | Drain knowledge-ledger writes | backend | env | closed | false | false | false | — | pending | 2026-10-23 | unowned |
 | `LISTEN_COMMITTED_CAPTURE_COVERAGE_ENABLED` | Persist committed live source-frame coverage with capture lifetime anchors (default on) | backend | env | closed | {value: 'true', category: rollout} | true (backend-listen (chart), pusher (chart)); {value: 'true', category: rollout} (gke/backend-listen, gke/pusher) | true (backend-listen (chart), pusher (chart)); {value: 'true', category: rollout} (gke/backend-listen, gke/pusher) | — | pending | 2026-11-02 | dazheng |
 | `LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION` | Preserve original live provider segments when a merge or partial repair would discard known capture windows; default off | backend | env | closed | {value: 'false', category: rollout} | false (backend-listen (chart), pusher (chart)); {value: 'false', category: rollout} (cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, gke/backend-listen, gke/pusher) | false (backend-listen (chart), pusher (chart)); {value: 'false', category: rollout} (cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, gke/backend-listen, gke/pusher) | — | pending | 2026-11-03 | dazheng |
@@ -188,6 +191,7 @@ and an explicit empty literal renders as `''`.
 | `LIVE_CAPTURE_WINDOW_STRICT_PROJECTION` | Project legacy capture windows as half-open intervals and refuse observed wall hiatuses; default off | backend | env | closed | {value: 'false', category: rollout} | false (backend-listen (chart), pusher (chart)); {value: 'false', category: rollout} (cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, gke/backend-listen, gke/pusher) | false (backend-listen (chart), pusher (chart)); {value: 'false', category: rollout} (cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, gke/backend-listen, gke/pusher) | — | pending | 2026-11-03 | dazheng |
 | `LIVE_CAPTURE_WINDOW_TRANSLATOR_SENDS` | Register observed raw replay and managed pre-finalize sends; default off | backend | env | closed | {value: 'false', category: rollout} | false (backend-listen (chart), pusher (chart)); {value: 'false', category: rollout} (cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, gke/backend-listen, gke/pusher) | true (backend-listen (chart), pusher (chart)); {value: 'false', category: rollout} (cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill); {value: 'true', category: rollout} (gke/backend-listen, gke/pusher) | — | pending | 2026-11-04 | dazheng |
 | `LIVE_SPEAKER_SPAN_RESOLUTION` | Resolve live and mixed conversation voices only from validated capture spans or trusted sync/v2 placement; default off | backend | env | closed | {value: 'false', category: rollout} | false (backend-listen (chart), pusher (chart)); {value: 'false', category: rollout} (cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, gke/backend-listen, gke/pusher) | true (backend-listen (chart), pusher (chart)); {value: 'true', category: rollout} (cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, gke/backend-listen, gke/pusher) | — | pending | 2026-11-02 | dazheng |
+| `LOCKED_CONTENT_RESET_RECOVERY_ENABLED` | Default-off bounded recovery of already-locked content on authenticated HTTP requests in each UTC quota month; current plan allowance must be available. | backend | env | closed | — | — | — | — | pending | 2026-11-12 | dazheng |
 | `MEETING_NOTES_EPISODE_C6_TIMEOUT_SECONDS` | Requested C6 writer budget, default 180s; existing gateway limit clamps to 115s; C7 fallback | backend | env | closed | — | — | — | — | pending | 2026-11-05 | dazheng |
 | `MEETING_NOTES_EPISODE_JEV_THRESHOLD` | Calibrated Jev evidence connection cutoff; deterministic remains default selector | backend | env | closed | — | — | — | — | pending | 2026-11-05 | dazheng |
 | `MEETING_NOTES_EPISODE_TIERED_ENABLED` | Universal evidence-volume cost routing: high-value C6, otherwise C7; default enabled inside episode cohort | backend | env | closed | — | — | — | — | pending | 2026-11-05 | dazheng |
@@ -204,16 +208,16 @@ and an explicit empty literal renders as `''`.
 | `MEMORY_OWNER_JEV_FLIP_ENABLED` | Switch memory owner decisions to Jev | backend | env | closed | — | true (backend-listen (chart), cloud_run/backend, cloud_run/backend-sync, gke/backend-listen, gke/pusher, pusher (chart)) | — | — | pending | 2026-10-23 | unowned |
 | `NOTES_TIER_ESCALATION_ENABLED` | Escalate shaped notes to xhigh effort for long meetings with at least five screen frames; enabled on the 1 percent episode cohort (2026-10-09) | backend | env | closed | — | — | true (backend-listen (chart), cloud_run/backend, cloud_run/backend-sync, cloud_run/backend-sync-backfill, gke/backend-listen, gke/pusher, pusher (chart)) | — | pending | 2026-11-08 | dazheng |
 | `OMI_IMESSAGE_CONTACT_CARD` | Default-off sharing of a preconfigured Linq contact card. | backend | env | closed | — | — | — | — | keep | 2026-11-09 | dazheng |
-| `OMI_IMESSAGE_ENABLED` | Default-off registration of the iMessage provider adapter. | backend | env | closed | — | — | — | — | keep | 2026-11-09 | dazheng |
-| `OMI_MESSAGING_CHANNELS` | Default-off channel gateway and opt-in cross-surface continuity; also requires uid allowlist and Pro entitlement. | backend | env | closed | — | — | — | — | keep | 2026-11-09 | dazheng |
-| `OMI_MESSAGING_CHANNELS_UIDS` | Comma-separated exact uid allowlist for messaging channels; empty admits nobody. | backend | env | closed | — | — | — | — | keep | 2026-11-09 | dazheng |
+| `OMI_IMESSAGE_ENABLED` | Default-off registration of the iMessage provider adapter. | backend | env | closed | — | — | {value: 'on', category: rollout} | — | keep | 2026-11-09 | dazheng |
+| `OMI_MESSAGING_CHANNELS` | Default-off channel gateway and opt-in cross-surface continuity; also requires uid allowlist and paid-plan entitlement. | backend | env | closed | — | — | {value: 'on', category: rollout} | — | keep | 2026-11-09 | dazheng |
+| `OMI_MESSAGING_CHANNELS_UIDS` | Comma-separated exact uid allowlist for messaging channels; empty admits nobody. | backend | env | closed | — | — | {value: 'vi7SA9ckQCe4ccobWNxlbdcNdC23', category: rollout} | — | keep | 2026-11-09 | dazheng |
 | `OMI_SHAPED_AGENT_MODE` | Notes and mobile/app chat shaped invocation. on serves shaped to everyone; off/unset/unknown disables shaped serving. cohort is an alias of on after legacy removal. Legacy comparison and shadow serving have been removed. Default off. | backend | env | closed | — | on (backend-listen (chart), cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, gke/backend-listen, gke/pusher, pusher (chart)) | on (backend-listen (chart), cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, gke/backend-listen, gke/pusher, pusher (chart)) | — | keep | 2026-11-05 | dazheng |
-| `OMI_TELEGRAM_ENABLED` | Default-off registration of the private-chat Telegram adapter. | backend | env | closed | — | — | — | — | keep | 2026-11-09 | dazheng |
+| `OMI_TELEGRAM_ENABLED` | Default-off registration of the private-chat Telegram adapter. | backend | env | closed | — | — | {value: 'on', category: rollout} | — | keep | 2026-11-09 | dazheng |
 | `PARAKEET_STREAM_ALLOCATION_PERCENT` | Allocate streaming sessions to Parakeet | backend | env | closed | 100 | 100 (gke/parakeet, parakeet (chart)) | 100 (gke/parakeet, parakeet (chart)) | — | pending | 2026-10-23 | unowned |
 | `PARAKEET_WINDOW_ALLOCATION_PERCENT` | Allocate live sessions to Parakeet window | backend | env | closed | 0 | 1 (backend-listen (chart), gke/backend-listen) | 100 (backend-listen (chart), gke/backend-listen) | — | pending | 2026-10-23 | dazheng |
 | `PARAKEET_WINDOW_DIARIZATION` | Enable Parakeet window diarization | backend | env | closed | false | false (backend-listen (chart), gke/backend-listen) | false (backend-listen (chart), gke/backend-listen) | — | pending | 2026-10-23 | unowned |
 | `PINNED_SPEAKER_PRIOR_ENABLED` | Turn near-misses on pinned people into suggestions and record voice candidates for the suggestion card (never loosens auto-labels) | backend | env | closed | — | — | — | — | pending | 2026-10-30 | dazheng |
-| `REVIEW_SURFACE_MODE` | Review queue, reversible agent changes and entity pages; off by default, on enables authenticated routes | backend | env | closed | — | on (backend-listen (chart), cloud_run/backend, gke/backend-listen) | on (backend-listen (chart), cloud_run/backend, gke/backend-listen) | — | pending | 2026-11-07 | dazheng |
+| `REVIEW_SURFACE_MODE` | Review queue, reversible agent changes and entity pages; off by default, on enables authenticated routes | backend | env | closed | — | on (backend-listen (chart), cloud_run/backend, gke/backend-listen) | on (backend-listen (chart), cloud_run/backend, gke/backend-listen); {value: 'on', category: rollout} (cloud_run/backend-sync) | — | pending | 2026-11-07 | dazheng |
 | `SCREEN_FRAME_EGRESS_ENABLED` | Allow meeting-note screen frame egress | backend | env | closed | — | true | true | — | graduate | 2026-10-23 | dazheng |
 | `SONIOX_CAPTURE_AXIS_DIAGNOSTICS` | Measure raw Soniox token clocks against wire PCM and the managed send ledger; default off, no placement changes | backend | env | closed | {value: 'false', category: rollout} | false (backend-listen (chart), pusher (chart)); {value: 'false', category: rollout} (cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, gke/backend-listen, gke/pusher) | true (backend-listen (chart), pusher (chart)); {value: 'false', category: rollout} (cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill); {value: 'true', category: rollout} (gke/backend-listen, gke/pusher) | — | pending | 2026-11-04 | dazheng |
 | `SONIOX_CONTEXT_TERMS` | Send session vocabulary (Omi first) as Soniox context terms after dev config-frame validation | backend | env | closed | false | false (backend-listen (chart), gke/backend-listen) | false (backend-listen (chart), gke/backend-listen) | — | pending | 2026-10-29 | dazheng |
@@ -224,6 +228,7 @@ and an explicit empty literal renders as `''`.
 | `SONIOX_WIRE_LEDGER` | Account every emitted managed Soniox sample on the compact axis; unknown capture origins reserve unplaceable intervals; reserve reported finalize padding as provider-only holes and refuse raced intervals; preserve every control frame; default off | backend | env | closed | {value: 'false', category: rollout} | false (backend-listen (chart), pusher (chart)); {value: 'false', category: rollout} (cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, gke/backend-listen, gke/pusher) | true (backend-listen (chart), pusher (chart)); {value: 'false', category: rollout} (cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill); {value: 'true', category: rollout} (gke/backend-listen, gke/pusher) | — | pending | 2026-11-04 | dazheng |
 | `SPEAKER_GROUPING_MODE` | incumbent\|provider_strict\|provider_cannot_link; owner_link is shadow-only and rejected; default incumbent everywhere; David gates promotion | backend | env | open | — | — | incumbent (backend-listen (chart), pusher (chart)); {value: 'incumbent', category: rollout} (cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, gke/backend-listen, gke/pusher) | — | pending | 2026-11-08 | dazheng |
 | `SPEAKER_MATCH_SCORES_ENABLED` | Persist bounded internal voice-match evidence on existing conversation writes; dev/local/offline default on; production hosts explicitly on | backend | env | closed | — | — | true (backend-listen (chart), cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, gke/backend-listen, gke/pusher, pusher (chart)) | — | pending | 2026-11-04 | dazheng |
+| `STOREFRONT_LADDER_V1_ENABLED` | Default-off versioned unified plans presentation; exact true admits v2 only; installed-client endpoints unchanged | backend | env | closed | — | — | — | — | pending | 2026-11-13 | dazheng |
 | `STT_FAILOVER_RECOVERY_ENABLED` | Enable live-STT failover recovery on prod listen | backend | env | closed | false | false (backend-listen (chart), gke/backend-listen) | true (backend-listen (chart), gke/backend-listen) | — | pending | 2026-11-03 | backend |
 | `STT_LEARNED_LANGUAGE_PROFILE` | Use a bounded per-user spoken-language history for live STT routing and Soniox hints | backend | env | closed | false | true (backend-listen (chart), gke/backend-listen) | true (backend-listen (chart), gke/backend-listen) | — | pending | 2026-10-28 | backend |
 | `STT_MULTI_LANGUAGE_HINTS` | Send primary and English hints to Soniox in non-English multilingual live sessions | backend | env | closed | true | true (backend-listen (chart), gke/backend-listen) | true (backend-listen (chart), gke/backend-listen) | — | pending | 2026-10-27 | backend |
@@ -251,10 +256,10 @@ and an explicit empty literal renders as `''`.
 | `TRANSLATION_OUTPUT_GUARD_ENABLED` | Reject conservative same-language translation rewrites | backend | env | open | — | — | — | — | pending | 2026-10-28 | dazheng |
 | `TRANSLATION_PROFILE_GATE_ENABLED` | Defer short out-of-profile translation guesses | backend | env | open | — | — | — | — | pending | 2026-10-28 | dazheng |
 | `X-Omi-Memory-Belief-Enabled` | Expose belief processing capability to memory clients | backend, macos | server_capability | closed | — | — | — | — | pending | 2026-10-23 | unowned |
-| `X-Omi-Memory-Canonical-Lifecycle-Exposed` | Per-account capability header that turns on memory tier and device filters in current macOS and Windows clients | backend, macos, windows | server_capability | closed | — | — | — | — | kill | 2026-11-08 | dazheng |
+| `X-Omi-Memory-Canonical-Lifecycle-Exposed` | Compatibility header for older macOS and Windows memory clients | backend, macos, windows | server_capability | closed | — | — | — | — | kill | 2026-11-08 | dazheng |
 | `free-tier-cohort-v1` | Free-tier exposure cohort, never direct admission | backend | posthog | closed | — | — | — | absent (exposure) | pending | 2026-10-23 | unowned |
 | `jit-processing-v1` | JIT processing admission cohort | backend | posthog | closed | — | — | — | expected (enable) | graduate | 2026-10-23 | dazheng |
-| `mobile-chat-apps` | Mobile Chat apps entry on Integrations (connect Telegram/iMessage); client-evaluated, default off. The payload carries each channel's provider id and address (Telegram bot username, iMessage number); the backend OMI_MESSAGING_CHANNELS cohort and Pro entitlement remain the authority | mobile | posthog | closed | — | — | — | absent (enable) | pending | 2026-11-09 | dazheng |
+| `mobile-chat-apps` | Mobile Chat apps entry on Integrations (connect Telegram/iMessage); client-evaluated, default off. The payload carries each channel's provider id and address (Telegram bot username, iMessage number); the backend OMI_MESSAGING_CHANNELS cohort and paid-plan entitlement remain the authority | mobile | posthog | closed | — | — | — | absent (enable) | pending | 2026-11-09 | dazheng |
 | `negative_feedback_remediation` | Enable negative-feedback remediation on stable | macos | posthog | closed | — | — | — | absent (enable) | pending | 2026-10-23 | unowned |
 | `negative_feedback_remediation_kill` | Beta negative-feedback remediation stop | macos | posthog | inverted | — | — | — | expected (kill) | pending | 2026-10-23 | unowned |
 | `on_device_meeting_identity` | Enable on-device meeting identity on stable | macos | posthog | closed | — | — | — | absent (enable) | graduate | 2026-10-23 | dazheng |
@@ -279,6 +284,7 @@ and an explicit empty literal renders as `''`.
 | `CONVERSATION_STORED_MEETING_CONTEXT_ENABLED` | Incident stop for stored meeting context lookup | backend | env | open | — | — | — | — | keep | — | unowned |
 | `DAY3_REENGAGEMENT_EMAIL_KILL_SWITCH` | Stop day-three re-engagement email | backend | env | inverted | false | false | false | — | keep | — | unowned |
 | `DEEPGRAM_SELF_HOSTED_ENABLED` | Select self-hosted Deepgram filler-word policy on pusher | backend | env | closed | — | false (backend-listen (chart)) | false (backend-listen (chart)); true (pusher (chart)) | — | keep | — | unowned |
+| `DESKTOP_LOOP_WATCHDOG_ENABLED` | Desktop event-loop stall warning and liveness signal; default on, false disables both | backend | env | open | — | — | — | — | keep | — | dazheng |
 | `DESKTOP_UPDATE_POINTERS_MODE` | Fall back to legacy desktop update pointers | backend | env | open | primary | primary (backend-listen (chart), cloud_run/backend, gke/backend-listen) | primary (backend-listen (chart), cloud_run/backend, gke/backend-listen) | — | keep | — | unowned |
 | `FAIR_USE_KILL_SWITCH` | Emergency stop for fair-use enforcement | backend | env | inverted | — | false (backend-listen (chart)) | false (backend-listen (chart)) | — | keep | — | unowned |
 | `FRAME_REQUEST_RETENTION_INDEPENDENT_HEALTHY` | Skip shared retention when independent job is healthy | backend | env | closed | false | false | false | — | keep | — | unowned |
@@ -319,11 +325,17 @@ and an explicit empty literal renders as `''`.
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | `ACCOUNT_DELETION_DISPATCH_MODE` | Select Cloud Tasks for account deletion | backend | env | closed | — | — | cloud_tasks (backend-listen (chart), cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, gke/backend-listen) | — | keep | — | unowned |
 | `AUDIO_MERGE_DISPATCH_MODE` | Select audio-merge dispatch lane | backend | env | closed | — | — | — | — | keep | — | unowned |
+| `BILLING_WEBHOOK_LEDGER_ENABLED` | Durable Stripe webhook receipts, duplicate suppression and failed-schedule retries; default false; no deployment declaration or activation in INF sprint | backend | env | closed | — | — | — | — | pending | — | dazheng |
 | `COMMITMENT_FOLLOWUP_TASKS_HANDLER_URL` | One-shot commitment due callback transport; absent disables scheduling | backend | env | closed | — | — | — | — | keep | — | dazheng |
 | `COMMITMENT_FOLLOWUP_TASKS_INVOKER_SA` | One-shot commitment due callback transport; absent disables scheduling | backend | env | closed | — | — | — | — | keep | — | dazheng |
 | `COMMITMENT_FOLLOWUP_TASKS_QUEUE` | One-shot commitment due callback transport; absent disables scheduling | backend | env | closed | — | — | — | — | keep | — | dazheng |
+| `DREAM_AGENT_BACKFILL_SHARE` | Fraction of eligible Dream passes attempting older cleanup; default 0.1 | backend | env | closed | — | — | — | — | pending | — | dazheng |
 | `DREAM_AGENT_CANARY_UID` | Dedicated synthetic UID in dream-canary- namespace; unset disables canary | backend | env | closed | — | — | {value: 'dream-canary-prod-01', category: rollout} | — | pending | — | dazheng |
+| `DREAM_AGENT_CONCURRENCY` | Parallel Dream workers and shared reserved background slots; default 2; bounded 1 to 8 | backend | env | closed | — | — | — | — | pending | — | dazheng |
+| `DREAM_AGENT_FULL_COMPLETION_TOKENS` | Full Dream completion ceiling; default 16000; maximum 16000 | backend | env | closed | — | — | — | — | pending | — | dazheng |
+| `DREAM_AGENT_FULL_CONTEXT_TOKENS` | Full Dream input estimate ceiling; default 400000; framing and schema included; hard model window remains authoritative | backend | env | closed | — | — | — | — | pending | — | dazheng |
 | `DREAM_AGENT_MANUAL_RUNS_PER_DAY` | Separate manual dream allowance per UTC day; default 3 | backend | env | closed | — | — | {value: '20', category: rollout} | — | pending | — | dazheng |
+| `DREAM_AGENT_RANDOM_SEED_SHARE` | Uniform sample fraction of cleanup attempts; default 0.1; offsets can bill linear reads | backend | env | closed | — | — | — | — | pending | — | dazheng |
 | `DREAM_AGENT_TESTFLIGHT_MIN_BUILD` | Minimum client asserted TestFlight build admitted to the dream-agent cohort; unset closes the cohort | backend | env | closed | — | — | — | — | pending | — | dazheng |
 | `FIRESTORE_CACHE_ENABLED` | Enable Firestore response cache | backend | env | closed | — | — | — | — | keep | — | unowned |
 | `LISTEN_FINALIZATION_DISPATCH_MODE` | Select conversation finalization dispatch lane | backend | env | closed | — | — | cloud_tasks | — | keep | — | unowned |
@@ -333,8 +345,8 @@ and an explicit empty literal renders as `''`.
 | `MEMORY_TYPESENSE_READINESS_REQUIRED` | Require Typesense projection readiness for memory reads | backend | env | closed | — | — | — | — | keep | — | unowned |
 | `MENTOR_PIPELINE` | Per-user cohort mentor dispatch; only cohort is valid — flag false/error or any other value dispatches nothing (legacy lane deleted) | backend | env | closed | — | — | cohort (backend-listen (chart), cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, desktop-backend, gke/backend-listen, gke/pusher, llm-gateway (chart), pusher (chart)) | — | keep | — | dazheng |
 | `OMI_BACKGROUND_FLEX_CAPABLE` | Allow background gateway Flex work | backend | env | closed | true | true | true | — | keep | — | unowned |
-| `OMI_IMESSAGE_MAX_SEND_RECEIVE_RATIO` | Durable iMessage send/receive ratio ceiling; default 3, bounded 1 through 5. | backend | env | closed | — | — | — | — | keep | — | dazheng |
-| `OMI_IMESSAGE_PROVIDER` | Installed iMessage provider selection; currently linq only. | backend | env | closed | — | — | — | — | keep | — | dazheng |
+| `OMI_IMESSAGE_MAX_SEND_RECEIVE_RATIO` | Durable iMessage send/receive ratio ceiling; default 3, bounded 1 through 5. | backend | env | closed | — | — | {value: '3', category: rollout} | — | keep | — | dazheng |
+| `OMI_IMESSAGE_PROVIDER` | Installed iMessage provider selection; currently linq only. | backend | env | closed | — | — | {value: 'linq', category: rollout} | — | keep | — | dazheng |
 | `OMI_LLM_CHAT_AGENT_ROUTE` | Select managed chat-agent gateway route | backend | env | closed | gateway | gateway (backend-listen (chart), cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, gke/backend-listen, gke/pusher, job/memory-maintenance-job, pusher (chart)) | gateway (backend-listen (chart), cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, gke/backend-listen, job/memory-maintenance-job, pusher (chart)) | — | keep | — | unowned |
 | `OMI_LLM_GATEWAY_FEATURE_MODE` | Select LLM gateway versus direct serving | backend | env | closed | gateway | gateway (backend-listen (chart), cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, gke/backend-listen, gke/pusher, job/memory-maintenance-job, pusher (chart)) | gateway (backend-listen (chart), cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, gke/backend-listen, job/memory-maintenance-job, pusher (chart)) | — | keep | — | unowned |
 | `OMI_TELEGRAM_STREAMING` | Telegram preview mode draft, edit or none; default draft. | backend | env | closed | — | — | — | — | keep | — | dazheng |
@@ -371,7 +383,7 @@ and an explicit empty literal renders as `''`.
 | `VAD_GATE_MODE` | Select off, shadow, or active server VAD gate | backend, mobile | env | closed | — | active (backend-listen (chart)) | active (backend-listen (chart)) | — | keep | — | unowned |
 | `VITE_ENABLE_GMAIL_SESSION` | Keep shipped Gmail session integration enabled | windows | build_define | open | — | — | — | — | keep | — | unowned |
 | `X-Omi-Memory-Default-Delete-Supported` | Indicate default-memory deletion support | backend, macos | server_capability | closed | — | — | — | — | keep | — | unowned |
-| `X-Omi-Memory-Device-Scope-Supported` | Indicate device-scoped memory query support | backend, macos | server_capability | closed | — | — | — | — | keep | — | unowned |
+| `X-Omi-Memory-Device-Scope-Supported` | Indicate device-scoped memory query support | backend, macos, windows | server_capability | closed | — | — | — | — | keep | — | unowned |
 
 ## Undeclared env flags
 
@@ -382,6 +394,7 @@ their code default (`fail` tells you which way a missing value resolves).
 - `ACTION_ITEM_IDENTITY_PRESERVE_ENABLED` — Keep a task's id and export marker when a conversation reprocess re-extracts the same task, so it is not sent to the user's cloud task app again; Apple Reminders excluded (default on) (fail: open)
 - `ADMIN_KEY_AUTH_ENABLED` — Allow administrator-key authentication (fail: open)
 - `AUDIO_MERGE_DISPATCH_MODE` — Select audio-merge dispatch lane (fail: closed)
+- `BILLING_WEBHOOK_LEDGER_ENABLED` — Durable Stripe webhook receipts, duplicate suppression and failed-schedule retries; default false; no deployment declaration or activation in INF sprint (fail: closed)
 - `CAPTURE_JEV_SHADOW_EXPIRY` — Shorten the Jev capture shadow hard deadline (fail: closed)
 - `CAPTURE_JEV_SHADOW_GLOBAL_DAILY_CAP` — Global daily Jev capture shadow call budget (fail: closed)
 - `CAPTURE_JEV_SHADOW_USER_DAILY_CAP` — Per-user daily Jev capture shadow call budget (fail: closed)
@@ -393,11 +406,21 @@ their code default (`fail` tells you which way a missing value resolves).
 - `CONVERSATION_SMART_MERGE_UID_ALLOWLIST` — Limit smart merge to listed UIDs; empty admits every user (fail: closed)
 - `CONVERSATION_SPEAKER_RESOLUTION_ENABLED` — Incident stop for conversation-wide speaker resolution (fail: open)
 - `CONVERSATION_STORED_MEETING_CONTEXT_ENABLED` — Incident stop for stored meeting context lookup (fail: open)
+- `DESKTOP_LOOP_WATCHDOG_ENABLED` — Desktop event-loop stall warning and liveness signal; default on, false disables both (fail: open)
+- `DREAM_AGENT_BACKFILL_SHARE` — Fraction of eligible Dream passes attempting older cleanup; default 0.1 (fail: closed)
+- `DREAM_AGENT_CONCURRENCY` — Parallel Dream workers and shared reserved background slots; default 2; bounded 1 to 8 (fail: closed)
+- `DREAM_AGENT_CONTEXT_MODE` — Dream context mode bounded (default) or full; full requires the separate UID allowlist (fail: closed)
+- `DREAM_AGENT_FULL_COMPLETION_TOKENS` — Full Dream completion ceiling; default 16000; maximum 16000 (fail: closed)
+- `DREAM_AGENT_FULL_CONTEXT_TOKENS` — Full Dream input estimate ceiling; default 400000; framing and schema included; hard model window remains authoritative (fail: closed)
+- `DREAM_AGENT_FULL_CONTEXT_UIDS` — Comma allowlist for full Dream context; empty admits nobody; ordinary Dream eligibility still applies (fail: closed)
+- `DREAM_AGENT_RANDOM_SEED_SHARE` — Uniform sample fraction of cleanup attempts; default 0.1; offsets can bill linear reads (fail: closed)
 - `DREAM_AGENT_TESTFLIGHT_ENABLED` — Enable the bounded TestFlight dream-agent cohort; default false (fail: closed)
 - `DREAM_AGENT_TESTFLIGHT_MIN_BUILD` — Minimum client asserted TestFlight build admitted to the dream-agent cohort; unset closes the cohort (fail: closed)
 - `FIRESTORE_CACHE_ENABLED` — Enable Firestore response cache (fail: closed)
 - `FREE_TIER_MEMORY_SUPPRESSION` — Suppress cloud memory extraction for eligible free users (fail: closed)
 - `FREE_TIER_MEMORY_SUPPRESSION_COHORT` — Admitted UIDs for free-tier memory suppression (fail: closed)
+- `HELD_CONTENT_ENABLED` — Default-off at-cap choice API; additionally requires X-Omi-Held-Content: 1. Capture custody and recovery must ship before enablement. (fail: closed)
+- `LOCKED_CONTENT_RESET_RECOVERY_ENABLED` — Default-off bounded recovery of already-locked content on authenticated HTTP requests in each UTC quota month; current plan allowance must be available. (fail: closed)
 - `MEETING_NOTES_EPISODE_C6_TIMEOUT_SECONDS` — Requested C6 writer budget, default 180s; existing gateway limit clamps to 115s; C7 fallback (fail: closed)
 - `MEETING_NOTES_EPISODE_CLAIMS_ENABLED` — Generate optional episode claim bindings, default off; visible provenance rules remain (fail: closed)
 - `MEETING_NOTES_EPISODE_EFFORT` — Episode writer thinking effort: default, high or xhigh; baseline unchanged (fail: closed)
@@ -415,13 +438,7 @@ their code default (`fail` tells you which way a missing value resolves).
 - `MEMORY_TYPESENSE_READINESS_REQUIRED` — Require Typesense projection readiness for memory reads (fail: closed)
 - `OMI_GEMINI_OVERFLOW_ENABLED` — Enable overflow routing to Gemini (fail: open)
 - `OMI_IMESSAGE_CONTACT_CARD` — Default-off sharing of a preconfigured Linq contact card. (fail: closed)
-- `OMI_IMESSAGE_ENABLED` — Default-off registration of the iMessage provider adapter. (fail: closed)
-- `OMI_IMESSAGE_MAX_SEND_RECEIVE_RATIO` — Durable iMessage send/receive ratio ceiling; default 3, bounded 1 through 5. (fail: closed)
-- `OMI_IMESSAGE_PROVIDER` — Installed iMessage provider selection; currently linq only. (fail: closed)
 - `OMI_LLM_GATEWAY_OBSERVABILITY_LOGS_ENABLED` — Enable gateway observability logs (fail: closed)
-- `OMI_MESSAGING_CHANNELS` — Default-off channel gateway and opt-in cross-surface continuity; also requires uid allowlist and Pro entitlement. (fail: closed)
-- `OMI_MESSAGING_CHANNELS_UIDS` — Comma-separated exact uid allowlist for messaging channels; empty admits nobody. (fail: closed)
-- `OMI_TELEGRAM_ENABLED` — Default-off registration of the private-chat Telegram adapter. (fail: closed)
 - `OMI_TELEGRAM_STREAMING` — Telegram preview mode draft, edit or none; default draft. (fail: closed)
 - `OMI_VERTEX_PT_TARGET_LOCATION` — Moved Vertex order location; default us; global explicitly widens residency (fail: closed)
 - `PARAKEET_DIARIZATION` — Enable prerecorded Parakeet diarization (fail: closed)
@@ -437,6 +454,7 @@ their code default (`fail` tells you which way a missing value resolves).
 - `SELFHEAL_MODE` — Conversation self-heal sweeper mode: off/detect-only/nudge/heal (fail: closed)
 - `SONIOX_ELAPSED_AXIS` — Measure Soniox elapsed timestamps before enabling speaker windows (fail: closed)
 - `SPEAKER_GROUPING_CROSS_SCOPE_THRESHOLD` — G2 cross-scope cosine-distance threshold; default 0.60; invalid configuration uses 0.60 (fail: closed)
+- `STOREFRONT_LADDER_V1_ENABLED` — Default-off versioned unified plans presentation; exact true admits v2 only; installed-client endpoints unchanged (fail: closed)
 - `STT_NO_TEXT_RESCUE_SECONDS` — Maximum paid wall and admitted audio seconds per no-text rescue; default 60 bounded 5-120 (fail: closed)
 - `STT_PAID_SPILLOVER_BUDGET_ENABLED` — Default-off fleet budget for paid router promotions after Parakeet capacity refusal; denial restores static order (fail: closed)
 - `STT_PAID_SPILLOVER_DEEPGRAM_PER_MINUTE` — Deepgram fleet paid router promotion cap per UTC minute; default 30; zero refuses promotions (fail: closed)

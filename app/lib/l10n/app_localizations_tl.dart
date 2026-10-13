@@ -9196,6 +9196,9 @@ class AppLocalizationsTl extends AppLocalizations {
       'Naabot na ang limitasyon ng patas na paggamit — awtomatikong magpapatuloy ang pag-sync';
 
   @override
+  String get syncCardThrottlePaused => 'Pansamantalang naka-pause ang pag-sync — awtomatiko itong magpapatuloy';
+
+  @override
   String get syncCardBackendBusy =>
       'Abala ang mga server ng Omi — masi-sync ang iyong mga recording kapag may bakanteng kapasidad na muli';
 
@@ -9864,6 +9867,15 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get chatBlockMemory => 'Alaala';
+
+  @override
+  String get chatBlockPerson => 'Tao';
+
+  @override
+  String get chatBlockUndone => 'Na-undo';
+
+  @override
+  String get chatBlockUndoFailed => 'Hindi ma-undo ang pagbabagong iyon';
 
   @override
   String get chatBlockQuestion => 'Tanong';
@@ -11067,11 +11079,6 @@ class AppLocalizationsTl extends AppLocalizations {
   }
 
   @override
-  String transcriptionsPendingCount(int count) {
-    return 'Mga transcript na naghihintay $count';
-  }
-
-  @override
   String get captureSourceCall => 'Tawag';
 
   @override
@@ -12120,8 +12127,6 @@ class AppLocalizationsTl extends AppLocalizations {
         'likely': 'Posible',
         'soundsLike': 'Parang si $name',
         'notPerson': 'Hindi si $name',
-        'carried': 'Si $name pa rin. Dinala mula sa huli mong usapan.',
-        'change': 'Baguhin',
         'alsoTitle': 'Si $name rin ba ito?',
         'alsoBody': 'Nahanap ni Omi ang parehong boses sa mga naunang usapan.',
         'confirmed': 'Kinumpirma mo ang label na ito',
@@ -13071,4 +13076,54 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get chatAppsOmiPro => 'OMI PRO';
+
+  @override
+  String reviewProposalCloseTask(String task) {
+    return 'Markahan ang “$task” bilang tapos na?';
+  }
+
+  @override
+  String reviewProposalRetireTask(String task) {
+    return 'Alisin ang gawaing “$task”?';
+  }
+
+  @override
+  String reviewProposalMergePeople(String name, String other) {
+    return 'Iisang tao ba sina “$name” at “$other”?';
+  }
+
+  @override
+  String get reviewProposalMergeMemories => 'Pagsamahin ang dalawang dobleng alaala?';
+
+  @override
+  String get reviewProposalMemory => 'I-update ang alaalang ito?';
+
+  @override
+  String reviewProposalEntitySummary(String name) {
+    return 'I-update ang buod para kay “$name”?';
+  }
+
+  @override
+  String get reviewProposalGeneric => 'Ilapat ang iminungkahing ayos na ito?';
+
+  @override
+  String get reviewProposalApply => 'Ilapat';
+
+  @override
+  String get reviewProposalSuggested => 'Iminungkahi';
+
+  @override
+  String get reviewProposalConflict => 'Nagbago ito mula nang imungkahi ng Dream, kaya walang nailapat.';
+
+  @override
+  String itemLinkListTitle(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count Item',
+      one: '1 Item',
+      zero: 'Walang Item',
+    );
+    return '$_temp0';
+  }
 }

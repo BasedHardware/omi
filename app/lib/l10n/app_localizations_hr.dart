@@ -9144,6 +9144,9 @@ class AppLocalizationsHr extends AppLocalizations {
       'Dostignuto je ograničenje poštene upotrebe — sinkronizacija će se automatski nastaviti';
 
   @override
+  String get syncCardThrottlePaused => 'Sinkronizacija je nakratko pauzirana — nastavit će se automatski';
+
+  @override
   String get syncCardBackendBusy =>
       'Omi poslužitelji su zauzeti — vaše snimke će se sinkronizirati čim se oslobodi kapacitet';
 
@@ -9812,6 +9815,15 @@ class AppLocalizationsHr extends AppLocalizations {
 
   @override
   String get chatBlockMemory => 'Sjećanje';
+
+  @override
+  String get chatBlockPerson => 'Osoba';
+
+  @override
+  String get chatBlockUndone => 'Poništeno';
+
+  @override
+  String get chatBlockUndoFailed => 'Ova promjena nije se mogla poništiti';
 
   @override
   String get chatBlockQuestion => 'Pitanje';
@@ -11008,11 +11020,6 @@ class AppLocalizationsHr extends AppLocalizations {
   }
 
   @override
-  String transcriptionsPendingCount(int count) {
-    return 'Transkripcije na čekanju $count';
-  }
-
-  @override
   String get captureSourceCall => 'Poziv';
 
   @override
@@ -12056,8 +12063,6 @@ class AppLocalizationsHr extends AppLocalizations {
         'likely': 'Vjerojatno',
         'soundsLike': 'Zvuči kao $name',
         'notPerson': 'Nije $name',
-        'carried': 'I dalje $name. Preneseno iz vašeg zadnjeg razgovora.',
-        'change': 'Promijeni',
         'alsoTitle': 'Je li ovo također $name?',
         'alsoBody': 'Omi je pronašao isti glas u ranijim razgovorima.',
         'confirmed': 'Potvrdili ste ovu oznaku',
@@ -13000,4 +13005,54 @@ class AppLocalizationsHr extends AppLocalizations {
 
   @override
   String get chatAppsOmiPro => 'OMI PRO';
+
+  @override
+  String reviewProposalCloseTask(String task) {
+    return 'Označiti „$task” kao dovršeno?';
+  }
+
+  @override
+  String reviewProposalRetireTask(String task) {
+    return 'Ukloniti zadatak „$task”?';
+  }
+
+  @override
+  String reviewProposalMergePeople(String name, String other) {
+    return 'Je li „$name” ista osoba kao „$other”?';
+  }
+
+  @override
+  String get reviewProposalMergeMemories => 'Spojiti dva duplicirana sjećanja?';
+
+  @override
+  String get reviewProposalMemory => 'Ažurirati ovo sjećanje?';
+
+  @override
+  String reviewProposalEntitySummary(String name) {
+    return 'Ažurirati sažetak za „$name”?';
+  }
+
+  @override
+  String get reviewProposalGeneric => 'Primijeniti ovaj predloženi ispravak?';
+
+  @override
+  String get reviewProposalApply => 'Primijeni';
+
+  @override
+  String get reviewProposalSuggested => 'Predloženo';
+
+  @override
+  String get reviewProposalConflict => 'Ovo se promijenilo otkako je Dream to predložio, pa ništa nije primijenjeno.';
+
+  @override
+  String itemLinkListTitle(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count stavki',
+      one: '1 stavka',
+      zero: 'Nema stavki',
+    );
+    return '$_temp0';
+  }
 }

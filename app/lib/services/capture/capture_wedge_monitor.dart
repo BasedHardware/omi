@@ -293,6 +293,27 @@ class CaptureWedgeMonitor extends ChangeNotifier {
     if (_lastRetentionRiskFingerprint == fingerprint) return;
     _lastRetentionRiskFingerprint = fingerprint;
     final state = _stateFor(localWalDeviceId);
+    final properties = <String, Object>{
+      'blocked_wal_count': blockedCount,
+      'retained_wal_count': retainedCount,
+      'retention_policy': 'admission_count_cap',
+      'block_reason': reason,
+    };
+    // Count-cap pressure is diagnostic only; storage prompts are reserved for disk admission failures.
+    if (reason == 'count_cap') {
+      final depth = _silenceAge(localWalDeviceId);
+      _safeTrack('Capture Wedge Detected', {
+        'source': localWalSource,
+        'consecutive_zero_byte_sessions': state.zeroByteSessionEnds.length,
+        'trigger': triggerStorageAtRisk,
+        'app_build': _appBuild(),
+        'platform': _platform(),
+        ...properties,
+        'seconds_since_last_ingress_byte': depth.ingress,
+        'seconds_since_last_transcript': depth.transcript,
+      });
+      return;
+    }
     unawaited(
       _maybeDeclare(
         state,
@@ -300,12 +321,7 @@ class CaptureWedgeMonitor extends ChangeNotifier {
         source: localWalSource,
         trigger: triggerStorageAtRisk,
         requireFeatureGate: false,
-        extraProperties: {
-          'blocked_wal_count': blockedCount,
-          'retained_wal_count': retainedCount,
-          'retention_policy': 'admission_count_cap',
-          'block_reason': reason,
-        },
+        extraProperties: properties,
       ),
     );
   }

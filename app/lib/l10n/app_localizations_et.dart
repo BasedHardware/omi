@@ -9108,6 +9108,9 @@ class AppLocalizationsEt extends AppLocalizations {
   String get syncCardRateLimited => 'Õiglase kasutuse piir on saavutatud — sünkroonimine jätkub automaatselt';
 
   @override
+  String get syncCardThrottlePaused => 'Sünkroonimine on korraks peatatud — see jätkub automaatselt';
+
+  @override
   String get syncCardBackendBusy => 'Omi serverid on hõivatud — sinu salvestised sünkroonitakse, kui maht vabaneb';
 
   @override
@@ -9768,6 +9771,15 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get chatBlockMemory => 'Mälestus';
+
+  @override
+  String get chatBlockPerson => 'Isik';
+
+  @override
+  String get chatBlockUndone => 'Tühistatud';
+
+  @override
+  String get chatBlockUndoFailed => 'Seda muudatust ei õnnestunud tühistada';
 
   @override
   String get chatBlockQuestion => 'Küsimus';
@@ -10965,11 +10977,6 @@ class AppLocalizationsEt extends AppLocalizations {
   }
 
   @override
-  String transcriptionsPendingCount(int count) {
-    return 'Ootel transkriptsioonid $count';
-  }
-
-  @override
   String get captureSourceCall => 'Kõne';
 
   @override
@@ -12013,8 +12020,6 @@ class AppLocalizationsEt extends AppLocalizations {
         'likely': 'Tõenäoline',
         'soundsLike': 'Kõlab nagu $name',
         'notPerson': 'Pole $name',
-        'carried': 'Endiselt $name. Üle võetud sinu viimasest vestlusest.',
-        'change': 'Muuda',
         'alsoTitle': 'Kas see on ka $name?',
         'alsoBody': 'Omi leidis sama hääle varasematest vestlustest.',
         'confirmed': 'Kinnitasid selle sildi',
@@ -12960,4 +12965,54 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get chatAppsOmiPro => 'OMI PRO';
+
+  @override
+  String reviewProposalCloseTask(String task) {
+    return 'Kas märkida „$task“ tehtuks?';
+  }
+
+  @override
+  String reviewProposalRetireTask(String task) {
+    return 'Kas eemaldada ülesanne „$task“?';
+  }
+
+  @override
+  String reviewProposalMergePeople(String name, String other) {
+    return 'Kas „$name“ on sama inimene kui „$other“?';
+  }
+
+  @override
+  String get reviewProposalMergeMemories => 'Kas liita kaks topeltmälestust?';
+
+  @override
+  String get reviewProposalMemory => 'Kas uuendada seda mälestust?';
+
+  @override
+  String reviewProposalEntitySummary(String name) {
+    return 'Kas uuendada „$name“ kokkuvõtet?';
+  }
+
+  @override
+  String get reviewProposalGeneric => 'Kas rakendada see soovitatud parandus?';
+
+  @override
+  String get reviewProposalApply => 'Rakenda';
+
+  @override
+  String get reviewProposalSuggested => 'Soovitatud';
+
+  @override
+  String get reviewProposalConflict => 'See on pärast Dreami soovitust muutunud, seega midagi ei rakendatud.';
+
+  @override
+  String itemLinkListTitle(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count üksust',
+      one: '1 üksus',
+      zero: 'Üksusi pole',
+    );
+    return '$_temp0';
+  }
 }

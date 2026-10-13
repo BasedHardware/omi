@@ -29,6 +29,9 @@ class DeviceOnboardingProvider extends ChangeNotifier {
   bool voiceSessionActive = false;
   bool questionSent = false;
   String? aiResponse;
+  // True right after a question was dropped empty or came back with no speech
+  // detected, so the step can show a retry hint instead of processing forever.
+  bool questionFailed = false;
 
   // Step 2: Voice reply preference. Null until the step is visited so a user
   // who skips the tutorial before this point keeps their existing preference.
@@ -41,6 +44,10 @@ class DeviceOnboardingProvider extends ChangeNotifier {
   int selectedDoubleTapAction = -1; // -1 = none selected
   int doublePressCount = 0;
   bool showSingleTapHint = false;
+
+  /// A step reopened from the All Set summary; finishing it goes back to the summary instead of
+  /// walking through every later step again (#20787).
+  bool reviewingFromSummary = false;
 
   Timer? _hintTimer;
   bool _disposed = false;
@@ -59,11 +66,13 @@ class DeviceOnboardingProvider extends ChangeNotifier {
     voiceSessionActive = false;
     questionSent = false;
     aiResponse = null;
+    questionFailed = false;
     selectedVoiceResponseMode = null;
     powerCycleState = PowerCycleSubState.waitingForOff;
     selectedDoubleTapAction = -1;
     doublePressCount = 0;
     showSingleTapHint = false;
+    reviewingFromSummary = false;
     _hintTimer?.cancel();
     _hintTimer = null;
   }
@@ -77,7 +86,14 @@ class DeviceOnboardingProvider extends ChangeNotifier {
 
   void goToStep(int step) {
     if (step < transcriptionStep || step >= totalSteps || step == currentStep) return;
+    reviewingFromSummary = currentStep == allSetStep;
     currentStep = step;
+    notifyListeners();
+  }
+
+  void returnToSummary() {
+    reviewingFromSummary = false;
+    currentStep = allSetStep;
     notifyListeners();
   }
 
@@ -140,6 +156,7 @@ class DeviceOnboardingProvider extends ChangeNotifier {
 
     if (!voiceSessionActive) {
       voiceSessionActive = true;
+      questionFailed = false;
       notifyListeners();
     } else {
       // Second press — question is being sent
@@ -152,6 +169,26 @@ class DeviceOnboardingProvider extends ChangeNotifier {
   void onVoiceResponseReceived(String response) {
     if (currentStep != askQuestionStep) return;
     aiResponse = response;
+    notifyListeners();
+  }
+
+  /// Capture's 15 s voice-command timeout sent the question without the second press this step
+  /// counts, so move on to "Processing" exactly as the second press would (#20786).
+  void onQuestionAutoSubmitted() {
+    if (!isOnboardingActive || currentStep != askQuestionStep || !voiceSessionActive) return;
+    voiceSessionActive = false;
+    questionSent = true;
+    notifyListeners();
+  }
+
+  /// The question was dropped before sending (no audio captured) or the
+  /// server reported no speech detected. Reset back to the pre-press state
+  /// so the step can show a retry hint instead of processing forever.
+  void onVoiceQuestionFailed() {
+    if (currentStep != askQuestionStep || aiResponse != null) return;
+    voiceSessionActive = false;
+    questionSent = false;
+    questionFailed = true;
     notifyListeners();
   }
 

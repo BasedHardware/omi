@@ -8,12 +8,15 @@ from typing import Literal
 from urllib.parse import quote
 
 from utils.messaging.adapters.base import BaseAdapter
+from utils.observability.fallback import record_fallback
+from utils.messaging.delivery_context import send_reply_target, send_first_chunk
 from utils.messaging.delivery_context import send_markup
 from utils.messaging.adapters.media import MEDIA_TYPES
-from utils.messaging.adapters.rendering import telegram
-from utils.messaging.adapters.transport import request_json
+from utils.messaging.adapters.rendering import telegram, html_plain, item_buttons
+from utils.messaging.adapters.transport import request_json, ProviderError
 from utils.messaging.contracts import ChannelCapabilities, ChannelMessage, InboundAttachment
 from utils.messaging.identity import key
+from utils.messaging.turn_context import bound_provider_clock
 
 
 class TelegramAdapter(BaseAdapter):
@@ -31,7 +34,7 @@ class TelegramAdapter(BaseAdapter):
             streaming=streaming,
             typing=True,
             reactions=True,
-            markdown_dialect='MarkdownV2',
+            markdown_dialect='HTML',
             media_in=MEDIA_TYPES,
             media_out=MEDIA_TYPES,
             rate_limits={'chat_per_second': 1, 'global_per_second': 30},
@@ -56,6 +59,12 @@ class TelegramAdapter(BaseAdapter):
         if not sender.get('id') or not item.get('message_id') or 'update_id' not in update:
             raise ValueError('Incomplete Telegram update')
         text = callback.get('data', '') if callback else item.get('text', item.get('caption', ''))
+        receipt_id = None
+        if callback and text.startswith('undo:'):
+            receipt_id = text[5:]
+            if not re.fullmatch(r'[a-f0-9]{32}', receipt_id):
+                return ()
+            text = 'undo'
         if callback and text != 'undo':
             if not text.startswith('ask:'):
                 return ()
@@ -66,6 +75,16 @@ class TelegramAdapter(BaseAdapter):
             proof = text.split(' ', 1)[1].strip()
             if not re.fullmatch(r'[A-Za-z0-9_-]{16,128}', proof):
                 raise ValueError('Invalid link token')
+        stamp = None if callback else item.get('date')
+        if stamp is not None and (not isinstance(stamp, int) or isinstance(stamp, bool)):
+            raise ValueError('Invalid Telegram message time')
+        if stamp is None:
+            received_at = datetime.now(timezone.utc)
+        else:
+            try:
+                received_at = bound_provider_clock(datetime.fromtimestamp(stamp, timezone.utc))
+            except (OverflowError, OSError, ValueError):
+                raise ValueError('Invalid Telegram message time') from None
         attachments = []
         for field, default_mime, default_name in (
             ('voice', 'audio/ogg', 'voice.ogg'),
@@ -93,7 +112,7 @@ class TelegramAdapter(BaseAdapter):
                 str(chat['id']),
                 str(item['message_id']) if not callback else 'callback:' + str(callback['id']),
                 text,
-                datetime.now(timezone.utc),
+                received_at,
                 reply_to=str(item['message_id']),
                 link_proof=proof,
                 unlink=command == '/unlink',
@@ -103,6 +122,8 @@ class TelegramAdapter(BaseAdapter):
                     else ('undo' if command in ('undo', '/undo') else None)
                 ),
                 attachments=tuple(attachments),
+                callback_id=str(callback['id']) if callback else None,
+                undo_receipt_id=receipt_id,
                 display_name=sender.get('username') if isinstance(sender.get('username'), str) else None,
             ),
         )
@@ -110,16 +131,52 @@ class TelegramAdapter(BaseAdapter):
     def render(self, text):
         return telegram(text, self.capabilities.max_text_len)
 
-    async def api(self, method, body, *, files=None, idempotent=False):
+    async def api(self, method, body, *, files=None, idempotent=False, threading=True):
         kwargs = {'data': body, 'files': files} if files else {'json': body}
-        return await request_json(
-            self.transport,
-            'POST',
-            'https://api.telegram.org/bot' + self._token + '/' + method,
-            idempotent=idempotent,
-            sleep=self.sleep,
-            **kwargs
-        )
+
+        async def prepare_thread():
+            resolver = send_reply_target.get()
+            if not threading or method != 'sendMessage' or resolver is None or not send_first_chunk.get():
+                return
+            current = await resolver()
+            if current:
+                body['reply_parameters'] = {'message_id': int(current), 'allow_sending_without_reply': True}
+            else:
+                body.pop('reply_parameters', None)
+
+        try:
+            return await request_json(
+                self.transport,
+                'POST',
+                'https://api.telegram.org/bot' + self._token + '/' + method,
+                idempotent=idempotent,
+                sleep=self.sleep,
+                before_request=prepare_thread,
+                **kwargs
+            )
+        except ProviderError as exc:
+            if body.get('reply_parameters') and exc.status_code in (400, 404, 422) and not exc.rendering_rejected:
+                record_fallback(
+                    component='other',
+                    from_mode='threaded_reply',
+                    to_mode='plain_reply',
+                    reason='other',
+                    outcome='degraded',
+                )
+                fallback = dict(body)
+                fallback.pop('reply_parameters')
+                return await self.api(method, fallback, files=files, idempotent=idempotent, threading=False)
+            # Only a definite 400 rejection permits a second send. Timeouts/5xx
+            # remain ambiguous and must never duplicate a delivered message.
+            if not exc.rendering_rejected or body.get('parse_mode') != 'HTML' or not body.get('text'):
+                raise
+            record_fallback(
+                component='other', from_mode='telegram_html', to_mode='plain_text', reason='other', outcome='degraded'
+            )
+            fallback = dict(body)
+            fallback.pop('parse_mode')
+            fallback['text'] = html_plain(body['text'])
+            return await self.api(method, fallback, idempotent=idempotent, threading=threading)
 
     async def typing(self, message, active=True):
         if active:
@@ -139,13 +196,16 @@ class TelegramAdapter(BaseAdapter):
         await self.pace(message.external_chat_id)
         await self.pace('__global__', 1 / 30)
         body = {'chat_id': message.external_chat_id}
+        reply_to = await self.reply_target(message)
+        if reply_to and not draft:
+            body['reply_parameters'] = {'message_id': int(reply_to), 'allow_sending_without_reply': True}
         if draft:
             if self.capabilities.streaming == 'none':
                 return
             if self.capabilities.streaming == 'edit':
                 identity = key(message.external_chat_id, message.provider_message_id)
                 preview = self._previews.get(identity)
-                body.update(text=text, parse_mode='MarkdownV2')
+                body.update(text=text, parse_mode='HTML')
                 if preview:
                     body['message_id'] = preview
                     await self.api('editMessageText', body, idempotent=True)
@@ -155,7 +215,7 @@ class TelegramAdapter(BaseAdapter):
                     result = await self.api('sendMessage', body)
                     self._previews[identity] = result['result']['message_id']
                 return
-            body.update(text=text, parse_mode='MarkdownV2', draft_id=int(key(message.provider_message_id)[:7], 16) or 1)
+            body.update(text=text, parse_mode='HTML', draft_id=int(key(message.provider_message_id)[:7], 16) or 1)
             await self.api('sendMessageDraft', body, idempotent=True)
             return
         label = 'artifact:' + artifact.file_store_ref if artifact else 'text:' + (text or '')
@@ -173,7 +233,7 @@ class TelegramAdapter(BaseAdapter):
                 'send' + field.title(), body, files={field: (artifact.name, data, artifact.mime_type)}
             )
         else:
-            body.update(text=text, parse_mode='MarkdownV2')
+            body.update(text=text, parse_mode='HTML')
             if send_markup.get():
                 body['reply_markup'] = send_markup.get()
             value = await self.api('sendMessage', body)
@@ -184,13 +244,41 @@ class TelegramAdapter(BaseAdapter):
                 'deleteMessage', {'chat_id': message.external_chat_id, 'message_id': preview}, idempotent=True
             )
 
+        return str(value['result']['message_id'])
+
+    def item_buttons(self, items):
+        return item_buttons(items)
+
     def buttons(self, suggestions):
         rows = []
         for suggestion in suggestions[:3]:
             if isinstance(suggestion, str) and len(('ask:' + suggestion).encode()) <= 64:
                 rows.append([{'text': suggestion, 'callback_data': 'ask:' + suggestion}])
-        rows.append([{'text': 'Undo last write', 'callback_data': 'undo'}])
-        return {'inline_keyboard': rows}
+        return {'inline_keyboard': rows} if rows else None
+
+    def receipt_buttons(self, receipt):
+        if receipt.reversible:
+            return {'inline_keyboard': [[{'text': 'Undo', 'callback_data': 'undo:' + receipt.id}]]}
+        return None
+
+    async def acknowledge(self, message):
+        if message.callback_id:
+            await self.api('answerCallbackQuery', {'callback_query_id': message.callback_id}, idempotent=True)
+
+    async def edit_receipt(self, message, result):
+        # The receipt delivery ID (or its authenticated callback bubble) owns the edit.
+        if result.bubble_id and result.bubble_text:
+            await self.api(
+                'editMessageText',
+                {
+                    'chat_id': message.external_chat_id,
+                    'message_id': int(result.bubble_id),
+                    'text': self.render(result.bubble_text)[-1],
+                    'parse_mode': 'HTML',
+                    'reply_markup': {'inline_keyboard': []},
+                },
+                idempotent=True,
+            )
 
     async def action(self, message, action, value):
         if action != 'react' or len(value) > 16:

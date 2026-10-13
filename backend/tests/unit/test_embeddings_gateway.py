@@ -7,6 +7,7 @@ embeddings.
 
 from __future__ import annotations
 
+import json
 import os
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -188,6 +189,50 @@ def test_gateway_embeddings_helpers_post_to_the_embeddings_surface(monkeypatch):
     query = gateway_client.invoke_gemini_embedding_gateway('q', task_type='RETRIEVAL_QUERY')
     assert query == [0.1, 0.2]
     assert GEMINI_EMBEDDINGS_AUTO_LANE_ID.encode() in seen[1]['body']
+
+
+def test_openai_embedding_inputs_are_clipped_before_the_gateway_post(monkeypatch):
+    """Empty, NUL, and over-long inputs are what make /v1/embeddings answer 400.
+
+    Sync backfill embeds whole historical transcripts in one call. The direct
+    LangChain client length-batches those; the gateway hop must do the same or
+    httpx.HTTPStatusError escapes from raise_for_status.
+    """
+    encoding = gateway_client._openai_embedding_encoding()
+    long_text = 'token ' * 20000
+    assert len(encoding.encode(long_text)) > gateway_client._OPENAI_EMBEDDING_MAX_INPUT_TOKENS
+    posted: list[list[str]] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        body = json.loads(request.read())
+        posted.append(body['input'])
+        data = [
+            {'object': 'embedding', 'embedding': [float(index)], 'index': index}
+            for index, _item in enumerate(body['input'])
+        ]
+        return httpx.Response(200, json={'object': 'list', 'data': data, 'model': 'x'})
+
+    monkeypatch.setattr(gateway_client, '_OPENAI_EMBEDDING_MAX_BATCH_ITEMS', 2)
+    transport = httpx.MockTransport(handler)
+    original_client = gateway_client.httpx.Client
+    monkeypatch.setattr(
+        gateway_client.httpx,
+        'Client',
+        lambda **kwargs: original_client(transport=transport, **kwargs),
+    )
+
+    vectors = gateway_client.invoke_openai_embeddings_gateway(['', 'keep\x00me', long_text, 'tail'])
+
+    assert vectors == [[0.0], [1.0], [0.0], [1.0]]
+    assert posted[0] == [' ', 'keepme']
+    assert len(posted) == 2
+    assert posted[1][1] == 'tail'
+    assert len(encoding.encode(posted[1][0])) <= gateway_client._OPENAI_EMBEDDING_MAX_INPUT_TOKENS
+    assert '\x00' not in posted[1][0]
+
+
+def test_openai_embedding_gateway_skips_the_post_for_no_inputs():
+    assert gateway_client.invoke_openai_embeddings_gateway([]) == []
 
 
 # --- gateway/backend deploy skew: a gateway older than its caller -------------

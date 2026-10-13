@@ -9047,6 +9047,9 @@ class AppLocalizationsHe extends AppLocalizations {
   String get syncCardRateLimited => 'הגעת למגבלת השימוש ההוגן — הסנכרון יתחדש באופן אוטומטי';
 
   @override
+  String get syncCardThrottlePaused => 'הסנכרון הושהה לזמן קצר — הוא יתחדש אוטומטית';
+
+  @override
   String get syncCardBackendBusy => 'השרתים של Omi עמוסים — ההקלטות שלך יסונכרנו ברגע שתתפנה תפוסה';
 
   @override
@@ -9698,6 +9701,15 @@ class AppLocalizationsHe extends AppLocalizations {
 
   @override
   String get chatBlockMemory => 'זיכרון';
+
+  @override
+  String get chatBlockPerson => 'אדם';
+
+  @override
+  String get chatBlockUndone => 'בוטל';
+
+  @override
+  String get chatBlockUndoFailed => 'לא ניתן היה לבטל את השינוי';
 
   @override
   String get chatBlockQuestion => 'שאלה';
@@ -10888,11 +10900,6 @@ class AppLocalizationsHe extends AppLocalizations {
   }
 
   @override
-  String transcriptionsPendingCount(int count) {
-    return 'תמלילים ממתינים $count';
-  }
-
-  @override
   String get captureSourceCall => 'שיחה';
 
   @override
@@ -11931,8 +11938,6 @@ class AppLocalizationsHe extends AppLocalizations {
         'likely': 'סביר',
         'soundsLike': 'נשמע כמו $name',
         'notPerson': 'לא $name',
-        'carried': 'עדיין $name. הועבר מהשיחה האחרונה שלך.',
-        'change': 'שינוי',
         'alsoTitle': 'האם זה גם $name?',
         'alsoBody': 'Omi מצא את אותו קול בשיחות קודמות.',
         'confirmed': 'אישרת את התווית הזו',
@@ -12873,4 +12878,54 @@ class AppLocalizationsHe extends AppLocalizations {
 
   @override
   String get chatAppsOmiPro => 'OMI PRO';
+
+  @override
+  String reviewProposalCloseTask(String task) {
+    return 'לסמן את “$task” כבוצעה?';
+  }
+
+  @override
+  String reviewProposalRetireTask(String task) {
+    return 'להסיר את המשימה “$task”?';
+  }
+
+  @override
+  String reviewProposalMergePeople(String name, String other) {
+    return 'האם “$name” הוא אותו אדם כמו “$other”?';
+  }
+
+  @override
+  String get reviewProposalMergeMemories => 'למזג שני זיכרונות כפולים?';
+
+  @override
+  String get reviewProposalMemory => 'לעדכן את הזיכרון הזה?';
+
+  @override
+  String reviewProposalEntitySummary(String name) {
+    return 'לעדכן את הסיכום של “$name”?';
+  }
+
+  @override
+  String get reviewProposalGeneric => 'להחיל את התיקון המוצע הזה?';
+
+  @override
+  String get reviewProposalApply => 'החל';
+
+  @override
+  String get reviewProposalSuggested => 'מוצע';
+
+  @override
+  String get reviewProposalConflict => 'זה השתנה מאז ש־Dream הציע אותו, ולכן שום דבר לא הוחל.';
+
+  @override
+  String itemLinkListTitle(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count פריטים',
+      one: 'פריט אחד',
+      zero: 'אין פריטים',
+    );
+    return '$_temp0';
+  }
 }

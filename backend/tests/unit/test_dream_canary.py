@@ -41,18 +41,27 @@ def store(monkeypatch):
     monkeypatch.setattr(dream_store, 'get_firestore_client', lambda: db)
     monkeypatch.setattr(storage, 'get_firestore_client', lambda: db)
     monkeypatch.setattr(conversations, 'db', db)
+    monkeypatch.setattr(conversations, 'get_firestore_client', lambda: db)
     monkeypatch.setattr(conversations, 'invalidate_people_stats_cache', lambda *a: None)
     monkeypatch.setattr(conversations, '_sync_conversation_search_index', lambda *a: None)
+    monkeypatch.setattr(dream_agent.dream_capacity, 'claim', AsyncMock(return_value=('slot', 'token')))
+    monkeypatch.setattr(dream_agent.dream_capacity, 'release', AsyncMock())
+    monkeypatch.setattr(dream_agent.dream_capacity, 'available_model', AsyncMock(return_value='synthetic-model'))
     monkeypatch.setattr(dream_store.firestore, 'transactional', lambda fn: fn)
     monkeypatch.setattr(dream_store, 'vocabulary', lambda *a: [])
     monkeypatch.setattr(dream_store, 'demoted_types', lambda *a: set())
     monkeypatch.setattr(dream_agent.review_store, 'remaining_today', lambda *a: 3)
-    monkeypatch.setattr(dream_reads.screen_activity, 'get_screen_activity', lambda *a, **k: [])
+    monkeypatch.setattr(dream_reads, 'context_candidates', lambda *a, **k: [])
 
     async def post(url, **kwargs):
         body = kwargs['json']
         assert body['max_completion_tokens'] <= 256
         model = body['model']
+        evidence = json.loads(body['messages'][-1]['content'])['records']
+        projected = evidence['conversations/' + storage.RECORD_ID]
+        assert 'SPEAKER_00: Robot Qorbi' in projected
+        assert 'Qorby is a misspelling of Qorbi' in projected
+        assert 'transcript_segments' not in projected
         value = (
             {'clusters': [{'refs': ['conversations/' + storage.RECORD_ID], 'problem': 'spelling'}]}
             if model == dream_transport.TRIAGE_LANE
@@ -147,6 +156,7 @@ def test_scheduler_prod_and_paused_dev_auth_match_sweep():
     assert canary['target']['uri'] == sweep['target']['uri'].replace('/sweep', '/canary')
     dev = next(row for row in config['environments']['dev']['jobs'] if row['name'] == canary['name'])
     assert dev['state'] == 'PAUSED'
+    assert canary['attempt_deadline'] == dev['attempt_deadline'] == '180s'
 
 
 @pytest.mark.parametrize('reject_vertex', [False, True])

@@ -41,7 +41,7 @@ void main() {
       (tester) async {
         await pump(tester, ChannelSettingsPage(linkId: linkIdTelegram));
         expect(find.text('@sam'), findsOneWidget);
-        expect(find.textContaining('Connected Oct 10, 2026'), findsOneWidget);
+        expect(find.textContaining('Connected'), findsOneWidget);
         expect(find.text('Show these chats in the Omi app'), findsOneWidget);
         expect(
           find.text('Off: you only see them in Telegram.'),

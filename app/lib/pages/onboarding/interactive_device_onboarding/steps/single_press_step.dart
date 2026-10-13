@@ -51,6 +51,13 @@ class _SinglePressStepState extends State<SinglePressStep> with TickerProviderSt
     _messageProvider = context.read<MessageProvider>();
     _messageCountAtStart = _messageProvider.messages.length;
     _messageProvider.addListener(_onMessagesChanged);
+    // Reopened from All Set after a question was answered: show that answer and Continue rather than
+    // waiting on "Processing your question…" for a message that already arrived (#20787).
+    final onboardingProvider = context.read<DeviceOnboardingProvider>();
+    if (onboardingProvider.questionSent && onboardingProvider.aiResponse != null) {
+      _aiResponse = onboardingProvider.aiResponse;
+      _showContinue = true;
+    }
   }
 
   void _onMessagesChanged() {
@@ -185,6 +192,22 @@ class _SinglePressStepState extends State<SinglePressStep> with TickerProviderSt
             ],
           ],
         ),
+      );
+    }
+
+    // Dropped empty or came back with no speech detected — invite a retry
+    // instead of leaving the user stuck on "Processing" forever.
+    if (provider.questionFailed) {
+      return Column(
+        children: [
+          _buildOmiWithBounce(),
+          const SizedBox(height: 24),
+          Text(
+            context.l10n.voiceQuestionNoSpeech,
+            style: OmiType.footnote.copyWith(color: OmiColors.textSecondary, fontWeight: FontWeight.w500),
+            textAlign: TextAlign.center,
+          ),
+        ],
       );
     }
 

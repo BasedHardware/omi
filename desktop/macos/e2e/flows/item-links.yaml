@@ -1,0 +1,77 @@
+version: 2
+name: item-links
+tier: 2
+description: App-scheme item links route through the signed-in shell; unknown ids become "No longer available" rows, an empty link shows the empty state, and the auth callback is never claimed
+app: non-prod
+covers:
+  - desktop/macos/Desktop/Sources/MainWindow/ItemLinks/ItemLinkRoute.swift
+  - desktop/macos/Desktop/Sources/MainWindow/ItemLinks/ItemLinkPresenter.swift
+  - desktop/macos/Desktop/Sources/MainWindow/ItemLinks/ItemLinkListSheet.swift
+  - desktop/macos/Desktop/Sources/Automation/DesktopAutomationItemLinkActions.swift
+  # The URL-event handler is the production caller of ItemLinkPresenter.receive; the bridge
+  # action calls the same entry point, so S4 pins that auth-shaped URLs fall through to it.
+  - desktop/macos/Desktop/Sources/OmiApp.swift
+preconditions:
+  - automation_bridge_ready
+
+steps:
+  - id: S1
+    name: Navigate to Chat so the signed-in shell is mounted
+    bridge.navigate:
+      target: chat
+      activateApp: false
+
+  # Ids that exist for no user: the resolver's real conversation/task reads and the local memory
+  # mirror all miss, so every row is the muted unavailable row, in URL order. Hermetic without
+  # seeding any record.
+  - id: S2
+    name: A multi-item link shows every unknown id as unavailable, in URL order
+    bridge.action:
+      name: item_link_open
+      params:
+        url: "omi-computer-dev://items?memory=e2eitemlinkmissingm1&conversation=e2eitemlinkmissingc1&task=e2eitemlinkmissingt1&goal=ignored"
+    expect:
+      result.detail.handled: "true"
+      result.detail.settled: "true"
+      result.detail.sheet_open: "true"
+      result.detail.row_count: "3"
+      result.detail.unavailable_count: "3"
+      result.detail.row_kinds: "memory,conversation,task"
+
+  - id: S3
+    name: An item link that names nothing shows the empty state
+    bridge.action:
+      name: item_link_open
+      params:
+        url: "omi-computer-dev://items?unknown=1"
+    expect:
+      result.detail.handled: "true"
+      result.detail.sheet_open: "true"
+      result.detail.row_count: "0"
+
+  - id: S4
+    name: The auth callback is not an item link
+    bridge.action:
+      name: item_link_open
+      params:
+        url: "omi-computer-dev://auth/callback?error=e2e_not_a_callback"
+    expect:
+      result.detail.handled: "false"
+
+  - id: S5
+    name: A singular link to a missing record explains instead of opening
+    bridge.action:
+      name: item_link_open
+      params:
+        url: "omi-computer-dev://conversation/e2eitemlinkmissingc2"
+    expect:
+      result.detail.sheet_open: "true"
+      result.detail.row_count: "1"
+      result.detail.unavailable_count: "1"
+
+  - id: S6
+    name: Closing the sheet clears it
+    bridge.action:
+      name: item_link_dismiss
+    expect:
+      result.detail.sheet_open: "false"

@@ -1,0 +1,179 @@
+[
+  {
+    "uid": "omi-daily-recap-generation-failing",
+    "orgID": 1,
+    "folderUID": "betdycdziadc0e",
+    "ruleGroup": "Daily recaps",
+    "title": "Daily recap generation is failing",
+    "condition": "C",
+    "data": [
+      {
+        "refId": "A",
+        "queryType": "timeSeriesList",
+        "relativeTimeRange": {
+          "from": 10800,
+          "to": 0
+        },
+        "datasourceUid": "beuxmaq8oxhq8e",
+        "model": {
+          "aliasBy": "generation failures",
+          "datasource": {
+            "type": "stackdriver",
+            "uid": "beuxmaq8oxhq8e"
+          },
+          "instant": false,
+          "intervalMs": 60000,
+          "maxDataPoints": 43200,
+          "queryType": "timeSeriesList",
+          "range": true,
+          "refId": "A",
+          "timeSeriesList": {
+            "alignmentPeriod": "+60s",
+            "crossSeriesReducer": "REDUCE_SUM",
+            "filters": [
+              "metric.type",
+              "=",
+              "logging.googleapis.com/user/daily_summary_user_failed",
+              "AND",
+              "resource.label.job_name",
+              "=",
+              "notifications-job",
+              "AND",
+              "metric.label.reason",
+              "=",
+              "generation_error",
+              "AND",
+              "metric.label.error_type",
+              "!=",
+              "DailySummaryDeliveryError"
+            ],
+            "groupBys": [],
+            "perSeriesAligner": "ALIGN_DELTA",
+            "preprocessor": "none",
+            "projectName": "based-hardware",
+            "view": "FULL"
+          }
+        }
+      },
+      {
+        "refId": "B",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "B",
+          "type": "reduce",
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "B"
+                ]
+              },
+              "reducer": {
+                "params": [],
+                "type": "last"
+              },
+              "type": "query"
+            }
+          ],
+          "expression": "A",
+          "reducer": "sum",
+          "settings": {
+            "mode": "dropNN"
+          }
+        }
+      },
+      {
+        "refId": "C",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "C",
+          "type": "threshold",
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [
+                  24
+                ],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "C"
+                ]
+              },
+              "reducer": {
+                "params": [],
+                "type": "last"
+              },
+              "type": "query"
+            }
+          ],
+          "expression": "B"
+        }
+      }
+    ],
+    "updated": "2026-10-13T00:00:00Z",
+    "noDataState": "OK",
+    "execErrState": "Error",
+    "for": "15m",
+    "keep_firing_for": "0s",
+    "annotations": {
+      "__dashboardUid__": "omi-core-features",
+      "__panelId__": "73",
+      "summary": "More than 24 daily recaps failed to generate in the last 3 hours.",
+      "user_impact": "Users who recorded conversations today get no daily recap notification and no recap in the app for this day until generation recovers and the backfill walk fills the hole.",
+      "scope": "notifications-job current-day recap generation (daily_summary_generated and daily_summary_user_failed log lines, as Cloud Logging metrics daily_summary_recap_generated and daily_summary_user_failed). Excludes DailySummaryDeliveryError, where the recap was generated and only the push failed. Failures are counted per cohort pass, so one recipient retried every 15 minutes counts up to four times per hour.",
+      "verification": "Open the Core Features Daily recap stats and the Recap outcomes graph. Then read notifications-job daily_summary_user_failed lines for the dominant error_type, and daily_summary_job_summary for attempted and failed counts.",
+      "safe_next_action": "For APIConnectionError or provider errors, check the LLM gateway endpoint the notifications job is deployed with (OMI_LLM_GATEWAY_URL) and the gateway lane health, then redeploy the job from main. Do not clear cohort cursors or re-run generation by hand; failed recipients are retried and later backfilled. Runbook: backend/docs/runbooks/daily-summary-cutover.md.",
+      "runbook": "backend/docs/runbooks/daily-summary-cutover.md",
+      "threshold": "Generation failures (reason=generation_error, excluding DailySummaryDeliveryError) summed over a trailing 3h > 24, for 15m. Queries Cloud Monitoring as timeSeriesList: the datasource PromQL query type panics Grafana's alert evaluator (nil pointer at tsdb/cloud-monitoring/promql_query.go:23, 2026-10-13), and a missing generated series reads as NoData, which masked exactly the total-outage case. No failures means no series, which is OK.",
+      "evaluated_bad": "2026-10-10 05:33 UTC to 2026-10-12: every generation failed with APIConnectionError. 8 to 516 generation failures per hour, so the trailing 3h sum crossed 24 within the first hour at busy hours and within 3h at the quietest hours.",
+      "evaluated_good": "2026-10-08: zero generation failures (all failures were DailySummaryDeliveryError, excluded). One persistently retried recipient adds at most 12 in 3h (4 passes per hour), below the threshold."
+    },
+    "labels": {
+      "alert_identity": "omi-daily-recap-generation-failing",
+      "component": "daily-recap",
+      "impact": "product",
+      "severity": "warning",
+      "instatus_component": "api"
+    },
+    "isPaused": false,
+    "notification_settings": {
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": ["alertname"], "group_wait": "5m", "group_interval": "1h", "repeat_interval": "24h"
+    },
+    "record": null
+  }
+]

@@ -45,6 +45,7 @@ def test_expected_exemptions_are_the_manifest_empty_index_overrides():
     # screen-activity device fields remain indexed for future device filtering.
     assert field_reconciler.expected_field_exemptions(manifest) == (
         field_reconciler.FieldExemption('conversations', 'live_transcript_replay_receipt'),
+        field_reconciler.FieldExemption('conversations', 'owner_recognition_diagnostics'),
         field_reconciler.FieldExemption('screen_activity', 'ocrText'),
         field_reconciler.FieldExemption('screen_activity', 'windowTitle'),
         field_reconciler.FieldExemption('sync_backfill_pending', 'payload'),
@@ -137,6 +138,7 @@ def test_apply_disables_only_missing_declared_fields_and_verifies_convergence(mo
     updates = [command for command in runner.commands if command[4] == 'update']
     assert {command[5] for command in updates} == {
         'live_transcript_replay_receipt',
+        'owner_recognition_diagnostics',
         'windowTitle',
         'payload',
         'active_payload',
@@ -145,6 +147,7 @@ def test_apply_disables_only_missing_declared_fields_and_verifies_convergence(mo
     assert all('--clear-exemption' not in command for command in updates)
     assert runner.disabled == {
         ('conversations', 'live_transcript_replay_receipt'),
+        ('conversations', 'owner_recognition_diagnostics'),
         ('screen_activity', 'ocrText'),
         ('screen_activity', 'windowTitle'),
         ('sync_backfill_pending', 'payload'),

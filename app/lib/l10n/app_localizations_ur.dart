@@ -9130,6 +9130,9 @@ class AppLocalizationsUr extends AppLocalizations {
   String get syncCardRateLimited => 'منصفانہ استعمال کی حد پوری ہو گئی — ہم آہنگی خودکار طور پر دوبارہ شروع ہو جائے گی';
 
   @override
+  String get syncCardThrottlePaused => 'سنک تھوڑی دیر کے لیے روک دیا گیا ہے — یہ خود بخود دوبارہ شروع ہوگا';
+
+  @override
   String get syncCardBackendBusy => 'Omi کے سرورز مصروف ہیں — گنجائش بحال ہوتے ہی آپ کی ریکارڈنگز سنک ہو جائیں گی';
 
   @override
@@ -9790,6 +9793,15 @@ class AppLocalizationsUr extends AppLocalizations {
 
   @override
   String get chatBlockMemory => 'یاد';
+
+  @override
+  String get chatBlockPerson => 'شخص';
+
+  @override
+  String get chatBlockUndone => 'کالعدم کر دیا گیا';
+
+  @override
+  String get chatBlockUndoFailed => 'یہ تبدیلی کالعدم نہیں ہو سکی';
 
   @override
   String get chatBlockQuestion => 'سوال';
@@ -10985,11 +10997,6 @@ class AppLocalizationsUr extends AppLocalizations {
   }
 
   @override
-  String transcriptionsPendingCount(int count) {
-    return 'زیرِ التوا ٹرانسکرپشن $count';
-  }
-
-  @override
   String get captureSourceCall => 'کال';
 
   @override
@@ -12034,8 +12041,6 @@ class AppLocalizationsUr extends AppLocalizations {
         'likely': 'ممکنہ',
         'soundsLike': '$name جیسی لگتی ہے',
         'notPerson': '$name نہیں',
-        'carried': 'اب بھی $name۔ آپ کی پچھلی گفتگو سے جاری۔',
-        'change': 'تبدیل کریں',
         'alsoTitle': 'کیا یہ بھی $name ہیں؟',
         'alsoBody': 'Omi کو یہی آواز پچھلی گفتگوؤں میں ملی۔',
         'confirmed': 'آپ نے اس لیبل کی تصدیق کی',
@@ -12980,4 +12985,54 @@ class AppLocalizationsUr extends AppLocalizations {
 
   @override
   String get chatAppsOmiPro => 'OMI PRO';
+
+  @override
+  String reviewProposalCloseTask(String task) {
+    return '“$task” کو مکمل نشان زد کریں؟';
+  }
+
+  @override
+  String reviewProposalRetireTask(String task) {
+    return 'کام “$task” ہٹا دیں؟';
+  }
+
+  @override
+  String reviewProposalMergePeople(String name, String other) {
+    return 'کیا “$name” اور “$other” ایک ہی شخص ہیں؟';
+  }
+
+  @override
+  String get reviewProposalMergeMemories => 'دو دہری یادیں ضم کریں؟';
+
+  @override
+  String get reviewProposalMemory => 'یہ یاد اپ ڈیٹ کریں؟';
+
+  @override
+  String reviewProposalEntitySummary(String name) {
+    return '“$name” کا خلاصہ اپ ڈیٹ کریں؟';
+  }
+
+  @override
+  String get reviewProposalGeneric => 'یہ تجویز کردہ درستی لاگو کریں؟';
+
+  @override
+  String get reviewProposalApply => 'لاگو کریں';
+
+  @override
+  String get reviewProposalSuggested => 'تجویز کردہ';
+
+  @override
+  String get reviewProposalConflict => 'Dream کی تجویز کے بعد یہ بدل گیا، اس لیے کچھ بھی لاگو نہیں کیا گیا۔';
+
+  @override
+  String itemLinkListTitle(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count آئٹمز',
+      one: '1 آئٹم',
+      zero: 'کوئی آئٹم نہیں',
+    );
+    return '$_temp0';
+  }
 }

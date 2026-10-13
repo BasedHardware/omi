@@ -9187,6 +9187,9 @@ class AppLocalizationsDe extends AppLocalizations {
   String get syncCardRateLimited => 'Nutzungslimit erreicht — die Synchronisierung wird automatisch fortgesetzt';
 
   @override
+  String get syncCardThrottlePaused => 'Synchronisierung kurz pausiert — sie wird automatisch fortgesetzt';
+
+  @override
   String get syncCardBackendBusy =>
       'Omis Server sind ausgelastet — deine Aufnahmen werden synchronisiert, sobald wieder Kapazität verfügbar ist';
 
@@ -9859,6 +9862,15 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get chatBlockMemory => 'Erinnerung';
+
+  @override
+  String get chatBlockPerson => 'Person';
+
+  @override
+  String get chatBlockUndone => 'Rückgängig gemacht';
+
+  @override
+  String get chatBlockUndoFailed => 'Diese Änderung konnte nicht rückgängig gemacht werden';
 
   @override
   String get chatBlockQuestion => 'Frage';
@@ -11062,11 +11074,6 @@ class AppLocalizationsDe extends AppLocalizations {
   }
 
   @override
-  String transcriptionsPendingCount(int count) {
-    return 'Offene Transkriptionen $count';
-  }
-
-  @override
   String get captureSourceCall => 'Anruf';
 
   @override
@@ -12114,8 +12121,6 @@ class AppLocalizationsDe extends AppLocalizations {
         'likely': 'Wahrscheinlich',
         'soundsLike': 'Klingt wie $name',
         'notPerson': 'Nicht $name',
-        'carried': 'Weiterhin $name. Aus deinem letzten Gespräch übernommen.',
-        'change': 'Ändern',
         'alsoTitle': 'Ist das auch $name?',
         'alsoBody': 'Omi hat dieselbe Stimme in früheren Gesprächen gefunden.',
         'confirmed': 'Du hast dieses Label bestätigt',
@@ -13064,4 +13069,55 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get chatAppsOmiPro => 'OMI PRO';
+
+  @override
+  String reviewProposalCloseTask(String task) {
+    return '„$task“ als erledigt markieren?';
+  }
+
+  @override
+  String reviewProposalRetireTask(String task) {
+    return 'Aufgabe „$task“ entfernen?';
+  }
+
+  @override
+  String reviewProposalMergePeople(String name, String other) {
+    return 'Ist „$name“ dieselbe Person wie „$other“?';
+  }
+
+  @override
+  String get reviewProposalMergeMemories => 'Zwei doppelte Erinnerungen zusammenführen?';
+
+  @override
+  String get reviewProposalMemory => 'Diese Erinnerung aktualisieren?';
+
+  @override
+  String reviewProposalEntitySummary(String name) {
+    return 'Zusammenfassung für „$name“ aktualisieren?';
+  }
+
+  @override
+  String get reviewProposalGeneric => 'Diese vorgeschlagene Korrektur übernehmen?';
+
+  @override
+  String get reviewProposalApply => 'Übernehmen';
+
+  @override
+  String get reviewProposalSuggested => 'Vorschlag';
+
+  @override
+  String get reviewProposalConflict =>
+      'Das hat sich geändert, seit Dream es vorgeschlagen hat. Es wurde nichts übernommen.';
+
+  @override
+  String itemLinkListTitle(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count Elemente',
+      one: '1 Element',
+      zero: 'Keine Elemente',
+    );
+    return '$_temp0';
+  }
 }

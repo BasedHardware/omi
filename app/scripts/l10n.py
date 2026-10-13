@@ -419,7 +419,13 @@ def apply_add(
     key: str,
     translations: dict[str, str],
     meta: dict[str, Any] | None,
+    before: str | None = None,
 ) -> dict[str, dict[str, Any]]:
+    if before is not None:
+        validate_key(before)
+        missing = [locale for locale, data in loaded.items() if before not in data]
+        if missing:
+            raise L10nError(f"insertion key {before!r} is missing in {', '.join(sorted(missing))}")
     present = [locale for locale, data in loaded.items() if key in data]
     if present:
         if len(present) == len(loaded) and values_and_meta_identical(loaded, key, translations, meta):
@@ -431,10 +437,18 @@ def apply_add(
         )
     out: dict[str, dict[str, Any]] = {}
     for locale, data in loaded.items():
-        new = dict(data)
-        new[key] = translations[locale]
+        addition = {key: translations[locale]}
         if locale == "en" and meta is not None:
-            new[f"@{key}"] = meta
+            addition[f"@{key}"] = meta
+        if before is None:
+            new = dict(data)
+            new.update(addition)
+        else:
+            new = {}
+            for name, value in data.items():
+                if name == before:
+                    new.update(addition)
+                new[name] = value
         out[locale] = new
     return out
 
@@ -782,7 +796,7 @@ def cmd_add(args: argparse.Namespace) -> int:
     meta = metadata_for(args.description, placeholders)
     translations = load_translations_file(Path(args.translations), set(by_locale), args.en)
     validate_new_values(translations, args.key, use_escaping=use_escaping)
-    updated = apply_add(loaded, args.key, translations, meta)
+    updated = apply_add(loaded, args.key, translations, meta, args.before)
     do_codegen = is_flutter_app(app_dir)
     status = mutate_and_write(by_locale, updated, app_dir, arb_dir, args.key, do_codegen)
     if status == "noop":
@@ -913,6 +927,7 @@ def build_parser() -> argparse.ArgumentParser:
     p_add.add_argument("--en", required=True, help="English source string")
     p_add.add_argument("--description", help="Translator description (written on @key in app_en.arb)")
     p_add.add_argument("--placeholders", help="ARB placeholders JSON object")
+    p_add.add_argument("--before", help="Insert before an existing key in every locale to avoid concurrent append conflicts")
     p_add.add_argument("--translations", required=True, help="JSON file mapping locale → string")
     p_add.set_defaults(func=cmd_add)
 

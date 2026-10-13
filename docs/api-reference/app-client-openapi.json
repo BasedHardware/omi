@@ -1445,6 +1445,66 @@
         "title": "AdviceResponse",
         "type": "object"
       },
+      "AgentProposalAnswer": {
+        "additionalProperties": false,
+        "properties": {
+          "decision": {
+            "enum": [
+              "accept",
+              "dismiss"
+            ],
+            "title": "Decision",
+            "type": "string"
+          }
+        },
+        "required": [
+          "decision"
+        ],
+        "title": "AgentProposalAnswer",
+        "type": "object"
+      },
+      "AgentProposalItem": {
+        "properties": {
+          "edit": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Edit"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "other_label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Other Label"
+          },
+          "target_label": {
+            "default": "",
+            "title": "Target Label",
+            "type": "string"
+          },
+          "vocabulary": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Term"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "title": "AgentProposalItem",
+        "type": "object"
+      },
       "AgentToolSchema": {
         "properties": {
           "description": {
@@ -1613,6 +1673,29 @@
         ],
         "title": "AnnouncementType",
         "type": "string"
+      },
+      "AnnualSavings": {
+        "properties": {
+          "amount_minor": {
+            "title": "Amount Minor",
+            "type": "integer"
+          },
+          "formatted": {
+            "title": "Formatted",
+            "type": "string"
+          },
+          "percent": {
+            "title": "Percent",
+            "type": "number"
+          }
+        },
+        "required": [
+          "amount_minor",
+          "percent",
+          "formatted"
+        ],
+        "title": "AnnualSavings",
+        "type": "object"
       },
       "App": {
         "description": "Full App model - includes large/internal fields for detail views.",
@@ -4960,6 +5043,125 @@
           "file"
         ],
         "title": "Body_upload_profile_v3_upload_audio_post",
+        "type": "object"
+      },
+      "BudgetChoiceRecord": {
+        "additionalProperties": false,
+        "properties": {
+          "choice": {
+            "enum": [
+              "on_device",
+              "upgrade"
+            ],
+            "title": "Choice",
+            "type": "string"
+          },
+          "dont_ask_again": {
+            "default": false,
+            "title": "Dont Ask Again",
+            "type": "boolean"
+          },
+          "period": {
+            "title": "Period",
+            "type": "string"
+          }
+        },
+        "required": [
+          "period",
+          "choice"
+        ],
+        "title": "BudgetChoiceRecord",
+        "type": "object"
+      },
+      "BudgetChoiceRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "choice": {
+            "enum": [
+              "on_device",
+              "upgrade"
+            ],
+            "title": "Choice",
+            "type": "string"
+          },
+          "dont_ask_again": {
+            "default": false,
+            "title": "Dont Ask Again",
+            "type": "boolean"
+          },
+          "period": {
+            "title": "Period",
+            "type": "string"
+          }
+        },
+        "required": [
+          "period",
+          "choice"
+        ],
+        "title": "BudgetChoiceRequest",
+        "type": "object"
+      },
+      "BudgetChoiceResponse": {
+        "properties": {
+          "ask": {
+            "title": "Ask",
+            "type": "boolean"
+          },
+          "choice": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/BudgetChoiceRecord"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "period": {
+            "title": "Period",
+            "type": "string"
+          },
+          "state": {
+            "enum": [
+              "managed",
+              "unavailable",
+              "on_device",
+              "held_pending_choice"
+            ],
+            "title": "State",
+            "type": "string"
+          }
+        },
+        "required": [
+          "period",
+          "state",
+          "choice",
+          "ask"
+        ],
+        "title": "BudgetChoiceResponse",
+        "type": "object"
+      },
+      "BudgetChoiceWriteResponse": {
+        "properties": {
+          "ask": {
+            "const": false,
+            "default": false,
+            "title": "Ask",
+            "type": "boolean"
+          },
+          "choice": {
+            "$ref": "#/components/schemas/BudgetChoiceRecord"
+          },
+          "period": {
+            "title": "Period",
+            "type": "string"
+          }
+        },
+        "required": [
+          "period",
+          "choice"
+        ],
+        "title": "BudgetChoiceWriteResponse",
         "type": "object"
       },
       "BulkAssignSegmentsRequest": {
@@ -8504,6 +8706,25 @@
             ],
             "title": "Updated At"
           },
+          "user_corrections": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "User Corrections",
+            "type": "array"
+          },
+          "user_overview": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "User Overview"
+          },
           "uses_custom_stt": {
             "default": false,
             "title": "Uses Custom Stt",
@@ -9740,6 +9961,25 @@
               }
             ],
             "title": "Updated At"
+          },
+          "user_corrections": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "User Corrections",
+            "type": "array"
+          },
+          "user_overview": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "User Overview"
           },
           "uses_custom_stt": {
             "default": false,
@@ -13422,6 +13662,15 @@
             "title": "Outcome",
             "type": "string"
           },
+          "policy": {
+            "default": "suggest",
+            "enum": [
+              "auto",
+              "suggest"
+            ],
+            "title": "Policy",
+            "type": "string"
+          },
           "reason": {
             "title": "Reason",
             "type": "string"
@@ -13513,6 +13762,15 @@
           },
           "kind": {
             "title": "Kind",
+            "type": "string"
+          },
+          "policy": {
+            "default": "auto",
+            "enum": [
+              "auto",
+              "suggest"
+            ],
+            "title": "Policy",
             "type": "string"
           },
           "spelling": {
@@ -13697,6 +13955,146 @@
           "runs"
         ],
         "title": "DreamRunsResponse",
+        "type": "object"
+      },
+      "Edit": {
+        "additionalProperties": false,
+        "properties": {
+          "after": {
+            "default": "",
+            "title": "After",
+            "type": "string"
+          },
+          "before": {
+            "default": "",
+            "title": "Before",
+            "type": "string"
+          },
+          "evidence": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 10,
+            "minItems": 1,
+            "title": "Evidence",
+            "type": "array"
+          },
+          "kind": {
+            "enum": [
+              "spelling",
+              "title",
+              "overview",
+              "memory",
+              "merge_people",
+              "entity_summary",
+              "close_task",
+              "retire_task",
+              "merge_memories"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "other": {
+            "default": "",
+            "title": "Other",
+            "type": "string"
+          },
+          "reason": {
+            "maxLength": 1000,
+            "minLength": 1,
+            "title": "Reason",
+            "type": "string"
+          },
+          "target": {
+            "title": "Target",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "target",
+          "reason",
+          "evidence"
+        ],
+        "title": "Edit",
+        "type": "object"
+      },
+      "EditReceiptBlock": {
+        "description": "Server-authored write receipt. IDs and URLs never encode item content.",
+        "properties": {
+          "action": {
+            "enum": [
+              "created",
+              "updated",
+              "deleted",
+              "completed",
+              "uncompleted",
+              "renamed"
+            ],
+            "title": "Action",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "receiptId": {
+            "title": "Receiptid",
+            "type": "string"
+          },
+          "summary": {
+            "maxLength": 300,
+            "minLength": 1,
+            "title": "Summary",
+            "type": "string"
+          },
+          "targetId": {
+            "title": "Targetid",
+            "type": "string"
+          },
+          "targetKind": {
+            "enum": [
+              "conversation",
+              "memory",
+              "task",
+              "person"
+            ],
+            "title": "Targetkind",
+            "type": "string"
+          },
+          "type": {
+            "const": "editReceipt",
+            "default": "editReceipt",
+            "title": "Type",
+            "type": "string"
+          },
+          "undoable": {
+            "default": true,
+            "title": "Undoable",
+            "type": "boolean"
+          },
+          "undoneAt": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Undoneat"
+          }
+        },
+        "required": [
+          "id",
+          "receiptId",
+          "targetKind",
+          "action",
+          "targetId",
+          "summary"
+        ],
+        "title": "EditReceiptBlock",
         "type": "object"
       },
       "EntitiesResponse": {
@@ -23320,6 +23718,242 @@
         "title": "PhoneNumbersResponse",
         "type": "object"
       },
+      "PlanFeature": {
+        "properties": {
+          "included": {
+            "default": true,
+            "title": "Included",
+            "type": "boolean"
+          },
+          "key": {
+            "title": "Key",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          }
+        },
+        "required": [
+          "key",
+          "label"
+        ],
+        "title": "PlanFeature",
+        "type": "object"
+      },
+      "PlanIdentitySubscription": {
+        "properties": {
+          "cancel_at_period_end": {
+            "default": false,
+            "title": "Cancel At Period End",
+            "type": "boolean"
+          },
+          "current_period_end": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Current Period End"
+          },
+          "current_period_start": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Current Period Start"
+          },
+          "current_price_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Current Price Id"
+          },
+          "deprecated": {
+            "default": false,
+            "title": "Deprecated",
+            "type": "boolean"
+          },
+          "deprecation_message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Deprecation Message"
+          },
+          "features": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Features",
+            "type": "array"
+          },
+          "limits": {
+            "$ref": "#/components/schemas/PlanLimits",
+            "default": {}
+          },
+          "plan": {
+            "$ref": "#/components/schemas/PlanType",
+            "default": "basic"
+          },
+          "status": {
+            "$ref": "#/components/schemas/SubscriptionStatus",
+            "default": "active"
+          },
+          "stripe_subscription_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Stripe Subscription Id"
+          }
+        },
+        "title": "PlanIdentitySubscription",
+        "type": "object"
+      },
+      "PlanIdentityUserSubscriptionResponse": {
+        "properties": {
+          "available_plans": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/SubscriptionPlan"
+            },
+            "title": "Available Plans",
+            "type": "array"
+          },
+          "chat_quota_allowed": {
+            "default": true,
+            "title": "Chat Quota Allowed",
+            "type": "boolean"
+          },
+          "chat_quota_percent": {
+            "default": 0.0,
+            "title": "Chat Quota Percent",
+            "type": "number"
+          },
+          "chat_quota_reset_at": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Chat Quota Reset At"
+          },
+          "chat_quota_unit": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ChatQuotaUnit"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "chat_quota_used": {
+            "default": 0.0,
+            "title": "Chat Quota Used",
+            "type": "number"
+          },
+          "desktop_grandfather_until": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Desktop Grandfather Until"
+          },
+          "insights_gained_limit": {
+            "title": "Insights Gained Limit",
+            "type": "integer"
+          },
+          "insights_gained_used": {
+            "title": "Insights Gained Used",
+            "type": "integer"
+          },
+          "phone_call_quota": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PhoneCallQuota"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "show_subscription_ui": {
+            "default": true,
+            "title": "Show Subscription Ui",
+            "type": "boolean"
+          },
+          "subscription": {
+            "$ref": "#/components/schemas/PlanIdentitySubscription"
+          },
+          "transcription_allowance": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TranscriptionAllowanceSnapshot"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "transcription_seconds_limit": {
+            "title": "Transcription Seconds Limit",
+            "type": "integer"
+          },
+          "transcription_seconds_used": {
+            "title": "Transcription Seconds Used",
+            "type": "integer"
+          },
+          "words_transcribed_limit": {
+            "title": "Words Transcribed Limit",
+            "type": "integer"
+          },
+          "words_transcribed_used": {
+            "title": "Words Transcribed Used",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "subscription",
+          "transcription_seconds_used",
+          "transcription_seconds_limit",
+          "words_transcribed_used",
+          "words_transcribed_limit",
+          "insights_gained_used",
+          "insights_gained_limit"
+        ],
+        "title": "PlanIdentityUserSubscriptionResponse",
+        "type": "object"
+      },
       "PlanLimits": {
         "properties": {
           "chat_cost_usd_per_month": {
@@ -25486,6 +26120,68 @@
         "title": "ReviewAnswerReceipt",
         "type": "object"
       },
+      "ReviewAnswerV2": {
+        "additionalProperties": false,
+        "properties": {
+          "agent_proposal": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AgentProposalAnswer"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "not_sure": {
+            "default": false,
+            "title": "Not Sure",
+            "type": "boolean"
+          },
+          "same_person": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SamePersonAnswer"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "speaker": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SpeakerAnswer"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "spelling": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SpellingAnswer"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "task": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TaskAnswer"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "title": "ReviewAnswerV2",
+        "type": "object"
+      },
       "ReviewAppRequest": {
         "properties": {
           "response": {
@@ -25775,6 +26471,103 @@
         "title": "ReviewItem",
         "type": "object"
       },
+      "ReviewItemV2": {
+        "properties": {
+          "agent_proposal": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AgentProposalItem"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "item_id": {
+            "title": "Item Id",
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "speaker",
+              "task",
+              "same_person",
+              "spelling",
+              "agent_proposal"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "quote": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Quote"
+          },
+          "same_person": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SamePersonItem"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "speaker": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SpeakerItem"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "spelling": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SpellingItem"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "task": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TaskItem"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "item_id",
+          "kind",
+          "title",
+          "created_at"
+        ],
+        "title": "ReviewItemV2",
+        "type": "object"
+      },
       "ReviewItemsResponse": {
         "properties": {
           "items": {
@@ -25797,6 +26590,30 @@
           "remaining_today"
         ],
         "title": "ReviewItemsResponse",
+        "type": "object"
+      },
+      "ReviewItemsResponseV2": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ReviewItemV2"
+            },
+            "maxItems": 3,
+            "title": "Items",
+            "type": "array"
+          },
+          "remaining_today": {
+            "maximum": 3.0,
+            "minimum": 0.0,
+            "title": "Remaining Today",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "remaining_today"
+        ],
+        "title": "ReviewItemsResponseV2",
         "type": "object"
       },
       "ReviewResolutionRequest": {
@@ -29198,6 +30015,256 @@
         "title": "StoreRecordingPermissionResponse",
         "type": "object"
       },
+      "StorefrontCurrentPlan": {
+        "properties": {
+          "legacy": {
+            "title": "Legacy",
+            "type": "boolean"
+          },
+          "plan_id": {
+            "title": "Plan Id",
+            "type": "string"
+          },
+          "price_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Price Id"
+          }
+        },
+        "required": [
+          "plan_id",
+          "legacy"
+        ],
+        "title": "StorefrontCurrentPlan",
+        "type": "object"
+      },
+      "StorefrontPrice": {
+        "properties": {
+          "amount_minor": {
+            "title": "Amount Minor",
+            "type": "integer"
+          },
+          "annual_savings": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AnnualSavings"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "currency": {
+            "title": "Currency",
+            "type": "string"
+          },
+          "formatted_amount": {
+            "title": "Formatted Amount",
+            "type": "string"
+          },
+          "interval": {
+            "enum": [
+              "month",
+              "year"
+            ],
+            "title": "Interval",
+            "type": "string"
+          },
+          "monthly_equivalent": {
+            "title": "Monthly Equivalent",
+            "type": "string"
+          },
+          "price_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Price Id"
+          }
+        },
+        "required": [
+          "interval",
+          "currency",
+          "amount_minor",
+          "formatted_amount",
+          "monthly_equivalent"
+        ],
+        "title": "StorefrontPrice",
+        "type": "object"
+      },
+      "StorefrontResponse": {
+        "properties": {
+          "catalog_revision": {
+            "title": "Catalog Revision",
+            "type": "integer"
+          },
+          "current": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/StorefrontCurrentPlan"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "next_offer_tier_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Offer Tier Id"
+          },
+          "schema_version": {
+            "const": 1,
+            "default": 1,
+            "title": "Schema Version",
+            "type": "integer"
+          },
+          "show_subscription_ui": {
+            "default": true,
+            "title": "Show Subscription Ui",
+            "type": "boolean"
+          },
+          "tiers": {
+            "items": {
+              "$ref": "#/components/schemas/StorefrontTier"
+            },
+            "title": "Tiers",
+            "type": "array"
+          },
+          "usage": {
+            "$ref": "#/components/schemas/StorefrontUsage"
+          }
+        },
+        "required": [
+          "catalog_revision"
+        ],
+        "title": "StorefrontResponse",
+        "type": "object"
+      },
+      "StorefrontTier": {
+        "properties": {
+          "action": {
+            "enum": [
+              "current",
+              "upgrade",
+              "downgrade_not_offered",
+              "contact"
+            ],
+            "title": "Action",
+            "type": "string"
+          },
+          "display_name": {
+            "title": "Display Name",
+            "type": "string"
+          },
+          "entitlement_version": {
+            "title": "Entitlement Version",
+            "type": "string"
+          },
+          "features": {
+            "items": {
+              "$ref": "#/components/schemas/PlanFeature"
+            },
+            "title": "Features",
+            "type": "array"
+          },
+          "legacy": {
+            "default": false,
+            "title": "Legacy",
+            "type": "boolean"
+          },
+          "plan_id": {
+            "title": "Plan Id",
+            "type": "string"
+          },
+          "prices": {
+            "items": {
+              "$ref": "#/components/schemas/StorefrontPrice"
+            },
+            "title": "Prices",
+            "type": "array"
+          },
+          "recommended": {
+            "default": false,
+            "title": "Recommended",
+            "type": "boolean"
+          },
+          "tagline": {
+            "title": "Tagline",
+            "type": "string"
+          },
+          "tier_id": {
+            "title": "Tier Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "tier_id",
+          "plan_id",
+          "entitlement_version",
+          "display_name",
+          "tagline",
+          "features",
+          "prices",
+          "action"
+        ],
+        "title": "StorefrontTier",
+        "type": "object"
+      },
+      "StorefrontUsage": {
+        "properties": {
+          "budget_percent": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Budget Percent"
+          },
+          "kind": {
+            "default": "unavailable",
+            "enum": [
+              "transcription",
+              "usage_budget",
+              "unavailable"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "reset_at": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reset At"
+          }
+        },
+        "title": "StorefrontUsage",
+        "type": "object"
+      },
       "StripeConnectAccountResponse": {
         "properties": {
           "account_id": {
@@ -29742,6 +30809,47 @@
         "title": "SyncCaptureManifestResponse",
         "type": "object"
       },
+      "SyncContentInProgressResponse": {
+        "description": "A duplicate upload follows its live owner; older servers omit hints.",
+        "properties": {
+          "code": {
+            "title": "Code",
+            "type": "string"
+          },
+          "detail": {
+            "default": "The same audio is already processing",
+            "title": "Detail",
+            "type": "string"
+          },
+          "job_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Job Id"
+          },
+          "poll_after_ms": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Poll After Ms"
+          }
+        },
+        "required": [
+          "code"
+        ],
+        "title": "SyncContentInProgressResponse",
+        "type": "object"
+      },
       "SyncJobStartResponse": {
         "properties": {
           "job_id": {
@@ -29806,6 +30914,17 @@
             "default": "fresh",
             "title": "Lane",
             "type": "string"
+          },
+          "poll_after_ms": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Poll After Ms"
           },
           "processed_segments": {
             "default": 0,
@@ -31647,6 +32766,51 @@
         "title": "TaskWorkflowMode",
         "type": "string"
       },
+      "Term": {
+        "additionalProperties": false,
+        "properties": {
+          "aliases": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 5,
+            "title": "Aliases",
+            "type": "array"
+          },
+          "evidence": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 10,
+            "minItems": 1,
+            "title": "Evidence",
+            "type": "array"
+          },
+          "kind": {
+            "enum": [
+              "person",
+              "organization",
+              "project",
+              "jargon"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "spelling": {
+            "maxLength": 50,
+            "minLength": 1,
+            "title": "Spelling",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "spelling",
+          "evidence"
+        ],
+        "title": "Term",
+        "type": "object"
+      },
       "TestDailySummaryRequest": {
         "properties": {
           "date": {
@@ -32585,6 +33749,28 @@
           }
         },
         "title": "UnapprovedPublicAppResponse",
+        "type": "object"
+      },
+      "UndoChatReceiptResponse": {
+        "properties": {
+          "block": {
+            "$ref": "#/components/schemas/EditReceiptBlock"
+          },
+          "status": {
+            "enum": [
+              "undone",
+              "already_undone",
+              "unavailable"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status",
+          "block"
+        ],
+        "title": "UndoChatReceiptResponse",
         "type": "object"
       },
       "UpdateAIUserProfileRequest": {
@@ -43545,6 +44731,90 @@
         "tags": [
           "chat-first"
         ]
+      }
+    },
+    "/v1/chat/receipts/{receipt_id}/undo": {
+      "post": {
+        "description": "Undo an owner-scoped chat write once and return its updated content block.",
+        "operationId": "undo_chat_receipt_v1_chat_receipts__receipt_id__undo_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "receipt_id",
+            "required": true,
+            "schema": {
+              "title": "Receipt Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UndoChatReceiptResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Undo Chat Receipt"
       }
     },
     "/v1/connectors/synthesize": {
@@ -67117,6 +68387,194 @@
         ]
       }
     },
+    "/v1/users/budget-choice": {
+      "get": {
+        "operationId": "get_budget_choice_v1_users_budget_choice_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Omi-Held-Content",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Omi-Held-Content"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BudgetChoiceResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Get Budget Choice"
+      },
+      "put": {
+        "operationId": "put_budget_choice_v1_users_budget_choice_put",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Omi-Held-Content",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Omi-Held-Content"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BudgetChoiceRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BudgetChoiceWriteResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Put Budget Choice"
+      }
+    },
     "/v1/users/daily-summaries": {
       "get": {
         "description": "Get list of daily summaries for the authenticated user.\nReturns summaries in reverse chronological order.",
@@ -70118,6 +71576,15 @@
               "title": "X-Device-Id-Hash",
               "type": "string"
             }
+          },
+          {
+            "description": "Value 1 declares catalog plan IDs and lossless unknown-plan decoding on a recognized client platform. Otherwise the platform release floor determines capability; older or unidentified clients retain legacy labels.",
+            "in": "header",
+            "name": "X-Omi-Plan-Identity",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
           }
         ],
         "responses": {
@@ -70153,7 +71620,13 @@
         "summary": "Get User Subscription Endpoint",
         "tags": [
           "v1"
-        ]
+        ],
+        "x-omi-plan-identity-response": {
+          "description": "application/json response when the server plan-identity capability predicate accepts the header or platform/version floor. The default 200 schema is the legacy projection.",
+          "schema": {
+            "$ref": "#/components/schemas/PlanIdentityUserSubscriptionResponse"
+          }
+        }
       }
     },
     "/v1/users/me/trial": {
@@ -77262,6 +78735,296 @@
         ]
       }
     },
+    "/v2/payments/plans": {
+      "get": {
+        "operationId": "get_storefront_v2_payments_plans_get",
+        "parameters": [
+          {
+            "description": "Paywall Opened source vocabulary (#21337)",
+            "in": "query",
+            "name": "source",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Paywall Opened source vocabulary (#21337)",
+              "title": "Source"
+            }
+          },
+          {
+            "in": "query",
+            "name": "trigger",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "proactive_agent",
+                    "screen_context",
+                    "usage_budget",
+                    "mcp_daily_cap"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Trigger"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StorefrontResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Get Storefront",
+        "tags": [
+          "payments"
+        ]
+      }
+    },
+    "/v2/review/items": {
+      "get": {
+        "operationId": "get_review_items_v2_v2_review_items_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReviewItemsResponseV2"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Get Review Items V2",
+        "tags": [
+          "review"
+        ]
+      }
+    },
+    "/v2/review/items/{item_id}/answer": {
+      "post": {
+        "operationId": "answer_review_item_v2_v2_review_items__item_id__answer_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "item_id",
+            "required": true,
+            "schema": {
+              "title": "Item Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReviewAnswerV2"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReviewAnswerReceipt"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Answer Review Item V2",
+        "tags": [
+          "review"
+        ]
+      }
+    },
     "/v2/sync-capture-manifest": {
       "post": {
         "operationId": "create_sync_capture_manifest_v2_sync_capture_manifest_post",
@@ -77536,6 +79299,16 @@
           },
           "401": {
             "$ref": "#/components/responses/Error401"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SyncContentInProgressResponse"
+                }
+              }
+            },
+            "description": "The same audio is already processing; follow its owner when present"
           },
           "422": {
             "content": {

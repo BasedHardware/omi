@@ -22,7 +22,6 @@ PRODUCTION_DRAIN_MODULES = (
     ('backend/utils/other/notifications.py', 'drain_isolated_async('),
     ('backend/utils/task_intelligence/workstream_association.py', 'drain_isolated('),
     ('backend/database/frame_requests.py', 'drain_isolated('),
-    ('backend/database/projection_repair.py', 'drain_isolated('),
     ('backend/utils/pusher_finalization.py', 'decide_attempt('),
     ('desktop/macos/agent/src/runtime/conversation-journal.ts', 'drainIsolated('),
     ('desktop/macos/agent/src/runtime/journal-outbox-pump.ts', 'drainIsolated('),
@@ -84,3 +83,11 @@ def test_only_the_periodic_publisher_observes_the_gauge() -> None:
     assert 'publish_all_queue_oldest_ready_ages' in (REPO / 'backend/database/durable_queue_age.py').read_text(
         encoding='utf-8'
     )
+
+
+def test_unknown_companion_is_zero_initialized_for_every_declared_queue() -> None:
+    from utils.metrics import generate_latest
+
+    exported = generate_latest().decode()
+    for queue in OMI_QUEUE_NAMES:
+        assert f'omi_queue_oldest_ready_sample_unknown{{queue="{queue}"}} 0.0' in exported

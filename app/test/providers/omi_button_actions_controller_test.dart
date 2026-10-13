@@ -126,10 +126,41 @@ void main() {
     expect(onboarding.voiceSessionActive, isTrue);
     expect(provider.hasVoiceCommandSessionForTesting, isTrue);
 
+    // No audio was ever captured for this session (the test never feeds BLE
+    // bytes in), so this is the same "pressed twice without speaking" case as
+    // #20789: the dropped question resets the step instead of sticking on
+    // "processing" forever.
     provider.handleButtonEventForTesting('test-id', 1);
-    expect(onboarding.questionSent, isTrue);
+    expect(onboarding.questionSent, isFalse);
+    expect(onboarding.questionFailed, isTrue);
     expect(onboarding.voiceSessionActive, isFalse);
 
+    provider.dispose();
+    onboarding.dispose();
+  });
+
+  test('a tutorial question sent by the 15 s timeout moves the tutorial on (#20786)', () async {
+    final onboarding = DeviceOnboardingProvider()..startOnboarding();
+    onboarding.advanceStep();
+    final actions = _RecordingCaptureExternalActions();
+    final provider = _NoSocketCaptureProvider(
+      externalActions: actions,
+      audioCodecLoader: (_) async => BleAudioCodec.opus,
+      speakerHaptic: (_, __) async => true,
+    );
+    provider.deviceOnboardingProvider = onboarding;
+    provider.updateRecordingDevice(_device(DeviceType.omi));
+
+    // One press and some speech, then no second press: the timeout ends the session.
+    provider.handleButtonEventForTesting('test-id', 1);
+    expect(onboarding.voiceSessionActive, isTrue);
+    provider.addVoiceCommandBytesForTesting(<int>[1, 2, 3]);
+    provider.endVoiceCommandSessionForTesting('test-id', autoSubmitted: true);
+    await Future<void>.delayed(Duration.zero);
+
+    expect(actions.sendCount, 1);
+    expect(onboarding.voiceSessionActive, isFalse);
+    expect(onboarding.questionSent, isTrue);
     provider.dispose();
     onboarding.dispose();
   });

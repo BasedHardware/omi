@@ -220,7 +220,8 @@ environments:
           max_doublings: 5
           max_retry: 0s
           min_backoff: 5s
-        attempt_deadline: 180s
+        # 660s full drain, 690s backend HTTP bound, plus Scheduler transport headroom.
+        attempt_deadline: 720s
         owner: backend/docs/runbooks/dream-agent.md
       - name: dream-agent-canary-half-hourly
         region: us-central1

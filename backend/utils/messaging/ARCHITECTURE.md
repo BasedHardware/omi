@@ -14,9 +14,14 @@ provider or database IO. See `backend/docs/messaging-channels.md` for Stage A an
   retry guards, rendering metadata, artifacts and surface actions.
 - `projection.py`: one catalog projection for advertisement and execution; channels
   omit device charts, app retains its existing tools.
+- `turn_context.py`: original request clocks for shaped evidence and phone reminder confirmations.
 - `history.py`, `app_awareness.py`: cross-surface append-only awareness and search.
-- `undo.py`: encrypted five-minute inverse receipts; reserves before supported writes,
-  reports outcomes, and delegates inverses to domain authorities.
+- `utils/retrieval/chat_mount.py`: shared shaped prompt and surface-aware legacy
+  prompt loading; channels avoid context IO for a prompt their runner discards.
+- `undo.py`: shared encrypted five-minute inverse receipts, owner-scoped app undo,
+  durable content-free audits, and exact field snapshots; reserves before supported writes,
+  emits shared memoryLink/taskCard action receipts, scopes inverse claims per action,
+  and delegates slow inverses to domain authorities without occupying the chat lease.
 - `adapters/base.py`: shared pacing, owned-file tools and media preparation.
 - `adapters/telegram.py`: private-chat Bot API verification, parsing, drafts and delivery.
 - `adapters/linq.py`: replaceable `IMessageProvider` and Linq implementation.

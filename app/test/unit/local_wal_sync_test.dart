@@ -14,10 +14,13 @@ import 'package:omi/services/audio_sources/audio_source.dart';
 import 'package:omi/services/wals/flash_page_wal_sync.dart';
 import 'package:omi/services/wals/local_wal_sync.dart';
 import 'package:omi/services/wals/sync_rate_limiter.dart';
+import 'package:omi/services/wals/sync_job_poller.dart';
 import 'package:omi/services/wals/sync_upload_batch.dart';
 import 'package:omi/services/wals/sync_upload_gate.dart';
 import 'package:omi/services/wals/wal.dart';
 import 'package:omi/services/wals/wal_interfaces.dart';
+import 'package:omi/utils/debug_log_manager.dart';
+import 'package:omi/utils/wal_file_manager.dart';
 
 /// Minimal listener for testing — records calls without side effects.
 class _MockListener implements IWalSyncListener {
@@ -43,6 +46,9 @@ void main() {
     TestWidgetsFlutterBinding.ensureInitialized();
     SharedPreferences.setMockInitialValues({});
     await SharedPreferencesUtil.init();
+    SyncRateLimiter.instance.clear();
+    SyncRateLimiter.instance.clockForTesting = null;
+    SyncJobPoller.instance.resetForTesting();
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(
       const MethodChannel('plugins.flutter.io/path_provider'),
       (MethodCall call) async {
@@ -53,6 +59,12 @@ void main() {
 
     listener = _MockListener();
     sync = LocalWalSyncImpl(listener);
+  });
+
+  tearDown(() {
+    SyncRateLimiter.instance.clear();
+    SyncRateLimiter.instance.clockForTesting = null;
+    SyncJobPoller.instance.resetForTesting();
   });
 
   group('onFrameCaptured', () {
@@ -885,6 +897,224 @@ void main() {
 
       expect(freshSync.testWals.map((w) => w.id), contains(wal.id));
     });
+  });
+
+  group('reconcile empty-completion diagnostics', () {
+    late Directory directory;
+    final now = DateTime.fromMillisecondsSinceEpoch(1790730000 * 1000);
+    final staleReports = <Map<String, Object?>>[];
+
+    setUpAll(() async {
+      directory = await Directory.systemTemp.createTemp('wal_reconcile_empty_');
+    });
+
+    setUp(() async {
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(
+        const MethodChannel('plugins.flutter.io/path_provider'),
+        (MethodCall call) async {
+          if (call.method == 'getApplicationDocumentsDirectory') return directory.path;
+          return null;
+        },
+      );
+      await WalFileManager.init();
+      await DebugLogManager.setEnabled(true);
+      await DebugLogManager.clear();
+      staleReports.clear();
+      SyncRateLimiter.instance.clear();
+    });
+
+    tearDown(() async {
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(
+        const MethodChannel('plugins.flutter.io/path_provider'),
+        null,
+      );
+      await DebugLogManager.setEnabled(false);
+      SyncRateLimiter.instance.clear();
+    });
+
+    tearDownAll(() async {
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(
+        const MethodChannel('plugins.flutter.io/path_provider'),
+        (MethodCall call) async => directory.parent.path,
+      );
+      await WalFileManager.init();
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(
+        const MethodChannel('plugins.flutter.io/path_provider'),
+        null,
+      );
+      if (directory.existsSync()) await directory.delete(recursive: true);
+    });
+
+    Wal member({int index = 0, int retryCount = 0}) {
+      final name = 'audio_reconcile_$index.bin';
+      File('${directory.path}/$name').writeAsBytesSync([1, 2, 3]);
+      return Wal(
+        timerStart: 1790728361 + index * 10,
+        device: 'E6:28:6D:ED:4E:45',
+        codec: BleAudioCodec.opus,
+        seconds: 30,
+        status: WalStatus.uploaded,
+        storage: WalStorage.disk,
+        filePath: name,
+        retryCount: retryCount,
+      )..jobId = 'b4b06584';
+    }
+
+    LocalWalSyncImpl build(SyncJobStatusResponse status) => LocalWalSyncImpl(
+          listener,
+          now: () => now,
+          jobStatusFetcher: (jobId) async => SyncJobFetch(SyncJobFetchOutcome.ok, status),
+          staleWalTelemetry: staleReports.add,
+        );
+
+    SyncJobStatusResponse completed({
+      List<String> newIds = const [],
+      List<String> updatedIds = const [],
+      bool missingResult = false,
+      int processedSegments = 0,
+      String? reasonCode,
+    }) =>
+        SyncJobStatusResponse(
+          jobId: 'b4b06584',
+          status: 'completed',
+          processedSegments: processedSegments,
+          reasonCode: reasonCode,
+          result: missingResult
+              ? null
+              : SyncLocalFilesResponse(newConversationIds: newIds, updatedConversationIds: updatedIds),
+        );
+
+    Future<List<Map<String, dynamic>>> readEvents() async {
+      final events = <Map<String, dynamic>>[];
+      for (final log in await DebugLogManager.listLogFiles()) {
+        events.addAll((await log.readAsLines()).map((line) => jsonDecode(line) as Map<String, dynamic>));
+      }
+      return events;
+    }
+
+    Future<List<Map<String, dynamic>>> pollEvents(String type) async {
+      for (var attempt = 0; attempt < 100; attempt++) {
+        final events = await readEvents();
+        if (events.any((event) => event['type'] == type)) return events;
+        await Future<void>.delayed(const Duration(milliseconds: 10));
+      }
+      fail('Timed out waiting for $type in DebugLogManager.listLogFiles');
+    }
+
+    test('queued then completed 0/0/0 acknowledges the WAL and emits a diagnostic', () async {
+      var polls = 0;
+      var pollNow = now.subtract(SyncJobPoller.minimumInterval);
+      final local = LocalWalSyncImpl(
+        listener,
+        now: () => pollNow,
+        jobStatusFetcher: (jobId) async => SyncJobFetch(
+          SyncJobFetchOutcome.ok,
+          polls++ == 0 ? SyncJobStatusResponse(jobId: jobId, status: 'queued') : completed(),
+        ),
+        staleWalTelemetry: staleReports.add,
+      );
+      final wal = member();
+      local.testWals = [wal];
+      await local.reconcileUploadedWals();
+      expect(wal.status, WalStatus.uploaded);
+      expect(wal.retryCount, 0);
+
+      await local.reconcileUploadedWals();
+      expect(polls, 1, reason: 'the first poll is immediate, repeated same-time passes are deferred');
+      expect(wal.status, WalStatus.uploaded);
+      pollNow = now; // exactly one minimum interval; retain the original ACK timestamp.
+      final response = await local.reconcileUploadedWals();
+      expect(response.newConversationIds, isEmpty);
+      expect(response.updatedConversationIds, isEmpty);
+      expect(polls, 2);
+      // capture_recovery_replay_scenarios_test.dart: acknowledgement resolves by
+      // polling, never by re-uploading bytes, including legitimate empty results.
+      expect(wal.status, WalStatus.synced);
+      expect(wal.syncedAt, 1790730000);
+      expect(wal.jobId, isNull);
+      expect(wal.retryCount, 0);
+      expect(wal.lastRetryAt, 0);
+      expect(listener.syncedWals, [wal]);
+      final restored = (await WalFileManager.loadWals()).single;
+      expect(restored.id, wal.id);
+      expect(restored.status, WalStatus.synced);
+      expect(restored.syncedAt, wal.syncedAt);
+      expect(restored.jobId, isNull);
+      expect(restored.retryCount, 0);
+      local.reportStaleMissingWals(trigger: 'test');
+      expect(staleReports, isEmpty);
+
+      final events = await pollEvents('reconcile_completed_empty');
+      final event = events.singleWhere((event) => event['type'] == 'reconcile_completed_empty');
+      expect(event['jobId'], 'b4b06584');
+      expect(event['walId'], 'E6:28:6D:ED:4E:45_1790728361');
+      expect(event['walKey'], '${wal.id}|${wal.filePath}');
+      expect(event['newConversations'], 0);
+      expect(event['updatedConversations'], 0);
+      expect(event['processedSegments'], 0);
+      expect(event['totalSegments'], 0);
+      expect(event['retryCount'], 0);
+      expect(event['capacityLimited'], false);
+      expect(event['retryCountBumped'], false);
+
+      await local.reconcileUploadedWals();
+      expect(polls, 2, reason: 'the acknowledged terminal job is detached');
+      expect(listener.syncedWals, [wal]);
+      expect((await readEvents()).where((event) => event['type'] == 'reconcile_completed_empty'), hasLength(1));
+    });
+
+    test('completed without a result acknowledges and reports existing retry accounting', () async {
+      final local = build(completed(missingResult: true, processedSegments: 1));
+      final wal = member(retryCount: walMaxAutoRetries)..lastRetryAt = 123;
+      local.testWals = [wal];
+      await local.reconcileUploadedWals();
+      expect(wal.status, WalStatus.synced);
+      expect(wal.jobId, isNull);
+      expect(wal.retryCount, walMaxAutoRetries);
+      expect(wal.lastRetryAt, 123);
+      expect((await WalFileManager.loadWals()).single.status, WalStatus.synced);
+      final events = await pollEvents('reconcile_completed_empty');
+      final event = events.singleWhere((event) => event['type'] == 'reconcile_completed_empty');
+      expect(event['newConversations'], 0);
+      expect(event['updatedConversations'], 0);
+      expect(event['processedSegments'], 1);
+      expect(event['retryCount'], walMaxAutoRetries);
+      expect(event['retryCountBumped'], false);
+    });
+
+    test('empty completion with a capacity hint acknowledges without applying backoff', () async {
+      final local = build(completed(reasonCode: 'backfill_capacity'));
+      final wal = member(retryCount: 1)..lastRetryAt = 123;
+      local.testWals = [wal];
+      await local.reconcileUploadedWals();
+      expect(wal.status, WalStatus.synced);
+      expect(wal.jobId, isNull);
+      expect(wal.retryCount, 1);
+      expect(wal.lastRetryAt, 123);
+      expect(SyncRateLimiter.instance.isLimited, isFalse);
+      await pollEvents('reconcile_completed_empty');
+    });
+
+    for (final updatedOnly in [false, true]) {
+      test('completed with ${updatedOnly ? 'updated' : 'new'} output acknowledges all five members', () async {
+        final local = build(
+          completed(newIds: updatedOnly ? [] : ['conversation-1'], updatedIds: updatedOnly ? ['conversation-1'] : []),
+        );
+        final members = List.generate(5, (index) => member(index: index)..jobId = 'eab86592');
+        local.testWals = members;
+        final response = await local.reconcileUploadedWals();
+        expect(updatedOnly ? response.updatedConversationIds : response.newConversationIds, ['conversation-1']);
+        expect(members.map((wal) => wal.status), everyElement(WalStatus.synced));
+        expect(members.map((wal) => wal.jobId), everyElement(isNull));
+        expect(members.map((wal) => wal.syncedAt), everyElement(1790730000));
+        expect(listener.syncedWals, members);
+        expect((await WalFileManager.loadWals()).map((wal) => wal.status), everyElement(WalStatus.synced));
+        local.reportStaleMissingWals(trigger: 'test');
+        expect(staleReports, isEmpty);
+        final events = await pollEvents('reconcile_poll');
+        expect(events.where((event) => event['type'] == 'reconcile_completed_empty'), isEmpty);
+      });
+    }
   });
 
   group('silent upload death recovery', () {

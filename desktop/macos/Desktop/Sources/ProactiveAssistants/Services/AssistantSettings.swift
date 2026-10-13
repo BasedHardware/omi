@@ -30,6 +30,11 @@ class AssistantSettings {
   private let batchTranscriptionEnabledKey = "batchTranscriptionEnabled"
   private let legacyTranscriptionEnabledKey = "transcriptionEnabled"
   private let legacySystemAudioCaptureModeKey = "systemAudioCaptureMode"
+  private let wakeWordEnabledKey = "wakeWordEnabled"
+  private let wakeWordPhraseKey = "wakeWordPhrase"
+  private let wakeWordCooldownKey = "wakeWordCooldown"
+  private let wakeWordUsesRealtimeKey = "wakeWordUsesRealtime"
+  private let wakeWordPrefersCloudSTTKey = "wakeWordPrefersCloudSTT"
 
   // MARK: - Default Values
 
@@ -44,6 +49,9 @@ class AssistantSettings {
   private let defaultBatchTranscriptionEnabled = false
   private let defaultAudioRecordingMode: AudioRecordingMode = .onlyMeetings
   private(set) var transcriptionVocabularyRevision: UInt64 = 0
+  private let defaultWakeWordEnabled = false
+  private let defaultWakeWordPhrase = "Omi"
+  private let defaultWakeWordCooldown: TimeInterval = 30
 
   private init() {
     migrateLegacyAudioRecordingSettings()
@@ -59,6 +67,11 @@ class AssistantSettings {
       transcriptionVocabularyKey: defaultTranscriptionVocabulary,
       vadGateEnabledKey: defaultVadGateEnabled,
       batchTranscriptionEnabledKey: defaultBatchTranscriptionEnabled,
+      wakeWordEnabledKey: defaultWakeWordEnabled,
+      wakeWordPhraseKey: defaultWakeWordPhrase,
+      wakeWordCooldownKey: defaultWakeWordCooldown,
+      wakeWordUsesRealtimeKey: false,
+      wakeWordPrefersCloudSTTKey: false,
     ])
   }
 
@@ -162,6 +175,72 @@ class AssistantSettings {
     set {
       UserDefaults.standard.set(newValue.rawValue, forKey: Self.audioRecordingModeDefaultsKey)
       NotificationCenter.default.post(name: .audioRecordingModeDidChange, object: nil)
+    }
+  }
+
+  var wakeWordEnabled: Bool {
+    get { UserDefaults.standard.bool(forKey: wakeWordEnabledKey) }
+    set {
+      UserDefaults.standard.set(newValue, forKey: wakeWordEnabledKey)
+      NotificationCenter.default.post(name: .assistantSettingsDidChange, object: nil)
+    }
+  }
+
+  var wakeWordPhrase: String {
+    get {
+      let stored = UserDefaults.standard.string(forKey: wakeWordPhraseKey) ?? defaultWakeWordPhrase
+      let trimmed = stored.trimmingCharacters(in: .whitespacesAndNewlines)
+      return trimmed.isEmpty ? defaultWakeWordPhrase : trimmed
+    }
+    set {
+      UserDefaults.standard.set(newValue, forKey: wakeWordPhraseKey)
+      NotificationCenter.default.post(name: .assistantSettingsDidChange, object: nil)
+    }
+  }
+
+  var wakeWordCooldown: TimeInterval {
+    get {
+      let stored = UserDefaults.standard.double(forKey: wakeWordCooldownKey)
+      return stored > 0 ? stored : defaultWakeWordCooldown
+    }
+    set {
+      UserDefaults.standard.set(newValue, forKey: wakeWordCooldownKey)
+      NotificationCenter.default.post(name: .assistantSettingsDidChange, object: nil)
+    }
+  }
+
+  /// Transcribe ambient audio in the cloud while the wake word is on, so the recognizer can
+  /// be told the wake phrase.
+  ///
+  /// Default off, and only consulted when the wake word is enabled. See
+  /// `STTSessionState.resolveMode` for the measurement behind it.
+  var wakeWordPrefersCloudSTT: Bool {
+    get { UserDefaults.standard.bool(forKey: wakeWordPrefersCloudSTTKey) }
+    set {
+      UserDefaults.standard.set(newValue, forKey: wakeWordPrefersCloudSTTKey)
+      NotificationCenter.default.post(name: .transcriptionSettingsDidChange, object: nil)
+    }
+  }
+
+  /// Whether the wake word currently needs a recognizer that can be told its name.
+  ///
+  /// Both halves matter: the opt-in only means anything while the wake word is on, and
+  /// leaving it off keeps ambient transcription on-device exactly as today.
+  var wakeWordNeedsRecognizableName: Bool {
+    wakeWordEnabled && wakeWordPrefersCloudSTT
+  }
+
+  /// Route a fired wake word into the realtime session instead of the text chat path.
+  ///
+  /// Default off. The text path is what has live measurement behind it; this is the
+  /// alternative under evaluation — the model speaks its own answer, barge-in is native
+  /// rather than text-matched, and a follow-up continues in the same session. Detection is
+  /// unchanged either way: both read the same ambient transcript.
+  var wakeWordUsesRealtime: Bool {
+    get { UserDefaults.standard.bool(forKey: wakeWordUsesRealtimeKey) }
+    set {
+      UserDefaults.standard.set(newValue, forKey: wakeWordUsesRealtimeKey)
+      NotificationCenter.default.post(name: .assistantSettingsDidChange, object: nil)
     }
   }
 

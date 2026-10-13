@@ -9133,6 +9133,9 @@ class AppLocalizationsUk extends AppLocalizations {
   String get syncCardRateLimited => 'Досягнуто ліміт використання — синхронізація відновиться автоматично';
 
   @override
+  String get syncCardThrottlePaused => 'Синхронізацію ненадовго призупинено — вона відновиться автоматично';
+
+  @override
   String get syncCardBackendBusy =>
       'Сервери Omi перевантажені — ваші записи синхронізуються, щойно з\'явиться доступна потужність';
 
@@ -9800,6 +9803,15 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get chatBlockMemory => 'Спогад';
+
+  @override
+  String get chatBlockPerson => 'Людина';
+
+  @override
+  String get chatBlockUndone => 'Скасовано';
+
+  @override
+  String get chatBlockUndoFailed => 'Не вдалося скасувати цю зміну';
 
   @override
   String get chatBlockQuestion => 'Питання';
@@ -10997,11 +11009,6 @@ class AppLocalizationsUk extends AppLocalizations {
   }
 
   @override
-  String transcriptionsPendingCount(int count) {
-    return 'Транскрипцій у черзі $count';
-  }
-
-  @override
   String get captureSourceCall => 'Дзвінок';
 
   @override
@@ -12047,8 +12054,6 @@ class AppLocalizationsUk extends AppLocalizations {
         'likely': 'Імовірно',
         'soundsLike': 'Схоже на $name',
         'notPerson': 'Не $name',
-        'carried': 'Досі $name. Перенесено з вашої останньої розмови.',
-        'change': 'Змінити',
         'alsoTitle': 'Це теж $name?',
         'alsoBody': 'Omi знайшов такий самий голос у попередніх розмовах.',
         'confirmed': 'Ви підтвердили цю мітку',
@@ -12996,4 +13001,54 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get chatAppsOmiPro => 'OMI PRO';
+
+  @override
+  String reviewProposalCloseTask(String task) {
+    return 'Позначити «$task» як виконане?';
+  }
+
+  @override
+  String reviewProposalRetireTask(String task) {
+    return 'Видалити завдання «$task»?';
+  }
+
+  @override
+  String reviewProposalMergePeople(String name, String other) {
+    return '«$name» і «$other» — це та сама людина?';
+  }
+
+  @override
+  String get reviewProposalMergeMemories => 'Об’єднати два дубльовані спогади?';
+
+  @override
+  String get reviewProposalMemory => 'Оновити цей спогад?';
+
+  @override
+  String reviewProposalEntitySummary(String name) {
+    return 'Оновити підсумок для «$name»?';
+  }
+
+  @override
+  String get reviewProposalGeneric => 'Застосувати це запропоноване виправлення?';
+
+  @override
+  String get reviewProposalApply => 'Застосувати';
+
+  @override
+  String get reviewProposalSuggested => 'Запропоновано';
+
+  @override
+  String get reviewProposalConflict => 'Це змінилося після пропозиції Dream, тому нічого не застосовано.';
+
+  @override
+  String itemLinkListTitle(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count елементів',
+      one: '1 елемент',
+      zero: 'Немає елементів',
+    );
+    return '$_temp0';
+  }
 }

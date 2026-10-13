@@ -16,6 +16,7 @@ import os
 from contextlib import contextmanager
 from pathlib import Path
 from types import ModuleType, SimpleNamespace
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -45,7 +46,10 @@ def _circular_import_fakes():
     # subscription.py imports the public name `compare_versions`; expose it on the
     # stub so the fresh exec resolves without the real database.announcements.
     announcements.compare_versions = _compare_versions
+    client = ModuleType("database._client")
+    client.get_customer_firestore_client = MagicMock()
     return {
+        "database._client": client,
         "database.users": SimpleNamespace(),
         "database.user_usage": SimpleNamespace(),
         "database.announcements": announcements,
@@ -63,12 +67,17 @@ def load_subscription():
     multi-file pytest run.
     """
 
-    @contextmanager
-    def _loader():
-        with stub_modules(_circular_import_fakes()):
+    with stub_modules(_circular_import_fakes()):
+        # Warm imports in fixture setup. Keep the fakes for the whole module so
+        # repeated loads neither re-register protobuf descriptors nor re-import
+        # the heavy dependency graph during each test's call phase.
+        load_module_fresh("utils.subscription", _SUBSCRIPTION_PATH)
+
+        @contextmanager
+        def _loader():
             yield load_module_fresh("utils.subscription", _SUBSCRIPTION_PATH)
 
-    return _loader
+        yield _loader
 
 
 def test_operator_chat_cap_independent_from_unlimited(monkeypatch, load_subscription):
@@ -291,7 +300,7 @@ def test_windows_full_catalog_matches_macos_canonical(load_subscription):
     """End-to-end catalog resolution for a Windows client (X-App-Platform: windows).
 
     Pins the fix: a Windows client gets the SAME catalog macOS gets — Operator +
-    Architect visible under their canonical titles, Neo hidden from a new basic
+    Architect visible under their compatible wire titles, Neo hidden from a new basic
     desktop user — and NEVER the legacy 'Omi Pro' / 'Unlimited Plan' rename that
     adapt_plans_for_legacy_client produces for pre-rollout clients.
     """
@@ -510,6 +519,6 @@ def test_plan_features_differentiate_operator_neo(monkeypatch, load_subscription
 def test_plan_display_names(load_subscription):
     with load_subscription() as sub_mod:
         assert sub_mod.get_plan_display_name(PlanType.basic) == 'Free'
-        assert sub_mod.get_plan_display_name(PlanType.operator) == 'Operator'
+        assert sub_mod.get_plan_display_name(PlanType.operator) == 'Pro'
         assert sub_mod.get_plan_display_name(PlanType.architect) == 'Architect'
         assert sub_mod.get_plan_display_name(PlanType.unlimited) == 'Neo'

@@ -23,6 +23,7 @@ class DebugLogManager {
   static const int _maxFileBytes = 5 * 1024 * 1024; // 5MB cap
 
   static File? _file;
+  static Future<void> _writeQueue = Future<void>.value();
   static final DateFormat _ts = DateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'");
   static bool _initializing = false;
   static bool _prunedOnce = false;
@@ -82,22 +83,32 @@ class DebugLogManager {
     } catch (_) {}
   }
 
+  // Keep initialization, rotation, appends and clears in the same write order.
+  static Future<void> _enqueueWrite(Future<void> Function() write) {
+    _writeQueue = _writeQueue.then((_) async {
+      try {
+        await write();
+      } catch (_) {
+        // Swallow to avoid impacting app flow or blocking subsequent writes.
+      }
+    });
+    return _writeQueue;
+  }
+
   static Future<void> _append(String line) async {
     if (!isEnabled) return;
-    try {
+    await _enqueueWrite(() async {
       final f = await _ensureFile();
       await _rotateIfNeeded(f);
       await f.writeAsString('$line\n', mode: FileMode.append, flush: false);
-    } catch (_) {
-      // Swallow to avoid impacting app flow
-    }
+    });
   }
 
   static Future<void> clear() async {
-    try {
+    await _enqueueWrite(() async {
       final f = await _ensureFile();
       await f.writeAsString('', mode: FileMode.write, flush: true);
-    } catch (_) {}
+    });
   }
 
   /// Returns available debug log files (within retention), sorted newest first.

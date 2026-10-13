@@ -4,8 +4,8 @@ The 2026-09-25 incident: after a mid-session STT failover the queued owner
 detections returned before any match decision without a single log line, and
 the account could only be attributed by replaying the saved conversation. Each
 pre-decision return now bumps exactly one bounded ``omi_speaker_id_match_exits_total``
-reason and emits one log line carrying the recording session id (never uid),
-and the existing evidence/decision lines carry the same session id.
+reason. Bounded diagnostic logs also carry uid/conversation/socket/scope and
+the existing evidence/decision lines retain the recording session id.
 """
 
 import logging
@@ -55,6 +55,12 @@ def _unexpected_spawn(coro, *, name):
     raise AssertionError('no task must be spawned by a pre-decision exit')
 
 
+def _diagnostic_matcher(host):
+    matcher = SpeakerMatcher(host)
+    matcher.diagnostics.begin('conv-current', matcher._generation)
+    return matcher
+
+
 def _queued(start: float, end: float, *, speaker=0, conversation=None, duration=None):
     return {
         'id': 'seg-exit',
@@ -88,6 +94,7 @@ async def test_exit_reasons_are_enumerated():
             'voice_capacity',
             'embedding_budget',
             'authority_unavailable',
+            'rejector_tail_reserved',
         }
     )
     assert any(
@@ -109,32 +116,33 @@ async def test_exit_reasons_are_enumerated():
     ],
 )
 async def test_early_exits_count_and_log_one_bounded_reason(reason, ring, segment, caplog):
-    matcher = SpeakerMatcher(_host(ring))
+    matcher = _diagnostic_matcher(_host(ring))
+    matcher.diagnostics.begin('conv-current', matcher._generation)
     before = _counter(reason)
-    with caplog.at_level(logging.INFO, logger='routers.listen.speakers'):
+    with caplog.at_level(logging.INFO):
         await matcher.match(segment['speaker_id'], segment)
     assert _counter(reason) == before + 1
     assert any(
-        f'speaker_id_exit reason={reason}' in record.message and 'session=rec-exits-1' in record.message
+        f"'reason': '{reason}'" in record.message and 'recording' in record.message and 'rec-exits-1' in record.message
         for record in caplog.records
     ), [record.message for record in caplog.records]
 
 
 @pytest.mark.anyio
 async def test_queued_detection_from_older_conversation_is_stale(caplog):
-    matcher = SpeakerMatcher(_host(_ring_with()))
+    matcher = _diagnostic_matcher(_host(_ring_with()))
     before = _counter('stale_generation')
-    with caplog.at_level(logging.INFO, logger='routers.listen.speakers'):
+    with caplog.at_level(logging.INFO):
         await matcher.match(0, _queued(100.0, 103.0, conversation='conv-old'))
     assert _counter('stale_generation') == before + 1
 
 
 @pytest.mark.anyio
 async def test_already_mapped_speaker_counts_as_its_own_reason(caplog):
-    matcher = SpeakerMatcher(_host(_ring_with()))
+    matcher = _diagnostic_matcher(_host(_ring_with()))
     matcher.speaker_to_person[0] = ('user', 'The User')
     before = _counter('already_mapped')
-    with caplog.at_level(logging.INFO, logger='routers.listen.speakers'):
+    with caplog.at_level(logging.INFO):
         await matcher.match(0, _queued(100.0, 103.0))
     assert _counter('already_mapped') == before + 1
 
@@ -142,7 +150,7 @@ async def test_already_mapped_speaker_counts_as_its_own_reason(caplog):
 @pytest.mark.anyio
 async def test_post_embedding_stale_generation_is_counted(monkeypatch, caplog):
     """The re-check after the embedding request returns also names its reason."""
-    matcher = SpeakerMatcher(_host(_ring_with(seconds=4.0, at=101.0)))
+    matcher = _diagnostic_matcher(_host(_ring_with(seconds=4.0, at=101.0)))
     matcher.person_embeddings['user'] = {'embedding': None, 'name': 'The User'}
 
     # The embedding extraction is the last step before the stale re-check;
@@ -153,7 +161,7 @@ async def test_post_embedding_stale_generation_is_counted(monkeypatch, caplog):
 
     monkeypatch.setattr(speakers_module, 'extract_embedding_from_bytes', flip_generation)
     before = _counter('stale_generation')
-    with caplog.at_level(logging.INFO, logger='routers.listen.speakers'):
+    with caplog.at_level(logging.INFO):
         await matcher.match(0, _queued(97.5, 103.0))
     assert _counter('stale_generation') == before + 1
 
@@ -163,7 +171,7 @@ async def test_post_embedding_stale_generation_is_counted(monkeypatch, caplog):
 async def test_receipt_exits_count_and_log_one_bounded_reason(reason, monkeypatch, caplog):
     host = _host(_ring_with(seconds=10.0, at=110.0))
     host.limits.speaker_id_min_audio = 1.0
-    matcher = SpeakerMatcher(host)
+    matcher = _diagnostic_matcher(host)
     matcher._profile_conversation_id = 'conv-receipt'
     embedding = np.array([[1.0, 0.0]])
     matcher.person_embeddings['p1'] = {'embedding': embedding, 'name': 'Person'}
@@ -181,11 +189,12 @@ async def test_receipt_exits_count_and_log_one_bounded_reason(reason, monkeypatc
     host.persistence.call = receipt_call
     monkeypatch.setattr(speakers_module, 'extract_embedding_from_bytes', lambda *args: embedding)
     monkeypatch.setattr(speakers_module, 'compare_embeddings', lambda *args: 0.0)
+    matcher.diagnostics.begin('conv-receipt', matcher._generation)
     before = _counter(reason)
-    with caplog.at_level(logging.INFO, logger='routers.listen.speakers'):
+    with caplog.at_level(logging.INFO):
         await matcher.match(0, _queued(100.0, 110.0, conversation='conv-receipt'))
     assert _counter(reason) == before + 1
-    assert sum(f'speaker_id_exit reason={reason}' in record.message for record in caplog.records) == 1
+    assert sum(f"'reason': '{reason}'" in record.message for record in caplog.records) == 1
     assert host.state.speaker_map_dirty
     if reason == 'rejected':
         assert 0 not in matcher.speaker_to_person
@@ -196,21 +205,21 @@ async def test_receipt_exits_count_and_log_one_bounded_reason(reason, monkeypatc
 @pytest.mark.anyio
 async def test_embedded_audio_leaves_no_fresh_window(caplog):
     # write()'s timestamp is the chunk end, so 10s ending at 110 covers 100–110.
-    matcher = SpeakerMatcher(_host(_ring_with(seconds=10.0, at=110.0)))
+    matcher = _diagnostic_matcher(_host(_ring_with(seconds=10.0, at=110.0)))
     matcher._covered_audio[0] = [(100.0, 110.0)]
     before = _counter('no_fresh_audio')
-    with caplog.at_level(logging.INFO, logger='routers.listen.speakers'):
+    with caplog.at_level(logging.INFO):
         await matcher.match(0, _queued(100.0, 110.0))
     assert _counter('no_fresh_audio') == before + 1
-    assert any('speaker_id_exit reason=no_fresh_audio' in record.message for record in caplog.records)
+    assert any("'reason': 'no_fresh_audio'" in record.message for record in caplog.records)
 
 
 @pytest.mark.anyio
 async def test_clamped_window_shorter_than_minimum_is_its_own_reason(caplog):
     """The segment is long enough, but the ring only retains a shorter slice of it."""
-    matcher = SpeakerMatcher(_host(_ring_with(seconds=1.0, at=101.0)))
+    matcher = _diagnostic_matcher(_host(_ring_with(seconds=1.0, at=101.0)))
     before = _counter('window_shorter_than_minimum')
-    with caplog.at_level(logging.INFO, logger='routers.listen.speakers'):
+    with caplog.at_level(logging.INFO):
         await matcher.match(0, _queued(100.0, 104.0))
     assert _counter('window_shorter_than_minimum') == before + 1
-    assert any('speaker_id_exit reason=window_shorter_than_minimum' in record.message for record in caplog.records)
+    assert any("'reason': 'window_shorter_than_minimum'" in record.message for record in caplog.records)

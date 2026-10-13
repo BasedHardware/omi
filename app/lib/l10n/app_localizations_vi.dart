@@ -9115,6 +9115,9 @@ class AppLocalizationsVi extends AppLocalizations {
   String get syncCardRateLimited => 'Đã đạt giới hạn sử dụng hợp lý — quá trình đồng bộ sẽ tự động tiếp tục';
 
   @override
+  String get syncCardThrottlePaused => 'Đồng bộ hóa tạm dừng trong giây lát — sẽ tự động tiếp tục';
+
+  @override
   String get syncCardBackendBusy =>
       'Máy chủ Omi đang quá tải — bản ghi của bạn sẽ được đồng bộ khi dung lượng được khôi phục';
 
@@ -9776,6 +9779,15 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get chatBlockMemory => 'Ký ức';
+
+  @override
+  String get chatBlockPerson => 'Người';
+
+  @override
+  String get chatBlockUndone => 'Đã hoàn tác';
+
+  @override
+  String get chatBlockUndoFailed => 'Không thể hoàn tác thay đổi này';
 
   @override
   String get chatBlockQuestion => 'Câu hỏi';
@@ -10973,11 +10985,6 @@ class AppLocalizationsVi extends AppLocalizations {
   }
 
   @override
-  String transcriptionsPendingCount(int count) {
-    return 'Bản chép âm đang chờ $count';
-  }
-
-  @override
   String get captureSourceCall => 'Cuộc gọi';
 
   @override
@@ -12019,8 +12026,6 @@ class AppLocalizationsVi extends AppLocalizations {
         'likely': 'Có thể',
         'soundsLike': 'Nghe giống $name',
         'notPerson': 'Không phải $name',
-        'carried': 'Vẫn là $name. Được giữ từ cuộc trò chuyện gần nhất của bạn.',
-        'change': 'Đổi',
         'alsoTitle': 'Đây cũng là $name?',
         'alsoBody': 'Omi đã tìm thấy cùng giọng nói này trong các cuộc trò chuyện trước.',
         'confirmed': 'Bạn đã xác nhận nhãn này',
@@ -12964,4 +12969,54 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get chatAppsOmiPro => 'OMI PRO';
+
+  @override
+  String reviewProposalCloseTask(String task) {
+    return 'Đánh dấu “$task” là đã xong?';
+  }
+
+  @override
+  String reviewProposalRetireTask(String task) {
+    return 'Xóa việc “$task”?';
+  }
+
+  @override
+  String reviewProposalMergePeople(String name, String other) {
+    return '“$name” có phải là cùng người với “$other” không?';
+  }
+
+  @override
+  String get reviewProposalMergeMemories => 'Gộp hai ký ức trùng lặp?';
+
+  @override
+  String get reviewProposalMemory => 'Cập nhật ký ức này?';
+
+  @override
+  String reviewProposalEntitySummary(String name) {
+    return 'Cập nhật bản tóm tắt cho “$name”?';
+  }
+
+  @override
+  String get reviewProposalGeneric => 'Áp dụng bản sửa được đề xuất này?';
+
+  @override
+  String get reviewProposalApply => 'Áp dụng';
+
+  @override
+  String get reviewProposalSuggested => 'Đề xuất';
+
+  @override
+  String get reviewProposalConflict => 'Mục này đã thay đổi sau khi Dream đề xuất nên không có gì được áp dụng.';
+
+  @override
+  String itemLinkListTitle(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count mục',
+      one: '1 mục',
+      zero: 'Không có mục nào',
+    );
+    return '$_temp0';
+  }
 }

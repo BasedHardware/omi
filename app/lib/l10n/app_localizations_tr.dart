@@ -9124,6 +9124,9 @@ class AppLocalizationsTr extends AppLocalizations {
   String get syncCardRateLimited => 'Adil kullanım sınırına ulaşıldı — eşitleme otomatik olarak sürdürülecek';
 
   @override
+  String get syncCardThrottlePaused => 'Senkronizasyon kısa süreliğine duraklatıldı — otomatik olarak devam edecek';
+
+  @override
   String get syncCardBackendBusy => 'Omi sunucuları yoğun — kapasite boşaldığında kayıtlarınız eşitlenecek';
 
   @override
@@ -9788,6 +9791,15 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get chatBlockMemory => 'Anı';
+
+  @override
+  String get chatBlockPerson => 'Kişi';
+
+  @override
+  String get chatBlockUndone => 'Geri alındı';
+
+  @override
+  String get chatBlockUndoFailed => 'Bu değişiklik geri alınamadı';
 
   @override
   String get chatBlockQuestion => 'Soru';
@@ -10983,11 +10995,6 @@ class AppLocalizationsTr extends AppLocalizations {
   }
 
   @override
-  String transcriptionsPendingCount(int count) {
-    return 'Bekleyen transkriptler $count';
-  }
-
-  @override
   String get captureSourceCall => 'Arama';
 
   @override
@@ -12031,8 +12038,6 @@ class AppLocalizationsTr extends AppLocalizations {
         'likely': 'Muhtemel',
         'soundsLike': '$name gibi duyuluyor',
         'notPerson': '$name değil',
-        'carried': 'Hâlâ $name. Son sohbetinizden aktarıldı.',
-        'change': 'Değiştir',
         'alsoTitle': 'Bu da $name mi?',
         'alsoBody': 'Omi aynı sesi önceki sohbetlerde buldu.',
         'confirmed': 'Bu etiketi onayladınız',
@@ -12979,4 +12984,54 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get chatAppsOmiPro => 'OMI PRO';
+
+  @override
+  String reviewProposalCloseTask(String task) {
+    return '“$task” tamamlandı olarak işaretlensin mi?';
+  }
+
+  @override
+  String reviewProposalRetireTask(String task) {
+    return '“$task” görevi kaldırılsın mı?';
+  }
+
+  @override
+  String reviewProposalMergePeople(String name, String other) {
+    return '“$name” ile “$other” aynı kişi mi?';
+  }
+
+  @override
+  String get reviewProposalMergeMemories => 'İki yinelenen anı birleştirilsin mi?';
+
+  @override
+  String get reviewProposalMemory => 'Bu anı güncellensin mi?';
+
+  @override
+  String reviewProposalEntitySummary(String name) {
+    return '“$name” özeti güncellensin mi?';
+  }
+
+  @override
+  String get reviewProposalGeneric => 'Önerilen bu düzeltme uygulansın mı?';
+
+  @override
+  String get reviewProposalApply => 'Uygula';
+
+  @override
+  String get reviewProposalSuggested => 'Önerilen';
+
+  @override
+  String get reviewProposalConflict => 'Bu, Dream önerdikten sonra değişti; bu yüzden hiçbir şey uygulanmadı.';
+
+  @override
+  String itemLinkListTitle(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count Öğe',
+      one: '1 Öğe',
+      zero: 'Öğe Yok',
+    );
+    return '$_temp0';
+  }
 }

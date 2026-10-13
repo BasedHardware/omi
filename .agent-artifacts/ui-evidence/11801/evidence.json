@@ -1,0 +1,19 @@
+{
+  "version": 1,
+  "images": [
+    {
+      "file": "001-desktop-macos-wake-word-enabled.png",
+      "platform": "desktop-macos",
+      "description": "Settings with the hands-free wake word enabled",
+      "captured_by": "agent",
+      "source": "screencapture"
+    },
+    {
+      "file": "002-desktop-macos-before-wake-word.png",
+      "platform": "desktop-macos",
+      "description": "The same settings before this change, with no wake word option",
+      "captured_by": "agent",
+      "source": "screencapture"
+    }
+  ]
+}

@@ -132,7 +132,8 @@ def with_conversation_notes_v2_env(payload: str) -> str:
     )
     payload = re.sub(
         r'("backend":\s*\{.*?"env":\s*\[\s*\{"name": "GOOGLE_CLOUD_PROJECT", "value": "based-hardware"\},)',
-        flags + r'\n        {"name": "BASIC_PLAN_GATE_PROXY_EMBED_ENABLED", "value": "true"},',
+        flags + r'\n        {"name": "OMI_VERTEX_RESERVATION_PROJECT", "value": "based-hardware-dev"},'
+        r'\n        {"name": "BASIC_PLAN_GATE_PROXY_EMBED_ENABLED", "value": "true"},',
         payload,
         count=1,
         flags=re.DOTALL,
@@ -140,7 +141,11 @@ def with_conversation_notes_v2_env(payload: str) -> str:
     return re.sub(
         r'("backend-sync":\s*\{.*?"env":\s*\[\s*\{"name": "GOOGLE_CLOUD_PROJECT", "value": "based-hardware"\},)',
         # backend-sync finalizes conversations, so it reads this environment's frame docs.
-        flags + r'\n        {"name": "BUCKET_SCREEN_FRAMES", "value": "based-hardware-dev-screen-frames"},',
+        flags + r'\n        {"name": "OMI_VERTEX_RESERVATION_PROJECT", "value": "based-hardware-dev"},'
+        r'\n        {"name": "BUCKET_SCREEN_FRAMES", "value": "based-hardware-dev-screen-frames"},'
+        r'\n        {"name": "TYPESENSE_HOST_PORT", "value": "443"},'
+        r'\n        {"name": "TYPESENSE_HOST", "valueFrom": {"secretKeyRef": {"name": "TYPESENSE_HOST", "key": "latest"}}},'
+        r'\n        {"name": "TYPESENSE_API_KEY", "valueFrom": {"secretKeyRef": {"name": "TYPESENSE_API_KEY", "key": "latest"}}},',
         payload,
         count=1,
         flags=re.DOTALL,
@@ -1252,7 +1257,7 @@ def test_repo_prod_rendered_cloud_run_state_matches_manifest(monkeypatch, servic
     entry = next(item for item in entries if item['name'] == setting)
     if stale is None:
         entries.remove(entry)
-    elif setting == 'DREAM_AGENT_FEEDBACK_SALT':
+    elif setting in {'DREAM_AGENT_FEEDBACK_SALT'}:
         entry['valueFrom']['secretKeyRef']['key'] = stale
     else:
         entry['value'] = stale
@@ -3541,3 +3546,72 @@ def test_production_speaker_match_scores_on_all_computing_and_persisting_hosts()
         ROOT / 'charts/pusher/prod_omi_pusher_values.yaml',
     ):
         assert parse_env_entries(chart.read_text())['SPEAKER_MATCH_SCORES_ENABLED'].value == 'true'
+
+
+def _posthog_billing_key_bindings(node, path='manifest'):
+    found = []
+    if isinstance(node, dict):
+        for key, value in node.items():
+            child = f'{path}.{key}'
+            if key == 'POSTHOG_BILLING_API_KEY':
+                found.append((child, value))
+            else:
+                found.extend(_posthog_billing_key_bindings(value, child))
+    elif isinstance(node, list):
+        for index, value in enumerate(node):
+            found.extend(_posthog_billing_key_bindings(value, f'{path}[{index}]'))
+    return found
+
+
+def test_prod_backend_billing_key_is_public_project_token(monkeypatch):
+    validator = load_validator()
+    manifest = validator._load_yaml(validator.DEFAULT_MANIFEST)
+    prod_backend = manifest['environments']['prod']['cloud_run']['services']['backend']
+    token = prod_backend['env']['PROACTIVITY_V2_POSTHOG_TOKEN']['value']
+    assert token.startswith('phc_')
+    assert prod_backend['env']['POSTHOG_BILLING_API_KEY'] == {'value': token, 'category': 'telemetry'}
+    assert prod_backend['env']['POSTHOG_HOST'] == {'value': 'https://us.posthog.com', 'category': 'telemetry'}
+    assert 'POSTHOG_PROJECT_API_KEY' not in prod_backend['env']
+    assert 'POSTHOG_PROJECT_API_KEY' not in prod_backend['secrets']
+    classification = json.loads((ROOT.parent / 'config/deployment-setting-classification.json').read_text())
+    assert 'POSTHOG_BILLING_API_KEY' in classification['kinds']['config']
+    assert 'POSTHOG_BILLING_API_KEY' not in classification['kinds']['secret']
+    assert 'POSTHOG_PROJECT_API_KEY' in classification['kinds']['secret']
+    assert _posthog_billing_key_bindings(manifest) == [
+        (
+            'manifest.environments.prod.cloud_run.services.backend.env.POSTHOG_BILLING_API_KEY',
+            {'value': token, 'category': 'telemetry'},
+        )
+    ]
+
+    env_config = validator._get_env_config(manifest, 'prod')
+    deployed = render_cloud_run_state(env_config, monkeypatch)
+    for service_name, service in deployed['services'].items():
+        matches = [item for item in service['env'] if item['name'] == 'POSTHOG_BILLING_API_KEY']
+        if service_name == 'backend':
+            assert matches == [{'name': 'POSTHOG_BILLING_API_KEY', 'value': token}]
+        else:
+            assert matches == []
+        assert all(item['name'] != 'POSTHOG_PROJECT_API_KEY' for item in service['env'])
+    for job in deployed['jobs'].values():
+        assert all(item['name'] != 'POSTHOG_BILLING_API_KEY' for item in job['env'])
+    assert validator._validate_cloud_run(env_config, deployed, strict_provisional=False) == []
+
+
+@pytest.mark.parametrize('mutation', ['remove', 'placeholder', 'secret_ref'])
+def test_prod_backend_billing_key_rejects_non_public_binding(monkeypatch, mutation):
+    validator = load_validator()
+    manifest = validator._load_yaml(validator.DEFAULT_MANIFEST)
+    env_config = validator._get_env_config(manifest, 'prod')
+    deployed = render_cloud_run_state(env_config, monkeypatch)
+    entries = deployed['services']['backend']['env']
+    entry = next(item for item in entries if item['name'] == 'POSTHOG_BILLING_API_KEY')
+    if mutation == 'remove':
+        entries.remove(entry)
+    elif mutation == 'placeholder':
+        entry['value'] = 'disabled'
+    else:
+        del entry['value']
+        entry['valueFrom'] = {'secretKeyRef': {'name': 'POSTHOG_PROJECT_API_KEY', 'key': 'latest'}}
+    errors = validator._validate_cloud_run(env_config, deployed, strict_provisional=False)
+    assert any(error.scope == 'cloud_run/backend' and 'POSTHOG_BILLING_API_KEY' in error.message for error in errors)

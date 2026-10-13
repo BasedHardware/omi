@@ -9115,6 +9115,9 @@ class AppLocalizationsCs extends AppLocalizations {
   String get syncCardRateLimited => 'Byl dosažen limit férového využití — synchronizace bude automaticky pokračovat';
 
   @override
+  String get syncCardThrottlePaused => 'Synchronizace je krátce pozastavena — automaticky se obnoví';
+
+  @override
   String get syncCardBackendBusy =>
       'Servery Omi jsou vytížené — vaše nahrávky se synchronizují, jakmile bude k dispozici kapacita';
 
@@ -9780,6 +9783,15 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get chatBlockMemory => 'Vzpomínka';
+
+  @override
+  String get chatBlockPerson => 'Osoba';
+
+  @override
+  String get chatBlockUndone => 'Vráceno zpět';
+
+  @override
+  String get chatBlockUndoFailed => 'Tuto změnu se nepodařilo vrátit';
 
   @override
   String get chatBlockQuestion => 'Otázka';
@@ -10973,11 +10985,6 @@ class AppLocalizationsCs extends AppLocalizations {
   }
 
   @override
-  String transcriptionsPendingCount(int count) {
-    return 'Čekající přepisy $count';
-  }
-
-  @override
   String get captureSourceCall => 'Hovor';
 
   @override
@@ -12022,8 +12029,6 @@ class AppLocalizationsCs extends AppLocalizations {
         'likely': 'Pravděpodobně',
         'soundsLike': 'Zní jako $name',
         'notPerson': 'Není $name',
-        'carried': 'Stále $name. Převzato z vaší poslední konverzace.',
-        'change': 'Změnit',
         'alsoTitle': 'Je to také $name?',
         'alsoBody': 'Omi našel stejný hlas v dřívějších rozhovorech.',
         'confirmed': 'Tento štítek jste potvrdili',
@@ -12968,4 +12973,54 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get chatAppsOmiPro => 'OMI PRO';
+
+  @override
+  String reviewProposalCloseTask(String task) {
+    return 'Označit „$task“ jako hotové?';
+  }
+
+  @override
+  String reviewProposalRetireTask(String task) {
+    return 'Odstranit úkol „$task“?';
+  }
+
+  @override
+  String reviewProposalMergePeople(String name, String other) {
+    return 'Je „$name“ stejná osoba jako „$other“?';
+  }
+
+  @override
+  String get reviewProposalMergeMemories => 'Sloučit dvě duplicitní vzpomínky?';
+
+  @override
+  String get reviewProposalMemory => 'Aktualizovat tuto vzpomínku?';
+
+  @override
+  String reviewProposalEntitySummary(String name) {
+    return 'Aktualizovat shrnutí pro „$name“?';
+  }
+
+  @override
+  String get reviewProposalGeneric => 'Použít tuto navrženou opravu?';
+
+  @override
+  String get reviewProposalApply => 'Použít';
+
+  @override
+  String get reviewProposalSuggested => 'Navrženo';
+
+  @override
+  String get reviewProposalConflict => 'Od návrhu Dream se to změnilo, takže se nic nepoužilo.';
+
+  @override
+  String itemLinkListTitle(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count položek',
+      one: '1 položka',
+      zero: 'Žádné položky',
+    );
+    return '$_temp0';
+  }
 }

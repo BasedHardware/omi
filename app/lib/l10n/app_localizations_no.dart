@@ -9112,6 +9112,9 @@ class AppLocalizationsNo extends AppLocalizations {
   String get syncCardRateLimited => 'Grensen for rimelig bruk er nådd — synkroniseringen fortsetter automatisk';
 
   @override
+  String get syncCardThrottlePaused => 'Synkronisering er satt kort på pause — den fortsetter automatisk';
+
+  @override
   String get syncCardBackendBusy =>
       'Omis servere er travle — opptakene dine synkroniseres så snart kapasiteten er tilbake';
 
@@ -9777,6 +9780,15 @@ class AppLocalizationsNo extends AppLocalizations {
 
   @override
   String get chatBlockMemory => 'Minne';
+
+  @override
+  String get chatBlockPerson => 'Person';
+
+  @override
+  String get chatBlockUndone => 'Angret';
+
+  @override
+  String get chatBlockUndoFailed => 'Kunne ikke angre endringen';
 
   @override
   String get chatBlockQuestion => 'Spørsmål';
@@ -10974,11 +10986,6 @@ class AppLocalizationsNo extends AppLocalizations {
   }
 
   @override
-  String transcriptionsPendingCount(int count) {
-    return 'Transkripsjoner i kø $count';
-  }
-
-  @override
   String get captureSourceCall => 'Anrop';
 
   @override
@@ -12022,8 +12029,6 @@ class AppLocalizationsNo extends AppLocalizations {
         'likely': 'Sannsynlig',
         'soundsLike': 'Høres ut som $name',
         'notPerson': 'Ikke $name',
-        'carried': 'Fortsatt $name. Videreført fra den siste samtalen din.',
-        'change': 'Endre',
         'alsoTitle': 'Er dette også $name?',
         'alsoBody': 'Omi fant den samme stemmen i tidligere samtaler.',
         'confirmed': 'Du har bekreftet denne etiketten',
@@ -12967,4 +12972,54 @@ class AppLocalizationsNo extends AppLocalizations {
 
   @override
   String get chatAppsOmiPro => 'OMI PRO';
+
+  @override
+  String reviewProposalCloseTask(String task) {
+    return 'Merke «$task» som fullført?';
+  }
+
+  @override
+  String reviewProposalRetireTask(String task) {
+    return 'Fjerne oppgaven «$task»?';
+  }
+
+  @override
+  String reviewProposalMergePeople(String name, String other) {
+    return 'Er «$name» samme person som «$other»?';
+  }
+
+  @override
+  String get reviewProposalMergeMemories => 'Slå sammen to dupliserte minner?';
+
+  @override
+  String get reviewProposalMemory => 'Oppdatere dette minnet?';
+
+  @override
+  String reviewProposalEntitySummary(String name) {
+    return 'Oppdatere sammendraget for «$name»?';
+  }
+
+  @override
+  String get reviewProposalGeneric => 'Bruke denne foreslåtte rettelsen?';
+
+  @override
+  String get reviewProposalApply => 'Bruk';
+
+  @override
+  String get reviewProposalSuggested => 'Foreslått';
+
+  @override
+  String get reviewProposalConflict => 'Dette er endret siden Dream foreslo det, så ingenting ble brukt.';
+
+  @override
+  String itemLinkListTitle(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count elementer',
+      one: '1 element',
+      zero: 'Ingen elementer',
+    );
+    return '$_temp0';
+  }
 }

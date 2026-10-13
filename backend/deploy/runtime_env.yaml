@@ -603,6 +603,9 @@ environments:
               value: '1'
             FIRESTORE_READ_LEDGER_SERVICE:
               value: backend
+            OMI_VERTEX_RESERVATION_PROJECT:
+              value: based-hardware-dev
+              category: runtime_identity
             AUDIO_TIMELINE_SPANS: {value: 'false', category: rollout}
             LIVE_SPEAKER_SPAN_RESOLUTION: {value: 'false', category: rollout}
             LIVE_CAPTURE_WINDOW_RETENTION: {value: 'false', category: rollout}
@@ -767,6 +770,12 @@ environments:
           - conversation.finalize.persisted
           - memory.canonical.mutate
           secrets:
+            TYPESENSE_HOST:
+              secret: TYPESENSE_HOST
+              version: latest
+            TYPESENSE_API_KEY:
+              secret: TYPESENSE_API_KEY
+              version: latest
             GOOGLE_CLIENT_SECRET:
               secret: GOOGLE_CLIENT_SECRET
               version: latest
@@ -786,6 +795,12 @@ environments:
               secret: POSTHOG_PROJECT_API_KEY
               version: latest
           env:
+            OMI_VERTEX_RESERVATION_PROJECT:
+              value: based-hardware-dev
+              category: runtime_identity
+            TYPESENSE_HOST_PORT:
+              value: '443'
+              category: service_discovery
             REDIS_DB_PORT:
               value: '13151'
               category: service_discovery
@@ -1902,7 +1917,7 @@ environments:
           REFERRAL_PUBLIC_BASE_URL:
             category: service_discovery
             value: https://omi.me
-          DREAM_AGENT_MODE: {value: shadow, category: rollout}
+          DREAM_AGENT_MODE: {value: 'on', category: rollout}
           DREAM_AGENT_UID_ALLOWLIST: {value: '9OqYLlKJv4hmeYpIhwJcHBR975i2,vi7SA9ckQCe4ccobWNxlbdcNdC23', category: rollout}
           PROACTIVITY_V2_POSTHOG_TOKEN: {value: phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y, category: rollout}
           PROACTIVITY_V2_POSTHOG_HOST: {value: 'https://us.posthog.com', category: rollout}
@@ -2052,7 +2067,7 @@ environments:
           HOSTED_SPEAKER_EMBEDDING_API_URL:
             category: service_discovery
             value: http://diarizer.omi.me:80
-          DREAM_AGENT_MODE: {value: shadow, category: rollout}
+          DREAM_AGENT_MODE: {value: 'on', category: rollout}
           DREAM_AGENT_UID_ALLOWLIST: {value: '9OqYLlKJv4hmeYpIhwJcHBR975i2,vi7SA9ckQCe4ccobWNxlbdcNdC23', category: rollout}
           PROACTIVITY_V2_POSTHOG_TOKEN: {value: phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y, category: rollout}
           PROACTIVITY_V2_POSTHOG_HOST: {value: 'https://us.posthog.com', category: rollout}
@@ -2254,6 +2269,18 @@ environments:
             MEMORY_V3_CURSOR_SECRET:
               secret: MEMORY_V3_CURSOR_SECRET
               version: latest
+            TELEGRAM_BOT_TOKEN:
+              secret: TELEGRAM_BOT_TOKEN
+              version: latest
+            TELEGRAM_WEBHOOK_SECRET:
+              secret: TELEGRAM_WEBHOOK_SECRET
+              version: latest
+            LINQ_API_KEY:
+              secret: LINQ_API_KEY
+              version: latest
+            LINQ_WEBHOOK_SECRET:
+              secret: LINQ_WEBHOOK_SECRET
+              version: latest
             DREAM_AGENT_FEEDBACK_SALT:
               secret: DREAM_AGENT_FEEDBACK_SALT
               version: latest
@@ -2277,6 +2304,9 @@ environments:
               value: '1'
             FIRESTORE_READ_LEDGER_SERVICE:
               value: backend
+            OMI_VERTEX_RESERVATION_PROJECT:
+              value: based-hardware
+              category: runtime_identity
             AUDIO_TIMELINE_SPANS: {value: 'false', category: rollout}
             LIVE_SPEAKER_SPAN_RESOLUTION: {value: 'true', category: rollout}
             LIVE_CAPTURE_WINDOW_RETENTION: {value: 'false', category: rollout}
@@ -2387,14 +2417,26 @@ environments:
             MEMORY_V3_CURSOR_SECRET_VERSION:
               value: prod-v1
               category: memory_rollout
-            DREAM_AGENT_MODE: {value: shadow, category: rollout}
+            OMI_MESSAGING_CHANNELS: {value: 'on', category: rollout}
+            OMI_MESSAGING_CHANNELS_UIDS: {value: vi7SA9ckQCe4ccobWNxlbdcNdC23, category: rollout}
+            OMI_TELEGRAM_ENABLED: {value: 'on', category: rollout}
+            OMI_IMESSAGE_ENABLED: {value: 'on', category: rollout}
+            OMI_IMESSAGE_PROVIDER: {value: linq, category: rollout}
+            OMI_IMESSAGE_MAX_SEND_RECEIVE_RATIO: {value: '3', category: rollout}
+            OMI_MESSAGING_LINK_TARGETS: {value: '{"telegram":{"provider":"telegram","address":"omi_chat_bot","deep_link_template":"https://t.me/{address}?start={proof}"},"imessage":{"provider":"linq","address":"+12062808403"}}',
+              category: rollout}
+            DREAM_AGENT_MODE: {value: 'on', category: rollout}
             DREAM_AGENT_UID_ALLOWLIST: {value: '9OqYLlKJv4hmeYpIhwJcHBR975i2,vi7SA9ckQCe4ccobWNxlbdcNdC23', category: rollout}
+            DREAM_AGENT_AUTO_APPLY_KINDS: {value: 'title,overview,vocabulary', category: rollout}
             DREAM_SELF_REPORT_MODE: {value: 'on', category: rollout}
             DREAM_AGENT_PASSES_PER_DAY: {value: '24', category: rollout}
             DREAM_AGENT_MANUAL_RUNS_PER_DAY: {value: '20', category: rollout}
             DREAM_AGENT_DAILY_USD: {value: '60', category: rollout}
             PROACTIVITY_V2_POSTHOG_TOKEN: {value: phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y, category: rollout}
             PROACTIVITY_V2_POSTHOG_HOST: {value: 'https://us.posthog.com', category: rollout}
+            POSTHOG_BILLING_API_KEY:
+              value: phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y
+              category: telemetry
             MENTOR_PIPELINE: {value: cohort, category: rollout}
             SPEAKER_GROUPING_SHADOW: {value: cohort, category: rollout}
             SPEAKER_GROUPING_SHADOW_PERCENT: {value: '10', category: rollout}
@@ -2491,6 +2533,12 @@ environments:
           - conversation.finalize.persisted
           - memory.canonical.mutate
           secrets:
+            TYPESENSE_HOST:
+              secret: TYPESENSE_HOST
+              version: latest
+            TYPESENSE_API_KEY:
+              secret: TYPESENSE_API_KEY
+              version: latest
             GOOGLE_CLIENT_SECRET:
               secret: GOOGLE_CLIENT_SECRET
               version: latest
@@ -2510,6 +2558,12 @@ environments:
               secret: DREAM_AGENT_FEEDBACK_SALT
               version: latest
           env:
+            OMI_VERTEX_RESERVATION_PROJECT:
+              value: based-hardware
+              category: runtime_identity
+            TYPESENSE_HOST_PORT:
+              value: '443'
+              category: service_discovery
             REDIS_DB_PORT:
               value: '13151'
               category: service_discovery
@@ -2627,8 +2681,10 @@ environments:
               value: canonical_memory_atoms
               category: memory_rollout
             OMI_SHAPED_AGENT_MODE: {value: 'on', category: rollout}
-            DREAM_AGENT_MODE: {value: shadow, category: rollout}
+            DREAM_AGENT_MODE: {value: 'on', category: rollout}
+            REVIEW_SURFACE_MODE: {value: 'on', category: rollout}
             DREAM_AGENT_UID_ALLOWLIST: {value: '9OqYLlKJv4hmeYpIhwJcHBR975i2,vi7SA9ckQCe4ccobWNxlbdcNdC23', category: rollout}
+            DREAM_AGENT_AUTO_APPLY_KINDS: {value: 'title,overview,vocabulary', category: rollout}
             DREAM_AGENT_PASSES_PER_DAY: {value: '24', category: rollout}
             DREAM_AGENT_MANUAL_RUNS_PER_DAY: {value: '20', category: rollout}
             DREAM_AGENT_DAILY_USD: {value: '60', category: rollout}
@@ -2844,7 +2900,7 @@ environments:
               value: canonical_memory_atoms
               category: memory_rollout
             OMI_SHAPED_AGENT_MODE: {value: 'on', category: rollout}
-            DREAM_AGENT_MODE: {value: shadow, category: rollout}
+            DREAM_AGENT_MODE: {value: 'on', category: rollout}
             DREAM_AGENT_UID_ALLOWLIST: {value: '9OqYLlKJv4hmeYpIhwJcHBR975i2,vi7SA9ckQCe4ccobWNxlbdcNdC23', category: rollout}
             SYNC_PHASE_METRICS_EXPORT_ENABLED:
               value: 'true'
@@ -3029,7 +3085,7 @@ environments:
             GCP_LOCATION:
               value: us-central1
             OMI_SHAPED_AGENT_MODE: {value: 'on', category: rollout}
-            DREAM_AGENT_MODE: {value: shadow, category: rollout}
+            DREAM_AGENT_MODE: {value: 'on', category: rollout}
             DREAM_AGENT_UID_ALLOWLIST: {value: '9OqYLlKJv4hmeYpIhwJcHBR975i2,vi7SA9ckQCe4ccobWNxlbdcNdC23', category: rollout}
             PROACTIVITY_V2_POSTHOG_TOKEN: {value: phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y, category: rollout}
             PROACTIVITY_V2_POSTHOG_HOST: {value: 'https://us.posthog.com', category: rollout}

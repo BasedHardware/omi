@@ -2,8 +2,10 @@ import 'dart:convert';
 import 'dart:math';
 
 import 'package:omi/utils/platform/platform_manager.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart' show RenderAbstractViewport, RenderBox, ScrollDirection;
+import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/gestures.dart' show kTouchSlop, PointerDownEvent, PointerMoveEvent;
 
@@ -57,6 +59,10 @@ class TranscriptWidget extends StatefulWidget {
   /// third. [playbackFollowRequest] re-triggers the scroll even when the target
   /// did not change (line tap, scrub, back-to-current).
   final String? currentSegmentId;
+
+  /// When set, the current-line highlight follows this listenable and does not
+  /// require the list to rebuild. [currentSegmentId] is the fallback.
+  final ValueListenable<String?>? highlightedSegment;
   final String? followTargetSegmentId;
   final bool followCurrentSegment;
   final int playbackFollowRequest;
@@ -111,6 +117,7 @@ class TranscriptWidget extends StatefulWidget {
     this.onRejectSpeakerLabel,
     this.startedAt,
     this.currentSegmentId,
+    this.highlightedSegment,
     this.followTargetSegmentId,
     this.followCurrentSegment = false,
     this.playbackFollowRequest = 0,
@@ -1025,29 +1032,49 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          GestureDetector(
-                            // The avatar carries the "Identify speaker" semantics; the name is a
-                            // larger visual target for the same action.
-                            excludeFromSemantics: true,
-                            onTap: data.speakerId == omiSpeakerId
-                                ? null
-                                : () {
-                                    widget.editSegment?.call(data.id, data.speakerId);
-                                    PlatformManager.instance.analytics.tagSheetOpened();
-                                  },
-                            child: Text(
-                              names.forSegment(data, person: person),
-                              style: OmiType.footnote.copyWith(
-                                color: data.speakerId == omiSpeakerId || person != null
-                                    ? OmiColors.textPrimary
-                                    : OmiColors.textSecondary,
-                                fontWeight: FontWeight.w500,
+                          if (!widget.isConversationDetail &&
+                              startsTurn &&
+                              data.speakerId != omiSpeakerId &&
+                              widget.editSegment != null &&
+                              (SpeakerLabelSource.isConfirmed(data.speakerLabelSource) ||
+                                  data.speakerLabelSource == SpeakerLabelSource.auto))
+                            OmiButton.tertiary(
+                              key: ValueKey('edit_speaker_label_${data.id}'),
+                              label: names.forSegment(data, person: person),
+                              leading: startsTurn && person != null && !isTagging
+                                  ? SpeakerLabelBadge(source: data.speakerLabelSource)
+                                  : null,
+                              size: OmiButtonSize.compact,
+                              onPressed: () {
+                                widget.editSegment!(data.id, data.speakerId);
+                                PlatformManager.instance.analytics.tagSheetOpened();
+                              },
+                            )
+                          else ...[
+                            GestureDetector(
+                              // The avatar carries the "Identify speaker" semantics; the name is a
+                              // larger visual target for the same action.
+                              excludeFromSemantics: true,
+                              onTap: data.speakerId == omiSpeakerId
+                                  ? null
+                                  : () {
+                                      widget.editSegment?.call(data.id, data.speakerId);
+                                      PlatformManager.instance.analytics.tagSheetOpened();
+                                    },
+                              child: Text(
+                                names.forSegment(data, person: person),
+                                style: OmiType.footnote.copyWith(
+                                  color: data.speakerId == omiSpeakerId || person != null
+                                      ? OmiColors.textPrimary
+                                      : OmiColors.textSecondary,
+                                  fontWeight: FontWeight.w500,
+                                ),
                               ),
                             ),
-                          ),
-                          if (startsTurn && person != null && !isTagging) ...[
-                            const SizedBox(width: 4),
-                            SpeakerLabelBadge(source: data.speakerLabelSource),
+                            if (startsTurn && person != null && !isTagging) ...[
+                              const SizedBox(width: 4),
+                              SpeakerLabelBadge(source: data.speakerLabelSource),
+                            ],
                           ],
                           if (isTagging) ...[const SizedBox(width: 6), const OmiSpinner(size: OmiSpinnerSize.small)],
                         ],
@@ -1173,6 +1200,22 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
   /// line plays the recording from there; double-tapping the words edits them.
   Widget _buildDetailLine(int segmentIdx, List<Person> people, SpeakerNames names, Set<String> askSegmentIds) {
     final data = widget.segments[segmentIdx];
+    return _SegmentHighlight(
+      segmentId: data.id,
+      highlighted: widget.highlightedSegment,
+      staticCurrent: data.id == widget.currentSegmentId,
+      builder: (context, isCurrent) => _buildHighlightedDetailLine(segmentIdx, people, names, askSegmentIds, isCurrent),
+    );
+  }
+
+  Widget _buildHighlightedDetailLine(
+    int segmentIdx,
+    List<Person> people,
+    SpeakerNames names,
+    Set<String> askSegmentIds,
+    bool isCurrent,
+  ) {
+    final data = widget.segments[segmentIdx];
     final Person? person = personById(people, data.personId);
     final isTagging = widget.taggingSegmentIds.contains(data.id);
     final previous = segmentIdx > 0 ? widget.segments[segmentIdx - 1] : null;
@@ -1194,7 +1237,6 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
         !isTagging &&
         askSegmentIds.contains(data.id);
     final isOmi = data.speakerId == omiSpeakerId && !data.isUser;
-    final isCurrent = data.id == widget.currentSegmentId;
     final unnamed = !data.isUser && !isOmi && (person == null || person.name.trim().isEmpty);
     final labelColor = data.isUser ? OmiColors.textPrimary : OmiColors.textTertiary;
     final label = OmiType.footnote.copyWith(color: labelColor, fontWeight: FontWeight.w600, height: 1.3);
@@ -1462,6 +1504,87 @@ class LiteTranscriptWidget extends StatelessWidget {
       ),
     );
   }
+}
+
+/// Rebuilds one transcript line only when that line gains or loses the playhead
+/// highlight. A reader fling moves the highlight often; rebuilding the list for
+/// each move lays out every visible line again.
+class _SegmentHighlight extends StatefulWidget {
+  const _SegmentHighlight({
+    required this.segmentId,
+    required this.highlighted,
+    required this.staticCurrent,
+    required this.builder,
+  });
+
+  final String segmentId;
+  final ValueListenable<String?>? highlighted;
+  final bool staticCurrent;
+  final Widget Function(BuildContext context, bool isCurrent) builder;
+
+  @override
+  State<_SegmentHighlight> createState() => _SegmentHighlightState();
+}
+
+class _SegmentHighlightState extends State<_SegmentHighlight> {
+  ValueListenable<String?>? _highlighted;
+  late bool _current;
+
+  @override
+  void initState() {
+    super.initState();
+    _current = _isCurrent;
+    _subscribe(widget.highlighted);
+  }
+
+  @override
+  void didUpdateWidget(_SegmentHighlight oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.highlighted != widget.highlighted || oldWidget.segmentId != widget.segmentId) {
+      _unsubscribe();
+      _current = _isCurrent;
+      _subscribe(widget.highlighted);
+    } else {
+      _current = _isCurrent;
+    }
+  }
+
+  @override
+  void dispose() {
+    _unsubscribe();
+    super.dispose();
+  }
+
+  bool get _isCurrent {
+    final highlighted = widget.highlighted;
+    if (highlighted != null) return highlighted.value == widget.segmentId;
+    return widget.staticCurrent;
+  }
+
+  void _subscribe(ValueListenable<String?>? highlighted) {
+    _highlighted = highlighted;
+    highlighted?.addListener(_onHighlight);
+  }
+
+  void _unsubscribe() {
+    _highlighted?.removeListener(_onHighlight);
+    _highlighted = null;
+  }
+
+  void _onHighlight() {
+    if (!mounted) return;
+    final next = _isCurrent;
+    if (next == _current) return;
+    _current = next;
+    // updateSegments() can sync the highlight from a parent build. That build
+    // already includes this line; setState here would assert.
+    final phase = SchedulerBinding.instance.schedulerPhase;
+    if (phase == SchedulerPhase.persistentCallbacks || phase == SchedulerPhase.midFrameMicrotasks) return;
+    setState(() {});
+  }
+
+  @override
+  Widget build(BuildContext context) => widget.builder(context, _isCurrent);
 }
 
 String getLastTranscript(

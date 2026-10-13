@@ -9113,6 +9113,9 @@ class AppLocalizationsFa extends AppLocalizations {
       'محدودیت استفاده منصفانه به پایان رسید — همگام‌سازی به‌طور خودکار از سر گرفته می‌شود';
 
   @override
+  String get syncCardThrottlePaused => 'همگام‌سازی برای مدت کوتاهی متوقف شده — به‌طور خودکار از سر گرفته می‌شود';
+
+  @override
   String get syncCardBackendBusy => 'سرورهای Omi شلوغ هستند — ضبط‌های شما به‌محض آزاد شدن ظرفیت همگام‌سازی می‌شوند';
 
   @override
@@ -9773,6 +9776,15 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String get chatBlockMemory => 'خاطره';
+
+  @override
+  String get chatBlockPerson => 'شخص';
+
+  @override
+  String get chatBlockUndone => 'لغو شد';
+
+  @override
+  String get chatBlockUndoFailed => 'لغو این تغییر ممکن نشد';
 
   @override
   String get chatBlockQuestion => 'پرسش';
@@ -10967,11 +10979,6 @@ class AppLocalizationsFa extends AppLocalizations {
   }
 
   @override
-  String transcriptionsPendingCount(int count) {
-    return 'رونویسی‌های در انتظار $count';
-  }
-
-  @override
   String get captureSourceCall => 'تماس';
 
   @override
@@ -12016,8 +12023,6 @@ class AppLocalizationsFa extends AppLocalizations {
         'likely': 'احتمالاً',
         'soundsLike': 'شبیه $name است',
         'notPerson': '$name نیست',
-        'carried': 'همچنان $name. از آخرین گفتگوی شما منتقل شد.',
-        'change': 'تغییر',
         'alsoTitle': 'آیا این هم $name است؟',
         'alsoBody': 'Omi همین صدا را در گفتگوهای قبلی پیدا کرد.',
         'confirmed': 'شما این برچسب را تأیید کردید',
@@ -12961,4 +12966,54 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String get chatAppsOmiPro => 'OMI PRO';
+
+  @override
+  String reviewProposalCloseTask(String task) {
+    return '«$task» به‌عنوان انجام‌شده علامت بخورد؟';
+  }
+
+  @override
+  String reviewProposalRetireTask(String task) {
+    return 'وظیفهٔ «$task» حذف شود؟';
+  }
+
+  @override
+  String reviewProposalMergePeople(String name, String other) {
+    return 'آیا «$name» همان «$other» است؟';
+  }
+
+  @override
+  String get reviewProposalMergeMemories => 'دو خاطرهٔ تکراری ادغام شوند؟';
+
+  @override
+  String get reviewProposalMemory => 'این خاطره به‌روزرسانی شود؟';
+
+  @override
+  String reviewProposalEntitySummary(String name) {
+    return 'خلاصهٔ «$name» به‌روزرسانی شود؟';
+  }
+
+  @override
+  String get reviewProposalGeneric => 'این اصلاح پیشنهادی اعمال شود؟';
+
+  @override
+  String get reviewProposalApply => 'اعمال';
+
+  @override
+  String get reviewProposalSuggested => 'پیشنهادی';
+
+  @override
+  String get reviewProposalConflict => 'این مورد پس از پیشنهاد Dream تغییر کرده است، بنابراین چیزی اعمال نشد.';
+
+  @override
+  String itemLinkListTitle(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count مورد',
+      one: '۱ مورد',
+      zero: 'هیچ موردی نیست',
+    );
+    return '$_temp0';
+  }
 }

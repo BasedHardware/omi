@@ -1,7 +1,7 @@
 # Messaging channels rollout
 
 Telegram and iMessage chat for one production uid. The backend switch, the uid
-allowlist, and the Pro (`pro` / Architect) gate all fail closed. This runbook
+allowlist, and the valid paid-plan gate all fail closed. This runbook
 does not deploy, merge, or read secret payloads.
 
 The mobile entry is a separate PostHog flag, `mobile-chat-apps`. The server
@@ -31,11 +31,13 @@ does not belong in it.
 ```json
 {
   "telegram": {
-    "address": "<bot username without @>",
+    "provider": "telegram",
+    "address": "omi_chat_bot",
     "deep_link_template": "https://t.me/{address}?start={proof}"
   },
   "imessage": {
-    "address": "<Omi iMessage number>"
+    "provider": "linq",
+    "address": "+12062808403"
   }
 }
 ```
@@ -48,14 +50,24 @@ addresses in the payload as a fallback:
 
 ```json
 {
-  "telegram": {"provider": "telegram", "address": "<bot username>"},
-  "imessage": {"provider": "linq", "address": "<Omi iMessage number>"}
+  "telegram": {"provider": "telegram", "address": "omi_chat_bot"},
+  "imessage": {"provider": "linq", "address": "+12062808403"}
 }
 ```
 
-Admission still requires a valid subscription whose plan is exactly `pro`
-(catalog name Architect). The app copy says "Omi Pro". Do not rename either
-side until David decides.
+Admission requires a valid paid subscription: legacy Unlimited, Plus, Unlimited v2,
+Operator or Architect (including the legacy `pro` alias). Basic/free and expired
+subscriptions are rejected. The app uses its existing `plan.isPaid` helper for eligibility;
+its existing localized "Omi Pro" marketing copy is unchanged by this logic-only rollout.
+
+The committed prod configuration scopes these settings and the four secret bindings to
+Cloud Run `backend` in `based-hardware`, `us-central1`, with uid
+`vi7SA9ckQCe4ccobWNxlbdcNdC23` only. Adapter wakeups and pending recovery execute in
+that process; no GKE listen/pusher or other worker needs these settings. Prebind
+`TELEGRAM_BOT_TOKEN=TELEGRAM_BOT_TOKEN:latest`,
+`TELEGRAM_WEBHOOK_SECRET=TELEGRAM_WEBHOOK_SECRET:latest`,
+`LINQ_API_KEY=LINQ_API_KEY:latest`, and `LINQ_WEBHOOK_SECRET=LINQ_WEBHOOK_SECRET:latest`
+on the live service before deployment preflight. The parent operator owns this step.
 
 ## Register webhooks
 
@@ -120,6 +132,58 @@ iMessage: the send/receive ledger blocks a turn that would exceed
 `OMI_IMESSAGE_MAX_SEND_RECEIVE_RATIO`. A long answer can stop mid-thread until
 David sends another message. That is the ratio guard, not a retry bug.
 
+## Linq sandbox activation and accepted-but-silent webhooks
+
+Linq's sandbox activation reply is provider-owned; it is not Omi's
+`Account linked. You can chat with Omi here.` acknowledgement. Check the active
+`users/{uid}/channel_links` mirror (the source for `GET /v1/messaging/links`)
+to establish Omi linking. Do not infer a link from the activation message.
+If activation did not reach Omi, mint a fresh code in the app and send the code
+again after activation. An unlinked sender receives instructions to link in Omi.
+Never bypass proof verification or the send/receive ratio to activate a sender.
+
+On 2026-10-11 the sandbox did deliver the code: the Linq link became active at
+09:24:39.483Z. Accepted webhooks at 09:24:39Z and 09:24:52Z were followed by
+content-free worker `ProviderError` logs at 09:24:39.945Z and 09:25:06.421Z.
+The next inbound at 09:25:28Z remained pending behind the failed turn's lease.
+The old logs did not retain provider status codes, so they cannot establish
+sandbox quota rejection. The adapter sent the wrong v3 body shape: `parts` and `idempotency_key` were
+not inside `message`. The chat-scoped `POST /api/partner/v3/chats/{chatId}/messages` envelope proven by
+PR #21172's October 11 repair keeps `parts` and `idempotency_key` inside `message`
+and `preferred_service: "iMessage"` at the top level. Synthetic transport replay
+requires this proven shape. Protocol-selection documentation for the separate
+`POST /v3/messages` endpoint does not establish the chat-scoped service placement.
+`message.reply_to` follows the [sending-messages guide](https://docs.linqapp.com/channel/imessage/guides/messaging/sending-messages/)
+but is unverified live; definite 400/404/422 thread rejections retry a plain send,
+retaining the top-level service. Ambiguous outcomes never trigger this fallback.
+
+Current worker logs report provider, bounded reason, exception type and HTTP
+status only, including terminal 429 responses. A handled turn failure attempts one short guarded failure reply,
+closes the stream in its owning task, stops typing, and releases the surface
+lease. The failed inbox row remains running and is never automatically replayed.
+A finished turn that raises `CancelledError` follows that same path. A worker
+task that is still cancelling retains its lease, because thread-pool work may
+still be running. A settled deferred reentry stores a failure fence, sends at
+most one notice, and releases the lease so the chat is not stuck; a retry sees
+the fence and does not run the turn again. Process loss still retains the lease.
+Only delivered assistant replies enter model event history. A failure to complete
+the inbox tombstone after successful delivery does not send a contradictory apology.
+Error frames are drained for a terminal fallback before being treated as silent failure.
+Failure-notice delivery records degraded/exhausted outcomes through the shared fallback helper.
+If the provider rejects the failure reply too (including exhausted ratio credit),
+`Messaging failure reply failed` records that outcome without provider bodies.
+
+Operator action for already-stuck jobs: confirm the old worker is stopped,
+reconcile each running job's delivery receipts/effects, then deliberately clear
+only its retained lease. Pending jobs may then drain; do not reset running jobs
+or reserved receipts blindly. No production data was changed by this diagnosis.
+After the fix is deployed, verify a new inbound reply on the sandbox and inspect
+status-only failures. A 400 suggests schema validation; 401/403 requires checking
+provider authorization or sandbox activation/recipient restrictions; 429 requires
+checking the sandbox limit in Linq. Those are diagnostic leads, not proof of the
+provider's rejection reason. Use the dashboard or read-only provider receipts;
+never paste credentials, handles or message bodies into incident notes.
+
 ## Kill switch
 
 1. Set `OMI_MESSAGING_CHANNELS=off` and roll the backend. Admission and new
@@ -163,3 +227,45 @@ deletes the account.
 Live provider testing waits on David's bot and Linq setup. WhatsApp stays a
 local waitlist. Insights is stored and not honored. There is no clear-history
 route separate from unlink.
+
+
+## First live QA, 2026-10-11
+
+Read-only Cloud Logging evidence for 09:14–09:40 UTC showed revision
+`backend-433b2d6-38108932764-1`, rather than the earlier revision in the brief.
+All reported Telegram webhooks returned 202. The unanswered requests were admitted
+at 09:19:03, 09:22:33 and 09:22:45 UTC. CPU throttling was disabled; request-only CPU
+allocation does not explain this incident.
+
+On the instance handling the 09:17:23 callback, memory inverse vector cleanup was
+logged at 09:17:36, graph-citation pruning at 09:22:34, and the background messaging
+worker reported `ProviderError` at 09:25:06. This supports slow inverse cleanup
+holding the surface lease, followed by a settled send failure retaining that lease.
+The old gateway held its lease across `UndoStore.undo` and deliberately skipped
+release on every exception. Logs do not contain per-phase timings or a stack for
+that provider error, so they do not prove the precise cleanup substep or rejected
+provider method. No production data/leases were changed for this investigation.
+Existing stranded jobs/leases still require operator reconciliation before any reset.
+
+On the first user turn, `get_memories_tool` used the expected principal at 09:15:35,
+reported zero visible rows at 09:15:43, and memory search returned empty at 09:15:45.
+There was no logged retrieval exception in that window. The historical tool text
+suggested that no saved personal facts existed, although the channel digest supplied
+personal context. Channel-only empty-result guidance now distinguishes unavailable
+retrieval from absent knowledge. The logs cannot distinguish privacy/review/temporal
+filtering from an empty underlying store; this investigation did not read account data.
+
+Synthetic timing regressions, run through `backend/test.sh` on the original and
+changed source, measured first typing at **176.2 ms → 0.7 ms** with 80 ms session
+and 80 ms digest delays. The same fixture's full turn still takes about 170 ms;
+this is feedback timing, not a production model latency claim. A separate channel
+setup fixture with an 80 ms discarded legacy-prompt read measured **101.6 ms →
+16.9 ms**, and prompt reads **1 → 0**. These are local measurements, not deployed
+acceptance. Production phase instrumentation can verify feedback latency after rollout.
+
+`test_messaging_live_qa.py` exercises no-write callback → message, memory receipt →
+slow undo → another message, duplicate callbacks, provider/inverse errors, distinct
+confirmation bubbles, bounded bootstrap history, and a dated reminder through the
+real shared tool projection. `test_messaging_adapters_firestore.py` exercises encrypted
+per-action receipts, expiry, cross-session scope, multiwrite text-undo ambiguity and
+concurrent once-only claims against the loopback Firestore emulator.

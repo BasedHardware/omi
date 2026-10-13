@@ -9135,6 +9135,9 @@ class AppLocalizationsNl extends AppLocalizations {
   String get syncCardRateLimited => 'Gebruikslimiet bereikt — synchronisatie wordt automatisch hervat';
 
   @override
+  String get syncCardThrottlePaused => 'Synchronisatie kort gepauzeerd — deze wordt automatisch hervat';
+
+  @override
   String get syncCardBackendBusy =>
       'De servers van Omi zijn druk — je opnames worden gesynchroniseerd zodra er weer capaciteit is';
 
@@ -9800,6 +9803,15 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get chatBlockMemory => 'Herinnering';
+
+  @override
+  String get chatBlockPerson => 'Persoon';
+
+  @override
+  String get chatBlockUndone => 'Ongedaan gemaakt';
+
+  @override
+  String get chatBlockUndoFailed => 'Deze wijziging kon niet ongedaan worden gemaakt';
 
   @override
   String get chatBlockQuestion => 'Vraag';
@@ -11002,11 +11014,6 @@ class AppLocalizationsNl extends AppLocalizations {
   }
 
   @override
-  String transcriptionsPendingCount(int count) {
-    return 'Transcripties in behandeling $count';
-  }
-
-  @override
   String get captureSourceCall => 'Gesprek';
 
   @override
@@ -12054,8 +12061,6 @@ class AppLocalizationsNl extends AppLocalizations {
         'likely': 'Waarschijnlijk',
         'soundsLike': 'Klinkt als $name',
         'notPerson': 'Niet $name',
-        'carried': 'Nog steeds $name. Overgenomen uit je laatste gesprek.',
-        'change': 'Wijzigen',
         'alsoTitle': 'Is dit ook $name?',
         'alsoBody': 'Omi heeft dezelfde stem in eerdere gesprekken gevonden.',
         'confirmed': 'Je hebt dit label bevestigd',
@@ -13002,4 +13007,54 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get chatAppsOmiPro => 'OMI PRO';
+
+  @override
+  String reviewProposalCloseTask(String task) {
+    return '“$task” als klaar markeren?';
+  }
+
+  @override
+  String reviewProposalRetireTask(String task) {
+    return 'De taak “$task” verwijderen?';
+  }
+
+  @override
+  String reviewProposalMergePeople(String name, String other) {
+    return 'Is “$name” dezelfde persoon als “$other”?';
+  }
+
+  @override
+  String get reviewProposalMergeMemories => 'Twee dubbele herinneringen samenvoegen?';
+
+  @override
+  String get reviewProposalMemory => 'Deze herinnering bijwerken?';
+
+  @override
+  String reviewProposalEntitySummary(String name) {
+    return 'De samenvatting van “$name” bijwerken?';
+  }
+
+  @override
+  String get reviewProposalGeneric => 'Deze voorgestelde correctie toepassen?';
+
+  @override
+  String get reviewProposalApply => 'Toepassen';
+
+  @override
+  String get reviewProposalSuggested => 'Voorgesteld';
+
+  @override
+  String get reviewProposalConflict => 'Dit is veranderd sinds Dream het voorstelde, dus er is niets toegepast.';
+
+  @override
+  String itemLinkListTitle(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count items',
+      one: '1 item',
+      zero: 'Geen items',
+    );
+    return '$_temp0';
+  }
 }

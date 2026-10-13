@@ -9162,6 +9162,9 @@ class AppLocalizationsTe extends AppLocalizations {
   String get syncCardRateLimited => 'న్యాయమైన వినియోగ పరిమితి చేరుకుంది — సింక్ స్వయంచాలకంగా తిరిగి కొనసాగుతుంది';
 
   @override
+  String get syncCardThrottlePaused => 'సింక్ కొద్దిసేపు నిలిపివేయబడింది — ఇది స్వయంచాలకంగా తిరిగి ప్రారంభమవుతుంది';
+
+  @override
   String get syncCardBackendBusy =>
       'Omi సర్వర్‌లు బిజీగా ఉన్నాయి — సామర్థ్యం అందుబాటులోకి వచ్చిన వెంటనే మీ రికార్డింగ్‌లు సింక్ అవుతాయి';
 
@@ -9826,6 +9829,15 @@ class AppLocalizationsTe extends AppLocalizations {
 
   @override
   String get chatBlockMemory => 'జ్ఞాపకం';
+
+  @override
+  String get chatBlockPerson => 'వ్యక్తి';
+
+  @override
+  String get chatBlockUndone => 'రద్దు చేయబడింది';
+
+  @override
+  String get chatBlockUndoFailed => 'ఈ మార్పును రద్దు చేయలేకపోయాము';
 
   @override
   String get chatBlockQuestion => 'ప్రశ్న';
@@ -11022,11 +11034,6 @@ class AppLocalizationsTe extends AppLocalizations {
   }
 
   @override
-  String transcriptionsPendingCount(int count) {
-    return 'పెండింగ్‌లో ఉన్న ట్రాన్స్‌క్రిప్షన్‌లు $count';
-  }
-
-  @override
   String get captureSourceCall => 'కాల్';
 
   @override
@@ -12071,8 +12078,6 @@ class AppLocalizationsTe extends AppLocalizations {
         'likely': 'అవకాశం',
         'soundsLike': '$name లాగా వినిపిస్తోంది',
         'notPerson': '$name కాదు',
-        'carried': 'ఇప్పటికీ $name. మీ చివరి సంభాషణ నుండి కొనసాగింది.',
-        'change': 'మార్చండి',
         'alsoTitle': 'ఇది కూడా $name యేనా?',
         'alsoBody': 'Omi మునుపటి సంభాషణల్లో ఇదే వాయిస్‌ను కనుగొంది.',
         'confirmed': 'మీరు ఈ లేబుల్‌ను నిర్ధారించారు',
@@ -13018,4 +13023,54 @@ class AppLocalizationsTe extends AppLocalizations {
 
   @override
   String get chatAppsOmiPro => 'OMI PRO';
+
+  @override
+  String reviewProposalCloseTask(String task) {
+    return '“$task”ని పూర్తయినట్లు గుర్తించాలా?';
+  }
+
+  @override
+  String reviewProposalRetireTask(String task) {
+    return '“$task” పనిని తీసివేయాలా?';
+  }
+
+  @override
+  String reviewProposalMergePeople(String name, String other) {
+    return '“$name” మరియు “$other” ఒకే వ్యక్తా?';
+  }
+
+  @override
+  String get reviewProposalMergeMemories => 'రెండు నకిలీ జ్ఞాపకాలను విలీనం చేయాలా?';
+
+  @override
+  String get reviewProposalMemory => 'ఈ జ్ఞాపకాన్ని నవీకరించాలా?';
+
+  @override
+  String reviewProposalEntitySummary(String name) {
+    return '“$name” సారాంశాన్ని నవీకరించాలా?';
+  }
+
+  @override
+  String get reviewProposalGeneric => 'ఈ సూచించిన సవరణను వర్తింపజేయాలా?';
+
+  @override
+  String get reviewProposalApply => 'వర్తింపజేయి';
+
+  @override
+  String get reviewProposalSuggested => 'సూచించినది';
+
+  @override
+  String get reviewProposalConflict => 'Dream సూచించిన తర్వాత ఇది మారింది, కాబట్టి ఏదీ వర్తింపజేయలేదు.';
+
+  @override
+  String itemLinkListTitle(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count అంశాలు',
+      one: '1 అంశం',
+      zero: 'అంశాలు లేవు',
+    );
+    return '$_temp0';
+  }
 }

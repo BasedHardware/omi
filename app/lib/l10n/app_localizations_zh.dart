@@ -8972,6 +8972,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get syncCardRateLimited => '已达到合理使用上限 — 同步将自动恢复';
 
   @override
+  String get syncCardThrottlePaused => '同步暂时暂停 — 将自动恢复';
+
+  @override
   String get syncCardBackendBusy => 'Omi 服务器繁忙 — 容量恢复后将自动同步你的录音';
 
   @override
@@ -9609,6 +9612,15 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get chatBlockMemory => '记忆';
+
+  @override
+  String get chatBlockPerson => '人物';
+
+  @override
+  String get chatBlockUndone => '已撤销';
+
+  @override
+  String get chatBlockUndoFailed => '无法撤销此更改';
 
   @override
   String get chatBlockQuestion => '问题';
@@ -10790,11 +10802,6 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
-  String transcriptionsPendingCount(int count) {
-    return '待处理转录 $count';
-  }
-
-  @override
   String get captureSourceCall => '通话';
 
   @override
@@ -11825,8 +11832,6 @@ class AppLocalizationsZh extends AppLocalizations {
         'likely': '可能',
         'soundsLike': '听起来像 $name',
         'notPerson': '不是 $name',
-        'carried': '仍是 $name。沿用自你的上一段对话。',
-        'change': '更改',
         'alsoTitle': '这也是 $name 吗？',
         'alsoBody': 'Omi 在之前的对话中发现了相同的声音。',
         'confirmed': '你已确认此标签',
@@ -12761,4 +12766,54 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get chatAppsOmiPro => 'OMI PRO';
+
+  @override
+  String reviewProposalCloseTask(String task) {
+    return '将“$task”标记为已完成？';
+  }
+
+  @override
+  String reviewProposalRetireTask(String task) {
+    return '删除任务“$task”？';
+  }
+
+  @override
+  String reviewProposalMergePeople(String name, String other) {
+    return '“$name”和“$other”是同一个人吗？';
+  }
+
+  @override
+  String get reviewProposalMergeMemories => '合并两条重复的记忆？';
+
+  @override
+  String get reviewProposalMemory => '更新这条记忆？';
+
+  @override
+  String reviewProposalEntitySummary(String name) {
+    return '更新“$name”的摘要？';
+  }
+
+  @override
+  String get reviewProposalGeneric => '应用这条建议的修正？';
+
+  @override
+  String get reviewProposalApply => '应用';
+
+  @override
+  String get reviewProposalSuggested => '建议';
+
+  @override
+  String get reviewProposalConflict => 'Dream 提出建议后内容已有变化，因此未应用任何更改。';
+
+  @override
+  String itemLinkListTitle(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count 个项目',
+      one: '1 个项目',
+      zero: '无项目',
+    );
+    return '$_temp0';
+  }
 }

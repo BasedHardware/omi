@@ -9153,6 +9153,9 @@ class AppLocalizationsHu extends AppLocalizations {
       'Elérted a méltányos használati korlátot — a szinkronizálás automatikusan folytatódik';
 
   @override
+  String get syncCardThrottlePaused => 'A szinkronizálás rövid időre szünetel — automatikusan folytatódik';
+
+  @override
   String get syncCardBackendBusy =>
       'Az Omi szerverei leterheltek — a felvételeid szinkronizálódnak, amint felszabadul a kapacitás';
 
@@ -9819,6 +9822,15 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get chatBlockMemory => 'Emlék';
+
+  @override
+  String get chatBlockPerson => 'Személy';
+
+  @override
+  String get chatBlockUndone => 'Visszavonva';
+
+  @override
+  String get chatBlockUndoFailed => 'Nem sikerült visszavonni a módosítást';
 
   @override
   String get chatBlockQuestion => 'Kérdés';
@@ -11018,11 +11030,6 @@ class AppLocalizationsHu extends AppLocalizations {
   }
 
   @override
-  String transcriptionsPendingCount(int count) {
-    return 'Függő átiratok $count';
-  }
-
-  @override
   String get captureSourceCall => 'Hívás';
 
   @override
@@ -12068,8 +12075,6 @@ class AppLocalizationsHu extends AppLocalizations {
         'likely': 'Valószínű',
         'soundsLike': '$name hangjához hasonlít',
         'notPerson': 'Nem $name',
-        'carried': 'Továbbra is $name. Átvéve az előző beszélgetésedből.',
-        'change': 'Módosítás',
         'alsoTitle': 'Ő is $name?',
         'alsoBody': 'Az Omi ugyanezt a hangot megtalálta korábbi beszélgetésekben.',
         'confirmed': 'Megerősítetted ezt a címkét',
@@ -13018,4 +13023,54 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get chatAppsOmiPro => 'OMI PRO';
+
+  @override
+  String reviewProposalCloseTask(String task) {
+    return 'Késznek jelölöd ezt: „$task”?';
+  }
+
+  @override
+  String reviewProposalRetireTask(String task) {
+    return 'Eltávolítod a(z) „$task” feladatot?';
+  }
+
+  @override
+  String reviewProposalMergePeople(String name, String other) {
+    return '„$name” ugyanaz a személy, mint „$other”?';
+  }
+
+  @override
+  String get reviewProposalMergeMemories => 'Összevonsz két ismétlődő emléket?';
+
+  @override
+  String get reviewProposalMemory => 'Frissíted ezt az emléket?';
+
+  @override
+  String reviewProposalEntitySummary(String name) {
+    return 'Frissíted „$name” összefoglalóját?';
+  }
+
+  @override
+  String get reviewProposalGeneric => 'Alkalmazod ezt a javasolt javítást?';
+
+  @override
+  String get reviewProposalApply => 'Alkalmaz';
+
+  @override
+  String get reviewProposalSuggested => 'Javasolt';
+
+  @override
+  String get reviewProposalConflict => 'Ez megváltozott, mióta a Dream javasolta, így semmi sem lett alkalmazva.';
+
+  @override
+  String itemLinkListTitle(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count elem',
+      one: '1 elem',
+      zero: 'Nincsenek elemek',
+    );
+    return '$_temp0';
+  }
 }

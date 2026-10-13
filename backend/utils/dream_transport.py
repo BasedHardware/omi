@@ -1,17 +1,31 @@
 """One gateway-only model turn. Reserved routing belongs to the gateway."""
 
 import json
+from collections import Counter
+from functools import lru_cache
+from typing import get_args, TypedDict
+
+from pydantic import ValidationError
+
+from models.dream_agent import Plan, Triage
+from config.dream_agent import context_mode, FULL_CONTEXT_WINDOW, FULL_MODEL_SECONDS
 
 import httpx
 
+from utils import dream_capacity
 from utils.http_client import get_llm_gateway_client, get_llm_gateway_semaphore
 from utils.llm.gateway_client import get_llm_gateway_base_url, llm_gateway_headers
 from utils.llm.shaped_agent import Turn
+from utils.observability.fallback import record_fallback
 
 # These lanes default to Luna. The gateway owns the reserved-capacity selection
 # when #20960 is present; no dream caller constructs a Gemini provider client.
 TRIAGE_LANE = 'omi:auto:dream-triage'
 MAIN_LANE = 'omi:auto:dream-reasoning'
+
+
+class RequestOptions(TypedDict, total=False):
+    timeout: httpx.Timeout
 
 
 def input_ceiling(messages, schema):
@@ -20,8 +34,21 @@ def input_ceiling(messages, schema):
     return len(json.dumps({'messages': messages, 'schema': schema}, ensure_ascii=False, default=str).encode()) + 256
 
 
+def input_estimate(messages, schema):
+    return (len(json.dumps({'messages': messages, 'schema': schema}, ensure_ascii=False, default=str)) + 3) // 4 + 256
+
+
+def full_input_bounds(messages, schema):
+    serialized = json.dumps({'messages': messages, 'schema': schema}, ensure_ascii=False, default=str)
+    return (len(serialized) + 3) // 4 + 256, len(serialized.encode()) + 256
+
+
 class PreTokenFailure(RuntimeError):
     """The gateway rejected a call before producing any billable model output."""
+
+
+class CapacityWait(PreTokenFailure):
+    """Reserved capacity unavailable; retain dirty versions without poisoning."""
 
 
 def _truncate_arrays(value, schema, root):
@@ -48,26 +75,116 @@ def _truncate_arrays(value, schema, root):
     return value
 
 
+@lru_cache(maxsize=1)
+def _diagnostic_fields():
+    # Static model metadata only; never retain response values or exception data.
+    fields = set()
+    for model in (Plan, Triage):
+        schema = model.model_json_schema()
+        for node in [schema, *schema.get('$defs', {}).values()]:
+            fields.update(node.get('properties', {}))
+    return frozenset(fields)
+
+
+def validation_counts(exc, *, prefix=()):
+    """Only schema-owned field names and Pydantic error types may leave parsing.
+
+    Unknown extra keys can contain user content; never log them, input, message,
+    context or URL. Numeric locations collapse into their enclosing field path.
+    """
+    fields = _diagnostic_fields()
+    counts = Counter()
+    for error in exc.errors(include_input=False, include_context=False, include_url=False):
+        path = (
+            '.'.join(
+                part if part in fields else 'unknown_field'
+                for part in (*prefix, *error['loc'])
+                if not isinstance(part, int)
+            )
+            or 'root'
+        )
+        counts[f"{path}:{error['type']}"] += 1
+    return dict(counts)
+
+
+def parse_response(model, content, *, usage_sink=None):
+    """Preserve strict top-level shape while isolating malformed list items."""
+    schema = model.model_json_schema()
+    bounded = _truncate_arrays(content, schema, schema)
+    if model not in (Plan, Triage):
+        return model.model_validate_json(json.dumps(bounded))
+    # Validate object/list types and extras before dropping anything. Empty lists
+    # preserve the exact top-level schema; item validation follows independently.
+    shape = (
+        {key: [] if key in model.model_fields and isinstance(value, list) else value for key, value in bounded.items()}
+        if isinstance(bounded, dict)
+        else bounded
+    )
+    model.model_validate_json(json.dumps(shape))
+    retained = {}
+    dropped = {}
+    errors = Counter()
+    for name, field in model.model_fields.items():
+        item_model = get_args(field.annotation)[0]
+        retained[name] = []
+        dropped[name] = 0
+        for item in bounded.get(name, []):
+            try:
+                retained[name].append(item_model.model_validate_json(json.dumps(item)))
+            except ValidationError as exc:
+                dropped[name] += 1
+                errors.update(validation_counts(exc, prefix=(name,)))
+    if any(dropped.values()):
+        record_fallback(
+            component='agent_tools',
+            from_mode='dream_response',
+            to_mode='validated_items',
+            reason='malformed_doc',
+            outcome='degraded',
+        )
+    if usage_sink is not None:
+        usage_sink.setdefault('dropped_invalid', {}).update(dropped)
+        totals = Counter(usage_sink.get('validation_errors', {}))
+        totals.update(errors)
+        usage_sink['validation_errors'] = dict(totals)
+    return model.model_validate(retained)
+
+
 async def model_turn(uid, lane, mount, messages, *, usage_sink=None, completion_limit=4096):
     if usage_sink is not None:
         usage_sink['usage_unknown'] = False
     schema = mount.schema.model_json_schema()
     ceiling = input_ceiling(messages, schema)
-    remaining = mount.budget.tokens - ceiling
+    full = context_mode(uid) == 'full' and lane == MAIN_LANE
+    estimated = input_estimate(messages, schema) if full else ceiling
+    remaining = mount.budget.tokens - estimated
     if remaining < 128:
         raise ValueError('dream_input_token_budget')
-    completion = min(4096 if lane == MAIN_LANE else 768, remaining, completion_limit)
+    completion = min(16000 if full else 4096 if lane == MAIN_LANE else 768, remaining, completion_limit)
+    if full and ceiling + completion > FULL_CONTEXT_WINDOW:
+        raise ValueError('dream_model_context_budget')
+    reservation_model = None
+    if lane == MAIN_LANE:
+        reservation_model = await dream_capacity.available_model()
+        if reservation_model is None:
+            raise CapacityWait('dream_capacity_wait')
+    if full and usage_sink is not None:
+        usage_sink['input_tokens_estimate'] = estimated
     headers = llm_gateway_headers(feature='dream_agent')
     headers['X-Omi-User-Uid'] = uid
     # Resolve local configuration before marking the provider outcome unknown.
     client = get_llm_gateway_client()
     url = get_llm_gateway_base_url() + '/v1/chat/completions'
+    options: RequestOptions = {}
+    if full:
+        options['timeout'] = httpx.Timeout(FULL_MODEL_SECONDS, connect=3.0, write=60.0, pool=5.0)
     async with get_llm_gateway_semaphore():
         if usage_sink is not None:
             usage_sink['usage_unknown'] = True
         response = await client.post(
             url,
             headers=headers,
+            **options,
             json={
                 'model': lane,
                 'messages': messages,
@@ -82,6 +199,16 @@ async def model_turn(uid, lane, mount, messages, *, usage_sink=None, completion_
     try:
         response.raise_for_status()
     except httpx.HTTPStatusError as exc:
+        try:
+            failure = response.json().get('error', {}).get('failure_class')
+        except (ValueError, AttributeError):
+            failure = None
+        if lane == MAIN_LANE and (
+            response.status_code == 429 or failure in {'reserved_capacity_unavailable', 'provider_429_omi_paid'}
+        ):
+            await dream_capacity.mark_saturated(reservation_model)
+            dream_capacity.log_wait(reservation_model, source='gateway_response')
+            raise CapacityWait('dream_capacity_wait') from exc
         raise PreTokenFailure('dream_gateway_rejected') from exc
     body = response.json()
     usage = body['usage']
@@ -93,6 +220,5 @@ async def model_turn(uid, lane, mount, messages, *, usage_sink=None, completion_
         usage_sink['usage_unknown'] = False
         usage_sink.setdefault('model_lanes', []).append(lane)
     content = json.loads(body['choices'][0]['message']['content'])
-    bounded = _truncate_arrays(content, schema, schema)
-    value = mount.schema.model_validate_json(json.dumps(bounded))
+    value = parse_response(mount.schema, content, usage_sink=usage_sink)
     return Turn(value=value, tokens=tokens)

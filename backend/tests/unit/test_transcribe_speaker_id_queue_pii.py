@@ -6,7 +6,8 @@ import pytest
 
 from models.transcript_segment import SpeakerIdentityStatus, TranscriptSegment
 from routers.listen.transcripts import TranscriptProcessor
-from routers.listen.speakers import MAX_SPEAKER_EMBEDDING_AUDIO_SECONDS, SpeakerMatcher
+from routers.listen.speakers import SpeakerMatcher
+from routers.listen.speaker_audio import MAX_SPEAKER_EMBEDDING_AUDIO_SECONDS
 
 
 @pytest.fixture

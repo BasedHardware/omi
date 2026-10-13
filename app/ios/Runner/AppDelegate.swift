@@ -197,6 +197,13 @@ final class QuickActionsIconPatcher: NSObject {
   func didInitializeImplicitFlutterEngine(_ engineBridge: FlutterImplicitEngineBridge) {
     GeneratedPluginRegistrant.register(with: engineBridge.pluginRegistry)
     let messenger = engineBridge.applicationRegistrar.messenger()
+    FlutterMethodChannel(name: "com.omi/device_health_policy", binaryMessenger: messenger).setMethodCallHandler { call, result in
+      guard call.method == "setPolicy", let args = call.arguments as? [String: Any], let epoch = args["epoch"] as? NSNumber else {
+        result(FlutterMethodNotImplemented); return
+      }
+      OmiBleManager.shared.setDeviceHealthPolicy(enabled: args["enabled"] as? Bool == true, epoch: epoch.int64Value, retire: args["retire"] as? Bool == true)
+      result(nil)
+    }
     let syncChannel = FlutterMethodChannel(name: "com.omi/periodic_recording_sync", binaryMessenger: messenger)
     periodicSyncChannel = syncChannel
     syncChannel.setMethodCallHandler { [weak self] call, result in
@@ -466,11 +473,21 @@ final class QuickActionsIconPatcher: NSObject {
             result(FlutterError(code: "battery_unavailable", message: "Phone battery unavailable", details: nil))
             return
         }
-        result([
+        let thermal: String?
+        switch ProcessInfo.processInfo.thermalState {
+        case .nominal: thermal = "nominal"
+        case .fair: thermal = "fair"
+        case .serious: thermal = "serious"
+        case .critical: thermal = "critical"
+        @unknown default: thermal = nil
+        }
+        var snapshot: [String: Any] = [
             "battery_level": Int((level * 100).rounded()),
             "battery_charging": state == .charging || state == .full,
             "os_battery_saver": ProcessInfo.processInfo.isLowPowerModeEnabled
-        ])
+        ]
+        if let thermal { snapshot["thermal_state"] = thermal }
+        result(snapshot)
     }
 
     // TestFlight environment detection

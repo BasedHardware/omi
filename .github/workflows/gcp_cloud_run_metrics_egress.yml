@@ -46,6 +46,18 @@ jobs:
         with:
           ref: ${{ github.sha }}
 
+      # Required repo or prod Environment variable; fail before credentials/Helm.
+      - name: Validate prod dead-man notification channels
+        if: github.event.inputs.environment == 'prod'
+        env:
+          ALERT_CHANNELS: ${{ vars.MONITORING_DEADMAN_NOTIFICATION_CHANNELS }}
+        run: |
+          set -euo pipefail
+          if [[ -z "${ALERT_CHANNELS//[[:space:]]/}" ]]; then
+            echo "MONITORING_DEADMAN_NOTIFICATION_CHANNELS must be created before running prod monitoring." >&2
+            exit 1
+          fi
+
       - name: Resolve environment-specific release contract
         env:
           ENV_SLUG: ${{ vars.ENV }}
@@ -152,6 +164,18 @@ jobs:
             --timeout=5m
           kubectl get service "$EXPORTER_RELEASE" \
             --namespace "$MONITORING_NAMESPACE"
+
+      # Runs after Helm so a Monitoring permission gap cannot block the Grafana/Prometheus
+      # rollout; it still fails the job (fail closed) when the dead-man cannot be reconciled.
+      - name: Ensure external prod Grafana dead-man
+        if: github.event.inputs.environment == 'prod'
+        env:
+          ALERT_CHANNELS: ${{ vars.MONITORING_DEADMAN_NOTIFICATION_CHANNELS }}
+        run: |
+          set -euo pipefail
+          python3 .github/scripts/ensure_grafana_deadman.py \
+            --project="${{ vars.GCP_PROJECT_ID }}" \
+            --notification-channels="$ALERT_CHANNELS"
 
   provision-live-alerts:
     # Grafana alert provisioning is independent of Helm deploy health: a
