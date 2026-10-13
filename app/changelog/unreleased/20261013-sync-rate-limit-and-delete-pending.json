@@ -1,0 +1,3 @@
+{
+  "change": "Stop repeated sync polling when rate limited and allow clearing stuck uploaded recordings via Delete Pending."
+}
