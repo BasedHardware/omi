@@ -12,7 +12,7 @@ import secrets
 from datetime import datetime, timedelta
 import html
 from typing import Optional, List, Dict, Any
-from urllib.parse import urlencode, urlsplit, parse_qs
+from urllib.parse import urlencode, urlsplit, parse_qs, quote
 
 import requests
 from dotenv import load_dotenv
@@ -1066,7 +1066,8 @@ async def root(uid: str = Query(None)):
     tokens = get_notion_tokens(clean_uid)
 
     if not tokens:
-        safe_uid = html.escape(clean_uid, quote=True)
+        quoted_uid = quote(clean_uid, safe="")
+        safe_uid = html.escape(quoted_uid, quote=True)
         auth_url = f"/auth/notion?uid={safe_uid}"
         return HTMLResponse(content=f"""
         <html>
@@ -1109,7 +1110,8 @@ async def root(uid: str = Query(None)):
         """)
 
     # User is connected
-    safe_uid = html.escape(clean_uid, quote=True)
+    quoted_uid = quote(clean_uid, safe="")
+    safe_uid = html.escape(quoted_uid, quote=True)
     workspace_name = html.escape(tokens.get("workspace_name", "Your Workspace"), quote=True)
 
     return HTMLResponse(content=f"""
@@ -1253,6 +1255,7 @@ async def notion_callback(
             return HTMLResponse(content="No access token received", status_code=400)
 
         store_notion_tokens(uid, access_token, workspace_id, workspace_name, bot_id)
+        safe_continue_url = html.escape(f"/?uid={quote(uid, safe='')}", quote=True)
 
         return HTMLResponse(content=f"""
         <html>
@@ -1269,7 +1272,7 @@ async def notion_callback(
                         <p>Your Notion workspace is now linked to Omi</p>
                     </div>
 
-                    <a href="/?uid={uid}" class="btn btn-primary btn-block">
+                    <a href="{safe_continue_url}" class="btn btn-primary btn-block">
                         Continue to Settings
                     </a>
 
@@ -1307,7 +1310,8 @@ async def disconnect(uid: str = Query(...)):
     if not clean_uid:
         return RedirectResponse(url="/")
     delete_notion_tokens(clean_uid)
-    return RedirectResponse(url=f"/?uid={clean_uid}")
+    quoted_uid = quote(clean_uid, safe="")
+    return RedirectResponse(url=f"/?uid={quoted_uid}")
 
 
 @app.get("/health")
