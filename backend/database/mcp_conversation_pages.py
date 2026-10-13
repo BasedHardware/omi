@@ -18,7 +18,7 @@ from .conversations import (
     document_data_with_revision,
     prepare_conversation_for_read,
     conversations_collection,
-    is_soft_deleted,
+    is_visible_conversation,
 )
 from .firestore_index_registry import MCP_CONVERSATION_CARD_QUERY_SPECS
 from .helpers import prepare_for_read
@@ -78,7 +78,7 @@ def get_mcp_conversation_cards(
         conversation = document_data_with_revision(doc)
         if conversation is None:
             continue
-        if is_soft_deleted(conversation):
+        if not is_visible_conversation(conversation):
             continue
         conversation.setdefault('id', doc.id)
         conversations.append(conversation)
@@ -152,7 +152,7 @@ def get_mcp_conversation_cards_page(
             conversation = document_data_with_revision(doc)
             if conversation is None:
                 continue
-            if is_soft_deleted(conversation):
+            if not is_visible_conversation(conversation):
                 continue
             conversation.setdefault('id', doc.id)
             visible.append(conversation)

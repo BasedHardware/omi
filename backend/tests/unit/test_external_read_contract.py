@@ -15,6 +15,12 @@ def test_unknown_query_is_rejected_without_echoing_input():
     assert exc.value.status_code == 400
     assert 'secret' not in exc.value.detail and 'private' not in exc.value.detail
     reject_unknown_query(SimpleNamespace(query_params={'limit': '20'}), {'limit'})
+    # Widely used cache-busters are inert for these read endpoints and have
+    # historically been accepted by the permissive query parser.
+    reject_unknown_query(
+        SimpleNamespace(query_params={'_': '1700000000', 'cacheBust': 'refresh'}),
+        {'limit'},
+    )
 
 
 def test_array_pagination_headers_report_limit_and_continuation():

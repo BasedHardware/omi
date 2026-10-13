@@ -701,7 +701,24 @@ TOOL_SPECS: Tuple[ToolSpec, ...] = (
         output_schema=_output_schema(
             _object_schema(
                 ["conversations"],
-                conversations=_object_array_with(**_CONVERSATION_CARD_FIELDS),
+                conversations=_object_array_with(
+                    **_CONVERSATION_CARD_FIELDS,
+                    match_snippets={
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "text": {"type": "string"},
+                                "segment_id": {"type": ["string", "null"]},
+                                "start": {"type": ["number", "null"]},
+                                "end": {"type": ["number", "null"]},
+                                "start_ms": {"type": ["integer", "null"]},
+                                "end_ms": {"type": ["integer", "null"]},
+                                "speaker_id": {"type": ["integer", "string", "null"]},
+                            },
+                        },
+                    },
+                ),
                 search_coverage={"type": "string"},
                 message={"type": "string"},
             )

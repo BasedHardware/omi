@@ -119,6 +119,14 @@ def test_hydrated_dates_filter_stale_index_and_keep_end_day_fraction(core):
     search.keyword_search_conversation_ids.assert_not_called()
 
 
+def test_shared_search_can_return_cards_without_hydrating_transcripts(core):
+    handler, db, vector, _, _ = core
+    vector.query_vectors.return_value = ['inside']
+    db.get_mcp_conversations_by_id.return_value = [row('inside')]
+    handler.search_conversations_core('owner', 'budget', limit=10, start_dt=None, end_dt=None, include_transcript=False)
+    assert db.get_mcp_conversations_by_id.call_args.kwargs['include_transcript'] is False
+
+
 def test_offset_page_emits_keyset_cursor_and_does_not_skip_lookahead(core):
     handler, _, _, _, _ = core
     handler.mcp_conversation_pages.get_mcp_conversation_cards = Mock(return_value=[row('a'), row('b')])

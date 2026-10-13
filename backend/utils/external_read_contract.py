@@ -9,9 +9,19 @@ from fastapi import HTTPException
 def reject_unknown_query(request: Any, allowed: Iterable[str]) -> None:
     if request is None or not hasattr(request, 'query_params'):
         return
-    if set(request.query_params) - set(allowed):
+    allowed_names = set(allowed)
+    unknown = {
+        name for name in request.query_params if name not in allowed_names and not _is_cache_buster_parameter(name)
+    }
+    if unknown:
         # Do not echo arbitrary names or values into errors/logs.
         raise HTTPException(status_code=400, detail="Unknown query parameter. Check the documented parameters.")
+
+
+def _is_cache_buster_parameter(name: str) -> bool:
+    """Keep common inert cache-buster query keys compatible with older callers."""
+    normalized = ''.join(character for character in name.lower() if character.isalnum())
+    return name == '_' or normalized in {'t', 'ts', 'timestamp', 'cb', 'cachebust', 'cachebuster'}
 
 
 def utc_window(start: Optional[datetime], end: Optional[datetime]) -> tuple:

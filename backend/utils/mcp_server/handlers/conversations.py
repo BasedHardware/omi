@@ -374,6 +374,7 @@ def search_conversations_core(
     start_dt: Optional[Any],
     end_dt: Optional[Any],
     extra_field_paths: Optional[List[str]] = None,
+    include_transcript: bool = True,
 ) -> List[Dict[str, Any]]:
     """Shared vector-search + batch-read for MCP ``search_conversations`` and REST search.
 
@@ -405,7 +406,7 @@ def search_conversations_core(
         conversations_db.get_mcp_conversations_by_id(
             uid,
             conversation_ids,
-            include_transcript=True,
+            include_transcript=include_transcript,
             extra_field_paths=extra_field_paths,
         )
         if conversation_ids
@@ -443,7 +444,7 @@ def search_conversations_core(
     rows = conversations_db.get_mcp_conversations_by_id(
         uid,
         keyword_ids,
-        include_transcript=True,
+        include_transcript=include_transcript,
         extra_field_paths=extra_field_paths,
     )
     return [

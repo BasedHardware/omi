@@ -790,6 +790,48 @@ class TestConversationKeysetPage:
         assert [d["id"] for d in page2] == ["v2", "v0"]
         assert resume2 is None
 
+    def test_completed_rule_discards_are_hidden_but_user_curated_rows_remain_visible(self):
+        pages_db = _import_real_module("database.mcp_conversation_pages")
+
+        t0 = datetime(2026, 6, 11, 10, 0, tzinfo=timezone.utc)
+        decision = {"verdict": "discard", "decided_by": "rule", "reason": "filler_only"}
+        docs = [
+            _FakeDoc(
+                "hidden",
+                {
+                    "created_at": t0 + timedelta(minutes=1),
+                    "status": "completed",
+                    "discarded": False,
+                    "relevance_decision": decision,
+                },
+            ),
+            _FakeDoc(
+                "starred",
+                {
+                    "created_at": t0,
+                    "status": "completed",
+                    "discarded": False,
+                    "relevance_decision": decision,
+                    "starred": True,
+                },
+            ),
+        ]
+        query = _DescKeysetQuery(docs)
+        with self._stub_client(query):
+            page, resume = pages_db.get_mcp_conversation_cards_page(UID, 1)
+        assert [row["id"] for row in page] == ["starred"]
+        assert resume is None
+
+    def test_card_projection_includes_server_visibility_fields_without_transcripts(self):
+        pages_db = _import_real_module("database.mcp_conversation_pages")
+        query = _DescKeysetQuery([])
+        selected = []
+        query.select = lambda fields: selected.extend(fields) or query
+        with self._stub_client(query):
+            pages_db.get_mcp_conversation_cards_page(UID, 2)
+        assert {"status", "relevance_decision", "starred", "folder_user_set", "has_photos"} <= set(selected)
+        assert "transcript_segments" not in selected
+
     def test_equal_created_at_rows_resume_by_document_id(self):
         pages_db = _import_real_module("database.mcp_conversation_pages")
 

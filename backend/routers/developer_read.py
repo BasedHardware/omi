@@ -97,7 +97,14 @@ def search_conversations(
     if not query.strip():
         raise HTTPException(status_code=400, detail='query must not be blank')
     try:
-        rows = search_conversations_core(auth.uid, query, limit=limit, start_dt=start_date, end_dt=end_date)
+        rows = search_conversations_core(
+            auth.uid,
+            query,
+            limit=limit,
+            start_dt=start_date,
+            end_dt=end_date,
+            include_transcript=False,
+        )
     except ToolExecutionError as exc:
         raise HTTPException(status_code=exc.http_status or 503, detail=exc.message) from exc
     return {

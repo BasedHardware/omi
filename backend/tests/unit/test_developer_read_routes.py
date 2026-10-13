@@ -93,6 +93,7 @@ def test_search_is_a_named_route_and_shared_core_receives_utc_dates(routes):
     assert core.call_args.args == ('owner', 'budget')
     assert str(core.call_args.kwargs['start_dt'].tzinfo) == 'UTC'
     assert core.call_args.kwargs['limit'] == 20
+    assert core.call_args.kwargs['include_transcript'] is False
 
 
 def test_unknown_parameters_and_blank_search_are_rejected(routes):
