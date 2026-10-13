@@ -168,7 +168,7 @@ class ConfettiPainter extends CustomPainter {
     Color(0xFFFF6B6B),
     Color(0xFF4DABF7),
     Color(0xFF51CF66),
-    Color(0xFFB197FC),
+    Color(0xFF38D9A9),
     Color(0xFFFF922B),
   ];
 
