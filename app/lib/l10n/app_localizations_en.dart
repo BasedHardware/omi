@@ -154,7 +154,8 @@ class AppLocalizationsEn extends AppLocalizations {
   String get deleting => 'Deleting…';
 
   @override
-  String get pleaseCompleteAuthentication => 'Please complete authentication in your browser. Once done, return to the app.';
+  String get pleaseCompleteAuthentication =>
+      'Please complete authentication in your browser. Once done, return to the app.';
 
   @override
   String get failedToStartAuthentication => 'Failed to start authentication';
@@ -356,16 +357,19 @@ class AppLocalizationsEn extends AppLocalizations {
   String get appsDisconnected => 'Your apps and integrations will be disconnected.';
 
   @override
-  String get exportBeforeDelete => 'You can export your data before deleting your account, but once deleted, it cannot be recovered.';
+  String get exportBeforeDelete =>
+      'You can export your data before deleting your account, but once deleted, it cannot be recovered.';
 
   @override
-  String get deleteAccountCheckbox => 'I understand that deleting my account is permanent and all data, including memories and conversations, will be lost and cannot be recovered.';
+  String get deleteAccountCheckbox =>
+      'I understand that deleting my account is permanent and all data, including memories and conversations, will be lost and cannot be recovered.';
 
   @override
   String get areYouSure => 'Are you sure?';
 
   @override
-  String get deleteAccountFinal => 'This action is irreversible and will permanently delete your account and all associated data. Are you sure you want to proceed?';
+  String get deleteAccountFinal =>
+      'This action is irreversible and will permanently delete your account and all associated data. Are you sure you want to proceed?';
 
   @override
   String get deleteNow => 'Delete Now';
@@ -374,7 +378,8 @@ class AppLocalizationsEn extends AppLocalizations {
   String get goBack => 'Go Back';
 
   @override
-  String get checkBoxToConfirm => 'Check the box to confirm you understand that deleting your account is permanent and irreversible.';
+  String get checkBoxToConfirm =>
+      'Check the box to confirm you understand that deleting your account is permanent and irreversible.';
 
   @override
   String get profile => 'Profile';
@@ -527,13 +532,15 @@ class AppLocalizationsEn extends AppLocalizations {
   String get deviceDisconnectedMessage => 'Your Omi has been disconnected 😔';
 
   @override
-  String get deviceUnpairedMessage => 'Device unpaired. Go to Settings > Bluetooth and forget the device to complete unpairing.';
+  String get deviceUnpairedMessage =>
+      'Device unpaired. Go to Settings > Bluetooth and forget the device to complete unpairing.';
 
   @override
   String get unpairDialogTitle => 'Unpair Device';
 
   @override
-  String get unpairDialogMessage => 'This will unpair the device so it can be connected to another phone. You will need to go to Settings > Bluetooth and forget the device to complete the process.';
+  String get unpairDialogMessage =>
+      'This will unpair the device so it can be connected to another phone. You will need to go to Settings > Bluetooth and forget the device to complete the process.';
 
   @override
   String get deviceNotConnected => 'Device Not Connected';
@@ -554,7 +561,8 @@ class AppLocalizationsEn extends AppLocalizations {
   String get v2Undetected => 'Offline Sync unavailable';
 
   @override
-  String get v2UndetectedMessage => 'Offline Sync needs a connected Omi device with SD-card storage. Your current device doesn\'t support it.';
+  String get v2UndetectedMessage =>
+      'Offline Sync needs a connected Omi device with SD-card storage. Your current device doesn\'t support it.';
 
   @override
   String get endConversation => 'End Conversation';
@@ -942,7 +950,8 @@ class AppLocalizationsEn extends AppLocalizations {
   String get shortConversationThreshold => 'Short Conversation Threshold';
 
   @override
-  String get shortConversationThresholdSubtitle => 'Conversations shorter than this will be hidden unless enabled above';
+  String get shortConversationThresholdSubtitle =>
+      'Conversations shorter than this will be hidden unless enabled above';
 
   @override
   String get durationThreshold => 'Duration Threshold';
@@ -1037,7 +1046,8 @@ class AppLocalizationsEn extends AppLocalizations {
   String get needYourPermission => 'We need your permission';
 
   @override
-  String get alreadyGavePermission => 'You\'ve already given us permission to save your recordings. Here\'s a reminder of why we need it:';
+  String get alreadyGavePermission =>
+      'You\'ve already given us permission to save your recordings. Here\'s a reminder of why we need it:';
 
   @override
   String get wouldLikePermission => 'We\'d like your permission to save your voice recordings. Here\'s why:';
@@ -1052,13 +1062,15 @@ class AppLocalizationsEn extends AppLocalizations {
   String get trainFamilyProfiles => 'Train Profiles for Friends and Family';
 
   @override
-  String get trainFamilyProfilesDesc => 'Your recordings help us recognize and create profiles for your friends and family.';
+  String get trainFamilyProfilesDesc =>
+      'Your recordings help us recognize and create profiles for your friends and family.';
 
   @override
   String get enhanceTranscriptAccuracy => 'Enhance Transcript Accuracy';
 
   @override
-  String get legalNotice => 'Legal Notice: The legality of recording and storing voice data may vary depending on your location and how you use this feature. It\'s your responsibility to ensure compliance with local laws and regulations.';
+  String get legalNotice =>
+      'Legal Notice: The legality of recording and storing voice data may vary depending on your location and how you use this feature. It\'s your responsibility to ensure compliance with local laws and regulations.';
 
   @override
   String get alreadyAuthorized => 'Already Authorized';
@@ -1136,7 +1148,8 @@ class AppLocalizationsEn extends AppLocalizations {
   String get showEventsNoParticipants => 'Show events with no participants';
 
   @override
-  String get showEventsNoParticipantsDesc => 'When enabled, Coming Up shows events without participants or a video link.';
+  String get showEventsNoParticipantsDesc =>
+      'When enabled, Coming Up shows events without participants or a video link.';
 
   @override
   String get yourMeetings => 'Your Meetings';
@@ -1177,7 +1190,8 @@ class AppLocalizationsEn extends AppLocalizations {
   String get noProjectsInWorkspace => 'No projects found in this workspace';
 
   @override
-  String get conversationTimeoutDesc => 'Choose how long to wait in silence before automatically ending a conversation:';
+  String get conversationTimeoutDesc =>
+      'Choose how long to wait in silence before automatically ending a conversation:';
 
   @override
   String get timeout2Minutes => '2 minutes';
@@ -1304,7 +1318,8 @@ class AppLocalizationsEn extends AppLocalizations {
   String get defaultRepository => 'Default Repository';
 
   @override
-  String get selectDefaultRepoDesc => 'Select a default repository for creating issues. You can still specify a different repository when creating issues.';
+  String get selectDefaultRepoDesc =>
+      'Select a default repository for creating issues. You can still specify a different repository when creating issues.';
 
   @override
   String get noReposFound => 'No repositories found';
@@ -1667,7 +1682,8 @@ class AppLocalizationsEn extends AppLocalizations {
   String get enableBluetooth => 'Enable Bluetooth';
 
   @override
-  String get bluetoothNeeded => 'Omi needs Bluetooth to connect to your wearable. Please enable Bluetooth and try again.';
+  String get bluetoothNeeded =>
+      'Omi needs Bluetooth to connect to your wearable. Please enable Bluetooth and try again.';
 
   @override
   String get contactSupport => 'Contact Support?';
@@ -1694,7 +1710,8 @@ class AppLocalizationsEn extends AppLocalizations {
   String get notifications => 'Notifications';
 
   @override
-  String get notificationsDesc => 'So Omi can send you conversation summaries, task reminders and replies from your apps.';
+  String get notificationsDesc =>
+      'So Omi can send you conversation summaries, task reminders and replies from your apps.';
 
   @override
   String get locationServiceDisabled => 'Location Service Disabled';
@@ -1706,7 +1723,8 @@ class AppLocalizationsEn extends AppLocalizations {
   String get backgroundLocationDenied => 'Background Location Access Denied';
 
   @override
-  String get backgroundLocationDeniedDesc => 'Please go to device settings and set location permission to \"Always Allow\"';
+  String get backgroundLocationDeniedDesc =>
+      'Please go to device settings and set location permission to \"Always Allow\"';
 
   @override
   String get lovingOmi => 'Loving Omi?';
@@ -1733,13 +1751,15 @@ class AppLocalizationsEn extends AppLocalizations {
   String get connectionError => 'Connection Error';
 
   @override
-  String get connectionErrorDesc => 'Failed to connect to the server. Please check your internet connection and try again.';
+  String get connectionErrorDesc =>
+      'Failed to connect to the server. Please check your internet connection and try again.';
 
   @override
   String get invalidRecordingMultipleSpeakers => 'Invalid recording detected';
 
   @override
-  String get multipleSpeakersDesc => 'It seems like there are multiple speakers in the recording. Please make sure you are in a quiet location and try again.';
+  String get multipleSpeakersDesc =>
+      'It seems like there are multiple speakers in the recording. Please make sure you are in a quiet location and try again.';
 
   @override
   String get tooShortDesc => 'There is not enough speech detected. Please speak more and try again.';
@@ -1751,13 +1771,15 @@ class AppLocalizationsEn extends AppLocalizations {
   String get areYouThere => 'Are you there?';
 
   @override
-  String get noSpeechDesc => 'We could not detect any speech. Please make sure to speak for at least 10 seconds and not more than 3 minutes.';
+  String get noSpeechDesc =>
+      'We could not detect any speech. Please make sure to speak for at least 10 seconds and not more than 3 minutes.';
 
   @override
   String get connectionLost => 'Connection Lost';
 
   @override
-  String get connectionLostDesc => 'The connection was interrupted. Please check your internet connection and try again.';
+  String get connectionLostDesc =>
+      'The connection was interrupted. Please check your internet connection and try again.';
 
   @override
   String get tryAgain => 'Try Again';
@@ -1772,7 +1794,8 @@ class AppLocalizationsEn extends AppLocalizations {
   String get permissionsRequired => 'Permissions Required';
 
   @override
-  String get permissionsRequiredDesc => 'This app needs Bluetooth and Location permissions to function properly. Please enable them in the settings.';
+  String get permissionsRequiredDesc =>
+      'This app needs Bluetooth and Location permissions to function properly. Please enable them in the settings.';
 
   @override
   String get openSettings => 'Open Settings';
@@ -1811,10 +1834,12 @@ class AppLocalizationsEn extends AppLocalizations {
   String get microphonePermission => 'Microphone Permission';
 
   @override
-  String get permissionGrantedNow => 'Permission granted! Now:\n\nOpen the Omi app on your watch and tap \"Continue\" below';
+  String get permissionGrantedNow =>
+      'Permission granted! Now:\n\nOpen the Omi app on your watch and tap \"Continue\" below';
 
   @override
-  String get needMicrophonePermission => 'We need microphone permission.\n\n1. Tap \"Grant Permission\"\n2. Allow on your iPhone\n3. Watch app will close\n4. Reopen and tap \"Continue\"';
+  String get needMicrophonePermission =>
+      'We need microphone permission.\n\n1. Tap \"Grant Permission\"\n2. Allow on your iPhone\n3. Watch app will close\n4. Reopen and tap \"Continue\"';
 
   @override
   String get grantPermissionButton => 'Grant Permission';
@@ -1823,13 +1848,15 @@ class AppLocalizationsEn extends AppLocalizations {
   String get needHelp => 'Need Help?';
 
   @override
-  String get troubleshootingSteps => 'Troubleshooting:\n\n1. Ensure Omi is installed on your watch\n2. Open the Omi app on your watch\n3. Look for the permission popup\n4. Tap \"Allow\" when prompted\n5. App on your watch will close - reopen it\n6. Come back and tap \"Continue\" on your iPhone';
+  String get troubleshootingSteps =>
+      'Troubleshooting:\n\n1. Ensure Omi is installed on your watch\n2. Open the Omi app on your watch\n3. Look for the permission popup\n4. Tap \"Allow\" when prompted\n5. App on your watch will close - reopen it\n6. Come back and tap \"Continue\" on your iPhone';
 
   @override
   String get recordingStartedSuccessfully => 'Recording started successfully!';
 
   @override
-  String get permissionNotGrantedYet => 'Permission not granted yet. Please make sure you allowed microphone access and reopened the app on your watch.';
+  String get permissionNotGrantedYet =>
+      'Permission not granted yet. Please make sure you allowed microphone access and reopened the app on your watch.';
 
   @override
   String errorRequestingPermission(String error) {
@@ -1923,7 +1950,8 @@ class AppLocalizationsEn extends AppLocalizations {
   String get welcomeActionItemsTitle => 'Ready for Tasks';
 
   @override
-  String get welcomeActionItemsDescription => 'Your AI will automatically pull tasks out of your conversations. They\'ll appear here when created.';
+  String get welcomeActionItemsDescription =>
+      'Your AI will automatically pull tasks out of your conversations. They\'ll appear here when created.';
 
   @override
   String get autoExtractionFeature => 'Automatically extracted from conversations';
@@ -2140,13 +2168,15 @@ class AppLocalizationsEn extends AppLocalizations {
   String get speechTranscriptionSectionTitle => 'Speech & Transcription';
 
   @override
-  String get languageSettingsHelperText => 'App Language changes menus and buttons. Primary Language affects how your recordings are transcribed.';
+  String get languageSettingsHelperText =>
+      'App Language changes menus and buttons. Primary Language affects how your recordings are transcribed.';
 
   @override
   String get translationNotice => 'Translation Notice';
 
   @override
-  String get translationNoticeMessage => 'Omi translates conversations into your primary language. Update it anytime in Settings → Profiles.';
+  String get translationNoticeMessage =>
+      'Omi translates conversations into your primary language. Update it anytime in Settings → Profiles.';
 
   @override
   String get pleaseCheckInternetConnection => 'Please check your internet connection and try again';
@@ -2308,7 +2338,8 @@ class AppLocalizationsEn extends AppLocalizations {
   String get unpairDeviceDialogTitle => 'Unpair Device';
 
   @override
-  String get unpairDeviceDialogMessage => 'This will unpair the device so it can be connected to another phone. You will need to go to Settings > Bluetooth and forget the device to complete the process.';
+  String get unpairDeviceDialogMessage =>
+      'This will unpair the device so it can be connected to another phone. You will need to go to Settings > Bluetooth and forget the device to complete the process.';
 
   @override
   String get unpair => 'Unpair';
@@ -2592,7 +2623,8 @@ class AppLocalizationsEn extends AppLocalizations {
   String get noTasksYet => 'No Tasks Yet';
 
   @override
-  String get tasksFromConversationsWillAppear => 'Tasks from your conversations will appear here.\nClick Create to add one manually.';
+  String get tasksFromConversationsWillAppear =>
+      'Tasks from your conversations will appear here.\nClick Create to add one manually.';
 
   @override
   String get monthJan => 'Jan';
@@ -2724,13 +2756,15 @@ class AppLocalizationsEn extends AppLocalizations {
   String get chatPrompt => 'Chat Prompt';
 
   @override
-  String get chatPromptPlaceholder => 'You are an awesome app, your job is to respond to the user queries and make them feel good…';
+  String get chatPromptPlaceholder =>
+      'You are an awesome app, your job is to respond to the user queries and make them feel good…';
 
   @override
   String get conversationPrompt => 'Conversation Prompt';
 
   @override
-  String get conversationPromptPlaceholder => 'You are an awesome app, you will be given transcript and summary of a conversation…';
+  String get conversationPromptPlaceholder =>
+      'You are an awesome app, you will be given transcript and summary of a conversation…';
 
   @override
   String get notificationScopes => 'Notification Scopes';
@@ -2742,7 +2776,8 @@ class AppLocalizationsEn extends AppLocalizations {
   String get makeMyAppPublic => 'Make my app public';
 
   @override
-  String get submitAppTermsAgreement => 'By submitting this app, I agree to the Omi AI Terms of Service and Privacy Policy';
+  String get submitAppTermsAgreement =>
+      'By submitting this app, I agree to the Omi AI Terms of Service and Privacy Policy';
 
   @override
   String get submitApp => 'Submit App';
@@ -2757,10 +2792,12 @@ class AppLocalizationsEn extends AppLocalizations {
   String get submitAppQuestion => 'Submit App?';
 
   @override
-  String get submitAppPublicDescription => 'Your app will be reviewed and made public. You can start using it immediately, even during the review!';
+  String get submitAppPublicDescription =>
+      'Your app will be reviewed and made public. You can start using it immediately, even during the review!';
 
   @override
-  String get submitAppPrivateDescription => 'Your app will be reviewed and made available to you privately. You can start using it immediately, even during the review!';
+  String get submitAppPrivateDescription =>
+      'Your app will be reviewed and made available to you privately. You can start using it immediately, even during the review!';
 
   @override
   String get startEarning => 'Start Earning! 💰';
@@ -2784,16 +2821,19 @@ class AppLocalizationsEn extends AppLocalizations {
   String get dataAccessNotice => 'Data Access Notice';
 
   @override
-  String get dataAccessWarning => 'This app will access your data. Omi AI is not responsible for how your data is used, modified, or deleted by this app';
+  String get dataAccessWarning =>
+      'This app will access your data. Omi AI is not responsible for how your data is used, modified, or deleted by this app';
 
   @override
   String get installApp => 'Install App';
 
   @override
-  String get betaTesterNotice => 'You are a beta tester for this app. It is not public yet. It will be public once approved.';
+  String get betaTesterNotice =>
+      'You are a beta tester for this app. It is not public yet. It will be public once approved.';
 
   @override
-  String get appUnderReviewOwner => 'Your app is under review and visible only to you. It will be public once approved.';
+  String get appUnderReviewOwner =>
+      'Your app is under review and visible only to you. It will be public once approved.';
 
   @override
   String get appRejectedNotice => 'Your app has been rejected. Please update the app details and resubmit for review.';
@@ -2858,7 +2898,8 @@ class AppLocalizationsEn extends AppLocalizations {
   String get descriptionLabel => 'Description';
 
   @override
-  String get appDescriptionPlaceholder => 'My Awesome App is a great app that does amazing things. It is the best app ever!';
+  String get appDescriptionPlaceholder =>
+      'My Awesome App is a great app that does amazing things. It is the best app ever!';
 
   @override
   String get pleaseProvideValidDescription => 'Please provide a valid description';
@@ -3007,7 +3048,8 @@ class AppLocalizationsEn extends AppLocalizations {
   String get microphonePermissionRequired => 'Microphone permission is required to make calls';
 
   @override
-  String get microphonePermissionDenied => 'Microphone permission denied. Please grant permission in System Preferences > Privacy & Security > Microphone.';
+  String get microphonePermissionDenied =>
+      'Microphone permission denied. Please grant permission in System Preferences > Privacy & Security > Microphone.';
 
   @override
   String failedToCheckMicrophonePermission(String error) {
@@ -3225,7 +3267,8 @@ class AppLocalizationsEn extends AppLocalizations {
   String get whatWeCollect => 'What we collect';
 
   @override
-  String get dataCollectionMessage => 'By continuing, your conversations, recordings, and personal information will be securely stored on our servers to provide AI-powered insights and enable all app features.';
+  String get dataCollectionMessage =>
+      'By continuing, your conversations, recordings, and personal information will be securely stored on our servers to provide AI-powered insights and enable all app features.';
 
   @override
   String get dataProtection => 'Data Protection';
@@ -3255,7 +3298,8 @@ class AppLocalizationsEn extends AppLocalizations {
   String get nameMustBeAtLeast2Characters => 'Name must be at least 2 characters';
 
   @override
-  String get tellUsHowYouWouldLikeToBeAddressed => 'Tell us how you\'d like to be addressed. This helps personalize your Omi experience.';
+  String get tellUsHowYouWouldLikeToBeAddressed =>
+      'Tell us how you\'d like to be addressed. This helps personalize your Omi experience.';
 
   @override
   String charactersCount(int count) {
@@ -3269,7 +3313,8 @@ class AppLocalizationsEn extends AppLocalizations {
   String get recordAudioConversations => 'Record audio conversations';
 
   @override
-  String get microphoneAccessDescription => 'Omi needs microphone access to record your conversations and provide transcriptions.';
+  String get microphoneAccessDescription =>
+      'Omi needs microphone access to record your conversations and provide transcriptions.';
 
   @override
   String get screenRecording => 'Screen Recording';
@@ -3278,7 +3323,8 @@ class AppLocalizationsEn extends AppLocalizations {
   String get captureSystemAudioFromMeetings => 'Capture system audio from meetings';
 
   @override
-  String get screenRecordingDescription => 'Omi needs screen recording permission to capture system audio from your browser-based meetings.';
+  String get screenRecordingDescription =>
+      'Omi needs screen recording permission to capture system audio from your browser-based meetings.';
 
   @override
   String get accessibility => 'Accessibility';
@@ -3287,7 +3333,8 @@ class AppLocalizationsEn extends AppLocalizations {
   String get detectBrowserBasedMeetings => 'Detect browser-based meetings';
 
   @override
-  String get accessibilityDescription => 'Omi needs accessibility permission to detect when you join Zoom, Meet, or Teams meetings in your browser.';
+  String get accessibilityDescription =>
+      'Omi needs accessibility permission to detect when you join Zoom, Meet, or Teams meetings in your browser.';
 
   @override
   String get pleaseWait => 'Please wait…';
@@ -3359,7 +3406,8 @@ class AppLocalizationsEn extends AppLocalizations {
   String get conversationsExportStarted => 'Conversations Export Started. This may take a few seconds, please wait.';
 
   @override
-  String get mcpDescription => 'To connect Omi with other applications to read, search, and manage your memories and conversations. Create a key to get started.';
+  String get mcpDescription =>
+      'To connect Omi with other applications to read, search, and manage your memories and conversations. Create a key to get started.';
 
   @override
   String get apiKeys => 'API Keys';
@@ -3406,7 +3454,8 @@ class AppLocalizationsEn extends AppLocalizations {
   String get autoCreateAndTagNewSpeakers => 'Auto-create and tag new speakers';
 
   @override
-  String get automaticallyCreateNewPerson => 'Automatically create a new person when a name is detected in the transcript.';
+  String get automaticallyCreateNewPerson =>
+      'Automatically create a new person when a name is detected in the transcript.';
 
   @override
   String get pilotFeatures => 'Pilot Features';
@@ -3646,7 +3695,8 @@ class AppLocalizationsEn extends AppLocalizations {
   String get signOutQuestion => 'Sign Out?';
 
   @override
-  String get signOutConfirmation => 'You\'ll need to sign in again to see your conversations. Your paired device and app preferences stay on this phone.';
+  String get signOutConfirmation =>
+      'You\'ll need to sign in again to see your conversations. Your paired device and app preferences stay on this phone.';
 
   @override
   String get customVocabularyHeader => 'CUSTOM VOCABULARY';
@@ -3664,7 +3714,8 @@ class AppLocalizationsEn extends AppLocalizations {
   String get dailySummaryTitle => 'Daily Summary';
 
   @override
-  String get dailySummaryDescription => 'Get a personalized summary of your day\'s conversations delivered as a notification.';
+  String get dailySummaryDescription =>
+      'Get a personalized summary of your day\'s conversations delivered as a notification.';
 
   @override
   String get deliveryTime => 'Delivery Time';
@@ -3802,7 +3853,8 @@ class AppLocalizationsEn extends AppLocalizations {
   String get no => 'No';
 
   @override
-  String get subscriptionCancelledSuccessfully => 'Subscription cancelled successfully. It will remain active until the end of the current billing period.';
+  String get subscriptionCancelledSuccessfully =>
+      'Subscription cancelled successfully. It will remain active until the end of the current billing period.';
 
   @override
   String get failedToCancelSubscription => 'Failed to cancel subscription. Please try again.';
@@ -3847,10 +3899,12 @@ class AppLocalizationsEn extends AppLocalizations {
   String get cancelling => 'Cancelling…';
 
   @override
-  String get betaTesterMessage => 'You are a beta tester for this app. It is not public yet. It will be public once approved.';
+  String get betaTesterMessage =>
+      'You are a beta tester for this app. It is not public yet. It will be public once approved.';
 
   @override
-  String get appUnderReviewMessage => 'Your app is under review and visible only to you. It will be public once approved.';
+  String get appUnderReviewMessage =>
+      'Your app is under review and visible only to you. It will be public once approved.';
 
   @override
   String get appRejectedMessage => 'Your app has been rejected. Please update the app details and resubmit for review.';
@@ -3907,7 +3961,8 @@ class AppLocalizationsEn extends AppLocalizations {
   String get issueActivatingApp => 'There was an issue activating this app. Please try again.';
 
   @override
-  String get dataAccessNoticeDescription => 'This app will access your data. Omi AI is not responsible for how your data is used, modified, or deleted by this app';
+  String get dataAccessNoticeDescription =>
+      'This app will access your data. Omi AI is not responsible for how your data is used, modified, or deleted by this app';
 
   @override
   String get copyUrl => 'Copy URL';
@@ -3995,7 +4050,8 @@ class AppLocalizationsEn extends AppLocalizations {
   String get omiApiKeys => 'Omi API Keys';
 
   @override
-  String get apiKeysDescription => 'API Keys are used for authentication when your app communicates with the Omi server. They allow your application to create memories and access other Omi services securely.';
+  String get apiKeysDescription =>
+      'API Keys are used for authentication when your app communicates with the Omi server. They allow your application to create memories and access other Omi services securely.';
 
   @override
   String get aboutOmiApiKeys => 'About Omi API Keys';
@@ -4105,7 +4161,8 @@ class AppLocalizationsEn extends AppLocalizations {
   String get keyCreated => 'Key Created';
 
   @override
-  String get keyCreatedMessage => 'Your new key has been created. Please copy it now. You will not be able to see it again.';
+  String get keyCreatedMessage =>
+      'Your new key has been created. Please copy it now. You will not be able to see it again.';
 
   @override
   String get keyWord => 'Key';
@@ -4114,7 +4171,8 @@ class AppLocalizationsEn extends AppLocalizations {
   String get externalAppAccess => 'External App Access';
 
   @override
-  String get externalAppAccessDescription => 'The following installed apps have external integrations and can access your data, such as conversations and memories.';
+  String get externalAppAccessDescription =>
+      'The following installed apps have external integrations and can access your data, such as conversations and memories.';
 
   @override
   String get noExternalAppsHaveAccess => 'No external apps have access to your data.';
@@ -4135,7 +4193,8 @@ class AppLocalizationsEn extends AppLocalizations {
   String get featureComingSoon => 'This feature is coming soon!';
 
   @override
-  String get migrationInProgressMessage => 'Migration in progress. You cannot change the protection level until it is complete.';
+  String get migrationInProgressMessage =>
+      'Migration in progress. You cannot change the protection level until it is complete.';
 
   @override
   String get migrationFailed => 'Migration Failed';
@@ -4275,7 +4334,8 @@ class AppLocalizationsEn extends AppLocalizations {
   String get monthlyPlanContinues => 'Your current monthly plan will continue until the end of your billing period';
 
   @override
-  String get paymentMethodCharged => 'Your existing payment method will be charged automatically when your monthly plan ends';
+  String get paymentMethodCharged =>
+      'Your existing payment method will be charged automatically when your monthly plan ends';
 
   @override
   String get annualSubscriptionStarts => 'Your 12-month annual subscription will start automatically after the charge';
@@ -4408,7 +4468,8 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
-  String get failedToGenerateSummaryCheckConversations => 'Failed to generate summary. Make sure you have conversations for that day.';
+  String get failedToGenerateSummaryCheckConversations =>
+      'Failed to generate summary. Make sure you have conversations for that day.';
 
   @override
   String get summaryNotFound => 'Summary not found';
@@ -4505,7 +4566,8 @@ class AppLocalizationsEn extends AppLocalizations {
   String get deleteAllLimitlessConversations => 'Delete All Limitless Conversations?';
 
   @override
-  String get deleteAllLimitlessWarning => 'All conversations imported from Limitless are deleted. This can\'t be undone.';
+  String get deleteAllLimitlessWarning =>
+      'All conversations imported from Limitless are deleted. This can\'t be undone.';
 
   @override
   String deletedLimitlessConversations(int count) {
@@ -4584,7 +4646,8 @@ class AppLocalizationsEn extends AppLocalizations {
   String get privacyNotice => 'Privacy Notice';
 
   @override
-  String get recordingsMayCaptureOthers => 'Recordings may capture others\' voices. Ensure you have consent from all participants before enabling.';
+  String get recordingsMayCaptureOthers =>
+      'Recordings may capture others\' voices. Ensure you have consent from all participants before enabling.';
 
   @override
   String get enable => 'Enable';
@@ -4596,7 +4659,8 @@ class AppLocalizationsEn extends AppLocalizations {
   String get on => 'On';
 
   @override
-  String get storeAudioDescription => 'Keep all audio recordings stored locally on your phone. When disabled, only failed uploads are kept to save storage space.';
+  String get storeAudioDescription =>
+      'Keep all audio recordings stored locally on your phone. When disabled, only failed uploads are kept to save storage space.';
 
   @override
   String get enableLocalStorage => 'Enable Local Storage';
@@ -4614,7 +4678,8 @@ class AppLocalizationsEn extends AppLocalizations {
   String get storeAudioOnCloud => 'Store Audio on Cloud';
 
   @override
-  String get cloudStorageDialogMessage => 'Your real-time recordings will be stored in private cloud storage as you speak.';
+  String get cloudStorageDialogMessage =>
+      'Your real-time recordings will be stored in private cloud storage as you speak.';
 
   @override
   String get storeAudioCloudDescription => 'Uploads your recordings as you speak so you can play them back later.';
@@ -4697,7 +4762,8 @@ class AppLocalizationsEn extends AppLocalizations {
   String get monthlyPayouts => 'Monthly payouts';
 
   @override
-  String get monthlyPayoutsDescription => 'Receive monthly payments directly to your account when you reach \$10 in earnings';
+  String get monthlyPayoutsDescription =>
+      'Receive monthly payments directly to your account when you reach \$10 in earnings';
 
   @override
   String get secureAndReliable => 'Secure and reliable';
@@ -4724,7 +4790,8 @@ class AppLocalizationsEn extends AppLocalizations {
   String get connectingYourStripeAccount => 'Connecting your Stripe account';
 
   @override
-  String get stripeOnboardingInstructions => 'Please complete the Stripe onboarding process in your browser. This page will automatically update once completed.';
+  String get stripeOnboardingInstructions =>
+      'Please complete the Stripe onboarding process in your browser. This page will automatically update once completed.';
 
   @override
   String get failedTryAgain => 'Failed? Try Again';
@@ -4736,7 +4803,8 @@ class AppLocalizationsEn extends AppLocalizations {
   String get successfullyConnected => 'Successfully Connected!';
 
   @override
-  String get stripeReadyForPayments => 'Your Stripe account is now ready to receive payments. You can start earning from your app sales right away.';
+  String get stripeReadyForPayments =>
+      'Your Stripe account is now ready to receive payments. You can start earning from your app sales right away.';
 
   @override
   String get updateStripeDetails => 'Update Stripe Details';
@@ -4763,7 +4831,8 @@ class AppLocalizationsEn extends AppLocalizations {
   String get paypalMeLink => 'PayPal.me Link';
 
   @override
-  String get stripeRecommendation => 'If Stripe is available in your country, we highly recommend using it for faster and easier payouts.';
+  String get stripeRecommendation =>
+      'If Stripe is available in your country, we highly recommend using it for faster and easier payouts.';
 
   @override
   String get updatePayPalDetails => 'Update PayPal Details';
@@ -4815,7 +4884,8 @@ class AppLocalizationsEn extends AppLocalizations {
   String get additionalSpeechSampleRemoved => 'Additional Speech Sample Removed';
 
   @override
-  String get consentDataMessage => 'By continuing, your conversations, recordings, and personal information will be securely stored on our servers. Your audio recordings and transcripts are processed by third-party AI services — Deepgram for transcription and OpenAI for analysis — to provide you with AI-powered insights and enable all app features.';
+  String get consentDataMessage =>
+      'By continuing, your conversations, recordings, and personal information will be securely stored on our servers. Your audio recordings and transcripts are processed by third-party AI services — Deepgram for transcription and OpenAI for analysis — to provide you with AI-powered insights and enable all app features.';
 
   @override
   String get tasksEmptyStateMessage => 'Start a conversation to create a task.';
@@ -4854,13 +4924,15 @@ class AppLocalizationsEn extends AppLocalizations {
   String get installOmiOnAppleWatch => 'Install Omi on your\nApple Watch';
 
   @override
-  String get installOmiOnAppleWatchDescription => 'To use your Apple Watch with Omi, you need to install the Omi app on your watch first.';
+  String get installOmiOnAppleWatchDescription =>
+      'To use your Apple Watch with Omi, you need to install the Omi app on your watch first.';
 
   @override
   String get openOmiOnAppleWatch => 'Open Omi on your\nApple Watch';
 
   @override
-  String get openOmiOnAppleWatchDescription => 'The Omi app is installed on your Apple Watch. Open it and tap Start to begin.';
+  String get openOmiOnAppleWatchDescription =>
+      'The Omi app is installed on your Apple Watch. Open it and tap Start to begin.';
 
   @override
   String get openWatchApp => 'Open Watch App';
@@ -4869,13 +4941,15 @@ class AppLocalizationsEn extends AppLocalizations {
   String get iveInstalledAndOpenedTheApp => 'I\'ve Installed & Opened the App';
 
   @override
-  String get unableToOpenWatchApp => 'Unable to open Apple Watch app. Please manually open the Watch app on your Apple Watch and install Omi from the \"Available Apps\" section.';
+  String get unableToOpenWatchApp =>
+      'Unable to open Apple Watch app. Please manually open the Watch app on your Apple Watch and install Omi from the \"Available Apps\" section.';
 
   @override
   String get appleWatchConnectedSuccessfully => 'Apple Watch connected successfully!';
 
   @override
-  String get appleWatchNotReachable => 'Apple Watch still not reachable. Please make sure the Omi app is open on your watch.';
+  String get appleWatchNotReachable =>
+      'Apple Watch still not reachable. Please make sure the Omi app is open on your watch.';
 
   @override
   String errorCheckingConnection(String error) {
@@ -5303,7 +5377,8 @@ class AppLocalizationsEn extends AppLocalizations {
   String get multipleSpeakersDetected => 'Multiple speakers detected';
 
   @override
-  String get multipleSpeakersDescription => 'It seems like there are multiple speakers in the recording. Please make sure you are in a quiet location and try again.';
+  String get multipleSpeakersDescription =>
+      'It seems like there are multiple speakers in the recording. Please make sure you are in a quiet location and try again.';
 
   @override
   String get invalidRecordingDetected => 'Invalid recording detected';
@@ -5315,13 +5390,15 @@ class AppLocalizationsEn extends AppLocalizations {
   String get speechDurationDescription => 'Please make sure you speak for at least 5 seconds and not more than 90.';
 
   @override
-  String get connectionLostDescription => 'The connection was interrupted. Please check your internet connection and try again.';
+  String get connectionLostDescription =>
+      'The connection was interrupted. Please check your internet connection and try again.';
 
   @override
   String get howToTakeGoodSample => 'How to take a good sample?';
 
   @override
-  String get goodSampleInstructions => '1. Make sure you are in a quiet place.\n2. Speak clearly and naturally.\n3. Make sure your device is in its natural position, on your neck.\n\nOnce it\'s created, you can always improve it or do it again.';
+  String get goodSampleInstructions =>
+      '1. Make sure you are in a quiet place.\n2. Speak clearly and naturally.\n3. Make sure your device is in its natural position, on your neck.\n\nOnce it\'s created, you can always improve it or do it again.';
 
   @override
   String get noDeviceConnectedUseMic => 'No device connected. Will use phone microphone.';
@@ -5384,10 +5461,12 @@ class AppLocalizationsEn extends AppLocalizations {
   String get howItWorks => 'How it works';
 
   @override
-  String get dailyScoreExplanation => 'Your daily score is based on task completion. Complete your tasks to improve your score!';
+  String get dailyScoreExplanation =>
+      'Your daily score is based on task completion. Complete your tasks to improve your score!';
 
   @override
-  String get notificationFrequencyDescription => 'Control how often Omi sends you proactive notifications and reminders.';
+  String get notificationFrequencyDescription =>
+      'Control how often Omi sends you proactive notifications and reminders.';
 
   @override
   String get sliderOff => 'Off';
@@ -5740,7 +5819,8 @@ class AppLocalizationsEn extends AppLocalizations {
   String get performanceWarning => 'Performance Warning';
 
   @override
-  String get largeModelWarning => 'This model is large and may crash the app or run very slowly on mobile devices.\n\n\"small\" or \"base\" is recommended.';
+  String get largeModelWarning =>
+      'This model is large and may crash the app or run very slowly on mobile devices.\n\n\"small\" or \"base\" is recommended.';
 
   @override
   String get usingNativeIosSpeech => 'Using Native iOS Speech Recognition';
@@ -5815,7 +5895,8 @@ class AppLocalizationsEn extends AppLocalizations {
   String get modelLabel => 'Model';
 
   @override
-  String get modelTooLargeWarning => 'This model is large and may crash the app or run very slowly on mobile devices.\n\n\"small\" or \"base\" is recommended.';
+  String get modelTooLargeWarning =>
+      'This model is large and may crash the app or run very slowly on mobile devices.\n\n\"small\" or \"base\" is recommended.';
 
   @override
   String get nativeEngineNoDownload => 'Your devices native speech engine will be used. No model download required.';
@@ -5854,7 +5935,8 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
-  String get omiTranscriptionOptimized => 'Omi\'s live transcription is built for real-time conversations and labels who said what.';
+  String get omiTranscriptionOptimized =>
+      'Omi\'s live transcription is built for real-time conversations and labels who said what.';
 
   @override
   String get reset => 'Reset';
@@ -6074,7 +6156,8 @@ class AppLocalizationsEn extends AppLocalizations {
   String get buildingKnowledgeGraphFromMemories => 'Building your knowledge graph from memories…';
 
   @override
-  String get knowledgeGraphWillBuildAutomatically => 'Your knowledge graph will be built automatically as you create new memories.';
+  String get knowledgeGraphWillBuildAutomatically =>
+      'Your knowledge graph will be built automatically as you create new memories.';
 
   @override
   String get buildGraphButton => 'Build Graph';
@@ -6365,7 +6448,8 @@ class AppLocalizationsEn extends AppLocalizations {
   String get downloadingAudioFromSdCard => 'Downloading audio from your device\'s SD card';
 
   @override
-  String get transferRequiredDescription => 'This recording is stored on your device\'s SD card. Transfer it to your phone to play or share.';
+  String get transferRequiredDescription =>
+      'This recording is stored on your device\'s SD card. Transfer it to your phone to play or share.';
 
   @override
   String get cancelTransfer => 'Cancel Transfer';
@@ -6442,7 +6526,8 @@ class AppLocalizationsEn extends AppLocalizations {
   String get bleSpeed => '~30 KB/s via BLE';
 
   @override
-  String get bluetoothMethodDescription => 'Uses standard Bluetooth Low Energy connection. Slower but doesn\'t affect your WiFi connection.';
+  String get bluetoothMethodDescription =>
+      'Uses standard Bluetooth Low Energy connection. Slower but doesn\'t affect your WiFi connection.';
 
   @override
   String get selected => 'Selected';
@@ -6488,10 +6573,12 @@ class AppLocalizationsEn extends AppLocalizations {
   String get appDeleteFailed => 'Failed to delete app. Please try again later.';
 
   @override
-  String get appVisibilityChangedSuccessfully => 'App visibility changed successfully. It may take a few minutes to reflect.';
+  String get appVisibilityChangedSuccessfully =>
+      'App visibility changed successfully. It may take a few minutes to reflect.';
 
   @override
-  String get errorActivatingAppIntegration => 'Error activating the app. If this is an integration app, make sure the setup is completed.';
+  String get errorActivatingAppIntegration =>
+      'Error activating the app. If this is an integration app, make sure the setup is completed.';
 
   @override
   String get errorUpdatingAppStatus => 'An error occurred while updating the app status.';
@@ -6571,7 +6658,8 @@ class AppLocalizationsEn extends AppLocalizations {
   String get nameMustBeAtLeast3Characters => 'Name must be at least 3 characters';
 
   @override
-  String get conversationPromptHint => 'e.g., Extract tasks, decisions made, and key takeaways from the provided conversation.';
+  String get conversationPromptHint =>
+      'e.g., Extract tasks, decisions made, and key takeaways from the provided conversation.';
 
   @override
   String get pleaseEnterAppPrompt => 'Please enter a prompt for your app';
@@ -6653,7 +6741,8 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
-  String get addAppPhotosPermissionDenied => 'Photos permission denied. Please allow access to photos to select an image';
+  String get addAppPhotosPermissionDenied =>
+      'Photos permission denied. Please allow access to photos to select an image';
 
   @override
   String get addAppErrorSelectingImageRetry => 'Error selecting image. Please try again.';
@@ -6758,16 +6847,19 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
-  String get planUpgradeScheduledMessage => 'Upgrade scheduled! Your monthly plan continues until the end of your billing period, then automatically switches to annual.';
+  String get planUpgradeScheduledMessage =>
+      'Upgrade scheduled! Your monthly plan continues until the end of your billing period, then automatically switches to annual.';
 
   @override
   String get couldNotSchedulePlanChange => 'Could not schedule plan change. Please try again.';
 
   @override
-  String get subscriptionReactivatedDefault => 'Your subscription has been reactivated! No charge now - you\'ll be billed at the end of your current period.';
+  String get subscriptionReactivatedDefault =>
+      'Your subscription has been reactivated! No charge now - you\'ll be billed at the end of your current period.';
 
   @override
-  String get subscriptionSuccessfulCharged => 'Subscription successful! You\'ve been charged for the new billing period.';
+  String get subscriptionSuccessfulCharged =>
+      'Subscription successful! You\'ve been charged for the new billing period.';
 
   @override
   String get couldNotProcessSubscription => 'Could not process subscription. Please try again.';
@@ -6941,7 +7033,8 @@ class AppLocalizationsEn extends AppLocalizations {
   String get onboardingBluetoothRequired => 'Bluetooth permission is required to connect to your device.';
 
   @override
-  String get onboardingBluetoothDeniedSystemPrefs => 'Bluetooth permission denied. Please grant permission in System Preferences.';
+  String get onboardingBluetoothDeniedSystemPrefs =>
+      'Bluetooth permission denied. Please grant permission in System Preferences.';
 
   @override
   String onboardingBluetoothStatusCheckPrefs(String status) {
@@ -6954,10 +7047,12 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
-  String get onboardingNotificationDeniedSystemPrefs => 'Notification permission denied. Please grant permission in System Preferences.';
+  String get onboardingNotificationDeniedSystemPrefs =>
+      'Notification permission denied. Please grant permission in System Preferences.';
 
   @override
-  String get onboardingNotificationDeniedNotifications => 'Notification permission denied. Please grant permission in System Preferences > Notifications.';
+  String get onboardingNotificationDeniedNotifications =>
+      'Notification permission denied. Please grant permission in System Preferences > Notifications.';
 
   @override
   String onboardingNotificationStatusCheckPrefs(String status) {
@@ -6970,13 +7065,15 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
-  String get onboardingLocationGrantInSettings => 'Please grant location permission in Settings > Privacy & Security > Location Services';
+  String get onboardingLocationGrantInSettings =>
+      'Please grant location permission in Settings > Privacy & Security > Location Services';
 
   @override
   String get onboardingMicrophoneRequired => 'Microphone permission is required for recording.';
 
   @override
-  String get onboardingMicrophoneDenied => 'Microphone permission denied. Please grant permission in System Preferences > Privacy & Security > Microphone.';
+  String get onboardingMicrophoneDenied =>
+      'Microphone permission denied. Please grant permission in System Preferences > Privacy & Security > Microphone.';
 
   @override
   String onboardingMicrophoneStatusCheckPrefs(String status) {
@@ -6992,7 +7089,8 @@ class AppLocalizationsEn extends AppLocalizations {
   String get onboardingScreenCaptureRequired => 'Screen capture permission is required for system audio recording.';
 
   @override
-  String get onboardingScreenCaptureDenied => 'Screen capture permission denied. Please grant permission in System Preferences > Privacy & Security > Screen Recording.';
+  String get onboardingScreenCaptureDenied =>
+      'Screen capture permission denied. Please grant permission in System Preferences > Privacy & Security > Screen Recording.';
 
   @override
   String onboardingScreenCaptureStatusCheckPrefs(String status) {
@@ -7564,7 +7662,8 @@ class AppLocalizationsEn extends AppLocalizations {
   String get pairingTitleOmiDevkit => 'Put Omi DevKit in Pairing Mode';
 
   @override
-  String get pairingDescOmiDevkit => 'Press the button once to turn on. The LED will blink purple when in pairing mode.';
+  String get pairingDescOmiDevkit =>
+      'Press the button once to turn on. The LED will blink purple when in pairing mode.';
 
   @override
   String get pairingTitleOmiGlass => 'Turn On Omi Glass';
@@ -7576,7 +7675,8 @@ class AppLocalizationsEn extends AppLocalizations {
   String get pairingTitlePlaudNote => 'Put Plaud Note in Pairing Mode';
 
   @override
-  String get pairingDescPlaudNote => 'Press and hold the side button for 2 seconds. The red LED will blink when ready to pair.';
+  String get pairingDescPlaudNote =>
+      'Press and hold the side button for 2 seconds. The red LED will blink when ready to pair.';
 
   @override
   String get pairingTitleBee => 'Put Bee in Pairing Mode';
@@ -7588,13 +7688,15 @@ class AppLocalizationsEn extends AppLocalizations {
   String get pairingTitleLimitless => 'Put Limitless in Pairing Mode';
 
   @override
-  String get pairingDescLimitless => 'When any light is visible, press once and then press and hold until the device shows a pink light, then release.';
+  String get pairingDescLimitless =>
+      'When any light is visible, press once and then press and hold until the device shows a pink light, then release.';
 
   @override
   String get pairingTitleFriendPendant => 'Put Friend Pendant in Pairing Mode';
 
   @override
-  String get pairingDescFriendPendant => 'Press the button on the pendant to turn it on. It will enter pairing mode automatically.';
+  String get pairingDescFriendPendant =>
+      'Press the button on the pendant to turn it on. It will enter pairing mode automatically.';
 
   @override
   String get pairingTitleFieldy => 'Put Fieldy in Pairing Mode';
@@ -7612,7 +7714,8 @@ class AppLocalizationsEn extends AppLocalizations {
   String get pairingTitleNeoOne => 'Put Neo One in Pairing Mode';
 
   @override
-  String get pairingDescNeoOne => 'Press and hold the power button until the LED blinks. The device will be discoverable.';
+  String get pairingDescNeoOne =>
+      'Press and hold the power button until the LED blinks. The device will be discoverable.';
 
   @override
   String get downloadingFromDevice => 'Downloading from device';
@@ -7726,7 +7829,8 @@ class AppLocalizationsEn extends AppLocalizations {
   String get switchAndRestart => 'Switch';
 
   @override
-  String get stagingDisclaimer => 'Staging may be buggy, have inconsistent performance, and data might be lost. Use for testing only.';
+  String get stagingDisclaimer =>
+      'Staging may be buggy, have inconsistent performance, and data might be lost. Use for testing only.';
 
   @override
   String get apiEnvSavedRestartRequired => 'Saved. Close and reopen the app to apply.';
@@ -7955,7 +8059,8 @@ class AppLocalizationsEn extends AppLocalizations {
   String get phoneCallsUnlimitedOnly => 'Phone Calls via Omi';
 
   @override
-  String get phoneCallsUpsellSubtitle => 'Make calls through Omi and get real-time transcription, automatic summaries, and more. Available exclusively for Unlimited plan subscribers.';
+  String get phoneCallsUpsellSubtitle =>
+      'Make calls through Omi and get real-time transcription, automatic summaries, and more. Available exclusively for Unlimited plan subscribers.';
 
   @override
   String get phoneCallsUpsellFeature1 => 'Real-time transcription of every call';
@@ -7979,7 +8084,8 @@ class AppLocalizationsEn extends AppLocalizations {
   String get deleteSyncedFiles => 'Delete Synced Recordings';
 
   @override
-  String get deleteSyncedFilesMessage => 'These recordings have already been synced to your phone. This can\'t be undone.';
+  String get deleteSyncedFilesMessage =>
+      'These recordings have already been synced to your phone. This can\'t be undone.';
 
   @override
   String get syncedFilesDeleted => 'Synced recordings deleted';
@@ -7991,7 +8097,8 @@ class AppLocalizationsEn extends AppLocalizations {
   String get deletePendingFiles => 'Delete Pending Recordings';
 
   @override
-  String get deletePendingFilesWarning => 'These recordings have NOT been synced to your phone and will be permanently lost. This can\'t be undone.';
+  String get deletePendingFilesWarning =>
+      'These recordings have NOT been synced to your phone and will be permanently lost. This can\'t be undone.';
 
   @override
   String get pendingFilesDeleted => 'Pending recordings deleted';
@@ -8003,7 +8110,8 @@ class AppLocalizationsEn extends AppLocalizations {
   String get deleteAll => 'Delete All';
 
   @override
-  String get deleteAllFilesWarning => 'This will delete both synced and pending recordings. Pending recordings have NOT been synced and will be permanently lost. This can\'t be undone.';
+  String get deleteAllFilesWarning =>
+      'This will delete both synced and pending recordings. Pending recordings have NOT been synced and will be permanently lost. This can\'t be undone.';
 
   @override
   String get allFilesDeleted => 'All recordings deleted';
@@ -8068,7 +8176,8 @@ class AppLocalizationsEn extends AppLocalizations {
   String get fairUseAboutTitle => 'About Fair Use';
 
   @override
-  String get fairUseAboutBody => 'Omi is designed for personal conversations, meetings, and live interactions. Usage is measured by time spent speaking, not time connected. If your usage is far above normal personal use, you\'ll get a warning first. Continued heavy use can slow down or limit transcription.';
+  String get fairUseAboutBody =>
+      'Omi is designed for personal conversations, meetings, and live interactions. Usage is measured by time spent speaking, not time connected. If your usage is far above normal personal use, you\'ll get a warning first. Continued heavy use can slow down or limit transcription.';
 
   @override
   String fairUseCaseRefCopied(String caseRef) {
@@ -8106,7 +8215,8 @@ class AppLocalizationsEn extends AppLocalizations {
   String get improveConnectionTitle => 'Improve Connection';
 
   @override
-  String get improveConnectionContent => 'We\'ve improved how Omi stays connected to your device. To activate this, please go to the Device Info page, tap \"Disconnect Device\", and then pair your device again.';
+  String get improveConnectionContent =>
+      'We\'ve improved how Omi stays connected to your device. To activate this, please go to the Device Info page, tap \"Disconnect Device\", and then pair your device again.';
 
   @override
   String get improveConnectionAction => 'Got It';
@@ -8161,10 +8271,12 @@ class AppLocalizationsEn extends AppLocalizations {
   String get cancelSyncQuestion => 'Cancel sync?';
 
   @override
-  String get phoneStorageDesc => 'When Omi reconnects, recordings are automatically transferred to your phone as a temporary holding area before uploading.';
+  String get phoneStorageDesc =>
+      'When Omi reconnects, recordings are automatically transferred to your phone as a temporary holding area before uploading.';
 
   @override
-  String get cloudStorageDesc => 'Once uploaded, your recordings are processed and transcribed. Conversations will be available within a minute.';
+  String get cloudStorageDesc =>
+      'Once uploaded, your recordings are processed and transcribed. Conversations will be available within a minute.';
 
   @override
   String get tipKeepPhoneNearby => 'Keep your phone nearby for faster syncing';
@@ -8188,10 +8300,12 @@ class AppLocalizationsEn extends AppLocalizations {
   String get permissionEnable => 'Enable';
 
   @override
-  String get permissionsPageDescription => 'Omi uses these to connect to your device, record audio, keep working in the background, send reminders, and note where conversations happened.';
+  String get permissionsPageDescription =>
+      'Omi uses these to connect to your device, record audio, keep working in the background, send reminders, and note where conversations happened.';
 
   @override
-  String get permissionsRequiredDescription => 'Omi needs a few permissions to work properly. Please grant them to continue.';
+  String get permissionsRequiredDescription =>
+      'Omi needs a few permissions to work properly. Please grant them to continue.';
 
   @override
   String get permissionsSetupTitle => 'Get the best experience';
@@ -8461,10 +8575,12 @@ class AppLocalizationsEn extends AppLocalizations {
   String get listeningTranscriptWillAppear => 'Listening… a transcript will appear here.';
 
   @override
-  String get recordingOfflineTranscriptWillCatchUp => 'Recording offline — the transcript will catch up when you\'re back online.';
+  String get recordingOfflineTranscriptWillCatchUp =>
+      'Recording offline — the transcript will catch up when you\'re back online.';
 
   @override
-  String get transcriptionUnavailableRecordingSaved => 'Transcription is unavailable — recording continues and your audio is saved.';
+  String get transcriptionUnavailableRecordingSaved =>
+      'Transcription is unavailable — recording continues and your audio is saved.';
 
   @override
   String get capturing => 'Capturing';
@@ -8500,7 +8616,8 @@ class AppLocalizationsEn extends AppLocalizations {
   String get firmwareWarningTitle => 'Important: Read Before Updating';
 
   @override
-  String get firmwareFormatWarning => 'This firmware will format the SD card. Please ensure all offline data is synced before upgrading.\n\nIf you see a flashing red light after flashing this version, do not worry. Simply connect the device to the app and it should turn blue. The red light means the device\'s clock hasn\'t been synced yet.';
+  String get firmwareFormatWarning =>
+      'This firmware will format the SD card. Please ensure all offline data is synced before upgrading.\n\nIf you see a flashing red light after flashing this version, do not worry. Simply connect the device to the app and it should turn blue. The red light means the device\'s clock hasn\'t been synced yet.';
 
   @override
   String get continueAnyway => 'Continue';
@@ -8520,7 +8637,8 @@ class AppLocalizationsEn extends AppLocalizations {
   String get tasksMarkComplete => 'Marked as complete';
 
   @override
-  String get appleHealthManageNote => 'Omi accesses Apple Health through Apple\'s HealthKit framework. You can revoke access anytime in iOS Settings.';
+  String get appleHealthManageNote =>
+      'Omi accesses Apple Health through Apple\'s HealthKit framework. You can revoke access anytime in iOS Settings.';
 
   @override
   String get appleHealthConnectCta => 'Connect to Apple Health';
@@ -8553,7 +8671,8 @@ class AppLocalizationsEn extends AppLocalizations {
   String get appleHealthDeniedTitle => 'Apple Health access denied';
 
   @override
-  String get appleHealthDeniedBody => 'Omi doesn\'t have permission to read your Apple Health data. Enable it in iOS Settings → Privacy & Security → Health → Omi.';
+  String get appleHealthDeniedBody =>
+      'Omi doesn\'t have permission to read your Apple Health data. Enable it in iOS Settings → Privacy & Security → Health → Omi.';
 
   @override
   String get deleteFlowReasonTitle => 'Why are you leaving?';
@@ -8729,7 +8848,8 @@ class AppLocalizationsEn extends AppLocalizations {
   String get chatQuotaSubtitle => 'AI chat messages used with Omi this month.';
 
   @override
-  String get chatQuotaExceededReply => 'You\'ve hit your monthly limit. Upgrade to keep chatting with Omi without restrictions.';
+  String get chatQuotaExceededReply =>
+      'You\'ve hit your monthly limit. Upgrade to keep chatting with Omi without restrictions.';
 
   @override
   String get voiceResponseAudio => 'Speak Omi responses aloud';
@@ -8840,7 +8960,8 @@ class AppLocalizationsEn extends AppLocalizations {
   String get deleteRecapConfirmTitle => 'Delete this recap?';
 
   @override
-  String get deleteRecapConfirmBody => 'This recap will be permanently removed. The original conversations from that day are not affected.';
+  String get deleteRecapConfirmBody =>
+      'This recap will be permanently removed. The original conversations from that day are not affected.';
 
   @override
   String get deleteRecapAction => 'Delete';
@@ -8882,7 +9003,8 @@ class AppLocalizationsEn extends AppLocalizations {
   String get deleteWhileProcessingTitle => 'Still Processing';
 
   @override
-  String get deleteWhileProcessingMessage => 'This recording is uploaded but Omi is still creating the conversation. If you delete it now and processing fails, it can\'t be recovered. Delete anyway?';
+  String get deleteWhileProcessingMessage =>
+      'This recording is uploaded but Omi is still creating the conversation. If you delete it now and processing fails, it can\'t be recovered. Delete anyway?';
 
   @override
   String get syncCardAllBackedUp => 'All recordings synced';
@@ -8916,7 +9038,8 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
-  String get syncFlowIntro => 'Recordings are transferred from your device to this phone and stored locally, then uploaded to Omi\'s server where they\'re transcribed and turned into conversations.';
+  String get syncFlowIntro =>
+      'Recordings are transferred from your device to this phone and stored locally, then uploaded to Omi\'s server where they\'re transcribed and turned into conversations.';
 
   @override
   String get syncStepUpload => 'Sync';
@@ -9009,7 +9132,8 @@ class AppLocalizationsEn extends AppLocalizations {
   String get backgroundModeDescription => 'Keep your Omi recording even when the app is fully closed.';
 
   @override
-  String get backgroundModeUnavailable => 'Background Mode is not available because no compatible device is connected. Connect an Omi, OpenGlass, or Friend Pendant device to use this feature.';
+  String get backgroundModeUnavailable =>
+      'Background Mode is not available because no compatible device is connected. Connect an Omi, OpenGlass, or Friend Pendant device to use this feature.';
 
   @override
   String get regenerateRecap => 'Regenerate Recap';
@@ -9030,19 +9154,23 @@ class AppLocalizationsEn extends AppLocalizations {
   String get syncCustomSttWarningTitle => 'Sync uses Omi transcription';
 
   @override
-  String get syncCustomSttWarningMessage => 'You use your own transcription provider. Syncing these recordings transcribes them on Omi\'s servers instead, and they count toward your plan\'s transcription limit.';
+  String get syncCustomSttWarningMessage =>
+      'You use your own transcription provider. Syncing these recordings transcribes them on Omi\'s servers instead, and they count toward your plan\'s transcription limit.';
 
   @override
   String get transcribeLaterTitle => 'Transcribe Later';
 
   @override
-  String get transcribeLaterDescription => 'Record now, transcribe when you choose. Audio stays on your phone until then.';
+  String get transcribeLaterDescription =>
+      'Record now, transcribe when you choose. Audio stays on your phone until then.';
 
   @override
-  String get transcribeLaterNote => 'Works with the phone microphone and Omi or Limitless wearables. Audio stays on your phone until you choose to upload it.';
+  String get transcribeLaterNote =>
+      'Works with the phone microphone and Omi or Limitless wearables. Audio stays on your phone until you choose to upload it.';
 
   @override
-  String get transcribeLaterStorageFull => 'Your phone is low on storage, so recording is paused. Free up space or upload your recordings, then it will resume automatically.';
+  String get transcribeLaterStorageFull =>
+      'Your phone is low on storage, so recording is paused. Free up space or upload your recordings, then it will resume automatically.';
 
   @override
   String get recordingMode => 'Recording mode';
@@ -9102,7 +9230,8 @@ class AppLocalizationsEn extends AppLocalizations {
   String get deviceOnboardingAskQuestionTitle => 'Ask Omi a Question';
 
   @override
-  String get deviceOnboardingAskQuestionSubtitle => 'Press the button once, speak your question, then press again when done';
+  String get deviceOnboardingAskQuestionSubtitle =>
+      'Press the button once, speak your question, then press again when done';
 
   @override
   String get deviceOnboardingProcessingQuestion => 'Processing your question…';
@@ -9192,7 +9321,8 @@ class AppLocalizationsEn extends AppLocalizations {
   String get pendantRecordingTitle => 'Recording on Pendant';
 
   @override
-  String get pendantRecordingNote => 'Your pendant is recording on its own. Recordings sync to your phone while the app is open.';
+  String get pendantRecordingNote =>
+      'Your pendant is recording on its own. Recordings sync to your phone while the app is open.';
 
   @override
   String get pendantSyncingRecordings => 'Syncing recordings from your pendant…';
@@ -9209,7 +9339,8 @@ class AppLocalizationsEn extends AppLocalizations {
   String get connectRayBanMeta => 'Connect Ray-Ban Meta';
 
   @override
-  String get raybanMetaSetupDescription => 'Use your Ray-Ban Meta glasses as your Omi capture device for conversations and visual context. Omi will open the Meta AI app to link your glasses.';
+  String get raybanMetaSetupDescription =>
+      'Use your Ray-Ban Meta glasses as your Omi capture device for conversations and visual context. Omi will open the Meta AI app to link your glasses.';
 
   @override
   String get raybanMetaOpenMetaAI => 'Connect through Meta AI';
@@ -9224,7 +9355,8 @@ class AppLocalizationsEn extends AppLocalizations {
   String get raybanMetaAllowCamera => 'Allow Camera on Glasses';
 
   @override
-  String get raybanMetaCameraExplanation => 'Omi uses your glasses camera to add photos to your conversations. You can skip this and use audio only.';
+  String get raybanMetaCameraExplanation =>
+      'Omi uses your glasses camera to add photos to your conversations. You can skip this and use audio only.';
 
   @override
   String get raybanMetaSkipForNow => 'Skip for Now';
@@ -9233,7 +9365,8 @@ class AppLocalizationsEn extends AppLocalizations {
   String get raybanMetaAudioOnlyTitle => 'Ray-Ban Meta audio-only mode';
 
   @override
-  String get raybanMetaAudioOnlyExplanation => 'This version of Omi can use your glasses microphone over Bluetooth. Photo capture needs the Meta developer build of Omi.';
+  String get raybanMetaAudioOnlyExplanation =>
+      'This version of Omi can use your glasses microphone over Bluetooth. Photo capture needs the Meta developer build of Omi.';
 
   @override
   String get raybanMetaMusicPauseNote => 'Music on your phone pauses while the glasses microphone is in use.';
@@ -9286,10 +9419,12 @@ class AppLocalizationsEn extends AppLocalizations {
   String get deviceStorageNearlyFull => 'Device nearly full — sync to free space.';
 
   @override
-  String get phoneMicOfflineFallbackMessage => 'No connection — recording locally. It will be transcribed when you\'re back online.';
+  String get phoneMicOfflineFallbackMessage =>
+      'No connection — recording locally. It will be transcribed when you\'re back online.';
 
   @override
-  String get dataEncryptedBanner => 'Your data is secured by default with strong encryption, and you stay in control of how it\'s stored and used.';
+  String get dataEncryptedBanner =>
+      'Your data is secured by default with strong encryption, and you stay in control of how it\'s stored and used.';
 
   @override
   String get sttModelAccuracy => 'Accuracy';
@@ -9444,16 +9579,20 @@ class AppLocalizationsEn extends AppLocalizations {
   String get rayBanMetaMicPickerTitle => 'Choose your Ray-Ban Meta microphone';
 
   @override
-  String get rayBanMetaMicPickerDescription => 'Select the Bluetooth microphone for your glasses. Music pauses while Omi uses it.';
+  String get rayBanMetaMicPickerDescription =>
+      'Select the Bluetooth microphone for your glasses. Music pauses while Omi uses it.';
 
   @override
-  String get rayBanMetaMicPickerEmpty => 'No Bluetooth microphones found. Connect your glasses in iPhone Settings, then try again.';
+  String get rayBanMetaMicPickerEmpty =>
+      'No Bluetooth microphones found. Connect your glasses in iPhone Settings, then try again.';
 
   @override
-  String get rayBanMetaMicPickerLoadError => 'Bluetooth microphones could not be loaded. Check that Bluetooth is on, then try again.';
+  String get rayBanMetaMicPickerLoadError =>
+      'Bluetooth microphones could not be loaded. Check that Bluetooth is on, then try again.';
 
   @override
-  String get rayBanMetaMicPickerConnectError => 'Could not connect to that microphone. Make sure it is connected in iPhone Settings.';
+  String get rayBanMetaMicPickerConnectError =>
+      'Could not connect to that microphone. Make sure it is connected in iPhone Settings.';
 
   @override
   String get syncStatusTooOld => 'Too old to sync — Omi can\'t accept it';
@@ -9517,10 +9656,12 @@ class AppLocalizationsEn extends AppLocalizations {
   String get accountCutoverMigrationInProgressTitle => 'Migration in Progress';
 
   @override
-  String get accountCutoverMigrationInProgressMessage => 'Your account is migrating. Product features are paused until migration finishes.';
+  String get accountCutoverMigrationInProgressMessage =>
+      'Your account is migrating. Product features are paused until migration finishes.';
 
   @override
-  String get accountCutoverMigrationRollbackMessage => 'Your account is in maintenance after a migration rollback. Some newer data may be stranded.';
+  String get accountCutoverMigrationRollbackMessage =>
+      'Your account is in maintenance after a migration rollback. Some newer data may be stranded.';
 
   @override
   String get accountCutoverOpenStore => 'Open Store';
@@ -9537,7 +9678,8 @@ class AppLocalizationsEn extends AppLocalizations {
   String get sendRawAudioToOmi => 'Send raw audio to Omi';
 
   @override
-  String get sendRawAudioToOmiDescription => 'Turn off to prevent raw audio from being sent to Omi. Transcripts and data needed by cloud features may still be sent to Omi.';
+  String get sendRawAudioToOmiDescription =>
+      'Turn off to prevent raw audio from being sent to Omi. Transcripts and data needed by cloud features may still be sent to Omi.';
 
   @override
   String get findDevice => 'Find';
@@ -9580,10 +9722,12 @@ class AppLocalizationsEn extends AppLocalizations {
   String get prerecordedTranscript => 'Prerecorded';
 
   @override
-  String get pendantRecordingSyncBlocked => 'Your Pendant is still recording, so its stored audio can\'t be transferred. Press the Pendant\'s button to stop recording, then sync again.';
+  String get pendantRecordingSyncBlocked =>
+      'Your Pendant is still recording, so its stored audio can\'t be transferred. Press the Pendant\'s button to stop recording, then sync again.';
 
   @override
-  String get pendantFullSyncBlocked => 'Your Pendant\'s storage is full and it\'s still in recording mode, so its stored audio can\'t be transferred. Press the Pendant\'s button to stop recording, then sync again.';
+  String get pendantFullSyncBlocked =>
+      'Your Pendant\'s storage is full and it\'s still in recording mode, so its stored audio can\'t be transferred. Press the Pendant\'s button to stop recording, then sync again.';
 
   @override
   String speechProfileOwnerTitle(String name) {
@@ -9660,13 +9804,15 @@ class AppLocalizationsEn extends AppLocalizations {
   String get couldNotLoadKnowledgeGraph => 'Couldn\'t load knowledge graph';
 
   @override
-  String get speechToTextUnavailableDesc => 'Speech-to-text isn\'t available right now. Check your internet connection and your device\'s speech recognition settings, then try again.';
+  String get speechToTextUnavailableDesc =>
+      'Speech-to-text isn\'t available right now. Check your internet connection and your device\'s speech recognition settings, then try again.';
 
   @override
   String get processingTakingLonger => 'Still working — this is taking longer than usual.';
 
   @override
-  String get speechProfileEnrollmentPrompt => 'So Omi knows which voice is yours — talk for about 5 seconds about anything.';
+  String get speechProfileEnrollmentPrompt =>
+      'So Omi knows which voice is yours — talk for about 5 seconds about anything.';
 
   @override
   String get home => 'Home';
@@ -9719,7 +9865,8 @@ class AppLocalizationsEn extends AppLocalizations {
       part,
       {
         'title': 'Let Omi get to know you',
-        'intro': 'Finish four short sentences out loud. This helps Omi recognize your voice and remember what matters to you. Share only what you want.',
+        'intro':
+            'Finish four short sentences out loud. This helps Omi recognize your voice and remember what matters to you. Share only what you want.',
         'hint': 'Say the whole sentence and finish it in your own words.',
         'name': 'My name is ___, and I spend most of my time ___.',
         'work': 'Right now, I am working on ___.',
@@ -9751,9 +9898,11 @@ class AppLocalizationsEn extends AppLocalizations {
         'voiceOnlyHint': 'You can skip any personal prompt and talk about something else.',
         'goalPrompt': 'Right now my number one goal is to ___.',
         'savedGoal': 'Your goal is saved',
-        'goalError': 'Your goal could not be saved. Retry to save the same goal without duplicating it. Any memories already saved are safe.',
+        'goalError':
+            'Your goal could not be saved. Retry to save the same goal without duplicating it. Any memories already saved are safe.',
         'goalLong': 'Shorten your goal to 500 characters or fewer, then try again.',
-        'voiceUnavailable': 'Voice setup is temporarily unavailable. Saved answers are safe. Retry, or continue and set up your voice later.',
+        'voiceUnavailable':
+            'Voice setup is temporarily unavailable. Saved answers are safe. Retry, or continue and set up your voice later.',
         'saveFinish': 'Save and Finish',
         'retryRemaining': 'Retry Remaining',
         'saveHint': 'Saves your voice profile and checked answers.',
@@ -9878,7 +10027,8 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
-  String get noConversationsHeroMessage => 'Conversations you record show up here. Tap the record button on Home to record your first one.';
+  String get noConversationsHeroMessage =>
+      'Conversations you record show up here. Tap the record button on Home to record your first one.';
 
   @override
   String get conversationMap => 'Conversation Map';
@@ -10269,7 +10419,8 @@ class AppLocalizationsEn extends AppLocalizations {
   String get selectFirmwareZip => 'Select firmware ZIP file';
 
   @override
-  String get customFirmwareWarning => 'Flashing custom firmware can brick your device. Make sure this is a valid Omi firmware build. Do not disconnect during the update.';
+  String get customFirmwareWarning =>
+      'Flashing custom firmware can brick your device. Make sure this is a valid Omi firmware build. Do not disconnect during the update.';
 
   @override
   String get firmwareFlashed => 'Firmware flashed';
@@ -10320,10 +10471,12 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
-  String get onboardingCompleteMessage => 'Keep Omi running for a couple of days. Your conversations, memories, and to-dos will start filling in.';
+  String get onboardingCompleteMessage =>
+      'Keep Omi running for a couple of days. Your conversations, memories, and to-dos will start filling in.';
 
   @override
-  String get cantFindDeviceHint => 'Can\'t find your device? Make sure it\'s turned on and close to your phone, then scan again.';
+  String get cantFindDeviceHint =>
+      'Can\'t find your device? Make sure it\'s turned on and close to your phone, then scan again.';
 
   @override
   String get scanAgain => 'Scan Again';
@@ -10357,10 +10510,12 @@ class AppLocalizationsEn extends AppLocalizations {
   String get firmwareUpdateFailedTitle => 'Update Failed';
 
   @override
-  String get firmwareUpdateFailedMessage => 'The update didn\'t finish. Your device is still on its current firmware and safe to use. Keep it charged and close to your phone, then try again.';
+  String get firmwareUpdateFailedMessage =>
+      'The update didn\'t finish. Your device is still on its current firmware and safe to use. Keep it charged and close to your phone, then try again.';
 
   @override
-  String get firmwareDownloadFailedMessage => 'The update couldn\'t be downloaded, and your device wasn\'t changed. Check your internet connection, then try again.';
+  String get firmwareDownloadFailedMessage =>
+      'The update couldn\'t be downloaded, and your device wasn\'t changed. Check your internet connection, then try again.';
 
   @override
   String firmwareBatteryTooLow(int level) {
@@ -10434,10 +10589,12 @@ class AppLocalizationsEn extends AppLocalizations {
   String get startupFailedTitle => 'Omi couldn’t start';
 
   @override
-  String get startupFailedMessage => 'Something went wrong while Omi was starting. Check your connection, then try again.';
+  String get startupFailedMessage =>
+      'Something went wrong while Omi was starting. Check your connection, then try again.';
 
   @override
-  String get startupFailedConfigMessage => 'This build of Omi has a configuration problem. It is not a problem with your device. Contact support and include the details below.';
+  String get startupFailedConfigMessage =>
+      'This build of Omi has a configuration problem. It is not a problem with your device. Contact support and include the details below.';
 
   @override
   String get discardRecordingTitle => 'Discard Recording?';
@@ -10725,7 +10882,8 @@ class AppLocalizationsEn extends AppLocalizations {
   String get conversationDeveloperTools => 'Conversation Developer Tools';
 
   @override
-  String get conversationDeveloperToolsDescription => 'Show Copy Conversation ID and Test Prompt in a conversation\'s menu';
+  String get conversationDeveloperToolsDescription =>
+      'Show Copy Conversation ID and Test Prompt in a conversation\'s menu';
 
   @override
   String participantsSummary(String name, int count) {
@@ -10790,7 +10948,8 @@ class AppLocalizationsEn extends AppLocalizations {
   String get speakerTagPromptSaveVoicesTitle => 'Remember voices of people you name';
 
   @override
-  String get speakerTagPromptSaveVoicesBody => 'Omi keeps a short voice sample so it can recognize them next time. You can change this anytime in Settings.';
+  String get speakerTagPromptSaveVoicesBody =>
+      'Omi keeps a short voice sample so it can recognize them next time. You can change this anytime in Settings.';
 
   @override
   String get speakerTagPromptThanks => 'Thanks! Omi will get better at recognizing voices.';
@@ -10811,13 +10970,15 @@ class AppLocalizationsEn extends AppLocalizations {
   String get voiceSettingsAskToTagSubtitle => 'Once in a while, Omi asks who was speaking in your recent conversations';
 
   @override
-  String get voiceSettingsSaveOthersSubtitle => 'When you name someone, Omi keeps a short voice sample so it can recognize them next time';
+  String get voiceSettingsSaveOthersSubtitle =>
+      'When you name someone, Omi keeps a short voice sample so it can recognize them next time';
 
   @override
   String get leaveBlank => 'Leave blank';
 
   @override
-  String get mcpOAuthSetup => 'On claude.ai, add a custom connector and paste the server URL. If Claude asks for an advanced OAuth Client ID, use the value below and leave the secret blank — never use your MCP API key as an OAuth secret.';
+  String get mcpOAuthSetup =>
+      'On claude.ai, add a custom connector and paste the server URL. If Claude asks for an advanced OAuth Client ID, use the value below and leave the secret blank — never use your MCP API key as an OAuth secret.';
 
   @override
   String get claudeCode => 'Claude Code';
@@ -10826,10 +10987,12 @@ class AppLocalizationsEn extends AppLocalizations {
   String get addToClaudeCodeConfig => 'Add to ~/.claude.json';
 
   @override
-  String get claudeDesktopConnectorSetup => 'On Claude Desktop → Settings → Connectors, add a custom connector and paste the server URL. If Claude asks for an advanced OAuth Client ID, use the value below and leave the secret blank — never use your MCP API key as an OAuth secret.';
+  String get claudeDesktopConnectorSetup =>
+      'On Claude Desktop → Settings → Connectors, add a custom connector and paste the server URL. If Claude asks for an advanced OAuth Client ID, use the value below and leave the secret blank — never use your MCP API key as an OAuth secret.';
 
   @override
-  String get transcriptionUnavailableRecordingContinues => 'Transcriptions are unavailable, recording continues on device and will process later';
+  String get transcriptionUnavailableRecordingContinues =>
+      'Transcriptions are unavailable, recording continues on device and will process later';
 
   @override
   String transcriptionsPendingFraction(int pending, int total) {
@@ -10887,7 +11050,8 @@ class AppLocalizationsEn extends AppLocalizations {
   String get captureRecoveryBanner => 'Omi isn\'t sending audio — tap to reconnect';
 
   @override
-  String get phoneRecordingBlockedByPendantBatch => 'Stop Transcribe Later on your pendant before recording with your phone.';
+  String get phoneRecordingBlockedByPendantBatch =>
+      'Stop Transcribe Later on your pendant before recording with your phone.';
 
   @override
   String get captureNotTranscribing => 'Not transcribing';
@@ -10902,10 +11066,12 @@ class AppLocalizationsEn extends AppLocalizations {
   String get captureMicInUseElsewhere => 'Mic in use by another app';
 
   @override
-  String get captureMicInterruptedDetail => 'A call or another app took the microphone, so Omi can\'t hear right now. Omi resumes on its own when the microphone is free. Everything recorded before this is safe.';
+  String get captureMicInterruptedDetail =>
+      'A call or another app took the microphone, so Omi can\'t hear right now. Omi resumes on its own when the microphone is free. Everything recorded before this is safe.';
 
   @override
-  String get captureCustomSttUnreachableDetail => 'Your custom speech-to-text service can\'t be reached. Omi keeps your audio on this phone and sends it when the service is back. Nothing is lost.';
+  String get captureCustomSttUnreachableDetail =>
+      'Your custom speech-to-text service can\'t be reached. Omi keeps your audio on this phone and sends it when the service is back. Nothing is lost.';
 
   @override
   String get captureStarting => 'Starting…';
@@ -10917,7 +11083,8 @@ class AppLocalizationsEn extends AppLocalizations {
   String get captureStorageAlmostFull => 'Storage almost full';
 
   @override
-  String get capturePendantDisconnectedDetail => 'Your pendant lost its connection to this phone. Omi reconnects on its own when the pendant is on and nearby. Everything recorded before this is safe.';
+  String get capturePendantDisconnectedDetail =>
+      'Your pendant lost its connection to this phone. Omi reconnects on its own when the pendant is on and nearby. Everything recorded before this is safe.';
 
   @override
   String get capturePendantDisconnectedShort => 'Omi reconnects on its own';
@@ -10969,7 +11136,8 @@ class AppLocalizationsEn extends AppLocalizations {
   String get deviceOnboardingVoiceReplyOffDescription => 'Answers stay on screen. Nothing is spoken.';
 
   @override
-  String get deviceOnboardingVoiceReplyHeadphonesDescription => 'Private. Speaks only through AirPods, Bluetooth or wired headphones.';
+  String get deviceOnboardingVoiceReplyHeadphonesDescription =>
+      'Private. Speaks only through AirPods, Bluetooth or wired headphones.';
 
   @override
   String get deviceOnboardingVoiceReplyAlwaysDescription => 'Uses the phone speaker when no headphones are connected.';
@@ -10983,7 +11151,8 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
-  String get deviceOnboardingVoiceReplyStatusHeadphonesDisconnected => 'No headphones connected. Omi stays silent until you connect some.';
+  String get deviceOnboardingVoiceReplyStatusHeadphonesDisconnected =>
+      'No headphones connected. Omi stays silent until you connect some.';
 
   @override
   String deviceOnboardingVoiceReplyStatusAlwaysHeadphones(String device) {
@@ -11073,13 +11242,15 @@ class AppLocalizationsEn extends AppLocalizations {
   String get siriIndexSetting => 'Use Omi with Siri & Apple Intelligence';
 
   @override
-  String get siriIndexSettingDescription => 'Allow Siri to find your conversations, memories, and tasks on this device. Turning this off removes them from Apple search.';
+  String get siriIndexSettingDescription =>
+      'Allow Siri to find your conversations, memories, and tasks on this device. Turning this off removes them from Apple search.';
 
   @override
   String get sendToSupport => 'Send to support';
 
   @override
-  String get deviceDiagnosticsUploadDescription => 'Review the diagnostics JSON below. It includes your device identifier, connection history, battery readings, firmware diagnostics, and BLE events. No audio or transcripts are included.';
+  String get deviceDiagnosticsUploadDescription =>
+      'Review the diagnostics JSON below. It includes your device identifier, connection history, battery readings, firmware diagnostics, and BLE events. No audio or transcripts are included.';
 
   @override
   String get deviceDiagnosticsTicket => 'Support ticket code';
@@ -11172,7 +11343,8 @@ class AppLocalizationsEn extends AppLocalizations {
   String get peopleRecent => 'Recent';
 
   @override
-  String get deletePeopleMessage => 'This removes their voice samples and can\'t be undone. Their lines in past conversations become unnamed speakers.';
+  String get deletePeopleMessage =>
+      'This removes their voice samples and can\'t be undone. Their lines in past conversations become unnamed speakers.';
 
   @override
   String get personTalkTime => 'Talk time';
@@ -11286,7 +11458,8 @@ class AppLocalizationsEn extends AppLocalizations {
   String get deleteMeetingScreenshotTitle => 'Delete Screenshot?';
 
   @override
-  String get deleteMeetingScreenshotMessage => 'This removes the screenshot from this meeting\'s note. It can\'t be undone.';
+  String get deleteMeetingScreenshotMessage =>
+      'This removes the screenshot from this meeting\'s note. It can\'t be undone.';
 
   @override
   String get conversationSummaryFailed => 'Summary failed';
@@ -11518,7 +11691,8 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
-  String get confidenceFootnote => 'Labels and confirmations from you count most. Automatic labels count for little until you confirm them.';
+  String get confidenceFootnote =>
+      'Labels and confirmations from you count most. Automatic labels count for little until you confirm them.';
 
   @override
   String get personWhyConfidence => 'Why?';
@@ -11595,7 +11769,8 @@ class AppLocalizationsEn extends AppLocalizations {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: 'Omi is unsure about these $count people. Most are names misheard from transcripts. Untick anyone you want to keep.',
+      other:
+          'Omi is unsure about these $count people. Most are names misheard from transcripts. Untick anyone you want to keep.',
       one: 'Omi is unsure about this person. Untick them to keep them.',
     );
     return '$_temp0';
@@ -11775,7 +11950,8 @@ class AppLocalizationsEn extends AppLocalizations {
   String get updateRequiredTitle => 'Update required';
 
   @override
-  String get updateRequiredMessage => 'This version of Omi is no longer supported. Update to keep recording and syncing.';
+  String get updateRequiredMessage =>
+      'This version of Omi is no longer supported. Update to keep recording and syncing.';
 
   @override
   String get exportingAllData => 'Exporting your data… Keep Omi open; large accounts can take several minutes.';
@@ -12021,7 +12197,8 @@ class AppLocalizationsEn extends AppLocalizations {
   String get unresolvedSpeakersTitle => 'About Speaker Labels';
 
   @override
-  String get unresolvedSpeakersMessage => 'Omi could not tell the other voices apart across the recordings. Tap a speaker label to name who is speaking.';
+  String get unresolvedSpeakersMessage =>
+      'Omi could not tell the other voices apart across the recordings. Tap a speaker label to name who is speaking.';
 
   @override
   String get nameSpeakerTitle => 'Name Speaker';
@@ -12054,7 +12231,8 @@ class AppLocalizationsEn extends AppLocalizations {
   String get showOnLockScreen => 'Show on Lock Screen';
 
   @override
-  String get accountDeletionInProgressSignInAgain => 'This account is being deleted. Sign in with another account, or wait a few minutes and try again.';
+  String get accountDeletionInProgressSignInAgain =>
+      'This account is being deleted. Sign in with another account, or wait a few minutes and try again.';
 
   @override
   String get onboardingSetupTitle => 'Setting up your Omi';
@@ -12305,7 +12483,8 @@ class AppLocalizationsEn extends AppLocalizations {
   String get dreamReportTitle => 'Dream Report';
 
   @override
-  String get dreamReportShadowBanner => 'Preview mode: Dream shows what it would change, but nothing in your account changes yet.';
+  String get dreamReportShadowBanner =>
+      'Preview mode: Dream shows what it would change, but nothing in your account changes yet.';
 
   @override
   String get dreamReportLiveBanner => 'Dream applies these changes on its own. Undo any of them in Recent Changes.';
@@ -12448,7 +12627,8 @@ class AppLocalizationsEn extends AppLocalizations {
   String get speakerTagPromptExcerptSaved => 'Answer saved for this excerpt.';
 
   @override
-  String get pinPersonDescription => 'Pinned people stay at the top of your People list and aren\'t removed by Clean Up.';
+  String get pinPersonDescription =>
+      'Pinned people stay at the top of your People list and aren\'t removed by Clean Up.';
 
   @override
   String get chatAppsProblemFailed => 'Something went wrong. Try again.';
@@ -12509,10 +12689,12 @@ class AppLocalizationsEn extends AppLocalizations {
   String get chatAppsPrivateMemoriesSubtitle => 'Health, money, and anything you marked private stay out of chat apps.';
 
   @override
-  String get chatAppsConnectIMessageMessage => 'Send Omi one message from the number you want to use. The code in it links that number to your account.';
+  String get chatAppsConnectIMessageMessage =>
+      'Send Omi one message from the number you want to use. The code in it links that number to your account.';
 
   @override
-  String get chatAppsWhatsAppMessage => 'We\'re working on bringing Omi to WhatsApp. It will show up here when it\'s ready.';
+  String get chatAppsWhatsAppMessage =>
+      'We\'re working on bringing Omi to WhatsApp. It will show up here when it\'s ready.';
 
   @override
   String chatAppsNoChatsMessage(String app) {
@@ -12585,7 +12767,8 @@ class AppLocalizationsEn extends AppLocalizations {
   String get chatAppsTelegramOtherDevice => 'Telegram on another device?';
 
   @override
-  String get chatAppsHeroMessage => 'Ask about your day, save memories, and manage tasks from Telegram or iMessage. Your chats stay in the app you use, and Omi remembers what you talked about everywhere.';
+  String get chatAppsHeroMessage =>
+      'Ask about your day, save memories, and manage tasks from Telegram or iMessage. Your chats stay in the app you use, and Omi remembers what you talked about everywhere.';
 
   @override
   String get chatAppsTryRemind => 'Remind me to call Mom on Sunday';
@@ -12614,7 +12797,8 @@ class AppLocalizationsEn extends AppLocalizations {
   String get chatAppsNotConnectedTitle => 'Not connected';
 
   @override
-  String get chatAppsTelegramPrivacyNote => 'Your chats with Omi are also stored by Telegram. Omi only answers you, never other people, and you can disconnect anytime.';
+  String get chatAppsTelegramPrivacyNote =>
+      'Your chats with Omi are also stored by Telegram. Omi only answers you, never other people, and you can disconnect anytime.';
 
   @override
   String get chatAppsProblemOffline => 'You\'re offline. Check your connection and try again.';
