@@ -11,6 +11,7 @@ import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/services/bridges/ble_bridge.dart';
 import 'package:omi/services/connectivity_service.dart';
 import 'package:omi/services/capture/native_batch_geolocation.dart';
+import 'package:omi/services/telemetry/client_telemetry.dart';
 import 'package:omi/services/wals.dart';
 import 'package:omi/services/wals/sync_job_poller.dart';
 import 'package:omi/utils/audio_player_utils.dart';
@@ -441,6 +442,11 @@ class LocalRecordingsProvider extends ChangeNotifier {
             updIds.addAll(s.result!.updatedConversationIds);
           }
           if (s.status == 'completed') {
+            try {
+              ClientTelemetry.instance.observeUploadDurableCompleted(jobId: jobId, confirmedAt: DateTime.now());
+            } catch (_) {
+              // Completion telemetry must not change file retention.
+            }
             await _deleteFileOnly(name);
           }
           // completed or failed: stop tracking. On failure the file is kept
@@ -644,7 +650,11 @@ Future<UploadFilesResult> uploadNativeBatchRecording(
   required File file,
   SyncUploadGate? uploadGate,
 }) {
-  return (uploadGate ?? SyncUploadGate.instance).upload([file], geolocation: recording.geolocation);
+  return (uploadGate ?? SyncUploadGate.instance).upload(
+    [file],
+    geolocation: recording.geolocation,
+    telemetrySource: 'phone',
+  );
 }
 
 /// Counts complete length-prefixed frames (`[4-byte LE length][payload]`) in a

@@ -41,6 +41,7 @@ import 'package:omi/services/capture/freemium_threshold_tracker.dart';
 import 'package:omi/services/capture/stt_mode_resolver.dart';
 import 'package:omi/services/capture/recording_lifecycle_telemetry.dart';
 import 'package:omi/backend/http/shared.dart' show accountDeletionWebSocketCloseCode;
+import 'package:omi/services/telemetry/client_telemetry.dart';
 import 'package:omi/services/capture/capture_seams.dart';
 import 'package:omi/services/capture/capture_session_owner.dart';
 import 'package:omi/services/capture/capture_wedge_monitor.dart';
@@ -3526,6 +3527,13 @@ class CaptureController extends ChangeNotifier
       final segmentArrivals = _closingSegmentArrivals.remove(event.memory.id) ?? const <String, int>{};
       event.memory.isNew = true;
       externalActions.removeProcessingConversation(OptimisticProcessingPlaceholder.id);
+      try {
+        ClientTelemetry.instance.noteProcessingRowLeft(
+          id: event.memory.id,
+          lifecycleOk: true,
+          lifecycleStatus: event.memory.status.name,
+        );
+      } catch (_) {}
       externalActions.removeProcessingConversation(event.memory.id);
       _processConversationCreated(event.memory, event.messages.cast<ServerMessage>());
       _autoSyncFallbackTimer?.cancel();
@@ -4304,9 +4312,9 @@ class CaptureController extends ChangeNotifier
         setNativeWriterGate: _nativeWriterGate.setGate,
         finalizeWal: () => _wal.getSyncs().phone.finalizeCurrentSession(),
         rollSession: (identity) async => _rollCaptureSession(identity),
-        mintRecordingId: (sessionKey, telemetrySource) {
+        mintRecordingId: (sessionKey, telemetrySource, requestOrigin) {
           _recordingTelemetry.complete(reason: 'session_roll');
-          return _recordingTelemetry.prepare(source: telemetrySource);
+          return _recordingTelemetry.prepare(source: telemetrySource, requestOrigin: requestOrigin);
         },
         checkPhonePermission: () async {
           final granted = await _requestMicrophonePermission();
