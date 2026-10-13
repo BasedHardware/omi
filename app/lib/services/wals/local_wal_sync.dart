@@ -1745,7 +1745,9 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
   @override
   Future<void> deleteAllPendingWals() async {
     final generation = _sessionGeneration;
-    final pendingWals = _wals.where((w) => w.status == WalStatus.miss).toList();
+    final pendingWals = _wals
+        .where((w) => w.status == WalStatus.miss || (w.status == WalStatus.uploaded && w.syncedAt == 0))
+        .toList();
     for (final wal in pendingWals) {
       if (!_isCurrent(generation)) break;
       await _deleteWal(wal, generation: generation);
@@ -2490,7 +2492,14 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
         final memberWalIds = members.map((w) => w.id).toList();
         switch (fetch.outcome) {
           case SyncJobFetchOutcome.throttled:
-            break; // Shared poller installed the account cooldown; stop below.
+            if (!SyncRateLimiter.instance.isLimited) {
+              final limit = fetch.rateLimit;
+              SyncRateLimiter.instance.markLimited(
+                retryAfterSeconds: limit?.retryAfterSeconds,
+                reason: limit?.kind.cooldownReason ?? RateLimitReason.edgeThrottle,
+              );
+            }
+            break; // Account cooldown installed; stop pass below.
           case SyncJobFetchOutcome.transient:
             // Network/5xx — leave as `uploaded`, retry on the next pass.
             DebugLogManager.logEvent('reconcile_poll', {
@@ -2629,7 +2638,9 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
             }
             break;
         }
+        if (SyncRateLimiter.instance.isLimited) break;
       }
+      if (SyncRateLimiter.instance.isLimited) break;
     }
 
     if (changed) {
