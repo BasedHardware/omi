@@ -32,8 +32,10 @@ See [the provider model
 limits](https://cloud.google.com/vertex-ai/generative-ai/docs/models/gemini/2-5-flash).
 The existing reservation/USD accounting reserves the combined input/completion
 budget plus one malformed-response retry **for every sample**: `2 * K * (400000 + 32768)`. At K=3 this
-reserves 2596608 tokens, or $25.96608 at the existing $0.00001/token upper-bound rate. The prod $60 daily cap
-therefore admits at most two such full passes per day, even when its pass-count cap is 24. At 253000 input
+reserves 2596608 tokens, or $25.96608 at the existing $0.00001/token upper-bound rate. The prod `backend-sync` cap is $250, intended to cover 24 hourly passes at roughly $8.2 settled usage
+(~$200) plus one ~$26 reservation of headroom. The current ledger is shared by day and retains successful
+reservations; it therefore admits at most nine full passes at this reservation size, before other spend.
+Per-user settlement is required for that intended hourly cadence. The bounded-mode report host retains $60. At 253000 input
 tokens, three unretried calls plus their maximum completions use at most 857304 tokens ($8.57304 at that
 upper-bound rate). Actual observed usage includes thinking and both attempts of any retried sample. Unknown
 usage from a failed sample stays unknown even when survivors produce a successful plan; admission remains

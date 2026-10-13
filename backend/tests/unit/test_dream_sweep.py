@@ -337,7 +337,7 @@ def test_prod_scheduler_and_writer_env_contract():
     assert all(
         not full_keys.intersection(service['env']) for service in writers if service is not services['backend-sync']
     )
-    # The sweep host and the report host present the same daily allowance; no other host declares one.
+    # The sweep host has full-mode accounting headroom; the report host keeps its bounded-mode allowance.
     dogfood_caps = {
         'DREAM_AGENT_PASSES_PER_DAY': '24',
         'DREAM_AGENT_MANUAL_RUNS_PER_DAY': '20',
@@ -345,7 +345,9 @@ def test_prod_scheduler_and_writer_env_contract():
     }
     for name in ('backend-sync', 'backend'):
         for key, value in dogfood_caps.items():
-            assert services[name]['env'][key]['value'] == value
+            assert services[name]['env'][key]['value'] == (
+                '250' if name == 'backend-sync' and key == 'DREAM_AGENT_DAILY_USD' else value
+            )
         assert services[name]['secrets']['DREAM_AGENT_FEEDBACK_SALT'] == {
             'secret': 'DREAM_AGENT_FEEDBACK_SALT',
             'version': 'latest',

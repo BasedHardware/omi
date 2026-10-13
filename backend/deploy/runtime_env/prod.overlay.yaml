@@ -780,7 +780,8 @@ overlay:
           # 2026-10-09: hourly dogfood + manual runs; reserve room for both users and canary.
           DREAM_AGENT_PASSES_PER_DAY: {value: '24', category: rollout}
           DREAM_AGENT_MANUAL_RUNS_PER_DAY: {value: '20', category: rollout}
-          DREAM_AGENT_DAILY_USD: {value: '60', category: rollout}
+          # Reserved-capacity accounting-only budget intent: 24 per-user hourly K=3 passes (~$200 settled) plus ~$26 reservation headroom.
+          DREAM_AGENT_DAILY_USD: {value: '250', category: rollout}
           DREAM_AGENT_CANARY_UID: {value: 'dream-canary-prod-01', category: rollout}
           CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE: {value: 'shadow', category: rollout}
           SYNC_PHASE_METRICS_EXPORT_ENABLED: {value: 'true', category: telemetry}
