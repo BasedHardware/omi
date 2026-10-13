@@ -3,6 +3,15 @@ SELECT event, count(*) AS emitted
 FROM events
 WHERE app_namespace = :app_namespace AND build_number = :build_number
   AND event IN (
+    'Onboarding First Capture Shown',
+    'Onboarding First Capture Choice Selected',
+    'Onboarding First Capture Recording Started',
+    'Onboarding First Capture Recording Completed',
+    'Onboarding First Capture Conversation Shown',
+    'Onboarding First Capture Empty Result',
+    'Onboarding First Capture Skipped',
+    'Onboarding Step Completed',
+
     'Onboarding Completed',
     'Phone Mic Recording Started',
     'Phone Mic Recording Stopped',

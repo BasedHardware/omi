@@ -12,11 +12,16 @@ class ChatBlockCard extends StatelessWidget {
     required this.child,
     this.onTap,
     this.semanticsLabel,
+    this.explicitChildNodes = false,
   });
 
   final Widget child;
   final VoidCallback? onTap;
   final String? semanticsLabel;
+
+  /// Keep inner controls (an Undo button) as their own accessibility nodes
+  /// instead of folding them into the card's label.
+  final bool explicitChildNodes;
 
   static const BorderRadius radius = OmiRadius.mdAll;
 
@@ -44,6 +49,7 @@ class ChatBlockCard extends StatelessWidget {
     if (semanticsLabel == null) return content;
     return Semantics(
       container: true,
+      explicitChildNodes: explicitChildNodes,
       label: semanticsLabel,
       button: onTap != null,
       enabled: onTap != null,
@@ -54,19 +60,29 @@ class ChatBlockCard extends StatelessWidget {
 
 /// Small caption row naming the block's entity ("Task", "Goal", ...).
 class ChatBlockEyebrow extends StatelessWidget {
-  const ChatBlockEyebrow({super.key, required this.icon, required this.label});
+  const ChatBlockEyebrow({super.key, required this.icon, required this.label, this.ellipsis = false});
 
   final IconData icon;
   final String label;
 
+  /// Ellipsize [label] when the row is narrower than the text, as at a large
+  /// text scale beside another control.
+  final bool ellipsis;
+
   @override
   Widget build(BuildContext context) {
+    final text = Text(
+      label,
+      maxLines: ellipsis ? 1 : null,
+      overflow: ellipsis ? TextOverflow.ellipsis : null,
+      style: OmiType.caption.copyWith(color: OmiColors.textSecondary, fontWeight: FontWeight.w600),
+    );
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
         ExcludeSemantics(child: Icon(icon, size: 14, color: OmiColors.textSecondary)),
         const SizedBox(width: 6),
-        Text(label, style: OmiType.caption.copyWith(color: OmiColors.textSecondary, fontWeight: FontWeight.w600)),
+        if (ellipsis) Flexible(child: text) else text,
       ],
     );
   }

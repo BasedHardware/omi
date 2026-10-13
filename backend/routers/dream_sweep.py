@@ -27,6 +27,7 @@ async def sweep_dream_agent(_retry_count: int = Depends(verify_cloud_tasks_oidc)
             'failed',
             'not_admitted',
             'deadline',
+            'waiting',
         )
     }
     # Counts and exception type names only: the sweep is otherwise unobservable without reading user data.

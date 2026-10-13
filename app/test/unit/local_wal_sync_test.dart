@@ -14,6 +14,7 @@ import 'package:omi/services/audio_sources/audio_source.dart';
 import 'package:omi/services/wals/flash_page_wal_sync.dart';
 import 'package:omi/services/wals/local_wal_sync.dart';
 import 'package:omi/services/wals/sync_rate_limiter.dart';
+import 'package:omi/services/wals/sync_job_poller.dart';
 import 'package:omi/services/wals/sync_upload_batch.dart';
 import 'package:omi/services/wals/sync_upload_gate.dart';
 import 'package:omi/services/wals/wal.dart';
@@ -45,6 +46,9 @@ void main() {
     TestWidgetsFlutterBinding.ensureInitialized();
     SharedPreferences.setMockInitialValues({});
     await SharedPreferencesUtil.init();
+    SyncRateLimiter.instance.clear();
+    SyncRateLimiter.instance.clockForTesting = null;
+    SyncJobPoller.instance.resetForTesting();
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(
       const MethodChannel('plugins.flutter.io/path_provider'),
       (MethodCall call) async {
@@ -55,6 +59,12 @@ void main() {
 
     listener = _MockListener();
     sync = LocalWalSyncImpl(listener);
+  });
+
+  tearDown(() {
+    SyncRateLimiter.instance.clear();
+    SyncRateLimiter.instance.clockForTesting = null;
+    SyncJobPoller.instance.resetForTesting();
   });
 
   group('onFrameCaptured', () {
@@ -465,6 +475,48 @@ void main() {
       expect(batch.length, 5);
       expect(canClaimLiveCapture(batch, oversized, now), isFalse);
       expect(canClaimLiveCapture(batch, oversized.take(5).toList(), now), isTrue);
+    });
+
+    test('pendant custody 10s WALs upload in jobs of 200s of audio, not 50s', () {
+      // #21177: pendant ring custody drains audio into ~10s WALs, and a five-file
+      // batch made every sync job 50s long. The manifest's 20-file limit binds
+      // before the 300s audio budget does for WALs this short.
+      const now = 2000000000;
+      final custodyTail = List.generate(
+        40,
+        (index) => Wal(timerStart: now - 7 * 60 * 60 - index * 10, codec: BleAudioCodec.opus, seconds: 10),
+      );
+
+      final batch = nextSyncUploadBatch(custodyTail.reversed.toList(), now);
+
+      expect(batch, hasLength(syncUploadBatchMaxFiles));
+      expect(batch.fold<int>(0, (total, wal) => total + wal.seconds), 200);
+      expect(
+        batch.map((wal) => wal.timerStart),
+        custodyTail.take(syncUploadBatchMaxFiles).map((wal) => wal.timerStart),
+      );
+    });
+
+    test('a batch is bounded by audio seconds, not by file count', () {
+      const now = 2000000000;
+      final historical = List.generate(
+        10,
+        (index) => Wal(timerStart: now - 7 * 60 * 60 - index * 45, codec: BleAudioCodec.opus, seconds: 45),
+      );
+
+      final batch = nextSyncUploadBatch(historical.reversed.toList(), now);
+
+      expect(batch, hasLength(6), reason: 'six 45s WALs are 270s; a seventh would pass 300s');
+    });
+
+    test('a WAL longer than the audio budget still uploads, alone', () {
+      const now = 2000000000;
+      final long = Wal(timerStart: now - 7 * 60 * 60, codec: BleAudioCodec.opus, seconds: 400);
+      final older = Wal(timerStart: now - 8 * 60 * 60, codec: BleAudioCodec.opus, seconds: 10);
+
+      final batch = nextSyncUploadBatch([older, long], now);
+
+      expect(batch, [long]);
     });
   });
 
@@ -993,9 +1045,10 @@ void main() {
 
     test('queued then completed 0/0/0 acknowledges the WAL and emits a diagnostic', () async {
       var polls = 0;
+      var pollNow = now.subtract(SyncJobPoller.minimumInterval);
       final local = LocalWalSyncImpl(
         listener,
-        now: () => now,
+        now: () => pollNow,
         jobStatusFetcher: (jobId) async => SyncJobFetch(
           SyncJobFetchOutcome.ok,
           polls++ == 0 ? SyncJobStatusResponse(jobId: jobId, status: 'queued') : completed(),
@@ -1008,9 +1061,14 @@ void main() {
       expect(wal.status, WalStatus.uploaded);
       expect(wal.retryCount, 0);
 
+      await local.reconcileUploadedWals();
+      expect(polls, 1, reason: 'the first poll is immediate, repeated same-time passes are deferred');
+      expect(wal.status, WalStatus.uploaded);
+      pollNow = now; // exactly one minimum interval; retain the original ACK timestamp.
       final response = await local.reconcileUploadedWals();
       expect(response.newConversationIds, isEmpty);
       expect(response.updatedConversationIds, isEmpty);
+      expect(polls, 2);
       // capture_recovery_replay_scenarios_test.dart: acknowledgement resolves by
       // polling, never by re-uploading bytes, including legitimate empty results.
       expect(wal.status, WalStatus.synced);

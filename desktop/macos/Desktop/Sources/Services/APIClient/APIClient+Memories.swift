@@ -858,7 +858,6 @@ extension APIClient {
 // MARK: - Memories API
 
 extension APIClient {
-  private static let canonicalLifecycleExposedHeader = "X-Omi-Memory-Canonical-Lifecycle-Exposed"
   private static let deviceScopeSupportedHeader = "X-Omi-Memory-Device-Scope-Supported"
   private static let defaultDeleteSupportedHeader = "X-Omi-Memory-Default-Delete-Supported"
   private static let nextCursorHeader = "X-Omi-Memory-Next-Cursor"
@@ -1023,10 +1022,11 @@ extension APIClient {
 
     let memories = try decoder.decode([ServerMemory].self, from: data)
     try validateExpectedOwner(authPolicy)
-    let lifecycleHeader = httpResponse.value(forHTTPHeaderField: Self.canonicalLifecycleExposedHeader)
-    let canonicalLifecycleExposed = lifecycleHeader == "true"
     let deviceScopeHeader = httpResponse.value(forHTTPHeaderField: Self.deviceScopeSupportedHeader)
     let deviceScopeSupported = deviceScopeHeader.map { $0.caseInsensitiveCompare("true") == .orderedSame }
+    // Current and pre-universal servers pair device-scope support with canonical
+    // lifecycle exposure on this route, including for empty and mixed-tier pages.
+    let canonicalLifecycleExposed = deviceScopeSupported == true
     let defaultMemoryDeleteSupported =
       httpResponse.value(forHTTPHeaderField: Self.defaultDeleteSupportedHeader) == "true"
     let nextCursor = httpResponse.value(forHTTPHeaderField: Self.nextCursorHeader)

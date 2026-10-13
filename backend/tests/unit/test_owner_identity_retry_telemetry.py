@@ -53,10 +53,10 @@ def test_registration_reuses_collector_and_only_materializes_closed_pairs():
     telemetry.record_retry('late', 'resolver_exit', 'resolved')
     importlib.reload(telemetry)
     assert telemetry.OWNER_IDENTITY_RETRY is counter
-    assert len(telemetry.PAIRS) == 60
-    assert len(telemetry.PAIRS - {p for p in telemetry.PAIRS if p[0] in ('resolver_exit', 'segment_abstained')}) == 28
+    assert len(telemetry.PAIRS) == 61
+    assert len(telemetry.PAIRS - {p for p in telemetry.PAIRS if p[0] in ('resolver_exit', 'segment_abstained')}) == 29
     assert set(counter._metrics) <= {(p, s, r) for p in ('first', 'late') for s, r in telemetry.PAIRS}
-    assert len(counter._metrics) < 120
+    assert len(counter._metrics) < 122
     before = snapshot('late')
     telemetry.record_retry('late', 'dynamic-conversation-id', 'dynamic-uid')
     assert delta('late', before) == {('skipped', 'processing_error'): 1}
@@ -194,6 +194,7 @@ def test_batch_pass_cap_and_skips_preserve_reads_and_attempts(monkeypatch):
 
 def test_slot_denial_counts_deduplicated_candidates_and_keeps_return(monkeypatch):
     monkeypatch.setattr(retry, '_slots', SimpleNamespace(acquire=lambda **kw: False))
+    monkeypatch.setattr(retry, '_waiting_slots', SimpleNamespace(acquire=lambda **kw: False))
     before = snapshot('late')
     assert not retry.schedule_completed_identity_retries('u', ['c1', 'c1', 'c2'])
     assert delta('late', before) == {('entry', 'candidate'): 2, ('skipped', 'slot_limit'): 2}

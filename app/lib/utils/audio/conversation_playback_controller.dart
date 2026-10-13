@@ -33,6 +33,10 @@ class ConversationPlaybackController extends ChangeNotifier {
   /// report without rebuilding the transcript.
   final ValueNotifier<double> wallPosition = ValueNotifier(0);
 
+  /// The segment containing the playhead. Line widgets listen so a reader
+  /// scroll can move the highlight without rebuilding the whole transcript.
+  final ValueNotifier<String?> highlightedSegment = ValueNotifier<String?>(null);
+
   double? _pendingWall;
   bool _pendingStrict = false;
   double? _pausedWall;
@@ -206,7 +210,12 @@ class ConversationPlaybackController extends ChangeNotifier {
     if (_currentSegmentId == null && _followTargetSegmentId == null) return false;
     _currentSegmentId = null;
     _followTargetSegmentId = null;
+    _syncHighlight(null);
     return true;
+  }
+
+  void _syncHighlight(String? id) {
+    if (highlightedSegment.value != id) highlightedSegment.value = id;
   }
 
   bool _recomputeTargets() {
@@ -233,6 +242,7 @@ class ConversationPlaybackController extends ChangeNotifier {
     if (current != _currentSegmentId || follow != _followTargetSegmentId) {
       _currentSegmentId = current;
       _followTargetSegmentId = follow;
+      _syncHighlight(current);
       return true;
     }
     return false;
@@ -242,6 +252,7 @@ class ConversationPlaybackController extends ChangeNotifier {
   void dispose() {
     _isDisposed = true;
     wallPosition.dispose();
+    highlightedSegment.dispose();
     super.dispose();
   }
 }

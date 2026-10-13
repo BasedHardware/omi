@@ -140,6 +140,7 @@ struct AppsPage: View {
       .padding(.top, QueryShellLayout.surfaceTopInset)
     }
     .background(Color.clear)
+    .marketplaceSetupFixture { selectedCatalogEntry = $0 }
     // Esc leaves "See more", then clears the search, before the shell sees it.
     .onEscapeKey(priority: .content) {
       if viewAllSection != nil {
@@ -186,7 +187,7 @@ struct AppsPage: View {
       ExtensionDetailSheet(
         entry: entry, appProvider: appProvider, onDismiss: { selectedCatalogEntry = nil }
       )
-      .frame(width: 460, height: entry.install.needsInput ? 420 : 340)
+      .frame(width: 460, height: ExtensionDetailSheet.preferredHeight(for: entry.install))
     }
     .dismissableSheet(item: $editingSkill) { skill in
       SkillEditorSheet(appProvider: appProvider, editingSkill: skill, onDismiss: { editingSkill = nil })

@@ -17,6 +17,7 @@ import 'package:omi/gen/phone_mic_pigeon.g.dart';
 import 'package:omi/models/custom_stt_config.dart';
 import 'package:omi/env/env.dart';
 import 'package:omi/services/capture/capture_controller.dart';
+import 'package:omi/services/capture/empty_recording_notice.dart';
 import 'package:omi/services/capture/capture_seams.dart';
 import 'package:omi/services/capture/conversation_location_capture.dart';
 import 'package:omi/services/capture/scenarios/native_event_vector.dart';
@@ -27,6 +28,7 @@ import 'package:omi/services/sockets/transcription_service.dart';
 import 'package:omi/services/wals/recording_transfer_coordinator.dart';
 import 'package:omi/services/wals/sync_upload_gate.dart';
 import 'package:omi/services/wals/sync_rate_limiter.dart';
+import 'package:omi/services/wals/sync_job_poller.dart';
 import 'package:omi/services/wals/wal.dart';
 import 'package:omi/services/wals/wal_interfaces.dart';
 import 'package:omi/services/wals/wal_service.dart';
@@ -291,12 +293,16 @@ class CaptureReplayWorld {
 
   /// Runs when the controller asks the server to process the in-progress conversation.
   void Function()? onProcessInProgress;
+
+  /// When set, Process Now returns this outcome instead of a transport miss.
+  Future<InProgressProcessOutcome> Function()? processOutcome;
   int tokenRefreshCalls = 0;
   final List<String> timeline = [];
 
   /// Server-side sync-job outcomes by job id, consulted by the reconciler
   /// through the injected job-status fetcher.
   final Map<String, SyncJobFetch> jobStatuses = {};
+  final List<({String jobId, DateTime at})> jobPolls = [];
 
   final List<Map<String, Object?>> coverageEvents = [];
 
@@ -348,6 +354,11 @@ class CaptureReplayWorld {
       SharedPreferences.setMockInitialValues(initialPrefs);
     }
     await SharedPreferencesUtil.init();
+    if (firstBoot) {
+      SyncRateLimiter.instance.clear();
+      SyncRateLimiter.instance.clockForTesting = clock.now;
+      SyncJobPoller.instance.resetForTesting(clock: clock.now);
+    }
 
     if (firstBoot) {
       SttModeResolver.instance = SttModeResolver(flagReader: () => false);
@@ -377,7 +388,10 @@ class CaptureReplayWorld {
       phoneUploadGate: uploads.buildGate(),
       phoneNow: clock.now,
       phonePeriodic: scheduler.periodic,
-      phoneJobStatusFetcher: (jobId) async => jobStatuses[jobId] ?? const SyncJobFetch(SyncJobFetchOutcome.notFound),
+      phoneJobStatusFetcher: (jobId) async {
+        jobPolls.add((jobId: jobId, at: clock.now()));
+        return jobStatuses[jobId] ?? const SyncJobFetch(SyncJobFetchOutcome.notFound);
+      },
       phoneCoverageTelemetry: coverageEvents.add,
       // The replay world has no real disk-space plugin; report ample space so
       // the storage-admission gate proves capacity instead of failing closed.
@@ -411,10 +425,12 @@ class CaptureReplayWorld {
       deviceMuteWriter: deviceMuteWriter,
       deviceMuteReader: deviceMuteReader,
       omiCallState: omiCall,
-      processInProgressConversation: () async {
+      processInProgressOutcome: () async {
         processCalls++;
         onProcessInProgress?.call();
-        return null;
+        final custom = processOutcome;
+        if (custom != null) return custom();
+        return const InProgressProcessOutcome(absence: ProcessAbsence.transport);
       },
       audioCodecLoader: (deviceId) async => pendantCodec,
       microphonePermissionRequester: () async => allowMic,
@@ -566,6 +582,8 @@ class CaptureReplayWorld {
     await wal.stop();
     SttModeResolver.debugResetInstance();
     SyncRateLimiter.instance.clear();
+    SyncRateLimiter.instance.clockForTesting = null;
+    SyncJobPoller.instance.resetForTesting();
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(
       const MethodChannel('plugins.flutter.io/path_provider'),
       null,
@@ -604,7 +622,7 @@ class _ReplayCaptureController extends CaptureController {
     super.microphonePermissionRequester,
     super.conversationLocationCapture,
     super.deviceConnectionLoader,
-    super.processInProgressConversation,
+    super.processInProgressOutcome,
     super.omiCallState,
     super.calendarGapMonitor,
     super.deviceMuteWriter,
