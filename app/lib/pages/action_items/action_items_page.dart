@@ -474,7 +474,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
                     return provider.forceRefreshActionItems();
                   },
                   child: (provider.isLoading ||
-                              (_initialLoadScheduled && !provider.hasLoaded && apiPhase == ApiViewPhase.data)) &&
+                              (_initialLoadScheduled && !provider.screenLoaded && apiPhase == ApiViewPhase.data)) &&
                           provider.actionItems.isEmpty
                       ? _buildLoadingState()
                       : showTypedStatus

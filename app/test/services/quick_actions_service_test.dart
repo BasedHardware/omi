@@ -135,4 +135,52 @@ void main() {
     device.dispose();
     capture.dispose();
   });
+
+  testWidgets('a failed publication is retried and the dedupe cache restored on success', (tester) async {
+    final device = _Device();
+    final capture = _Capture();
+    final native = _QuickActions();
+    final service = QuickActionsService.forTesting(quickActions: native);
+    late BuildContext context;
+    await tester.pumpWidget(MultiProvider(
+      providers: [
+        ChangeNotifierProvider<DeviceProvider>.value(value: device),
+        ChangeNotifierProvider<CaptureProvider>.value(value: capture),
+      ],
+      child: MaterialApp(
+        locale: const Locale('en'),
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: Builder(builder: (ctx) {
+          context = ctx;
+          return const SizedBox();
+        }),
+      ),
+    ));
+    service.initialize(context);
+    expect(native.publications, hasLength(1));
+
+    // The platform rejects the first changed publication; the failure clears
+    // the dedupe cache and schedules the bounded retry.
+    final failure = Completer<void>();
+    native.nextCompletion = failure;
+    device.connected = true;
+    service.updateShortcuts(context);
+    failure.completeError(StateError('platform failed'));
+    await tester.pump();
+    expect(tester.takeException(), isStateError);
+    expect(native.publications, hasLength(2));
+
+    // The retry must run even though the failed attempt cleared the cache.
+    await tester.pump(const Duration(seconds: 5));
+    expect(native.publications, hasLength(3), reason: 'the scheduled retry must republish the failed projection');
+
+    // A successful retry restores the dedupe cache: an unchanged later update
+    // must not republish.
+    service.updateShortcuts(context);
+    expect(native.publications, hasLength(3), reason: 'a retried publication must dedupe like a first success');
+    await tester.pumpWidget(const SizedBox());
+    device.dispose();
+    capture.dispose();
+  });
 }

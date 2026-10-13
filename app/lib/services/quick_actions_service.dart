@@ -42,6 +42,10 @@ class QuickActionsService {
   final bool _isSupported;
   bool _initialized = false;
   List<(String, String)>? _publishedShortcuts;
+  // Projections whose publication failed and may still be retried. The dedupe
+  // cache (_publishedShortcuts) is cleared on failure so natural later updates
+  // republish; retries must survive that clearing, so they are tracked here.
+  final Set<List<(String, String)>> _failedShortcutProjections = {};
   static const _maxShortcutRetries = 2;
   int _shortcutRetries = 0;
   Timer? _shortcutRetryTimer;
@@ -61,6 +65,7 @@ class QuickActionsService {
   void reset() {
     _initialized = false;
     _publishedShortcuts = null;
+    _failedShortcutProjections.clear();
     _shortcutRetryTimer?.cancel();
     _shortcutRetryTimer = null;
   }
@@ -99,6 +104,7 @@ class QuickActionsService {
     final projection = items.map((item) => (item.type, item.localizedTitle)).toList();
     if (listEquals(projection, _publishedShortcuts)) return;
     _publishedShortcuts = projection;
+    _failedShortcutProjections.clear();
     _shortcutRetries = 0;
     _shortcutRetryTimer?.cancel();
     _shortcutRetryTimer = null;
@@ -109,6 +115,9 @@ class QuickActionsService {
         _publishedShortcuts = null;
       }
       // ...and schedule a bounded retry in case quiet wiring never calls back.
+      // The retry must outlive the cache clearing above: it aborts only when a
+      // newer projection has taken over publication.
+      _failedShortcutProjections.add(projection);
       _scheduleShortcutRetry(items, projection);
     });
   }
@@ -121,8 +130,19 @@ class QuickActionsService {
     _shortcutRetries++;
     _shortcutRetryTimer = Timer(const Duration(seconds: 5), () {
       _shortcutRetryTimer = null;
-      if (!listEquals(projection, _publishedShortcuts ?? const <(String, String)>[])) return;
-      _quickActions.setShortcutItems(items).catchError((Object error, StackTrace stack) {
+      // The failed publication cleared the dedupe cache, so compare against
+      // the retry-eligible set instead: abort only when a newer projection
+      // has published since (which clears the failed set).
+      if (!_failedShortcutProjections.any((failed) => listEquals(failed, projection))) return;
+      _quickActions.setShortcutItems(items).then((_) {
+        // Success: restore the dedupe cache so unchanged later updates stay
+        // free. The guard skips the restore if a newer projection took over
+        // (its publish cleared the failed set) while this retry was in flight.
+        if (_failedShortcutProjections.any((failed) => listEquals(failed, projection))) {
+          _failedShortcutProjections.clear();
+          _publishedShortcuts = projection;
+        }
+      }).catchError((Object error, StackTrace stack) {
         FlutterError.reportError(FlutterErrorDetails(exception: error, stack: stack));
         _scheduleShortcutRetry(items, projection);
       });

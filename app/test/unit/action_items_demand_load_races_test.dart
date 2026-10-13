@@ -228,5 +228,51 @@ void main() {
       expect(typed.requestedOffsets.last, 100, reason: 'preserved creates must not shift the server pagination offset');
       provider.dispose();
     });
+
+    test('a refresh observing the confirmed create retires it from the offset exclusion', () async {
+      final typed = _HeldListApi();
+      final provider = ActionItemsProvider(
+        actionItemsApi: typed,
+        createActionItemRequest: ({required description, dueAt, conversationId, completed = false}) async =>
+            _row('server-9'),
+      );
+
+      // The common path: the create settles with no fetch in flight, so only
+      // _preservedCreateIds tracks it.
+      typed.result = const ApiSuccess(ActionItemsResponse(actionItems: [], hasMore: false));
+      final load = provider.ensureLoaded(showShimmer: true);
+      await Future<void>.delayed(Duration.zero);
+      typed.resolve();
+      await load;
+      final created = provider.createActionItem(description: 'retire guard');
+      await created;
+      expect(provider.actionItems.map((item) => item.id), contains('server-9'));
+
+      // A later refresh that contains the confirmed row must mark it
+      // server-backed, even though there is nothing to preserve.
+      typed.result = ApiSuccess(
+        ActionItemsResponse(
+          actionItems: [_serverRow('server-9'), for (var i = 0; i < 100; i++) _serverRow('srv-$i')],
+          hasMore: true,
+        ),
+      );
+      final refresh = provider.fetchActionItems();
+      await Future<void>.delayed(Duration.zero);
+      typed.resolve();
+      await refresh;
+      expect(provider.actionItems.length, 101, reason: 'sanity: the observed create must not duplicate');
+
+      // With the confirmed row retired, the next page offset counts all 101
+      // server-backed rows instead of skipping one forever.
+      typed.result = const ApiSuccess(ActionItemsResponse(actionItems: [], hasMore: false));
+      final more = provider.loadMoreActionItems();
+      await Future<void>.delayed(Duration.zero);
+      typed.resolve();
+      await more;
+
+      expect(typed.requestedOffsets.last, 101,
+          reason: 'a server-observed preserved create must rejoin the pagination offset');
+      provider.dispose();
+    });
   });
 }

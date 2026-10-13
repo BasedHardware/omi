@@ -56,6 +56,14 @@ void main() {
     app.name = 'After';
     detail.setProviders(apps, conversations);
     expect(notifications, 2);
+    // The attribution row renders description and image; a catalog refresh
+    // changing only those must still notify while detail is open.
+    app.description = 'Fresh description';
+    detail.setProviders(apps, conversations);
+    expect(notifications, 3);
+    app.image = '/apps/new.png';
+    detail.setProviders(apps, conversations);
+    expect(notifications, 4);
     final selected = ServerConversation(
         id: 'selected', createdAt: DateTime(2026, 10, 13), structured: Structured('Before', 'Overview'));
     conversations.conversations = [selected];

@@ -895,6 +895,8 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
       return [
         app.id,
         app.name,
+        app.description,
+        app.getImageUrl(),
         app.status,
         app.enabled,
         app.deleted,

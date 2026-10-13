@@ -151,11 +151,15 @@ class ActionItemsProvider extends ChangeNotifier {
     List<ActionItemWithMetadata> fetched, {
     required int fetchOrdinal,
   }) {
-    if (_pendingCreates.isEmpty && _fetchShadowedCreates.isEmpty) return fetched;
     final fetchedIds = fetched.map((item) => item.id).toSet();
     // A server page observing a preserved create confirms it server-side; it
-    // now counts as server-backed for pagination.
+    // now counts as server-backed for pagination. Retirement must precede the
+    // nothing-to-preserve early return below: the common settle path (a create
+    // that landed with no fetch in flight) leaves only _preservedCreateIds
+    // populated, and skipping retirement would exclude that row from the
+    // pagination offset forever.
     _preservedCreateIds.removeWhere(fetchedIds.contains);
+    if (_pendingCreates.isEmpty && _fetchShadowedCreates.isEmpty) return fetched;
     final preserved = <ActionItemWithMetadata>[
       for (final entry in _fetchShadowedCreates.entries)
         if (entry.value.$2.contains(fetchOrdinal) && !fetchedIds.contains(entry.key)) entry.value.$1,
@@ -190,8 +194,13 @@ class ActionItemsProvider extends ChangeNotifier {
   bool get isFetching => _isFetching;
 
   /// A bounded snapshot is ready for Home widgets, or the Tasks list has loaded.
-  /// Screen initialization is tracked separately by [ensureLoaded].
   bool get hasLoaded => _initialLoadCompleted || _homeWidgetRefreshedAt != null;
+
+  /// The Tasks screen's own full initialization, separate from [hasLoaded]:
+  /// Home's bounded widget preview can complete (zero tasks) without this
+  /// screen ever running [ensureLoaded], and the screen must still shimmer
+  /// through its authoritative first load instead of flashing the empty state.
+  bool get screenLoaded => _initialLoadCompleted;
   bool get hasMore => _hasMore;
   bool get includeCompleted => _includeCompleted;
   bool get showCompletedView => _showCompletedView;
