@@ -929,6 +929,7 @@ def manual_score_routes(monkeypatch):
     from fastapi.testclient import TestClient
     import database.conversations as db
     import database.speaker_learning_jobs as learning_jobs
+    import database.voice_profiles as voice_profiles_db
     import routers.conversations as assignment_router
     import routers.speaker_labels as rejection_router
     import utils.other.endpoints as auth
@@ -937,6 +938,9 @@ def manual_score_routes(monkeypatch):
     store = StrictFirestore()
     monkeypatch.setattr(db, 'get_firestore_client', lambda: store)
     monkeypatch.setattr(db, 'db', store)
+    # Positive assignments retire ignored-voice markers through voice_profiles;
+    # keep that write on the hermetic store like test_speaker_rejections does.
+    monkeypatch.setattr(voice_profiles_db, 'get_firestore_client', lambda: store)
     monkeypatch.setattr(db, 'invalidate_people_stats_cache', lambda *a: None)
     monkeypatch.setattr(db, 'record_speaker_review', lambda *a: None)
     monkeypatch.setattr(learning_jobs, 'record_speaker_learning_job_events', lambda *a: None)
