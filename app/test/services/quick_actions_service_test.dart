@@ -183,4 +183,61 @@ void main() {
     device.dispose();
     capture.dispose();
   });
+
+  testWidgets('a superseded failed publication does not retry over a newer projection', (tester) async {
+    final device = _Device();
+    final capture = _Capture();
+    final native = _QuickActions();
+    final service = QuickActionsService.forTesting(quickActions: native);
+    late BuildContext context;
+    await tester.pumpWidget(MultiProvider(
+      providers: [
+        ChangeNotifierProvider<DeviceProvider>.value(value: device),
+        ChangeNotifierProvider<CaptureProvider>.value(value: capture),
+      ],
+      child: MaterialApp(
+        locale: const Locale('en'),
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: Builder(builder: (ctx) {
+          context = ctx;
+          return const SizedBox();
+        }),
+      ),
+    ));
+    service.initialize(context);
+    expect(native.publications, hasLength(1));
+
+    // Publication A (connected) starts and its platform call stays pending.
+    final failureA = Completer<void>();
+    native.nextCompletion = failureA;
+    device.connected = true;
+    service.updateShortcuts(context);
+    expect(native.publications, hasLength(2));
+
+    // While A is pending, state changes again and publication B (disconnected)
+    // succeeds and takes over the dedupe cache.
+    native.nextCompletion = null;
+    device.connected = false;
+    service.updateShortcuts(context);
+    expect(native.publications, hasLength(3));
+    expect(native.publications.last.any((s) => s.type == 'connect_device'), isTrue);
+
+    // A's platform call now fails. The failure is superseded: it must not
+    // re-arm A's obsolete projection for retry.
+    failureA.completeError(StateError('platform failed late'));
+    await tester.pump();
+    expect(tester.takeException(), isStateError);
+
+    await tester.pump(const Duration(seconds: 5));
+    expect(native.publications, hasLength(3),
+        reason: 'a superseded failure must not retry its obsolete projection over the published one');
+
+    // The dedupe cache must still hold B's projection, not be rolled back to A.
+    service.updateShortcuts(context);
+    expect(native.publications, hasLength(3), reason: 'the superseding projection must keep deduping later updates');
+    await tester.pumpWidget(const SizedBox());
+    device.dispose();
+    capture.dispose();
+  });
 }

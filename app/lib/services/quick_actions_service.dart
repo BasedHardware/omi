@@ -110,10 +110,16 @@ class QuickActionsService {
     _shortcutRetryTimer = null;
     _quickActions.setShortcutItems(items).catchError((Object error, StackTrace stack) {
       FlutterError.reportError(FlutterErrorDetails(exception: error, stack: stack));
-      // Keep the dedupe cache clear so any natural later update republishes...
-      if (listEquals(projection, _publishedShortcuts ?? const <(String, String)>[])) {
-        _publishedShortcuts = null;
+      // A newer projection took over publication while this call was in
+      // flight: the failure is superseded. Re-arming the obsolete projection
+      // here would let its retry overwrite the current shortcuts with stale
+      // connect/mute actions, so ignore it entirely.
+      if (!listEquals(projection, _publishedShortcuts ?? const <(String, String)>[])) {
+        return;
       }
+      // This call still owns publication. Keep the dedupe cache clear so any
+      // natural later update republishes...
+      _publishedShortcuts = null;
       // ...and schedule a bounded retry in case quiet wiring never calls back.
       // The retry must outlive the cache clearing above: it aborts only when a
       // newer projection has taken over publication.
