@@ -1778,6 +1778,9 @@ class AppLocalizationsCa extends AppLocalizations {
       'Sembla que hi ha diversos parlants a l\'enregistrament. Assegureu-vos que esteu en un lloc tranquil i torneu-ho a provar.';
 
   @override
+  String get discardedOnlyRecording => 'That recording was too short or empty to keep.';
+
+  @override
   String get tooShortDesc => 'No s\'ha detectat prou veu. Parleu més i torneu-ho a provar.';
 
   @override

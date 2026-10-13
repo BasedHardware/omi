@@ -545,6 +545,7 @@
     "connectionErrorDesc": "Kunne ikke koble til serveren. Sjekk internettforbindelsen din og prøv igjen.",
     "invalidRecordingMultipleSpeakers": "Ugyldig opptak oppdaget",
     "multipleSpeakersDesc": "Det ser ut til å være flere talere i opptaket. Pass på at du er på et stille sted og prøv igjen.",
+    "discardedOnlyRecording": "That recording was too short or empty to keep.",
     "tooShortDesc": "Det er ikke nok tale oppdaget. Snakk mer og prøv igjen.",
     "invalidRecordingDesc": "Pass på at du snakker i minst 5 sekunder og ikke mer enn 90.",
     "areYouThere": "Er du der?",

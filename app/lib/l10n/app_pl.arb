@@ -545,6 +545,7 @@
     "connectionErrorDesc": "Nie udało się połączyć z serwerem. Sprawdź połączenie internetowe i spróbuj ponownie.",
     "invalidRecordingMultipleSpeakers": "Wykryto nieprawidłowe nagranie",
     "multipleSpeakersDesc": "Wygląda na to, że w nagraniu jest wielu mówców. Upewnij się, że jesteś w cichym miejscu i spróbuj ponownie.",
+    "discardedOnlyRecording": "That recording was too short or empty to keep.",
     "tooShortDesc": "Nie wykryto wystarczającej ilości mowy. Mów więcej i spróbuj ponownie.",
     "invalidRecordingDesc": "Upewnij się, że mówisz przez co najmniej 5 sekund i nie więcej niż 90.",
     "areYouThere": "Jesteś tam?",

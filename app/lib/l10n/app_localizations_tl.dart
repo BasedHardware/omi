@@ -1777,6 +1777,9 @@ class AppLocalizationsTl extends AppLocalizations {
       'Mukhang may maraming speakers sa recording. Mangyaring masiguro na ikaw ay nasa tahimik na lugar at subukan muli.';
 
   @override
+  String get discardedOnlyRecording => 'That recording was too short or empty to keep.';
+
+  @override
   String get tooShortDesc => 'Walang sapat na speech na nadetect. Mangyaring magsalita nang higit pa at subukan muli.';
 
   @override

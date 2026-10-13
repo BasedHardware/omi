@@ -545,6 +545,7 @@
     "connectionErrorDesc": "Неуспешна връзка със сървъра. Моля, проверете интернет връзката си и опитайте отново.",
     "invalidRecordingMultipleSpeakers": "Открит е невалиден запис",
     "multipleSpeakersDesc": "Изглежда има множество говорители в записа. Моля, уверете се, че сте на тихо място и опитайте отново.",
+    "discardedOnlyRecording": "That recording was too short or empty to keep.",
     "tooShortDesc": "Не е открита достатъчно реч. Моля, говорете повече и опитайте отново.",
     "invalidRecordingDesc": "Моля, уверете се, че говорите поне 5 секунди и не повече от 90.",
     "areYouThere": "Там ли сте?",

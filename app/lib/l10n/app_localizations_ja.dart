@@ -1737,6 +1737,9 @@ class AppLocalizationsJa extends AppLocalizations {
   String get multipleSpeakersDesc => '録音に複数の話者がいるようです。静かな場所にいることを確認して、もう一度お試しください。';
 
   @override
+  String get discardedOnlyRecording => 'That recording was too short or empty to keep.';
+
+  @override
   String get tooShortDesc => '音声が十分に検出されませんでした。もっと話してからもう一度お試しください。';
 
   @override

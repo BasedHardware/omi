@@ -545,6 +545,7 @@
     "connectionErrorDesc": "Neizdevās izveidot savienojumu ar serveri. Lūdzu, pārbaudiet interneta savienojumu un mēģiniet vēlreiz.",
     "invalidRecordingMultipleSpeakers": "Atklāts nederīgs ieraksts",
     "multipleSpeakersDesc": "Šķiet, ka ierakstā ir vairāki runātāji. Lūdzu, pārliecinieties, ka atrodaties klusā vietā, un mēģiniet vēlreiz.",
+    "discardedOnlyRecording": "That recording was too short or empty to keep.",
     "tooShortDesc": "Nav atklāts pietiekami daudz runas. Lūdzu, runājiet vairāk un mēģiniet vēlreiz.",
     "invalidRecordingDesc": "Lūdzu, pārliecinieties, ka runājat vismaz 5 sekundes un ne vairāk kā 90.",
     "areYouThere": "Vai jūs esat tur?",

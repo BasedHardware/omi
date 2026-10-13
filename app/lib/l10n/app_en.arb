@@ -1707,7 +1707,11 @@
     "@multipleSpeakersDesc": {
         "description": "Error description for multiple speakers"
     },
-    "tooShortDesc": "There is not enough speech detected. Please speak more and try again.",
+    "discardedOnlyRecording": "That recording was too short or empty to keep.",
+    "@discardedOnlyRecording": {
+        "description": "Shown once when the only conversation was discarded as too short or empty."
+    },
+    "tooShortDesc": "Not enough speech to make a conversation. Try talking for 30 seconds or more.",
     "@tooShortDesc": {
         "description": "Error description for recording being too short"
     },

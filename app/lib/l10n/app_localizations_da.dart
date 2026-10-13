@@ -1757,6 +1757,9 @@ class AppLocalizationsDa extends AppLocalizations {
   String get multipleSpeakersDesc => 'Optagelsen indeholder flere talere';
 
   @override
+  String get discardedOnlyRecording => 'That recording was too short or empty to keep.';
+
+  @override
   String get tooShortDesc => 'Optagelsen er for kort';
 
   @override

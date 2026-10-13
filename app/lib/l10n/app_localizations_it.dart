@@ -1774,6 +1774,9 @@ class AppLocalizationsIt extends AppLocalizations {
       'Sembra che ci siano più persone che parlano nella registrazione. Assicurati di essere in un luogo silenzioso e riprova.';
 
   @override
+  String get discardedOnlyRecording => 'That recording was too short or empty to keep.';
+
+  @override
   String get tooShortDesc => 'Non è stato rilevato abbastanza parlato. Parla di più e riprova.';
 
   @override

@@ -545,6 +545,7 @@
     "connectionErrorDesc": "サーバーへの接続に失敗しました。インターネット接続を確認してもう一度お試しください。",
     "invalidRecordingMultipleSpeakers": "無効な録音が検出されました",
     "multipleSpeakersDesc": "録音に複数の話者がいるようです。静かな場所にいることを確認して、もう一度お試しください。",
+    "discardedOnlyRecording": "That recording was too short or empty to keep.",
     "tooShortDesc": "音声が十分に検出されませんでした。もっと話してからもう一度お試しください。",
     "invalidRecordingDesc": "5秒以上、90秒以内で話してください。",
     "areYouThere": "いらっしゃいますか？",

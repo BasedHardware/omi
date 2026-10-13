@@ -540,6 +540,7 @@
     "connectionErrorDesc": "无法连接到服务器。",
     "invalidRecordingMultipleSpeakers": "无效录音",
     "multipleSpeakersDesc": "似乎有多人说话。",
+    "discardedOnlyRecording": "That recording was too short or empty to keep.",
     "tooShortDesc": "未检测到足够的语音。",
     "invalidRecordingDesc": "请确保说话时间至少 5 秒。",
     "areYouThere": "您在吗？",

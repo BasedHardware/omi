@@ -1772,6 +1772,9 @@ class AppLocalizationsBg extends AppLocalizations {
       'Изглежда има множество говорители в записа. Моля, уверете се, че сте на тихо място и опитайте отново.';
 
   @override
+  String get discardedOnlyRecording => 'That recording was too short or empty to keep.';
+
+  @override
   String get tooShortDesc => 'Не е открита достатъчно реч. Моля, говорете повече и опитайте отново.';
 
   @override

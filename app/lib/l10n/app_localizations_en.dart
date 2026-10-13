@@ -1762,7 +1762,10 @@ class AppLocalizationsEn extends AppLocalizations {
       'It seems like there are multiple speakers in the recording. Please make sure you are in a quiet location and try again.';
 
   @override
-  String get tooShortDesc => 'There is not enough speech detected. Please speak more and try again.';
+  String get discardedOnlyRecording => 'That recording was too short or empty to keep.';
+
+  @override
+  String get tooShortDesc => 'Not enough speech to make a conversation. Try talking for 30 seconds or more.';
 
   @override
   String get invalidRecordingDesc => 'Please make sure you speak for at least 5 seconds and not more than 90.';
