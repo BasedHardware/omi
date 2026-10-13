@@ -220,11 +220,10 @@ environments:
           max_doublings: 5
           max_retry: 0s
           min_backoff: 5s
-        # 660s full drain, 690s backend HTTP bound, plus Scheduler transport headroom.
-        attempt_deadline: 720s
+        # 1680s full drain, 1710s backend HTTP bound, plus Scheduler transport headroom.
+        attempt_deadline: 1740s
         owner: backend/docs/runbooks/dream-agent.md
       - name: candidate-integration-sweep
-        lifecycle: planned
         # Prod only. Dev's data plane is production Firestore, so this job is
         # not declared for based-hardware-dev at all.
         region: us-central1
