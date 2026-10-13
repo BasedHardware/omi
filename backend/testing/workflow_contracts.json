@@ -344,8 +344,8 @@
         "no_large_tuple_results"
       ],
       "invariants": [
-        "repair enqueue is idempotent",
-        "repair processing uses injected stores and has retry/dead-letter accounting"
+        "projection metadata preserves tombstone state",
+        "projection reconciliation identifies missing and stale vectors"
       ]
     },
     {

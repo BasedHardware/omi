@@ -98,6 +98,13 @@ class _UnlockDoc:
 
 
 class _UnlockQuery:
+    def select(self, fields):
+        assert fields == []
+        return self
+
+    def limit(self, count):
+        return _UnlockQuery(self._docs[:count])
+
     def __init__(self, docs):
         self._docs = docs
 
@@ -165,3 +172,28 @@ def test_unlock_all_memories_updates_legacy_and_canonical_lock_fields(monkeypatc
     assert ("users/u1/memory_items", "promotion.is_locked", "==", True) in fake.filters
     assert ("legacy-locked", {"is_locked": False}) in fake.updates
     assert ("canonical-locked", {"promotion.is_locked": False}) in fake.updates
+
+
+def test_unlock_memories_bounds_each_legacy_and_canonical_page(monkeypatch):
+    fake = _UnlockDb()
+    fake.docs_by_collection = {
+        "users/u1/memories": [_UnlockDoc(f"legacy-{i}") for i in range(101)],
+        "users/u1/memory_items": [_UnlockDoc(f"canonical-{i}") for i in range(101)],
+    }
+    monkeypatch.setattr(memories, "external_write_fence", lambda *args, **kwargs: nullcontext())
+    assert memories.unlock_all_memories("u1", firestore_client=fake, limit=100) == 200
+    assert len(fake.updates) == 200
+
+
+def test_unlock_action_items_bounds_updates_and_invalidates_list(monkeypatch):
+    import database.action_items as action_items
+
+    fake = _UnlockDb()
+    fake.docs_by_collection = {'users/u1/action_items': [_UnlockDoc(f'task-{i}') for i in range(101)]}
+    invalidations = []
+    monkeypatch.setattr(action_items, 'db', fake)
+    monkeypatch.setattr(action_items, 'bump_action_items_list_version', lambda uid: invalidations.append(uid))
+    assert action_items.unlock_all_action_items('u1', limit=100) == 100
+    assert len(fake.updates) == 100
+    assert all(update['is_locked'] is False and update['updated_at'] for _, update in fake.updates)
+    assert invalidations == ['u1']

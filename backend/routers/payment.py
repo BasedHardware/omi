@@ -955,7 +955,7 @@ async def _handle_stripe_event(event: dict, background_tasks: BackgroundTasks | 
                 if checkout_decision.outcome == 'duplicate_checkout':
                     logger.warning(f"Duplicate webhook event for existing subscription: {session.get('subscription')}")
                     return {"status": "success", "message": "Subscription already processed."}
-                else:
+                elif 'cancel_old_subscription' in checkout_decision.effects:
                     # Cancel the old subscription to prevent double-charging
                     old_sub_id = existing_subscription.stripe_subscription_id
                     logger.info(
@@ -1099,7 +1099,8 @@ async def _handle_stripe_event(event: dict, background_tasks: BackgroundTasks | 
                         billing_owner_confirmed,
                     ),
                 )
-                assert decision.next_state is not None
+                if decision.next_state is None:
+                    raise ValueError('Subscription transition requires a projected state')
                 new_subscription = decision.next_state
                 adopted_active_paid = decision.adopted_active_paid
                 try:
@@ -1191,7 +1192,8 @@ async def _handle_stripe_event(event: dict, background_tasks: BackgroundTasks | 
                                     schedule_status=schedule_obj.get('status'),
                                 ),
                             )
-                            assert decision.next_state is not None
+                            if decision.next_state is None:
+                                raise ValueError('Schedule transition requires a projected state')
                             new_subscription = decision.next_state
                             await run_blocking(
                                 db_executor, users_db.update_user_subscription, uid, new_subscription.model_dump()
@@ -1235,7 +1237,8 @@ async def _handle_stripe_event(event: dict, background_tasks: BackgroundTasks | 
                                     schedule_status=schedule_obj.get('status'),
                                 ),
                             )
-                            assert decision.next_state is not None
+                            if decision.next_state is None:
+                                raise ValueError('Schedule transition requires a projected state')
                             new_subscription = decision.next_state
                             await run_blocking(
                                 db_executor, users_db.update_user_subscription, uid, new_subscription.model_dump()
