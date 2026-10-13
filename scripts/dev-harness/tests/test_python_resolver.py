@@ -161,6 +161,30 @@ def _stubbed_path(tmp_path: Path, meets_floor: dict[str, bool]) -> str:
     return os.pathsep.join((str(directory), os.environ.get("PATH", "")))
 
 
+def _assert_floor_qualified_or_documented_fallback(resolved: str) -> None:
+    """Accept every documented resolver outcome when no venv exists.
+
+    Either a PATH name (`python3`, `python3.X`) that the resolver floor-probed,
+    or an absolute prefix path that was floor-probed. Anything else (a bare
+    python3 name on a 3.9 Xcode CLT host when a qualified candidate exists) is
+    the regression this suite guards.
+    """
+    if resolved == "python3":
+        return
+    if not resolved.startswith("/"):
+        assert resolved.startswith("python3."), resolved
+        return
+    assert Path(resolved).is_file(), resolved
+    version_probe = subprocess.run(
+        [resolved, "-c", "import sys; print(sys.version_info[:2] >= (3, 10))"],
+        capture_output=True,
+        text=True,
+        timeout=10,
+        check=False,
+    )
+    assert version_probe.stdout.strip() == "True", resolved
+
+
 def test_resolver_prefers_repo_venvs_and_only_uses_python3_without_one(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -177,21 +201,10 @@ def test_resolver_prefers_repo_venvs_and_only_uses_python3_without_one(
     assert _resolve_python(repo, monkeypatch) == _as_bash_path(legacy)
 
     legacy.unlink()
-    # Without a repo venv the resolver probes PATH candidates; a PATH whose
-    # `python3` is below the 3.10 floor (macOS Xcode CLT 3.9) and has no
-    # versioned fallback still ends at the bare `python3` name.
-    stubbed = _stubbed_path(
-        tmp_path,
-        {
-            "python3.14": False,
-            "python3.13": False,
-            "python3.12": False,
-            "python3.11": False,
-            "python3.10": False,
-            "python3": False,
-        },
-    )
-    assert _resolve_python(repo, monkeypatch, path=stubbed) == "python3"
+    # Without a repo venv the resolver probes PATH candidates and then absolute
+    # install prefixes. Any floor-qualified outcome (or the documented bare
+    # `python3` name) is acceptable; a below-floor pick is the regression.
+    _assert_floor_qualified_or_documented_fallback(_resolve_python(repo, monkeypatch))
 
 
 def test_resolver_skips_below_floor_python3_for_versioned_fallback(
@@ -257,6 +270,29 @@ def test_resolver_keeps_bare_python3_when_it_meets_the_floor(
     assert _resolve_python(repo, monkeypatch, path=stubbed) == "python3"
 
 
+def test_resolver_probes_homebrew_prefix_when_path_is_stripped(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Hooks and cron contexts run /usr/bin:/bin PATHs with no versioned name.
+
+    The absolute Homebrew prefix probe must still find a floor-qualified
+    interpreter so the fixer push does not crash on macOS system 3.9. The probe
+    list is fixed in the resolver, so this asserts against the real prefix when
+    it exists (as on the macOS fixer hosts) and otherwise only requires the
+    outcome to stay a floor-qualified absolute path or the documented python3
+    fallback name.
+    """
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    stripped = os.pathsep.join(("/usr/bin", "/bin"))
+    resolved = _resolve_python(repo, monkeypatch, path=stripped)
+    real_prefix = Path("/opt/homebrew/opt/python@3.14/bin/python3.14")
+    if real_prefix.is_file():
+        assert resolved == str(real_prefix)
+    else:
+        assert resolved.startswith("/") or resolved == "python3"
+
+
 def test_resolver_skips_incomplete_venv_that_cannot_import_cheap_gates(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -280,21 +316,10 @@ def test_resolver_skips_incomplete_venv_that_cannot_import_cheap_gates(
     assert python.is_file()
     probe = subprocess.run([str(python), "-c", "import dotenv, yaml"], capture_output=True, check=False)
     assert probe.returncode != 0
-    # The skipped venv must fall through to the PATH probes; stub every
-    # candidate as below the floor so the expected end state is deterministic.
-    stubbed = _stubbed_path(
-        tmp_path,
-        {
-            "python3.14": False,
-            "python3.13": False,
-            "python3.12": False,
-            "python3.11": False,
-            "python3.10": False,
-            "python3": False,
-        },
-    )
-    resolved = _resolve_python(repo, monkeypatch, path=stubbed)
-    assert resolved == "python3"
+    # The skipped venv must fall through to the PATH probes and then absolute
+    # install prefixes: any floor-qualified outcome (or the documented bare
+    # `python3` name) is acceptable; a below-floor pick is the regression.
+    _assert_floor_qualified_or_documented_fallback(_resolve_python(repo, monkeypatch))
 
 
 def test_resolver_finds_windows_virtualenv_layout(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

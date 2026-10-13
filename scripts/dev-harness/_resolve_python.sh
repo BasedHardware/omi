@@ -83,6 +83,33 @@ dev_harness_python() {
     fi
   done
 
+  # Hooks and cron contexts often run a stripped PATH (/usr/bin:/bin) where no
+  # versioned name is reachable even though Homebrew's interpreters exist.
+  # Absolute prefixes only: still floor-probed, still overridden by PYTHON=.
+  local prefix_bin prefix version
+  for prefix_bin in \
+    /opt/homebrew/opt/python@3.14/bin \
+    /opt/homebrew/opt/python@3.13/bin \
+    /opt/homebrew/opt/python@3.12/bin \
+    /opt/homebrew/opt/python@3.11/bin \
+    /opt/homebrew/opt/python@3.10/bin \
+    /opt/homebrew/bin \
+    /usr/local/opt/python@3.14/bin \
+    /usr/local/opt/python@3.13/bin \
+    /usr/local/opt/python@3.12/bin \
+    /usr/local/opt/python@3.11/bin \
+    /usr/local/opt/python@3.10/bin \
+    /usr/local/bin; do
+    [ -d "$prefix_bin" ] || continue
+    for version in 3.14 3.13 3.12 3.11 3.10; do
+      candidate="$prefix_bin/python$version"
+      if dev_harness_python_floor_ok "$candidate"; then
+        printf '%s\n' "$candidate"
+        return
+      fi
+    done
+  done
+
   printf '%s\n' "python3"
 }
 
