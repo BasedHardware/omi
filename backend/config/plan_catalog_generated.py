@@ -25,8 +25,8 @@ WIRE_PLAN_ALIASES: Final[dict[str, PlanType]] = {
     'pro': PlanType.architect,
 }
 
-CATALOG_SHA256: Final = 'f32e383c33fd49df6610373101cb3ceb2c013bf53560f6b2d3a0d2d263a642e5'
-CATALOG_REVISION: Final = 6
+CATALOG_SHA256: Final = '4782b15081e10eaa8ef165e8c8e22fd7989b17c2f72f4a1eeb994bb9f9686199'
+CATALOG_REVISION: Final = 7
 CATALOG_AUTHORITY: Final = {'plan_identity': 'catalog',
  'price_identity': 'repository_ledger',
  'price_amount': 'stripe_live',
@@ -41,6 +41,42 @@ PROACTIVITY_V2_BUDGET: Final[dict[str, Any]] = {'fraction_basis_points': 1000,
                              'unlimited_v2': 2999,
                              'unlimited': 2000,
                              'plus': 2000}}
+ENTITLEMENT_VERSIONS: Final = {'legacy': {'budget': None},
+ 'ladder_v1': {'rate_card_version': 'v1',
+               'unit_usd_micros': 1000,
+               'monthly_budgets': {'basic': {'kind': 'rate_card_mix',
+                                             'speech_seconds': 18000,
+                                             'chat_messages': 30,
+                                             'chat_tier': 'standard'},
+                                   'plus': {'kind': 'units', 'value': 16360},
+                                   'operator': {'kind': 'units', 'value': 44090},
+                                   'architect': {'kind': 'units', 'value': 189463}}}}
+LADDER_V1_STRIPE_PRICES: Final = []
+RECOGNIZED_STRIPE_ENTITLEMENT_VERSIONS: Final = {'price_1RrxXL1F8wnoWYvwIddzR902': 'legacy',
+ 'price_1RrxXL1F8wnoWYvw3kDbWmjs': 'legacy',
+ 'price_1RtJPm1F8wnoWYvwhVJ38kLb': 'legacy',
+ 'price_1RtJQ71F8wnoWYvwKMPaGlGY': 'legacy',
+ 'price_1TNIHd1F8wnoWYvwkIrekcQZ': 'legacy',
+ 'price_1TNIHd1F8wnoWYvwlKywJ8TO': 'legacy',
+ 'price_1RrFym1F8wnoWYvwQgIFhRWD': 'legacy',
+ 'price_1RrG6k1F8wnoWYvwORsU26Mr': 'legacy',
+ 'price_1TLFXK1F8wnoWYvwG1TaUkZ3': 'legacy',
+ 'price_1TN7s21F8wnoWYvwG6JuEFm6': 'legacy',
+ 'price_1TN7sF1F8wnoWYvwd0QaLZNA': 'legacy',
+ 'price_1TAfBB1F8wnoWYvw8XBFM1dX': 'legacy',
+ 'price_1TLFac1F8wnoWYvwtPxZhtzE': 'legacy',
+ 'price_1TN7jS1F8wnoWYvwM5GqfxDw': 'legacy',
+ 'price_1TN7jo1F8wnoWYvw6Xu1zAtC': 'legacy',
+ 'price_1TMxVM1F8wnoWYvw9uaoYX7V': 'legacy',
+ 'price_1TMxVM1F8wnoWYvwNfXdF6LW': 'legacy',
+ 'price_1TuH6z1F8wnoWYvw7Siv61SX': 'legacy',
+ 'price_1TuHCw1F8wnoWYvwZvKu86sI': 'legacy',
+ 'price_1TuIa81F8wnoWYvw0iX0j5M8': 'legacy',
+ 'price_1TuIap1F8wnoWYvwHWq0EvNU': 'legacy',
+ 'price_1ULq501F8wnoWYvwwN56CHzO': 'legacy',
+ 'price_1ULq5e1F8wnoWYvwQT8XQ4Uw': 'legacy',
+ 'price_1ULq6b1F8wnoWYvwtchjjNqq': 'legacy',
+ 'price_1ULq7H1F8wnoWYvwC1poOtd5': 'legacy'}
 MEASUREMENT_CONTRACTS: Final = {'transcription': {'usage_status': 'complete',
                    'usage_source': 'backend/database/user_usage.py:hourly_usage.plan_usage.<plan_id>.transcription_seconds',
                    'cost_status': 'missing',
