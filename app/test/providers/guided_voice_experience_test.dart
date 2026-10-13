@@ -181,6 +181,9 @@ void main() {
     expect(flow.payoffSource, 'chat');
     expect(io.chatFacts, ['I build bicycles.']);
     expect(flow.payoffAnswer, contains('bicycle project'));
+    await flow.saveAll();
+    expect(flow.stage, IntroductionStage.payoff, reason: 'a stale second Save must not replace the payoff');
+    expect(io.remembered, ['I build bicycles.']);
     final failed = ExperienceIO()..chatFails = true;
     final other = GuidedVoiceController(failed);
     addTearDown(other.dispose);

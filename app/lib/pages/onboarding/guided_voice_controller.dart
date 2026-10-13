@@ -483,7 +483,7 @@ class GuidedVoiceController extends ChangeNotifier {
   }
 
   Future<void> saveAll() async {
-    if (busy || _disposed || stage == IntroductionStage.done) return;
+    if (busy || _disposed || stage == IntroductionStage.done || stage == IntroductionStage.payoff) return;
     markStarted();
     _saveAttempts++;
     PlatformManager.instance.analytics.guidedIntroSaveSubmitted(
