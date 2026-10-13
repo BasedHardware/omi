@@ -57,11 +57,11 @@ void main() {
     );
   });
 
-  test('native quiet scan returns fold into the same closed reasons', () {
+  test('native quiet scan returns stay distinct from radio-off', () {
     expect(pairingBlockFromNativeScan('nearby_devices_denied'), DevicePairingBlockedReason.nearbyDevicesDenied);
     expect(pairingBlockFromNativeScan('bluetooth_off'), DevicePairingBlockedReason.bluetoothOff);
-    expect(pairingBlockFromNativeScan('no_adapter'), DevicePairingBlockedReason.bluetoothOff);
-    expect(pairingBlockFromNativeScan('scanner_unavailable'), DevicePairingBlockedReason.bluetoothOff);
+    expect(pairingBlockFromNativeScan('no_adapter'), DevicePairingBlockedReason.noAdapter);
+    expect(pairingBlockFromNativeScan('scanner_unavailable'), DevicePairingBlockedReason.scannerUnavailable);
     expect(pairingBlockFromNativeScan('something_else'), isNull);
   });
 

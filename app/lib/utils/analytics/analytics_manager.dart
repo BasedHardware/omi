@@ -796,11 +796,13 @@ class AnalyticsManager {
     required OnboardingPermissionResultPermission permission,
     required bool granted,
     required bool permanentlyDenied,
+    required bool servicesDisabled,
   }) =>
       const TypedEvents().emit(OnboardingPermissionResult(
         permission: permission,
         granted: granted,
         permanentlyDenied: permanentlyDenied,
+        servicesDisabled: servicesDisabled,
       ));
 
   void devicePairingBlocked({

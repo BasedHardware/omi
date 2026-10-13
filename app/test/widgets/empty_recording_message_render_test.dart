@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 import 'dart:ui' as ui;
 
 import 'package:flutter/foundation.dart';
@@ -36,16 +37,7 @@ void main() {
 
         const evidence = String.fromEnvironment('OMI_EMPTY_RECORDING_UI_EVIDENCE_DIR');
         if (evidence.isNotEmpty) {
-          await tester.runAsync(() async {
-            final fonts = jsonDecode(await rootBundle.loadString('FontManifest.json')) as List<dynamic>;
-            for (final entry in fonts) {
-              final loader = FontLoader(entry['family'] as String);
-              for (final font in entry['fonts'] as List<dynamic>) {
-                loader.addFont(rootBundle.load(font['asset'] as String));
-              }
-              await loader.load();
-            }
-          });
+          await tester.runAsync(_loadEvidenceFonts);
         }
 
         const boundaryKey = ValueKey('empty-recording-evidence');
@@ -93,4 +85,50 @@ void main() {
       });
     }
   }
+}
+
+Future<void> _loadEvidenceFonts() async {
+  final fonts = jsonDecode(await rootBundle.loadString('FontManifest.json')) as List<dynamic>;
+  final sfAssets = <String>{};
+  for (final entry in fonts) {
+    final loader = FontLoader(entry['family'] as String);
+    for (final font in entry['fonts'] as List<dynamic>) {
+      final asset = font['asset'] as String;
+      if (asset.contains('SFPRODISPLAY')) sfAssets.add(asset);
+      loader.addFont(rootBundle.load(asset));
+    }
+    await loader.load();
+  }
+  for (final family in const [
+    'Roboto',
+    'CupertinoSystemText',
+    'CupertinoSystemDisplay',
+    '.SF UI Text',
+    '.SF UI Display',
+    'FlutterTest',
+  ]) {
+    final loader = FontLoader(family);
+    for (final asset in sfAssets) {
+      loader.addFont(rootBundle.load(asset));
+    }
+    await loader.load();
+  }
+  final icons = _materialIconsFont();
+  final bytes = await icons.readAsBytes();
+  final iconLoader = FontLoader('MaterialIcons')
+    ..addFont(Future.value(ByteData.sublistView(Uint8List.fromList(bytes))));
+  await iconLoader.load();
+}
+
+File _materialIconsFont() {
+  var dir = File(Platform.resolvedExecutable).absolute.parent;
+  for (var i = 0; i < 10; i++) {
+    final candidate = File('${dir.path}/artifacts/material_fonts/MaterialIcons-Regular.otf');
+    if (candidate.existsSync()) return candidate;
+    final direct = File('${dir.path}/material_fonts/MaterialIcons-Regular.otf');
+    if (direct.existsSync()) return direct;
+    if (dir.path == dir.parent.path) break;
+    dir = dir.parent;
+  }
+  throw StateError('MaterialIcons-Regular.otf not found above ${Platform.resolvedExecutable}');
 }

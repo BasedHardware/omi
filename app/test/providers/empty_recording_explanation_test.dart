@@ -28,11 +28,11 @@ void main() {
     final provider = ConversationProvider(isSignedIn: () => false);
     addTearDown(provider.dispose);
 
-    expect(provider.claimDiscardedOnlyExplanation(), isFalse);
+    expect(provider.claimDiscardedOnlyExplanation(), DiscardedOnlyClaim.notDiscardedOnly);
     await provider.addConversation(row('gone', discarded: true));
-    expect(provider.claimDiscardedOnlyExplanation(), isTrue);
+    expect(provider.claimDiscardedOnlyExplanation(), DiscardedOnlyClaim.shown);
     expect(provider.homeEmptyExplanation, HomeEmptyExplanation.discardedOnly);
-    expect(provider.claimDiscardedOnlyExplanation(), isFalse);
+    expect(provider.claimDiscardedOnlyExplanation(), DiscardedOnlyClaim.alreadyShown);
 
     await provider.addConversation(row('kept', discarded: false));
     provider.showEmptyRecordingExplanation();
@@ -46,5 +46,7 @@ void main() {
     addTearDown(provider.dispose);
     provider.showEmptyRecordingExplanation();
     expect(provider.homeEmptyExplanation, HomeEmptyExplanation.tooShort);
+    provider.upsertConversation(row('kept', discarded: false));
+    expect(provider.homeEmptyExplanation, HomeEmptyExplanation.none);
   });
 }

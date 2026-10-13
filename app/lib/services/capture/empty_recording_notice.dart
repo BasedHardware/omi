@@ -34,11 +34,14 @@ class RecordingCompletionFacts {
 /// never became a conversation the user can open.
 enum HomeEmptyExplanation { none, tooShort, discardedOnly }
 
-const int shortPhoneRecordingSeconds = 30;
+/// First announcement, a later capture of the same discarded-only list, or
+/// a list that is not discarded-only.
+enum DiscardedOnlyClaim { shown, alreadyShown, notDiscardedOnly }
 
-RecordingSurface recordingSurfaceForSource(String? raw) {
+/// Telemetry sources are `phone_mic_*` and `pendant_*`. Watch is not one of
+/// those strings; [recordingSurfaceForSession] reads it from the device.
+RecordingSurface recordingSurfaceForTelemetry(String? raw) {
   final value = (raw ?? '').toLowerCase();
-  if (value.contains('watch')) return RecordingSurface.watch;
   if (value == 'phone' || value.startsWith('phone')) return RecordingSurface.phone;
   return RecordingSurface.omi;
 }
@@ -51,33 +54,16 @@ RecordingSurface recordingSurfaceForConversation(ConversationSource? source) {
   };
 }
 
-/// A missing process body. A 404 and a 200 without a conversation are the
-/// empty-delete path. A missing HTTP response is [EmptyRecordingReason.nullResult].
-EmptyRecordingReason? reasonForMissingConversation({
-  required bool hasResponse,
-  required bool hasConversation,
-  ProcessAbsence? absence,
+/// Prefer the conversation or the session device. The telemetry string is only
+/// the phone-versus-pendant fallback when neither source is known.
+RecordingSurface recordingSurfaceForSession({
+  ConversationSource? conversationSource,
+  ConversationSource? deviceSource,
+  String? telemetrySource,
 }) {
-  if (hasConversation) return null;
-  if (hasResponse) return EmptyRecordingReason.emptyDeleted;
-  if (absence == ProcessAbsence.notFound || absence == ProcessAbsence.emptyBody) {
-    return EmptyRecordingReason.emptyDeleted;
-  }
-  return EmptyRecordingReason.nullResult;
-}
-
-/// Immediate explanation for a phone stop that never observed speech and
-/// stayed under 30 seconds. Pendant and watch stops wait for a process result
-/// so a late transcript is not described as "too short".
-bool shouldExplainShortPhoneStop({
-  required RecordingSurface surface,
-  required int durationSeconds,
-  required bool transcriptObserved,
-  required bool conversationDelivered,
-}) {
-  if (conversationDelivered || transcriptObserved) return false;
-  if (surface != RecordingSurface.phone) return false;
-  return durationSeconds < shortPhoneRecordingSeconds;
+  final classified = conversationSource ?? deviceSource;
+  if (classified != null) return recordingSurfaceForConversation(classified);
+  return recordingSurfaceForTelemetry(telemetrySource);
 }
 
 /// True when every known conversation was discarded, so Home would otherwise

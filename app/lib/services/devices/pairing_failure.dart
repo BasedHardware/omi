@@ -1,12 +1,15 @@
 import 'package:omi/utils/analytics/registry/events.g.dart';
 
 /// Closed reasons `OmiBleManager.startScan` reports before it scans.
-/// `no_adapter` and `scanner_unavailable` fold into [DevicePairingBlockedReason.bluetoothOff]
-/// because the radio never started.
+/// `no_adapter` and `scanner_unavailable` stay distinct from radio-off so the
+/// funnel can see those quiet returns. The user-facing copy can still match
+/// Bluetooth off.
 DevicePairingBlockedReason? pairingBlockFromNativeScan(String reason) {
   return switch (reason) {
     'nearby_devices_denied' => DevicePairingBlockedReason.nearbyDevicesDenied,
-    'bluetooth_off' || 'no_adapter' || 'scanner_unavailable' => DevicePairingBlockedReason.bluetoothOff,
+    'bluetooth_off' => DevicePairingBlockedReason.bluetoothOff,
+    'no_adapter' => DevicePairingBlockedReason.noAdapter,
+    'scanner_unavailable' => DevicePairingBlockedReason.scannerUnavailable,
     _ => null,
   };
 }

@@ -126,6 +126,10 @@
         "permanentlyDenied": {
           "type": "bool",
           "wire_name": "permanently_denied"
+        },
+        "servicesDisabled": {
+          "type": "bool",
+          "wire_name": "services_disabled"
         }
       },
       "consumers": ["onboarding-activation-funnel"],
@@ -146,7 +150,9 @@
             "bluetooth_permission_denied",
             "location_permission_missing",
             "bluetooth_off",
-            "nearby_devices_denied"
+            "nearby_devices_denied",
+            "no_adapter",
+            "scanner_unavailable"
           ]
         },
         "androidSdk": {

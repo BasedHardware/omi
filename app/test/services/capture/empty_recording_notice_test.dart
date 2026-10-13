@@ -8,92 +8,24 @@ import 'package:omi/services/capture/optimistic_processing.dart';
 import 'package:omi/services/capture/recording_lifecycle_telemetry.dart';
 
 void main() {
-  test('missing process results map to empty-deleted or null', () {
+  test('recording surfaces come from the session device, then phone versus pendant', () {
+    expect(recordingSurfaceForTelemetry('phone_mic_live'), RecordingSurface.phone);
+    expect(recordingSurfaceForTelemetry('apple_watch'), RecordingSurface.omi);
+    expect(recordingSurfaceForTelemetry('pendant_live'), RecordingSurface.omi);
     expect(
-      reasonForMissingConversation(hasResponse: false, hasConversation: false, absence: ProcessAbsence.notFound),
-      EmptyRecordingReason.emptyDeleted,
+      recordingSurfaceForSession(deviceSource: ConversationSource.apple_watch, telemetrySource: 'pendant_live'),
+      RecordingSurface.watch,
     );
     expect(
-      reasonForMissingConversation(hasResponse: false, hasConversation: false, absence: ProcessAbsence.emptyBody),
-      EmptyRecordingReason.emptyDeleted,
+      recordingSurfaceForSession(deviceSource: ConversationSource.phone, telemetrySource: 'pendant_live'),
+      RecordingSurface.phone,
     );
     expect(
-      reasonForMissingConversation(hasResponse: true, hasConversation: false),
-      EmptyRecordingReason.emptyDeleted,
+      recordingSurfaceForSession(conversationSource: ConversationSource.apple_watch, telemetrySource: 'phone_mic_live'),
+      RecordingSurface.watch,
     );
-    expect(
-      reasonForMissingConversation(hasResponse: false, hasConversation: false, absence: ProcessAbsence.transport),
-      EmptyRecordingReason.nullResult,
-    );
-    expect(
-      reasonForMissingConversation(hasResponse: true, hasConversation: true),
-      isNull,
-    );
-  });
-
-  test('only a short phone stop with no transcript is explained immediately', () {
-    expect(
-      shouldExplainShortPhoneStop(
-        surface: RecordingSurface.phone,
-        durationSeconds: 12,
-        transcriptObserved: false,
-        conversationDelivered: false,
-      ),
-      isTrue,
-    );
-    expect(
-      shouldExplainShortPhoneStop(
-        surface: RecordingSurface.phone,
-        durationSeconds: 30,
-        transcriptObserved: false,
-        conversationDelivered: false,
-      ),
-      isFalse,
-    );
-    expect(
-      shouldExplainShortPhoneStop(
-        surface: RecordingSurface.watch,
-        durationSeconds: 4,
-        transcriptObserved: false,
-        conversationDelivered: false,
-      ),
-      isFalse,
-    );
-    expect(
-      shouldExplainShortPhoneStop(
-        surface: RecordingSurface.omi,
-        durationSeconds: 4,
-        transcriptObserved: false,
-        conversationDelivered: false,
-      ),
-      isFalse,
-    );
-    expect(
-      shouldExplainShortPhoneStop(
-        surface: RecordingSurface.phone,
-        durationSeconds: 8,
-        transcriptObserved: true,
-        conversationDelivered: false,
-      ),
-      isFalse,
-    );
-    expect(
-      shouldExplainShortPhoneStop(
-        surface: RecordingSurface.phone,
-        durationSeconds: 8,
-        transcriptObserved: false,
-        conversationDelivered: true,
-      ),
-      isFalse,
-    );
-  });
-
-  test('recording surfaces stay phone, watch, or omi', () {
-    expect(recordingSurfaceForSource('phone_mic_live'), RecordingSurface.phone);
-    expect(recordingSurfaceForSource('apple_watch'), RecordingSurface.watch);
-    expect(recordingSurfaceForSource('pendant_live'), RecordingSurface.omi);
-    expect(recordingSurfaceForConversation(ConversationSource.phone), RecordingSurface.phone);
-    expect(recordingSurfaceForConversation(ConversationSource.apple_watch), RecordingSurface.watch);
+    expect(recordingSurfaceForSession(telemetrySource: 'phone_mic_batch'), RecordingSurface.phone);
+    expect(recordingSurfaceForSession(telemetrySource: 'pendant_batch'), RecordingSurface.omi);
     expect(recordingSurfaceForConversation(ConversationSource.omi), RecordingSurface.omi);
   });
 
@@ -103,31 +35,41 @@ void main() {
     expect(onlyDiscardedConversations(const [true, false]), isFalse);
   });
 
-  test('a null process result removes the placeholder and reports why', () async {
-    final reasons = <EmptyRecordingReason>[];
+  test('a null process result removes the placeholder and reports the absence', () async {
+    final absences = <ProcessAbsence>[];
     final id = await OptimisticProcessingPlaceholder.applyProcessResult(
       result: null,
       absence: ProcessAbsence.notFound,
       actions: const NoopCaptureExternalActions(),
       onCreated: (_, __) async {},
-      onNoConversation: reasons.add,
+      onNoConversation: absences.add,
     );
     expect(id, isNull);
-    expect(reasons, [EmptyRecordingReason.emptyDeleted]);
+    expect(absences, [ProcessAbsence.notFound]);
 
-    reasons.clear();
+    absences.clear();
+    await OptimisticProcessingPlaceholder.applyProcessResult(
+      result: null,
+      absence: ProcessAbsence.emptyBody,
+      actions: const NoopCaptureExternalActions(),
+      onCreated: (_, __) async {},
+      onNoConversation: absences.add,
+    );
+    expect(absences, [ProcessAbsence.emptyBody]);
+
+    absences.clear();
     await OptimisticProcessingPlaceholder.applyProcessResult(
       result: null,
       absence: ProcessAbsence.transport,
       actions: const NoopCaptureExternalActions(),
       onCreated: (_, __) async {},
-      onNoConversation: reasons.add,
+      onNoConversation: absences.add,
     );
-    expect(reasons, [EmptyRecordingReason.nullResult]);
+    expect(absences, [ProcessAbsence.transport]);
   });
 
   test('a returned conversation does not explain an empty recording', () async {
-    final reasons = <EmptyRecordingReason>[];
+    final absences = <ProcessAbsence>[];
     final created = <String>[];
     final id = await OptimisticProcessingPlaceholder.applyProcessResult(
       result: CreateConversationResponse(
@@ -141,11 +83,11 @@ void main() {
       ),
       actions: const NoopCaptureExternalActions(),
       onCreated: (conversation, _) async => created.add(conversation.id),
-      onNoConversation: reasons.add,
+      onNoConversation: absences.add,
     );
     expect(id, 'kept');
     expect(created, ['kept']);
-    expect(reasons, isEmpty);
+    expect(absences, isEmpty);
   });
 
   test('completion facts survive stop and a failed start does not reuse them', () {

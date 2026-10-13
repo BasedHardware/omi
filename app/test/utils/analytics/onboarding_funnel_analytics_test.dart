@@ -41,6 +41,7 @@ void main() {
       permission: OnboardingPermissionResultPermission.backgroundActivity,
       granted: false,
       permanentlyDenied: false,
+      servicesDisabled: false,
     );
     analytics.devicePairingBlocked(
       reason: DevicePairingBlockedReason.locationPermissionMissing,
@@ -72,6 +73,22 @@ void main() {
       transcriptObserved: false,
       reason: EmptyRecordingReason.nullResult,
     );
+    analytics.onboardingPermissionResult(
+      permission: OnboardingPermissionResultPermission.location,
+      granted: false,
+      permanentlyDenied: false,
+      servicesDisabled: true,
+    );
+    analytics.devicePairingBlocked(
+      reason: DevicePairingBlockedReason.noAdapter,
+      androidSdk: 34,
+      iosVersion: 0,
+    );
+    analytics.devicePairingBlocked(
+      reason: DevicePairingBlockedReason.scannerUnavailable,
+      androidSdk: 34,
+      iosVersion: 0,
+    );
     await AnalyticsManager.flushPending(force: true);
 
     expect(adapter.names, [
@@ -87,6 +104,9 @@ void main() {
       'Recording Produced No Conversation',
       'Recording Produced No Conversation',
       'Recording Produced No Conversation',
+      'Onboarding Permission Result',
+      'Device Pairing Blocked',
+      'Device Pairing Blocked',
     ]);
     expect(adapter.propertiesAt(2), containsPair('provider', 'google'));
     expect(adapter.propertiesAt(3), containsPair('provider', 'apple'));
@@ -94,6 +114,7 @@ void main() {
     expect(adapter.propertiesAt(4), containsPair('permission', 'background_activity'));
     expect(adapter.propertiesAt(4), containsPair('granted', false));
     expect(adapter.propertiesAt(4), containsPair('permanently_denied', false));
+    expect(adapter.propertiesAt(4), containsPair('services_disabled', false));
     expect(adapter.propertiesAt(5), containsPair('reason', 'location_permission_missing'));
     expect(adapter.propertiesAt(5), containsPair('android_sdk', 30));
     expect(adapter.propertiesAt(5), containsPair('ios_version', 0));
@@ -110,6 +131,10 @@ void main() {
     expect(adapter.propertiesAt(10)['reason'], 'discarded');
     expect(adapter.propertiesAt(11)['source'], 'omi');
     expect(adapter.propertiesAt(11)['reason'], 'null_result');
+    expect(adapter.propertiesAt(12), containsPair('services_disabled', true));
+    expect(adapter.propertiesAt(12), containsPair('permanently_denied', false));
+    expect(adapter.propertiesAt(13), containsPair('reason', 'no_adapter'));
+    expect(adapter.propertiesAt(14), containsPair('reason', 'scanner_unavailable'));
   });
 }
 

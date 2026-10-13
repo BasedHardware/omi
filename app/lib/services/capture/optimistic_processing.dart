@@ -39,16 +39,16 @@ class OptimisticProcessingPlaceholder {
     required CaptureExternalActions actions,
     required Future<void> Function(ServerConversation conversation, List<ServerMessage> messages) onCreated,
     ProcessAbsence? absence,
-    void Function(EmptyRecordingReason reason)? onNoConversation,
+    void Function(ProcessAbsence absence)? onNoConversation,
   }) async {
-    final missing = reasonForMissingConversation(
-      hasResponse: result != null,
-      hasConversation: result?.conversation != null,
-      absence: absence,
-    );
-    if (missing != null || result == null || result.conversation == null) {
+    if (result == null || result.conversation == null) {
       actions.removeProcessingConversation(id);
-      if (missing != null) onNoConversation?.call(missing);
+      // A 200 with no conversation is a confirmed empty delete. A null HTTP
+      // result without an explicit absence is a transport failure. A 404 stays
+      // [ProcessAbsence.notFound] so the caller can wait for a conversation
+      // that was already finalized.
+      final resolved = absence ?? (result == null ? ProcessAbsence.transport : ProcessAbsence.emptyBody);
+      onNoConversation?.call(resolved);
       return null;
     }
     final response = result;

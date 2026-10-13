@@ -1449,14 +1449,16 @@ class ConversationProvider extends ChangeNotifier {
   }
 
   /// Sets the discarded-only empty state whenever that is still true.
-  /// Returns true only the first time, so the announcement is once.
-  bool claimDiscardedOnlyExplanation() {
-    if (showDiscardedConversations) return false;
-    if (!onlyDiscardedConversations(conversations.map((conversation) => conversation.discarded))) return false;
+  /// [DiscardedOnlyClaim.alreadyShown] still lets the caller emit once per capture.
+  DiscardedOnlyClaim claimDiscardedOnlyExplanation() {
+    if (showDiscardedConversations) return DiscardedOnlyClaim.notDiscardedOnly;
+    if (!onlyDiscardedConversations(conversations.map((conversation) => conversation.discarded))) {
+      return DiscardedOnlyClaim.notDiscardedOnly;
+    }
     _setHomeEmptyExplanation(HomeEmptyExplanation.discardedOnly);
-    if (SharedPreferencesUtil().discardedOnlyExplained) return false;
+    if (SharedPreferencesUtil().discardedOnlyExplained) return DiscardedOnlyClaim.alreadyShown;
     SharedPreferencesUtil().discardedOnlyExplained = true;
-    return true;
+    return DiscardedOnlyClaim.shown;
   }
 
   void clearEmptyRecordingExplanation() {
@@ -1485,6 +1487,7 @@ class ConversationProvider extends ChangeNotifier {
     } else {
       updateConversation(conversation, idx);
     }
+    if (!conversation.discarded) clearEmptyRecordingExplanation();
   }
 
   void updateConversationInSortedList(ServerConversation conversation) {

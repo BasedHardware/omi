@@ -38,6 +38,23 @@ void main() {
       ),
       isTrue,
     );
+    expect(
+      log.claim(
+        permission: OnboardingPermissionResultPermission.location,
+        granted: false,
+        permanentlyDenied: false,
+        servicesDisabled: true,
+      ),
+      isTrue,
+    );
+    expect(
+      log.claim(
+        permission: OnboardingPermissionResultPermission.location,
+        granted: false,
+        permanentlyDenied: false,
+      ),
+      isTrue,
+    );
   });
 
   test('permanent denial is restricted or permanentlyDenied', () {

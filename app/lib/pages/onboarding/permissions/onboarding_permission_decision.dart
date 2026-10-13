@@ -10,8 +10,9 @@ class OnboardingPermissionDecisionLog {
     required OnboardingPermissionResultPermission permission,
     required bool granted,
     required bool permanentlyDenied,
+    bool servicesDisabled = false,
   }) {
-    return _seen.add('${permission.wireName}|$granted|$permanentlyDenied');
+    return _seen.add('${permission.wireName}|$granted|$permanentlyDenied|$servicesDisabled');
   }
 }
 

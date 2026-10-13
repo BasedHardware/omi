@@ -10,7 +10,7 @@ Source: events.json. Presence is not task success. Existing SDK provenance/ident
 | onboardingGetStartedTapped | Onboarding Get Started Tapped | none | active | onboarding-activation-funnel |
 | signInStarted | Sign In Started | provider | active | onboarding-activation-funnel |
 | signInFailed | Sign In Failed | provider, error_class | active | onboarding-activation-funnel |
-| onboardingPermissionResult | Onboarding Permission Result | permission, granted, permanently_denied | active | onboarding-activation-funnel |
+| onboardingPermissionResult | Onboarding Permission Result | permission, granted, permanently_denied, services_disabled | active | onboarding-activation-funnel |
 | devicePairingBlocked | Device Pairing Blocked | reason, android_sdk, ios_version | active | onboarding-activation-funnel |
 | deviceScanEmpty | Device Scan Empty | after_seconds | active | onboarding-activation-funnel |
 | deviceConnectFailed | Device Connect Failed | error_class | active | onboarding-activation-funnel |

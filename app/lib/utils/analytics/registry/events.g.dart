@@ -110,21 +110,24 @@ enum OnboardingPermissionResultPermission {
 }
 
 final class OnboardingPermissionResult extends RegisteredEvent {
-  const OnboardingPermissionResult({required this.permission, required this.granted, required this.permanentlyDenied});
+  const OnboardingPermissionResult({required this.permission, required this.granted, required this.permanentlyDenied, required this.servicesDisabled});
   final OnboardingPermissionResultPermission permission;
   final bool granted;
   final bool permanentlyDenied;
+  final bool servicesDisabled;
   @override
   String get wireName => "Onboarding Permission Result";
   @override
-  Map<String, Object> get properties => {"permission": permission.wireName, "granted": granted, "permanently_denied": permanentlyDenied};
+  Map<String, Object> get properties => {"permission": permission.wireName, "granted": granted, "permanently_denied": permanentlyDenied, "services_disabled": servicesDisabled};
 }
 
 enum DevicePairingBlockedReason {
   bluetoothPermissionDenied("bluetooth_permission_denied"),
   locationPermissionMissing("location_permission_missing"),
   bluetoothOff("bluetooth_off"),
-  nearbyDevicesDenied("nearby_devices_denied");
+  nearbyDevicesDenied("nearby_devices_denied"),
+  noAdapter("no_adapter"),
+  scannerUnavailable("scanner_unavailable");
   const DevicePairingBlockedReason(this.wireName);
   final String wireName;
 }

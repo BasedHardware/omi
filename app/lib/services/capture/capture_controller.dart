@@ -116,6 +116,7 @@ class CaptureController extends ChangeNotifier
   final IMicRecorderService? _phoneMicBatchRecorder;
   final Future<bool> Function(String deviceId, int level)? _speakerHaptic;
   final Future<CreateConversationResponse?> Function()? _processInProgressConversationOverride;
+  final Future<InProgressProcessOutcome> Function()? _processInProgressOutcomeOverride;
   final Future<DeviceConnection?> Function(String deviceId)? _deviceConnectionLoader;
   final ValueListenable<PhoneCallState>? _omiCallState;
   final CaptureNativeWriterGate _nativeWriterGate;
@@ -309,6 +310,7 @@ class CaptureController extends ChangeNotifier
     CaptureConversationSocketOpen? openSocket,
     CaptureSessionOwner? sessionOwner,
     Future<CreateConversationResponse?> Function()? processInProgressConversation,
+    Future<InProgressProcessOutcome> Function()? processInProgressOutcome,
     Future<DeviceConnection?> Function(String deviceId)? deviceConnectionLoader,
     ValueListenable<PhoneCallState>? omiCallState,
     CaptureNativeWriterGate? nativeWriterGate,
@@ -333,6 +335,7 @@ class CaptureController extends ChangeNotifier
         _openSocketOverride = openSocket,
         _sessionOwner = sessionOwner,
         _processInProgressConversationOverride = processInProgressConversation,
+        _processInProgressOutcomeOverride = processInProgressOutcome,
         _deviceConnectionLoader = deviceConnectionLoader,
         _omiCallState = omiCallState,
         _nativeWriterGate = nativeWriterGate ?? const NoopCaptureNativeWriterGate(),
@@ -2815,7 +2818,7 @@ class CaptureController extends ChangeNotifier
     await _wal.getSyncs().phone.finalizeCurrentSession();
     updateRecordingState(RecordingState.stop);
     await _socket?.stop(reason: 'stop stream recording');
-    if (_recordingTelemetry.complete(reason: reason)) _explainShortPhoneStopIfNeeded();
+    _recordingTelemetry.complete(reason: reason);
     await _clearPhoneRestoreMarker();
     return true;
   }
@@ -3624,7 +3627,9 @@ class CaptureController extends ChangeNotifier
 
     _resetStateVariables();
     final Future<InProgressProcessOutcome> request;
-    if (_processInProgressConversationOverride != null) {
+    if (_processInProgressOutcomeOverride != null) {
+      request = _processInProgressOutcomeOverride!();
+    } else if (_processInProgressConversationOverride != null) {
       request = _processInProgressConversationOverride!().then(
         (result) => InProgressProcessOutcome(
           response: result,
@@ -3837,8 +3842,11 @@ class CaptureController extends ChangeNotifier
           durationSeconds: conversation.getDurationInSeconds(),
           transcriptObserved: conversation.transcriptSegments.isNotEmpty,
         ),
+        conversationSource: conversation.source,
       );
+      return;
     }
+    // A kept conversation answers this capture. Upsert already cleared Home.
   }
 
   void _markCaptureStarted({String? evidence}) {
@@ -3849,41 +3857,65 @@ class CaptureController extends ChangeNotifier
 
   bool get _conversationDeliveredForCurrentCapture => _deliveredExplanationGeneration == _captureExplanationGeneration;
 
-  void _explainShortPhoneStopIfNeeded() {
-    final facts = _recordingTelemetry.completionFacts();
-    if (facts == null) return;
-    if (!shouldExplainShortPhoneStop(
-      surface: recordingSurfaceForSource(facts.source),
-      durationSeconds: facts.durationSeconds,
-      transcriptObserved: facts.transcriptObserved,
-      conversationDelivered: _conversationDeliveredForCurrentCapture,
-    )) {
-      return;
+  ConversationSource? _sessionConversationSource() {
+    final raw = conversationSourceForDeviceType(_sessionRecordingDevice?.type ?? _recordingDevice?.type);
+    if (raw == null) return null;
+    for (final source in ConversationSource.values) {
+      if (source.name == raw) return source;
     }
-    _announceNoConversation(EmptyRecordingReason.emptyDeleted, facts: facts);
+    return null;
   }
 
-  void _onProcessProducedNoConversation(EmptyRecordingReason reason) {
+  void _onProcessProducedNoConversation(ProcessAbsence absence) {
     if (_conversationDeliveredForCurrentCapture) return;
-    _announceNoConversation(reason);
+    switch (absence) {
+      case ProcessAbsence.emptyBody:
+        _announceNoConversation(EmptyRecordingReason.emptyDeleted);
+      case ProcessAbsence.notFound:
+        // POST /v1/conversations returns 404 both when nothing was captured and
+        // when the conversation was already finalized. Let the conversation-created
+        // path set [_deliveredExplanationGeneration] before treating this as empty.
+        final generation = _captureExplanationGeneration;
+        _scheduling.once(Duration.zero, () {
+          if (lifetime.isClosed) return;
+          if (_deliveredExplanationGeneration == generation) return;
+          if (_announcedNoConversationGeneration == generation) return;
+          _announceNoConversation(EmptyRecordingReason.emptyDeleted);
+        });
+      case ProcessAbsence.transport:
+        _announceNoConversation(EmptyRecordingReason.nullResult, showUserCopy: false);
+    }
   }
 
-  void _announceNoConversation(EmptyRecordingReason reason, {RecordingCompletionFacts? facts}) {
+  void _announceNoConversation(
+    EmptyRecordingReason reason, {
+    RecordingCompletionFacts? facts,
+    ConversationSource? conversationSource,
+    bool showUserCopy = true,
+  }) {
     if (_announcedNoConversationGeneration == _captureExplanationGeneration) return;
     final resolved = facts ?? _recordingTelemetry.completionFacts();
     try {
+      var showCopy = showUserCopy;
       if (reason == EmptyRecordingReason.discarded) {
-        if (!externalActions.claimDiscardedOnlyExplanation()) return;
-      } else {
+        final claim = externalActions.claimDiscardedOnlyExplanation();
+        if (claim == DiscardedOnlyClaim.notDiscardedOnly) return;
+        showCopy = claim == DiscardedOnlyClaim.shown;
+      } else if (showCopy) {
         externalActions.showEmptyRecordingExplanation();
       }
       _announcedNoConversationGeneration = _captureExplanationGeneration;
       PlatformManager.instance.analytics.recordingProducedNoConversation(
-        source: recordingSurfaceForSource(resolved?.source),
+        source: recordingSurfaceForSession(
+          conversationSource: conversationSource,
+          deviceSource: _sessionConversationSource(),
+          telemetrySource: resolved?.source,
+        ),
         durationSeconds: resolved?.durationSeconds ?? 0,
         transcriptObserved: resolved?.transcriptObserved ?? false,
         reason: reason,
       );
+      if (!showCopy) return;
       final ctx = globalNavigatorKey.currentContext;
       if (ctx != null) {
         AppSnackbar.showSnackbar(

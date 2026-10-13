@@ -241,9 +241,10 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin implemen
         _recordOnboardingPermission(
           permission: OnboardingPermissionResultPermission.location,
           granted: false,
-          permanentlyDenied: true,
+          permanentlyDenied: false,
+          servicesDisabled: true,
         );
-        return (false, PermissionStatus.permanentlyDenied);
+        return (false, PermissionStatus.denied);
       }
       var res = await Permission.locationWhenInUse.request();
       _recordOnboardingPermission(
@@ -468,11 +469,13 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin implemen
     required OnboardingPermissionResultPermission permission,
     required bool granted,
     required bool permanentlyDenied,
+    bool servicesDisabled = false,
   }) {
     if (!_permissionDecisions.claim(
       permission: permission,
       granted: granted,
       permanentlyDenied: permanentlyDenied,
+      servicesDisabled: servicesDisabled,
     )) {
       return;
     }
@@ -480,6 +483,7 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin implemen
       permission: permission,
       granted: granted,
       permanentlyDenied: permanentlyDenied,
+      servicesDisabled: servicesDisabled,
     );
   }
 
