@@ -584,17 +584,22 @@ final class PhoneMicController {
 
     private func applyProgressCadence() {
         let interval = desiredProgressInterval()
-        if progressIntervalArmed == Self.fastProgressTickInterval {
-            // Already at the fast cadence: the fault window, or the preserved
-            // recovery beat that has not fired yet. Keep that deadline exactly
-            // as armed. The previous guard only covered the fast→healthy
-            // transition, so a second route/config/interruption before the beat
-            // fell through and re-anchored the fire to `now + 1s` — late enough
-            // in a missed-beat window, that walks the only liveness event past
-            // Dart's unchanged 10s stall deadline and restarts a recovered
-            // session. The tick handler arms the healthy 4s repeating cadence
-            // only after this beat actually fires.
-            return
+        if progressIntervalArmed != 0 {
+            // An armed fire's deadline is at most one interval out, so
+            // re-anchoring it to `now + interval` can only delay the next
+            // liveness beat. Keep any already-armed deadline — a preserved
+            // fast fire through recovery, a second fault arriving before that
+            // fire, or an unchanged healthy window — and let the tick handler
+            // retarget the repeating cadence after the beat fires. Only a
+            // fault pulling a far-off healthy deadline in to the fast cadence
+            // re-schedules. Delaying the beat is what let a late-window
+            // recovery or a repeated fault push the only liveness event past
+            // Dart's unchanged 10s stall deadline, restarting a recovered
+            // session.
+            if progressIntervalArmed == Self.fastProgressTickInterval
+                || progressIntervalArmed == interval {
+                return
+            }
         }
         syncProgressTimer(first: interval, repeating: interval)
     }
