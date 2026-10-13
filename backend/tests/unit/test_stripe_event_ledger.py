@@ -73,9 +73,9 @@ def test_old_event_detected_on_claim_and_on_late_completion_without_suppression(
     old, new = event('evt-old', 100), event('evt-new', 200)
     assert ledger.claim_event(old, 'old', now=NOW, client=db).out_of_order is False
     ledger.claim_event(new, 'new', now=NOW, client=db)
+    ledger.finish_event(new, 'new', succeeded=True, now=NOW, client=db)
     assert ledger.finish_event(old, 'old', succeeded=True, now=NOW, client=db) is True
     assert ledger.claim_event(event('evt-even-older', 50), 'older', now=NOW, client=db).out_of_order is True
-    ledger.finish_event(new, 'new', succeeded=True, now=NOW, client=db)
     order = next(value for path, value in db.rows.items() if path[0] == ledger.ORDER_COLLECTION)
     assert order['latest_created'] == 200
 
@@ -270,3 +270,92 @@ def test_real_webhook_failed_write_remains_retryable(lane, monkeypatch):
     assert run_lifecycle(lane) == {'status': 'success'}
     assert receipt(db)['outcome'] == 'acknowledged'
     assert receipt(db)['attempt'] == 2
+
+
+@pytest.mark.parametrize(
+    'kind',
+    [
+        'customer.subscription.created',
+        'customer.subscription.updated',
+        'customer.subscription.deleted',
+        'checkout.session.completed',
+    ],
+)
+def test_real_webhook_unknown_price_is_200_and_same_id_reenters(lane, monkeypatch, kind):
+    db = StrictFirestore()
+    monkeypatch.setenv('BILLING_WEBHOOK_LEDGER_ENABLED', 'true')
+    monkeypatch.setattr(ledger, '_client', lambda client: db)
+    lane.event = lifecycle_event(kind, 'active')
+    obj = lane.event['data']['object']
+    obj['items']['data'][0]['price']['id'] = 'price_unknown'
+    if kind == 'checkout.session.completed':
+        import stripe
+
+        lane.stripe_obj = obj
+        lane.event['data']['object'] = stripe.checkout.Session.construct_from(
+            {
+                'id': 'cs-fixture',
+                'client_reference_id': 'fixture-user',
+                'customer': 'cus-fixture',
+                'subscription': 'sub-current',
+                'metadata': {},
+            },
+            'fixture',
+        )
+    builds = []
+    build = payment._build_subscription_from_stripe_object
+
+    def tracking(obj):
+        builds.append(obj['id'])
+        return build(obj)
+
+    monkeypatch.setattr(payment, '_build_subscription_from_stripe_object', tracking)
+    assert run_lifecycle(lane) == {'status': 'success'}
+    assert not any(name == 'write' for name, _ in lane.calls)
+    assert receipt(db)['outcome'] == 'failed'
+    assert run_lifecycle(lane) == {'status': 'success'}
+    assert len(builds) == 2
+    assert receipt(db)['attempt'] == 2
+    obj['items']['data'][0]['price']['id'] = 'price_plus'
+    assert run_lifecycle(lane) == {'status': 'success'}
+    assert receipt(db)['outcome'] == 'acknowledged'
+    assert sum(name == 'write' for name, _ in lane.calls) == 1
+    assert run_lifecycle(lane) == {'status': 'success'}
+    assert len(builds) == 3
+
+
+def test_real_webhook_uncommitted_finish_replays_after_lease(lane, monkeypatch):
+    db = StrictFirestore()
+    monkeypatch.setenv('BILLING_WEBHOOK_LEDGER_ENABLED', 'true')
+    now = [NOW]
+    claim, finish = ledger.claim_event, ledger.finish_event
+    monkeypatch.setattr(ledger, 'claim_event', lambda e, t: claim(e, t, now=now[0], client=db))
+
+    def unavailable(*args, **kwargs):
+        raise RuntimeError('fixture finish did not commit')
+
+    monkeypatch.setattr(ledger, 'finish_event', unavailable)
+    lane.event = lifecycle_event('customer.subscription.updated', 'active')
+    with pytest.raises(HTTPException) as error:
+        run_lifecycle(lane)
+    assert error.value.status_code == 503
+    assert receipt(db)['outcome'] == 'processing'
+    assert sum(name == 'write' for name, _ in lane.calls) == 1
+    with pytest.raises(HTTPException):
+        run_lifecycle(lane)
+    assert sum(name == 'write' for name, _ in lane.calls) == 1
+    now[0] += timedelta(seconds=ledger.LEASE_SECONDS)
+    monkeypatch.setattr(ledger, 'finish_event', lambda e, t, **kw: finish(e, t, now=now[0], client=db, **kw))
+    assert run_lifecycle(lane) == {'status': 'success'}
+    assert sum(name == 'write' for name, _ in lane.calls) == 2
+    assert receipt(db)['outcome'] == 'acknowledged'
+    assert run_lifecycle(lane) == {'status': 'success'}
+    assert sum(name == 'write' for name, _ in lane.calls) == 2
+
+
+def test_failed_newer_claim_does_not_advance_success_order():
+    db = StrictFirestore()
+    new = event('evt-new', 200)
+    ledger.claim_event(new, 'new', now=NOW, client=db)
+    ledger.finish_event(new, 'new', succeeded=False, now=NOW, client=db)
+    assert ledger.claim_event(event('evt-old', 100), 'old', now=NOW, client=db).out_of_order is False

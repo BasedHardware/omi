@@ -1,4 +1,4 @@
-<!-- feature-flag-registry as-of: 2026-09-24 -->
+<!-- feature-flag-registry as-of: 2026-10-13 -->
 
 # Feature-flag authority registry
 
@@ -112,7 +112,7 @@ entries are exempt: they are queued for removal, not running.
 
 ## Overdue for a decision
 
-None as of 2026-09-24.
+None as of 2026-10-13.
 
 ## Flags
 

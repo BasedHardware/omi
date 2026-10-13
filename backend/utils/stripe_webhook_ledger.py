@@ -26,6 +26,10 @@ PROTECTED_EVENTS = frozenset(
 )
 
 
+class RetryableBillingSkip(dict):
+    """HTTP success whose unresolved entitlement must remain replayable."""
+
+
 async def _ledger_call(run_db: Callable, function: Callable, *args, **kwargs):
     # Bound HTTP waiting. A running SDK operation can finish in its worker after
     # timeout; no handler runs without a confirmed claim, and completion tokens
@@ -43,13 +47,14 @@ async def dispatch_with_ledger(event: dict, handler: Callable[[], Awaitable[dict
         record_outcome('unprotected')
         try:
             await _ledger_call(run_db, ledger.observe_event, event)
-        except Exception:
+        except Exception as error:
+            logger.warning('billing observation failed: %s', type(error).__name__)
             record_outcome('observe_error')
             record_fallback(
                 component='other',
                 from_mode='billing_event_observation',
                 to_mode='skip_ledger_observation',
-                reason='connection_error',
+                reason='malformed_doc' if isinstance(error, ValueError) else 'connection_error',
                 outcome='degraded',
                 log=logger,
             )
@@ -57,7 +62,8 @@ async def dispatch_with_ledger(event: dict, handler: Callable[[], Awaitable[dict
     token = uuid4().hex
     try:
         claim = await _ledger_call(run_db, ledger.claim_event, event, token)
-    except Exception:
+    except Exception as error:
+        logger.error('billing claim failed: %s', type(error).__name__)
         record_outcome('claim_error')
         raise HTTPException(status_code=503, detail='Billing event receipt unavailable') from None
     if claim.outcome == 'duplicate':
@@ -77,13 +83,15 @@ async def dispatch_with_ledger(event: dict, handler: Callable[[], Awaitable[dict
             record_outcome('finish_error')
             logger.warning('billing event failure receipt unavailable')
         raise
+    succeeded = not isinstance(result, RetryableBillingSkip)
     try:
-        out_of_order = await _ledger_call(run_db, ledger.finish_event, event, token, succeeded=True)
-    except Exception:
+        out_of_order = await _ledger_call(run_db, ledger.finish_event, event, token, succeeded=succeeded)
+    except Exception as error:
+        logger.error('billing completion failed: %s', type(error).__name__)
         record_outcome('finish_error')
         # A 2xx without a durable receipt would make future duplicate suppression unsafe.
         raise HTTPException(status_code=503, detail='Billing event completion receipt unavailable') from None
-    record_outcome('acknowledged')
+    record_outcome('acknowledged' if succeeded else 'retryable_skip')
     if out_of_order:
         record_outcome('out_of_order')
     return result
