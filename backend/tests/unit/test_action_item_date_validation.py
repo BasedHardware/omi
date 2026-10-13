@@ -343,6 +343,8 @@ conv_folder_stub.build_folders_context = MagicMock(return_value="")
 # Stub utils.llm.gateway_error_contract (conversation_processing imports from it)
 gateway_error_contract_stub = _stub_module("utils.llm.gateway_error_contract")
 gateway_error_contract_stub.is_byok_rate_limit_gateway_error = MagicMock(return_value=False)
+_stub_module("database.chat_edits").snapshot = MagicMock(return_value={})
+_stub_module("database.chat_edits").envelope = MagicMock(return_value={})
 _stub_module("utils.messaging.undo").record_write = MagicMock(return_value="")
 _stub_module("utils.messaging.projection").surface_runtime = types.SimpleNamespace(get=lambda: None)
 _load_module_from_file("utils.messaging.turn_context", BACKEND_DIR / "utils" / "messaging" / "turn_context.py")
@@ -612,6 +614,9 @@ class TestUpdateActionItemDateValidation:
     def test_accepts_future_date_on_update(self):
         """Updating due date to a future date should work."""
         future_date = (datetime.now(timezone.utc) + timedelta(days=3)).strftime('%Y-%m-%dT%H:%M:%S+00:00')
+        action_items_db.update_action_item.side_effect = (
+            lambda *args, **kwargs: kwargs['expected_chat_state'].update(after={}) or True
+        )
         result = update_action_item_tool(
             action_item_id="test-item-id",
             due_at=future_date,

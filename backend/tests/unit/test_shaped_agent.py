@@ -11,6 +11,7 @@ from unittest.mock import AsyncMock
 import google.auth.credentials  # noqa: F401
 import httpx
 import pytest
+from langchain_anthropic import ChatAnthropic
 from langchain_openai import ChatOpenAI
 
 from models.calendar_context import CalendarMeetingContext, MeetingParticipant
@@ -18,8 +19,10 @@ from models.conversation import ExternalIntegrationCreateConversation
 from models.structured import Structured
 from models.structured_extraction import StructuredExtraction
 from testing.import_isolation import stub_modules
+from utils import byok
 from utils.conversations import process_conversation as pc
 from utils.conversations.meeting_context import merge_meeting_contexts, store_meeting_context, stored_meeting_context
+from utils.llm import clients
 from utils.llm import conversation_processing as notes
 from utils.llm import shaped_agent as shaped
 from utils.llm import shaped_notes_transport
@@ -492,6 +495,72 @@ def test_notes_transport_is_owned_per_worker_loop(monkeypatch):
     assert loops[0] is not loops[1]
     assert len(transports) == 2 and all(transport.is_closed for transport in transports)
     assert cached.root_async_client is original_client and not original_client.is_closed()
+
+
+def test_anthropic_only_byok_notes_preserve_transport_and_omit_cache_hints(monkeypatch):
+    monkeypatch.setenv(shaped.FLAG, 'on')
+    monkeypatch.setattr(clients, 'should_route_features_through_gateway', lambda: True)
+    monkeypatch.setattr(clients, '_anthropic_chat_cache', {})
+    token = byok._byok_ctx.set({'anthropic': 'fake-anthropic-key'})
+    transports, loops, requests = [], [], []
+    real_client = httpx.AsyncClient
+    content = json.dumps(
+        {
+            'title': 'BYOK note',
+            'overview': 'Grounded note',
+            'emoji': '🧠',
+            'category': 'work',
+            'sections': [],
+            'action_items': [],
+            'events': [],
+        }
+    )
+
+    async def respond(request):
+        loops.append(asyncio.get_running_loop())
+        requests.append(json.loads(request.content))
+        assert request.headers['x-api-key'] == 'fake-anthropic-key'
+        return httpx.Response(
+            200,
+            json={
+                'id': 'message',
+                'type': 'message',
+                'role': 'assistant',
+                'model': 'claude-test',
+                'content': [{'type': 'text', 'text': content}],
+                'stop_reason': 'end_turn',
+                'usage': {'input_tokens': 1, 'output_tokens': 1},
+            },
+        )
+
+    def transport_factory():
+        transport = real_client(transport=httpx.MockTransport(respond))
+        transports.append(transport)
+        return transport
+
+    monkeypatch.setattr(shaped_notes_transport, 'httpx', SimpleNamespace(AsyncClient=transport_factory))
+    try:
+        cached = clients.get_llm('conv_structure', request_timeout=notes.CONVERSATION_STRUCTURE_TIMEOUT_SECONDS)
+        assert isinstance(cached, ChatAnthropic)
+        original_client = cached._async_client
+        prefix = ConversationPromptPrefix('c', 'FULL TRANSCRIPT\nThis is unique evidence.')
+        for _ in range(2):
+            result = notes.get_conversation_notes(
+                prefix,
+                uid='anyone',
+                started_at=datetime.now(timezone.utc),
+                language_code='en',
+                tz='UTC',
+                task_intelligence_capture=False,
+            )
+            assert result.title == 'BYOK note'
+        assert len(requests) == 2 and loops[0] is not loops[1]
+        assert 'prompt_cache_breakpoint' not in json.dumps(requests)
+        assert 'prompt_cache_options' not in json.dumps(requests)
+        assert all(transport.is_closed for transport in transports)
+        assert cached._async_client is original_client and not original_client.is_closed()
+    finally:
+        byok._byok_ctx.reset(token)
 
 
 @pytest.mark.parametrize('round_trip', [False, True])

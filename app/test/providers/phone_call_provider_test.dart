@@ -78,14 +78,17 @@ class _FakeWebSocketChannel implements WebSocketChannel {
   @override
   WebSocketSink get sink => _RecordingSink(outgoing, sent);
 
+  int? customCloseCode;
+  String? customCloseReason;
+
   @override
   String? get protocol => null;
 
   @override
-  int? get closeCode => null;
+  int? get closeCode => customCloseCode;
 
   @override
-  String? get closeReason => null;
+  String? get closeReason => customCloseReason;
 
   @override
   Future<void> get ready => Future.value();
@@ -361,5 +364,78 @@ void main() {
     expect(session.$2?['audio_frames_sent'], 3);
     expect(session.$2?['audio_channel_1_frames'], 3);
     expect(session.$2?['audio_bytes_sent'], 3 * 5 /* 4-byte payload + 1 prefix byte */);
+  });
+
+  test('immediate socket close does not reset ws reconnect counter; accepted message resets it', () async {
+    final socket1 = _FakeWebSocketChannel();
+    final socket2 = _FakeWebSocketChannel();
+    var socketsCreated = 0;
+    PhoneCallProvider.socketFactoryForTesting = (_, __) {
+      socketsCreated++;
+      return socketsCreated == 1 ? socket1 : socket2;
+    };
+    PhoneCallProvider.headerBuilderForTesting = (_) async => <String, String>{};
+
+    final provider = PhoneCallProvider.forTesting();
+    provider.debugSetCallIdForTesting('call-1');
+    provider.noAudioStallTimeout = const Duration(seconds: 60);
+    addTearDown(provider.dispose);
+
+    await Future<void>.delayed(const Duration(milliseconds: 50));
+    await emitEvent({'type': 'callStateChanged', 'state': 'active'});
+    await Future<void>.delayed(const Duration(milliseconds: 100));
+
+    expect(socketsCreated, 1);
+    expect(provider.wsReconnectAttemptsForTesting, 0);
+
+    // Socket 1 closes immediately before receiving any message (unaccepted rejection).
+    socket1.customCloseCode = 1008;
+    socket1.customCloseReason = 'Policy violation';
+    await socket1.incoming.close();
+    await Future<void>.delayed(const Duration(milliseconds: 100));
+
+    // Reconnect scheduled: attempt counter incremented to 1 (not reset to 0!).
+    expect(provider.wsReconnectAttemptsForTesting, 1);
+    expect(provider.transcriptionStatus, TranscriptionStatus.reconnecting);
+
+    // Cancel timer and trigger next connection to test accept behavior
+    provider.wsReconnectTimerForTesting?.cancel();
+    await provider.connectTranscriptionSocketForTesting();
+    expect(socketsCreated, 2);
+    // Before accept, counter remains at 1
+    expect(provider.wsReconnectAttemptsForTesting, 1);
+
+    // Socket 2 receives incoming message (connection accepted by server)
+    socket2.incoming.add('ping');
+    await Future<void>.delayed(const Duration(milliseconds: 100));
+
+    // On accept, counter resets to 0 and status becomes active
+    expect(provider.wsReconnectAttemptsForTesting, 0);
+    expect(provider.transcriptionStatus, TranscriptionStatus.active);
+  });
+
+  test('reconnect attempts give up with failed status after max attempts reached', () async {
+    final socket = _FakeWebSocketChannel();
+    PhoneCallProvider.socketFactoryForTesting = (_, __) => socket;
+    PhoneCallProvider.headerBuilderForTesting = (_) async => <String, String>{};
+
+    final provider = PhoneCallProvider.forTesting();
+    provider.debugSetCallIdForTesting('call-1');
+    addTearDown(provider.dispose);
+
+    await Future<void>.delayed(const Duration(milliseconds: 50));
+    await emitEvent({'type': 'callStateChanged', 'state': 'active'});
+    await Future<void>.delayed(const Duration(milliseconds: 50));
+
+    // Simulate 10 failed reconnect cycles to reach max attempts and trigger failed status
+    for (var i = 0; i < 10; i++) {
+      socket.incoming.close();
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+      provider.wsReconnectTimerForTesting?.cancel();
+      await provider.connectTranscriptionSocketForTesting();
+    }
+    await Future<void>.delayed(const Duration(milliseconds: 50));
+
+    expect(provider.transcriptionStatus, TranscriptionStatus.failed);
   });
 }

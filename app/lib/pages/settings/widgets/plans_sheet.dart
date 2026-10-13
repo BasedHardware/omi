@@ -38,6 +38,9 @@ class PlansSheet extends StatefulWidget {
   final Animation<double> arrowAnimation;
   final VoidCallback? onCancelSubscription;
 
+  /// Closed paywall `source` for the surface that opened this sheet.
+  final String analyticsSource;
+
   const PlansSheet({
     super.key,
     required this.waveController,
@@ -45,6 +48,7 @@ class PlansSheet extends StatefulWidget {
     required this.arrowController,
     required this.arrowAnimation,
     this.onCancelSubscription,
+    this.analyticsSource = 'usage_page',
   });
 
   @override
@@ -299,7 +303,11 @@ class _PlansSheetState extends State<PlansSheet> {
       }
     }
 
-    PlatformManager.instance.analytics.upgradePlanSelected(plan: selectedPlan, source: 'Usage Page Plan Sheet');
+    PlatformManager.instance.analytics.upgradePlanSelected(
+      plan: tierId ?? 'unknown',
+      billingInterval: isYearly ? 'year' : 'month',
+      source: widget.analyticsSource,
+    );
 
     await _handleUpgrade(priceId, targetPlan: tierId ?? 'unknown', billingInterval: isYearly ? 'year' : 'month');
   }
@@ -332,10 +340,14 @@ class _PlansSheetState extends State<PlansSheet> {
       final confirmed = await showOmiConfirm(
         context,
         title: l10n.confirmPlanChange,
-        message: l10n.planSwitchingDescriptionWithTitle(selectedPrice.title),
+        message:
+            '${currentPlanDisplayName(context, provider.subscription)} → ${planDisplayName(PlanType.fromWire(targetPlan), plans, l10n)} (${selectedPrice.title})',
         confirmLabel: l10n.changePlan,
       );
-      if (!confirmed) return;
+      if (!confirmed) {
+        PlatformManager.instance.analytics.upgradeCancelled();
+        return;
+      }
     }
 
     setState(() => _isUpgrading = true);
@@ -361,6 +373,11 @@ class _PlansSheetState extends State<PlansSheet> {
           setState(() => _promoCodeError = null);
           _promoCodeController.clear();
           if (mounted) OmiFeedback.confirm(context, l10n.planUpgradeScheduledMessage);
+          PlatformManager.instance.analytics.upgradeSucceeded(
+            previousPlan: currentSub.plan.wireName,
+            newPlan: targetPlan,
+            billingInterval: billingInterval,
+          );
         } else {
           if (mounted) OmiFeedback.error(context, l10n.couldNotSchedulePlanChange);
         }

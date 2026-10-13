@@ -1,6 +1,9 @@
 """Durable outbound/undo transactions against a loopback-only Firestore emulator."""
 
 import json
+import asyncio
+import base64
+from dataclasses import replace
 import os
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta, timezone
@@ -10,11 +13,12 @@ import pytest
 from google.auth.credentials import AnonymousCredentials
 from google.cloud import firestore
 from database import action_items
-from database.messaging import MessagingStore
+from database.messaging import MessagingStore, STALE_SECONDS, PENDING_MAX_SECONDS
 from testing.messaging.loopback import LoopbackAdapter
 from utils.messaging.adapters.delivery import DeliveryLedger
 from utils.messaging.undo import UndoStore
-from utils.messaging import undo
+from utils.messaging import undo, history
+from utils.messaging.gateway import Gateway
 from utils.messaging.projection import SurfaceRuntime, surface_runtime
 from utils.messaging.contracts import Principal
 
@@ -63,9 +67,10 @@ def test_receipt_retry_and_ambiguous_telegram_reconciliation(store):
     with pytest.raises(RuntimeError, match='reconciliation'):
         ledger.reserve(incoming, 'telegram')
     assert ledger.reserve(incoming, 'telegram', retry_reserved=True)
-    ledger.accepted(incoming, 'telegram', 'receipt-1')
+    ledger.accepted(incoming, 'telegram', 'receipt-1', message_sent=True)
     assert not ledger.reserve(incoming, 'telegram', retry_reserved=True)
     assert ledger._chat(incoming).get().to_dict()['sent'] == 1
+    assert ledger._chat(incoming).get().to_dict()['outbound_accepted'] is True
 
 
 def test_undo_encrypted_scoped_expired_once_and_ambiguous_inverse(store, monkeypatch):
@@ -210,7 +215,6 @@ def test_expired_receipts_cleanup_is_bounded_and_preserves_recent_tombstones(sto
 
 
 def test_inbox_fifo_fences_running_head_and_sorts_retry_backlog(store):
-    from dataclasses import replace
 
     incoming = message()
     items = [replace(incoming, provider_message_id=str(i)) for i in range(3)]
@@ -231,7 +235,6 @@ def test_inbox_fifo_fences_running_head_and_sorts_retry_backlog(store):
 
 
 def test_settled_failed_head_retains_evidence_without_blocking_fifo(store):
-    from dataclasses import replace
 
     incoming = message()
     failed = store.enqueue(incoming)
@@ -243,3 +246,113 @@ def test_settled_failed_head_retains_evidence_without_blocking_fifo(store):
     assert row['status'] == 'running' and row['payload'] and row['fifo_settled_at']
     assert store.claim(failed) is None
     assert store.claim(following) is not None
+
+
+def test_stale_heads_and_pending_retirement_never_replay(store, caplog):
+
+    incoming = message()
+    stale = store.enqueue(incoming)
+    old_pending = store.enqueue(replace(incoming, provider_message_id='old'))
+    fresh = store.enqueue(replace(incoming, provider_message_id='fresh'))
+    now = datetime.now(timezone.utc)
+    store.db.document(stale).update({'status': 'running', 'created_at': now - timedelta(seconds=STALE_SECONDS + 1)})
+    store.db.document(old_pending).update({'created_at': now - timedelta(seconds=PENDING_MAX_SECONDS + 1)})
+    claimed = store.claim_next(fresh, now=now)
+    assert claimed[0] == fresh
+    stale_row = store.db.document(stale).get().to_dict()
+    assert stale_row['fifo_settled_at'] and stale_row['retired_reason'] == 'stale_running'
+    assert store.db.document(old_pending).get().to_dict()['status'] == 'done'
+    assert store.claim(stale) is None
+    assert store.claim_next(fresh) is None  # fresh running turn remains exclusive
+    with pytest.raises(PermissionError):
+        store.assert_running(stale)
+    assert 'reason=stale_running' in caplog.text and 'head_age_seconds=' in caplog.text
+
+
+def test_expired_lease_reclaim_fences_old_owner_and_release(store):
+
+    now = datetime.now(timezone.utc)
+    old = store.acquire('test', 'surface', now=now - timedelta(seconds=STALE_SECONDS + 1))
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        tokens = list(pool.map(lambda _: store.acquire('test', 'surface', now=now), range(2)))
+    assert sum(token is not None for token in tokens) == 1
+    current = next(token for token in tokens if token)
+    with pytest.raises(PermissionError):
+        store.assert_lease('test', 'surface', old)
+    with pytest.raises(PermissionError):
+        store.release('test', 'surface', old)
+    store.assert_lease('test', 'surface', current)
+    store.release('test', 'surface', current)
+
+
+def test_newest_wake_drains_older_pending_in_order_once(store, monkeypatch):
+
+    adapter = LoopbackAdapter()
+    incoming = message()
+    link = store.mint('test', incoming.channel, incoming.provider, 'token')['proof']
+    store.consume(link, incoming)
+    paths = [store.enqueue(replace(incoming, provider_message_id=str(i), text=str(i))) for i in range(3)]
+    seen = []
+    monkeypatch.setattr(history, 'recent_activity', lambda *args, **kwargs: [])
+
+    def turn(uid, surface, session, request, sink, **kwargs):
+        seen.append(request.text)
+
+        async def stream():
+            yield 'done: ' + base64.b64encode(json.dumps({'text': 'answer ' + request.text}).encode()).decode() + '\n\n'
+
+        return stream()
+
+    gateway = Gateway(adapter, store=store, turn=turn, admission=lambda uid: None)
+    assert asyncio.run(gateway.process(paths[-1]))
+    assert seen == ['0', '1', '2'] and len(adapter.sent) == 3
+    assert not asyncio.run(gateway.process(paths[-1]))
+    assert len(adapter.sent) == 3
+
+
+def test_durable_chat_head_survives_completion_duplicate_and_late_webhooks(store):
+    incoming = replace(message(), reply_to='answered-provider-message')
+    first = store.enqueue(incoming)
+    second_message = replace(
+        incoming, provider_message_id='second', received_at=incoming.received_at + timedelta(seconds=1)
+    )
+    second = store.enqueue(second_message)
+    assert store.reply_target(incoming) == incoming.reply_to
+    assert store.reply_target(second_message) is None
+    assert store.enqueue(incoming) is None
+    store.complete(first)
+    store.complete(second)
+    assert store.reply_target(incoming) == incoming.reply_to
+    late = replace(incoming, provider_message_id='late', received_at=incoming.received_at - timedelta(seconds=1))
+    store.enqueue(late)
+    assert store.reply_target(second_message) is None
+    other_chat = replace(incoming, external_chat_id='other-chat', provider_message_id='other')
+    store.enqueue(other_chat)
+    assert store.reply_target(other_chat) is None
+    callback = replace(second_message, provider_message_id='callback', callback_id='click', reply_to='receipt')
+    store.enqueue(callback)
+    assert store.reply_target(second_message) is None
+    assert store.reply_target(callback) == 'receipt'
+
+
+def test_preview_history_is_accepted_delivery_not_a_reservation(store):
+    ledger, incoming = DeliveryLedger(store), message()
+    ledger.inbound(incoming)
+    assert not asyncio.run(ledger.has_outbound(incoming))
+    ledger.reserve(incoming, 'operation')
+    assert not asyncio.run(ledger.has_outbound(incoming))
+    ledger.accepted(incoming, 'operation', 'reaction-receipt')
+    assert not asyncio.run(ledger.has_outbound(incoming))
+    ledger.reserve(incoming, 'message-operation')
+    ledger.accepted(incoming, 'message-operation', 'receipt', message_sent=True)
+    assert asyncio.run(ledger.has_outbound(incoming))
+    assert not asyncio.run(ledger.has_outbound(replace(incoming, external_chat_id='other-chat')))
+
+
+def test_transactional_telegram_clock_tie_keeps_the_newer_provider_id(store):
+    old = replace(message(), channel='telegram', provider='telegram', provider_message_id='10', reply_to='10')
+    newer = replace(old, provider_message_id='11', reply_to='11')
+    store.enqueue(newer)
+    store.enqueue(old)
+    assert store.reply_target(newer) is None
+    assert store.reply_target(old) == '10'

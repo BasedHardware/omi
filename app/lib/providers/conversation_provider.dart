@@ -13,6 +13,7 @@ import 'package:omi/backend/http/api_result.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/structured.dart';
+import 'package:omi/services/capture/empty_recording_notice.dart';
 import 'package:omi/services/auth_service.dart';
 import 'package:omi/services/siri_integration.dart';
 import 'package:omi/services/notifications/merge_notification_handler.dart';
@@ -76,6 +77,7 @@ class ConversationProvider extends ChangeNotifier {
 
   bool isLoadingConversations = false;
   bool showDiscardedConversations = false;
+  HomeEmptyExplanation homeEmptyExplanation = HomeEmptyExplanation.none;
   bool showShortConversations = false;
   int shortConversationThreshold = 0; // in seconds
   bool showStarredOnly = false; // filter to show only starred conversations
@@ -268,6 +270,11 @@ class ConversationProvider extends ChangeNotifier {
   void _loadSettings() {
     final prefs = SharedPreferencesUtil();
     showDiscardedConversations = prefs.showDiscardedMemories;
+    homeEmptyExplanation = switch (prefs.homeEmptyExplanation) {
+      'tooShort' => HomeEmptyExplanation.tooShort,
+      'discardedOnly' => HomeEmptyExplanation.discardedOnly,
+      _ => HomeEmptyExplanation.none,
+    };
     showShortConversations = prefs.showShortConversations;
     shortConversationThreshold = prefs.shortConversationThreshold;
   }
@@ -908,6 +915,7 @@ class ConversationProvider extends ChangeNotifier {
       // Only cache when viewing all folders
       SharedPreferencesUtil().cachedConversations = conversations;
     }
+    if (conversations.isNotEmpty) clearEmptyRecordingExplanation();
     if (searchedConversations.isEmpty) {
       searchedConversations = conversations;
     }
@@ -1435,6 +1443,43 @@ class ConversationProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  void showEmptyRecordingExplanation() {
+    if (conversations.any((conversation) => !conversation.discarded)) return;
+    _setHomeEmptyExplanation(HomeEmptyExplanation.tooShort);
+  }
+
+  /// Sets the discarded-only empty state whenever that is still true.
+  /// [DiscardedOnlyClaim.alreadyShown] still lets the caller emit once per capture.
+  DiscardedOnlyClaim claimDiscardedOnlyExplanation() {
+    if (showDiscardedConversations) return DiscardedOnlyClaim.notDiscardedOnly;
+    if (!onlyDiscardedConversations(conversations.map((conversation) => conversation.discarded))) {
+      return DiscardedOnlyClaim.notDiscardedOnly;
+    }
+    _setHomeEmptyExplanation(HomeEmptyExplanation.discardedOnly);
+    if (SharedPreferencesUtil().discardedOnlyExplained) return DiscardedOnlyClaim.alreadyShown;
+    SharedPreferencesUtil().discardedOnlyExplained = true;
+    return DiscardedOnlyClaim.shown;
+  }
+
+  void clearEmptyRecordingExplanation() {
+    if (homeEmptyExplanation == HomeEmptyExplanation.none) return;
+    homeEmptyExplanation = HomeEmptyExplanation.none;
+    SharedPreferencesUtil().homeEmptyExplanation = '';
+    notifyListeners();
+  }
+
+  void _setHomeEmptyExplanation(HomeEmptyExplanation next) {
+    final stored = switch (next) {
+      HomeEmptyExplanation.tooShort => 'tooShort',
+      HomeEmptyExplanation.discardedOnly => 'discardedOnly',
+      HomeEmptyExplanation.none => '',
+    };
+    final changed = homeEmptyExplanation != next;
+    homeEmptyExplanation = next;
+    SharedPreferencesUtil().homeEmptyExplanation = stored;
+    if (changed) notifyListeners();
+  }
+
   void upsertConversation(ServerConversation conversation) {
     int idx = conversations.indexWhere((m) => m.id == conversation.id);
     if (idx < 0) {
@@ -1442,6 +1487,7 @@ class ConversationProvider extends ChangeNotifier {
     } else {
       updateConversation(conversation, idx);
     }
+    if (!conversation.discarded) clearEmptyRecordingExplanation();
   }
 
   void updateConversationInSortedList(ServerConversation conversation) {

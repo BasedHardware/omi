@@ -340,7 +340,7 @@ final class MeetingScreenEvidencePassTests: XCTestCase {
           XCTFail("a persisted set for this window must be read, not re-selected")
           return MeetingFrameSelector.Outcome()
         },
-        fetchPersistedSet: { _ in server.persisted() },
+        fetchPersistedSet: { _ in await server.persisted() },
         deleteFrameRemote: { _, _ in },
         now: { clock.now })
     }
@@ -364,10 +364,15 @@ final class MeetingScreenEvidencePassTests: XCTestCase {
     XCTAssertEqual(note.frames.first?.thumbnailURL, "https://example.test/thumb-2.jpg")
     XCTAssertGreaterThan(note.frames.first?.urlExpiresAt ?? .distantPast, clock.now.addingTimeInterval(15 * 60))
 
-    // Every tile reporting a failed thumbnail at once still costs one refetch.
-    async let first: Void = note.refreshAfterContentUnavailable()
-    async let second: Void = note.refreshAfterContentUnavailable()
-    _ = await (first, second)
+    // Keep the first fetch in flight before the second tile reports failure.
+    // An instant fake can finish before the second async-let task even starts;
+    // that exercises sequential refreshes, not coalescing concurrent reports.
+    let heldFetch = server.holdNextFetch()
+    let first = Task { await note.refreshAfterContentUnavailable() }
+    await heldFetch.started.wait()
+    await note.refreshAfterContentUnavailable()
+    await heldFetch.release.set()
+    await first.value
     XCTAssertEqual(server.fetches, 3)
     XCTAssertEqual(note.frames.first?.thumbnailURL, "https://example.test/thumb-3.jpg")
   }
@@ -765,7 +770,10 @@ private actor FakeScreenFrameServer {
     let frame = ConversationScreenFrame(
       id: "frame-1", capturedAt: capturedAt, role: "strip", rank: 0, caption: "Roadmap slide", labels: [],
       sourceBadge: nil, focalRegion: nil, width: 1280, height: 800, contentURL: "https://example.test/frame.jpg",
-      thumbnailURL: "https://example.test/thumb.jpg", urlExpiresAt: capturedAt.addingTimeInterval(3_600),
+      // Signatures are minted when the set is served, even for old frames.
+      // Capture-time expiry can invalidate a completed in-flight fixture's cache
+      // before its cleanup task runs and a joining note adopts that result.
+      thumbnailURL: "https://example.test/thumb.jpg", urlExpiresAt: Date().addingTimeInterval(3_600),
       ground: nil)
     stored = ConversationScreenFrameSet(
       revision: 1, banner: nil, strip: [frame], adjudicatedAt: Date(), selectionFingerprint: stampedFingerprint)
@@ -862,11 +870,17 @@ private final class TestClock: @unchecked Sendable {
 
 /// A persisted set whose signatures are re-minted on every `GET`, each good for 20 minutes.
 private final class SigningServer: @unchecked Sendable {
+  struct HeldFetch: Sendable {
+    let started = AsyncFlag()
+    let release = AsyncFlag()
+  }
+
   private let lock = NSLock()
   private let fingerprint: String
   private let capturedAt: Date
   private let clock: TestClock
   private var count = 0
+  private var nextHeldFetch: HeldFetch?
 
   init(fingerprint: String, capturedAt: Date, clock: TestClock) {
     self.fingerprint = fingerprint
@@ -880,11 +894,23 @@ private final class SigningServer: @unchecked Sendable {
     return count
   }
 
-  func persisted() -> ConversationScreenFrameSet {
-    lock.lock()
-    count += 1
-    let generation = count
-    lock.unlock()
+  func holdNextFetch() -> HeldFetch {
+    let held = HeldFetch()
+    lock.withLock { nextHeldFetch = held }
+    return held
+  }
+
+  func persisted() async -> ConversationScreenFrameSet {
+    let (generation, held) = lock.withLock {
+      count += 1
+      let held = nextHeldFetch
+      nextHeldFetch = nil
+      return (count, held)
+    }
+    if let held {
+      await held.started.set()
+      await held.release.wait()
+    }
     let frame = ConversationScreenFrame(
       id: "frame-1", capturedAt: capturedAt, role: "strip", rank: 0, caption: "Roadmap", labels: [],
       sourceBadge: nil, focalRegion: nil, width: 1280, height: 800,

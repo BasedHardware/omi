@@ -87,6 +87,7 @@ class BleBridge implements BleFlutterApi {
   }
 
   final Set<void Function(String state)> _bluetoothStateListeners = {};
+  final Set<void Function(String reason)> _scanBlockedListeners = {};
   void Function(BlePeripheral peripheral)? peripheralDiscoveredCallback;
   void Function(List<String> peripheralUuids)? stateRestoredCallback;
   VoidCallback? pairingLostCallback;
@@ -105,6 +106,12 @@ class BleBridge implements BleFlutterApi {
   VoidCallback addBluetoothStateListener(void Function(String state) listener) {
     _bluetoothStateListeners.add(listener);
     return () => _bluetoothStateListeners.remove(listener);
+  }
+
+  /// Android scan attempts that returned before discovery started.
+  VoidCallback addScanBlockedListener(void Function(String reason) listener) {
+    _scanBlockedListeners.add(listener);
+    return () => _scanBlockedListeners.remove(listener);
   }
 
   void registerPeripheral({
@@ -142,6 +149,13 @@ class BleBridge implements BleFlutterApi {
   void onBluetoothStateChanged(String state) {
     for (final listener in List.of(_bluetoothStateListeners)) {
       listener(state);
+    }
+  }
+
+  @override
+  void onScanBlocked(String reason) {
+    for (final listener in List.of(_scanBlockedListeners)) {
+      listener(reason);
     }
   }
 

@@ -6,6 +6,7 @@ import {
   useMemo,
   useTransition,
   useEffect,
+  useRef,
   useDeferredValue,
   lazy,
   Suspense,
@@ -39,6 +40,7 @@ import { PageToolbar } from '@/components/layout/PageToolbar';
 import { BulkActionBar } from '@/components/tasks/BulkActionBar';
 import { copyMemoriesToClipboard, downloadMemories } from '@/lib/memoryExport';
 import { useChat as useChatContext } from '@/components/chat/ChatContext';
+import { readHighlightParam } from '@/lib/itemList';
 
 // Lazy load heavy components for better performance
 const KnowledgeGraph = lazy(() =>
@@ -258,6 +260,33 @@ export function MemoriesPage() {
       }
     }, 100);
   }, []);
+
+  // `/memories?highlight=<id>` (from an item-list link): scroll to and highlight that memory once
+  // it is in the loaded list. MemoryList virtualizes rows, so a DOM lookup misses anything
+  // outside the first viewport; setting highlightedMemoryId lets the list scroll itself.
+  const [pendingHighlight, setPendingHighlight] = useState<string | null>(() =>
+    readHighlightParam(),
+  );
+  const highlightTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => {
+    return () => {
+      if (highlightTimer.current != null) clearTimeout(highlightTimer.current);
+    };
+  }, []);
+  useEffect(() => {
+    if (!pendingHighlight || loading || !memoriesById.has(pendingHighlight)) return;
+    const id = pendingHighlight;
+    setPendingHighlight(null);
+    setSelectedTag(null);
+    setSearchQuery('');
+    setViewMode('list');
+    setHighlightedMemoryId(id);
+    if (highlightTimer.current != null) clearTimeout(highlightTimer.current);
+    highlightTimer.current = setTimeout(() => {
+      highlightTimer.current = null;
+      setHighlightedMemoryId((current) => (current === id ? null : current));
+    }, 2000);
+  }, [pendingHighlight, loading, memoriesById]);
 
   // Handle selection toggle for a single memory
   const handleToggleSelect = useCallback((memoryId: string) => {

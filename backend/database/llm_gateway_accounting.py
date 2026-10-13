@@ -21,6 +21,7 @@ from google.cloud import firestore
 
 from database._client import get_firestore_client
 from database.llm_usage import resolve_usage_plan_id
+from database.usage_units import gateway_shadow
 
 ATTEMPTS_COLLECTION = 'llm_gateway_attempts'
 USER_DAYS_COLLECTION = 'llm_gateway_user_days'
@@ -47,6 +48,8 @@ def record_llm_gateway_attempt(
     attempt_id = _required_string(event, 'attempt_id')
     client = firestore_client or get_firestore_client()
     data = dict(event)
+    annotation, shadow = gateway_shadow(data)
+    data["usage_units_v1"] = annotation
     data['subscription_tier'] = _subscription_tier(client, data.get('user_uid'))
     plan_id = resolve_usage_plan_id(data.get('user_uid', ''), firestore_client=client)
     data['plan_id'] = plan_id
@@ -66,7 +69,7 @@ def record_llm_gateway_attempt(
         client.collection(ATTEMPTS_COLLECTION).document(attempt_id).create(data)
     except AlreadyExists:
         return False
-    _record_user_day_rollup(client, data)
+    _record_user_day_rollup(client, data, shadow)
     return True
 
 
@@ -101,7 +104,7 @@ def _required_string(event: Mapping[str, Any], key: str) -> str:
     return value
 
 
-def _record_user_day_rollup(client: Any, data: Mapping[str, Any]) -> None:
+def _record_user_day_rollup(client: Any, data: Mapping[str, Any], shadow: Mapping[str, Any]) -> None:
     """Increment the hashed per-user-day rollup for one newly stored attempt.
 
     Fail-open by contract: the immutable attempt document already carries the
@@ -133,6 +136,7 @@ def _record_user_day_rollup(client: Any, data: Mapping[str, Any]) -> None:
             update[f'fc_{_feature_class(data.get("feature"))}'] = firestore.Increment(cost)
         if data.get('cost_status') != 'estimated':
             update['attempts_unpriced'] = firestore.Increment(1)
+        update.update(shadow)
         client.collection(USER_DAYS_COLLECTION).document(f'{date}_{uid_hash}').set(update, merge=True)
     except Exception:
         # The attempt ledger write already succeeded; losing one rollup

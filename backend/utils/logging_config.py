@@ -16,6 +16,30 @@ import sys
 from typing import Optional, TextIO
 
 
+class SuccessfulHealthAccessFilter(logging.Filter):
+    """Suppress only Uvicorn's routine successful probe access records.
+
+    Platform request logs and failed probes remain available. Unknown record
+    shapes pass through so a Uvicorn format change cannot hide failures.
+    """
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        if record.name != 'uvicorn.access' or record.levelno != logging.INFO:
+            return True
+        args = record.args
+        if not isinstance(args, tuple) or len(args) != 5:
+            return True
+        _, method, path, _, status = args
+        return not (method in ('GET', 'HEAD') and path in ('/v1/health', '/health', '/ready') and status == 200)
+
+
+def configure_health_access_logging() -> None:
+    """Install once on the emitting logger, independent of its handlers."""
+    logger = logging.getLogger('uvicorn.access')
+    if not any(isinstance(item, SuccessfulHealthAccessFilter) for item in logger.filters):
+        logger.addFilter(SuccessfulHealthAccessFilter())
+
+
 class _MaxLevelFilter(logging.Filter):
     """Only allow records strictly below ``level`` (keeps errors off stdout)."""
 
@@ -41,6 +65,8 @@ def configure_split_stream_logging(
     """
     out_stream = stdout if stdout is not None else sys.stdout
     err_stream = stderr if stderr is not None else sys.stderr
+
+    configure_health_access_logging()
 
     root = logging.getLogger()
     root.setLevel(level)

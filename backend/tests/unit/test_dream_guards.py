@@ -193,6 +193,8 @@ def test_short_spelling_options_are_dropped_and_counted():
                     'item_id': 'spelling:invented',
                     'kind': 'spelling',
                     'title': 'Which spelling?',
+                    'source_ref': 'conversations/c1',
+                    'quote': 'Invented',
                     'reason': 'Invented',
                     'created_at': '2026-10-11T00:00:00Z',
                     'spelling': {'term_id': 'invented', 'allow_custom': True, 'options': ['One']},
@@ -241,9 +243,12 @@ def test_run_filters_before_shadow_persistence_and_effects(monkeypatch, caplog, 
             feedback('synthetic heading stale.', 'notes'),
         ],
     )
+    monkeypatch.setattr(dream_agent.dream_capacity, 'claim', AsyncMock(return_value=('slot', 'token')))
+    monkeypatch.setattr(dream_agent.dream_capacity, 'release', AsyncMock())
+    monkeypatch.setattr(dream_agent.dream_capacity, 'available_model', AsyncMock(return_value='synthetic-model'))
     monkeypatch.setattr(dream_store, 'acquire', lambda *a, **k: {'run_id': 'synthetic', 'mode': 'shadow'})
     monkeypatch.setattr(dream_store, 'vocabulary', lambda *a: [])
-    monkeypatch.setattr(dream_agent.dream_reads, 'read_changes', lambda *a: (records, []))
+    monkeypatch.setattr(dream_agent.dream_reads, 'read_changes', lambda *a, **k: (records, []))
     monkeypatch.setattr(dream_agent, 'plan_pass', AsyncMock(return_value=(plan, 100)))
     monkeypatch.setattr(dream_store, 'demoted_types', lambda *a: set())
     monkeypatch.setattr(review_store, 'remaining_today', lambda *a: 3)
