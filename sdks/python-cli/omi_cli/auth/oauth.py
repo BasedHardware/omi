@@ -37,7 +37,11 @@ from typing import Any, Optional
 import httpx
 
 from omi_cli import config as cfg
-from omi_cli.auth.store import store_api_key, store_oauth_tokens, update_oauth_id_token
+from omi_cli.auth.store import (
+    store_oauth_session_with_dev_key,
+    store_oauth_tokens,
+    update_oauth_id_token,
+)
 from omi_cli.config import Profile
 from omi_cli.errors import AuthError, UsageError
 
@@ -178,16 +182,22 @@ def login_with_browser(
         )
 
     custom_token = _exchange_code_for_custom_token(api_base, code, redirect_uri, code_verifier)
-    id_token, _refresh_token, _expires_in = _firebase_signin_with_custom_token(custom_token)
+    id_token, refresh_token, expires_in = _firebase_signin_with_custom_token(custom_token)
 
     # Every /v1/dev/* endpoint the CLI actually uses authenticates with a
-    # *developer API key*, not a Firebase ID token — so storing the Firebase
-    # token directly would 401 ("Invalid API Key") on the very first call.
-    # The Firebase session DOES authenticate POST /v1/dev/keys, so use it once
-    # to mint a long-lived dev key and store that. Browser OAuth is, in effect,
-    # just a friendlier way to obtain a key without visiting the dashboard.
+    # *developer API key*, not a Firebase ID token — so the key must be minted
+    # and stored. But ``omi chat`` authenticates with the Firebase identity, so
+    # the OAuth session must ALSO be kept. Persist both together with
+    # auth_method = "oauth" so neither capability is lost.
     raw_key = _exchange_firebase_token_for_dev_key(api_base, id_token)
-    return store_api_key(profile_name, raw_key, api_base=api_base)
+    return store_oauth_session_with_dev_key(
+        profile_name,
+        api_key=raw_key,
+        id_token=id_token,
+        refresh_token=refresh_token,
+        expires_at=time.time() + expires_in - _REFRESH_MARGIN_SECONDS,
+        api_base=api_base,
+    )
 
 
 # --- Refresh ---------------------------------------------------------------
