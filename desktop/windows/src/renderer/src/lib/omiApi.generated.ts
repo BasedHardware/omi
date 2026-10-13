@@ -232,12 +232,6 @@ export interface AnnouncementDeleteResponse {
 
 export type AnnouncementType = "changelog" | "feature" | "announcement";
 
-export interface AnnualSavings {
-  amount_minor: number;
-  formatted: string;
-  percent: number;
-}
-
 export interface App {
   approved?: boolean;
   author: string;
@@ -3856,12 +3850,6 @@ export interface PhoneNumbersResponse {
   numbers: Array<PhoneNumberResponse>;
 }
 
-export interface PlanFeature {
-  included?: boolean;
-  key: string;
-  label: string;
-}
-
 export interface PlanIdentitySubscription {
   cancel_at_period_end?: boolean;
   current_period_end?: number | null;
@@ -4993,49 +4981,63 @@ export interface StoreRecordingPermissionResponse {
   store_recording_permission: boolean;
 }
 
-export interface StorefrontCurrentPlan {
+export interface StorefrontCurrent {
+  cancel_at_period_end?: boolean;
+  interval?: "month" | "year" | null;
   legacy: boolean;
+  legacy_note?: string | null;
+  line: string;
+  name: string;
   plan_id: string;
   price_id?: string | null;
 }
 
 export interface StorefrontPrice {
   amount_minor: number;
-  annual_savings?: AnnualSavings | null;
+  cta_label?: string | null;
   currency: string;
-  formatted_amount: string;
+  headline: string;
   interval: "month" | "year";
-  monthly_equivalent: string;
+  months_free?: number | null;
   price_id?: string | null;
+  renewal_line?: string | null;
+  subline?: string | null;
 }
 
 export interface StorefrontResponse {
   catalog_revision: number;
-  current?: StorefrontCurrentPlan | null;
-  next_offer_tier_id?: string | null;
-  schema_version?: 1;
+  current?: StorefrontCurrent | null;
+  header?: string | null;
+  schema_version?: 2;
   show_subscription_ui?: boolean;
   tiers?: Array<StorefrontTier>;
   usage?: StorefrontUsage;
+  yearly_toggle_label?: string | null;
 }
 
 export interface StorefrontTier {
-  action: "current" | "upgrade" | "downgrade_not_offered" | "contact";
-  display_name: string;
-  entitlement_version: string;
-  features: Array<PlanFeature>;
-  legacy?: boolean;
+  action: "checkout" | "current" | "none";
+  blocked_line?: string | null;
+  bullets: Array<string>;
+  compact?: boolean;
+  cta_label?: string | null;
+  hours_line: string;
+  is_current?: boolean;
+  name: string;
   plan_id: string;
   prices: Array<StorefrontPrice>;
   recommended?: boolean;
-  tagline: string;
   tier_id: string;
 }
 
 export interface StorefrontUsage {
-  budget_percent?: number | null;
-  kind?: "transcription" | "usage_budget" | "unavailable";
-  reset_at?: number | null;
+  kind?: "usage_budget" | "transcription" | "unavailable";
+  meter_line?: string | null;
+  nudge_line?: string | null;
+  percent?: number | null;
+  period_id?: string | null;
+  pro_gates?: Array<string>;
+  reset_label?: string | null;
 }
 
 export interface StripeConnectAccountResponse {
@@ -6057,7 +6059,6 @@ export interface OmiApiSchemas {
   "Announcement": Announcement;
   "AnnouncementDeleteResponse": AnnouncementDeleteResponse;
   "AnnouncementType": AnnouncementType;
-  "AnnualSavings": AnnualSavings;
   "App": App;
   "AppApiKeyResponse": AppApiKeyResponse;
   "AppBaseModel": AppBaseModel;
@@ -6537,7 +6538,6 @@ export interface OmiApiSchemas {
   "PhoneMutationResponse": PhoneMutationResponse;
   "PhoneNumberResponse": PhoneNumberResponse;
   "PhoneNumbersResponse": PhoneNumbersResponse;
-  "PlanFeature": PlanFeature;
   "PlanIdentitySubscription": PlanIdentitySubscription;
   "PlanIdentityUserSubscriptionResponse": PlanIdentityUserSubscriptionResponse;
   "PlanLimits": PlanLimits;
@@ -6695,7 +6695,7 @@ export interface OmiApiSchemas {
   "StoreMeetingRequest": StoreMeetingRequest;
   "StoreMeetingResponse": StoreMeetingResponse;
   "StoreRecordingPermissionResponse": StoreRecordingPermissionResponse;
-  "StorefrontCurrentPlan": StorefrontCurrentPlan;
+  "StorefrontCurrent": StorefrontCurrent;
   "StorefrontPrice": StorefrontPrice;
   "StorefrontResponse": StorefrontResponse;
   "StorefrontTier": StorefrontTier;
@@ -21482,7 +21482,7 @@ export async function report_message_v2_messages__message_id__report_post(path: 
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
-export async function get_storefront_v2_payments_plans_get(query: { source?: string | null, trigger?: "proactive_agent" | "screen_context" | "usage_budget" | "mcp_daily_cap" | null }, header: { X_App_Platform?: string, X_App_Version?: string, authorization?: string, X_Device_Id_Hash?: string }, init?: OmiApiClientInit): Promise<StorefrontResponse> {
+export async function get_storefront_v2_payments_plans_get(query: { source?: string | null, trigger?: "proactive_agent" | "screen_context" | "usage_budget" | "mcp_daily_cap" | null, locale?: string | null }, header: { X_App_Platform?: string, X_App_Version?: string, authorization?: string, X_Device_Id_Hash?: string }, init?: OmiApiClientInit): Promise<StorefrontResponse> {
   const _base = init?.baseURL ?? "";
   const _path = `/v2/payments/plans`;
   const _params = query ? Object.entries(query)

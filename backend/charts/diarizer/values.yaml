@@ -97,6 +97,8 @@ resources: {}
 
 # This section is for setting up autoscaling more information can be found here: https://kubernetes.io/docs/concepts/workloads/autoscaling/
 autoscaling:
+  # Optional Pods metric; requires a Prometheus custom-metrics adapter mapping.
+  queueDepthAverageValue: null
   enabled: false
   minReplicas: 1
   maxReplicas: 100
@@ -121,3 +123,16 @@ nodeSelector: {}
 tolerations: []
 
 affinity: {}
+
+# Additive metrics discovery; enable only where the GMP CRD is installed.
+podMonitoring:
+  enabled: false
+  interval: 30s
+
+# Raise for long final-pass requests when enabling a cohort behind the ingress.
+backendConfig:
+  name: diarizer-backend-config
+  timeoutSeconds: 30
+
+# Empty keeps the image entrypoint serving concurrent legacy embeddings/v1.
+command: []

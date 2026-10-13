@@ -53,7 +53,8 @@ def spelling_grounding_rejection(edit, records, vocabulary=()):
         or edit.before.strip() == edit.after.strip()
     ):
         return 'invalid_spelling'
-    target = records.get(edit.target)
+    target_ref = base_ref(edit.target)
+    target = records.get(target_ref)
     if target is None or any(not has_ref(ref, records) for ref in edit.evidence):
         return 'invalid_evidence'
     sources = source_conversations(edit.target, target)
@@ -67,7 +68,7 @@ def spelling_grounding_rejection(edit, records, vocabulary=()):
             if not isinstance(ref, str):
                 continue
             ref = base_ref(ref)
-            if ref == edit.target or ref.split('/', 1)[-1] == edit.target.split('/', 1)[-1]:
+            if ref == target_ref or ref.split('/', 1)[-1] == target_ref.split('/', 1)[-1]:
                 return True
             if ref not in records:
                 return True
@@ -79,7 +80,7 @@ def spelling_grounding_rejection(edit, records, vocabulary=()):
 
     for ref in edit.evidence:
         base = base_ref(ref)
-        if base == edit.target or base.split('/', 1)[-1] == edit.target.split('/', 1)[-1]:
+        if base == target_ref or base.split('/', 1)[-1] == target_ref.split('/', 1)[-1]:
             continue
         row = records[base]
         if sources & source_conversations(ref, row) or traces_target(row):
