@@ -41,7 +41,7 @@ PROACTIVITY_V2_BUDGET: Final[dict[str, Any]] = {'fraction_basis_points': 1000,
                              'unlimited_v2': 2999,
                              'unlimited': 2000,
                              'plus': 2000}}
-ENTITLEMENT_VERSIONS: Final = {'legacy': {'budget': None},
+ENTITLEMENT_VERSIONS: Final[dict[str, Any]] = {'legacy': {'budget': None},
  'ladder_v1': {'rate_card_version': 'v1',
                'unit_usd_micros': 1000,
                'monthly_budgets': {'basic': {'kind': 'rate_card_mix',
@@ -51,8 +51,8 @@ ENTITLEMENT_VERSIONS: Final = {'legacy': {'budget': None},
                                    'plus': {'kind': 'units', 'value': 16360},
                                    'operator': {'kind': 'units', 'value': 44090},
                                    'architect': {'kind': 'units', 'value': 189463}}}}
-LADDER_V1_STRIPE_PRICES: Final = []
-RECOGNIZED_STRIPE_ENTITLEMENT_VERSIONS: Final = {'price_1RrxXL1F8wnoWYvwIddzR902': 'legacy',
+LADDER_V1_STRIPE_PRICES: Final[list[str]] = []
+RECOGNIZED_STRIPE_ENTITLEMENT_VERSIONS: Final[dict[str, Any]] = {'price_1RrxXL1F8wnoWYvwIddzR902': 'legacy',
  'price_1RrxXL1F8wnoWYvw3kDbWmjs': 'legacy',
  'price_1RtJPm1F8wnoWYvwhVJ38kLb': 'legacy',
  'price_1RtJQ71F8wnoWYvwKMPaGlGY': 'legacy',
