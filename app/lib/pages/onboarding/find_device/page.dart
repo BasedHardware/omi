@@ -86,7 +86,8 @@ class _FindDevicesPageState extends State<FindDevicesPage> {
   Widget build(BuildContext context) {
     return Consumer<OnboardingProvider>(
       builder: (context, provider, child) {
-        final cantFind = provider.deviceList.isEmpty && provider.enableInstructions;
+        final cantFind =
+            provider.deviceList.isEmpty && provider.enableInstructions && provider.pairingFailureReason == null;
         final notNow = widget.includeSkip
             ? OmiButton.tertiary(
                 key: const Key('find_devices_not_now'),
@@ -111,7 +112,7 @@ class _FindDevicesPageState extends State<FindDevicesPage> {
               goNext: widget.goNext,
               isFromOnboarding: widget.isFromOnboarding,
               onRescan: _scanAgain,
-              showStatus: !cantFind,
+              showStatus: !cantFind && provider.pairingFailureReason == null,
             ),
             // Nothing found after a while: troubleshooting first, support last (onboarding-home #13).
             // The pairing guide has no support route, so Contact Support stays as a small link.

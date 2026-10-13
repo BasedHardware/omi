@@ -23319,6 +23319,72 @@ abstract class AppLocalizations {
   /// **'I didn\'t catch enough speech, try again with a few sentences'**
   String get firstCaptureEmpty;
 
+  /// No description provided for @watchCaptureTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Record from your Apple Watch'**
+  String get watchCaptureTitle;
+
+  /// No description provided for @watchCaptureOpen.
+  ///
+  /// In en, this message translates to:
+  /// **'Open Omi on your Apple Watch.'**
+  String get watchCaptureOpen;
+
+  /// No description provided for @watchCaptureRecord.
+  ///
+  /// In en, this message translates to:
+  /// **'Tap Record. Allow microphone access if asked.'**
+  String get watchCaptureRecord;
+
+  /// No description provided for @watchCaptureSync.
+  ///
+  /// In en, this message translates to:
+  /// **'Your recording syncs to Omi on this phone.'**
+  String get watchCaptureSync;
+
+  /// No description provided for @pairingBluetoothOff.
+  ///
+  /// In en, this message translates to:
+  /// **'Turn on Bluetooth on your phone, then try again.'**
+  String get pairingBluetoothOff;
+
+  /// No description provided for @pairingBluetoothPermission.
+  ///
+  /// In en, this message translates to:
+  /// **'Allow Bluetooth access for Omi in Settings, then try again.'**
+  String get pairingBluetoothPermission;
+
+  /// No description provided for @pairingNearbyPermission.
+  ///
+  /// In en, this message translates to:
+  /// **'Allow Nearby devices access for Omi in Settings, then try again.'**
+  String get pairingNearbyPermission;
+
+  /// No description provided for @pairingLocationPermission.
+  ///
+  /// In en, this message translates to:
+  /// **'Allow location access for Omi in Settings so this phone can find your device, then try again.'**
+  String get pairingLocationPermission;
+
+  /// No description provided for @pairingNotFoundOrDropped.
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn\'t reach your Omi. Make sure it\'s charged, close to your phone, and its light is blinking, then try again.'**
+  String get pairingNotFoundOrDropped;
+
+  /// No description provided for @pairingBondRecovery.
+  ///
+  /// In en, this message translates to:
+  /// **'Forget Omi in your phone’s Bluetooth settings, then try pairing again.'**
+  String get pairingBondRecovery;
+
+  /// No description provided for @pairingHowTo.
+  ///
+  /// In en, this message translates to:
+  /// **'How to pair'**
+  String get pairingHowTo;
+
   /// No description provided for @firstCaptureWatchInstructions.
   ///
   /// In en, this message translates to:

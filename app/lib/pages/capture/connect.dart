@@ -73,9 +73,11 @@ class _ConnectDevicePageState extends State<ConnectDevicePage> {
                   if (!onboardingProvider.isConnected)
                     ScanningRippleWidget(
                       isScanning: !onboardingProvider.isConnected,
-                      size: MediaQuery.sizeOf(context).height <= 700 ? 280 : 360,
+                      size: (MediaQuery.sizeOf(context).height <= 700 ? 280.0 : 360.0) *
+                          (onboardingProvider.pairingFailureReason == null ? 1 : 0.5),
                     ),
                   DeviceAnimationWidget(
+                    sizeMultiplier: onboardingProvider.pairingFailureReason == null ? 1 : 0.5,
                     isConnected: onboardingProvider.isConnected,
                     deviceName: onboardingProvider.deviceName,
                     deviceType: onboardingProvider.deviceType,
