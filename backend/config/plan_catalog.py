@@ -13,6 +13,8 @@ import os
 from copy import deepcopy
 from typing import Any, Mapping, Optional
 
+from config.rate_card import budget_units as entitlement_budget_units
+
 from config.plan_catalog_generated import (  # noqa: F401 - this module is the public facade
     ENTITLEMENT_VERSIONS,
     RECOGNIZED_STRIPE_ENTITLEMENT_VERSIONS,
@@ -233,6 +235,7 @@ def resolve_subscription_entitlements(subscription: Any, environ: Mapping[str, s
 
 
 __all__ = [
+    "entitlement_budget_units",
     "get_entitlement_version",
     "resolve_price_entitlements",
     "resolve_subscription_entitlements",
