@@ -277,10 +277,10 @@ def test_resolver_probes_homebrew_prefix_when_path_is_stripped(
 
     The absolute Homebrew prefix probe must still find a floor-qualified
     interpreter so the fixer push does not crash on macOS system 3.9. The probe
-    list is fixed in the resolver, so this asserts against the real prefix when
-    it exists (as on the macOS fixer hosts) and otherwise only requires the
-    outcome to stay a floor-qualified absolute path or the documented python3
-    fallback name.
+    list is fixed in the resolver, so assert the host-adaptive contract: the
+    outcome must be a floor-qualified absolute prefix path when that prefix
+    exists, or any other documented outcome (a PATH name such as `python3.12`
+    on Linux hosts, or the bare `python3` fallback).
     """
     repo = tmp_path / "repo"
     repo.mkdir()
@@ -290,7 +290,7 @@ def test_resolver_probes_homebrew_prefix_when_path_is_stripped(
     if real_prefix.is_file():
         assert resolved == str(real_prefix)
     else:
-        assert resolved.startswith("/") or resolved == "python3"
+        _assert_floor_qualified_or_documented_fallback(resolved)
 
 
 def test_resolver_skips_incomplete_venv_that_cannot_import_cheap_gates(
