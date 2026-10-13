@@ -103,7 +103,6 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
   void initState() {
     WidgetsBinding.instance.addObserver(this);
     if (widget.initialDraft != null) textController.text = widget.initialDraft!;
-    apps = prefs.appsList;
     scrollController = ScrollController();
     textFieldFocusNode = FocusNode();
     textFieldFocusNode.addListener(() {

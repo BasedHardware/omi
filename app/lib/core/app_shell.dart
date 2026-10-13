@@ -47,6 +47,7 @@ class AppShell extends StatefulWidget {
 class _AppShellState extends State<AppShell> {
   late AppLinks _appLinks;
   StreamSubscription<Uri>? _linkSubscription;
+  Future<void>? _subscriptionReady;
   Future<void> initDeepLinks() async {
     _appLinks = AppLinks();
 
@@ -112,6 +113,9 @@ class _AppShellState extends State<AppShell> {
         _handleSharedTasksDeepLink(token);
       }
     } else if (uri.pathSegments.first == 'unlimited') {
+      // This destination needs the server's paid-surface policy, rather than
+      // support identity readiness. Other links need only hydrated caches.
+      await _subscriptionReady;
       if (mounted) {
         if (!context.read<UsageProvider>().showSubscriptionUI) return;
         final plan = context.read<UsageProvider>().subscription?.subscription.plan.wireName ?? 'unknown';
@@ -383,30 +387,41 @@ class _AppShellState extends State<AppShell> {
       homeProvider.loadLanguagesThenSetupPrimary();
       context.read<UserProvider>().initialize();
       context.read<PeopleProvider>().initialize();
-      try {
-        await PlatformManager.instance.intercom.loginIdentifiedUser(SharedPreferencesUtil().uid);
-      } catch (e) {
-        Logger.debug('Failed to login to Intercom: $e');
-      }
-
-      if (!mounted) return;
       context.read<MessageProvider>().setMessagesFromCache();
       context.read<AppProvider>().setAppsFromCache();
       context.read<MessageProvider>().refreshMessages();
-      context.read<UsageProvider>().fetchSubscription();
+      _subscriptionReady = context.read<UsageProvider>().fetchSubscription();
       context.read<TaskIntegrationProvider>().loadFromBackend();
       // Same fire-and-forget as task integrations: chat/settings must not
       // treat an empty in-memory map as "not connected" after process death.
       context.read<IntegrationProvider>().loadFromBackend();
 
       NotificationService.instance.saveNotificationToken();
-    } else {
-      if (!PlatformManager.instance.isAnalyticsSupported) {
-        await PlatformManager.instance.intercom.loginUnidentifiedUser();
-      }
-      if (!mounted) return;
     }
-    PlatformManager.instance.intercom.setUserAttributes();
+    // Support identity has its own lifecycle; deep links only wait for the
+    // product cache hydration and refresh launches above.
+    unawaited(_initializeSupportIdentity(isSignedIn, SharedPreferencesUtil().uid));
+  }
+
+  Future<void> _initializeSupportIdentity(bool isSignedIn, String uid) async {
+    final intercom = PlatformManager.instance.intercom;
+    try {
+      if (isSignedIn) {
+        await intercom.loginIdentifiedUser(uid);
+      } else if (!PlatformManager.instance.isAnalyticsSupported) {
+        await intercom.loginUnidentifiedUser();
+      }
+    } catch (e) {
+      Logger.debug('Failed to login to Intercom: $e');
+    }
+    // A delayed SDK completion must not attach a successor account's
+    // attributes to the identity captured at startup.
+    if (!mounted || SharedPreferencesUtil().uid != uid) return;
+    try {
+      await intercom.setUserAttributes();
+    } catch (e) {
+      Logger.debug('Failed to set Intercom user attributes: $e');
+    }
   }
 
   @override
