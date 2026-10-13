@@ -1,0 +1,145 @@
+{
+  "version": 1,
+  "images": [
+    {
+      "file": "001-mobile-ios-idle.png",
+      "platform": "mobile-ios",
+      "description": "idle; light theme, 393x852 @3x, real fonts, synthetic local I/O",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "002-mobile-ios-recording.png",
+      "platform": "mobile-ios",
+      "description": "recording; light theme, 393x852 @3x, real fonts, synthetic local I/O; varying-amplitude PCM",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "003-mobile-ios-transcribing.png",
+      "platform": "mobile-ios",
+      "description": "transcribing; light theme, 393x852 @3x, real fonts, synthetic local I/O",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "004-mobile-ios-confirmation.png",
+      "platform": "mobile-ios",
+      "description": "confirmation; light theme, 393x852 @3x, real fonts, synthetic local I/O",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "005-mobile-ios-failed.png",
+      "platform": "mobile-ios",
+      "description": "failed; light theme, 393x852 @3x, real fonts, synthetic local I/O",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "006-mobile-ios-typing.png",
+      "platform": "mobile-ios",
+      "description": "typing; light theme, 393x852 @3x, real fonts, synthetic local I/O",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "007-mobile-ios-review.png",
+      "platform": "mobile-ios",
+      "description": "review; light theme, 393x852 @3x, real fonts, synthetic local I/O",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "008-mobile-ios-payoff-chat.png",
+      "platform": "mobile-ios",
+      "description": "payoff-chat; light theme, 393x852 @3x, real fonts, synthetic local I/O",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "009-mobile-ios-payoff-fallback.png",
+      "platform": "mobile-ios",
+      "description": "payoff-fallback; light theme, 393x852 @3x, real fonts, synthetic local I/O",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "010-mobile-android-idle.png",
+      "platform": "mobile-android",
+      "description": "idle; light theme, 393x852 @3x, real fonts, synthetic local I/O",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "011-mobile-android-recording.png",
+      "platform": "mobile-android",
+      "description": "recording; light theme, 393x852 @3x, real fonts, synthetic local I/O; varying-amplitude PCM",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "012-mobile-android-transcribing.png",
+      "platform": "mobile-android",
+      "description": "transcribing; light theme, 393x852 @3x, real fonts, synthetic local I/O",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "013-mobile-android-confirmation.png",
+      "platform": "mobile-android",
+      "description": "confirmation; light theme, 393x852 @3x, real fonts, synthetic local I/O",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "014-mobile-android-failed.png",
+      "platform": "mobile-android",
+      "description": "failed; light theme, 393x852 @3x, real fonts, synthetic local I/O",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "015-mobile-android-typing.png",
+      "platform": "mobile-android",
+      "description": "typing; light theme, 393x852 @3x, real fonts, synthetic local I/O",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "016-mobile-android-review.png",
+      "platform": "mobile-android",
+      "description": "review; light theme, 393x852 @3x, real fonts, synthetic local I/O",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "017-mobile-android-payoff-chat.png",
+      "platform": "mobile-android",
+      "description": "payoff-chat; light theme, 393x852 @3x, real fonts, synthetic local I/O",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "018-mobile-android-payoff-fallback.png",
+      "platform": "mobile-android",
+      "description": "payoff-fallback; light theme, 393x852 @3x, real fonts, synthetic local I/O",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "019-mobile-ios-paused.png",
+      "platform": "mobile-ios",
+      "description": "paused; light theme, 393x852 @3x, real fonts, synthetic local I/O",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "020-mobile-android-paused.png",
+      "platform": "mobile-android",
+      "description": "paused; light theme, 393x852 @3x, real fonts, synthetic local I/O",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    }
+  ]
+}

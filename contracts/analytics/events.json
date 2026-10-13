@@ -3715,6 +3715,49 @@
         "subscription-funnel"
       ],
       "correlation": null
+    },
+    {
+      "id": "guidedIntroPayoffShown",
+      "wire_name": "Guided Intro Payoff Shown",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {
+        "memoriesCount": {
+          "type": "int",
+          "wire_name": "memories_count"
+        },
+        "answerSource": {
+          "type": "enum",
+          "wire_name": "answer_source",
+          "values": [
+            "chat",
+            "fallback"
+          ]
+        },
+        "latencyMs": {
+          "type": "int",
+          "wire_name": "latency_ms"
+        }
+      },
+      "consumers": [
+        "guided-intro-payoff-presence"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "guidedIntroPayoffContinued",
+      "wire_name": "Guided Intro Payoff Continued",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {},
+      "consumers": [
+        "guided-intro-payoff-presence"
+      ],
+      "correlation": null
     }
   ]
 }
