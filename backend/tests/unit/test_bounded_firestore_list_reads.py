@@ -61,7 +61,9 @@ class _FakeAggregation:
 
 
 class _FakeQuery:
-    def __init__(self, docs: List[_FakeDoc], filters: Optional[List] = None, *, count_error: Any = None, order_by: Any = None):
+    def __init__(
+        self, docs: List[_FakeDoc], filters: Optional[List] = None, *, count_error: Any = None, order_by: Any = None
+    ):
         self._docs = docs
         self._filters = list(filters or [])
         self._count_error = count_error
@@ -128,7 +130,11 @@ class _FakeQuery:
                 docs = [d for d in docs if d.data.get('due_at') is not None]
                 docs = sorted(docs, key=lambda d: d.data.get('due_at'))
             elif field == 'created_at':
-                docs = sorted(docs, key=lambda d: d.data.get('created_at') or datetime.min.replace(tzinfo=timezone.utc), reverse=True)
+                docs = sorted(
+                    docs,
+                    key=lambda d: d.data.get('created_at') or datetime.min.replace(tzinfo=timezone.utc),
+                    reverse=True,
+                )
             elif field == 'completed' and op == 'in' and isinstance(value, (list, tuple, set, frozenset)):
                 docs = [d for d in docs if 'completed' in d.data and d.data.get('completed') in value]
             elif field == 'conversation_id' and op == '==':

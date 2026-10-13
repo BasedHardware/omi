@@ -85,7 +85,10 @@ class _Query:
                 d = [doc for doc in d if doc._data.get('due_at') is not None]
                 d.sort(key=lambda doc: doc._data.get('due_at'))
             elif field == 'created_at':
-                d.sort(key=lambda doc: doc._data.get('created_at') or datetime.min.replace(tzinfo=timezone.utc), reverse=True)
+                d.sort(
+                    key=lambda doc: doc._data.get('created_at') or datetime.min.replace(tzinfo=timezone.utc),
+                    reverse=True,
+                )
         d = d[self._offset :]
         if self._limit is not None:
             d = d[: self._limit]

@@ -769,10 +769,7 @@ def get_action_items(
             q = q.where(filter=FieldFilter('completed', '==', completed_filter))
 
         has_date_filters = (
-            start_date is not None
-            or end_date is not None
-            or due_start_date is not None
-            or due_end_date is not None
+            start_date is not None or end_date is not None or due_start_date is not None or due_end_date is not None
         )
         if has_date_filters:
             items, docs = _stream_action_items_bounded(
