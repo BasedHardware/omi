@@ -2,114 +2,121 @@
   "version": 1,
   "images": [
     {
-      "file": "001-mobile-ios-onboarding-consent.png",
+      "file": "002-mobile-ios-onboarding-data-privacy.png",
       "platform": "mobile-ios",
-      "description": "Data & Privacy consent card over the sign-in photo",
+      "description": "Data & Privacy: the Omi pendant, centred headline, Continue at the standard height",
       "captured_by": "agent",
       "source": "screencapture"
     },
     {
-      "file": "002-mobile-ios-onboarding-name.png",
+      "file": "003-mobile-ios-onboarding-name.png",
       "platform": "mobile-ios",
-      "description": "Name step",
+      "description": "Name, focused and ready to type",
       "captured_by": "agent",
       "source": "screencapture"
     },
     {
-      "file": "003-mobile-ios-onboarding-permissions.png",
+      "file": "004-mobile-ios-onboarding-permissions.png",
       "platform": "mobile-ios",
-      "description": "Permissions: location and notifications allowed",
+      "description": "Permissions as simple toggle cards, both answered",
       "captured_by": "agent",
       "source": "screencapture"
     },
     {
-      "file": "004-mobile-ios-onboarding-language.png",
+      "file": "005-mobile-ios-onboarding-language.png",
       "platform": "mobile-ios",
-      "description": "Language step",
+      "description": "Language, pre-selected from the phone",
       "captured_by": "agent",
       "source": "screencapture"
     },
     {
-      "file": "005-mobile-ios-connect-omi.png",
+      "file": "006-mobile-ios-connect-omi.png",
       "platform": "mobile-ios",
-      "description": "Connect Omi, with I've ordered mine / Not ordered yet",
+      "description": "Connect Omi with I've ordered mine / Not ordered yet",
       "captured_by": "agent",
       "source": "screencapture"
     },
     {
-      "file": "006-mobile-ios-activation-intro.png",
+      "file": "007-mobile-ios-activation-intro.png",
       "platform": "mobile-ios",
-      "description": "Activation intro: Let's try Omi.",
+      "description": "Activation intro: Let's try Omi",
       "captured_by": "agent",
       "source": "screencapture"
     },
     {
-      "file": "007-mobile-ios-activation-microphone.png",
+      "file": "008-mobile-ios-activation-microphone.png",
       "platform": "mobile-ios",
-      "description": "Microphone ask before the dictation (phone path)",
+      "description": "Microphone ask: the mic control the dictation uses",
       "captured_by": "agent",
       "source": "screencapture"
     },
     {
-      "file": "008-mobile-ios-activation-dictation-live.png",
+      "file": "009-mobile-ios-activation-dictation-live.png",
       "platform": "mobile-ios",
-      "description": "Dictation: words appear live as the user talks",
+      "description": "Dictation: the user's words appear live",
       "captured_by": "agent",
       "source": "screencapture"
     },
     {
-      "file": "009-mobile-ios-activation-summarizing.png",
+      "file": "010-mobile-ios-activation-summarizing.png",
       "platform": "mobile-ios",
       "description": "Summarizing, with the user's words",
       "captured_by": "agent",
       "source": "screencapture"
     },
     {
-      "file": "010-mobile-ios-activation-summary.png",
+      "file": "011-mobile-ios-activation-summary.png",
       "platform": "mobile-ios",
       "description": "The first conversation's summary",
       "captured_by": "agent",
       "source": "screencapture"
     },
     {
-      "file": "011-mobile-ios-activation-todos.png",
+      "file": "012-mobile-ios-activation-todos.png",
       "platform": "mobile-ios",
       "description": "To-dos found in it, saved to Tasks",
       "captured_by": "agent",
       "source": "screencapture"
     },
     {
-      "file": "012-mobile-ios-activation-all-set.png",
+      "file": "013-mobile-ios-activation-all-set.png",
       "platform": "mobile-ios",
       "description": "You're all set",
       "captured_by": "agent",
       "source": "screencapture"
     },
     {
-      "file": "013-mobile-ios-activation-rating.png",
+      "file": "014-mobile-ios-activation-rating.png",
       "platform": "mobile-ios",
       "description": "Rating ask with the App Store prompt",
       "captured_by": "agent",
       "source": "screencapture"
     },
     {
-      "file": "014-mobile-ios-superwall-paywall-end.png",
+      "file": "015-mobile-ios-superwall-paywall-end.png",
       "platform": "mobile-ios",
-      "description": "Superwall paywall at the end of onboarding (iOS debug pilot, mock products so prices are blank)",
+      "description": "Superwall paywall at the end of onboarding (iOS debug pilot; mock products, so prices are blank)",
       "captured_by": "agent",
       "source": "screencapture"
     },
     {
-      "file": "015-mobile-ios-home-after-onboarding.png",
+      "file": "016-mobile-ios-home-after-onboarding.png",
       "platform": "mobile-ios",
-      "description": "Home after onboarding: the conversation, and a dot on Tasks",
+      "description": "Home after onboarding: the first conversation and a dot on Tasks",
       "captured_by": "agent",
       "source": "screencapture"
     },
     {
-      "file": "016-mobile-ios-chat-welcome-message.png",
+      "file": "017-mobile-ios-chat-welcome-message.png",
       "platform": "mobile-ios",
       "description": "Omi's first chat message in an empty chat",
+      "captured_by": "agent",
+      "source": "screencapture"
+    },
+    {
+      "file": "018-mobile-ios-home-live-pill.png",
+      "platform": "mobile-ios",
+      "description": "Bottom-bar live pill while the phone records (local server has no transcription, so the Reconnecting card also shows)",
       "captured_by": "agent",
       "source": "screencapture"
     }
