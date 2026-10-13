@@ -707,3 +707,123 @@ def test_capacity_failure_after_triage_keeps_versions_without_poison(queue, monk
     assert queue.rows[('dream_users', UID, 'spend', state['day'])]['reserved_usd'] == pytest.approx(
         17 * Caps().max_usd_per_token
     )
+
+
+@pytest.mark.parametrize('defer_context', [False, True])
+def test_full_mixed_capacity_samples_settle_survivor(queue, monkeypatch, defer_context):
+    from models.dream_agent import Plan, Edit
+    from utils.dream_context import EvidenceRecords
+
+    monkeypatch.setenv('DREAM_AGENT_CONTEXT_MODE', 'full')
+    monkeypatch.setenv('DREAM_AGENT_FULL_CONTEXT_UIDS', UID)
+    monkeypatch.setenv('DREAM_AGENT_FULL_SAMPLES', '3')
+    monkeypatch.setenv('DREAM_AGENT_MODE', 'on')
+    monkeypatch.setenv('REVIEW_SURFACE_MODE', 'on')
+    monkeypatch.setattr(dream_agent.dream_capacity, 'wait_for_capacity', AsyncMock(return_value=False))
+    seed(queue, 32)
+    refs = [f'conversations/{i}' for i in range(32)]
+    records = EvidenceRecords(
+        {ref: {'transcript_segments': [{'id': 'one', 'text': 'Borza is a project.'}]} for ref in refs}, targets=refs
+    )
+    context = 'conversations/context'
+    records[context] = {'transcript_segments': [{'id': 'one', 'text': 'Borza is a project.'}]}
+    monkeypatch.setattr(
+        dream_reads, 'read_changes', lambda *a, **kw: (records, [s.to_dict() for s in dream_store.dirty_refs(UID)])
+    )
+    monkeypatch.setattr(dream_agent.review_changes, 'agent_change_allowed', lambda *a: True)
+    monkeypatch.setattr(dream_agent.dream_tools, 'suggest_spelling', lambda *a: 'suggestion_cap')
+    calls = 0
+
+    async def turn(*args):
+        nonlocal calls
+        calls += 1
+        if calls <= 2:
+            raise dream_transport.CapacityWait('dream_capacity_wait')
+        return Turn(
+            value=Plan(
+                edits=(
+                    [
+                        Edit(
+                            kind='spelling',
+                            target=context,
+                            before='Borza',
+                            after='Borzah',
+                            reason='Synthetic',
+                            evidence=[context],
+                        )
+                    ]
+                    if defer_context
+                    else []
+                )
+            ),
+            tokens=10,
+        )
+
+    report = asyncio.run(dream_agent.run_pass(UID, caps=Caps(daily_usd=250), turn=turn))
+    assert report['status'] == 'complete'
+    assert report['samples_returned'] == 1 and report['samples_failed'] == 2
+    assert report['consensus_threshold'] == 1
+    assert report['context_mode'] == 'full' and report['records'] == 33
+    assert queue.rows[('dream_users', UID)]['lease'] is None
+    assert all(s.to_dict().get('failed_passes', 0) == 0 for s in dream_store.dirty_refs(UID))
+
+
+@pytest.mark.parametrize('code', ['dream_settlement_limit', 'private provider response'])
+def test_failed_settlement_keeps_real_pass_metrics_and_only_owned_error_codes(queue, monkeypatch, caplog, code):
+    from models.dream_agent import Plan
+
+    monkeypatch.setenv('DREAM_AGENT_CONTEXT_MODE', 'full')
+    monkeypatch.setenv('DREAM_AGENT_FULL_CONTEXT_UIDS', UID)
+    monkeypatch.setenv('DREAM_AGENT_FULL_SAMPLES', '3')
+    seed(queue, 1)
+
+    async def turn(*args):
+        return Turn(value=Plan(), tokens=10)
+
+    def fail(*args, **kwargs):
+        raise ValueError(code)
+
+    monkeypatch.setattr(dream_store, 'finish', fail)
+    with caplog.at_level('INFO', logger='utils.dream_metrics'):
+        report = asyncio.run(dream_agent.run_pass(UID, caps=Caps(daily_usd=250), turn=turn))
+    assert report['status'] == 'failed' and report['context_mode'] == 'full'
+    assert report['samples_requested'] == report['samples_returned'] == 3
+    assert report['targets'] == report['records'] == 1 and report['tokens'] == 30
+    assert report['error_code'] == (code if code == 'dream_settlement_limit' else None)
+    assert 'context_mode=full' in caplog.text and 'samples_requested=3 samples_returned=3' in caplog.text
+    if code != 'dream_settlement_limit':
+        assert code not in caplog.text
+
+
+@pytest.mark.parametrize('all_capacity', [True, False])
+def test_full_capacity_rejections_never_advance_dirty_failure_circuit(queue, monkeypatch, all_capacity):
+    from models.dream_agent import Plan
+
+    monkeypatch.setenv('DREAM_AGENT_CONTEXT_MODE', 'full')
+    monkeypatch.setenv('DREAM_AGENT_FULL_CONTEXT_UIDS', UID)
+    monkeypatch.setenv('DREAM_AGENT_FULL_SAMPLES', '3')
+    monkeypatch.setattr(dream_agent.dream_capacity, 'wait_for_capacity', AsyncMock(return_value=False))
+    seed(queue, 1)
+    dirty_path = ('dream_users', UID, 'dirty', dream_store.dirty_id('conversations', '0'))
+    queue.rows[dirty_path]['failed_passes'] = 2
+    calls = 0
+
+    async def turn(*args):
+        nonlocal calls
+        calls += 1
+        if all_capacity or calls % 3 != 0:
+            raise dream_transport.CapacityWait('dream_capacity_wait')
+        return Turn(value=Plan(), tokens=10)
+
+    for _ in range(3):
+        report = asyncio.run(dream_agent.run_pass(UID, caps=Caps(passes=10, daily_usd=250), turn=turn))
+        assert report['status'] == ('waiting' if all_capacity else 'complete')
+        assert report['context_mode'] == 'full' and report['samples_requested'] == 3
+        assert report['samples_returned'] == (0 if all_capacity else 1)
+        assert report['samples_capacity_wait'] == (3 if all_capacity else 2)
+        if not all_capacity:
+            # A completed pass legitimately acknowledges the dirty version. Seed it again.
+            seed(queue, 1)
+            queue.rows[dirty_path]['failed_passes'] = 2
+        assert queue.rows[dirty_path]['failed_passes'] == 2
+        assert queue.rows[('dream_users', UID)].get('poisoned', 0) == 0
