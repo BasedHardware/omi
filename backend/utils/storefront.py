@@ -3,7 +3,7 @@
 from functools import lru_cache
 from pathlib import Path
 import json
-from typing import Any, Callable
+from typing import Any, Callable, Literal
 
 from models.storefront import (
     StorefrontCurrent,
@@ -41,7 +41,9 @@ def is_legacy_plan(plan: str, price_id: str | None, bindings: set[str]) -> bool:
     return price_id not in bindings
 
 
-def tier_action(*, current_plan: str, tier_plan: str, legacy: bool, cancel: bool) -> str:
+def tier_action(
+    *, current_plan: str, tier_plan: str, legacy: bool, cancel: bool
+) -> Literal['checkout', 'current', 'none']:
     """checkout, current, or none. Legacy never checks out. Cancel offers Resubscribe on the current tier."""
     if tier_plan == current_plan:
         if legacy or current_plan == 'basic' or not cancel:
@@ -151,7 +153,7 @@ def _retrieve(retrieve_price: Callable[[str], dict[str, Any]], price_id: str | N
         row = retrieve_price(price_id)
     except Exception:
         return None
-    if isinstance(row, dict) and row.get('id') == price_id:
+    if row.get('id') == price_id:
         return row
     return None
 
@@ -203,7 +205,8 @@ def build_storefront(
         if type(current_row.get('unit_amount')) is int:
             current_amount = current_row['unit_amount']
     badge = recommended_plan_id(current_plan, trigger)
-    currency = ladder.get('currency') if isinstance(ladder.get('currency'), str) else 'usd'
+    raw_currency = ladder.get('currency')
+    currency = raw_currency if isinstance(raw_currency, str) else 'usd'
     tiers: list[StorefrontTier] = []
     for tier in ladder['tiers']:
         plan = tier['plan_id']
