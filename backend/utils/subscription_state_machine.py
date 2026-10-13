@@ -129,3 +129,17 @@ def transition(current: Subscription | None, event: ResolvedStripeEvent) -> Tran
     if paid:
         effects += ('clear_fair_use',)
     return Transition(candidate, effects, 'adopted' if adopted else 'projected', adopted)
+
+
+def schedule_transition(event: Mapping[str, Any], candidate: Subscription, now: int) -> Transition:
+    """Resolve the shared schedule projection with an adapter-supplied clock."""
+    return transition(
+        None,
+        ResolvedStripeEvent(
+            event['type'],
+            candidate.stripe_subscription_id,
+            candidate,
+            now,
+            schedule_status=event['data']['object'].get('status'),
+        ),
+    )
