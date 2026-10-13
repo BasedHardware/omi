@@ -15,6 +15,8 @@ from copy import deepcopy
 from datetime import datetime, timezone
 from typing import Any, Mapping, Optional
 
+from config.rate_card import budget_units as entitlement_budget_units
+
 from config.plan_catalog_generated import (  # noqa: F401 - this module is the public facade
     ENTITLEMENT_VERSIONS,
     LADDER_V1_STRIPE_PRICES,
@@ -253,6 +255,7 @@ def resolve_subscription_entitlements(subscription: Any, environ: Mapping[str, s
 
 
 __all__ = [
+    "entitlement_budget_units",
     'ENTITLEMENT_VERSIONS',
     'LADDER_V1_STRIPE_PRICES',
     'RECOGNIZED_STRIPE_ENTITLEMENT_VERSIONS',
