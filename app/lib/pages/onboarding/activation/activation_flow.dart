@@ -188,7 +188,7 @@ class _ActivationFlowState extends State<ActivationFlow> {
           key: const ValueKey('microphone'),
           title: l10n.onboardingActMicTitle,
           subtitle: _phoneInstead ? l10n.onboardingActMicFallbackBody : l10n.onboardingActMicBody,
-          body: const _RoundVisual(icon: Icons.mic_none_rounded, size: 120),
+          body: const _MicVisual(),
           bottom: _ContinueButton(
             stage: 'microphone',
             label: l10n.onboardingActMicAllow,
@@ -394,12 +394,12 @@ class _IntroLineState extends State<_IntroLine> {
   }
 }
 
-/// A large icon in a soft circle, rising in.
-class _RoundVisual extends StatelessWidget {
-  const _RoundVisual({required this.icon, required this.size});
+/// The microphone ask: the dark round control and soft ripple of the listening screen that follows,
+/// so allowing the microphone feels like the first step of talking to Omi.
+class _MicVisual extends StatelessWidget {
+  const _MicVisual();
 
-  final IconData icon;
-  final double size;
+  static const double _size = 180;
 
   @override
   Widget build(BuildContext context) {
@@ -407,11 +407,26 @@ class _RoundVisual extends StatelessWidget {
       duration: const Duration(milliseconds: 900),
       builder: (context, t) => rise(
         t,
-        Container(
-          width: size,
-          height: size,
-          decoration: BoxDecoration(color: OmiColors.surface1, shape: BoxShape.circle),
-          child: Icon(icon, size: size * 0.42, color: OmiColors.textPrimary),
+        SizedBox(
+          width: _size,
+          height: _size,
+          child: Stack(
+            alignment: Alignment.center,
+            children: [
+              ScanningRippleWidget(isScanning: true, size: _size, color: OmiColors.textTertiary),
+              Container(
+                width: 112,
+                height: 112,
+                decoration: BoxDecoration(color: OmiColors.textPrimary.withValues(alpha: 0.06), shape: BoxShape.circle),
+              ),
+              Container(
+                width: 80,
+                height: 80,
+                decoration: BoxDecoration(color: OmiColors.accent, shape: BoxShape.circle),
+                child: Icon(Icons.mic_rounded, size: 36, color: OmiColors.onAccent),
+              ),
+            ],
+          ),
         ),
         distance: 16,
       ),
