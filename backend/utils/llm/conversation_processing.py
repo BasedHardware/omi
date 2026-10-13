@@ -7,7 +7,12 @@ from importlib import import_module
 from zoneinfo import ZoneInfo
 from typing import Any, Callable, Dict, Iterable, List, Optional, Sequence, Tuple, TYPE_CHECKING, cast
 
-from langchain_core.exceptions import OutputParserException
+try:
+    from langchain_core.exceptions import OutputParserException
+except ModuleNotFoundError:
+    # Import isolation replaces langchain_core with a non-package stub, so
+    # langchain_core.exceptions cannot be imported. Notes repair is unused there.
+    OutputParserException = None
 from langchain_core.output_parsers import PydanticOutputParser
 from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_core.prompts import ChatPromptTemplate
@@ -353,11 +358,16 @@ def _escape_interior_json_quotes(text: str) -> str:
     return ''.join(out)
 
 
+_NOTES_OUTPUT_PARSE_ERRORS: Tuple[type[BaseException], ...] = (
+    (OutputParserException,) if OutputParserException is not None else (ValueError, json.JSONDecodeError)
+)
+
+
 def _parse_notes_model_output(parser: PydanticOutputParser, content: str) -> Any:
     text = str(content)
     try:
         return parser.parse(text)
-    except OutputParserException:
+    except _NOTES_OUTPUT_PARSE_ERRORS:
         repaired = _escape_interior_json_quotes(text)
         if repaired == text:
             raise
