@@ -10,6 +10,11 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, cast
 
+if __package__:
+    from .dart_schema_groups import additional_schema_groups
+else:
+    from dart_schema_groups import additional_schema_groups
+
 ROOT_DIR = Path(__file__).resolve().parents[2]
 DEFAULT_SPEC_PATH = ROOT_DIR / 'docs' / 'api-reference' / 'app-client-openapi.json'
 DEFAULT_OUTPUT_DIR = ROOT_DIR / 'app' / 'lib' / 'backend' / 'schema' / 'gen'
@@ -531,18 +536,6 @@ SCHEMA_GROUPS = {
             'AudioUrlsResponse',
         ),
     },
-    'storefront': {
-        'output': DEFAULT_OUTPUT_DIR / 'storefront_wire.g.dart',
-        'schemas': (
-            'AnnualSavings',
-            'PlanFeature',
-            'StorefrontCurrentPlan',
-            'StorefrontPrice',
-            'StorefrontResponse',
-            'StorefrontTier',
-            'StorefrontUsage',
-        ),
-    },
     'payments': {
         'output': DEFAULT_OUTPUT_DIR / 'payments_wire.g.dart',
         'schemas': (
@@ -578,17 +571,7 @@ SCHEMA_GROUPS = {
             'MemoryRevertRequest',
         ),
     },
-    'goals': {
-        'output': DEFAULT_OUTPUT_DIR / 'goals_wire.g.dart',
-        'schemas': (
-            'GoalMetric',
-            'GoalResponse',
-            'GoalSuggestionResponse',
-            'AdviceResponse',
-            'GoalHistoryEntryResponse',
-            'GoalDeleteResponse',
-        ),
-    },
+    **additional_schema_groups(DEFAULT_OUTPUT_DIR),
 }
 ALIASES = {
     'Structured': {'action_items': ('actionItems',)},
