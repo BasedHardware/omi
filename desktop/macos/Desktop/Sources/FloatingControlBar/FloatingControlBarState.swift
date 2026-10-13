@@ -219,6 +219,30 @@ enum FloatingBarNotificationQueuePolicy {
   }
 }
 
+/// Decides whether a proactive card is delivered by the notch alone.
+///
+/// The bar grows to a 508pt panel to show a card. That panel is the right surface for
+/// something the user has to act on, and the wrong one for a remark: it covers the top of
+/// the screen unasked, for a sentence that could have simply been said.
+///
+/// So a card that is *actually spoken* keeps the notch collapsed and rides the response
+/// glow instead. The panel stays the fallback for everything else, which is what makes
+/// this safe to turn on — a card that would be silent is still shown, so nothing is
+/// delivered to nobody.
+///
+/// Two cards always take the panel regardless: one carrying an action has buttons that
+/// have to be reachable, and a persistent card is waiting on an explicit decision. Neither
+/// can be answered by a glow.
+enum FloatingBarNotchOnlyCardPolicy {
+  static func staysInNotch(
+    spokenAloud: Bool,
+    hasAction: Bool,
+    isPersistent: Bool
+  ) -> Bool {
+    spokenAloud && !hasAction && !isPersistent
+  }
+}
+
 enum FloatingBarNotificationAction: Equatable {
   case openProactivityItem(ProactivityNotificationTarget)
   case openWhatMattersNow(recommendationID: String)
@@ -279,6 +303,13 @@ struct FloatingBarNotification: Identifiable, Equatable {
   /// acts on it or dismisses it. Reserved for cards whose whole point is an
   /// explicit decision (e.g. the meeting summary share card).
   let isPersistent: Bool
+  /// Proactive cards must revalidate snooze and presence when they leave the queue.
+  let isProactive: Bool
+  /// Whether speech was eligible before live presence is applied at presentation.
+  let speechEligible: Bool
+  /// The card is spoken, so the notch carries it and the bar never grows into the panel.
+  /// See `FloatingBarNotchOnlyCardPolicy`.
+  var staysInNotch: Bool
 
   init(
     ownerID: String,
@@ -293,7 +324,10 @@ struct FloatingBarNotification: Identifiable, Equatable {
     action: FloatingBarNotificationAction? = nil,
     suggestionTelemetryIdentity: SuggestionAssistantTelemetry.NotificationIdentity? = nil,
     screenshotData: Data? = nil,
-    isPersistent: Bool = false
+    isPersistent: Bool = false,
+    isProactive: Bool = false,
+    speechEligible: Bool = false,
+    staysInNotch: Bool = false
   ) {
     self.id = id
     self.onInteraction = onInteraction
@@ -311,6 +345,9 @@ struct FloatingBarNotification: Identifiable, Equatable {
     self.suggestionTelemetryIdentity = suggestionTelemetryIdentity
     self.screenshotData = screenshotData
     self.isPersistent = isPersistent
+    self.isProactive = isProactive
+    self.speechEligible = speechEligible
+    self.staysInNotch = staysInNotch
   }
 
   /// Identity every shown card can write. SuggestionAssistant supplies a real
@@ -372,6 +409,19 @@ class FloatingControlBarState: NSObject, ObservableObject {
   @Published private(set) var localAnswerOverride: ChatMessage? = nil
   @Published var lastConversationActivityAt: Date? = nil
   @Published var activeAgentChatPillID: UUID? = nil
+  /// This query answers in the notch: spoken, with the existing response glow, and without
+  /// growing the bar into a response panel.
+  ///
+  /// Set for a wake-word command, where hands and eyes are elsewhere and a panel covering a
+  /// fifth of the screen is the opposite of what was asked for. It has to survive the whole
+  /// query rather than just its start: the answer's arrival presents `.mainResponse` again
+  /// on its own, which is why suppressing only the initial expansion left the panel showing.
+  /// The query's own presentation sites skip presenting entirely while this is set, so the
+  /// flag ends when any *other* open surface is presented — `present(_:)` clears it — never
+  /// sooner. A latch that outlived its answer silently swallowed the next agent-chat or
+  /// notification-conversation growth (`resizeAnchored(makeResizable: true)`).
+  @Published var answersQuietly: Bool = false
+
   @Published var conversationSurface: FloatingConversationSurface = .closed
   private var activeAIDraftKey = ChatDraftKey.floatingMain
   private var isRestoringAIDraft = false
@@ -831,6 +881,12 @@ class FloatingControlBarState: NSObject, ObservableObject {
   }
 
   func present(_ surface: FloatingConversationSurface) {
+    // Presenting an open surface is an explicit choice to show content, and it ends a
+    // quiet (wake-word) answer's silence. The quiet answer's own presentation sites never
+    // present while the latch is set, so this only fires for surfaces opened afterwards
+    // (agent chat, a tapped notification, a restored conversation) — exactly the surfaces
+    // whose growth the stale latch would otherwise silently swallow.
+    if surface.isOpen { answersQuietly = false }
     conversationSurface = surface
     activeAgentChatPillID = surface.agentID
     showingAIConversation = surface.isOpen

@@ -413,7 +413,7 @@ jobs:
           telegram_bot_token: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           telegram_chat_id: ${{ secrets.TELEGRAM_CHAT_ID }}
 
-      - name: Provision backend route 5xx alert
+      - name: Provision backend route and request storm alerts
         id: backend-route-alert
         if: github.event.inputs.environment == 'prod'
         continue-on-error: true
@@ -434,21 +434,30 @@ jobs:
           POLICY="$(python3 "$DEPLOY_WORKFLOW_ROOT/.github/scripts/ensure_backend_route_5xx_alert.py" \
             --project "$PROJECT_ID" \
             --notification-channels "$ALERT_CHANNELS")"
+          STORM_POLICIES="$(python3 "$DEPLOY_WORKFLOW_ROOT/.github/scripts/ensure_request_storm_alerts.py" \
+            --project "$PROJECT_ID" \
+            --notification-channels "$ALERT_CHANNELS")"
+          {
+            echo "### Request storm alerts"
+            echo ""
+            echo "Provisioned edge 429 and sync upload 409-share policies:"
+            echo "$STORM_POLICIES"
+          } >> "$GITHUB_STEP_SUMMARY"
           {
             echo "### Backend route 5xx alert"
             echo ""
             echo "Provisioned \`${POLICY}\` for metric \`backend_route_5xx\`."
           } >> "$GITHUB_STEP_SUMMARY"
 
-      - name: Report backend route 5xx alert provisioning failure
+      - name: Report backend alert provisioning failure
         if: always() && github.event.inputs.environment == 'prod' && steps.backend-route-alert.outcome == 'failure'
         continue-on-error: true
         run: |
-          echo "::warning title=Backend route 5xx alert::Provisioning failed; the deploy is unaffected but the per-route 5xx metric or alert policy may be missing or stale. Follow backend/docs/runbooks/backend-route-5xx.md."
+          echo "::warning title=Backend route 5xx alert::Provisioning failed; the deploy is unaffected but the per-route 5xx or request-storm alert policies may be missing or stale. Follow backend/docs/runbooks/backend-route-5xx.md and backend/docs/runbooks/request-storm-alerts.md."
           {
             echo "### Backend route 5xx alert"
             echo ""
-            echo "**Provisioning failed.** The deployment remains successful, but the \`backend_route_5xx\` metric or its alert policy may be missing or stale."
+            echo "**Provisioning failed.** The deployment remains successful, but the \`backend_route_5xx\` metric or its alert policy, or the edge 429 / sync 409-share policies, may be missing or stale."
             echo ""
             echo "Re-run the deploy to retry provisioning, then follow the [runbook](https://github.com/BasedHardware/omi/blob/main/backend/docs/runbooks/backend-route-5xx.md)."
           } >> "$GITHUB_STEP_SUMMARY"

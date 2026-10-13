@@ -1,4 +1,5 @@
 import { getIdToken } from './firebase';
+import { version as webAppVersion } from '../../package.json';
 import { getWebDeviceIdHash } from './clientDevice';
 import {
   invalidateCache,
@@ -98,6 +99,8 @@ async function fetchWithAuthResponse<T>(
   }
   new Headers(options.headers).forEach((value, name) => headers.set(name, value));
   headers.set('X-App-Platform', 'web');
+  headers.set('X-App-Version', webAppVersion);
+  headers.set('X-Omi-Plan-Identity', '1');
   if (deviceIdHash) {
     headers.set('X-Device-Id-Hash', deviceIdHash);
   }
@@ -423,6 +426,11 @@ export async function getActionItems(
   };
 }
 
+/** One action item by id (404 when it is gone or not the caller's). */
+export async function getActionItem(id: string): Promise<ActionItem> {
+  return fetchWithAuth<ActionItem>(`/v1/action-items/${encodeURIComponent(id)}`);
+}
+
 /**
  * Create a new action item
  */
@@ -558,6 +566,44 @@ export async function getMemoriesPage(
  */
 export async function getMemories(params: GetMemoriesParams = {}): Promise<Memory[]> {
   return (await getMemoriesPage(params)).memories;
+}
+
+/**
+ * Find memories by id. The backend has no memory-by-id read, so this walks the
+ * owner-wide `all` view and stops once every id is found. `complete` is false
+ * when the walk stopped early (page cap, truncated read): an id missing then
+ * may still exist and must not be reported as deleted.
+ */
+export async function findMemoriesByIds(
+  ids: readonly string[],
+  options: { maxPages?: number; fetchPage?: typeof getMemoriesPage } = {},
+): Promise<{ found: Map<string, Memory>; complete: boolean }> {
+  const { maxPages = 20, fetchPage = getMemoriesPage } = options;
+  const wanted = new Set(ids);
+  const found = new Map<string, Memory>();
+  if (wanted.size === 0) return { found, complete: true };
+  const limit = 500;
+  let offset = 0;
+  let cursor: string | undefined;
+  const seenCursors = new Set<string>();
+  for (let page = 0; page < maxPages; page++) {
+    const result = await fetchPage({ limit, offset, cursor, view: 'all' });
+    for (const memory of result.memories) {
+      if (wanted.has(memory.id)) found.set(memory.id, memory);
+    }
+    if (found.size === wanted.size) return { found, complete: true };
+    if (result.truncated) return { found, complete: false };
+    if (result.nextCursor) {
+      if (seenCursors.has(result.nextCursor)) return { found, complete: false };
+      seenCursors.add(result.nextCursor);
+      cursor = result.nextCursor;
+    } else if (cursor || result.memories.length < limit) {
+      return { found, complete: true };
+    } else {
+      offset += result.memories.length;
+    }
+  }
+  return { found, complete: false };
 }
 
 /**
@@ -1873,9 +1919,6 @@ export async function getAllUsageData(): Promise<AllUsageData> {
   return { today, monthly, yearly, all_time };
 }
 
-/**
- * Get user subscription info
- */
 export async function getUserSubscription(): Promise<UserSubscription | null> {
   try {
     const response = await fetchWithAuth<UserSubscriptionResponse>(
@@ -1887,8 +1930,7 @@ export async function getUserSubscription(): Promise<UserSubscription | null> {
       plan: plan.raw ?? '',
       plan_identity: plan,
       status: response.subscription?.status || 'active',
-      // Unknown plans are deliberately excluded. A future wire value must not
-      // inherit paid capability merely because it is non-empty.
+      // Unknown plans never infer paid capability.
       is_unlimited: planGrantsPaidCapability(plan),
       current_period_end: response.subscription?.current_period_end,
       stripe_subscription_id: response.subscription?.stripe_subscription_id,

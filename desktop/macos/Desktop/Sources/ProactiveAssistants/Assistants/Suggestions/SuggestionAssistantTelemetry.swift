@@ -161,6 +161,14 @@ enum SuggestionAssistantTelemetry {
     /// A commitment nudge that named work absent from the grounding it was given.
     case filteredUngroundedCommitment = "filtered_ungrounded_commitment"
     case rejectedOwner = "rejected_owner"
+    /// Withheld because the user is presenting. Distinct from the `filtered_*` outcomes:
+    /// those retire a suggestion on its merits, this one defers an otherwise-deliverable
+    /// suggestion on audience, and deliberately leaves it eligible to deliver later.
+    case suppressedPresenting = "suppressed_presenting"
+    /// Withheld because the user silenced notifications for a period. Like
+    /// `suppressed_presenting` this defers rather than retires: the suggestion is not
+    /// written to the dedup window, so it can still be delivered once the snooze lapses.
+    case suppressedSnoozed = "suppressed_snoozed"
   }
 
   /// One evaluation produces at most one suggestion. Separate UUIDs preserve

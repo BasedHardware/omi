@@ -4,6 +4,7 @@ import asyncio
 import ast
 from datetime import datetime, timezone
 from pathlib import Path
+import re
 import sys
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
@@ -19,6 +20,7 @@ def environment():
     service = sys.modules['utils.chat_turn']
     source = Path(__file__).parents[1] / 'fixtures/messaging/mobile_turn_before.py.txt'
     namespace = dict(vars(service))
+    namespace["re"] = re  # The frozen pre-extraction route owns its original regex dependency.
     namespace["_safe_file_chats"] = service.safe_file_chats
     exec(compile(ast.parse(source.read_text()), str(source), 'exec'), namespace)
     yield router, service, namespace['send_message'], namespace

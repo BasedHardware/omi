@@ -1,0 +1,33 @@
+{
+  "version": 1,
+  "images": [
+    {
+      "file": "001-mobile-ios-item-list-sheet-dark.png",
+      "platform": "mobile-ios",
+      "description": "h.omi.me/items sheet, dark: conversation, task, memory, completed task, and a conversation that is no longer available",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "002-mobile-ios-item-list-sheet-light.png",
+      "platform": "mobile-ios",
+      "description": "h.omi.me/items sheet, light",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "003-web-items-fallback-iphone.png",
+      "platform": "web",
+      "description": "h.omi.me/items?task=…&conversation=…&memory=… fallback on an iPhone without the app",
+      "captured_by": "agent",
+      "source": "screencapture"
+    },
+    {
+      "file": "004-web-items-fallback-mac.png",
+      "platform": "web",
+      "description": "h.omi.me/items fallback in a Mac browser: Open in Omi for Mac (omi-computer://items?…) and the web sign-in handoff",
+      "captured_by": "agent",
+      "source": "screencapture"
+    }
+  ]
+}

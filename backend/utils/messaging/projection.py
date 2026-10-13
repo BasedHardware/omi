@@ -66,3 +66,6 @@ def project_runtime_tools(runtime, core, device, entitled, device_names):
         principal=runtime.principal,
         excluded_names=() if runtime.surface == 'app' else ('create_chart_tool',),
     )
+
+
+chat_write_runtime: ContextVar[SurfaceRuntime | None] = ContextVar('chat_write_runtime', default=None)

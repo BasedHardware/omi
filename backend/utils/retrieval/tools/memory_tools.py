@@ -346,6 +346,9 @@ def get_memories_tool(
             stamp = stamp.astimezone(timezone.utc)
         date_str = stamp.strftime('%Y-%m-%d %H:%M:%S UTC') if stamp else 'Unknown'
         memory_id = getattr(memory, 'id', None)
+        channel_items = configurable.get('channel_items')
+        if memory_id and isinstance(channel_items, list):
+            channel_items.append({'kind': 'memory', 'id': memory_id, 'title': memory.content[:100]})
         records.append(
             format_memory_evidence(
                 memory.content,
@@ -521,6 +524,9 @@ def search_memories_tool(
             display_date = _memory_read_date(memory, temporal=effective_view != 'released')
             date_str = format_local_date(display_date, display_tz) if display_date else 'Unknown'
             memory_id = getattr(memory, 'id', None)
+            channel_items = configurable.get('channel_items')
+            if memory_id and isinstance(channel_items, list):
+                channel_items.append({'kind': 'memory', 'id': memory_id, 'title': memory.content[:100]})
             memory_id_prefix = f'memory_id: {memory_id}, ' if memory_id else ''
             suffix = f"{memory_id_prefix}relevance: {score:.2f}, category: {memory.category.value}, date: {date_str}"
             if effective_view != 'released':

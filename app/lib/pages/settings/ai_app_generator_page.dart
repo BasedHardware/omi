@@ -1,3 +1,4 @@
+import 'dart:math' as math;
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
@@ -107,7 +108,9 @@ class _AiAppGeneratorPageState extends State<_AiAppGeneratorPageView> {
 
                           // Suggestion cards (shimmer while they load)
                           SizedBox(
-                            height: 160,
+                            // Three lines and Try it grow with the reader's text size (a fixed 160pt
+                            // strip cut them at 1.3x).
+                            height: 160 * math.max(1.0, MediaQuery.textScalerOf(context).scale(16) / 16),
                             child: ListView.builder(
                               scrollDirection: Axis.horizontal,
                               padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.lg),
