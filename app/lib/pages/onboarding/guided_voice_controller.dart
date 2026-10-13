@@ -313,9 +313,7 @@ class GuidedVoiceController extends ChangeNotifier {
       if (!_current(generation)) return;
       if (text.isEmpty) throw StateError('No speech');
       final uid = accountUid ?? (SharedPreferencesUtil().uid.isNotEmpty ? SharedPreferencesUtil().uid : null);
-      final answerId = isGoalPrompt
-          ? 'intro-goal-${uid ?? _sessionId}'
-          : 'intro-$_sessionId-${answers.length}';
+      final answerId = isGoalPrompt ? 'intro-goal-${uid ?? _sessionId}' : 'intro-$_sessionId-${answers.length}';
       final answer = IntroductionAnswer(
         isGoalPrompt ? cleanIntroductionGoal(text) : text,
         audio,
