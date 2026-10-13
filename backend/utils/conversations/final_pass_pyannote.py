@@ -75,7 +75,7 @@ def run_final_pass(
                         end=right,
                         speaker=speaker,
                         speaker_id=speakers.get(speaker, OMI_SPEAKER_ID_SENTINEL),
-                        speaker_id_scope='final:' + output['provenance']['backend'],
+                        speaker_id_scope=f"final:{output['provenance']['backend']}:{conversation_id}",
                         is_user=identity == 'user',
                         person_id=identity if identity not in (None, 'user') else None,
                         speaker_match_source='final_centroid:' + output['version'],

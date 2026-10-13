@@ -158,8 +158,21 @@ def test_shared_pipeline_selects_backend_stamps_provenance_and_abstains_in_other
     )
     assert outcome['outcome'] == 'diarized'
     assert segments[0].is_user and segments[0].speaker_label_source == 'auto'
-    assert segments[0].speaker_id_scope == 'final:pyannote'
+    assert segments[0].speaker_id_scope == 'final:pyannote:fixture'
     assert segments[0].speaker_match_source == 'final_centroid:synthetic-1'
+    # Smart merge keys provider labels by scope: unrelated final passes must
+    # never reuse a voice even when both backends return the same label.
+    from utils.stt.speaker_identity import ConversationSpeakerIdAllocator
+
+    allocator = ConversationSpeakerIdAllocator()
+    allocator.hydrate(segments)
+    donor, _ = pipeline.run_final_pass(
+        b'', words, None, roster, deadline=float('inf'), conversation_id='another-fixture'
+    )
+    assert donor[0].speaker_id_scope != segments[0].speaker_id_scope
+    donor_row = donor[0].model_dump()
+    allocator.assign(donor_row)
+    assert donor_row['speaker_id'] != segments[0].speaker_id
     result.embedding_space = 'nemotron-internal-unqualified'
     segments, outcome = pipeline.run_final_pass(
         b'', words, None, roster, deadline=float('inf'), conversation_id='fixture'
