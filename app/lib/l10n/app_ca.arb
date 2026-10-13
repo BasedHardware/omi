@@ -4008,6 +4008,8 @@
     "paywallRecommended": "Recomanat",
     "paywallNoPlans": "No hi ha plans disponibles",
     "paywallOtherPlans": "Altres plans",
+    "paywallLegacyPlanStays": "El teu pla es queda exactament com està.",
+    "paywallMcpDailyRequests": "Més sol·licituds MCP diàries",
     "paywallComparePlans": "Compara els plans",
     "paywallLegacyPlan": "Pla antic"
 }

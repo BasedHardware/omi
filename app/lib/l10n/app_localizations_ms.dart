@@ -13063,6 +13063,12 @@ class AppLocalizationsMs extends AppLocalizations {
   String get paywallOtherPlans => 'Pelan lain';
 
   @override
+  String get paywallLegacyPlanStays => 'Pelan anda kekal seperti sedia ada.';
+
+  @override
+  String get paywallMcpDailyRequests => 'Lebih banyak permintaan MCP harian';
+
+  @override
   String get paywallComparePlans => 'Bandingkan pelan';
 
   @override

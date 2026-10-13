@@ -13093,6 +13093,12 @@ class AppLocalizationsMk extends AppLocalizations {
   String get paywallOtherPlans => 'Други планови';
 
   @override
+  String get paywallLegacyPlanStays => 'Вашиот план останува токму таков каков што е.';
+
+  @override
+  String get paywallMcpDailyRequests => 'Повеќе дневни MCP барања';
+
+  @override
   String get paywallComparePlans => 'Спореди планови';
 
   @override

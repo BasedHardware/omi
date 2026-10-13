@@ -11445,6 +11445,8 @@
     "paywallRecommended": "Inirerekomenda",
     "paywallNoPlans": "Walang Available na Plano",
     "paywallOtherPlans": "Iba pang plano",
+    "paywallLegacyPlanStays": "Mananatili ang plan mo nang eksakto kung ano ito.",
+    "paywallMcpDailyRequests": "Mas maraming pang-araw-araw na request sa MCP",
     "paywallComparePlans": "Ihambing ang mga plano",
     "paywallLegacyPlan": "Lumang plano"
 }

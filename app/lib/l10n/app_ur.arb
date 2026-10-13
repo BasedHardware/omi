@@ -11445,6 +11445,8 @@
     "paywallRecommended": "تجویز کردہ",
     "paywallNoPlans": "کوئی پلان دستیاب نہیں",
     "paywallOtherPlans": "دیگر پلان",
+    "paywallLegacyPlanStays": "آپ کا پلان بالکل ویسا ہی رہتا ہے۔",
+    "paywallMcpDailyRequests": "مزید روزانہ MCP درخواستیں",
     "paywallComparePlans": "پلان کا موازنہ کریں",
     "paywallLegacyPlan": "پرانا پلان"
 }

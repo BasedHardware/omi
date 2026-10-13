@@ -4008,6 +4008,8 @@
     "paywallRecommended": "Suositeltu",
     "paywallNoPlans": "Ei saatavilla olevia tilauksia",
     "paywallOtherPlans": "Muut tilaukset",
+    "paywallLegacyPlanStays": "Tilauksesi pysyy täsmälleen entisellään.",
+    "paywallMcpDailyRequests": "Enemmän päivittäisiä MCP-pyyntöjä",
     "paywallComparePlans": "Vertaa tilauksia",
     "paywallLegacyPlan": "Vanha tilaus"
 }

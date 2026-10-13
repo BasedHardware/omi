@@ -13041,6 +13041,12 @@ class AppLocalizationsSr extends AppLocalizations {
   String get paywallOtherPlans => 'Други планови';
 
   @override
+  String get paywallLegacyPlanStays => 'Ваш план остаје тачно такав какав јесте.';
+
+  @override
+  String get paywallMcpDailyRequests => 'Више дневних MCP захтева';
+
+  @override
   String get paywallComparePlans => 'Упореди планове';
 
   @override

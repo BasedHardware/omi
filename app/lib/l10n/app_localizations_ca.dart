@@ -13100,6 +13100,12 @@ class AppLocalizationsCa extends AppLocalizations {
   String get paywallOtherPlans => 'Altres plans';
 
   @override
+  String get paywallLegacyPlanStays => 'El teu pla es queda exactament com està.';
+
+  @override
+  String get paywallMcpDailyRequests => 'Més sol·licituds MCP diàries';
+
+  @override
   String get paywallComparePlans => 'Compara els plans';
 
   @override

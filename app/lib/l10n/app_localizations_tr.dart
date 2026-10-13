@@ -13045,6 +13045,12 @@ class AppLocalizationsTr extends AppLocalizations {
   String get paywallOtherPlans => 'Diğer planlar';
 
   @override
+  String get paywallLegacyPlanStays => 'Planın aynen olduğu gibi kalır.';
+
+  @override
+  String get paywallMcpDailyRequests => 'Daha fazla günlük MCP isteği';
+
+  @override
   String get paywallComparePlans => 'Planları karşılaştır';
 
   @override

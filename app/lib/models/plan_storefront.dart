@@ -25,17 +25,6 @@ class PlanStorefront {
       usageContext?.legacy != true &&
       usageContext?.proGates.contains(feature) == true;
 
-  /// Client safety boundary: presentation actions cannot migrate legacy prices
-  /// or strip desktop entitlements, even when the server advertises checkout.
-  bool canCheckout(StorefrontTier tier, StorefrontPrice price, {bool currentGrantsDesktop = false}) =>
-      showSubscriptionUi &&
-      current?.legacy != true &&
-      tier.action == 'checkout' &&
-      tier.prices.contains(price) &&
-      price.id != current?.priceId &&
-      (!(currentGrantsDesktop || PlanType.fromWire(current?.id ?? 'basic').grantsDesktop) ||
-          PlanType.fromWire(tier.id).grantsDesktop);
-
   factory PlanStorefront.fromJson(Map<String, dynamic> json) {
     if (json['schema_version'] != 1) throw const FormatException('Unsupported storefront schema');
     final tiers = (json['tiers'] as List).map((row) => StorefrontTier.fromJson(_object(row))).toList();
@@ -50,6 +39,83 @@ class PlanStorefront {
       showSubscriptionUi: json['show_subscription_ui'] == true,
     );
   }
+}
+
+/// Checkout, resubscribe the current price, or refuse.
+enum StorefrontCheckoutDecision { refuse, checkout, resubscribe }
+
+/// basic < plus < operator < architect. Null when [id] is not on that ladder.
+int? _storefrontLadderRank(String? id) {
+  const ladder = ['basic', 'plus', 'operator', 'architect'];
+  if (id == null) return null;
+  final plan = PlanType.fromWire(id);
+  if (plan.isUnknown) return null;
+  final index = ladder.indexOf(plan.wireName);
+  return index < 0 ? null : index;
+}
+
+bool _isNonLadderLegacyPlan(PlanType plan) => plan == PlanType.unlimited || plan == PlanType.unlimitedV2;
+
+int? _higherRank(int? left, int? right) {
+  if (left == null) return right;
+  if (right == null) return left;
+  return left > right ? left : right;
+}
+
+StorefrontPrice? _priceOnTier(StorefrontTier tier, String? id) {
+  if (id == null || id.isEmpty) return null;
+  for (final candidate in tier.prices) {
+    if (candidate.id == id) return candidate;
+  }
+  return null;
+}
+
+/// Single checkout boundary for rendering and every tap or handoff.
+///
+/// Paid subscribers may move up the ladder, or from monthly to annual on the
+/// same tier. Legacy prices, unlimited plans, and unrecognized ids never
+/// check out. A scheduled cancellation resubscribes the current price only.
+StorefrontCheckoutDecision storefrontCheckoutDecision(
+  StorefrontCurrentPlan? current,
+  PlanType? livePlan,
+  StorefrontTier tier,
+  StorefrontPrice price, {
+  bool usageLegacy = false,
+  bool cancelScheduled = false,
+  bool showSubscriptionUi = true,
+}) {
+  if (!showSubscriptionUi || usageLegacy || current?.legacy == true) {
+    return StorefrontCheckoutDecision.refuse;
+  }
+  if (livePlan != null && (_isNonLadderLegacyPlan(livePlan) || livePlan.isUnknown)) {
+    return StorefrontCheckoutDecision.refuse;
+  }
+  if (current != null &&
+      (_isNonLadderLegacyPlan(PlanType.fromWire(current.id)) || PlanType.fromWire(current.id).isUnknown)) {
+    return StorefrontCheckoutDecision.refuse;
+  }
+  if (tier.action != 'checkout' || !tier.prices.contains(price)) {
+    return StorefrontCheckoutDecision.refuse;
+  }
+  final held = _priceOnTier(tier, current?.priceId);
+  if (held != null && held.interval == 'year' && price.interval == 'month') {
+    return StorefrontCheckoutDecision.refuse;
+  }
+  final targetRank = _storefrontLadderRank(tier.id);
+  final effectiveRank = _higherRank(_storefrontLadderRank(current?.id), _storefrontLadderRank(livePlan?.wireName));
+  if (effectiveRank != null && targetRank != null && targetRank < effectiveRank) {
+    return StorefrontCheckoutDecision.refuse;
+  }
+  final effectiveGrantsDesktop =
+      (livePlan?.grantsDesktop ?? false) || PlanType.fromWire(current?.id ?? 'basic').grantsDesktop;
+  if (effectiveGrantsDesktop && !PlanType.fromWire(tier.id).grantsDesktop) {
+    return StorefrontCheckoutDecision.refuse;
+  }
+  if (price.id == current?.priceId) {
+    return cancelScheduled ? StorefrontCheckoutDecision.resubscribe : StorefrontCheckoutDecision.refuse;
+  }
+  if (cancelScheduled) return StorefrontCheckoutDecision.refuse;
+  return StorefrontCheckoutDecision.checkout;
 }
 
 class StorefrontTier {
@@ -190,6 +256,9 @@ class StorefrontUsageContext {
   final String? periodId;
   final bool legacy;
 
+  /// Opening surface, such as `mcp_daily_cap`. Absent on older payloads.
+  final String? source;
+
   /// Server entitlement decision; never inferred from the displayed tier.
   final Set<String> proGates;
   const StorefrontUsageContext(
@@ -201,6 +270,7 @@ class StorefrontUsageContext {
       this.budgetNudgeLabel,
       this.periodId,
       required this.legacy,
+      this.source,
       this.proGates = const {}});
   factory StorefrontUsageContext.fromJson(Map<String, dynamic> json) {
     final percent = json['budget_percent'];
@@ -220,6 +290,7 @@ class StorefrontUsageContext {
         budgetNudgeLabel: json['budget_nudge_label'] as String?,
         periodId: json['period_id'] as String?,
         legacy: _boolean(json, 'legacy'),
+        source: json['source'] as String?,
         proGates: Set<String>.unmodifiable(gates.map((value) => value as String)));
   }
 

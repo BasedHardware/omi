@@ -13080,6 +13080,12 @@ class AppLocalizationsBg extends AppLocalizations {
   String get paywallOtherPlans => 'Други планове';
 
   @override
+  String get paywallLegacyPlanStays => 'Планът ви остава точно такъв, какъвто е.';
+
+  @override
+  String get paywallMcpDailyRequests => 'Повече дневни MCP заявки';
+
+  @override
   String get paywallComparePlans => 'Сравни плановете';
 
   @override

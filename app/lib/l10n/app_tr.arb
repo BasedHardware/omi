@@ -4043,6 +4043,8 @@
     "paywallRecommended": "Önerilen",
     "paywallNoPlans": "Kullanılabilir Plan Yok",
     "paywallOtherPlans": "Diğer planlar",
+    "paywallLegacyPlanStays": "Planın aynen olduğu gibi kalır.",
+    "paywallMcpDailyRequests": "Daha fazla günlük MCP isteği",
     "paywallComparePlans": "Planları karşılaştır",
     "paywallLegacyPlan": "Eski plan"
 }

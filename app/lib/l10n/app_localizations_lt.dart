@@ -13056,6 +13056,12 @@ class AppLocalizationsLt extends AppLocalizations {
   String get paywallOtherPlans => 'Kiti planai';
 
   @override
+  String get paywallLegacyPlanStays => 'Jūsų planas lieka toks, koks yra.';
+
+  @override
+  String get paywallMcpDailyRequests => 'Daugiau kasdienių MCP užklausų';
+
+  @override
   String get paywallComparePlans => 'Palyginti planus';
 
   @override

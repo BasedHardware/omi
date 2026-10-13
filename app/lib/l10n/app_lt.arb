@@ -4008,6 +4008,8 @@
     "paywallRecommended": "Rekomenduojama",
     "paywallNoPlans": "Nėra galimų planų",
     "paywallOtherPlans": "Kiti planai",
+    "paywallLegacyPlanStays": "Jūsų planas lieka toks, koks yra.",
+    "paywallMcpDailyRequests": "Daugiau kasdienių MCP užklausų",
     "paywallComparePlans": "Palyginti planus",
     "paywallLegacyPlan": "Ankstesnis planas"
 }

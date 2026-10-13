@@ -13115,6 +13115,12 @@ class AppLocalizationsEl extends AppLocalizations {
   String get paywallOtherPlans => 'Άλλα προγράμματα';
 
   @override
+  String get paywallLegacyPlanStays => 'Το πρόγραμμά σας παραμένει ακριβώς ως έχει.';
+
+  @override
+  String get paywallMcpDailyRequests => 'Περισσότερα ημερήσια αιτήματα MCP';
+
+  @override
   String get paywallComparePlans => 'Σύγκριση προγραμμάτων';
 
   @override

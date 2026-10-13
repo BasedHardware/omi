@@ -4008,6 +4008,8 @@
     "paywallRecommended": "추천",
     "paywallNoPlans": "이용 가능한 요금제가 없습니다",
     "paywallOtherPlans": "다른 요금제",
+    "paywallLegacyPlanStays": "현재 요금제는 그대로 유지됩니다.",
+    "paywallMcpDailyRequests": "더 많은 일일 MCP 요청",
     "paywallComparePlans": "요금제 비교",
     "paywallLegacyPlan": "기존 요금제"
 }

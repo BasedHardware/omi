@@ -13027,6 +13027,12 @@ class AppLocalizationsFa extends AppLocalizations {
   String get paywallOtherPlans => 'طرح‌های دیگر';
 
   @override
+  String get paywallLegacyPlanStays => 'طرح شما دقیقاً به همین شکل باقی می‌ماند.';
+
+  @override
+  String get paywallMcpDailyRequests => 'درخواست‌های روزانه MCP بیشتر';
+
+  @override
   String get paywallComparePlans => 'مقایسه طرح‌ها';
 
   @override

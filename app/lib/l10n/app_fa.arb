@@ -11445,6 +11445,8 @@
     "paywallRecommended": "پیشنهادی",
     "paywallNoPlans": "هیچ طرحی در دسترس نیست",
     "paywallOtherPlans": "طرح‌های دیگر",
+    "paywallLegacyPlanStays": "طرح شما دقیقاً به همین شکل باقی می‌ماند.",
+    "paywallMcpDailyRequests": "درخواست‌های روزانه MCP بیشتر",
     "paywallComparePlans": "مقایسه طرح‌ها",
     "paywallLegacyPlan": "طرح قدیمی"
 }

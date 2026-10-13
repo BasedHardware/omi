@@ -11445,6 +11445,8 @@
     "paywallRecommended": "Рэкамендуецца",
     "paywallNoPlans": "Няма даступных планаў",
     "paywallOtherPlans": "Іншыя планы",
+    "paywallLegacyPlanStays": "Ваш план застаецца сапраўды такім, які ён ёсць.",
+    "paywallMcpDailyRequests": "Больш штодзённых запытаў MCP",
     "paywallComparePlans": "Параўнаць планы",
     "paywallLegacyPlan": "Ранейшы план"
 }

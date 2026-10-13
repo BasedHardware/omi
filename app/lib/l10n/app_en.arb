@@ -15780,6 +15780,14 @@
     "@paywallOtherPlans": {
         "description": "Expandable row for current and lower plans."
     },
+    "paywallLegacyPlanStays": "Your plan stays exactly as it is.",
+    "@paywallLegacyPlanStays": {
+        "description": "Reassurance on the legacy plan view. No migration or checkout."
+    },
+    "paywallMcpDailyRequests": "More daily MCP requests",
+    "@paywallMcpDailyRequests": {
+        "description": "First benefit on the recommended card when the sheet opened from the daily MCP cap."
+    },
     "paywallComparePlans": "Compare plans",
     "@paywallComparePlans": {
         "description": "Primary action in the nonblocking budget banner."

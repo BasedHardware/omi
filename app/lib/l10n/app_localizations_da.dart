@@ -13019,6 +13019,12 @@ class AppLocalizationsDa extends AppLocalizations {
   String get paywallOtherPlans => 'Andre abonnementer';
 
   @override
+  String get paywallLegacyPlanStays => 'Dit abonnement forbliver præcis, som det er.';
+
+  @override
+  String get paywallMcpDailyRequests => 'Flere daglige MCP-anmodninger';
+
+  @override
   String get paywallComparePlans => 'Sammenlign abonnementer';
 
   @override

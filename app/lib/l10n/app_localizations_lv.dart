@@ -13061,6 +13061,12 @@ class AppLocalizationsLv extends AppLocalizations {
   String get paywallOtherPlans => 'Citi plāni';
 
   @override
+  String get paywallLegacyPlanStays => 'Jūsu plāns paliek tieši tāds, kāds tas ir.';
+
+  @override
+  String get paywallMcpDailyRequests => 'Vairāk ikdienas MCP pieprasījumu';
+
+  @override
   String get paywallComparePlans => 'Salīdzināt plānus';
 
   @override

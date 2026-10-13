@@ -13026,6 +13026,12 @@ class AppLocalizationsEt extends AppLocalizations {
   String get paywallOtherPlans => 'Muud paketid';
 
   @override
+  String get paywallLegacyPlanStays => 'Sinu pakett jääb täpselt selliseks, nagu see on.';
+
+  @override
+  String get paywallMcpDailyRequests => 'Rohkem igapäevaseid MCP-päringuid';
+
+  @override
   String get paywallComparePlans => 'Võrdle pakette';
 
   @override

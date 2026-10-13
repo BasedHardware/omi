@@ -4008,6 +4008,8 @@
     "paywallRecommended": "Disyorkan",
     "paywallNoPlans": "Tiada Pelan Tersedia",
     "paywallOtherPlans": "Pelan lain",
+    "paywallLegacyPlanStays": "Pelan anda kekal seperti sedia ada.",
+    "paywallMcpDailyRequests": "Lebih banyak permintaan MCP harian",
     "paywallComparePlans": "Bandingkan pelan",
     "paywallLegacyPlan": "Pelan lama"
 }

@@ -169,7 +169,7 @@ class _BudgetUpsellCardState extends State<BudgetUpsellCard> {
       return const SizedBox.shrink();
     }
     return Container(
-      key: const Key('budget_80_percent_banner'),
+      key: const Key('budget_80'),
       margin: const EdgeInsets.only(top: OmiSpacing.sm),
       padding: const EdgeInsets.all(OmiSpacing.md),
       decoration: BoxDecoration(color: OmiColors.surface2, borderRadius: OmiRadius.mdAll),

@@ -4008,6 +4008,8 @@
     "paywallRecommended": "Anbefalt",
     "paywallNoPlans": "Ingen tilgjengelige planer",
     "paywallOtherPlans": "Andre abonnementer",
+    "paywallLegacyPlanStays": "Abonnementet ditt forblir nøyaktig som det er.",
+    "paywallMcpDailyRequests": "Flere daglige MCP-forespørsler",
     "paywallComparePlans": "Sammenlign abonnementer",
     "paywallLegacyPlan": "Eldre abonnement"
 }

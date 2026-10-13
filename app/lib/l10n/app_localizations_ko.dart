@@ -12851,6 +12851,12 @@ class AppLocalizationsKo extends AppLocalizations {
   String get paywallOtherPlans => '다른 요금제';
 
   @override
+  String get paywallLegacyPlanStays => '현재 요금제는 그대로 유지됩니다.';
+
+  @override
+  String get paywallMcpDailyRequests => '더 많은 일일 MCP 요청';
+
+  @override
   String get paywallComparePlans => '요금제 비교';
 
   @override

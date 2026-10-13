@@ -4008,6 +4008,8 @@
     "paywallRecommended": "Recomandat",
     "paywallNoPlans": "Nu există planuri disponibile",
     "paywallOtherPlans": "Alte planuri",
+    "paywallLegacyPlanStays": "Planul tău rămâne exact așa cum este.",
+    "paywallMcpDailyRequests": "Mai multe cereri MCP zilnice",
     "paywallComparePlans": "Compară planurile",
     "paywallLegacyPlan": "Plan vechi"
 }

@@ -4008,6 +4008,8 @@
     "paywallRecommended": "Consigliato",
     "paywallNoPlans": "Nessun piano disponibile",
     "paywallOtherPlans": "Altri piani",
+    "paywallLegacyPlanStays": "Il tuo piano resta esattamente com’è.",
+    "paywallMcpDailyRequests": "Più richieste MCP al giorno",
     "paywallComparePlans": "Confronta i piani",
     "paywallLegacyPlan": "Piano precedente"
 }

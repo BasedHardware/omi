@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'package:omi/models/plan_storefront.dart';
+import 'package:omi/models/subscription.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 
@@ -13,7 +14,8 @@ class StorefrontPlansContent extends StatefulWidget {
       this.loading = false,
       this.failed = false,
       this.busy = false,
-      this.currentGrantsDesktop = false,
+      this.livePlan,
+      this.cancelScheduled = false,
       required this.onRetry,
       required this.onSelect,
       required this.onManage,
@@ -23,7 +25,8 @@ class StorefrontPlansContent extends StatefulWidget {
   final bool loading;
   final bool failed;
   final bool busy;
-  final bool currentGrantsDesktop;
+  final PlanType? livePlan;
+  final bool cancelScheduled;
   final Future<void> Function() onRetry;
   final Future<void> Function(StorefrontTier tier, StorefrontPrice price) onSelect;
   final Future<void> Function() onManage;
@@ -59,11 +62,12 @@ class _StorefrontPlansContentState extends State<StorefrontPlansContent> {
             Text(data.usageContext!.message, style: OmiType.footnote.copyWith(color: OmiColors.textSecondary)),
             const SizedBox(height: OmiSpacing.sm),
           ],
-          if (data?.current case final current?) ...[
+          if (data?.current?.legacy == true)
+            _legacyPlan(data!.current!)
+          else if (data?.current case final current?) ...[
             Text(
               [
                 '${context.l10n.currentPlan} · ${current.name}',
-                if (current.legacy) context.l10n.paywallLegacyPlan,
                 if (current.formattedPrice?.isNotEmpty == true) current.formattedPrice!,
                 if (current.renewalLabel?.isNotEmpty == true) current.renewalLabel!,
               ].join(' · '),
@@ -139,11 +143,37 @@ class _StorefrontPlansContentState extends State<StorefrontPlansContent> {
     );
   }
 
+  Widget _legacyPlan(StorefrontCurrentPlan current) {
+    final line = [
+      current.name,
+      context.l10n.paywallLegacyPlan,
+      if (current.formattedPrice?.isNotEmpty == true) current.formattedPrice!,
+      if (current.renewalLabel?.isNotEmpty == true) current.renewalLabel!,
+    ].join(' · ');
+    return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+      Text(line,
+          key: const Key('storefront_current_plan'), style: OmiType.footnote.copyWith(color: OmiColors.textSecondary)),
+      const SizedBox(height: OmiSpacing.xs),
+      Text(context.l10n.paywallLegacyPlanStays, key: const Key('storefront_legacy_stays'), style: OmiType.subhead),
+      const SizedBox(height: OmiSpacing.sm),
+    ]);
+  }
+
   Widget _tierCard(StorefrontTier tier, StorefrontCurrentPlan? current) {
     final price = tier.priceFor(_interval);
     final isCurrentPrice = price != null && price.id == current?.priceId;
-    final canBuy =
-        price != null && widget.storefront!.canCheckout(tier, price, currentGrantsDesktop: widget.currentGrantsDesktop);
+    final storefront = widget.storefront!;
+    final decision = price == null
+        ? StorefrontCheckoutDecision.refuse
+        : storefrontCheckoutDecision(
+            storefront.current,
+            widget.livePlan,
+            tier,
+            price,
+            usageLegacy: storefront.usageContext?.legacy == true,
+            cancelScheduled: widget.cancelScheduled,
+            showSubscriptionUi: storefront.showSubscriptionUi,
+          );
     return Container(
       key: Key('storefront_tier_${tier.id}'),
       padding: const EdgeInsets.all(OmiSpacing.md),
@@ -179,20 +209,25 @@ class _StorefrontPlansContentState extends State<StorefrontPlansContent> {
           const SizedBox(height: OmiSpacing.xs),
           Text(price.renewalTerms, style: OmiType.footnote.copyWith(color: OmiColors.textSecondary)),
         ],
-        if (canBuy) ...[
+        if (price case final selected? when decision != StorefrontCheckoutDecision.refuse) ...[
           const SizedBox(height: OmiSpacing.sm),
           OmiButton(
               key: Key('storefront_buy_${tier.id}'),
-              label: tier.actionLabel,
+              label: decision == StorefrontCheckoutDecision.resubscribe ? context.l10n.resubscribe : tier.actionLabel,
               expand: true,
               isLoading: widget.busy,
-              onPressed: widget.busy ? null : () => widget.onSelect(tier, price)),
+              onPressed: widget.busy ? null : () => widget.onSelect(tier, selected)),
         ] else if (isCurrentPrice) ...[
           const SizedBox(height: OmiSpacing.xs),
           Text(context.l10n.currentPlan, style: OmiType.footnote),
         ],
         const SizedBox(height: OmiSpacing.sm),
         Text(tier.description, style: OmiType.subhead.copyWith(color: OmiColors.textSecondary)),
+        if (tier.recommended && storefront.usageContext?.source == 'mcp_daily_cap')
+          Padding(
+              padding: const EdgeInsets.only(bottom: OmiSpacing.xs),
+              child: Text('• ${context.l10n.paywallMcpDailyRequests}',
+                  key: const Key('storefront_mcp_benefit'), style: OmiType.subhead)),
         if (tier.recordingEquivalent != null)
           Padding(
               padding: const EdgeInsets.only(bottom: OmiSpacing.xs),

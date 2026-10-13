@@ -13137,6 +13137,12 @@ class AppLocalizationsTl extends AppLocalizations {
   String get paywallOtherPlans => 'Iba pang plano';
 
   @override
+  String get paywallLegacyPlanStays => 'Mananatili ang plan mo nang eksakto kung ano ito.';
+
+  @override
+  String get paywallMcpDailyRequests => 'Mas maraming pang-araw-araw na request sa MCP';
+
+  @override
   String get paywallComparePlans => 'Ihambing ang mga plano';
 
   @override

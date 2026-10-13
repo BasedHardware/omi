@@ -13037,6 +13037,12 @@ class AppLocalizationsFi extends AppLocalizations {
   String get paywallOtherPlans => 'Muut tilaukset';
 
   @override
+  String get paywallLegacyPlanStays => 'Tilauksesi pysyy täsmälleen entisellään.';
+
+  @override
+  String get paywallMcpDailyRequests => 'Enemmän päivittäisiä MCP-pyyntöjä';
+
+  @override
   String get paywallComparePlans => 'Vertaa tilauksia';
 
   @override

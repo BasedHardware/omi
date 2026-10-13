@@ -13029,6 +13029,12 @@ class AppLocalizationsBn extends AppLocalizations {
   String get paywallOtherPlans => 'অন্যান্য প্ল্যান';
 
   @override
+  String get paywallLegacyPlanStays => 'আপনার প্ল্যান ঠিক যেমন আছে তেমনই থাকবে।';
+
+  @override
+  String get paywallMcpDailyRequests => 'আরও দৈনিক MCP অনুরোধ';
+
+  @override
   String get paywallComparePlans => 'প্ল্যান তুলনা করুন';
 
   @override

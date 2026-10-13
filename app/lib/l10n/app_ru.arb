@@ -4043,6 +4043,8 @@
     "paywallRecommended": "Рекомендуется",
     "paywallNoPlans": "Нет доступных тарифов",
     "paywallOtherPlans": "Другие планы",
+    "paywallLegacyPlanStays": "Ваш план остаётся именно таким, какой он есть.",
+    "paywallMcpDailyRequests": "Больше ежедневных запросов MCP",
     "paywallComparePlans": "Сравнить планы",
     "paywallLegacyPlan": "Прежний план"
 }

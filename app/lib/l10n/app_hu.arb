@@ -4104,6 +4104,8 @@
     "paywallRecommended": "Ajánlott",
     "paywallNoPlans": "Nincs elérhető csomag",
     "paywallOtherPlans": "Más csomagok",
+    "paywallLegacyPlanStays": "A csomagod pontosan úgy marad, ahogy van.",
+    "paywallMcpDailyRequests": "Több napi MCP-kérés",
     "paywallComparePlans": "Csomagok összehasonlítása",
     "paywallLegacyPlan": "Korábbi csomag"
 }

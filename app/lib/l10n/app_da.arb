@@ -4050,6 +4050,8 @@
     "paywallRecommended": "Anbefalet",
     "paywallNoPlans": "Ingen tilgængelige planer",
     "paywallOtherPlans": "Andre abonnementer",
+    "paywallLegacyPlanStays": "Dit abonnement forbliver præcis, som det er.",
+    "paywallMcpDailyRequests": "Flere daglige MCP-anmodninger",
     "paywallComparePlans": "Sammenlign abonnementer",
     "paywallLegacyPlan": "Ældre abonnement"
 }

@@ -13046,6 +13046,12 @@ class AppLocalizationsUr extends AppLocalizations {
   String get paywallOtherPlans => 'دیگر پلان';
 
   @override
+  String get paywallLegacyPlanStays => 'آپ کا پلان بالکل ویسا ہی رہتا ہے۔';
+
+  @override
+  String get paywallMcpDailyRequests => 'مزید روزانہ MCP درخواستیں';
+
+  @override
   String get paywallComparePlans => 'پلان کا موازنہ کریں';
 
   @override

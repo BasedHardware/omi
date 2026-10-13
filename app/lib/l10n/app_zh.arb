@@ -4008,6 +4008,8 @@
     "paywallRecommended": "推荐",
     "paywallNoPlans": "暂无可用套餐",
     "paywallOtherPlans": "其他方案",
+    "paywallLegacyPlanStays": "你的方案会保持原样。",
+    "paywallMcpDailyRequests": "更多每日 MCP 请求",
     "paywallComparePlans": "比较方案",
     "paywallLegacyPlan": "旧版方案"
 }

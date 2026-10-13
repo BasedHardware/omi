@@ -13087,6 +13087,12 @@ class AppLocalizationsRo extends AppLocalizations {
   String get paywallOtherPlans => 'Alte planuri';
 
   @override
+  String get paywallLegacyPlanStays => 'Planul tău rămâne exact așa cum este.';
+
+  @override
+  String get paywallMcpDailyRequests => 'Mai multe cereri MCP zilnice';
+
+  @override
   String get paywallComparePlans => 'Compară planurile';
 
   @override

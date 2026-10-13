@@ -19,6 +19,7 @@ import 'package:omi/utils/platform/platform_manager.dart';
 
 class _Usage extends UsageProvider {
   String? checkedOutPrice;
+  String? sessionPrice;
   @override
   Future<Map<String, dynamic>?> upgradeUserSubscription({required String priceId, String? promotionCode}) async {
     checkedOutPrice = priceId;
@@ -29,6 +30,7 @@ class _Usage extends UsageProvider {
   Future<void> loadAvailablePlans() async {}
   @override
   Future<Map<String, dynamic>?> createUserCheckoutSession({required String priceId, String? promotionCode}) async {
+    sessionPrice = priceId;
     checkedOutPrice = priceId;
     return null; // No browser or real payment in hermetic tests.
   }
@@ -122,9 +124,244 @@ void main() {
       await tester.widget<StorefrontPlansContent>(find.byType(StorefrontPlansContent)).onSelect(data.tiers[1], price);
       await tester.pumpAndSettle();
       expect(usage.checkedOutPrice, isNull);
+      expect(find.text('Change Plan'), findsNothing);
       expect(tester.takeException(), isNull);
     });
   }
+  testWidgets('architect subscription rejects Operator checkout even from a stale tap', (tester) async {
+    tester.view.physicalSize = const Size(1000, 2200);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final usage = _Usage();
+    addTearDown(usage.dispose);
+    final json = jsonDecode(File('test/fixtures/plan_storefront.json').readAsStringSync()) as Map<String, dynamic>;
+    json['current']['id'] = 'architect';
+    json['current']['legacy'] = false;
+    json['current']['price_id'] = 'fixture_architect_month';
+    final data = PlanStorefront.fromJson(json);
+    final price = data.tiers[2].priceFor('month')!;
+    usage.debugSetSubscription(UserSubscriptionResponse(
+      subscription: Subscription(
+          plan: PlanType.architect, status: SubscriptionStatus.active, currentPriceId: 'fixture_architect_month'),
+      transcriptionSecondsUsed: 0,
+      transcriptionSecondsLimit: 0,
+      wordsTranscribedUsed: 0,
+      wordsTranscribedLimit: 0,
+      insightsGainedUsed: 0,
+      insightsGainedLimit: 0,
+      availablePlans: [
+        SubscriptionPlan(id: 'operator', title: 'Pro', prices: [
+          PricingOption(id: price.id, title: 'Monthly', priceString: price.formatted),
+        ])
+      ],
+    ));
+    usage.debugSetAvailablePlans({
+      'plans': [
+        {
+          'id': price.id,
+          'plan_id': 'operator',
+          'interval': 'month',
+          'unit_amount': price.amount,
+          'title': 'Pro',
+          'price_string': price.formatted,
+          'is_active': false
+        }
+      ]
+    });
+    await tester.pumpWidget(ChangeNotifierProvider<UsageProvider>.value(
+        value: usage,
+        child: MaterialApp(
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            supportedLocales: AppLocalizations.supportedLocales,
+            home: Scaffold(body: _Host(data)))));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('storefront_buy_operator')), findsNothing);
+    await tester.widget<StorefrontPlansContent>(find.byType(StorefrontPlansContent)).onSelect(data.tiers[2], price);
+    await tester.pumpAndSettle();
+    expect(usage.checkedOutPrice, isNull);
+    expect(usage.sessionPrice, isNull);
+    expect(find.text('Change Plan'), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+  testWidgets('annual subscriber has no monthly buy and a stale monthly tap does not check out', (tester) async {
+    tester.view.physicalSize = const Size(1000, 2200);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final usage = _Usage();
+    addTearDown(usage.dispose);
+    final json = jsonDecode(File('test/fixtures/plan_storefront.json').readAsStringSync()) as Map<String, dynamic>;
+    json['current']['price_id'] = 'fixture_plus_year';
+    json['current']['legacy'] = false;
+    final data = PlanStorefront.fromJson(json);
+    final price = data.tiers[1].priceFor('month')!;
+    usage.debugSetSubscription(UserSubscriptionResponse(
+      subscription:
+          Subscription(plan: PlanType.plus, status: SubscriptionStatus.active, currentPriceId: 'fixture_plus_year'),
+      transcriptionSecondsUsed: 0,
+      transcriptionSecondsLimit: 0,
+      wordsTranscribedUsed: 0,
+      wordsTranscribedLimit: 0,
+      insightsGainedUsed: 0,
+      insightsGainedLimit: 0,
+      availablePlans: [
+        SubscriptionPlan(id: 'plus', title: 'Plus', prices: [
+          PricingOption(id: price.id, title: 'Monthly', priceString: price.formatted),
+        ])
+      ],
+    ));
+    usage.debugSetAvailablePlans({
+      'plans': [
+        {
+          'id': price.id,
+          'plan_id': 'plus',
+          'interval': 'month',
+          'unit_amount': price.amount,
+          'title': 'Plus',
+          'price_string': price.formatted,
+          'is_active': false
+        }
+      ]
+    });
+    await tester.pumpWidget(ChangeNotifierProvider<UsageProvider>.value(
+        value: usage,
+        child: MaterialApp(
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            supportedLocales: AppLocalizations.supportedLocales,
+            home: Scaffold(body: _Host(data)))));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('storefront_buy_plus')), findsNothing);
+    await tester.widget<StorefrontPlansContent>(find.byType(StorefrontPlansContent)).onSelect(data.tiers[1], price);
+    await tester.pumpAndSettle();
+    expect(usage.checkedOutPrice, isNull);
+    expect(usage.sessionPrice, isNull);
+    expect(find.text('Change Plan'), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+  testWidgets('cancelled subscriber resubscribe reaches checkout session', (tester) async {
+    tester.view.physicalSize = const Size(1000, 2200);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final usage = _Usage();
+    addTearDown(usage.dispose);
+    final json = jsonDecode(File('test/fixtures/plan_storefront.json').readAsStringSync()) as Map<String, dynamic>;
+    final data = PlanStorefront.fromJson(json);
+    final price = data.tiers[1].priceFor('month')!;
+    usage.debugSetSubscription(UserSubscriptionResponse(
+      subscription: Subscription(
+          plan: PlanType.plus, status: SubscriptionStatus.active, cancelAtPeriodEnd: true, currentPriceId: price.id),
+      transcriptionSecondsUsed: 0,
+      transcriptionSecondsLimit: 0,
+      wordsTranscribedUsed: 0,
+      wordsTranscribedLimit: 0,
+      insightsGainedUsed: 0,
+      insightsGainedLimit: 0,
+      availablePlans: [
+        SubscriptionPlan(id: 'plus', title: 'Plus', prices: [
+          PricingOption(id: price.id, title: 'Monthly', priceString: price.formatted),
+        ])
+      ],
+    ));
+    usage.debugSetAvailablePlans({
+      'plans': [
+        {
+          'id': price.id,
+          'plan_id': 'plus',
+          'interval': 'month',
+          'unit_amount': price.amount,
+          'title': 'Plus',
+          'price_string': price.formatted,
+          'is_active': true
+        }
+      ]
+    });
+    await tester.pumpWidget(ChangeNotifierProvider<UsageProvider>.value(
+        value: usage,
+        child: MaterialApp(
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            supportedLocales: AppLocalizations.supportedLocales,
+            home: Scaffold(body: _Host(data)))));
+    await tester.pumpAndSettle();
+    expect(find.text('Resubscribe'), findsOneWidget);
+    await tester.ensureVisible(find.byKey(const Key('storefront_buy_plus')));
+    await tester.tap(find.byKey(const Key('storefront_buy_plus')).hitTestable());
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+    await tester.tap(find.text('Change Plan').hitTestable());
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(usage.sessionPrice, price.id);
+    expect(usage.checkedOutPrice, price.id);
+    expect(tester.takeException(), isNull);
+  });
+  testWidgets('pending storefront gate does not check out live unlimited', (tester) async {
+    tester.view.physicalSize = const Size(1000, 2200);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final usage = _Usage();
+    addTearDown(usage.dispose);
+    final pending = Completer<bool>();
+    final data = PlanStorefront.fromJson(jsonDecode(File('test/fixtures/plan_storefront.json').readAsStringSync()));
+    usage.debugSetSubscription(UserSubscriptionResponse(
+      subscription: Subscription(
+          plan: PlanType.unlimitedV2, status: SubscriptionStatus.active, stripeSubscriptionId: 'sub_fixture'),
+      transcriptionSecondsUsed: 0,
+      transcriptionSecondsLimit: 0,
+      wordsTranscribedUsed: 0,
+      wordsTranscribedLimit: 0,
+      insightsGainedUsed: 0,
+      insightsGainedLimit: 0,
+      availablePlans: [
+        SubscriptionPlan(id: 'plus', title: 'Plus', prices: [
+          PricingOption(id: 'fixture_plus_year', title: 'Yearly', priceString: r'$199.90'),
+        ])
+      ],
+    ));
+    usage.debugSetAvailablePlans({
+      'plans': [
+        {
+          'id': 'fixture_unlimited_month',
+          'plan_id': 'unlimited_v2',
+          'interval': 'month',
+          'unit_amount': 1999,
+          'title': 'Unlimited',
+          'price_string': r'$19.99',
+          'is_active': true
+        },
+        {
+          'id': 'fixture_plus_year',
+          'plan_id': 'plus',
+          'interval': 'year',
+          'unit_amount': 19990,
+          'title': 'Plus',
+          'price_string': r'$199.90',
+          'is_active': false
+        }
+      ]
+    });
+    await tester.pumpWidget(ChangeNotifierProvider<UsageProvider>.value(
+        value: usage,
+        child: MaterialApp(
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            supportedLocales: AppLocalizations.supportedLocales,
+            home: Scaffold(body: _Host(data, gate: () => pending.future)))));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 50));
+    expect(find.byType(StorefrontPlansContent), findsNothing);
+    final button = find.byKey(const ValueKey('plans_sheet_upgrade_button'));
+    await tester.scrollUntilVisible(button, 200, scrollable: find.byType(Scrollable).first);
+    await tester.tap(button.hitTestable());
+    await tester.pumpAndSettle();
+    expect(usage.checkedOutPrice, isNull);
+    expect(usage.sessionPrice, isNull);
+    expect(find.byType(OmiAlertDialog), findsNothing);
+    pending.complete(false);
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+  });
   testWidgets('unresolved storefront flag paints existing plans sheet', (tester) async {
     final usage = _Usage();
     addTearDown(usage.dispose);

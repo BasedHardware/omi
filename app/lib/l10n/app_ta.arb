@@ -11445,6 +11445,8 @@
     "paywallRecommended": "பரிந்துரைக்கப்படுகிறது",
     "paywallNoPlans": "திட்டங்கள் எதுவும் கிடைக்கவில்லை",
     "paywallOtherPlans": "பிற திட்டங்கள்",
+    "paywallLegacyPlanStays": "உங்கள் திட்டம் இருப்பது போலவே இருக்கும்.",
+    "paywallMcpDailyRequests": "கூடுதல் தினசரி MCP கோரிக்கைகள்",
     "paywallComparePlans": "திட்டங்களை ஒப்பிடு",
     "paywallLegacyPlan": "பழைய திட்டம்"
 }

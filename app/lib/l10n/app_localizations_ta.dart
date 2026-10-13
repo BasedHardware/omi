@@ -13122,6 +13122,12 @@ class AppLocalizationsTa extends AppLocalizations {
   String get paywallOtherPlans => 'பிற திட்டங்கள்';
 
   @override
+  String get paywallLegacyPlanStays => 'உங்கள் திட்டம் இருப்பது போலவே இருக்கும்.';
+
+  @override
+  String get paywallMcpDailyRequests => 'கூடுதல் தினசரி MCP கோரிக்கைகள்';
+
+  @override
   String get paywallComparePlans => 'திட்டங்களை ஒப்பிடு';
 
   @override

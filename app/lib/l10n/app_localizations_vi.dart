@@ -13030,6 +13030,12 @@ class AppLocalizationsVi extends AppLocalizations {
   String get paywallOtherPlans => 'Các gói khác';
 
   @override
+  String get paywallLegacyPlanStays => 'Gói của bạn giữ nguyên như hiện tại.';
+
+  @override
+  String get paywallMcpDailyRequests => 'Thêm yêu cầu MCP mỗi ngày';
+
+  @override
   String get paywallComparePlans => 'So sánh các gói';
 
   @override

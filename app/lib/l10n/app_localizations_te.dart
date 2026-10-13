@@ -13084,6 +13084,12 @@ class AppLocalizationsTe extends AppLocalizations {
   String get paywallOtherPlans => 'ఇతర ప్లాన్‌లు';
 
   @override
+  String get paywallLegacyPlanStays => 'మీ ప్లాన్ ఉన్నది ఉన్నట్లే ఉంటుంది.';
+
+  @override
+  String get paywallMcpDailyRequests => 'రోజుకు మరిన్ని MCP అభ్యర్థనలు';
+
+  @override
   String get paywallComparePlans => 'ప్లాన్‌లను పోల్చండి';
 
   @override

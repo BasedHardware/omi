@@ -13131,6 +13131,12 @@ class AppLocalizationsDe extends AppLocalizations {
   String get paywallOtherPlans => 'Weitere Tarife';
 
   @override
+  String get paywallLegacyPlanStays => 'Dein Tarif bleibt genau so, wie er ist.';
+
+  @override
+  String get paywallMcpDailyRequests => 'Mehr tägliche MCP-Anfragen';
+
+  @override
   String get paywallComparePlans => 'Tarife vergleichen';
 
   @override

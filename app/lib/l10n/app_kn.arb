@@ -11445,6 +11445,8 @@
     "paywallRecommended": "ಶಿಫಾರಸು ಮಾಡಲಾಗಿದೆ",
     "paywallNoPlans": "ಯಾವುದೇ ಯೋಜನೆಗಳು ಲಭ್ಯವಿಲ್ಲ",
     "paywallOtherPlans": "ಇತರ ಯೋಜನೆಗಳು",
+    "paywallLegacyPlanStays": "ನಿಮ್ಮ ಯೋಜನೆ ಇದ್ದಂತೆಯೇ ಉಳಿಯುತ್ತದೆ.",
+    "paywallMcpDailyRequests": "ಹೆಚ್ಚಿನ ದೈನಂದಿನ MCP ವಿನಂತಿಗಳು",
     "paywallComparePlans": "ಯೋಜನೆಗಳನ್ನು ಹೋಲಿಸಿ",
     "paywallLegacyPlan": "ಹಳೆಯ ಯೋಜನೆ"
 }

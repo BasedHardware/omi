@@ -4008,6 +4008,8 @@
     "paywallRecommended": "Aanbevolen",
     "paywallNoPlans": "Geen abonnementen beschikbaar",
     "paywallOtherPlans": "Andere abonnementen",
+    "paywallLegacyPlanStays": "Je abonnement blijft precies zoals het is.",
+    "paywallMcpDailyRequests": "Meer dagelijkse MCP-verzoeken",
     "paywallComparePlans": "Abonnementen vergelijken",
     "paywallLegacyPlan": "Oud abonnement"
 }

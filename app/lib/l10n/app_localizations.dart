@@ -23235,6 +23235,18 @@ abstract class AppLocalizations {
   /// **'Other plans'**
   String get paywallOtherPlans;
 
+  /// Reassurance on the legacy plan view. No migration or checkout.
+  ///
+  /// In en, this message translates to:
+  /// **'Your plan stays exactly as it is.'**
+  String get paywallLegacyPlanStays;
+
+  /// First benefit on the recommended card when the sheet opened from the daily MCP cap.
+  ///
+  /// In en, this message translates to:
+  /// **'More daily MCP requests'**
+  String get paywallMcpDailyRequests;
+
   /// Primary action in the nonblocking budget banner.
   ///
   /// In en, this message translates to:

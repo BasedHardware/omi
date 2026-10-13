@@ -11445,6 +11445,8 @@
     "paywallRecommended": "מומלץ",
     "paywallNoPlans": "אין תוכניות זמינות",
     "paywallOtherPlans": "תוכניות אחרות",
+    "paywallLegacyPlanStays": "התוכנית שלך נשארת בדיוק כפי שהיא.",
+    "paywallMcpDailyRequests": "יותר בקשות MCP ביום",
     "paywallComparePlans": "השוואת תוכניות",
     "paywallLegacyPlan": "תוכנית ותיקה"
 }

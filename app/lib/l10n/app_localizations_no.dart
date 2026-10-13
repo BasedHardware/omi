@@ -13033,6 +13033,12 @@ class AppLocalizationsNo extends AppLocalizations {
   String get paywallOtherPlans => 'Andre abonnementer';
 
   @override
+  String get paywallLegacyPlanStays => 'Abonnementet ditt forblir nøyaktig som det er.';
+
+  @override
+  String get paywallMcpDailyRequests => 'Flere daglige MCP-forespørsler';
+
+  @override
   String get paywallComparePlans => 'Sammenlign abonnementer';
 
   @override

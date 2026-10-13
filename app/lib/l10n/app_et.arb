@@ -4008,6 +4008,8 @@
     "paywallRecommended": "Soovitatud",
     "paywallNoPlans": "Plaane pole saadaval",
     "paywallOtherPlans": "Muud paketid",
+    "paywallLegacyPlanStays": "Sinu pakett jääb täpselt selliseks, nagu see on.",
+    "paywallMcpDailyRequests": "Rohkem igapäevaseid MCP-päringuid",
     "paywallComparePlans": "Võrdle pakette",
     "paywallLegacyPlan": "Varasem pakett"
 }

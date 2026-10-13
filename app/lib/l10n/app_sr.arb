@@ -11445,6 +11445,8 @@
     "paywallRecommended": "Препоручено",
     "paywallNoPlans": "Нема доступних планова",
     "paywallOtherPlans": "Други планови",
+    "paywallLegacyPlanStays": "Ваш план остаје тачно такав какав јесте.",
+    "paywallMcpDailyRequests": "Више дневних MCP захтева",
     "paywallComparePlans": "Упореди планове",
     "paywallLegacyPlan": "Стари план"
 }

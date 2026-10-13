@@ -13037,6 +13037,12 @@ class AppLocalizationsSv extends AppLocalizations {
   String get paywallOtherPlans => 'Andra abonnemang';
 
   @override
+  String get paywallLegacyPlanStays => 'Ditt abonnemang förblir precis som det är.';
+
+  @override
+  String get paywallMcpDailyRequests => 'Fler dagliga MCP-förfrågningar';
+
+  @override
   String get paywallComparePlans => 'Jämför abonnemang';
 
   @override

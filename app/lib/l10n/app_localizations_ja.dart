@@ -12846,6 +12846,12 @@ class AppLocalizationsJa extends AppLocalizations {
   String get paywallOtherPlans => 'その他のプラン';
 
   @override
+  String get paywallLegacyPlanStays => '現在のプランはそのまま続きます。';
+
+  @override
+  String get paywallMcpDailyRequests => '1日のMCPリクエストを増やす';
+
+  @override
   String get paywallComparePlans => 'プランを比較';
 
   @override

@@ -4008,6 +4008,8 @@
     "paywallRecommended": "Προτείνεται",
     "paywallNoPlans": "Δεν υπάρχουν διαθέσιμα προγράμματα",
     "paywallOtherPlans": "Άλλα προγράμματα",
+    "paywallLegacyPlanStays": "Το πρόγραμμά σας παραμένει ακριβώς ως έχει.",
+    "paywallMcpDailyRequests": "Περισσότερα ημερήσια αιτήματα MCP",
     "paywallComparePlans": "Σύγκριση προγραμμάτων",
     "paywallLegacyPlan": "Παλαιό πρόγραμμα"
 }

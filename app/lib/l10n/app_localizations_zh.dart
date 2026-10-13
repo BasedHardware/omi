@@ -12827,6 +12827,12 @@ class AppLocalizationsZh extends AppLocalizations {
   String get paywallOtherPlans => '其他方案';
 
   @override
+  String get paywallLegacyPlanStays => '你的方案会保持原样。';
+
+  @override
+  String get paywallMcpDailyRequests => '更多每日 MCP 请求';
+
+  @override
   String get paywallComparePlans => '比较方案';
 
   @override

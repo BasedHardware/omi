@@ -53,7 +53,7 @@
     {
       "file": "008-mobile-ios-storefront-legacy.png",
       "platform": "mobile-ios",
-      "description": "storefront legacy (W6f client eligibility and grouping revision; hermetic widget render, synthetic backend fields)",
+      "description": "legacy plan name, price, renewal, and reassurance with refresh and manage only",
       "captured_by": "agent",
       "source": "visual-audit"
     },
@@ -81,7 +81,7 @@
     {
       "file": "012-mobile-ios-storefront-mcp-cap.png",
       "platform": "mobile-ios",
-      "description": "storefront mcp cap (W6f client eligibility and grouping revision; hermetic widget render, synthetic backend fields)",
+      "description": "MCP cap sheet; recommended card leads with daily MCP requests",
       "captured_by": "agent",
       "source": "visual-audit"
     },
@@ -116,7 +116,7 @@
     {
       "file": "017-mobile-ios-free-mcp-cap.png",
       "platform": "mobile-ios",
-      "description": "free mcp cap (W6f client eligibility and grouping revision; hermetic widget render, synthetic backend fields)",
+      "description": "free MCP cap; recommended Plus card leads with daily MCP requests before recording hours",
       "captured_by": "agent",
       "source": "visual-audit"
     },
@@ -131,6 +131,27 @@
       "file": "019-mobile-ios-storefront-other-plans.png",
       "platform": "mobile-ios",
       "description": "storefront other plans (W6f client eligibility and grouping revision; hermetic widget render, synthetic backend fields)",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "020-mobile-ios-storefront-annual-current.png",
+      "platform": "mobile-ios",
+      "description": "annual Plus subscriber on the monthly tab; current tier has no buy button, Pro remains an upward move",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "021-mobile-ios-storefront-architect-subscriber.png",
+      "platform": "mobile-ios",
+      "description": "Architect subscriber; Pro is shown without checkout and Architect is marked current",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "022-mobile-ios-storefront-cancelled-resubscribe.png",
+      "platform": "mobile-ios",
+      "description": "cancelled Plus subscriber; current price offers Resubscribe and Pro has no checkout",
       "captured_by": "agent",
       "source": "visual-audit"
     }

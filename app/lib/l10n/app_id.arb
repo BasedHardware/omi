@@ -4043,6 +4043,8 @@
     "paywallRecommended": "Direkomendasikan",
     "paywallNoPlans": "Tidak Ada Paket Tersedia",
     "paywallOtherPlans": "Paket lainnya",
+    "paywallLegacyPlanStays": "Paket Anda tetap seperti sekarang.",
+    "paywallMcpDailyRequests": "Lebih banyak permintaan MCP harian",
     "paywallComparePlans": "Bandingkan paket",
     "paywallLegacyPlan": "Paket lama"
 }

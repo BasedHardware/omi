@@ -4008,6 +4008,8 @@
     "paywallRecommended": "Ieteicams",
     "paywallNoPlans": "Nav pieejamu plānu",
     "paywallOtherPlans": "Citi plāni",
+    "paywallLegacyPlanStays": "Jūsu plāns paliek tieši tāds, kāds tas ir.",
+    "paywallMcpDailyRequests": "Vairāk ikdienas MCP pieprasījumu",
     "paywallComparePlans": "Salīdzināt plānus",
     "paywallLegacyPlan": "Iepriekšējais plāns"
 }

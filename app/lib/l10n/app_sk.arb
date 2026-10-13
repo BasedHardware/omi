@@ -4008,6 +4008,8 @@
     "paywallRecommended": "Odporúčané",
     "paywallNoPlans": "Nie sú dostupné žiadne plány",
     "paywallOtherPlans": "Ďalšie plány",
+    "paywallLegacyPlanStays": "Váš plán zostáva presne taký, aký je.",
+    "paywallMcpDailyRequests": "Viac denných požiadaviek MCP",
     "paywallComparePlans": "Porovnať plány",
     "paywallLegacyPlan": "Pôvodný plán"
 }

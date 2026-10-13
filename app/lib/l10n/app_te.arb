@@ -11445,6 +11445,8 @@
     "paywallRecommended": "సిఫార్సు చేయబడింది",
     "paywallNoPlans": "ప్లాన్‌లు అందుబాటులో లేవు",
     "paywallOtherPlans": "ఇతర ప్లాన్‌లు",
+    "paywallLegacyPlanStays": "మీ ప్లాన్ ఉన్నది ఉన్నట్లే ఉంటుంది.",
+    "paywallMcpDailyRequests": "రోజుకు మరిన్ని MCP అభ్యర్థనలు",
     "paywallComparePlans": "ప్లాన్‌లను పోల్చండి",
     "paywallLegacyPlan": "పాత ప్లాన్"
 }

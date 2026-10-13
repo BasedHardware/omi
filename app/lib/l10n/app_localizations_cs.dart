@@ -13034,6 +13034,12 @@ class AppLocalizationsCs extends AppLocalizations {
   String get paywallOtherPlans => 'Další plány';
 
   @override
+  String get paywallLegacyPlanStays => 'Váš plán zůstává přesně tak, jak je.';
+
+  @override
+  String get paywallMcpDailyRequests => 'Více denních požadavků MCP';
+
+  @override
   String get paywallComparePlans => 'Porovnat plány';
 
   @override

@@ -13071,6 +13071,12 @@ class AppLocalizationsKn extends AppLocalizations {
   String get paywallOtherPlans => 'ಇತರ ಯೋಜನೆಗಳು';
 
   @override
+  String get paywallLegacyPlanStays => 'ನಿಮ್ಮ ಯೋಜನೆ ಇದ್ದಂತೆಯೇ ಉಳಿಯುತ್ತದೆ.';
+
+  @override
+  String get paywallMcpDailyRequests => 'ಹೆಚ್ಚಿನ ದೈನಂದಿನ MCP ವಿನಂತಿಗಳು';
+
+  @override
   String get paywallComparePlans => 'ಯೋಜನೆಗಳನ್ನು ಹೋಲಿಸಿ';
 
   @override

@@ -4008,6 +4008,8 @@
     "paywallRecommended": "Rekommenderas",
     "paywallNoPlans": "Inga tillgängliga planer",
     "paywallOtherPlans": "Andra abonnemang",
+    "paywallLegacyPlanStays": "Ditt abonnemang förblir precis som det är.",
+    "paywallMcpDailyRequests": "Fler dagliga MCP-förfrågningar",
     "paywallComparePlans": "Jämför abonnemang",
     "paywallLegacyPlan": "Äldre abonnemang"
 }

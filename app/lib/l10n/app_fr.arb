@@ -4043,6 +4043,8 @@
     "paywallRecommended": "Recommandé",
     "paywallNoPlans": "Aucune offre disponible",
     "paywallOtherPlans": "Autres forfaits",
+    "paywallLegacyPlanStays": "Votre forfait reste exactement tel qu’il est.",
+    "paywallMcpDailyRequests": "Plus de requêtes MCP par jour",
     "paywallComparePlans": "Comparer les forfaits",
     "paywallLegacyPlan": "Ancien forfait"
 }

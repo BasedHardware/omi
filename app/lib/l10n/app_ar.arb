@@ -4008,6 +4008,8 @@
     "paywallRecommended": "موصى به",
     "paywallNoPlans": "لا توجد خطط متاحة",
     "paywallOtherPlans": "خطط أخرى",
+    "paywallLegacyPlanStays": "تبقى خطتك كما هي تمامًا.",
+    "paywallMcpDailyRequests": "المزيد من طلبات MCP اليومية",
     "paywallComparePlans": "مقارنة الخطط",
     "paywallLegacyPlan": "خطة قديمة"
 }

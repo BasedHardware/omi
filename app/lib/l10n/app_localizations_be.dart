@@ -13067,6 +13067,12 @@ class AppLocalizationsBe extends AppLocalizations {
   String get paywallOtherPlans => 'Іншыя планы';
 
   @override
+  String get paywallLegacyPlanStays => 'Ваш план застаецца сапраўды такім, які ён ёсць.';
+
+  @override
+  String get paywallMcpDailyRequests => 'Больш штодзённых запытаў MCP';
+
+  @override
   String get paywallComparePlans => 'Параўнаць планы';
 
   @override

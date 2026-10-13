@@ -13013,6 +13013,12 @@ class AppLocalizationsHi extends AppLocalizations {
   String get paywallOtherPlans => 'अन्य प्लान';
 
   @override
+  String get paywallLegacyPlanStays => 'आपका प्लान बिल्कुल वैसा ही रहता है।';
+
+  @override
+  String get paywallMcpDailyRequests => 'रोज़ाना और MCP अनुरोध';
+
+  @override
   String get paywallComparePlans => 'प्लान की तुलना करें';
 
   @override

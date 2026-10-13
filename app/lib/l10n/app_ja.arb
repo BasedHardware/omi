@@ -4008,6 +4008,8 @@
     "paywallRecommended": "おすすめ",
     "paywallNoPlans": "利用可能なプランはありません",
     "paywallOtherPlans": "その他のプラン",
+    "paywallLegacyPlanStays": "現在のプランはそのまま続きます。",
+    "paywallMcpDailyRequests": "1日のMCPリクエストを増やす",
     "paywallComparePlans": "プランを比較",
     "paywallLegacyPlan": "旧プラン"
 }

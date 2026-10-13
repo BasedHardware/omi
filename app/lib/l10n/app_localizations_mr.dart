@@ -13038,6 +13038,12 @@ class AppLocalizationsMr extends AppLocalizations {
   String get paywallOtherPlans => 'इतर योजना';
 
   @override
+  String get paywallLegacyPlanStays => 'तुमची योजना जशी आहे तशीच राहते.';
+
+  @override
+  String get paywallMcpDailyRequests => 'अधिक दैनिक MCP विनंत्या';
+
+  @override
   String get paywallComparePlans => 'योजनांची तुलना करा';
 
   @override

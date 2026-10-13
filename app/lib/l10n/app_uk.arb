@@ -4008,6 +4008,8 @@
     "paywallRecommended": "Рекомендовано",
     "paywallNoPlans": "Немає доступних планів",
     "paywallOtherPlans": "Інші плани",
+    "paywallLegacyPlanStays": "Ваш план лишається саме таким, яким він є.",
+    "paywallMcpDailyRequests": "Більше щоденних запитів MCP",
     "paywallComparePlans": "Порівняти плани",
     "paywallLegacyPlan": "Попередній план"
 }

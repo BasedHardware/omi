@@ -4008,6 +4008,8 @@
     "paywallRecommended": "Препоръчано",
     "paywallNoPlans": "Няма налични планове",
     "paywallOtherPlans": "Други планове",
+    "paywallLegacyPlanStays": "Планът ви остава точно такъв, какъвто е.",
+    "paywallMcpDailyRequests": "Повече дневни MCP заявки",
     "paywallComparePlans": "Сравни плановете",
     "paywallLegacyPlan": "Стар план"
 }

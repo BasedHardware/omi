@@ -12959,6 +12959,12 @@ class AppLocalizationsAr extends AppLocalizations {
   String get paywallOtherPlans => 'خطط أخرى';
 
   @override
+  String get paywallLegacyPlanStays => 'تبقى خطتك كما هي تمامًا.';
+
+  @override
+  String get paywallMcpDailyRequests => 'المزيد من طلبات MCP اليومية';
+
+  @override
   String get paywallComparePlans => 'مقارنة الخطط';
 
   @override

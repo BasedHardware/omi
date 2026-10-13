@@ -4008,6 +4008,8 @@
     "paywallRecommended": "Đề xuất",
     "paywallNoPlans": "Chưa Có Gói Khả Dụng",
     "paywallOtherPlans": "Các gói khác",
+    "paywallLegacyPlanStays": "Gói của bạn giữ nguyên như hiện tại.",
+    "paywallMcpDailyRequests": "Thêm yêu cầu MCP mỗi ngày",
     "paywallComparePlans": "So sánh các gói",
     "paywallLegacyPlan": "Gói cũ"
 }

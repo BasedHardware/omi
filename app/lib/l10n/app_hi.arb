@@ -4008,6 +4008,8 @@
     "paywallRecommended": "सुझाया गया",
     "paywallNoPlans": "कोई प्लान उपलब्ध नहीं है",
     "paywallOtherPlans": "अन्य प्लान",
+    "paywallLegacyPlanStays": "आपका प्लान बिल्कुल वैसा ही रहता है।",
+    "paywallMcpDailyRequests": "रोज़ाना और MCP अनुरोध",
     "paywallComparePlans": "प्लान की तुलना करें",
     "paywallLegacyPlan": "पुराना प्लान"
 }

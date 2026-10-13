@@ -13084,6 +13084,12 @@ class AppLocalizationsHu extends AppLocalizations {
   String get paywallOtherPlans => 'Más csomagok';
 
   @override
+  String get paywallLegacyPlanStays => 'A csomagod pontosan úgy marad, ahogy van.';
+
+  @override
+  String get paywallMcpDailyRequests => 'Több napi MCP-kérés';
+
+  @override
   String get paywallComparePlans => 'Csomagok összehasonlítása';
 
   @override

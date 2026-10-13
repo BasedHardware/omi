@@ -13042,6 +13042,12 @@ class AppLocalizationsId extends AppLocalizations {
   String get paywallOtherPlans => 'Paket lainnya';
 
   @override
+  String get paywallLegacyPlanStays => 'Paket Anda tetap seperti sekarang.';
+
+  @override
+  String get paywallMcpDailyRequests => 'Lebih banyak permintaan MCP harian';
+
+  @override
   String get paywallComparePlans => 'Bandingkan paket';
 
   @override

@@ -13078,6 +13078,12 @@ class AppLocalizationsRu extends AppLocalizations {
   String get paywallOtherPlans => 'Другие планы';
 
   @override
+  String get paywallLegacyPlanStays => 'Ваш план остаётся именно таким, какой он есть.';
+
+  @override
+  String get paywallMcpDailyRequests => 'Больше ежедневных запросов MCP';
+
+  @override
   String get paywallComparePlans => 'Сравнить планы';
 
   @override

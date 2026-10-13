@@ -4043,6 +4043,8 @@
     "paywallRecommended": "Recomendado",
     "paywallNoPlans": "Nenhum plano disponível",
     "paywallOtherPlans": "Outros planos",
+    "paywallLegacyPlanStays": "Seu plano continua exatamente como está.",
+    "paywallMcpDailyRequests": "Mais solicitações MCP por dia",
     "paywallComparePlans": "Comparar planos",
     "paywallLegacyPlan": "Plano anterior"
 }

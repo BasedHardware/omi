@@ -11445,6 +11445,8 @@
     "paywallRecommended": "প্রস্তাবিত",
     "paywallNoPlans": "কোনো প্ল্যান উপলব্ধ নেই",
     "paywallOtherPlans": "অন্যান্য প্ল্যান",
+    "paywallLegacyPlanStays": "আপনার প্ল্যান ঠিক যেমন আছে তেমনই থাকবে।",
+    "paywallMcpDailyRequests": "আরও দৈনিক MCP অনুরোধ",
     "paywallComparePlans": "প্ল্যান তুলনা করুন",
     "paywallLegacyPlan": "পুরনো প্ল্যান"
 }
