@@ -55,7 +55,9 @@ void main() {
     expect(text, 'Finish your bicycle project.');
     final decoded = jsonDecode(body!) as Map;
     expect(decoded['device_tools'], isEmpty);
-    expect(decoded['text'], contains('I build bicycles.'));
+    expect(decoded['text'], contains('> I build bicycles.'));
+    expect(decoded['text'], isNot(contains('Base a brief answer')),
+        reason: 'chat history contains user-facing question and quotes, not helper instructions');
     expect(decoded['text'], startsWith('What should I focus on this week?'));
   });
   for (final frame in [

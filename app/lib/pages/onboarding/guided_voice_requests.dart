@@ -53,8 +53,7 @@ Future<String> transcribeGuidedAnswer(File file, String language, {Future<http.R
 Future<String> askGuidedPayoff(String question, List<String> savedAnswers,
     {Stream<String> Function(String)? stream, Duration timeout = const Duration(seconds: 8)}) async {
   final body = jsonEncode({
-    'text': '$question\n\nBased only on what I just shared, suggest one small focus for this week:\n'
-        '${savedAnswers.map((s) => '- $s').join('\n')}',
+    'text': '$question\n\n${savedAnswers.map((s) => '> ${s.replaceAll('\n', '\n> ')}').join('\n\n')}',
     'device_tools': <String>[],
   });
   final abort = Completer<void>();
