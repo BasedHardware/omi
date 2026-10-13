@@ -69,6 +69,10 @@ REQUEST_REJECTIONS_TOTAL = Counter(
     ['api_surface', 'error_class'],
 )
 
+# A zero must be scraped before the first rejection for increase() to see it.
+for _surface in ('openai_chat_completions', 'openai_embeddings', 'openrouter_systemone', 'anthropic_messages'):
+    REQUEST_REJECTIONS_TOTAL.labels(api_surface=_surface, error_class='invalid_request')
+
 LUNA_UNSUPPORTED_PARAMS_DROPPED_TOTAL = Counter(
     'llm_gateway_luna_unsupported_params_dropped_total',
     'OpenAI request parameters omitted because gpt-6-luna does not accept them',

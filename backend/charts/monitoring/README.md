@@ -17,6 +17,29 @@ no-data semantics lives in [`expected-targets.prod.yaml`](./expected-targets.pro
 - Live Instatus delivery verification and notification-policy rework remain
   maintainer-approved Phase 2 work (not claimed by the inventory).
 
+## Telemetry cost cuts
+
+The 2026-10-13 audit measured 527,780 head series. Production kubelet
+`metricRelabelings` drop `kubernetes_feature_enabled` and the
+`rest_client_{request,response}_size_bytes_{bucket,sum,count}` families;
+`probesMetricRelabelings` drop `prober_probe_duration_seconds_{bucket,sum,count}`.
+No committed consumer or live Prometheus rule referenced these families.
+The main ServiceMonitor contributed 16,526 active series (about 3.1% of head).
+The chart's existing storage-operation bucket drop is preserved because Helm
+replaces relabeling lists. Probe-result counters, used latency histograms,
+HPA inputs, scrape intervals, resource requests and 10-day retention stay intact.
+
+`backend/tests/unit/test_monitoring_cost_contract.py` guards these cuts against
+committed alerts, dashboards (including vendored defaults), recording rules,
+adapter queries and Prometheus-reading code. Generate the conservative usage map
+with `python3 backend/scripts/monitoring_metric_usage.py --metrics-file <names.json>`;
+the input is a JSON name array or `/api/v1/label/__name__/values` response.
+A missing committed reference is a candidate for review, not proof that an
+operator never uses a metric in Explore. Before deploying, check live rules and
+operator-managed dashboards again; after deploying compare post-relabel samples
+and head series after compaction. Removed history ages out over the existing
+retention window. Series reductions only save dollars when capacity can be reduced.
+
 ## Grafana storage
 
 Grafana 12.1.0 uses SQLite on the existing 20Gi `standard-rwo` PVC. Prod and
@@ -671,6 +694,11 @@ Alerting is configured through Grafana unified alerting (not Prometheus AlertMan
 
 Loki ruler is configured to send alerts to AlertManager at `http://prod-kube-prometheus-stack-alertmanager:9093`.
 
+### Telegram notification quality
+
+See [template, severity timing, examples and supervisor rollout](notifications/README.md).
+Rules own direct notification timing; Helm does not provision the contact or template.
+
 ### Human-Impact Alert Contract
 
 Grafana rules are operational runbook entries, not raw metric dumps. The split files in `alerts/*.json` are the
@@ -1076,3 +1104,48 @@ helm -n dev-omi-monitoring --kube-context "$DEV_CONTEXT" upgrade --install dev-o
 2. Check Alloy collects from the right namespace (configured in Alloy values)
 3. Verify Loki gateway is reachable and basic auth secret exists
 4. Query in Grafana Explore with Loki datasource: `{namespace="{env}-omi-backend"}`
+
+## Alert admission backtest
+
+`backend/scripts/alert_backtest.py` is read-only and uses only the Python standard
+library. `--lint` runs offline in the existing local/CI checks manifest and the
+monitoring unit suite. Regenerate the committed metric-name snapshot with:
+
+```bash
+source ~/.local/bin/gcp-agent-env.sh ro-prod
+python3 backend/scripts/alert_backtest.py \
+  --kube-context gke_based-hardware_us-central1_prod-omi-gke --refresh-inventory
+python3 backend/scripts/alert_backtest.py --lint
+python3 backend/scripts/alert_backtest.py \
+  --kube-context gke_based-hardware_us-central1_prod-omi-gke \
+  --uids omi-parakeet-stream-capacity-warning --json-output /tmp/backtest.json \
+  --markdown-output /tmp/backtest.md
+```
+
+Direct Prometheus access uses `--prom-url`. `--rules` accepts exported JSON files;
+without it all `alerts/*.json` are loaded. The replay uses retained history up to
+10 days, with the rule's `interval` or five minutes. `--step` must be at least a
+minute. Sampling can miss shorter incidents, and the initial pending state is
+unknown; episodes at the window edges are censored. No deployment is authorized
+by a quiet replay alone: inspect current raw selector counts and traffic gates.
+
+The evaluator preserves series labels, reduces each range frame separately,
+interprets math without Python `eval`, and implements threshold/classic nodes.
+Range datasource queries use their declared frame resolution and one bounded
+request per evaluation (potentially slow); resample, ambiguous joins and unknown
+nodes fail closed as `needs-human`. Non-Prometheus rules require separate evidence.
+`NoData` and `KeepLast` intervals are reported as unknown, requiring human review;
+DatasourceNoData routing is not simulated. Long lookbacks near the retention edge
+are flagged as incomplete; review the warmed portion separately. Pages/week counts instance starts,
+not Telegram messages or repeat notifications. Noise means over 5% firing time;
+flapping means at least ten episodes no longer than two steps or ten minutes.
+
+Lint checks inventory names, dependency/condition structure, finite thresholds,
+boolean threshold units, reduction/math support and pending periods on rate,
+ratio or average queries. `legacy_debt` pins unchanged pre-existing findings to
+a rule hash; any rule edit invalidates the exception. It is debt, never deployment
+approval. The snapshot is historical presence, not proof of current ingestion.
+Explicit `admission_holds` require a rule to stay paused until its reviewed hold
+is removed. Live replay exits nonzero on dead, noisy or unproven results.
+The CI gate catches structural regressions; live threshold calibration remains
+a required admission review before an operator sends a rule to Telegram.

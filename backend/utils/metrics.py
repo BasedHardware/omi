@@ -784,14 +784,12 @@ OMI_QUEUE_OLDEST_READY_AGE_SECONDS = Gauge(
 OMI_QUEUE_NAMES = (
     'memory_outbox',
     'candidate_integration_outbox',
-    'chat_first_proactive_intents',
     'conversation_finalization_jobs',
     'daily_summary_hour_groups',
     'daily_memory_sweep',
     'vector_repair_outbox',
     'task_recurrence_inbox',
     'frame_deletion_outbox',
-    'projection_repairs',
 )
 
 # Closed queue inventory bounds cardinality. Before the first tick, age absence
@@ -1294,12 +1292,6 @@ TASK_INTELLIGENCE_ATTRIBUTION_TOTAL = Counter(
     'task_intelligence_attribution_total',
     'Privacy-safe task intervention, feedback, and outcome events',
     ['event', 'subject_kind', 'code'],
-)
-
-CHAT_FIRST_PROACTIVE_TOTAL = Counter(
-    'chat_first_proactive_total',
-    'Chat-first proactive engine activity with no user content',
-    ['event', 'source', 'reason'],
 )
 
 MEMORY_UNIVERSAL_READ_ORIGIN_TOTAL = Counter(
