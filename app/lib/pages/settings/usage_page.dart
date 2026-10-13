@@ -22,6 +22,7 @@ import 'package:omi/models/user_usage.dart';
 import 'package:omi/pages/settings/fair_use_page.dart';
 import 'package:omi/pages/settings/transcription_settings_page.dart';
 import 'package:omi/pages/settings/widgets/plans_sheet.dart';
+import 'package:omi/pages/settings/widgets/plans/contextual_plans.dart';
 import 'package:omi/pages/settings/widgets/usage/usage_chart.dart';
 import 'package:omi/pages/settings/widgets/usage/usage_stat_tile.dart';
 import 'package:omi/providers/usage_provider.dart';
@@ -541,7 +542,7 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin, Wi
     );
   }
 
-  void _showPlansSheet({required String source, required bool trackOpen}) {
+  Future<void> _showPlansSheet({required String source, required bool trackOpen}) async {
     if (!context.read<UsageProvider>().showSubscriptionUI) {
       return;
     }
@@ -549,8 +550,11 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin, Wi
       final plan = context.read<UsageProvider>().subscription?.subscription.plan.wireName ?? 'unknown';
       PlatformManager.instance.analytics.paywallOpened(source, currentPlan: plan);
     }
+    final title = await plansSheetTitle(context);
+    if (!mounted || !context.read<UsageProvider>().showSubscriptionUI) return;
     showOmiSheet(
       context: context,
+      title: title,
       padding: EdgeInsets.zero,
       builder: (context) => PlansSheet(
         waveController: _waveController,
@@ -657,6 +661,7 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin, Wi
             padding: const EdgeInsets.fromLTRB(OmiSpacing.md, OmiSpacing.md, OmiSpacing.md, OmiSpacing.xl),
             children: [
               _buildSubscriptionInfo(context, provider),
+              const BudgetUpsellBanner(),
               _buildFairUseBanner(),
               if (stats == null)
                 const OmiLoadingState()

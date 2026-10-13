@@ -4,6 +4,11 @@
 # Checks that consume PR metadata declare `requires_pr_body: true`; post-merge
 # push runs exclude only that category because no authoritative PR body is available.
 checks:
+  - id: monitoring-alert-backtest-lint
+    command: ["python3", "backend/scripts/alert_backtest.py", "--lint"]
+    triggers: ["backend/charts/monitoring/alerts/**", "backend/charts/monitoring/metric-inventory.prod.json", "backend/scripts/alert_backtest.py", "backend/tests/unit/test_monitoring_alert_backtest.py", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "2026-10-13 absent-rule audit: retired proactive metric and kube_endpoint_address_available could never evaluate; fingerprinted legacy debt cannot admit new dead selectors or edited rules"
   - id: ui-evidence
     command: ["python3", ".github/scripts/check_ui_evidence.py", "--changed-files", "{changed_files}", "--base", "{target_base}", "--head", "{head}", "--pr-body-file", "{pr_body_file}"]
     triggers: ["app/lib/**/*.dart", "desktop/macos/Desktop/Sources/**/*.swift", "desktop/windows/src/**/*.ts", "desktop/windows/src/**/*.tsx", "web/frontend/src/**", "web/admin/app/**", ".github/scripts/check_ui_evidence.py", ".github/checks-manifest.yaml", ".github/scripts/run_checks.py"]

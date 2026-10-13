@@ -407,8 +407,12 @@ class TestBYOKMiddlewareValidation:
         assert response.status_code == 403
         assert not called
 
-    def test_mismatched_keys_reach_byok_recovery_routes_without_keys(self, monkeypatch):
-        from utils.byok import BYOKMiddleware, get_byok_keys
+    @pytest.mark.parametrize(
+        'path', ['/v1/users/me/subscription', '/v1/payments/available-plans', '/v1/users/budget-choice']
+    )
+    @pytest.mark.parametrize('header', ['X-BYOK-OpenAI', 'X-BYOK-Deepgram'])
+    def test_mismatched_keys_reach_byok_recovery_routes_without_keys(self, monkeypatch, path, header):
+        from utils.byok import BYOKMiddleware, get_byok_keys, get_byok_key
 
         async def run_blocking(_executor, function, *args):
             if function.__name__ == 'verify_token':
@@ -418,12 +422,13 @@ class TestBYOKMiddlewareValidation:
         monkeypatch.setattr('utils.byok.run_blocking', run_blocking)
         middleware = BYOKMiddleware(MagicMock())
         request = self._request(
-            {'Authorization': 'Bearer token', 'X-BYOK-OpenAI': 'sk-invalid'},
-            path='/v1/users/me/subscription',
+            {'Authorization': 'Bearer token', header: 'invalid-key'},
+            path=path,
         )
 
         async def call_next(_request):
             assert get_byok_keys() == {}
+            assert get_byok_key('deepgram') is None
             return 'recovery'
 
         assert __import__('asyncio').run(middleware.dispatch(request, call_next)) == 'recovery'

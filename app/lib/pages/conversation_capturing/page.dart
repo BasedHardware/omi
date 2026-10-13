@@ -109,9 +109,20 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> {
   /// Finish: the one stop. No confirmation: Finish is explicit, and it processes the conversation
   /// (a phone recording stops first; a pendant it paused resumes afterwards).
   Future<void> _stopConversation(CaptureProvider provider) async {
-    await provider.finishCapture();
+    final hadContent = provider.segments.isNotEmpty || provider.photos.isNotEmpty;
+    if (hadContent) {
+      await provider.finishCapture();
+      if (!mounted) return;
+      switchHomeToConversationsTab(context);
+    } else {
+      final source = provider.liveCaptureSource;
+      if (source == null || source == ConversationSource.phone.name) {
+        await provider.stopStreamRecording();
+      } else if (LiveCaptureCard.canPause(provider.recordingDevice, source: source) && !provider.isPaused) {
+        await provider.pauseCapture();
+      }
+    }
     if (!mounted) return;
-    switchHomeToConversationsTab(context);
     // A swipe back during the finish has already popped this route; it only stays mounted while it
     // animates out, and a pop then would take Home with it and leave the navigator empty.
     final route = ModalRoute.of(context);

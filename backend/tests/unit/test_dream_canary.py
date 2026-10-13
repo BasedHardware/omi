@@ -96,7 +96,9 @@ def test_canary_full_loop_real_serialization_and_transport_shadow_in_on(store, c
     assert doc['mode'] == 'shadow' and doc['tokens'] == 100
     assert doc['records_read'] == 1 and doc['records_queued_after'] == 0
     assert 'review_encrypted_v1' in doc['source']
-    assert db.rows[('dream_spend', doc['created_at'].date().isoformat())]['reserved_usd'] == pytest.approx(0.16)
+    assert db.rows[('dream_users', UID, 'spend', doc['created_at'].date().isoformat())][
+        'reserved_usd'
+    ] == pytest.approx(0.001)
     assert not eligible(UID, db.rows[('users', UID)])
     assert not dream_store.mark_dirty(UID, [('conversations', 'other')])
     assert UID not in caplog.text and 'Qorbi' not in caplog.text
@@ -156,6 +158,7 @@ def test_scheduler_prod_and_paused_dev_auth_match_sweep():
     assert canary['target']['uri'] == sweep['target']['uri'].replace('/sweep', '/canary')
     dev = next(row for row in config['environments']['dev']['jobs'] if row['name'] == canary['name'])
     assert dev['state'] == 'PAUSED'
+    assert canary['attempt_deadline'] == dev['attempt_deadline'] == '180s'
 
 
 @pytest.mark.parametrize('reject_vertex', [False, True])

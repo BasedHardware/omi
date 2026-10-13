@@ -14,6 +14,194 @@ final class OnboardingCompleted extends RegisteredEvent {
   Map<String, Object> get properties => {};
 }
 
+enum RecordingProducedNoConversationSource {
+  phone("phone"),
+  omi("omi"),
+  watch("watch");
+  const RecordingProducedNoConversationSource(this.wireName);
+  final String wireName;
+}
+
+enum RecordingProducedNoConversationReason {
+  emptyDeleted("empty_deleted"),
+  discarded("discarded"),
+  nullResult("null_result");
+  const RecordingProducedNoConversationReason(this.wireName);
+  final String wireName;
+}
+
+final class RecordingProducedNoConversation extends RegisteredEvent {
+  const RecordingProducedNoConversation({required this.source, required this.durationSeconds, required this.transcriptObserved, required this.reason});
+  final RecordingProducedNoConversationSource source;
+  final int durationSeconds;
+  final bool transcriptObserved;
+  final RecordingProducedNoConversationReason reason;
+  @override
+  String get wireName => "Recording Produced No Conversation";
+  @override
+  Map<String, Object> get properties => {"source": source.wireName, "duration_s": durationSeconds, "transcript_observed": transcriptObserved, "reason": reason.wireName};
+}
+
+final class OnboardingWelcomeShown extends RegisteredEvent {
+  const OnboardingWelcomeShown();
+  @override
+  String get wireName => "Onboarding Welcome Shown";
+  @override
+  Map<String, Object> get properties => {};
+}
+
+final class OnboardingGetStartedTapped extends RegisteredEvent {
+  const OnboardingGetStartedTapped();
+  @override
+  String get wireName => "Onboarding Get Started Tapped";
+  @override
+  Map<String, Object> get properties => {};
+}
+
+enum SignInStartedProvider {
+  apple("apple"),
+  google("google");
+  const SignInStartedProvider(this.wireName);
+  final String wireName;
+}
+
+final class SignInStarted extends RegisteredEvent {
+  const SignInStarted({required this.provider});
+  final SignInStartedProvider provider;
+  @override
+  String get wireName => "Sign In Started";
+  @override
+  Map<String, Object> get properties => {"provider": provider.wireName};
+}
+
+enum SignInFailedProvider {
+  apple("apple"),
+  google("google");
+  const SignInFailedProvider(this.wireName);
+  final String wireName;
+}
+
+enum SignInFailedErrorClass {
+  cancelled("cancelled"),
+  network("network"),
+  credential("credential"),
+  configuration("configuration"),
+  unknown("unknown");
+  const SignInFailedErrorClass(this.wireName);
+  final String wireName;
+}
+
+final class SignInFailed extends RegisteredEvent {
+  const SignInFailed({required this.provider, required this.errorClass});
+  final SignInFailedProvider provider;
+  final SignInFailedErrorClass errorClass;
+  @override
+  String get wireName => "Sign In Failed";
+  @override
+  Map<String, Object> get properties => {"provider": provider.wireName, "error_class": errorClass.wireName};
+}
+
+enum OnboardingPermissionResultPermission {
+  notifications("notifications"),
+  location("location"),
+  backgroundActivity("background_activity");
+  const OnboardingPermissionResultPermission(this.wireName);
+  final String wireName;
+}
+
+final class OnboardingPermissionResult extends RegisteredEvent {
+  const OnboardingPermissionResult({required this.permission, required this.granted, required this.permanentlyDenied, required this.servicesDisabled});
+  final OnboardingPermissionResultPermission permission;
+  final bool granted;
+  final bool permanentlyDenied;
+  final bool servicesDisabled;
+  @override
+  String get wireName => "Onboarding Permission Result";
+  @override
+  Map<String, Object> get properties => {"permission": permission.wireName, "granted": granted, "permanently_denied": permanentlyDenied, "services_disabled": servicesDisabled};
+}
+
+enum DevicePairingBlockedReason {
+  bluetoothPermissionDenied("bluetooth_permission_denied"),
+  locationPermissionMissing("location_permission_missing"),
+  bluetoothOff("bluetooth_off"),
+  nearbyDevicesDenied("nearby_devices_denied"),
+  noAdapter("no_adapter"),
+  scannerUnavailable("scanner_unavailable");
+  const DevicePairingBlockedReason(this.wireName);
+  final String wireName;
+}
+
+final class DevicePairingBlocked extends RegisteredEvent {
+  const DevicePairingBlocked({required this.reason, required this.androidSdk, required this.iosVersion});
+  final DevicePairingBlockedReason reason;
+  final int androidSdk;
+  final int iosVersion;
+  @override
+  String get wireName => "Device Pairing Blocked";
+  @override
+  Map<String, Object> get properties => {"reason": reason.wireName, "android_sdk": androidSdk, "ios_version": iosVersion};
+}
+
+final class DeviceScanEmpty extends RegisteredEvent {
+  const DeviceScanEmpty({required this.afterSeconds});
+  final int afterSeconds;
+  @override
+  String get wireName => "Device Scan Empty";
+  @override
+  Map<String, Object> get properties => {"after_seconds": afterSeconds};
+}
+
+enum DeviceConnectFailureShownFailureReason {
+  bluetoothOff("bluetooth_off"),
+  bluetoothPermissionDenied("bluetooth_permission_denied"),
+  nearbyDevicesDenied("nearby_devices_denied"),
+  locationPermissionMissing("location_permission_missing"),
+  notFoundOrDropped("not_found_or_dropped"),
+  staleBond("stale_bond"),
+  unknown("unknown");
+  const DeviceConnectFailureShownFailureReason(this.wireName);
+  final String wireName;
+}
+
+enum DeviceConnectFailureShownPlatform {
+  ios("ios"),
+  android("android"),
+  other("other");
+  const DeviceConnectFailureShownPlatform(this.wireName);
+  final String wireName;
+}
+
+final class DeviceConnectFailureShown extends RegisteredEvent {
+  const DeviceConnectFailureShown({required this.failureReason, required this.platform});
+  final DeviceConnectFailureShownFailureReason failureReason;
+  final DeviceConnectFailureShownPlatform platform;
+  @override
+  String get wireName => "Device Connect Failure Shown";
+  @override
+  Map<String, Object> get properties => {"failure_reason": failureReason.wireName, "platform": platform.wireName};
+}
+
+enum DeviceConnectFailedErrorClass {
+  timeout("timeout"),
+  bluetoothOff("bluetooth_off"),
+  permissionDenied("permission_denied"),
+  notFound("not_found"),
+  initializationFailed("initialization_failed"),
+  unknown("unknown");
+  const DeviceConnectFailedErrorClass(this.wireName);
+  final String wireName;
+}
+
+final class DeviceConnectFailed extends RegisteredEvent {
+  const DeviceConnectFailed({required this.errorClass});
+  final DeviceConnectFailedErrorClass errorClass;
+  @override
+  String get wireName => "Device Connect Failed";
+  @override
+  Map<String, Object> get properties => {"error_class": errorClass.wireName};
+}
+
 final class PhoneMicRecordingStarted extends RegisteredEvent {
   const PhoneMicRecordingStarted();
   @override
@@ -2195,7 +2383,12 @@ enum PaywallOpenedSource {
   webPlans("web_plans"),
   macosSettingsView("macos_settings_view"),
   windowsSettingsView("windows_settings_view"),
-  unknown("unknown");
+  unknown("unknown"),
+  budget100Percent("budget_100_percent"),
+  proactiveAgentGate("proactive_agent_gate"),
+  screenContextGate("screen_context_gate"),
+  mcpDailyCap("mcp_daily_cap"),
+  budget80("budget_80");
   const PaywallOpenedSource(this.wireName);
   final String wireName;
 }
@@ -2259,7 +2452,12 @@ enum UpgradePlanSelectedSource {
   webPlans("web_plans"),
   macosSettingsView("macos_settings_view"),
   windowsSettingsView("windows_settings_view"),
-  unknown("unknown");
+  unknown("unknown"),
+  budget100Percent("budget_100_percent"),
+  proactiveAgentGate("proactive_agent_gate"),
+  screenContextGate("screen_context_gate"),
+  mcpDailyCap("mcp_daily_cap"),
+  budget80("budget_80");
   const UpgradePlanSelectedSource(this.wireName);
   final String wireName;
 }
@@ -2451,4 +2649,144 @@ final class SubscriptionCancelAbandoned extends RegisteredEvent {
   String get wireName => "Subscription Cancel Abandoned";
   @override
   Map<String, Object> get properties => {"step": step, "reason": reason.wireName};
+}
+
+enum GuidedIntroPayoffShownAnswerSource {
+  chat("chat"),
+  fallback("fallback");
+  const GuidedIntroPayoffShownAnswerSource(this.wireName);
+  final String wireName;
+}
+
+final class GuidedIntroPayoffShown extends RegisteredEvent {
+  const GuidedIntroPayoffShown({required this.memoriesCount, required this.answerSource, required this.latencyMs});
+  final int memoriesCount;
+  final GuidedIntroPayoffShownAnswerSource answerSource;
+  final int latencyMs;
+  @override
+  String get wireName => "Guided Intro Payoff Shown";
+  @override
+  Map<String, Object> get properties => {"memories_count": memoriesCount, "answer_source": answerSource.wireName, "latency_ms": latencyMs};
+}
+
+final class GuidedIntroPayoffContinued extends RegisteredEvent {
+  const GuidedIntroPayoffContinued();
+  @override
+  String get wireName => "Guided Intro Payoff Continued";
+  @override
+  Map<String, Object> get properties => {};
+}
+
+final class OnboardingFirstCaptureShown extends RegisteredEvent {
+  const OnboardingFirstCaptureShown();
+  @override
+  String get wireName => "Onboarding First Capture Shown";
+  @override
+  Map<String, Object> get properties => {};
+}
+
+enum OnboardingFirstCaptureChoiceSelectedChoice {
+  omi("omi"),
+  appleWatch("apple_watch"),
+  phone("phone"),
+  skipped("skipped");
+  const OnboardingFirstCaptureChoiceSelectedChoice(this.wireName);
+  final String wireName;
+}
+
+final class OnboardingFirstCaptureChoiceSelected extends RegisteredEvent {
+  const OnboardingFirstCaptureChoiceSelected({required this.choice});
+  final OnboardingFirstCaptureChoiceSelectedChoice choice;
+  @override
+  String get wireName => "Onboarding First Capture Choice Selected";
+  @override
+  Map<String, Object> get properties => {"choice": choice.wireName};
+}
+
+final class OnboardingFirstCaptureRecordingStarted extends RegisteredEvent {
+  const OnboardingFirstCaptureRecordingStarted();
+  @override
+  String get wireName => "Onboarding First Capture Recording Started";
+  @override
+  Map<String, Object> get properties => {};
+}
+
+final class OnboardingFirstCaptureRecordingCompleted extends RegisteredEvent {
+  const OnboardingFirstCaptureRecordingCompleted({required this.durationS, required this.transcriptObserved});
+  final int durationS;
+  final bool transcriptObserved;
+  @override
+  String get wireName => "Onboarding First Capture Recording Completed";
+  @override
+  Map<String, Object> get properties => {"duration_s": durationS, "transcript_observed": transcriptObserved};
+}
+
+final class OnboardingFirstCaptureConversationShown extends RegisteredEvent {
+  const OnboardingFirstCaptureConversationShown({required this.latencyMs});
+  final int latencyMs;
+  @override
+  String get wireName => "Onboarding First Capture Conversation Shown";
+  @override
+  Map<String, Object> get properties => {"latency_ms": latencyMs};
+}
+
+final class OnboardingFirstCaptureEmptyResult extends RegisteredEvent {
+  const OnboardingFirstCaptureEmptyResult();
+  @override
+  String get wireName => "Onboarding First Capture Empty Result";
+  @override
+  Map<String, Object> get properties => {};
+}
+
+final class OnboardingFirstCaptureSkipped extends RegisteredEvent {
+  const OnboardingFirstCaptureSkipped();
+  @override
+  String get wireName => "Onboarding First Capture Skipped";
+  @override
+  Map<String, Object> get properties => {};
+}
+
+enum OnboardingStepCompletedStep {
+  auth("auth"),
+  aiConsent("ai_consent"),
+  name("name"),
+  primaryLanguage("primary_language"),
+  acquisitionSource("acquisition_source"),
+  permissions("permissions"),
+  speechProfile("speech_profile"),
+  knowledgeGraph("knowledge_graph"),
+  setup("setup"),
+  firstCapture("first_capture");
+  const OnboardingStepCompletedStep(this.wireName);
+  final String wireName;
+}
+
+enum OnboardingStepCompletedPlatform {
+  ios("ios"),
+  android("android"),
+  other("other");
+  const OnboardingStepCompletedPlatform(this.wireName);
+  final String wireName;
+}
+
+enum OnboardingStepCompletedExitReason {
+  answered("answered"),
+  skipped("skipped"),
+  back("back");
+  const OnboardingStepCompletedExitReason(this.wireName);
+  final String wireName;
+}
+
+final class OnboardingStepCompleted extends RegisteredEvent {
+  const OnboardingStepCompleted({required this.step, required this.index, required this.elapsedMs, required this.skipped, required this.platform, required this.exitReason});
+  final OnboardingStepCompletedStep step;
+  final int index;
+  final int elapsedMs;
+  final bool skipped;
+  final OnboardingStepCompletedPlatform platform;
+  final OnboardingStepCompletedExitReason exitReason;
+  @override
+  String get wireName => "Onboarding Step Completed";
+  @override
+  Map<String, Object> get properties => {"step": step.wireName, "index": index, "elapsed_ms": elapsedMs, "skipped": skipped, "platform": platform.wireName, "exit_reason": exitReason.wireName};
 }

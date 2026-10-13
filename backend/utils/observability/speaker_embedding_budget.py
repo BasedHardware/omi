@@ -64,3 +64,10 @@ for _target in ('owner', 'person'):
     RECOVERY_ACCEPTANCES.labels(target=_target)
 for _reason in ('proven_rejector', 'clearly_far', 'completed_not_near_owner'):
     RECOVERY_DENIALS.labels(reason=_reason)
+
+PCM_WINDOWS_RESTORED = _counter(
+    'omi_speaker_id_pcm_windows_restored_total',
+    'Candidate query windows reaching their physical minimum only after exact full-span sample restoration',
+    'reason',
+)
+PCM_WINDOWS_RESTORED.labels(reason='full_span_rounding')

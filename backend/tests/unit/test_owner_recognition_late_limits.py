@@ -76,6 +76,9 @@ async def test_process_admits_only_two_late_jobs_even_while_threads_block(env, m
 async def test_cancelling_waiters_does_not_free_slots_before_threads_finish(env, monkeypatch):
     from utils.conversations import speaker_identity_retry as retry
 
+    # Exhaust metadata waiting capacity too: cancelled active workers still own their slots.
+    monkeypatch.setattr(retry, '_waiting_slots', SimpleNamespace(acquire=lambda **kw: False))
+
     release = threading.Event()
     futures = []
     submit = retry.submit_with_context

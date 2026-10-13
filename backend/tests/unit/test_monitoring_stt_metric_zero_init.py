@@ -20,16 +20,16 @@ BACKEND = Path(__file__).resolve().parents[2]
 # Existing sparse series are debt, not healthy zeroes. Remove entries as their
 # startup paths are added; don't mask new alert metrics with a blanket exception.
 DECLARED_SPARSE = {
-    'llm_gateway_request_rejections_total': 'Children appear only on pre-route validation rejection.',
     'llm_gateway_requests_total': 'Route/outcome children appear only when a real request finishes.',
-    'llm_gateway_chat_extraction_requests_total': 'Client extraction outcome children appear on requests.',
-    'llm_gateway_client_first_byte_seconds_bucket': 'Client first-byte histogram children appear on gateway traffic.',
-    'chat_first_proactive_total': 'Proactive result children appear only when the proactive job runs.',
     'omi_sync_dispatch_attempts_total': 'Dispatch lane/outcome children appear only on sync dispatch.',
     'omi_live_stt_terminal_failures_total': 'Provider/phase failure children appear only on live-STT failure.',
     'omi_live_stt_accepted_total': 'Provider/platform/environment children appear only on accepted STT traffic.',
     'omi_live_stt_terminal_total': 'Provider/outcome/phase children appear only at live-STT termination.',
     'omi_listen_accepted_total': 'Source/platform children appear only when a listen session is accepted.',
+    'omi_client_journey_terminal_total': (
+        'Client journey children are traffic-created to bound cardinality. Journey SLOs zero-fill only the '
+        'bad numerator against an observed valid denominator; absence is owned by scrape/signal health.'
+    ),
 }
 
 

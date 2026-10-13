@@ -8,6 +8,7 @@ import re
 import unicodedata
 
 from models.dream_agent import Plan
+from models.dream_refs import base_ref, has_ref, cited_value
 
 # Code-configurable threshold; no rollout/environment switch changes admission.
 MIN_SUMMARY_TRANSCRIPT_WORDS = 40
@@ -35,13 +36,14 @@ def task_rejection(edit, row, records, *, now=None):
     if not times or any(time is None for time in times):
         return 'stale_task_evidence'
     latest = max(time for time in times if time is not None)
-    sources = {edit.target}
+    sources = {base_ref(edit.target)}
     if row.get('conversation_id'):
         sources.add('conversations/' + row['conversation_id'].removeprefix('conversations/'))
     for source in row.get('provenance') or []:
         if source.get('kind') == 'conversation':
             sources.add('conversations/' + source['id'])
     for ref in edit.evidence:
+        ref = base_ref(ref)
         if ref in sources or ref not in records:
             continue
         evidence = records[ref]
@@ -51,7 +53,7 @@ def task_rejection(edit, row, records, *, now=None):
             break
     else:
         return 'stale_task_evidence'
-    if edit.kind == 'retire_task':
+    if edit.kind == 'retire_task' and getattr(records, 'context_mode', 'bounded') != 'full':
         created = timestamp(row.get('created_at'))
         if created is None or (now or datetime.now(timezone.utc)) - created <= timedelta(days=MIN_RETIRE_TASK_DAYS):
             return 'task_too_recent'
@@ -173,7 +175,7 @@ def summary_eligibility(row):
     return {kind: summary_field_rejection(kind, row) or 'editable' for kind in ('title', 'overview')}
 
 
-def summary_rejection(edit, row, *, min_words=None):
+def summary_rejection(edit, row, *, min_words=None, full=False):
     if edit.kind not in {'title', 'overview'}:
         return None
     reason = summary_field_rejection(edit.kind, row, min_words=min_words)
@@ -181,7 +183,9 @@ def summary_rejection(edit, row, *, min_words=None):
         return reason
     speech = ' '.join((s.get('text') or '') for s in row.get('transcript_segments') or [])
     after_words = tokens(edit.after)
-    if len(after_words) < (3 if edit.kind == 'title' else 8) or PLACEHOLDER.search(' '.join(after_words)):
+    if not full and (
+        len(after_words) < (3 if edit.kind == 'title' else 8) or PLACEHOLDER.search(' '.join(after_words))
+    ):
         return 'placeholder'
     if edit.kind == 'title' and not set(after_words).intersection(tokens(speech)):
         return 'ungrounded'
@@ -193,15 +197,15 @@ def summary_rejection(edit, row, *, min_words=None):
     return None
 
 
-def feedback_rejection(feedback):
-    if (
+def feedback_rejection(feedback, *, full=False):
+    if not full and (
         feedback.failure_class in {'success', 'none', 'ok'}
         or feedback.severity == 'info'
         or NON_FAILURE.search(' '.join(tokens(feedback.reproduction)))
     ):
         return 'not_a_failure'
     text = ' '.join((feedback.component, feedback.failure_class, feedback.reproduction))
-    if LANGUAGE.search(' '.join(tokens(text))):
+    if not full and LANGUAGE.search(' '.join(tokens(text))):
         return 'language_not_defect'
     if RECORD_REF.search(feedback.reproduction):
         return 'ref_leak'
@@ -211,27 +215,62 @@ def feedback_rejection(feedback):
 def filter_plan(plan: Plan, records, *, usage_sink=None, targets=None):
     """Drop unsafe proposals before any report persistence; diagnostics contain counts only."""
     rejected = Counter()
+    full = getattr(records, 'context_mode', 'bounded') == 'full'
     edits = []
     targets = set(records) if targets is None else set(targets)
+    if full:
+        targets = set(records)
+    unique = []
+    seen = set()
     for edit in plan.edits:
+        key = (edit.kind, edit.target, edit.before, edit.after)
+        if key in seen:
+            rejected['duplicate_edit'] += 1
+        elif edit.kind == 'spelling' and edit.before == edit.after:
+            rejected['noop'] += 1
+        else:
+            unique.append(edit)
+        seen.add(key)
+    spelling_pairs = {(edit.target, edit.before, edit.after) for edit in unique if edit.kind == 'spelling'}
+    for edit in unique:
+        if edit.kind == 'spelling' and (edit.target, edit.after, edit.before) in spelling_pairs:
+            rejected['contradictory_spelling'] += 1
+            continue
         reason = spelling_rejection(edit)
+        if full and (
+            not has_ref(edit.target, records)
+            or any(not has_ref(ref, records) for ref in edit.evidence)
+            or (edit.other and not has_ref(edit.other, records))
+        ):
+            reason = 'invalid_evidence'
         if edit.kind in {'close_task', 'retire_task'}:
             reason = (
                 'invalid_evidence'
-                if edit.target not in records or any(ref not in records for ref in edit.evidence)
-                else task_rejection(edit, records[edit.target], records)
+                if not has_ref(edit.target, records) or any(not has_ref(ref, records) for ref in edit.evidence)
+                else task_rejection(edit, records[base_ref(edit.target)], records)
             )
         if edit.kind in {'title', 'overview'}:
             reason = (
                 'invalid_evidence'
-                if edit.target not in records or any(ref not in records for ref in edit.evidence)
-                else summary_rejection(edit, records[edit.target])
+                if not has_ref(edit.target, records) or any(not has_ref(ref, records) for ref in edit.evidence)
+                else summary_rejection(edit, records[base_ref(edit.target)], full=full)
             )
-        if not reason and (
-            edit.target not in targets
-            or (edit.kind in {'merge_people', 'merge_memories'} and edit.other not in targets)
+        if (
+            not full
+            and not reason
+            and (
+                base_ref(edit.target) not in targets
+                or (edit.kind in {'merge_people', 'merge_memories'} and base_ref(edit.other) not in targets)
+            )
         ):
             reason = 'context_target'
+        if (
+            not reason
+            and edit.kind == 'spelling'
+            and '#' in edit.target
+            and not verbatim_quote(edit.before, cited_value(edit.target, records))
+        ):
+            reason = 'invalid_evidence'
         if reason:
             rejected[reason] += 1
         else:
@@ -243,38 +282,74 @@ def filter_plan(plan: Plan, records, *, usage_sink=None, targets=None):
     } - {''}
     questions = []
     for question in plan.questions:
-        if (
+        if not has_ref(question.source_ref, records) or not verbatim_quote(
+            question.quote, cited_value(question.source_ref, records)
+        ):
+            rejected['invalid_question_evidence'] += 1
+        elif (
             question.same_person
             and not {question.same_person.left.entity_id, question.same_person.right.entity_id} <= entities
         ):
-            rejected['context_target'] += 1
+            rejected['invalid_evidence' if full else 'context_target'] += 1
         elif question.speaker and 'conversations/' + question.speaker.conversation_id not in targets:
-            rejected['context_target'] += 1
+            rejected['invalid_evidence' if full else 'context_target'] += 1
         elif question.task and 'candidates/' + question.task.candidate_id not in targets:
-            rejected['context_target'] += 1
+            rejected['invalid_evidence' if full else 'context_target'] += 1
         else:
             questions.append(question)
     vocabulary = []
     for term in plan.vocabulary:
-        reason = vocabulary_rejection(term)
+        reason = (
+            'invalid_evidence'
+            if full and any(not has_ref(ref, records) for ref in term.evidence)
+            else vocabulary_rejection(term)
+        )
         if reason:
             rejected[reason] += 1
         else:
             vocabulary.append(term)
     feedback = []
     for item in plan.feedback:
-        reason = feedback_rejection(item)
+        reason = feedback_rejection(item, full=full)
         if reason:
             rejected[reason] += 1
         else:
             feedback.append(item)
+    slow_tasks, frames = plan.slow_tasks, plan.frames
+    if full:
+        rejected['edit_cap'] += max(0, len(edits) - 25)
+        edits = edits[:25]
+        slow_tasks = [task for task in plan.slow_tasks if all(has_ref(ref, records) for ref in task.evidence)]
+        frames = [frame for frame in plan.frames if has_ref(frame.screen_ref, records)]
+        rejected['invalid_evidence'] += len(plan.slow_tasks) - len(slow_tasks) + len(plan.frames) - len(frames)
+        rejected = +rejected
     if usage_sink is not None:
         counts = Counter(usage_sink.get('rejected', {}))
         counts.update(rejected)
         usage_sink['rejected'] = dict(counts)
     return plan.model_copy(
-        update={'edits': edits, 'questions': questions, 'vocabulary': vocabulary, 'feedback': feedback}
+        update={
+            'edits': edits,
+            'questions': questions,
+            'vocabulary': vocabulary,
+            'feedback': feedback,
+            'slow_tasks': slow_tasks,
+            'frames': frames,
+        }
     )
+
+
+def verbatim_quote(quote, value):
+    """A quote must occur inside one actual field, never across serialized field boundaries."""
+    if not quote or not quote.strip():
+        return False
+    if isinstance(value, str):
+        return quote in value
+    if isinstance(value, dict):
+        return any(verbatim_quote(quote, field) for field in value.values())
+    if isinstance(value, list):
+        return any(verbatim_quote(quote, field) for field in value)
+    return False
 
 
 def cap_feedback(feedback, *, usage_sink):

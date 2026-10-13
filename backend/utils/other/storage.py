@@ -1018,6 +1018,12 @@ def download_and_decode_chunk_blob(
         return None
 
 
+def download_audio_chunk_pcm(uid: str, path: str, sample_rate: int = 16000) -> bytes | None:
+    """Bounded read of a single stored chunk for server coverage probes."""
+    bucket = _get_storage_client().bucket(private_cloud_sync_bucket)
+    return download_and_decode_chunk_blob(bucket, path, uid, sample_rate, download_kwargs={'timeout': 5, 'retry': None})
+
+
 def download_audio_chunks_and_merge(
     uid: str,
     conversation_id: str,

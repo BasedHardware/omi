@@ -83,7 +83,11 @@ def test_success_charges_media_duration_even_without_transcript(monkeypatch, met
     fake = _FakeSttClient(response=_FakeResponse(json_data={'text': '', 'segments': []}))
     response = _upload(_make_client(monkeypatch, fake))
     assert response.status_code == 200
-    record.assert_called_once_with(_UID, transcription_seconds=10)
+    record.assert_called_once_with(
+        _UID,
+        transcription_seconds=10,
+        usage_metadata={'funding': 'omi', 'provider': 'parakeet', 'source': 'parakeet_proxy'},
+    )
     assert allowance.call_args_list == [call(_UID, source=None, byok_active=False)] * 2
 
 
@@ -525,7 +529,11 @@ def test_real_probe_rewinds_upload_for_provider(monkeypatch, metering):
     fake = _FakeSttClient(response=_FakeResponse(json_data={'text': 'ok'}))
     assert _upload(_make_client(monkeypatch, fake), content=body).status_code == 200
     assert fake.calls[0]['files']['file'][1] == body
-    metering[1].assert_called_once_with(_UID, transcription_seconds=2)
+    metering[1].assert_called_once_with(
+        _UID,
+        transcription_seconds=2,
+        usage_metadata={'funding': 'omi', 'provider': 'parakeet', 'source': 'parakeet_proxy'},
+    )
 
 
 async def test_child_probe_suppresses_native_playlist_logs_without_changing_parent():

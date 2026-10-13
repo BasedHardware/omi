@@ -9,7 +9,7 @@ import pytest
 from config.dream_agent import Caps
 from database import dream_store
 from models.dream_agent import Edit, Plan, Cluster, Triage
-from utils import dream_agent, dream_grounding, dream_tools, review
+from utils import dream_transport, dream_agent, dream_grounding, dream_tools, review
 from utils.llm.shaped_agent import Turn
 
 
@@ -101,8 +101,12 @@ def test_invalid_spelling_never_reaches_review(before, after):
 
     edit = correction().model_copy(update={'before': before, 'after': after})
     sink = {}
-    assert not filter_plan(Plan(edits=[edit]), records(), usage_sink=sink).edits
-    assert sink['rejected'] == {'invalid_spelling': 1}
+    plan = dream_transport.parse_response(Plan, {'edits': [edit.model_dump()]}, usage_sink=sink)
+    assert not filter_plan(plan, records(), usage_sink=sink).edits
+    reason = (
+        'invalid_edit' if not before.strip() or not after.strip() else 'noop' if before == after else 'invalid_spelling'
+    )
+    assert sink['rejected'] == {reason: 1}
 
 
 def test_spelling_question_retains_fenced_actionable_source(monkeypatch):
@@ -238,6 +242,8 @@ def test_capped_target_skips_hydration_and_reasoning_until_next_utc_day(monkeypa
         'watermark': dream_store.EPOCH,
         'dirty_dropped': 0,
         'dirty_dropped_reported': 0,
+        'reservation_usd': 0.24,
+        'spend_scope': 'user',
     }
     db = DreamFirestore()
     db.rows[('dream_users', uid)] = {'lease': lease, 'score': 1}

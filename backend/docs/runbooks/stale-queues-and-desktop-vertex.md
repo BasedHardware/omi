@@ -7,14 +7,13 @@ performed. Run from the repository root with the worktree's Python environment:
 
 ```bash
 source ~/.local/bin/gcp-agent-env.sh ro-prod
-backend/.venv/bin/python backend/scripts/stale_queue_audit.py --project based-hardware --sample-limit 200
+backend/.venv/bin/python backend/scripts/retire_dead_queue_backlog.py --project based-hardware
 ```
 
 The script uses the read-only gcloud token explicitly, never interactive ADC.
-It has no write mode. Counts use Firestore aggregation; samples project only
-status, creation time, attempt count, source kind, availability and claim time.
-Samples are bounded and ordered by document identity: their maximum age is a
-**lower bound**, not the global oldest. It emits no document paths or user IDs.
+It defaults to dry-run. Counts use Firestore aggregation; bounded scans project
+creation time only. The historical table below came from stale_queue_audit.py.
+It emits no document paths or user IDs.
 
 Dry-run at 2026-10-12 11:51 UTC (`writes: 0`):
 
@@ -37,31 +36,14 @@ Absence of attempt fields on intent documents does **not** prove zero attempts:
 
 ## Consumer evidence and operational repair boundaries
 
-### Projection repairs: enqueued but no production drain
+### Projection repairs: retired
 
-`database/memory_ledger.py` enqueues after both append paths.
-`process_projection_repairs` has no production caller; its three-attempt policy
-never runs. Search reproducibly:
-
-```bash
-rg -n 'process_projection_repairs|enqueue_projection_repairs' backend --glob '*.py'
-```
-
-The queue is not proven retired: ledger append callers remain in memories,
-entities and review changes. Removing its gauge or calling every row repaired
-would hide missing work. The helper also requires injected `fact_loader` and
-`repair_func`; there is no configured production repair adapter to schedule.
-
-Human-owned repair plan: wire a bounded, generation-fenced projection worker to
-an authoritative fact loader and an idempotent projection adapter, with explicit
-upsert/delete/tombstone handling and independent item transactions. Verify the
-adapter on synthetic dev data before scheduling or draining production. Process
-100 items per tick using `process_projection_repairs(..., limit=100,
-max_attempts=3)`, retaining reasoned dead letters. The read-only script above is
-the exact current dry-run; **it proposes zero automatic mutations**. A runnable
-production drain cannot safely be supplied from the existing helper without
-choosing this missing domain adapter. Do not substitute `None` facts, acknowledge
-an unconfigured vector write, or blanket-delete 1.18 million repair records.
+The fact-bearing legacy callers were removed by #11447 and #12084; remaining
+Dream commits have no fact IDs. The ledger no longer enqueues repairs. Inline
+legacy vector writes and current canonical repair are independent of this queue.
+Delete the historical backlog with `scripts/retire_dead_queue_backlog.py` after
+reviewing its default dry-run. Keep `memories`, `memory_commits`, `memory_items`
+and `memory_outbox` untouched. Do not replay the unused repair adapter.
 
 ### Candidate integrations: first delivery exists, retries have no scheduler
 
@@ -88,22 +70,14 @@ with no dispatches. A deployment needs the normal reviewed job-image, workload
 identity and secret configuration; no `gcloud run jobs execute` or scheduler
 creation was performed here.
 
-### Chat-first: client-owned materialization, not a server push queue
+### Chat-first: retired automatic materialization
 
-`fetch_ready_intent_batch` is called when the desktop polls. Generation-mismatched
-rows are skipped. Plain capture receipts are superseded/retired only during that
-fetch. Pending kernel receipts remain deliverable until the local kernel commits
-and acknowledges the stable identity; absence/offline state cannot be repaired
-by pretending to have that receipt.
-
-Human-owned repair plan: reconcile per-account generation metadata first. Add a
-bounded maintenance path that invokes the existing capture-retirement transaction
-only for proven plain `captureLink` receipts; `capture_arrival` alone is insufficient
-because meeting-note `conversationLink` cards share that source. Preserve pending
-kernel receipts and deferred intents. Use the existing dead-letter collection
-and typed reason rather than setting `delivered`. This requires a product decision
-for dormant/offline accounts before changing their delivery lifetime. The dry-run
-above proposes zero age-only retirements and zero fabricated receipts.
+#20665 removed the production producers and client polling. Released-client
+materialization routes return empty 200 responses without touching the store;
+meeting-treatment receipts remain. Delete historical intents only after reviewing
+the cleanup dry-run. Leave `messages` and Chat-first sibling collections alone.
+The age sampler, stalled alert and scheduled materialization review are retired.
+The unused store and historical audit CLI remain for a separate removal change.
 
 ### Deployment/scheduling inventory
 

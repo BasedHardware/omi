@@ -54,7 +54,9 @@ def fake_db(monkeypatch):
     monkeypatch.setattr(candidates_db, 'db', database)
     monkeypatch.setattr(candidates_db.firestore, 'transactional', transactional)
     monkeypatch.setattr(integration_outbox_db, 'db', database)
+    monkeypatch.setattr(integration_outbox_db, 'get_firestore_client', lambda: database)
     monkeypatch.setattr(integration_outbox_db.firestore, 'transactional', transactional)
+    monkeypatch.setattr(candidate_service, 'get_user_deletion_wipe_status', lambda uid: None)
     candidate_service.clear_workstream_candidate_resolver()
     candidate_service.task_links.clear_workstream_goal_resolver()
     candidate_service.task_links.register_goal_existence_resolver(lambda uid, goal_id: goal_id == 'goal-1')
@@ -1141,10 +1143,10 @@ def test_integration_outbox_dispatches_once_and_retry_observes_completion(fake_d
 
     async def sync(uid, task, **kwargs):
         dispatched.append(task['id'])
-        return {'synced': True}
+        return {'synced': True}, 'accepted', None
 
     monkeypatch.setattr(candidate_service.action_items_db, 'get_action_item', lambda uid, task_id: {'id': task_id})
-    monkeypatch.setattr(candidate_service, 'auto_sync_action_item', sync)
+    monkeypatch.setattr(candidate_service, 'auto_sync_action_item_with_outcome', sync)
     monkeypatch.setattr(candidate_service, 'submit_with_context', lambda executor, function: function())
 
     first = candidate_service.accept_candidate('user-1', record.candidate_id, account_generation=3)
@@ -1155,6 +1157,26 @@ def test_integration_outbox_dispatches_once_and_retry_observes_completion(fake_d
     assert dispatched == [first.task_id]
     outbox = next(data for path, data in fake_db.rows.items() if 'candidate_integration_outbox' in path)
     assert outbox['status'] == 'completed'
+    assert outbox['attempt_count'] == 1
+
+
+def test_accept_schedules_integration_without_waiting_for_the_provider(fake_db, monkeypatch):
+    record = create_record(fake_db)
+    calls = []
+
+    async def sync(uid, task, **kwargs):
+        calls.append(task['id'])
+        return {'synced': True}, 'accepted', None
+
+    monkeypatch.setattr(candidate_service.action_items_db, 'get_action_item', lambda uid, task_id: {'id': task_id})
+    monkeypatch.setattr(candidate_service, 'auto_sync_action_item_with_outcome', sync)
+    monkeypatch.setattr(candidate_service, 'submit_with_context', lambda executor, function: None)
+
+    candidate_service.accept_candidate('user-1', record.candidate_id, account_generation=3)
+
+    assert calls == []
+    outbox = next(data for path, data in fake_db.rows.items() if 'candidate_integration_outbox' in path)
+    assert outbox['status'] == 'processing'
     assert outbox['attempt_count'] == 1
 
 
@@ -1189,10 +1211,10 @@ def test_unsynced_integration_result_stays_retryable(fake_db, monkeypatch):
     record = create_record(fake_db)
 
     async def unsynced(uid, task, **kwargs):
-        return {'synced': False, 'platform': 'todoist', 'error': 'temporary'}
+        return {'synced': False, 'platform': 'todoist', 'error': 'temporary'}, 'in_doubt', None
 
     monkeypatch.setattr(candidate_service.action_items_db, 'get_action_item', lambda uid, task_id: {'id': task_id})
-    monkeypatch.setattr(candidate_service, 'auto_sync_action_item', unsynced)
+    monkeypatch.setattr(candidate_service, 'auto_sync_action_item_with_outcome', unsynced)
     monkeypatch.setattr(candidate_service, 'submit_with_context', lambda executor, function: function())
 
     candidate_service.accept_candidate('user-1', record.candidate_id, account_generation=3)
@@ -1208,10 +1230,10 @@ def test_drain_recovers_crash_after_accept_commit(fake_db, monkeypatch):
 
     async def sync(uid, task, **kwargs):
         dispatched.append(task['id'])
-        return {'synced': True}
+        return {'synced': True}, 'accepted', None
 
     monkeypatch.setattr(candidate_service.action_items_db, 'get_action_item', lambda uid, task_id: {'id': task_id})
-    monkeypatch.setattr(candidate_service, 'auto_sync_action_item', sync)
+    monkeypatch.setattr(candidate_service, 'auto_sync_action_item_with_outcome', sync)
     monkeypatch.setattr(candidate_service, 'submit_with_context', lambda executor, function: function())
     monkeypatch.setattr(
         integration_outbox_db,
@@ -1369,6 +1391,176 @@ def test_integration_poison_reaches_dead_letter_with_error_text(fake_db):
         'user-1', record.candidate_id, account_generation=3
     )
     assert fake_db.rows[('users', 'user-1', 'candidate_integration_outbox', record.candidate_id)]['status'] == 'pending'
+
+
+def test_claim_dead_letters_in_doubt_without_another_attempt(fake_db):
+    record = create_record(fake_db)
+    candidates_db.resolve_task_candidate('user-1', record.candidate_id, account_generation=3)
+    path = ('users', 'user-1', 'candidate_integration_outbox', record.candidate_id)
+    fake_db.rows[path]['status'] = 'failed'
+    fake_db.rows[path]['provider_attempt_outcome'] = 'in_doubt'
+    fake_db.rows[path]['attempt_count'] = 2
+
+    assert (
+        integration_outbox_db.claim_candidate_integration_dispatch('user-1', record.candidate_id, account_generation=3)
+        is None
+    )
+
+    assert fake_db.rows[path]['status'] == 'dead_letter'
+    assert fake_db.rows[path]['dead_letter_reason'] == 'in_doubt'
+    assert fake_db.rows[path]['provider_attempt_outcome'] == 'in_doubt'
+    assert fake_db.rows[path]['attempt_count'] == 2
+
+
+def test_claim_dead_letters_a_legacy_failure_with_no_recorded_outcome(fake_db):
+    # Pre-migration failed rows never recorded whether the provider accepted the create.
+    record = create_record(fake_db)
+    candidates_db.resolve_task_candidate('user-1', record.candidate_id, account_generation=3)
+    path = ('users', 'user-1', 'candidate_integration_outbox', record.candidate_id)
+    fake_db.rows[path]['status'] = 'failed'
+    fake_db.rows[path].pop('provider_attempt_outcome', None)
+    fake_db.rows[path]['attempt_count'] = 1
+
+    assert (
+        integration_outbox_db.claim_candidate_integration_dispatch('user-1', record.candidate_id, account_generation=3)
+        is None
+    )
+
+    assert fake_db.rows[path]['status'] == 'dead_letter'
+    assert fake_db.rows[path]['dead_letter_reason'] == 'in_doubt'
+    assert fake_db.rows[path]['attempt_count'] == 1
+
+
+def test_claim_dead_letters_a_row_past_the_attempt_budget(fake_db):
+    record = create_record(fake_db)
+    candidates_db.resolve_task_candidate('user-1', record.candidate_id, account_generation=3)
+    path = ('users', 'user-1', 'candidate_integration_outbox', record.candidate_id)
+    fake_db.rows[path]['status'] = 'failed'
+    fake_db.rows[path]['provider_attempt_outcome'] = 'not_sent'
+    fake_db.rows[path]['attempt_count'] = integration_outbox_db.CANDIDATE_INTEGRATION_POLICY.max_attempts
+
+    assert (
+        integration_outbox_db.claim_candidate_integration_dispatch('user-1', record.candidate_id, account_generation=3)
+        is None
+    )
+
+    assert fake_db.rows[path]['status'] == 'dead_letter'
+    assert fake_db.rows[path]['dead_letter_reason'] == 'attempt_budget_exhausted'
+    assert fake_db.rows[path]['attempt_count'] == integration_outbox_db.CANDIDATE_INTEGRATION_POLICY.max_attempts
+
+
+def test_claim_leaves_a_live_in_doubt_lease_alone(fake_db):
+    record = create_record(fake_db)
+    candidates_db.resolve_task_candidate('user-1', record.candidate_id, account_generation=3)
+    path = ('users', 'user-1', 'candidate_integration_outbox', record.candidate_id)
+    fake_db.rows[path]['status'] = 'processing'
+    fake_db.rows[path]['provider_attempt_outcome'] = 'in_doubt'
+    fake_db.rows[path]['lease_token'] = 'owner'
+    fake_db.rows[path]['claimed_at'] = datetime.now(timezone.utc)
+    fake_db.rows[path]['attempt_count'] = 1
+
+    assert (
+        integration_outbox_db.claim_candidate_integration_dispatch('user-1', record.candidate_id, account_generation=3)
+        is None
+    )
+
+    assert fake_db.rows[path]['status'] == 'processing'
+    assert fake_db.rows[path]['lease_token'] == 'owner'
+    assert fake_db.rows[path]['provider_attempt_outcome'] == 'in_doubt'
+    assert fake_db.rows[path]['attempt_count'] == 1
+
+
+def test_claim_exports_a_recorded_external_id_with_its_platform(fake_db):
+    record = create_record(fake_db)
+    receipt = candidates_db.resolve_task_candidate('user-1', record.candidate_id, account_generation=3)
+    path = ('users', 'user-1', 'candidate_integration_outbox', record.candidate_id)
+    fake_db.rows[path]['status'] = 'failed'
+    fake_db.rows[path]['provider_attempt_outcome'] = 'in_doubt'
+    fake_db.rows[path]['external_task_id'] = 'ext-recorded'
+    fake_db.rows[path]['export_platform'] = 'todoist'
+    fake_db.rows[path]['attempt_count'] = 1
+
+    assert (
+        integration_outbox_db.claim_candidate_integration_dispatch('user-1', record.candidate_id, account_generation=3)
+        is None
+    )
+
+    assert fake_db.rows[path]['status'] == 'completed'
+    assert fake_db.rows[path]['external_task_id'] == 'ext-recorded'
+    assert fake_db.rows[path]['export_platform'] == 'todoist'
+    assert fake_db.rows[path]['provider_attempt_outcome'] == 'accepted'
+    assert fake_db.rows[path]['attempt_count'] == 1
+    item = fake_db.rows[('users', 'user-1', 'action_items', receipt.task_id)]
+    assert item['exported'] is True
+    assert item['external_task_id'] == 'ext-recorded'
+    assert item['export_platform'] == 'todoist'
+    assert isinstance(item['export_date'], datetime)
+
+
+def test_repeated_acceptance_does_not_resend_an_in_doubt_create(fake_db, monkeypatch):
+    record = create_record(fake_db)
+    calls = []
+
+    async def sync(uid, task, skip_apple_reminders=False, on_provider_attempt=None):
+        if on_provider_attempt is not None:
+            assert on_provider_attempt('asana') is True
+        calls.append(task['id'])
+        return {'synced': False, 'error': 'marker write failed'}, 'in_doubt', 'ext-9'
+
+    monkeypatch.setattr(candidate_service.action_items_db, 'get_action_item', lambda uid, task_id: {'id': task_id})
+    monkeypatch.setattr(candidate_service, 'auto_sync_action_item_with_outcome', sync)
+    monkeypatch.setattr(candidate_service, 'submit_with_context', lambda executor, function: function())
+
+    candidate_service.accept_candidate('user-1', record.candidate_id, account_generation=3)
+    outbox = next(data for path, data in fake_db.rows.items() if path[-2] == 'candidate_integration_outbox')
+    assert outbox['status'] == 'failed'
+    assert outbox['provider_attempt_outcome'] == 'in_doubt'
+    assert outbox['external_task_id'] == 'ext-9'
+    assert outbox['export_platform'] == 'asana'
+    assert calls == [outbox['task_id']]
+
+    candidate_service.accept_candidate('user-1', record.candidate_id, account_generation=3)
+
+    assert calls == [outbox['task_id']]
+    assert outbox['status'] == 'completed'
+    item = fake_db.rows[('users', 'user-1', 'action_items', outbox['task_id'])]
+    assert item['exported'] is True
+    assert item['export_platform'] == 'asana'
+    assert item['external_task_id'] == 'ext-9'
+
+
+def test_drain_does_not_resend_an_in_doubt_row(fake_db, monkeypatch):
+    record = create_record(fake_db)
+    receipt = candidates_db.resolve_task_candidate('user-1', record.candidate_id, account_generation=3)
+    path = ('users', 'user-1', 'candidate_integration_outbox', record.candidate_id)
+    fake_db.rows[path]['status'] = 'failed'
+    fake_db.rows[path]['provider_attempt_outcome'] = 'in_doubt'
+    fake_db.rows[path]['attempt_count'] = 1
+
+    async def sync(*args, **kwargs):
+        raise AssertionError('provider called')
+
+    monkeypatch.setattr(candidate_service, 'auto_sync_action_item_with_outcome', sync)
+    monkeypatch.setattr(candidate_service, 'submit_with_context', lambda executor, function: function())
+    monkeypatch.setattr(
+        integration_outbox_db,
+        'list_candidate_integration_dispatches',
+        lambda uid, account_generation, limit=100: [
+            {
+                'candidate_id': record.candidate_id,
+                'task_id': receipt.task_id,
+                'status': 'failed',
+                'account_generation': account_generation,
+                'provider_attempt_outcome': 'in_doubt',
+            }
+        ],
+    )
+
+    assert candidate_service.drain_candidate_integrations('user-1', account_generation=3) == 0
+    assert fake_db.rows[path]['status'] == 'dead_letter'
+    assert fake_db.rows[path]['dead_letter_reason'] == 'in_doubt'
+    assert fake_db.rows[path]['provider_attempt_outcome'] == 'in_doubt'
+    assert fake_db.rows[path]['attempt_count'] == 1
 
 
 def test_claim_refuses_dead_letter(fake_db):

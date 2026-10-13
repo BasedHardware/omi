@@ -888,10 +888,20 @@ def test_prod_cloud_run_secret_refs_match_approved_bindings():
         assert {
             (entry['name'], entry['valueFrom']['secretKeyRef']['name'], entry['valueFrom']['secretKeyRef']['key'])
             for entry in refs
-        } == (
-            {(name, name, 'latest') for name in names}
-            | ({('POSTHOG_BILLING_API_KEY', 'POSTHOG_PROJECT_API_KEY', 'latest')} if service == 'backend' else set())
-        ), service
+        } == {(name, name, 'latest') for name in names}, service
+    backend_env = prod['cloud_run']['services']['backend']['env']
+    token = backend_env['PROACTIVITY_V2_POSTHOG_TOKEN']['value']
+    assert token.startswith('phc_')
+    assert backend_env['POSTHOG_BILLING_API_KEY'] == {'value': token, 'category': 'telemetry'}
+    assert backend_env['POSTHOG_HOST'] == {'value': 'https://us.posthog.com', 'category': 'telemetry'}
+    assert _MODULE['_render_env_entries']({'POSTHOG_BILLING_API_KEY': backend_env['POSTHOG_BILLING_API_KEY']}) == [
+        {'name': 'POSTHOG_BILLING_API_KEY', 'value': token}
+    ]
+    for service_name, service in prod['cloud_run']['services'].items():
+        if service_name == 'backend':
+            continue
+        assert 'POSTHOG_BILLING_API_KEY' not in service.get('env', {})
+        assert 'POSTHOG_BILLING_API_KEY' not in service.get('secrets', {})
     desktop = _MODULE['_render_secret_entries'](prod['desktop_backend']['secrets'])
     assert {
         (entry['name'], entry['valueFrom']['secretKeyRef']['name'], entry['valueFrom']['secretKeyRef']['key'])
