@@ -331,7 +331,7 @@ and an explicit empty literal renders as `''`.
 | `DREAM_AGENT_BACKFILL_SHARE` | Fraction of eligible Dream passes attempting older cleanup; default 0.1 | backend | env | closed | — | — | — | — | pending | — | dazheng |
 | `DREAM_AGENT_CANARY_UID` | Dedicated synthetic UID in dream-canary- namespace; unset disables canary | backend | env | closed | — | — | {value: 'dream-canary-prod-01', category: rollout} | — | pending | — | dazheng |
 | `DREAM_AGENT_CONCURRENCY` | Parallel Dream workers and shared reserved background slots; default 2; bounded 1 to 8 | backend | env | closed | — | — | — | — | pending | — | dazheng |
-| `DREAM_AGENT_FULL_COMPLETION_TOKENS` | Full Dream completion ceiling; default 16000; maximum 16000 | backend | env | closed | — | — | — | — | pending | — | dazheng |
+| `DREAM_AGENT_FULL_COMPLETION_TOKENS` | Full Dream total completion ceiling including thinking; default 32768; maximum 32768 | backend | env | closed | — | — | — | — | pending | — | dazheng |
 | `DREAM_AGENT_FULL_CONTEXT_TOKENS` | Full Dream input estimate ceiling; default 400000; framing and schema included; hard model window remains authoritative | backend | env | closed | — | — | — | — | pending | — | dazheng |
 | `DREAM_AGENT_MANUAL_RUNS_PER_DAY` | Separate manual dream allowance per UTC day; default 3 | backend | env | closed | — | — | {value: '20', category: rollout} | — | pending | — | dazheng |
 | `DREAM_AGENT_RANDOM_SEED_SHARE` | Uniform sample fraction of cleanup attempts; default 0.1; offsets can bill linear reads | backend | env | closed | — | — | — | — | pending | — | dazheng |
@@ -408,7 +408,7 @@ their code default (`fail` tells you which way a missing value resolves).
 - `DREAM_AGENT_BACKFILL_SHARE` — Fraction of eligible Dream passes attempting older cleanup; default 0.1 (fail: closed)
 - `DREAM_AGENT_CONCURRENCY` — Parallel Dream workers and shared reserved background slots; default 2; bounded 1 to 8 (fail: closed)
 - `DREAM_AGENT_CONTEXT_MODE` — Dream context mode bounded (default) or full; full requires the separate UID allowlist (fail: closed)
-- `DREAM_AGENT_FULL_COMPLETION_TOKENS` — Full Dream completion ceiling; default 16000; maximum 16000 (fail: closed)
+- `DREAM_AGENT_FULL_COMPLETION_TOKENS` — Full Dream total completion ceiling including thinking; default 32768; maximum 32768 (fail: closed)
 - `DREAM_AGENT_FULL_CONTEXT_TOKENS` — Full Dream input estimate ceiling; default 400000; framing and schema included; hard model window remains authoritative (fail: closed)
 - `DREAM_AGENT_FULL_CONTEXT_UIDS` — Comma allowlist for full Dream context; empty admits nobody; ordinary Dream eligibility still applies (fail: closed)
 - `DREAM_AGENT_RANDOM_SEED_SHARE` — Uniform sample fraction of cleanup attempts; default 0.1; offsets can bill linear reads (fail: closed)

@@ -1,6 +1,7 @@
 """Exercise reserved-capacity waits and size-safe Luna recovery without provider IO."""
 
 import asyncio
+import json
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
@@ -8,13 +9,19 @@ import httpx
 import pytest
 
 from config.dream_agent import Caps, FULL_CONTEXT_WINDOW
+from config.vertex_reservations import State
 from llm_gateway.gateway import executor
 from llm_gateway.gateway.auth import ServiceCaller
 from llm_gateway.gateway.config_loader import load_gateway_config
 from llm_gateway.gateway.credentials import build_omi_managed_credential_context
 from llm_gateway.gateway.errors import GatewayError
 from llm_gateway.gateway.executor import ProviderRegistry, execute_chat_completion
-from llm_gateway.gateway.providers import FakeChatCompletionProvider, ProviderFailure, fake_success_response
+from llm_gateway.gateway.providers import (
+    FakeChatCompletionProvider,
+    ProviderFailure,
+    VertexGeminiProvider,
+    fake_success_response,
+)
 from llm_gateway.gateway.resolver import resolve_chat_completion_route
 from llm_gateway.gateway.schemas import FailureClass
 from models.dream_agent import Plan
@@ -100,6 +107,73 @@ async def test_full_request_rejection_recovery_fits_luna_without_shrinking(full_
     assert result.selected_model == 'gpt-6-luna' and result.fallback_used
     assert len(gemini.calls) == len(luna.calls) == 1
     assert luna.calls[0].request['messages'] == messages
-    assert luna.calls[0].request['max_completion_tokens'] == 16000
+    assert luna.calls[0].request['max_completion_tokens'] == 32768
     assert gemini.calls[0].timeout_ms == luna.calls[0].timeout_ms == 480000
     assert resolved.active_route.provider_options['reserved_capacity_only'] is True
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('model', ['gemini-2.5-flash', 'gemini-3.8-flash'])
+async def test_full_thinking_reaches_actual_reserved_model_without_changing_bounded(full_gateway, monkeypatch, model):
+    config, credentials = full_gateway
+    monkeypatch.setenv('GOOGLE_CLOUD_PROJECT', 'synthetic-project')
+    monkeypatch.delenv('OMI_VERTEX_RESERVATION_STATES', raising=False)
+    monkeypatch.delenv('OMI_VERTEX_PT_MODEL', raising=False)
+    seen = []
+
+    def handler(request):
+        seen.append(request)
+        return httpx.Response(
+            200,
+            json={
+                'modelVersion': model,
+                'trafficType': 'PROVISIONED_THROUGHPUT',
+                'candidates': [{'content': {'parts': [{'text': '{}'}]}, 'finishReason': 'STOP'}],
+                'usageMetadata': {
+                    'promptTokenCount': 10,
+                    'candidatesTokenCount': 2,
+                    'thoughtsTokenCount': 3,
+                    'totalTokenCount': 15,
+                },
+            },
+        )
+
+    provider = VertexGeminiProvider(
+        http_client=httpx.AsyncClient(transport=httpx.MockTransport(handler)),
+        access_token_supplier=AsyncMock(return_value='synthetic-token'),
+    )
+
+    async def refresh(*args):
+        provider._reservation_states = {model: State.ACTIVE}
+
+    monkeypatch.setattr(provider, '_refresh_reservations', refresh)
+    monkeypatch.setattr(provider._reservations, 'record', AsyncMock())
+    monkeypatch.setattr(provider._reservations, 'note_request', lambda *args: None)
+    registry = ProviderRegistry({'gemini': provider})
+    try:
+        for full in (True, False):
+            payload = {
+                'model': dream_transport.MAIN_LANE,
+                'messages': [{'role': 'user', 'content': 'Synthetic'}],
+                'max_completion_tokens': 32768,
+            }
+            if full:
+                payload.update(reasoning_effort='high', google={'thinking_config': {'thinking_budget': 16384}})
+            resolved = resolve_chat_completion_route(config, payload)
+            await execute_chat_completion(resolved, credentials, registry)
+            request = seen[-1]
+            assert model + ':generateContent' in str(request.url)
+            assert request.headers['X-Vertex-AI-LLM-Request-Type'] == 'dedicated'
+            wire = json.loads(request.content)
+            expected = (
+                ({'thinkingLevel': 'high'} if model == 'gemini-3.8-flash' else {'thinkingBudget': 16384})
+                if full
+                else ({'thinkingLevel': 'low'} if model == 'gemini-3.8-flash' else {'thinkingBudget': 0})
+            )
+            assert wire['generationConfig']['thinkingConfig'] == expected
+            assert '_dream_thinking_budget' not in wire
+            assert resolved.active_route.provider_options['reserved_capacity_only'] is True
+        assert len(seen) == 2
+        assert provider._thinking_budget_context.get() is None
+    finally:
+        await provider.aclose()

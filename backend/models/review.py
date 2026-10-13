@@ -90,11 +90,12 @@ class AgentProposalItem(BaseModel):
         return self
 
 
-class ReviewItem(BaseModel):
+class ReviewQuestionPayload(BaseModel):
+    """Shared question payload, without choosing a legacy or Dream evidence contract."""
+
     item_id: str
     kind: ReviewKind
     title: str
-    quote: Optional[str] = None
     created_at: datetime
     speaker: Optional[SpeakerItem] = None
     task: Optional[TaskItem] = None
@@ -109,11 +110,17 @@ class ReviewItem(BaseModel):
         return self
 
 
+class ReviewItem(ReviewQuestionPayload):
+    quote: Optional[str] = None
+    source_ref: Optional[str] = None
+
+
 class ReviewItemV2(BaseModel):
     item_id: str
     kind: ReviewKindV2
     title: str
     quote: Optional[str] = None
+    source_ref: Optional[str] = None
     created_at: datetime
     speaker: Optional[SpeakerItem] = None
     task: Optional[TaskItem] = None

@@ -206,7 +206,9 @@ async def dry_run(uid, records, *, targets=None, caps=None, turn=None, vocabular
         if reason == 'ungrounded_spelling':
             sink.setdefault('rejected', {}).setdefault(reason, 0)
             sink['rejected'][reason] += 1
-            if len(proposed['questions']) < 3:
+            if not dream_guards.verbatim_quote(edit.before, evidence[edit.target]):
+                sink['rejected']['invalid_question_evidence'] = sink['rejected'].get('invalid_question_evidence', 0) + 1
+            elif len(proposed['questions']) < 3:
                 proposed['questions'].append(spelling_question(edit).model_dump(mode='python'))
     result = {
         'plan': proposed,
@@ -216,7 +218,11 @@ async def dry_run(uid, records, *, targets=None, caps=None, turn=None, vocabular
     }
     result['raw_plan'] = sink.get('raw_plan', Plan().model_dump(mode='python'))
     if caps.context_mode == 'full':
-        result.update(context_mode='full', input_tokens_estimate=sink.get('input_tokens_estimate', 0))
+        result.update(
+            context_mode='full',
+            input_tokens_estimate=sink.get('input_tokens_estimate', 0),
+            response_retries=sink.get('response_retries', 0),
+        )
     return result
 
 
@@ -405,6 +411,13 @@ async def _run_admitted_pass(
                 remaining = caps.edits
                 for edit in plan.edits:
                     key = dream_tools.edit_key(edit, records)
+                    if grounding[key] == 'ungrounded_spelling' and not dream_guards.verbatim_quote(
+                        edit.before, records[edit.target]
+                    ):
+                        report.setdefault('rejected', {}).setdefault('invalid_question_evidence', 0)
+                        report['rejected']['invalid_question_evidence'] += 1
+                        outcomes.append({'key': key, 'status': 'invalid_question_evidence'})
+                        continue
                     if edit.target not in records or any(ref not in records for ref in edit.evidence):
                         outcomes.append({'key': key, 'status': 'invalid_evidence'})
                         continue
