@@ -176,6 +176,9 @@ def test_provider_rejection_preserves_exact_terminal_class_and_bounded_member(
 
     assert response.status_code == 400
     assert response.json()['error']['code'] == expected_code
+    # The bounded classifier must survive the wire so backend composition
+    # boundaries can tell request-shape 400s from unreadable attachments.
+    assert response.json()['error']['provider_rejection'] == provider_rejection.value
     assert len(recorded) == 1
     error = recorded[0]['error']
     assert error.failure_class == failure_class
