@@ -13019,4 +13019,10 @@ class AppLocalizationsVi extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get paywallRecommended => 'Đề xuất';
+
+  @override
+  String get paywallNoPlans => 'Chưa Có Gói Khả Dụng';
 }

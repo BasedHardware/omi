@@ -13104,4 +13104,10 @@ class AppLocalizationsEl extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get paywallRecommended => 'Προτείνεται';
+
+  @override
+  String get paywallNoPlans => 'Δεν υπάρχουν διαθέσιμα προγράμματα';
 }

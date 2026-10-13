@@ -4004,5 +4004,7 @@
     "reviewProposalApply": "Pritaikyti",
     "reviewProposalSuggested": "Siūloma",
     "reviewProposalConflict": "Tai pasikeitė po Dream pasiūlymo, todėl nieko nepritaikyta.",
-    "itemLinkListTitle": "{count, plural, =0{Nėra elementų} =1{1 elementas} other{{count} elementai}}"
+    "itemLinkListTitle": "{count, plural, =0{Nėra elementų} =1{1 elementas} other{{count} elementai}}",
+    "paywallRecommended": "Rekomenduojama",
+    "paywallNoPlans": "Nėra galimų planų"
 }

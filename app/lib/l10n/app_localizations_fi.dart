@@ -13026,4 +13026,10 @@ class AppLocalizationsFi extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get paywallRecommended => 'Suositeltu';
+
+  @override
+  String get paywallNoPlans => 'Ei saatavilla olevia tilauksia';
 }

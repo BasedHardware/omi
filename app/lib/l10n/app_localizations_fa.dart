@@ -13016,4 +13016,10 @@ class AppLocalizationsFa extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get paywallRecommended => 'پیشنهادی';
+
+  @override
+  String get paywallNoPlans => 'هیچ طرحی در دسترس نیست';
 }

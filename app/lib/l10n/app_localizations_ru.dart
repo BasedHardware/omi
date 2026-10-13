@@ -13067,4 +13067,10 @@ class AppLocalizationsRu extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get paywallRecommended => 'Рекомендуется';
+
+  @override
+  String get paywallNoPlans => 'Нет доступных тарифов';
 }

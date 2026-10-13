@@ -13017,4 +13017,10 @@ class AppLocalizationsSk extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get paywallRecommended => 'Odporúčané';
+
+  @override
+  String get paywallNoPlans => 'Nie sú dostupné žiadne plány';
 }

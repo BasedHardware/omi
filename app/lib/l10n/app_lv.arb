@@ -4004,5 +4004,7 @@
     "reviewProposalApply": "Lietot",
     "reviewProposalSuggested": "Ieteikts",
     "reviewProposalConflict": "Kopš Dream to ieteica, tas ir mainījies, tāpēc nekas netika lietots.",
-    "itemLinkListTitle": "{count, plural, =0{Nav vienību} =1{1 vienība} other{{count} vienības}}"
+    "itemLinkListTitle": "{count, plural, =0{Nav vienību} =1{1 vienība} other{{count} vienības}}",
+    "paywallRecommended": "Ieteicams",
+    "paywallNoPlans": "Nav pieejamu plānu"
 }

@@ -12840,4 +12840,10 @@ class AppLocalizationsKo extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get paywallRecommended => '추천';
+
+  @override
+  String get paywallNoPlans => '이용 가능한 요금제가 없습니다';
 }

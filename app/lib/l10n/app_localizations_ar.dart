@@ -12948,4 +12948,10 @@ class AppLocalizationsAr extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get paywallRecommended => 'موصى به';
+
+  @override
+  String get paywallNoPlans => 'لا توجد خطط متاحة';
 }

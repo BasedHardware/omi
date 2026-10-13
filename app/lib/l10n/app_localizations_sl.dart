@@ -13051,4 +13051,10 @@ class AppLocalizationsSl extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get paywallRecommended => 'Priporočeno';
+
+  @override
+  String get paywallNoPlans => 'Ni razpoložljivih paketov';
 }

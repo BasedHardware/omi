@@ -2195,7 +2195,12 @@ enum PaywallOpenedSource {
   webPlans("web_plans"),
   macosSettingsView("macos_settings_view"),
   windowsSettingsView("windows_settings_view"),
-  unknown("unknown");
+  unknown("unknown"),
+  budget80Percent("budget_80_percent"),
+  budget100Percent("budget_100_percent"),
+  proactiveAgentGate("proactive_agent_gate"),
+  screenContextGate("screen_context_gate"),
+  mcpDailyCap("mcp_daily_cap");
   const PaywallOpenedSource(this.wireName);
   final String wireName;
 }
@@ -2259,7 +2264,12 @@ enum UpgradePlanSelectedSource {
   webPlans("web_plans"),
   macosSettingsView("macos_settings_view"),
   windowsSettingsView("windows_settings_view"),
-  unknown("unknown");
+  unknown("unknown"),
+  budget80Percent("budget_80_percent"),
+  budget100Percent("budget_100_percent"),
+  proactiveAgentGate("proactive_agent_gate"),
+  screenContextGate("screen_context_gate"),
+  mcpDailyCap("mcp_daily_cap");
   const UpgradePlanSelectedSource(this.wireName);
   final String wireName;
 }

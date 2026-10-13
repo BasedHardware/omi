@@ -23216,6 +23216,18 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'{count, plural, =0{No Items} =1{1 Item} other{{count} Items}}'**
   String itemLinkListTitle(int count);
+
+  /// Backend recommended tier badge; highlights a recommendation without preselecting checkout.
+  ///
+  /// In en, this message translates to:
+  /// **'Recommended'**
+  String get paywallRecommended;
+
+  /// Plans sheet empty state; this is distinct from a loading failure.
+  ///
+  /// In en, this message translates to:
+  /// **'No Plans Available'**
+  String get paywallNoPlans;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

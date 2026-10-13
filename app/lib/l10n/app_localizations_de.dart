@@ -13120,4 +13120,10 @@ class AppLocalizationsDe extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get paywallRecommended => 'Empfohlen';
+
+  @override
+  String get paywallNoPlans => 'Keine Tarife verfügbar';
 }

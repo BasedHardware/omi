@@ -13111,4 +13111,10 @@ class AppLocalizationsTa extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get paywallRecommended => 'பரிந்துரைக்கப்படுகிறது';
+
+  @override
+  String get paywallNoPlans => 'திட்டங்கள் எதுவும் கிடைக்கவில்லை';
 }

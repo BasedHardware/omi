@@ -13082,4 +13082,10 @@ class AppLocalizationsMk extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get paywallRecommended => 'Препорачано';
+
+  @override
+  String get paywallNoPlans => 'Нема достапни планови';
 }

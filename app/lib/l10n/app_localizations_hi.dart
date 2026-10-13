@@ -13002,4 +13002,10 @@ class AppLocalizationsHi extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get paywallRecommended => 'सुझाया गया';
+
+  @override
+  String get paywallNoPlans => 'कोई प्लान उपलब्ध नहीं है';
 }

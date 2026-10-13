@@ -13056,4 +13056,10 @@ class AppLocalizationsBe extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get paywallRecommended => 'Рэкамендуецца';
+
+  @override
+  String get paywallNoPlans => 'Няма даступных планаў';
 }

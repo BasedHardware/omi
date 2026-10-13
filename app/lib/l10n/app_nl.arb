@@ -4004,5 +4004,7 @@
     "reviewProposalApply": "Toepassen",
     "reviewProposalSuggested": "Voorgesteld",
     "reviewProposalConflict": "Dit is veranderd sinds Dream het voorstelde, dus er is niets toegepast.",
-    "itemLinkListTitle": "{count, plural, =0{Geen items} =1{1 item} other{{count} items}}"
+    "itemLinkListTitle": "{count, plural, =0{Geen items} =1{1 item} other{{count} items}}",
+    "paywallRecommended": "Aanbevolen",
+    "paywallNoPlans": "Geen abonnementen beschikbaar"
 }

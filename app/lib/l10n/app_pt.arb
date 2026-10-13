@@ -4039,5 +4039,7 @@
     "reviewProposalApply": "Aplicar",
     "reviewProposalSuggested": "Sugerido",
     "reviewProposalConflict": "Isto mudou desde que o Dream sugeriu, então nada foi aplicado.",
-    "itemLinkListTitle": "{count, plural, =0{Sem itens} =1{1 item} other{{count} itens}}"
+    "itemLinkListTitle": "{count, plural, =0{Sem itens} =1{1 item} other{{count} itens}}",
+    "paywallRecommended": "Recomendado",
+    "paywallNoPlans": "Nenhum plano disponível"
 }

@@ -13050,4 +13050,10 @@ class AppLocalizationsLv extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get paywallRecommended => 'Ieteicams';
+
+  @override
+  String get paywallNoPlans => 'Nav pieejamu plānu';
 }

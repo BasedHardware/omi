@@ -4004,5 +4004,7 @@
     "reviewProposalApply": "Приложи",
     "reviewProposalSuggested": "Предложено",
     "reviewProposalConflict": "Това се промени, след като Dream го предложи, затова нищо не беше приложено.",
-    "itemLinkListTitle": "{count, plural, =0{Няма елементи} =1{1 елемент} other{{count} елемента}}"
+    "itemLinkListTitle": "{count, plural, =0{Няма елементи} =1{1 елемент} other{{count} елемента}}",
+    "paywallRecommended": "Препоръчано",
+    "paywallNoPlans": "Няма налични планове"
 }

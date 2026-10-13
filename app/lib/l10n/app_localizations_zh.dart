@@ -12816,4 +12816,10 @@ class AppLocalizationsZh extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get paywallRecommended => '推荐';
+
+  @override
+  String get paywallNoPlans => '暂无可用套餐';
 }

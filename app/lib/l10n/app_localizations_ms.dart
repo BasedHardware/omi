@@ -13052,4 +13052,10 @@ class AppLocalizationsMs extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get paywallRecommended => 'Disyorkan';
+
+  @override
+  String get paywallNoPlans => 'Tiada Pelan Tersedia';
 }

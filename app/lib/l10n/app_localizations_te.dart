@@ -13073,4 +13073,10 @@ class AppLocalizationsTe extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get paywallRecommended => 'సిఫార్సు చేయబడింది';
+
+  @override
+  String get paywallNoPlans => 'ప్లాన్‌లు అందుబాటులో లేవు';
 }

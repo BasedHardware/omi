@@ -13023,4 +13023,10 @@ class AppLocalizationsCs extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get paywallRecommended => 'Doporučeno';
+
+  @override
+  String get paywallNoPlans => 'Nejsou dostupné žádné plány';
 }

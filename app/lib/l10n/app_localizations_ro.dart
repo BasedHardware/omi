@@ -13076,4 +13076,10 @@ class AppLocalizationsRo extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get paywallRecommended => 'Recomandat';
+
+  @override
+  String get paywallNoPlans => 'Nu există planuri disponibile';
 }

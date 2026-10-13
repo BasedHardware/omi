@@ -13073,4 +13073,10 @@ class AppLocalizationsHu extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get paywallRecommended => 'Ajánlott';
+
+  @override
+  String get paywallNoPlans => 'Nincs elérhető csomag';
 }

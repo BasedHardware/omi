@@ -13015,4 +13015,10 @@ class AppLocalizationsEt extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get paywallRecommended => 'Soovitatud';
+
+  @override
+  String get paywallNoPlans => 'Plaane pole saadaval';
 }

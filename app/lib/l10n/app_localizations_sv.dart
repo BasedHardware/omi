@@ -13026,4 +13026,10 @@ class AppLocalizationsSv extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get paywallRecommended => 'Rekommenderas';
+
+  @override
+  String get paywallNoPlans => 'Inga tillgängliga planer';
 }

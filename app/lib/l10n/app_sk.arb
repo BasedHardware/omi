@@ -4004,5 +4004,7 @@
     "reviewProposalApply": "Použiť",
     "reviewProposalSuggested": "Navrhnuté",
     "reviewProposalConflict": "Od návrhu Dream sa to zmenilo, takže sa nič nepoužilo.",
-    "itemLinkListTitle": "{count, plural, =0{Žiadne položky} =1{1 položka} other{{count} položiek}}"
+    "itemLinkListTitle": "{count, plural, =0{Žiadne položky} =1{1 položka} other{{count} položiek}}",
+    "paywallRecommended": "Odporúčané",
+    "paywallNoPlans": "Nie sú dostupné žiadne plány"
 }

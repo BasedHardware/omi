@@ -13051,4 +13051,10 @@ class AppLocalizationsUk extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get paywallRecommended => 'Рекомендовано';
+
+  @override
+  String get paywallNoPlans => 'Немає доступних планів';
 }

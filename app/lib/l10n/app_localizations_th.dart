@@ -12955,4 +12955,10 @@ class AppLocalizationsTh extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get paywallRecommended => 'แนะนำ';
+
+  @override
+  String get paywallNoPlans => 'ไม่มีแพ็กเกจที่พร้อมใช้งาน';
 }

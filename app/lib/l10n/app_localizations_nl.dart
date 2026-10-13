@@ -13057,4 +13057,10 @@ class AppLocalizationsNl extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get paywallRecommended => 'Aanbevolen';
+
+  @override
+  String get paywallNoPlans => 'Geen abonnementen beschikbaar';
 }

@@ -11441,5 +11441,7 @@
     "reviewProposalApply": "వర్తింపజేయి",
     "reviewProposalSuggested": "సూచించినది",
     "reviewProposalConflict": "Dream సూచించిన తర్వాత ఇది మారింది, కాబట్టి ఏదీ వర్తింపజేయలేదు.",
-    "itemLinkListTitle": "{count, plural, =0{అంశాలు లేవు} =1{1 అంశం} other{{count} అంశాలు}}"
+    "itemLinkListTitle": "{count, plural, =0{అంశాలు లేవు} =1{1 అంశం} other{{count} అంశాలు}}",
+    "paywallRecommended": "సిఫార్సు చేయబడింది",
+    "paywallNoPlans": "ప్లాన్‌లు అందుబాటులో లేవు"
 }

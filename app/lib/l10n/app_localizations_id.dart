@@ -13031,4 +13031,10 @@ class AppLocalizationsId extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get paywallRecommended => 'Direkomendasikan';
+
+  @override
+  String get paywallNoPlans => 'Tidak Ada Paket Tersedia';
 }

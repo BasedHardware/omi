@@ -13089,4 +13089,10 @@ class AppLocalizationsCa extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get paywallRecommended => 'Recomanat';
+
+  @override
+  String get paywallNoPlans => 'No hi ha plans disponibles';
 }

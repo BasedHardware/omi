@@ -15767,5 +15767,13 @@
                 "type": "int"
             }
         }
+    },
+    "paywallRecommended": "Recommended",
+    "@paywallRecommended": {
+        "description": "Backend recommended tier badge; highlights a recommendation without preselecting checkout."
+    },
+    "paywallNoPlans": "No Plans Available",
+    "@paywallNoPlans": {
+        "description": "Plans sheet empty state; this is distinct from a loading failure."
     }
 }

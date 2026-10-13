@@ -13035,4 +13035,10 @@ class AppLocalizationsUr extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get paywallRecommended => 'تجویز کردہ';
+
+  @override
+  String get paywallNoPlans => 'کوئی پلان دستیاب نہیں';
 }

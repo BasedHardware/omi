@@ -13060,4 +13060,10 @@ class AppLocalizationsPl extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get paywallRecommended => 'Polecane';
+
+  @override
+  String get paywallNoPlans => 'Brak dostępnych planów';
 }

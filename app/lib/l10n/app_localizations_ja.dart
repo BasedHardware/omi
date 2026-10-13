@@ -12835,4 +12835,10 @@ class AppLocalizationsJa extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get paywallRecommended => 'おすすめ';
+
+  @override
+  String get paywallNoPlans => '利用可能なプランはありません';
 }

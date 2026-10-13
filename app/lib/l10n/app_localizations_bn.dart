@@ -13018,4 +13018,10 @@ class AppLocalizationsBn extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get paywallRecommended => 'প্রস্তাবিত';
+
+  @override
+  String get paywallNoPlans => 'কোনো প্ল্যান উপলব্ধ নেই';
 }

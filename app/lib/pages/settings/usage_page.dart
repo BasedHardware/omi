@@ -22,6 +22,7 @@ import 'package:omi/models/user_usage.dart';
 import 'package:omi/pages/settings/fair_use_page.dart';
 import 'package:omi/pages/settings/transcription_settings_page.dart';
 import 'package:omi/pages/settings/widgets/plans_sheet.dart';
+import 'package:omi/pages/settings/widgets/plans/contextual_plans.dart';
 import 'package:omi/pages/settings/widgets/usage/usage_chart.dart';
 import 'package:omi/pages/settings/widgets/usage/usage_stat_tile.dart';
 import 'package:omi/providers/usage_provider.dart';
@@ -657,6 +658,7 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin, Wi
             padding: const EdgeInsets.fromLTRB(OmiSpacing.md, OmiSpacing.md, OmiSpacing.md, OmiSpacing.xl),
             children: [
               _buildSubscriptionInfo(context, provider),
+              const BudgetUpsellBanner(),
               _buildFairUseBanner(),
               if (stats == null)
                 const OmiLoadingState()
