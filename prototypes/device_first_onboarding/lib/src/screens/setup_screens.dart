@@ -335,7 +335,7 @@ class _SetupScreenState extends State<SetupScreen> with SingleTickerProviderStat
                     for (var i = 0; i < 5; i++) Icon(Icons.star_rounded, size: 16, color: t.text)
                   ]),
                   const SizedBox(height: 6),
-                  // TODO(confirm): replace with a real App Store review.
+                  // Placeholder: swap in a real App Store review.
                   Text(
                     "“I haven't missed a follow-up since I started wearing it.”",
                     style: t.label(size: 14),

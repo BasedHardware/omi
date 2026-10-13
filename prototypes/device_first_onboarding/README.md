@@ -59,7 +59,7 @@ No              Get your Omi ($129) → Order summary → Waiting room → …
 | Waiting room, delivery push | Static order status | Store order status + a "delivered" webhook |
 | Product imagery | The pendant is drawn in code (no assets) | Real product photography |
 
-Values marked `TODO(confirm)` still need a decision: the monthly price, shipping
+Values marked `Placeholder:` still need a decision: the monthly price, shipping
 price and delivery window, the order data, and a real App Store review.
 
 ## Moving a direction into the app

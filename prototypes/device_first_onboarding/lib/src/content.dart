@@ -1,6 +1,6 @@
 /// Prices and trial settings used across the prototype.
 ///
-/// Anything marked `TODO(confirm)` is a placeholder that still needs a
+/// Anything marked "Placeholder:" is a stand-in value that still needs a
 /// decision; everything else comes from omi.me or the plan catalog.
 class DfPricing {
   const DfPricing._();
@@ -9,7 +9,7 @@ class DfPricing {
   static const String yearly = r'$269/yr';
   static const String yearlyPerMonth = r'$22.42/mo';
 
-  // TODO(confirm): monthly Unlimited price. $29.99 is derived from omi.me's
+  // Placeholder: monthly Unlimited price. $29.99 is derived from omi.me's
   // "pay for 9 months, get 3 free" framing of the $269 yearly price.
   static const String monthly = r'$29.99/mo';
 

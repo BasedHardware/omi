@@ -109,7 +109,7 @@ class CheckoutScreen extends StatelessWidget {
             children: <Widget>[
               const DfListRow(label: 'Omi pendant', value: '${DfPricing.deviceList}.00'),
               DfListRow(label: 'Launch discount', value: '–${DfPricing.deviceDiscount}.00', valueColor: t.success),
-              // TODO(confirm): shipping price and delivery window.
+              // Placeholder: shipping price and delivery window.
               const DfListRow(label: 'Shipping', value: 'Free'),
               DfListRow(label: 'Total', value: '${DfPricing.devicePrice}.00', emphasize: true, valueColor: t.text),
             ],
@@ -177,7 +177,7 @@ class WaitingRoomScreen extends StatelessWidget {
                 padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
                 child: Row(
                   children: <Widget>[
-                    // TODO(confirm): real order number and dates from the store.
+                    // Placeholder: real order number and dates come from the store.
                     Text('Order #1042', style: t.label(size: 13, weight: FontWeight.w600, color: t.textTertiary)),
                   ],
                 ),
