@@ -30,16 +30,24 @@ less than the configured estimate, especially for multibyte text; the gateway
 has no count-tokens surface. Neither estimate is represented as observed usage.
 See [the provider model
 limits](https://cloud.google.com/vertex-ai/generative-ai/docs/models/gemini/2-5-flash).
-The existing reservation/USD accounting reserves the combined input/completion
-budget plus one malformed-response retry **for every sample**: `2 * K * (400000 + 32768)`. At K=3 this
-reserves 2596608 tokens, or $25.96608 at the existing $0.00001/token upper-bound rate. The prod `backend-sync` cap is $250, intended to cover 24 hourly passes at roughly $8.2 settled usage
-(~$200) plus one ~$26 reservation of headroom. The current ledger is shared by day and retains successful
-reservations; it therefore admits at most nine full passes at this reservation size, before other spend.
-Per-user settlement is required for that intended hourly cadence. The bounded-mode report host retains $60. At 253000 input
-tokens, three unretried calls plus their maximum completions use at most 857304 tokens ($8.57304 at that
-upper-bound rate). Actual observed usage includes thinking and both attempts of any retried sample. Unknown
-usage from a failed sample stays unknown even when survivors produce a successful plan; admission remains
-reserved. Daily USD and per-user caps remain authoritative.
+The existing reservation/USD accounting reserves the combined input/completion budget plus one
+malformed-response retry **for every sample**: `2 * K * (400000 + 32768)`. At K=3 this reserves 2596608
+tokens, or $25.96608 at the existing $0.00001/token upper-bound rate. The prod `backend-sync` cap is $250,
+intended to cover 24 hourly passes at roughly $8.2 settled usage (~$200) plus one ~$26 reservation of
+headroom. Admission and settlement now use `dream_users/<uid>/spend/<UTC date>`. The ledger is shared only by
+that user's scheduled/manual passes and service hosts; another user or the synthetic canary cannot exhaust it.
+Finishing a pass atomically replaces its reservation with actual aggregate tokens times the accounting rate
+captured at admission, including every sample and retry. Known billable failures settle too; an unknown or
+missing usage outcome keeps the full reservation. At 820000 tokens per full pass, 24 passes settle to $196.80;
+the final admission needs $214.56608 including its temporary reservation, below $250. Settlement uses the
+admission UTC day across midnight and tracks the current charge on a retained lease so repeated recovery
+cannot deduct a reservation twice. New user ledgers do not import the historical shared total. A pre-change
+in-flight lease remains attached to `dream_spend/<day>`; without its captured accounting rate it retains the
+old reservation, unless an explicit known-zero refund is authorized. The bounded-mode report host retains $60.
+At 253000 input tokens, three unretried calls plus their maximum completions use at most 857304 tokens
+($8.57304 at that upper-bound rate). Actual observed usage includes thinking and both attempts of any retried
+sample. Unknown usage from a failed sample stays unknown even when survivors produce a successful plan;
+admission remains reserved. Daily USD and per-user caps remain authoritative.
 
 Dirty targets have first priority in oldest-first inspection order, then history
 seeds, then existing linked/lexical/semantic/temporal retrieval order. All fitting
@@ -391,7 +399,7 @@ fixtures only and does not access production customer records.
 The worker defaults off in code. The production runtime declarations enable shadow
 for David's two allowlisted UIDs only; TestFlight stays disabled. Prod backend and
 backend-sync declare 24 scheduled passes/user/day, 20 manual runs/user/day and a
-$60 global daily reservation ceiling. Other budget knobs keep their defaults.
+$250 per-user daily accounting cap on backend-sync ($60 on the bounded report host). Other budget knobs keep their defaults.
 Review API #20966 supplies the effect ledger; #20960 supplies
 the dedicated-only reservation policy. Declaring runtime configuration does not
 deploy it or change cloud resources.
@@ -519,7 +527,7 @@ All knobs are declared in `config/feature-flags.yaml`:
 | `DREAM_AGENT_TOKENS_PER_PASS` | 24,000 across both stages |
 | `DREAM_AGENT_PASSES_PER_DAY` | 2 per user, UTC; billable/ambiguous failed and shadow admissions count |
 | `DREAM_AGENT_EDITS_PER_PASS` | 10, shared with slow task proposals and vocabulary |
-| `DREAM_AGENT_DAILY_USD` | $20 global daily reservation ceiling |
+| `DREAM_AGENT_DAILY_USD` | $20 per-user daily accounting cap (default) |
 | `DREAM_AGENT_MAX_USD_PER_TOKEN` | $0.00001 conservative upper bound |
 | `DREAM_AGENT_UNDO_RATE` | 0.2; strictly above demotes that type |
 | `DREAM_AGENT_UNDO_MIN_SAMPLES` | 10 in a bounded 30-day journal window |
@@ -618,12 +626,12 @@ Evidence refs, document IDs, frame requests, reproductions, usage ambiguity and
 reserved spend never enter this wire projection.
 
 POST accepts `{}` and uses the same persistent lease, mode, token/edit limits
-and global spend reservation as scheduled passes. `DREAM_AGENT_MANUAL_RUNS_PER_DAY`
+and per-user UTC-day spend reservation as scheduled passes. `DREAM_AGENT_MANUAL_RUNS_PER_DAY`
 defaults to 3 and uses a separate UTC counter; it never consumes scheduled passes.
 A held lease returns 409 `dream_run_in_progress`; exhausted manual allowance
 returns 429 `dream_manual_limit`. Empty queues return an empty `idle` run without
 admission. Invisible/deleted-only evidence refunds the provisional manual count.
-Unavailable global spend or invalid admission budgets return 503
+Unavailable per-user spend or invalid admission budgets return 503
 `dream_budget_unavailable`. The request has an 85-second application deadline
 and a 90-second middleware deadline, including admission/report reads; its worker
 has a 70-second planning bound. A deadline returns a `deadline` run and retains
@@ -672,8 +680,8 @@ always shadow, including when global mode is on. No product effects execute.
 The maximum pass cap is 16,000 tokens (or a smaller global per-pass cap), with
 at most 256 completion tokens per lane and a 65-second worker bound. Its 96/day
 synthetic admission allowance permits the half-hour schedule and bounded retries;
-all reservations count toward the same global daily USD ceiling. At defaults,
-48 checks reserve at most $7.68/day; observed token-price cost is much smaller.
+its reservations and actual usage count only toward the synthetic canary UID's daily ledger. At defaults,
+48 checks temporarily reserve at most $7.68/day; known usage settles to actual token-price cost.
 The schema's conservative byte ceiling explains the input cap. The 88-second
 route bound includes a three-second durable health-write attempt.
 

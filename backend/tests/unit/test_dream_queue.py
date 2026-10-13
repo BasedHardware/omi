@@ -203,7 +203,7 @@ def test_idle_pass_refunds_and_can_admit_again(queue, monkeypatch):
     state = queue.rows[('dream_users', UID)]
     assert state['passes'] == 0 and state['score'] == 0 and state['lease'] is None
     assert dream_store.acquire(UID, Caps()) is None
-    assert queue.rows[('dream_spend', state['day'])]['reserved_usd'] == 0
+    assert queue.rows[('dream_users', UID, 'spend', state['day'])]['reserved_usd'] == 0
     turn.assert_not_called()
     dream_store.mark_dirty(UID, [('conversations', 'new')])
     assert dream_store.acquire(UID, Caps(passes=1)) is not None
@@ -258,7 +258,7 @@ def test_first_gateway_rejection_refunds_admission_and_spend(queue, monkeypatch)
     assert report['cost_usd_reserved'] == 0
     state = queue.rows[('dream_users', UID)]
     assert state['passes'] == 0 and state['lease'] is None
-    assert queue.rows[('dream_spend', state['day'])]['reserved_usd'] == 0
+    assert queue.rows[('dream_users', UID, 'spend', state['day'])]['reserved_usd'] == 0
     assert dream_store.dirty_count(UID) == 1
     assert dream_store.acquire(UID, Caps(passes=1)) is not None
 
@@ -279,7 +279,9 @@ def test_billable_or_ambiguous_failure_retains_admission_and_spend(queue, failur
     assert report['tokens'] == (17 if failure == 'after_tokens' else 0)
     state = queue.rows[('dream_users', UID)]
     assert state['passes'] == 1 and state['lease'] is None
-    assert queue.rows[('dream_spend', state['day'])]['reserved_usd'] == pytest.approx(0.24)
+    assert queue.rows[('dream_users', UID, 'spend', state['day'])]['reserved_usd'] == pytest.approx(
+        17 * Caps().max_usd_per_token if failure == 'after_tokens' else 0.24
+    )
     assert dream_store.dirty_count(UID) == 1
 
 
@@ -343,7 +345,7 @@ def test_refund_uses_lease_day_after_midnight(queue):
     queue.rows[('dream_users', UID)].update(day='2026-10-10', passes=2)
     dream_store.finish(UID, lease, {'tokens': 0}, success=False, refund=True)
     assert queue.rows[('dream_users', UID)]['passes'] == 2
-    assert queue.rows[('dream_spend', lease['day'])]['reserved_usd'] == 0
+    assert queue.rows[('dream_users', UID, 'spend', lease['day'])]['reserved_usd'] == 0
 
 
 def test_dream_fixture_keeps_firestore_constraints(queue):
@@ -412,7 +414,7 @@ def test_local_gateway_config_failure_refunds_before_dispatch(queue, monkeypatch
     state = queue.rows[('dream_users', UID)]
     assert report['status'] == 'failed' and report['tokens'] == 0
     assert state['passes'] == 0 and state['lease'] is None
-    assert queue.rows[('dream_spend', state['day'])]['reserved_usd'] == 0
+    assert queue.rows[('dream_users', UID, 'spend', state['day'])]['reserved_usd'] == 0
     client.post.assert_not_called()
 
 
@@ -429,7 +431,7 @@ def test_pre_model_timeout_refunds_but_retains_worker_safety_lease(queue, monkey
     assert report['status'] == 'failed' and report['tokens'] == 0
     assert report['cost_usd_reserved'] == 0
     assert state['passes'] == 0 and state['lease']['run_id'] == report['run_id']
-    assert queue.rows[('dream_spend', state['day'])]['reserved_usd'] == 0
+    assert queue.rows[('dream_users', UID, 'spend', state['day'])]['reserved_usd'] == 0
     assert dream_store.acquire(UID, Caps()) is None
     assert dream_store.dirty_count(UID) == 1
     turn.assert_not_called()
@@ -702,4 +704,6 @@ def test_capacity_failure_after_triage_keeps_versions_without_poison(queue, monk
     assert dream_store.dirty_refs(UID)[0].to_dict().get('failed_passes', 0) == 0
     state = queue.rows[('dream_users', UID)]
     assert state['lease'] is None and state['passes'] == 1
-    assert queue.rows[('dream_spend', state['day'])]['reserved_usd'] == pytest.approx(0.24)
+    assert queue.rows[('dream_users', UID, 'spend', state['day'])]['reserved_usd'] == pytest.approx(
+        17 * Caps().max_usd_per_token
+    )
