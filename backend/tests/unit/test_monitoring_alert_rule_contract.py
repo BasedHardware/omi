@@ -173,7 +173,7 @@ def test_combined_alert_export_matches_every_split_source_rule():
         assert combined[uid] == split[uid], uid
 
 
-def test_durable_queue_oldest_ready_alert_pages_on_age_or_absent_gauge():
+def test_durable_queue_oldest_ready_alert_pages_on_age_absence_or_sustained_unknown():
     for rules in _all_rule_exports().values():
         rule = rules['omi-queue-oldest-ready']
         assert len(rule['uid']) < 40
@@ -181,6 +181,8 @@ def test_durable_queue_oldest_ready_alert_pages_on_age_or_absent_gauge():
         assert 'omi_queue_oldest_ready_age_seconds' in expr
         assert 'absent(omi_queue_oldest_ready_age_seconds)' in expr
         assert '21600' in expr
+        assert 'max(omi_queue_oldest_ready_sample_unknown) > 0' in expr
+        assert rule['for'] == '5m'
         assert rule['noDataState'] == 'Alerting'
         assert rule['labels']['alert_identity'] == 'omi-queue-oldest-ready'
 

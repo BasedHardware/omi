@@ -45,7 +45,11 @@ def validate_entitlement_versions(catalog: Mapping[str, Any]) -> list[str]:
         if version not in versions:
             errors.append(f'entitlement_versions: unknown version {version!r}')
         if version == 'ladder_v1':
-            ladder_prices.add(price['price_id'])
+            price_id = price.get('price_id')
+            if not isinstance(price_id, str) or not price_id:
+                errors.append('entitlement_versions: ladder_v1 price requires a nonempty price_id')
+            else:
+                ladder_prices.add(price_id)
             if price.get('plan_id') not in budgets or price.get('plan_id') == 'basic':
                 errors.append('entitlement_versions: ladder price must map to a paid ladder plan')
     if set(bindings) != ladder_prices:

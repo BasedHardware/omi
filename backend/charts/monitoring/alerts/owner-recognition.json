@@ -136,6 +136,7 @@
     "for": "2h",
     "keep_firing_for": "0s",
     "annotations": {
+      "__dashboardUid__": "omi-core-features",
       "summary": "The share of live and sync conversations that identified their owner is under half of that share over the last 7 days.",
       "user_impact": "Owner voice labels may be missing on new conversations. This is a new counter, so confirm the series is populated before treating the page as a recognition outage.",
       "scope": "omi_owner_recognition_conversations_total from process_conversation on pusher and Cloud Run (backend, backend-sync). surface is live or sync. too_little_speech is outside the share. The owner_identified numerator is zero-filled so a missing success series still reads as zero when other judged outcomes exist. Quiet traffic stays No Data.",
@@ -155,7 +156,8 @@
     },
     "isPaused": false,
     "notification_settings": {
-      "receiver": "Omi - Services Alerting (Telegram)"
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": ["alertname"], "group_wait": "5m", "group_interval": "1h", "repeat_interval": "24h"
     },
     "record": null
   }
