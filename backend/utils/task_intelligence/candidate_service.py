@@ -2,12 +2,14 @@
 
 import asyncio
 import logging
-from typing import Optional, Protocol
+from typing import Any, Optional, Protocol
 
 import database.action_items as action_items_db
 import database.candidate_integration_outbox as integration_outbox_db
 import database.candidates as candidates_db
 import database.workstreams as workstreams_db
+from database.account_deletion_marker import get_user_deletion_wipe_status
+from database.account_deletion_policy import account_deletion_blocks_access
 from database.durable_queue import OutcomeKind, ProcessOutcome, drain_isolated
 from models.candidate import (
     CandidateAction,
@@ -26,6 +28,37 @@ from utils.task_intelligence import task_links
 from utils.task_intelligence.workstream_index import refresh_workstream_association_index
 
 logger = logging.getLogger(__name__)
+
+_PROVIDER_ATTEMPT_OUTCOMES = frozenset({'not_sent', 'definite_error', 'in_doubt', 'accepted'})
+
+
+def provider_dispatch_blocked_by_account_deletion(uid: str) -> bool:
+    """Fail closed on the account_deletions/{uid} marker the request auth fence uses."""
+    try:
+        status = get_user_deletion_wipe_status(uid)
+    except Exception as error:
+        logger.error(
+            'candidate integration deletion fence unavailable exception_type=%s',
+            type(error).__name__,
+        )
+        return True
+    return account_deletion_blocks_access(status)
+
+
+def _classified_provider_outcome(result: dict, *, succeeded: bool) -> str:
+    outcome = result.get('provider_attempt_outcome')
+    if outcome in _PROVIDER_ATTEMPT_OUTCOMES:
+        return outcome
+    if succeeded:
+        return 'accepted'
+    return 'in_doubt'
+
+
+def _recorded_external_task_id(result: dict) -> Optional[str]:
+    external_id = result.get('external_task_id')
+    if isinstance(external_id, str) and external_id:
+        return external_id
+    return None
 
 
 class WorkstreamCandidateResolver(Protocol):
@@ -85,8 +118,23 @@ def _record_integration_result(
     *,
     account_generation: int,
     lease_token: str,
+    firestore_client: Any = None,
 ) -> bool:
-    """Run the provider sync and complete or fail the lease. Blocking."""
+    """Run the provider sync and complete or fail the lease. Blocking.
+
+    Marks the attempt ``in_doubt`` before the provider call. A crash or a timeout
+    after that point must not be retried. A definite pre-accept failure overwrites
+    the marker when the call returns.
+    """
+    noted = integration_outbox_db.note_candidate_integration_provider_attempt(
+        uid,
+        candidate_id,
+        lease_token=lease_token,
+        outcome='in_doubt',
+        firestore_client=firestore_client,
+    )
+    if not noted:
+        return False
     try:
         result = asyncio.run(auto_sync_action_item(uid, task, skip_apple_reminders=False))
     except Exception:
@@ -97,6 +145,7 @@ def _record_integration_result(
             lease_token=lease_token,
             succeeded=False,
             error_text='integration_exception',
+            provider_attempt_outcome='in_doubt',
         )
         record_fallback(
             component='other',
@@ -120,6 +169,8 @@ def _record_integration_result(
         lease_token=lease_token,
         succeeded=succeeded,
         error_text=None if succeeded else 'integration_not_synced',
+        provider_attempt_outcome=_classified_provider_outcome(result, succeeded=succeeded),
+        external_task_id=_recorded_external_task_id(result),
     )
     if not succeeded:
         record_fallback(
@@ -129,7 +180,7 @@ def _record_integration_result(
             reason='other',
             outcome='degraded',
         )
-    return succeeded
+    return True
 
 
 def _claim_task_integration(uid: str, candidate_id: str, task_id: str, *, account_generation: int):
@@ -148,12 +199,19 @@ def _claim_task_integration(uid: str, candidate_id: str, task_id: str, *, accoun
     return lease_token, task
 
 
-def _retain_lease_for_provider_call(uid: str, candidate_id: str, lease_token: str) -> bool:
+def _retain_lease_for_provider_call(
+    uid: str,
+    candidate_id: str,
+    lease_token: str,
+    *,
+    firestore_client: Any = None,
+) -> bool:
     """Fresh lease iff this token still owns the processing row. Otherwise do not export."""
     owned = integration_outbox_db.refresh_candidate_integration_lease(
         uid,
         candidate_id,
         lease_token=lease_token,
+        firestore_client=firestore_client,
     )
     if not owned:
         logger.info(
@@ -166,11 +224,16 @@ def _retain_lease_for_provider_call(uid: str, candidate_id: str, lease_token: st
 
 def _dispatch_task_integration(uid: str, candidate_id: str, task_id: str, *, account_generation: int) -> bool:
     """Accept path: claim, then schedule the provider sync. Returns before it finishes."""
+    if provider_dispatch_blocked_by_account_deletion(uid):
+        return False
     lease_token, task = _claim_task_integration(uid, candidate_id, task_id, account_generation=account_generation)
     if lease_token is None or task is None:
         return False
 
     def run_sync() -> None:
+        # Deletion can become pending while this job sits on the pool.
+        if provider_dispatch_blocked_by_account_deletion(uid):
+            return
         # The pool may have queued this past the 300s claim lease. Re-stamp only
         # while this token still owns the row; a sweeper that took it must be
         # the only provider call.
@@ -188,28 +251,37 @@ def _dispatch_task_integration(uid: str, candidate_id: str, task_id: str, *, acc
     return True
 
 
-def dispatch_task_integration_blocking(uid: str, candidate_id: str, task_id: str, *, account_generation: int) -> bool:
+def dispatch_task_integration_blocking(
+    uid: str,
+    candidate_id: str,
+    task_id: str,
+    *,
+    account_generation: int,
+    firestore_client: Any = None,
+) -> bool:
     """Claim, confirm the lease, sync, and complete before returning.
 
     True when this call recorded the attempt (success, terminal noop, or retryable failure).
-    False when the row was not claimed or the lease was lost before the provider call.
-    A provider exception is recorded as a failure and re-raised.
+    False when the row was not claimed, deletion blocks access, or the lease was lost
+    before the provider call. A provider exception is recorded as a failure and re-raised.
     """
+    if provider_dispatch_blocked_by_account_deletion(uid):
+        return False
     lease_token, task = _claim_task_integration(uid, candidate_id, task_id, account_generation=account_generation)
     if lease_token is None:
         return False
     if task is None:
         return True
-    if not _retain_lease_for_provider_call(uid, candidate_id, lease_token):
+    if not _retain_lease_for_provider_call(uid, candidate_id, lease_token, firestore_client=firestore_client):
         return False
-    _record_integration_result(
+    return _record_integration_result(
         uid,
         candidate_id,
         task,
         account_generation=account_generation,
         lease_token=lease_token,
+        firestore_client=firestore_client,
     )
-    return True
 
 
 def drain_candidate_integrations(uid: str, *, account_generation: int, limit: int = 100) -> int:

@@ -1,16 +1,22 @@
 """Bounded retry and stale-abandon pass for candidate_integration_outbox.
 
 One invocation inspects at most ``MAX_ROWS`` collection-group rows and stops
-at ``BUDGET_SECONDS``. Rows older than seven days, missing ``created_at``, or
-on a previous account generation are dead-lettered with no provider call.
-Younger due rows use the blocking dispatch so the lease is completed before
-the pass moves on.
+at ``BUDGET_SECONDS``. Rows older than seven days (or older than seven days
+since ``redriven_at``, when an operator redrive stamped one), missing
+``created_at``, or on a previous account generation are dead-lettered with no
+provider call. A failed row is retried only when its recorded provider outcome
+is known to be pre-accept. Ambiguous creates are dead-lettered, or completed
+from a recorded external id, and never posted again.
 
 A ``processing`` row is reclaimed only when ``claimed_at`` is older than
 ``SWEEP_RECLAIM_AFTER`` (one hour). The claim protocol's 300s lease stays as
 it is: an inline accept job can sit on the shared postprocess pool past those
 300s and still own the row. That job re-stamps ``claimed_at`` when it starts,
 and this pass's blocking dispatch does the same just before the provider call.
+
+The scan orders each status by document name and continues from the previous
+pass's cursor, so rows that stay in the same status do not pin the budget on
+the same prefix.
 """
 
 import logging
@@ -18,7 +24,9 @@ import time
 from datetime import datetime, timedelta, timezone
 from typing import Any, Callable, Optional
 
+import database.action_items as action_items_db
 import database.candidate_integration_outbox as integration_outbox_db
+from database._client import get_firestore_client
 from utils.executors import db_executor, postprocess_executor, run_blocking
 from utils.metrics import CANDIDATE_INTEGRATION_SWEEP_DISPOSITIONS, OMI_CANDIDATE_INTEGRATION_SWEEP_TOTAL
 from utils.task_intelligence import candidate_service
@@ -49,6 +57,10 @@ def _bump(counts: dict[str, int], disposition: str) -> None:
     OMI_CANDIDATE_INTEGRATION_SWEEP_TOTAL.labels(disposition=disposition).inc()
 
 
+def _row_path(row: dict[str, Any]) -> str:
+    return f"users/{row['uid']}/{integration_outbox_db.CANDIDATE_INTEGRATION_OUTBOX_COLLECTION}/{row['candidate_id']}"
+
+
 def _lease_is_live(row: dict[str, Any], now: datetime) -> bool:
     """True while this pass must not reclaim or dead-letter the processing row."""
     if row.get('status') != 'processing':
@@ -59,13 +71,50 @@ def _lease_is_live(row: dict[str, Any], now: datetime) -> bool:
     return _aware(claimed_at) + SWEEP_RECLAIM_AFTER > now
 
 
-async def _generation(uid: str, cache: dict[str, int]) -> int:
+def _attempt_count(row: dict[str, Any]) -> int:
+    try:
+        return int(row.get('attempt_count') or 0)
+    except (TypeError, ValueError):
+        return 0
+
+
+def _external_task_id(row: dict[str, Any]) -> Optional[str]:
+    external_id = row.get('external_task_id')
+    if isinstance(external_id, str) and external_id:
+        return external_id
+    return None
+
+
+def _provider_retry_allowed(row: dict[str, Any]) -> bool:
+    """True only when this row is known not to have been accepted by the provider."""
+    outcome = row.get('provider_attempt_outcome')
+    if outcome in integration_outbox_db.PROVIDER_ATTEMPT_RETRY_SAFE:
+        return True
+    return row.get('status') == 'pending' and _attempt_count(row) == 0 and outcome is None
+
+
+def _load_sweep_state(firestore_client: Any) -> tuple[Any, dict[str, str]]:
+    client = firestore_client if firestore_client is not None else get_firestore_client()
+    try:
+        cursors = integration_outbox_db.read_candidate_integration_sweep_cursors(firestore_client=client)
+    except Exception as error:
+        logger.error('candidate integration sweep cursor read failed exception_type=%s', type(error).__name__)
+        cursors = {}
+    return client, cursors
+
+
+async def _generation(uid: str, cache: dict[str, int], firestore_client: Any) -> int:
     if uid not in cache:
-        cache[uid] = await run_blocking(db_executor, integration_outbox_db.current_task_account_generation, uid)
+        cache[uid] = await run_blocking(
+            db_executor,
+            integration_outbox_db.current_task_account_generation,
+            uid,
+            firestore_client=firestore_client,
+        )
     return cache[uid]
 
 
-async def _abandon(uid: str, candidate_id: str, reason: str, now: datetime) -> bool:
+async def _abandon(uid: str, candidate_id: str, reason: str, now: datetime, firestore_client: Any) -> bool:
     return await run_blocking(
         db_executor,
         integration_outbox_db.abandon_candidate_integration_dispatch,
@@ -73,7 +122,63 @@ async def _abandon(uid: str, candidate_id: str, reason: str, now: datetime) -> b
         candidate_id,
         reason=reason,
         now=now,
+        firestore_client=firestore_client,
     )
+
+
+async def _recover_recorded_export(
+    row: dict[str, Any],
+    *,
+    external_id: str,
+    now: datetime,
+    counts: dict[str, int],
+    firestore_client: Any,
+) -> None:
+    """Mark the local task exported from the recorded id. No provider call."""
+    uid = row['uid']
+    candidate_id = row['candidate_id']
+    task_id = row['task_id']
+    try:
+        updated = await run_blocking(
+            db_executor,
+            action_items_db.update_action_item,
+            uid,
+            task_id,
+            {
+                'exported': True,
+                'export_date': now,
+                'external_task_id': external_id,
+            },
+        )
+    except Exception as error:
+        logger.error(
+            'candidate integration sweep export recovery failed exception_type=%s',
+            type(error).__name__,
+        )
+        _bump(counts, 'error')
+        return
+    if not updated:
+        wrote = await _abandon(uid, candidate_id, 'in_doubt', now, firestore_client)
+        _bump(counts, 'dead_letter_in_doubt' if wrote else 'skipped_not_claimed')
+        return
+    try:
+        wrote = await run_blocking(
+            db_executor,
+            integration_outbox_db.complete_candidate_integration_recorded_export,
+            uid,
+            candidate_id,
+            external_task_id=external_id,
+            now=now,
+            firestore_client=firestore_client,
+        )
+    except Exception as error:
+        logger.error(
+            'candidate integration sweep recorded-export complete failed exception_type=%s',
+            type(error).__name__,
+        )
+        _bump(counts, 'error')
+        return
+    _bump(counts, 'recovered_external_id' if wrote else 'skipped_not_claimed')
 
 
 async def _dispose(
@@ -82,6 +187,7 @@ async def _dispose(
     now: datetime,
     counts: dict[str, int],
     generations: dict[str, int],
+    firestore_client: Any,
 ) -> None:
     uid = row.get('uid')
     candidate_id = row.get('candidate_id')
@@ -92,19 +198,23 @@ async def _dispose(
         _bump(counts, 'skipped_live_lease')
         return
     created_at = row.get('created_at')
-    if not isinstance(created_at, datetime):
-        wrote = await _abandon(uid, candidate_id, 'missing_created_at', now)
+    redriven_at = row.get('redriven_at')
+    has_created_at = isinstance(created_at, datetime)
+    has_redriven_at = isinstance(redriven_at, datetime)
+    if not has_created_at and not has_redriven_at:
+        wrote = await _abandon(uid, candidate_id, 'missing_created_at', now, firestore_client)
         _bump(counts, 'dead_letter_missing_created_at' if wrote else 'skipped_not_claimed')
         return
-    if _aware(created_at) < now - STALE_AFTER:
-        wrote = await _abandon(uid, candidate_id, 'stale_abandoned', now)
+    age_anchor = redriven_at if has_redriven_at else created_at
+    if _aware(age_anchor) < now - STALE_AFTER:
+        wrote = await _abandon(uid, candidate_id, 'stale_abandoned', now, firestore_client)
         _bump(counts, 'dead_letter_stale_abandoned' if wrote else 'skipped_not_claimed')
         return
-    if row.get('status') == 'pending' and now - _aware(created_at) < PENDING_GRACE:
+    if has_created_at and row.get('status') == 'pending' and now - _aware(created_at) < PENDING_GRACE:
         _bump(counts, 'skipped_pending_young')
         return
     try:
-        generation = await _generation(uid, generations)
+        generation = await _generation(uid, generations, firestore_client)
     except Exception as error:
         logger.error(
             'candidate integration sweep generation read failed exception_type=%s',
@@ -114,9 +224,31 @@ async def _dispose(
         return
     row_generation = row.get('account_generation')
     if row_generation != generation:
-        wrote = await _abandon(uid, candidate_id, 'generation_mismatch', now)
-        _bump(counts, 'dead_letter_generation_mismatch' if wrote else 'skipped_not_claimed')
-        return
+        try:
+            outcome = await run_blocking(
+                db_executor,
+                integration_outbox_db.dead_letter_candidate_integration_generation_mismatch,
+                uid,
+                candidate_id,
+                now=now,
+                firestore_client=firestore_client,
+            )
+        except Exception as error:
+            logger.error(
+                'candidate integration sweep generation check failed exception_type=%s',
+                type(error).__name__,
+            )
+            _bump(counts, 'error')
+            return
+        if outcome == 'dead_letter':
+            _bump(counts, 'dead_letter_generation_mismatch')
+            return
+        if outcome != 'current':
+            _bump(counts, 'skipped_not_claimed')
+            return
+        if isinstance(row_generation, int):
+            generations[uid] = row_generation
+            generation = row_generation
     task_id = row.get('task_id')
     if not isinstance(task_id, str) or not task_id:
         try:
@@ -142,12 +274,37 @@ async def _dispose(
     if isinstance(available_at, datetime) and _aware(available_at) > now:
         _bump(counts, 'skipped_not_due')
         return
-    try:
-        attempt_count = int(row.get('attempt_count') or 0)
-    except (TypeError, ValueError):
-        attempt_count = 0
-    if attempt_count >= integration_outbox_db.CANDIDATE_INTEGRATION_POLICY.max_attempts:
+    if _attempt_count(row) >= integration_outbox_db.CANDIDATE_INTEGRATION_POLICY.max_attempts:
         _bump(counts, 'skipped_attempt_budget')
+        return
+    try:
+        deleting = await run_blocking(
+            db_executor,
+            candidate_service.provider_dispatch_blocked_by_account_deletion,
+            uid,
+        )
+    except Exception as error:
+        logger.error(
+            'candidate integration sweep deletion fence failed exception_type=%s',
+            type(error).__name__,
+        )
+        deleting = True
+    if deleting:
+        _bump(counts, 'skipped_account_deleting')
+        return
+    external_id = _external_task_id(row)
+    if external_id is not None:
+        await _recover_recorded_export(
+            row,
+            external_id=external_id,
+            now=now,
+            counts=counts,
+            firestore_client=firestore_client,
+        )
+        return
+    if not _provider_retry_allowed(row):
+        wrote = await _abandon(uid, candidate_id, 'in_doubt', now, firestore_client)
+        _bump(counts, 'dead_letter_in_doubt' if wrote else 'skipped_not_claimed')
         return
     try:
         recorded = await run_blocking(
@@ -157,12 +314,30 @@ async def _dispose(
             candidate_id,
             task_id,
             account_generation=generation,
+            firestore_client=firestore_client,
         )
     except Exception as error:
         logger.error('candidate integration sweep dispatch failed exception_type=%s', type(error).__name__)
         _bump(counts, 'error')
         return
     _bump(counts, 'retried' if recorded else 'skipped_not_claimed')
+
+
+async def _page(
+    status: str,
+    *,
+    limit: int,
+    start_after_path: Optional[str],
+    firestore_client: Any,
+) -> tuple[list[dict[str, Any]], bool]:
+    return await run_blocking(
+        db_executor,
+        integration_outbox_db.list_candidate_integration_sweep_rows,
+        status,
+        limit=limit,
+        firestore_client=firestore_client,
+        start_after_path=start_after_path,
+    )
 
 
 async def sweep_candidate_integrations(
@@ -184,20 +359,55 @@ async def sweep_candidate_integrations(
     inspected = 0
     remaining = max_rows
     generations: dict[str, int] = {}
+    client, cursors = await run_blocking(db_executor, _load_sweep_state, firestore_client)
     for status in SCAN_STATUSES:
         if remaining <= 0 or clock() >= deadline:
             break
-        rows = await run_blocking(
-            db_executor,
-            integration_outbox_db.list_candidate_integration_sweep_rows,
+        cursor = cursors.get(status)
+        page_limit = remaining
+        rows, reached_end = await _page(
             status,
-            limit=remaining,
-            firestore_client=firestore_client,
+            limit=page_limit,
+            start_after_path=cursor,
+            firestore_client=client,
         )
+        if not rows and cursor:
+            cursors.pop(status, None)
+            rows, reached_end = await _page(
+                status,
+                limit=page_limit,
+                start_after_path=None,
+                firestore_client=client,
+            )
+        inspected_paths: list[str] = []
         for row in rows:
             if remaining <= 0 or clock() >= deadline:
                 break
             inspected += 1
             remaining -= 1
-            await _dispose(row, now=observed, counts=counts, generations=generations)
+            inspected_paths.append(_row_path(row))
+            await _dispose(
+                row,
+                now=observed,
+                counts=counts,
+                generations=generations,
+                firestore_client=client,
+            )
+        if not inspected_paths:
+            if reached_end:
+                cursors.pop(status, None)
+            continue
+        if reached_end and len(inspected_paths) == len(rows):
+            cursors.pop(status, None)
+        else:
+            cursors[status] = inspected_paths[-1]
+    try:
+        await run_blocking(
+            db_executor,
+            integration_outbox_db.write_candidate_integration_sweep_cursors,
+            cursors,
+            firestore_client=client,
+        )
+    except Exception as error:
+        logger.error('candidate integration sweep cursor write failed exception_type=%s', type(error).__name__)
     return {'inspected': inspected, **counts}

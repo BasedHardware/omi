@@ -13,6 +13,38 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+# Closed outcomes for a single cloud create. The sweeper retries only the first two.
+# ``in_doubt`` means the provider may already have the task (timeout after POST, or
+# the create succeeded and the local ``exported`` write failed).
+_PROVIDER_NOT_SENT = frozenset(
+    {
+        "no_access_token",
+        "token_refresh_failed",
+        "no_workspace",
+        "no_list",
+        "unsupported",
+        "not_sent",
+    }
+)
+
+
+def _provider_attempt_outcome(result: Dict[str, Any]) -> str:
+    if result.get("success"):
+        return "accepted"
+    code = result.get("error_code")
+    if code == "api_error":
+        return "definite_error"
+    if code in _PROVIDER_NOT_SENT:
+        return "not_sent"
+    return "in_doubt"
+
+
+def _external_task_id(result: Dict[str, Any]) -> Any:
+    external_id = result.get("external_task_id")
+    if isinstance(external_id, str) and external_id:
+        return external_id
+    return None
+
 
 async def auto_sync_action_item(
     uid: str, action_item: Dict[str, Any], skip_apple_reminders: bool = False
@@ -31,26 +63,28 @@ async def auto_sync_action_item(
     try:
         default_app = await run_blocking(db_executor, users_db.get_default_task_integration, uid)
         if not default_app:
-            return {"synced": False, "reason": "no_default_integration"}
+            return {"synced": False, "reason": "no_default_integration", "provider_attempt_outcome": "not_sent"}
 
         integration = await run_blocking(db_executor, users_db.get_task_integration, uid, default_app)
         if not integration:
-            return {"synced": False, "reason": "integration_not_found"}
+            return {"synced": False, "reason": "integration_not_found", "provider_attempt_outcome": "not_sent"}
 
         if not integration.get("connected"):
-            return {"synced": False, "reason": "integration_not_connected"}
+            return {"synced": False, "reason": "integration_not_connected", "provider_attempt_outcome": "not_sent"}
 
         # Route to appropriate handler
         if default_app == "apple_reminders":
             if skip_apple_reminders:
-                return {"synced": False, "reason": "client_handles_sync"}
-            return await _sync_to_apple_reminders(uid, [action_item])
+                return {"synced": False, "reason": "client_handles_sync", "provider_attempt_outcome": "not_sent"}
+            result = await _sync_to_apple_reminders(uid, [action_item])
+            result["provider_attempt_outcome"] = "not_sent"
+            return result
         else:
             return await _sync_to_cloud_service(uid, default_app, integration, action_item)
 
     except Exception as e:
         logger.error(f"Auto-sync failed for user {uid}: {e}")
-        return {"synced": False, "error": str(e)}
+        return {"synced": False, "error": str(e), "provider_attempt_outcome": "not_sent"}
 
 
 async def _sync_to_cloud_service(
@@ -65,34 +99,73 @@ async def _sync_to_cloud_service(
     if item_id:
         existing = await run_blocking(db_executor, action_items_db.get_action_item, uid, item_id)
         if existing and existing.get("exported"):
-            return {"synced": True, "platform": app_key, "reason": "already_exported"}
+            return {
+                "synced": True,
+                "platform": app_key,
+                "reason": "already_exported",
+                "provider_attempt_outcome": "not_sent",
+            }
 
-    async with httpx.AsyncClient(timeout=10.0) as client:
-        result = await create_task_internal(
-            uid=uid,
-            app_key=app_key,
-            integration=integration,
-            title=action_item["description"],
-            due_date=action_item.get("due_at"),
-            client=client,
-        )
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            result = await create_task_internal(
+                uid=uid,
+                app_key=app_key,
+                integration=integration,
+                title=action_item["description"],
+                due_date=action_item.get("due_at"),
+                client=client,
+            )
+    except Exception:
+        # Token refresh and other pre-POST failures raise out of create_task_internal.
+        # Post-send timeouts are caught there and returned as error_code in_doubt.
+        logger.error("Auto-sync create raised before a definite provider result user=%s app=%s", uid, app_key)
+        return {
+            "synced": False,
+            "platform": app_key,
+            "error": "integration_exception",
+            "provider_attempt_outcome": "not_sent",
+        }
 
     if result.get("success"):
-        # Mark action item as exported
-        await run_blocking(
-            db_executor,
-            action_items_db.update_action_item,
-            uid,
-            action_item["id"],
-            {
-                "exported": True,
-                "export_platform": app_key,
-                "export_date": datetime.now(timezone.utc),
-            },
-        )
-        return {"synced": True, "platform": app_key, "external_task_id": result.get("external_task_id")}
+        external_id = _external_task_id(result)
+        exported = {
+            "exported": True,
+            "export_platform": app_key,
+            "export_date": datetime.now(timezone.utc),
+        }
+        if external_id is not None:
+            exported["external_task_id"] = external_id
+        try:
+            await run_blocking(
+                db_executor,
+                action_items_db.update_action_item,
+                uid,
+                action_item["id"],
+                exported,
+            )
+        except Exception:
+            logger.error("Auto-sync export marker write failed user=%s app=%s", uid, app_key)
+            return {
+                "synced": False,
+                "platform": app_key,
+                "error": "export_marker_failed",
+                "provider_attempt_outcome": "in_doubt",
+                "external_task_id": external_id,
+            }
+        return {
+            "synced": True,
+            "platform": app_key,
+            "external_task_id": external_id,
+            "provider_attempt_outcome": "accepted",
+        }
 
-    return {"synced": False, "platform": app_key, "error": result.get("error")}
+    return {
+        "synced": False,
+        "platform": app_key,
+        "error": result.get("error"),
+        "provider_attempt_outcome": _provider_attempt_outcome(result),
+    }
 
 
 async def _sync_to_apple_reminders(uid: str, action_items: List[Dict[str, Any]]) -> Dict[str, Any]:

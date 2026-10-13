@@ -41,9 +41,13 @@ class _GroupQuery:
         self._filters = []
         self._fields = None
         self._limit = None
+        self._after = None
 
     def where(self, *args, filter=None, **kwargs):
         self._filters.append((filter.field_path, filter.value))
+        return self
+
+    def order_by(self, field, direction=None):
         return self
 
     def select(self, fields):
@@ -56,15 +60,26 @@ class _GroupQuery:
         self._limit = count
         return self
 
+    def start_after(self, snapshot):
+        reference = getattr(snapshot, 'reference', None)
+        path = getattr(reference, 'path', None)
+        if isinstance(path, tuple):
+            path = '/'.join(path)
+        self._after = str(path) if path else None
+        return self
+
     def stream(self):
         rows = []
-        for path, data in sorted(self.database.rows.items()):
+        for path, data in self.database.rows.items():
             if len(path) < 2 or path[-2] != self.group:
                 continue
             if any(data.get(field) != expected for field, expected in self._filters):
                 continue
             projected = {field: data[field] for field in self._fields if field in data}
             rows.append(_Snapshot(path, projected))
+        rows.sort(key=lambda snapshot: snapshot.reference.path)
+        if self._after:
+            rows = [snapshot for snapshot in rows if snapshot.reference.path > self._after]
         if self._limit is not None:
             rows = rows[: self._limit]
         return iter(rows)
@@ -77,6 +92,15 @@ class _GroupClient:
 
     def collection_group(self, name):
         return _GroupQuery(self.database, name, self.selects)
+
+    def collection(self, name):
+        return self.database.collection(name)
+
+    def document(self, path):
+        return self.database.document(path)
+
+    def transaction(self):
+        return self.database.transaction()
 
 
 @pytest.fixture
@@ -95,7 +119,9 @@ def store(monkeypatch):
         return run
 
     monkeypatch.setattr(integration_outbox_db, 'db', database)
+    monkeypatch.setattr(integration_outbox_db, 'get_firestore_client', lambda: database)
     monkeypatch.setattr(integration_outbox_db.firestore, 'transactional', transactional)
+    monkeypatch.setattr(candidate_service, 'get_user_deletion_wipe_status', lambda uid: None)
     return database
 
 
@@ -111,6 +137,7 @@ def _put(store, candidate_id, **fields):
         'created_at': now - timedelta(hours=1),
         'updated_at': now,
         'available_at': now - timedelta(seconds=1),
+        'provider_attempt_outcome': 'definite_error',
     }
     payload.update(fields)
     store.rows[('users', 'user-1', 'candidate_integration_outbox', candidate_id)] = payload
@@ -396,6 +423,145 @@ def test_row_and_wall_clock_budgets_stop_the_pass(store, monkeypatch):
     stopped = _sweep(store, now=now, monotonic=lambda: 0.0, budget_seconds=0)
     assert stopped[0]['inspected'] == 0
     assert store.rows[held]['status'] == 'failed'
+
+
+def test_ambiguous_and_legacy_failures_are_not_sent_to_the_provider_again(store, monkeypatch):
+    now = _now()
+    calls = _allow_sync(monkeypatch, {'synced': True, 'provider_attempt_outcome': 'accepted'})
+    legacy = _put(store, 'legacy', now=now, task_id='task-legacy')
+    del store.rows[legacy]['provider_attempt_outcome']
+    doubt = _put(store, 'doubt', now=now, task_id='task-doubt', provider_attempt_outcome='in_doubt')
+    safe = _put(store, 'safe', now=now, task_id='task-safe', provider_attempt_outcome='definite_error')
+    recorded = _put(
+        store,
+        'recorded',
+        now=now,
+        task_id='task-recorded',
+        provider_attempt_outcome='in_doubt',
+        external_task_id='ext-recorded',
+    )
+    updates = []
+
+    def update_action_item(uid, task_id, payload):
+        updates.append((task_id, payload))
+        return True
+
+    monkeypatch.setattr(sweeper.action_items_db, 'update_action_item', update_action_item)
+
+    counts, _client = _sweep(store, now=now)
+
+    assert calls == ['task-safe']
+    assert counts['dead_letter_in_doubt'] == 2
+    assert counts['recovered_external_id'] == 1
+    assert counts['retried'] == 1
+    assert store.rows[legacy]['status'] == 'dead_letter'
+    assert store.rows[legacy]['dead_letter_reason'] == 'in_doubt'
+    assert store.rows[doubt]['status'] == 'dead_letter'
+    assert store.rows[doubt]['dead_letter_reason'] == 'in_doubt'
+    assert store.rows[safe]['status'] == 'completed'
+    assert store.rows[recorded]['status'] == 'completed'
+    assert updates == [
+        ('task-recorded', {'exported': True, 'export_date': now, 'external_task_id': 'ext-recorded'}),
+    ]
+
+
+@pytest.mark.parametrize('wipe_status', ['pending', 'running', 'done'])
+def test_account_deletion_skips_provider_dispatch(store, monkeypatch, wipe_status):
+    now = _now()
+    calls = _allow_sync(monkeypatch, {'synced': True, 'provider_attempt_outcome': 'accepted'})
+    path = _put(store, 'deleting', now=now, provider_attempt_outcome='definite_error')
+    monkeypatch.setattr(candidate_service, 'get_user_deletion_wipe_status', lambda uid: wipe_status)
+
+    counts, _client = _sweep(store, now=now)
+
+    assert calls == []
+    assert counts['skipped_account_deleting'] == 1
+    assert counts['retried'] == 0
+    assert store.rows[path]['status'] == 'failed'
+
+
+def test_deletion_fence_is_fail_closed_when_the_marker_read_fails(store, monkeypatch):
+    now = _now()
+    calls = _allow_sync(monkeypatch, {'synced': True, 'provider_attempt_outcome': 'accepted'})
+    path = _put(store, 'deleting', now=now, provider_attempt_outcome='not_sent')
+
+    def explode(uid):
+        raise RuntimeError('marker unavailable')
+
+    monkeypatch.setattr(candidate_service, 'get_user_deletion_wipe_status', explode)
+
+    counts, _client = _sweep(store, now=now)
+
+    assert calls == []
+    assert counts['skipped_account_deleting'] == 1
+    assert store.rows[path]['status'] == 'failed'
+
+
+def test_redriven_row_is_not_dead_lettered_by_the_original_created_at(store, monkeypatch):
+    now = _now()
+    calls = _allow_sync(monkeypatch, {'synced': True, 'provider_attempt_outcome': 'accepted'})
+    created_at = now - timedelta(days=8)
+    path = _put(
+        store,
+        'old-redrive',
+        now=now,
+        status='dead_letter',
+        created_at=created_at,
+        provider_attempt_outcome='definite_error',
+        dead_letter_reason='stale_abandoned',
+    )
+
+    assert integration_outbox_db.redrive_candidate_integration_dead_letter(
+        'user-1',
+        'old-redrive',
+        account_generation=3,
+        now=now,
+    )
+    assert store.rows[path]['redriven_at'] == now
+    assert store.rows[path]['created_at'] == created_at
+    assert store.rows[path]['status'] == 'pending'
+
+    counts, _client = _sweep(store, now=now)
+
+    assert counts['dead_letter_stale_abandoned'] == 0
+    assert counts['retried'] == 1
+    assert calls == ['task-1']
+    assert store.rows[path]['status'] == 'completed'
+
+
+def test_sweep_cursor_moves_past_rows_that_stay_in_the_same_status(store, monkeypatch):
+    now = _now()
+    calls = _allow_sync(monkeypatch, {'synced': True, 'provider_attempt_outcome': 'accepted'})
+    _put(store, 'a-sticky', now=now, available_at=now + timedelta(hours=1))
+    _put(store, 'b-sticky', now=now, available_at=now + timedelta(hours=1))
+    _put(store, 'c-due', now=now, task_id='task-due', available_at=now - timedelta(seconds=1))
+
+    first, _client = _sweep(store, now=now, max_rows=1)
+    second, _client = _sweep(store, now=now, max_rows=1)
+    third, _client = _sweep(store, now=now, max_rows=1)
+
+    assert first['skipped_not_due'] == 1 and first['retried'] == 0
+    assert second['skipped_not_due'] == 1 and second['retried'] == 0
+    assert third['retried'] == 1
+    assert calls == ['task-due']
+
+
+def test_generation_mismatch_rechecks_the_control_document_in_the_write_transaction(store, monkeypatch):
+    now = _now()
+    calls = _allow_sync(monkeypatch, {'synced': True, 'provider_attempt_outcome': 'accepted'})
+    path = _put(store, 'current-generation', now=now, account_generation=3)
+    monkeypatch.setattr(
+        integration_outbox_db,
+        'current_task_account_generation',
+        lambda uid, firestore_client=None: 1,
+    )
+
+    counts, _client = _sweep(store, now=now)
+
+    assert counts['dead_letter_generation_mismatch'] == 0
+    assert counts['retried'] == 1
+    assert calls == ['task-1']
+    assert store.rows[path]['status'] == 'completed'
 
 
 def test_sweep_counter_zero_inits_the_closed_disposition_set():

@@ -806,11 +806,14 @@ for _queue_name in OMI_QUEUE_NAMES:
 # exports the whole set; never label by uid.
 CANDIDATE_INTEGRATION_SWEEP_DISPOSITIONS = (
     'dead_letter_generation_mismatch',
+    'dead_letter_in_doubt',
     'dead_letter_malformed',
     'dead_letter_missing_created_at',
     'dead_letter_stale_abandoned',
     'error',
+    'recovered_external_id',
     'retried',
+    'skipped_account_deleting',
     'skipped_attempt_budget',
     'skipped_live_lease',
     'skipped_not_claimed',
