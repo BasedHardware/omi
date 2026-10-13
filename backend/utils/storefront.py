@@ -101,13 +101,18 @@ def build_storefront(
         'operator' if trigger in {'proactive_agent', 'screen_context'} or current_plan != 'basic' else 'plus'
     )
     current_price = subscription.current_price_id
-    # Missing historical price never implies the new entitlement version.
-    legacy = current_plan != 'basic' and current_price not in bindings
     ranks = {tier['plan_id']: rank for rank, tier in enumerate(ladder['tiers'])}
     current_rank = ranks.get(current_plan)
+    # A price binding cannot turn a non-ladder plan into ladder-v1 entitlements.
+    legacy = current_plan != 'basic' and (current_rank is None or current_price not in bindings)
+    # Neo/Unlimited have no ladder rank. Only these explicitly higher plans may
+    # be offered for contact; absence of rank must never authorize a downgrade.
+    higher_offers = {'operator', 'architect'} if current_plan in {'unlimited', 'unlimited_v2'} else set()
     tiers: list[StorefrontTier] = []
     for tier in ladder['tiers']:
         plan = tier['plan_id']
+        if legacy and plan == current_plan:
+            continue
         rows: list[dict[str, Any]] = []
         for registration in recognized:
             price_id = registration['price_id']
@@ -144,8 +149,8 @@ def build_storefront(
             continue
         if plan == current_plan and not legacy:
             action = 'current'
-        elif legacy and plan == current_plan:
-            action = 'contact'
+        elif current_rank is None and plan not in higher_offers:
+            action = 'downgrade_not_offered'
         elif current_rank is not None and ranks[plan] <= current_rank:
             action = 'downgrade_not_offered'
         elif legacy or not prices:
@@ -162,7 +167,7 @@ def build_storefront(
                 features=_features(tier),
                 prices=prices,
                 action=action,
-                recommended=plan == recommended_plan,
+                recommended=plan == recommended_plan and action in {'upgrade', 'contact'},
             )
         )
     if legacy or (current_plan != 'basic' and not any(tier.action == 'current' for tier in tiers)):
@@ -174,9 +179,11 @@ def build_storefront(
                     rows.append(row)
             except Exception:
                 pass
-        name = next(
-            (tier['display_name'] for tier in ladder['tiers'] if tier['plan_id'] == current_plan),
-            {'unlimited': 'Neo', 'unlimited_v2': 'Unlimited'}.get(current_plan, current_plan),
+        current_tier = next((tier for tier in ladder['tiers'] if tier['plan_id'] == current_plan), None)
+        name = (
+            current_tier['display_name']
+            if current_tier
+            else {'unlimited': 'Neo', 'unlimited_v2': 'Unlimited'}.get(current_plan, current_plan)
         )
         tiers.append(
             StorefrontTier(
@@ -189,8 +196,8 @@ def build_storefront(
                 action='current',
                 features=(
                     [PlanFeature(key='legacy_entitlements', label='Your existing benefits stay the same')]
-                    if legacy
-                    else _features(next(tier for tier in ladder['tiers'] if tier['plan_id'] == current_plan))
+                    if legacy or current_tier is None
+                    else _features(current_tier)
                 ),
                 prices=present_prices(rows, current=True),
             )

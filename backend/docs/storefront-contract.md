@@ -1,7 +1,8 @@
 # First-party storefront presentation contract
 
 `GET /v2/payments/plans` uses Firebase authentication (including the existing
-no-BYOK-validation payment dependency). Its response is `StorefrontResponse`,
+no-BYOK-validation payment dependency), with the shared per-UID `storefront:plans`
+rate limit (12 requests/minute, boost-exempt, fail-open on Redis errors). Its response is `StorefrontResponse`,
 `schema_version: 1`. A new endpoint preserves installed-client wire shapes and
 version gates. Clients adopting this endpoint render server order, names,
 feature labels, price strings and actions without plan-specific branching.
@@ -42,13 +43,15 @@ Requests may pass `source` using the #21337 `Paywall Opened` vocabulary and
 `trigger` (`proactive_agent`, `screen_context`, `usage_budget`, `mcp_daily_cap`).
 Source describes the opening surface; trigger describes the gate on that surface.
 Pro-only gates recommend Pro, including for Free callers. Free budget/MCP-cap
-callers recommend Plus. Plus and all other paid callers (including legacy
-subscribers priced at or above Plus) recommend Pro. Without gate context, Free
-gets Plus and everyone else gets Pro. Unknown sources use the same default;
+callers recommend Plus. Plus callers recommend Pro. Neo/Unlimited holders may receive Pro as an
+explicit higher contact offer; Free and Plus are never offered to those holders.
+Pro/Architect callers receive no Pro badge because it is current or lower.
+Without gate context, Free gets Plus and eligible paid callers get Pro. Unknown sources use the same default;
 invalid triggers return 422.
 
 `recommended` is a backend-authored badge, never a selection or checkout action.
-It may appear on a current/contact tier; legacy migration actions stay contact.
+It appears only on higher upgrade/contact offers, never a current or lower tier.
+Legacy migration actions stay contact.
 If the recommended tier has no usable registered price and is hidden, no badge
 is returned. `next_offer_tier_id` remains the first offered upgrade, independent
 of the badge. Clients must never preselect a recommended tier.
@@ -57,7 +60,10 @@ of the badge. Clients must never preselect a recommended tier.
 
 The v2 ladder is platform independent: Free, Plus, Pro (`operator`), Architect.
 Neo/Unlimited appear only as an existing subscriber's separate current row.
-Legacy rows use existing-benefits copy, never ladder-v1 gate claims.
+Every current plan id has exactly one card. Legacy rows use existing-benefits
+copy, never ladder-v1 gate claims; no second ladder card is shown for that id.
+Non-ladder paid plans stay legacy even if their price is mistakenly activated.
+Only Pro and Architect are explicit higher contact offers for Neo/Unlimited.
 
 The W3 generated catalog's `LADDER_V1_STRIPE_PRICES` is the only activation list.
 It joins recognized-price plan/interval/version metadata and the existing
@@ -73,7 +79,9 @@ This is the brief's hide-unpurchasable-tiers option, rather than selling legacy
 prices with new entitlement claims. Architect does not become purchasable until
 its price is explicitly registered as ladder-v1 and its amount verified.
 
-Savings use the retrieved monthly and annual prices: `12 * monthly - annual`;
+Price reads share the user-subscription endpoint's `stripe_price:{price_id}`
+Redis cache and 24-hour TTL, including archived current prices. Cache failures
+remain fail-open. Savings use the retrieved monthly and annual prices: `12 * monthly - annual`;
 percent is that difference divided by `12 * monthly`. No savings copy is emitted
 if the difference is zero/negative or a matching monthly price is unavailable.
 Monthly equivalent divides the annual amount by 12, formatted to two decimals.
@@ -86,12 +94,15 @@ This deliberately does not change released-client purchase or entitlement rules.
 ## Usage projection seam
 
 If W3 exposes `get_usage_units(uid)` on `utils.subscription`, the adapter accepts
-its display-ready `budget_percent` and Unix `reset_at` fields. No such function
+its display-ready `budget_percent` and Unix `reset_at` fields only for Free or
+ladder-v1 subscribers. Legacy paid callers never receive that budget label. No such function
 exists on current main; the seam is optional and needs W3 coordination before
 activation. Ladder-v1 paid prices without that projection return unavailable
 usage instead of showing a legacy transcription cap as a shared budget.
 Legacy/Free callers may show the existing monthly speech allowance percentage
-and next UTC calendar month reset. Provider errors omit usage with fallback telemetry.
+and next UTC calendar month reset. Chat-metered legacy plans without a speech
+allowance return `unavailable`; this schema has no legacy chat-meter projection.
+Provider errors omit usage with fallback telemetry.
 
 ## Dry-run proposal and Architect evidence
 

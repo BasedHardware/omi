@@ -11,6 +11,7 @@ from fastapi.testclient import TestClient
 from models.users import PlanType, Subscription
 from models.storefront import StorefrontUsage
 from routers import storefront as route
+from utils.rate_limit_config import get_effective_limit
 from utils.storefront import build_storefront, load_ladder, present_prices
 
 
@@ -104,6 +105,8 @@ def client(monkeypatch):
     app = FastAPI()
     app.include_router(route.router)
     app.dependency_overrides[route.auth.get_current_user_uid_no_byok_validation] = lambda: 'fixture-user'
+    monkeypatch.setattr(route.auth, 'check_rate_limit', lambda *args: (True, 12, 0))
+    monkeypatch.setattr(route.auth, 'RATE_LIMIT_SHADOW', False)
     monkeypatch.setenv('STOREFRONT_LADDER_V1_ENABLED', 'true')
     monkeypatch.setattr(route, 'should_hide_subscription_ui', lambda *args: False)
     monkeypatch.setattr(route.users_db, 'get_user_valid_subscription', lambda uid, **kwargs: Subscription())
@@ -264,8 +267,12 @@ def test_contextual_recommendation_per_subscription_and_gate(plan, trigger):
         source='macos_usage_limit',
         trigger=trigger,
     )
-    expected = 'operator' if plan != 'basic' or trigger in {'proactive_agent', 'screen_context'} else 'plus'
-    assert [tier.plan_id for tier in sheet.tiers if tier.recommended] == [expected]
+    expected = (
+        []
+        if plan in {'operator', 'architect'}
+        else ['operator'] if plan != 'basic' or trigger in {'proactive_agent', 'screen_context'} else ['plus']
+    )
+    assert [tier.plan_id for tier in sheet.tiers if tier.recommended] == expected
     if plan != 'basic':
         assert not any(tier.action == 'upgrade' for tier in sheet.tiers)
 
@@ -311,3 +318,145 @@ def test_endpoint_forwards_opening_context(client, monkeypatch, trigger, expecte
 
 def test_invalid_gate_is_rejected(client):
     assert client.get('/v2/payments/plans?trigger=typo').status_code == 422
+
+
+@pytest.mark.parametrize('plan', ['unlimited', 'unlimited_v2'])
+@pytest.mark.parametrize('registered_current', [False, True])
+@pytest.mark.parametrize('offers', [False, True])
+def test_non_ladder_paid_plans_only_offer_explicit_higher_tiers(plan, registered_current, offers):
+    rows = {'price_current': price('price_current', 2999)}
+    bindings = ['price_current'] if registered_current else []
+    recognized = []
+    if offers:
+        for offer, amount in [('plus', 1999), ('operator', 4999), ('architect', 19900)]:
+            key = f'price_{offer}'
+            rows[key] = price(key, amount)
+            bindings.append(key)
+            recognized.append(
+                {'price_id': key, 'plan_id': offer, 'interval': 'month', 'entitlement_version': 'ladder_v1'}
+            )
+    sheet = build(plan, 'price_current', rows, bindings, recognized)
+    by_plan = {tier.plan_id: tier for tier in sheet.tiers}
+    assert by_plan['basic'].action == 'downgrade_not_offered'
+    if offers:
+        assert by_plan['plus'].action == 'downgrade_not_offered'
+        assert not by_plan['plus'].recommended
+        assert by_plan['operator'].action == by_plan['architect'].action == 'contact'
+        assert by_plan['operator'].recommended
+    assert len([tier for tier in sheet.tiers if tier.action == 'current']) == 1
+    assert by_plan[plan].action == 'current' and by_plan[plan].legacy
+    assert by_plan[plan].prices[0].amount_minor == 2999
+    assert [feature.key for feature in by_plan[plan].features] == ['legacy_entitlements']
+    assert sheet.next_offer_tier_id is None
+
+
+@pytest.mark.parametrize('plan', ['plus', 'operator', 'architect'])
+def test_legacy_ladder_plan_has_one_card_and_only_existing_entitlement_copy(plan):
+    key = f'price_{plan}'
+    sheet = build(
+        plan,
+        'price_old',
+        {key: price(key, 4999)},
+        [key],
+        [{'price_id': key, 'plan_id': plan, 'interval': 'month', 'entitlement_version': 'ladder_v1'}],
+    )
+    cards = [tier for tier in sheet.tiers if tier.plan_id == plan]
+    assert len(cards) == 1
+    assert cards[0].action == 'current' and cards[0].legacy
+    assert [feature.key for feature in cards[0].features] == ['legacy_entitlements']
+    assert not cards[0].recommended
+
+
+@pytest.mark.parametrize('plan', ['operator', 'architect'])
+@pytest.mark.parametrize('trigger', [None, 'proactive_agent', 'screen_context', 'usage_budget', 'mcp_daily_cap'])
+def test_ladder_subscriber_never_recommends_current_or_lower_plan(plan, trigger):
+    rows, recognized = {}, []
+    for offer, amount in [('plus', 1999), ('operator', 4999), ('architect', 19900)]:
+        key = f'price_{offer}'
+        rows[key] = price(key, amount)
+        recognized.append({'price_id': key, 'plan_id': offer, 'interval': 'month', 'entitlement_version': 'ladder_v1'})
+    sheet = build(plan, f'price_{plan}', rows, list(rows), recognized, trigger=trigger)
+    assert not any(tier.recommended for tier in sheet.tiers)
+
+
+def test_price_retrieval_reuses_subscription_cache_and_24_hour_ttl(monkeypatch):
+    cache = {}
+    writes = []
+    monkeypatch.setattr(route.redis_db, 'get_generic_cache', cache.get)
+
+    def save(key, value, ttl):
+        cache[key] = value
+        writes.append((key, ttl))
+
+    monkeypatch.setattr(route.redis_db, 'set_generic_cache', save)
+    retrieved = Mock()
+    retrieved.to_dict_recursive.return_value = price('price_fixture', 1999)
+    retrieve = Mock(return_value=retrieved)
+    monkeypatch.setattr(route.stripe.Price, 'retrieve', retrieve)
+    assert route._retrieve_price('price_fixture') == route._retrieve_price('price_fixture')
+    retrieve.assert_called_once_with('price_fixture')
+    assert writes == [('stripe_price:price_fixture', 86400)]
+    cache['stripe_price:price_existing'] = price('price_existing', 2999, active=False)
+    assert route._retrieve_price('price_existing')['active'] is False
+    retrieve.assert_called_once()
+
+
+def test_price_provider_failure_is_not_cached_and_emits_fallback(monkeypatch):
+    monkeypatch.setattr(route.redis_db, 'get_generic_cache', lambda key: None)
+    save = Mock()
+    monkeypatch.setattr(route.redis_db, 'set_generic_cache', save)
+    monkeypatch.setattr(route.stripe.Price, 'retrieve', Mock(side_effect=RuntimeError('offline fixture')))
+    fallback = Mock()
+    monkeypatch.setattr(route, '_degraded', fallback)
+    with pytest.raises(RuntimeError, match='offline fixture'):
+        route._retrieve_price('price_bad')
+    save.assert_not_called()
+    fallback.assert_called_once_with('storefront_price', 'hidden_price')
+
+
+def test_storefront_rate_limit_runs_before_data_reads(client, monkeypatch):
+    assert get_effective_limit('storefront:plans', boost=100) == (12, 60)
+
+    limited = Mock(return_value=(False, 0, 60))
+    monkeypatch.setattr(route.auth, 'check_rate_limit', limited)
+    read = Mock(side_effect=AssertionError('limited request must not read data'))
+    monkeypatch.setattr(route.users_db, 'get_user_valid_subscription', read)
+    response = client.get('/v2/payments/plans')
+    assert response.status_code == 429 and response.headers['Retry-After'] == '60'
+    limited.assert_called_once_with('fixture-user', 'storefront:plans', 12, 60)
+    read.assert_not_called()
+
+
+@pytest.mark.parametrize('plan', ['plus', 'operator', 'architect', 'unlimited', 'unlimited_v2'])
+def test_legacy_usage_never_accepts_shared_budget_projection(monkeypatch, plan):
+    projection = Mock(return_value={'budget_percent': 80, 'reset_at': 1800000000})
+    monkeypatch.setattr(route.subscription_utils, 'get_usage_units', projection, raising=False)
+    monkeypatch.setattr(route.subscription_utils, 'transcription_allowance_seconds', lambda plan: 100)
+    monkeypatch.setattr(
+        route.subscription_utils, 'get_monthly_usage_for_subscription', lambda uid: {'transcription_seconds': 62}
+    )
+    result = route._usage('fixture', Subscription(plan=PlanType(plan), current_price_id='price_legacy'))
+    assert result.kind == 'transcription' and result.budget_percent == 62
+    projection.assert_not_called()
+
+
+def test_legacy_chat_meter_without_speech_allowance_is_explicitly_unavailable(monkeypatch):
+    monkeypatch.setattr(
+        route.subscription_utils,
+        'get_usage_units',
+        lambda uid: {'budget_percent': 80, 'reset_at': 1800000000},
+        raising=False,
+    )
+    monkeypatch.setattr(route.subscription_utils, 'transcription_allowance_seconds', lambda plan: None)
+    result = route._usage('fixture', Subscription(plan=PlanType.operator, current_price_id='price_legacy'))
+    assert result.kind == 'unavailable' and result.budget_percent is None
+
+
+@pytest.mark.parametrize('plan', ['basic', 'plus'])
+def test_shared_budget_projection_is_only_for_free_or_ladder_subscribers(monkeypatch, plan):
+    monkeypatch.setattr(route.catalog, 'LADDER_V1_STRIPE_PRICES', ['price_new'], raising=False)
+    projection = Mock(return_value={'budget_percent': 80, 'reset_at': 1800000000})
+    monkeypatch.setattr(route.subscription_utils, 'get_usage_units', projection, raising=False)
+    result = route._usage('fixture', Subscription(plan=PlanType(plan), current_price_id='price_new'))
+    assert result.kind == 'usage_budget' and result.budget_percent == 80
+    projection.assert_called_once_with('fixture')

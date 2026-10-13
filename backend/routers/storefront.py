@@ -8,7 +8,7 @@ from fastapi import APIRouter, Depends, Header, HTTPException, Query
 import stripe
 
 import config.plan_catalog_generated as catalog
-from database import users as users_db
+from database import redis_db, users as users_db
 from database.app_review_config import should_hide_subscription_ui
 from models.users import Subscription
 from models.storefront import StorefrontResponse, StorefrontUsage
@@ -28,7 +28,12 @@ def _degraded(from_mode: str, to_mode: str) -> None:
 
 def _retrieve_price(price_id: str) -> dict[str, Any]:
     try:
-        return stripe.Price.retrieve(price_id).to_dict()
+        cache_key = f'stripe_price:{price_id}'
+        price_data = redis_db.get_generic_cache(cache_key)
+        if not price_data:
+            price_data = stripe.Price.retrieve(price_id).to_dict_recursive()
+            redis_db.set_generic_cache(cache_key, price_data, ttl=3600 * 24)
+        return price_data
     except Exception:
         _degraded('storefront_price', 'hidden_price')
         raise
@@ -39,7 +44,11 @@ def _usage(uid: str, subscription: Subscription) -> StorefrontUsage:
         # W3 may provide a display-ready projection on the shared facade. Do not
         # guess units or denominators; only accept percentage/reset fields.
         projection = getattr(subscription_utils, 'get_usage_units', None)
-        if callable(projection):
+        ladder_subscriber = subscription.plan.value not in {
+            'unlimited',
+            'unlimited_v2',
+        } and subscription.current_price_id in getattr(catalog, 'LADDER_V1_STRIPE_PRICES', [])
+        if callable(projection) and (subscription.plan.value == 'basic' or ladder_subscriber):
             snapshot = projection(uid)
             percent = snapshot.get('budget_percent') if isinstance(snapshot, dict) else None
             reset = snapshot.get('reset_at') if isinstance(snapshot, dict) else None
@@ -52,7 +61,7 @@ def _usage(uid: str, subscription: Subscription) -> StorefrontUsage:
                 and reset > 0
             ):
                 return StorefrontUsage(kind='usage_budget', budget_percent=percent, reset_at=reset)
-        if subscription.current_price_id in getattr(catalog, 'LADDER_V1_STRIPE_PRICES', []):
+        if ladder_subscriber:
             return StorefrontUsage()
         # Existing legacy speech allowance; explicitly labelled so clients never
         # mistake it for the new shared-unit budget.
@@ -75,7 +84,7 @@ def _usage(uid: str, subscription: Subscription) -> StorefrontUsage:
 def get_storefront(
     source: Optional[str] = Query(None, description='Paywall Opened source vocabulary (#21337)'),
     trigger: Optional[Literal['proactive_agent', 'screen_context', 'usage_budget', 'mcp_daily_cap']] = Query(None),
-    uid: str = Depends(auth.get_current_user_uid_no_byok_validation),
+    uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid_no_byok_validation, 'storefront:plans')),
     x_app_platform: Optional[str] = Header(None, alias='X-App-Platform'),
     x_app_version: Optional[str] = Header(None, alias='X-App-Version'),
 ):
