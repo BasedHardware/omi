@@ -699,19 +699,27 @@ struct Harness {
             }, "batch pacing resumed")
             drainMain(seconds: 0.05)
             let afterResume = progressCount(world.sink)
-            drainMain(seconds: 1.5)
-            precondition(progressCount(world.sink) == afterResume,
-                "resumed healthy capture must return to the 5s cadence")
+            // Recovery reaching .running must preserve the pending fast first
+            // beat: emitting it ~1s later keeps the beat gap under the Dart 10s
+            // stall deadline instead of silently retargeting to the slow cadence.
+            drainMain(seconds: 2.0)
+            precondition(progressCount(world.sink) > afterResume,
+                "recovery must emit its pending fast beat within ~1s, not wait out the healthy cadence")
+            let fastBeatCount = progressCount(world.sink)
+            // After that fast beat the repeating cadence is the slow one.
+            drainMain(seconds: 2.0)
+            precondition(progressCount(world.sink) == fastBeatCount,
+                "after the preserved fast beat the heartbeat must return to the healthy cadence")
 
             world.monitorBox.monitor!.fire(.appBecameActive)
             drainMain(seconds: 3.0)
-            precondition(progressCount(world.sink) > afterResume,
+            precondition(progressCount(world.sink) > fastBeatCount,
                 "foreground must schedule one fast heartbeat")
             stop(controller)
         }
 
-        // Pins the native 5s constant itself: quiet through 4.3s (rejects 1s–4s),
-        // then a beat before the 500ms leeway can hide a 5s timer.
+        // Pins the native 4s constant itself: quiet through 3.3s (rejects 1s–3s),
+        // then a beat before the 500ms leeway can hide a 4s timer.
         do {
             let world = ReplayWorld()
             let writers = WriterBox()
@@ -720,12 +728,12 @@ struct Harness {
                 preconditionFailure("batch cadence: start failed")
             }
             let started = progressCount(world.sink)
-            drainMain(seconds: 4.3)
+            drainMain(seconds: 3.3)
             precondition(progressCount(world.sink) == started,
-                "healthy batch heartbeat is 5s; it must not tick within 4.3s")
-            drainMain(seconds: 2.2)
+                "healthy batch heartbeat is 4s; it must not tick within 3.3s")
+            drainMain(seconds: 2.0)
             precondition(progressCount(world.sink) > started,
-                "healthy batch heartbeat must tick at 5s (none by ~6.5s)")
+                "healthy batch heartbeat must tick at 4s (none by ~5.3s)")
             stop(controller)
         }
 

@@ -77,7 +77,7 @@ abstract class PhoneMicFlutterApi {
   /// rebuild_failed, resume_failed, media_services_reset, batch_storage_full.
   void onCaptureError(String code, String message, int sessionId);
 
-  /// Emitted while batch capture runs (iOS: 5s while healthy, 1s on fault or
+  /// Emitted while batch capture runs (iOS: 4s while healthy, 1s on fault or
   /// foreground; Android: 1Hz). Its arrival is the liveness signal for the Dart
   /// batch watchdog; the value is derived from the number of frames
   /// actually written to disk, so mutes and interruptions freeze it while the

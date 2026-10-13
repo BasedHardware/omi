@@ -26,9 +26,11 @@ final class PhoneMicController {
     /// and the first beat after foreground use this so a gap is still visible
     /// inside the Dart 10s batch deadline.
     private static let fastProgressTickInterval: TimeInterval = 1.0
-    /// Healthy `.running` cadence. 5s keeps a missed beat under the 10s Dart
-    /// stall threshold (one skipped tick is not itself a stall).
-    private static let healthyProgressTickInterval: TimeInterval = 5.0
+    /// Healthy `.running` cadence. Strictly under half the 10s Dart stall
+    /// threshold: even if one beat is lost or coalesced, the next lands at
+    /// ~8.5s (2x4s + the 500ms leeway) — one skipped tick is not itself a
+    /// stall. A 5s cadence would put the second beat exactly at the deadline.
+    private static let healthyProgressTickInterval: TimeInterval = 4.0
 
     private let controlQueue = DispatchQueue(label: "com.omi.phonemic.control", qos: .userInitiated)
     private let audioQueue = DispatchQueue(label: "com.omi.phonemic.audio", qos: .userInitiated)
@@ -355,7 +357,7 @@ final class PhoneMicController {
                     beginRebuild()
                 } else if mode == .batch {
                     // One fast liveness beat, then the healthy cadence. Pulls a
-                    // far-off 5s deadline forward without leaving the 1s poll on.
+                    // far-off 4s deadline forward without leaving the 1s poll on.
                     syncProgressTimer(first: Self.fastProgressTickInterval, repeating: Self.healthyProgressTickInterval)
                 }
             default:
@@ -482,7 +484,7 @@ final class PhoneMicController {
             let writer = batchWriter
             let marker = batchMarker
             // The audio bytes stay on this closure. The weak hop is only the
-            // storage-full fault edge, so the healthy 5s heartbeat cannot delay it.
+            // storage-full fault edge, so the healthy 4s heartbeat cannot delay it.
             return { [weak self] data, _ in
                 guard let encoder, let writer else { return }
                 let packets = encoder.encode(data)
@@ -580,6 +582,15 @@ final class PhoneMicController {
 
     private func applyProgressCadence() {
         let interval = desiredProgressInterval()
+        if interval == Self.healthyProgressTickInterval,
+           progressIntervalArmed != 0, progressIntervalArmed != Self.healthyProgressTickInterval {
+            // Retargeting out of a fault window (resume/rebuild recovery reaching
+            // `.running`): keep the already-scheduled fast first fire so the beat
+            // gap cannot silently grow past the Dart 10s stall deadline, and only
+            // switch the repeating cadence back to the slow interval afterward.
+            syncProgressTimer(first: Self.fastProgressTickInterval, repeating: interval)
+            return
+        }
         syncProgressTimer(first: interval, repeating: interval)
     }
 
@@ -591,7 +602,7 @@ final class PhoneMicController {
 
     /// Heartbeat on controlQueue. Reads the writer's committed frame count and drains
     /// any storage-full edge the write path did not already report, then emits
-    /// progress. Healthy running is 5s; interrupted/rebuilding is 1s. Emitted every
+    /// progress. Healthy running is 4s; interrupted/rebuilding is 1s. Emitted every
     /// tick even while interrupted/muted — the value freezes (frames-written derived),
     /// but its arrival is the Dart watchdog's liveness signal. The Dart batch stall
     /// threshold stays 10s, so the slower healthy beat is not itself a gap.
