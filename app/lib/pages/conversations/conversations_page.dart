@@ -15,6 +15,7 @@ import 'package:omi/pages/conversations/widgets/speaker_tag_prompt_card.dart';
 import 'package:omi/pages/review/widgets/review_entry_card.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/conversation_provider.dart';
+import 'package:omi/services/capture/empty_recording_notice.dart';
 import 'package:omi/providers/local_recordings_provider.dart';
 import 'package:omi/models/local_recording.dart';
 import 'package:omi/utils/logger.dart';
@@ -27,6 +28,7 @@ import 'package:omi/pages/conversations/widgets/empty_conversations.dart';
 import 'package:omi/pages/conversations/widgets/recording_list_item.dart';
 import 'package:omi/pages/home/widgets/home_daily_recaps.dart';
 import 'package:omi/ui/ui.dart';
+import 'package:omi/utils/l10n_extensions.dart';
 
 import 'package:omi/widgets/home_bottom_bar.dart';
 
@@ -76,6 +78,7 @@ typedef _ConversationPageSnapshot = ({
   int processingIdentitySignature,
   int recordingIdentitySignature,
   int pendingDeleteCount,
+  HomeEmptyExplanation homeEmptyExplanation,
 });
 
 int _identitySignature(Iterable<Object> values) => Object.hashAll(values.map(identityHashCode));
@@ -136,6 +139,7 @@ _ConversationPageSnapshot _conversationPageSnapshot(
     processingIdentitySignature: _identitySignature(conversations.processingConversations),
     recordingIdentitySignature: _identitySignature(recordings.recordings),
     pendingDeleteCount: conversations.memoriesToDelete.length,
+    homeEmptyExplanation: conversations.homeEmptyExplanation,
   );
 }
 
@@ -564,7 +568,18 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
                   !_hasActiveFilter(convoProvider))
                 // Friendly hero for brand-new users with zero conversations —
                 // matches the polished Tasks empty state.
-                const SliverFillRemaining(hasScrollBody: false, child: Center(child: NoConversationsHero()))
+                SliverFillRemaining(
+                  hasScrollBody: false,
+                  child: Center(
+                    child: NoConversationsHero(
+                      message: switch (snapshot.homeEmptyExplanation) {
+                        HomeEmptyExplanation.tooShort => context.l10n.tooShortDesc,
+                        HomeEmptyExplanation.discardedOnly => context.l10n.discardedOnlyRecording,
+                        HomeEmptyExplanation.none => null,
+                      },
+                    ),
+                  ),
+                )
               else if (convoProvider.groupedConversations.isEmpty &&
                   !hasRecordings &&
                   !hasProcessingConversations &&

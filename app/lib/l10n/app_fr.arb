@@ -545,6 +545,7 @@
     "connectionErrorDesc": "Échec de la connexion au serveur. Veuillez vérifier votre connexion internet et réessayer.",
     "invalidRecordingMultipleSpeakers": "Enregistrement invalide détecté",
     "multipleSpeakersDesc": "Il semble y avoir plusieurs locuteurs dans l'enregistrement. Veuillez vous assurer d'être dans un endroit calme et réessayer.",
+    "discardedOnlyRecording": "That recording was too short or empty to keep.",
     "tooShortDesc": "Pas assez de parole détectée. Veuillez parler davantage et réessayer.",
     "invalidRecordingDesc": "Veuillez vous assurer de parler pendant au moins 5 secondes et pas plus de 90.",
     "areYouThere": "Êtes-vous là ?",

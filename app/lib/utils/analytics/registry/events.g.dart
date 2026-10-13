@@ -14,6 +14,161 @@ final class OnboardingCompleted extends RegisteredEvent {
   Map<String, Object> get properties => {};
 }
 
+enum RecordingProducedNoConversationSource {
+  phone("phone"),
+  omi("omi"),
+  watch("watch");
+  const RecordingProducedNoConversationSource(this.wireName);
+  final String wireName;
+}
+
+enum RecordingProducedNoConversationReason {
+  emptyDeleted("empty_deleted"),
+  discarded("discarded"),
+  nullResult("null_result");
+  const RecordingProducedNoConversationReason(this.wireName);
+  final String wireName;
+}
+
+final class RecordingProducedNoConversation extends RegisteredEvent {
+  const RecordingProducedNoConversation({required this.source, required this.durationSeconds, required this.transcriptObserved, required this.reason});
+  final RecordingProducedNoConversationSource source;
+  final int durationSeconds;
+  final bool transcriptObserved;
+  final RecordingProducedNoConversationReason reason;
+  @override
+  String get wireName => "Recording Produced No Conversation";
+  @override
+  Map<String, Object> get properties => {"source": source.wireName, "duration_s": durationSeconds, "transcript_observed": transcriptObserved, "reason": reason.wireName};
+}
+
+final class OnboardingWelcomeShown extends RegisteredEvent {
+  const OnboardingWelcomeShown();
+  @override
+  String get wireName => "Onboarding Welcome Shown";
+  @override
+  Map<String, Object> get properties => {};
+}
+
+final class OnboardingGetStartedTapped extends RegisteredEvent {
+  const OnboardingGetStartedTapped();
+  @override
+  String get wireName => "Onboarding Get Started Tapped";
+  @override
+  Map<String, Object> get properties => {};
+}
+
+enum SignInStartedProvider {
+  apple("apple"),
+  google("google");
+  const SignInStartedProvider(this.wireName);
+  final String wireName;
+}
+
+final class SignInStarted extends RegisteredEvent {
+  const SignInStarted({required this.provider});
+  final SignInStartedProvider provider;
+  @override
+  String get wireName => "Sign In Started";
+  @override
+  Map<String, Object> get properties => {"provider": provider.wireName};
+}
+
+enum SignInFailedProvider {
+  apple("apple"),
+  google("google");
+  const SignInFailedProvider(this.wireName);
+  final String wireName;
+}
+
+enum SignInFailedErrorClass {
+  cancelled("cancelled"),
+  network("network"),
+  credential("credential"),
+  configuration("configuration"),
+  unknown("unknown");
+  const SignInFailedErrorClass(this.wireName);
+  final String wireName;
+}
+
+final class SignInFailed extends RegisteredEvent {
+  const SignInFailed({required this.provider, required this.errorClass});
+  final SignInFailedProvider provider;
+  final SignInFailedErrorClass errorClass;
+  @override
+  String get wireName => "Sign In Failed";
+  @override
+  Map<String, Object> get properties => {"provider": provider.wireName, "error_class": errorClass.wireName};
+}
+
+enum OnboardingPermissionResultPermission {
+  notifications("notifications"),
+  location("location"),
+  backgroundActivity("background_activity");
+  const OnboardingPermissionResultPermission(this.wireName);
+  final String wireName;
+}
+
+final class OnboardingPermissionResult extends RegisteredEvent {
+  const OnboardingPermissionResult({required this.permission, required this.granted, required this.permanentlyDenied});
+  final OnboardingPermissionResultPermission permission;
+  final bool granted;
+  final bool permanentlyDenied;
+  @override
+  String get wireName => "Onboarding Permission Result";
+  @override
+  Map<String, Object> get properties => {"permission": permission.wireName, "granted": granted, "permanently_denied": permanentlyDenied};
+}
+
+enum DevicePairingBlockedReason {
+  bluetoothPermissionDenied("bluetooth_permission_denied"),
+  locationPermissionMissing("location_permission_missing"),
+  bluetoothOff("bluetooth_off"),
+  nearbyDevicesDenied("nearby_devices_denied");
+  const DevicePairingBlockedReason(this.wireName);
+  final String wireName;
+}
+
+final class DevicePairingBlocked extends RegisteredEvent {
+  const DevicePairingBlocked({required this.reason, required this.androidSdk, required this.iosVersion});
+  final DevicePairingBlockedReason reason;
+  final int androidSdk;
+  final int iosVersion;
+  @override
+  String get wireName => "Device Pairing Blocked";
+  @override
+  Map<String, Object> get properties => {"reason": reason.wireName, "android_sdk": androidSdk, "ios_version": iosVersion};
+}
+
+final class DeviceScanEmpty extends RegisteredEvent {
+  const DeviceScanEmpty({required this.afterSeconds});
+  final int afterSeconds;
+  @override
+  String get wireName => "Device Scan Empty";
+  @override
+  Map<String, Object> get properties => {"after_seconds": afterSeconds};
+}
+
+enum DeviceConnectFailedErrorClass {
+  timeout("timeout"),
+  bluetoothOff("bluetooth_off"),
+  permissionDenied("permission_denied"),
+  notFound("not_found"),
+  initializationFailed("initialization_failed"),
+  unknown("unknown");
+  const DeviceConnectFailedErrorClass(this.wireName);
+  final String wireName;
+}
+
+final class DeviceConnectFailed extends RegisteredEvent {
+  const DeviceConnectFailed({required this.errorClass});
+  final DeviceConnectFailedErrorClass errorClass;
+  @override
+  String get wireName => "Device Connect Failed";
+  @override
+  Map<String, Object> get properties => {"error_class": errorClass.wireName};
+}
+
 final class PhoneMicRecordingStarted extends RegisteredEvent {
   const PhoneMicRecordingStarted();
   @override

@@ -545,6 +545,7 @@
     "connectionErrorDesc": "Nem sikerült csatlakozni a szerverhez. Kérlek, ellenőrizd az internetkapcsolatot, és próbáld újra.",
     "invalidRecordingMultipleSpeakers": "Érvénytelen felvétel észlelve",
     "multipleSpeakersDesc": "Úgy tűnik, több beszélő van a felvételen. Kérlek, győződj meg róla, hogy csendes helyen vagy, és próbáld újra.",
+    "discardedOnlyRecording": "That recording was too short or empty to keep.",
     "tooShortDesc": "Nem észlelhető elegendő beszéd. Kérlek, beszélj többet, és próbáld újra.",
     "invalidRecordingDesc": "Kérlek, győződj meg róla, hogy legalább 5 másodpercig, de legfeljebb 90 másodpercig beszélsz.",
     "areYouThere": "Ott vagy?",

@@ -545,6 +545,7 @@
     "connectionErrorDesc": "Nepodarilo sa pripojiť k serveru. Skontrolujte prosím svoje internetové pripojenie a skúste to znova.",
     "invalidRecordingMultipleSpeakers": "Bola zistená neplatná nahrávka",
     "multipleSpeakersDesc": "Zdá sa, že v nahrávke je viacero rečníkov. Uistite sa, že ste na tichom mieste, a skúste to znova.",
+    "discardedOnlyRecording": "That recording was too short or empty to keep.",
     "tooShortDesc": "Nezistilo sa dostatok reči. Hovorte viac a skúste to znova.",
     "invalidRecordingDesc": "Uistite sa, že hovoríte minimálne 5 sekúnd a najviac 90.",
     "areYouThere": "Ste tam?",

@@ -4,6 +4,7 @@ import 'package:video_player/video_player.dart';
 
 import 'package:omi/pages/onboarding/wrapper.dart';
 import 'package:omi/ui/omi_tokens.dart';
+import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/other/temp.dart';
@@ -33,6 +34,7 @@ class _DeviceSelectionPageState extends State<DeviceSelectionPage> with SingleTi
     ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeInOut));
 
     _initializeVideo();
+    PlatformManager.instance.analytics.onboardingWelcomeShown();
   }
 
   void _initializeVideo() async {
@@ -146,6 +148,7 @@ class _DeviceSelectionPageState extends State<DeviceSelectionPage> with SingleTi
                           child: ElevatedButton(
                             onPressed: () async {
                               OmiHaptics.selection();
+                              PlatformManager.instance.analytics.onboardingGetStartedTapped();
                               if (mounted) {
                                 routeToPage(context, const OnboardingWrapper());
                               }

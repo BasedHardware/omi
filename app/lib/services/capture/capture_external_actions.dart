@@ -25,6 +25,15 @@ abstract interface class CaptureExternalActions {
 
   bool hasConversation(String conversationId);
 
+  /// Home should explain that the last recording was too short to keep.
+  void showEmptyRecordingExplanation();
+
+  /// Home should explain a discarded-only list. Returns true the first time
+  /// that explanation is announced, so the snackbar and analytics fire once.
+  bool claimDiscardedOnlyExplanation();
+
+  void clearEmptyRecordingExplanation();
+
   Future<Person?> createPerson(String name);
 
   Future<bool> assignSpeaker(String conversationId, List<String> segmentIds, String personId, {int? speakerId});
@@ -67,6 +76,15 @@ class NoopCaptureExternalActions implements CaptureExternalActions {
 
   @override
   bool hasConversation(String conversationId) => false;
+
+  @override
+  void showEmptyRecordingExplanation() {}
+
+  @override
+  bool claimDiscardedOnlyExplanation() => false;
+
+  @override
+  void clearEmptyRecordingExplanation() {}
 
   @override
   Future<Person?> createPerson(String name) async => null;

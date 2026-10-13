@@ -545,6 +545,7 @@
     "connectionErrorDesc": "Kan geen verbinding maken met de server. Controleer je internetverbinding en probeer het opnieuw.",
     "invalidRecordingMultipleSpeakers": "Ongeldige opname gedetecteerd",
     "multipleSpeakersDesc": "Het lijkt erop dat er meerdere sprekers in de opname zijn. Zorg ervoor dat je op een rustige locatie bent en probeer het opnieuw.",
+    "discardedOnlyRecording": "That recording was too short or empty to keep.",
     "tooShortDesc": "Er is niet genoeg spraak gedetecteerd. Spreek meer en probeer het opnieuw.",
     "invalidRecordingDesc": "Zorg ervoor dat je minimaal 5 seconden en niet meer dan 90 seconden spreekt.",
     "areYouThere": "Ben je er nog?",

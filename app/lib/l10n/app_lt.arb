@@ -1998,6 +1998,7 @@
     "todaysScore": "Šiandienos balas",
     "toggleControlBar": "Perjungti valdymo juostą",
     "tomorrow": "Rytoj",
+    "discardedOnlyRecording": "That recording was too short or empty to keep.",
     "tooShortDesc": "Neaptikta pakankamai kalbos. Kalbėkite daugiau ir bandykite dar kartą.",
     "total": "Iš viso",
     "totalMemoriesCount": "Turite {count} prisiminimų iš viso",

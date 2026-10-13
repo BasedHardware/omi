@@ -545,6 +545,7 @@
     "connectionErrorDesc": "Det gick inte att ansluta till servern. Kontrollera din internetanslutning och försök igen.",
     "invalidRecordingMultipleSpeakers": "Ogiltig inspelning upptäckt",
     "multipleSpeakersDesc": "Det verkar som det finns flera talare i inspelningen. Se till att du är på en tyst plats och försök igen.",
+    "discardedOnlyRecording": "That recording was too short or empty to keep.",
     "tooShortDesc": "Det finns inte tillräckligt med tal upptäckt. Tala mer och försök igen.",
     "invalidRecordingDesc": "Se till att du talar i minst 5 sekunder och inte mer än 90.",
     "areYouThere": "Är du där?",

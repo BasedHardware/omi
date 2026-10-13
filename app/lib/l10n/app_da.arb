@@ -545,6 +545,7 @@
     "connectionErrorDesc": "Kunne ikke oprette forbindelse til enheden",
     "invalidRecordingMultipleSpeakers": "Ugyldig optagelse: Flere talere",
     "multipleSpeakersDesc": "Optagelsen indeholder flere talere",
+    "discardedOnlyRecording": "That recording was too short or empty to keep.",
     "tooShortDesc": "Optagelsen er for kort",
     "invalidRecordingDesc": "Ugyldig optagelse",
     "areYouThere": "Er du der?",

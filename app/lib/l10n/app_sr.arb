@@ -1689,6 +1689,7 @@
     "@multipleSpeakersDesc": {
         "description": "Error description for multiple speakers"
     },
+    "discardedOnlyRecording": "That recording was too short or empty to keep.",
     "tooShortDesc": "Нема довољно говора открит. Молим вас говорите више и покушајте поново.",
     "@tooShortDesc": {
         "description": "Error description for recording being too short"

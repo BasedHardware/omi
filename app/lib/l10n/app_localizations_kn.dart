@@ -1770,6 +1770,9 @@ class AppLocalizationsKn extends AppLocalizations {
       'ರೆಕಾರ್ಡಿಂಗ್‌ನಲ್ಲಿ ಅನೇಕ ಸ್ಪೀಕರ್‌ಗಳಿರುವಂತೆ ತೋರುತ್ತದೆ. ದಯವಿಟ್ಟು ನೀವು ಶಾಂತ ಸ್ಥಳದಲ್ಲಿ ಇರುವಿರಿ ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ.';
 
   @override
+  String get discardedOnlyRecording => 'That recording was too short or empty to keep.';
+
+  @override
   String get tooShortDesc => 'ಸಾಕಷ್ಟು ಭಾಷಣ ಕಂಡುಬಂದಿಲ್ಲ. ದಯವಿಟ್ಟು ಹೆಚ್ಚು ಮಾತನಾಡಿ ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ.';
 
   @override

@@ -999,6 +999,15 @@ class SharedPreferencesUtil {
 
   set showDiscardedMemories(bool value) => saveBool('showDiscardedMemories', value);
 
+  /// `tooShort` or `discardedOnly` while Home should explain a missing conversation.
+  String get homeEmptyExplanation => getString('homeEmptyExplanation');
+
+  set homeEmptyExplanation(String value) => saveString('homeEmptyExplanation', value);
+
+  bool get discardedOnlyExplained => getBool('discardedOnlyExplained');
+
+  set discardedOnlyExplained(bool value) => saveBool('discardedOnlyExplained', value);
+
   // Show short conversations - default is false (hidden)
   bool get showShortConversations => getBool('showShortConversations', defaultValue: false);
 

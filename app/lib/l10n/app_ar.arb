@@ -545,6 +545,7 @@
     "connectionErrorDesc": "فشل الاتصال بالخادم. يرجى التحقق من اتصالك بالإنترنت والمحاولة مرة أخرى.",
     "invalidRecordingMultipleSpeakers": "تم اكتشاف تسجيل غير صالح",
     "multipleSpeakersDesc": "يبدو أن هناك عدة متحدثين في التسجيل. يرجى التأكد من أنك في موقع هادئ والمحاولة مرة أخرى.",
+    "discardedOnlyRecording": "That recording was too short or empty to keep.",
     "tooShortDesc": "لا يوجد كلام كافٍ مكتشف. يرجى التحدث أكثر والمحاولة مرة أخرى.",
     "invalidRecordingDesc": "يرجى التأكد من التحدث لمدة 5 ثوانٍ على الأقل وليس أكثر من 90.",
     "areYouThere": "هل أنت هناك؟",

@@ -540,6 +540,7 @@
     "connectionErrorDesc": "सर्वर से कनेक्ट करने में विफल।",
     "invalidRecordingMultipleSpeakers": "अमान्य रिकॉर्डिंग",
     "multipleSpeakersDesc": "ऐसा लगता है कि कई स्पीकर हैं।",
+    "discardedOnlyRecording": "That recording was too short or empty to keep.",
     "tooShortDesc": "पर्याप्त भाषण नहीं मिला।",
     "invalidRecordingDesc": "कृपया सुनिश्चित करें कि आप कम से कम 5 सेकंड बोलें।",
     "areYouThere": "क्या आप वहां हैं?",

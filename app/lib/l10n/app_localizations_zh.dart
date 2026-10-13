@@ -1736,6 +1736,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get multipleSpeakersDesc => '似乎有多人说话。';
 
   @override
+  String get discardedOnlyRecording => 'That recording was too short or empty to keep.';
+
+  @override
   String get tooShortDesc => '未检测到足够的语音。';
 
   @override

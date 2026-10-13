@@ -17,8 +17,10 @@ import 'package:omi/utils/analytics/adapters/posthog_adapter.dart';
 import 'package:omi/utils/analytics/analytics_adapter.dart';
 import 'package:omi/utils/analytics/device_health_telemetry.dart';
 import 'package:omi/utils/analytics/intercom.dart';
+import 'package:omi/services/capture/empty_recording_notice.dart';
 import 'package:omi/utils/analytics/registry/events.g.dart';
 import 'package:omi/utils/analytics/registry/typed_events.dart';
+import 'package:omi/utils/auth/sign_in_failure.dart';
 import 'package:omi/utils/build_provenance.dart';
 import 'package:omi/utils/device.dart';
 import 'package:omi/utils/platform/platform_service.dart';
@@ -770,6 +772,74 @@ class AnalyticsManager {
   }
 
   void onboardingCompleted() => const TypedEvents().emit(const OnboardingCompleted());
+
+  void onboardingWelcomeShown() => const TypedEvents().emit(const OnboardingWelcomeShown());
+
+  void onboardingGetStartedTapped() => const TypedEvents().emit(const OnboardingGetStartedTapped());
+
+  void signInStarted(String provider) {
+    final value = signInProvider(provider);
+    if (value == null) return;
+    const TypedEvents().emit(SignInStarted(provider: value));
+  }
+
+  void signInFailed(String provider, {Object? error, bool cancelled = false}) {
+    final value = signInFailedProvider(provider);
+    if (value == null) return;
+    const TypedEvents().emit(SignInFailed(
+      provider: value,
+      errorClass: cancelled || error == null ? SignInFailedErrorClass.cancelled : classifySignInFailure(error),
+    ));
+  }
+
+  void onboardingPermissionResult({
+    required OnboardingPermissionResultPermission permission,
+    required bool granted,
+    required bool permanentlyDenied,
+  }) =>
+      const TypedEvents().emit(OnboardingPermissionResult(
+        permission: permission,
+        granted: granted,
+        permanentlyDenied: permanentlyDenied,
+      ));
+
+  void devicePairingBlocked({
+    required DevicePairingBlockedReason reason,
+    required int androidSdk,
+    required int iosVersion,
+  }) =>
+      const TypedEvents().emit(DevicePairingBlocked(
+        reason: reason,
+        androidSdk: androidSdk < 0 ? 0 : androidSdk,
+        iosVersion: iosVersion < 0 ? 0 : iosVersion,
+      ));
+
+  void deviceScanEmpty({required int afterSeconds}) =>
+      const TypedEvents().emit(DeviceScanEmpty(afterSeconds: afterSeconds < 0 ? 0 : afterSeconds));
+
+  void deviceConnectFailed(DeviceConnectFailedErrorClass errorClass) =>
+      const TypedEvents().emit(DeviceConnectFailed(errorClass: errorClass));
+
+  void recordingProducedNoConversation({
+    required RecordingSurface source,
+    required int durationSeconds,
+    required bool transcriptObserved,
+    required EmptyRecordingReason reason,
+  }) =>
+      const TypedEvents().emit(RecordingProducedNoConversation(
+        source: switch (source) {
+          RecordingSurface.phone => RecordingProducedNoConversationSource.phone,
+          RecordingSurface.omi => RecordingProducedNoConversationSource.omi,
+          RecordingSurface.watch => RecordingProducedNoConversationSource.watch,
+        },
+        durationSeconds: durationSeconds < 0 ? 0 : durationSeconds,
+        transcriptObserved: transcriptObserved,
+        reason: switch (reason) {
+          EmptyRecordingReason.emptyDeleted => RecordingProducedNoConversationReason.emptyDeleted,
+          EmptyRecordingReason.discarded => RecordingProducedNoConversationReason.discarded,
+          EmptyRecordingReason.nullResult => RecordingProducedNoConversationReason.nullResult,
+        },
+      ));
 
   void onboardingStepCompleted(String step) => track('Onboarding Step $step Completed');
 

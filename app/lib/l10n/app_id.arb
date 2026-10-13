@@ -545,6 +545,7 @@
     "connectionErrorDesc": "Gagal terhubung ke server. Silakan periksa koneksi internet Anda dan coba lagi.",
     "invalidRecordingMultipleSpeakers": "Rekaman tidak valid terdeteksi",
     "multipleSpeakersDesc": "Sepertinya ada beberapa pembicara dalam rekaman. Pastikan Anda berada di lokasi yang sunyi dan coba lagi.",
+    "discardedOnlyRecording": "That recording was too short or empty to keep.",
     "tooShortDesc": "Tidak cukup ucapan terdeteksi. Silakan berbicara lebih banyak dan coba lagi.",
     "invalidRecordingDesc": "Pastikan Anda berbicara setidaknya selama 5 detik dan tidak lebih dari 90.",
     "areYouThere": "Apakah Anda di sana?",

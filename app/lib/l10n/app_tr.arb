@@ -545,6 +545,7 @@
     "connectionErrorDesc": "Sunucuya bağlanılamadı. Lütfen internet bağlantınızı kontrol edin ve tekrar deneyin.",
     "invalidRecordingMultipleSpeakers": "Geçersiz kayıt algılandı",
     "multipleSpeakersDesc": "Kayıtta birden fazla konuşmacı var gibi görünüyor. Lütfen sessiz bir yerde olduğunuzdan emin olun ve tekrar deneyin.",
+    "discardedOnlyRecording": "That recording was too short or empty to keep.",
     "tooShortDesc": "Yeterli konuşma algılanamadı. Lütfen daha fazla konuşun ve tekrar deneyin.",
     "invalidRecordingDesc": "Lütfen en az 5 saniye, en fazla 90 saniye konuştuğunuzdan emin olun.",
     "areYouThere": "Orada mısınız?",

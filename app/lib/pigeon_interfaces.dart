@@ -274,6 +274,10 @@ abstract class BleFlutterApi {
   /// Native batch writer finalized a recording file (rotation / gap / stop) so
   /// Dart can rescan the recordings dir without waiting for a disconnect.
   void onBatchRecordingFinalized(String fileName);
+
+  /// Android `startScan` returned before discovery started.
+  /// `reason` is `no_adapter`, `bluetooth_off`, `nearby_devices_denied`, or `scanner_unavailable`.
+  void onScanBlocked(String reason);
 }
 
 // =============================================================================

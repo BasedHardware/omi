@@ -16,6 +16,192 @@
       "correlation": null
     },
     {
+      "id": "recordingProducedNoConversation",
+      "wire_name": "Recording Produced No Conversation",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {
+        "source": {
+          "type": "enum",
+          "wire_name": "source",
+          "values": ["phone", "omi", "watch"]
+        },
+        "durationSeconds": {
+          "type": "int",
+          "wire_name": "duration_s"
+        },
+        "transcriptObserved": {
+          "type": "bool",
+          "wire_name": "transcript_observed"
+        },
+        "reason": {
+          "type": "enum",
+          "wire_name": "reason",
+          "values": ["empty_deleted", "discarded", "null_result"]
+        }
+      },
+      "consumers": ["onboarding-activation-funnel"],
+      "correlation": null
+    },
+    {
+      "id": "onboardingWelcomeShown",
+      "wire_name": "Onboarding Welcome Shown",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {},
+      "consumers": ["onboarding-activation-funnel"],
+      "correlation": null
+    },
+    {
+      "id": "onboardingGetStartedTapped",
+      "wire_name": "Onboarding Get Started Tapped",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {},
+      "consumers": ["onboarding-activation-funnel"],
+      "correlation": null
+    },
+    {
+      "id": "signInStarted",
+      "wire_name": "Sign In Started",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {
+        "provider": {
+          "type": "enum",
+          "wire_name": "provider",
+          "values": ["apple", "google"]
+        }
+      },
+      "consumers": ["onboarding-activation-funnel"],
+      "correlation": null
+    },
+    {
+      "id": "signInFailed",
+      "wire_name": "Sign In Failed",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {
+        "provider": {
+          "type": "enum",
+          "wire_name": "provider",
+          "values": ["apple", "google"]
+        },
+        "errorClass": {
+          "type": "enum",
+          "wire_name": "error_class",
+          "values": ["cancelled", "network", "credential", "configuration", "unknown"]
+        }
+      },
+      "consumers": ["onboarding-activation-funnel"],
+      "correlation": null
+    },
+    {
+      "id": "onboardingPermissionResult",
+      "wire_name": "Onboarding Permission Result",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {
+        "permission": {
+          "type": "enum",
+          "wire_name": "permission",
+          "values": ["notifications", "location", "background_activity"]
+        },
+        "granted": {
+          "type": "bool",
+          "wire_name": "granted"
+        },
+        "permanentlyDenied": {
+          "type": "bool",
+          "wire_name": "permanently_denied"
+        }
+      },
+      "consumers": ["onboarding-activation-funnel"],
+      "correlation": null
+    },
+    {
+      "id": "devicePairingBlocked",
+      "wire_name": "Device Pairing Blocked",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {
+        "reason": {
+          "type": "enum",
+          "wire_name": "reason",
+          "values": [
+            "bluetooth_permission_denied",
+            "location_permission_missing",
+            "bluetooth_off",
+            "nearby_devices_denied"
+          ]
+        },
+        "androidSdk": {
+          "type": "int",
+          "wire_name": "android_sdk"
+        },
+        "iosVersion": {
+          "type": "int",
+          "wire_name": "ios_version"
+        }
+      },
+      "consumers": ["onboarding-activation-funnel"],
+      "correlation": null
+    },
+    {
+      "id": "deviceScanEmpty",
+      "wire_name": "Device Scan Empty",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {
+        "afterSeconds": {
+          "type": "int",
+          "wire_name": "after_seconds"
+        }
+      },
+      "consumers": ["onboarding-activation-funnel"],
+      "correlation": null
+    },
+    {
+      "id": "deviceConnectFailed",
+      "wire_name": "Device Connect Failed",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {
+        "errorClass": {
+          "type": "enum",
+          "wire_name": "error_class",
+          "values": [
+            "timeout",
+            "bluetooth_off",
+            "permission_denied",
+            "not_found",
+            "initialization_failed",
+            "unknown"
+          ]
+        }
+      },
+      "consumers": ["onboarding-activation-funnel"],
+      "correlation": null
+    },
+    {
       "id": "phoneMicRecordingStarted",
       "wire_name": "Phone Mic Recording Started",
       "status": "active",

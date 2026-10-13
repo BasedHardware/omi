@@ -70,6 +70,15 @@ class ProviderCaptureExternalActions implements CaptureExternalActions {
   }
 
   @override
+  void showEmptyRecordingExplanation() => conversationProvider.showEmptyRecordingExplanation();
+
+  @override
+  bool claimDiscardedOnlyExplanation() => conversationProvider.claimDiscardedOnlyExplanation();
+
+  @override
+  void clearEmptyRecordingExplanation() => conversationProvider.clearEmptyRecordingExplanation();
+
+  @override
   Future<Person?> createPerson(String name) {
     return peopleProvider.createPersonProvider(name);
   }

@@ -545,6 +545,7 @@
     "connectionErrorDesc": "서버 연결에 실패했습니다. 인터넷 연결을 확인하고 다시 시도해 주세요.",
     "invalidRecordingMultipleSpeakers": "잘못된 녹음 감지됨",
     "multipleSpeakersDesc": "녹음에 여러 명의 화자가 있는 것 같습니다. 조용한 장소에 있는지 확인하고 다시 시도하세요.",
+    "discardedOnlyRecording": "That recording was too short or empty to keep.",
     "tooShortDesc": "음성이 충분히 감지되지 않았습니다. 더 많이 말하고 다시 시도하세요.",
     "invalidRecordingDesc": "최소 5초 이상 90초 이하로 말씀해 주세요.",
     "areYouThere": "계십니까?",

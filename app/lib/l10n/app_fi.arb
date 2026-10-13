@@ -545,6 +545,7 @@
     "connectionErrorDesc": "Yhteys palvelimeen epäonnistui. Tarkista internet-yhteytesi ja yritä uudelleen.",
     "invalidRecordingMultipleSpeakers": "Virheellinen nauhoitus havaittu",
     "multipleSpeakersDesc": "Näyttää siltä, että nauhoituksessa on useita puhujia. Varmista, että olet hiljaisessa paikassa ja yritä uudelleen.",
+    "discardedOnlyRecording": "That recording was too short or empty to keep.",
     "tooShortDesc": "Puhetta ei havaittu tarpeeksi. Puhu enemmän ja yritä uudelleen.",
     "invalidRecordingDesc": "Varmista, että puhut vähintään 5 sekuntia ja korkeintaan 90 sekuntia.",
     "areYouThere": "Oletko siellä?",

@@ -14,6 +14,7 @@ import 'package:omi/backend/schema/gen/misc_wire.g.dart' as misc_wire;
 import 'package:omi/backend/schema/schema.dart';
 import 'package:omi/env/env.dart';
 import 'package:omi/services/capture/calendar_capture_gap_monitor.dart';
+import 'package:omi/services/capture/empty_recording_notice.dart';
 import 'package:omi/services/integrations/google_calendar_service.dart';
 import 'package:omi/utils/debug_log_manager.dart';
 import 'package:omi/utils/logger.dart';
@@ -31,26 +32,34 @@ import 'package:omi/utils/wal_sync_upload.dart';
 bool isBenignInProgressConversationCreateStatus(int statusCode) => statusCode == 404;
 
 Future<CreateConversationResponse?> processInProgressConversation() async {
+  return (await processInProgressConversationOutcome()).response;
+}
+
+Future<InProgressProcessOutcome> processInProgressConversationOutcome() async {
   var response = await makeApiCall(
     url: '${Env.apiBaseUrl}v1/conversations',
     headers: {},
     method: 'POST',
     body: jsonEncode({}),
   );
-  if (response == null) return null;
+  if (response == null) return const InProgressProcessOutcome(absence: ProcessAbsence.transport);
   Logger.debug('createConversationServer: ${response.body}');
   if (response.statusCode == 200) {
-    return CreateConversationResponse.fromGeneratedWireJson(jsonDecode(response.body) as Map<String, dynamic>);
+    final parsed = CreateConversationResponse.fromGeneratedWireJson(jsonDecode(response.body) as Map<String, dynamic>);
+    if (parsed.conversation == null) {
+      return InProgressProcessOutcome(response: parsed, absence: ProcessAbsence.emptyBody);
+    }
+    return InProgressProcessOutcome(response: parsed);
   } else if (isBenignInProgressConversationCreateStatus(response.statusCode)) {
     Logger.debug('processInProgressConversation: no in-progress conversation (already finalized), skipping');
-  } else {
-    PlatformManager.instance.crashReporter.reportCrash(
-      Exception('Failed to create conversation'),
-      StackTrace.current,
-      userAttributes: {'response': response.body},
-    );
+    return const InProgressProcessOutcome(absence: ProcessAbsence.notFound);
   }
-  return null;
+  PlatformManager.instance.crashReporter.reportCrash(
+    Exception('Failed to create conversation'),
+    StackTrace.current,
+    userAttributes: {'response': response.body},
+  );
+  return const InProgressProcessOutcome(absence: ProcessAbsence.transport);
 }
 
 Future<List<ServerConversation>> getConversations({

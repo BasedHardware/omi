@@ -545,6 +545,7 @@
     "connectionErrorDesc": "Không thể kết nối với máy chủ. Vui lòng kiểm tra kết nối internet và thử lại.",
     "invalidRecordingMultipleSpeakers": "Phát hiện bản ghi âm không hợp lệ",
     "multipleSpeakersDesc": "Có vẻ như có nhiều người nói trong bản ghi âm. Vui lòng đảm bảo bạn ở nơi yên tĩnh và thử lại.",
+    "discardedOnlyRecording": "That recording was too short or empty to keep.",
     "tooShortDesc": "Không phát hiện đủ giọng nói. Vui lòng nói nhiều hơn và thử lại.",
     "invalidRecordingDesc": "Vui lòng đảm bảo bạn nói ít nhất 5 giây và không quá 90 giây.",
     "areYouThere": "Bạn có ở đó không?",

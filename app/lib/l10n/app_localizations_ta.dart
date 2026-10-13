@@ -1778,6 +1778,9 @@ class AppLocalizationsTa extends AppLocalizations {
       'பதிவில் பல பேச்சாளர்கள் உள்ளனர் என்று தோன்றுகிறது. நீங்கள் ஒரு조용한் இடத்தில் இருக்கிறீர்கள் என்பதை உறுதிசெய்து மீண்டும் முயற்சி செய்யவும்.';
 
   @override
+  String get discardedOnlyRecording => 'That recording was too short or empty to keep.';
+
+  @override
   String get tooShortDesc => 'போதுமான பேச்சு கண்டறிக்கப்படவில்லை. மேலும் பேச மற்றும் மீண்டும் முயற்சி செய்யவும்.';
 
   @override

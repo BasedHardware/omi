@@ -44,6 +44,7 @@ import 'package:omi/backend/http/shared.dart' show accountDeletionWebSocketClose
 import 'package:omi/services/capture/capture_seams.dart';
 import 'package:omi/services/capture/capture_session_owner.dart';
 import 'package:omi/services/capture/capture_wedge_monitor.dart';
+import 'package:omi/services/capture/empty_recording_notice.dart';
 import 'package:omi/services/capture/optimistic_processing.dart';
 import 'package:omi/services/capture/speaker_suggestions.dart';
 import 'package:omi/services/services.dart';
@@ -126,6 +127,9 @@ class CaptureController extends ChangeNotifier
   late final NativeBatchGeolocationPreferenceFence _phoneBatchGeolocationPreference =
       NativeBatchGeolocationPreferenceFence(writer: _writePhoneBatchGeolocationPreference);
   final RecordingLifecycleTelemetry _recordingTelemetry;
+  int _captureExplanationGeneration = 0;
+  int? _deliveredExplanationGeneration;
+  int? _announcedNoConversationGeneration;
   final CalendarCaptureGapMonitor? _calendarGapMonitor;
   final CaptureLivenessWatchdog _livenessWatchdog = CaptureLivenessWatchdog();
   bool _livenessCheckRunning = false;
@@ -1012,7 +1016,7 @@ class CaptureController extends ChangeNotifier
       final health = _ingressPort?.ingressHealth(deviceId);
       if (_usesNativeIngress && health?.verifiedAt(_now()) == true) {
         _verifiedIngressStartedAt ??= _now();
-        _recordingTelemetry.markStarted(evidence: 'native_ingress');
+        _markCaptureStarted(evidence: 'native_ingress');
       } else if (health == null) {
         _verifiedIngressStartedAt = null;
       }
@@ -2746,7 +2750,7 @@ class CaptureController extends ChangeNotifier
         onRecording: () {
           if (!_admitsCapture(revision)) return;
           updateRecordingState(RecordingState.record);
-          _recordingTelemetry.markStarted();
+          _markCaptureStarted();
         },
         onStop: () {
           if (!_micInterrupted && !_phoneMicPaused) {
@@ -2811,7 +2815,7 @@ class CaptureController extends ChangeNotifier
     await _wal.getSyncs().phone.finalizeCurrentSession();
     updateRecordingState(RecordingState.stop);
     await _socket?.stop(reason: 'stop stream recording');
-    _recordingTelemetry.complete(reason: reason);
+    if (_recordingTelemetry.complete(reason: reason)) _explainShortPhoneStopIfNeeded();
     await _clearPhoneRestoreMarker();
     return true;
   }
@@ -2958,7 +2962,7 @@ class CaptureController extends ChangeNotifier
       // before showing an OS location prompt. Native writers retry the bounded
       // preference while the file is open, so a later fix still gets a sidecar.
       unawaited(_capturePhoneBatchSessionLocation(batchLocationGeneration));
-      _recordingTelemetry.markStarted();
+      _markCaptureStarted();
     } catch (e, st) {
       // No socket to clean in batch — fail visibly instead of recording nothing.
       Logger.error('[CaptureProvider] phone mic batch start failed: $e\n$st');
@@ -3048,7 +3052,7 @@ class CaptureController extends ChangeNotifier
     await _resetState();
 
     if (recordingState == RecordingState.deviceRecord || recordingState == RecordingState.pause) {
-      if (!_usesNativeIngress || _ingressPort?.supportsIngressHealth == false) _recordingTelemetry.markStarted();
+      if (!_usesNativeIngress || _ingressPort?.supportsIngressHealth == false) _markCaptureStarted();
     } else if (deviceRequested) {
       _recordingTelemetry.failStart(failureClass: 'capture_unavailable');
       return const CaptureStageFailure('capture_unavailable');
@@ -3619,14 +3623,25 @@ class CaptureController extends ChangeNotifier
     _clearSessionLocation();
 
     _resetStateVariables();
-    final process = _processInProgressConversationOverride ?? processInProgressConversation;
-    final request = process();
+    final Future<InProgressProcessOutcome> request;
+    if (_processInProgressConversationOverride != null) {
+      request = _processInProgressConversationOverride!().then(
+        (result) => InProgressProcessOutcome(
+          response: result,
+          absence: result == null ? ProcessAbsence.transport : null,
+        ),
+      );
+    } else {
+      request = processInProgressConversationOutcome();
+    }
     _processInFlight = request.then((_) {}, onError: (_) {});
-    request.then<void>((result) async {
+    request.then<void>((outcome) async {
       final conversationId = await OptimisticProcessingPlaceholder.applyProcessResult(
-        result: result,
+        result: outcome.response,
+        absence: outcome.absence,
         actions: externalActions,
         onCreated: _processConversationCreated,
+        onNoConversation: _onProcessProducedNoConversation,
       );
       if (sessionStart > 0 && conversationId != null) {
         if (phoneSync is LocalWalSyncImpl) {
@@ -3812,7 +3827,72 @@ class CaptureController extends ChangeNotifier
     }
 
     externalActions.upsertConversation(conversation);
+    _deliveredExplanationGeneration = _captureExplanationGeneration;
     PlatformManager.instance.analytics.conversationCreated(conversation, recordingDevice: _sessionRecordingDevice);
+    if (conversation.discarded) {
+      _announceNoConversation(
+        EmptyRecordingReason.discarded,
+        facts: RecordingCompletionFacts(
+          source: conversation.source?.name ?? _recordingTelemetry.completionFacts()?.source ?? 'omi',
+          durationSeconds: conversation.getDurationInSeconds(),
+          transcriptObserved: conversation.transcriptSegments.isNotEmpty,
+        ),
+      );
+    }
+  }
+
+  void _markCaptureStarted({String? evidence}) {
+    if (!_recordingTelemetry.markStarted(evidence: evidence)) return;
+    _captureExplanationGeneration++;
+    _announcedNoConversationGeneration = null;
+  }
+
+  bool get _conversationDeliveredForCurrentCapture => _deliveredExplanationGeneration == _captureExplanationGeneration;
+
+  void _explainShortPhoneStopIfNeeded() {
+    final facts = _recordingTelemetry.completionFacts();
+    if (facts == null) return;
+    if (!shouldExplainShortPhoneStop(
+      surface: recordingSurfaceForSource(facts.source),
+      durationSeconds: facts.durationSeconds,
+      transcriptObserved: facts.transcriptObserved,
+      conversationDelivered: _conversationDeliveredForCurrentCapture,
+    )) {
+      return;
+    }
+    _announceNoConversation(EmptyRecordingReason.emptyDeleted, facts: facts);
+  }
+
+  void _onProcessProducedNoConversation(EmptyRecordingReason reason) {
+    if (_conversationDeliveredForCurrentCapture) return;
+    _announceNoConversation(reason);
+  }
+
+  void _announceNoConversation(EmptyRecordingReason reason, {RecordingCompletionFacts? facts}) {
+    if (_announcedNoConversationGeneration == _captureExplanationGeneration) return;
+    final resolved = facts ?? _recordingTelemetry.completionFacts();
+    try {
+      if (reason == EmptyRecordingReason.discarded) {
+        if (!externalActions.claimDiscardedOnlyExplanation()) return;
+      } else {
+        externalActions.showEmptyRecordingExplanation();
+      }
+      _announcedNoConversationGeneration = _captureExplanationGeneration;
+      PlatformManager.instance.analytics.recordingProducedNoConversation(
+        source: recordingSurfaceForSource(resolved?.source),
+        durationSeconds: resolved?.durationSeconds ?? 0,
+        transcriptObserved: resolved?.transcriptObserved ?? false,
+        reason: reason,
+      );
+      final ctx = globalNavigatorKey.currentContext;
+      if (ctx != null) {
+        AppSnackbar.showSnackbar(
+          reason == EmptyRecordingReason.discarded ? ctx.l10n.discardedOnlyRecording : ctx.l10n.tooShortDesc,
+        );
+      }
+    } catch (error) {
+      Logger.debug('empty recording explanation failed: $error');
+    }
   }
 
   Future<void> _handleLastConvoEvent(String memoryId) async {
