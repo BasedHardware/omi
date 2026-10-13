@@ -408,10 +408,7 @@ async def finalize_persisted_conversation(
                 require_delivery=True,
                 last_delivery_attempt=final_attempt,
             )
-        # Publish the content-free capture-arrival intent before marking the
-        # durable fanout projection completed. Desktop waits on that projection
-        # before waking Chat; ordering the marker first closes the small window
-        # where a completed projection existed without a notes-ready intent.
+        # Record the meeting treatment verdict; automatic Chat intents are retired.
         stage = 'meeting_receipt'
         await run_blocking(
             db_executor,

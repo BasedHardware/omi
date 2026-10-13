@@ -150,15 +150,16 @@ class _IntegrationsPageState extends State<IntegrationsPage> with WidgetsBinding
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
       // Refresh when app comes back from background (e.g., after OAuth)
-      _loadFromBackend().then((_) => _resolvePendingIntegrationAttempts());
+      _loadFromBackend(forceRefresh: true);
     }
   }
 
-  Future<void> _loadFromBackend() async {
+  Future<void> _loadFromBackend({bool forceRefresh = false}) async {
+    if (!mounted) return;
     unawaited(context.read<MessagingChannelsProvider>().load());
     // IntegrationProvider.loadFromBackend() already fetches all connection statuses
     // and syncs SharedPreferences for backward compatibility with services
-    await context.read<IntegrationProvider>().loadFromBackend();
+    await context.read<IntegrationProvider>().loadFromBackend(forceRefresh: forceRefresh);
     _resolvePendingIntegrationAttempts();
   }
 
@@ -166,7 +167,8 @@ class _IntegrationsPageState extends State<IntegrationsPage> with WidgetsBinding
     if (!mounted || _pendingIntegrationAttempts.isEmpty) return;
     final provider = context.read<IntegrationProvider>();
     for (final entry in Map<IntegrationApp, ProductAttempt>.from(_pendingIntegrationAttempts).entries) {
-      if (provider.isAppConnected(entry.key)) {
+      if (!provider.hasStatusError(entry.key) && provider.isAppConnected(entry.key)) {
+        PlatformManager.instance.analytics.integrationConnectSucceeded(integrationName: entry.key.displayName);
         entry.value.complete(ProductOutcome.success);
         _pendingIntegrationAttempts.remove(entry.key);
       }
@@ -253,7 +255,6 @@ class _IntegrationsPageState extends State<IntegrationsPage> with WidgetsBinding
 
     final success = await authenticate();
     if (success) {
-      PlatformManager.instance.analytics.integrationConnectSucceeded(integrationName: app.displayName);
       if (mounted) OmiFeedback.info(context, context.l10n.completeAuthInBrowser);
       await _loadFromBackend();
       Logger.debug('✓ Integration enabled: ${app.displayName} (${app.key}) - authentication in progress');
@@ -370,11 +371,14 @@ class _IntegrationsPageState extends State<IntegrationsPage> with WidgetsBinding
 
   Widget _buildAppTile(IntegrationApp app, bool isLoading) {
     final isConnected = _isAppConnected(app);
+    final statusError = context.read<IntegrationProvider>().hasStatusError(app);
     final isAvailable = app.isAvailable;
 
     final Widget trailing;
     if (isLoading) {
       trailing = _buildShimmerButton();
+    } else if (statusError) {
+      trailing = IntegrationStatusChip(context.l10n.tryAgain, tone: IntegrationChipTone.muted);
     } else if (!isAvailable) {
       trailing = IntegrationStatusChip(context.l10n.comingSoon, tone: IntegrationChipTone.muted);
     } else if (!isConnected) {
@@ -401,6 +405,10 @@ class _IntegrationsPageState extends State<IntegrationsPage> with WidgetsBinding
       onTap: isAvailable
           ? () {
               if (isLoading) return;
+              if (statusError) {
+                _loadFromBackend();
+                return;
+              }
 
               if (app == IntegrationApp.appleHealth) {
                 _openAppleHealthDetail();
@@ -463,6 +471,11 @@ class _IntegrationsPageState extends State<IntegrationsPage> with WidgetsBinding
               padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.lg),
               sliver: SliverList.list(
                 children: [
+                  if (provider.hasLoadError)
+                    Padding(
+                        padding: const EdgeInsets.only(bottom: OmiSpacing.md),
+                        child: Semantics(
+                            liveRegion: true, child: Text(context.l10n.connectionErrorDesc, style: OmiType.subhead))),
                   const ChatAppsIntegrationsEntry(),
                   ...IntegrationApp.values.map((app) => _buildAppTile(app, isLoading)),
                   Padding(

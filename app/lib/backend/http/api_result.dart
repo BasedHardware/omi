@@ -92,7 +92,7 @@ ApiFailure<T> _authFailure<T>(AuthTokenResult result) {
   return ApiFailure(ApiProblem(transient ? ApiProblemKind.authTransient : ApiProblemKind.authTerminal));
 }
 
-Duration? _retryAfter(http.Response response, DateTime Function() now) {
+Duration? parseApiRetryAfter(http.Response response, DateTime Function() now) {
   final raw = response.headers['retry-after'];
   if (raw == null) return null;
   final seconds = int.tryParse(raw.trim());
@@ -126,7 +126,7 @@ ApiResult<T> _classifyResponse<T>(http.Response response, T Function(String) dec
     ApiProblem(
       kind,
       statusCode: response.statusCode,
-      retryAfter: kind == ApiProblemKind.rateLimited ? _retryAfter(response, now) : null,
+      retryAfter: kind == ApiProblemKind.rateLimited ? parseApiRetryAfter(response, now) : null,
     ),
   );
 }

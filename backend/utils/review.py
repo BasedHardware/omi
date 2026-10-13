@@ -299,14 +299,19 @@ def answer_item(uid: str, item_id: str, answer: ReviewAnswer | ReviewAnswerV2, *
             value = answer.spelling.value.strip()
             if not value or (not item.spelling.allow_custom and value not in item.spelling.options):
                 raise store.ReviewConflict('Spelling is not an allowed option')
-            save_user_fact(
-                uid,
-                f'vocabulary:{item.spelling.term_id}',
-                value,
-                action_id=f'review:{store.safe_id(item_id)}',
-                predicate='vocabulary',
-            )
-            applied = True
+            if state['source'].get('spelling_edit'):
+                from utils.dream_tools import answer_spelling
+
+                applied = answer_spelling(uid, state['source'], value)
+            else:
+                save_user_fact(
+                    uid,
+                    f'vocabulary:{item.spelling.term_id}',
+                    value,
+                    action_id=f'review:{store.safe_id(item_id)}',
+                    predicate='vocabulary',
+                )
+                applied = True
     except (
         store.ReviewConflict,
         store.ReviewNotFound,

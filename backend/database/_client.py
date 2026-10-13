@@ -309,6 +309,17 @@ def is_expired_transaction_error(error: BaseException) -> bool:
 
 _DOCUMENT_SIZE_LIMIT_MARKER = "exceeds the maximum allowed size"
 
+# Google RPC codes whose rejections do not change when the same write is
+# retried: the row's size, its ACL, or the database's policy refuses the
+# operation itself, not this attempt at it.
+_PERMANENT_WRITE_CODE_MARKERS = (
+    _DOCUMENT_SIZE_LIMIT_MARKER,
+    "the request must be modified",  # failed_precondition envelope
+    "permission denied",  # permission_denied on the row or database
+    "caller does not have permission",
+    "forbidden for",  # policy refusals phrased as ``... forbidden for ...``
+)
+
 
 def is_document_size_limit_error(error: BaseException) -> bool:
     """True for the Firestore 400 rejecting a write that would exceed the 1 MiB document ceiling.
@@ -318,6 +329,22 @@ def is_document_size_limit_error(error: BaseException) -> bool:
     rather than loop.
     """
     return isinstance(error, InvalidArgument) and _DOCUMENT_SIZE_LIMIT_MARKER in str(error).lower()
+
+
+def is_permanent_firestore_write_rejection(error: BaseException) -> bool:
+    """True when Firestore refused the write itself, not this attempt at it.
+
+    The document-size 400 is the volume case, but the same permanence holds for
+    a permission-denied row and for failed-precondition policy refusals: no
+    retry of the same write can succeed, so callers must move the payload to
+    storage that still accepts it (or a different row) instead of looping.
+    Transient classes — contention (``Aborted``), an expired transaction id,
+    availability faults — return False; callers keep their retry.
+    """
+    if is_document_size_limit_error(error):
+        return True
+    message = str(error).lower()
+    return any(marker in message for marker in _PERMANENT_WRITE_CODE_MARKERS[1:])
 
 
 # The SDK's ``_Transactional`` raises a bare ValueError once its own attempts are spent.

@@ -920,11 +920,9 @@ class _FakeDocument:
     def set(self, data: dict[str, Any], merge: bool = False) -> None:
         current = self._collection.documents.get(self._document_id, {})
         stored = dict(current) if merge else {}
-        for key, value in data.items():
-            if isinstance(value, firestore.Increment):
-                stored[key] = current.get(key, 0) + value.value
-            else:
-                stored[key] = value
+        from tests.unit.fixtures.shadow_usage_firestore import merge as merge_fields
+
+        merge_fields(stored, data)
         self._collection.documents[self._document_id] = stored
 
     def get(self, _fields: list[str]) -> _FakeSnapshot:

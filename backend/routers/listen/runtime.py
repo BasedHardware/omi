@@ -24,6 +24,7 @@ from models.message_event import (
 )
 from models.users import PlanType
 from utils.analytics import billable_transcription_seconds, record_usage
+from utils.usage_provenance import live_usage_metadata
 from utils.apps import is_audio_bytes_app_enabled
 from utils.async_tasks import WebSocketTaskSupervisor, drain_tasks, wait_for_event
 from utils.byok import get_byok_keys
@@ -823,6 +824,7 @@ class ListenSessionRuntime:
                     record_usage,
                     self.request.uid,
                     speech_seconds=custom_speech_ms // 1000,
+                    usage_metadata=live_usage_metadata(self),
                 )
             return 0
         if not self.state.last_usage_record_timestamp:
@@ -864,6 +866,7 @@ class ListenSessionRuntime:
                 transcription_seconds=seconds,
                 words_transcribed=words,
                 speech_seconds=speech_seconds,
+                usage_metadata=live_usage_metadata(self),
             )
         if not final:
             self.state.last_usage_record_timestamp = now

@@ -182,6 +182,39 @@ else
   fail "absent remove exited non-zero"
 fi
 
+# Positioned additions avoid conflicts with concurrent end-of-catalog keys.
+if run_l10n add positioned --before hello --en "Hello everyone" --description "Positioned key" \
+  --translations "$work/tr-ok.json" >"$work/position.out" 2>"$work/position.err"; then
+  if python3 - "$mini" <<'PYTEST'
+import json, sys
+from pathlib import Path
+for path in Path(sys.argv[1]).glob("app_*.arb"):
+    data = json.loads(path.read_text())
+    keys = list(data)
+    assert keys.index("positioned") < keys.index("hello")
+    assert data["hello"].endswith("{name}")
+    if path.name == "app_en.arb":
+        assert keys.index("@positioned") == keys.index("positioned") + 1
+PYTEST
+  then pass "--before inserts translations and metadata beside a stable key"
+  else fail "--before placement or retained value incorrect"; fi
+else
+  fail "positioned add failed: $(cat "$work/position.err")"
+fi
+cp "$mini/app_en.arb" "$work/position.before"
+if run_l10n add positioned --before hello --en "Hello everyone" --description "Positioned key" \
+  --translations "$work/tr-ok.json" >"$work/position-repeat.out" 2>"$work/position-repeat.err"; then
+  cmp -s "$mini/app_en.arb" "$work/position.before" && pass "positioned add re-run is a byte-level no-op" \
+    || fail "positioned re-run changed bytes"
+else fail "positioned re-run failed"; fi
+if run_l10n add invalidPosition --before absent --en "Hello everyone" \
+  --translations "$work/tr-ok.json" >"$work/position-missing.out" 2>"$work/position-missing.err"; then
+  fail "positioned add accepted an absent anchor"
+else
+  cmp -s "$mini/app_en.arb" "$work/position.before" && pass "missing insertion anchor refuses without writes" \
+    || fail "missing insertion anchor mutated bytes"
+fi
+
 echo
 echo "l10n tool (ICU apostrophe / use-escaping):"
 

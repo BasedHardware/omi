@@ -1230,13 +1230,29 @@ async def test_custom_stt_flush_meters_speech_in_isolated_lane(monkeypatch):
 
     assert await runtime._flush_usage(final=False) == 0
     assert recorded == [('custom-stt-user', 4200, 'custom_stt')]
-    assert usage_calls == [('custom-stt-user', {'speech_seconds': 4})]
+    assert usage_calls == [
+        (
+            'custom-stt-user',
+            {
+                'speech_seconds': 4,
+                'usage_metadata': {'funding': 'custom', 'provider': 'unknown', 'source': 'listen'},
+            },
+        )
+    ]
 
     # No speech delta → no meter write either.
     runtime.receiver = SimpleNamespace(vad_gate=SimpleNamespace(consume_speech_ms_delta=lambda: 0))
     assert await runtime._flush_usage(final=True) == 0
     assert recorded == [('custom-stt-user', 4200, 'custom_stt')]
-    assert usage_calls == [('custom-stt-user', {'speech_seconds': 4})]
+    assert usage_calls == [
+        (
+            'custom-stt-user',
+            {
+                'speech_seconds': 4,
+                'usage_metadata': {'funding': 'custom', 'provider': 'unknown', 'source': 'listen'},
+            },
+        )
+    ]
 
 
 @pytest.mark.anyio

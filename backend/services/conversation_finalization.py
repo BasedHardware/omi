@@ -29,6 +29,7 @@ from utils.metrics import (
     LISTEN_FINALIZATION_DURABLE_JOBS,
     LISTEN_FINALIZATION_JOB_STATUS,
     LISTEN_FINALIZATION_OLDEST_NONTERMINAL_AGE_SECONDS,
+    LISTEN_FINALIZATION_OLDEST_BLOCKED_BYOK_AGE_SECONDS,
     LISTEN_FINALIZATION_RETRIES_TOTAL,
     LISTEN_FINALIZATION_STALE_PROCESSING_RECONCILIATIONS_TOTAL,
 )
@@ -72,6 +73,14 @@ def reconcile_stale_in_progress_conversations(*, firestore_client: Any = None) -
 def reconcile_listen_finalization_jobs(limit: int = 100, *, firestore_client: Any = None) -> dict[str, int | float]:
     """Replay stale queued/leased platform-key jobs and publish backlog signals."""
     result: dict[str, int | float] = {'requeued': 0, 'skipped': 0, 'enqueue_failed': 0}
+    try:
+        recovery = jobs_db.recover_stranded_byok_jobs(firestore_client=firestore_client)
+        if recovery['blocked']:
+            logger.info('listen BYOK ownership reclaim: %s', recovery)
+        if recovery['errors']:
+            logger.error('listen BYOK ownership reclaim failed rows=%s', recovery['errors'])
+    except Exception:
+        logger.exception('listen BYOK ownership reclaim scan failed')
     if not is_listen_finalization_dispatch_enabled():
         _publish_job_metrics(firestore_client=firestore_client)
         return result
@@ -292,22 +301,16 @@ def _record_byok_abandonment_journey(job: dict[str, Any]) -> None:
 def reconcile_abandoned_byok_finalization_jobs(limit: int = 100, *, firestore_client: Any = None) -> dict[str, int]:
     """Give stranded BYOK finalization jobs an owner and a truthful terminal.
 
-    A ``requires_byok`` job is executable only inside a live pusher session that
-    presents the user's request-scoped keys. Both BYOK transitions
-    (``_resume_blocked_byok_job_txn`` and ``_mark_finalization_retryable_txn``)
-    delete ``reconcile_after_at`` by design, so the row is invisible to the
-    credential-free replay query, and ``_claim_finalization_job_txn`` separately
-    refuses ``requires_byok`` jobs for the Cloud Tasks worker. Once the session
-    ends the row is owned by nobody: it accumulates in ``queued`` forever, and
-    the conversation it binds can sit on ``processing`` forever with it.
+    Prompt reclaim returns lost live-session ownership to ``blocked_byok`` so a
+    reconnect can resume it. Waiting is bounded: this sweep covers queued,
+    leased (without a live lease), and blocked_byok jobs whose last live activity
+    exceeds ``get_byok_abandoned_after()``. Reclaim does not refresh that age.
 
     This sweep is **disposition and visibility only**. It never replays a BYOK
-    finalization, never substitutes Omi platform credentials, and never touches a
-    ``blocked_byok`` row (that state is still legitimately waiting for a live
-    session, and it is already visible on its own gauge). An unownable row older
-    than ``get_byok_abandoned_after()`` is dead-lettered with the distinct
-    ``byok_session_abandoned`` failure code, and the bound conversation is closed
-    only when it is still ``processing`` and still bound to this exact job.
+    finalization or substitutes platform credentials. Eligible jobs become
+    ``dead_letter`` with the distinct ``byok_session_abandoned`` failure code;
+    a still-bound ``processing`` conversation closes in the same transaction.
+    Reconnect or claim changes to status, epoch, or activity fence stale scans.
 
     Work is bounded per invocation (fixed page size, capped scan) and eventual
     coverage comes from a persisted, rotated CAS cursor, exactly like the stale
@@ -447,6 +450,7 @@ def _publish_job_metrics(*, firestore_client: Any = None) -> None:
         logger.exception('listen finalization metrics query failed')
         return
     LISTEN_FINALIZATION_OLDEST_NONTERMINAL_AGE_SECONDS.set(float(summary['oldest_nonterminal_age_seconds']))
+    LISTEN_FINALIZATION_OLDEST_BLOCKED_BYOK_AGE_SECONDS.set(float(summary['oldest_blocked_byok_age_seconds']))
     for state in ('accepted', 'success', 'failure', 'stale', 'nonterminal', 'blocked_byok', 'terminal_unknown'):
         LISTEN_FINALIZATION_DURABLE_JOBS.labels(state=state).set(float(summary[state]))
     for status in ('queued', 'leased', 'blocked_byok', 'dead_letter'):
