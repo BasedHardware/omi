@@ -18,6 +18,8 @@ PAIRS = {
     'critical': [('1h', '5m', 14.4), ('6h', '30m', 6)],
     'warning': [('24h', '2h', 3), ('3d', '6h', 1)],
 }
+# Receipt bound for chat critical pages. Raise it only when an interval is a real failure burst.
+CHAT_CRITICAL_INTERVAL_BOUND = 0
 
 
 @lru_cache
@@ -55,30 +57,54 @@ def test_slo_rules_use_exact_budget_and_two_independent_window_pairs(journey, se
     rule, raw = rules[uid]
     metric, scope, target = SCOPES[journey]
     expr = rule['data'][0]['model']['expr']
-    assert expr.count(' > 0) or (') == (4 if journey == 'pusher' and severity == 'critical' else 2)
+    chat_page = journey == 'chat' and severity == 'critical'
+    if chat_page:
+        assert expr.count(' > 0) or (') == 3
+    elif journey == 'pusher' and severity == 'critical':
+        assert expr.count(' > 0) or (') == 4
+    else:
+        assert expr.count(' > 0) or (') == 2
     assert float(rule['annotations']['slo_target']) == target
     thresholds = re.findall(r'> bool ([0-9.]+)', expr)
-    assert len(thresholds) == 4
-    for index, (long, short, multiplier) in enumerate(PAIRS[severity]):
-        assert all(
-            math.isclose(float(v), (1 - target) * multiplier, rel_tol=1e-10)
-            for v in thresholds[index * 2 : index * 2 + 2]
-        )
-        for window, minimum in [(long, 20), (short, 2 if journey == 'chat' and short == '5m' else 5)]:
-            labels = scope + ',outcome=~"transcribed|no_transcript"' if journey == 'live' else scope
-            valid = f'sum(increase({metric}{{{labels}}}[{window}]))'
-            assert f'({valid} >= bool {minimum})' in expr
-            if journey == 'live':
-                assert f'outcome="no_transcript"}}[{window}]' in expr
-                assert 'too_short' not in expr
-            else:
-                good = f'sum(increase(omi_journey_terminal_total{{{scope},outcome="success"}}[{window}]))'
-                assert f'clamp_min({valid} - ({good} or ({valid} * 0)), 0)' in expr
-                assert 'success|failure' not in expr
-    assert rule['data'][1]['model']['expression'] == '$A > 0'
-    assert rule['data'][2]['model']['expression'] == 'C'
-    assert rule['condition'] == 'D'
-    assert rule['for'] == rule['keep_firing_for'] == '0s'
+    if chat_page:
+        # Long windows only: the 5m/30m ratio arms page on one low-volume miss.
+        assert thresholds == ['0.072', '0.03']
+        assert '[5m]' not in expr and '[30m]' not in expr
+        checked = [('1h', 20, 4, 14.4), ('6h', 40, 7, 6)]
+    else:
+        assert len(thresholds) == 4
+        checked = []
+        for index, (long, short, multiplier) in enumerate(PAIRS[severity]):
+            assert all(
+                math.isclose(float(v), (1 - target) * multiplier, rel_tol=1e-10)
+                for v in thresholds[index * 2 : index * 2 + 2]
+            )
+            checked.extend([(long, 20, None, multiplier), (short, 5, None, multiplier)])
+    for window, minimum, bad_minimum, multiplier in checked:
+        if chat_page:
+            assert math.isclose((1 - target) * multiplier, float('0.072' if window == '1h' else '0.03'))
+        labels = scope + ',outcome=~"transcribed|no_transcript"' if journey == 'live' else scope
+        valid = f'sum(increase({metric}{{{labels}}}[{window}]))'
+        assert f'({valid} >= bool {minimum})' in expr
+        if journey == 'live':
+            assert f'outcome="no_transcript"}}[{window}]' in expr
+            assert 'too_short' not in expr
+        else:
+            good = f'sum(increase(omi_journey_terminal_total{{{scope},outcome="success"}}[{window}]))'
+            bad = f'clamp_min({valid} - ({good} or ({valid} * 0)), 0)'
+            assert bad in expr
+            assert 'success|failure' not in expr
+            if bad_minimum is not None:
+                assert f'({bad} >= bool {bad_minimum})' in expr
+    if chat_page:
+        ten = f'sum(increase({metric}{{{scope}}}[10m]))'
+        success = f'sum(increase(omi_journey_terminal_total{{{scope},outcome="success"}}[10m]))'
+        assert f'({ten} >= bool 5)' in expr
+        assert f'(({success} or vector(0)) < bool 1)' in expr
+        assert rule['for'] == '2m'
+    else:
+        assert rule['for'] == '0s'
+    assert rule['keep_firing_for'] == '0s'
     assert rule['noDataState'] == 'NoData'  # absent SLI must never resolve healthy
     assert rule['execErrState'] == 'Error'
     assert rule['labels']['severity'] == severity
@@ -141,7 +167,13 @@ def test_each_minimum_event_gate_fits_measured_baseline_volume(journey, severity
     rate = evidence['baselines'][journey]['valid_events'] / (10 * 24 * 60)
     expr = rule_exports['split'][f'omi-slo-{journey}-{severity}'][0]['data'][0]['model']['expr']
     gates = re.findall(r'\[(\d+)([mhd])\]\)\) >= bool (\d+)', expr)
-    assert len(gates) == (5 if journey == 'pusher' and severity == 'critical' else 4)
+    if journey == 'chat' and severity == 'critical':
+        expected_gates = 3  # 1h, 6h, and the 10m zero-completion floor
+    elif journey == 'pusher' and severity == 'critical':
+        expected_gates = 5
+    else:
+        expected_gates = 4
+    assert len(gates) == expected_gates
     for count, unit, minimum in gates:
         expected = rate * int(count) * {'m': 1, 'h': 60, 'd': 1440}[unit]
         assert int(minimum) <= expected, (journey, count, unit, minimum, expected)
@@ -170,6 +202,67 @@ def test_pusher_no_completion_arm_is_independent_of_long_window_success(rule_exp
     expr = rule_exports['split']['omi-slo-pusher-critical'][0]['data'][0]['model']['expr']
     assert 'omi_journey_accepted_total{job="pusher-metrics",journey="pusher_session"}[10m])) >= bool 20' in expr
     assert 'outcome="success"}[10m])) or vector(0)) < bool 1' in expr
+
+
+def _annotation_windows(text):
+    return set(re.findall(r'(?<![\d.])(\d+[mhd])\b', text))
+
+
+@pytest.mark.parametrize('journey', SCOPES)
+@pytest.mark.parametrize('severity', PAIRS)
+def test_threshold_and_scope_name_exactly_the_expression_windows(journey, severity, rule_exports):
+    rule = rule_exports['split'][f'omi-slo-{journey}-{severity}'][0]
+    expr = rule['data'][0]['model']['expr']
+    expr_windows = set(re.findall(r'\[(\d+[mhd])\]', expr))
+    for field in ('threshold', 'scope'):
+        assert _annotation_windows(rule['annotations'][field]) == expr_windows
+        has_zero_completion = '[10m]' in expr and '< bool 1' in expr
+        assert ('10m' in rule['annotations'][field]) is has_zero_completion
+    assert 'chat fast short window' not in rule['annotations']['scope']
+
+
+@pytest.mark.parametrize('journey', SCOPES)
+def test_one_miss_at_each_critical_volume_gate_stays_under_the_burn_threshold(journey, rule_exports):
+    expr = rule_exports['split'][f'omi-slo-{journey}-critical'][0]['data'][0]['model']['expr']
+    saw_burn_arm = False
+    for arm in expr.split(' > 0) or ('):
+        thresholds = [float(value) for value in re.findall(r'(?<!=)> bool ([0-9.]+)', arm)]
+        if not thresholds:
+            continue
+        saw_burn_arm = True
+        assert len(set(thresholds)) == 1
+        threshold = thresholds[0]
+        gates = [int(count) for _, _, count in re.findall(r'\[(\d+)([mhd])\]\)\) >= bool (\d+)', arm)]
+        assert gates
+        for minimum in gates:
+            assert 1 / minimum < threshold
+    assert saw_burn_arm
+
+
+def test_chat_critical_burn_arms_ignore_three_isolated_misses(rule_exports):
+    expr = rule_exports['split']['omi-slo-chat-critical'][0]['data'][0]['model']['expr']
+    assert ', 0) >= bool 4)' in expr
+    assert ', 0) >= bool 7)' in expr
+
+
+def test_chat_critical_pending_period_pages_a_ten_minute_total_outage(rule_exports):
+    evidence = json.loads((MONITORING / 'slo-backtest.prod.json').read_text())
+    rate_per_minute = evidence['baselines']['chat']['valid_events'] / 14400
+    rule = rule_exports['split']['omi-slo-chat-critical'][0]
+    assert rule['for'] == '2m'
+    pending_minutes = 2
+    # Four misses accumulate during the outage; the 1h arm then stays true, so pending fits inside 10 minutes.
+    assert (4 / rate_per_minute) + pending_minutes <= 10
+    # The 10m zero-completion arm stays true for 2/rate minutes, longer than pending.
+    assert pending_minutes < (2 / rate_per_minute)
+
+
+def test_chat_critical_receipt_intervals_stay_within_bound():
+    evidence = json.loads((MONITORING / 'slo-backtest.prod.json').read_text())
+    proof = evidence['rules']['omi-slo-chat-critical']
+    assert proof['for'] == '2m'
+    assert len(proof['sampled_firing_intervals']) <= CHAT_CRITICAL_INTERVAL_BOUND
+    assert len(proof['post_warmup_firing_intervals']) <= CHAT_CRITICAL_INTERVAL_BOUND
 
 
 def test_vanished_live_families_fire_exact_liveness_expression(rule_exports):

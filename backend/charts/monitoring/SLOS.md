@@ -73,24 +73,48 @@ the warning has a five-minute pending period. Quiet outcomes prove emission.
 
 ## Burn windows and volume
 
-Burn is bad share / (1 - target). Each pair is AND; positive arms are ORed into
-one critical and one warning identity per journey. No extra pending delay.
+Burn is bad share / (1 - target). Each classic pair is AND; positive arms are
+ORed into one critical and one warning identity per journey.
 
 | Severity | Pair 1 | Pair 2 | live bad share | chat bad share | pusher bad share |
 | --- | --- | --- | --- | --- | --- |
 | critical | 1h AND 5m >14.4x | 6h AND 30m >6x | 72% / 30% | 7.2% / 3% | 64.8% / 27% |
 | warning | 24h AND 2h >3x | 3d AND 6h >1x | 15% / 5% | 1.5% / 0.5% | 13.5% / 4.5% |
 
-Each pair requires >=20 long-window and >=5 short-window valid events, except
-chat's fast five-minute gate is **2**. Chat averages
-2.80 accepts per five minutes; the old five-event gate exceeded measured volume.
-A ten-minute total chat outage at that rate yields about
-5.60 misses, >7.2% in the 1h window and 100% in the 5m window, so it pages.
-Synthetic exact-expression Prometheus results for cancelled and no-terminal
-chat/pusher outages are saved in the receipt and checked against current rules.
-Pusher additionally pages when >=20 accepted sessions have zero successful completions
-in ten minutes. This independent arm covers complete hangs at the lower target.
-Contracts check **every journey/window gate** against its measured baseline rate.
+Live and pusher critical keep both short windows. Each of those pairs requires
+>=20 long-window and >=5 short-window valid events. One miss at each short gate
+stays under that pair's burn threshold: live 5m is 20% < 72%, live 30m is
+20% < 30%, pusher 5m is 20% < 64.8%, and pusher 30m is 20% < 27%.
+
+Chat critical does not use the 5-minute or 30-minute ratio arms. At 2.80
+accepts per five minutes, one miss is a 50% bad share, and that arm paged on
+isolated residual misses while the 99.5% objective and the warning stayed
+healthy. The 30-minute gate of 5 crosses 3% on one miss. Chat critical pages
+when any of these is true:
+
+- 1h bad share > 7.2% (14.4x), at least 4 bad events, and at least 20 accepts
+- 6h bad share > 3% (6x), at least 7 bad events, and at least 40 accepts
+- 10m zero-completion: at least 5 accepts and fewer than 1 success
+
+The pending period is 2 minutes, so one evaluation blip does not page. At
+0.560 accepts per minute, four misses accumulate in about 7.1 minutes. The
+1-hour arm then stays true until those misses age out, so a 10-minute total
+outage (accepts continue, successes stay at 0) pages about 9.1 minutes after
+it starts. The zero-completion condition is true for about 3.6 minutes around
+the end of that outage, which is longer than the pending period, so that arm
+pages at about 10.2 minutes as well. One to three misses in an hour fail the
+4-event gate. One miss at the 20-accept floor is 5% < 7.2%. One miss at the
+40-accept floor is 2.5% < 3%.
+
+Warning rules keep the classic pairs, with >=20 long-window and >=5
+short-window valid events. Pusher critical also pages when >=20 accepted
+sessions have fewer than 1 success in ten minutes. Live critical has no
+10-minute zero-completion arm. Each rule's `threshold` and `scope` name exactly
+the windows in its expression. Synthetic exact-expression Prometheus results
+for cancelled and no-terminal chat/pusher outages are in the receipt.
+Contracts check every journey/window gate against its measured baseline rate,
+that one miss at each critical volume gate stays under that arm's burn
+threshold, and that chat critical receipt intervals stay within bound.
 These averages do not guarantee pages during lower-volume periods.
 
 On a 10d budget, 1h at 14.4x consumes 6% and 6h at 6x consumes 15% under steady
@@ -103,11 +127,23 @@ but the oldest retained data cannot reconstruct full windows.
 | --- | --- | --- | --- |
 | `omi-slo-live-critical` | 0 / 0 | 0 | 2881 / 2881 |
 | `omi-slo-live-warning` | 7 / 7 | 173 | 2881 / 2881 |
-| `omi-slo-chat-critical` | 8 / 8 | 9 | 2881 / 2881 |
+| `omi-slo-chat-critical` | 0 / 0 | 2 | 2881 / 2881 |
 | `omi-slo-chat-warning` | 0 / 0 | 0 | 2881 / 2881 |
 | `omi-slo-pusher-critical` | 0 / 0 | 0 | 2881 / 2881 |
 | `omi-slo-pusher-warning` | 8 / 1 | 634 | 2881 / 2881 |
 | `omi-slo-live-signal-dead` | 0 / 0 | 1 | 2881 / 2881 |
+
+Chat critical was re-queried on this same endpoint after its page was redesigned.
+The condition was true on 2 samples, `2026-10-08T16:10:00Z` and
+`2026-10-08T16:55:00Z`, 45 minutes apart. Neither sample has a true neighbor, so
+the 2-minute pending period records 0 firing intervals. At 16:10Z the 1h window
+had 4.02 bad events out of 33.2 accepts and the 6h window had 3.84 bad events,
+under its gate of 7. At 16:55Z the 1h window had 5.32 bad events out of 55.4
+accepts, while the 10m window had 3.99 accepts and 0 successes, below the
+5-accept zero-completion floor; the next sample was healthy, which matches
+in-flight turns completing. These are single-sample crossings, not a sustained
+outage. Spot checks were instant queries of `clamp_min(accepted - success, 0)`,
+accepted, and success at those two timestamps for the 1h, 6h, and 10m windows.
 
 All changed rules were queried with 300s steps in sequential one-day chunks.
 The receipt contains every sampled UTC interval and exact expression, with first

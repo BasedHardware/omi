@@ -36,6 +36,14 @@ def utc(timestamp):
     return datetime.fromtimestamp(timestamp, timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
 
 
+def pending_seconds(duration):
+    match = re.fullmatch(r'(\d+)([smh])', duration)
+    if match is None:
+        raise ValueError(duration)
+    count, unit = match.groups()
+    return int(count) * {'s': 1, 'm': 60, 'h': 3600}[unit]
+
+
 def intervals(samples, pending=0, cutoff=0):
     result = []
     start = last = None
@@ -91,49 +99,66 @@ def main():
     # Pin a single endpoint so every rule and baseline uses the same ten days.
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--end-unix', type=int, help='Pin a receipt endpoint for a reproducible retry')
+    parser.add_argument('--only', action='append', default=[], help='Refresh these UIDs inside the existing receipt')
     args = parser.parse_args()
-    end = args.end_unix or int(time.time() // 300 * 300)
-    start = end - 864000
-    evidence = dict(
-        measurement_start_utc=utc(start),
-        measurement_end_utc=utc(end),
-        end_unix=end,
-        context=CONTEXT,
-        identity_tier='ro-prod',
-        api=API + 'query_range',
-        step_seconds=300,
-        chunk_seconds=86400,
-        expected_samples=2881,
-        limitations=[
-            'Five-minute sampled conditions can miss shorter intervals; these are not delivered notifications.',
-            'Oldest retained samples lack full windows; conservative post-warmup intervals reported separately.',
-            'Accepted and successful terminals can straddle window boundaries; unmatched accepted work is conservatively bad.',
-            'No Grafana pending history, notification policy or causal incident proof was read.',
-        ],
-        baselines={},
-        rules={},
-    )
-    for journey, (metric, scope, outcome) in SCOPES.items():
-        good = f'sum(increase({metric}{{{scope},outcome="{outcome}"}}[10d]))'
-        valid_selector = (
-            f'{metric}{{{scope},outcome=~"transcribed|no_transcript"}}'
-            if journey == 'live'
-            else f'omi_journey_accepted_total{{{scope}}}'
+    receipt_path = MONITORING / 'slo-backtest.prod.json'
+    only = set(args.only)
+    if only:
+        evidence = json.loads(receipt_path.read_text())
+        end = args.end_unix or evidence['end_unix']
+        if end != evidence['end_unix']:
+            raise SystemExit('pinned end does not match the receipt')
+        start = end - 864000
+    else:
+        end = args.end_unix or int(time.time() // 300 * 300)
+        start = end - 864000
+        evidence = dict(
+            measurement_start_utc=utc(start),
+            measurement_end_utc=utc(end),
+            end_unix=end,
+            context=CONTEXT,
+            identity_tier='ro-prod',
+            api=API + 'query_range',
+            step_seconds=300,
+            chunk_seconds=86400,
+            expected_samples=2881,
+            limitations=[
+                'Five-minute sampled conditions can miss shorter intervals; these are not delivered notifications.',
+                'Oldest retained samples lack full windows; conservative post-warmup intervals reported separately.',
+                'Accepted and successful terminals can straddle window boundaries; unmatched accepted work is conservatively bad.',
+                'No Grafana pending history, notification policy or causal incident proof was read.',
+            ],
+            baselines={},
+            rules={},
         )
-        valid = f'sum(increase({valid_selector}[10d]))'
-        g = float(query(good, time=end)[0]['value'][1])
-        v = float(query(valid, time=end)[0]['value'][1])
-        presence = query(f'sum({valid_selector})', start=start, end=end, step=3600)
-        evidence['baselines'][journey] = dict(
-            good_query=good,
-            valid_query=valid,
-            good_events=g,
-            valid_events=v,
-            success_fraction=g / v,
-            hourly_presence_samples=len(presence[0]['values']),
-        )
-        print(journey, g / v, flush=True)
-    for rule in json.loads((MONITORING / 'alerts/journey-slos.json').read_text()):
+        for journey, (metric, scope, outcome) in SCOPES.items():
+            good = f'sum(increase({metric}{{{scope},outcome="{outcome}"}}[10d]))'
+            valid_selector = (
+                f'{metric}{{{scope},outcome=~"transcribed|no_transcript"}}'
+                if journey == 'live'
+                else f'omi_journey_accepted_total{{{scope}}}'
+            )
+            valid = f'sum(increase({valid_selector}[10d]))'
+            g = float(query(good, time=end)[0]['value'][1])
+            v = float(query(valid, time=end)[0]['value'][1])
+            presence = query(f'sum({valid_selector})', start=start, end=end, step=3600)
+            evidence['baselines'][journey] = dict(
+                good_query=good,
+                valid_query=valid,
+                good_events=g,
+                valid_events=v,
+                success_fraction=g / v,
+                hourly_presence_samples=len(presence[0]['values']),
+            )
+            print(journey, g / v, flush=True)
+    rules = json.loads((MONITORING / 'alerts/journey-slos.json').read_text())
+    selected = [rule['uid'] for rule in rules]
+    unknown = only - set(selected)
+    if unknown:
+        raise SystemExit(f'unknown rule uid: {sorted(unknown)}')
+    for rule in rules:
+        if only and rule['uid'] not in only:
+            continue
         expr = rule['data'][0]['model']['expr']
         samples = {}
         for chunk in range(start, end, 86400):
@@ -142,7 +167,7 @@ def main():
                 for t, value in series['values']:
                     samples[int(t)] = float(value)
         warmup = 259200 if rule['uid'].endswith('warning') else 21600
-        pending = 300 if rule['for'] == '5m' else 0
+        pending = pending_seconds(rule['for'])
         if rule['uid'].endswith('signal-dead'):
             warmup = 3600
         evidence['rules'][rule['uid']] = dict(
@@ -155,9 +180,8 @@ def main():
             full_window_results_from_utc=utc(start + warmup),
         )
         print(rule['uid'], evidence['rules'][rule['uid']]['true_condition_samples'], flush=True)
-        (MONITORING / 'slo-backtest.prod.json').write_text(json.dumps(evidence, indent=2) + '\n')
+        receipt_path.write_text(json.dumps(evidence, indent=2) + '\n')
     evidence['synthetic_cases'] = {}
-    rules = json.loads((MONITORING / 'alerts/journey-slos.json').read_text())
     for journey in ('chat', 'pusher'):
         rule = next(r for r in rules if r['uid'] == f'omi-slo-{journey}-critical')
         rate = evidence['baselines'][journey]['valid_events'] / 14400
@@ -177,7 +201,7 @@ def main():
     value = float(query(expr, time=end)[0]['value'][1])
     assert value > 0
     evidence['synthetic_cases']['live_both_families_vanished'] = dict(uid=rule['uid'], expression=expr, value=value)
-    (MONITORING / 'slo-backtest.prod.json').write_text(json.dumps(evidence, indent=2) + '\n')
+    receipt_path.write_text(json.dumps(evidence, indent=2) + '\n')
 
 
 if __name__ == '__main__':

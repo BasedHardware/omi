@@ -19,12 +19,12 @@
     "annotations": {
       "summary": "Live transcription - SLO budget burn (critical)",
       "user_impact": "Live unsuccessful eligible work is consuming the 95.0% success budget faster than allowed.",
-      "scope": "Speech-eligible sessions: transcribed or no_transcript; silent/short idle reaps excluded, speech-bearing idle reaps without delivery fail. Aggregate across instances; minimum 20 long-window and 5 short-window events (chat fast short window: 2).",
+      "scope": "Speech-eligible sessions: transcribed or no_transcript; silent/short idle reaps excluded, speech-bearing idle reaps without delivery fail. Aggregate across instances. Arms: 1h and 5m burn >14.4x with >=20 events in 1h and >=5 in 5m; 6h and 30m burn >6x with >=20 events in 6h and >=5 in 30m.",
       "verification": "Read-only production baseline and query_range backtest on 2026-10-13; see backend/charts/monitoring/SLOS.md. No live provisioning or notification delivery.",
       "safe_next_action": "Confirm failed terminal outcomes and scrape health, correlate deploy/provider changes, then follow the journey runbook. Do not scale from this alert alone.",
       "runbook": "backend/charts/monitoring/SLOS.md",
       "slo_target": "0.95",
-      "threshold": "(1h AND 5m burn > 14.4x) OR (6h AND 30m burn > 6x) OR (10m accepted >=20 AND successes <1)"
+      "threshold": "(1h AND 5m burn > 14.4x) OR (6h AND 30m burn > 6x)"
     },
     "labels": {
       "severity": "critical",
@@ -59,7 +59,7 @@
     "annotations": {
       "summary": "Live transcription - SLO budget burn (warning)",
       "user_impact": "Live unsuccessful eligible work is consuming the 95.0% success budget faster than allowed.",
-      "scope": "Speech-eligible sessions: transcribed or no_transcript; silent/short idle reaps excluded, speech-bearing idle reaps without delivery fail. Aggregate across instances; minimum 20 long-window and 5 short-window events (chat fast short window: 2).",
+      "scope": "Speech-eligible sessions: transcribed or no_transcript; silent/short idle reaps excluded, speech-bearing idle reaps without delivery fail. Aggregate across instances. Arms: 24h and 2h burn >3x with >=20 events in 24h and >=5 in 2h; 3d and 6h burn >1x with >=20 events in 3d and >=5 in 6h.",
       "verification": "Read-only production baseline and query_range backtest on 2026-10-13; see backend/charts/monitoring/SLOS.md. No live provisioning or notification delivery.",
       "safe_next_action": "Confirm failed terminal outcomes and scrape health, correlate deploy/provider changes, then follow the journey runbook. Do not scale from this alert alone.",
       "runbook": "backend/charts/monitoring/SLOS.md",
@@ -87,24 +87,24 @@
     "title": "Mobile chat - SLO budget burn (critical)",
     "condition": "D",
     "data": [
-      {"refId": "A", "queryType": "", "relativeTimeRange": {"from": 21600, "to": 0}, "datasourceUid": "prometheus", "model": {"datasource": {"type": "prometheus", "uid": "prometheus"}, "expr": "((((clamp_min(sum(increase(omi_journey_accepted_total{job=\"cloud-run-application-metrics\",journey=\"chat_response\"}[1h])) - (sum(increase(omi_journey_terminal_total{job=\"cloud-run-application-metrics\",journey=\"chat_response\",outcome=\"success\"}[1h])) or (sum(increase(omi_journey_accepted_total{job=\"cloud-run-application-metrics\",journey=\"chat_response\"}[1h])) * 0)), 0) / sum(increase(omi_journey_accepted_total{job=\"cloud-run-application-metrics\",journey=\"chat_response\"}[1h]))) > bool 0.072) * ((clamp_min(sum(increase(omi_journey_accepted_total{job=\"cloud-run-application-metrics\",journey=\"chat_response\"}[5m])) - (sum(increase(omi_journey_terminal_total{job=\"cloud-run-application-metrics\",journey=\"chat_response\",outcome=\"success\"}[5m])) or (sum(increase(omi_journey_accepted_total{job=\"cloud-run-application-metrics\",journey=\"chat_response\"}[5m])) * 0)), 0) / sum(increase(omi_journey_accepted_total{job=\"cloud-run-application-metrics\",journey=\"chat_response\"}[5m]))) > bool 0.072) * (sum(increase(omi_journey_accepted_total{job=\"cloud-run-application-metrics\",journey=\"chat_response\"}[1h])) >= bool 20) * (sum(increase(omi_journey_accepted_total{job=\"cloud-run-application-metrics\",journey=\"chat_response\"}[5m])) >= bool 2)) > 0) or ((((clamp_min(sum(increase(omi_journey_accepted_total{job=\"cloud-run-application-metrics\",journey=\"chat_response\"}[6h])) - (sum(increase(omi_journey_terminal_total{job=\"cloud-run-application-metrics\",journey=\"chat_response\",outcome=\"success\"}[6h])) or (sum(increase(omi_journey_accepted_total{job=\"cloud-run-application-metrics\",journey=\"chat_response\"}[6h])) * 0)), 0) / sum(increase(omi_journey_accepted_total{job=\"cloud-run-application-metrics\",journey=\"chat_response\"}[6h]))) > bool 0.03) * ((clamp_min(sum(increase(omi_journey_accepted_total{job=\"cloud-run-application-metrics\",journey=\"chat_response\"}[30m])) - (sum(increase(omi_journey_terminal_total{job=\"cloud-run-application-metrics\",journey=\"chat_response\",outcome=\"success\"}[30m])) or (sum(increase(omi_journey_accepted_total{job=\"cloud-run-application-metrics\",journey=\"chat_response\"}[30m])) * 0)), 0) / sum(increase(omi_journey_accepted_total{job=\"cloud-run-application-metrics\",journey=\"chat_response\"}[30m]))) > bool 0.03) * (sum(increase(omi_journey_accepted_total{job=\"cloud-run-application-metrics\",journey=\"chat_response\"}[6h])) >= bool 20) * (sum(increase(omi_journey_accepted_total{job=\"cloud-run-application-metrics\",journey=\"chat_response\"}[30m])) >= bool 5)) > 0) or (sum(increase(omi_journey_accepted_total{job=\"cloud-run-application-metrics\",journey=\"chat_response\"}[6h])) * 0)", "instant": true, "intervalMs": 1000, "maxDataPoints": 43200, "refId": "A"}},
+      {"refId": "A", "queryType": "", "relativeTimeRange": {"from": 21600, "to": 0}, "datasourceUid": "prometheus", "model": {"datasource": {"type": "prometheus", "uid": "prometheus"}, "expr": "(((((clamp_min(sum(increase(omi_journey_accepted_total{job=\"cloud-run-application-metrics\",journey=\"chat_response\"}[1h])) - (sum(increase(omi_journey_terminal_total{job=\"cloud-run-application-metrics\",journey=\"chat_response\",outcome=\"success\"}[1h])) or (sum(increase(omi_journey_accepted_total{job=\"cloud-run-application-metrics\",journey=\"chat_response\"}[1h])) * 0)), 0) / sum(increase(omi_journey_accepted_total{job=\"cloud-run-application-metrics\",journey=\"chat_response\"}[1h]))) > bool 0.072) * (clamp_min(sum(increase(omi_journey_accepted_total{job=\"cloud-run-application-metrics\",journey=\"chat_response\"}[1h])) - (sum(increase(omi_journey_terminal_total{job=\"cloud-run-application-metrics\",journey=\"chat_response\",outcome=\"success\"}[1h])) or (sum(increase(omi_journey_accepted_total{job=\"cloud-run-application-metrics\",journey=\"chat_response\"}[1h])) * 0)), 0) >= bool 4) * (sum(increase(omi_journey_accepted_total{job=\"cloud-run-application-metrics\",journey=\"chat_response\"}[1h])) >= bool 20)) > 0) or ((((clamp_min(sum(increase(omi_journey_accepted_total{job=\"cloud-run-application-metrics\",journey=\"chat_response\"}[6h])) - (sum(increase(omi_journey_terminal_total{job=\"cloud-run-application-metrics\",journey=\"chat_response\",outcome=\"success\"}[6h])) or (sum(increase(omi_journey_accepted_total{job=\"cloud-run-application-metrics\",journey=\"chat_response\"}[6h])) * 0)), 0) / sum(increase(omi_journey_accepted_total{job=\"cloud-run-application-metrics\",journey=\"chat_response\"}[6h]))) > bool 0.03) * (clamp_min(sum(increase(omi_journey_accepted_total{job=\"cloud-run-application-metrics\",journey=\"chat_response\"}[6h])) - (sum(increase(omi_journey_terminal_total{job=\"cloud-run-application-metrics\",journey=\"chat_response\",outcome=\"success\"}[6h])) or (sum(increase(omi_journey_accepted_total{job=\"cloud-run-application-metrics\",journey=\"chat_response\"}[6h])) * 0)), 0) >= bool 7) * (sum(increase(omi_journey_accepted_total{job=\"cloud-run-application-metrics\",journey=\"chat_response\"}[6h])) >= bool 40)) > 0) or (((sum(increase(omi_journey_accepted_total{job=\"cloud-run-application-metrics\",journey=\"chat_response\"}[10m])) >= bool 5) * ((sum(increase(omi_journey_terminal_total{job=\"cloud-run-application-metrics\",journey=\"chat_response\",outcome=\"success\"}[10m])) or vector(0)) < bool 1)) > 0) or (sum(increase(omi_journey_accepted_total{job=\"cloud-run-application-metrics\",journey=\"chat_response\"}[6h])) * 0))", "instant": true, "intervalMs": 1000, "maxDataPoints": 43200, "refId": "A"}},
       {"refId": "C", "queryType": "", "relativeTimeRange": {"from": 0, "to": 0}, "datasourceUid": "__expr__", "model": {"datasource": {"type": "__expr__", "uid": "__expr__"}, "expression": "$A > 0", "intervalMs": 1000, "maxDataPoints": 43200, "refId": "C", "type": "math"}},
       {"refId": "D", "queryType": "", "relativeTimeRange": {"from": 0, "to": 0}, "datasourceUid": "__expr__", "model": {"conditions": [{"evaluator": {"params": [], "type": "gt"}, "operator": {"type": "and"}, "query": {"params": ["D"]}, "reducer": {"params": [], "type": "last"}, "type": "query"}], "datasource": {"type": "__expr__", "uid": "__expr__"}, "expression": "C", "intervalMs": 1000, "maxDataPoints": 43200, "reducer": "last", "refId": "D", "type": "reduce"}}
     ],
     "updated": "2026-10-13T00:00:00Z",
     "noDataState": "NoData",
     "execErrState": "Error",
-    "for": "0s",
+    "for": "2m",
     "keep_firing_for": "0s",
     "annotations": {
       "summary": "Mobile chat - SLO budget burn (critical)",
       "user_impact": "Chat unsuccessful eligible work is consuming the 99.5% success budget faster than allowed.",
-      "scope": "Accepted work minus successful terminals counts cancelled, abandoned and nonterminal work as bad; cancellation intent is not distinguishable. Aggregate across instances; minimum 20 long-window and 5 short-window events (chat fast short window: 2). Independent zero-completion arm: >=20 accepts and <1 successful terminal in 10m.",
+      "scope": "Accepted work minus successful terminals counts cancelled, abandoned and nonterminal work as bad; cancellation intent is not distinguishable. Aggregate across instances. Burn arms: 1h bad share >7.2% with >=4 bad events and >=20 accepts; 6h bad share >3% with >=7 bad events and >=40 accepts. Zero-completion arm: >=5 accepts and <1 success in 10m. Pending period is 2 minutes.",
       "verification": "Read-only production baseline and query_range backtest on 2026-10-13; see backend/charts/monitoring/SLOS.md. No live provisioning or notification delivery.",
       "safe_next_action": "Confirm failed terminal outcomes and scrape health, correlate deploy/provider changes, then follow the journey runbook. Do not scale from this alert alone.",
       "runbook": "backend/charts/monitoring/SLOS.md",
       "slo_target": "0.995",
-      "threshold": "(1h AND 5m burn > 14.4x) OR (6h AND 30m burn > 6x)"
+      "threshold": "(1h burn > 14.4x AND bad >= 4) OR (6h burn > 6x AND bad >= 7) OR (10m accepted >=5 AND successes <1)"
     },
     "labels": {
       "severity": "critical",
@@ -139,7 +139,7 @@
     "annotations": {
       "summary": "Mobile chat - SLO budget burn (warning)",
       "user_impact": "Chat unsuccessful eligible work is consuming the 99.5% success budget faster than allowed.",
-      "scope": "Accepted work minus successful terminals counts cancelled, abandoned and nonterminal work as bad; cancellation intent is not distinguishable. Aggregate across instances; minimum 20 long-window and 5 short-window events (chat fast short window: 2).",
+      "scope": "Accepted work minus successful terminals counts cancelled, abandoned and nonterminal work as bad; cancellation intent is not distinguishable. Aggregate across instances. Arms: 24h and 2h burn >3x with >=20 accepts in 24h and >=5 in 2h; 3d and 6h burn >1x with >=20 accepts in 3d and >=5 in 6h.",
       "verification": "Read-only production baseline and query_range backtest on 2026-10-13; see backend/charts/monitoring/SLOS.md. No live provisioning or notification delivery.",
       "safe_next_action": "Confirm failed terminal outcomes and scrape health, correlate deploy/provider changes, then follow the journey runbook. Do not scale from this alert alone.",
       "runbook": "backend/charts/monitoring/SLOS.md",
@@ -179,12 +179,12 @@
     "annotations": {
       "summary": "Pusher session - SLO budget burn (critical)",
       "user_impact": "Pusher unsuccessful eligible work is consuming the 95.5% success budget faster than allowed.",
-      "scope": "Accepted work minus successful terminals counts cancelled, abandoned and nonterminal work as bad; cancellation intent is not distinguishable. Aggregate across instances; minimum 20 long-window and 5 short-window events (chat fast short window: 2).",
+      "scope": "Accepted work minus successful terminals counts cancelled, abandoned and nonterminal work as bad; cancellation intent is not distinguishable. Aggregate across instances. Arms: 1h and 5m burn >14.4x with >=20 accepts in 1h and >=5 in 5m; 6h and 30m burn >6x with >=20 accepts in 6h and >=5 in 30m. Zero-completion arm: >=20 accepts and <1 success in 10m.",
       "verification": "Read-only production baseline and query_range backtest on 2026-10-13; see backend/charts/monitoring/SLOS.md. No live provisioning or notification delivery.",
       "safe_next_action": "Confirm failed terminal outcomes and scrape health, correlate deploy/provider changes, then follow the journey runbook. Do not scale from this alert alone.",
       "runbook": "backend/charts/monitoring/SLOS.md",
       "slo_target": "0.955",
-      "threshold": "(1h AND 5m burn > 14.4x) OR (6h AND 30m burn > 6x)"
+      "threshold": "(1h AND 5m burn > 14.4x) OR (6h AND 30m burn > 6x) OR (10m accepted >=20 AND successes <1)"
     },
     "labels": {
       "severity": "critical",
@@ -219,7 +219,7 @@
     "annotations": {
       "summary": "Pusher session - SLO budget burn (warning)",
       "user_impact": "Pusher unsuccessful eligible work is consuming the 95.5% success budget faster than allowed.",
-      "scope": "Accepted work minus successful terminals counts cancelled, abandoned and nonterminal work as bad; cancellation intent is not distinguishable. Aggregate across instances; minimum 20 long-window and 5 short-window events (chat fast short window: 2).",
+      "scope": "Accepted work minus successful terminals counts cancelled, abandoned and nonterminal work as bad; cancellation intent is not distinguishable. Aggregate across instances. Arms: 24h and 2h burn >3x with >=20 accepts in 24h and >=5 in 2h; 3d and 6h burn >1x with >=20 accepts in 3d and >=5 in 6h.",
       "verification": "Read-only production baseline and query_range backtest on 2026-10-13; see backend/charts/monitoring/SLOS.md. No live provisioning or notification delivery.",
       "safe_next_action": "Confirm failed terminal outcomes and scrape health, correlate deploy/provider changes, then follow the journey runbook. Do not scale from this alert alone.",
       "runbook": "backend/charts/monitoring/SLOS.md",
