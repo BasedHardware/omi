@@ -47,6 +47,7 @@ class OmiBleForegroundService : Service() {
         private const val MTU_REQUEST_DELAY_MS = 100L
         private const val MTU_SIZE = 512
         private const val STABILITY_TIMER_MS = 60_000L
+        private const val RETENTION_PROBE_TIMEOUT_MS = 10_000L
         // Base delay for CCCD-timeout recovery. Ordinary out-of-range retries use
         // reconnectBackoff so a fixed 3s loop cannot spin the radio forever.
         private const val RECONNECT_DELAY_MS = 3_000L
@@ -160,8 +161,7 @@ class OmiBleForegroundService : Service() {
         var hasEverConnected: Boolean = false,
         /** Advertisement record only; runtime storage status must also be verified. */
         @Volatile var hasVerifiedRetention: Boolean = false,
-        @Volatile var retentionRuntimeVerified: Boolean = false,
-        var retentionProbeInFlight: Boolean = false,
+        var retentionProbeTimeout: Runnable? = null,
         var pendingReconnect: Runnable? = null,
         var pendingReconnectDelayMs: Long = 0L,
         /** Uptime deadline of the pending retry, 0 when none is scheduled.
@@ -175,6 +175,9 @@ class OmiBleForegroundService : Service() {
         var currentAttemptEstablished: Boolean = false
     ) {
         internal val reconnectDiagnostics = BleReconnectDiagnostics()
+        internal val retentionProbe = RetentionProbeLifecycle()
+        val retentionRuntimeVerified: Boolean get() = retentionProbe.runtimeVerified
+        val retentionProbeInFlight: Boolean get() = retentionProbe.inFlight
     }
 
     private val managedDevices = ConcurrentHashMap<String, ManagedDevice>()
@@ -383,24 +386,39 @@ class OmiBleForegroundService : Service() {
                 it.uuid.equals(STORAGE_DRAIN_SERVICE_UUID, ignoreCase = true)
             }
             // Every ready event must prove storage again; never persist this capability.
-            managed.retentionRuntimeVerified = false
+            managed.retentionProbe.resetVerification()
         }
     }
 
     private fun probeRetentionRuntime(address: String) {
         val managed = managedDevices[address] ?: return
         val gatt = bleManager.connectedGatts[address] ?: return
+        val probe: RetentionProbeLifecycle.Probe
+        val timeout: Runnable
         synchronized(managed) {
             if (!managed.hasVerifiedRetention || managed.retentionProbeInFlight) return
-            managed.retentionProbeInFlight = true
+            probe = managed.retentionProbe.start(gatt) ?: return
+            timeout = Runnable {
+                synchronized(managed) {
+                    if (managed.retentionProbe.timeout(probe)) {
+                        managed.retentionProbeTimeout = null
+                        Log.w(TAG, "Runtime offline retention probe timed out for $address; keeping flat retry cadence")
+                    }
+                }
+            }
+            managed.retentionProbeTimeout = timeout
+            handler.postDelayed(timeout, RETENTION_PROBE_TIMEOUT_MS)
         }
         val completeProbe: (Result<ByteArray>) -> Unit = completeProbe@ { result ->
+            handler.removeCallbacks(timeout)
             synchronized(managed) {
-                managed.retentionProbeInFlight = false
                 // A read from a replaced device/connection must not license its successor.
-                if (managedDevices[address] !== managed || bleManager.connectedGatts[address] !== gatt) return@completeProbe
-                managed.retentionRuntimeVerified = managed.hasVerifiedRetention &&
-                    BleReconnectBackoff.retentionProbeSucceeds(result.getOrNull())
+                if (managedDevices[address] !== managed || bleManager.connectedGatts[address] !== gatt) {
+                    if (managed.retentionProbe.timeout(probe)) managed.retentionProbeTimeout = null
+                    return@completeProbe
+                }
+                if (!managed.retentionProbe.result(probe, gatt, managed.hasVerifiedRetention, result.getOrNull())) return@completeProbe
+                managed.retentionProbeTimeout = null
                 if (managed.retentionRuntimeVerified) {
                     Log.i(TAG, "Verified runtime offline retention for $address (storage status nonzero)")
                 } else {
@@ -413,6 +431,14 @@ class OmiBleForegroundService : Service() {
             bleManager.readCharacteristic(address, STORAGE_DRAIN_SERVICE_UUID, STORAGE_DRAIN_READ_CHAR_UUID, completeProbe)
         } catch (e: Exception) {
             completeProbe(Result.failure(e))
+        }
+    }
+
+    private fun retireRetentionProbe(managed: ManagedDevice) {
+        synchronized(managed) {
+            managed.retentionProbeTimeout?.let { handler.removeCallbacks(it) }
+            managed.retentionProbeTimeout = null
+            managed.retentionProbe.interrupt()
         }
     }
 
@@ -491,6 +517,7 @@ class OmiBleForegroundService : Service() {
 
         managed.pendingReconnect?.let { handler.removeCallbacks(it) }
         managed.stabilityTimerRunnable?.let { handler.removeCallbacks(it) }
+        retireRetentionProbe(managed)
 
         bleManager.disconnectGatt(addr)
         bleManager.closeGatt(addr)
@@ -514,6 +541,7 @@ class OmiBleForegroundService : Service() {
             val managed = managedDevices[addr] ?: return
             if (!isBluetoothEnabled || bleManager.isPeripheralConnected(addr)) return
 
+            retireRetentionProbe(managed)
             if (bleManager.connectedGatts.containsKey(addr)) bleManager.closeGatt(addr)
 
             // autoConnect=false for initial connection (device nearby, fast).
@@ -622,6 +650,7 @@ class OmiBleForegroundService : Service() {
                 managed.retryCount = 0
                 // Close the stuck GATT so connectToDevice opens a fresh one
                 if (bleManager.connectedGatts.containsKey(addr)) {
+                    retireRetentionProbe(managed)
                     bleManager.closeGatt(addr)
                 }
                 managed.currentGattHash = null
@@ -647,6 +676,7 @@ class OmiBleForegroundService : Service() {
             managed.pendingReconnect = null
             managed.stabilityTimerRunnable?.let { handler.removeCallbacks(it) }
             managed.stabilityTimerRunnable = null
+            retireRetentionProbe(managed)
 
             val duration = managed.connectionStartTime?.let { System.currentTimeMillis() - it } ?: 0
             if (duration >= STABILITY_TIMER_MS) {
@@ -842,6 +872,7 @@ class OmiBleForegroundService : Service() {
                         managed.pendingReconnect = null
                         managed.stabilityTimerRunnable?.let { handler.removeCallbacks(it) }
                         managed.stabilityTimerRunnable = null
+                        retireRetentionProbe(managed)
                         bleManager.stopRssiKeepAlive()
                         bleManager.closeGatt(addr)
                         managed.currentGattHash = null
@@ -854,6 +885,7 @@ class OmiBleForegroundService : Service() {
                     isBluetoothEnabled = false
                     for ((addr, managed) in managedDevices) {
                         if (managed.currentGattHash != null) {
+                            retireRetentionProbe(managed)
                             bleManager.closeGatt(addr)
                             managed.currentGattHash = null
                         }
@@ -1019,6 +1051,7 @@ class OmiBleForegroundService : Service() {
         for ((addr, managed) in managedDevices) {
             managed.pendingReconnect?.let { handler.removeCallbacks(it) }
             managed.stabilityTimerRunnable?.let { handler.removeCallbacks(it) }
+            retireRetentionProbe(managed)
             persistDisconnectEvent(addr, -1, isManual = false, eventType = "disconnect")
             bleManager.disconnectGatt(addr)
             bleManager.closeGatt(addr)
