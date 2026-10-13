@@ -69,8 +69,14 @@ def metric_names(expr):
     return names
 
 
+# Only the fields that decide whether and when a rule fires. Notification routing, annotations
+# and labels change independently (e.g. a fleet-wide timing policy) and must not void debt baselines.
+FINGERPRINT_FIELDS = ('condition', 'data', 'for', 'noDataState', 'execErrState')
+
+
 def fingerprint(rule):
-    return hashlib.sha256(json.dumps(rule, sort_keys=True, separators=(',', ':')).encode()).hexdigest()
+    semantic = {key: rule.get(key) for key in FINGERPRINT_FIELDS}
+    return hashlib.sha256(json.dumps(semantic, sort_keys=True, separators=(',', ':')).encode()).hexdigest()
 
 
 class Prometheus:

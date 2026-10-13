@@ -197,3 +197,15 @@ def test_daily_chunks_preserve_grid_and_series_identity(monkeypatch):
     series = client.range('fixture_total', 0, 86400, 300)
     assert [t for t, _ in series[0]['values']] == list(range(0, 86401, 300))
     assert [(c['start'], c['end']) for c in calls] == [(0, 86100), (86400, 86400)]
+
+
+def test_debt_fingerprint_ignores_routing_and_annotations():
+    rule = next(iter(b.rules().values()))
+    rerouted = json.loads(json.dumps(rule))
+    rerouted['notification_settings'] = {'receiver': 'x', 'repeat_interval': '24h'}
+    rerouted['annotations'] = {**rerouted.get('annotations', {}), '__dashboardUid__': 'other'}
+    rerouted['labels'] = {**rerouted.get('labels', {}), 'severity': 'warning'}
+    assert b.fingerprint(rerouted) == b.fingerprint(rule)
+    retuned = json.loads(json.dumps(rule))
+    retuned['for'] = '99m'
+    assert b.fingerprint(retuned) != b.fingerprint(rule)

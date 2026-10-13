@@ -2009,42 +2009,42 @@
   ],
   "legacy_debt": {
     "bfobs1syncenq01": {
-      "sha256": "cbe9b1f8bc46ece7324a14b7135cdfeabad426ab62e081c30df4493d1f4464ee",
+      "sha256": "736f058e0b07d9e3bb29f77ffc0488a775a2cecbd88c4d306b6f9cd55eff214c",
       "errors": [
         "missing metrics: omi_sync_dispatch_attempts_total"
       ],
       "reason": "Existing rule outside this admission slice; unchanged fingerprint only, not deployment approval."
     },
     "omi-cloud-run-metric-names-unnormalized": {
-      "sha256": "418a184234212c45fd683ae6f40dc03e9e230f59b8c8988e1ff9e6fe59c2a99f",
+      "sha256": "3bcde82824b3134e89cb8ddd7f01cb913963c98231d1275634667125adc72e65",
       "errors": [
         "regex/negative metric-name selector needs explicit inventory review"
       ],
       "reason": "Existing rule outside this admission slice; unchanged fingerprint only, not deployment approval."
     },
     "omi-stt-account-state": {
-      "sha256": "ad66a7f7ad1425d631a692940f814a6a8115cea8bfe3e2c716d4de670081b55d",
+      "sha256": "8650917e09587a997804eac703fd5373255bd81bbb445436e1c9a92480c63e6a",
       "errors": [
         "no pending duration on noisy rate/ratio/average"
       ],
       "reason": "Existing rule outside this admission slice; unchanged fingerprint only, not deployment approval."
     },
     "omi-llm-gateway-client-reachability": {
-      "sha256": "6e97705e18544d3e3defd9503001dae12a2331dff0761d061f0a11df14e4ee54",
+      "sha256": "e6cd0161109e9f7f1b5669beba163c1ebfe13e456eb4a994ced2e38fe2d115a0",
       "errors": [
         "missing metrics: llm_gateway_chat_extraction_requests_total, llm_gateway_client_first_byte_seconds_bucket"
       ],
       "reason": "Paused by admission hold; unpausing requires reviewed proof and removal of the hold."
     },
     "omi-queue-oldest-ready": {
-      "sha256": "1264cca098ce0dc2e895e19c0f903092e91c75e361eda7833f4684e0649464b1",
+      "sha256": "d473be07d4c6670398390eaf713b843b10bf067f07fc24399f8f2022bf1af51f",
       "errors": [
         "missing metrics: omi_queue_oldest_ready_sample_unknown"
       ],
       "reason": "Paused by admission hold; unpausing requires reviewed proof and removal of the hold."
     },
     "bevykefxxe0owd": {
-      "sha256": "9c03b38886715458e58718983df38c77ae7c4852996670b0c38bbfaeb6c20519",
+      "sha256": "839e384fb300c4471414ad229459310bb029cf4a898fcbcd43e1179ff3418b0f",
       "errors": [
         "missing metrics: engine_stream_latency_bucket"
       ],
