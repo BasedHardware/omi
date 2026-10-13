@@ -34,8 +34,15 @@ class ServiceManager {
     // Android (AudioRecord); chat voice memos and the speech profile stay on the
     // flutter_sound path via [mic]. The shared arbiter keeps the two stacks from
     // contending for the microphone.
+    // iOS lengthens the healthy-state watchdog poll (5s, deadline-capped).
+    // Android keeps the 1s poll; its native heartbeat also does mode checks
+    // that this flag must not slow down.
     sm._phoneMic = (Platform.isIOS || Platform.isAndroid)
-        ? ArbitratedMic(inner: NativeMicRecorderService(), arbiter: micArbiter, owner: 'conversation')
+        ? ArbitratedMic(
+            inner: NativeMicRecorderService(paceHealthyChecks: Platform.isIOS),
+            arbiter: micArbiter,
+            owner: 'conversation',
+          )
         : sm._mic;
     sm._device = DeviceService();
     sm._socket = SocketServicePool();
