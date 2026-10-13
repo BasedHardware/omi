@@ -152,6 +152,14 @@ async def mark_saturated(model):
         logger.warning('dream_capacity_cooldown reason=saturated model=%s', model)
 
 
+async def wait_for_capacity(deadline, required_seconds):
+    """One cooldown, then recheck shared/local saturation; never outlive the pass."""
+    if deadline - asyncio.get_running_loop().time() < COOLDOWN_SECONDS + required_seconds:
+        return False
+    await asyncio.sleep(COOLDOWN_SECONDS)
+    return deadline - asyncio.get_running_loop().time() >= required_seconds and await available_model() is not None
+
+
 def _release_local(token):
     slots = _local().slots
     for index, (own, _) in list(slots.items()):
