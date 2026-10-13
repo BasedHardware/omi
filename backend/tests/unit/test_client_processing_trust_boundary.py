@@ -541,6 +541,10 @@ PINNED_CONVERSATION_DUMPS: FrozenSet[DumpSite] = frozenset(
         DumpSite('routers/conversations.py', 'update_action_item_description', 'model_dump'),
         DumpSite('routers/conversations.py', 'delete_action_item', 'model_dump'),
         DumpSite('routers/conversations.py', 'get_conversation_suggested_apps', 'model_dump'),
+        # Final-pass commit serializes only TranscriptSegment candidates for
+        # protected persistence/remapping, never a Conversation or LLM payload.
+        # TranscriptSegment cannot carry the client_processing projection.
+        DumpSite('database/conversations.py', 'commit', 'model_dump'),
         DumpSite('database/conversations.py', 'store_model_segments_result', 'model_dump'),
         DumpSite('database/conversations.py', '_store', 'model_dump'),
         # _get_goal_context / suggest_goal dump MemoryDB records (not
