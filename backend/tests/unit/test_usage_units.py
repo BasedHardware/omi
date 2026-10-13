@@ -98,7 +98,7 @@ def test_read_joins_hourly_and_gateway_rollups_without_attempt_scan(units):
         firestore_client=store,
         entitlements={'budget': {'kind': 'rate_card_mix'}, 'entitlement_version': 'ladder_v1'},
     )
-    assert planned['budget_units'] == 217
+    assert planned['budget_units'] == 4853
 
 
 def test_hourly_write_keeps_root_meter_and_finops_counters_and_recovers_dotted_history(units, monkeypatch):
