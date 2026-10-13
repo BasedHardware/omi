@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/material.dart';
@@ -11,12 +12,19 @@ import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/models/plan_storefront.dart';
 import 'package:omi/models/subscription.dart';
 import 'package:omi/pages/settings/widgets/plans_sheet.dart';
+import 'package:omi/pages/settings/widgets/plans/storefront_plans_content.dart';
 import 'package:omi/providers/usage_provider.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
 
 class _Usage extends UsageProvider {
   String? checkedOutPrice;
+  @override
+  Future<Map<String, dynamic>?> upgradeUserSubscription({required String priceId, String? promotionCode}) async {
+    checkedOutPrice = priceId;
+    return null;
+  }
+
   @override
   Future<void> loadAvailablePlans() async {}
   @override
@@ -27,7 +35,8 @@ class _Usage extends UsageProvider {
 }
 
 class _Host extends StatefulWidget {
-  const _Host(this.data);
+  const _Host(this.data, {this.gate});
+  final Future<bool> Function()? gate;
   final PlanStorefront data;
   @override
   State<_Host> createState() => _HostState();
@@ -49,8 +58,8 @@ class _HostState extends State<_Host> with TickerProviderStateMixin {
         arrowController: animation,
         arrowAnimation: animation,
         initialStorefront: widget.data,
-        readStorefrontGate: () async => true,
-        analyticsSource: 'budget_80_percent',
+        readStorefrontGate: widget.gate ?? () async => true,
+        analyticsSource: 'budget_80',
         storefrontApi: PlanStorefrontApi(
             baseUrl: 'http://127.0.0.1:1/',
             send: (_) async => http.Response(File('test/fixtures/plan_storefront.json').readAsStringSync(), 200)),
@@ -63,9 +72,80 @@ void main() {
     await SharedPreferencesUtil.init();
     PlatformManager.initializeForLocalHarness();
   });
+  for (final current in ['operator', 'architect', 'legacy']) {
+    testWidgets('$current subscription rejects Plus checkout even from a stale tap', (tester) async {
+      tester.view.physicalSize = const Size(1000, 2200);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      final usage = _Usage();
+      addTearDown(usage.dispose);
+      final json = jsonDecode(File('test/fixtures/plan_storefront.json').readAsStringSync()) as Map<String, dynamic>;
+      json['current']['id'] = current == 'legacy' ? 'unlimited_v2' : current;
+      json['current']['legacy'] = current == 'legacy';
+      json['current']['price_id'] = 'fixture_existing';
+      final data = PlanStorefront.fromJson(json);
+      usage.debugSetSubscription(UserSubscriptionResponse(
+        subscription: Subscription(
+            plan: PlanType.fromWire(current == 'legacy' ? 'unlimited_v2' : current), status: SubscriptionStatus.active),
+        transcriptionSecondsUsed: 0,
+        transcriptionSecondsLimit: 0,
+        wordsTranscribedUsed: 0,
+        wordsTranscribedLimit: 0,
+        insightsGainedUsed: 0,
+        insightsGainedLimit: 0,
+        availablePlans: [],
+      ));
+      final price = data.tiers[1].priceFor('month')!;
+      usage.debugSetAvailablePlans({
+        'plans': [
+          {
+            'id': price.id,
+            'plan_id': 'plus',
+            'interval': 'month',
+            'unit_amount': price.amount,
+            'title': 'Plus',
+            'price_string': price.formatted,
+            'is_active': false
+          }
+        ]
+      });
+      await tester.pumpWidget(ChangeNotifierProvider<UsageProvider>.value(
+          value: usage,
+          child: MaterialApp(
+              localizationsDelegates: AppLocalizations.localizationsDelegates,
+              supportedLocales: AppLocalizations.supportedLocales,
+              home: Scaffold(body: _Host(data)))));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('storefront_buy_plus')), findsNothing);
+      // Invoke the actual sheet handoff to model a tap queued before subscription refresh.
+      await tester.widget<StorefrontPlansContent>(find.byType(StorefrontPlansContent)).onSelect(data.tiers[1], price);
+      await tester.pumpAndSettle();
+      expect(usage.checkedOutPrice, isNull);
+      expect(tester.takeException(), isNull);
+    });
+  }
+  testWidgets('unresolved storefront flag paints existing plans sheet', (tester) async {
+    final usage = _Usage();
+    addTearDown(usage.dispose);
+    final pending = Completer<bool>();
+    final data = PlanStorefront.fromJson(jsonDecode(File('test/fixtures/plan_storefront.json').readAsStringSync()));
+    await tester.pumpWidget(ChangeNotifierProvider<UsageProvider>.value(
+        value: usage,
+        child: MaterialApp(
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            supportedLocales: AppLocalizations.supportedLocales,
+            home: Scaffold(body: _Host(data, gate: () => pending.future)))));
+    await tester.pump();
+    expect(find.byType(StorefrontPlansContent), findsNothing);
+    expect(find.byType(OmiLoadingState), findsNothing);
+    pending.complete(false);
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+  });
   for (final mismatch in ['none', 'id', 'amount', 'interval']) {
     testWidgets('existing checkout receives exact storefront price only when mismatch=$mismatch', (tester) async {
-      tester.view.physicalSize = const Size(430, 2200);
+      tester.view.physicalSize = const Size(1000, 2200);
       tester.view.devicePixelRatio = 1;
       addTearDown(tester.view.resetPhysicalSize);
       addTearDown(tester.view.resetDevicePixelRatio);
@@ -110,7 +190,11 @@ void main() {
               supportedLocales: AppLocalizations.supportedLocales,
               home: Scaffold(body: _Host(data)))));
       await tester.pumpAndSettle();
-      await tester.tap(find.byKey(const Key('storefront_buy_plus')));
+      await tester.ensureVisible(find.byKey(const Key('storefront_other_plans')));
+      await tester.tap(find.byKey(const Key('storefront_other_plans')).hitTestable());
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(find.byKey(const Key('storefront_buy_plus')));
+      await tester.tap(find.byKey(const Key('storefront_buy_plus')).hitTestable());
       await tester.pumpAndSettle();
       expect(usage.checkedOutPrice, mismatch == 'none' ? price.id : isNull);
       expect(tester.takeException(), isNull);

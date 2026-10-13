@@ -5,6 +5,20 @@ import 'package:omi/models/plan_storefront.dart';
 
 Map<String, dynamic> fixture() => jsonDecode(File('test/fixtures/plan_storefront.json').readAsStringSync());
 void main() {
+  test('unused current message is optional and malformed pro gates fail at parse time', () {
+    final json = fixture();
+    json['current'].remove('message');
+    expect(PlanStorefront.fromJson(json).current!.message, isEmpty);
+    for (final gates in [
+      [1],
+      ['proactive_agent', null],
+      [''],
+      'proactive_agent'
+    ]) {
+      json['usage_context']['pro_gates'] = gates;
+      expect(() => PlanStorefront.fromJson(json), throwsFormatException);
+    }
+  });
   test('optional presentation fields preserve backend billing copy and period identity', () {
     final data = PlanStorefront.fromJson(fixture());
     expect(data.current!.formattedPrice, r'$19.99/mo');

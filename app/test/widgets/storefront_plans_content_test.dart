@@ -41,6 +41,14 @@ Future<void> capture(WidgetTester tester, String name) async {
     final paragraph = element.renderObject;
     if (paragraph is RenderParagraph) paragraph.text = productFont(paragraph.text);
   }
+  // Force retained header layers to repaint after font normalization so the
+  // exported boundary contains the entire visible sheet on every capture.
+  void repaint(RenderObject object) {
+    object.visitChildren(repaint);
+    object.markNeedsPaint();
+  }
+
+  repaint(tester.renderObject<RenderRepaintBoundary>(find.byKey(boundaryKey)));
   await tester.pump();
   await tester.runAsync(() async {
     final boundary = tester.renderObject<RenderRepaintBoundary>(find.byKey(boundaryKey));
@@ -101,22 +109,22 @@ Future<void> pumpSheet(WidgetTester tester,
   // Recreate the capture boundary between states so retained header layers are
   // painted into every standalone screenshot, including empty/error states.
   await tester.pumpWidget(const SizedBox.shrink());
-  await tester.pumpWidget(RepaintBoundary(
-      key: boundaryKey,
-      child: MaterialApp(
-        key: UniqueKey(),
-        debugShowCheckedModeBanner: false,
-        localizationsDelegates: AppLocalizations.localizationsDelegates,
-        supportedLocales: AppLocalizations.supportedLocales,
-        theme: buildOmiTheme(brightness: dark ? Brightness.dark : Brightness.light).copyWith(
-          platform: TargetPlatform.iOS,
-          textTheme: buildOmiTheme(brightness: dark ? Brightness.dark : Brightness.light)
-              .textTheme
-              .apply(fontFamily: 'SF Pro Display'),
-        ),
-        builder: (context, child) =>
-            MediaQuery(data: MediaQuery.of(context).copyWith(textScaler: TextScaler.linear(scale)), child: child!),
-        home: Scaffold(
+  await tester.pumpWidget(MaterialApp(
+    key: UniqueKey(),
+    debugShowCheckedModeBanner: false,
+    localizationsDelegates: AppLocalizations.localizationsDelegates,
+    supportedLocales: AppLocalizations.supportedLocales,
+    theme: buildOmiTheme(brightness: dark ? Brightness.dark : Brightness.light).copyWith(
+      platform: TargetPlatform.iOS,
+      textTheme: buildOmiTheme(brightness: dark ? Brightness.dark : Brightness.light)
+          .textTheme
+          .apply(fontFamily: 'SF Pro Display'),
+    ),
+    builder: (context, child) =>
+        MediaQuery(data: MediaQuery.of(context).copyWith(textScaler: TextScaler.linear(scale)), child: child!),
+    home: RepaintBoundary(
+        key: boundaryKey,
+        child: Scaffold(
             body: Align(
                 alignment: Alignment.bottomCenter,
                 child: OmiSheetScaffold(
@@ -131,8 +139,8 @@ Future<void> pumpSheet(WidgetTester tester,
                           onManage: () async => manage?.call(),
                           onRestore: () async => restore?.call(),
                           onSelect: select ?? (_, __) async {}),
-                ))),
-      )));
+                )))),
+  ));
   await tester.pump();
   await tester.pump(const Duration(milliseconds: 500));
 }
@@ -161,12 +169,6 @@ void main() {
     await capture(tester, '001-mobile-ios-storefront-monthly.png');
     await tester.tap(find.byKey(const Key('storefront_year')));
     await tester.pumpAndSettle();
-    await tester.scrollUntilVisible(find.byKey(const Key('storefront_other_plans')), 200,
-        scrollable: find.byType(Scrollable).first);
-    await tester.ensureVisible(find.byKey(const Key('storefront_other_plans')));
-    await tester.pump();
-    await tester.tap(find.byKey(const Key('storefront_other_plans')).hitTestable());
-    await tester.pumpAndSettle();
     await tester.scrollUntilVisible(find.byKey(const Key('storefront_buy_plus')), 200,
         scrollable: find.byType(Scrollable).first);
     expect(find.textContaining('Save 16.7%'), findsWidgets);
@@ -184,6 +186,10 @@ void main() {
     expect(selectedId, 'fixture_operator_year');
     expect(find.byType(OmiCloseButton), findsOneWidget);
     expect(tester.takeException(), isNull);
+    await tester.scrollUntilVisible(find.byKey(const Key('storefront_other_plans')), 250,
+        scrollable: find.byType(Scrollable).first);
+    await tester.tap(find.byKey(const Key('storefront_other_plans')).hitTestable());
+    await tester.pumpAndSettle();
     await tester.scrollUntilVisible(find.byKey(const Key('storefront_tier_architect')), 250,
         scrollable: find.byType(Scrollable).first);
     await Scrollable.ensureVisible(tester.element(find.byKey(const Key('storefront_tier_architect'))), alignment: 0);
@@ -228,7 +234,7 @@ void main() {
     }
   });
 
-  testWidgets('legacy current plan stays distinct from the new-buyer ladder', (tester) async {
+  testWidgets('legacy current plan has no storefront buy buttons despite checkout actions', (tester) async {
     final json = fixture();
     json['current'] = {
       'id': 'unlimited_v2',
@@ -242,9 +248,13 @@ void main() {
     expect(find.text('Current · Unlimited · Legacy plan'), findsOneWidget);
     expect(find.textContaining('legacy plan stays unchanged'), findsNothing);
     await capture(tester, '008-mobile-ios-storefront-legacy.png');
-    await tester.scrollUntilVisible(find.byKey(const Key('storefront_other_plans')), 200,
-        scrollable: find.byType(Scrollable).first);
-    expect(find.text('Other plans · Free, Plus'), findsOneWidget);
+    expect(
+        find.byWidgetPredicate((widget) =>
+            widget.key is ValueKey<String> && (widget.key as ValueKey<String>).value.startsWith('storefront_buy_')),
+        findsNothing);
+    expect(find.byKey(const Key('storefront_other_plans')), findsNothing);
+    expect(find.byKey(const Key('storefront_manage')), findsOneWidget);
+    expect(find.byKey(const Key('storefront_restore')), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 
@@ -345,23 +355,30 @@ void main() {
     });
   }
 
-  testWidgets('recommendation leads and current/lower plans remain expandable in backend order', (tester) async {
+  testWidgets('Other plans is collapsed and excludes the current tier', (tester) async {
     await pumpSheet(tester, data: PlanStorefront.fromJson(fixture()));
     expect(find.byKey(const Key('storefront_tier_basic')), findsNothing);
-    expect(find.byKey(const Key('storefront_tier_plus')), findsNothing);
+    expect(find.byKey(const Key('storefront_tier_architect')), findsNothing);
+    expect(find.byKey(const Key('storefront_tier_plus')), findsOneWidget);
     expect(find.text(r'Current · Plus · $19.99/mo · Renews Nov 1'), findsOneWidget);
     await tester.scrollUntilVisible(find.byKey(const Key('storefront_other_plans')), 200,
         scrollable: find.byType(Scrollable).first);
-    expect(find.text('Other plans · Free, Plus'), findsOneWidget);
-    await tester.ensureVisible(find.byKey(const Key('storefront_other_plans')));
-    await tester.ensureVisible(find.byKey(const Key('storefront_other_plans')));
     await tester.pump();
     await tester.tap(find.byKey(const Key('storefront_other_plans')).hitTestable());
     await tester.pumpAndSettle();
-    expect(find.byKey(const Key('storefront_tier_basic')), findsOneWidget);
-    expect(find.byKey(const Key('storefront_tier_plus')), findsOneWidget);
-    expect(tester.getTopLeft(find.byKey(const Key('storefront_tier_basic'))).dy,
-        lessThan(tester.getTopLeft(find.byKey(const Key('storefront_tier_plus'))).dy));
+    final list = tester.widget<ListView>(find.byKey(const Key('storefront_scroll')));
+    final children = (list.childrenDelegate as SliverChildListDelegate).children;
+    final currentIndex = children.indexWhere((child) => child.key == const Key('storefront_tier_plus'));
+    final freeIndex = children.indexWhere((child) => child.key == const Key('storefront_tier_basic'));
+    final architectIndex = children.indexWhere((child) => child.key == const Key('storefront_tier_architect'));
+    expect(currentIndex, greaterThanOrEqualTo(0));
+    expect(freeIndex, greaterThan(currentIndex));
+    expect(architectIndex, greaterThan(freeIndex));
+    expect(children.where((child) => child.key == const Key('storefront_tier_plus')), hasLength(1));
+    await tester.scrollUntilVisible(find.byKey(const Key('storefront_tier_architect')), 200,
+        scrollable: find.byType(Scrollable).first);
+    expect(find.byKey(const Key('storefront_tier_architect')), findsOneWidget);
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('missing billing fields are omitted and a new period restores a dismissed nudge', (tester) async {
@@ -392,16 +409,19 @@ void main() {
     await capture(tester, '018-mobile-ios-small-light-budget-fold.png');
   });
 
-  testWidgets('expanded other plans retain current billing controls', (tester) async {
+  testWidgets('expanded other plans show Free and Architect with current tier separate', (tester) async {
     await pumpSheet(tester, data: PlanStorefront.fromJson(fixture()));
-    await tester.ensureVisible(find.byKey(const Key('storefront_other_plans')));
-    await tester.ensureVisible(find.byKey(const Key('storefront_other_plans')));
+    await tester.scrollUntilVisible(find.byKey(const Key('storefront_other_plans')), 200,
+        scrollable: find.byType(Scrollable).first);
+    await tester.scrollUntilVisible(find.byKey(const Key('storefront_other_plans')), 200,
+        scrollable: find.byType(Scrollable).first);
     await tester.pump();
     await tester.tap(find.byKey(const Key('storefront_other_plans')).hitTestable());
     await tester.pumpAndSettle();
     await tester.ensureVisible(find.byKey(const Key('storefront_tier_basic')));
     await capture(tester, '019-mobile-ios-storefront-other-plans.png');
-    expect(find.byKey(const Key('storefront_tier_plus')), findsOneWidget);
+    expect(find.byKey(const Key('storefront_buy_plus')), findsNothing);
+    expect(tester.takeException(), isNull);
   });
 
   for (final dark in [true, false]) {

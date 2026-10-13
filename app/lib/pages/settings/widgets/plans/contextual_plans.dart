@@ -66,9 +66,7 @@ class _ContextualPlansHostState extends State<_ContextualPlansHost> with TickerP
 /// Existing legacy access is never inferred from a canonical tier name.
 Future<bool> showProGateUpsell(BuildContext context, {required String feature, required String source}) async {
   final provider = context.read<UsageProvider>();
-  if (!provider.showSubscriptionUI ||
-      !await PlanStorefrontGate.upsellsEnabled() ||
-      !await PlanStorefrontGate.sheetEnabled()) {
+  if (!provider.showSubscriptionUI || !await PlanStorefrontGate.contextualEnabled()) {
     return false;
   }
   if (!context.mounted || !provider.showSubscriptionUI) return false;
@@ -119,9 +117,7 @@ class _BudgetUpsellBannerState extends State<BudgetUpsellBanner> {
   Future<void> _load(int generation) async {
     if (!mounted || generation != _generation) return;
     final provider = context.read<UsageProvider>();
-    if (!provider.showSubscriptionUI ||
-        !await PlanStorefrontGate.upsellsEnabled() ||
-        !await PlanStorefrontGate.sheetEnabled()) {
+    if (!provider.showSubscriptionUI || !await PlanStorefrontGate.contextualEnabled()) {
       return;
     }
     if (!mounted || generation != _generation || !provider.showSubscriptionUI) return;

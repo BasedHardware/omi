@@ -1,3 +1,5 @@
+import 'package:omi/models/subscription.dart';
+
 /// Presentation only. The backend owns tier rank, recommendation, copy, prices and entitlements.
 /// Unknown schema versions and malformed purchasable prices fail closed.
 class PlanStorefront {
@@ -22,6 +24,17 @@ class PlanStorefront {
       current?.legacy == false &&
       usageContext?.legacy != true &&
       usageContext?.proGates.contains(feature) == true;
+
+  /// Client safety boundary: presentation actions cannot migrate legacy prices
+  /// or strip desktop entitlements, even when the server advertises checkout.
+  bool canCheckout(StorefrontTier tier, StorefrontPrice price, {bool currentGrantsDesktop = false}) =>
+      showSubscriptionUi &&
+      current?.legacy != true &&
+      tier.action == 'checkout' &&
+      tier.prices.contains(price) &&
+      price.id != current?.priceId &&
+      (!(currentGrantsDesktop || PlanType.fromWire(current?.id ?? 'basic').grantsDesktop) ||
+          PlanType.fromWire(tier.id).grantsDesktop);
 
   factory PlanStorefront.fromJson(Map<String, dynamic> json) {
     if (json['schema_version'] != 1) throw const FormatException('Unsupported storefront schema');
@@ -151,7 +164,7 @@ class StorefrontCurrentPlan {
       required this.name,
       this.priceId,
       required this.legacy,
-      required this.message,
+      this.message = '',
       this.formattedPrice,
       this.renewalLabel,
       this.comparisonTierId});
@@ -160,7 +173,7 @@ class StorefrontCurrentPlan {
       name: _text(json, 'name'),
       priceId: json['price_id'] as String?,
       legacy: _boolean(json, 'legacy'),
-      message: _text(json, 'message'),
+      message: json['message'] as String? ?? '',
       formattedPrice: json['formatted_price'] as String?,
       renewalLabel: json['renewal_label'] as String?,
       comparisonTierId: json['comparison_tier_id'] as String?);
@@ -194,6 +207,10 @@ class StorefrontUsageContext {
     if (percent != null && (percent is! num || !percent.isFinite || percent < 0)) {
       throw const FormatException('Invalid usage percentage');
     }
+    final gates = json['pro_gates'] ?? const [];
+    if (gates is! List || gates.any((value) => value is! String || value.trim().isEmpty)) {
+      throw const FormatException('Invalid pro gates');
+    }
     return StorefrontUsageContext(
         title: _text(json, 'title'),
         message: _text(json, 'message'),
@@ -203,7 +220,7 @@ class StorefrontUsageContext {
         budgetNudgeLabel: json['budget_nudge_label'] as String?,
         periodId: json['period_id'] as String?,
         legacy: _boolean(json, 'legacy'),
-        proGates: Set.unmodifiable((json['pro_gates'] as List? ?? const []).cast<String>()));
+        proGates: Set<String>.unmodifiable(gates.map((value) => value as String)));
   }
 
   /// At 100%, W4 owns the choice. Never create a competing budget dialog.

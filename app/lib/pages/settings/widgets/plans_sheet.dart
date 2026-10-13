@@ -69,7 +69,6 @@ class PlansSheet extends StatefulWidget {
 }
 
 class _PlansSheetState extends State<PlansSheet> {
-  bool _storefrontGateResolved = false;
   bool _storefrontEnabled = false;
   bool _storefrontLoading = false;
   bool _storefrontFailed = false;
@@ -88,7 +87,6 @@ class _PlansSheetState extends State<PlansSheet> {
     final enabled = await (widget.readStorefrontGate ?? PlanStorefrontGate.sheetEnabled)();
     if (!mounted) return;
     setState(() {
-      _storefrontGateResolved = true;
       _storefrontEnabled = enabled;
       _storefront = enabled ? widget.initialStorefront : null;
       _storefrontLoading = enabled && _storefront == null;
@@ -116,6 +114,12 @@ class _PlansSheetState extends State<PlansSheet> {
 
   Future<void> _selectStorefrontPrice(StorefrontTier tier, StorefrontPrice price) async {
     if (_isUpgrading || !context.read<UsageProvider>().showSubscriptionUI) return;
+    if (_storefront?.canCheckout(tier, price,
+            currentGrantsDesktop:
+                context.read<UsageProvider>().subscription?.subscription.plan.grantsDesktop ?? false) !=
+        true) {
+      return;
+    }
     setState(() => _isUpgrading = true);
     selectedTierId = tier.id;
     selectedPlan = price.interval == 'year' ? 'yearly' : 'monthly';
@@ -297,6 +301,12 @@ class _PlansSheetState extends State<PlansSheet> {
 
     // Get the price ID from the available plans
     final usageProvider = context.read<UsageProvider>();
+    if (storefrontPrice != null &&
+        (_storefront?.current?.legacy == true ||
+            ((usageProvider.subscription?.subscription.plan.grantsDesktop ?? false) &&
+                !PlanType.fromWire(selectedTierId ?? '').grantsDesktop))) {
+      return;
+    }
     final availablePlans = usageProvider.availablePlans;
     if (availablePlans == null) {
       OmiFeedback.error(context, context.l10n.couldNotLoadPlans);
@@ -586,16 +596,13 @@ class _PlansSheetState extends State<PlansSheet> {
           return const SizedBox.shrink();
         }
 
-        if (!_storefrontGateResolved) {
-          return SizedBox(height: MediaQuery.sizeOf(context).height * 0.72, child: const OmiLoadingState());
-        }
-
         if (_storefrontEnabled) {
           return StorefrontPlansContent(
             storefront: _storefront,
             loading: _storefrontLoading,
             failed: _storefrontFailed,
             busy: _isUpgrading,
+            currentGrantsDesktop: provider.subscription?.subscription.plan.grantsDesktop ?? false,
             onRetry: _loadStorefront,
             onSelect: _selectStorefrontPrice,
             onManage: _openPaymentPortal,

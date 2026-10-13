@@ -20,14 +20,7 @@ void main() {
     AnalyticsManager.configure(adapter);
     await AnalyticsManager.init();
     final analytics = AnalyticsManager();
-    const sources = [
-      'budget_80',
-      'budget_80_percent',
-      'budget_100_percent',
-      'proactive_agent_gate',
-      'screen_context_gate',
-      'mcp_daily_cap'
-    ];
+    const sources = ['budget_80', 'budget_100_percent', 'proactive_agent_gate', 'screen_context_gate', 'mcp_daily_cap'];
     for (final source in sources) {
       analytics.paywallOpened(source, currentPlan: 'plus');
       analytics.upgradePlanSelected(plan: 'operator', billingInterval: 'year', source: source);

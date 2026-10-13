@@ -4,133 +4,133 @@
     {
       "file": "001-mobile-ios-storefront-monthly.png",
       "platform": "mobile-ios",
-      "description": "storefront monthly (PO revision; hermetic widget render, synthetic backend fields)",
+      "description": "storefront monthly (W6f client eligibility and grouping revision; hermetic widget render, synthetic backend fields)",
       "captured_by": "agent",
       "source": "visual-audit"
     },
     {
       "file": "002-mobile-ios-storefront-annual.png",
       "platform": "mobile-ios",
-      "description": "storefront annual (PO revision; hermetic widget render, synthetic backend fields)",
+      "description": "storefront annual (W6f client eligibility and grouping revision; hermetic widget render, synthetic backend fields)",
       "captured_by": "agent",
       "source": "visual-audit"
     },
     {
       "file": "003-mobile-ios-storefront-pro.png",
       "platform": "mobile-ios",
-      "description": "storefront pro (PO revision; hermetic widget render, synthetic backend fields)",
+      "description": "storefront pro (W6f client eligibility and grouping revision; hermetic widget render, synthetic backend fields)",
       "captured_by": "agent",
       "source": "visual-audit"
     },
     {
       "file": "004-mobile-ios-storefront-architect.png",
       "platform": "mobile-ios",
-      "description": "storefront architect (PO revision; hermetic widget render, synthetic backend fields)",
+      "description": "storefront architect (W6f client eligibility and grouping revision; hermetic widget render, synthetic backend fields)",
       "captured_by": "agent",
       "source": "visual-audit"
     },
     {
       "file": "005-mobile-ios-storefront-loading.png",
       "platform": "mobile-ios",
-      "description": "storefront loading (PO revision; hermetic widget render, synthetic backend fields)",
+      "description": "storefront loading (W6f client eligibility and grouping revision; hermetic widget render, synthetic backend fields)",
       "captured_by": "agent",
       "source": "visual-audit"
     },
     {
       "file": "006-mobile-ios-storefront-empty.png",
       "platform": "mobile-ios",
-      "description": "storefront empty (PO revision; hermetic widget render, synthetic backend fields)",
+      "description": "storefront empty (W6f client eligibility and grouping revision; hermetic widget render, synthetic backend fields)",
       "captured_by": "agent",
       "source": "visual-audit"
     },
     {
       "file": "007-mobile-ios-storefront-error.png",
       "platform": "mobile-ios",
-      "description": "storefront error (PO revision; hermetic widget render, synthetic backend fields)",
+      "description": "storefront error (W6f client eligibility and grouping revision; hermetic widget render, synthetic backend fields)",
       "captured_by": "agent",
       "source": "visual-audit"
     },
     {
       "file": "008-mobile-ios-storefront-legacy.png",
       "platform": "mobile-ios",
-      "description": "storefront legacy (PO revision; hermetic widget render, synthetic backend fields)",
+      "description": "storefront legacy (W6f client eligibility and grouping revision; hermetic widget render, synthetic backend fields)",
       "captured_by": "agent",
       "source": "visual-audit"
     },
     {
       "file": "009-mobile-ios-storefront-small-light.png",
       "platform": "mobile-ios",
-      "description": "storefront small light (PO revision; hermetic widget render, synthetic backend fields)",
+      "description": "storefront small light (W6f client eligibility and grouping revision; hermetic widget render, synthetic backend fields)",
       "captured_by": "agent",
       "source": "visual-audit"
     },
     {
       "file": "010-mobile-ios-storefront-proactive-gate.png",
       "platform": "mobile-ios",
-      "description": "storefront proactive gate (PO revision; hermetic widget render, synthetic backend fields)",
+      "description": "storefront proactive gate (W6f client eligibility and grouping revision; hermetic widget render, synthetic backend fields)",
       "captured_by": "agent",
       "source": "visual-audit"
     },
     {
       "file": "011-mobile-ios-storefront-screen-gate.png",
       "platform": "mobile-ios",
-      "description": "storefront screen gate (PO revision; hermetic widget render, synthetic backend fields)",
+      "description": "storefront screen gate (W6f client eligibility and grouping revision; hermetic widget render, synthetic backend fields)",
       "captured_by": "agent",
       "source": "visual-audit"
     },
     {
       "file": "012-mobile-ios-storefront-mcp-cap.png",
       "platform": "mobile-ios",
-      "description": "storefront mcp cap (PO revision; hermetic widget render, synthetic backend fields)",
+      "description": "storefront mcp cap (W6f client eligibility and grouping revision; hermetic widget render, synthetic backend fields)",
       "captured_by": "agent",
       "source": "visual-audit"
     },
     {
       "file": "013-mobile-ios-budget-banner.png",
       "platform": "mobile-ios",
-      "description": "budget banner (PO revision; hermetic widget render, synthetic backend fields)",
+      "description": "budget banner (W6f client eligibility and grouping revision; hermetic widget render, synthetic backend fields)",
       "captured_by": "agent",
       "source": "visual-audit"
     },
     {
       "file": "014-mobile-ios-free-budget.png",
       "platform": "mobile-ios",
-      "description": "free budget (PO revision; hermetic widget render, synthetic backend fields)",
+      "description": "free budget (W6f client eligibility and grouping revision; hermetic widget render, synthetic backend fields)",
       "captured_by": "agent",
       "source": "visual-audit"
     },
     {
       "file": "015-mobile-ios-free-pro-gate.png",
       "platform": "mobile-ios",
-      "description": "free pro gate (PO revision; hermetic widget render, synthetic backend fields)",
+      "description": "free pro gate (W6f client eligibility and grouping revision; hermetic widget render, synthetic backend fields)",
       "captured_by": "agent",
       "source": "visual-audit"
     },
     {
       "file": "016-mobile-ios-plus-budget.png",
       "platform": "mobile-ios",
-      "description": "plus budget (PO revision; hermetic widget render, synthetic backend fields)",
+      "description": "plus budget (W6f client eligibility and grouping revision; hermetic widget render, synthetic backend fields)",
       "captured_by": "agent",
       "source": "visual-audit"
     },
     {
       "file": "017-mobile-ios-free-mcp-cap.png",
       "platform": "mobile-ios",
-      "description": "free mcp cap (PO revision; hermetic widget render, synthetic backend fields)",
+      "description": "free mcp cap (W6f client eligibility and grouping revision; hermetic widget render, synthetic backend fields)",
       "captured_by": "agent",
       "source": "visual-audit"
     },
     {
       "file": "018-mobile-ios-small-light-budget-fold.png",
       "platform": "mobile-ios",
-      "description": "small light budget fold (PO revision; hermetic widget render, synthetic backend fields)",
+      "description": "small light budget fold (W6f client eligibility and grouping revision; hermetic widget render, synthetic backend fields)",
       "captured_by": "agent",
       "source": "visual-audit"
     },
     {
       "file": "019-mobile-ios-storefront-other-plans.png",
       "platform": "mobile-ios",
-      "description": "storefront other plans (PO revision; hermetic widget render, synthetic backend fields)",
+      "description": "storefront other plans (W6f client eligibility and grouping revision; hermetic widget render, synthetic backend fields)",
       "captured_by": "agent",
       "source": "visual-audit"
     }

@@ -10,6 +10,11 @@ abstract final class PlanStorefrontGate {
   static Future<bool> sheetEnabled({Future<bool> Function(String)? readFlag}) => _read(sheetFlag, readFlag);
   static Future<bool> upsellsEnabled({Future<bool> Function(String)? readFlag}) => _read(upsellFlag, readFlag);
 
+  static Future<bool> contextualEnabled({Future<bool> Function(String)? readFlag}) async {
+    final flags = await Future.wait([upsellsEnabled(readFlag: readFlag), sheetEnabled(readFlag: readFlag)]);
+    return flags.every((enabled) => enabled);
+  }
+
   static Future<bool> _read(String key, Future<bool> Function(String)? readFlag) async {
     try {
       return await (readFlag ?? AnalyticsManager().isFeatureEnabled)(key).timeout(const Duration(seconds: 2));

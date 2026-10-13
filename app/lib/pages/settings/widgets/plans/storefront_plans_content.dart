@@ -13,6 +13,7 @@ class StorefrontPlansContent extends StatefulWidget {
       this.loading = false,
       this.failed = false,
       this.busy = false,
+      this.currentGrantsDesktop = false,
       required this.onRetry,
       required this.onSelect,
       required this.onManage,
@@ -22,6 +23,7 @@ class StorefrontPlansContent extends StatefulWidget {
   final bool loading;
   final bool failed;
   final bool busy;
+  final bool currentGrantsDesktop;
   final Future<void> Function() onRetry;
   final Future<void> Function(StorefrontTier tier, StorefrontPrice price) onSelect;
   final Future<void> Function() onManage;
@@ -41,18 +43,9 @@ class _StorefrontPlansContentState extends State<StorefrontPlansContent> {
     final data = widget.storefront;
     if (data != null && !data.showSubscriptionUi) return const SizedBox.shrink();
     final tiers = data?.tiers ?? const <StorefrontTier>[];
-    final currentIndex = tiers.indexWhere((tier) => tier.id == (data?.current?.comparisonTierId ?? data?.current?.id));
-    final other = <StorefrontTier>[];
-    final visible = <StorefrontTier>[];
-    for (var i = 0; i < tiers.length; i++) {
-      final tier = tiers[i];
-      if (!tier.recommended && currentIndex >= 0 && i <= currentIndex) {
-        other.add(tier);
-      } else {
-        visible.add(tier);
-      }
-    }
-    // Stable partition: recommendation leads, server ordering breaks ties.
+    final currentId = data?.current?.id;
+    final visible = tiers.where((tier) => tier.recommended || tier.id == currentId).toList();
+    final other = tiers.where((tier) => !tier.recommended && tier.id != currentId).toList();
     final ordered = [...visible.where((t) => t.recommended), ...visible.where((t) => !t.recommended)];
     return SizedBox(
       height: MediaQuery.sizeOf(context).height * 0.9,
@@ -60,10 +53,10 @@ class _StorefrontPlansContentState extends State<StorefrontPlansContent> {
         key: const Key('storefront_scroll'),
         padding: const EdgeInsets.all(OmiSpacing.md),
         children: [
-          if (data?.usageContext case final usage?) ...[
-            Semantics(header: true, child: Text(usage.title, style: OmiType.headline)),
+          if (data?.current?.legacy != true && data?.usageContext != null) ...[
+            Semantics(header: true, child: Text(data!.usageContext!.title, style: OmiType.headline)),
             const SizedBox(height: OmiSpacing.xxs),
-            Text(usage.message, style: OmiType.footnote.copyWith(color: OmiColors.textSecondary)),
+            Text(data.usageContext!.message, style: OmiType.footnote.copyWith(color: OmiColors.textSecondary)),
             const SizedBox(height: OmiSpacing.sm),
           ],
           if (data?.current case final current?) ...[
@@ -91,7 +84,7 @@ class _StorefrontPlansContentState extends State<StorefrontPlansContent> {
                 glyph: const SizedBox.shrink(),
                 title: context.l10n.paywallNoPlans,
                 action: OmiButton.secondary(label: context.l10n.refresh, onPressed: widget.onRetry))
-          else ...[
+          else if (data.current?.legacy != true) ...[
             Wrap(spacing: OmiSpacing.xs, children: [
               OmiFilterChip(
                   key: const Key('storefront_month'),
@@ -109,12 +102,16 @@ class _StorefrontPlansContentState extends State<StorefrontPlansContent> {
               _tierCard(tier, data.current),
               const SizedBox(height: OmiSpacing.sm),
             ],
+            for (final tier in ordered.where((tier) => !tier.recommended)) ...[
+              _tierCard(tier, data.current),
+              const SizedBox(height: OmiSpacing.sm),
+            ],
             if (other.isNotEmpty) ...[
               Semantics(
                 expanded: _otherPlansExpanded,
                 child: OmiButton.tertiary(
                   key: const Key('storefront_other_plans'),
-                  label: '${context.l10n.paywallOtherPlans} · ${other.map((t) => t.name).join(', ')}',
+                  label: context.l10n.paywallOtherPlans,
                   expand: true,
                   onPressed: () => setState(() => _otherPlansExpanded = !_otherPlansExpanded),
                 ),
@@ -124,10 +121,6 @@ class _StorefrontPlansContentState extends State<StorefrontPlansContent> {
                   _tierCard(tier, data.current),
                   const SizedBox(height: OmiSpacing.sm),
                 ],
-            ],
-            for (final tier in ordered.where((tier) => !tier.recommended)) ...[
-              _tierCard(tier, data.current),
-              const SizedBox(height: OmiSpacing.sm),
             ],
           ],
           const SizedBox(height: OmiSpacing.sm),
@@ -149,7 +142,8 @@ class _StorefrontPlansContentState extends State<StorefrontPlansContent> {
   Widget _tierCard(StorefrontTier tier, StorefrontCurrentPlan? current) {
     final price = tier.priceFor(_interval);
     final isCurrentPrice = price != null && price.id == current?.priceId;
-    final canBuy = tier.action == 'checkout' && price != null && !isCurrentPrice;
+    final canBuy =
+        price != null && widget.storefront!.canCheckout(tier, price, currentGrantsDesktop: widget.currentGrantsDesktop);
     return Container(
       key: Key('storefront_tier_${tier.id}'),
       padding: const EdgeInsets.all(OmiSpacing.md),
