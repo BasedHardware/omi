@@ -1,11 +1,13 @@
 import base64
 import hashlib
 import hmac
+import inspect
 import json
 import logging
 import time
 import uuid
 from datetime import datetime, timezone
+from functools import wraps
 from typing import Any, Callable, Dict, List, Literal, Optional, Tuple, cast
 
 import database._client as db_client_module
@@ -15,6 +17,7 @@ from utils.other.account_gate_http import account_gate_busy_http_exception
 
 from fastapi import APIRouter, Body, Depends, Header, HTTPException, Query, Request, Response
 from fastapi.responses import JSONResponse
+from fastapi.routing import APIRoute
 from pydantic import BaseModel, Field
 
 from database.memory_imports import ingest_memory_import_batch
@@ -57,7 +60,62 @@ from utils.other import endpoints as auth
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter()
+
+class MemoriesRoute(APIRoute):
+    """Log every handler-emitted 503, including cursor and mutation paths."""
+
+    def __init__(self, path: str, endpoint: Callable[..., Any], **kwargs: Any) -> None:
+        # include_router reconstructs APIRoutes with the already wrapped endpoint.
+        # Preserve one log per failure across nested router registration.
+        if getattr(endpoint, '_memories_503_logged', False):
+            super().__init__(path, endpoint, **kwargs)
+            return
+        signature = inspect.signature(endpoint)
+
+        def log_failure(exc: HTTPException, started: float, args: tuple[Any, ...], call_kwargs: dict[str, Any]) -> None:
+            if exc.status_code != 503:
+                return
+            uid = signature.bind_partial(*args, **call_kwargs).arguments.get('uid')
+            fields = {
+                'event': 'memories_503',
+                'endpoint': path,
+                'uid_hashed': hashlib.sha256(str(uid).encode()).hexdigest()[:16] if uid else 'unknown',
+                'exception_class': type(exc.__cause__ or exc).__name__,
+                'elapsed_ms': round((time.monotonic() - started) * 1000, 2),
+            }
+            logger.error('memories_503 %s', json.dumps(fields, sort_keys=True), extra=fields)
+
+        wrapped: Callable[..., Any]
+        if inspect.iscoroutinefunction(endpoint):
+
+            @wraps(endpoint)
+            async def async_wrapped(*args: Any, **call_kwargs: Any) -> Any:
+                started = time.monotonic()
+                try:
+                    return await endpoint(*args, **call_kwargs)
+                except HTTPException as exc:
+                    log_failure(exc, started, args, call_kwargs)
+                    raise
+
+            wrapped = async_wrapped
+        else:
+
+            @wraps(endpoint)
+            def sync_wrapped(*args: Any, **call_kwargs: Any) -> Any:
+                started = time.monotonic()
+                try:
+                    return endpoint(*args, **call_kwargs)
+                except HTTPException as exc:
+                    log_failure(exc, started, args, call_kwargs)
+                    raise
+
+            wrapped = sync_wrapped
+
+        setattr(wrapped, '_memories_503_logged', True)
+        super().__init__(path, wrapped, **kwargs)
+
+
+router = APIRouter(route_class=MemoriesRoute)
 _auth_module = cast(Any, auth)
 
 

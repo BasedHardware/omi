@@ -7,6 +7,7 @@ import 'package:http/io_client.dart';
 import 'package:pool/pool.dart';
 
 import 'package:omi/services/dev_controls/journey_faults.dart';
+import 'package:omi/backend/http/api_edge_throttle_telemetry.dart';
 
 class HttpPoolManager {
   static final HttpPoolManager instance = HttpPoolManager._();
@@ -116,6 +117,7 @@ class HttpPoolManager {
             throw TimeoutException('Request timeout');
           },
         );
+        ApiEdgeThrottleTelemetry.instance.observe(request, streamed);
         // One deadline covers headers and body: a server that sends headers
         // and then stalls the body must not extend the caller's budget to
         // timeout + timeout. Spend only what is left of this attempt.
@@ -161,7 +163,10 @@ class HttpPoolManager {
   }) {
     stampRequestTime(request);
     _applyJourneyFaults(request);
-    return _client.send(request).timeout(timeout);
+    return _client.send(request).timeout(timeout).then((response) {
+      ApiEdgeThrottleTelemetry.instance.observe(request, response);
+      return response;
+    });
   }
 
   void dispose() {

@@ -401,6 +401,14 @@ jobs:
       - name: Attach Managed Prometheus sidecar to production candidate
         id: attach-gmp-sidecar
         run: |
+          # Only probe a release whose deployed source serves /healthz/live (added in #21287). A rollback to an
+          # older SHA must not get a probe its app answers with 404, which would restart instances in a loop.
+          liveness_args=()
+          if grep -q '"/healthz/live"' backend/desktop_backend.py; then
+            liveness_args=(--desktop-backend-liveness-probe)
+          else
+            echo "::warning::Deployed source has no /healthz/live; deploying without the liveness probe."
+          fi
           python3 "$DESKTOP_BACKEND_CONTROLS/backend/scripts/attach_cloud_run_gmp_sidecar.py" \
             --project="${{ vars.GCP_PROJECT_ID }}" \
             --region="$REGION" \
@@ -410,6 +418,7 @@ jobs:
             --ingress-container=desktop-backend-1 \
             --config="$DESKTOP_BACKEND_CONTROLS/backend/deploy/cloud_run_gmp_sidecar.yaml" \
             --expected-env-state="$RUNNER_TEMP/desktop-backend-runtime-env-state.json" \
+            "${liveness_args[@]}" \
             --tag="$CANDIDATE_TAG"
 
       - name: Wait for no-traffic candidate readiness
@@ -438,6 +447,24 @@ jobs:
           # so that field went empty and the guard below started failing closed. Extract
           # the image by container name instead, and assert there is exactly one match so
           # the guard still fails closed if the container topology ever changes again.
+          expect_liveness=false
+          grep -q '"/healthz/live"' backend/desktop_backend.py && expect_liveness=true
+          revision_json="$(gcloud run revisions describe "${{ steps.admitted-source.outputs.revision }}" \
+            --project="$PROJECT_ID" \
+            --region="$REGION" \
+            --format=json)"
+          jq -e --argjson expect "$expect_liveness" '
+            [.spec.containers[]? | select(.name == "desktop-backend-1")] as $ingress |
+            ($ingress | length) == 1 and
+            $ingress[0].startupProbe.tcpSocket.port == 8080 and
+            (($expect | not) or (
+              $ingress[0].livenessProbe.httpGet.path == "/healthz/live" and
+              $ingress[0].livenessProbe.httpGet.port == 8080 and
+              $ingress[0].livenessProbe.periodSeconds == 10 and
+              $ingress[0].livenessProbe.timeoutSeconds == 5 and
+              $ingress[0].livenessProbe.failureThreshold == 3
+            ))
+          ' <<< "$revision_json" >/dev/null
           runtime_image_ref="$(
             gcloud run revisions describe "${{ steps.admitted-source.outputs.revision }}" \
               --project="$PROJECT_ID" \

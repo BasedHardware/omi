@@ -114,3 +114,5 @@ Existing Vertex 4xx JSON logs use fixed reason classes (`schema_keyword`,
 `schema_reference`, `schema_complexity`, `schema`, or `unknown`) alongside existing
 thought-signature/thinking classes; provider bodies and echoed user values are never
 logged. Only the `llm-gateway` service needs redeployment for these changes.
+
+Request counters also expose bounded `upstream_http_status` (common rejection/error codes, status classes, or `none`). The latency histogram omits that label. Use it with `provider_rejection` and `fallback_reason` when diagnosing a failing lane; old series without this label cannot supply a retrospective status breakdown. See `backend/docs/runbooks/stale-queues-and-desktop-vertex.md`.

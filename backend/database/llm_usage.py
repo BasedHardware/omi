@@ -82,7 +82,7 @@ def _plan_key(uid: str, firestore_client: Any | None) -> str:
     return resolve_usage_plan_id(uid, firestore_client=firestore_client) or _UNATTRIBUTED_PLAN
 
 
-def _nested(update: Dict[str, Any]) -> Dict[str, Any]:
+def nest_usage_fields(update: Dict[str, Any]) -> Dict[str, Any]:
     """Expand dotted field paths into nested maps, for writes that use ``set(..., merge=True)``.
 
     Firestore treats a dot as a field PATH in ``update()`` but as a literal character in ``set()``. These
@@ -245,7 +245,7 @@ def record_llm_usage(
         cost_exclusion=cost_exclusion,
     )
 
-    usage_ref.set(_nested(update_data), merge=True)
+    usage_ref.set(nest_usage_fields(update_data), merge=True)
 
 
 @transactional  # pyright: ignore[reportUntypedFunctionDecorator]
@@ -279,7 +279,7 @@ def _record_chat_quota_question_transaction(
         update.update(usage_update_for(plan_key, doc_id))
     else:
         _record_plan_metadata(update, plan_key, cost_status='missing', cost_exclusion='chat_token_cost_not_recorded')
-    transaction.set(usage_ref, _nested(update), merge=True)
+    transaction.set(usage_ref, nest_usage_fields(update), merge=True)
     return True
 
 
@@ -368,7 +368,7 @@ def _release_chat_quota_question_transaction(
         'last_updated': now,
     }
     _record_plan_bucket(update, plan_key, 'backend_chat', quota_questions=-1, count_call=False)
-    transaction.set(usage_ref, _nested(update), merge=True)
+    transaction.set(usage_ref, nest_usage_fields(update), merge=True)
     return True
 
 
@@ -604,7 +604,7 @@ def record_llm_usage_bucket(
         count_call=count_call,
         firestore_client=firestore_client,
     )
-    ref.set(_nested(update), merge=True)
+    ref.set(nest_usage_fields(update), merge=True)
 
 
 def usage_bucket_update(
@@ -695,7 +695,7 @@ def record_llm_cost_exclusion(
     plan_key = _plan_key(uid, firestore_client)
     update: Dict[str, Any] = {'date': today, 'last_updated': datetime.now(timezone.utc)}
     _record_plan_metadata(update, plan_key, cost_status='excluded', cost_exclusion=cost_exclusion)
-    ref.set(_nested(update), merge=True)
+    ref.set(nest_usage_fields(update), merge=True)
 
 
 def _merge_cost_status(existing: str | None, observed: str) -> str:

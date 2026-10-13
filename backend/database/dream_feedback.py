@@ -72,7 +72,7 @@ def _name_terms(inputs, vocabulary):
 
 
 def validate(report: Feedback, inputs, vocabulary, *, uid='') -> None:
-    reason = feedback_rejection(report)
+    reason = feedback_rejection(report, full=getattr(inputs, 'context_mode', 'bounded') == 'full')
     if reason:
         raise ValueError(reason)
     text = report.reproduction

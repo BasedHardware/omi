@@ -130,3 +130,41 @@ async def test_asana_retry_reuses_injected_client_for_refresh_and_retry():
     assert calls[2].args[0] == "https://app.asana.com/api/1.0/tasks"
     assert calls[2].kwargs["headers"]["Authorization"] == "Bearer fresh-token"
     mock_run_blocking.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_asana_resend_failure_after_refresh_is_in_doubt(monkeypatch):
+    # The resend after a 401 may reach Asana; a timeout there must never read as "not sent".
+    client = AsyncMock(spec=httpx.AsyncClient)
+    client.post.side_effect = [_mock_response(401), httpx.ReadTimeout("timed out")]
+    monkeypatch.setattr(ops, "refresh_oauth_token", AsyncMock(return_value={"access_token": "fresh"}))
+
+    result = await ops.create_task_internal(
+        uid="uid-3",
+        app_key="asana",
+        integration={"connected": True, "access_token": "stale", "workspace_gid": "w1"},
+        title="Ship it",
+        client=client,
+    )
+
+    assert result["success"] is False
+    assert result["error_code"] == "in_doubt"
+    assert client.post.await_count == 2
+
+
+@pytest.mark.asyncio
+async def test_asana_refresh_failure_before_resend_is_not_sent(monkeypatch):
+    client = AsyncMock(spec=httpx.AsyncClient)
+    client.post.return_value = _mock_response(401)
+    monkeypatch.setattr(ops, "refresh_oauth_token", AsyncMock(side_effect=RuntimeError("revoked")))
+
+    result = await ops.create_task_internal(
+        uid="uid-4",
+        app_key="asana",
+        integration={"connected": True, "access_token": "stale", "workspace_gid": "w1"},
+        title="Ship it",
+        client=client,
+    )
+
+    assert result["error_code"] == "token_refresh_failed"
+    assert client.post.await_count == 1

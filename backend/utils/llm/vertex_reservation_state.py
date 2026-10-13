@@ -87,7 +87,12 @@ class ReservationState:
             for m, s in sorted(RESERVATIONS.items())
         ]
         revision = hashlib.sha256(json.dumps(addresses).encode()).hexdigest()[:16]
-        return 'vertex-reservations:v1:' + os.getenv('GOOGLE_CLOUD_PROJECT', '') + ':' + revision
+        return (
+            'vertex-reservations:v1:'
+            + os.getenv('OMI_VERTEX_RESERVATION_PROJECT', os.getenv('GOOGLE_CLOUD_PROJECT', ''))
+            + ':'
+            + revision
+        )
 
     def _check_scope(self) -> None:
         key = self.key()
@@ -354,6 +359,14 @@ class ReservationState:
         self, model: str, capacity: str, status: int, traffic_type: str | None, *, timeout_seconds: float = 0.3
     ) -> None:
         self._check_scope()
+        if model in RESERVATIONS and capacity == 'dedicated' and status == 429:
+            try:
+                client = self.client()
+                if client is not None:
+                    async with asyncio.timeout(0.3):
+                        await client.set(self.key() + ':saturated:' + model, '1', ex=120)
+            except Exception:
+                logger.warning('vertex_reservation_saturation_publish_failed model=%s', model)
         if (
             model in RESERVATIONS
             and capacity == 'dedicated'
