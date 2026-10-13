@@ -106,6 +106,9 @@ void main() {
                 if (state.startsWith('payoff')) {
                   await flow.saveAll();
                   io.chatFails = state == 'payoff-fallback';
+                  if (state == 'payoff-chat') {
+                    io.pendingChat = Completer<String>()..complete('Focus on **finishing** your bicycle project.');
+                  }
                   await flow.showPayoff('What should I focus on this week?', 'My name is Robin and I build bicycles.');
                 }
               }

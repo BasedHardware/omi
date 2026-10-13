@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'guided_voice_controller.dart';
@@ -35,7 +36,12 @@ class GuidedVoicePayoff extends StatelessWidget {
             const SizedBox(height: OmiSpacing.sm),
           ],
           Semantics(
-              liveRegion: true, child: Text(flow.payoffAnswer, key: const Key('payoff_answer'), style: OmiType.body)),
+            key: const Key('payoff_answer'),
+            liveRegion: true,
+            child: flow.payoffSource == 'chat'
+                ? MarkdownBody(data: flow.payoffAnswer, styleSheet: MarkdownStyleSheet(p: OmiType.body))
+                : Text(flow.payoffAnswer, style: OmiType.body),
+          ),
         ],
       );
 }
