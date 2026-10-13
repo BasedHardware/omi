@@ -19,6 +19,9 @@ from config.dream_agent import (
     FULL_PASS_SECONDS,
     FULL_DRAIN_SECONDS,
     FULL_MODEL_SECONDS,
+    PASS_TIMEOUT_SECONDS,
+    FINISH_MARGIN_SECONDS,
+    DRAIN_TIMEOUT_SECONDS,
 )
 from database import dream_scheduler, dream_store, dream_feedback, review_changes, review_store
 from database.dream_dirty import dream_writing
@@ -673,11 +676,6 @@ async def _run_admitted_pass(
         report.pop('run_id', None)
     record_pass(report)
     return report
-
-
-PASS_TIMEOUT_SECONDS = 180
-FINISH_MARGIN_SECONDS = 30
-DRAIN_TIMEOUT_SECONDS = PASS_TIMEOUT_SECONDS + FINISH_MARGIN_SECONDS + 30
 
 
 async def drain(*, limit=100):

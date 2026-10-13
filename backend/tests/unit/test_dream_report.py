@@ -3,7 +3,7 @@
 import asyncio
 import json
 import httpx
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from unittest.mock import AsyncMock
@@ -385,3 +385,37 @@ def test_full_manual_json_retry_stays_in_one_lease_and_preserves_usage(store, cl
     assert gateway.post.await_count == samples + 1 and dream_store.dirty_count(UID) == 0
     assert stored['samples_returned'] == samples and stored['samples_failed'] == 0
     assert 'raw_plan' not in stored and 'admitted_records' not in stored
+
+
+def test_manual_endpoint_reclaims_abandoned_lease_and_completes_new_pass(store, client, monkeypatch):
+    dream_store.mark_dirty(UID, [('conversations', 'c1')])
+    stale = dream_store.acquire(UID, Caps(), trigger='manual', now=datetime.now(timezone.utc) - timedelta(hours=1))
+    pending = dream_store.dirty_refs(UID)[0].to_dict()
+    assert store.rows[('dream_users', UID)]['lease']['run_id'] == stale['run_id']
+
+    async def turn(uid, lane, mount, messages, **kwargs):
+        from models.dream_agent import Triage, Cluster
+
+        kwargs['usage_sink']['tokens'] += 10
+        kwargs['usage_sink']['usage_unknown'] = False
+        return Turn(
+            value=(
+                Triage(clusters=[Cluster(refs=['conversations/c1'], problem='spelling')])
+                if lane == dream_transport.TRIAGE_LANE
+                else Plan()
+            ),
+            tokens=10,
+        )
+
+    monkeypatch.setattr(dream_transport, 'model_turn', turn)
+    response = client.post('/v1/dream/runs', json={})
+    assert response.status_code == 200, response.text
+    assert response.json()['status'] == 'complete'
+    assert response.json()['run_id'] != stale['run_id']
+    assert store.rows[('dream_users', UID)]['abandoned_passes'] == 1
+    old = review_store.decode_doc(UID, dream_store.own_run(UID, stale['run_id'], firestore_client=store))
+    assert old['source']['usage_unknown'] and old['records_queued_after'] == 1
+    assert old['source']['budget_charge_usd'] == stale['reservation_usd']
+    assert store.rows[('dream_users', UID)]['lease'] is None
+    # The replacement pass read/settled the version; reclamation itself left it pending.
+    assert pending['version'] and response.json()['records_read'] == 1

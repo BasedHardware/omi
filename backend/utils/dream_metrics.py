@@ -5,10 +5,10 @@ import json
 
 from prometheus_client import Counter
 from utils.dream_diagnostics import counts_only
+from database.dream_metrics import PASSES
 
 POLICY_WARNINGS = Counter('omi_dream_policy_warning_total', 'Ignored auto-apply policy kinds')
 
-PASSES = Counter('omi_dream_pass_total', 'Dream terminal pass outcomes', ['status', 'error_type'])
 TOKENS = Counter('omi_dream_tokens_total', 'Observed dream model tokens')
 RESPONSE_RETRIES = Counter('omi_dream_response_retries_total', 'Dream malformed/truncated JSON response retries')
 CANARY = Counter('omi_dream_canary_total', 'Dream synthetic loop outcomes', ['status', 'stage'])
@@ -73,6 +73,7 @@ ERROR_TYPES = {
     'AdmissionDenied',
     'DreamTranscriptReadError',
     'InvalidModelResponse',
+    'LeaseAbandoned',
 }
 
 
