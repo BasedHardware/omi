@@ -296,3 +296,14 @@ def test_checkout_created_before_completed_and_duplicate_paths(lane, stored_plan
             'stripe_metadata',
             'notification',
         ]
+
+
+def test_stale_guard_decision_is_not_rechecked_after_stripe_lookup(lane, monkeypatch):
+    # origin/main checks preservation once, before IO. A clock rollback during
+    # lookup must not turn a previously failed preservation check into success.
+    lane.current = Subscription(plan=PlanType.plus, stripe_subscription_id='sub-new', current_period_end=NOW)
+    lane.event = event(EVENTS[2], 'canceled', sub_id='sub-old')
+    clock = iter((NOW + 1, NOW - 1))
+    monkeypatch.setattr(payment.time, 'time', lambda: next(clock, NOW - 1))
+    assert run(lane) == {'status': 'success'}
+    assert lane.current.plan == PlanType.basic
