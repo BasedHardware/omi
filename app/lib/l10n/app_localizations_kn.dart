@@ -3683,7 +3683,7 @@ class AppLocalizationsKn extends AppLocalizations {
   String get settingsHeader => 'ಸೆಟ್ಟಿಂಗ್‌ಗಳು';
 
   @override
-  String get plansAndBilling => 'ಯೋಜನೆಗಳು ಮತ್ತು ಬಿಲ್ಲಿಂಗ್';
+  String get plansAndBilling => 'Plans';
 
   @override
   String get calendarIntegration => 'ಕ್ಯಾಲೆಂಡರ್ ಸಂಯೋಗ';
@@ -13065,10 +13065,10 @@ class AppLocalizationsKn extends AppLocalizations {
   String get paywallRecommended => 'ಶಿಫಾರಸು ಮಾಡಲಾಗಿದೆ';
 
   @override
-  String get paywallNoPlans => 'ಯಾವುದೇ ಯೋಜನೆಗಳು ಲಭ್ಯವಿಲ್ಲ';
+  String get paywallNoPlans => 'Plans aren\'t available right now. Try again in a minute.';
 
   @override
-  String get paywallOtherPlans => 'ಇತರ ಯೋಜನೆಗಳು';
+  String get paywallOtherPlans => 'See all plans';
 
   @override
   String get paywallLegacyPlanStays => 'ನಿಮ್ಮ ಯೋಜನೆ ಇದ್ದಂತೆಯೇ ಉಳಿಯುತ್ತದೆ.';
@@ -13077,8 +13077,23 @@ class AppLocalizationsKn extends AppLocalizations {
   String get paywallMcpDailyRequests => 'ಹೆಚ್ಚಿನ ದೈನಂದಿನ MCP ವಿನಂತಿಗಳು';
 
   @override
-  String get paywallComparePlans => 'ಯೋಜನೆಗಳನ್ನು ಹೋಲಿಸಿ';
+  String get paywallComparePlans => 'See plans';
 
   @override
   String get paywallLegacyPlan => 'ಹಳೆಯ ಯೋಜನೆ';
+
+  @override
+  String get paywallYourPlan => 'Your plan';
+
+  @override
+  String get paywallNotNow => 'Not now';
+
+  @override
+  String get paywallTryAgain => 'Try again';
+
+  @override
+  String get paywallManageBilling => 'Manage billing';
+
+  @override
+  String get paywallLoadError => 'Couldn\'t load plans. Check your connection and try again.';
 }

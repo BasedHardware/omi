@@ -1,41 +1,54 @@
 import 'package:omi/models/subscription.dart';
 
 /// Presentation only. The backend owns tier rank, recommendation, copy, prices and entitlements.
-/// Unknown schema versions and malformed purchasable prices fail closed.
+/// Schema version 2 is the only accepted payload. Unknown versions and malformed purchasable prices fail closed.
 class PlanStorefront {
+  final int catalogRevision;
   final List<StorefrontTier> tiers;
   final StorefrontCurrentPlan? current;
-  final StorefrontUsageContext? usageContext;
+  final StorefrontUsage? usage;
+  final String header;
+  final String? yearlyToggleLabel;
   final bool showSubscriptionUi;
 
   const PlanStorefront({
+    required this.catalogRevision,
     required this.tiers,
     this.current,
-    this.usageContext,
+    this.usage,
+    required this.header,
+    this.yearlyToggleLabel,
     required this.showSubscriptionUi,
   });
 
   /// Current and usage snapshots must both permit a nonblocking budget nudge.
-  bool get showBudgetNudge => showSubscriptionUi && current?.legacy == false && usageContext?.showBudgetNudge == true;
+  bool get showBudgetNudge => showSubscriptionUi && current?.legacy == false && usage?.showBudgetNudge == true;
 
   bool shouldGate(String feature) =>
-      showSubscriptionUi &&
-      current != null &&
-      current?.legacy == false &&
-      usageContext?.legacy != true &&
-      usageContext?.proGates.contains(feature) == true;
+      showSubscriptionUi && current != null && current?.legacy == false && usage?.proGates.contains(feature) == true;
 
   factory PlanStorefront.fromJson(Map<String, dynamic> json) {
-    if (json['schema_version'] != 1) throw const FormatException('Unsupported storefront schema');
+    if (json['schema_version'] != 2) throw const FormatException('Unsupported storefront schema');
+    final revision = json['catalog_revision'];
+    if (revision is! int || revision < 0) throw const FormatException('Invalid storefront catalog revision');
     final tiers = (json['tiers'] as List).map((row) => StorefrontTier.fromJson(_object(row))).toList();
-    if (tiers.map((tier) => tier.id).toSet().length != tiers.length) {
+    if (tiers.map((tier) => tier.tierId).toSet().length != tiers.length) {
       throw const FormatException('Duplicate storefront tier');
     }
+    if (tiers.map((tier) => tier.planId).toSet().length != tiers.length) {
+      throw const FormatException('Duplicate storefront plan');
+    }
+    final yearly = json['yearly_toggle_label'];
+    if (yearly != null && (yearly is! String || yearly.trim().isEmpty)) {
+      throw const FormatException('Invalid yearly toggle label');
+    }
     return PlanStorefront(
+      catalogRevision: revision,
       tiers: List.unmodifiable(tiers),
       current: json['current'] == null ? null : StorefrontCurrentPlan.fromJson(_object(json['current'])),
-      usageContext:
-          json['usage_context'] == null ? null : StorefrontUsageContext.fromJson(_object(json['usage_context'])),
+      usage: json['usage'] == null ? null : StorefrontUsage.fromJson(_object(json['usage'])),
+      header: _text(json, 'header'),
+      yearlyToggleLabel: yearly as String?,
       showSubscriptionUi: json['show_subscription_ui'] == true,
     );
   }
@@ -91,7 +104,7 @@ StorefrontCheckoutDecision storefrontCheckoutDecision(
     return StorefrontCheckoutDecision.refuse;
   }
   if (current != null &&
-      (_isNonLadderLegacyPlan(PlanType.fromWire(current.id)) || PlanType.fromWire(current.id).isUnknown)) {
+      (_isNonLadderLegacyPlan(PlanType.fromWire(current.planId)) || PlanType.fromWire(current.planId).isUnknown)) {
     return StorefrontCheckoutDecision.refuse;
   }
   if (tier.action != 'checkout' || !tier.prices.contains(price)) {
@@ -101,14 +114,14 @@ StorefrontCheckoutDecision storefrontCheckoutDecision(
   if (held != null && held.interval == 'year' && price.interval == 'month') {
     return StorefrontCheckoutDecision.refuse;
   }
-  final targetRank = _storefrontLadderRank(tier.id);
-  final effectiveRank = _higherRank(_storefrontLadderRank(current?.id), _storefrontLadderRank(livePlan?.wireName));
+  final targetRank = _storefrontLadderRank(tier.planId);
+  final effectiveRank = _higherRank(_storefrontLadderRank(current?.planId), _storefrontLadderRank(livePlan?.wireName));
   if (effectiveRank != null && targetRank != null && targetRank < effectiveRank) {
     return StorefrontCheckoutDecision.refuse;
   }
   final effectiveGrantsDesktop =
-      (livePlan?.grantsDesktop ?? false) || PlanType.fromWire(current?.id ?? 'basic').grantsDesktop;
-  if (effectiveGrantsDesktop && !PlanType.fromWire(tier.id).grantsDesktop) {
+      (livePlan?.grantsDesktop ?? false) || PlanType.fromWire(current?.planId ?? 'basic').grantsDesktop;
+  if (effectiveGrantsDesktop && !PlanType.fromWire(tier.planId).grantsDesktop) {
     return StorefrontCheckoutDecision.refuse;
   }
   if (price.id == current?.priceId) {
@@ -119,49 +132,59 @@ StorefrontCheckoutDecision storefrontCheckoutDecision(
 }
 
 class StorefrontTier {
-  final String id;
+  final String tierId;
+  final String planId;
   final String name;
-  final String description;
-  final List<String> outcomes;
-  final String? recordingEquivalent;
+  final String hoursLine;
+  final List<String> bullets;
   final bool recommended;
+  final bool isCurrent;
   final List<StorefrontPrice> prices;
   final String action;
-  final String actionLabel;
+  final String? ctaLabel;
 
-  const StorefrontTier(
-      {required this.id,
-      required this.name,
-      required this.description,
-      required this.outcomes,
-      this.recordingEquivalent,
-      required this.recommended,
-      required this.prices,
-      required this.action,
-      required this.actionLabel});
+  const StorefrontTier({
+    required this.tierId,
+    required this.planId,
+    required this.name,
+    required this.hoursLine,
+    required this.bullets,
+    required this.recommended,
+    required this.isCurrent,
+    required this.prices,
+    required this.action,
+    this.ctaLabel,
+  });
 
   factory StorefrontTier.fromJson(Map<String, dynamic> json) {
     final action = _text(json, 'action');
-    if (!['none', 'checkout', 'manage'].contains(action)) {
+    if (!['none', 'checkout', 'current'].contains(action)) {
       throw const FormatException('Unsupported storefront action');
+    }
+    final cta = json['cta_label'];
+    if (action == 'checkout') {
+      if (cta is! String || cta.trim().isEmpty) throw const FormatException('Missing storefront cta_label');
+    } else if (cta != null && (cta is! String || cta.trim().isEmpty)) {
+      throw const FormatException('Invalid storefront cta_label');
     }
     final prices = (json['prices'] as List).map((row) => StorefrontPrice.fromJson(_object(row))).toList();
     if (prices.map((price) => price.interval).toSet().length != prices.length) {
       throw const FormatException('Duplicate storefront price interval');
     }
     return StorefrontTier(
-      id: _text(json, 'id'),
+      tierId: _text(json, 'tier_id'),
+      planId: _text(json, 'plan_id'),
       name: _text(json, 'name'),
-      description: _text(json, 'description'),
-      outcomes: List.unmodifiable((json['outcomes'] as List).map((value) {
-        if (value is! String || value.trim().isEmpty) throw const FormatException('Invalid outcome');
+      hoursLine: _text(json, 'hours_line'),
+      bullets: List.unmodifiable((json['bullets'] as List).map((value) {
+        if (value is! String || value.trim().isEmpty) throw const FormatException('Invalid bullet');
         return value;
       })),
-      recordingEquivalent: json['recording_equivalent'] as String?,
-      recommended: json['recommended'] == true,
+      recommended: _boolean(json, 'recommended'),
+      isCurrent: _boolean(json, 'is_current'),
       prices: List.unmodifiable(prices),
       action: action,
-      actionLabel: _text(json, 'action_label'),
+      ctaLabel: cta as String?,
     );
   }
 
@@ -174,106 +197,129 @@ class StorefrontTier {
 }
 
 class StorefrontPrice {
-  /// Exact existing checkout price id. Never reconstructed from tier/interval.
+  /// Exact existing checkout price id. Never reconstructed from tier or interval.
   final String id;
   final String interval;
-  final int amount;
+  final int amountMinor;
   final String currency;
-  final String formatted;
-  final String monthlyEquivalent;
-  final String renewalTerms;
+  final String headline;
+  final String? subline;
+  final String renewalLine;
+  final int? monthsFree;
 
-  /// Computed by the server from live prices. No client arithmetic or fixed badge.
-  final String? annualSavings;
-
-  const StorefrontPrice(
-      {required this.id,
-      required this.interval,
-      required this.amount,
-      required this.currency,
-      required this.formatted,
-      required this.monthlyEquivalent,
-      required this.renewalTerms,
-      this.annualSavings});
+  const StorefrontPrice({
+    required this.id,
+    required this.interval,
+    required this.amountMinor,
+    required this.currency,
+    required this.headline,
+    this.subline,
+    required this.renewalLine,
+    this.monthsFree,
+  });
 
   factory StorefrontPrice.fromJson(Map<String, dynamic> json) {
     final interval = _text(json, 'interval');
-    final amount = json['amount'];
+    final amount = json['amount_minor'];
     if (!['month', 'year'].contains(interval) || amount is! int || amount < 0) {
       throw const FormatException('Invalid storefront price');
     }
+    final subline = json['subline'];
+    if (subline != null && (subline is! String || subline.trim().isEmpty)) {
+      throw const FormatException('Invalid storefront subline');
+    }
+    final months = json['months_free'];
+    if (months != null && (months is! int || months < 0)) {
+      throw const FormatException('Invalid storefront months free');
+    }
     return StorefrontPrice(
-        id: _text(json, 'id'),
-        interval: interval,
-        amount: amount,
-        currency: _text(json, 'currency'),
-        formatted: _text(json, 'formatted'),
-        monthlyEquivalent: _text(json, 'monthly_equivalent'),
-        renewalTerms: _text(json, 'renewal_terms'),
-        annualSavings: json['annual_savings'] as String?);
+      id: _text(json, 'price_id'),
+      interval: interval,
+      amountMinor: amount,
+      currency: _text(json, 'currency'),
+      headline: _text(json, 'headline'),
+      subline: subline as String?,
+      renewalLine: _text(json, 'renewal_line'),
+      monthsFree: months as int?,
+    );
   }
 }
 
 class StorefrontCurrentPlan {
-  final String id;
+  final String planId;
   final String name;
   final String? priceId;
+  final String? interval;
   final bool legacy;
-  final String message;
-  final String? formattedPrice;
-  final String? renewalLabel;
+  final bool cancelAtPeriodEnd;
+  final String line;
+  final String? legacyNote;
 
-  /// Backend-selected tier for display grouping of legacy plans; never an entitlement.
-  final String? comparisonTierId;
-  const StorefrontCurrentPlan(
-      {required this.id,
-      required this.name,
-      this.priceId,
-      required this.legacy,
-      this.message = '',
-      this.formattedPrice,
-      this.renewalLabel,
-      this.comparisonTierId});
-  factory StorefrontCurrentPlan.fromJson(Map<String, dynamic> json) => StorefrontCurrentPlan(
-      id: _text(json, 'id'),
+  const StorefrontCurrentPlan({
+    required this.planId,
+    required this.name,
+    this.priceId,
+    this.interval,
+    required this.legacy,
+    required this.cancelAtPeriodEnd,
+    required this.line,
+    this.legacyNote,
+  });
+
+  factory StorefrontCurrentPlan.fromJson(Map<String, dynamic> json) {
+    final legacy = _boolean(json, 'legacy');
+    final note = json['legacy_note'];
+    if (legacy) {
+      if (note is! String || note.trim().isEmpty) throw const FormatException('Missing storefront legacy note');
+    } else if (note != null) {
+      throw const FormatException('Unexpected storefront legacy note');
+    }
+    final interval = json['interval'];
+    if (interval != null && interval != 'month' && interval != 'year') {
+      throw const FormatException('Invalid storefront interval');
+    }
+    final priceId = json['price_id'];
+    if (priceId != null && (priceId is! String || priceId.trim().isEmpty)) {
+      throw const FormatException('Invalid storefront price id');
+    }
+    return StorefrontCurrentPlan(
+      planId: _text(json, 'plan_id'),
       name: _text(json, 'name'),
-      priceId: json['price_id'] as String?,
-      legacy: _boolean(json, 'legacy'),
-      message: json['message'] as String? ?? '',
-      formattedPrice: json['formatted_price'] as String?,
-      renewalLabel: json['renewal_label'] as String?,
-      comparisonTierId: json['comparison_tier_id'] as String?);
+      priceId: priceId as String?,
+      interval: interval as String?,
+      legacy: legacy,
+      cancelAtPeriodEnd: _boolean(json, 'cancel_at_period_end'),
+      line: _text(json, 'line'),
+      legacyNote: note as String?,
+    );
+  }
 }
 
-class StorefrontUsageContext {
-  /// Server-localized reason and outcome for the surface that opened the sheet.
-  final String title;
-  final String message;
-  final String? meter;
-  final String? resetLabel;
-  final double? budgetPercent;
-  final String? budgetNudgeLabel;
+class StorefrontUsage {
+  final String kind;
+  final double? percent;
   final String? periodId;
-  final bool legacy;
-
-  /// Opening surface, such as `mcp_daily_cap`. Absent on older payloads.
-  final String? source;
-
-  /// Server entitlement decision; never inferred from the displayed tier.
+  final String? resetLabel;
+  final String? meterLine;
+  final String? nudgeLine;
   final Set<String> proGates;
-  const StorefrontUsageContext(
-      {required this.title,
-      required this.message,
-      this.meter,
-      this.resetLabel,
-      this.budgetPercent,
-      this.budgetNudgeLabel,
-      this.periodId,
-      required this.legacy,
-      this.source,
-      this.proGates = const {}});
-  factory StorefrontUsageContext.fromJson(Map<String, dynamic> json) {
-    final percent = json['budget_percent'];
+
+  const StorefrontUsage({
+    required this.kind,
+    this.percent,
+    this.periodId,
+    this.resetLabel,
+    this.meterLine,
+    this.nudgeLine,
+    this.proGates = const {},
+  });
+
+  factory StorefrontUsage.fromJson(Map<String, dynamic> json) {
+    final kind = _text(json, 'kind');
+    if (!['usage_budget', 'transcription', 'unavailable'].contains(kind)) {
+      throw const FormatException('Unsupported usage kind');
+    }
+    final percent = json['percent'];
     if (percent != null && (percent is! num || !percent.isFinite || percent < 0)) {
       throw const FormatException('Invalid usage percentage');
     }
@@ -281,21 +327,25 @@ class StorefrontUsageContext {
     if (gates is! List || gates.any((value) => value is! String || value.trim().isEmpty)) {
       throw const FormatException('Invalid pro gates');
     }
-    return StorefrontUsageContext(
-        title: _text(json, 'title'),
-        message: _text(json, 'message'),
-        meter: json['meter'] as String?,
-        resetLabel: json['reset_label'] as String?,
-        budgetPercent: (percent as num?)?.toDouble(),
-        budgetNudgeLabel: json['budget_nudge_label'] as String?,
-        periodId: json['period_id'] as String?,
-        legacy: _boolean(json, 'legacy'),
-        source: json['source'] as String?,
-        proGates: Set<String>.unmodifiable(gates.map((value) => value as String)));
+    return StorefrontUsage(
+      kind: kind,
+      percent: (percent as num?)?.toDouble(),
+      periodId: _optionalText(json, 'period_id'),
+      resetLabel: _optionalText(json, 'reset_label'),
+      meterLine: _optionalText(json, 'meter_line'),
+      nudgeLine: _optionalText(json, 'nudge_line'),
+      proGates: Set<String>.unmodifiable(gates.map((value) => value as String)),
+    );
   }
 
   /// At 100%, W4 owns the choice. Never create a competing budget dialog.
-  bool get showBudgetNudge => !legacy && budgetPercent != null && budgetPercent! >= 80 && budgetPercent! < 100;
+  bool get showBudgetNudge =>
+      kind == 'usage_budget' &&
+      percent != null &&
+      percent! >= 80 &&
+      percent! < 100 &&
+      nudgeLine != null &&
+      nudgeLine!.isNotEmpty;
 }
 
 Map<String, dynamic> _object(Object? value) {
@@ -307,6 +357,11 @@ String _text(Map<String, dynamic> json, String key) {
   final value = json[key];
   if (value is! String || value.trim().isEmpty) throw FormatException('Missing storefront $key');
   return value;
+}
+
+String? _optionalText(Map<String, dynamic> json, String key) {
+  if (!json.containsKey(key) || json[key] == null) return null;
+  return _text(json, key);
 }
 
 bool _boolean(Map<String, dynamic> json, String key) {

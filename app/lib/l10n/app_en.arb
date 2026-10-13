@@ -4159,9 +4159,9 @@
     "@account": {
         "description": "Account section label"
     },
-    "plansAndBilling": "Plans & Billing",
+    "plansAndBilling": "Plans",
     "@plansAndBilling": {
-        "description": "Plans and billing section"
+        "description": "Title of the plans sheet."
     },
     "calendarIntegration": "Calendar Integration",
     "@calendarIntegration": {
@@ -15772,13 +15772,13 @@
     "@paywallRecommended": {
         "description": "Backend recommended tier badge; highlights a recommendation without preselecting checkout."
     },
-    "paywallNoPlans": "No Plans Available",
+    "paywallNoPlans": "Plans aren't available right now. Try again in a minute.",
     "@paywallNoPlans": {
-        "description": "Plans sheet empty state; this is distinct from a loading failure."
+        "description": "Empty state when the plans list has no tiers."
     },
-    "paywallOtherPlans": "Other plans",
+    "paywallOtherPlans": "See all plans",
     "@paywallOtherPlans": {
-        "description": "Expandable row for current and lower plans."
+        "description": "Collapsed section that reveals the rest of the plan ladder."
     },
     "paywallLegacyPlanStays": "Your plan stays exactly as it is.",
     "@paywallLegacyPlanStays": {
@@ -15788,12 +15788,32 @@
     "@paywallMcpDailyRequests": {
         "description": "First benefit on the recommended card when the sheet opened from the daily MCP cap."
     },
-    "paywallComparePlans": "Compare plans",
+    "paywallComparePlans": "See plans",
     "@paywallComparePlans": {
-        "description": "Primary action in the nonblocking budget banner."
+        "description": "Primary button on the usage banner."
     },
     "paywallLegacyPlan": "Legacy plan",
     "@paywallLegacyPlan": {
         "description": "Marker beside the true name of a legacy subscription."
+    },
+    "paywallYourPlan": "Your plan",
+    "@paywallYourPlan": {
+        "description": "Badge on the tier card for the plan the person already has."
+    },
+    "paywallNotNow": "Not now",
+    "@paywallNotNow": {
+        "description": "Secondary button on the usage banner."
+    },
+    "paywallTryAgain": "Try again",
+    "@paywallTryAgain": {
+        "description": "Retry button when the plans sheet fails to load."
+    },
+    "paywallManageBilling": "Manage billing",
+    "@paywallManageBilling": {
+        "description": "Button that opens billing management."
+    },
+    "paywallLoadError": "Couldn't load plans. Check your connection and try again.",
+    "@paywallLoadError": {
+        "description": "Plans sheet error copy. The retry button is separate."
     }
 }

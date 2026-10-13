@@ -4113,7 +4113,7 @@
     "@account": {
         "description": "Account section label"
     },
-    "plansAndBilling": "Mga Plano & Pagbabayad",
+    "plansAndBilling": "Plans",
     "@plansAndBilling": {
         "description": "Plans and billing section"
     },
@@ -11443,10 +11443,15 @@
     "reviewProposalConflict": "Nagbago ito mula nang imungkahi ng Dream, kaya walang nailapat.",
     "itemLinkListTitle": "{count, plural, =0{Walang Item} =1{1 Item} other{{count} Item}}",
     "paywallRecommended": "Inirerekomenda",
-    "paywallNoPlans": "Walang Available na Plano",
-    "paywallOtherPlans": "Iba pang plano",
+    "paywallNoPlans": "Plans aren't available right now. Try again in a minute.",
+    "paywallOtherPlans": "See all plans",
     "paywallLegacyPlanStays": "Mananatili ang plan mo nang eksakto kung ano ito.",
     "paywallMcpDailyRequests": "Mas maraming pang-araw-araw na request sa MCP",
-    "paywallComparePlans": "Ihambing ang mga plano",
-    "paywallLegacyPlan": "Lumang plano"
+    "paywallComparePlans": "See plans",
+    "paywallLegacyPlan": "Lumang plano",
+    "paywallYourPlan": "Your plan",
+    "paywallNotNow": "Not now",
+    "paywallTryAgain": "Try again",
+    "paywallManageBilling": "Manage billing",
+    "paywallLoadError": "Couldn't load plans. Check your connection and try again."
 }

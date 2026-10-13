@@ -1121,7 +1121,7 @@
     "selectAudioInput": "Audioeingang auswählen",
     "loadingDevices": "Geräte werden geladen…",
     "settingsHeader": "EINSTELLUNGEN",
-    "plansAndBilling": "Pläne & Abrechnung",
+    "plansAndBilling": "Plans",
     "calendarIntegration": "Kalenderintegration",
     "dailySummary": "Tägliche Zusammenfassung",
     "developer": "Entwickler",
@@ -4006,10 +4006,15 @@
     "reviewProposalConflict": "Das hat sich geändert, seit Dream es vorgeschlagen hat. Es wurde nichts übernommen.",
     "itemLinkListTitle": "{count, plural, =0{Keine Elemente} =1{1 Element} other{{count} Elemente}}",
     "paywallRecommended": "Empfohlen",
-    "paywallNoPlans": "Keine Tarife verfügbar",
-    "paywallOtherPlans": "Weitere Tarife",
+    "paywallNoPlans": "Plans aren't available right now. Try again in a minute.",
+    "paywallOtherPlans": "See all plans",
     "paywallLegacyPlanStays": "Dein Tarif bleibt genau so, wie er ist.",
     "paywallMcpDailyRequests": "Mehr tägliche MCP-Anfragen",
-    "paywallComparePlans": "Tarife vergleichen",
-    "paywallLegacyPlan": "Bestandstarif"
+    "paywallComparePlans": "See plans",
+    "paywallLegacyPlan": "Bestandstarif",
+    "paywallYourPlan": "Your plan",
+    "paywallNotNow": "Not now",
+    "paywallTryAgain": "Try again",
+    "paywallManageBilling": "Manage billing",
+    "paywallLoadError": "Couldn't load plans. Check your connection and try again."
 }

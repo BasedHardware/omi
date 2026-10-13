@@ -552,6 +552,7 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin, Wi
     }
     showOmiSheet(
       context: context,
+      title: context.l10n.plansAndBilling,
       padding: EdgeInsets.zero,
       builder: (context) => PlansSheet(
         waveController: _waveController,

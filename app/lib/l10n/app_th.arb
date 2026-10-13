@@ -1121,7 +1121,7 @@
     "selectAudioInput": "เลือกอินพุตเสียง",
     "loadingDevices": "กำลังโหลดอุปกรณ์…",
     "settingsHeader": "การตั้งค่า",
-    "plansAndBilling": "แผนและการเรียกเก็บเงิน",
+    "plansAndBilling": "Plans",
     "calendarIntegration": "การรวมปฏิทิน",
     "dailySummary": "สรุปรายวัน",
     "developer": "นักพัฒนา",
@@ -4006,10 +4006,15 @@
     "reviewProposalConflict": "รายการนี้เปลี่ยนไปหลังจาก Dream แนะนำ จึงไม่มีการใช้การแก้ไขใด ๆ",
     "itemLinkListTitle": "{count, plural, =0{ไม่มีรายการ} =1{1 รายการ} other{{count} รายการ}}",
     "paywallRecommended": "แนะนำ",
-    "paywallNoPlans": "ไม่มีแพ็กเกจที่พร้อมใช้งาน",
-    "paywallOtherPlans": "แผนอื่น ๆ",
+    "paywallNoPlans": "Plans aren't available right now. Try again in a minute.",
+    "paywallOtherPlans": "See all plans",
     "paywallLegacyPlanStays": "แผนของคุณยังคงเหมือนเดิมทุกประการ",
     "paywallMcpDailyRequests": "คำขอ MCP รายวันมากขึ้น",
-    "paywallComparePlans": "เปรียบเทียบแผน",
-    "paywallLegacyPlan": "แผนเดิม"
+    "paywallComparePlans": "See plans",
+    "paywallLegacyPlan": "แผนเดิม",
+    "paywallYourPlan": "Your plan",
+    "paywallNotNow": "Not now",
+    "paywallTryAgain": "Try again",
+    "paywallManageBilling": "Manage billing",
+    "paywallLoadError": "Couldn't load plans. Check your connection and try again."
 }

@@ -17,6 +17,7 @@ import 'package:omi/utils/platform/platform_manager.dart';
 Future<bool> openContextualPlans(
   BuildContext context, {
   required String source,
+  String trigger = '',
   PlanStorefront? storefront,
 }) async {
   final provider = context.read<UsageProvider>();
@@ -28,13 +29,14 @@ Future<bool> openContextualPlans(
       context: context,
       padding: EdgeInsets.zero,
       title: context.l10n.plansAndBilling,
-      builder: (_) => _ContextualPlansHost(source: source, storefront: storefront));
+      builder: (_) => _ContextualPlansHost(source: source, trigger: trigger, storefront: storefront));
   return true;
 }
 
 class _ContextualPlansHost extends StatefulWidget {
-  const _ContextualPlansHost({required this.source, this.storefront});
+  const _ContextualPlansHost({required this.source, this.trigger = '', this.storefront});
   final String source;
+  final String trigger;
   final PlanStorefront? storefront;
   @override
   State<_ContextualPlansHost> createState() => _ContextualPlansHostState();
@@ -59,6 +61,7 @@ class _ContextualPlansHostState extends State<_ContextualPlansHost> with TickerP
       arrowController: _arrow,
       arrowAnimation: _arrow,
       analyticsSource: widget.source,
+      storefrontTrigger: widget.trigger,
       initialStorefront: widget.storefront);
 }
 
@@ -70,13 +73,13 @@ Future<bool> showProGateUpsell(BuildContext context, {required String feature, r
     return false;
   }
   if (!context.mounted || !provider.showSubscriptionUI) return false;
-  final result = await PlanStorefrontApi().load(source: source, locale: context.l10n.localeName);
+  final result = await PlanStorefrontApi().load(source: source, trigger: feature, locale: context.l10n.localeName);
   if (!context.mounted || !provider.showSubscriptionUI || result is! ApiSuccess<PlanStorefront>) {
     return false;
   }
   final data = result.data;
   if (!data.shouldGate(feature)) return false;
-  return openContextualPlans(context, source: source, storefront: data);
+  return openContextualPlans(context, source: source, trigger: feature, storefront: data);
 }
 
 /// Local presentation preference; the backend period, not a client date, resets it.
@@ -121,7 +124,8 @@ class _BudgetUpsellBannerState extends State<BudgetUpsellBanner> {
       return;
     }
     if (!mounted || generation != _generation || !provider.showSubscriptionUI) return;
-    final result = await PlanStorefrontApi().load(source: 'budget_80', locale: context.l10n.localeName);
+    final result =
+        await PlanStorefrontApi().load(source: 'budget_80', trigger: 'budget_80', locale: context.l10n.localeName);
     if (mounted && generation == _generation && result is ApiSuccess<PlanStorefront>) {
       setState(() => _data = result.data);
     }
@@ -131,16 +135,59 @@ class _BudgetUpsellBannerState extends State<BudgetUpsellBanner> {
   Widget build(BuildContext context) {
     final data = _data;
     if (!context.watch<UsageProvider>().showSubscriptionUI || data == null) return const SizedBox.shrink();
-    final period = data.usageContext?.periodId;
-    if (BudgetNudgeDismissal.isDismissed(period)) {
-      return const SizedBox.shrink();
-    }
-    return BudgetUpsellCard(
-        data: data,
-        onDismiss: () => BudgetNudgeDismissal.dismiss(period),
-        onOpen: () async {
-          await openContextualPlans(context, source: 'budget_80', storefront: data);
-        });
+    final period = data.usage?.periodId;
+    final dismissed = BudgetNudgeDismissal.isDismissed(period);
+    final meterLine = data.usage?.meterLine;
+    final showMeter = meterLine != null && meterLine.isNotEmpty;
+    final showNudge = !dismissed && data.showBudgetNudge;
+    if (!showMeter && !showNudge) return const SizedBox.shrink();
+    return Column(mainAxisSize: MainAxisSize.min, children: [
+      if (showMeter) StorefrontUsageMeter(usage: data.usage!),
+      if (showNudge)
+        BudgetUpsellCard(
+            data: data,
+            onDismiss: () => BudgetNudgeDismissal.dismiss(period),
+            onOpen: () async {
+              await openContextualPlans(context, source: 'budget_80', trigger: 'budget_80', storefront: data);
+            }),
+    ]);
+  }
+}
+
+/// Usage-screen meter. The line is the backend string; there is no separate title.
+class StorefrontUsageMeter extends StatelessWidget {
+  const StorefrontUsageMeter({super.key, required this.usage});
+  final StorefrontUsage usage;
+
+  @override
+  Widget build(BuildContext context) {
+    final line = usage.meterLine;
+    if (line == null || line.isEmpty) return const SizedBox.shrink();
+    final percent = usage.percent;
+    return Container(
+      key: const Key('storefront_usage_meter'),
+      margin: const EdgeInsets.only(top: OmiSpacing.sm),
+      padding: const EdgeInsets.all(OmiSpacing.md),
+      decoration: BoxDecoration(
+        color: OmiColors.surface1,
+        borderRadius: OmiRadius.lgAll,
+        border: Border.all(color: OmiColors.border),
+      ),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Text(line, style: OmiType.footnote.copyWith(color: OmiColors.textSecondary)),
+        if (percent != null) ...[
+          const SizedBox(height: OmiSpacing.xs),
+          LinearProgressIndicator(
+            key: const Key('storefront_usage_meter_bar'),
+            value: (percent / 100).clamp(0.0, 1.0),
+            minHeight: 4,
+            color: OmiColors.accent,
+            backgroundColor: OmiColors.surface3,
+            borderRadius: OmiRadius.pillAll,
+          ),
+        ],
+      ]),
+    );
   }
 }
 
@@ -159,7 +206,7 @@ class _BudgetUpsellCardState extends State<BudgetUpsellCard> {
   @override
   void didUpdateWidget(BudgetUpsellCard oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.data.usageContext?.periodId != widget.data.usageContext?.periodId) _dismissed = false;
+    if (oldWidget.data.usage?.periodId != widget.data.usage?.periodId) _dismissed = false;
   }
 
   @override
@@ -168,26 +215,15 @@ class _BudgetUpsellCardState extends State<BudgetUpsellCard> {
     if (_dismissed || !data.showBudgetNudge) {
       return const SizedBox.shrink();
     }
+    final nudge = data.usage?.nudgeLine;
+    if (nudge == null || nudge.isEmpty) return const SizedBox.shrink();
     return Container(
       key: const Key('budget_80'),
       margin: const EdgeInsets.only(top: OmiSpacing.sm),
       padding: const EdgeInsets.all(OmiSpacing.md),
       decoration: BoxDecoration(color: OmiColors.surface2, borderRadius: OmiRadius.mdAll),
       child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-        Semantics(
-          label: data.usageContext!.budgetNudgeLabel ?? data.usageContext!.meter ?? data.usageContext!.message,
-          child: ExcludeSemantics(
-              child: LinearProgressIndicator(
-            key: const Key('budget_nudge_meter'),
-            value: data.usageContext!.budgetPercent! / 100,
-            minHeight: 2,
-            color: OmiColors.accent,
-            backgroundColor: OmiColors.border,
-          )),
-        ),
-        const SizedBox(height: OmiSpacing.sm),
-        Text(data.usageContext!.budgetNudgeLabel ?? data.usageContext!.meter ?? data.usageContext!.message,
-            style: OmiType.subhead),
+        Text(nudge, style: OmiType.subhead),
         const SizedBox(height: OmiSpacing.xs),
         Row(children: [
           Expanded(
@@ -199,7 +235,7 @@ class _BudgetUpsellCardState extends State<BudgetUpsellCard> {
           )),
           OmiButton.tertiary(
             key: const Key('budget_nudge_dismiss'),
-            label: context.l10n.dismiss,
+            label: context.l10n.paywallNotNow,
             size: OmiButtonSize.compact,
             onPressed: () async {
               setState(() => _dismissed = true);

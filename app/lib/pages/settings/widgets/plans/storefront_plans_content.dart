@@ -5,21 +5,21 @@ import 'package:omi/models/subscription.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 
-/// Pure presentation: rank, recommendation, prices, copy and eligibility arrive from the server.
-/// The host retains existing purchase/payment management calls and the close shell.
+/// Pure presentation. Rank, recommendation, prices, copy, and eligibility arrive from the server.
+/// The host retains purchase and payment-management calls and the close shell.
 class StorefrontPlansContent extends StatefulWidget {
-  const StorefrontPlansContent(
-      {super.key,
-      this.storefront,
-      this.loading = false,
-      this.failed = false,
-      this.busy = false,
-      this.livePlan,
-      this.cancelScheduled = false,
-      required this.onRetry,
-      required this.onSelect,
-      required this.onManage,
-      required this.onRestore});
+  const StorefrontPlansContent({
+    super.key,
+    this.storefront,
+    this.loading = false,
+    this.failed = false,
+    this.busy = false,
+    this.livePlan,
+    this.cancelScheduled = false,
+    required this.onRetry,
+    required this.onSelect,
+    required this.onManage,
+  });
 
   final PlanStorefront? storefront;
   final bool loading;
@@ -30,139 +30,119 @@ class StorefrontPlansContent extends StatefulWidget {
   final Future<void> Function() onRetry;
   final Future<void> Function(StorefrontTier tier, StorefrontPrice price) onSelect;
   final Future<void> Function() onManage;
-  final Future<void> Function() onRestore;
 
   @override
   State<StorefrontPlansContent> createState() => _StorefrontPlansContentState();
 }
 
 class _StorefrontPlansContentState extends State<StorefrontPlansContent> {
-  // Annual is an explicit decision, never the default.
+  // Monthly is the default. Yearly is an explicit choice.
   String _interval = 'month';
-  bool _otherPlansExpanded = false;
+  bool _allPlansExpanded = false;
+
+  bool _cancelScheduled(PlanStorefront? data) => widget.cancelScheduled || data?.current?.cancelAtPeriodEnd == true;
 
   @override
   Widget build(BuildContext context) {
     final data = widget.storefront;
     if (data != null && !data.showSubscriptionUi) return const SizedBox.shrink();
-    final tiers = data?.tiers ?? const <StorefrontTier>[];
-    final currentId = data?.current?.id;
-    final visible = tiers.where((tier) => tier.recommended || tier.id == currentId).toList();
-    final other = tiers.where((tier) => !tier.recommended && tier.id != currentId).toList();
-    final ordered = [...visible.where((t) => t.recommended), ...visible.where((t) => !t.recommended)];
+    final legacy = data?.current?.legacy == true;
     return SizedBox(
       height: MediaQuery.sizeOf(context).height * 0.9,
       child: ListView(
         key: const Key('storefront_scroll'),
-        padding: const EdgeInsets.all(OmiSpacing.md),
+        padding: const EdgeInsets.fromLTRB(OmiSpacing.md, OmiSpacing.xs, OmiSpacing.md, OmiSpacing.md),
         children: [
-          if (data?.current?.legacy != true && data?.usageContext != null) ...[
-            Semantics(header: true, child: Text(data!.usageContext!.title, style: OmiType.headline)),
-            const SizedBox(height: OmiSpacing.xxs),
-            Text(data.usageContext!.message, style: OmiType.footnote.copyWith(color: OmiColors.textSecondary)),
-            const SizedBox(height: OmiSpacing.sm),
-          ],
-          if (data?.current?.legacy == true)
-            _legacyPlan(data!.current!)
-          else if (data?.current case final current?) ...[
-            Text(
-              [
-                '${context.l10n.currentPlan} · ${current.name}',
-                if (current.formattedPrice?.isNotEmpty == true) current.formattedPrice!,
-                if (current.renewalLabel?.isNotEmpty == true) current.renewalLabel!,
-              ].join(' · '),
-              key: const Key('storefront_current_plan'),
-              style: OmiType.footnote.copyWith(color: OmiColors.textSecondary),
-            ),
+          if (data != null) ...[
+            Semantics(header: true, child: Text(data.header, style: OmiType.headline)),
+            if (data.current != null) ...[
+              const SizedBox(height: OmiSpacing.xs),
+              Text(
+                data.current!.line,
+                key: const Key('storefront_current_plan'),
+                style: OmiType.footnote.copyWith(color: OmiColors.textSecondary),
+              ),
+              if (legacy && data.current!.legacyNote != null) ...[
+                const SizedBox(height: OmiSpacing.xs),
+                Text(data.current!.legacyNote!, key: const Key('storefront_legacy_note'), style: OmiType.subhead),
+              ],
+            ],
             const SizedBox(height: OmiSpacing.sm),
           ],
           if (widget.loading)
             const OmiLoadingState()
           else if (widget.failed)
             OmiErrorState(
-                title: context.l10n.unableToLoadPlans,
-                message: context.l10n.checkConnectionTryAgain,
-                onRetry: widget.onRetry)
-          else if (data == null || data.tiers.isEmpty)
+              message: context.l10n.paywallLoadError,
+              retryLabel: context.l10n.paywallTryAgain,
+              onRetry: widget.onRetry,
+            )
+          else if (data == null || (data.tiers.isEmpty && !legacy))
             OmiEmptyState(
-                glyph: const SizedBox.shrink(),
-                title: context.l10n.paywallNoPlans,
-                action: OmiButton.secondary(label: context.l10n.refresh, onPressed: widget.onRetry))
-          else if (data.current?.legacy != true) ...[
-            Wrap(spacing: OmiSpacing.xs, children: [
-              OmiFilterChip(
-                  key: const Key('storefront_month'),
-                  label: context.l10n.billingMonthly,
-                  selected: _interval == 'month',
-                  onSelected: () => setState(() => _interval = 'month')),
-              OmiFilterChip(
-                  key: const Key('storefront_year'),
-                  label: context.l10n.billingYearly,
-                  selected: _interval == 'year',
-                  onSelected: () => setState(() => _interval = 'year')),
-            ]),
+              glyph: const SizedBox.shrink(),
+              title: context.l10n.paywallNoPlans,
+            )
+          else if (!legacy)
+            ..._plans(data),
+          if (data == null || data.current?.legacy == true || data.current?.priceId != null || widget.failed) ...[
             const SizedBox(height: OmiSpacing.sm),
-            for (final tier in ordered.where((tier) => tier.recommended)) ...[
-              _tierCard(tier, data.current),
-              const SizedBox(height: OmiSpacing.sm),
-            ],
-            for (final tier in ordered.where((tier) => !tier.recommended)) ...[
-              _tierCard(tier, data.current),
-              const SizedBox(height: OmiSpacing.sm),
-            ],
-            if (other.isNotEmpty) ...[
-              Semantics(
-                expanded: _otherPlansExpanded,
-                child: OmiButton.tertiary(
-                  key: const Key('storefront_other_plans'),
-                  label: context.l10n.paywallOtherPlans,
-                  expand: true,
-                  onPressed: () => setState(() => _otherPlansExpanded = !_otherPlansExpanded),
-                ),
-              ),
-              if (_otherPlansExpanded)
-                for (final tier in other) ...[
-                  _tierCard(tier, data.current),
-                  const SizedBox(height: OmiSpacing.sm),
-                ],
-            ],
-          ],
-          const SizedBox(height: OmiSpacing.sm),
-          OmiButton.tertiary(
-              key: const Key('storefront_restore'),
-              label: context.l10n.refresh,
-              onPressed: widget.busy ? null : widget.onRestore,
-              expand: true),
-          OmiButton.tertiary(
+            OmiButton.tertiary(
               key: const Key('storefront_manage'),
-              label: context.l10n.managePaymentMethod,
+              label: context.l10n.paywallManageBilling,
               onPressed: widget.busy ? null : widget.onManage,
-              expand: true),
+              expand: true,
+            ),
+          ],
         ],
       ),
     );
   }
 
-  Widget _legacyPlan(StorefrontCurrentPlan current) {
-    final line = [
-      current.name,
-      context.l10n.paywallLegacyPlan,
-      if (current.formattedPrice?.isNotEmpty == true) current.formattedPrice!,
-      if (current.renewalLabel?.isNotEmpty == true) current.renewalLabel!,
-    ].join(' · ');
-    return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-      Text(line,
-          key: const Key('storefront_current_plan'), style: OmiType.footnote.copyWith(color: OmiColors.textSecondary)),
-      const SizedBox(height: OmiSpacing.xs),
-      Text(context.l10n.paywallLegacyPlanStays, key: const Key('storefront_legacy_stays'), style: OmiType.subhead),
+  List<Widget> _plans(PlanStorefront data) {
+    final tiers = data.tiers;
+    final primary = tiers.where((tier) => tier.recommended || tier.isCurrent).toList();
+    final rest = tiers.where((tier) => !tier.recommended && !tier.isCurrent).toList();
+    return [
+      Wrap(spacing: OmiSpacing.xs, runSpacing: OmiSpacing.xxs, children: [
+        OmiFilterChip(
+          key: const Key('storefront_month'),
+          label: context.l10n.billingMonthly,
+          selected: _interval == 'month',
+          onSelected: () => setState(() => _interval = 'month'),
+        ),
+        OmiFilterChip(
+          key: const Key('storefront_year'),
+          label: data.yearlyToggleLabel ?? context.l10n.billingYearly,
+          selected: _interval == 'year',
+          onSelected: () => setState(() => _interval = 'year'),
+        ),
+      ]),
       const SizedBox(height: OmiSpacing.sm),
-    ]);
+      for (final tier in primary) ...[
+        _tierCard(tier, data),
+        const SizedBox(height: OmiSpacing.sm),
+      ],
+      if (rest.isNotEmpty) ...[
+        Semantics(
+          expanded: _allPlansExpanded,
+          child: OmiButton.tertiary(
+            key: const Key('storefront_other_plans'),
+            label: context.l10n.paywallOtherPlans,
+            expand: true,
+            onPressed: () => setState(() => _allPlansExpanded = !_allPlansExpanded),
+          ),
+        ),
+        if (_allPlansExpanded)
+          for (final tier in rest) ...[
+            const SizedBox(height: OmiSpacing.sm),
+            _tierCard(tier, data),
+          ],
+      ],
+    ];
   }
 
-  Widget _tierCard(StorefrontTier tier, StorefrontCurrentPlan? current) {
+  Widget _tierCard(StorefrontTier tier, PlanStorefront storefront) {
     final price = tier.priceFor(_interval);
-    final isCurrentPrice = price != null && price.id == current?.priceId;
-    final storefront = widget.storefront!;
     final decision = price == null
         ? StorefrontCheckoutDecision.refuse
         : storefrontCheckoutDecision(
@@ -170,12 +150,14 @@ class _StorefrontPlansContentState extends State<StorefrontPlansContent> {
             widget.livePlan,
             tier,
             price,
-            usageLegacy: storefront.usageContext?.legacy == true,
-            cancelScheduled: widget.cancelScheduled,
+            cancelScheduled: _cancelScheduled(storefront),
             showSubscriptionUi: storefront.showSubscriptionUi,
           );
+    final cta = decision == StorefrontCheckoutDecision.resubscribe || decision == StorefrontCheckoutDecision.checkout
+        ? tier.ctaLabel
+        : null;
     return Container(
-      key: Key('storefront_tier_${tier.id}'),
+      key: Key('storefront_tier_${tier.planId}'),
       padding: const EdgeInsets.all(OmiSpacing.md),
       decoration: BoxDecoration(
         color: OmiColors.surface1,
@@ -184,58 +166,57 @@ class _StorefrontPlansContentState extends State<StorefrontPlansContent> {
             Border.all(color: tier.recommended ? OmiColors.accent : OmiColors.border, width: tier.recommended ? 2 : 1),
       ),
       child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-        Wrap(
-            alignment: WrapAlignment.spaceBetween,
-            spacing: OmiSpacing.xs,
-            runSpacing: OmiSpacing.xxs,
-            crossAxisAlignment: WrapCrossAlignment.center,
-            children: [
-              Semantics(header: true, child: Text(tier.name, style: OmiType.title3)),
-              if (tier.recommended)
-                Text(context.l10n.paywallRecommended, style: OmiType.footnote.copyWith(fontWeight: FontWeight.w600)),
-            ]),
-        const SizedBox(height: OmiSpacing.xxs),
-        const SizedBox(height: OmiSpacing.sm),
+        Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Expanded(child: Semantics(header: true, child: Text(tier.name, style: OmiType.title3))),
+          Wrap(spacing: OmiSpacing.xxs, runSpacing: OmiSpacing.xxs, alignment: WrapAlignment.end, children: [
+            if (tier.recommended) _badge(context.l10n.paywallRecommended),
+            if (tier.isCurrent) _badge(context.l10n.paywallYourPlan),
+          ]),
+        ]),
         if (price != null) ...[
-          Text(price.monthlyEquivalent, key: Key('storefront_price_${tier.id}'), style: OmiType.title3),
-          Text(price.formatted, style: OmiType.subhead.copyWith(color: OmiColors.textSecondary)),
-          if (_interval == 'year' && price.annualSavings != null)
+          const SizedBox(height: OmiSpacing.xs),
+          Text(price.headline, key: Key('storefront_price_${tier.planId}'), style: OmiType.title3),
+          if (price.subline != null)
             Padding(
-                padding: const EdgeInsets.only(top: OmiSpacing.xs),
-                child: Text(price.annualSavings!, style: OmiType.footnote)),
-          const SizedBox(height: OmiSpacing.sm),
-        ],
-        if (price != null) ...[
-          const SizedBox(height: OmiSpacing.xs),
-          Text(price.renewalTerms, style: OmiType.footnote.copyWith(color: OmiColors.textSecondary)),
-        ],
-        if (price case final selected? when decision != StorefrontCheckoutDecision.refuse) ...[
-          const SizedBox(height: OmiSpacing.sm),
-          OmiButton(
-              key: Key('storefront_buy_${tier.id}'),
-              label: decision == StorefrontCheckoutDecision.resubscribe ? context.l10n.resubscribe : tier.actionLabel,
-              expand: true,
-              isLoading: widget.busy,
-              onPressed: widget.busy ? null : () => widget.onSelect(tier, selected)),
-        ] else if (isCurrentPrice) ...[
-          const SizedBox(height: OmiSpacing.xs),
-          Text(context.l10n.currentPlan, style: OmiType.footnote),
+              padding: const EdgeInsets.only(top: OmiSpacing.xxs),
+              child: Text(price.subline!,
+                  key: Key('storefront_subline_${tier.planId}'),
+                  style: OmiType.footnote.copyWith(color: OmiColors.textSecondary)),
+            ),
         ],
         const SizedBox(height: OmiSpacing.sm),
-        Text(tier.description, style: OmiType.subhead.copyWith(color: OmiColors.textSecondary)),
-        if (tier.recommended && storefront.usageContext?.source == 'mcp_daily_cap')
+        Text(tier.hoursLine, style: OmiType.subhead),
+        const SizedBox(height: OmiSpacing.xs),
+        for (final bullet in tier.bullets)
           Padding(
-              padding: const EdgeInsets.only(bottom: OmiSpacing.xs),
-              child: Text('• ${context.l10n.paywallMcpDailyRequests}',
-                  key: const Key('storefront_mcp_benefit'), style: OmiType.subhead)),
-        if (tier.recordingEquivalent != null)
-          Padding(
-              padding: const EdgeInsets.only(bottom: OmiSpacing.xs),
-              child: Text(tier.recordingEquivalent!, style: OmiType.callout)),
-        for (final outcome in tier.outcomes)
-          Padding(
-              padding: const EdgeInsets.only(bottom: OmiSpacing.xs), child: Text('• $outcome', style: OmiType.subhead)),
+            padding: const EdgeInsets.only(bottom: OmiSpacing.xxs),
+            child: Text('• $bullet', style: OmiType.subhead),
+          ),
+        if (price != null && cta != null) ...[
+          const SizedBox(height: OmiSpacing.xs),
+          OmiButton(
+            key: Key('storefront_buy_${tier.planId}'),
+            label: cta,
+            expand: true,
+            isLoading: widget.busy,
+            onPressed: widget.busy ? null : () => widget.onSelect(tier, price),
+          ),
+          const SizedBox(height: OmiSpacing.xxs),
+          Text(
+            price.renewalLine,
+            key: Key('storefront_renewal_${tier.planId}'),
+            style: OmiType.caption.copyWith(color: OmiColors.textSecondary),
+          ),
+        ],
       ]),
+    );
+  }
+
+  Widget _badge(String label) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.xs, vertical: 2),
+      decoration: BoxDecoration(color: OmiColors.surface3, borderRadius: OmiRadius.pillAll),
+      child: Text(label, style: OmiType.caption.copyWith(fontWeight: FontWeight.w600)),
     );
   }
 }

@@ -3690,7 +3690,7 @@ class AppLocalizationsHu extends AppLocalizations {
   String get settingsHeader => 'BEÁLLÍTÁSOK';
 
   @override
-  String get plansAndBilling => 'Csomagok és Számlázás';
+  String get plansAndBilling => 'Plans';
 
   @override
   String get calendarIntegration => 'Naptár Integráció';
@@ -13078,10 +13078,10 @@ class AppLocalizationsHu extends AppLocalizations {
   String get paywallRecommended => 'Ajánlott';
 
   @override
-  String get paywallNoPlans => 'Nincs elérhető csomag';
+  String get paywallNoPlans => 'Plans aren\'t available right now. Try again in a minute.';
 
   @override
-  String get paywallOtherPlans => 'Más csomagok';
+  String get paywallOtherPlans => 'See all plans';
 
   @override
   String get paywallLegacyPlanStays => 'A csomagod pontosan úgy marad, ahogy van.';
@@ -13090,8 +13090,23 @@ class AppLocalizationsHu extends AppLocalizations {
   String get paywallMcpDailyRequests => 'Több napi MCP-kérés';
 
   @override
-  String get paywallComparePlans => 'Csomagok összehasonlítása';
+  String get paywallComparePlans => 'See plans';
 
   @override
   String get paywallLegacyPlan => 'Korábbi csomag';
+
+  @override
+  String get paywallYourPlan => 'Your plan';
+
+  @override
+  String get paywallNotNow => 'Not now';
+
+  @override
+  String get paywallTryAgain => 'Try again';
+
+  @override
+  String get paywallManageBilling => 'Manage billing';
+
+  @override
+  String get paywallLoadError => 'Couldn\'t load plans. Check your connection and try again.';
 }

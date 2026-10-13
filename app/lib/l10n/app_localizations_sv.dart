@@ -3674,7 +3674,7 @@ class AppLocalizationsSv extends AppLocalizations {
   String get settingsHeader => 'INSTÄLLNINGAR';
 
   @override
-  String get plansAndBilling => 'Planer och Fakturering';
+  String get plansAndBilling => 'Plans';
 
   @override
   String get calendarIntegration => 'Kalenderintegration';
@@ -13031,10 +13031,10 @@ class AppLocalizationsSv extends AppLocalizations {
   String get paywallRecommended => 'Rekommenderas';
 
   @override
-  String get paywallNoPlans => 'Inga tillgängliga planer';
+  String get paywallNoPlans => 'Plans aren\'t available right now. Try again in a minute.';
 
   @override
-  String get paywallOtherPlans => 'Andra abonnemang';
+  String get paywallOtherPlans => 'See all plans';
 
   @override
   String get paywallLegacyPlanStays => 'Ditt abonnemang förblir precis som det är.';
@@ -13043,8 +13043,23 @@ class AppLocalizationsSv extends AppLocalizations {
   String get paywallMcpDailyRequests => 'Fler dagliga MCP-förfrågningar';
 
   @override
-  String get paywallComparePlans => 'Jämför abonnemang';
+  String get paywallComparePlans => 'See plans';
 
   @override
   String get paywallLegacyPlan => 'Äldre abonnemang';
+
+  @override
+  String get paywallYourPlan => 'Your plan';
+
+  @override
+  String get paywallNotNow => 'Not now';
+
+  @override
+  String get paywallTryAgain => 'Try again';
+
+  @override
+  String get paywallManageBilling => 'Manage billing';
+
+  @override
+  String get paywallLoadError => 'Couldn\'t load plans. Check your connection and try again.';
 }

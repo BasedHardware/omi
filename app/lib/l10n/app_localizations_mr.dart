@@ -3675,7 +3675,7 @@ class AppLocalizationsMr extends AppLocalizations {
   String get settingsHeader => 'सेटिंग्‍स';
 
   @override
-  String get plansAndBilling => 'योजना आणि बिलिंग';
+  String get plansAndBilling => 'Plans';
 
   @override
   String get calendarIntegration => 'कॅलेंडर एकीकरण';
@@ -13032,10 +13032,10 @@ class AppLocalizationsMr extends AppLocalizations {
   String get paywallRecommended => 'शिफारस केलेले';
 
   @override
-  String get paywallNoPlans => 'कोणतीही योजना उपलब्ध नाही';
+  String get paywallNoPlans => 'Plans aren\'t available right now. Try again in a minute.';
 
   @override
-  String get paywallOtherPlans => 'इतर योजना';
+  String get paywallOtherPlans => 'See all plans';
 
   @override
   String get paywallLegacyPlanStays => 'तुमची योजना जशी आहे तशीच राहते.';
@@ -13044,8 +13044,23 @@ class AppLocalizationsMr extends AppLocalizations {
   String get paywallMcpDailyRequests => 'अधिक दैनिक MCP विनंत्या';
 
   @override
-  String get paywallComparePlans => 'योजनांची तुलना करा';
+  String get paywallComparePlans => 'See plans';
 
   @override
   String get paywallLegacyPlan => 'जुनी योजना';
+
+  @override
+  String get paywallYourPlan => 'Your plan';
+
+  @override
+  String get paywallNotNow => 'Not now';
+
+  @override
+  String get paywallTryAgain => 'Try again';
+
+  @override
+  String get paywallManageBilling => 'Manage billing';
+
+  @override
+  String get paywallLoadError => 'Couldn\'t load plans. Check your connection and try again.';
 }

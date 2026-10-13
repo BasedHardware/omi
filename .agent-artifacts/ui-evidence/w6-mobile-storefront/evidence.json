@@ -2,156 +2,121 @@
   "version": 1,
   "images": [
     {
-      "file": "001-mobile-ios-storefront-monthly.png",
+      "file": "001-mobile-ios-settings.png",
       "platform": "mobile-ios",
-      "description": "storefront monthly (W6f client eligibility and grouping revision; hermetic widget render, synthetic backend fields)",
+      "description": "Settings sheet: header Choose your plan, Plus current line, Pro recommended, monthly prices",
       "captured_by": "agent",
       "source": "visual-audit"
     },
     {
-      "file": "002-mobile-ios-storefront-annual.png",
+      "file": "002-mobile-ios-budget-80.png",
       "platform": "mobile-ios",
-      "description": "storefront annual (W6f client eligibility and grouping revision; hermetic widget render, synthetic backend fields)",
+      "description": "80% usage header with the same Plus current line and recommended Pro card",
       "captured_by": "agent",
       "source": "visual-audit"
     },
     {
-      "file": "003-mobile-ios-storefront-pro.png",
+      "file": "003-mobile-ios-budget-100.png",
       "platform": "mobile-ios",
-      "description": "storefront pro (W6f client eligibility and grouping revision; hermetic widget render, synthetic backend fields)",
+      "description": "100% usage header, no nudge, recommended Pro card",
       "captured_by": "agent",
       "source": "visual-audit"
     },
     {
-      "file": "004-mobile-ios-storefront-architect.png",
+      "file": "004-mobile-ios-pro-gate-proactive.png",
       "platform": "mobile-ios",
-      "description": "storefront architect (W6f client eligibility and grouping revision; hermetic widget render, synthetic backend fields)",
+      "description": "Reminders and follow-ups header, reminder bullet first on Pro",
       "captured_by": "agent",
       "source": "visual-audit"
     },
     {
-      "file": "005-mobile-ios-storefront-loading.png",
+      "file": "005-mobile-ios-pro-gate-screen.png",
       "platform": "mobile-ios",
-      "description": "storefront loading (W6f client eligibility and grouping revision; hermetic widget render, synthetic backend fields)",
+      "description": "Screen help header, screen bullet first on Pro",
       "captured_by": "agent",
       "source": "visual-audit"
     },
     {
-      "file": "006-mobile-ios-storefront-empty.png",
+      "file": "006-mobile-ios-mcp-cap.png",
       "platform": "mobile-ios",
-      "description": "storefront empty (W6f client eligibility and grouping revision; hermetic widget render, synthetic backend fields)",
+      "description": "MCP cap header, Free current, Plus recommended with MCP bullet first",
       "captured_by": "agent",
       "source": "visual-audit"
     },
     {
-      "file": "007-mobile-ios-storefront-error.png",
+      "file": "007-mobile-ios-legacy.png",
       "platform": "mobile-ios",
-      "description": "storefront error (W6f client eligibility and grouping revision; hermetic widget render, synthetic backend fields)",
+      "description": "Legacy Unlimited line, legacy note, and Manage billing, with no plan cards or Refresh",
       "captured_by": "agent",
       "source": "visual-audit"
     },
     {
-      "file": "008-mobile-ios-storefront-legacy.png",
+      "file": "008-mobile-ios-free.png",
       "platform": "mobile-ios",
-      "description": "legacy plan name, price, renewal, and reassurance with refresh and manage only",
+      "description": "Free current line, Plus recommended with Get Plus",
       "captured_by": "agent",
       "source": "visual-audit"
     },
     {
-      "file": "009-mobile-ios-storefront-small-light.png",
+      "file": "009-mobile-ios-cancel-scheduled.png",
       "platform": "mobile-ios",
-      "description": "storefront small light (W6f client eligibility and grouping revision; hermetic widget render, synthetic backend fields)",
+      "description": "Cancel-scheduled Plus line and Resubscribe on the current price",
       "captured_by": "agent",
       "source": "visual-audit"
     },
     {
-      "file": "010-mobile-ios-storefront-proactive-gate.png",
+      "file": "010-mobile-ios-architect.png",
       "platform": "mobile-ios",
-      "description": "storefront proactive gate (W6f client eligibility and grouping revision; hermetic widget render, synthetic backend fields)",
+      "description": "Architect subscriber sees only the current card, with no upgrade button",
       "captured_by": "agent",
       "source": "visual-audit"
     },
     {
-      "file": "011-mobile-ios-storefront-screen-gate.png",
+      "file": "011-mobile-ios-banner.png",
       "platform": "mobile-ios",
-      "description": "storefront screen gate (W6f client eligibility and grouping revision; hermetic widget render, synthetic backend fields)",
+      "description": "Usage banner is one nudge line plus See plans and Not now",
       "captured_by": "agent",
       "source": "visual-audit"
     },
     {
-      "file": "012-mobile-ios-storefront-mcp-cap.png",
+      "file": "012-mobile-ios-meter.png",
       "platform": "mobile-ios",
-      "description": "MCP cap sheet; recommended card leads with daily MCP requests",
+      "description": "Usage meter shows the backend meter line and a progress bar, with no title row",
       "captured_by": "agent",
       "source": "visual-audit"
     },
     {
-      "file": "013-mobile-ios-budget-banner.png",
+      "file": "013-mobile-ios-small-phone-light.png",
       "platform": "mobile-ios",
-      "description": "budget banner (W6f client eligibility and grouping revision; hermetic widget render, synthetic backend fields)",
+      "description": "Small light phone keeps Get Plus on screen for the recommended Plus card",
       "captured_by": "agent",
       "source": "visual-audit"
     },
     {
-      "file": "014-mobile-ios-free-budget.png",
+      "file": "014-mobile-ios-yearly.png",
       "platform": "mobile-ios",
-      "description": "free budget (W6f client eligibility and grouping revision; hermetic widget render, synthetic backend fields)",
+      "description": "Yearly toggle shows monthly-equivalent headlines, yearly sublines, and yearly renewal lines",
       "captured_by": "agent",
       "source": "visual-audit"
     },
     {
-      "file": "015-mobile-ios-free-pro-gate.png",
+      "file": "015-mobile-ios-see-all-plans.png",
       "platform": "mobile-ios",
-      "description": "free pro gate (W6f client eligibility and grouping revision; hermetic widget render, synthetic backend fields)",
+      "description": "See all plans expanded to Free and Architect under the current Plus card",
       "captured_by": "agent",
       "source": "visual-audit"
     },
     {
-      "file": "016-mobile-ios-plus-budget.png",
+      "file": "016-mobile-ios-empty.png",
       "platform": "mobile-ios",
-      "description": "plus budget (W6f client eligibility and grouping revision; hermetic widget render, synthetic backend fields)",
+      "description": "Empty catalog copy, with no Try again button",
       "captured_by": "agent",
       "source": "visual-audit"
     },
     {
-      "file": "017-mobile-ios-free-mcp-cap.png",
+      "file": "017-mobile-ios-error.png",
       "platform": "mobile-ios",
-      "description": "free MCP cap; recommended Plus card leads with daily MCP requests before recording hours",
-      "captured_by": "agent",
-      "source": "visual-audit"
-    },
-    {
-      "file": "018-mobile-ios-small-light-budget-fold.png",
-      "platform": "mobile-ios",
-      "description": "small light budget fold (W6f client eligibility and grouping revision; hermetic widget render, synthetic backend fields)",
-      "captured_by": "agent",
-      "source": "visual-audit"
-    },
-    {
-      "file": "019-mobile-ios-storefront-other-plans.png",
-      "platform": "mobile-ios",
-      "description": "storefront other plans (W6f client eligibility and grouping revision; hermetic widget render, synthetic backend fields)",
-      "captured_by": "agent",
-      "source": "visual-audit"
-    },
-    {
-      "file": "020-mobile-ios-storefront-annual-current.png",
-      "platform": "mobile-ios",
-      "description": "annual Plus subscriber on the monthly tab; current tier has no buy button, Pro remains an upward move",
-      "captured_by": "agent",
-      "source": "visual-audit"
-    },
-    {
-      "file": "021-mobile-ios-storefront-architect-subscriber.png",
-      "platform": "mobile-ios",
-      "description": "Architect subscriber; Pro is shown without checkout and Architect is marked current",
-      "captured_by": "agent",
-      "source": "visual-audit"
-    },
-    {
-      "file": "022-mobile-ios-storefront-cancelled-resubscribe.png",
-      "platform": "mobile-ios",
-      "description": "cancelled Plus subscriber; current price offers Resubscribe and Pro has no checkout",
+      "description": "Load error copy with a Try again button",
       "captured_by": "agent",
       "source": "visual-audit"
     }

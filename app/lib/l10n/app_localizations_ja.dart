@@ -3613,7 +3613,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get settingsHeader => '設定';
 
   @override
-  String get plansAndBilling => 'プランと請求';
+  String get plansAndBilling => 'Plans';
 
   @override
   String get calendarIntegration => 'カレンダー統合';
@@ -12840,10 +12840,10 @@ class AppLocalizationsJa extends AppLocalizations {
   String get paywallRecommended => 'おすすめ';
 
   @override
-  String get paywallNoPlans => '利用可能なプランはありません';
+  String get paywallNoPlans => 'Plans aren\'t available right now. Try again in a minute.';
 
   @override
-  String get paywallOtherPlans => 'その他のプラン';
+  String get paywallOtherPlans => 'See all plans';
 
   @override
   String get paywallLegacyPlanStays => '現在のプランはそのまま続きます。';
@@ -12852,8 +12852,23 @@ class AppLocalizationsJa extends AppLocalizations {
   String get paywallMcpDailyRequests => '1日のMCPリクエストを増やす';
 
   @override
-  String get paywallComparePlans => 'プランを比較';
+  String get paywallComparePlans => 'See plans';
 
   @override
   String get paywallLegacyPlan => '旧プラン';
+
+  @override
+  String get paywallYourPlan => 'Your plan';
+
+  @override
+  String get paywallNotNow => 'Not now';
+
+  @override
+  String get paywallTryAgain => 'Try again';
+
+  @override
+  String get paywallManageBilling => 'Manage billing';
+
+  @override
+  String get paywallLoadError => 'Couldn\'t load plans. Check your connection and try again.';
 }

@@ -3642,7 +3642,7 @@ class AppLocalizationsAr extends AppLocalizations {
   String get settingsHeader => 'الإعدادات';
 
   @override
-  String get plansAndBilling => 'الخطط والفواتير';
+  String get plansAndBilling => 'Plans';
 
   @override
   String get calendarIntegration => 'تكامل التقويم';
@@ -12953,10 +12953,10 @@ class AppLocalizationsAr extends AppLocalizations {
   String get paywallRecommended => 'موصى به';
 
   @override
-  String get paywallNoPlans => 'لا توجد خطط متاحة';
+  String get paywallNoPlans => 'Plans aren\'t available right now. Try again in a minute.';
 
   @override
-  String get paywallOtherPlans => 'خطط أخرى';
+  String get paywallOtherPlans => 'See all plans';
 
   @override
   String get paywallLegacyPlanStays => 'تبقى خطتك كما هي تمامًا.';
@@ -12965,8 +12965,23 @@ class AppLocalizationsAr extends AppLocalizations {
   String get paywallMcpDailyRequests => 'المزيد من طلبات MCP اليومية';
 
   @override
-  String get paywallComparePlans => 'مقارنة الخطط';
+  String get paywallComparePlans => 'See plans';
 
   @override
   String get paywallLegacyPlan => 'خطة قديمة';
+
+  @override
+  String get paywallYourPlan => 'Your plan';
+
+  @override
+  String get paywallNotNow => 'Not now';
+
+  @override
+  String get paywallTryAgain => 'Try again';
+
+  @override
+  String get paywallManageBilling => 'Manage billing';
+
+  @override
+  String get paywallLoadError => 'Couldn\'t load plans. Check your connection and try again.';
 }

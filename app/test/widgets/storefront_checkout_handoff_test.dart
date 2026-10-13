@@ -17,6 +17,8 @@ import 'package:omi/providers/usage_provider.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
 
+StorefrontTier _plan(PlanStorefront data, String planId) => data.tiers.firstWhere((tier) => tier.planId == planId);
+
 class _Usage extends UsageProvider {
   String? checkedOutPrice;
   String? sessionPrice;
@@ -64,7 +66,8 @@ class _HostState extends State<_Host> with TickerProviderStateMixin {
         analyticsSource: 'budget_80',
         storefrontApi: PlanStorefrontApi(
             baseUrl: 'http://127.0.0.1:1/',
-            send: (_) async => http.Response(File('test/fixtures/plan_storefront.json').readAsStringSync(), 200)),
+            send: (_) async =>
+                http.Response(File('test/fixtures/storefront_v2/settings.json').readAsStringSync(), 200)),
       ));
 }
 
@@ -82,9 +85,12 @@ void main() {
       addTearDown(tester.view.resetDevicePixelRatio);
       final usage = _Usage();
       addTearDown(usage.dispose);
-      final json = jsonDecode(File('test/fixtures/plan_storefront.json').readAsStringSync()) as Map<String, dynamic>;
-      json['current']['id'] = current == 'legacy' ? 'unlimited_v2' : current;
+      final json =
+          jsonDecode(File('test/fixtures/storefront_v2/settings.json').readAsStringSync()) as Map<String, dynamic>;
+      json['current']['plan_id'] = current == 'legacy' ? 'unlimited_v2' : current;
       json['current']['legacy'] = current == 'legacy';
+      json['current']['legacy_note'] =
+          current == 'legacy' ? "We don't sell this plan anymore, but yours stays exactly as it is." : null;
       json['current']['price_id'] = 'fixture_existing';
       final data = PlanStorefront.fromJson(json);
       usage.debugSetSubscription(UserSubscriptionResponse(
@@ -98,16 +104,16 @@ void main() {
         insightsGainedLimit: 0,
         availablePlans: [],
       ));
-      final price = data.tiers[1].priceFor('month')!;
+      final price = _plan(data, 'plus').priceFor('month')!;
       usage.debugSetAvailablePlans({
         'plans': [
           {
             'id': price.id,
             'plan_id': 'plus',
             'interval': 'month',
-            'unit_amount': price.amount,
+            'unit_amount': price.amountMinor,
             'title': 'Plus',
-            'price_string': price.formatted,
+            'price_string': price.headline,
             'is_active': false
           }
         ]
@@ -121,7 +127,9 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.byKey(const Key('storefront_buy_plus')), findsNothing);
       // Invoke the actual sheet handoff to model a tap queued before subscription refresh.
-      await tester.widget<StorefrontPlansContent>(find.byType(StorefrontPlansContent)).onSelect(data.tiers[1], price);
+      await tester
+          .widget<StorefrontPlansContent>(find.byType(StorefrontPlansContent))
+          .onSelect(_plan(data, 'plus'), price);
       await tester.pumpAndSettle();
       expect(usage.checkedOutPrice, isNull);
       expect(find.text('Change Plan'), findsNothing);
@@ -135,12 +143,13 @@ void main() {
     addTearDown(tester.view.resetDevicePixelRatio);
     final usage = _Usage();
     addTearDown(usage.dispose);
-    final json = jsonDecode(File('test/fixtures/plan_storefront.json').readAsStringSync()) as Map<String, dynamic>;
-    json['current']['id'] = 'architect';
+    final json =
+        jsonDecode(File('test/fixtures/storefront_v2/settings.json').readAsStringSync()) as Map<String, dynamic>;
+    json['current']['plan_id'] = 'architect';
     json['current']['legacy'] = false;
     json['current']['price_id'] = 'fixture_architect_month';
     final data = PlanStorefront.fromJson(json);
-    final price = data.tiers[2].priceFor('month')!;
+    final price = _plan(data, 'operator').priceFor('month')!;
     usage.debugSetSubscription(UserSubscriptionResponse(
       subscription: Subscription(
           plan: PlanType.architect, status: SubscriptionStatus.active, currentPriceId: 'fixture_architect_month'),
@@ -152,7 +161,7 @@ void main() {
       insightsGainedLimit: 0,
       availablePlans: [
         SubscriptionPlan(id: 'operator', title: 'Pro', prices: [
-          PricingOption(id: price.id, title: 'Monthly', priceString: price.formatted),
+          PricingOption(id: price.id, title: 'Monthly', priceString: price.headline),
         ])
       ],
     ));
@@ -162,9 +171,9 @@ void main() {
           'id': price.id,
           'plan_id': 'operator',
           'interval': 'month',
-          'unit_amount': price.amount,
+          'unit_amount': price.amountMinor,
           'title': 'Pro',
-          'price_string': price.formatted,
+          'price_string': price.headline,
           'is_active': false
         }
       ]
@@ -177,7 +186,9 @@ void main() {
             home: Scaffold(body: _Host(data)))));
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('storefront_buy_operator')), findsNothing);
-    await tester.widget<StorefrontPlansContent>(find.byType(StorefrontPlansContent)).onSelect(data.tiers[2], price);
+    await tester
+        .widget<StorefrontPlansContent>(find.byType(StorefrontPlansContent))
+        .onSelect(_plan(data, 'operator'), price);
     await tester.pumpAndSettle();
     expect(usage.checkedOutPrice, isNull);
     expect(usage.sessionPrice, isNull);
@@ -191,11 +202,12 @@ void main() {
     addTearDown(tester.view.resetDevicePixelRatio);
     final usage = _Usage();
     addTearDown(usage.dispose);
-    final json = jsonDecode(File('test/fixtures/plan_storefront.json').readAsStringSync()) as Map<String, dynamic>;
+    final json =
+        jsonDecode(File('test/fixtures/storefront_v2/settings.json').readAsStringSync()) as Map<String, dynamic>;
     json['current']['price_id'] = 'fixture_plus_year';
     json['current']['legacy'] = false;
     final data = PlanStorefront.fromJson(json);
-    final price = data.tiers[1].priceFor('month')!;
+    final price = _plan(data, 'plus').priceFor('month')!;
     usage.debugSetSubscription(UserSubscriptionResponse(
       subscription:
           Subscription(plan: PlanType.plus, status: SubscriptionStatus.active, currentPriceId: 'fixture_plus_year'),
@@ -207,7 +219,7 @@ void main() {
       insightsGainedLimit: 0,
       availablePlans: [
         SubscriptionPlan(id: 'plus', title: 'Plus', prices: [
-          PricingOption(id: price.id, title: 'Monthly', priceString: price.formatted),
+          PricingOption(id: price.id, title: 'Monthly', priceString: price.headline),
         ])
       ],
     ));
@@ -217,9 +229,9 @@ void main() {
           'id': price.id,
           'plan_id': 'plus',
           'interval': 'month',
-          'unit_amount': price.amount,
+          'unit_amount': price.amountMinor,
           'title': 'Plus',
-          'price_string': price.formatted,
+          'price_string': price.headline,
           'is_active': false
         }
       ]
@@ -232,7 +244,9 @@ void main() {
             home: Scaffold(body: _Host(data)))));
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('storefront_buy_plus')), findsNothing);
-    await tester.widget<StorefrontPlansContent>(find.byType(StorefrontPlansContent)).onSelect(data.tiers[1], price);
+    await tester
+        .widget<StorefrontPlansContent>(find.byType(StorefrontPlansContent))
+        .onSelect(_plan(data, 'plus'), price);
     await tester.pumpAndSettle();
     expect(usage.checkedOutPrice, isNull);
     expect(usage.sessionPrice, isNull);
@@ -246,9 +260,13 @@ void main() {
     addTearDown(tester.view.resetDevicePixelRatio);
     final usage = _Usage();
     addTearDown(usage.dispose);
-    final json = jsonDecode(File('test/fixtures/plan_storefront.json').readAsStringSync()) as Map<String, dynamic>;
+    final json =
+        jsonDecode(File('test/fixtures/storefront_v2/settings.json').readAsStringSync()) as Map<String, dynamic>;
+    json['current']['cancel_at_period_end'] = true;
+    (json['tiers'] as List).cast<Map<String, dynamic>>().firstWhere((tier) => tier['plan_id'] == 'plus')['cta_label'] =
+        'Resubscribe';
     final data = PlanStorefront.fromJson(json);
-    final price = data.tiers[1].priceFor('month')!;
+    final price = _plan(data, 'plus').priceFor('month')!;
     usage.debugSetSubscription(UserSubscriptionResponse(
       subscription: Subscription(
           plan: PlanType.plus, status: SubscriptionStatus.active, cancelAtPeriodEnd: true, currentPriceId: price.id),
@@ -260,7 +278,7 @@ void main() {
       insightsGainedLimit: 0,
       availablePlans: [
         SubscriptionPlan(id: 'plus', title: 'Plus', prices: [
-          PricingOption(id: price.id, title: 'Monthly', priceString: price.formatted),
+          PricingOption(id: price.id, title: 'Monthly', priceString: price.headline),
         ])
       ],
     ));
@@ -270,9 +288,9 @@ void main() {
           'id': price.id,
           'plan_id': 'plus',
           'interval': 'month',
-          'unit_amount': price.amount,
+          'unit_amount': price.amountMinor,
           'title': 'Plus',
-          'price_string': price.formatted,
+          'price_string': price.headline,
           'is_active': true
         }
       ]
@@ -304,7 +322,8 @@ void main() {
     final usage = _Usage();
     addTearDown(usage.dispose);
     final pending = Completer<bool>();
-    final data = PlanStorefront.fromJson(jsonDecode(File('test/fixtures/plan_storefront.json').readAsStringSync()));
+    final data =
+        PlanStorefront.fromJson(jsonDecode(File('test/fixtures/storefront_v2/settings.json').readAsStringSync()));
     usage.debugSetSubscription(UserSubscriptionResponse(
       subscription: Subscription(
           plan: PlanType.unlimitedV2, status: SubscriptionStatus.active, stripeSubscriptionId: 'sub_fixture'),
@@ -366,7 +385,8 @@ void main() {
     final usage = _Usage();
     addTearDown(usage.dispose);
     final pending = Completer<bool>();
-    final data = PlanStorefront.fromJson(jsonDecode(File('test/fixtures/plan_storefront.json').readAsStringSync()));
+    final data =
+        PlanStorefront.fromJson(jsonDecode(File('test/fixtures/storefront_v2/settings.json').readAsStringSync()));
     await tester.pumpWidget(ChangeNotifierProvider<UsageProvider>.value(
         value: usage,
         child: MaterialApp(
@@ -388,10 +408,11 @@ void main() {
       addTearDown(tester.view.resetDevicePixelRatio);
       final usage = _Usage();
       addTearDown(usage.dispose);
-      final json = jsonDecode(File('test/fixtures/plan_storefront.json').readAsStringSync()) as Map<String, dynamic>;
+      final json =
+          jsonDecode(File('test/fixtures/storefront_v2/settings.json').readAsStringSync()) as Map<String, dynamic>;
       json['current'] = null;
       final data = PlanStorefront.fromJson(json);
-      final price = data.tiers[1].priceFor('month')!;
+      final price = _plan(data, 'plus').priceFor('month')!;
       final catalogId = mismatch == 'id' ? 'fixture_different_price' : price.id;
       usage.debugSetSubscription(UserSubscriptionResponse(
         subscription: Subscription(plan: PlanType.basic, status: SubscriptionStatus.inactive),
@@ -403,7 +424,7 @@ void main() {
         insightsGainedLimit: 0,
         availablePlans: [
           SubscriptionPlan(id: 'plus', title: 'Plus', prices: [
-            PricingOption(id: catalogId, title: 'Monthly', priceString: price.formatted),
+            PricingOption(id: catalogId, title: 'Monthly', priceString: price.headline),
           ])
         ],
       ));
@@ -414,8 +435,8 @@ void main() {
             'plan_id': 'plus',
             'title': 'Plus',
             'interval': mismatch == 'interval' ? 'year' : 'month',
-            'unit_amount': mismatch == 'amount' ? price.amount + 1 : price.amount,
-            'price_string': price.formatted,
+            'unit_amount': mismatch == 'amount' ? price.amountMinor + 1 : price.amountMinor,
+            'price_string': price.headline,
             'is_active': false
           },
         ]

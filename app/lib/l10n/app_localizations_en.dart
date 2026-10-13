@@ -3671,7 +3671,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get settingsHeader => 'SETTINGS';
 
   @override
-  String get plansAndBilling => 'Plans & Billing';
+  String get plansAndBilling => 'Plans';
 
   @override
   String get calendarIntegration => 'Calendar Integration';
@@ -13011,10 +13011,10 @@ class AppLocalizationsEn extends AppLocalizations {
   String get paywallRecommended => 'Recommended';
 
   @override
-  String get paywallNoPlans => 'No Plans Available';
+  String get paywallNoPlans => 'Plans aren\'t available right now. Try again in a minute.';
 
   @override
-  String get paywallOtherPlans => 'Other plans';
+  String get paywallOtherPlans => 'See all plans';
 
   @override
   String get paywallLegacyPlanStays => 'Your plan stays exactly as it is.';
@@ -13023,8 +13023,23 @@ class AppLocalizationsEn extends AppLocalizations {
   String get paywallMcpDailyRequests => 'More daily MCP requests';
 
   @override
-  String get paywallComparePlans => 'Compare plans';
+  String get paywallComparePlans => 'See plans';
 
   @override
   String get paywallLegacyPlan => 'Legacy plan';
+
+  @override
+  String get paywallYourPlan => 'Your plan';
+
+  @override
+  String get paywallNotNow => 'Not now';
+
+  @override
+  String get paywallTryAgain => 'Try again';
+
+  @override
+  String get paywallManageBilling => 'Manage billing';
+
+  @override
+  String get paywallLoadError => 'Couldn\'t load plans. Check your connection and try again.';
 }

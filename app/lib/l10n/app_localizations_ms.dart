@@ -3677,7 +3677,7 @@ class AppLocalizationsMs extends AppLocalizations {
   String get settingsHeader => 'TETAPAN';
 
   @override
-  String get plansAndBilling => 'Pelan & Pengebilan';
+  String get plansAndBilling => 'Plans';
 
   @override
   String get calendarIntegration => 'Integrasi Kalendar';
@@ -13057,10 +13057,10 @@ class AppLocalizationsMs extends AppLocalizations {
   String get paywallRecommended => 'Disyorkan';
 
   @override
-  String get paywallNoPlans => 'Tiada Pelan Tersedia';
+  String get paywallNoPlans => 'Plans aren\'t available right now. Try again in a minute.';
 
   @override
-  String get paywallOtherPlans => 'Pelan lain';
+  String get paywallOtherPlans => 'See all plans';
 
   @override
   String get paywallLegacyPlanStays => 'Pelan anda kekal seperti sedia ada.';
@@ -13069,8 +13069,23 @@ class AppLocalizationsMs extends AppLocalizations {
   String get paywallMcpDailyRequests => 'Lebih banyak permintaan MCP harian';
 
   @override
-  String get paywallComparePlans => 'Bandingkan pelan';
+  String get paywallComparePlans => 'See plans';
 
   @override
   String get paywallLegacyPlan => 'Pelan lama';
+
+  @override
+  String get paywallYourPlan => 'Your plan';
+
+  @override
+  String get paywallNotNow => 'Not now';
+
+  @override
+  String get paywallTryAgain => 'Try again';
+
+  @override
+  String get paywallManageBilling => 'Manage billing';
+
+  @override
+  String get paywallLoadError => 'Couldn\'t load plans. Check your connection and try again.';
 }

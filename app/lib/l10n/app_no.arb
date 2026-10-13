@@ -1121,7 +1121,7 @@
     "selectAudioInput": "Velg lydinngang",
     "loadingDevices": "Laster inn enheter…",
     "settingsHeader": "INNSTILLINGER",
-    "plansAndBilling": "Planer og Fakturering",
+    "plansAndBilling": "Plans",
     "calendarIntegration": "Kalenderintegrasjon",
     "dailySummary": "Daglig sammendrag",
     "developer": "Utvikler",
@@ -4006,10 +4006,15 @@
     "reviewProposalConflict": "Dette er endret siden Dream foreslo det, så ingenting ble brukt.",
     "itemLinkListTitle": "{count, plural, =0{Ingen elementer} =1{1 element} other{{count} elementer}}",
     "paywallRecommended": "Anbefalt",
-    "paywallNoPlans": "Ingen tilgjengelige planer",
-    "paywallOtherPlans": "Andre abonnementer",
+    "paywallNoPlans": "Plans aren't available right now. Try again in a minute.",
+    "paywallOtherPlans": "See all plans",
     "paywallLegacyPlanStays": "Abonnementet ditt forblir nøyaktig som det er.",
     "paywallMcpDailyRequests": "Flere daglige MCP-forespørsler",
-    "paywallComparePlans": "Sammenlign abonnementer",
-    "paywallLegacyPlan": "Eldre abonnement"
+    "paywallComparePlans": "See plans",
+    "paywallLegacyPlan": "Eldre abonnement",
+    "paywallYourPlan": "Your plan",
+    "paywallNotNow": "Not now",
+    "paywallTryAgain": "Try again",
+    "paywallManageBilling": "Manage billing",
+    "paywallLoadError": "Couldn't load plans. Check your connection and try again."
 }

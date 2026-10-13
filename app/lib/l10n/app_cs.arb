@@ -1121,7 +1121,7 @@
     "selectAudioInput": "Vyberte vstup zvuku",
     "loadingDevices": "Načítání zařízení…",
     "settingsHeader": "NASTAVENÍ",
-    "plansAndBilling": "Plány a Fakturace",
+    "plansAndBilling": "Plans",
     "calendarIntegration": "Integrace Kalendáře",
     "dailySummary": "Denní shrnutí",
     "developer": "Vývojář",
@@ -4006,10 +4006,15 @@
     "reviewProposalConflict": "Od návrhu Dream se to změnilo, takže se nic nepoužilo.",
     "itemLinkListTitle": "{count, plural, =0{Žádné položky} =1{1 položka} other{{count} položek}}",
     "paywallRecommended": "Doporučeno",
-    "paywallNoPlans": "Nejsou dostupné žádné plány",
-    "paywallOtherPlans": "Další plány",
+    "paywallNoPlans": "Plans aren't available right now. Try again in a minute.",
+    "paywallOtherPlans": "See all plans",
     "paywallLegacyPlanStays": "Váš plán zůstává přesně tak, jak je.",
     "paywallMcpDailyRequests": "Více denních požadavků MCP",
-    "paywallComparePlans": "Porovnat plány",
-    "paywallLegacyPlan": "Původní plán"
+    "paywallComparePlans": "See plans",
+    "paywallLegacyPlan": "Původní plán",
+    "paywallYourPlan": "Your plan",
+    "paywallNotNow": "Not now",
+    "paywallTryAgain": "Try again",
+    "paywallManageBilling": "Manage billing",
+    "paywallLoadError": "Couldn't load plans. Check your connection and try again."
 }

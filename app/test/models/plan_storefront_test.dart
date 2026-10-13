@@ -1,158 +1,201 @@
 import 'dart:convert';
 import 'dart:io';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:omi/models/plan_storefront.dart';
 import 'package:omi/models/subscription.dart';
 
-Map<String, dynamic> fixture() => jsonDecode(File('test/fixtures/plan_storefront.json').readAsStringSync());
+/// Hand-authored from the coordinator copy deck because origin/lane/sub-w5-presentation-v2
+/// did not yet contain backend/tests/fixtures/storefront_v2. When that directory exists,
+/// the bytes must match.
+Map<String, dynamic> fixture([String name = 'settings']) =>
+    jsonDecode(File('test/fixtures/storefront_v2/$name.json').readAsStringSync()) as Map<String, dynamic>;
+
 void main() {
-  test('unused current message is optional and malformed pro gates fail at parse time', () {
-    final json = fixture();
-    json['current'].remove('message');
-    expect(PlanStorefront.fromJson(json).current!.message, isEmpty);
+  test('schema version 2 parses deck fields and rejects every other version', () {
+    final data = PlanStorefront.fromJson(fixture());
+    expect(data.catalogRevision, 1);
+    expect(data.header, 'Choose your plan');
+    expect(data.current!.line, r"You're on Plus · $19.99/mo · renews Nov 1");
+    expect(data.current!.legacyNote, isNull);
+    expect(data.yearlyToggleLabel, 'Yearly · 2 months free');
+    expect(data.tiers.map((tier) => tier.planId), ['operator', 'basic', 'plus', 'architect']);
+    final pro = data.tiers.singleWhere((tier) => tier.recommended);
+    expect(pro.name, 'Pro');
+    expect(pro.hoursLine, 'About 280 hours a month, enough to wear it all day');
+    expect(pro.ctaLabel, 'Upgrade to Pro');
+    expect(pro.priceFor('month')!.subline, isNull);
+    expect(pro.priceFor('year')!.id, 'fixture_operator_year');
+    expect(pro.priceFor('year')!.subline, r'$499.90 billed yearly · 2 months free');
+    expect(pro.priceFor('year')!.monthsFree, 2);
+    expect(pro.priceFor('year')!.renewalLine, 'Renews yearly until you cancel. Cancel anytime in settings.');
+    expect(data.usage!.showBudgetNudge, isFalse);
+    for (final version in [1, 3, '2', null]) {
+      expect(() => PlanStorefront.fromJson(fixture()..['schema_version'] = version), throwsFormatException);
+    }
+  });
+
+  test('app fixtures match backend goldens byte for byte when that directory exists', () {
+    final backend = Directory('../backend/tests/fixtures/storefront_v2');
+    if (!backend.existsSync()) return;
+    final app = Directory('test/fixtures/storefront_v2');
+    Map<String, File> jsonFiles(Directory directory) => {
+          for (final entity in directory.listSync().whereType<File>())
+            if (entity.path.endsWith('.json')) entity.uri.pathSegments.last: entity
+        };
+    final backendFiles = jsonFiles(backend);
+    final appFiles = jsonFiles(app);
+    expect(appFiles.keys.toSet(), backendFiles.keys.toSet());
+    for (final name in appFiles.keys) {
+      expect(appFiles[name]!.readAsBytesSync(), backendFiles[name]!.readAsBytesSync(), reason: name);
+    }
+  });
+
+  for (final entry in {
+    'free': 'plus',
+    'mcp_cap': 'plus',
+    'pro_gate_proactive': 'operator',
+    'budget_80': 'operator',
+  }.entries) {
+    test('preserves server recommendation for ${entry.key}', () {
+      final data = PlanStorefront.fromJson(fixture(entry.key));
+      expect(data.tiers.singleWhere((tier) => tier.recommended).planId, entry.value);
+      if (entry.key == 'mcp_cap') {
+        expect(data.header, "You've used today's 100 MCP requests");
+        expect(data.tiers.every((tier) => tier.bullets.first.contains('MCP')), isTrue);
+      }
+      if (entry.key == 'pro_gate_proactive') {
+        expect(data.tiers.singleWhere((tier) => tier.planId == 'operator').bullets.first,
+            "Omi reminds you of things you said you'd do");
+      }
+    });
+  }
+
+  test('screen gate leads the Pro card with the screen bullet', () {
+    final pro =
+        PlanStorefront.fromJson(fixture('pro_gate_screen')).tiers.singleWhere((tier) => tier.planId == 'operator');
+    expect(pro.bullets.first, "On your Mac, Omi can see what you're working on and help with it");
+  });
+
+  test('legacy note is required only for a legacy plan', () {
+    final legacy = PlanStorefront.fromJson(fixture('legacy'));
+    expect(legacy.current!.legacy, isTrue);
+    expect(legacy.current!.legacyNote, 'We don\'t sell this plan anymore, but yours stays exactly as it is.');
+    expect(legacy.shouldGate('proactive_agent'), isFalse);
+    expect(legacy.showBudgetNudge, isFalse);
+    final missing = fixture('legacy');
+    missing['current']['legacy_note'] = null;
+    expect(() => PlanStorefront.fromJson(missing), throwsFormatException);
+    final unexpected = fixture();
+    unexpected['current']['legacy_note'] = 'nope';
+    expect(() => PlanStorefront.fromJson(unexpected), throwsFormatException);
+  });
+
+  test('rejects unknown actions, ambiguous intervals and nonboolean flags', () {
+    final action = fixture();
+    action['tiers'][0]['action'] = 'redirect';
+    expect(() => PlanStorefront.fromJson(action), throwsFormatException);
+    final duplicate = fixture();
+    duplicate['tiers'][0]['prices'].add(duplicate['tiers'][0]['prices'][0]);
+    expect(() => PlanStorefront.fromJson(duplicate), throwsFormatException);
+    for (final flag in ['true', 1, null]) {
+      final json = fixture();
+      json['current']['legacy'] = flag;
+      expect(() => PlanStorefront.fromJson(json), throwsFormatException);
+      final cancel = fixture();
+      cancel['current']['cancel_at_period_end'] = flag;
+      expect(() => PlanStorefront.fromJson(cancel), throwsFormatException);
+    }
+  });
+
+  test('fails closed for malformed prices, duplicate plans and a missing visibility flag', () {
+    final price = fixture();
+    price['tiers'][0]['prices'][0]['interval'] = 'week';
+    expect(() => PlanStorefront.fromJson(price), throwsFormatException);
+    final duplicate = fixture();
+    duplicate['tiers'][1]['plan_id'] = 'operator';
+    expect(() => PlanStorefront.fromJson(duplicate), throwsFormatException);
+    final hidden = fixture()..remove('show_subscription_ui');
+    expect(PlanStorefront.fromJson(hidden).showSubscriptionUi, isFalse);
+    final hours = fixture();
+    hours['tiers'][0].remove('hours_line');
+    expect(() => PlanStorefront.fromJson(hours), throwsFormatException);
+  });
+
+  test('malformed pro gates fail at parse time', () {
     for (final gates in [
       [1],
       ['proactive_agent', null],
       [''],
       'proactive_agent'
     ]) {
-      json['usage_context']['pro_gates'] = gates;
+      final json = fixture();
+      json['usage']['pro_gates'] = gates;
       expect(() => PlanStorefront.fromJson(json), throwsFormatException);
     }
   });
-  test('optional presentation fields preserve backend billing copy and period identity', () {
-    final data = PlanStorefront.fromJson(fixture());
-    expect(data.current!.formattedPrice, r'$19.99/mo');
-    expect(data.current!.renewalLabel, 'Renews Nov 1');
-    expect(data.usageContext!.periodId, '2026-10');
-    expect(data.usageContext!.budgetNudgeLabel, contains('80%'));
-    final json = fixture();
-    json['current']['comparison_tier_id'] = 'plus';
-    expect(PlanStorefront.fromJson(json).current!.comparisonTierId, 'plus');
-    json['current'].remove('formatted_price');
-    json['current'].remove('renewal_label');
-    json['usage_context'].remove('period_id');
-    expect(PlanStorefront.fromJson(json).current!.formattedPrice, isNull);
-    expect(PlanStorefront.fromJson(json).usageContext!.periodId, isNull);
-  });
 
-  for (final entry in {
-    'free_budget': 'plus',
-    'free_mcp_cap': 'plus',
-    'free_pro_gate': 'operator',
-    'plus_budget': 'operator'
-  }.entries) {
-    test('preserves contextual server recommendation for ${entry.key}', () {
-      final json = jsonDecode(File('test/fixtures/plan_storefront_${entry.key}.json').readAsStringSync())
-          as Map<String, dynamic>;
-      final data = PlanStorefront.fromJson(json);
-      expect(data.tiers.singleWhere((tier) => tier.recommended).id, entry.value);
-      if (entry.key == 'free_mcp_cap') expect(data.usageContext!.source, 'mcp_daily_cap');
-    });
-  }
-  test('rejects unknown actions, ambiguous intervals and nonboolean legacy flags', () {
-    final action = fixture();
-    action['tiers'][1]['action'] = 'redirect';
-    expect(() => PlanStorefront.fromJson(action), throwsFormatException);
-    final duplicate = fixture();
-    duplicate['tiers'][1]['prices'].add(duplicate['tiers'][1]['prices'][0]);
-    expect(() => PlanStorefront.fromJson(duplicate), throwsFormatException);
-    for (final section in ['current', 'usage_context']) {
-      for (final flag in ['true', 1, null]) {
-        final json = fixture();
-        json[section]['legacy'] = flag;
-        expect(() => PlanStorefront.fromJson(json), throwsFormatException);
-      }
-    }
-  });
-  test('preserves server order, recommendation, exact prices and computed savings', () {
-    final data = PlanStorefront.fromJson(fixture());
-    expect(data.tiers.map((t) => t.id), ['basic', 'plus', 'operator', 'architect']);
-    final pro = data.tiers.singleWhere((t) => t.recommended);
-    expect(pro.name, 'Pro');
-    expect(pro.priceFor('year')!.id, 'fixture_operator_year');
-    expect(pro.priceFor('year')!.annualSavings, 'Save 16.7% compared with monthly');
-    expect(data.current!.priceId, 'fixture_plus_month');
-    expect(data.usageContext!.showBudgetNudge, isTrue);
-  });
-  test('unknown tiers retain identity without inferring entitlement', () {
-    final json = fixture();
-    json['tiers'][0]['id'] = 'future_plan';
-    expect(PlanStorefront.fromJson(json).tiers.first.id, 'future_plan');
-  });
-  test('fails closed for unsupported schemas, malformed prices and duplicates', () {
-    final version = fixture()..['schema_version'] = 2;
-    expect(() => PlanStorefront.fromJson(version), throwsFormatException);
-    final price = fixture();
-    price['tiers'][1]['prices'][0]['interval'] = 'week';
-    expect(() => PlanStorefront.fromJson(price), throwsFormatException);
-    final duplicate = fixture();
-    duplicate['tiers'][1]['id'] = 'basic';
-    expect(() => PlanStorefront.fromJson(duplicate), throwsFormatException);
-    final hidden = fixture()..remove('show_subscription_ui');
-    expect(PlanStorefront.fromJson(hidden).showSubscriptionUi, isFalse);
-    final missingLegacy = fixture();
-    missingLegacy['current'].remove('legacy');
-    expect(() => PlanStorefront.fromJson(missingLegacy), throwsFormatException);
-  });
   test('Pro gates follow server decisions and never override legacy access', () {
     final json = fixture();
     expect(PlanStorefront.fromJson(json).shouldGate('proactive_agent'), isTrue);
     expect(PlanStorefront.fromJson(json).shouldGate('future_feature'), isFalse);
     json['current']['legacy'] = true;
+    json['current']['legacy_note'] = 'We don\'t sell this plan anymore, but yours stays exactly as it is.';
     expect(PlanStorefront.fromJson(json).shouldGate('proactive_agent'), isFalse);
     json['current'] = null;
     expect(PlanStorefront.fromJson(json).shouldGate('proactive_agent'), isFalse);
     json['show_subscription_ui'] = false;
     expect(PlanStorefront.fromJson(json).shouldGate('proactive_agent'), isFalse);
   });
-  test('current legacy alone suppresses the budget nudge', () {
-    final json = fixture();
-    json['current']['legacy'] = true;
-    expect(PlanStorefront.fromJson(json).showBudgetNudge, isFalse);
-    json['current'] = null;
-    expect(PlanStorefront.fromJson(json).showBudgetNudge, isFalse);
-  });
-  test('legacy budgets never nudge and 100% belongs to W4', () {
+
+  test('budget nudge is the 80 percent band and 100 percent belongs to W4', () {
+    expect(PlanStorefront.fromJson(fixture('budget_80')).showBudgetNudge, isTrue);
+    expect(PlanStorefront.fromJson(fixture('budget_80')).usage!.nudgeLine, contains('80%'));
+    expect(PlanStorefront.fromJson(fixture('budget_100')).showBudgetNudge, isFalse);
     for (final percent in [0, 79, 100, 120]) {
-      final json = fixture();
-      json['usage_context']['budget_percent'] = percent;
-      expect(PlanStorefront.fromJson(json).usageContext!.showBudgetNudge, isFalse);
+      final json = fixture('budget_80');
+      json['usage']['percent'] = percent;
+      expect(PlanStorefront.fromJson(json).usage!.showBudgetNudge, isFalse);
     }
-    final json = fixture();
-    json['usage_context']['legacy'] = true;
-    json['current']['legacy'] = true;
-    expect(PlanStorefront.fromJson(json).usageContext!.showBudgetNudge, isFalse);
-    expect(PlanStorefront.fromJson(json).current!.legacy, isTrue);
+    final cleared = fixture('budget_80');
+    cleared['current'] = null;
+    expect(PlanStorefront.fromJson(cleared).showBudgetNudge, isFalse);
   });
 
   test('storefrontCheckoutDecision allows only upward moves or same-tier annual', () {
     StorefrontPrice priced(String id, String interval) => StorefrontPrice(
         id: id,
         interval: interval,
-        amount: 100,
+        amountMinor: 100,
         currency: 'usd',
-        formatted: r'$1',
-        monthlyEquivalent: r'$1/mo',
-        renewalTerms: 'Renews');
+        headline: r'$1/month',
+        renewalLine: 'Renews monthly until you cancel. Cancel anytime in settings.');
     StorefrontTier tier(String id, List<StorefrontPrice> prices) => StorefrontTier(
-        id: id,
+        tierId: '$id:ladder_v1',
+        planId: id,
         name: id,
-        description: 'd',
-        outcomes: const ['o'],
+        hoursLine: 'About 1 hour of recording a month',
+        bullets: const ['Included'],
         recommended: id == 'operator',
+        isCurrent: false,
         prices: prices,
         action: 'checkout',
-        actionLabel: 'Continue');
-    StorefrontCurrentPlan current(String id, {String? priceId, bool legacy = false}) =>
-        StorefrontCurrentPlan(id: id, name: id, priceId: priceId, legacy: legacy);
+        ctaLabel: 'Continue');
+    StorefrontCurrentPlan current(String id, {String? priceId, bool legacy = false}) => StorefrontCurrentPlan(
+        planId: id,
+        name: id,
+        priceId: priceId,
+        interval: 'month',
+        legacy: legacy,
+        cancelAtPeriodEnd: false,
+        line: 'You\'re on $id',
+        legacyNote: legacy ? 'We don\'t sell this plan anymore, but yours stays exactly as it is.' : null);
 
     final plusMonth = priced('plus_month', 'month');
     final plusYear = priced('plus_year', 'year');
     final plus = tier('plus', [plusMonth, plusYear]);
     final operatorMonth = priced('operator_month', 'month');
-    final operatorYear = priced('operator_year', 'year');
-    final operator = tier('operator', [operatorMonth, operatorYear]);
+    final operator = tier('operator', [operatorMonth, priced('operator_year', 'year')]);
     final architectMonth = priced('architect_month', 'month');
     final architect = tier('architect', [architectMonth, priced('architect_year', 'year')]);
     final basic = tier('basic', [priced('basic_month', 'month')]);

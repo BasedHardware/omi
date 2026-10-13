@@ -4113,7 +4113,7 @@
     "@account": {
         "description": "Account section label"
     },
-    "plansAndBilling": "منصوبے اور بلنگ",
+    "plansAndBilling": "Plans",
     "@plansAndBilling": {
         "description": "Plans and billing section"
     },
@@ -11443,10 +11443,15 @@
     "reviewProposalConflict": "Dream کی تجویز کے بعد یہ بدل گیا، اس لیے کچھ بھی لاگو نہیں کیا گیا۔",
     "itemLinkListTitle": "{count, plural, =0{کوئی آئٹم نہیں} =1{1 آئٹم} other{{count} آئٹمز}}",
     "paywallRecommended": "تجویز کردہ",
-    "paywallNoPlans": "کوئی پلان دستیاب نہیں",
-    "paywallOtherPlans": "دیگر پلان",
+    "paywallNoPlans": "Plans aren't available right now. Try again in a minute.",
+    "paywallOtherPlans": "See all plans",
     "paywallLegacyPlanStays": "آپ کا پلان بالکل ویسا ہی رہتا ہے۔",
     "paywallMcpDailyRequests": "مزید روزانہ MCP درخواستیں",
-    "paywallComparePlans": "پلان کا موازنہ کریں",
-    "paywallLegacyPlan": "پرانا پلان"
+    "paywallComparePlans": "See plans",
+    "paywallLegacyPlan": "پرانا پلان",
+    "paywallYourPlan": "Your plan",
+    "paywallNotNow": "Not now",
+    "paywallTryAgain": "Try again",
+    "paywallManageBilling": "Manage billing",
+    "paywallLoadError": "Couldn't load plans. Check your connection and try again."
 }

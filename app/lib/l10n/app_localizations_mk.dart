@@ -3684,7 +3684,7 @@ class AppLocalizationsMk extends AppLocalizations {
   String get settingsHeader => 'ПОСТАВКИ';
 
   @override
-  String get plansAndBilling => 'Планови и Наплата';
+  String get plansAndBilling => 'Plans';
 
   @override
   String get calendarIntegration => 'Интеграција со календар';
@@ -13087,10 +13087,10 @@ class AppLocalizationsMk extends AppLocalizations {
   String get paywallRecommended => 'Препорачано';
 
   @override
-  String get paywallNoPlans => 'Нема достапни планови';
+  String get paywallNoPlans => 'Plans aren\'t available right now. Try again in a minute.';
 
   @override
-  String get paywallOtherPlans => 'Други планови';
+  String get paywallOtherPlans => 'See all plans';
 
   @override
   String get paywallLegacyPlanStays => 'Вашиот план останува токму таков каков што е.';
@@ -13099,8 +13099,23 @@ class AppLocalizationsMk extends AppLocalizations {
   String get paywallMcpDailyRequests => 'Повеќе дневни MCP барања';
 
   @override
-  String get paywallComparePlans => 'Спореди планови';
+  String get paywallComparePlans => 'See plans';
 
   @override
   String get paywallLegacyPlan => 'Стар план';
+
+  @override
+  String get paywallYourPlan => 'Your plan';
+
+  @override
+  String get paywallNotNow => 'Not now';
+
+  @override
+  String get paywallTryAgain => 'Try again';
+
+  @override
+  String get paywallManageBilling => 'Manage billing';
+
+  @override
+  String get paywallLoadError => 'Couldn\'t load plans. Check your connection and try again.';
 }

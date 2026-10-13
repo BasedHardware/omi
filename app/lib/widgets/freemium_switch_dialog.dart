@@ -8,6 +8,7 @@ import 'package:omi/providers/usage_provider.dart';
 import 'package:omi/services/capture/freemium_threshold_tracker.dart';
 import 'package:omi/services/freemium_transcription_service.dart';
 import 'package:omi/ui/ui.dart';
+import 'package:omi/utils/l10n_extensions.dart';
 
 /// Prompt id of the plans sheet offered when the Plus meter runs low.
 const String kFreemiumPlansPromptId = 'freemium-plans';
@@ -56,6 +57,7 @@ class FreemiumSwitchHandler {
         PlatformManager.instance.analytics.paywallOpened('freemium_switch', currentPlan: plan);
         return showOmiSheet<void>(
           context: promptContext,
+          title: promptContext.l10n.plansAndBilling,
           padding: EdgeInsets.zero,
           builder: (_) => const _PlansSheetWrapper(),
         );

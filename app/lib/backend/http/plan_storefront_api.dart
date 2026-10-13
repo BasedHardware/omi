@@ -4,18 +4,23 @@ import 'package:omi/backend/http/api_result.dart';
 import 'package:omi/env/env.dart';
 import 'package:omi/models/plan_storefront.dart';
 
-/// W5 integration seam. No fixture fallback, client prices or alternate purchase rail.
-/// All endpoint/field mapping belongs here when W5's contract lands.
+/// Reads the v2 plans presentation. No fixture fallback, client prices, or alternate purchase rail.
 class PlanStorefrontApi {
   PlanStorefrontApi({String? baseUrl, this.send}) : baseUrl = baseUrl ?? Env.apiBaseUrl ?? '';
   final String baseUrl;
   final ApiSend? send;
 
-  Future<ApiResult<PlanStorefront>> load({required String source, required String locale}) => executeApi(
+  Future<ApiResult<PlanStorefront>> load({
+    required String source,
+    String trigger = '',
+    required String locale,
+  }) =>
+      executeApi(
         request: ApiRequest(
-          url: '${baseUrl}v1/payments/plan-presentation?${Uri(queryParameters: {
+          url: '${baseUrl}v2/payments/plans?${Uri(queryParameters: {
                 'source': source,
-                'locale': locale
+                'trigger': trigger,
+                'locale': locale,
               }).query}',
           method: 'GET',
         ),

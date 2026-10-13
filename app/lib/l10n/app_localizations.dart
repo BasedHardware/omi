@@ -7077,10 +7077,10 @@ abstract class AppLocalizations {
   /// **'SETTINGS'**
   String get settingsHeader;
 
-  /// Plans and billing section
+  /// Title of the plans sheet.
   ///
   /// In en, this message translates to:
-  /// **'Plans & Billing'**
+  /// **'Plans'**
   String get plansAndBilling;
 
   /// Calendar integration section
@@ -23223,16 +23223,16 @@ abstract class AppLocalizations {
   /// **'Recommended'**
   String get paywallRecommended;
 
-  /// Plans sheet empty state; this is distinct from a loading failure.
+  /// Empty state when the plans list has no tiers.
   ///
   /// In en, this message translates to:
-  /// **'No Plans Available'**
+  /// **'Plans aren\'t available right now. Try again in a minute.'**
   String get paywallNoPlans;
 
-  /// Expandable row for current and lower plans.
+  /// Collapsed section that reveals the rest of the plan ladder.
   ///
   /// In en, this message translates to:
-  /// **'Other plans'**
+  /// **'See all plans'**
   String get paywallOtherPlans;
 
   /// Reassurance on the legacy plan view. No migration or checkout.
@@ -23247,10 +23247,10 @@ abstract class AppLocalizations {
   /// **'More daily MCP requests'**
   String get paywallMcpDailyRequests;
 
-  /// Primary action in the nonblocking budget banner.
+  /// Primary button on the usage banner.
   ///
   /// In en, this message translates to:
-  /// **'Compare plans'**
+  /// **'See plans'**
   String get paywallComparePlans;
 
   /// Marker beside the true name of a legacy subscription.
@@ -23258,6 +23258,36 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Legacy plan'**
   String get paywallLegacyPlan;
+
+  /// Badge on the tier card for the plan the person already has.
+  ///
+  /// In en, this message translates to:
+  /// **'Your plan'**
+  String get paywallYourPlan;
+
+  /// Secondary button on the usage banner.
+  ///
+  /// In en, this message translates to:
+  /// **'Not now'**
+  String get paywallNotNow;
+
+  /// Retry button when the plans sheet fails to load.
+  ///
+  /// In en, this message translates to:
+  /// **'Try again'**
+  String get paywallTryAgain;
+
+  /// Button that opens billing management.
+  ///
+  /// In en, this message translates to:
+  /// **'Manage billing'**
+  String get paywallManageBilling;
+
+  /// Plans sheet error copy. The retry button is separate.
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn\'t load plans. Check your connection and try again.'**
+  String get paywallLoadError;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

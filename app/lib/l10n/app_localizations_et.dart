@@ -3667,7 +3667,7 @@ class AppLocalizationsEt extends AppLocalizations {
   String get settingsHeader => 'SEADED';
 
   @override
-  String get plansAndBilling => 'Plaanid ja Arveldus';
+  String get plansAndBilling => 'Plans';
 
   @override
   String get calendarIntegration => 'Kalendri Integratsioon';
@@ -13020,10 +13020,10 @@ class AppLocalizationsEt extends AppLocalizations {
   String get paywallRecommended => 'Soovitatud';
 
   @override
-  String get paywallNoPlans => 'Plaane pole saadaval';
+  String get paywallNoPlans => 'Plans aren\'t available right now. Try again in a minute.';
 
   @override
-  String get paywallOtherPlans => 'Muud paketid';
+  String get paywallOtherPlans => 'See all plans';
 
   @override
   String get paywallLegacyPlanStays => 'Sinu pakett jääb täpselt selliseks, nagu see on.';
@@ -13032,8 +13032,23 @@ class AppLocalizationsEt extends AppLocalizations {
   String get paywallMcpDailyRequests => 'Rohkem igapäevaseid MCP-päringuid';
 
   @override
-  String get paywallComparePlans => 'Võrdle pakette';
+  String get paywallComparePlans => 'See plans';
 
   @override
   String get paywallLegacyPlan => 'Varasem pakett';
+
+  @override
+  String get paywallYourPlan => 'Your plan';
+
+  @override
+  String get paywallNotNow => 'Not now';
+
+  @override
+  String get paywallTryAgain => 'Try again';
+
+  @override
+  String get paywallManageBilling => 'Manage billing';
+
+  @override
+  String get paywallLoadError => 'Couldn\'t load plans. Check your connection and try again.';
 }

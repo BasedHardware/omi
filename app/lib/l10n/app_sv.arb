@@ -1121,7 +1121,7 @@
     "selectAudioInput": "Välj ljudingång",
     "loadingDevices": "Laddar enheter…",
     "settingsHeader": "INSTÄLLNINGAR",
-    "plansAndBilling": "Planer och Fakturering",
+    "plansAndBilling": "Plans",
     "calendarIntegration": "Kalenderintegration",
     "dailySummary": "Daglig sammanfattning",
     "developer": "Utvecklare",
@@ -4006,10 +4006,15 @@
     "reviewProposalConflict": "Det här har ändrats sedan Dream föreslog det, så inget tillämpades.",
     "itemLinkListTitle": "{count, plural, =0{Inga objekt} =1{1 objekt} other{{count} objekt}}",
     "paywallRecommended": "Rekommenderas",
-    "paywallNoPlans": "Inga tillgängliga planer",
-    "paywallOtherPlans": "Andra abonnemang",
+    "paywallNoPlans": "Plans aren't available right now. Try again in a minute.",
+    "paywallOtherPlans": "See all plans",
     "paywallLegacyPlanStays": "Ditt abonnemang förblir precis som det är.",
     "paywallMcpDailyRequests": "Fler dagliga MCP-förfrågningar",
-    "paywallComparePlans": "Jämför abonnemang",
-    "paywallLegacyPlan": "Äldre abonnemang"
+    "paywallComparePlans": "See plans",
+    "paywallLegacyPlan": "Äldre abonnemang",
+    "paywallYourPlan": "Your plan",
+    "paywallNotNow": "Not now",
+    "paywallTryAgain": "Try again",
+    "paywallManageBilling": "Manage billing",
+    "paywallLoadError": "Couldn't load plans. Check your connection and try again."
 }

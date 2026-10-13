@@ -3609,7 +3609,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get settingsHeader => '设置';
 
   @override
-  String get plansAndBilling => '计划与账单';
+  String get plansAndBilling => 'Plans';
 
   @override
   String get calendarIntegration => '日历集成';
@@ -12821,10 +12821,10 @@ class AppLocalizationsZh extends AppLocalizations {
   String get paywallRecommended => '推荐';
 
   @override
-  String get paywallNoPlans => '暂无可用套餐';
+  String get paywallNoPlans => 'Plans aren\'t available right now. Try again in a minute.';
 
   @override
-  String get paywallOtherPlans => '其他方案';
+  String get paywallOtherPlans => 'See all plans';
 
   @override
   String get paywallLegacyPlanStays => '你的方案会保持原样。';
@@ -12833,8 +12833,23 @@ class AppLocalizationsZh extends AppLocalizations {
   String get paywallMcpDailyRequests => '更多每日 MCP 请求';
 
   @override
-  String get paywallComparePlans => '比较方案';
+  String get paywallComparePlans => 'See plans';
 
   @override
   String get paywallLegacyPlan => '旧版方案';
+
+  @override
+  String get paywallYourPlan => 'Your plan';
+
+  @override
+  String get paywallNotNow => 'Not now';
+
+  @override
+  String get paywallTryAgain => 'Try again';
+
+  @override
+  String get paywallManageBilling => 'Manage billing';
+
+  @override
+  String get paywallLoadError => 'Couldn\'t load plans. Check your connection and try again.';
 }

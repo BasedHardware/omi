@@ -4113,7 +4113,7 @@
     "@account": {
         "description": "Account section label"
     },
-    "plansAndBilling": "ಯೋಜನೆಗಳು ಮತ್ತು ಬಿಲ್ಲಿಂಗ್",
+    "plansAndBilling": "Plans",
     "@plansAndBilling": {
         "description": "Plans and billing section"
     },
@@ -11443,10 +11443,15 @@
     "reviewProposalConflict": "Dream ಸೂಚಿಸಿದ ನಂತರ ಇದು ಬದಲಾಗಿದೆ, ಆದ್ದರಿಂದ ಏನನ್ನೂ ಅನ್ವಯಿಸಲಾಗಿಲ್ಲ.",
     "itemLinkListTitle": "{count, plural, =0{ಯಾವುದೇ ಐಟಂ ಇಲ್ಲ} =1{1 ಐಟಂ} other{{count} ಐಟಂಗಳು}}",
     "paywallRecommended": "ಶಿಫಾರಸು ಮಾಡಲಾಗಿದೆ",
-    "paywallNoPlans": "ಯಾವುದೇ ಯೋಜನೆಗಳು ಲಭ್ಯವಿಲ್ಲ",
-    "paywallOtherPlans": "ಇತರ ಯೋಜನೆಗಳು",
+    "paywallNoPlans": "Plans aren't available right now. Try again in a minute.",
+    "paywallOtherPlans": "See all plans",
     "paywallLegacyPlanStays": "ನಿಮ್ಮ ಯೋಜನೆ ಇದ್ದಂತೆಯೇ ಉಳಿಯುತ್ತದೆ.",
     "paywallMcpDailyRequests": "ಹೆಚ್ಚಿನ ದೈನಂದಿನ MCP ವಿನಂತಿಗಳು",
-    "paywallComparePlans": "ಯೋಜನೆಗಳನ್ನು ಹೋಲಿಸಿ",
-    "paywallLegacyPlan": "ಹಳೆಯ ಯೋಜನೆ"
+    "paywallComparePlans": "See plans",
+    "paywallLegacyPlan": "ಹಳೆಯ ಯೋಜನೆ",
+    "paywallYourPlan": "Your plan",
+    "paywallNotNow": "Not now",
+    "paywallTryAgain": "Try again",
+    "paywallManageBilling": "Manage billing",
+    "paywallLoadError": "Couldn't load plans. Check your connection and try again."
 }

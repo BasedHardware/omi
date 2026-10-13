@@ -3646,7 +3646,7 @@ class AppLocalizationsHe extends AppLocalizations {
   String get settingsHeader => 'הגדרות';
 
   @override
-  String get plansAndBilling => 'תוכניות וחיוב';
+  String get plansAndBilling => 'Plans';
 
   @override
   String get calendarIntegration => 'שילוב יומן';
@@ -12933,10 +12933,10 @@ class AppLocalizationsHe extends AppLocalizations {
   String get paywallRecommended => 'מומלץ';
 
   @override
-  String get paywallNoPlans => 'אין תוכניות זמינות';
+  String get paywallNoPlans => 'Plans aren\'t available right now. Try again in a minute.';
 
   @override
-  String get paywallOtherPlans => 'תוכניות אחרות';
+  String get paywallOtherPlans => 'See all plans';
 
   @override
   String get paywallLegacyPlanStays => 'התוכנית שלך נשארת בדיוק כפי שהיא.';
@@ -12945,8 +12945,23 @@ class AppLocalizationsHe extends AppLocalizations {
   String get paywallMcpDailyRequests => 'יותר בקשות MCP ביום';
 
   @override
-  String get paywallComparePlans => 'השוואת תוכניות';
+  String get paywallComparePlans => 'See plans';
 
   @override
   String get paywallLegacyPlan => 'תוכנית ותיקה';
+
+  @override
+  String get paywallYourPlan => 'Your plan';
+
+  @override
+  String get paywallNotNow => 'Not now';
+
+  @override
+  String get paywallTryAgain => 'Try again';
+
+  @override
+  String get paywallManageBilling => 'Manage billing';
+
+  @override
+  String get paywallLoadError => 'Couldn\'t load plans. Check your connection and try again.';
 }

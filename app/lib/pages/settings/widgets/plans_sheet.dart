@@ -45,6 +45,7 @@ class PlansSheet extends StatefulWidget {
 
   /// Closed paywall `source` for the surface that opened this sheet.
   final String analyticsSource;
+  final String storefrontTrigger;
   final PlanStorefront? initialStorefront;
   @visibleForTesting
   final Future<bool> Function()? readStorefrontGate;
@@ -59,6 +60,7 @@ class PlansSheet extends StatefulWidget {
     required this.arrowAnimation,
     this.onCancelSubscription,
     this.analyticsSource = 'usage_page',
+    this.storefrontTrigger = '',
     this.initialStorefront,
     this.readStorefrontGate,
     this.storefrontApi,
@@ -105,7 +107,7 @@ class _PlansSheetState extends State<PlansSheet> {
       _storefront = null;
     });
     final result = await (widget.storefrontApi ?? PlanStorefrontApi())
-        .load(source: widget.analyticsSource, locale: context.l10n.localeName);
+        .load(source: widget.analyticsSource, trigger: widget.storefrontTrigger, locale: context.l10n.localeName);
     if (!mounted) return;
     setState(() {
       _storefrontLoading = false;
@@ -121,8 +123,7 @@ class _PlansSheetState extends State<PlansSheet> {
       sub?.plan,
       tier,
       price,
-      usageLegacy: _storefront?.usageContext?.legacy == true,
-      cancelScheduled: sub?.cancelAtPeriodEnd ?? false,
+      cancelScheduled: (sub?.cancelAtPeriodEnd ?? false) || (_storefront?.current?.cancelAtPeriodEnd ?? false),
       showSubscriptionUi: _storefront?.showSubscriptionUi ?? false,
     );
   }
@@ -131,7 +132,7 @@ class _PlansSheetState extends State<PlansSheet> {
     if (_isUpgrading || !context.read<UsageProvider>().showSubscriptionUI) return;
     if (_storefrontDecision(tier, price) == StorefrontCheckoutDecision.refuse) return;
     setState(() => _isUpgrading = true);
-    selectedTierId = tier.id;
+    selectedTierId = tier.planId;
     selectedPlan = price.interval == 'year' ? 'yearly' : 'monthly';
     try {
       await _handleUpgradeWithSelectedPlan(storefrontPrice: price, releaseUpgradingLock: false);
@@ -144,13 +145,6 @@ class _PlansSheetState extends State<PlansSheet> {
         }
       }
     }
-  }
-
-  Future<void> _restoreStorefront() async {
-    await context.read<UsageProvider>().fetchSubscription();
-    if (!mounted) return;
-    await _loadAvailablePlans();
-    await _loadStorefront();
   }
 
   Future<void> _loadAvailablePlans() async {
@@ -326,7 +320,7 @@ class _PlansSheetState extends State<PlansSheet> {
       return;
     }
     if (storefrontPrice != null) {
-      final tier = _storefront?.tiers.where((item) => item.id == selectedTierId).firstOrNull;
+      final tier = _storefront?.tiers.where((item) => item.planId == selectedTierId).firstOrNull;
       if (tier == null || _storefrontDecision(tier, storefrontPrice) == StorefrontCheckoutDecision.refuse) {
         return;
       }
@@ -356,7 +350,7 @@ class _PlansSheetState extends State<PlansSheet> {
     if (storefrontPrice != null &&
         (storefrontPrice.id != priceId ||
             storefrontPrice.interval != selectedPlanData['interval'] ||
-            storefrontPrice.amount != selectedPlanData['unit_amount'])) {
+            storefrontPrice.amountMinor != selectedPlanData['unit_amount'])) {
       OmiFeedback.error(context, context.l10n.selectedPlanNotAvailable);
       return;
     }
@@ -648,7 +642,6 @@ class _PlansSheetState extends State<PlansSheet> {
             onRetry: _loadStorefront,
             onSelect: _selectStorefrontPrice,
             onManage: _openPaymentPortal,
-            onRestore: _restoreStorefront,
           );
         }
 

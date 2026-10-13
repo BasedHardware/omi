@@ -1121,7 +1121,7 @@
     "selectAudioInput": "Pilih Input Audio",
     "loadingDevices": "Memuat perangkat…",
     "settingsHeader": "PENGATURAN",
-    "plansAndBilling": "Paket & Penagihan",
+    "plansAndBilling": "Plans",
     "calendarIntegration": "Integrasi Kalender",
     "dailySummary": "Ringkasan Harian",
     "developer": "Pengembang",
@@ -4041,10 +4041,15 @@
     "reviewProposalConflict": "Ini berubah sejak Dream menyarankannya, jadi tidak ada yang diterapkan.",
     "itemLinkListTitle": "{count, plural, =0{Tidak Ada Item} =1{1 Item} other{{count} Item}}",
     "paywallRecommended": "Direkomendasikan",
-    "paywallNoPlans": "Tidak Ada Paket Tersedia",
-    "paywallOtherPlans": "Paket lainnya",
+    "paywallNoPlans": "Plans aren't available right now. Try again in a minute.",
+    "paywallOtherPlans": "See all plans",
     "paywallLegacyPlanStays": "Paket Anda tetap seperti sekarang.",
     "paywallMcpDailyRequests": "Lebih banyak permintaan MCP harian",
-    "paywallComparePlans": "Bandingkan paket",
-    "paywallLegacyPlan": "Paket lama"
+    "paywallComparePlans": "See plans",
+    "paywallLegacyPlan": "Paket lama",
+    "paywallYourPlan": "Your plan",
+    "paywallNotNow": "Not now",
+    "paywallTryAgain": "Try again",
+    "paywallManageBilling": "Manage billing",
+    "paywallLoadError": "Couldn't load plans. Check your connection and try again."
 }

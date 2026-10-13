@@ -748,6 +748,7 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
     );
     showOmiSheet<void>(
       context: context,
+      title: context.l10n.plansAndBilling,
       padding: EdgeInsets.zero,
       builder: (_) => const _PlansSheetWrapper(analyticsSource: 'chat_quota_exceeded'),
     );

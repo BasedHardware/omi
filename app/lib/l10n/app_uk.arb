@@ -1121,7 +1121,7 @@
     "selectAudioInput": "Виберіть аудіовхід",
     "loadingDevices": "Завантаження пристроїв…",
     "settingsHeader": "НАЛАШТУВАННЯ",
-    "plansAndBilling": "Плани та Оплата",
+    "plansAndBilling": "Plans",
     "calendarIntegration": "Інтеграція Календаря",
     "dailySummary": "Щоденний підсумок",
     "developer": "Розробник",
@@ -4006,10 +4006,15 @@
     "reviewProposalConflict": "Це змінилося після пропозиції Dream, тому нічого не застосовано.",
     "itemLinkListTitle": "{count, plural, =0{Немає елементів} =1{1 елемент} other{{count} елементів}}",
     "paywallRecommended": "Рекомендовано",
-    "paywallNoPlans": "Немає доступних планів",
-    "paywallOtherPlans": "Інші плани",
+    "paywallNoPlans": "Plans aren't available right now. Try again in a minute.",
+    "paywallOtherPlans": "See all plans",
     "paywallLegacyPlanStays": "Ваш план лишається саме таким, яким він є.",
     "paywallMcpDailyRequests": "Більше щоденних запитів MCP",
-    "paywallComparePlans": "Порівняти плани",
-    "paywallLegacyPlan": "Попередній план"
+    "paywallComparePlans": "See plans",
+    "paywallLegacyPlan": "Попередній план",
+    "paywallYourPlan": "Your plan",
+    "paywallNotNow": "Not now",
+    "paywallTryAgain": "Try again",
+    "paywallManageBilling": "Manage billing",
+    "paywallLoadError": "Couldn't load plans. Check your connection and try again."
 }

@@ -4113,7 +4113,7 @@
     "@account": {
         "description": "Account section label"
     },
-    "plansAndBilling": "திட்டங்கள் மற்றும் பில்லிங்",
+    "plansAndBilling": "Plans",
     "@plansAndBilling": {
         "description": "Plans and billing section"
     },
@@ -11443,10 +11443,15 @@
     "reviewProposalConflict": "Dream பரிந்துரைத்த பிறகு இது மாறியுள்ளது, அதனால் எதுவும் பயன்படுத்தப்படவில்லை.",
     "itemLinkListTitle": "{count, plural, =0{உருப்படிகள் இல்லை} =1{1 உருப்படி} other{{count} உருப்படிகள்}}",
     "paywallRecommended": "பரிந்துரைக்கப்படுகிறது",
-    "paywallNoPlans": "திட்டங்கள் எதுவும் கிடைக்கவில்லை",
-    "paywallOtherPlans": "பிற திட்டங்கள்",
+    "paywallNoPlans": "Plans aren't available right now. Try again in a minute.",
+    "paywallOtherPlans": "See all plans",
     "paywallLegacyPlanStays": "உங்கள் திட்டம் இருப்பது போலவே இருக்கும்.",
     "paywallMcpDailyRequests": "கூடுதல் தினசரி MCP கோரிக்கைகள்",
-    "paywallComparePlans": "திட்டங்களை ஒப்பிடு",
-    "paywallLegacyPlan": "பழைய திட்டம்"
+    "paywallComparePlans": "See plans",
+    "paywallLegacyPlan": "பழைய திட்டம்",
+    "paywallYourPlan": "Your plan",
+    "paywallNotNow": "Not now",
+    "paywallTryAgain": "Try again",
+    "paywallManageBilling": "Manage billing",
+    "paywallLoadError": "Couldn't load plans. Check your connection and try again."
 }

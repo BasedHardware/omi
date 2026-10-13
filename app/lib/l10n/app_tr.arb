@@ -1121,7 +1121,7 @@
     "selectAudioInput": "Ses girişini seç",
     "loadingDevices": "Cihazlar yükleniyor…",
     "settingsHeader": "AYARLAR",
-    "plansAndBilling": "Planlar ve Faturalama",
+    "plansAndBilling": "Plans",
     "calendarIntegration": "Takvim Entegrasyonu",
     "dailySummary": "Günlük Özet",
     "developer": "Geliştirici",
@@ -4041,10 +4041,15 @@
     "reviewProposalConflict": "Bu, Dream önerdikten sonra değişti; bu yüzden hiçbir şey uygulanmadı.",
     "itemLinkListTitle": "{count, plural, =0{Öğe Yok} =1{1 Öğe} other{{count} Öğe}}",
     "paywallRecommended": "Önerilen",
-    "paywallNoPlans": "Kullanılabilir Plan Yok",
-    "paywallOtherPlans": "Diğer planlar",
+    "paywallNoPlans": "Plans aren't available right now. Try again in a minute.",
+    "paywallOtherPlans": "See all plans",
     "paywallLegacyPlanStays": "Planın aynen olduğu gibi kalır.",
     "paywallMcpDailyRequests": "Daha fazla günlük MCP isteği",
-    "paywallComparePlans": "Planları karşılaştır",
-    "paywallLegacyPlan": "Eski plan"
+    "paywallComparePlans": "See plans",
+    "paywallLegacyPlan": "Eski plan",
+    "paywallYourPlan": "Your plan",
+    "paywallNotNow": "Not now",
+    "paywallTryAgain": "Try again",
+    "paywallManageBilling": "Manage billing",
+    "paywallLoadError": "Couldn't load plans. Check your connection and try again."
 }

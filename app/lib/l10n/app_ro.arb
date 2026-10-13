@@ -1121,7 +1121,7 @@
     "selectAudioInput": "Selectați intrarea audio",
     "loadingDevices": "Se încarcă dispozitivele…",
     "settingsHeader": "SETĂRI",
-    "plansAndBilling": "Planuri și Facturare",
+    "plansAndBilling": "Plans",
     "calendarIntegration": "Integrare Calendar",
     "dailySummary": "Rezumat zilnic",
     "developer": "Dezvoltator",
@@ -4006,10 +4006,15 @@
     "reviewProposalConflict": "S-a schimbat de când Dream a sugerat asta, așa că nu s-a aplicat nimic.",
     "itemLinkListTitle": "{count, plural, =0{Niciun element} =1{1 element} other{{count} elemente}}",
     "paywallRecommended": "Recomandat",
-    "paywallNoPlans": "Nu există planuri disponibile",
-    "paywallOtherPlans": "Alte planuri",
+    "paywallNoPlans": "Plans aren't available right now. Try again in a minute.",
+    "paywallOtherPlans": "See all plans",
     "paywallLegacyPlanStays": "Planul tău rămâne exact așa cum este.",
     "paywallMcpDailyRequests": "Mai multe cereri MCP zilnice",
-    "paywallComparePlans": "Compară planurile",
-    "paywallLegacyPlan": "Plan vechi"
+    "paywallComparePlans": "See plans",
+    "paywallLegacyPlan": "Plan vechi",
+    "paywallYourPlan": "Your plan",
+    "paywallNotNow": "Not now",
+    "paywallTryAgain": "Try again",
+    "paywallManageBilling": "Manage billing",
+    "paywallLoadError": "Couldn't load plans. Check your connection and try again."
 }

@@ -1500,7 +1500,7 @@
     "planSetToCancelOn": "Jūsų planas nustatytas atšaukti {date}.\nPersiregistruokite dabar, kad išsaugotumėte privalumus - nėra mokesčio iki {date}.",
     "planSwitchingDescriptionWithTitle": "Jūs keičiate savo Neribotą planą į {title}.",
     "planUpgradeScheduledMessage": "Atnaujinimas suplanuotas\\! Jūsų mėnesinis planas tęsiasi iki atsiskaitymo laikotarpio pabaigos, tada automatiškai persijungia į metinį.",
-    "plansAndBilling": "Planai ir Atsiskaitymas",
+    "plansAndBilling": "Plans",
     "pleaseAuthenticateWithService": "Prašome prisijungti prie {serviceName} Nustatymai > Užduočių integracijos",
     "pleaseCheckInternetConnection": "Patikrinkite interneto ryšį ir bandykite dar kartą",
     "pleaseCheckInternetConnectionAndTryAgain": "Patikrinkite interneto ryšį ir bandykite dar kartą",
@@ -4006,10 +4006,15 @@
     "reviewProposalConflict": "Tai pasikeitė po Dream pasiūlymo, todėl nieko nepritaikyta.",
     "itemLinkListTitle": "{count, plural, =0{Nėra elementų} =1{1 elementas} other{{count} elementai}}",
     "paywallRecommended": "Rekomenduojama",
-    "paywallNoPlans": "Nėra galimų planų",
-    "paywallOtherPlans": "Kiti planai",
+    "paywallNoPlans": "Plans aren't available right now. Try again in a minute.",
+    "paywallOtherPlans": "See all plans",
     "paywallLegacyPlanStays": "Jūsų planas lieka toks, koks yra.",
     "paywallMcpDailyRequests": "Daugiau kasdienių MCP užklausų",
-    "paywallComparePlans": "Palyginti planus",
-    "paywallLegacyPlan": "Ankstesnis planas"
+    "paywallComparePlans": "See plans",
+    "paywallLegacyPlan": "Ankstesnis planas",
+    "paywallYourPlan": "Your plan",
+    "paywallNotNow": "Not now",
+    "paywallTryAgain": "Try again",
+    "paywallManageBilling": "Manage billing",
+    "paywallLoadError": "Couldn't load plans. Check your connection and try again."
 }

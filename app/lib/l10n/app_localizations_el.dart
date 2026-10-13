@@ -3694,7 +3694,7 @@ class AppLocalizationsEl extends AppLocalizations {
   String get settingsHeader => 'ΡΥΘΜΙΣΕΙΣ';
 
   @override
-  String get plansAndBilling => 'Πλάνα & Χρέωση';
+  String get plansAndBilling => 'Plans';
 
   @override
   String get calendarIntegration => 'Ενσωμάτωση Ημερολογίου';
@@ -13109,10 +13109,10 @@ class AppLocalizationsEl extends AppLocalizations {
   String get paywallRecommended => 'Προτείνεται';
 
   @override
-  String get paywallNoPlans => 'Δεν υπάρχουν διαθέσιμα προγράμματα';
+  String get paywallNoPlans => 'Plans aren\'t available right now. Try again in a minute.';
 
   @override
-  String get paywallOtherPlans => 'Άλλα προγράμματα';
+  String get paywallOtherPlans => 'See all plans';
 
   @override
   String get paywallLegacyPlanStays => 'Το πρόγραμμά σας παραμένει ακριβώς ως έχει.';
@@ -13121,8 +13121,23 @@ class AppLocalizationsEl extends AppLocalizations {
   String get paywallMcpDailyRequests => 'Περισσότερα ημερήσια αιτήματα MCP';
 
   @override
-  String get paywallComparePlans => 'Σύγκριση προγραμμάτων';
+  String get paywallComparePlans => 'See plans';
 
   @override
   String get paywallLegacyPlan => 'Παλαιό πρόγραμμα';
+
+  @override
+  String get paywallYourPlan => 'Your plan';
+
+  @override
+  String get paywallNotNow => 'Not now';
+
+  @override
+  String get paywallTryAgain => 'Try again';
+
+  @override
+  String get paywallManageBilling => 'Manage billing';
+
+  @override
+  String get paywallLoadError => 'Couldn\'t load plans. Check your connection and try again.';
 }

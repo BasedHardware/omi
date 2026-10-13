@@ -3671,7 +3671,7 @@ class AppLocalizationsFi extends AppLocalizations {
   String get settingsHeader => 'ASETUKSET';
 
   @override
-  String get plansAndBilling => 'Suunnitelmat ja Laskutus';
+  String get plansAndBilling => 'Plans';
 
   @override
   String get calendarIntegration => 'Kalenterin Integraatio';
@@ -13031,10 +13031,10 @@ class AppLocalizationsFi extends AppLocalizations {
   String get paywallRecommended => 'Suositeltu';
 
   @override
-  String get paywallNoPlans => 'Ei saatavilla olevia tilauksia';
+  String get paywallNoPlans => 'Plans aren\'t available right now. Try again in a minute.';
 
   @override
-  String get paywallOtherPlans => 'Muut tilaukset';
+  String get paywallOtherPlans => 'See all plans';
 
   @override
   String get paywallLegacyPlanStays => 'Tilauksesi pysyy täsmälleen entisellään.';
@@ -13043,8 +13043,23 @@ class AppLocalizationsFi extends AppLocalizations {
   String get paywallMcpDailyRequests => 'Enemmän päivittäisiä MCP-pyyntöjä';
 
   @override
-  String get paywallComparePlans => 'Vertaa tilauksia';
+  String get paywallComparePlans => 'See plans';
 
   @override
   String get paywallLegacyPlan => 'Vanha tilaus';
+
+  @override
+  String get paywallYourPlan => 'Your plan';
+
+  @override
+  String get paywallNotNow => 'Not now';
+
+  @override
+  String get paywallTryAgain => 'Try again';
+
+  @override
+  String get paywallManageBilling => 'Manage billing';
+
+  @override
+  String get paywallLoadError => 'Couldn\'t load plans. Check your connection and try again.';
 }

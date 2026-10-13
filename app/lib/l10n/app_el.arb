@@ -1121,7 +1121,7 @@
     "selectAudioInput": "Επιλέξτε είσοδο ήχου",
     "loadingDevices": "Φόρτωση συσκευών…",
     "settingsHeader": "ΡΥΘΜΙΣΕΙΣ",
-    "plansAndBilling": "Πλάνα & Χρέωση",
+    "plansAndBilling": "Plans",
     "calendarIntegration": "Ενσωμάτωση Ημερολογίου",
     "dailySummary": "Ημερήσια σύνοψη",
     "developer": "Προγραμματιστής",
@@ -4006,10 +4006,15 @@
     "reviewProposalConflict": "Αυτό άλλαξε αφότου το πρότεινε το Dream, οπότε δεν εφαρμόστηκε τίποτα.",
     "itemLinkListTitle": "{count, plural, =0{Κανένα στοιχείο} =1{1 στοιχείο} other{{count} στοιχεία}}",
     "paywallRecommended": "Προτείνεται",
-    "paywallNoPlans": "Δεν υπάρχουν διαθέσιμα προγράμματα",
-    "paywallOtherPlans": "Άλλα προγράμματα",
+    "paywallNoPlans": "Plans aren't available right now. Try again in a minute.",
+    "paywallOtherPlans": "See all plans",
     "paywallLegacyPlanStays": "Το πρόγραμμά σας παραμένει ακριβώς ως έχει.",
     "paywallMcpDailyRequests": "Περισσότερα ημερήσια αιτήματα MCP",
-    "paywallComparePlans": "Σύγκριση προγραμμάτων",
-    "paywallLegacyPlan": "Παλαιό πρόγραμμα"
+    "paywallComparePlans": "See plans",
+    "paywallLegacyPlan": "Παλαιό πρόγραμμα",
+    "paywallYourPlan": "Your plan",
+    "paywallNotNow": "Not now",
+    "paywallTryAgain": "Try again",
+    "paywallManageBilling": "Manage billing",
+    "paywallLoadError": "Couldn't load plans. Check your connection and try again."
 }

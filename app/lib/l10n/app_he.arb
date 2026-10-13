@@ -4113,7 +4113,7 @@
     "@account": {
         "description": "Account section label"
     },
-    "plansAndBilling": "תוכניות וחיוב",
+    "plansAndBilling": "Plans",
     "@plansAndBilling": {
         "description": "Plans and billing section"
     },
@@ -11443,10 +11443,15 @@
     "reviewProposalConflict": "זה השתנה מאז ש־Dream הציע אותו, ולכן שום דבר לא הוחל.",
     "itemLinkListTitle": "{count, plural, =0{אין פריטים} =1{פריט אחד} other{{count} פריטים}}",
     "paywallRecommended": "מומלץ",
-    "paywallNoPlans": "אין תוכניות זמינות",
-    "paywallOtherPlans": "תוכניות אחרות",
+    "paywallNoPlans": "Plans aren't available right now. Try again in a minute.",
+    "paywallOtherPlans": "See all plans",
     "paywallLegacyPlanStays": "התוכנית שלך נשארת בדיוק כפי שהיא.",
     "paywallMcpDailyRequests": "יותר בקשות MCP ביום",
-    "paywallComparePlans": "השוואת תוכניות",
-    "paywallLegacyPlan": "תוכנית ותיקה"
+    "paywallComparePlans": "See plans",
+    "paywallLegacyPlan": "תוכנית ותיקה",
+    "paywallYourPlan": "Your plan",
+    "paywallNotNow": "Not now",
+    "paywallTryAgain": "Try again",
+    "paywallManageBilling": "Manage billing",
+    "paywallLoadError": "Couldn't load plans. Check your connection and try again."
 }

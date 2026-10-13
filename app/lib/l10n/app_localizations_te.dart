@@ -3689,7 +3689,7 @@ class AppLocalizationsTe extends AppLocalizations {
   String get settingsHeader => 'సెట్టింగ్‌లు';
 
   @override
-  String get plansAndBilling => 'ప్లాన్‌లు & బిలింగ్';
+  String get plansAndBilling => 'Plans';
 
   @override
   String get calendarIntegration => 'క్యాలెండర్ ఇంటిగ్రేషన్';
@@ -13078,10 +13078,10 @@ class AppLocalizationsTe extends AppLocalizations {
   String get paywallRecommended => 'సిఫార్సు చేయబడింది';
 
   @override
-  String get paywallNoPlans => 'ప్లాన్‌లు అందుబాటులో లేవు';
+  String get paywallNoPlans => 'Plans aren\'t available right now. Try again in a minute.';
 
   @override
-  String get paywallOtherPlans => 'ఇతర ప్లాన్‌లు';
+  String get paywallOtherPlans => 'See all plans';
 
   @override
   String get paywallLegacyPlanStays => 'మీ ప్లాన్ ఉన్నది ఉన్నట్లే ఉంటుంది.';
@@ -13090,8 +13090,23 @@ class AppLocalizationsTe extends AppLocalizations {
   String get paywallMcpDailyRequests => 'రోజుకు మరిన్ని MCP అభ్యర్థనలు';
 
   @override
-  String get paywallComparePlans => 'ప్లాన్‌లను పోల్చండి';
+  String get paywallComparePlans => 'See plans';
 
   @override
   String get paywallLegacyPlan => 'పాత ప్లాన్';
+
+  @override
+  String get paywallYourPlan => 'Your plan';
+
+  @override
+  String get paywallNotNow => 'Not now';
+
+  @override
+  String get paywallTryAgain => 'Try again';
+
+  @override
+  String get paywallManageBilling => 'Manage billing';
+
+  @override
+  String get paywallLoadError => 'Couldn\'t load plans. Check your connection and try again.';
 }

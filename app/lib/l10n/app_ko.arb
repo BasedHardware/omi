@@ -1121,7 +1121,7 @@
     "selectAudioInput": "오디오 입력 선택",
     "loadingDevices": "장치 로드 중…",
     "settingsHeader": "설정",
-    "plansAndBilling": "플랜 및 결제",
+    "plansAndBilling": "Plans",
     "calendarIntegration": "캘린더 통합",
     "dailySummary": "일일 요약",
     "developer": "개발자",
@@ -4006,10 +4006,15 @@
     "reviewProposalConflict": "Dream이 제안한 후 내용이 바뀌어 아무것도 적용되지 않았습니다.",
     "itemLinkListTitle": "{count, plural, =0{항목 없음} =1{항목 1개} other{항목 {count}개}}",
     "paywallRecommended": "추천",
-    "paywallNoPlans": "이용 가능한 요금제가 없습니다",
-    "paywallOtherPlans": "다른 요금제",
+    "paywallNoPlans": "Plans aren't available right now. Try again in a minute.",
+    "paywallOtherPlans": "See all plans",
     "paywallLegacyPlanStays": "현재 요금제는 그대로 유지됩니다.",
     "paywallMcpDailyRequests": "더 많은 일일 MCP 요청",
-    "paywallComparePlans": "요금제 비교",
-    "paywallLegacyPlan": "기존 요금제"
+    "paywallComparePlans": "See plans",
+    "paywallLegacyPlan": "기존 요금제",
+    "paywallYourPlan": "Your plan",
+    "paywallNotNow": "Not now",
+    "paywallTryAgain": "Try again",
+    "paywallManageBilling": "Manage billing",
+    "paywallLoadError": "Couldn't load plans. Check your connection and try again."
 }
