@@ -260,6 +260,9 @@
             "entrypoints": ["main", "batch_main"],
             "image_import_smoke": false,
             "dependency_probe_smoke": true,
+            "dependency_probe_exclusions": {
+                "utils.stt.diarization_turns": "First-party module the Dockerfile copies from backend/utils/stt into /app; the -I probe cannot see /app, so it is not an installed dependency."
+            },
             "pull_request_smoke": false
         },
         {
