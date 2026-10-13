@@ -92,7 +92,7 @@ def infer(waveform: Any, min_speakers: int | None = None, max_speakers: int | No
                     vectors.append((vector / norm, r - l))
                     evidence += r - l
             if vectors:
-                centroid = sum(v * w for v, w in vectors) / evidence
+                centroid: Any = sum(v * w for v, w in vectors) / evidence
                 norm = float(np.linalg.norm(centroid))
                 if norm <= 0 or not np.isfinite(centroid).all():
                     continue
