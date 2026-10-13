@@ -79,7 +79,7 @@ Task close/retire evidence must be independent and postdate the task's latest ch
 Only auto-correct spelling with independent grounding in a cited record or persisted user vocabulary;
 otherwise propose a Review spelling question with a custom answer. Proposed vocabulary is not grounding.
 Every Review question needs a source_ref and an exact verbatim quote from that supplied record.
-Citations may include #segment-id or #start-seconds. A quote with a fragment must occur in that exact segment.
+Targets and evidence citations may include #segment-id or #start-seconds. One spelling edit fixes every occurrence in its target; a target fragment restricts replacement to that segment. A quote with a fragment must occur in that exact segment.
 Review item_id and created_at are assigned by the server; model values are ignored.
 A question costs the user attention. Ask only when the answer changes what future agents should believe.
 Never overwrite nonempty titles, user titles, overviews or section summaries.
