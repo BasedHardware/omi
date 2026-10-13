@@ -37,6 +37,12 @@ class NativeBleTransport extends DeviceTransport implements CaptureSubscriptionE
   Completer<List<BleService>>? _deviceReadyCompleter;
 
   DeviceTransportState _state = DeviceTransportState.disconnected;
+  late final VoidCallback _releaseBridge;
+
+  /// Set when [disconnect] hands the peripheral back to native, cleared by
+  /// [connect]. Native keeps connecting and reconnecting after a Dart-side
+  /// timeout or drop, so release cannot be inferred from the mirrored [_state].
+  bool _nativeReleased = false;
   Timer? _audioLivenessTimer;
   int _audioSilenceResubscribes = 0;
   int _subscriptionGeneration = 0;
@@ -63,7 +69,7 @@ class NativeBleTransport extends DeviceTransport implements CaptureSubscriptionE
   NativeBleTransport(this._peripheralUuid, {this.requiresBond = false, BleHostApi? hostApi})
       : _hostApi = hostApi ?? BleHostApi() {
     BleBridge.instance.addIngressListener(_ingressOwnershipChanged);
-    BleBridge.instance.registerPeripheral(
+    _releaseBridge = BleBridge.instance.registerPeripheral(
       peripheralUuid: _peripheralUuid,
       onConnectionState: _handleConnectionState,
       onDeviceReady: _handleDeviceReady,
@@ -96,6 +102,7 @@ class NativeBleTransport extends DeviceTransport implements CaptureSubscriptionE
     deviceReady.ignore();
 
     try {
+      _nativeReleased = false;
       await _hostApi.manageDevice(_peripheralUuid, requiresBond);
     } catch (e) {
       Logger.debug('[NativeBleTransport] manageDevice failed: $e');
@@ -122,7 +129,7 @@ class NativeBleTransport extends DeviceTransport implements CaptureSubscriptionE
   @override
   Future<void> disconnect() async {
     _subscriptionGeneration++;
-    if (_state == DeviceTransportState.disconnected && _streamControllers.isEmpty) return;
+    if (_nativeReleased && _state == DeviceTransportState.disconnected && _streamControllers.isEmpty) return;
 
     // A liveness watch pending from a prior connection must not fire into a
     // subsequent one and force a spurious CCCD re-subscribe.
@@ -147,8 +154,12 @@ class NativeBleTransport extends DeviceTransport implements CaptureSubscriptionE
     _services = [];
 
     try {
+      _nativeReleased = true;
       await _hostApi.unmanageDevice(_peripheralUuid);
     } catch (e) {
+      // Native may still own the link; keep release retryable and its readies
+      // adoptable rather than mirroring "released" over a live link.
+      _nativeReleased = false;
       Logger.debug('[NativeBleTransport] unmanageDevice failed: $e');
     }
 
@@ -288,7 +299,7 @@ class NativeBleTransport extends DeviceTransport implements CaptureSubscriptionE
     _subscriptionGeneration++;
     _audioLivenessTimer?.cancel();
     BleBridge.instance.removeIngressListener(_ingressOwnershipChanged);
-    BleBridge.instance.unregisterPeripheral(_peripheralUuid);
+    _releaseBridge();
     await _audioSubscriptionErrors.close();
     _activeSubscriptionKeys.clear();
     _subscribedSubscriptionKeys.clear();
@@ -299,7 +310,7 @@ class NativeBleTransport extends DeviceTransport implements CaptureSubscriptionE
   // MARK: - Private Helpers
 
   void _updateState(DeviceTransportState newState) {
-    if (_state != newState) {
+    if (_state != newState && !_connectionStateController.isClosed) {
       _state = newState;
       _connectionStateController.add(_state);
     }
@@ -353,6 +364,9 @@ class NativeBleTransport extends DeviceTransport implements CaptureSubscriptionE
   }
 
   void _handleDeviceReady(List<BleService> services) {
+    // A ready already in flight when this transport released native must not
+    // re-adopt the link behind the explicit disconnect.
+    if (_nativeReleased) return;
     _subscriptionGeneration++;
     _subscribedSubscriptionKeys.clear();
     subscriptionFailures.clear();

@@ -18,6 +18,7 @@ import 'package:omi/pages/home/firmware_update.dart';
 import 'package:omi/pages/home/omiglass_ota_update.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/local_recordings_provider.dart';
+import 'package:omi/providers/native_link_reconciler.dart';
 import 'package:omi/services/capture/capture_wedge_monitor.dart';
 import 'package:omi/services/devices.dart';
 import 'package:omi/services/devices/connectors/device_connection.dart';
@@ -144,6 +145,8 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
   /// coordinator wake, and capture streaming must use this token, not
   /// `_sessionGeneration` at callback time. -1 means no admitted connect.
   int _admittedConnectGeneration = -1;
+  late final NativeLinkReconciler nativeLink = NativeLinkReconciler(this);
+  (DeviceConnection, int)? _admittedLink;
 
   DeviceProvider({
     BleDiagnosticsLoader? bleDiagnosticsLoader,
@@ -203,6 +206,7 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
   /// account publication from the retired generation must not land.
   void clearUserData() {
     _sessionGeneration++;
+    _admittedLink = null;
     _deviceHealthTimer?.cancel();
     _deviceHealthTimer = null;
     _admittedConnectGeneration = -1;
@@ -795,6 +799,8 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
 
   void setIsConnected(bool value) {
     isConnected = value;
+    // Every path that drops the mirror must allow the live link to be re-admitted.
+    if (!value) _admittedLink = null;
     if (isConnected) {
       _discoveryTimer?.cancel();
     }
@@ -805,6 +811,7 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
   void dispose() {
     _isDisposed = true;
     _sessionGeneration++;
+    nativeLink.dispose();
     _deviceHealthTimer?.cancel();
     _deviceHealthTimer = null;
     _admittedConnectGeneration = -1;
@@ -1178,6 +1185,12 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     if (connection == null) {
       return;
     }
+    // One admission per physical connect: overlapping connected events (a
+    // native connect still initializing, a resume reconcile) must not run
+    // connect side effects twice.
+    final link = (connection, connection.connectionEpoch);
+    if (_admittedLink == link) return;
+    _admittedLink = link;
     _onDeviceConnected(connection.device, generation);
   }
 

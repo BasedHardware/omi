@@ -675,9 +675,10 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
               (previous?..setConversationProvider(conversation)) ?? LocalRecordingsProvider(),
         ),
         ChangeNotifierProxyProvider2<CaptureProvider, LocalRecordingsProvider, DeviceProvider>(
-          create: (context) => DeviceProvider(),
+          create: (context) => DeviceProvider()..nativeLink.bindAppLifecycle(),
           update: (BuildContext context, captureProvider, localRecordings, DeviceProvider? previous) =>
-              (previous?..setProviders(captureProvider, localRecordings)) ?? DeviceProvider(),
+              (previous?..setProviders(captureProvider, localRecordings)) ??
+              (DeviceProvider()..nativeLink.bindAppLifecycle()),
         ),
         ChangeNotifierProxyProvider<DeviceProvider, OnboardingProvider>(
           create: (context) => OnboardingProvider(),

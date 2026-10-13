@@ -43,7 +43,7 @@ void main() {
       messenger.setMockMessageHandler(channelName, null);
     }
     hostApiChannelNames.clear();
-    BleBridge.instance.unregisterPeripheral(_deviceId);
+    BleBridge.instance.clearPeripheralForTesting(_deviceId);
   });
 
   setUp(() async {
