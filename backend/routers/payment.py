@@ -230,8 +230,6 @@ def _build_subscription_from_stripe_object(stripe_sub: dict) -> Subscription | N
     """Builds a Subscription object from a Stripe Subscription object."""
     stripe_status = stripe_sub['status']
 
-    # For inactive subscriptions (canceled, unpaid, etc.), always downgrade to Basic
-    # regardless of price ID — ensures deleted/canceled users don't keep paid access
     if stripe_status not in ('active', 'trialing'):
         return project_subscription(stripe_sub, None, get_basic_plan_limits())
 
