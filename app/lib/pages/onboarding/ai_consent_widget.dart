@@ -49,7 +49,8 @@ class _AiConsentWidgetState extends State<AiConsentWidget> {
   @override
   Widget build(BuildContext context) {
     final l10n = context.l10n;
-    final small = OmiType.footnote.copyWith(color: OmiColors.textSecondary, height: 1.4);
+    // The providers read as part of the same statement: same size and colour.
+    final body = OmiType.subhead.copyWith(height: 1.4);
     final fine = OmiType.caption.copyWith(color: OmiColors.textTertiary, height: 1.3);
     final link = fine.copyWith(color: OmiColors.textSecondary, decoration: TextDecoration.underline);
     // The other steps end their button `OmiSpacing.sm` above the safe area; this one keeps that
@@ -64,9 +65,9 @@ class _AiConsentWidgetState extends State<AiConsentWidget> {
         content: [
           Semantics(header: true, child: Text(l10n.dataAndPrivacy, style: OmiType.title2)),
           const SizedBox(height: OmiSpacing.xs),
-          Text(l10n.consentShortMessage, style: OmiType.subhead.copyWith(height: 1.4)),
-          const SizedBox(height: OmiSpacing.md),
-          Text(l10n.consentAiProviders(_aiProviders), style: small),
+          Text(l10n.consentShortMessage, style: body),
+          const SizedBox(height: OmiSpacing.xs),
+          Text(l10n.consentAiProviders(_aiProviders), style: body),
         ],
         footer: [
           const SizedBox(height: OmiSpacing.xl),
