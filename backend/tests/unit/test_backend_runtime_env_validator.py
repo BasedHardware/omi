@@ -3573,6 +3573,10 @@ def test_prod_backend_billing_key_is_public_project_token(monkeypatch):
     assert prod_backend['env']['POSTHOG_HOST'] == {'value': 'https://us.posthog.com', 'category': 'telemetry'}
     assert 'POSTHOG_PROJECT_API_KEY' not in prod_backend['env']
     assert 'POSTHOG_PROJECT_API_KEY' not in prod_backend['secrets']
+    classification = json.loads((ROOT.parent / 'config/deployment-setting-classification.json').read_text())
+    assert 'POSTHOG_BILLING_API_KEY' in classification['kinds']['config']
+    assert 'POSTHOG_BILLING_API_KEY' not in classification['kinds']['secret']
+    assert 'POSTHOG_PROJECT_API_KEY' in classification['kinds']['secret']
     assert _posthog_billing_key_bindings(manifest) == [
         (
             'manifest.environments.prod.cloud_run.services.backend.env.POSTHOG_BILLING_API_KEY',
