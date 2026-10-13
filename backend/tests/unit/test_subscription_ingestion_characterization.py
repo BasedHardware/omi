@@ -177,6 +177,7 @@ def test_adoption_preserves_replacement_bytes_and_does_not_copy_stale_customer(l
 def test_out_of_order_same_subscription_is_currently_last_delivery_wins(lane):
     lane.event = event(EVENTS[1], 'active', created=NOW)
     run(lane)
+    assert lane.current.plan == PlanType.plus
     lane.event = event(EVENTS[0], 'incomplete', created=NOW - 50)
     run(lane)
     assert lane.current.plan == PlanType.basic
@@ -573,3 +574,97 @@ def test_stale_guard_decision_is_not_rechecked_after_stripe_lookup(lane, monkeyp
     monkeypatch.setattr(payment.time, 'time', lambda: next(clock, NOW - 1))
     assert run(lane) == {'status': 'success'}
     assert lane.current.plan == PlanType.basic
+
+
+@pytest.mark.parametrize('status', ['active', 'trialing'])
+def test_active_snapshot_preserves_false_cancel_flag(lane, status):
+    lane.event = event(EVENTS[1], status)
+    lane.event['data']['object']['cancel_at_period_end'] = False
+    run(lane)
+    assert lane.current.cancel_at_period_end is False
+
+
+@pytest.mark.parametrize('schedule_status', ['completed', 'canceled'])
+def test_schedule_currently_overwrites_different_valid_paid_subscription(lane, schedule_status):
+    lane.current = Subscription(plan=PlanType.operator, stripe_subscription_id='sub-new', current_period_end=NOW + 100)
+    lane.stripe_obj = event(EVENTS[1], 'canceled', sub_id='sub-old')['data']['object']
+    lane.event = {
+        'type': 'subscription_schedule.' + schedule_status,
+        'data': {
+            'object': {
+                'metadata': {'uid': 'fixture-user'},
+                'status': schedule_status,
+                'subscription': 'sub-old',
+            }
+        },
+    }
+    run(lane)
+    assert lane.current.plan == PlanType.basic
+    assert lane.current.stripe_subscription_id == 'sub-old'
+
+
+def test_checkout_cancel_failure_currently_still_activates(lane, monkeypatch):
+    lane.current = Subscription(plan=PlanType.plus, stripe_subscription_id='sub-old')
+    lane.stripe_obj = event(EVENTS[1], 'active')['data']['object']
+    lane.event = {
+        'type': 'checkout.session.completed',
+        'data': {
+            'object': stripe.checkout.Session.construct_from(
+                {
+                    'id': 'cs-fixture',
+                    'client_reference_id': 'fixture-user',
+                    'metadata': {},
+                    'customer': 'cus-fixture',
+                    'subscription': 'sub-current',
+                },
+                'fixture',
+            )
+        },
+    }
+
+    def fail(*args):
+        raise RuntimeError('fixture cancellation failed')
+
+    monkeypatch.setattr(payment.stripe.Subscription, 'cancel', fail)
+    run(lane)
+    assert lane.current.plan == PlanType.plus
+    assert lane.current.stripe_subscription_id == 'sub-current'
+
+
+def test_missing_profile_currently_does_not_block_subscription_mutation(lane):
+    lane.owner = False
+    lane.event = event(EVENTS[1], 'active')
+    run(lane)
+    assert lane.current.plan == PlanType.plus
+    assert 'telemetry' not in [name for name, _ in lane.calls]
+
+
+@pytest.mark.parametrize('kind', ['invoice.paid', 'invoice.payment_succeeded'])
+def test_invoice_only_renews_creator_app(lane, monkeypatch, kind):
+    lane.stripe_obj = event(EVENTS[1], 'active')['data']['object']
+    lane.stripe_obj['metadata']['app_id'] = 'creator-fixture'
+    lane.event = {'type': kind, 'data': {'object': {'subscription': 'sub-current'}}}
+    monkeypatch.setattr(payment, 'paid_app', lambda *args: lane.calls.append(('paid_app', args)))
+    run(lane)
+    assert [name for name, _ in lane.calls] == ['paid_app']
+    assert lane.current is None
+
+
+def test_invalid_signature_is_400_before_any_effect(lane, monkeypatch):
+    from fastapi import HTTPException
+
+    def invalid(*args):
+        raise stripe.error.SignatureVerificationError('fixture invalid signature', 'fixture')
+
+    monkeypatch.setattr(payment.stripe_utils, 'parse_event', invalid)
+    with pytest.raises(HTTPException) as error:
+        run(lane)
+    assert error.value.status_code == 400
+    assert lane.calls == []
+
+
+def test_lifecycle_observation_precedes_entitlement_effects(lane, monkeypatch):
+    lane.event = event(EVENTS[1], 'active')
+    monkeypatch.setattr(payment, 'record_subscription_event', lambda **kw: lane.calls.append(('observation', ())))
+    run(lane)
+    assert [name for name, _ in lane.calls][:2] == ['observation', 'customer']
