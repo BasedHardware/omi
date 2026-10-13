@@ -205,26 +205,36 @@ class FirstCaptureWatchInstructions extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Scaffold(
         appBar: AppBar(leading: const OmiBackButton(), title: Text(context.l10n.firstCaptureWatch)),
-        body: SafeArea(
-            child: ListView(padding: const EdgeInsets.all(OmiSpacing.lg), children: [
-          const SizedBox(height: OmiSpacing.xxl),
+        body: FirstCaptureLayout(content: [
           Icon(Icons.watch_outlined, size: 64, color: OmiColors.textPrimary),
           const SizedBox(height: OmiSpacing.lg),
-          Text(
-              paired == false
-                  ? context.l10n.firstCaptureWatchPair
-                  : installed == false
-                      ? context.l10n.firstCaptureWatchInstall
-                      : context.l10n.firstCaptureWatchInstructions,
-              style: OmiType.title2,
-              textAlign: TextAlign.center),
-          const SizedBox(height: OmiSpacing.xxl),
+          Text(context.l10n.watchCaptureTitle, style: OmiType.title2, textAlign: TextAlign.center),
+          const SizedBox(height: OmiSpacing.xl),
+          if (paired == false || installed == false)
+            Text(paired == false ? context.l10n.firstCaptureWatchPair : context.l10n.firstCaptureWatchInstall,
+                style: OmiType.body.copyWith(color: OmiColors.textSecondary), textAlign: TextAlign.center)
+          else
+            for (final step in [
+              context.l10n.watchCaptureOpen,
+              context.l10n.watchCaptureRecord,
+              context.l10n.watchCaptureSync
+            ].indexed)
+              Padding(
+                padding: const EdgeInsets.only(bottom: OmiSpacing.md),
+                child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Text('${step.$1 + 1}.', style: OmiType.body),
+                  const SizedBox(width: OmiSpacing.sm),
+                  Expanded(child: Text(step.$2, style: OmiType.body.copyWith(color: OmiColors.textSecondary))),
+                ]),
+              ),
+        ], actions: [
           OmiButton(
+              key: const Key('watch_capture_continue'),
               labelStyle: OmiType.callout.copyWith(
                   fontWeight: FontWeight.w600, fontFamily: Theme.of(context).textTheme.labelLarge?.fontFamily),
               label: context.l10n.startUsingOmi,
               expand: true,
               onPressed: onComplete),
-        ])),
+        ]),
       );
 }
