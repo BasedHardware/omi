@@ -12992,4 +12992,7 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get onboardingActNotesLater => 'Omiがまだメモを作成中です。ホームに表示されます。';
+
+  @override
+  String get chatWelcomeMessage => 'こんにちは、Omiです。話した内容なら何でも聞いてください。誰が何を言ったか、何を約束したか、一日のまとめなど。タスクの追加や、覚えておくこともできます。';
 }

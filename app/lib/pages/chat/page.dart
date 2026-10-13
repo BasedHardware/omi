@@ -306,8 +306,13 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
                           : provider.isClearingChat
                               ? OmiLoadingState(label: context.l10n.deletingMessages)
                               : (provider.messages.isEmpty)
-                                  ? ChatGreeting(isConnected: connectivityProvider.isConnected, name: prefs.givenName)
-                                  : _buildTranscript(provider),
+                                  ? ChatGreeting(
+                                      isConnected: connectivityProvider.isConnected,
+                                      name: prefs.givenName,
+                                      welcome: ChatWelcome.pending,
+                                      animateWelcome: !ChatWelcome.shown,
+                                    )
+                                  : _transcriptMarkingWelcomed(provider),
                     ),
                     _buildComposer(context, provider, connectivityProvider),
                   ],
@@ -693,7 +698,15 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
     );
   }
 
+  /// Anyone who already has a chat history is past the welcome, so clearing it later doesn't bring
+  /// the welcome back.
+  Widget _transcriptMarkingWelcomed(MessageProvider provider) {
+    if (ChatWelcome.pending) ChatWelcome.markDone();
+    return _buildTranscript(provider);
+  }
+
   _sendMessageUtil(String text) async {
+    ChatWelcome.markDone();
     var provider = context.read<MessageProvider>();
     // Guard against re-entry (rapid double-tap of send, voice→transcribeSuccess
     // race firing onTranscriptReady twice, etc.). Without this the chat could

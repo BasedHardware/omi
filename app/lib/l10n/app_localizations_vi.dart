@@ -13180,4 +13180,8 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get onboardingActNotesLater => 'Omi vẫn đang viết ghi chú của bạn. Bạn sẽ thấy chúng ở Trang chủ.';
+
+  @override
+  String get chatWelcomeMessage =>
+      'Chào bạn, mình là Omi. Hỏi mình bất cứ điều gì bạn đã nói: ai đã nói gì, bạn đã hứa gì hay tóm tắt ngày của bạn. Mình cũng có thể thêm việc cần làm và ghi nhớ mọi thứ giúp bạn.';
 }

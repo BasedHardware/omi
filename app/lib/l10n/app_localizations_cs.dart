@@ -13183,4 +13183,8 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get onboardingActNotesLater => 'Omi ještě píše vaše poznámky. Najdete je na domovské obrazovce.';
+
+  @override
+  String get chatWelcomeMessage =>
+      'Ahoj, jsem Omi. Zeptej se mě na cokoli, o čem jsi mluvil: co kdo řekl, co jsi slíbil nebo shrnutí tvého dne. Umím také přidávat úkoly a pamatovat si věci za tebe.';
 }

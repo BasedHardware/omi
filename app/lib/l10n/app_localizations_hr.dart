@@ -13216,4 +13216,8 @@ class AppLocalizationsHr extends AppLocalizations {
 
   @override
   String get onboardingActNotesLater => 'Omi još piše vaše bilješke. Pronaći ćete ih na početnoj.';
+
+  @override
+  String get chatWelcomeMessage =>
+      'Bok, ja sam Omi. Pitaj me bilo što o čemu si razgovarao: što je netko rekao, što si obećao ili sažetak tvog dana. Mogu i dodavati zadatke i pamtiti stvari za tebe.';
 }

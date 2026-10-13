@@ -11484,5 +11484,6 @@
     "onboardingActDictateBodyOmi": "פשוט דבר. ה-Omi שלך מקשיב.",
     "voiceProfileCardDismissed": "אפשר להגדיר פרופיל קולי בכל עת בהגדרות.",
     "homeNewRecordingButton": "הקלטה חדשה",
-    "onboardingActNotesLater": "Omi עדיין כותב את ההערות שלך. תמצא אותן במסך הבית."
+    "onboardingActNotesLater": "Omi עדיין כותב את ההערות שלך. תמצא אותן במסך הבית.",
+    "chatWelcomeMessage": "היי, אני Omi. שאל אותי כל דבר על מה שדיברת: מה מישהו אמר, מה הבטחת או סיכום של היום שלך. אני יכול גם להוסיף משימות ולזכור דברים בשבילך."
 }

@@ -13187,4 +13187,8 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get onboardingActNotesLater => 'Omi skriver fortfarande dina anteckningar. Du hittar dem på Hem.';
+
+  @override
+  String get chatWelcomeMessage =>
+      'Hej, jag är Omi. Fråga mig om allt du har pratat om: vad någon sa, vad du lovade eller en sammanfattning av din dag. Jag kan också lägga till uppgifter och komma ihåg saker åt dig.';
 }

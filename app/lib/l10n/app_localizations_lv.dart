@@ -13210,4 +13210,8 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get onboardingActNotesLater => 'Omi vēl raksta jūsu piezīmes. Tās atradīsiet sākumlapā.';
+
+  @override
+  String get chatWelcomeMessage =>
+      'Sveiki, es esmu Omi. Jautā man jebko par to, par ko esi runājis: ko kāds teica, ko tu apsolīji vai kopsavilkumu par tavu dienu. Es varu arī pievienot uzdevumus un atcerēties lietas tavā vietā.';
 }

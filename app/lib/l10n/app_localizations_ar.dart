@@ -13106,4 +13106,8 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get onboardingActNotesLater => 'لا يزال Omi يكتب ملاحظاتك. ستجدها في الصفحة الرئيسية.';
+
+  @override
+  String get chatWelcomeMessage =>
+      'مرحبًا، أنا Omi. اسألني عن أي شيء تحدثت عنه: ما قاله شخص ما، أو ما وعدت به، أو ملخص يومك. يمكنني أيضًا إضافة مهام وتذكّر الأشياء لك.';
 }

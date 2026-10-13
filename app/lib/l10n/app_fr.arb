@@ -4082,5 +4082,6 @@
     "onboardingActDictateBodyOmi": "Parlez simplement. Votre Omi vous écoute.",
     "voiceProfileCardDismissed": "Vous pouvez configurer votre profil vocal à tout moment dans les Réglages.",
     "homeNewRecordingButton": "Nouvel enregistrement",
-    "onboardingActNotesLater": "Omi rédige encore vos notes. Vous les trouverez sur l'accueil."
+    "onboardingActNotesLater": "Omi rédige encore vos notes. Vous les trouverez sur l'accueil.",
+    "chatWelcomeMessage": "Salut, je suis Omi. Demandez-moi tout ce dont vous avez parlé : ce que quelqu'un a dit, ce que vous avez promis ou un résumé de votre journée. Je peux aussi ajouter des tâches et retenir des choses pour vous."
 }

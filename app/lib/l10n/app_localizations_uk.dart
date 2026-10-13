@@ -13212,4 +13212,8 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get onboardingActNotesLater => 'Omi ще пише ваші нотатки. Ви знайдете їх на головному екрані.';
+
+  @override
+  String get chatWelcomeMessage =>
+      'Привіт, я Omi. Питайте про все, про що ви говорили: що хтось сказав, що ви пообіцяли або як минув ваш день. Я також можу додавати завдання й запам\'ятовувати важливе за вас.';
 }

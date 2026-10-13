@@ -13206,4 +13206,8 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get onboardingActNotesLater => 'O Omi ainda está escrevendo suas notas. Você vai encontrá-las no Início.';
+
+  @override
+  String get chatWelcomeMessage =>
+      'Oi, eu sou o Omi. Pergunte qualquer coisa sobre o que você conversou: o que alguém disse, o que você prometeu ou um resumo do seu dia. Também posso adicionar tarefas e lembrar coisas para você.';
 }

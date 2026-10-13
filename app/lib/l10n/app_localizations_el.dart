@@ -13267,4 +13267,8 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get onboardingActNotesLater => 'Το Omi γράφει ακόμα τις σημειώσεις σου. Θα τις βρεις στην Αρχική.';
+
+  @override
+  String get chatWelcomeMessage =>
+      'Γεια, είμαι το Omi. Ρώτα με οτιδήποτε έχεις συζητήσει: τι είπε κάποιος, τι υποσχέθηκες ή μια σύνοψη της μέρας σου. Μπορώ επίσης να προσθέτω εργασίες και να θυμάμαι πράγματα για σένα.';
 }

@@ -13187,4 +13187,8 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get onboardingActNotesLater => 'Omi kirjoittaa vielä muistiinpanojasi. Löydät ne Kotinäkymästä.';
+
+  @override
+  String get chatWelcomeMessage =>
+      'Hei, olen Omi. Kysy minulta mitä tahansa siitä, mistä olet puhunut: mitä joku sanoi, mitä lupasit tai yhteenveto päivästäsi. Voin myös lisätä tehtäviä ja muistaa asioita puolestasi.';
 }

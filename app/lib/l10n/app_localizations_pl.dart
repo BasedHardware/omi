@@ -13221,4 +13221,8 @@ class AppLocalizationsPl extends AppLocalizations {
 
   @override
   String get onboardingActNotesLater => 'Omi wciąż pisze Twoje notatki. Znajdziesz je na ekranie głównym.';
+
+  @override
+  String get chatWelcomeMessage =>
+      'Cześć, jestem Omi. Pytaj mnie o wszystko, o czym rozmawiałeś: co ktoś powiedział, co obiecałeś albo jak minął ci dzień. Mogę też dodawać zadania i zapamiętywać rzeczy za ciebie.';
 }

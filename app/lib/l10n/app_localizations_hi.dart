@@ -13164,4 +13164,8 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String get onboardingActNotesLater => 'Omi अभी भी आपके नोट्स लिख रहा है। आप उन्हें होम पर पाएंगे।';
+
+  @override
+  String get chatWelcomeMessage =>
+      'नमस्ते, मैं Omi हूँ। आपने जिस बारे में बात की है, उसके बारे में कुछ भी पूछें: किसी ने क्या कहा, आपने क्या वादा किया, या आपके दिन का सारांश। मैं काम जोड़ सकता हूँ और आपके लिए चीज़ें याद भी रख सकता हूँ।';
 }

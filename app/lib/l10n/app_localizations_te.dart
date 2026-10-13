@@ -13233,4 +13233,8 @@ class AppLocalizationsTe extends AppLocalizations {
 
   @override
   String get onboardingActNotesLater => 'Omi ఇంకా మీ నోట్స్ రాస్తోంది. మీరు వాటిని హోమ్‌లో చూడవచ్చు.';
+
+  @override
+  String get chatWelcomeMessage =>
+      'హాయ్, నేను Omi. మీరు మాట్లాడిన దేని గురించైనా అడగండి: ఎవరు ఏమన్నారు, మీరు ఏమి మాట ఇచ్చారు లేదా మీ రోజు సారాంశం. నేను పనులను జోడించగలను, మీ కోసం విషయాలు గుర్తుంచుకోగలను.';
 }

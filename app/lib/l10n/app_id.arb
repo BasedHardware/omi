@@ -4082,5 +4082,6 @@
     "onboardingActDictateBodyOmi": "Bicara saja. Omi kamu sedang mendengarkan.",
     "voiceProfileCardDismissed": "Anda dapat mengatur Profil Suara kapan saja di Pengaturan.",
     "homeNewRecordingButton": "Rekaman Baru",
-    "onboardingActNotesLater": "Omi masih menulis catatanmu. Kamu akan menemukannya di Beranda."
+    "onboardingActNotesLater": "Omi masih menulis catatanmu. Kamu akan menemukannya di Beranda.",
+    "chatWelcomeMessage": "Hai, aku Omi. Tanyakan apa saja tentang hal yang kamu bicarakan: apa yang dikatakan seseorang, apa yang kamu janjikan, atau ringkasan harimu. Aku juga bisa menambahkan tugas dan mengingat hal-hal untukmu."
 }

@@ -13217,4 +13217,8 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get onboardingActNotesLater => 'Omi schrijft je notities nog. Je vindt ze op Home.';
+
+  @override
+  String get chatWelcomeMessage =>
+      'Hoi, ik ben Omi. Vraag me alles over waar je het over hebt gehad: wat iemand zei, wat je beloofde of een samenvatting van je dag. Ik kan ook taken toevoegen en dingen voor je onthouden.';
 }

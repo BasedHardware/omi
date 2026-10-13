@@ -11484,5 +11484,6 @@
     "onboardingActDictateBodyOmi": "Magsalita ka lang. Nakikinig ang Omi mo.",
     "voiceProfileCardDismissed": "Maaari mong i-set up ang Voice Profile anumang oras sa Settings.",
     "homeNewRecordingButton": "Bagong Recording",
-    "onboardingActNotesLater": "Isinusulat pa ng Omi ang iyong mga tala. Makikita mo ang mga ito sa Home."
+    "onboardingActNotesLater": "Isinusulat pa ng Omi ang iyong mga tala. Makikita mo ang mga ito sa Home.",
+    "chatWelcomeMessage": "Hi, ako si Omi. Itanong mo sa akin ang kahit ano tungkol sa mga napag-usapan mo: ang sinabi ng isang tao, ang ipinangako mo, o buod ng araw mo. Kaya ko ring magdagdag ng mga gawain at tandaan ang mga bagay para sa iyo."
 }

@@ -13221,4 +13221,8 @@ class AppLocalizationsKn extends AppLocalizations {
   @override
   String get onboardingActNotesLater =>
       'Omi ಇನ್ನೂ ನಿಮ್ಮ ಟಿಪ್ಪಣಿಗಳನ್ನು ಬರೆಯುತ್ತಿದೆ. ನೀವು ಅವುಗಳನ್ನು ಹೋಮ್‌ನಲ್ಲಿ ಕಾಣುವಿರಿ.';
+
+  @override
+  String get chatWelcomeMessage =>
+      'ನಮಸ್ಕಾರ, ನಾನು Omi. ನೀವು ಮಾತನಾಡಿದ ಯಾವುದರ ಬಗ್ಗೆಯೂ ಕೇಳಿ: ಯಾರು ಏನು ಹೇಳಿದರು, ನೀವು ಏನು ಭರವಸೆ ನೀಡಿದ್ದೀರಿ ಅಥವಾ ನಿಮ್ಮ ದಿನದ ಸಾರಾಂಶ. ನಾನು ಕಾರ್ಯಗಳನ್ನು ಸೇರಿಸಬಹುದು ಮತ್ತು ನಿಮಗಾಗಿ ವಿಷಯಗಳನ್ನು ನೆನಪಿಟ್ಟುಕೊಳ್ಳಬಹುದು.';
 }

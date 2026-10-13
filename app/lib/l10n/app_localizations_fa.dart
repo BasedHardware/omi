@@ -13177,4 +13177,8 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String get onboardingActNotesLater => 'Omi هنوز در حال نوشتن یادداشت‌های شماست. آن‌ها را در صفحه اصلی پیدا می‌کنید.';
+
+  @override
+  String get chatWelcomeMessage =>
+      'سلام، من Omi هستم. هر چیزی درباره صحبت‌هایت بپرس: اینکه کسی چه گفت، چه قولی دادی یا خلاصه‌ای از روزت. می‌توانم کار هم اضافه کنم و چیزها را برایت به خاطر بسپارم.';
 }

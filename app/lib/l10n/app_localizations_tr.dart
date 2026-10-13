@@ -13195,4 +13195,8 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get onboardingActNotesLater => 'Omi notlarını hâlâ yazıyor. Onları Ana Sayfa\'da bulacaksın.';
+
+  @override
+  String get chatWelcomeMessage =>
+      'Merhaba, ben Omi. Konuştuğun her şeyi bana sorabilirsin: birinin ne dediğini, ne söz verdiğini ya da gününün özetini. Görev de ekleyebilir ve senin için bir şeyleri hatırlayabilirim.';
 }

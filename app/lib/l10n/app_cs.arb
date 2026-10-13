@@ -4047,5 +4047,6 @@
     "onboardingActDictateBodyOmi": "Prostě mluvte. Vaše Omi poslouchá.",
     "voiceProfileCardDismissed": "Hlasový profil můžete kdykoli nastavit v Nastavení.",
     "homeNewRecordingButton": "Nový záznam",
-    "onboardingActNotesLater": "Omi ještě píše vaše poznámky. Najdete je na domovské obrazovce."
+    "onboardingActNotesLater": "Omi ještě píše vaše poznámky. Najdete je na domovské obrazovce.",
+    "chatWelcomeMessage": "Ahoj, jsem Omi. Zeptej se mě na cokoli, o čem jsi mluvil: co kdo řekl, co jsi slíbil nebo shrnutí tvého dne. Umím také přidávat úkoly a pamatovat si věci za tebe."
 }

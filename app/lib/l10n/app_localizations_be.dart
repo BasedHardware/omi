@@ -13217,4 +13217,8 @@ class AppLocalizationsBe extends AppLocalizations {
 
   @override
   String get onboardingActNotesLater => 'Omi яшчэ піша вашы нататкі. Вы знойдзеце іх на галоўнай.';
+
+  @override
+  String get chatWelcomeMessage =>
+      'Прывітанне, я Omi. Пытайцеся пра ўсё, пра што вы размаўлялі: што хтосьці сказаў, што вы паабяцалі, ці як прайшоў ваш дзень. Я таксама магу дадаваць задачы і запамінаць рэчы за вас.';
 }

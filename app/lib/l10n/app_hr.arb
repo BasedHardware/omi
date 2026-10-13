@@ -11484,5 +11484,6 @@
     "onboardingActDictateBodyOmi": "Samo pričajte. Vaš Omi sluša.",
     "voiceProfileCardDismissed": "Glasovni profil možete postaviti bilo kada u Postavkama.",
     "homeNewRecordingButton": "Novo snimanje",
-    "onboardingActNotesLater": "Omi još piše vaše bilješke. Pronaći ćete ih na početnoj."
+    "onboardingActNotesLater": "Omi još piše vaše bilješke. Pronaći ćete ih na početnoj.",
+    "chatWelcomeMessage": "Bok, ja sam Omi. Pitaj me bilo što o čemu si razgovarao: što je netko rekao, što si obećao ili sažetak tvog dana. Mogu i dodavati zadatke i pamtiti stvari za tebe."
 }

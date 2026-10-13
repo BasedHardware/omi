@@ -7,6 +7,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/l10n/app_localizations.dart';
+import 'package:omi/pages/home/widgets/home_tab_switcher.dart';
 import 'package:omi/pages/onboarding/activation/activation_capture.dart';
 import 'package:omi/pages/onboarding/activation/activation_flow.dart';
 
@@ -140,6 +141,7 @@ void main() {
     expect(find.text('Omi caught your to-dos'), findsOneWidget);
     expect(find.text('Grab milk on the way home'), findsOneWidget);
     expect(find.text('Saved to your tasks'), findsOneWidget);
+    expect(NewTasksDot.showing, isTrue, reason: 'Home marks Tasks until it is opened');
     await tapKey(tester, 'activation_continue_tasks');
 
     // Hooray, then the rating ask, then the paywall.

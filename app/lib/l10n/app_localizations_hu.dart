@@ -13234,4 +13234,8 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get onboardingActNotesLater => 'Az Omi még írja a jegyzeteidet. A kezdőlapon találod őket.';
+
+  @override
+  String get chatWelcomeMessage =>
+      'Szia, Omi vagyok. Kérdezz bármit arról, amiről beszéltél: mit mondott valaki, mit ígértél, vagy kérj összefoglalót a napodról. Feladatokat is fel tudok venni, és dolgokat is megjegyzek helyetted.';
 }

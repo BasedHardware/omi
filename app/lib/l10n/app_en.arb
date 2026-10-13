@@ -15948,5 +15948,9 @@
     "onboardingActNotesLater": "Omi is still writing your notes. You'll find them on Home.",
     "@onboardingActNotesLater": {
         "description": "Onboarding activation: shown under the reader's words when Omi's notes took too long; they appear on Home later"
+    },
+    "chatWelcomeMessage": "Hi, I'm Omi. Ask me anything you've talked about: what someone said, what you promised, or a summary of your day. I can also add to-dos and remember things for you.",
+    "@chatWelcomeMessage": {
+        "description": "First message Omi shows in an empty chat the first time it is opened, explaining what chat can do"
     }
 }

@@ -4047,5 +4047,6 @@
     "onboardingActDictateBodyOmi": "Praat gewoon. Je Omi luistert.",
     "voiceProfileCardDismissed": "Je kunt je stemprofiel altijd instellen via Instellingen.",
     "homeNewRecordingButton": "Nieuwe opname",
-    "onboardingActNotesLater": "Omi schrijft je notities nog. Je vindt ze op Home."
+    "onboardingActNotesLater": "Omi schrijft je notities nog. Je vindt ze op Home.",
+    "chatWelcomeMessage": "Hoi, ik ben Omi. Vraag me alles over waar je het over hebt gehad: wat iemand zei, wat je beloofde of een samenvatting van je dag. Ik kan ook taken toevoegen en dingen voor je onthouden."
 }

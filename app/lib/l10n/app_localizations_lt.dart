@@ -13206,4 +13206,8 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get onboardingActNotesLater => 'Omi dar rašo jūsų užrašus. Rasite juos pradžios ekrane.';
+
+  @override
+  String get chatWelcomeMessage =>
+      'Labas, aš Omi. Klausk manęs apie bet ką, apie ką kalbėjai: ką kas nors pasakė, ką pažadėjai ar tavo dienos santrauką. Taip pat galiu pridėti užduočių ir prisiminti dalykus už tave.';
 }

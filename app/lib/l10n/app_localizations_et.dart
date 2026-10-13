@@ -13176,4 +13176,8 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get onboardingActNotesLater => 'Omi kirjutab veel su märkmeid. Leiad need avalehelt.';
+
+  @override
+  String get chatWelcomeMessage =>
+      'Tere, mina olen Omi. Küsi minult kõike, millest oled rääkinud: mida keegi ütles, mida sa lubasid või kokkuvõtet oma päevast. Saan ka ülesandeid lisada ja asju sinu eest meeles pidada.';
 }

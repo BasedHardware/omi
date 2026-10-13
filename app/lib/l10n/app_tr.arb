@@ -4082,5 +4082,6 @@
     "onboardingActDictateBodyOmi": "Sadece konuş. Omi'n dinliyor.",
     "voiceProfileCardDismissed": "Ses profilini istediğin zaman Ayarlar'dan kurabilirsin.",
     "homeNewRecordingButton": "Yeni Kayıt",
-    "onboardingActNotesLater": "Omi notlarını hâlâ yazıyor. Onları Ana Sayfa'da bulacaksın."
+    "onboardingActNotesLater": "Omi notlarını hâlâ yazıyor. Onları Ana Sayfa'da bulacaksın.",
+    "chatWelcomeMessage": "Merhaba, ben Omi. Konuştuğun her şeyi bana sorabilirsin: birinin ne dediğini, ne söz verdiğini ya da gününün özetini. Görev de ekleyebilir ve senin için bir şeyleri hatırlayabilirim."
 }

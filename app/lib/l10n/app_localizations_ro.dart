@@ -13237,4 +13237,8 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get onboardingActNotesLater => 'Omi încă îți scrie notițele. Le vei găsi pe pagina principală.';
+
+  @override
+  String get chatWelcomeMessage =>
+      'Salut, sunt Omi. Întreabă-mă orice despre ce ai vorbit: ce a spus cineva, ce ai promis sau un rezumat al zilei tale. Pot și să adaug sarcini și să țin minte lucruri pentru tine.';
 }

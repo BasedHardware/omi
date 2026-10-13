@@ -13230,4 +13230,8 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String get onboardingActNotesLater => 'Omi все още пише бележките ви. Ще ги намерите на началния екран.';
+
+  @override
+  String get chatWelcomeMessage =>
+      'Здравей, аз съм Omi. Питай ме за всичко, за което си говорил: какво е казал някой, какво си обещал или обобщение на деня ти. Мога и да добавям задачи и да запомням неща вместо теб.';
 }

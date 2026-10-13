@@ -12973,4 +12973,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get onboardingActNotesLater => 'Omi 仍在撰写你的笔记，稍后可在首页查看。';
+
+  @override
+  String get chatWelcomeMessage => '你好，我是 Omi。关于你聊过的任何事都可以问我：某人说了什么、你答应过什么，或者今天的总结。我还能帮你添加待办、记住重要的事。';
 }

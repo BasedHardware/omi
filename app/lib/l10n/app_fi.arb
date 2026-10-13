@@ -4047,5 +4047,6 @@
     "onboardingActDictateBodyOmi": "Puhu vain. Omisi kuuntelee.",
     "voiceProfileCardDismissed": "Voit määrittää ääniprofiilin milloin tahansa asetuksissa.",
     "homeNewRecordingButton": "Uusi tallennus",
-    "onboardingActNotesLater": "Omi kirjoittaa vielä muistiinpanojasi. Löydät ne Kotinäkymästä."
+    "onboardingActNotesLater": "Omi kirjoittaa vielä muistiinpanojasi. Löydät ne Kotinäkymästä.",
+    "chatWelcomeMessage": "Hei, olen Omi. Kysy minulta mitä tahansa siitä, mistä olet puhunut: mitä joku sanoi, mitä lupasit tai yhteenveto päivästäsi. Voin myös lisätä tehtäviä ja muistaa asioita puolestasi."
 }

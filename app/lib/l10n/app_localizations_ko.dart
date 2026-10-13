@@ -12998,4 +12998,8 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get onboardingActNotesLater => 'Omi가 아직 노트를 작성하고 있어요. 홈에서 확인할 수 있어요.';
+
+  @override
+  String get chatWelcomeMessage =>
+      '안녕하세요, Omi예요. 나눈 대화라면 무엇이든 물어보세요. 누가 무슨 말을 했는지, 무엇을 약속했는지, 하루 요약까지요. 할 일을 추가하고 기억해 둘 수도 있어요.';
 }

@@ -13287,4 +13287,8 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get onboardingActNotesLater => 'Isinusulat pa ng Omi ang iyong mga tala. Makikita mo ang mga ito sa Home.';
+
+  @override
+  String get chatWelcomeMessage =>
+      'Hi, ako si Omi. Itanong mo sa akin ang kahit ano tungkol sa mga napag-usapan mo: ang sinabi ng isang tao, ang ipinangako mo, o buod ng araw mo. Kaya ko ring magdagdag ng mga gawain at tandaan ang mga bagay para sa iyo.';
 }
