@@ -24,6 +24,7 @@ from utils.subscription_state_machine import (
     ResolvedStripeEvent,
     transition,
 )
+from utils.stripe_webhook_ledger import dispatch_with_ledger
 from utils.fair_use import clear_fair_use_on_upgrade
 from utils.notifications import send_notification, send_subscription_paid_personalized_notification
 from models.users import PlanType, Subscription, SubscriptionStatus, PlanLimits
@@ -242,12 +243,8 @@ def _build_subscription_from_stripe_object(stripe_sub: dict) -> Subscription | N
     try:
         plan = get_plan_type_from_price_id(price_id)
     except ValueError as e:
-        # A price Stripe is actively billing that we cannot resolve. Before the
-        # catalog, a retained/configured disagreement could not arise here: the
-        # env mapping simply won. It can now raise, and this early return means
-        # the subscriber's stored row silently stops tracking Stripe. That is
-        # the Apr 17-20 failure shape, so it must be observable rather than a
-        # bare log line. See .github/agent-docs/plan-source-of-truth.md.
+        # Preserve observable unknown-price skips (the prior multi-week billing
+        # drop shape); see .github/agent-docs/plan-source-of-truth.md.
         record_fallback(
             component='other',
             from_mode='stripe_price_resolution',
@@ -888,6 +885,13 @@ async def stripe_webhook(
     except stripe.error.SignatureVerificationError as e:
         raise HTTPException(status_code=400, detail="Invalid signature")
 
+    async def run_db(function, *args, **kwargs):
+        return await run_blocking(db_executor, function, *args, **kwargs)
+
+    return await dispatch_with_ledger(event, lambda: _handle_stripe_event(event, background_tasks), run_db)
+
+
+async def _handle_stripe_event(event: dict, background_tasks: BackgroundTasks | None = None):
     if event['type'] == 'checkout.session.completed':
         session = event['data']['object']
         client_reference_id = session.get('client_reference_id')
@@ -939,12 +943,8 @@ async def stripe_webhook(
                 )
                 return {"status": "success"}
 
-            # Check if user already has an active *paid* subscription to prevent duplicates.
-            # Stripe sends customer.subscription.created while Checkout subscriptions are still
-            # incomplete; our subscription event handler represents those as Basic with a Stripe
-            # subscription id. Do not treat that transient Basic record as a duplicate checkout,
-            # otherwise checkout.session.completed returns before persisting the real paid
-            # subscription/customer id and later stale incomplete_expired events can clobber access.
+            # An incomplete Basic row is not a completed paid checkout;
+            # preserve the existing duplicate/replacement decision in pure code.
             existing_subscription = await run_blocking(db_executor, users_db.get_user_valid_subscription, uid)
             checkout_decision = transition(
                 existing_subscription,
