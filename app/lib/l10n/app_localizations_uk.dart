@@ -13080,7 +13080,7 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get onboardingActWearBody =>
-      'Він слухає й запам\'ятовує ваші розмови. Натисніть один раз, щоб запитати що завгодно.';
+      'Він памʼятає ваші розмови. Натисніть кнопку, щоб запитати що завгодно, і ще раз, щоб надіслати.';
 
   @override
   String get onboardingActIntro => 'Спробуймо Omi.';
@@ -13158,4 +13158,19 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get onboardingActSavedToTasks => 'Збережено у ваші завдання';
+
+  @override
+  String get onboardingConnectTapToConnect => 'Торкніться Omi, щоб підключити.';
+
+  @override
+  String get onboardingActMicFallbackBody => 'Omi ще не передає звук. Поки що скористайтеся телефоном.';
+
+  @override
+  String get onboardingActNoAudioOmi => 'Omi не чути. Перевірте, що він увімкнений і поруч.';
+
+  @override
+  String get onboardingActNoAudioPhone => 'Поки вас не чути. Спробуйте говорити трохи голосніше.';
+
+  @override
+  String get onboardingActDictateBodyOmi => 'Просто говоріть. Omi слухає.';
 }

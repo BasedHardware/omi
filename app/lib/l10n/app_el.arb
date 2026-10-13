@@ -4013,7 +4013,7 @@
     "consentShortMessage": "Το Omi χρησιμοποιεί AI για να μετατρέπει τις συνομιλίες σου σε σημειώσεις. Μπορείς να τις διαγράψεις οποιαδήποτε στιγμή.",
     "consentAiProviders": "Επεξεργασία μέσω {providers}.",
     "onboardingActWearTitle": "Φορέστε το Omi σας",
-    "onboardingActWearBody": "Ακούει και θυμάται τις συνομιλίες σας. Πατήστε μία φορά για να ρωτήσετε οτιδήποτε.",
+    "onboardingActWearBody": "Θυμάται τις συνομιλίες σου. Πάτησε το κουμπί για να ρωτήσεις οτιδήποτε και ξανά για αποστολή.",
     "onboardingActIntro": "Ας δοκιμάσουμε το Omi.",
     "onboardingActMicTitle": "Το Omi χρειάζεται το μικρόφωνό σας",
     "onboardingActMicBody": "Για να σας ακούει το Omi όταν του μιλάτε.",
@@ -4037,5 +4037,10 @@
     "onboardingActDemoTask1": "Αποστολή της παρουσίασης στην ομάδα ως την Παρασκευή",
     "onboardingActDemoTask2": "Γάλα στον δρόμο για το σπίτι",
     "onboardingActJustNow": "Μόλις τώρα",
-    "onboardingActSavedToTasks": "Αποθηκεύτηκε στις εργασίες σου"
+    "onboardingActSavedToTasks": "Αποθηκεύτηκε στις εργασίες σου",
+    "onboardingConnectTapToConnect": "Πάτησε το Omi σου για σύνδεση.",
+    "onboardingActMicFallbackBody": "Το Omi δεν στέλνει ακόμα ήχο. Χρησιμοποίησε προς το παρόν το τηλέφωνό σου.",
+    "onboardingActNoAudioOmi": "Δεν ακούμε το Omi. Βεβαιώσου ότι είναι ανοιχτό και κοντά σου.",
+    "onboardingActNoAudioPhone": "Δεν σε ακούμε ακόμα. Δοκίμασε να μιλήσεις λίγο πιο δυνατά.",
+    "onboardingActDictateBodyOmi": "Απλώς μίλα. Το Omi σου ακούει."
 }

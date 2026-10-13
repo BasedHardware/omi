@@ -11450,7 +11450,7 @@
     "consentShortMessage": "Omi користи вештачка интелигенција за да ги претвори вашите разговори во белешки. Можете да ги избришете во секое време.",
     "consentAiProviders": "Се обработува со {providers}.",
     "onboardingActWearTitle": "Носете го вашиот Omi",
-    "onboardingActWearBody": "Ги слуша и ги памети вашите разговори. Притиснете еднаш за да прашате било што.",
+    "onboardingActWearBody": "Ги памети вашите разговори. Притиснете го копчето за да прашате нешто, и повторно за да испратите.",
     "onboardingActIntro": "Да го пробаме Omi.",
     "onboardingActMicTitle": "На Omi му треба микрофонот",
     "onboardingActMicBody": "За Omi да ве слуша кога зборувате со него.",
@@ -11474,5 +11474,10 @@
     "onboardingActDemoTask1": "Да ја пратам презентацијата на тимот до петок",
     "onboardingActDemoTask2": "Да купам млеко на пат кон дома",
     "onboardingActJustNow": "Токму сега",
-    "onboardingActSavedToTasks": "Зачувано во вашите задачи"
+    "onboardingActSavedToTasks": "Зачувано во вашите задачи",
+    "onboardingConnectTapToConnect": "Допрете го вашиот Omi за да се поврзете.",
+    "onboardingActMicFallbackBody": "Omi сè уште не испраќа звук. Засега користете го телефонот.",
+    "onboardingActNoAudioOmi": "Не се слуша Omi. Проверете дали е вклучен и блиску.",
+    "onboardingActNoAudioPhone": "Сè уште не ве слушаме. Обидете се да зборувате малку погласно.",
+    "onboardingActDictateBodyOmi": "Само зборувајте. Вашиот Omi слуша."
 }

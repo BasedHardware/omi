@@ -304,7 +304,8 @@ class _FoundDevicesState extends State<FoundDevices> {
             mainAxisAlignment: MainAxisAlignment.start,
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              if (!widget.showStatus && !provider.isConnected)
+              // Without the status line (onboarding), the host shows the state itself.
+              if (!widget.showStatus)
                 const SizedBox.shrink()
               else if (!provider.isConnected)
                 Text(
@@ -317,7 +318,7 @@ class _FoundDevicesState extends State<FoundDevices> {
                 Text(context.l10n.pairingSuccessful, style: OmiType.footnote.copyWith(color: OmiColors.textSecondary)),
               if (visibleDevices.isNotEmpty) const SizedBox(height: 16),
               if (!provider.isConnected) ..._devicesList(provider),
-              if (provider.isConnected)
+              if (provider.isConnected && widget.showStatus)
                 Text(
                   () {
                     final sameNameCount = provider.visibleDeviceList.where((d) => d.name == provider.deviceName).length;

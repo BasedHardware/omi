@@ -4013,7 +4013,7 @@
     "consentShortMessage": "Omi използва ИИ, за да превърне разговорите ви в бележки. Можете да ги изтриете по всяко време.",
     "consentAiProviders": "Обработва се с {providers}.",
     "onboardingActWearTitle": "Носете своя Omi",
-    "onboardingActWearBody": "Слуша и запомня разговорите ви. Натиснете веднъж, за да го попитате нещо.",
+    "onboardingActWearBody": "Помни разговорите ви. Натиснете бутона, за да попитате нещо, и пак, за да изпратите.",
     "onboardingActIntro": "Да пробваме Omi.",
     "onboardingActMicTitle": "Omi се нуждае от микрофона ви",
     "onboardingActMicBody": "За да ви чува Omi, когато говорите с него.",
@@ -4037,5 +4037,10 @@
     "onboardingActDemoTask1": "Да пратя презентацията на екипа до петък",
     "onboardingActDemoTask2": "Да купя мляко на връщане",
     "onboardingActJustNow": "Току-що",
-    "onboardingActSavedToTasks": "Запазено в задачите ви"
+    "onboardingActSavedToTasks": "Запазено в задачите ви",
+    "onboardingConnectTapToConnect": "Докоснете Omi, за да се свържете.",
+    "onboardingActMicFallbackBody": "Omi все още не изпраща звук. Засега използвайте телефона си.",
+    "onboardingActNoAudioOmi": "Не чуваме Omi. Уверете се, че е включен и наблизо.",
+    "onboardingActNoAudioPhone": "Още не ви чуваме. Опитайте да говорите малко по-силно.",
+    "onboardingActDictateBodyOmi": "Просто говорете. Omi слуша."
 }

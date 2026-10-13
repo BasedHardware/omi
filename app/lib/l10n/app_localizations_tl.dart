@@ -13155,7 +13155,7 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get onboardingActWearBody =>
-      'Nakikinig at naaalala nito ang mga usapan mo. Pindutin nang isang beses para magtanong ng kahit ano.';
+      'Naaalala nito ang iyong mga usapan. Pindutin ang button para magtanong ng kahit ano, at muli para ipadala.';
 
   @override
   String get onboardingActIntro => 'Subukan natin ang Omi.';
@@ -13233,4 +13233,19 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get onboardingActSavedToTasks => 'Na-save sa mga gawain mo';
+
+  @override
+  String get onboardingConnectTapToConnect => 'I-tap ang iyong Omi para kumonekta.';
+
+  @override
+  String get onboardingActMicFallbackBody => 'Hindi pa nagpapadala ng audio ang Omi mo. Gamitin muna ang iyong phone.';
+
+  @override
+  String get onboardingActNoAudioOmi => 'Hindi marinig ang Omi mo. Siguraduhing naka-on ito at malapit.';
+
+  @override
+  String get onboardingActNoAudioPhone => 'Hindi ka pa marinig. Subukang magsalita nang medyo malakas.';
+
+  @override
+  String get onboardingActDictateBodyOmi => 'Magsalita ka lang. Nakikinig ang Omi mo.';
 }

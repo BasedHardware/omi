@@ -4013,7 +4013,7 @@
     "consentShortMessage": "Omi pomocí AI mění vaše konverzace v poznámky. Kdykoli je můžete smazat.",
     "consentAiProviders": "Zpracovává {providers}.",
     "onboardingActWearTitle": "Noste svůj Omi",
-    "onboardingActWearBody": "Poslouchá a pamatuje si vaše konverzace. Jedním stiskem se ho na cokoli zeptáte.",
+    "onboardingActWearBody": "Pamatuje si vaše konverzace. Stiskněte tlačítko a zeptejte se na cokoli, dalším stiskem odešlete.",
     "onboardingActIntro": "Vyzkoušejme Omi.",
     "onboardingActMicTitle": "Omi potřebuje mikrofon",
     "onboardingActMicBody": "Aby vás Omi slyšel, když na něj mluvíte.",
@@ -4037,5 +4037,10 @@
     "onboardingActDemoTask1": "Poslat prezentaci týmu do pátku",
     "onboardingActDemoTask2": "Koupit cestou domů mléko",
     "onboardingActJustNow": "Právě teď",
-    "onboardingActSavedToTasks": "Uloženo do vašich úkolů"
+    "onboardingActSavedToTasks": "Uloženo do vašich úkolů",
+    "onboardingConnectTapToConnect": "Klepnutím na Omi se připojíte.",
+    "onboardingActMicFallbackBody": "Omi zatím neposílá zvuk. Zatím použijte telefon.",
+    "onboardingActNoAudioOmi": "Omi neslyšíme. Zkontrolujte, že je zapnuté a blízko.",
+    "onboardingActNoAudioPhone": "Zatím vás neslyšíme. Zkuste mluvit trochu hlasitěji.",
+    "onboardingActDictateBodyOmi": "Prostě mluvte. Vaše Omi poslouchá."
 }

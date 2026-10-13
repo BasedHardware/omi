@@ -13048,7 +13048,7 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get onboardingActWearBody =>
-      'Omi lắng nghe và ghi nhớ các cuộc trò chuyện. Nhấn một lần để hỏi bất cứ điều gì.';
+      'Omi ghi nhớ các cuộc trò chuyện của bạn. Nhấn nút để hỏi bất cứ điều gì, nhấn lần nữa để gửi.';
 
   @override
   String get onboardingActIntro => 'Cùng thử Omi nhé.';
@@ -13126,4 +13126,19 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get onboardingActSavedToTasks => 'Đã lưu vào việc cần làm';
+
+  @override
+  String get onboardingConnectTapToConnect => 'Chạm vào Omi của bạn để kết nối.';
+
+  @override
+  String get onboardingActMicFallbackBody => 'Omi chưa gửi âm thanh. Tạm thời hãy dùng điện thoại.';
+
+  @override
+  String get onboardingActNoAudioOmi => 'Không nghe thấy Omi. Hãy kiểm tra xem nó đã bật và ở gần chưa.';
+
+  @override
+  String get onboardingActNoAudioPhone => 'Chưa nghe thấy bạn. Hãy thử nói to hơn một chút.';
+
+  @override
+  String get onboardingActDictateBodyOmi => 'Cứ nói thôi. Omi đang lắng nghe.';
 }

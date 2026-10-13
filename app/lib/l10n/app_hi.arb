@@ -4013,7 +4013,7 @@
     "consentShortMessage": "Omi AI की मदद से आपकी बातचीत को नोट्स में बदलता है। आप उन्हें कभी भी हटा सकते हैं।",
     "consentAiProviders": "{providers} के साथ प्रोसेस किया जाता है।",
     "onboardingActWearTitle": "अपना Omi पहनें",
-    "onboardingActWearBody": "यह आपकी बातचीत सुनता और याद रखता है। कुछ भी पूछने के लिए एक बार दबाएँ।",
+    "onboardingActWearBody": "यह आपकी बातचीत याद रखता है। कुछ भी पूछने के लिए बटन दबाएं, भेजने के लिए फिर दबाएं।",
     "onboardingActIntro": "चलिए Omi आज़माएं।",
     "onboardingActMicTitle": "Omi को आपका माइक्रोफ़ोन चाहिए",
     "onboardingActMicBody": "ताकि आप बात करें तो Omi सुन सके।",
@@ -4037,5 +4037,10 @@
     "onboardingActDemoTask1": "शुक्रवार तक टीम को डेक भेजना",
     "onboardingActDemoTask2": "घर लौटते हुए दूध लेना",
     "onboardingActJustNow": "अभी-अभी",
-    "onboardingActSavedToTasks": "आपके कामों में सहेजा गया"
+    "onboardingActSavedToTasks": "आपके कामों में सहेजा गया",
+    "onboardingConnectTapToConnect": "कनेक्ट करने के लिए अपने Omi पर टैप करें।",
+    "onboardingActMicFallbackBody": "आपका Omi अभी ऑडियो नहीं भेज रहा। फ़िलहाल अपना फ़ोन इस्तेमाल करें।",
+    "onboardingActNoAudioOmi": "आपका Omi सुनाई नहीं दे रहा। देखें कि वह चालू है और पास है।",
+    "onboardingActNoAudioPhone": "अभी आपकी आवाज़ नहीं आ रही। थोड़ा ज़ोर से बोलकर देखें।",
+    "onboardingActDictateBodyOmi": "बस बोलिए। आपका Omi सुन रहा है।"
 }

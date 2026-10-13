@@ -13105,7 +13105,7 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get onboardingActWearBody =>
-      'Ascultă și își amintește conversațiile tale. Apasă o dată ca să-l întrebi orice.';
+      'Își amintește conversațiile tale. Apasă butonul ca să întrebi orice și din nou ca să trimiți.';
 
   @override
   String get onboardingActIntro => 'Hai să încercăm Omi.';
@@ -13183,4 +13183,19 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get onboardingActSavedToTasks => 'Salvat în sarcinile tale';
+
+  @override
+  String get onboardingConnectTapToConnect => 'Atinge Omi-ul tău pentru a te conecta.';
+
+  @override
+  String get onboardingActMicFallbackBody => 'Omi nu trimite încă sunet. Deocamdată folosește telefonul.';
+
+  @override
+  String get onboardingActNoAudioOmi => 'Nu se aude Omi. Verifică dacă e pornit și aproape.';
+
+  @override
+  String get onboardingActNoAudioPhone => 'Încă nu te auzim. Încearcă să vorbești puțin mai tare.';
+
+  @override
+  String get onboardingActDictateBodyOmi => 'Doar vorbește. Omi te ascultă.';
 }

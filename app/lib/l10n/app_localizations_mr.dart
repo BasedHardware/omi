@@ -13054,7 +13054,8 @@ class AppLocalizationsMr extends AppLocalizations {
   String get onboardingActWearTitle => 'तुमचा Omi घाला';
 
   @override
-  String get onboardingActWearBody => 'तो तुमची संभाषणे ऐकतो आणि लक्षात ठेवतो. काहीही विचारण्यासाठी एकदा दाबा.';
+  String get onboardingActWearBody =>
+      'तो तुमची संभाषणे लक्षात ठेवतो. काहीही विचारण्यासाठी बटण दाबा, पाठवण्यासाठी पुन्हा दाबा.';
 
   @override
   String get onboardingActIntro => 'चला, Omi वापरून पाहू.';
@@ -13132,4 +13133,19 @@ class AppLocalizationsMr extends AppLocalizations {
 
   @override
   String get onboardingActSavedToTasks => 'तुमच्या कामांमध्ये जतन केले';
+
+  @override
+  String get onboardingConnectTapToConnect => 'कनेक्ट करण्यासाठी तुमच्या Omi वर टॅप करा.';
+
+  @override
+  String get onboardingActMicFallbackBody => 'तुमचा Omi अजून ऑडिओ पाठवत नाही. सध्या तुमचा फोन वापरा.';
+
+  @override
+  String get onboardingActNoAudioOmi => 'तुमचा Omi ऐकू येत नाही. तो सुरू आहे आणि जवळ आहे का ते पाहा.';
+
+  @override
+  String get onboardingActNoAudioPhone => 'अजून तुमचा आवाज ऐकू येत नाही. थोडं मोठ्याने बोलून पाहा.';
+
+  @override
+  String get onboardingActDictateBodyOmi => 'फक्त बोला. तुमचा Omi ऐकत आहे.';
 }

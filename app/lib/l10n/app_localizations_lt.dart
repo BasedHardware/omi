@@ -13074,7 +13074,7 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get onboardingActWearBody =>
-      'Jis klausosi ir įsimena jūsų pokalbius. Paspauskite kartą ir klauskite ko tik norite.';
+      'Jis prisimena jūsų pokalbius. Paspauskite mygtuką, kad ko nors paklaustumėte, ir dar kartą, kad išsiųstumėte.';
 
   @override
   String get onboardingActIntro => 'Išbandykime Omi.';
@@ -13152,4 +13152,19 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get onboardingActSavedToTasks => 'Išsaugota jūsų užduotyse';
+
+  @override
+  String get onboardingConnectTapToConnect => 'Palieskite savo Omi, kad prisijungtumėte.';
+
+  @override
+  String get onboardingActMicFallbackBody => 'Omi dar nesiunčia garso. Kol kas naudokite telefoną.';
+
+  @override
+  String get onboardingActNoAudioOmi => 'Omi negirdėti. Patikrinkite, ar jis įjungtas ir šalia.';
+
+  @override
+  String get onboardingActNoAudioPhone => 'Dar jūsų negirdime. Pabandykite kalbėti šiek tiek garsiau.';
+
+  @override
+  String get onboardingActDictateBodyOmi => 'Tiesiog kalbėkite. Jūsų Omi klauso.';
 }

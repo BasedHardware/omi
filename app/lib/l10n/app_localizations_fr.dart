@@ -13153,7 +13153,7 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get onboardingActWearBody =>
-      'Il écoute et retient vos conversations. Appuyez une fois pour lui demander n\'importe quoi.';
+      'Il se souvient de vos conversations. Appuyez sur le bouton pour lui poser une question, puis à nouveau pour envoyer.';
 
   @override
   String get onboardingActIntro => 'Essayons Omi.';
@@ -13231,4 +13231,20 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get onboardingActSavedToTasks => 'Enregistré dans vos tâches';
+
+  @override
+  String get onboardingConnectTapToConnect => 'Touchez votre Omi pour le connecter.';
+
+  @override
+  String get onboardingActMicFallbackBody =>
+      'Votre Omi n\'envoie pas encore de son. Utilisez votre téléphone pour l\'instant.';
+
+  @override
+  String get onboardingActNoAudioOmi => 'On n\'entend pas votre Omi. Vérifiez qu\'il est allumé et proche.';
+
+  @override
+  String get onboardingActNoAudioPhone => 'On ne vous entend pas encore. Parlez un peu plus fort.';
+
+  @override
+  String get onboardingActDictateBodyOmi => 'Parlez simplement. Votre Omi vous écoute.';
 }

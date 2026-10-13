@@ -13102,7 +13102,7 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get onboardingActWearBody =>
-      'Hallgatja és megjegyzi a beszélgetéseidet. Nyomd meg egyszer, és kérdezz bármit.';
+      'Emlékszik a beszélgetéseidre. Nyomd meg a gombot, ha kérdeznél, és újra a küldéshez.';
 
   @override
   String get onboardingActIntro => 'Próbáljuk ki az Omit.';
@@ -13180,4 +13180,19 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get onboardingActSavedToTasks => 'Mentve a teendőid közé';
+
+  @override
+  String get onboardingConnectTapToConnect => 'Koppints az Omidra a csatlakozáshoz.';
+
+  @override
+  String get onboardingActMicFallbackBody => 'Az Omi még nem küld hangot. Egyelőre használd a telefonodat.';
+
+  @override
+  String get onboardingActNoAudioOmi => 'Nem halljuk az Omit. Ellenőrizd, hogy be van-e kapcsolva és közel van-e.';
+
+  @override
+  String get onboardingActNoAudioPhone => 'Még nem hallunk. Próbálj kicsit hangosabban beszélni.';
+
+  @override
+  String get onboardingActDictateBodyOmi => 'Csak beszélj. Az Omid figyel.';
 }

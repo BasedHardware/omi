@@ -4048,7 +4048,7 @@
     "consentShortMessage": "Omi menggunakan AI untuk mengubah percakapanmu menjadi catatan. Kamu bisa menghapusnya kapan saja.",
     "consentAiProviders": "Diproses dengan {providers}.",
     "onboardingActWearTitle": "Pakai Omi Anda",
-    "onboardingActWearBody": "Omi mendengar dan mengingat percakapan Anda. Tekan sekali untuk bertanya apa saja.",
+    "onboardingActWearBody": "Omi mengingat percakapanmu. Tekan tombol untuk bertanya apa saja, tekan lagi untuk mengirim.",
     "onboardingActIntro": "Ayo coba Omi.",
     "onboardingActMicTitle": "Omi butuh mikrofon Anda",
     "onboardingActMicBody": "Agar Omi bisa mendengar saat Anda bicara.",
@@ -4072,5 +4072,10 @@
     "onboardingActDemoTask1": "Kirim deck ke tim sebelum Jumat",
     "onboardingActDemoTask2": "Beli susu di jalan pulang",
     "onboardingActJustNow": "Baru saja",
-    "onboardingActSavedToTasks": "Disimpan ke tugasmu"
+    "onboardingActSavedToTasks": "Disimpan ke tugasmu",
+    "onboardingConnectTapToConnect": "Ketuk Omi kamu untuk menghubungkan.",
+    "onboardingActMicFallbackBody": "Omi kamu belum mengirim audio. Pakai ponselmu dulu.",
+    "onboardingActNoAudioOmi": "Omi kamu tidak terdengar. Pastikan menyala dan dekat.",
+    "onboardingActNoAudioPhone": "Suaramu belum terdengar. Coba bicara sedikit lebih keras.",
+    "onboardingActDictateBodyOmi": "Bicara saja. Omi kamu sedang mendengarkan."
 }

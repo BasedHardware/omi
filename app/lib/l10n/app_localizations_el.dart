@@ -13134,7 +13134,7 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get onboardingActWearBody =>
-      'Ακούει και θυμάται τις συνομιλίες σας. Πατήστε μία φορά για να ρωτήσετε οτιδήποτε.';
+      'Θυμάται τις συνομιλίες σου. Πάτησε το κουμπί για να ρωτήσεις οτιδήποτε και ξανά για αποστολή.';
 
   @override
   String get onboardingActIntro => 'Ας δοκιμάσουμε το Omi.';
@@ -13212,4 +13212,20 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get onboardingActSavedToTasks => 'Αποθηκεύτηκε στις εργασίες σου';
+
+  @override
+  String get onboardingConnectTapToConnect => 'Πάτησε το Omi σου για σύνδεση.';
+
+  @override
+  String get onboardingActMicFallbackBody =>
+      'Το Omi δεν στέλνει ακόμα ήχο. Χρησιμοποίησε προς το παρόν το τηλέφωνό σου.';
+
+  @override
+  String get onboardingActNoAudioOmi => 'Δεν ακούμε το Omi. Βεβαιώσου ότι είναι ανοιχτό και κοντά σου.';
+
+  @override
+  String get onboardingActNoAudioPhone => 'Δεν σε ακούμε ακόμα. Δοκίμασε να μιλήσεις λίγο πιο δυνατά.';
+
+  @override
+  String get onboardingActDictateBodyOmi => 'Απλώς μίλα. Το Omi σου ακούει.';
 }

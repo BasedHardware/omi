@@ -13140,7 +13140,7 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String get onboardingActWearBody =>
-      'இது உங்கள் உரையாடல்களைக் கேட்டு நினைவில் வைக்கும். எதையும் கேட்க ஒருமுறை அழுத்துங்கள்.';
+      'இது உங்கள் உரையாடல்களை நினைவில் வைக்கும். எதையும் கேட்க பட்டனை அழுத்தவும், அனுப்ப மீண்டும் அழுத்தவும்.';
 
   @override
   String get onboardingActIntro => 'Omi-ஐ முயற்சிப்போம்.';
@@ -13218,4 +13218,21 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String get onboardingActSavedToTasks => 'உங்கள் பணிகளில் சேமிக்கப்பட்டது';
+
+  @override
+  String get onboardingConnectTapToConnect => 'இணைக்க உங்கள் Omi-ஐத் தட்டவும்.';
+
+  @override
+  String get onboardingActMicFallbackBody =>
+      'உங்கள் Omi இன்னும் ஒலியை அனுப்பவில்லை. இப்போதைக்கு உங்கள் போனைப் பயன்படுத்துங்கள்.';
+
+  @override
+  String get onboardingActNoAudioOmi =>
+      'உங்கள் Omi கேட்கவில்லை. அது இயக்கத்தில் உள்ளதா, அருகில் உள்ளதா எனப் பாருங்கள்.';
+
+  @override
+  String get onboardingActNoAudioPhone => 'இன்னும் உங்கள் குரல் கேட்கவில்லை. சற்று சத்தமாகப் பேசிப் பாருங்கள்.';
+
+  @override
+  String get onboardingActDictateBodyOmi => 'பேசுங்கள் போதும். உங்கள் Omi கேட்டுக்கொண்டிருக்கிறது.';
 }

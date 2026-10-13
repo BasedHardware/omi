@@ -12956,7 +12956,7 @@ class AppLocalizationsHe extends AppLocalizations {
   String get onboardingActWearTitle => 'ענדו את ה-Omi';
 
   @override
-  String get onboardingActWearBody => 'הוא מקשיב וזוכר את השיחות שלכם. לחצו פעם אחת כדי לשאול כל דבר.';
+  String get onboardingActWearBody => 'הוא זוכר את השיחות שלך. לחץ על הכפתור כדי לשאול כל דבר, ושוב כדי לשלוח.';
 
   @override
   String get onboardingActIntro => 'בואו ננסה את Omi.';
@@ -13033,4 +13033,19 @@ class AppLocalizationsHe extends AppLocalizations {
 
   @override
   String get onboardingActSavedToTasks => 'נשמר במשימות שלך';
+
+  @override
+  String get onboardingConnectTapToConnect => 'הקש על ה-Omi שלך כדי להתחבר.';
+
+  @override
+  String get onboardingActMicFallbackBody => 'ה-Omi עדיין לא שולח שמע. בינתיים השתמש בטלפון.';
+
+  @override
+  String get onboardingActNoAudioOmi => 'לא שומעים את ה-Omi. ודא שהוא דולק וקרוב.';
+
+  @override
+  String get onboardingActNoAudioPhone => 'עדיין לא שומעים אותך. נסה לדבר קצת יותר חזק.';
+
+  @override
+  String get onboardingActDictateBodyOmi => 'פשוט דבר. ה-Omi שלך מקשיב.';
 }

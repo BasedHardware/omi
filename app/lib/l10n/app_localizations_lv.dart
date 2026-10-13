@@ -13077,7 +13077,8 @@ class AppLocalizationsLv extends AppLocalizations {
   String get onboardingActWearTitle => 'Valkājiet savu Omi';
 
   @override
-  String get onboardingActWearBody => 'Tas klausās un atceras jūsu sarunas. Nospiediet vienreiz, lai jautātu jebko.';
+  String get onboardingActWearBody =>
+      'Tas atceras jūsu sarunas. Nospiediet pogu, lai jautātu jebko, un vēlreiz, lai nosūtītu.';
 
   @override
   String get onboardingActIntro => 'Izmēģināsim Omi.';
@@ -13155,4 +13156,19 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get onboardingActSavedToTasks => 'Saglabāts jūsu uzdevumos';
+
+  @override
+  String get onboardingConnectTapToConnect => 'Pieskarieties savam Omi, lai savienotu.';
+
+  @override
+  String get onboardingActMicFallbackBody => 'Omi vēl nesūta skaņu. Pagaidām izmantojiet tālruni.';
+
+  @override
+  String get onboardingActNoAudioOmi => 'Omi nav dzirdams. Pārliecinieties, ka tas ir ieslēgts un tuvumā.';
+
+  @override
+  String get onboardingActNoAudioPhone => 'Vēl jūs nedzirdam. Mēģiniet runāt mazliet skaļāk.';
+
+  @override
+  String get onboardingActDictateBodyOmi => 'Vienkārši runājiet. Jūsu Omi klausās.';
 }

@@ -6,12 +6,14 @@ import 'package:in_app_review/in_app_review.dart';
 import 'package:permission_handler/permission_handler.dart';
 
 import 'package:omi/backend/preferences.dart';
+import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/pages/onboarding/activation/activation_capture.dart';
 import 'package:omi/pages/onboarding/activation/activation_visuals.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
+import 'package:omi/widgets/device_widget.dart';
 import 'package:omi/widgets/scanning_ripple.dart';
 
 /// Height of the row above every title: Skip sits in it on the dictation step.
@@ -39,6 +41,7 @@ class ActivationFlow extends StatefulWidget {
   const ActivationFlow({
     super.key,
     required this.hasDevice,
+    this.showWearTips = false,
     required this.onFinished,
     this.showPaywall,
     this.capture,
@@ -47,8 +50,11 @@ class ActivationFlow extends StatefulWidget {
     this.requestReview,
   });
 
-  /// The reader connected an Omi in onboarding: they get the wear instructions and dictate through it.
+  /// The reader connected a wearable in onboarding: they dictate through it.
   final bool hasDevice;
+
+  /// The wearable is an Omi: show how to wear it and use its button first.
+  final bool showWearTips;
 
   /// Called once at the very end; Home follows.
   final VoidCallback onFinished;
@@ -70,7 +76,11 @@ class ActivationFlow extends StatefulWidget {
 }
 
 class _ActivationFlowState extends State<ActivationFlow> {
-  late ActivationStage _stage = widget.hasDevice ? ActivationStage.wear : ActivationStage.intro;
+  late ActivationStage _stage = widget.hasDevice && widget.showWearTips ? ActivationStage.wear : ActivationStage.intro;
+  ActivationCapture? _capture;
+
+  /// The connected wearable was not streaming, so this dictation uses the phone microphone.
+  bool _phoneInstead = false;
   String _heard = '';
   ActivationResult? _result;
   bool _finished = false;
@@ -81,7 +91,16 @@ class _ActivationFlowState extends State<ActivationFlow> {
   void _go(ActivationStage next) {
     if (!mounted) return;
     _track(next.name);
+    // Each visit to the dictation listens afresh.
+    if (next == ActivationStage.dictate) _capture = null;
     setState(() => _stage = next);
+  }
+
+  /// The wearable was not streaming and the phone microphone is not allowed yet.
+  void _needsMicrophone() {
+    _phoneInstead = true;
+    _track('device_not_streaming');
+    _go(ActivationStage.microphone);
   }
 
   Future<void> _afterIntro() async {
@@ -131,7 +150,7 @@ class _ActivationFlowState extends State<ActivationFlow> {
         ),
       );
     }
-    return PipelineActivationCapture(context);
+    return PipelineActivationCapture(context, expectDevice: widget.hasDevice && !_phoneInstead);
   }
 
   Future<void> _afterRating() async {
@@ -149,7 +168,7 @@ class _ActivationFlowState extends State<ActivationFlow> {
           key: const ValueKey('wear'),
           title: l10n.onboardingActWearTitle,
           subtitle: l10n.onboardingActWearBody,
-          body: const _RoundVisual(icon: Icons.graphic_eq_rounded, size: 160),
+          body: const DeviceAnimationWidget(sizeMultiplier: 0.7, isConnected: true, deviceType: DeviceType.omi),
           bottom: _ContinueButton(stage: 'wear', onPressed: () => _go(ActivationStage.intro)),
         ),
       ActivationStage.intro => _IntroLine(
@@ -160,7 +179,7 @@ class _ActivationFlowState extends State<ActivationFlow> {
       ActivationStage.microphone => _Stage(
           key: const ValueKey('microphone'),
           title: l10n.onboardingActMicTitle,
-          subtitle: l10n.onboardingActMicBody,
+          subtitle: _phoneInstead ? l10n.onboardingActMicFallbackBody : l10n.onboardingActMicBody,
           body: const _RoundVisual(icon: Icons.mic_none_rounded, size: 120),
           bottom: _ContinueButton(
             stage: 'microphone',
@@ -170,9 +189,11 @@ class _ActivationFlowState extends State<ActivationFlow> {
         ),
       ActivationStage.dictate => _DictationStep(
           key: const ValueKey('dictate'),
-          capture: _newCapture(context),
+          capture: _capture ??= _newCapture(context),
           onDone: _dictated,
           onSkip: _skipped,
+          onNeedsMicrophone: _needsMicrophone,
+          throughOmi: widget.hasDevice && !_phoneInstead,
         ),
       ActivationStage.writing => _Stage(
           key: const ValueKey('writing'),
@@ -406,11 +427,22 @@ TextStyle get _wordsStyle => OmiType.body.copyWith(height: 1.45);
 /// "Tell Omi about your day": a card that fills with the reader's words, Skip (grey, top right) and
 /// a round ✓ (done, enabled once Omi has heard something).
 class _DictationStep extends StatefulWidget {
-  const _DictationStep({super.key, required this.capture, required this.onDone, required this.onSkip});
+  const _DictationStep({
+    super.key,
+    required this.capture,
+    required this.onDone,
+    required this.onSkip,
+    required this.onNeedsMicrophone,
+    this.throughOmi = false,
+  });
 
   final ActivationCapture capture;
   final void Function(String heard, Future<ActivationResult> result) onDone;
   final VoidCallback onSkip;
+  final VoidCallback onNeedsMicrophone;
+
+  /// The reader dictates through their Omi, not the phone.
+  final bool throughOmi;
 
   @override
   State<_DictationStep> createState() => _DictationStepState();
@@ -421,21 +453,36 @@ class _DictationStepState extends State<_DictationStep> {
   bool _failed = false;
   bool _leaving = false;
 
+  /// Nothing heard for a while after listening started: say so, instead of listening in silence.
+  bool _quiet = false;
+  Timer? _quietTimer;
+
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) async {
-      final ok = await widget.capture.start();
+      final start = await widget.capture.start();
       if (!mounted) return;
+      if (start == ActivationStart.needsMicrophone) {
+        _leaving = true;
+        widget.onNeedsMicrophone();
+        return;
+      }
       setState(() {
-        _started = ok;
-        _failed = !ok;
+        _started = start == ActivationStart.listening;
+        _failed = !_started;
       });
+      if (_started) {
+        _quietTimer = Timer(const Duration(seconds: 12), () {
+          if (mounted && widget.capture.liveText.value.trim().isEmpty) setState(() => _quiet = true);
+        });
+      }
     });
   }
 
   @override
   void dispose() {
+    _quietTimer?.cancel();
     if (!_leaving) unawaited(widget.capture.cancel());
     super.dispose();
   }
@@ -465,7 +512,7 @@ class _DictationStepState extends State<_DictationStep> {
         final heard = text.trim().isNotEmpty;
         return _Stage(
           title: l10n.onboardingActDictateTitle,
-          subtitle: l10n.onboardingActDictateBody,
+          subtitle: widget.throughOmi ? l10n.onboardingActDictateBodyOmi : l10n.onboardingActDictateBody,
           topRight: _QuietSkip(label: l10n.skip, onTap: _skip),
           body: AnimatedSize(
             duration: const Duration(milliseconds: 200),
@@ -485,7 +532,13 @@ class _DictationStepState extends State<_DictationStep> {
                 ? l10n.somethingWentWrong
                 : heard
                     ? l10n.onboardingActDictateHint
-                    : '${l10n.listening} · $source',
+                    : !_started
+                        ? l10n.listening
+                        : _quiet
+                            ? (widget.capture.usesDevice
+                                ? l10n.onboardingActNoAudioOmi
+                                : l10n.onboardingActNoAudioPhone)
+                            : '${l10n.listening} · $source',
             onDone: _done,
           ),
           bottomHeight: _kControlHeight,

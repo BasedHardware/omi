@@ -12863,7 +12863,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get onboardingActWearTitle => 'Omiを身につけよう';
 
   @override
-  String get onboardingActWearBody => '会話を聞いて覚えておきます。1回押すと何でも質問できます。';
+  String get onboardingActWearBody => '会話を覚えてくれます。ボタンを押して何でも質問し、もう一度押すと送信します。';
 
   @override
   String get onboardingActIntro => 'Omiを試してみましょう。';
@@ -12938,4 +12938,19 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get onboardingActSavedToTasks => 'タスクに保存しました';
+
+  @override
+  String get onboardingConnectTapToConnect => 'Omiをタップして接続します。';
+
+  @override
+  String get onboardingActMicFallbackBody => 'Omiからまだ音声が届いていません。今はスマートフォンを使いましょう。';
+
+  @override
+  String get onboardingActNoAudioOmi => 'Omiの音声が聞こえません。電源が入っていて近くにあるか確認してください。';
+
+  @override
+  String get onboardingActNoAudioPhone => 'まだ声が聞こえません。少し大きな声で話してみてください。';
+
+  @override
+  String get onboardingActDictateBodyOmi => '話すだけでOK。Omiが聞いています。';
 }

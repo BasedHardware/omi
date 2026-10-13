@@ -13088,7 +13088,8 @@ class AppLocalizationsPl extends AppLocalizations {
   String get onboardingActWearTitle => 'Noś swoje Omi';
 
   @override
-  String get onboardingActWearBody => 'Słucha i zapamiętuje Twoje rozmowy. Naciśnij raz, aby o coś zapytać.';
+  String get onboardingActWearBody =>
+      'Pamięta Twoje rozmowy. Naciśnij przycisk, aby o coś zapytać, i ponownie, aby wysłać.';
 
   @override
   String get onboardingActIntro => 'Wypróbujmy Omi.';
@@ -13166,4 +13167,19 @@ class AppLocalizationsPl extends AppLocalizations {
 
   @override
   String get onboardingActSavedToTasks => 'Zapisano w Twoich zadaniach';
+
+  @override
+  String get onboardingConnectTapToConnect => 'Stuknij swoje Omi, aby połączyć.';
+
+  @override
+  String get onboardingActMicFallbackBody => 'Twoje Omi jeszcze nie przesyła dźwięku. Na razie użyj telefonu.';
+
+  @override
+  String get onboardingActNoAudioOmi => 'Nie słychać Omi. Sprawdź, czy jest włączone i blisko.';
+
+  @override
+  String get onboardingActNoAudioPhone => 'Jeszcze Cię nie słychać. Spróbuj mówić trochę głośniej.';
+
+  @override
+  String get onboardingActDictateBodyOmi => 'Po prostu mów. Twoje Omi słucha.';
 }

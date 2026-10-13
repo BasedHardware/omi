@@ -11450,7 +11450,7 @@
     "consentShortMessage": "Omi با هوش مصنوعی گفتگوهای شما را به یادداشت تبدیل می‌کند. هر زمان بخواهید می‌توانید آن‌ها را حذف کنید.",
     "consentAiProviders": "پردازش با {providers}.",
     "onboardingActWearTitle": "Omi خود را بپوشید",
-    "onboardingActWearBody": "گفتگوهایتان را می‌شنود و به خاطر می‌سپارد. برای پرسیدن هر چیزی یک بار فشار دهید.",
+    "onboardingActWearBody": "گفتگوهای شما را به خاطر می‌سپارد. برای پرسیدن هر چیزی دکمه را بزنید و برای ارسال دوباره بزنید.",
     "onboardingActIntro": "بیایید Omi را امتحان کنیم.",
     "onboardingActMicTitle": "Omi به میکروفون شما نیاز دارد",
     "onboardingActMicBody": "تا Omi وقتی با او حرف می‌زنید صدایتان را بشنود.",
@@ -11474,5 +11474,10 @@
     "onboardingActDemoTask1": "فرستادن ارائه برای تیم تا جمعه",
     "onboardingActDemoTask2": "خریدن شیر سر راه خانه",
     "onboardingActJustNow": "همین الان",
-    "onboardingActSavedToTasks": "در کارهای شما ذخیره شد"
+    "onboardingActSavedToTasks": "در کارهای شما ذخیره شد",
+    "onboardingConnectTapToConnect": "برای اتصال روی Omi خود ضربه بزنید.",
+    "onboardingActMicFallbackBody": "Omi هنوز صدا نمی‌فرستد. فعلاً از گوشی خود استفاده کنید.",
+    "onboardingActNoAudioOmi": "صدای Omi نمی‌آید. مطمئن شوید روشن و نزدیک است.",
+    "onboardingActNoAudioPhone": "هنوز صدایتان نمی‌آید. کمی بلندتر صحبت کنید.",
+    "onboardingActDictateBodyOmi": "فقط صحبت کنید. Omi گوش می‌دهد."
 }

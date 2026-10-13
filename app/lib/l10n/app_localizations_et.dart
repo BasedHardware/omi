@@ -13043,7 +13043,8 @@ class AppLocalizationsEt extends AppLocalizations {
   String get onboardingActWearTitle => 'Kanna oma Omit';
 
   @override
-  String get onboardingActWearBody => 'See kuulab ja mäletab su vestlusi. Vajuta korra, et midagi küsida.';
+  String get onboardingActWearBody =>
+      'See mäletab sinu vestlusi. Vajuta nuppu, et midagi küsida, ja uuesti saatmiseks.';
 
   @override
   String get onboardingActIntro => 'Proovime Omit.';
@@ -13121,4 +13122,19 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get onboardingActSavedToTasks => 'Salvestatud sinu ülesannetesse';
+
+  @override
+  String get onboardingConnectTapToConnect => 'Ühendamiseks puuduta oma Omit.';
+
+  @override
+  String get onboardingActMicFallbackBody => 'Omi ei saada veel heli. Kasuta praegu oma telefoni.';
+
+  @override
+  String get onboardingActNoAudioOmi => 'Omit pole kuulda. Veendu, et see on sees ja lähedal.';
+
+  @override
+  String get onboardingActNoAudioPhone => 'Me ei kuule sind veel. Proovi natuke valjemini rääkida.';
+
+  @override
+  String get onboardingActDictateBodyOmi => 'Lihtsalt räägi. Sinu Omi kuulab.';
 }

@@ -13054,7 +13054,8 @@ class AppLocalizationsFi extends AppLocalizations {
   String get onboardingActWearTitle => 'Pidä Omia päälläsi';
 
   @override
-  String get onboardingActWearBody => 'Se kuuntelee ja muistaa keskustelusi. Paina kerran ja kysy mitä vain.';
+  String get onboardingActWearBody =>
+      'Se muistaa keskustelusi. Kysy mitä vain painamalla painiketta, ja lähetä painamalla uudelleen.';
 
   @override
   String get onboardingActIntro => 'Kokeillaan Omia.';
@@ -13132,4 +13133,19 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get onboardingActSavedToTasks => 'Tallennettu tehtäviisi';
+
+  @override
+  String get onboardingConnectTapToConnect => 'Yhdistä napauttamalla Omiasi.';
+
+  @override
+  String get onboardingActMicFallbackBody => 'Omi ei vielä lähetä ääntä. Käytä toistaiseksi puhelinta.';
+
+  @override
+  String get onboardingActNoAudioOmi => 'Omia ei kuulu. Varmista, että se on päällä ja lähellä.';
+
+  @override
+  String get onboardingActNoAudioPhone => 'Emme kuule sinua vielä. Kokeile puhua vähän kovempaa.';
+
+  @override
+  String get onboardingActDictateBodyOmi => 'Puhu vain. Omisi kuuntelee.';
 }

@@ -4013,7 +4013,7 @@
     "consentShortMessage": "Omi folosește AI pentru a transforma conversațiile tale în notițe. Le poți șterge oricând.",
     "consentAiProviders": "Procesat cu {providers}.",
     "onboardingActWearTitle": "Poartă-ți Omi",
-    "onboardingActWearBody": "Ascultă și își amintește conversațiile tale. Apasă o dată ca să-l întrebi orice.",
+    "onboardingActWearBody": "Își amintește conversațiile tale. Apasă butonul ca să întrebi orice și din nou ca să trimiți.",
     "onboardingActIntro": "Hai să încercăm Omi.",
     "onboardingActMicTitle": "Omi are nevoie de microfon",
     "onboardingActMicBody": "Ca Omi să te audă când vorbești cu el.",
@@ -4037,5 +4037,10 @@
     "onboardingActDemoTask1": "Trimite prezentarea echipei până vineri",
     "onboardingActDemoTask2": "Ia lapte în drum spre casă",
     "onboardingActJustNow": "Chiar acum",
-    "onboardingActSavedToTasks": "Salvat în sarcinile tale"
+    "onboardingActSavedToTasks": "Salvat în sarcinile tale",
+    "onboardingConnectTapToConnect": "Atinge Omi-ul tău pentru a te conecta.",
+    "onboardingActMicFallbackBody": "Omi nu trimite încă sunet. Deocamdată folosește telefonul.",
+    "onboardingActNoAudioOmi": "Nu se aude Omi. Verifică dacă e pornit și aproape.",
+    "onboardingActNoAudioPhone": "Încă nu te auzim. Încearcă să vorbești puțin mai tare.",
+    "onboardingActDictateBodyOmi": "Doar vorbește. Omi te ascultă."
 }

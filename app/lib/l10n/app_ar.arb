@@ -4013,7 +4013,7 @@
     "consentShortMessage": "يستخدم Omi الذكاء الاصطناعي لتحويل محادثاتك إلى ملاحظات. يمكنك حذفها في أي وقت.",
     "consentAiProviders": "تتم المعالجة بواسطة {providers}.",
     "onboardingActWearTitle": "ارتدِ Omi",
-    "onboardingActWearBody": "يستمع ويتذكر محادثاتك. اضغط مرة واحدة لتسأله أي شيء.",
+    "onboardingActWearBody": "يتذكر محادثاتك. اضغط الزر لتسأله أي شيء، واضغط مجددًا للإرسال.",
     "onboardingActIntro": "لنجرّب Omi.",
     "onboardingActMicTitle": "يحتاج Omi إلى الميكروفون",
     "onboardingActMicBody": "ليسمعك Omi عندما تتحدث إليه.",
@@ -4037,5 +4037,10 @@
     "onboardingActDemoTask1": "إرسال العرض إلى الفريق قبل الجمعة",
     "onboardingActDemoTask2": "شراء الحليب في طريق العودة",
     "onboardingActJustNow": "الآن",
-    "onboardingActSavedToTasks": "تم الحفظ في مهامك"
+    "onboardingActSavedToTasks": "تم الحفظ في مهامك",
+    "onboardingConnectTapToConnect": "اضغط على Omi للاتصال.",
+    "onboardingActMicFallbackBody": "لا يرسل Omi الصوت بعد. استخدم هاتفك الآن.",
+    "onboardingActNoAudioOmi": "لا أسمع Omi. تأكد من أنه يعمل وقريب منك.",
+    "onboardingActNoAudioPhone": "لا أسمعك بعد. جرّب التحدث بصوت أعلى قليلاً.",
+    "onboardingActDictateBodyOmi": "تحدّث فقط. Omi يستمع."
 }

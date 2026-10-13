@@ -4048,7 +4048,7 @@
     "consentShortMessage": "Omi с помощью ИИ превращает ваши разговоры в заметки. Их можно удалить в любой момент.",
     "consentAiProviders": "Обработка: {providers}.",
     "onboardingActWearTitle": "Носите Omi",
-    "onboardingActWearBody": "Он слушает и запоминает ваши разговоры. Нажмите один раз, чтобы спросить что угодно.",
+    "onboardingActWearBody": "Он помнит ваши разговоры. Нажмите кнопку, чтобы спросить что угодно, и ещё раз, чтобы отправить.",
     "onboardingActIntro": "Попробуем Omi.",
     "onboardingActMicTitle": "Omi нужен микрофон",
     "onboardingActMicBody": "Чтобы Omi слышал вас, когда вы с ним говорите.",
@@ -4072,5 +4072,10 @@
     "onboardingActDemoTask1": "Отправить презентацию команде до пятницы",
     "onboardingActDemoTask2": "Купить молоко по дороге домой",
     "onboardingActJustNow": "Только что",
-    "onboardingActSavedToTasks": "Сохранено в ваши задачи"
+    "onboardingActSavedToTasks": "Сохранено в ваши задачи",
+    "onboardingConnectTapToConnect": "Нажмите на Omi, чтобы подключить.",
+    "onboardingActMicFallbackBody": "Omi пока не передаёт звук. Пока используйте телефон.",
+    "onboardingActNoAudioOmi": "Omi не слышно. Проверьте, что он включён и рядом.",
+    "onboardingActNoAudioPhone": "Пока вас не слышно. Попробуйте говорить чуть громче.",
+    "onboardingActDictateBodyOmi": "Просто говорите. Omi слушает."
 }

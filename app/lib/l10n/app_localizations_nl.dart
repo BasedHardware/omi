@@ -13084,7 +13084,8 @@ class AppLocalizationsNl extends AppLocalizations {
   String get onboardingActWearTitle => 'Draag je Omi';
 
   @override
-  String get onboardingActWearBody => 'Hij luistert en onthoudt je gesprekken. Druk één keer om hem iets te vragen.';
+  String get onboardingActWearBody =>
+      'Hij onthoudt je gesprekken. Druk op de knop om iets te vragen, en nog eens om te versturen.';
 
   @override
   String get onboardingActIntro => 'Probeer Omi eens.';
@@ -13162,4 +13163,19 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get onboardingActSavedToTasks => 'Opgeslagen in je taken';
+
+  @override
+  String get onboardingConnectTapToConnect => 'Tik op je Omi om te verbinden.';
+
+  @override
+  String get onboardingActMicFallbackBody => 'Je Omi stuurt nog geen geluid. Gebruik voorlopig je telefoon.';
+
+  @override
+  String get onboardingActNoAudioOmi => 'We horen je Omi niet. Controleer of hij aan staat en dichtbij is.';
+
+  @override
+  String get onboardingActNoAudioPhone => 'We horen je nog niet. Probeer iets harder te praten.';
+
+  @override
+  String get onboardingActDictateBodyOmi => 'Praat gewoon. Je Omi luistert.';
 }

@@ -13045,7 +13045,7 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String get onboardingActWearBody =>
-      'گفتگوهایتان را می‌شنود و به خاطر می‌سپارد. برای پرسیدن هر چیزی یک بار فشار دهید.';
+      'گفتگوهای شما را به خاطر می‌سپارد. برای پرسیدن هر چیزی دکمه را بزنید و برای ارسال دوباره بزنید.';
 
   @override
   String get onboardingActIntro => 'بیایید Omi را امتحان کنیم.';
@@ -13123,4 +13123,19 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String get onboardingActSavedToTasks => 'در کارهای شما ذخیره شد';
+
+  @override
+  String get onboardingConnectTapToConnect => 'برای اتصال روی Omi خود ضربه بزنید.';
+
+  @override
+  String get onboardingActMicFallbackBody => 'Omi هنوز صدا نمی‌فرستد. فعلاً از گوشی خود استفاده کنید.';
+
+  @override
+  String get onboardingActNoAudioOmi => 'صدای Omi نمی‌آید. مطمئن شوید روشن و نزدیک است.';
+
+  @override
+  String get onboardingActNoAudioPhone => 'هنوز صدایتان نمی‌آید. کمی بلندتر صحبت کنید.';
+
+  @override
+  String get onboardingActDictateBodyOmi => 'فقط صحبت کنید. Omi گوش می‌دهد.';
 }

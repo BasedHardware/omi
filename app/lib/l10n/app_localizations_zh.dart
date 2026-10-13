@@ -12844,7 +12844,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get onboardingActWearTitle => '戴上你的 Omi';
 
   @override
-  String get onboardingActWearBody => '它会聆听并记住你的对话。按一下即可向它提问。';
+  String get onboardingActWearBody => '它会记住你的对话。按下按钮即可提问，再按一次发送。';
 
   @override
   String get onboardingActIntro => '来试试 Omi 吧。';
@@ -12919,4 +12919,19 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get onboardingActSavedToTasks => '已保存到你的任务';
+
+  @override
+  String get onboardingConnectTapToConnect => '轻点你的 Omi 进行连接。';
+
+  @override
+  String get onboardingActMicFallbackBody => '你的 Omi 还没有传来声音，先用手机吧。';
+
+  @override
+  String get onboardingActNoAudioOmi => '听不到你的 Omi。请确认它已开启并在附近。';
+
+  @override
+  String get onboardingActNoAudioPhone => '还听不到你的声音，试着大声一点。';
+
+  @override
+  String get onboardingActDictateBodyOmi => '直接说就好，你的 Omi 正在听。';
 }

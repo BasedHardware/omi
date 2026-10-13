@@ -12982,7 +12982,7 @@ class AppLocalizationsTh extends AppLocalizations {
   String get onboardingActWearTitle => 'สวม Omi ของคุณ';
 
   @override
-  String get onboardingActWearBody => 'Omi ฟังและจดจำบทสนทนาของคุณ กดหนึ่งครั้งเพื่อถามอะไรก็ได้';
+  String get onboardingActWearBody => 'จำบทสนทนาของคุณได้ กดปุ่มเพื่อถามอะไรก็ได้ แล้วกดอีกครั้งเพื่อส่ง';
 
   @override
   String get onboardingActIntro => 'มาลองใช้ Omi กัน';
@@ -13059,4 +13059,19 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get onboardingActSavedToTasks => 'บันทึกไว้ในงานของคุณแล้ว';
+
+  @override
+  String get onboardingConnectTapToConnect => 'แตะ Omi ของคุณเพื่อเชื่อมต่อ';
+
+  @override
+  String get onboardingActMicFallbackBody => 'Omi ยังไม่ส่งเสียงมา ใช้โทรศัพท์ไปก่อนนะ';
+
+  @override
+  String get onboardingActNoAudioOmi => 'ไม่ได้ยินเสียงจาก Omi ตรวจดูว่าเปิดอยู่และอยู่ใกล้ๆ';
+
+  @override
+  String get onboardingActNoAudioPhone => 'ยังไม่ได้ยินเสียงคุณ ลองพูดดังขึ้นอีกนิด';
+
+  @override
+  String get onboardingActDictateBodyOmi => 'พูดได้เลย Omi กำลังฟังอยู่';
 }

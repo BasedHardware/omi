@@ -11450,7 +11450,7 @@
     "consentShortMessage": "Omi AI மூலம் உங்கள் உரையாடல்களைக் குறிப்புகளாக மாற்றுகிறது. எப்போது வேண்டுமானாலும் நீக்கலாம்.",
     "consentAiProviders": "{providers} மூலம் செயலாக்கப்படுகிறது.",
     "onboardingActWearTitle": "உங்கள் Omi-ஐ அணியுங்கள்",
-    "onboardingActWearBody": "இது உங்கள் உரையாடல்களைக் கேட்டு நினைவில் வைக்கும். எதையும் கேட்க ஒருமுறை அழுத்துங்கள்.",
+    "onboardingActWearBody": "இது உங்கள் உரையாடல்களை நினைவில் வைக்கும். எதையும் கேட்க பட்டனை அழுத்தவும், அனுப்ப மீண்டும் அழுத்தவும்.",
     "onboardingActIntro": "Omi-ஐ முயற்சிப்போம்.",
     "onboardingActMicTitle": "Omi-க்கு உங்கள் மைக்ரோஃபோன் தேவை",
     "onboardingActMicBody": "நீங்கள் பேசும்போது Omi கேட்க.",
@@ -11474,5 +11474,10 @@
     "onboardingActDemoTask1": "வெள்ளிக்குள் குழுவுக்கு டெக் அனுப்புவது",
     "onboardingActDemoTask2": "வீட்டுக்குப் போகும் வழியில் பால் வாங்குவது",
     "onboardingActJustNow": "இப்போதுதான்",
-    "onboardingActSavedToTasks": "உங்கள் பணிகளில் சேமிக்கப்பட்டது"
+    "onboardingActSavedToTasks": "உங்கள் பணிகளில் சேமிக்கப்பட்டது",
+    "onboardingConnectTapToConnect": "இணைக்க உங்கள் Omi-ஐத் தட்டவும்.",
+    "onboardingActMicFallbackBody": "உங்கள் Omi இன்னும் ஒலியை அனுப்பவில்லை. இப்போதைக்கு உங்கள் போனைப் பயன்படுத்துங்கள்.",
+    "onboardingActNoAudioOmi": "உங்கள் Omi கேட்கவில்லை. அது இயக்கத்தில் உள்ளதா, அருகில் உள்ளதா எனப் பாருங்கள்.",
+    "onboardingActNoAudioPhone": "இன்னும் உங்கள் குரல் கேட்கவில்லை. சற்று சத்தமாகப் பேசிப் பாருங்கள்.",
+    "onboardingActDictateBodyOmi": "பேசுங்கள் போதும். உங்கள் Omi கேட்டுக்கொண்டிருக்கிறது."
 }

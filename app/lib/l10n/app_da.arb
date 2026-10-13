@@ -4055,7 +4055,7 @@
     "consentShortMessage": "Omi bruger AI til at gøre dine samtaler til noter. Du kan slette dem når som helst.",
     "consentAiProviders": "Behandles med {providers}.",
     "onboardingActWearTitle": "Bær din Omi",
-    "onboardingActWearBody": "Den lytter og husker dine samtaler. Tryk én gang for at spørge om hvad som helst.",
+    "onboardingActWearBody": "Den husker dine samtaler. Tryk på knappen for at spørge om hvad som helst, og igen for at sende.",
     "onboardingActIntro": "Lad os prøve Omi.",
     "onboardingActMicTitle": "Omi skal bruge din mikrofon",
     "onboardingActMicBody": "Så Omi kan høre dig, når du taler til den.",
@@ -4079,5 +4079,10 @@
     "onboardingActDemoTask1": "Send præsentationen til holdet inden fredag",
     "onboardingActDemoTask2": "Køb mælk på vej hjem",
     "onboardingActJustNow": "Lige nu",
-    "onboardingActSavedToTasks": "Gemt i dine opgaver"
+    "onboardingActSavedToTasks": "Gemt i dine opgaver",
+    "onboardingConnectTapToConnect": "Tryk på din Omi for at forbinde.",
+    "onboardingActMicFallbackBody": "Din Omi sender ikke lyd endnu. Brug din telefon indtil videre.",
+    "onboardingActNoAudioOmi": "Kan ikke høre din Omi. Tjek, at den er tændt og tæt på.",
+    "onboardingActNoAudioPhone": "Kan ikke høre dig endnu. Prøv at tale lidt højere.",
+    "onboardingActDictateBodyOmi": "Bare tal. Din Omi lytter."
 }

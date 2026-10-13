@@ -13038,7 +13038,7 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String get onboardingActWearBody =>
-      'Den lytter og husker dine samtaler. Tryk én gang for at spørge om hvad som helst.';
+      'Den husker dine samtaler. Tryk på knappen for at spørge om hvad som helst, og igen for at sende.';
 
   @override
   String get onboardingActIntro => 'Lad os prøve Omi.';
@@ -13116,4 +13116,19 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String get onboardingActSavedToTasks => 'Gemt i dine opgaver';
+
+  @override
+  String get onboardingConnectTapToConnect => 'Tryk på din Omi for at forbinde.';
+
+  @override
+  String get onboardingActMicFallbackBody => 'Din Omi sender ikke lyd endnu. Brug din telefon indtil videre.';
+
+  @override
+  String get onboardingActNoAudioOmi => 'Kan ikke høre din Omi. Tjek, at den er tændt og tæt på.';
+
+  @override
+  String get onboardingActNoAudioPhone => 'Kan ikke høre dig endnu. Prøv at tale lidt højere.';
+
+  @override
+  String get onboardingActDictateBodyOmi => 'Bare tal. Din Omi lytter.';
 }

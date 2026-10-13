@@ -11450,7 +11450,7 @@
     "consentShortMessage": "Ginagamit ng Omi ang AI para gawing notes ang iyong mga usapan. Puwede mo itong burahin anumang oras.",
     "consentAiProviders": "Pinoproseso gamit ang {providers}.",
     "onboardingActWearTitle": "Isuot ang iyong Omi",
-    "onboardingActWearBody": "Nakikinig at naaalala nito ang mga usapan mo. Pindutin nang isang beses para magtanong ng kahit ano.",
+    "onboardingActWearBody": "Naaalala nito ang iyong mga usapan. Pindutin ang button para magtanong ng kahit ano, at muli para ipadala.",
     "onboardingActIntro": "Subukan natin ang Omi.",
     "onboardingActMicTitle": "Kailangan ng Omi ang mikropono mo",
     "onboardingActMicBody": "Para marinig ka ng Omi kapag kinakausap mo ito.",
@@ -11474,5 +11474,10 @@
     "onboardingActDemoTask1": "Ipadala ang deck sa team bago mag-Biyernes",
     "onboardingActDemoTask2": "Bumili ng gatas pauwi",
     "onboardingActJustNow": "Ngayon lang",
-    "onboardingActSavedToTasks": "Na-save sa mga gawain mo"
+    "onboardingActSavedToTasks": "Na-save sa mga gawain mo",
+    "onboardingConnectTapToConnect": "I-tap ang iyong Omi para kumonekta.",
+    "onboardingActMicFallbackBody": "Hindi pa nagpapadala ng audio ang Omi mo. Gamitin muna ang iyong phone.",
+    "onboardingActNoAudioOmi": "Hindi marinig ang Omi mo. Siguraduhing naka-on ito at malapit.",
+    "onboardingActNoAudioPhone": "Hindi ka pa marinig. Subukang magsalita nang medyo malakas.",
+    "onboardingActDictateBodyOmi": "Magsalita ka lang. Nakikinig ang Omi mo."
 }

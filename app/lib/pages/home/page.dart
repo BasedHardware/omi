@@ -473,6 +473,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
           listen: false,
         ).streamDeviceRecording(device: Provider.of<DeviceProvider>(context, listen: false).capabilityNormalizedDevice);
       }
+      if (mounted) context.read<DeviceProvider>().showDeferredFirmwareUpdatePrompt(context);
 
       if (!mounted || initialLink == null) return;
       await openHomeDeepLink(context, initialLink, openSettings: _openSettings, openSearch: _openSearch);

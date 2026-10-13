@@ -13062,7 +13062,8 @@ class AppLocalizationsTr extends AppLocalizations {
   String get onboardingActWearTitle => 'Omi\'ni tak';
 
   @override
-  String get onboardingActWearBody => 'Konuşmalarını dinler ve hatırlar. Bir şey sormak için bir kez bas.';
+  String get onboardingActWearBody =>
+      'Konuşmalarını hatırlar. Bir şey sormak için düğmeye bas, göndermek için tekrar bas.';
 
   @override
   String get onboardingActIntro => 'Hadi Omi\'yi deneyelim.';
@@ -13140,4 +13141,19 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get onboardingActSavedToTasks => 'Görevlerine kaydedildi';
+
+  @override
+  String get onboardingConnectTapToConnect => 'Bağlamak için Omi\'ne dokun.';
+
+  @override
+  String get onboardingActMicFallbackBody => 'Omi\'n henüz ses göndermiyor. Şimdilik telefonunu kullan.';
+
+  @override
+  String get onboardingActNoAudioOmi => 'Omi\'n duyulmuyor. Açık ve yakında olduğundan emin ol.';
+
+  @override
+  String get onboardingActNoAudioPhone => 'Henüz seni duyamıyoruz. Biraz daha yüksek sesle konuşmayı dene.';
+
+  @override
+  String get onboardingActDictateBodyOmi => 'Sadece konuş. Omi\'n dinliyor.';
 }

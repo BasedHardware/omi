@@ -15806,7 +15806,7 @@
     "@onboardingActWearTitle": {
         "description": "Activation: title for device users before the demo"
     },
-    "onboardingActWearBody": "It listens and remembers your conversations. Press once to ask it anything.",
+    "onboardingActWearBody": "It remembers your conversations. Press the button to ask it anything, and again to send.",
     "@onboardingActWearBody": {
         "description": "Activation: how the device works, shown to device users"
     },
@@ -15911,5 +15911,25 @@
     "onboardingActSavedToTasks": "Saved to your tasks",
     "@onboardingActSavedToTasks": {
         "description": "Confirmation under the to-dos Omi found in onboarding"
+    },
+    "onboardingConnectTapToConnect": "Tap your Omi to connect.",
+    "@onboardingConnectTapToConnect": {
+        "description": "Connect Omi onboarding step, under the title once an Omi is found nearby"
+    },
+    "onboardingActMicFallbackBody": "Your Omi isn't sending audio yet. Use your phone for now.",
+    "@onboardingActMicFallbackBody": {
+        "description": "Onboarding microphone ask when the connected Omi is not streaming"
+    },
+    "onboardingActNoAudioOmi": "Can't hear your Omi. Make sure it's on and close by.",
+    "@onboardingActNoAudioOmi": {
+        "description": "Onboarding dictation hint after a while with no words from the Omi"
+    },
+    "onboardingActNoAudioPhone": "Can't hear you yet. Try speaking a little louder.",
+    "@onboardingActNoAudioPhone": {
+        "description": "Onboarding dictation hint after a while with no words from the phone microphone"
+    },
+    "onboardingActDictateBodyOmi": "Just talk. Your Omi is listening.",
+    "@onboardingActDictateBodyOmi": {
+        "description": "Onboarding dictation subtitle when the words come from the connected Omi"
     }
 }

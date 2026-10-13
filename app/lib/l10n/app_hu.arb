@@ -4109,7 +4109,7 @@
     "consentShortMessage": "Az Omi mesterséges intelligenciával jegyzetekké alakítja a beszélgetéseidet. Bármikor törölheted őket.",
     "consentAiProviders": "Feldolgozás: {providers}.",
     "onboardingActWearTitle": "Viseld az Omid",
-    "onboardingActWearBody": "Hallgatja és megjegyzi a beszélgetéseidet. Nyomd meg egyszer, és kérdezz bármit.",
+    "onboardingActWearBody": "Emlékszik a beszélgetéseidre. Nyomd meg a gombot, ha kérdeznél, és újra a küldéshez.",
     "onboardingActIntro": "Próbáljuk ki az Omit.",
     "onboardingActMicTitle": "Az Ominak kell a mikrofonod",
     "onboardingActMicBody": "Hogy az Omi halljon, amikor beszélsz hozzá.",
@@ -4133,5 +4133,10 @@
     "onboardingActDemoTask1": "Péntekig elküldeni a prezentációt a csapatnak",
     "onboardingActDemoTask2": "Hazafelé tejet venni",
     "onboardingActJustNow": "Épp most",
-    "onboardingActSavedToTasks": "Mentve a teendőid közé"
+    "onboardingActSavedToTasks": "Mentve a teendőid közé",
+    "onboardingConnectTapToConnect": "Koppints az Omidra a csatlakozáshoz.",
+    "onboardingActMicFallbackBody": "Az Omi még nem küld hangot. Egyelőre használd a telefonodat.",
+    "onboardingActNoAudioOmi": "Nem halljuk az Omit. Ellenőrizd, hogy be van-e kapcsolva és közel van-e.",
+    "onboardingActNoAudioPhone": "Még nem hallunk. Próbálj kicsit hangosabban beszélni.",
+    "onboardingActDictateBodyOmi": "Csak beszélj. Az Omid figyel."
 }

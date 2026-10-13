@@ -4013,7 +4013,7 @@
     "consentShortMessage": "Omi tekee keskusteluistasi muistiinpanoja tekoälyn avulla. Voit poistaa ne milloin tahansa.",
     "consentAiProviders": "Käsittely: {providers}.",
     "onboardingActWearTitle": "Pidä Omia päälläsi",
-    "onboardingActWearBody": "Se kuuntelee ja muistaa keskustelusi. Paina kerran ja kysy mitä vain.",
+    "onboardingActWearBody": "Se muistaa keskustelusi. Kysy mitä vain painamalla painiketta, ja lähetä painamalla uudelleen.",
     "onboardingActIntro": "Kokeillaan Omia.",
     "onboardingActMicTitle": "Omi tarvitsee mikrofonisi",
     "onboardingActMicBody": "Jotta Omi kuulee sinut, kun puhut sille.",
@@ -4037,5 +4037,10 @@
     "onboardingActDemoTask1": "Lähetä esitys tiimille perjantaihin mennessä",
     "onboardingActDemoTask2": "Hae maitoa kotimatkalla",
     "onboardingActJustNow": "Juuri nyt",
-    "onboardingActSavedToTasks": "Tallennettu tehtäviisi"
+    "onboardingActSavedToTasks": "Tallennettu tehtäviisi",
+    "onboardingConnectTapToConnect": "Yhdistä napauttamalla Omiasi.",
+    "onboardingActMicFallbackBody": "Omi ei vielä lähetä ääntä. Käytä toistaiseksi puhelinta.",
+    "onboardingActNoAudioOmi": "Omia ei kuulu. Varmista, että se on päällä ja lähellä.",
+    "onboardingActNoAudioPhone": "Emme kuule sinua vielä. Kokeile puhua vähän kovempaa.",
+    "onboardingActDictateBodyOmi": "Puhu vain. Omisi kuuntelee."
 }

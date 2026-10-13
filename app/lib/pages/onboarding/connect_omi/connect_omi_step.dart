@@ -201,9 +201,9 @@ class _ConnectOmiStepState extends State<ConnectOmiStep> with SingleTickerProvid
               );
 
         final String subtitle = provider.isConnected
-            ? l10n.pairingSuccessful
+            ? l10n.connected
             : found
-                ? l10n.devicesFoundNearby(provider.nearbyDeviceCount == 0 ? devices.length : provider.nearbyDeviceCount)
+                ? l10n.onboardingConnectTapToConnect
                 : cantFind
                     ? l10n.cantFindDeviceHint
                     : l10n.pairingDescOmi;
@@ -282,7 +282,8 @@ class _ConnectOmiStepState extends State<ConnectOmiStep> with SingleTickerProvid
                     ),
                   ),
                 ),
-                if (!provider.isConnected)
+                // Once the reader is connecting their own Omi, "Don't have your Omi yet?" no longer applies.
+                if (!provider.isConnected && !provider.isClicked)
                   _rise(
                       _links,
                       Column(mainAxisSize: MainAxisSize.min, children: [

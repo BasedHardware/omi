@@ -11450,7 +11450,7 @@
     "consentShortMessage": "Omi з дапамогай ШІ ператварае вашы размовы ў нататкі. Іх можна выдаліць у любы момант.",
     "consentAiProviders": "Апрацоўка: {providers}.",
     "onboardingActWearTitle": "Надзеньце Omi",
-    "onboardingActWearBody": "Ён слухае і запамінае вашы размовы. Націсніце адзін раз, каб нешта спытаць.",
+    "onboardingActWearBody": "Ён памятае вашы размовы. Націсніце кнопку, каб спытаць што-небудзь, і яшчэ раз, каб адправіць.",
     "onboardingActIntro": "Паспрабуем Omi.",
     "onboardingActMicTitle": "Omi патрэбны мікрафон",
     "onboardingActMicBody": "Каб Omi чуў вас, калі вы з ім размаўляеце.",
@@ -11474,5 +11474,10 @@
     "onboardingActDemoTask1": "Адправіць прэзентацыю камандзе да пятніцы",
     "onboardingActDemoTask2": "Купіць малако па дарозе дадому",
     "onboardingActJustNow": "Толькі што",
-    "onboardingActSavedToTasks": "Захавана ў вашыя справы"
+    "onboardingActSavedToTasks": "Захавана ў вашыя справы",
+    "onboardingConnectTapToConnect": "Націсніце на Omi, каб падключыць.",
+    "onboardingActMicFallbackBody": "Omi яшчэ не перадае гук. Пакуль скарыстайцеся тэлефонам.",
+    "onboardingActNoAudioOmi": "Не чуваць Omi. Пераканайцеся, што ён уключаны і побач.",
+    "onboardingActNoAudioPhone": "Пакуль вас не чуваць. Паспрабуйце гаварыць крыху гучней.",
+    "onboardingActDictateBodyOmi": "Проста гаварыце. Omi слухае."
 }

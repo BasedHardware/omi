@@ -4013,7 +4013,7 @@
     "consentShortMessage": "Omi fa servir la IA per convertir les teves converses en notes. Les pots esborrar quan vulguis.",
     "consentAiProviders": "Processat amb {providers}.",
     "onboardingActWearTitle": "Porta el teu Omi",
-    "onboardingActWearBody": "Escolta i recorda les teves converses. Prem un cop per preguntar-li el que vulguis.",
+    "onboardingActWearBody": "Recorda les teves converses. Prem el botó per preguntar-li el que vulguis i torna-hi per enviar.",
     "onboardingActIntro": "Provem Omi.",
     "onboardingActMicTitle": "Omi necessita el micròfon",
     "onboardingActMicBody": "Perquè Omi et senti quan li parlis.",
@@ -4037,5 +4037,10 @@
     "onboardingActDemoTask1": "Enviar la presentació a l'equip abans de divendres",
     "onboardingActDemoTask2": "Comprar llet de tornada a casa",
     "onboardingActJustNow": "Ara mateix",
-    "onboardingActSavedToTasks": "Desat a les teves tasques"
+    "onboardingActSavedToTasks": "Desat a les teves tasques",
+    "onboardingConnectTapToConnect": "Toca el teu Omi per connectar-lo.",
+    "onboardingActMicFallbackBody": "L'Omi encara no envia àudio. De moment, fes servir el telèfon.",
+    "onboardingActNoAudioOmi": "No sentim l'Omi. Comprova que estigui encès i a prop.",
+    "onboardingActNoAudioPhone": "Encara no et sentim. Prova de parlar una mica més fort.",
+    "onboardingActDictateBodyOmi": "Només parla. El teu Omi t'escolta."
 }

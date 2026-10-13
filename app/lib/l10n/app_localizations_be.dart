@@ -13084,7 +13084,8 @@ class AppLocalizationsBe extends AppLocalizations {
   String get onboardingActWearTitle => 'Надзеньце Omi';
 
   @override
-  String get onboardingActWearBody => 'Ён слухае і запамінае вашы размовы. Націсніце адзін раз, каб нешта спытаць.';
+  String get onboardingActWearBody =>
+      'Ён памятае вашы размовы. Націсніце кнопку, каб спытаць што-небудзь, і яшчэ раз, каб адправіць.';
 
   @override
   String get onboardingActIntro => 'Паспрабуем Omi.';
@@ -13162,4 +13163,19 @@ class AppLocalizationsBe extends AppLocalizations {
 
   @override
   String get onboardingActSavedToTasks => 'Захавана ў вашыя справы';
+
+  @override
+  String get onboardingConnectTapToConnect => 'Націсніце на Omi, каб падключыць.';
+
+  @override
+  String get onboardingActMicFallbackBody => 'Omi яшчэ не перадае гук. Пакуль скарыстайцеся тэлефонам.';
+
+  @override
+  String get onboardingActNoAudioOmi => 'Не чуваць Omi. Пераканайцеся, што ён уключаны і побач.';
+
+  @override
+  String get onboardingActNoAudioPhone => 'Пакуль вас не чуваць. Паспрабуйце гаварыць крыху гучней.';
+
+  @override
+  String get onboardingActDictateBodyOmi => 'Проста гаварыце. Omi слухае.';
 }

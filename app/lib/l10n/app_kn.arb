@@ -11450,7 +11450,7 @@
     "consentShortMessage": "Omi AI ಬಳಸಿ ನಿಮ್ಮ ಸಂಭಾಷಣೆಗಳನ್ನು ಟಿಪ್ಪಣಿಗಳಾಗಿ ಮಾಡುತ್ತದೆ. ಯಾವಾಗ ಬೇಕಾದರೂ ಅಳಿಸಬಹುದು.",
     "consentAiProviders": "{providers} ಮೂಲಕ ಸಂಸ್ಕರಿಸಲಾಗುತ್ತದೆ.",
     "onboardingActWearTitle": "ನಿಮ್ಮ Omi ಧರಿಸಿ",
-    "onboardingActWearBody": "ಇದು ನಿಮ್ಮ ಸಂಭಾಷಣೆಗಳನ್ನು ಕೇಳಿ ನೆನಪಿಡುತ್ತದೆ. ಏನಾದರೂ ಕೇಳಲು ಒಮ್ಮೆ ಒತ್ತಿ.",
+    "onboardingActWearBody": "ಇದು ನಿಮ್ಮ ಸಂಭಾಷಣೆಗಳನ್ನು ನೆನಪಿಡುತ್ತದೆ. ಏನಾದರೂ ಕೇಳಲು ಬಟನ್ ಒತ್ತಿ, ಕಳುಹಿಸಲು ಮತ್ತೆ ಒತ್ತಿ.",
     "onboardingActIntro": "Omi ಪ್ರಯತ್ನಿಸೋಣ.",
     "onboardingActMicTitle": "Omi ಗೆ ನಿಮ್ಮ ಮೈಕ್ರೊಫೋನ್ ಬೇಕು",
     "onboardingActMicBody": "ನೀವು ಮಾತನಾಡಿದಾಗ Omi ಕೇಳಲು.",
@@ -11474,5 +11474,10 @@
     "onboardingActDemoTask1": "ಶುಕ್ರವಾರದೊಳಗೆ ತಂಡಕ್ಕೆ ಡೆಕ್ ಕಳುಹಿಸುವುದು",
     "onboardingActDemoTask2": "ಮನೆಗೆ ಹೋಗುವಾಗ ಹಾಲು ತರುವುದು",
     "onboardingActJustNow": "ಈಗಷ್ಟೇ",
-    "onboardingActSavedToTasks": "ನಿಮ್ಮ ಕೆಲಸಗಳಿಗೆ ಉಳಿಸಲಾಗಿದೆ"
+    "onboardingActSavedToTasks": "ನಿಮ್ಮ ಕೆಲಸಗಳಿಗೆ ಉಳಿಸಲಾಗಿದೆ",
+    "onboardingConnectTapToConnect": "ಸಂಪರ್ಕಿಸಲು ನಿಮ್ಮ Omi ಟ್ಯಾಪ್ ಮಾಡಿ.",
+    "onboardingActMicFallbackBody": "ನಿಮ್ಮ Omi ಇನ್ನೂ ಆಡಿಯೋ ಕಳುಹಿಸುತ್ತಿಲ್ಲ. ಸದ್ಯಕ್ಕೆ ನಿಮ್ಮ ಫೋನ್ ಬಳಸಿ.",
+    "onboardingActNoAudioOmi": "ನಿಮ್ಮ Omi ಕೇಳಿಸುತ್ತಿಲ್ಲ. ಅದು ಆನ್ ಆಗಿದೆ ಮತ್ತು ಹತ್ತಿರವಿದೆಯೇ ನೋಡಿ.",
+    "onboardingActNoAudioPhone": "ಇನ್ನೂ ನಿಮ್ಮ ಧ್ವನಿ ಕೇಳಿಸುತ್ತಿಲ್ಲ. ಸ್ವಲ್ಪ ಜೋರಾಗಿ ಮಾತಾಡಿ ನೋಡಿ.",
+    "onboardingActDictateBodyOmi": "ಸುಮ್ಮನೆ ಮಾತಾಡಿ. ನಿಮ್ಮ Omi ಕೇಳುತ್ತಿದೆ."
 }

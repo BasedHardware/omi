@@ -4013,7 +4013,7 @@
     "consentShortMessage": "OmiはAIで会話をメモにまとめます。メモはいつでも削除できます。",
     "consentAiProviders": "{providers} で処理されます。",
     "onboardingActWearTitle": "Omiを身につけよう",
-    "onboardingActWearBody": "会話を聞いて覚えておきます。1回押すと何でも質問できます。",
+    "onboardingActWearBody": "会話を覚えてくれます。ボタンを押して何でも質問し、もう一度押すと送信します。",
     "onboardingActIntro": "Omiを試してみましょう。",
     "onboardingActMicTitle": "Omiにマイクの許可が必要です",
     "onboardingActMicBody": "話しかけたときにOmiが聞き取れるようにします。",
@@ -4037,5 +4037,10 @@
     "onboardingActDemoTask1": "金曜までにチームへ資料を送る",
     "onboardingActDemoTask2": "帰りに牛乳を買う",
     "onboardingActJustNow": "たった今",
-    "onboardingActSavedToTasks": "タスクに保存しました"
+    "onboardingActSavedToTasks": "タスクに保存しました",
+    "onboardingConnectTapToConnect": "Omiをタップして接続します。",
+    "onboardingActMicFallbackBody": "Omiからまだ音声が届いていません。今はスマートフォンを使いましょう。",
+    "onboardingActNoAudioOmi": "Omiの音声が聞こえません。電源が入っていて近くにあるか確認してください。",
+    "onboardingActNoAudioPhone": "まだ声が聞こえません。少し大きな声で話してみてください。",
+    "onboardingActDictateBodyOmi": "話すだけでOK。Omiが聞いています。"
 }

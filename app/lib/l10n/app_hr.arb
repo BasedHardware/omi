@@ -11450,7 +11450,7 @@
     "consentShortMessage": "Omi koristi AI kako bi vaše razgovore pretvorio u bilješke. Možete ih izbrisati bilo kada.",
     "consentAiProviders": "Obrađuje se pomoću {providers}.",
     "onboardingActWearTitle": "Nosite svoj Omi",
-    "onboardingActWearBody": "Sluša i pamti vaše razgovore. Pritisnite jednom da ga bilo što pitate.",
+    "onboardingActWearBody": "Pamti vaše razgovore. Pritisnite gumb da pitate bilo što, pa ponovno da pošaljete.",
     "onboardingActIntro": "Isprobajmo Omi.",
     "onboardingActMicTitle": "Omi treba vaš mikrofon",
     "onboardingActMicBody": "Da vas Omi čuje kad mu se obratite.",
@@ -11474,5 +11474,10 @@
     "onboardingActDemoTask1": "Poslati prezentaciju timu do petka",
     "onboardingActDemoTask2": "Kupiti mlijeko na putu kući",
     "onboardingActJustNow": "Upravo sada",
-    "onboardingActSavedToTasks": "Spremljeno u vaše zadatke"
+    "onboardingActSavedToTasks": "Spremljeno u vaše zadatke",
+    "onboardingConnectTapToConnect": "Dodirnite svoj Omi da biste se povezali.",
+    "onboardingActMicFallbackBody": "Omi još ne šalje zvuk. Za sada koristite telefon.",
+    "onboardingActNoAudioOmi": "Ne čujemo Omi. Provjerite je li uključen i blizu.",
+    "onboardingActNoAudioPhone": "Još vas ne čujemo. Pokušajte govoriti malo glasnije.",
+    "onboardingActDictateBodyOmi": "Samo pričajte. Vaš Omi sluša."
 }

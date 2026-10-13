@@ -13118,7 +13118,7 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get onboardingActWearBody =>
-      'Escolta i recorda les teves converses. Prem un cop per preguntar-li el que vulguis.';
+      'Recorda les teves converses. Prem el botó per preguntar-li el que vulguis i torna-hi per enviar.';
 
   @override
   String get onboardingActIntro => 'Provem Omi.';
@@ -13196,4 +13196,19 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get onboardingActSavedToTasks => 'Desat a les teves tasques';
+
+  @override
+  String get onboardingConnectTapToConnect => 'Toca el teu Omi per connectar-lo.';
+
+  @override
+  String get onboardingActMicFallbackBody => 'L\'Omi encara no envia àudio. De moment, fes servir el telèfon.';
+
+  @override
+  String get onboardingActNoAudioOmi => 'No sentim l\'Omi. Comprova que estigui encès i a prop.';
+
+  @override
+  String get onboardingActNoAudioPhone => 'Encara no et sentim. Prova de parlar una mica més fort.';
+
+  @override
+  String get onboardingActDictateBodyOmi => 'Només parla. El teu Omi t\'escolta.';
 }

@@ -136,7 +136,7 @@ void main() {
     await tester.pump(const Duration(seconds: 2)); // The search rings never settle.
 
     expect(find.text('Omi'), findsOneWidget);
-    expect(find.text('1 DEVICE FOUND NEARBY'), findsOneWidget);
+    expect(find.text('Tap your Omi to connect.'), findsOneWidget);
   });
 
   testWidgets('leaving stops the search and clears "nothing found" for the in-app pairing page', (tester) async {

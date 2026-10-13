@@ -13060,7 +13060,7 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get onboardingActWearBody =>
-      'Omi mendengar dan mengingat percakapan Anda. Tekan sekali untuk bertanya apa saja.';
+      'Omi mengingat percakapanmu. Tekan tombol untuk bertanya apa saja, tekan lagi untuk mengirim.';
 
   @override
   String get onboardingActIntro => 'Ayo coba Omi.';
@@ -13138,4 +13138,19 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get onboardingActSavedToTasks => 'Disimpan ke tugasmu';
+
+  @override
+  String get onboardingConnectTapToConnect => 'Ketuk Omi kamu untuk menghubungkan.';
+
+  @override
+  String get onboardingActMicFallbackBody => 'Omi kamu belum mengirim audio. Pakai ponselmu dulu.';
+
+  @override
+  String get onboardingActNoAudioOmi => 'Omi kamu tidak terdengar. Pastikan menyala dan dekat.';
+
+  @override
+  String get onboardingActNoAudioPhone => 'Suaramu belum terdengar. Coba bicara sedikit lebih keras.';
+
+  @override
+  String get onboardingActDictateBodyOmi => 'Bicara saja. Omi kamu sedang mendengarkan.';
 }

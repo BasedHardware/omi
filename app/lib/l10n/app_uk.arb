@@ -4013,7 +4013,7 @@
     "consentShortMessage": "Omi за допомогою ШІ перетворює ваші розмови на нотатки. Їх можна видалити будь-коли.",
     "consentAiProviders": "Обробка: {providers}.",
     "onboardingActWearTitle": "Носіть свій Omi",
-    "onboardingActWearBody": "Він слухає й запам'ятовує ваші розмови. Натисніть один раз, щоб запитати що завгодно.",
+    "onboardingActWearBody": "Він памʼятає ваші розмови. Натисніть кнопку, щоб запитати що завгодно, і ще раз, щоб надіслати.",
     "onboardingActIntro": "Спробуймо Omi.",
     "onboardingActMicTitle": "Omi потрібен мікрофон",
     "onboardingActMicBody": "Щоб Omi чув вас, коли ви з ним говорите.",
@@ -4037,5 +4037,10 @@
     "onboardingActDemoTask1": "Надіслати презентацію команді до п'ятниці",
     "onboardingActDemoTask2": "Купити молоко дорогою додому",
     "onboardingActJustNow": "Щойно",
-    "onboardingActSavedToTasks": "Збережено у ваші завдання"
+    "onboardingActSavedToTasks": "Збережено у ваші завдання",
+    "onboardingConnectTapToConnect": "Торкніться Omi, щоб підключити.",
+    "onboardingActMicFallbackBody": "Omi ще не передає звук. Поки що скористайтеся телефоном.",
+    "onboardingActNoAudioOmi": "Omi не чути. Перевірте, що він увімкнений і поруч.",
+    "onboardingActNoAudioPhone": "Поки вас не чути. Спробуйте говорити трохи голосніше.",
+    "onboardingActDictateBodyOmi": "Просто говоріть. Omi слухає."
 }

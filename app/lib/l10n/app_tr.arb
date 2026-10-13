@@ -4048,7 +4048,7 @@
     "consentShortMessage": "Omi, konuşmalarını yapay zekâ ile notlara dönüştürür. İstediğin zaman silebilirsin.",
     "consentAiProviders": "{providers} ile işlenir.",
     "onboardingActWearTitle": "Omi'ni tak",
-    "onboardingActWearBody": "Konuşmalarını dinler ve hatırlar. Bir şey sormak için bir kez bas.",
+    "onboardingActWearBody": "Konuşmalarını hatırlar. Bir şey sormak için düğmeye bas, göndermek için tekrar bas.",
     "onboardingActIntro": "Hadi Omi'yi deneyelim.",
     "onboardingActMicTitle": "Omi'nin mikrofonuna ihtiyacı var",
     "onboardingActMicBody": "Omi'yle konuştuğunda seni duyabilmesi için.",
@@ -4072,5 +4072,10 @@
     "onboardingActDemoTask1": "Cumaya kadar sunumu ekibe gönder",
     "onboardingActDemoTask2": "Eve dönerken süt al",
     "onboardingActJustNow": "Az önce",
-    "onboardingActSavedToTasks": "Görevlerine kaydedildi"
+    "onboardingActSavedToTasks": "Görevlerine kaydedildi",
+    "onboardingConnectTapToConnect": "Bağlamak için Omi'ne dokun.",
+    "onboardingActMicFallbackBody": "Omi'n henüz ses göndermiyor. Şimdilik telefonunu kullan.",
+    "onboardingActNoAudioOmi": "Omi'n duyulmuyor. Açık ve yakında olduğundan emin ol.",
+    "onboardingActNoAudioPhone": "Henüz seni duyamıyoruz. Biraz daha yüksek sesle konuşmayı dene.",
+    "onboardingActDictateBodyOmi": "Sadece konuş. Omi'n dinliyor."
 }

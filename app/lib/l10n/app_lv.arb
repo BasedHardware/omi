@@ -4013,7 +4013,7 @@
     "consentShortMessage": "Omi ar MI palīdzību pārvērš jūsu sarunas piezīmēs. Tās var izdzēst jebkurā laikā.",
     "consentAiProviders": "Apstrādā {providers}.",
     "onboardingActWearTitle": "Valkājiet savu Omi",
-    "onboardingActWearBody": "Tas klausās un atceras jūsu sarunas. Nospiediet vienreiz, lai jautātu jebko.",
+    "onboardingActWearBody": "Tas atceras jūsu sarunas. Nospiediet pogu, lai jautātu jebko, un vēlreiz, lai nosūtītu.",
     "onboardingActIntro": "Izmēģināsim Omi.",
     "onboardingActMicTitle": "Omi vajag jūsu mikrofonu",
     "onboardingActMicBody": "Lai Omi jūs dzirdētu, kad ar to runājat.",
@@ -4037,5 +4037,10 @@
     "onboardingActDemoTask1": "Līdz piektdienai nosūtīt prezentāciju komandai",
     "onboardingActDemoTask2": "Pa ceļam mājās nopirkt pienu",
     "onboardingActJustNow": "Tikko",
-    "onboardingActSavedToTasks": "Saglabāts jūsu uzdevumos"
+    "onboardingActSavedToTasks": "Saglabāts jūsu uzdevumos",
+    "onboardingConnectTapToConnect": "Pieskarieties savam Omi, lai savienotu.",
+    "onboardingActMicFallbackBody": "Omi vēl nesūta skaņu. Pagaidām izmantojiet tālruni.",
+    "onboardingActNoAudioOmi": "Omi nav dzirdams. Pārliecinieties, ka tas ir ieslēgts un tuvumā.",
+    "onboardingActNoAudioPhone": "Vēl jūs nedzirdam. Mēģiniet runāt mazliet skaļāk.",
+    "onboardingActDictateBodyOmi": "Vienkārši runājiet. Jūsu Omi klausās."
 }

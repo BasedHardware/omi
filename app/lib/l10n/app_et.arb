@@ -4013,7 +4013,7 @@
     "consentShortMessage": "Omi muudab tehisintellekti abil sinu vestlused märkmeteks. Saad need igal ajal kustutada.",
     "consentAiProviders": "Töödeldakse teenustega {providers}.",
     "onboardingActWearTitle": "Kanna oma Omit",
-    "onboardingActWearBody": "See kuulab ja mäletab su vestlusi. Vajuta korra, et midagi küsida.",
+    "onboardingActWearBody": "See mäletab sinu vestlusi. Vajuta nuppu, et midagi küsida, ja uuesti saatmiseks.",
     "onboardingActIntro": "Proovime Omit.",
     "onboardingActMicTitle": "Omi vajab su mikrofoni",
     "onboardingActMicBody": "Et Omi kuuleks sind, kui sa temaga räägid.",
@@ -4037,5 +4037,10 @@
     "onboardingActDemoTask1": "Saata esitlus reedeks tiimile",
     "onboardingActDemoTask2": "Osta koduteel piima",
     "onboardingActJustNow": "Just praegu",
-    "onboardingActSavedToTasks": "Salvestatud sinu ülesannetesse"
+    "onboardingActSavedToTasks": "Salvestatud sinu ülesannetesse",
+    "onboardingConnectTapToConnect": "Ühendamiseks puuduta oma Omit.",
+    "onboardingActMicFallbackBody": "Omi ei saada veel heli. Kasuta praegu oma telefoni.",
+    "onboardingActNoAudioOmi": "Omit pole kuulda. Veendu, et see on sees ja lähedal.",
+    "onboardingActNoAudioPhone": "Me ei kuule sind veel. Proovi natuke valjemini rääkida.",
+    "onboardingActDictateBodyOmi": "Lihtsalt räägi. Sinu Omi kuulab."
 }

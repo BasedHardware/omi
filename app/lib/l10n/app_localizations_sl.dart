@@ -13079,7 +13079,8 @@ class AppLocalizationsSl extends AppLocalizations {
   String get onboardingActWearTitle => 'Nosite svoj Omi';
 
   @override
-  String get onboardingActWearBody => 'Posluša in si zapomni vaše pogovore. Pritisnite enkrat in ga vprašajte karkoli.';
+  String get onboardingActWearBody =>
+      'Zapomni si vaše pogovore. Pritisnite gumb, da kar koli vprašate, in znova, da pošljete.';
 
   @override
   String get onboardingActIntro => 'Preizkusimo Omi.';
@@ -13157,4 +13158,19 @@ class AppLocalizationsSl extends AppLocalizations {
 
   @override
   String get onboardingActSavedToTasks => 'Shranjeno med vaša opravila';
+
+  @override
+  String get onboardingConnectTapToConnect => 'Tapnite svoj Omi za povezavo.';
+
+  @override
+  String get onboardingActMicFallbackBody => 'Omi še ne pošilja zvoka. Za zdaj uporabite telefon.';
+
+  @override
+  String get onboardingActNoAudioOmi => 'Omija ne slišimo. Preverite, ali je vklopljen in blizu.';
+
+  @override
+  String get onboardingActNoAudioPhone => 'Še vas ne slišimo. Poskusite govoriti malo glasneje.';
+
+  @override
+  String get onboardingActDictateBodyOmi => 'Samo govorite. Vaš Omi posluša.';
 }

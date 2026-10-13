@@ -99,6 +99,17 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
   DateTime? _lastBatteryNotifyTime;
   bool _hasLowBatteryAlerted = false;
   bool _havingNewFirmware = false;
+
+  /// A firmware update was found during first-run onboarding; Home shows the prompt once it opens.
+  bool _firmwarePromptDeferred = false;
+
+  /// Shows a firmware update prompt that was held back during first-run onboarding.
+  void showDeferredFirmwareUpdatePrompt(BuildContext context) {
+    if (!_firmwarePromptDeferred) return;
+    _firmwarePromptDeferred = false;
+    if (_havingNewFirmware && context.mounted) showFirmwareUpdateDialog(context);
+  }
+
   bool get havingNewFirmware =>
       _havingNewFirmware && pairedDevice != null && isConnected && _allowsFirmwareUpdateForPairedDevice;
 
@@ -1210,6 +1221,11 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
         // Use a small delay to ensure the UI is ready
         Future.delayed(const Duration(milliseconds: 500), () {
           if (!_isCurrent(generation) || !_isCurrentFirmwareCheckSession(checkSession)) return;
+          // A first-run reader is mid-onboarding: hold the prompt until Home is up.
+          if (!SharedPreferencesUtil().onboardingCompleted) {
+            _firmwarePromptDeferred = true;
+            return;
+          }
           final context = globalNavigatorKey.currentContext;
           if (context != null && context.mounted) {
             showFirmwareUpdateDialog(context);

@@ -8,10 +8,12 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:provider/provider.dart';
 
 import 'package:omi/backend/preferences.dart';
+import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/gen/assets.gen.dart';
 import 'package:omi/pages/home/page.dart';
 import 'package:omi/pages/onboarding/ai_consent_widget.dart';
 import 'package:omi/pages/onboarding/auth.dart';
+import 'package:omi/pages/onboarding/activation/activation_capture.dart';
 import 'package:omi/pages/onboarding/activation/activation_flow.dart';
 import 'package:omi/pages/onboarding/activation/onboarding_plans_sheet.dart';
 import 'package:omi/pages/onboarding/connect_omi/connect_omi_step.dart';
@@ -434,8 +436,12 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
       widget.forceAuthPage
           ? const SizedBox.shrink()
           : ActivationFlow(
-              hasDevice:
-                  _deviceChoice == OnboardingDeviceChoice.connected || context.read<DeviceProvider>().isConnected,
+              hasDevice: _deviceChoice == OnboardingDeviceChoice.connected ||
+                  context.read<DeviceProvider>().isConnected ||
+                  DemoActivationCapture.pretendsDevice,
+              // How to wear it and use its button applies to Omi itself, not other wearables.
+              showWearTips: context.read<DeviceProvider>().connectedDevice?.type == DeviceType.omi ||
+                  DemoActivationCapture.pretendsDevice,
               showPaywall: _showPaywall,
               onFinished: () {
                 PlatformManager.instance.analytics.onboardingStepCompleted('Activation');

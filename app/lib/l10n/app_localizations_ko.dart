@@ -12868,7 +12868,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get onboardingActWearTitle => 'Omi를 착용하세요';
 
   @override
-  String get onboardingActWearBody => '대화를 듣고 기억해요. 한 번 누르면 무엇이든 물어볼 수 있어요.';
+  String get onboardingActWearBody => '대화를 기억해요. 버튼을 눌러 무엇이든 묻고, 한 번 더 눌러 보내세요.';
 
   @override
   String get onboardingActIntro => 'Omi를 써 볼까요?';
@@ -12944,4 +12944,19 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get onboardingActSavedToTasks => '할 일에 저장됨';
+
+  @override
+  String get onboardingConnectTapToConnect => 'Omi를 탭해서 연결하세요.';
+
+  @override
+  String get onboardingActMicFallbackBody => 'Omi가 아직 오디오를 보내지 않아요. 지금은 휴대폰을 사용하세요.';
+
+  @override
+  String get onboardingActNoAudioOmi => 'Omi 소리가 들리지 않아요. 켜져 있고 가까이 있는지 확인하세요.';
+
+  @override
+  String get onboardingActNoAudioPhone => '아직 목소리가 들리지 않아요. 조금 더 크게 말해 보세요.';
+
+  @override
+  String get onboardingActDictateBodyOmi => '그냥 말하세요. Omi가 듣고 있어요.';
 }

@@ -11450,7 +11450,7 @@
     "consentShortMessage": "Omi משתמש בבינה מלאכותית כדי להפוך את השיחות שלך להערות. אפשר למחוק אותן בכל עת.",
     "consentAiProviders": "מעובד באמצעות {providers}.",
     "onboardingActWearTitle": "ענדו את ה-Omi",
-    "onboardingActWearBody": "הוא מקשיב וזוכר את השיחות שלכם. לחצו פעם אחת כדי לשאול כל דבר.",
+    "onboardingActWearBody": "הוא זוכר את השיחות שלך. לחץ על הכפתור כדי לשאול כל דבר, ושוב כדי לשלוח.",
     "onboardingActIntro": "בואו ננסה את Omi.",
     "onboardingActMicTitle": "Omi צריך את המיקרופון",
     "onboardingActMicBody": "כדי ש-Omi ישמע אתכם כשאתם מדברים אליו.",
@@ -11474,5 +11474,10 @@
     "onboardingActDemoTask1": "לשלוח את המצגת לצוות עד שישי",
     "onboardingActDemoTask2": "לקנות חלב בדרך הביתה",
     "onboardingActJustNow": "עכשיו",
-    "onboardingActSavedToTasks": "נשמר במשימות שלך"
+    "onboardingActSavedToTasks": "נשמר במשימות שלך",
+    "onboardingConnectTapToConnect": "הקש על ה-Omi שלך כדי להתחבר.",
+    "onboardingActMicFallbackBody": "ה-Omi עדיין לא שולח שמע. בינתיים השתמש בטלפון.",
+    "onboardingActNoAudioOmi": "לא שומעים את ה-Omi. ודא שהוא דולק וקרוב.",
+    "onboardingActNoAudioPhone": "עדיין לא שומעים אותך. נסה לדבר קצת יותר חזק.",
+    "onboardingActDictateBodyOmi": "פשוט דבר. ה-Omi שלך מקשיב."
 }

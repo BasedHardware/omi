@@ -4013,7 +4013,7 @@
     "consentShortMessage": "Omi ใช้ AI เปลี่ยนบทสนทนาของคุณเป็นโน้ต คุณลบได้ทุกเมื่อ",
     "consentAiProviders": "ประมวลผลด้วย {providers}",
     "onboardingActWearTitle": "สวม Omi ของคุณ",
-    "onboardingActWearBody": "Omi ฟังและจดจำบทสนทนาของคุณ กดหนึ่งครั้งเพื่อถามอะไรก็ได้",
+    "onboardingActWearBody": "จำบทสนทนาของคุณได้ กดปุ่มเพื่อถามอะไรก็ได้ แล้วกดอีกครั้งเพื่อส่ง",
     "onboardingActIntro": "มาลองใช้ Omi กัน",
     "onboardingActMicTitle": "Omi ต้องใช้ไมโครโฟน",
     "onboardingActMicBody": "เพื่อให้ Omi ได้ยินเมื่อคุณพูดด้วย",
@@ -4037,5 +4037,10 @@
     "onboardingActDemoTask1": "ส่งสไลด์ให้ทีมภายในวันศุกร์",
     "onboardingActDemoTask2": "ซื้อนมตอนกลับบ้าน",
     "onboardingActJustNow": "เมื่อสักครู่",
-    "onboardingActSavedToTasks": "บันทึกไว้ในงานของคุณแล้ว"
+    "onboardingActSavedToTasks": "บันทึกไว้ในงานของคุณแล้ว",
+    "onboardingConnectTapToConnect": "แตะ Omi ของคุณเพื่อเชื่อมต่อ",
+    "onboardingActMicFallbackBody": "Omi ยังไม่ส่งเสียงมา ใช้โทรศัพท์ไปก่อนนะ",
+    "onboardingActNoAudioOmi": "ไม่ได้ยินเสียงจาก Omi ตรวจดูว่าเปิดอยู่และอยู่ใกล้ๆ",
+    "onboardingActNoAudioPhone": "ยังไม่ได้ยินเสียงคุณ ลองพูดดังขึ้นอีกนิด",
+    "onboardingActDictateBodyOmi": "พูดได้เลย Omi กำลังฟังอยู่"
 }

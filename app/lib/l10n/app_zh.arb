@@ -4013,7 +4013,7 @@
     "consentShortMessage": "Omi 用 AI 把你的对话整理成笔记。你可以随时删除。",
     "consentAiProviders": "由 {providers} 处理。",
     "onboardingActWearTitle": "戴上你的 Omi",
-    "onboardingActWearBody": "它会聆听并记住你的对话。按一下即可向它提问。",
+    "onboardingActWearBody": "它会记住你的对话。按下按钮即可提问，再按一次发送。",
     "onboardingActIntro": "来试试 Omi 吧。",
     "onboardingActMicTitle": "Omi 需要使用麦克风",
     "onboardingActMicBody": "这样你说话时 Omi 才能听到。",
@@ -4037,5 +4037,10 @@
     "onboardingActDemoTask1": "周五前把演示文稿发给团队",
     "onboardingActDemoTask2": "回家路上买牛奶",
     "onboardingActJustNow": "刚刚",
-    "onboardingActSavedToTasks": "已保存到你的任务"
+    "onboardingActSavedToTasks": "已保存到你的任务",
+    "onboardingConnectTapToConnect": "轻点你的 Omi 进行连接。",
+    "onboardingActMicFallbackBody": "你的 Omi 还没有传来声音，先用手机吧。",
+    "onboardingActNoAudioOmi": "听不到你的 Omi。请确认它已开启并在附近。",
+    "onboardingActNoAudioPhone": "还听不到你的声音，试着大声一点。",
+    "onboardingActDictateBodyOmi": "直接说就好，你的 Omi 正在听。"
 }

@@ -13044,7 +13044,8 @@ class AppLocalizationsSk extends AppLocalizations {
   String get onboardingActWearTitle => 'Noste svoj Omi';
 
   @override
-  String get onboardingActWearBody => 'Počúva a pamätá si vaše rozhovory. Jedným stlačením sa ho na čokoľvek opýtate.';
+  String get onboardingActWearBody =>
+      'Pamätá si vaše konverzácie. Stlačte tlačidlo a opýtajte sa čokoľvek, ďalším stlačením odošlite.';
 
   @override
   String get onboardingActIntro => 'Vyskúšajme Omi.';
@@ -13122,4 +13123,19 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get onboardingActSavedToTasks => 'Uložené do vašich úloh';
+
+  @override
+  String get onboardingConnectTapToConnect => 'Ťuknutím na Omi sa pripojíte.';
+
+  @override
+  String get onboardingActMicFallbackBody => 'Omi zatiaľ neposiela zvuk. Zatiaľ použite telefón.';
+
+  @override
+  String get onboardingActNoAudioOmi => 'Omi nepočuť. Skontrolujte, či je zapnuté a blízko.';
+
+  @override
+  String get onboardingActNoAudioPhone => 'Zatiaľ vás nepočuť. Skúste hovoriť trochu hlasnejšie.';
+
+  @override
+  String get onboardingActDictateBodyOmi => 'Jednoducho hovorte. Vaše Omi počúva.';
 }

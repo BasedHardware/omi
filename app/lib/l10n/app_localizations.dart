@@ -23268,7 +23268,7 @@ abstract class AppLocalizations {
   /// Activation: how the device works, shown to device users
   ///
   /// In en, this message translates to:
-  /// **'It listens and remembers your conversations. Press once to ask it anything.'**
+  /// **'It remembers your conversations. Press the button to ask it anything, and again to send.'**
   String get onboardingActWearBody;
 
   /// Activation: animated line before the demo slides
@@ -23414,6 +23414,36 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Saved to your tasks'**
   String get onboardingActSavedToTasks;
+
+  /// Connect Omi onboarding step, under the title once an Omi is found nearby
+  ///
+  /// In en, this message translates to:
+  /// **'Tap your Omi to connect.'**
+  String get onboardingConnectTapToConnect;
+
+  /// Onboarding microphone ask when the connected Omi is not streaming
+  ///
+  /// In en, this message translates to:
+  /// **'Your Omi isn\'t sending audio yet. Use your phone for now.'**
+  String get onboardingActMicFallbackBody;
+
+  /// Onboarding dictation hint after a while with no words from the Omi
+  ///
+  /// In en, this message translates to:
+  /// **'Can\'t hear your Omi. Make sure it\'s on and close by.'**
+  String get onboardingActNoAudioOmi;
+
+  /// Onboarding dictation hint after a while with no words from the phone microphone
+  ///
+  /// In en, this message translates to:
+  /// **'Can\'t hear you yet. Try speaking a little louder.'**
+  String get onboardingActNoAudioPhone;
+
+  /// Onboarding dictation subtitle when the words come from the connected Omi
+  ///
+  /// In en, this message translates to:
+  /// **'Just talk. Your Omi is listening.'**
+  String get onboardingActDictateBodyOmi;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

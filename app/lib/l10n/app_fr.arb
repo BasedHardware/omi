@@ -4048,7 +4048,7 @@
     "consentShortMessage": "Omi utilise l'IA pour transformer vos conversations en notes. Vous pouvez les supprimer à tout moment.",
     "consentAiProviders": "Traité avec {providers}.",
     "onboardingActWearTitle": "Portez votre Omi",
-    "onboardingActWearBody": "Il écoute et retient vos conversations. Appuyez une fois pour lui demander n'importe quoi.",
+    "onboardingActWearBody": "Il se souvient de vos conversations. Appuyez sur le bouton pour lui poser une question, puis à nouveau pour envoyer.",
     "onboardingActIntro": "Essayons Omi.",
     "onboardingActMicTitle": "Omi a besoin de votre micro",
     "onboardingActMicBody": "Pour qu'Omi vous entende quand vous lui parlez.",
@@ -4072,5 +4072,10 @@
     "onboardingActDemoTask1": "Envoyer la présentation à l'équipe d'ici vendredi",
     "onboardingActDemoTask2": "Prendre du lait en rentrant",
     "onboardingActJustNow": "À l'instant",
-    "onboardingActSavedToTasks": "Enregistré dans vos tâches"
+    "onboardingActSavedToTasks": "Enregistré dans vos tâches",
+    "onboardingConnectTapToConnect": "Touchez votre Omi pour le connecter.",
+    "onboardingActMicFallbackBody": "Votre Omi n'envoie pas encore de son. Utilisez votre téléphone pour l'instant.",
+    "onboardingActNoAudioOmi": "On n'entend pas votre Omi. Vérifiez qu'il est allumé et proche.",
+    "onboardingActNoAudioPhone": "On ne vous entend pas encore. Parlez un peu plus fort.",
+    "onboardingActDictateBodyOmi": "Parlez simplement. Votre Omi vous écoute."
 }
