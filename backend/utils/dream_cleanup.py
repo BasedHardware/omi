@@ -183,13 +183,16 @@ def add_seed(uid, records, lease, caps, vocabulary, *, read_record, rng=None, pe
             {**records, **{key: pool[key] for key in seeds}}, targets={*records.targets, *seeds}
         )
         if (
-            len(candidate.targets) <= CONTEXT_TARGET_LIMIT
-            and fits_triage(candidate, caps, vocabulary, reserve_context=True)
-            and fits_pass(candidate, caps, vocabulary)
-        ):
+            caps.context_mode == 'full'
+            or (
+                len(candidate.targets) <= CONTEXT_TARGET_LIMIT
+                and fits_triage(candidate, caps, vocabulary, reserve_context=True)
+            )
+        ) and fits_pass(candidate, caps, vocabulary):
             candidate.target_sources = {**records.target_sources, **{key: source for key in seeds}}
             candidate.cleanup_cursor = cursor
             candidate.seed_errors = records.seed_errors
+            candidate.context_mode = records.context_mode
             return candidate
     return records
 

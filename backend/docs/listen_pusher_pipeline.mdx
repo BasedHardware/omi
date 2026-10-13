@@ -4089,9 +4089,16 @@ is cache-policy isolation, not a retrofit of the old image's independent matchin
 behavior; old pusher still lacks the partial/late repair improvements.
 
 After pusher finishes its private-cloud uploads, process-wide admission allows
-at most two submitted/running late batches, without a waiting queue. Each scans
+at most two submitted/running late batches. Saturated admission can retain at
+most two additional ID-only batches, each with at most 128 distinct candidates.
+These wait asynchronously for 5, 15, 30, 60 and 120 seconds (230 seconds total),
+then expire if admission is still unavailable. Waiting performs no Firestore,
+audio, or model calls and borrows no executor thread. Submissions coalesce across
+active and waiting keys; the handoff is atomic. Fresh eligibility, consent,
+manual authority and the document revision are read only after admission.
+The waiting path retains no PCM and changes no audio retention policy. Each admitted batch scans
 at most 128 distinct conversations and selects at most eight eligible rows,
-including all deferred completion rechecks. Rows still `in_progress` or
+including all deferred completion rechecks; admission waits spend none of those passes. Rows still `in_progress` or
 `processing` retain their attempt: async waits of 5, 15, 30, 60 and 120 seconds
 re-read only those rows (at most six metadata snapshots per candidate, 768 per
 batch). Waits borrow no executor thread but retain the batch's admission slot.
@@ -4214,7 +4221,10 @@ people/projection, entitlement and name reads are separate. The bounded owner
 work does not replenish after a session-hour. Live audio adds at most 256 model
 attempts plus three owner-enrollment repairs per socket (existing paid-person
 repair is separate). Late audio adds at most 192 model attempts per admitted
-batch and zero enrollment repairs, with at most two batches per process.
+batch and zero enrollment repairs, with at most two active batches and two
+ID-only admission waiters per process. At most 512 distinct `(uid, conversation)` keys
+are tracked; only the 256 active candidate keys can own executor work. Waiting
+can improve utilization of the existing two slots, without adding GPU concurrency.
 
 ### Relevance decision analytics
 
@@ -4282,15 +4292,29 @@ Another batch after completion may count the same conversation again. These
 are attempts, not unique conversations or evidence of owner speech.
 The counter cannot reconstruct historical failures or identify an account.
 
-The 28 funnel `(stage,reason)` pairs are closed:
+The 29 funnel `(stage,reason)` pairs are closed:
 
 | Stage | Reasons | Meaning |
 | --- | --- | --- |
 | entry | candidate | Known deduplicated candidates, before slot/scan admission; first passes at resolver entry. |
 | eligible | candidate | Late snapshot passed existing retry eligibility and ID check; first pass has a nonempty conversation model. |
+| deferred | slot_limit | Candidates retained in one of two bounded ID-only admission waiters; no snapshot or audio has been read. |
 | skipped | slot_limit, scan_limit, pass_limit, missing, not_completed, deleted, discarded, locked, channel_source, private_cloud_disabled, missing_revision, already_resolved_owner, id_mismatch, empty_transcript, manual_receipt_unavailable, read_error, processing_error, submission_error | One terminal skip; capacity reasons mean the candidate was not scanned, not that its audio was ineligible. |
 | cas_refused | missing, account_deleting, deleted, discarded, locked, not_completed, revision_changed | Late-only terminal verdict from the actual transaction snapshot, emitted after the outer transaction returns. |
 | cas_committed | done | Late-only terminal commit, including canonical identity no-op; transaction callback retries do not increment. |
+
+Admission deferral uses the same closed retry funnel: `pass=late,stage=deferred,reason=slot_limit`
+counts retained candidates. Full waiting capacity, expiry and cancellation
+before admission emit
+`stage=skipped,reason=slot_limit`; coalesced duplicates add no entry. This adds
+one bounded stage/reason pair (61 pairs, at most 122 series across both passes);
+UID and conversation IDs remain outside Prometheus labels. Deferred admission
+counts are not commits or owner additions. Terminal waiters remove their keys
+under the admission lock before recording the skip; later callbacks release only
+their waiting permit and cannot erase a same-turn resubmission. Cancellation,
+including before the waiter starts, records one skip and releases only its
+metadata reservation; handed-off batches add no admission skip. A cancelled active coordinator still
+retains its slot until the storage future finishes.
 
 `resolver_exit` has exactly 30 primary reasons: `resolved`, `partial`, `disabled`,
 `no_audio`, `all_short`, `no_eligible`, `no_vectors`, `global_manifest_ambiguity`,

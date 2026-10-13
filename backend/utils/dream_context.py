@@ -20,6 +20,7 @@ from utils.dream_prompt import (
     person_names,
     text,
     conversation_summary,
+    fits_full,
 )
 from utils.dream_transport import input_ceiling
 from models.dream_agent import Triage, Plan
@@ -39,6 +40,7 @@ class EvidenceRecords(dict):
         self.target_sources = {ref: getattr(records, 'target_sources', {}).get(ref, 'dirty') for ref in self.targets}
         self.cleanup_cursor = dict(getattr(records, 'cleanup_cursor', {}) or {})
         self.seed_errors = getattr(records, 'seed_errors', 0)
+        self.context_mode = getattr(records, 'context_mode', 'bounded')
 
 
 def preserve_sources(records, original):
@@ -46,6 +48,7 @@ def preserve_sources(records, original):
     records.target_sources = {ref: sources.get(ref, 'dirty') for ref in records.targets}
     records.cleanup_cursor = dict(getattr(original, 'cleanup_cursor', {}) or {})
     records.seed_errors = getattr(original, 'seed_errors', 0)
+    records.context_mode = getattr(original, 'context_mode', 'bounded')
     return records
 
 
@@ -84,6 +87,8 @@ def cluster_hints(triage, records):
 
 
 def fits_pass(records, caps, vocabulary=None):
+    if caps.context_mode == 'full':
+        return fits_full(records, caps, vocabulary)
     # Reserve the worst case triage input + its completion before admitting context.
     try:
         budget = triage_budget(caps)
@@ -341,6 +346,8 @@ def add_context(
             candidate = EvidenceRecords({**records, ref: row}, targets=records.targets)
         if not fits_pass(candidate, caps, vocabulary):
             path_count(diagnostics, path, 'budget_skipped')
+            if caps.context_mode == 'full':
+                continue
             break
         records = candidate
         path_count(diagnostics, path, 'added')

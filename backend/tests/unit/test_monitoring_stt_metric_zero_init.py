@@ -21,8 +21,6 @@ BACKEND = Path(__file__).resolve().parents[2]
 # startup paths are added; don't mask new alert metrics with a blanket exception.
 DECLARED_SPARSE = {
     'llm_gateway_requests_total': 'Route/outcome children appear only when a real request finishes.',
-    'llm_gateway_chat_extraction_requests_total': 'Client extraction outcome children appear on requests.',
-    'llm_gateway_client_first_byte_seconds_bucket': 'Client first-byte histogram children appear on gateway traffic.',
     'omi_sync_dispatch_attempts_total': 'Dispatch lane/outcome children appear only on sync dispatch.',
     'omi_live_stt_terminal_failures_total': 'Provider/phase failure children appear only on live-STT failure.',
     'omi_live_stt_accepted_total': 'Provider/platform/environment children appear only on accepted STT traffic.',

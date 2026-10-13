@@ -285,6 +285,12 @@ def _setup_payment_module(include_client: bool = True) -> Any:
     fallback_mod.record_fallback = MagicMock()
     sys.modules["utils.observability.fallback"] = fallback_mod
 
+    # Preload the sibling so importing the ledger does not execute
+    # utils.observability against the incomplete fallback stub.
+    billing_ledger_mod = types.ModuleType("utils.observability.billing_ledger")
+    billing_ledger_mod.record_outcome = MagicMock()
+    sys.modules["utils.observability.billing_ledger"] = billing_ledger_mod
+
     subscription_events_mod = types.ModuleType("utils.observability.subscription_events")
     subscription_events_mod.record_subscription_event = MagicMock()
     sys.modules["utils.observability.subscription_events"] = subscription_events_mod
