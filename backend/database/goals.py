@@ -88,6 +88,10 @@ class GoalConflictError(GoalStoreError):
     pass
 
 
+class GoalValidationError(GoalStoreError):
+    pass
+
+
 def _get_db(firestore_client: Any = None) -> Any:
     if firestore_client is not None:
         return firestore_client
@@ -593,17 +597,26 @@ def update_goal(
         metric = None
     elif 'metric' in patch:
         metric_value = patch['metric']
-        metric = GoalMetric.model_validate(metric_value) if metric_value is not None else None
+        if metric_value is not None:
+            try:
+                metric = GoalMetric.model_validate(metric_value)
+            except (ValidationError, ValueError) as exc:
+                raise GoalValidationError(str(exc)) from exc
+        else:
+            metric = None
     elif any(key in patch for key in legacy_metric_keys):
         current_metric = _metric_from_storage(current) or GoalMetric(type=GoalType.scale, current=0, target=0)
-        metric = GoalMetric(
-            type=GoalType(patch.get('goal_type', current_metric.type.value)),
-            current=float(patch.get('current_value', current_metric.current)),
-            target=float(patch.get('target_value', current_metric.target)),
-            min=patch.get('min_value', current_metric.min),
-            max=patch.get('max_value', current_metric.max),
-            unit=patch.get('unit', current_metric.unit),
-        )
+        try:
+            metric = GoalMetric(
+                type=GoalType(patch.get('goal_type', current_metric.type.value)),
+                current=float(patch.get('current_value', current_metric.current)),
+                target=float(patch.get('target_value', current_metric.target)),
+                min=patch.get('min_value', current_metric.min),
+                max=patch.get('max_value', current_metric.max),
+                unit=patch.get('unit', current_metric.unit),
+            )
+        except (ValidationError, ValueError) as exc:
+            raise GoalValidationError(str(exc)) from exc
     else:
         metric = _metric_from_storage(current)
     if 'metric' in patch or clear_metric or any(key in patch for key in legacy_metric_keys):
