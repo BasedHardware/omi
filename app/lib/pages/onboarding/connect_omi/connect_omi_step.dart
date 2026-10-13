@@ -6,6 +6,7 @@ import 'package:provider/provider.dart';
 
 import 'package:omi/gen/assets.gen.dart';
 import 'package:omi/pages/onboarding/find_device/found_devices.dart';
+import 'package:omi/pages/shop/omi_shop.dart';
 import 'package:omi/providers/onboarding_provider.dart';
 import 'package:omi/services/devices/bluetooth_readiness.dart';
 import 'package:omi/ui/ui.dart';
@@ -32,10 +33,13 @@ enum OnboardingDeviceChoice {
 /// sees it revealed as the step opens. Otherwise the step searches with instructions, and readers
 /// without their Omi say whether it is on its way or not ordered yet.
 class ConnectOmiStep extends StatefulWidget {
-  const ConnectOmiStep({super.key, required this.onDone});
+  const ConnectOmiStep({super.key, required this.onDone, this.openShop = openOmiShop});
 
   /// Called once with how the reader left the step.
   final void Function(OnboardingDeviceChoice choice) onDone;
+
+  /// Opens the Omi store for "Not ordered yet"; replaceable in tests (no web view there).
+  final Future<void> Function(BuildContext context, {required String source}) openShop;
 
   @override
   State<ConnectOmiStep> createState() => _ConnectOmiStepState();
@@ -130,6 +134,17 @@ class _ConnectOmiStepState extends State<ConnectOmiStep> with SingleTickerProvid
     _provider?.enableInstructions = false;
     setState(() {});
     await _scan();
+  }
+
+  /// "Not ordered yet": the Omi store opens inside the app; closing it carries on with onboarding.
+  bool _shopOpen = false;
+  Future<void> _notOrdered() async {
+    if (_done || _shopOpen) return;
+    _shopOpen = true;
+    OmiHaptics.selection();
+    await widget.openShop(context, source: 'onboarding_not_ordered');
+    _shopOpen = false;
+    if (mounted) _finish(OnboardingDeviceChoice.notOrdered);
   }
 
   void _finish(OnboardingDeviceChoice choice) {
@@ -294,7 +309,7 @@ class _ConnectOmiStepState extends State<ConnectOmiStep> with SingleTickerProvid
                                 key: const Key('connect_omi_not_ordered'),
                                 label: l10n.onboardingOmiNotOrdered,
                                 size: OmiButtonSize.compact,
-                                onPressed: () => _finish(OnboardingDeviceChoice.notOrdered),
+                                onPressed: _notOrdered,
                               ),
                             ),
                           ],

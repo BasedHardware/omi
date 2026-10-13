@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:connectivity_plus_platform_interface/connectivity_plus_platform_interface.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -56,7 +58,8 @@ void main() {
   // The providers are app-wide singletons in production: hand them in by value so the test owns
   // their lifetime, as the app does.
   Future<void> pump(WidgetTester tester, _FakeOnboarding onboarding,
-      {required void Function(OnboardingDeviceChoice) onDone}) {
+      {required void Function(OnboardingDeviceChoice) onDone,
+      Future<void> Function(BuildContext, {required String source})? openShop}) {
     return tester.pumpWidget(
       MultiProvider(
         providers: [
@@ -66,7 +69,10 @@ void main() {
         child: MaterialApp(
           localizationsDelegates: AppLocalizations.localizationsDelegates,
           supportedLocales: const [Locale('en')],
-          home: Scaffold(body: ConnectOmiStep(onDone: onDone)),
+          home: Scaffold(
+            body:
+                openShop == null ? ConnectOmiStep(onDone: onDone) : ConnectOmiStep(onDone: onDone, openShop: openShop),
+          ),
         ),
       ),
     );
@@ -83,22 +89,42 @@ void main() {
     expect(onboarding.scans, 1);
   });
 
-  testWidgets('"I\'ve ordered mine" and "Not ordered yet" leave once with that answer', (tester) async {
-    for (final (key, expected) in const [
-      ('connect_omi_ordered', OnboardingDeviceChoice.ordered),
-      ('connect_omi_not_ordered', OnboardingDeviceChoice.notOrdered),
-    ]) {
-      final choices = <OnboardingDeviceChoice>[];
-      await pump(tester, _FakeOnboarding(), onDone: choices.add);
-      await tester.pump(const Duration(seconds: 2)); // The search rings never settle.
+  testWidgets('"I\'ve ordered mine" leaves once with that answer', (tester) async {
+    final choices = <OnboardingDeviceChoice>[];
+    await pump(tester, _FakeOnboarding(), onDone: choices.add);
+    await tester.pump(const Duration(seconds: 2)); // The search rings never settle.
 
-      await tester.tap(find.byKey(Key(key)));
-      await tester.tap(find.byKey(Key(key)), warnIfMissed: false);
-      await tester.pump();
+    await tester.tap(find.byKey(const Key('connect_omi_ordered')));
+    await tester.tap(find.byKey(const Key('connect_omi_ordered')), warnIfMissed: false);
+    await tester.pump();
 
-      expect(choices, [expected]);
-      await tester.pumpWidget(const SizedBox());
-    }
+    expect(choices, [OnboardingDeviceChoice.ordered]);
+  });
+
+  testWidgets('"Not ordered yet" opens the Omi store, and onboarding carries on once it is closed', (tester) async {
+    final choices = <OnboardingDeviceChoice>[];
+    final sources = <String>[];
+    final closed = Completer<void>();
+    await pump(
+      tester,
+      _FakeOnboarding(),
+      onDone: choices.add,
+      openShop: (_, {required source}) {
+        sources.add(source);
+        return closed.future;
+      },
+    );
+    await tester.pump(const Duration(seconds: 2));
+
+    await tester.tap(find.byKey(const Key('connect_omi_not_ordered')));
+    await tester.tap(find.byKey(const Key('connect_omi_not_ordered')), warnIfMissed: false);
+    await tester.pump();
+    expect(sources, ['onboarding_not_ordered'], reason: 'one store, tagged with where it came from');
+    expect(choices, isEmpty, reason: 'still in the store');
+
+    closed.complete();
+    await tester.pump();
+    expect(choices, [OnboardingDeviceChoice.notOrdered]);
   });
 
   testWidgets('a nearby device is shown as a row to connect', (tester) async {
