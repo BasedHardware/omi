@@ -91,7 +91,7 @@ def test_schedule_cancellation_checks_none_subscription():
 
     # Must have the None guard before setting cancel_at_period_end
     none_check_pos = cancel_section.index('if not new_subscription:')
-    cancel_attr_pos = cancel_section.index('decision = transition(')
+    cancel_attr_pos = cancel_section.index('decision = schedule_transition(')
     assert none_check_pos < cancel_attr_pos, "None check must appear before cancel_at_period_end assignment"
 
 
