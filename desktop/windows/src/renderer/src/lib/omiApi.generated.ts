@@ -4290,6 +4290,7 @@ export interface ReviewItem {
   kind: "speaker" | "task" | "same_person" | "spelling";
   quote?: string | null;
   same_person?: SamePersonItem | null;
+  source_ref?: string | null;
   speaker?: SpeakerItem | null;
   spelling?: SpellingItem | null;
   task?: TaskItem | null;
@@ -4303,6 +4304,7 @@ export interface ReviewItemV2 {
   kind: "speaker" | "task" | "same_person" | "spelling" | "agent_proposal";
   quote?: string | null;
   same_person?: SamePersonItem | null;
+  source_ref?: string | null;
   speaker?: SpeakerItem | null;
   spelling?: SpellingItem | null;
   task?: TaskItem | null;

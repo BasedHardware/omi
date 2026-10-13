@@ -14,9 +14,15 @@ from database.review_memory_changes import MemoryEdit
 from database.task_intelligence_control import get_task_workflow_control
 from models.action_item import EvidenceRef, EvidenceKind, EvidenceScope, TaskCreatePayload
 from models.candidate import CandidateCreate, TaskCreateCandidate
-from models.review import AgentProposalItem, ChangeRef, ReviewChange, ReviewItemV2
+from models.review import AgentProposalItem, ChangeRef, ReviewChange, ReviewItem, ReviewItemV2
 from utils.entity_pages import resolve_entity
-from utils.dream_guards import spelling_rejection, summary_rejection, task_rejection, vocabulary_rejection
+from utils.dream_guards import (
+    spelling_rejection,
+    summary_rejection,
+    task_rejection,
+    vocabulary_rejection,
+    verbatim_quote,
+)
 from utils.dream_context import EvidenceRecords
 from utils.dream_grounding import spelling_grounding_rejection, spelling_question
 
@@ -328,6 +334,8 @@ def apply_grounded_edit(uid, edit, records):
 
 def suggest_spelling(uid, edit, records, run_id):
     validate_edit(edit, records)
+    if not verbatim_quote(edit.before, records[edit.target]):
+        raise ValueError('dream_invalid_question_evidence')
     source: dict[str, Any] = {
         'records': {ref: records[ref] for ref in {edit.target, *edit.evidence}},
         'edit_key': edit_key(edit, records),
@@ -338,7 +346,7 @@ def suggest_spelling(uid, edit, records, run_id):
     validate_canonical_proposal(uid, edit)
     return review_store.enqueue_review_proposal(
         uid,
-        spelling_question(edit),
+        ReviewItem.model_validate(spelling_question(edit).model_dump()),
         edit_key=edit_key(edit, records),
         source=source,
         dream_run_id=run_id,
@@ -618,7 +626,11 @@ def answer_proposal(uid, proposal, source, decision):
 def ask(uid, item, records):
     if item.kind not in {'same_person', 'spelling'}:
         raise ValueError('dream_question_kind')
-    review_store.enqueue_review_proposal(uid, item, evidence_version=review_store.fingerprint(records))
+    if item.source_ref not in records or not verbatim_quote(item.quote, records[item.source_ref]):
+        raise ValueError('dream_invalid_question_evidence')
+    review_store.enqueue_review_proposal(
+        uid, ReviewItem.model_validate(item.model_dump()), evidence_version=review_store.fingerprint(records)
+    )
 
 
 def request_frame(uid, question, records):

@@ -16,6 +16,20 @@ LEASE_SECONDS = 300
 RETRY_SECONDS = 60
 
 
+def _memory_page_drained(count: int, page_size: int) -> bool:
+    """True when neither memory collection filled its page.
+
+    The unlock helper returns the summed row count. A 60 + 60 pair is fully
+    drained and still sums past ``page_size``. ``page_saturated`` records that
+    either collection returned a full page. A missing attribute keeps the
+    single-count comparison used by one-collection callers and older doubles.
+    """
+    saturated = getattr(count, 'page_saturated', None)
+    if isinstance(saturated, bool):
+        return not saturated
+    return count < page_size
+
+
 def recover_locked_content(uid: str, *, now: datetime | None = None) -> None:
     if not reset_recovery_enabled():
         return
@@ -61,19 +75,31 @@ def recover_locked_content(uid: str, *, now: datetime | None = None) -> None:
         # Same helpers as the paid-upgrade webhook, now with bounded pages.
         # Children first; each collection drains independently over retries.
         # A page can expose a parent before all child pages finish.
-        memory_count = memories.unlock_all_memories(uid, limit=PAGE_SIZE)
-        if not eligible():
-            return
-        action_count = action_items.unlock_all_action_items(uid, limit=PAGE_SIZE)
-        if not eligible():
-            return
-        conversation_count = conversations.unlock_all_conversations(uid, limit=PAGE_SIZE)
-        redis_db.set_credits_invalidation_signal(uid)
-        clear_trial_paywall_cache(uid)
-        invalidate_enforcement_cache(uid)
-        # Two memory collections can each return PAGE_SIZE. A full page is
-        # conservatively incomplete; a later request proves the empty tail.
-        if memory_count < PAGE_SIZE and action_count < PAGE_SIZE and conversation_count < PAGE_SIZE:
+        try:
+            memory_count = memories.unlock_all_memories(uid, limit=PAGE_SIZE)
+            if not eligible():
+                return
+            action_count = action_items.unlock_all_action_items(uid, limit=PAGE_SIZE)
+            if not eligible():
+                return
+            conversation_count = conversations.unlock_all_conversations(uid, limit=PAGE_SIZE)
+        finally:
+            # Repair access caches even when a later recheck denies or fails,
+            # or a helper raises after an already-committed page. A paywall
+            # cache error must not skip fair-use invalidation.
+            redis_db.set_credits_invalidation_signal(uid)
+            try:
+                clear_trial_paywall_cache(uid)
+            finally:
+                invalidate_enforcement_cache(uid)
+        # Each memory collection has its own page. A full page stays incomplete
+        # until a later short page proves the tail. Two short pages (60 + 60)
+        # are drained even though their sum reaches PAGE_SIZE.
+        if (
+            _memory_page_drained(memory_count, PAGE_SIZE)
+            and action_count < PAGE_SIZE
+            and conversation_count < PAGE_SIZE
+        ):
             state.set({'completed_period': period, 'completed_at': now})
             redis_db.r.set(done_key, '1', ex=period_ttl)
     except Exception as error:

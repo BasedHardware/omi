@@ -7,7 +7,6 @@ import 'package:permission_handler/permission_handler.dart';
 import 'package:omi/backend/http/api/memories.dart';
 import 'package:omi/backend/schema/memory.dart';
 import 'package:omi/backend/http/api/goals.dart';
-import 'package:omi/backend/http/api/messages.dart';
 import 'package:omi/backend/http/api/speech_profile.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/services/services.dart';
@@ -18,8 +17,9 @@ import 'package:omi/utils/audio/wav_bytes.dart';
 import 'package:omi/utils/hard_secret_detector.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
 import 'guided_voice_controller.dart';
+import 'guided_voice_requests.dart';
 
-class DeviceGuidedVoiceIO implements GuidedVoiceIO {
+class DeviceGuidedVoiceIO implements GuidedVoiceIO, GuidedVoiceExperienceIO {
   DeviceGuidedVoiceIO({
     Future<Memory?> Function(String, String, String)? createMemoryRequest,
     IMicRecorderService? mic,
@@ -30,6 +30,7 @@ class DeviceGuidedVoiceIO implements GuidedVoiceIO {
   final IMicRecorderService? _mic;
   IMicRecorderService get _recorder => _mic ?? ServiceManager.instance().mic;
   bool _local = false;
+  bool _selectionLocked = false;
   bool _recording = false;
   bool _closed = false;
   // Non-null while a start() call is awaiting the recorder's own start-up. A stop()
@@ -47,12 +48,40 @@ class DeviceGuidedVoiceIO implements GuidedVoiceIO {
   bool get livePreview => _local;
 
   @override
-  Future<void> prepare() async {
-    if (!await Permission.microphone.request().isGranted) throw StateError('microphone');
+  Future<bool> preflight() async {
     final prefs = SharedPreferencesUtil();
     _language = prefs.hasSetPrimaryLanguage ? prefs.userPrimaryLanguage : 'en';
     if (_language == 'multi') _language = 'en';
-    _local = Platform.isIOS && await OnDeviceAppleProvider.isOnDeviceAvailable(_language);
+    final local = Platform.isIOS && await OnDeviceAppleProvider.isOnDeviceAvailable(_language);
+    // A slow preflight may finish after recording has been allowed. Never
+    // switch its engine after prepare selected the recognizer/cloud path.
+    if (!_selectionLocked && !_closed) _local = local;
+    return _local || await guidedVoicePreflight();
+  }
+
+  @override
+  Future<String> ask(String question, List<String> savedAnswers) async {
+    return askGuidedPayoff(question, savedAnswers, onAccepted: () {
+      PlatformManager.instance.analytics.chatMessageSent(
+        message: question,
+        includesFiles: false,
+        numberOfFiles: 0,
+        chatTargetId: 'omi',
+        isPersonaChat: false,
+        isVoiceInput: false,
+      );
+    });
+  }
+
+  @override
+  Future<void> prepare() async {
+    _selectionLocked = true;
+    final permission = await Permission.microphone.request();
+    if (!permission.isGranted) {
+      throw GuidedVoiceFailure(permission.isPermanentlyDenied ? 'permission_permanently_denied' : 'permission_denied');
+    }
+    // Keep the language/engine selected by preflight: changing to cloud here
+    // would start a recording without checking that transcription path.
     if (_local) _recognizer = OnDeviceAppleProvider(language: _language);
     _directory = await (await getTemporaryDirectory()).createTemp('omi-introduction-');
     if (_closed) await close();
@@ -111,7 +140,7 @@ class DeviceGuidedVoiceIO implements GuidedVoiceIO {
     } else {
       final file = await _file(pcm);
       try {
-        text = await transcribeVoiceMessage([file], language: _language).timeout(const Duration(seconds: 30));
+        text = await transcribeGuidedAnswer(file, _language);
       } finally {
         if (await file.exists()) await file.delete();
       }

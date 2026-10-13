@@ -1443,10 +1443,25 @@ def delete_memories_for_conversation(uid: str, memory_id: str, *, firestore_clie
     return result
 
 
+class MemoryUnlockCount(int):
+    """Sum of unlocked memory rows, plus whether either bounded page filled up."""
+
+    page_saturated: bool
+
+    def __new__(cls, total: int, *, page_saturated: bool) -> 'MemoryUnlockCount':
+        value = int.__new__(cls, total)
+        value.page_saturated = page_saturated
+        return value
+
+
 @_account_write_gated
 def unlock_all_memories(uid: str, *, firestore_client: Any = None, limit: Optional[int] = None) -> int:
     """
     Unlock both released legacy rows and canonical product-memory rows.
+
+    The numeric value is ``legacy_count + canonical_count``. When ``limit`` is
+    set, ``page_saturated`` is true if either collection returned a full page.
+    A 60 + 60 pair is drained; callers must not treat the sum as one page.
     """
     database = _get_db(firestore_client)
     legacy_ref = database.collection(users_collection).document(uid).collection(memories_collection)
@@ -1472,7 +1487,8 @@ def unlock_all_memories(uid: str, *, firestore_client: Any = None, limit: Option
         legacy_count,
         canonical_count,
     )
-    return legacy_count + canonical_count
+    page_saturated = limit is not None and (legacy_count >= limit or canonical_count >= limit)
+    return MemoryUnlockCount(legacy_count + canonical_count, page_saturated=page_saturated)
 
 
 # **************************************
