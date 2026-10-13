@@ -676,10 +676,15 @@ class ActionItemsProvider extends ChangeNotifier {
     } catch (e) {
       Logger.debug('Error loading more action items: $e');
     } finally {
-      setFetching(false);
+      // A stale load-more from a signed-out generation must not clear the
+      // successor account's fetch state (or admit an overlapping pagination
+      // request while it runs): only the owning generation may reset it.
+      if (generation == _sessionGeneration) {
+        setFetching(false);
+      }
     }
 
-    notifyListeners();
+    if (generation == _sessionGeneration) notifyListeners();
   }
 
   /// Returns whether the change reached the server; the caller decides what to tell the user.
@@ -1142,10 +1147,19 @@ class ActionItemsProvider extends ChangeNotifier {
   void _settlePendingCreate(String tempId, ActionItemWithMetadata? settledRow) {
     _pendingCreates.remove(tempId);
     if (settledRow == null) return;
-    // The settled row stays out of the pagination offset until a server page
-    // response has contained it: the pages the demand load fetched may not
-    // include it yet, and counting it would skip a server row in loadMore.
-    _preservedCreateIds.add(settledRow.id);
+    // A concurrent fetch may have already observed the committed row and
+    // placed it in the visible list before this create settled (its
+    // retirement ran when the id was not preserved yet, so nothing retired).
+    // A server page has contained the row: it is server-backed immediately
+    // and must not be excluded from the pagination offset until some later
+    // page happens to retire it.
+    final alreadyObserved = _actionItems.any((item) => item.id == settledRow.id);
+    if (!alreadyObserved) {
+      // The settled row stays out of the pagination offset until a server page
+      // response has contained it: the pages the demand load fetched may not
+      // include it yet, and counting it would skip a server row in loadMore.
+      _preservedCreateIds.add(settledRow.id);
+    }
     if (_wholesaleFetchesInFlight.isEmpty) return;
     // If the row was already removed (e.g. the user deleted the temp entry),
     // do not resurrect it via a later fetch's preservation.

@@ -329,6 +329,95 @@ void main() {
       provider.dispose();
     });
 
+    test('a create that settles after its row was already fetched counts as server-backed immediately', () async {
+      final typed = _HeldListApi();
+      var createResolved = false;
+      final provider = ActionItemsProvider(
+        actionItemsApi: typed,
+        createActionItemRequest: ({required description, dueAt, conversationId, completed = false}) async {
+          while (!createResolved) {
+            await Future<void>.delayed(const Duration(milliseconds: 1));
+          }
+          return _row('server-15');
+        },
+      );
+
+      // First page: full page of 100 + hasMore.
+      typed.result = ApiSuccess(
+        ActionItemsResponse(actionItems: [for (var i = 0; i < 100; i++) _serverRow('srv-$i')], hasMore: true),
+      );
+      final load = provider.ensureLoaded(showShimmer: true);
+      await Future<void>.delayed(Duration.zero);
+
+      final created = provider.createActionItem(description: 'observed before settle');
+      await Future<void>.delayed(Duration.zero);
+
+      // The list fetch already observed the committed server row (server-side
+      // write visible before the create response settles).
+      typed.result = ApiSuccess(
+        ActionItemsResponse(
+          actionItems: [_serverRow('server-15'), for (var i = 0; i < 99; i++) _serverRow('srv-$i')],
+          hasMore: true,
+        ),
+      );
+      typed.resolve();
+      await load;
+      createResolved = true;
+      await created;
+      expect(provider.actionItems.length, 100, reason: 'sanity: the confirmed row replaced the temp row, no duplicate');
+
+      // The settled create was already inside an applied server response: it
+      // must not be excluded from the pagination offset until a later page
+      // observes it again.
+      typed.result = const ApiSuccess(ActionItemsResponse(actionItems: [], hasMore: false));
+      final more = provider.loadMoreActionItems();
+      await Future<void>.delayed(Duration.zero);
+      typed.resolve();
+      await more;
+
+      expect(typed.requestedOffsets.last, 100,
+          reason: 'an already-observed create must count as server-backed at settle time');
+      provider.dispose();
+    });
+
+    test('a stale load-more completion cannot clear the successor account fetch state', () async {
+      final typed = _HeldListApi();
+      final provider = ActionItemsProvider(actionItemsApi: typed);
+
+      // First page with hasMore so a load-more is possible.
+      typed.result = ApiSuccess(
+        ActionItemsResponse(actionItems: [for (var i = 0; i < 100; i++) _serverRow('srv-$i')], hasMore: true),
+      );
+      final load = provider.ensureLoaded(showShimmer: true);
+      await Future<void>.delayed(Duration.zero);
+      typed.resolve();
+      await load;
+
+      // A load-more starts, then the user signs out before it resolves.
+      typed.result = const ApiSuccess(ActionItemsResponse(actionItems: [], hasMore: false));
+      final more = provider.loadMoreActionItems();
+      await Future<void>.delayed(Duration.zero);
+      provider.clearUserData();
+      expect(provider.isFetching, isFalse, reason: 'clearUserData resets fetch state for the successor account');
+
+      // The successor account starts its own fetch and is mid-flight when the
+      // stale load-more resolves.
+      typed.result = const ApiSuccess(ActionItemsResponse(actionItems: [], hasMore: false));
+      final successorLoad = provider.fetchActionItems(showShimmer: true);
+      await Future<void>.delayed(Duration.zero);
+      expect(provider.isLoading, isTrue, reason: 'successor shimmer flag sanity');
+      expect(provider.isFetching, isFalse, reason: 'successor has no load-more in flight');
+
+      typed.resolve();
+      await more;
+      await successorLoad;
+
+      // The stale load-more's finally must not have cleared the successor's
+      // loading state early.
+      expect(provider.isLoading, isFalse, reason: 'the successor load owns its own loading flag lifecycle');
+      provider.dispose();
+    });
+
     test('a Home preview that loses the navigation race still releases its shadow threat', () async {
       final typed = _HeldListApi();
       var createResolved = false;
