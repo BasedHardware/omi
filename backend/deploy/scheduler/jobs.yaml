@@ -224,7 +224,6 @@ environments:
         attempt_deadline: 720s
         owner: backend/docs/runbooks/dream-agent.md
       - name: candidate-integration-sweep
-        lifecycle: planned
         # Prod only. Dev's data plane is production Firestore, so this job is
         # not declared for based-hardware-dev at all.
         region: us-central1
