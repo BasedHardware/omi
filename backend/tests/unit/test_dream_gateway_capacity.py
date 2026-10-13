@@ -43,6 +43,7 @@ def full_gateway(monkeypatch):
     credentials = build_omi_managed_credential_context(ServiceCaller(name='backend'))
     monkeypatch.setattr(dream_transport.dream_capacity, 'available_model', AsyncMock(return_value='synthetic-reserved'))
     monkeypatch.setattr(dream_transport.dream_capacity, 'mark_saturated', AsyncMock())
+    monkeypatch.setattr(dream_transport.dream_capacity, 'wait_for_capacity', AsyncMock(return_value=False))
     monkeypatch.setattr(dream_transport, 'llm_gateway_headers', lambda **k: {})
     monkeypatch.setattr(dream_transport, 'get_llm_gateway_base_url', lambda: 'https://synthetic.invalid')
     monkeypatch.setattr(dream_transport, 'get_llm_gateway_semaphore', lambda: asyncio.Semaphore(1))

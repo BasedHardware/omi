@@ -112,7 +112,8 @@ def test_paused_ref_is_excluded_from_retrieval_without_hydration(monkeypatch):
         return []
 
     monkeypatch.setattr(dream_reads, 'context_candidates', candidates)
-    rows, consumed = dream_reads.read_changes(uid, {'started_at': now}, Caps())
+    # This retrieval test has no history store; cleanup has its own seeded tests.
+    rows, consumed = dream_reads.read_changes(uid, {'started_at': now, 'cleanup_selected': False}, Caps())
     assert rows.targets == {'conversations/healthy'} and len(consumed) == 1
     assert reads == ['conversations/healthy']
     assert 'conversations/paused' in excluded
