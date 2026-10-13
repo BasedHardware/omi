@@ -119,8 +119,28 @@ class ActionItemsProvider extends ChangeNotifier {
   // every fetch that was in flight at settle time has applied its replacement.
   final Map<String, ActionItemWithMetadata> _pendingCreates = {};
   final Map<String, (ActionItemWithMetadata, Set<int>)> _fetchShadowedCreates = {};
+  // Final server ids of creates that were preserved into the visible list but
+  // have not yet been observed inside any server page response. They stay out
+  // of the pagination offset until the server confirms them, so loadMore never
+  // skips a server row.
+  final Set<String> _preservedCreateIds = {};
   int _wholesaleListFetchOrdinal = 0;
   final Set<int> _wholesaleFetchesInFlight = {};
+
+  /// Count of server-backed rows in [_actionItems] for pagination: preserved
+  /// optimistic/shadowed creates are excluded until a server response has
+  /// contained them, so `loadMoreActionItems` never skips a server task.
+  int get _serverBackedRowCount {
+    if (_pendingCreates.isEmpty && _fetchShadowedCreates.isEmpty && _preservedCreateIds.isEmpty) {
+      return _actionItems.length;
+    }
+    return _actionItems
+        .where((item) =>
+            !_pendingCreates.containsKey(item.id) &&
+            !_fetchShadowedCreates.containsKey(item.id) &&
+            !_preservedCreateIds.contains(item.id))
+        .length;
+  }
 
   /// Merges optimistic creates into [fetched] so a wholesale list replacement
   /// cannot drop a create the response predates. [fetchOrdinal] identifies the
@@ -133,6 +153,9 @@ class ActionItemsProvider extends ChangeNotifier {
   }) {
     if (_pendingCreates.isEmpty && _fetchShadowedCreates.isEmpty) return fetched;
     final fetchedIds = fetched.map((item) => item.id).toSet();
+    // A server page observing a preserved create confirms it server-side; it
+    // now counts as server-backed for pagination.
+    _preservedCreateIds.removeWhere(fetchedIds.contains);
     final preserved = <ActionItemWithMetadata>[
       for (final entry in _fetchShadowedCreates.entries)
         if (entry.value.$2.contains(fetchOrdinal) && !fetchedIds.contains(entry.key)) entry.value.$1,
@@ -580,7 +603,7 @@ class ActionItemsProvider extends ChangeNotifier {
       var decodedPageIsComplete = true;
       final response = await _fetchActionItemsPage(
         limit: 50,
-        offset: _actionItems.length,
+        offset: _serverBackedRowCount,
         completed: _includeCompleted ? null : false,
         startDate: _startDate,
         endDate: _endDate,
@@ -993,7 +1016,11 @@ class ActionItemsProvider extends ChangeNotifier {
         _settlePendingCreate(optimisticItem.id, newItem);
         // The server row replaces the temp row wherever it sits; if an
         // interleaved list response already dropped the temp row, re-insert
-        // the confirmed row so the create is never lost from the UI.
+        // the confirmed row so the create is never lost from the UI. A
+        // concurrent list response may have observed the committed row before
+        // this create settled, so drop any earlier copy of the same server id
+        // instead of leaving a duplicate.
+        _actionItems.removeWhere((item) => item.id == newItem.id && item.id != optimisticItem.id);
         final index = _actionItems.indexWhere((item) => item.id == optimisticItem.id);
         if (index != -1) {
           _actionItems[index] = newItem;
@@ -1028,7 +1055,12 @@ class ActionItemsProvider extends ChangeNotifier {
   /// shadowed until each of those fetches has applied its replacement.
   void _settlePendingCreate(String tempId, ActionItemWithMetadata? settledRow) {
     _pendingCreates.remove(tempId);
-    if (settledRow == null || _wholesaleFetchesInFlight.isEmpty) return;
+    if (settledRow == null) return;
+    // The settled row stays out of the pagination offset until a server page
+    // response has contained it: the pages the demand load fetched may not
+    // include it yet, and counting it would skip a server row in loadMore.
+    _preservedCreateIds.add(settledRow.id);
+    if (_wholesaleFetchesInFlight.isEmpty) return;
     // If the row was already removed (e.g. the user deleted the temp entry),
     // do not resurrect it via a later fetch's preservation.
     final present = _actionItems.any((item) => item.id == settledRow.id || item.id == tempId);
@@ -1311,6 +1343,7 @@ class ActionItemsProvider extends ChangeNotifier {
     _stagedDeletes.clear();
     _pendingCreates.clear();
     _fetchShadowedCreates.clear();
+    _preservedCreateIds.clear();
     _pendingSortUpdates.clear();
     _pendingIndentUpdates.clear();
     notifyListeners();

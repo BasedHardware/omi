@@ -16,6 +16,7 @@ class _HeldListApi extends api.ActionItemsApi {
   _HeldListApi() : super(baseUrl: 'http://localhost/');
   ApiResult<ActionItemsResponse> result = const ApiSuccess(ActionItemsResponse(actionItems: [], hasMore: false));
   final List<Completer<ApiResult<ActionItemsResponse>>> _pending = [];
+  final List<int> requestedOffsets = [];
 
   @override
   Future<ApiResult<ActionItemsResponse>> list({
@@ -28,6 +29,7 @@ class _HeldListApi extends api.ActionItemsApi {
     DateTime? dueStartDate,
     DateTime? dueEndDate,
   }) {
+    requestedOffsets.add(offset);
     final completer = Completer<ApiResult<ActionItemsResponse>>();
     _pending.add(completer);
     return completer.future;
@@ -46,6 +48,16 @@ class _HeldListApi extends api.ActionItemsApi {
 ActionItemWithMetadata _row(String id) => ActionItemWithMetadata(
       id: id,
       description: 'task $id',
+      completed: false,
+    );
+
+/// Server-shaped row with distinct created/updated timestamps, so it can be
+/// distinguished from optimistic rows in pagination assertions.
+const _serverRowDecription = 'server task';
+
+ActionItemWithMetadata _serverRow(String id) => ActionItemWithMetadata(
+      id: id,
+      description: _serverRowDecription,
       completed: false,
     );
 
@@ -138,34 +150,82 @@ void main() {
       provider.dispose();
     });
 
-    test('a fetch that starts after the create settles sees the row server-side', () async {
+    test('the confirmed row replaces both the temp row and any fetched copy: no duplicates', () async {
       final typed = _HeldListApi();
+      var createResolved = false;
       final provider = ActionItemsProvider(
         actionItemsApi: typed,
-        createActionItemRequest: ({required description, dueAt, conversationId, completed = false}) async =>
-            _row('server-3'),
+        createActionItemRequest: ({required description, dueAt, conversationId, completed = false}) async {
+          while (!createResolved) {
+            await Future<void>.delayed(const Duration(milliseconds: 1));
+          }
+          return _row('server-4');
+        },
       );
 
       final load = provider.ensureLoaded(showShimmer: true);
       await Future<void>.delayed(Duration.zero);
-      final created = provider.createActionItem(description: 'quick task');
-      await Future<void>.delayed(Duration.zero);
-      await created;
 
-      typed.result = const ApiSuccess(ActionItemsResponse(actionItems: [], hasMore: false));
+      final created = provider.createActionItem(description: 'dup guard');
+      await Future<void>.delayed(Duration.zero);
+
+      // The concurrent list fetch already observed the committed server row
+      // (server-side write visible before the create response settles here).
+      typed.result = ApiSuccess(
+        ActionItemsResponse(actionItems: [_serverRow('server-4')], hasMore: false),
+      );
       typed.resolve();
       await load;
 
-      // A refresh that starts now reflects the server list (still racing the
-      // server-side write visibility), so preservation must not stick forever.
-      final refresh = provider.fetchActionItems();
-      await Future<void>.delayed(Duration.zero);
-      typed.result = const ApiSuccess(ActionItemsResponse(actionItems: [], hasMore: false));
-      typed.resolve();
-      await refresh;
+      createResolved = true;
+      await created;
 
-      expect(provider.actionItems, isEmpty,
-          reason: 'later fetches are authoritative; preservation covers only fetches that predate the create');
+      final ids = provider.actionItems.map((item) => item.id).toList();
+      expect(ids.where((id) => id == 'server-4').length, 1,
+          reason: 'temp-row replacement must not leave a duplicate of the committed row');
+      provider.dispose();
+    });
+
+    test('loadMore offsets by server-backed rows only, never preserved creates', () async {
+      final typed = _HeldListApi();
+      var createResolved = false;
+      final provider = ActionItemsProvider(
+        actionItemsApi: typed,
+        createActionItemRequest: ({required description, dueAt, conversationId, completed = false}) async {
+          while (!createResolved) {
+            await Future<void>.delayed(const Duration(milliseconds: 1));
+          }
+          return _row('server-5');
+        },
+      );
+
+      final load = provider.ensureLoaded(showShimmer: true);
+      await Future<void>.delayed(Duration.zero);
+
+      final created = provider.createActionItem(description: 'offset guard');
+      await Future<void>.delayed(Duration.zero);
+
+      // Full first page of 100 server rows + the preserved create.
+      typed.result = ApiSuccess(
+        ActionItemsResponse(
+          actionItems: [for (var i = 0; i < 100; i++) _serverRow('srv-$i')],
+          hasMore: true,
+        ),
+      );
+      typed.resolve();
+      await load;
+      createResolved = true;
+      await created;
+      expect(provider.actionItems.length, 101, reason: 'sanity: 100 server rows plus the preserved create');
+
+      // Second page: offset must be 100 (server-backed rows), not 101.
+      typed.result = const ApiSuccess(ActionItemsResponse(actionItems: [], hasMore: false));
+      final more = provider.loadMoreActionItems();
+      await Future<void>.delayed(Duration.zero);
+      typed.resolve();
+      await more;
+
+      expect(typed.requestedOffsets.last, 100, reason: 'preserved creates must not shift the server pagination offset');
       provider.dispose();
     });
   });

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -41,6 +42,9 @@ class QuickActionsService {
   final bool _isSupported;
   bool _initialized = false;
   List<(String, String)>? _publishedShortcuts;
+  static const _maxShortcutRetries = 2;
+  int _shortcutRetries = 0;
+  Timer? _shortcutRetryTimer;
 
   void initialize(BuildContext context) {
     if (!_isSupported || _initialized) return;
@@ -57,6 +61,8 @@ class QuickActionsService {
   void reset() {
     _initialized = false;
     _publishedShortcuts = null;
+    _shortcutRetryTimer?.cancel();
+    _shortcutRetryTimer = null;
   }
 
   void updateShortcuts(BuildContext context) {
@@ -93,10 +99,33 @@ class QuickActionsService {
     final projection = items.map((item) => (item.type, item.localizedTitle)).toList();
     if (listEquals(projection, _publishedShortcuts)) return;
     _publishedShortcuts = projection;
+    _shortcutRetries = 0;
+    _shortcutRetryTimer?.cancel();
+    _shortcutRetryTimer = null;
     _quickActions.setShortcutItems(items).catchError((Object error, StackTrace stack) {
-      // Retry failed publication without invalidating a newer request.
-      if (identical(_publishedShortcuts, projection)) _publishedShortcuts = null;
       FlutterError.reportError(FlutterErrorDetails(exception: error, stack: stack));
+      // Keep the dedupe cache clear so any natural later update republishes...
+      if (listEquals(projection, _publishedShortcuts ?? const <(String, String)>[])) {
+        _publishedShortcuts = null;
+      }
+      // ...and schedule a bounded retry in case quiet wiring never calls back.
+      _scheduleShortcutRetry(items, projection);
+    });
+  }
+
+  /// Re-publishes a failed publication after a short delay. Aborts once a
+  /// newer projection owns publication or the attempt budget is exhausted;
+  /// any successful publish cancels the pending retry.
+  void _scheduleShortcutRetry(List<ShortcutItem> items, List<(String, String)> projection) {
+    if (_shortcutRetries >= _maxShortcutRetries) return;
+    _shortcutRetries++;
+    _shortcutRetryTimer = Timer(const Duration(seconds: 5), () {
+      _shortcutRetryTimer = null;
+      if (!listEquals(projection, _publishedShortcuts ?? const <(String, String)>[])) return;
+      _quickActions.setShortcutItems(items).catchError((Object error, StackTrace stack) {
+        FlutterError.reportError(FlutterErrorDetails(exception: error, stack: stack));
+        _scheduleShortcutRetry(items, projection);
+      });
     });
   }
 

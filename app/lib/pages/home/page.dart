@@ -643,13 +643,18 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
     // Admit optional freshness between frames, after animations/scroll settling.
     // scheduleTask(Priority.idle) repeatedly posts zero-delay timers while an
     // animation is active; a bounded check avoids that work (and fake-clock spin).
+    final deadline = DateTime.now().add(const Duration(seconds: 10));
     _homeWidgetFreshnessTimer = Timer.periodic(const Duration(milliseconds: 250), (timer) {
       if (!mounted) {
         timer.cancel();
         return;
       }
+      // A repeating animation (e.g. a fresh conversation status indicator)
+      // may never let the scheduler go idle; freshness is still worth more
+      // than waiting for quiescence indefinitely, so admit it at the deadline.
+      final pastDeadline = DateTime.now().isAfter(deadline);
       final scheduler = SchedulerBinding.instance;
-      if (scheduler.hasScheduledFrame || scheduler.transientCallbackCount > 0) return;
+      if ((!pastDeadline && (scheduler.hasScheduledFrame || scheduler.transientCallbackCount > 0))) return;
       timer.cancel();
       _homeWidgetFreshnessTimer = null;
       unawaited(tasks.ensureHomeWidgetPreviewLoaded());
