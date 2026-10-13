@@ -11,6 +11,7 @@ from starlette.websockets import WebSocketState
 
 import database.conversations as conversations_db
 from database import users as users_db
+from database.legal_holds import DestructiveOperationInProgress
 from utils.conversations.speaker_identity_retry import schedule_completed_identity_retries
 from utils.pusher_finalization import FINALIZATION_RESULT_PROTOCOL_LEGACY, process_conversation_task
 from utils.pusher_protocol import (
@@ -254,10 +255,15 @@ async def _websocket_util_trigger(
         # stop uploading rather than leaving more orphans in the bucket (#11742).
         deleted_conversations: set[str] = set()
         identity_refreshed: set[str] = set()
+        # Set when the storage authority refuses this account's writes because a
+        # destructive operation owns the gate (account deletion in progress): the
+        # refusal is permanent for the session, so later batches drop fast instead
+        # of replaying the same fenced write every flush.
+        upload_fenced: bool = False
 
         def _add_to_batch(chunk_info: PrivateCloudChunk) -> None:
             conv_id = chunk_info['conversation_id']
-            if conv_id in deleted_conversations:
+            if conv_id in deleted_conversations or upload_fenced:
                 audio_budget.release(len(chunk_info['data']))
                 return
             span = chunk_info.get('span')
@@ -299,8 +305,15 @@ async def _websocket_util_trigger(
 
         async def _upload_batch(batch: Optional[Dict[str, Any]]):
             """Upload a batched chunk and update audio files."""
-            nonlocal application_failed
+            nonlocal application_failed, upload_fenced
             if not batch or len(batch['data']) == 0:
+                return
+            if upload_fenced:
+                # The fence latched earlier this session: this batch was already
+                # queued before the refusal — drop it instead of replaying a
+                # write the authority has refused for the rest of the session.
+                audio_budget.release(len(batch['data']))
+                batch['data'] = bytearray()
                 return
             conv_id = batch['conversation_id']
             chunk_data = bytes(batch['data'])
@@ -381,7 +394,31 @@ async def _websocket_util_trigger(
                     logger.error(f"Error updating audio files: {e} {uid} {conv_id}")
                 audio_budget.release(len(chunk_data))
             except Exception as e:
-                if retries < PRIVATE_CLOUD_SYNC_MAX_RETRIES:
+                if isinstance(e, DestructiveOperationInProgress):
+                    # The storage authority fenced this account: a destructive
+                    # operation (account deletion) owns the gate for hours. The
+                    # refusal is permanent — no retry of this batch can pass the
+                    # fence, and every later flush would burn the same three
+                    # doomed attempts against the same authority reads. Latch
+                    # the session: drop what is queued and stop accepting more,
+                    # like the deleted-conversation path, and keep the session
+                    # itself healthy (the closure is by design, not a fault).
+                    upload_fenced = True
+                    audio_budget.release(len(chunk_data))
+                    PUSHER_PRIVATE_CLOUD_UPLOAD_DROPS.inc()
+                    record_fallback(
+                        component='pusher',
+                        from_mode='private_cloud_sync',
+                        to_mode='drop',
+                        reason='policy',
+                        outcome='exhausted',
+                        log=logger,
+                    )
+                    logger.warning(
+                        f'Private cloud sync stopped: account writes are fenced by a destructive operation '
+                        f'(no retry) {uid} {conv_id}'
+                    )
+                elif retries < PRIVATE_CLOUD_SYNC_MAX_RETRIES:
                     batch['retries'] = retries + 1
                     batch['data'] = bytearray(chunk_data)
                     # Retry in the ordered ready lane on a later process tick,
@@ -411,6 +448,19 @@ async def _websocket_util_trigger(
                 private_cloud_queue.clear()
                 for chunk_info in chunks_to_process:
                     _add_to_batch(chunk_info)
+
+            if upload_fenced:
+                # The fence latched mid-session: anything still held is dropped
+                # fast (budget released, no upload, no retries) so the loop's
+                # drain contract still completes and shutdown stays bounded.
+                while ready_batches:
+                    dropped = ready_batches.pop(0)
+                    payload = dropped.get('data')
+                    audio_budget.release(len(payload) if payload else 0)
+                for dropped in list(pending.values()):
+                    audio_budget.release(len(dropped.get('data', b'')))
+                pending.clear()
+                continue
 
             if not pending and not ready_batches:
                 # `pending` alone must not gate the iteration: a failed

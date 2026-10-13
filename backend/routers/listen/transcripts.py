@@ -60,7 +60,7 @@ from utils.transcribe_decisions import (
     should_queue_speaker_embedding,
     should_skip_speaker_detection,
 )
-from database._client import is_document_size_limit_error, is_permanent_firestore_write_rejection
+from database._client import is_permanent_firestore_write_rejection
 from utils.transcribe_store import conversations_db, user_db
 from utils.translation import TranslationService
 from utils.translation_cache import ConversationLanguageState, TranscriptSegmentLanguageCache
