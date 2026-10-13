@@ -17,6 +17,8 @@ from utils.dream_prompt import (
     TRIAGE_INSTRUCTIONS,
     text,
     conversation_summary,
+    fits_full,
+    select_full_records,
 )
 from utils.dream_transport import input_ceiling
 from models.dream_agent import Triage
@@ -135,6 +137,8 @@ def cached_reader(diagnostics=None):
 
 def record_budget_counts(records, caps, vocabulary, diagnostics):
     counts = diagnostics['context_budget_counts']
+    if caps.context_mode == 'full':
+        return
     try:
         message = evidence_message(records, Triage, triage_budget(caps), vocabulary=vocabulary)
         payload = json.loads(message[0]['content'])
@@ -153,6 +157,29 @@ def record_budget_counts(records, caps, vocabulary, diagnostics):
 
 def retrieve_context(uid, records, caps, vocabulary=None, *, read=None, diagnostics=None, pending_refs=()):
     diagnostics = initialize({} if diagnostics is None else diagnostics)
+    if caps.context_mode == 'full':
+        whole = select_full_records(records, caps, vocabulary)
+        selected = preserve_sources(EvidenceRecords(whole, targets=records.targets & set(whole)), records)
+        selected.context_mode = 'full'
+        diagnostics['target_context_counts']['retrieval_seeded'] = len(selected.targets)
+        diagnostics['context_budget_counts']['targets_deferred'] = len(records.targets - selected.targets)
+        read = cached_reader(diagnostics) if read is None else read
+        return add_context(
+            selected,
+            context_candidates(
+                uid,
+                selected,
+                vocabulary or [],
+                read_record=read,
+                read_entity_record=read_entity_record,
+                diagnostics=diagnostics,
+                excluded_refs=set(records),
+                pending_refs=pending_refs,
+            ),
+            caps,
+            vocabulary,
+            diagnostics=diagnostics,
+        )
     original = records
     budget_counts = diagnostics['context_budget_counts']
     budget_counts.update(
@@ -245,6 +272,7 @@ def read_changes(uid, lease, caps, vocabulary=None, *, diagnostics=None, unavail
         : dream_store.DIRTY_INSPECTION_LIMIT
     ]
     records = EvidenceRecords()
+    records.context_mode = caps.context_mode
     consumed = []
     assessed = {}
     paused = set()
@@ -296,8 +324,12 @@ def read_changes(uid, lease, caps, vocabulary=None, *, diagnostics=None, unavail
             return 'unavailable'
         candidate = EvidenceRecords({**records, ref: row}, targets=records.targets | {ref})
         has_context = len(candidate) > len(candidate.targets)
-        if not fits_triage(candidate, caps, vocabulary, reserve_context=reserve_context) or (
-            has_context and not fits_pass(candidate, caps, vocabulary)
+        if (caps.context_mode == 'full' and not fits_full(candidate, caps, vocabulary)) or (
+            caps.context_mode != 'full'
+            and (
+                not fits_triage(candidate, caps, vocabulary, reserve_context=reserve_context)
+                or (has_context and not fits_pass(candidate, caps, vocabulary))
+            )
         ):
             return 'budget'
         candidate = preserve_sources(candidate, records)
@@ -309,9 +341,10 @@ def read_changes(uid, lease, caps, vocabulary=None, *, diagnostics=None, unavail
 
     # Four is an initial neighbourhood seed allocation, never a final target cap.
     position = 0
-    while position < len(dirty) and len(records.targets) < 4:
+    while position < len(dirty) and (caps.context_mode == 'full' or len(records.targets) < 4):
         if admit(dirty[position], reserve_context=True) == 'budget':
-            break
+            if caps.context_mode != 'full':
+                break
         position += 1
     # Potential targets 5–8 have not been hydrated/admitted yet. Exclude the
     # bounded pending queue window from temporal selection before those reads;
@@ -331,6 +364,11 @@ def read_changes(uid, lease, caps, vocabulary=None, *, diagnostics=None, unavail
         uid, records, lease, caps, vocabulary, read_record=read, pending_refs=seed_pending - records.targets
     )
     records = retrieve_context(uid, records, caps, vocabulary, read=read, diagnostics=diagnostics, pending_refs=pending)
+    if caps.context_mode == 'full':
+        consumed = [item for item in consumed if f"{item['collection']}/{item['id']}" in records.targets]
+        counts['admitted'] = len(consumed)
+        counts['budget_deferred'] = counts['found'] - len(consumed)
+        return records, consumed
     initial_consumed = len(consumed)
     consumed = [item for item in consumed if f"{item['collection']}/{item['id']}" in records.targets]
     dropped_initial = initial_consumed - len(consumed)

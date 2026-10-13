@@ -258,3 +258,29 @@ def test_main_methods_timeout_includes_post():
                     ), f"POST env var should be HTTP_POST_TIMEOUT, got {post_value.args[0].value}"
                     return
     raise AssertionError("methods_timeout assignment not found in main.py")
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('path', ['/v2/dream-agent/sweep', '/v1/dream/runs', '/other'])
+async def test_full_dream_outer_timeout_is_dynamic_and_path_scoped(monkeypatch, path):
+    seen = []
+    real_wait_for = asyncio.wait_for
+
+    async def capture(awaitable, timeout):
+        seen.append(timeout)
+        return await real_wait_for(awaitable, timeout)
+
+    async def immediate(request):
+        return PlainTextResponse('ok')
+
+    monkeypatch.setattr(asyncio, 'wait_for', capture)
+    middleware = TimeoutMiddleware(Starlette(), paths_timeout={path: 90})
+    request = _make_request(method='POST', path=path)
+    monkeypatch.setenv('DREAM_AGENT_CONTEXT_MODE', 'bounded')
+    monkeypatch.setenv('DREAM_AGENT_FULL_CONTEXT_UIDS', 'synthetic')
+    await middleware.dispatch(request, immediate)
+    monkeypatch.setenv('DREAM_AGENT_CONTEXT_MODE', 'full')
+    await middleware.dispatch(request, immediate)
+    monkeypatch.setenv('DREAM_AGENT_FULL_CONTEXT_UIDS', '')
+    await middleware.dispatch(request, immediate)
+    assert seen == [90, 90 if path == '/other' else 690, 90]

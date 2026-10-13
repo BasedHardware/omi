@@ -1,5 +1,91 @@
 # Dream agent phase 1
 
+## Opt-in full context (rung 1)
+
+`DREAM_AGENT_CONTEXT_MODE=bounded` is the default. `full` applies only to the
+comma-separated `DREAM_AGENT_FULL_CONTEXT_UIDS`; empty/unknown configuration
+keeps bounded behavior. This allowlist does not replace ordinary Dream
+eligibility, mode, Review enablement, admission, USD caps or Undo/suppression.
+No deployment or cohort is enabled by this source change.
+
+Full mode bypasses triage and uses one reasoning turn in the existing `run_loop`.
+`DREAM_AGENT_FULL_CONTEXT_TOKENS` defaults to 400000 input tokens;
+`DREAM_AGENT_FULL_COMPLETION_TOKENS` defaults to 16000 (maximum 16000).
+Input admission estimates serialized characters / 4 plus framing, including
+system instructions, schema, vocabulary and the complete projected records.
+A separate conservative UTF-8 byte upper bound plus completion must fit
+1048576, the reserved model's context window. This final safety fence can admit
+less than the configured estimate, especially for multibyte text; the gateway
+has no count-tokens surface. Neither estimate is represented as observed usage.
+See [the provider model limits](https://cloud.google.com/vertex-ai/generative-ai/docs/models/gemini/2-5-flash).
+The existing reservation/USD accounting reserves the combined input/completion
+budget (416000 tokens, $4.16 at the default upper-bound rate); daily USD and
+per-user pass caps still apply.
+
+Dirty targets have first priority in oldest-first inspection order, then history
+seeds, then existing linked/lexical/semantic/temporal retrieval order. All fitting
+targets in the existing 32-version inspection window may be admitted. Full
+snapshots retain the entire transcript, speaker labels, title, overview, sections
+and all memory/task/person fields. There are no per-record excerpt caps or middle
+truncation. Oversized records are skipped whole, allowing later smaller records
+to fit; omitted dirty versions remain queued. Retrieval keeps its existing query
+bounds, and seeds keep their visibility/cooldown rules. Every supplied record is
+eligible for edits supported by the existing action schema, including retrieved
+context and merge partners. Target/source roles survive only as queue diagnostics.
+
+The short full prompt states the goal and hard constraints. Schema, supplied
+references, post-task independent evidence, independent spelling grounding,
+feedback privacy, edit/attention caps, leases, kill switch and journals remain.
+`context_target`, `not_a_failure`, `language_not_defect`, `placeholder` and
+`task_too_recent` are disabled only for full evidence. Nonempty summary fields
+remain protected, including user titles and section summaries; the other summary
+validation and visibility rules stay intact. Ungrounded spelling becomes Review.
+Full mode allows 25 edits; risky kinds and vocabulary still require Review.
+Encrypted proposal source metadata retains full guard policy through acceptance,
+which still rehydrates and fences current evidence. Bounded proposals keep their
+existing policy.
+
+Full model/HTTP read deadlines are 480 seconds (connect 3, write 60, pool 5).
+Passes, including full-mode manual runs, allow 600 seconds; drain/manual outer
+bounds and capacity-slot cancellation fences allow 660 seconds, including a
+30-second settlement margin. The HTTP middleware gives the sweep/manual paths
+690 seconds only when full mode is configured with a nonempty allowlist; their
+handlers still enforce each UID's own mode. Bounded model/pass/drain/manual/slot deadlines are
+unchanged. Owner leases already have no timed expiry and remain conservative
+on ambiguous cancellation. Before enabling full drains, the Scheduler attempt
+and backend-sync request deadlines must exceed 660 seconds; the checked-in
+Scheduler contract currently allows 300 seconds. These deployment settings are
+not changed here.
+
+Gateway inspection at this revision: `llm_gateway/gateway/dream_lanes.py` derives
+Dream routes from the desktop reserved artifact and sets
+`timeouts.request_ms=60000` and `retry.max_attempts=1`. There is no Dream input
+size/token ceiling in chat request validation, route artifacts, or the gateway
+chart. The 96000-character SystemOne limit and proactivity request byte limits
+belong to other lanes. The 60-second gateway/provider request deadline can still
+stop a large full call before the backend's 480-second bound. This PR deliberately
+leaves gateway code/config untouched; operators must resolve that external
+constraint before claiming large-context live acceptance. No provider fallback
+is added; reserved-capacity waits keep dirty work and never authorize shared
+Gemini capacity. Existing gateway rejection routing remains gateway-owned.
+
+`dry_run(uid, records, vocabulary=...)` uses the same gated projection, planning
+and guards without storage reads, lease/admission, acknowledgement or effects.
+Both modes return `raw_plan` before deterministic guards; full mode also applies
+feedback privacy and edit caps, labels spelling policy, and returns
+`context_mode` and `input_tokens_estimate`. Raw plans are private owner replay
+output and may contain rejected feedback: never log/persist them as telemetry.
+Real pass reports remove raw plans before persistence. For an in-pod comparison,
+use the same authorized decrypted records and vocabulary, set mode `bounded`,
+call `dry_run`, then set mode `full` plus the full UID allowlist and call again.
+Do not publish either result's content. Provider-free replay supplies `turn`.
+
+The pass log gains `context_mode`, `input_tokens_estimate`, `targets`, `records`
+and allowlisted per-guard rejection counts. It never emits records, raw plans,
+UIDs, proposal text or provider messages. `targets` counts admitted dirty/history
+seeds; `records` includes all model evidence. Full mode makes both editable.
+
+
 ## Target neighbourhoods and read-only planning
 
 Spelling auto-apply additionally requires the corrected form in a cited
