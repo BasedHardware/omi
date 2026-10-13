@@ -187,6 +187,7 @@ AREA_TESTS = (
             'backend/scripts/generate_plan_catalog.py',
             'backend/models/users.py',
             'backend/utils/subscription.py',
+            'backend/utils/subscription_state_machine.py',
             'backend/utils/overage.py',
             'backend/utils/fair_use.py',
             'backend/utils/sync/rate_limit.py',
