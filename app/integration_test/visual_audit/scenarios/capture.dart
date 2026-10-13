@@ -227,26 +227,7 @@ class _AskOmiBar extends StatelessWidget {
   const _AskOmiBar();
 
   @override
-  Widget build(BuildContext context) => Container(
-        height: kHomeChatBarHeight,
-        decoration: BoxDecoration(
-          color: OmiColors.surface1,
-          borderRadius: OmiRadius.pillAll,
-          border: Border.all(color: OmiColors.border, width: 1),
-        ),
-        child: Row(children: [
-          const SizedBox(width: 18),
-          Expanded(child: Text('Ask Omi', style: OmiType.subhead.copyWith(color: OmiColors.textTertiary))),
-          Container(
-            width: 42,
-            height: 42,
-            margin: const EdgeInsets.only(right: 6),
-            alignment: Alignment.center,
-            decoration: BoxDecoration(color: OmiColors.accent, shape: BoxShape.circle),
-            child: FaIcon(FontAwesomeIcons.microphone, size: 15, color: OmiColors.onAccent),
-          ),
-        ]),
-      );
+  Widget build(BuildContext context) => const HomeAskAnythingButton();
 }
 
 Future<void> _runHome(
