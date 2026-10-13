@@ -2684,6 +2684,9 @@ environments:
             DREAM_AGENT_MODE: {value: 'on', category: rollout}
             REVIEW_SURFACE_MODE: {value: 'on', category: rollout}
             DREAM_AGENT_UID_ALLOWLIST: {value: '9OqYLlKJv4hmeYpIhwJcHBR975i2,vi7SA9ckQCe4ccobWNxlbdcNdC23', category: rollout}
+            DREAM_AGENT_CONTEXT_MODE: {value: full, category: rollout}
+            DREAM_AGENT_FULL_CONTEXT_UIDS: {value: 'vi7SA9ckQCe4ccobWNxlbdcNdC23', category: rollout}
+            DREAM_AGENT_FULL_SAMPLES: {value: '3', category: rollout}
             DREAM_AGENT_AUTO_APPLY_KINDS: {value: 'title,overview,vocabulary', category: rollout}
             DREAM_AGENT_PASSES_PER_DAY: {value: '24', category: rollout}
             DREAM_AGENT_MANUAL_RUNS_PER_DAY: {value: '20', category: rollout}

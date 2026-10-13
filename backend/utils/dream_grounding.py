@@ -7,10 +7,12 @@ from datetime import datetime, timezone
 
 from models.review import SpellingItem
 from models.dream_agent import DreamReviewItem
+from models.dream_refs import base_ref, has_ref, cited_value
 from utils.conversations.summary_selection import render_sections_markdown
 
 
 def source_conversations(ref, row):
+    ref = base_ref(ref)
     sources = {ref.split('/', 1)[1]} if ref.startswith('conversations/') else set()
     if row.get('conversation_id'):
         sources.add(row['conversation_id'].removeprefix('conversations/'))
@@ -26,7 +28,8 @@ def source_conversations(ref, row):
 
 def record_text(row):
     values = [
-        row.get(key) for key in ('name', 'label', 'content', 'description', 'summary', 'title', 'ocrText', 'ocr_text')
+        row.get(key)
+        for key in ('text', 'name', 'label', 'content', 'description', 'summary', 'title', 'ocrText', 'ocr_text')
     ]
     values.extend((row.get('structured') or {}).get(key) for key in ('title', 'overview'))
     values.append(render_sections_markdown((row.get('structured') or {}).get('sections') or []))
@@ -51,7 +54,7 @@ def spelling_grounding_rejection(edit, records, vocabulary=()):
     ):
         return 'invalid_spelling'
     target = records.get(edit.target)
-    if target is None or any(ref not in records for ref in edit.evidence):
+    if target is None or any(not has_ref(ref, records) for ref in edit.evidence):
         return 'invalid_evidence'
     sources = source_conversations(edit.target, target)
     exact_case = edit.before.casefold() == edit.after.casefold()
@@ -63,6 +66,7 @@ def spelling_grounding_rejection(edit, records, vocabulary=()):
         for ref in row.get('evidence') or []:
             if not isinstance(ref, str):
                 continue
+            ref = base_ref(ref)
             if ref == edit.target or ref.split('/', 1)[-1] == edit.target.split('/', 1)[-1]:
                 return True
             if ref not in records:
@@ -74,12 +78,14 @@ def spelling_grounding_rejection(edit, records, vocabulary=()):
         return False
 
     for ref in edit.evidence:
-        if ref == edit.target or ref.split('/', 1)[-1] == edit.target.split('/', 1)[-1]:
+        base = base_ref(ref)
+        if base == edit.target or base.split('/', 1)[-1] == edit.target.split('/', 1)[-1]:
             continue
-        row = records[ref]
+        row = records[base]
         if sources & source_conversations(ref, row) or traces_target(row):
             continue
-        if contains_spelling(record_text(row), edit.after, exact_case=exact_case):
+        selected = cited_value(ref, records)
+        if selected is not None and contains_spelling(record_text(selected), edit.after, exact_case=exact_case):
             return None
     if any(
         contains_spelling(value, edit.after, exact_case=exact_case)

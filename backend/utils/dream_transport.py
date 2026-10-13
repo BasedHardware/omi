@@ -251,7 +251,10 @@ async def _model_attempt(uid, lane, mount, messages, *, usage_sink=None, complet
                 **(
                     {
                         'reasoning_effort': 'high',
-                        'google': {'thinking_config': {'thinking_budget': min(FULL_THINKING_TOKENS, completion // 2)}},
+                        'google': {
+                            'thinking_config': {'thinking_budget': min(FULL_THINKING_TOKENS, completion // 2)},
+                            'dream_reserved_only': True,
+                        },
                     }
                     if full
                     else {}

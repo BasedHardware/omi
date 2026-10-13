@@ -53,7 +53,7 @@ def full_gateway(monkeypatch):
 @pytest.mark.parametrize('failure', [FailureClass.RESERVED_CAPACITY_UNAVAILABLE, FailureClass.PROVIDER_429_OMI_PAID])
 async def test_full_reservation_exhaustion_is_capacity_wait_without_luna(full_gateway, monkeypatch, failure):
     config, credentials = full_gateway
-    gemini = FakeChatCompletionProvider([ProviderFailure(failure)])
+    gemini = FakeChatCompletionProvider([ProviderFailure(failure) for _ in range(3)])
     luna = FakeChatCompletionProvider()
     registry = ProviderRegistry({'gemini': gemini, 'openai': luna})
 
@@ -70,7 +70,7 @@ async def test_full_reservation_exhaustion_is_capacity_wait_without_luna(full_ga
     sink = {'tokens': 0}
     with pytest.raises(dream_transport.CapacityWait):
         await dream_agent.plan_pass(UID, {}, caps, usage_sink=sink)
-    assert len(gemini.calls) == 1 and gemini.calls[0].timeout_ms == 480000
+    assert len(gemini.calls) == 3 and all(call.timeout_ms == 480000 for call in gemini.calls)
     assert not luna.calls
     assert sink['tokens'] == 0 and sink['usage_unknown'] is False
 
@@ -158,7 +158,10 @@ async def test_full_thinking_reaches_actual_reserved_model_without_changing_boun
                 'max_completion_tokens': 32768,
             }
             if full:
-                payload.update(reasoning_effort='high', google={'thinking_config': {'thinking_budget': 16384}})
+                payload.update(
+                    reasoning_effort='high',
+                    google={'thinking_config': {'thinking_budget': 16384}, 'dream_reserved_only': True},
+                )
             resolved = resolve_chat_completion_route(config, payload)
             await execute_chat_completion(resolved, credentials, registry)
             request = seen[-1]
@@ -172,8 +175,28 @@ async def test_full_thinking_reaches_actual_reserved_model_without_changing_boun
             )
             assert wire['generationConfig']['thinkingConfig'] == expected
             assert '_dream_thinking_budget' not in wire
+            assert 'dream_reserved_only' not in json.dumps(wire)
             assert resolved.active_route.provider_options['reserved_capacity_only'] is True
         assert len(seen) == 2
         assert provider._thinking_budget_context.get() is None
     finally:
         await provider.aclose()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('failure', [FailureClass.PROVIDER_INVALID_REQUEST, FailureClass.RESERVED_CAPACITY_UNAVAILABLE])
+async def test_full_sample_never_recovers_on_luna(full_gateway, failure):
+    config, credentials = full_gateway
+    resolved = resolve_chat_completion_route(
+        config,
+        {
+            'model': dream_transport.MAIN_LANE,
+            'messages': [{'role': 'user', 'content': 'Synthetic'}],
+            'google': {'dream_reserved_only': True},
+        },
+    )
+    gemini = FakeChatCompletionProvider([ProviderFailure(failure)])
+    luna = FakeChatCompletionProvider()
+    with pytest.raises(GatewayError):
+        await execute_chat_completion(resolved, credentials, ProviderRegistry({'gemini': gemini, 'openai': luna}))
+    assert len(gemini.calls) == 1 and not luna.calls

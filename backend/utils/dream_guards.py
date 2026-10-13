@@ -8,6 +8,7 @@ import re
 import unicodedata
 
 from models.dream_agent import Plan
+from models.dream_refs import base_ref, has_ref, cited_value
 
 # Code-configurable threshold; no rollout/environment switch changes admission.
 MIN_SUMMARY_TRANSCRIPT_WORDS = 40
@@ -42,6 +43,7 @@ def task_rejection(edit, row, records, *, now=None):
         if source.get('kind') == 'conversation':
             sources.add('conversations/' + source['id'])
     for ref in edit.evidence:
+        ref = base_ref(ref)
         if ref in sources or ref not in records:
             continue
         evidence = records[ref]
@@ -237,20 +239,20 @@ def filter_plan(plan: Plan, records, *, usage_sink=None, targets=None):
         reason = spelling_rejection(edit)
         if full and (
             edit.target not in records
-            or any(ref not in records for ref in edit.evidence)
+            or any(not has_ref(ref, records) for ref in edit.evidence)
             or (edit.other and edit.other not in records)
         ):
             reason = 'invalid_evidence'
         if edit.kind in {'close_task', 'retire_task'}:
             reason = (
                 'invalid_evidence'
-                if edit.target not in records or any(ref not in records for ref in edit.evidence)
+                if edit.target not in records or any(not has_ref(ref, records) for ref in edit.evidence)
                 else task_rejection(edit, records[edit.target], records)
             )
         if edit.kind in {'title', 'overview'}:
             reason = (
                 'invalid_evidence'
-                if edit.target not in records or any(ref not in records for ref in edit.evidence)
+                if edit.target not in records or any(not has_ref(ref, records) for ref in edit.evidence)
                 else summary_rejection(edit, records[edit.target], full=full)
             )
         if (
@@ -273,7 +275,9 @@ def filter_plan(plan: Plan, records, *, usage_sink=None, targets=None):
     } - {''}
     questions = []
     for question in plan.questions:
-        if question.source_ref not in records or not verbatim_quote(question.quote, records[question.source_ref]):
+        if not has_ref(question.source_ref, records) or not verbatim_quote(
+            question.quote, cited_value(question.source_ref, records)
+        ):
             rejected['invalid_question_evidence'] += 1
         elif (
             question.same_person
@@ -290,7 +294,7 @@ def filter_plan(plan: Plan, records, *, usage_sink=None, targets=None):
     for term in plan.vocabulary:
         reason = (
             'invalid_evidence'
-            if full and any(ref not in records for ref in term.evidence)
+            if full and any(not has_ref(ref, records) for ref in term.evidence)
             else vocabulary_rejection(term)
         )
         if reason:
@@ -308,8 +312,8 @@ def filter_plan(plan: Plan, records, *, usage_sink=None, targets=None):
     if full:
         rejected['edit_cap'] += max(0, len(edits) - 25)
         edits = edits[:25]
-        slow_tasks = [task for task in plan.slow_tasks if all(ref in records for ref in task.evidence)]
-        frames = [frame for frame in plan.frames if frame.screen_ref in records]
+        slow_tasks = [task for task in plan.slow_tasks if all(has_ref(ref, records) for ref in task.evidence)]
+        frames = [frame for frame in plan.frames if has_ref(frame.screen_ref, records)]
         rejected['invalid_evidence'] += len(plan.slow_tasks) - len(slow_tasks) + len(plan.frames) - len(frames)
         rejected = +rejected
     if usage_sink is not None:
