@@ -181,9 +181,12 @@ class _OrbPainter extends CustomPainter {
 /// Full-bleed hero for the welcome screen: the orb on Aurora, the pendant on
 /// Graphite, lit from above.
 class DfHeroArt extends StatelessWidget {
-  const DfHeroArt({super.key, required this.height});
+  const DfHeroArt({super.key, required this.height, this.product = false});
 
   final double height;
+
+  /// Always show the pendant (with its glow on Aurora), e.g. when selling it.
+  final bool product;
 
   @override
   Widget build(BuildContext context) {
@@ -202,7 +205,11 @@ class DfHeroArt extends StatelessWidget {
         ),
         child: Padding(
           padding: EdgeInsets.only(top: top),
-          child: Center(child: t.hasGlow ? DfOrb(size: height * 0.55) : DfPendant(size: height * 0.4)),
+          child: Center(
+            child: t.hasGlow && !product
+                ? DfOrb(size: height * 0.55)
+                : DfPendant(size: height * 0.4, glow: product),
+          ),
         ),
       ),
     );

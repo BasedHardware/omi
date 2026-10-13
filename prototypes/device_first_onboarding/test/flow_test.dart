@@ -40,15 +40,16 @@ Future<void> tapText(WidgetTester tester, String text) async {
 }
 
 void main() {
+  // One test per screen, so a layout overflow is attributed to the screen that caused it.
   group('every screen renders without overflow', () {
     for (final size in const <Size>[Size(390, 844), Size(375, 667)]) {
       for (final direction in DfDirection.values) {
-        testWidgets('${direction.label} at ${size.width.toInt()}x${size.height.toInt()}', (tester) async {
-          for (final step in DfStep.values) {
+        for (final step in DfStep.values) {
+          testWidgets('${direction.label} ${size.width.toInt()}x${size.height.toInt()} ${step.title}', (tester) async {
             await pumpFlow(tester, direction: direction, step: step, size: size, searchDuration: const Duration(hours: 1));
-            expect(tester.takeException(), isNull, reason: step.title);
-          }
-        });
+            expect(tester.takeException(), isNull);
+          });
+        }
       }
     }
   });

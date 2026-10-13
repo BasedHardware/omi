@@ -20,7 +20,7 @@ class BuyOmiScreen extends StatelessWidget {
     return DfPage(
       header: Stack(
         children: <Widget>[
-          const DfHeroArt(height: 330),
+          const DfHeroArt(height: 330, product: true),
           Positioned(
             left: 8,
             top: top + 8,
@@ -88,7 +88,6 @@ class CheckoutScreen extends StatelessWidget {
         DfCard(
           padding: const EdgeInsets.symmetric(vertical: 18, horizontal: 8),
           child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
             children: <Widget>[
               const _BoxItem(label: 'Pendant', child: DfPendant(size: 48, showCord: false)),
               _BoxItem(
@@ -139,12 +138,14 @@ class _BoxItem extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final t = DfThemeScope.of(context);
-    return Column(
-      children: <Widget>[
-        SizedBox(height: 52, child: Center(child: child)),
-        const SizedBox(height: 8),
-        Text(label, style: t.body(size: 12, color: t.textTertiary)),
-      ],
+    return Expanded(
+      child: Column(
+        children: <Widget>[
+          SizedBox(height: 52, child: Center(child: child)),
+          const SizedBox(height: 8),
+          Text(label, textAlign: TextAlign.center, style: t.body(size: 12, color: t.textTertiary)),
+        ],
+      ),
     );
   }
 }

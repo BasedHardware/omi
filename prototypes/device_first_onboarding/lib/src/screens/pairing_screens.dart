@@ -52,7 +52,7 @@ class _FindDeviceScreenState extends State<FindDeviceScreen> {
           children: <Widget>[
             SizedBox.square(dimension: 16, child: CircularProgressIndicator(strokeWidth: 2, color: t.text)),
             const SizedBox(width: 10),
-            Text('Searching for devices', style: t.label(size: 16)),
+            Flexible(child: Text('Searching for devices', style: t.label(size: 16))),
           ],
         ),
         if (_showHelp)

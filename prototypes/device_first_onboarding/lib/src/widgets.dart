@@ -226,7 +226,15 @@ class DfListRow extends StatelessWidget {
           children: <Widget>[
             if (icon != null) ...<Widget>[Icon(icon, size: 20, color: iconColor ?? t.text), const SizedBox(width: 12)],
             Expanded(child: Text(label, style: t.label(weight: weight, color: labelColor))),
-            if (value != null) Text(value, style: t.label(color: valueColor ?? t.textTertiary, weight: weight)),
+            if (value != null) const SizedBox(width: 12),
+            if (value != null)
+              Flexible(
+                child: Text(
+                  value,
+                  textAlign: TextAlign.right,
+                  style: t.label(color: valueColor ?? t.textTertiary, weight: weight),
+                ),
+              ),
             if (trailing != null) trailing,
           ],
         ),
@@ -396,10 +404,13 @@ class DfPlanOption extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: <Widget>[
-                    Row(
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 4,
+                      crossAxisAlignment: WrapCrossAlignment.center,
                       children: <Widget>[
-                        Flexible(child: Text(title, style: t.label(size: 16, weight: FontWeight.w600))),
-                        if (badge != null) ...<Widget>[const SizedBox(width: 8), DfBadge(badge)],
+                        Text(title, style: t.label(size: 16, weight: FontWeight.w600)),
+                        if (badge != null) DfBadge(badge),
                       ],
                     ),
                     const SizedBox(height: 2),
