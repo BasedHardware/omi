@@ -404,6 +404,44 @@ void main() {
     expect(find.byKey(const Key('storefront_tier_plus')), findsOneWidget);
   });
 
+  for (final dark in [true, false]) {
+    testWidgets('real draggable sheet keeps Pro price and CTA above the small-phone fold (dark=$dark)', (tester) async {
+      await pumpSheet(tester, dark: dark, size: const Size(320, 568), content: const SizedBox.shrink());
+      final data = PlanStorefront.fromJson(fixture());
+      final closed = showOmiSheet<void>(
+        context: tester.element(find.byType(Scaffold)),
+        title: 'Plans & Billing',
+        padding: EdgeInsets.zero,
+        builder: (_) => StorefrontPlansContent(
+          storefront: data,
+          onRetry: () async {},
+          onSelect: (_, __) async {},
+          onManage: () async {},
+          onRestore: () async {},
+        ),
+      );
+      await tester.pumpAndSettle();
+      final content = find.byType(StorefrontPlansContent);
+      final route = ModalRoute.of(tester.element(content))! as OmiSheetRoute<void>;
+      expect(route.enableDrag, isTrue);
+      expect(route.showDragHandle, isTrue);
+      expect(tester.getTopLeft(content).dy, lessThan(568 * 0.2));
+      for (final key in ['storefront_price_operator', 'storefront_buy_operator']) {
+        final control = find.byKey(Key(key));
+        expect(control.hitTestable(), findsOneWidget);
+        expect(tester.getBottomRight(control).dy, lessThanOrEqualTo(568));
+      }
+      final close = find.byType(OmiCloseButton).last;
+      expect(close.hitTestable(), findsOneWidget);
+      expect(tester.getSize(close).height, greaterThanOrEqualTo(44));
+      expect(tester.takeException(), isNull);
+      await tester.tap(close);
+      await tester.pumpAndSettle();
+      await closed;
+      expect(find.byType(StorefrontPlansContent), findsNothing);
+    });
+  }
+
   testWidgets('hidden storefront never renders offers or actions', (tester) async {
     await pumpSheet(tester, data: PlanStorefront.fromJson(fixture()..['show_subscription_ui'] = false));
     expect(find.byKey(const Key('storefront_tier_operator')), findsNothing);
