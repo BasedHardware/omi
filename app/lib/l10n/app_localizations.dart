@@ -23510,6 +23510,18 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Tip: Enable Omi in Shortcuts → Siri.'**
   String get firstCaptureSiriTip;
+
+  /// Headline of the Outline paywall variant (mobile paywall A/B test)
+  ///
+  /// In en, this message translates to:
+  /// **'Never miss a word again.'**
+  String get paywallOutlineHeadline;
+
+  /// Caption under the upgrade button on the Outline paywall variant
+  ///
+  /// In en, this message translates to:
+  /// **'Cancel anytime.'**
+  String get paywallCancelAnytime;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

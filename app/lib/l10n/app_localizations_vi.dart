@@ -13199,4 +13199,10 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get firstCaptureSiriTip => 'Tip: Enable Omi in Shortcuts → Siri.';
+
+  @override
+  String get paywallOutlineHeadline => 'Không bao giờ bỏ lỡ một lời nào nữa.';
+
+  @override
+  String get paywallCancelAnytime => 'Hủy bất cứ lúc nào.';
 }

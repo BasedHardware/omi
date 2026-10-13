@@ -11490,5 +11490,7 @@
     "firstCaptureShortWarning": "A few more sentences help Omi understand you. About 30 seconds is ideal.",
     "firstCaptureCancelTitle": "Leave This Recording?",
     "firstCaptureCancelWarning": "Going back stops this recording. Keep talking to give Omi a few more sentences.",
-    "firstCaptureSiriTip": "Tip: Enable Omi in Shortcuts → Siri."
+    "firstCaptureSiriTip": "Tip: Enable Omi in Shortcuts → Siri.",
+    "paywallOutlineHeadline": "ಇನ್ನು ಮುಂದೆ ಒಂದು ಪದವನ್ನೂ ತಪ್ಪಿಸಿಕೊಳ್ಳಬೇಡಿ.",
+    "paywallCancelAnytime": "ಯಾವಾಗ ಬೇಕಾದರೂ ರದ್ದುಗೊಳಿಸಿ."
 }

@@ -13015,4 +13015,10 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get firstCaptureSiriTip => 'Tip: Enable Omi in Shortcuts → Siri.';
+
+  @override
+  String get paywallOutlineHeadline => 'もう一言も聞き逃さない。';
+
+  @override
+  String get paywallCancelAnytime => 'いつでもキャンセルできます。';
 }

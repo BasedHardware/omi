@@ -589,6 +589,40 @@ class AnalyticsManager {
     }
   }
 
+  /// The multivariate arm for [key]. Same identity and consent fences as [isFeatureEnabled];
+  /// null when the flag is off, not multivariate, or unresolved.
+  Future<String?> getFeatureFlagVariant(String key) async {
+    final adapter = _adapter;
+    if (adapter == null ||
+        !adapter.isInitialized ||
+        !_trackingEnabled ||
+        _settledDistinctId == null ||
+        adapter is! AnalyticsFeatureFlagAdapter) {
+      return null;
+    }
+    final epoch = _identityEpoch;
+    final identity = _settledDistinctId;
+    try {
+      final variant = await (adapter as AnalyticsFeatureFlagAdapter).getFeatureFlagVariant(key).timeout(_initTimeout);
+      if (epoch != _identityEpoch || !identical(identity, _settledDistinctId) || !_trackingEnabled) return null;
+      return variant;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  final Set<String> _recordedFlagExposures = {};
+
+  /// Records an experiment exposure the way PostHog Experiments attribute metrics
+  /// (`$feature_flag_called`), once per arm per process. The SDK's own exposure events are off
+  /// (`sendFeatureFlagEvents = false`), so only experiment flags emit one. Also registers
+  /// `$feature/<key>` so every later event can be broken down by arm.
+  void recordFeatureFlagExposure(String key, String variant) {
+    if (!_recordedFlagExposures.add('$key:$variant')) return;
+    _adapter?.registerSuperProperties({'\$feature/$key': variant});
+    track(r'$feature_flag_called', properties: {r'$feature_flag': key, r'$feature_flag_response': variant});
+  }
+
   void track(String eventName, {Map<String, dynamic>? properties}) =>
       PlatformService.executeIfSupported(PlatformService.isAnalyticsSupported, () {
         final adapter = _adapter;

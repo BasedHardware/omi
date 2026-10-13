@@ -5,6 +5,7 @@ import 'package:omi/backend/http/api_result.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/http/plan_storefront_api.dart';
 import 'package:omi/models/plan_storefront.dart';
+import 'package:omi/pages/paywall/paywall_router.dart';
 import 'package:omi/pages/settings/widgets/plans_sheet.dart';
 import 'package:omi/providers/usage_provider.dart';
 import 'package:omi/services/experiments/plan_storefront_gate.dart';
@@ -23,6 +24,8 @@ Future<bool> openContextualPlans(
   final provider = context.read<UsageProvider>();
   if (!provider.showSubscriptionUI || !await PlanStorefrontGate.sheetEnabled()) return false;
   if (!context.mounted || !provider.showSubscriptionUI) return false;
+  if (await PaywallRouter.openVariant(context, source: source)) return true;
+  if (!context.mounted) return false;
   PlatformManager.instance.analytics
       .paywallOpened(source, currentPlan: provider.subscription?.subscription.plan.wireName ?? 'unknown');
   await showOmiSheet(

@@ -1,0 +1,60 @@
+import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+
+import 'package:omi/pages/paywall/outline_paywall_page.dart';
+import 'package:omi/pages/paywall/web_paywall_page.dart';
+import 'package:omi/providers/usage_provider.dart';
+import 'package:omi/services/experiments/paywall_experiment.dart';
+import 'package:omi/utils/analytics/registry/events.g.dart';
+import 'package:omi/utils/analytics/registry/typed_events.dart';
+import 'package:omi/utils/other/temp.dart';
+import 'package:omi/utils/platform/platform_manager.dart';
+
+/// Decides which paywall a surface opens. Every opener asks here first; when the reader is in a
+/// non-control arm the variant page is shown and the opener does nothing else. Control, paid
+/// readers (the sheet owns upgrades, switches and cancellation) and App Review builds (subscription
+/// UI hidden) all return false, and the opener shows the `PlansSheet` exactly as before.
+abstract final class PaywallRouter {
+  static Future<bool> openVariant(
+    BuildContext context, {
+    required String source,
+    bool trackOpen = true,
+    PaywallExperimentConfig? config,
+  }) async {
+    final usage = context.read<UsageProvider>();
+    if (!usage.showSubscriptionUI) return false;
+    if (usage.subscription?.subscription.plan.isPaid == true) return false;
+    final resolved = config ?? await PaywallExperiment.resolve();
+    if (!context.mounted || resolved.isControl) return false;
+    if (!context.read<UsageProvider>().showSubscriptionUI) return false;
+
+    PaywallExperiment.recordExposure(resolved);
+    if (trackOpen) {
+      final plan = usage.subscription?.subscription.plan.wireName ?? 'unknown';
+      PlatformManager.instance.analytics.paywallOpened(source, currentPlan: plan);
+    }
+    const TypedEvents().emit(PaywallVariantShown(variant: variantWire(resolved.variant), source: sourceWire(source)));
+
+    final page = switch (resolved.variant) {
+      PaywallVariant.outline => OutlinePaywallPage(source: source),
+      PaywallVariant.web => WebPaywallPage(source: source, url: resolved.webUrl!),
+      PaywallVariant.control => null,
+    };
+    if (page == null) return false;
+    await routeToPage(context, page);
+    return true;
+  }
+
+  static PaywallVariantShownVariant variantWire(PaywallVariant variant) => switch (variant) {
+        PaywallVariant.control => PaywallVariantShownVariant.control,
+        PaywallVariant.outline => PaywallVariantShownVariant.outline,
+        PaywallVariant.web => PaywallVariantShownVariant.web,
+      };
+
+  static PaywallVariantShownSource sourceWire(String source) {
+    for (final value in PaywallVariantShownSource.values) {
+      if (value.wireName == source) return value;
+    }
+    return PaywallVariantShownSource.unknown;
+  }
+}

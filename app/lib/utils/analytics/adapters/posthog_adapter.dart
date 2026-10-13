@@ -130,6 +130,12 @@ class PostHogAnalyticsAdapter
   Future<bool> isFeatureEnabled(String key) => Posthog().isFeatureEnabled(key);
 
   @override
+  Future<String?> getFeatureFlagVariant(String key) async {
+    final result = await Posthog().getFeatureFlagResult(key);
+    return result?.enabled == true ? result?.variant : null;
+  }
+
+  @override
   Future<Object?> getFeatureFlagPayload(String key) async {
     final result = await Posthog().getFeatureFlagResult(key);
     return result?.enabled == true ? result?.payload : null;

@@ -43,6 +43,15 @@ class _FlagAdapter implements AnalyticsAdapter, AnalyticsIdentityAdapter, Analyt
     return completer.future;
   }
 
+  final variantReads = <Completer<String?>>[];
+
+  @override
+  Future<String?> getFeatureFlagVariant(String key) {
+    final completer = Completer<String?>();
+    variantReads.add(completer);
+    return completer.future;
+  }
+
   @override
   void track({required String eventName, Map<String, Object>? properties}) {}
 
