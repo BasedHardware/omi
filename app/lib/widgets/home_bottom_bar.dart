@@ -1,9 +1,9 @@
-import 'package:omi/utils/l10n_extensions.dart';
 import 'package:flutter/material.dart';
 
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 
 import 'package:omi/ui/omi_tokens.dart';
+import 'package:omi/utils/l10n_extensions.dart';
 
 /// The two-bubbles glyph (FontAwesome `comments`, regular weight) that marks Ask Omi everywhere it
 /// appears, so every entry point reads as one family.
@@ -77,7 +77,6 @@ class HomeChatBarBackdrop extends StatelessWidget {
     );
   }
 }
-
 
 /// Centred "Ask anything" button in Home's bottom bar (#19854).
 class HomeAskAnythingButton extends StatelessWidget {
