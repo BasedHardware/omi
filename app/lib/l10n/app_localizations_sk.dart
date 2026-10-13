@@ -1772,6 +1772,9 @@ class AppLocalizationsSk extends AppLocalizations {
       'Zdá sa, že v nahrávke je viacero rečníkov. Uistite sa, že ste na tichom mieste, a skúste to znova.';
 
   @override
+  String get discardedOnlyRecording => 'That recording was too short or empty to keep.';
+
+  @override
   String get tooShortDesc => 'Nezistilo sa dostatok reči. Hovorte viac a skúste to znova.';
 
   @override

@@ -1557,7 +1557,13 @@ def process_segment(
             turnstile.complete(path)
 
 
-def _reprocess_merged_conversations(uid: str, response: dict, on_fenced: Optional[Callable[[], None]] = None):
+def _reprocess_merged_conversations(
+    uid: str,
+    response: dict,
+    on_fenced: Optional[Callable[[], None]] = None,
+    *,
+    user_selected: bool = False,
+):
     """Regenerate summary/structured data for conversations that gained segments this batch.
 
     The merge path in process_segment only appends transcript segments; without this the
@@ -1566,9 +1572,18 @@ def _reprocess_merged_conversations(uid: str, response: dict, on_fenced: Optiona
     same batch.
     """
     merged = response.pop('_merged', {})
+    if user_selected:
+        # Rule-discard intake does not enroll enrichment. Process Now is an
+        # explicit keep choice, so include those retained rows too. Apply it
+        # only after all chunks have joined: curating each chunk during intake
+        # would prevent later chunks from merging into the same recording.
+        for conversation_id in response.get('new_memories', set()) | response.get('updated_memories', set()):
+            merged.setdefault(conversation_id, _LINEAGE_RETRY_LANGUAGE)
     fenced_ids = set()
     for conversation_id, language in merged.items():
         try:
+            if user_selected and not lifecycle_service.restore_discarded(uid, conversation_id):
+                raise SyncConversationPersistenceFenced('selected recording no longer exists')
             _reprocess_conversation_after_update(uid, conversation_id, language)
         except SyncConversationPersistenceFenced:
             fenced_ids.add(conversation_id)
@@ -1579,7 +1594,7 @@ def _reprocess_merged_conversations(uid: str, response: dict, on_fenced: Optiona
                 on_fenced()
             logger.info('event=sync_conversation_reprocess outcome=fenced conversation_id=%s', conversation_id)
         except Exception as e:
-            if is_destructive_operation_in_progress(e):
+            if user_selected or is_destructive_operation_in_progress(e):
                 raise
             logger.error(f'sync: failed to reprocess merged conversation {conversation_id}: {e}')
     # A task-mode worker whose every conversation was superseded by a newer
@@ -1991,6 +2006,13 @@ async def _run_full_pipeline_background_async(  # pyright: ignore[reportGeneralT
     coordinator itself holds zero thread pool slots — only leaf operations use
     threads, and only for their actual duration.
     """
+    # LocalRecordingsProvider uploads one explicitly selected native recording
+    # at a time. The writer's exact marker distinguishes Transcribe Later from
+    # automatic offline fallback (omibatchphoneauto) in already-released clients.
+    # Keep this narrow: a mixed/bulk sync job does not establish a keep choice.
+    user_selected_phone_recording = len(raw_paths) == 1 and os.path.basename(raw_paths[0]).lower().startswith(
+        'audio_omibatchphone_'
+    )
     # Enrich raw sync geolocation (address / place id) once per job before any
     # conversation is created. This is the single enrichment point covering both
     # the inline and Cloud Tasks dispatch branches; it runs before the
@@ -2792,6 +2814,7 @@ async def _run_full_pipeline_background_async(  # pyright: ignore[reportGeneralT
                 uid,
                 response,
                 on_fenced=_checkpoint_fenced_conversations,
+                **({'user_selected': True} if user_selected_phone_recording else {}),
             )
 
             # Persist conversation audio (private-cloud chunks → audio_files) so synced

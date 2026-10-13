@@ -545,6 +545,7 @@
     "connectionErrorDesc": "เชื่อมต่อกับเซิร์ฟเวอร์ไม่สำเร็จ กรุณาตรวจสอบการเชื่อมต่ออินเทอร์เน็ตของคุณและลองอีกครั้ง",
     "invalidRecordingMultipleSpeakers": "ตรวจพบการบันทึกที่ไม่ถูกต้อง",
     "multipleSpeakersDesc": "ดูเหมือนว่ามีผู้พูดหลายคนในการบันทึก กรุณาตรวจสอบให้แน่ใจว่าคุณอยู่ในสถานที่เงียบและลองอีกครั้ง",
+    "discardedOnlyRecording": "That recording was too short or empty to keep.",
     "tooShortDesc": "ตรวจพบคำพูดไม่เพียงพอ กรุณาพูดมากขึ้นและลองอีกครั้ง",
     "invalidRecordingDesc": "กรุณาตรวจสอบให้แน่ใจว่าคุณพูดอย่างน้อย 5 วินาทีและไม่เกิน 90 วินาที",
     "areYouThere": "คุณยังอยู่ไหม?",

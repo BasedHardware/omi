@@ -1689,6 +1689,7 @@
     "@multipleSpeakersDesc": {
         "description": "Error description for multiple speakers"
     },
+    "discardedOnlyRecording": "That recording was too short or empty to keep.",
     "tooShortDesc": "سخن کافی تشخیص داده نشده است. لطفاً بیشتر صحبت کنید و دوباره تلاش کنید.",
     "@tooShortDesc": {
         "description": "Error description for recording being too short"

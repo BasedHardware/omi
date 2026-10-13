@@ -545,6 +545,7 @@
     "connectionErrorDesc": "Verbindung zum Server fehlgeschlagen. Bitte überprüfen Sie Ihre Internetverbindung und versuchen Sie es erneut.",
     "invalidRecordingMultipleSpeakers": "Ungültige Aufnahme erkannt",
     "multipleSpeakersDesc": "Es scheint, dass mehrere Sprecher in der Aufnahme sind. Bitte stellen Sie sicher, dass Sie sich an einem ruhigen Ort befinden, und versuchen Sie es erneut.",
+    "discardedOnlyRecording": "That recording was too short or empty to keep.",
     "tooShortDesc": "Es wurde nicht genug Sprache erkannt. Bitte sprechen Sie mehr und versuchen Sie es erneut.",
     "invalidRecordingDesc": "Bitte stellen Sie sicher, dass Sie mindestens 5 Sekunden und nicht mehr als 90 Sekunden sprechen.",
     "areYouThere": "Sind Sie da?",

@@ -1769,6 +1769,9 @@ class AppLocalizationsBe extends AppLocalizations {
       'Здаецца, ў запісе больш адной дыктара. Калі ласка, пераканайцеся, што вы ў спакойным месцы, і спробуйце яшчэ раз.';
 
   @override
+  String get discardedOnlyRecording => 'That recording was too short or empty to keep.';
+
+  @override
   String get tooShortDesc => 'Выяўлена недастаткова маў. Калі ласка, гаварыце больш і спробуйце яшчэ раз.';
 
   @override

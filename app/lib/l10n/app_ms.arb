@@ -545,6 +545,7 @@
     "connectionErrorDesc": "Gagal menyambung ke pelayan. Sila semak sambungan internet anda dan cuba lagi.",
     "invalidRecordingMultipleSpeakers": "Rakaman tidak sah dikesan",
     "multipleSpeakersDesc": "Nampaknya terdapat beberapa penutur dalam rakaman. Sila pastikan anda berada di lokasi yang senyap dan cuba lagi.",
+    "discardedOnlyRecording": "That recording was too short or empty to keep.",
     "tooShortDesc": "Tidak cukup pertuturan dikesan. Sila bercakap lebih banyak dan cuba lagi.",
     "invalidRecordingDesc": "Sila pastikan anda bercakap sekurang-kurangnya 5 saat dan tidak lebih daripada 90.",
     "areYouThere": "Adakah anda di sana?",

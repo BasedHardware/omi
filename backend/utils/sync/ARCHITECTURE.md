@@ -69,6 +69,33 @@ Offline replay: `scripts/sync_live_dedupe_replay.py` replays supplied STT candid
 
 ## Relevance and remaining differences
 
+### Phone Transcribe Later / Process Now
+
+`LocalRecordingsProvider` uploads one selected native file at a time through
+`/v2/sync-local-files`. The native `audio_omibatchphone_` marker denotes explicit
+Transcribe Later; `audio_omibatchphoneauto_` denotes automatic offline fallback.
+The shared job coordinator recognizes only a single explicit file, covering
+already-released clients without a new request field. Mixed/bulk jobs retain
+automatic relevance policy.
+
+After all speech segments finish assignment, the coordinator enrolls every
+resulting retained row for enrichment, including rule-discard rows that intake
+normally excludes. It calls `lifecycle.restore_discarded` before reprocessing,
+persisting the existing `sync_relevance_user_kept` authority transactionally.
+Applying this after assembly preserves the normal joining of a long recording's
+chunks. Later relevance and list refreshes honor the same stored choice.
+Silence produces no IDs and no restore. Deletion fences still win; keep-write
+and enrichment errors propagate to the existing job retry/failure path.
+
+Implementation checklist for [#20459](https://github.com/BasedHardware/omi/issues/20459):
+
+- [x] Carry the existing native manual/automatic distinction through job completion.
+- [x] Restore retained rule-discards before enrichment through the lifecycle owner.
+- [x] Guard short speech, automatic/mixed jobs, write failures and deletion with
+  `tests/unit/test_phone_batch_process_now.py`.
+- [ ] Verify a released build on a physical iPhone and with the reporter. The
+  earlier disappearing-live-recording report has no confirmed common cause.
+
 Speech the deterministic relevance rules (`utils/conversations/relevance_rules.py`) discard outright gets `sync_relevance=review` and skips enrichment; everything else is assessed by the relevance step as a `SYNC_UPDATE` when the pipeline processes it. Uncurated completed review fragments are stored `discarded=True`: hidden from default lists/search, retained with their transcript/audio, and recoverable through Show discarded. Readers trust that stored flag alone; `scripts/conversation_relevance_backfill.py` rewrites rows stored before intake did so. Explicit restoration of any row sets `sync_relevance_user_kept` so later intake and reassessment honor that choice. Curated, shared, photo-bearing, and live-target records are protected; a generated summary is not curation and protects nothing. Duration alone never discards meaningful speech. Subsequent intake reassesses the complete transcript. Unknown content/language stays `keep`; speaker profiles and `is_user` never gate assignment or relevance.
 
 Known limitation: WALs carrying different existing live target IDs can remain separate even during one continuous recording. Sync never bridges those live-owned targets because an open socket may still write to them; partial-flap intake does not guarantee partition parity. Realtime now remembers same-origin continuations inside the continuity window and reaps expired empty generations on reconnect. This prevents one source of new target proliferation; it does not redirect historical distinct explicit live targets. Recording lineage binding (below) covers uploads that carry a recording id; historical rows are not migrated.

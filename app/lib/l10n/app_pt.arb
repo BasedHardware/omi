@@ -540,6 +540,7 @@
     "connectionErrorDesc": "Falha ao conectar com servidor.",
     "invalidRecordingMultipleSpeakers": "Gravação inválida",
     "multipleSpeakersDesc": "Parece haver múltiplos falantes.",
+    "discardedOnlyRecording": "That recording was too short or empty to keep.",
     "tooShortDesc": "Não detectamos fala suficiente.",
     "invalidRecordingDesc": "Certifique-se de falar por pelo menos 5 segundos.",
     "areYouThere": "Está aí?",

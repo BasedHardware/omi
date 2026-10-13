@@ -1771,6 +1771,9 @@ class AppLocalizationsRu extends AppLocalizations {
       'Похоже, в записи несколько говорящих. Пожалуйста, убедитесь, что вы находитесь в тихом месте, и попробуйте снова.';
 
   @override
+  String get discardedOnlyRecording => 'That recording was too short or empty to keep.';
+
+  @override
   String get tooShortDesc => 'Обнаружено недостаточно речи. Пожалуйста, говорите больше и попробуйте снова.';
 
   @override

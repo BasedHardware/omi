@@ -1766,6 +1766,9 @@ class AppLocalizationsSl extends AppLocalizations {
       'Videti je, da so v snemki večje govorca. Prosimo prepričajte se, da ste na tihem mestu in poskusite znova.';
 
   @override
+  String get discardedOnlyRecording => 'That recording was too short or empty to keep.';
+
+  @override
   String get tooShortDesc => 'Zaznano ni dovolj govora. Prosimo govorite več in poskusite znova.';
 
   @override

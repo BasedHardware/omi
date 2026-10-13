@@ -1748,6 +1748,9 @@ class AppLocalizationsHi extends AppLocalizations {
   String get multipleSpeakersDesc => 'ऐसा लगता है कि कई स्पीकर हैं।';
 
   @override
+  String get discardedOnlyRecording => 'That recording was too short or empty to keep.';
+
+  @override
   String get tooShortDesc => 'पर्याप्त भाषण नहीं मिला।';
 
   @override

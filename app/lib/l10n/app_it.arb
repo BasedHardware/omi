@@ -545,6 +545,7 @@
     "connectionErrorDesc": "Impossibile connettersi al server. Controlla la tua connessione internet e riprova.",
     "invalidRecordingMultipleSpeakers": "Registrazione non valida rilevata",
     "multipleSpeakersDesc": "Sembra che ci siano più persone che parlano nella registrazione. Assicurati di essere in un luogo silenzioso e riprova.",
+    "discardedOnlyRecording": "That recording was too short or empty to keep.",
     "tooShortDesc": "Non è stato rilevato abbastanza parlato. Parla di più e riprova.",
     "invalidRecordingDesc": "Assicurati di parlare per almeno 5 secondi e non più di 90.",
     "areYouThere": "Ci sei?",

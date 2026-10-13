@@ -545,6 +545,7 @@
     "connectionErrorDesc": "No s'ha pogut connectar amb el servidor. Comproveu la vostra connexió a internet i torneu-ho a provar.",
     "invalidRecordingMultipleSpeakers": "S'ha detectat un enregistrament no vàlid",
     "multipleSpeakersDesc": "Sembla que hi ha diversos parlants a l'enregistrament. Assegureu-vos que esteu en un lloc tranquil i torneu-ho a provar.",
+    "discardedOnlyRecording": "That recording was too short or empty to keep.",
     "tooShortDesc": "No s'ha detectat prou veu. Parleu més i torneu-ho a provar.",
     "invalidRecordingDesc": "Assegureu-vos de parlar durant almenys 5 segons i no més de 90.",
     "areYouThere": "Hi sou?",

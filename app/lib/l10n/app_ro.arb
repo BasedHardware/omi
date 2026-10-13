@@ -545,6 +545,7 @@
     "connectionErrorDesc": "Conectarea la server a eșuat. Te rugăm să verifici conexiunea la internet și să încerci din nou.",
     "invalidRecordingMultipleSpeakers": "Înregistrare invalidă detectată",
     "multipleSpeakersDesc": "Se pare că sunt mai mulți vorbitori în înregistrare. Te rugăm să te asiguri că ești într-un loc liniștit și să încerci din nou.",
+    "discardedOnlyRecording": "That recording was too short or empty to keep.",
     "tooShortDesc": "Nu s-a detectat suficientă vorbire. Te rugăm să vorbești mai mult și să încerci din nou.",
     "invalidRecordingDesc": "Te rugăm să te asiguri că vorbești cel puțin 5 secunde și nu mai mult de 90.",
     "areYouThere": "Ești acolo?",

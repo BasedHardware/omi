@@ -1760,6 +1760,9 @@ class AppLocalizationsEs extends AppLocalizations {
   String get multipleSpeakersDesc => 'Parece haber múltiples hablantes.';
 
   @override
+  String get discardedOnlyRecording => 'That recording was too short or empty to keep.';
+
+  @override
   String get tooShortDesc => 'No se detectó suficiente habla.';
 
   @override

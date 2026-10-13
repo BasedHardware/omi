@@ -1765,6 +1765,9 @@ class AppLocalizationsSr extends AppLocalizations {
       'Чини се да су у снимку мултипли говорници. Молим вас уверите се да сте на тихој локацији и покушајте поново.';
 
   @override
+  String get discardedOnlyRecording => 'That recording was too short or empty to keep.';
+
+  @override
   String get tooShortDesc => 'Нема довољно говора открит. Молим вас говорите више и покушајте поново.';
 
   @override

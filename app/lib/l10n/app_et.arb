@@ -545,6 +545,7 @@
     "connectionErrorDesc": "Serveriga ühendamine ebaõnnestus. Palun kontrollige oma internetiühendust ja proovige uuesti.",
     "invalidRecordingMultipleSpeakers": "Vigane salvestis tuvastatud",
     "multipleSpeakersDesc": "Tundub, et salvestises on mitu kõnelejat. Palun veenduge, et olete vaikses kohas ja proovige uuesti.",
+    "discardedOnlyRecording": "That recording was too short or empty to keep.",
     "tooShortDesc": "Kõnet ei tuvastatud piisavalt. Palun rääkige rohkem ja proovige uuesti.",
     "invalidRecordingDesc": "Palun veenduge, et räägite vähemalt 5 sekundit ja mitte rohkem kui 90.",
     "areYouThere": "Kas olete seal?",
