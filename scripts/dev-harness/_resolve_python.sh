@@ -14,9 +14,6 @@ dev_harness_venv_covers_cheap_gates() {
 # module scope, so the selected interpreter must support Python >= 3.10 syntax.
 # macOS ships Xcode CLT `python3` 3.9 where bare `python3` would otherwise crash
 # the gate regardless of the diff being pushed.
-DEV_HARNESS_MIN_PYTHON_MAJOR=3
-DEV_HARNESS_MIN_PYTHON_MINOR=10
-
 dev_harness_python_floor_ok() {
   local python_bin="$1"
   [ -n "$python_bin" ] || return 1
@@ -75,18 +72,28 @@ dev_harness_python() {
   # which cannot import the pre-push check scripts (PEP 604 unions at module
   # scope). Prefer an explicit versioned interpreter first; keep bare `python3`
   # only when it actually satisfies the floor.
-  local fallback
+  # Among floor-qualified candidates prefer one that can also import the
+  # cheap-gate deps (yaml + python-dotenv): this resolver is shared by
+  # mobile-session.sh, dev-up.sh and the pre-push gates, so a version-newer
+  # interpreter without those packages must not shadow an import-capable one.
+  # When no candidate has the imports, keep the documented floor-only outcome
+  # so the gate reports the missing module instead of a version crash.
+  local fallback floor_only
+  floor_only=""
   for fallback in python3.14 python3.13 python3.12 python3.11 python3.10 python3; do
     if dev_harness_python_floor_ok "$fallback"; then
-      printf '%s\n' "$fallback"
-      return
+      if dev_harness_venv_covers_cheap_gates "$fallback"; then
+        printf '%s\n' "$fallback"
+        return
+      fi
+      [ -n "$floor_only" ] || floor_only="$fallback"
     fi
   done
 
   # Hooks and cron contexts often run a stripped PATH (/usr/bin:/bin) where no
   # versioned name is reachable even though Homebrew's interpreters exist.
   # Absolute prefixes only: still floor-probed, still overridden by PYTHON=.
-  local prefix_bin prefix version
+  local prefix_bin version
   for prefix_bin in \
     /opt/homebrew/opt/python@3.14/bin \
     /opt/homebrew/opt/python@3.13/bin \
@@ -104,11 +111,18 @@ dev_harness_python() {
     for version in 3.14 3.13 3.12 3.11 3.10; do
       candidate="$prefix_bin/python$version"
       if dev_harness_python_floor_ok "$candidate"; then
-        printf '%s\n' "$candidate"
-        return
+        if dev_harness_venv_covers_cheap_gates "$candidate"; then
+          printf '%s\n' "$candidate"
+          return
+        fi
+        [ -n "$floor_only" ] || floor_only="$candidate"
       fi
     done
   done
+  if [ -n "$floor_only" ]; then
+    printf '%s\n' "$floor_only"
+    return
+  fi
 
   printf '%s\n' "python3"
 }

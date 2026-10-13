@@ -390,6 +390,45 @@ def test_default_device_runner_missing_binary_is_127_not_a_traceback(monkeypatch
     assert "adb" in out
 
 
+def test_default_device_runner_android_timeout_keeps_android_diagnosis(monkeypatch: pytest.MonkeyPatch) -> None:
+    """An adb hang is an Android tooling problem, not an Xcode first-launch one.
+
+    The Xcode first-launch probe must not run for non-xcrun commands: it would
+    send the operator to alter unrelated Xcode state (and misreport an
+    adb-server/USB hang as an Xcode remedy).
+    """
+
+    def hung(command: Sequence[str], **_kwargs: object) -> object:
+        assert command[0] == "adb", command
+        raise subprocess.TimeoutExpired(cmd=list(command), timeout=180)
+
+    monkeypatch.setattr(ms.subprocess, "run", hung)
+    code, out = ms._default_device_runner(["adb", "devices"])
+    assert code == 124
+    assert "adb timed out" in out
+    assert "Xcode first launch" not in out
+
+
+def test_default_device_runner_xcrun_timeout_diagnoses_xcode_first_launch(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Only xcrun timeouts may probe and report the Xcode first-launch state."""
+
+    class Probe:
+        returncode = 1  # first launch pending
+
+    def hung(command: Sequence[str], **_kwargs: object) -> object:
+        if command[0] == "xcrun":
+            raise subprocess.TimeoutExpired(cmd=list(command), timeout=180)
+        if command[0] == "xcodebuild":
+            return Probe()
+        raise AssertionError(f"unexpected command: {command}")
+
+    monkeypatch.setattr(ms.subprocess, "run", hung)
+    code, out = ms._default_device_runner(["xcrun", "devicectl", "list", "devices"])
+    assert code == 124
+    assert "xcrun timed out" in out
+    assert "Xcode first launch is pending" in out
+
+
 def _android_sdk(tmp_path: Path, *, emulator: bool = True, sdkmanager: bool = True, image: bool = False) -> Path:
     home = tmp_path / "android-sdk"
     if emulator:

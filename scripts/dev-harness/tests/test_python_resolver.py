@@ -270,6 +270,92 @@ def test_resolver_keeps_bare_python3_when_it_meets_the_floor(
     assert _resolve_python(repo, monkeypatch, path=stubbed) == "python3"
 
 
+def _write_probe_stub_python(directory: Path, name: str, *, floor_ok: bool, imports_ok: bool) -> None:
+    """Stub an interpreter whose floor and cheap-gate import probes are scripted.
+
+    The resolver floor-probes with `-c 'import sys; ... version_info ...'` and
+    import-probes with `-c 'import dotenv, yaml'`; `$2` carries the payload, so
+    a stub can answer each probe independently.
+    """
+    stub = directory / name
+    stub.parent.mkdir(parents=True, exist_ok=True)
+    stub.write_text(
+        "#!/bin/sh\n"
+        'case "$2" in\n'
+        "  *version_info*) exit "
+        f"{0 if floor_ok else 1}"
+        " ;;\n"
+        "  *) exit "
+        f"{0 if imports_ok else 1}"
+        " ;;\n"
+        "esac\n",
+        encoding="utf-8",
+    )
+    stub.chmod(stub.stat().st_mode | stat.S_IXUSR)
+
+
+def _stubbed_probe_path(tmp_path: Path, probes: dict[str, tuple[bool, bool]]) -> str:
+    directory = tmp_path / "stub-probe-bin"
+    for name, (floor_ok, imports_ok) in probes.items():
+        _write_probe_stub_python(directory, name, floor_ok=floor_ok, imports_ok=imports_ok)
+    return os.pathsep.join((str(directory), os.environ.get("PATH", "")))
+
+
+def test_resolver_prefers_import_capable_python_over_newer_import_bare_one(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A newer interpreter without PyYAML/python-dotenv must not shadow one that has them.
+
+    The resolver is shared by mobile-session.sh, dev-up.sh and the cheap
+    pre-push gates, so among floor-qualified candidates the import-capable one
+    wins even when a version-newer candidate exists.
+    """
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    stubbed = _stubbed_probe_path(
+        tmp_path,
+        {
+            # floor-passing but cannot import the cheap-gate deps
+            "python3.14": (True, False),
+            "python3.13": (False, False),
+            "python3.12": (False, False),
+            # floor-passing AND import-capable: must win over python3.14
+            "python3.11": (True, True),
+            "python3.10": (False, False),
+            "python3": (False, False),
+        },
+    )
+    assert _resolve_python(repo, monkeypatch, path=stubbed) == "python3.11"
+
+
+def test_resolver_keeps_floor_qualified_fallback_when_no_candidate_has_imports(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """With no import-capable candidate, keep the documented floor-only outcome.
+
+    The gate then reports the missing module (actionable) instead of silently
+    selecting a below-floor interpreter. An absolute prefix interpreter that is
+    both floor- and import-qualified is an equally valid outcome on hosts that
+    have one.
+    """
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    stubbed = _stubbed_probe_path(
+        tmp_path,
+        {
+            "python3.14": (True, False),
+            "python3.13": (False, False),
+            "python3.12": (False, False),
+            "python3.11": (False, False),
+            "python3.10": (False, False),
+            "python3": (False, False),
+        },
+    )
+    resolved = _resolve_python(repo, monkeypatch, path=stubbed)
+    assert resolved != "python3", resolved
+    _assert_floor_qualified_or_documented_fallback(resolved)
+
+
 def test_resolver_probes_homebrew_prefix_when_path_is_stripped(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

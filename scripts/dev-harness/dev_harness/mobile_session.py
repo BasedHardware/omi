@@ -1087,29 +1087,37 @@ def _default_device_runner(command: Sequence[str], timeout: float = 180.0) -> tu
         completed = subprocess.run(list(command), capture_output=True, text=True, check=False, timeout=timeout)
     except OSError as exc:
         return 127, f"{command[0]} not available: {exc}"
-    except subprocess.TimeoutExpired as exc:
+    except subprocess.TimeoutExpired:
         # A pending Xcode first launch (re-armed by Xcode updates; completion
         # needs admin rights) makes every xcrun devicectl/simctl call spawn a
         # hanging `xcodebuild -runFirstLaunch` child. Diagnose it instead of
         # letting the timeout escape as a raw traceback.
-        first_launch = "pending"
-        try:
-            probe = subprocess.run(
-                ["xcodebuild", "-checkFirstLaunchStatus"],
-                capture_output=True,
-                text=True,
-                timeout=10,
-                check=False,
-            )
-            first_launch = "pending" if probe.returncode != 0 else "complete"
-        except (OSError, subprocess.TimeoutExpired):
-            first_launch = "unknown"
+        tool = command[0] if command else ""
         diagnosis = (
-            f"{command[0]} timed out after {timeout:g}s; Xcode first launch is {first_launch}. "
-            "If pending, complete it once with admin rights: "
-            "`sudo xcodebuild -runFirstLaunch && sudo xcodebuild -license accept` "
-            "(or open Xcode.app and finish the prompt)."
+            f"{tool or 'device tooling'} timed out after {timeout:g}s"
+            " with no diagnosis available. The command never returned; retry, and"
+            " if it persists check the tool's server/daemon state (e.g. for"
+            " Android: adb server, USB connection, SDK tooling)."
         )
+        if tool == "xcrun":
+            first_launch = "pending"
+            try:
+                probe = subprocess.run(
+                    ["xcodebuild", "-checkFirstLaunchStatus"],
+                    capture_output=True,
+                    text=True,
+                    timeout=10,
+                    check=False,
+                )
+                first_launch = "pending" if probe.returncode != 0 else "complete"
+            except (OSError, subprocess.TimeoutExpired):
+                first_launch = "unknown"
+            diagnosis = (
+                f"{tool} timed out after {timeout:g}s; Xcode first launch is {first_launch}. "
+                "If pending, complete it once with admin rights: "
+                "`sudo xcodebuild -runFirstLaunch && sudo xcodebuild -license accept` "
+                "(or open Xcode.app and finish the prompt)."
+            )
         return 124, diagnosis
     return completed.returncode, (completed.stdout or "") + (completed.stderr or "")
 
