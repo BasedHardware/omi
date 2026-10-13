@@ -211,7 +211,7 @@ class ClientTelemetry {
     if (!ClientTelemetryFlags.migrationEnabled || jobId == null || jobId.isEmpty) return;
     final host = platform?.call();
     final release = channel?.call();
-    if (host == null || release == null) return;
+    if (host == null || host.isEmpty || release == null || release.isEmpty) return;
     outbox.completeAcceptedJob(
       jobId: jobId,
       build: (job) {
@@ -225,8 +225,8 @@ class ClientTelemetry {
           ownerId: job.ownerId,
           eventId: _newId(),
           occurredAt: confirmedAt.toUtc(),
-          platform: host ?? '',
-          channel: release ?? '',
+          platform: host,
+          channel: release,
           family: 'upload',
           attributes: ClientTelemetrySchema.uploadAttributes(
             attemptId: job.attemptId,

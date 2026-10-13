@@ -296,8 +296,8 @@ class SyncUploadGate {
   }
 
   double _durationSeconds(DateTime startedAt) {
-    final milliseconds = _latencyMs(startedAt);
-    return (milliseconds == null ? 0 : milliseconds) / 1000.0;
+    final milliseconds = _latencyMs(startedAt) ?? 0;
+    return milliseconds / 1000.0;
   }
 
   int? _latencyMs(DateTime startedAt) {

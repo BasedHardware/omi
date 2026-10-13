@@ -178,15 +178,13 @@ class ClientTelemetryOutbox {
     required this.store,
     required this.clock,
     required this.newId,
-    TelemetryToken? tokenFor,
-    TelemetryPost? post,
+    this.tokenFor,
+    this.post,
     TelemetryDelay? delay,
     Random? random,
     this.maxObservations = ClientTelemetrySchema.maxOutboxObservations,
     this.maxBytes = ClientTelemetrySchema.maxOutboxBytes,
-  })  : tokenFor = tokenFor,
-        post = post,
-        _delay = delay ?? ((duration) => Future<void>.delayed(duration)),
+  })  : _delay = delay ?? ((duration) => Future<void>.delayed(duration)),
         _random = random ?? Random();
 
   ClientTelemetryStore store;
