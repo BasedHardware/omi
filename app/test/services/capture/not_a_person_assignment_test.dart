@@ -42,6 +42,52 @@ void main() {
     SharedPreferences.setMockInitialValues({'deviceMuted': true});
     await SharedPreferencesUtil.init();
   });
+  test('same-conversation refresh reapplies exclusions to stale speaker labels', () async {
+    final controller = CaptureController(
+      externalActions: _Actions(),
+      bleListeners: _Ble(),
+      connectivity: CaptureConnectivityBoundary(
+        initiallyConnected: true,
+        changes: const Stream.empty(),
+        isConnected: () => true,
+      ),
+      excludeSpeaker: (id, ids) async => true,
+    );
+    addTearDown(() async {
+      controller.dispose();
+      await controller.lifetime.close();
+    });
+    controller.applyInProgressConversation(
+      ServerConversation(
+        id: 'c',
+        createdAt: DateTime(2026),
+        structured: Structured('TV', 'TV'),
+        transcriptSegments: [_segment('s1'), _segment('s2')],
+      ),
+    );
+    final staleSnapshot = ServerConversation(
+      id: 'c',
+      createdAt: DateTime(2026),
+      structured: Structured('TV', 'TV'),
+      transcriptSegments: [
+        _segment('s1')..speakerLabelSource = 'manual',
+        _segment('s2')
+          ..isUser = false
+          ..personId = 'p1'
+          ..speakerLabelSource = 'manual',
+      ],
+    );
+    expect(await controller.assignSpeakerToConversation(4, '', '', ['s1'], notAPerson: true), isTrue);
+
+    controller.applyInProgressConversation(staleSnapshot);
+
+    expect(controller.segments.map((s) => s.id), ['s1', 's2']);
+    for (final segment in controller.segments) {
+      expect(segment.isUser, isFalse);
+      expect(segment.personId, isNull);
+      expect(segment.speakerLabelSource, isNull);
+    }
+  });
   test('exclusion clears the cluster, skips person creation, suppresses suggestions and is reversible', () async {
     final actions = _Actions();
     final calls = <List<String>>[];

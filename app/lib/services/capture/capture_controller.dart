@@ -3435,6 +3435,7 @@ class CaptureController extends ChangeNotifier
   /// Install an acknowledged server snapshot. Shared by REST refresh and
   /// hermetic capture scenarios that control the conversation boundary.
   void applyInProgressConversation(ServerConversation? nextConversation) {
+    final isSameConversation = _conversation?.id == nextConversation?.id;
     if (_conversation?.id != nextConversation?.id) {
       suggestionsBySegmentId.clear();
       _manualSpeakerDefaults.clear();
@@ -3443,6 +3444,15 @@ class CaptureController extends ChangeNotifier
     _conversation = nextConversation;
     if (_conversation != null) {
       segments = _conversation!.transcriptSegments;
+      if (isSameConversation) {
+        for (final segment in segments) {
+          if (_excludedSpeakers.contains(segment.speakerId)) {
+            segment.isUser = false;
+            segment.personId = null;
+            segment.speakerLabelSource = null;
+          }
+        }
+      }
       // Merge server photos with locally-captured temp photos to avoid losing
       // photos that haven't been processed server-side yet.
       final serverPhotos = _conversation!.photos;
