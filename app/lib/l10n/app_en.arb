@@ -15773,6 +15773,46 @@
             }
         }
     },
+    "paywallRecommended": "Recommended",
+    "@paywallRecommended": {
+        "description": "Backend recommended tier badge; highlights a recommendation without preselecting checkout."
+    },
+    "paywallNoPlans": "Plans aren't available right now. Try again in a minute.",
+    "@paywallNoPlans": {
+        "description": "Empty state when the plans list has no tiers."
+    },
+    "paywallOtherPlans": "See all plans",
+    "@paywallOtherPlans": {
+        "description": "Collapsed section that reveals the rest of the plan ladder."
+    },
+    "paywallComparePlans": "See plans",
+    "@paywallComparePlans": {
+        "description": "Primary button on the usage banner."
+    },
+    "paywallYourPlan": "Your plan",
+    "@paywallYourPlan": {
+        "description": "Badge on the tier card for the plan the person already has."
+    },
+    "paywallNotNow": "Not now",
+    "@paywallNotNow": {
+        "description": "Secondary button on the usage banner."
+    },
+    "paywallTryAgain": "Try again",
+    "@paywallTryAgain": {
+        "description": "Retry button when the plans sheet fails to load."
+    },
+    "paywallManageBilling": "Manage billing",
+    "@paywallManageBilling": {
+        "description": "Button that opens billing management."
+    },
+    "paywallLoadError": "Couldn't load plans. Check your connection and try again.",
+    "@paywallLoadError": {
+        "description": "Plans sheet error copy. The retry button is separate."
+    },
+    "paywallPlans": "Plans",
+    "@paywallPlans": {
+        "description": "Title of the new plans sheet. The previous sheet keeps Plans & Billing."
+    },
     "firstCaptureTitle": "How will you capture?",
     "firstCaptureDescription": "Choose how you want to capture your first conversation.",
     "firstCaptureOmi": "I Have an Omi",

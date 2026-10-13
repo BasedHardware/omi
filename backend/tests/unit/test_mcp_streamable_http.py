@@ -829,6 +829,32 @@ class TestToolResultContract:
         assert result["isError"] is True
         Draft202012Validator(spec.output_schema).validate(result["structuredContent"])
 
+    def test_conversation_search_schema_describes_match_snippets(self):
+        spec = next(item for item in TOOL_SPECS if item.name == "search_conversations")
+        conversation_schema = spec.output_schema["anyOf"][0]["properties"]["conversations"]["items"]
+        assert "match_snippets" in conversation_schema["properties"]
+        Draft202012Validator(spec.output_schema).validate(
+            {
+                "conversations": [
+                    {
+                        "id": "conversation-id",
+                        "match_snippets": [
+                            {
+                                "text": "Speaker 1: search result",
+                                "segment_id": "segment-id",
+                                "start": 1.0,
+                                "end": 2.0,
+                                "start_ms": 1000,
+                                "end_ms": 2000,
+                                "speaker_id": 1,
+                            }
+                        ],
+                    }
+                ],
+                "search_coverage": "summary_vectors_with_keyword_recovery",
+            }
+        )
+
     @pytest.mark.parametrize(
         ("raised", "expected_code"),
         [

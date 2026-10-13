@@ -60,6 +60,14 @@ COUNT_PROFILES = (
 )
 
 WITHOUT_PHOTOS_PROFILES = (
+    _profile(
+        'developer-list',
+        statuses=[['completed']],
+        categories=[[], ['personal'], ['personal', 'technology']],
+        folder_id=[None, 'folder-1'],
+        starred=[None, False, True],
+        **_DATES,
+    ),
     _profile('main-list-single-status', statuses=[['completed']], sources=_ROUTE_SOURCES, **_DATES, **_SELECTORS),
     _profile(
         'main-list-default-or-multi-status', statuses=_MULTI_STATUS, sources=[[], ['omi']], **_DATES, **_SELECTORS
@@ -106,15 +114,6 @@ PHOTO_PROFILES = (
         include_discarded=[True],
         start_date=[FROZEN_NOW],
         end_date=[FROZEN_LATER],
-    ),
-    _profile(
-        'developer-list',
-        photo=True,
-        statuses=[['completed']],
-        categories=[[], ['personal'], ['personal', 'technology']],
-        folder_id=[None, 'folder-1'],
-        starred=[None, False, True],
-        **_DATES,
     ),
     _profile(
         'integration-list',

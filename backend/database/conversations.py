@@ -99,8 +99,14 @@ _PUBLIC_TRANSCRIPT_MAX_SEGMENTS = 4096
 _PUBLIC_TRANSCRIPT_MAX_SEGMENT_TEXT_CHARS = 24_000
 MCP_CONVERSATION_CARD_FIELD_PATHS = (
     'id',
+    'status',
     'discarded',
     'deleted',
+    'relevance_decision',
+    'sync_relevance_user_kept',
+    'has_photos',
+    'starred',
+    'folder_user_set',
     'created_at',
     'started_at',
     'finished_at',
