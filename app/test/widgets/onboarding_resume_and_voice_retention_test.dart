@@ -1,10 +1,17 @@
-import 'dart:async';
-import 'dart:typed_data';
-
 import 'package:flutter_test/flutter_test.dart';
 import 'package:omi/pages/onboarding/guided_voice_controller.dart';
 import 'package:omi/pages/onboarding/wrapper.dart';
 import '../providers/guided_voice_controller_test.dart' show FakeVoiceIO;
+
+Future<void> _answerAll(FakeVoiceIO io, GuidedVoiceController flow,
+    {required String goal, required String memory}) async {
+  await flow.start();
+  for (var i = 0; i < 4; i++) {
+    io.text = i == 3 ? goal : '$memory $i';
+    io.speak();
+    await flow.next();
+  }
+}
 
 void main() {
   group('Onboarding voice retention & goal idempotency (#20785)', () {
@@ -12,11 +19,7 @@ void main() {
       // Session 1: User runs guided voice introduction for account 'test-user-42'
       final io1 = FakeVoiceIO();
       final flow1 = GuidedVoiceController(io1, accountUid: 'test-user-42');
-      for (var i = 0; i < 4; i++) {
-        io1.text = i == 3 ? 'Right now my goal is to ship Omi.' : 'Personal detail $i';
-        await flow1.startRecording();
-        io1.speak();
-      }
+      await _answerAll(io1, flow1, goal: 'Right now my goal is to ship Omi.', memory: 'Personal detail');
       expect(flow1.answers.length, 4);
       expect(flow1.answers.last.isGoal, isTrue);
       final goalKey1 = flow1.answers.last.id;
@@ -30,11 +33,7 @@ void main() {
       // the goal idempotency key must be identical to prevent duplicate goals on backend.
       final io2 = FakeVoiceIO();
       final flow2 = GuidedVoiceController(io2, accountUid: 'test-user-42');
-      for (var i = 0; i < 4; i++) {
-        io2.text = i == 3 ? 'Right now my goal is to ship Omi.' : 'Personal detail $i';
-        await flow2.startRecording();
-        io2.speak();
-      }
+      await _answerAll(io2, flow2, goal: 'Right now my goal is to ship Omi.', memory: 'Personal detail');
       expect(flow2.answers.length, 4);
       expect(flow2.answers.last.isGoal, isTrue);
       final goalKey2 = flow2.answers.last.id;
@@ -49,11 +48,7 @@ void main() {
       final io = FakeVoiceIO();
       final flow = GuidedVoiceController(io, accountUid: 'user-abc');
 
-      for (var i = 0; i < 4; i++) {
-        io.text = i == 3 ? 'My primary goal is to build great AI.' : 'Memory fact $i';
-        await flow.startRecording();
-        io.speak();
-      }
+      await _answerAll(io, flow, goal: 'My primary goal is to build great AI.', memory: 'Memory fact');
       await flow.saveAll();
 
       expect(flow.stage, IntroductionStage.done);

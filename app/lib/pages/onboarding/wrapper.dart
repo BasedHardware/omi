@@ -41,6 +41,22 @@ class OnboardingWrapper extends StatefulWidget {
 
   final bool forceAuthPage;
 
+  /// The step helpers live on the private state class. Tests call them through the public widget.
+  @visibleForTesting
+  static bool isResumableStepForTesting(int index) => _OnboardingWrapperState.isResumableStepForTesting(index);
+
+  @visibleForTesting
+  static int? previousStepForTesting({
+    required int currentIndex,
+    required bool setupPageEnabled,
+    required bool knowledgeGraphStepEnabled,
+  }) =>
+      _OnboardingWrapperState.previousStepForTesting(
+        currentIndex: currentIndex,
+        setupPageEnabled: setupPageEnabled,
+        knowledgeGraphStepEnabled: knowledgeGraphStepEnabled,
+      );
+
   @override
   State<OnboardingWrapper> createState() => _OnboardingWrapperState();
 }
@@ -82,6 +98,7 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
   bool get hasSpeechProfile => SharedPreferencesUtil().hasSpeakerProfile;
   Future<void>? _knowledgeGraphPrebuildFuture;
   Future<bool>? _setupPageEnabled;
+  bool? _setupPageEnabledResolved;
   ProductAttempt? _onboardingAttempt;
   bool _finishing = false;
   GuidedVoiceController? _voiceController;
@@ -118,7 +135,7 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
       }
       // Read the flag two steps ahead so the decision is ready when the reader taps Continue.
       if (_controller!.index == kSpeechProfilePage) {
-        _setupPageEnabled ??= OnboardingSetupRatingPromptGate.isEnabled();
+        _ensureSetupPageFlag();
       }
     });
 
@@ -208,8 +225,18 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
 
   /// Setup page when the flag allows it, otherwise the completion screen. Used by the Knowledge
   /// Graph step's Continue and, while that step is hidden, straight from the speech profile.
+  void _ensureSetupPageFlag() {
+    _setupPageEnabled ??= OnboardingSetupRatingPromptGate.isEnabled().then((enabled) {
+      _setupPageEnabledResolved = enabled;
+      if (mounted) setState(() {});
+      return enabled;
+    });
+  }
+
   Future<void> _continueAfterKnowledgeGraph() async {
-    final enabled = await (_setupPageEnabled ?? OnboardingSetupRatingPromptGate.isEnabled());
+    _ensureSetupPageFlag();
+    final enabled = await _setupPageEnabled!;
+    _setupPageEnabledResolved = enabled;
     if (!mounted) return;
     _controller!.animateTo(stepAfterKnowledgeGraph(setupPageEnabled: enabled));
   }
@@ -250,7 +277,7 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
   int? get _previousStep {
     final current = _controller!.index;
     if (current == kCompletePage) {
-      return _setupPageEnabled == true
+      return _setupPageEnabledResolved == true
           ? kSetupPage
           : (kKnowledgeGraphStepEnabled ? kKnowledgeGraphPage : kSpeechProfilePage);
     }
@@ -275,9 +302,7 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
     required bool knowledgeGraphStepEnabled,
   }) {
     if (currentIndex == kCompletePage) {
-      return setupPageEnabled
-          ? kSetupPage
-          : (knowledgeGraphStepEnabled ? kKnowledgeGraphPage : kSpeechProfilePage);
+      return setupPageEnabled ? kSetupPage : (knowledgeGraphStepEnabled ? kKnowledgeGraphPage : kSpeechProfilePage);
     }
     if (currentIndex == kSetupPage) {
       return knowledgeGraphStepEnabled ? kKnowledgeGraphPage : kSpeechProfilePage;
