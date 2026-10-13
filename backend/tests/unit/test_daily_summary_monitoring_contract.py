@@ -177,7 +177,12 @@ def test_recap_dashboard_row_and_no_grid_overlap():
 
 
 def test_recap_alert_reads_provisioned_log_metrics_and_gates_on_volume():
-    """Failure-Class: FC-alert-never-provably-fired -- every series the rule reads is provisioned."""
+    """Failure-Class: FC-alert-never-provably-fired -- every series the rule reads is provisioned.
+
+    The Cloud Monitoring datasource's PromQL query type panics Grafana's alert
+    evaluator (nil pointer at tsdb/cloud-monitoring/promql_query.go:23, prod
+    2026-10-13), so alert queries use timeSeriesList like every other rule on it.
+    """
     provisioned = _provisioned_log_metrics()
     for export in ('alerts/daily-recap.json', 'alert-rules.json'):
         rules = json.loads((ROOT / 'backend/charts/monitoring' / export).read_text())
@@ -186,22 +191,45 @@ def test_recap_alert_reads_provisioned_log_metrics_and_gates_on_volume():
         assert rule['notification_settings']['receiver'] == 'Omi - Services Alerting (Telegram)'
         assert rule['noDataState'] == 'OK'
         assert rule['for'] == '15m'
-        models = [node['model'] for node in rule['data']]
-        exprs = _cloud_monitoring_exprs(models)
-        assert len(exprs) == 4
-        for node in rule['data']:
-            if node['model'].get('queryType') == 'promQL':
-                assert node['datasourceUid'] == CLOUD_MONITORING['uid']
-        for expr in exprs:
-            assert _referenced_log_metrics(expr) <= provisioned
-            # An absent generated series during a total outage must read 0, not No Data.
-            assert expr.endswith(' or vector(0)')
-        assert sum('DailySummaryDeliveryError' in expr for expr in exprs) == 2
-        assert ['[1h]' in e for e in exprs] == [True, True, False, False]
-        maths = [m['expression'] for m in models if m.get('type') == 'math']
-        assert maths == ['($E >= 10 && $F / ($E + $F) < 0.5) || ($G >= 20 && $H == 0)']
+        assert rule['condition'] == 'C'
+        queries = [node for node in rule['data'] if node['datasourceUid'] == CLOUD_MONITORING['uid']]
+        assert len(queries) == 1
+        query = queries[0]
+        assert query['model']['queryType'] == query['queryType'] == 'timeSeriesList'
+        assert query['relativeTimeRange'] == {'from': 10800, 'to': 0}
+        series = query['model']['timeSeriesList']
+        filters = series['filters']
+        metric = filters[filters.index('metric.type') + 2]
+        assert metric.startswith('logging.googleapis.com/user/')
+        assert metric.split('/')[-1] in provisioned
+        assert filters[filters.index('metric.label.reason') + 1 : filters.index('metric.label.reason') + 3] == [
+            '=',
+            'generation_error',
+        ]
+        assert filters[filters.index('metric.label.error_type') + 1 : filters.index('metric.label.error_type') + 3] == [
+            '!=',
+            'DailySummaryDeliveryError',
+        ]
+        assert series['perSeriesAligner'] == 'ALIGN_DELTA'
+        assert series['crossSeriesReducer'] == 'REDUCE_SUM'
+        models = {node['refId']: node['model'] for node in rule['data']}
+        assert models['B']['type'] == 'reduce' and models['B']['reducer'] == 'sum' and models['B']['expression'] == 'A'
+        assert models['C']['type'] == 'threshold' and models['C']['expression'] == 'B'
+        assert models['C']['conditions'][0]['evaluator'] == {'params': [24], 'type': 'gt'}
         assert rule['annotations']['__dashboardUid__'] == 'omi-core-features'
         assert rule['annotations']['__panelId__'] == '73'
+
+
+def test_no_alert_rule_uses_the_cloud_monitoring_promql_query_type():
+    rules = json.loads((ROOT / 'backend/charts/monitoring/alert-rules.json').read_text())
+    offenders = [
+        rule['uid']
+        for rule in rules
+        for node in rule['data']
+        if node['datasourceUid'] == CLOUD_MONITORING['uid']
+        and (node.get('queryType') == 'promQL' or node['model'].get('queryType') == 'promQL')
+    ]
+    assert offenders == []
 
 
 def test_notifications_namespace_in_both_exporter_filters():
