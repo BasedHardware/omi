@@ -26,11 +26,15 @@ import 'package:omi/pages/onboarding/permissions/permissions_widget.dart';
 import 'package:omi/pages/onboarding/primary_language/primary_language_widget.dart';
 import 'package:omi/pages/onboarding/complete_screen.dart';
 import 'package:omi/pages/onboarding/setup_page.dart';
+import 'package:omi/pages/onboarding/speech_profile_widget.dart';
+import 'package:omi/pages/onboarding/guided_voice_controller.dart';
+import 'package:omi/pages/onboarding/guided_voice_io.dart';
 import 'package:omi/pages/onboarding/widgets/onboarding_step_layout.dart';
 import 'package:omi/providers/home_provider.dart';
 import 'package:omi/providers/onboarding_provider.dart';
 import 'package:omi/providers/usage_provider.dart';
 import 'package:omi/services/auth_service.dart';
+import 'package:omi/services/experiments/onboarding_activation_flow.dart';
 import 'package:omi/services/experiments/onboarding_setup_rating_prompt.dart';
 import 'package:omi/utils/analytics/intercom.dart';
 import 'package:omi/utils/analytics/product_telemetry.dart';
@@ -58,7 +62,10 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
   static const int kPermissionsPage = 3;
   static const int kPrimaryLanguagePage = 4;
   static const int kConnectOmiPage = 5; // Finds the reader's Omi (search starts after sign-in)
-  static const int kSpeechProfilePage = 6; // Activation: Omi at work, the first conversation, congrats
+  // The ending after Connect Omi, A/B by OnboardingActivationExperiment: the guided voice
+  // introduction (control) or the activation (treatment: Omi at work, the first conversation,
+  // congrats).
+  static const int kSpeechProfilePage = 6;
   static const int kActivationPage = kSpeechProfilePage;
   static const int kKnowledgeGraphPage = 7; // Memory graph preview
   static const int kSetupPage = 8; // "Setting up your Omi" + rating pre-prompt; flag-gated, else skipped
@@ -90,6 +97,19 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
   Future<bool>? _setupPageEnabled;
   ProductAttempt? _onboardingAttempt;
   bool _finishing = false;
+  GuidedVoiceController? _voiceController;
+
+  GuidedVoiceController _getVoiceController() {
+    return _voiceController ??= GuidedVoiceController(
+      DeviceGuidedVoiceIO(),
+      flowSource: 'first_run',
+      accountUid: SharedPreferencesUtil().uid,
+    );
+  }
+
+  /// Which ending this reader gets; null until the flag has been read.
+  OnboardingEnding? _ending;
+  Future<OnboardingEnding>? _endingFuture;
 
   /// The step on screen and which way the reader last moved, for the step transition.
   int _shownIndex = 0;
@@ -113,6 +133,8 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
         _shownIndex = _controller!.index;
       });
       _rememberStep(_controller!.index);
+      // Read the ending's flag from Connect Omi on, so it is decided when the reader leaves it.
+      if (_controller!.index >= kConnectOmiPage) unawaited(_resolveEnding());
       // Update background image when page changes
       _updateBackgroundImage(_controller!.index);
       // Precache next image for smoother transitions
@@ -162,6 +184,7 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
   @override
   void dispose() {
     _onboardingAttempt?.complete(ProductOutcome.unobserved, failure: ProductFailure.incomplete);
+    _voiceController?.dispose();
     _controller?.dispose();
     _backgroundAnimationController.dispose();
     super.dispose();
@@ -219,6 +242,7 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
     SharedPreferencesUtil().onboardingCompleted = true;
     SharedPreferencesUtil().permissionsCompleted = true;
     SharedPreferencesUtil().remove(_resumeKey);
+    OnboardingActivationExperiment.forget(SharedPreferencesUtil().uid);
     _completeOnboardingTelemetry();
     PlatformManager.instance.analytics.onboardingCompleted();
     PaintingBinding.instance.imageCache.clear();
@@ -232,8 +256,83 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
       unawaited(OnboardingSyncRuntime.enqueue(deviceOnboardingCompleted: true));
     }
     PlatformManager.instance.analytics.onboardingStepCompleted('Connect Omi');
-    _goNext();
+    unawaited(_enterEnding());
   }
+
+  // ---- The ending: voice introduction (control) or activation (treatment) ------------------
+
+  /// The ending for this account: the one it already started, else the flag's answer (control on
+  /// any doubt). Read once per onboarding.
+  Future<OnboardingEnding> _resolveEnding() {
+    return _endingFuture ??= () async {
+      final uid = SharedPreferencesUtil().uid;
+      final ending = OnboardingActivationExperiment.remembered(uid) ?? await OnboardingActivationExperiment.resolve();
+      if (mounted) setState(() => _ending = ending);
+      return ending;
+    }();
+  }
+
+  /// Leaves Connect Omi once the ending is decided, and keeps it for this account so a reader who
+  /// comes back later finishes the same ending.
+  Future<void> _enterEnding() async {
+    final ending = await _resolveEnding();
+    if (!mounted) return;
+    OnboardingActivationExperiment.remember(SharedPreferencesUtil().uid, ending);
+    _controller!.animateTo(kSpeechProfilePage);
+  }
+
+  /// Control: after the voice introduction, the knowledge graph when shown, otherwise the setup
+  /// page or the completion screen, exactly as before the activation existed.
+  void _leaveSpeechProfile() {
+    if (kKnowledgeGraphStepEnabled) {
+      _controller!.animateTo(kKnowledgeGraphPage);
+    } else {
+      _continueAfterKnowledgeGraph();
+    }
+  }
+
+  Widget _endingPage() {
+    if (widget.forceAuthPage) return const SizedBox.shrink();
+    switch (_ending) {
+      case null:
+        return const SizedBox.shrink();
+      case OnboardingEnding.voiceIntro:
+        // The guided introduction owns its transcription-only session and reviews statements
+        // before explicitly saving them as memories.
+        return SpeechProfileWidget(
+          flowSource: 'first_run',
+          controller: _getVoiceController(),
+          goNext: () {
+            // All Done is not enroll success (#12765). Upload/embedding events fire only from the
+            // guided I/O upload receipt.
+            PlatformManager.instance.analytics.speechProfileContinued();
+            _leaveSpeechProfile();
+          },
+          onSkip: () {
+            PlatformManager.instance.analytics.speechProfileSkipped();
+            _leaveSpeechProfile();
+          },
+        );
+      case OnboardingEnding.activation:
+        return ActivationFlow(
+          hasDevice: _deviceChoice == OnboardingDeviceChoice.connected ||
+              context.read<DeviceProvider>().isConnected ||
+              DemoActivationCapture.pretendsDevice,
+          // How to wear it and use its button applies to Omi itself, not other wearables.
+          showWearTips: context.read<DeviceProvider>().connectedDevice?.type == DeviceType.omi ||
+              DemoActivationCapture.pretendsDevice,
+          showPaywall: _showPaywall,
+          onFinished: () {
+            PlatformManager.instance.analytics.onboardingStepCompleted('Activation');
+            _completeOnboarding();
+          },
+        );
+    }
+  }
+
+  /// The activation is a moment, not a form: no progress line and no way back. The voice
+  /// introduction keeps its progress line.
+  bool get _onActivation => _controller!.index == kActivationPage && _ending != OnboardingEnding.voiceIntro;
 
   void _goNext() {
     if (_controller!.index < _controller!.length - 1) {
@@ -280,7 +379,7 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
   int? get _previousStep {
     // Connect Omi is the threshold into the experience: no way back into the setup questions
     // (language and permissions can be changed later in Settings).
-    // The activation that follows is a moment, not a form: no back either.
+    // The ending that follows (activation or voice introduction) is not a form: no back either.
     if (_controller!.index == kConnectOmiPage || _controller!.index == kActivationPage) return null;
     final position = kProgressSteps.indexOf(_controller!.index);
     if (position <= 0) return null;
@@ -298,6 +397,8 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
   /// "Use a Different Account" on the consent step: sign out and start again from the beginning.
   Future<void> _useDifferentAccount() async {
     final navigator = Navigator.of(context, rootNavigator: true);
+    _voiceController?.dispose();
+    _voiceController = null;
     final rootContext = globalNavigatorKey.currentContext;
     if (rootContext != null && rootContext.mounted) clearAllUserState(rootContext);
     await SharedPreferencesUtil().clear();
@@ -436,21 +537,7 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
         },
       ),
       widget.forceAuthPage ? const SizedBox.shrink() : ConnectOmiStep(onDone: _leaveConnectOmi),
-      widget.forceAuthPage
-          ? const SizedBox.shrink()
-          : ActivationFlow(
-              hasDevice: _deviceChoice == OnboardingDeviceChoice.connected ||
-                  context.read<DeviceProvider>().isConnected ||
-                  DemoActivationCapture.pretendsDevice,
-              // How to wear it and use its button applies to Omi itself, not other wearables.
-              showWearTips: context.read<DeviceProvider>().connectedDevice?.type == DeviceType.omi ||
-                  DemoActivationCapture.pretendsDevice,
-              showPaywall: _showPaywall,
-              onFinished: () {
-                PlatformManager.instance.analytics.onboardingStepCompleted('Activation');
-                _completeOnboarding();
-              },
-            ),
+      _endingPage(),
       OnboardingKnowledgeGraphStep(onContinue: _leaveKnowledgeGraph),
       OnboardingSetupPage(
         pendingWork: _knowledgeGraphPrebuildFuture,
@@ -486,7 +573,7 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
                 reserveHeader: index == kConnectOmiPage,
                 onBack: previous == null ? null : _goBack,
                 // The activation is a moment, not a form: no progress line over it.
-                progress: kProgressSteps.contains(index) && index != kActivationPage
+                progress: kProgressSteps.contains(index) && !_onActivation
                     ? OnboardingProgressLine(current: kProgressSteps.indexOf(index), total: kProgressSteps.length)
                     : null,
                 child: _StepTransition(
