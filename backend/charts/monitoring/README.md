@@ -17,6 +17,29 @@ no-data semantics lives in [`expected-targets.prod.yaml`](./expected-targets.pro
 - Live Instatus delivery verification and notification-policy rework remain
   maintainer-approved Phase 2 work (not claimed by the inventory).
 
+## Telemetry cost cuts
+
+The 2026-10-13 audit measured 527,780 head series. Production kubelet
+`metricRelabelings` drop `kubernetes_feature_enabled` and the
+`rest_client_{request,response}_size_bytes_{bucket,sum,count}` families;
+`probesMetricRelabelings` drop `prober_probe_duration_seconds_{bucket,sum,count}`.
+No committed consumer or live Prometheus rule referenced these families.
+The main ServiceMonitor contributed 16,526 active series (about 3.1% of head).
+The chart's existing storage-operation bucket drop is preserved because Helm
+replaces relabeling lists. Probe-result counters, used latency histograms,
+HPA inputs, scrape intervals, resource requests and 10-day retention stay intact.
+
+`backend/tests/unit/test_monitoring_cost_contract.py` guards these cuts against
+committed alerts, dashboards (including vendored defaults), recording rules,
+adapter queries and Prometheus-reading code. Generate the conservative usage map
+with `python3 backend/scripts/monitoring_metric_usage.py --metrics-file <names.json>`;
+the input is a JSON name array or `/api/v1/label/__name__/values` response.
+A missing committed reference is a candidate for review, not proof that an
+operator never uses a metric in Explore. Before deploying, check live rules and
+operator-managed dashboards again; after deploying compare post-relabel samples
+and head series after compaction. Removed history ages out over the existing
+retention window. Series reductions only save dollars when capacity can be reduced.
+
 ## Grafana storage
 
 Grafana 12.1.0 uses SQLite on the existing 20Gi `standard-rwo` PVC. Prod and
@@ -670,6 +693,11 @@ curl -s -X POST -H "Authorization: Bearer $PROD_GRAFANA_TOKEN" \
 Alerting is configured through Grafana unified alerting (not Prometheus AlertManager rules directly). Alert screenshots are enabled via the Grafana image renderer.
 
 Loki ruler is configured to send alerts to AlertManager at `http://prod-kube-prometheus-stack-alertmanager:9093`.
+
+### Telegram notification quality
+
+See [template, severity timing, examples and supervisor rollout](notifications/README.md).
+Rules own direct notification timing; Helm does not provision the contact or template.
 
 ### Human-Impact Alert Contract
 

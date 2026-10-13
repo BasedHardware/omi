@@ -122,6 +122,7 @@ MONITORING_CONTRACT_SOURCES = (
     'backend/charts/monitoring/expected-targets.prod.yaml',
     'backend/charts/monitoring/kube-prometheus-stack/',
     'backend/charts/monitoring/alerts/',
+    'backend/charts/monitoring/notifications/',
     'backend/charts/monitoring/alert-rules.json',
     'backend/charts/monitoring/live-alert-gate.json',
     'backend/charts/monitoring/prometheus-stackdriver-exporter/',
