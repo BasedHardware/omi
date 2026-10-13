@@ -37,9 +37,10 @@ from utils.dream_prompt import mount, evidence_message, evidence_chars, person_n
 from utils.dream_prompt import full_mount, full_evidence_message, select_full_records
 
 
-async def plan_pass(uid, records, caps, *, turn=None, usage_sink=None, vocabulary=None, deadline=None):
+async def plan_pass(uid, records, caps, *, turn=None, usage_sink=None, vocabulary=None, deadline=None, clock=None):
     caps = caps.for_uid(uid)
-    deadline = deadline if deadline is not None else asyncio.get_running_loop().time() + FULL_PASS_SECONDS
+    clock = asyncio.get_running_loop().time if clock is None else clock
+    deadline = deadline if deadline is not None else clock() + FULL_PASS_SECONDS
 
     async def invoke(uid, lane, mount, messages):
         if usage_sink is not None:
@@ -133,7 +134,7 @@ async def plan_pass(uid, records, caps, *, turn=None, usage_sink=None, vocabular
         results = []
         try:
             for sink in sample_usage:
-                if deadline - asyncio.get_running_loop().time() < FULL_MODEL_SECONDS:
+                if deadline - clock() < FULL_MODEL_SECONDS:
                     break
                 sink['attempted'] = True
                 for attempt in range(2):
@@ -142,7 +143,9 @@ async def plan_pass(uid, records, caps, *, turn=None, usage_sink=None, vocabular
                         break
                     except dream_transport.CapacityWait as exc:
                         sink['capacity_wait'] = True
-                        if attempt == 0 and await dream_capacity.wait_for_capacity(deadline, FULL_MODEL_SECONDS):
+                        if attempt == 0 and await dream_capacity.wait_for_capacity(
+                            deadline, FULL_MODEL_SECONDS, clock=clock
+                        ):
                             sink['capacity_retries'] = 1
                             continue
                         results.append(exc)

@@ -10,7 +10,7 @@ from config.dream_agent import Caps
 from models.dream_agent import DreamReviewItem, Plan, SlowTask
 from models.dream_edit import Edit, Term
 from models.dream_refs import base_ref, cited_value
-from utils import dream_agent, dream_guards, dream_metrics, dream_tools, dream_transport
+from utils import dream_agent, dream_capacity, dream_guards, dream_metrics, dream_tools, dream_transport
 from utils.dream_consensus import majority
 from utils.dream_context import EvidenceRecords
 from utils.llm.shaped_agent import Turn
@@ -23,6 +23,30 @@ RECORD = {
         {'id': 'second', 'start': 20, 'end': 24, 'text': 'A different exact quote.'},
     ]
 }
+
+
+class ManualClock:
+    def __init__(self):
+        self.now = 1000.0
+
+    def __call__(self):
+        return self.now
+
+    def advance(self, seconds):
+        self.now += seconds
+
+
+@pytest.fixture
+def clock():
+    return ManualClock()
+
+
+@pytest.fixture(autouse=True)
+def isolated_capacity(monkeypatch):
+    # Patch the lazy state seam rather than clearing another test's cached state.
+    local = dream_capacity.LocalCapacity()
+    monkeypatch.setattr(dream_capacity, '_local', lambda: local)
+    return local
 
 
 @pytest.fixture
@@ -314,39 +338,53 @@ async def test_capacity_retry_exhaustion_still_uses_the_one_survivor(full, monke
 
 
 @pytest.mark.asyncio
-async def test_remaining_deadline_keeps_returned_sample_without_starting_another(full):
+@pytest.mark.parametrize('headroom', [480.0, 480.01])
+async def test_remaining_deadline_keeps_returned_sample_without_starting_another(
+    full, clock, isolated_capacity, monkeypatch, headroom
+):
     calls = 0
+    # Even a saturated reservation must not affect a provider-free fake turn.
+    isolated_capacity.cooldowns['gemini-2.5-flash'] = float('inf')
+    available = AsyncMock(side_effect=AssertionError('fake turn consulted provider capacity'))
+    monkeypatch.setattr(dream_capacity, 'available_model', available)
 
     async def turn(*args):
         nonlocal calls
         calls += 1
-        await asyncio.sleep(0.02)
+        clock.advance(0.02)
         return Turn(value=Plan(edits=[edit()]), tokens=10)
 
     sink = {'tokens': 0}
     result, tokens = await dream_agent.plan_pass(
-        UID, {REF: RECORD}, full, turn=turn, usage_sink=sink, deadline=asyncio.get_running_loop().time() + 480.01
+        UID, {REF: RECORD}, full, turn=turn, usage_sink=sink, deadline=clock() + headroom, clock=clock
     )
     assert calls == 1 and len(result.edits) == 1 and tokens == 10
     assert sink['samples_requested'] == 3 and sink['samples_attempted'] == 1 and sink['samples_returned'] == 1
+    available.assert_not_awaited()
+    dream_capacity.wait_for_capacity.assert_not_awaited()
     assert sink['consensus_threshold'] == 1 and not sink['usage_unknown']
 
 
 @pytest.mark.asyncio
-async def test_cooldown_wait_honors_deadline_and_rechecks_capacity(monkeypatch):
+async def test_cooldown_wait_honors_deadline_and_rechecks_capacity(monkeypatch, clock):
     from utils import dream_capacity
 
-    slept = AsyncMock()
+    slept = AsyncMock(side_effect=clock.advance)
     available = AsyncMock(return_value='reserved')
     monkeypatch.setattr(dream_capacity.asyncio, 'sleep', slept)
     monkeypatch.setattr(dream_capacity, 'available_model', available)
-    now = asyncio.get_running_loop().time()
-    assert not await dream_capacity.wait_for_capacity(now + 599, 480)
+    now = clock()
+    assert not await dream_capacity.wait_for_capacity(now + 599, 480, clock=clock)
     assert slept.await_count == available.await_count == 0
-    assert await dream_capacity.wait_for_capacity(now + 700, 480)
+    assert await dream_capacity.wait_for_capacity(now + 700, 480, clock=clock)
     slept.assert_awaited_once_with(120)
+    assert clock() == now + 120
+    # A second cooldown no longer fits the original deadline.
+    assert not await dream_capacity.wait_for_capacity(now + 700, 480, clock=clock)
+    assert slept.await_count == available.await_count == 1
     available.return_value = None
-    assert not await dream_capacity.wait_for_capacity(now + 700, 480)
+    assert not await dream_capacity.wait_for_capacity(clock() + 700, 480, clock=clock)
+    assert slept.await_count == available.await_count == 2
 
 
 @pytest.mark.parametrize(
