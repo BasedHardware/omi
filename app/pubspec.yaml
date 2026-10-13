@@ -211,6 +211,7 @@ flutter:
     - assets/images/stars.png
     - assets/images/herologo.png
     - assets/images/omi_pendant_glow.png
+    - assets/videos/onboarding_launch_loop.mp4
     - assets/fonts/
     - assets/images/
     - assets/test/tts_progressive_probe.mp3

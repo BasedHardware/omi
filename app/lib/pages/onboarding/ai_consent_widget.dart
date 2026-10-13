@@ -49,21 +49,21 @@ class _AiConsentWidgetState extends State<AiConsentWidget> {
   @override
   Widget build(BuildContext context) {
     final l10n = context.l10n;
-    final body = OmiType.callout.copyWith(color: OmiColors.textSecondary, height: 1.45);
-    final fine = OmiType.caption.copyWith(color: OmiColors.textTertiary, height: 1.3);
-    final link = fine.copyWith(color: OmiColors.textSecondary, decoration: TextDecoration.underline);
-    // The other steps end their button `OmiSpacing.sm` above the safe area; this one keeps that
-    // height and puts the agreement line in the space below it.
-    final bottomInset = MediaQuery.paddingOf(context).bottom;
-    final belowButton = bottomInset + OmiSpacing.sm < 40 ? 40.0 : bottomInset + OmiSpacing.sm;
-    return OnboardingStep(
-      card: OnboardingCard(
-        reserveBottomInset: false,
-        padding: const EdgeInsets.fromLTRB(OmiSpacing.xl, OmiSpacing.xl, OmiSpacing.xl, 0),
-        content: [
+    final p = OnboardingHero.palette;
+    final body = OmiType.callout.copyWith(color: p.textSecondary, height: 1.45);
+    final fine = OmiType.caption.copyWith(color: p.textTertiary, height: 1.3);
+    final link = fine.copyWith(color: p.textSecondary, decoration: TextDecoration.underline);
+    return OnboardingHeroStep(
+      headline: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
           Semantics(
             header: true,
-            child: Text(l10n.dataAndPrivacy, style: OmiType.title1, textAlign: TextAlign.center),
+            child: Text(
+              l10n.dataAndPrivacy,
+              style: OmiType.title1.copyWith(color: p.textPrimary),
+              textAlign: TextAlign.center,
+            ),
           ),
           const SizedBox(height: OmiSpacing.xs),
           ConstrainedBox(
@@ -74,42 +74,34 @@ class _AiConsentWidgetState extends State<AiConsentWidget> {
           Text(
             l10n.consentAiProviders(_aiProviders),
             key: const Key('ai_consent_providers'),
-            style: OmiType.footnote.copyWith(color: OmiColors.textTertiary),
+            style: OmiType.footnote.copyWith(color: p.textTertiary),
             textAlign: TextAlign.center,
           ),
         ],
-        footer: [
-          const SizedBox(height: OmiSpacing.xl),
-          OmiButton(
-            key: const Key('ai_consent_agree'),
-            label: l10n.continueButton,
-            expand: true,
-            onPressed: () {
-              OmiHaptics.selection();
-              widget.onAgree();
-            },
-          ),
-          SizedBox(
-            height: belowButton,
-            child: Padding(
-              padding: const EdgeInsets.only(top: OmiSpacing.xs),
-              // One quiet line where it fits; long translations wrap to a second line.
-              child: Text.rich(
-                TextSpan(
-                  style: fine,
-                  children: [
-                    TextSpan(text: l10n.byContinuingYouAgree),
-                    TextSpan(text: l10n.termsOfUse, style: link, recognizer: _termsRecognizer),
-                    TextSpan(text: l10n.and),
-                    TextSpan(text: l10n.privacyPolicy, style: link, recognizer: _privacyRecognizer),
-                    const TextSpan(text: '.'),
-                  ],
-                ),
-                textAlign: TextAlign.center,
-              ),
-            ),
-          ),
-        ],
+      ),
+      buttons: [
+        OnboardingHeroButton(
+          key: const Key('ai_consent_agree'),
+          label: l10n.continueButton,
+          onPressed: () {
+            OmiHaptics.selection();
+            widget.onAgree();
+          },
+        ),
+      ],
+      // One quiet line where it fits; long translations wrap to a second line.
+      legal: Text.rich(
+        TextSpan(
+          style: fine,
+          children: [
+            TextSpan(text: l10n.byContinuingYouAgree),
+            TextSpan(text: l10n.termsOfUse, style: link, recognizer: _termsRecognizer),
+            TextSpan(text: l10n.and),
+            TextSpan(text: l10n.privacyPolicy, style: link, recognizer: _privacyRecognizer),
+            const TextSpan(text: '.'),
+          ],
+        ),
+        textAlign: TextAlign.center,
       ),
     );
   }

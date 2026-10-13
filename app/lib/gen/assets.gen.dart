@@ -500,6 +500,16 @@ class $AssetsTestGen {
   List<String> get values => [ttsProgressiveProbe];
 }
 
+class $AssetsVideosGen {
+  const $AssetsVideosGen();
+
+  /// File path: assets/videos/onboarding_launch_loop.mp4
+  String get onboardingLaunchLoop => 'assets/videos/onboarding_launch_loop.mp4';
+
+  /// List of all assets
+  List<String> get values => [onboardingLaunchLoop];
+}
+
 abstract final class Assets {
   static const $AssetsCompetitorLogosGen competitorLogos =
       $AssetsCompetitorLogosGen();
@@ -508,6 +518,7 @@ abstract final class Assets {
   static const $AssetsIntegrationAppLogosGen integrationAppLogos =
       $AssetsIntegrationAppLogosGen();
   static const $AssetsTestGen test = $AssetsTestGen();
+  static const $AssetsVideosGen videos = $AssetsVideosGen();
   static const String shorebird = 'shorebird.yaml';
 
   /// List of all assets

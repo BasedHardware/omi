@@ -14,6 +14,8 @@ import 'package:provider/provider.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/gen/assets.gen.dart';
 import 'package:omi/pages/home/page.dart';
+import 'package:omi/pages/onboarding/widgets/onboarding_hero_film.dart';
+import 'package:omi/pages/onboarding/widgets/onboarding_card.dart';
 import 'package:omi/pages/onboarding/ai_consent_widget.dart';
 import 'package:omi/pages/onboarding/auth.dart';
 import 'package:omi/pages/onboarding/activation/activation_capture.dart';
@@ -594,7 +596,7 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
           backgroundColor: OmiColors.surface0,
           body: Stack(
             children: [
-              if (showBackground) _background(),
+              if (showBackground) OnboardingHero.video ? const OnboardingHeroFilm() : _background(),
               OnboardingStepLayout(
                 reserveHeader: index == kConnectOmiPage,
                 onBack: previous == null ? null : _goBack,
