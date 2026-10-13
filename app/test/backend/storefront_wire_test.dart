@@ -11,10 +11,11 @@ void main() {
 
     expect(decoded.schemaVersion, 2);
     expect(decoded.header, 'Choose your plan');
-    expect(decoded.tiers.map((tier) => tier.name), ['Plus', 'Free', 'Pro', 'Architect']);
-    expect(decoded.tiers.first.recommended, isTrue);
+    final tiers = decoded.tiers!;
+    expect(tiers.map((tier) => tier.name), ['Plus', 'Free', 'Pro', 'Architect']);
+    expect(tiers.first.recommended, isTrue);
     expect(decoded.yearlyToggleLabel, 'Yearly · 2 months free');
-    final free = decoded.tiers.firstWhere((tier) => tier.name == 'Free');
+    final free = tiers.firstWhere((tier) => tier.name == 'Free');
     expect(free.compact, isTrue);
     expect(free.blockedLine, isNull);
     expect(free.ctaLabel, isNull);
