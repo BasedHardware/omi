@@ -228,3 +228,69 @@ def test_search_files_tool_provider_rejection_is_not_a_server_error(monkeypatch,
         for record in caplog.records
     )
     assert all(record.exc_info in (None, (None, None, None)) for record in caplog.records)
+
+
+def _bad_request_error(body: object) -> openai.BadRequestError:
+    return openai.BadRequestError(
+        message='Error code: 400 - rejected',
+        response=SimpleNamespace(request=None, status_code=400, headers={}),
+        body=body,
+    )
+
+
+def _run_search_files_tool_rejection(monkeypatch, caplog, error: Exception):
+    session = {
+        'id': 's1',
+        'created_at': datetime.now(timezone.utc),
+        'file_ids': ['f1'],
+    }
+    monkeypatch.setattr(file_tools.chat_db, 'get_chat_session_by_id', lambda *_args: session)
+
+    class _Rejected:
+        def __init__(self, *_args, **_kwargs):
+            pass
+
+        def process_chat_with_file(self, *_args, **_kwargs):
+            raise chat_file.ProviderRejectedChatFileError('The file could not be processed.') from error
+
+    monkeypatch.setattr(file_tools, 'FileChatTool', _Rejected)
+    with caplog.at_level(logging.DEBUG, logger='utils.retrieval.tools.file_tools'):
+        return file_tools.search_files_tool.func(
+            question='what does this say?',
+            config={'configurable': {'user_id': 'u1', 'chat_session_id': 's1'}},
+        )
+
+
+def test_search_files_tool_request_shape_400_stays_a_server_error(monkeypatch, caplog):
+    # A 400 naming a field our request constructs (bad model id, unsupported
+    # token budget) is a deployment fault: it must stay error-level with the
+    # traceback instead of masquerading as a rejected user file.
+    cause = _bad_request_error({'error': {'param': 'model', 'message': "Invalid 'model'"}})
+
+    result = _run_search_files_tool_rejection(monkeypatch, caplog, cause)
+
+    assert result == 'I encountered an error while searching the files. Please try again or rephrase your question.'
+    error_records = [record for record in caplog.records if record.levelno >= logging.ERROR]
+    assert error_records, 'request-shape 400 must be reported at ERROR'
+    assert any(record.exc_info for record in error_records), 'traceback must be preserved'
+    assert not any(
+        record.levelno == logging.WARNING and 'provider rejected the file' in record.getMessage()
+        for record in caplog.records
+    )
+
+
+def test_search_files_tool_attachment_shaped_400_stays_soft(monkeypatch, caplog):
+    # A 400 whose param points at the attachment itself (stale file id inside
+    # the message content) is unreadable user input, not a deployment fault.
+    cause = _bad_request_error(
+        {'error': {'param': 'messages[0].content[1].file.file_id', 'message': 'No such File object'}}
+    )
+
+    result = _run_search_files_tool_rejection(monkeypatch, caplog, cause)
+
+    assert result == 'The file could not be processed.'
+    assert not any(record.levelno >= logging.ERROR for record in caplog.records)
+    assert any(
+        record.levelno == logging.WARNING and 'provider rejected the file' in record.getMessage()
+        for record in caplog.records
+    )

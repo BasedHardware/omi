@@ -5,6 +5,7 @@ These tools allow the LLM to search and query files uploaded to chat sessions.
 """
 
 import contextvars
+from collections.abc import Mapping
 from langchain_core.runnables import RunnableConfig
 from langchain_core.tools import tool  # type: ignore[reportUnknownVariableType]  # langchain @tool decorator partially typed
 from typing import Any, Dict, List, Optional, cast
@@ -14,6 +15,52 @@ from utils.other.chat_file import FileChatTool, ProviderRejectedChatFileError
 import logging
 
 logger = logging.getLogger(__name__)
+
+# Request fields this tool's provider call constructs (chat_file._ask_files /
+# _ask_files_stream). A provider 400 naming one of them is a deployment fault
+# (bad model id, unsupported token budget, malformed message schema), not the
+# user's attachment. Both OpenAI's nested ``error.param``/``error.code`` body
+# and flat gateway bodies are honored, mirroring is_gateway_model_not_found.
+_REQUEST_FIELD_400_MARKERS = ('model', 'messages', 'max_completion_tokens', 'stream')
+_REQUEST_SHAPE_400_CODES = frozenset({'model_not_found'})
+# Param paths ending in an attachment reference are about the user's file
+# (stale file_id, unreadable image), even though they live under ``messages``.
+_ATTACHMENT_PARAM_SUFFIXES = (
+    '.file.file_id',
+    '.file',
+    '.file_id',
+    '.image_url',
+    '.image_url.url',
+)
+
+
+def _names_request_field(param: object, code: object) -> bool:
+    """Whether one (param, code) pair from a provider 400 names our request shape."""
+    if code in _REQUEST_SHAPE_400_CODES:
+        return True
+    if not isinstance(param, str) or not param:
+        return False
+    if param.endswith(_ATTACHMENT_PARAM_SUFFIXES):
+        return False
+    return any(
+        param == marker or param.startswith(f'{marker}.') or param.startswith(f'{marker}[')
+        for marker in _REQUEST_FIELD_400_MARKERS
+    )
+
+
+def _provider_400_names_request_field(cause: object) -> bool:
+    """Whether a ProviderRejectedChatFileError's cause 400 is about our request shape."""
+    if cause is None:
+        return False
+    pairs: list[tuple[object, object]] = [(getattr(cause, 'param', None), getattr(cause, 'code', None))]
+    body = getattr(cause, 'body', None)
+    if isinstance(body, Mapping):
+        nested = body.get('error')
+        if isinstance(nested, Mapping):
+            pairs.append((nested.get('param'), nested.get('code')))
+        pairs.append((body.get('param'), body.get('code')))
+    return any(_names_request_field(param, code) for param, code in pairs)
+
 
 # Import agent_config_context for fallback config access
 try:
@@ -112,6 +159,18 @@ def search_files_tool(question: str, file_ids: Optional[List[str]] = None, confi
         # That is unreadable input, not a server fault. Logging the traceback at
         # ERROR makes Cloud Error Reporting group the raise site as an outage.
         cause = error.__cause__
+        if _provider_400_names_request_field(cause):
+            # A 400 naming a field our request constructs (model id, token budget,
+            # message schema) is a deployment fault, not a bad attachment. Keep
+            # error-level reporting with the traceback so the regression surfaces
+            # in Cloud Error Reporting instead of masquerading as a rejected file.
+            logger.error(
+                "search_files_tool rejected by provider for request shape cause_type=%s status=%s",
+                type(cause).__name__ if cause is not None else "none",
+                getattr(cause, "status_code", None),
+                exc_info=error,
+            )
+            return "I encountered an error while searching the files. Please try again or rephrase your question."
         logger.warning(
             "search_files_tool provider rejected the file cause_type=%s status=%s",
             type(cause).__name__ if cause is not None else "none",
