@@ -328,7 +328,15 @@ void main() {
         await tester.runAsync(() async {
           final image = tester.element(find.byKey(boundary)).renderObject! as RenderRepaintBoundary;
           final png = await (await image.toImage(pixelRatio: 3)).toByteData(format: ui.ImageByteFormat.png);
-          final file = File('../.agent-artifacts/ui-evidence/onb-polish/$tag-$name.png');
+          final ordinal = name == 'watch'
+              ? 1
+              : name.startsWith('connect-')
+                  ? Reason.values.indexWhere((reason) => name == 'connect-${reason.wireName}') +
+                      (platform == TargetPlatform.iOS ? 2 : 12)
+                  : ['find-us', 'find-us-large', 'find-us-large-end'].indexOf(name) +
+                      (platform == TargetPlatform.iOS ? 9 : 19);
+          final filename = '${ordinal.toString().padLeft(3, '0')}-mobile-$tag-${name.replaceAll('_', '-')}.png';
+          final file = File('../.agent-artifacts/ui-evidence/onb-polish/$filename');
           file.parent.createSync(recursive: true);
           file.writeAsBytesSync(png!.buffer.asUint8List());
         });
