@@ -3,6 +3,7 @@ kind: BackendConfig
 metadata:
   name: diarizer-backend-config
 spec:
+  timeoutSec: {{ .Values.backendConfig.timeoutSeconds }}
   healthCheck:
     checkIntervalSec: 10
     timeoutSec: 5

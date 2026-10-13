@@ -247,6 +247,9 @@ and an explicit empty literal renders as `''`.
 | `SYNC_LINEAGE_S1_REQUIRED` | Require valid S1 upload claims before per-segment lineage binding (default gated) | backend | env | closed | {value: 'true', category: rollout} | {value: 'true', category: rollout} | {value: 'true', category: rollout} | — | pending | 2026-11-02 | dazheng |
 | `SYNC_SAFETY_WAL_DEDUPE_ENABLED` | Fleet server safety-WAL interval-confirmed coverage cuts and corroborated transcript dedupe | backend | env | open | {value: 'true', category: rollout} | {value: 'true', category: rollout} | {value: 'true', category: rollout} | — | pending | 2026-11-12 | dazheng |
 | `SYNC_WAL_AUDIO_COVERAGE_ENABLED` | Trim safety-WAL frames positively proven live-received by shared source-frame identity before VAD/STT (default on) | backend | env | open | true | true | true | — | pending | 2026-11-02 | dazheng |
+| `TRANSCRIPTION_FINAL_PASS_AUTHORITATIVE` | Revision-fenced replacement of the transcript of record | backend | env | closed | — | — | — | — | pending | 2026-11-12 | dazheng |
+| `TRANSCRIPTION_FINAL_PASS_PERCENT` | Shared diarization cohort percentage | backend | env | closed | — | — | — | — | pending | 2026-11-12 | dazheng |
+| `TRANSCRIPTION_FINAL_PASS_SYNC_ENABLED` | Shared diarization and centroid naming for sync and safety WAL | backend | env | closed | — | — | — | — | pending | 2026-11-12 | dazheng |
 | `TRANSCRIPTION_SHADOW_ENABLED` | Run the stored-audio Parakeet final pass in shadow | backend | env | closed | — | false (backend-listen (chart), cloud_run/backend-sync, gke/backend-listen); true (gke/pusher, pusher (chart)) | true (gke/pusher, pusher (chart)) | — | pending | 2026-10-26 | dazheng |
 | `TRANSCRIPTION_SHADOW_PERCENT` | Allocate UIDs to the Parakeet final-pass shadow | backend | env | closed | — | 0 (backend-listen (chart), cloud_run/backend-sync, gke/backend-listen, gke/pusher, pusher (chart)) | 0 (gke/pusher, pusher (chart)) | — | pending | 2026-10-26 | dazheng |
 | `TRANSLATION_DEMAND_LEASE_V1_ENABLED` | Accept lease-v1 demand semantics from opted-in clients | backend | env | closed | {value: 'true', category: rollout} | true (backend-listen (chart)); {value: 'true', category: rollout} (cloud_run/backend, gke/backend-listen) | true (backend-listen (chart)); {value: 'true', category: rollout} (cloud_run/backend, gke/backend-listen) | — | pending | 2026-10-29 | dazheng |
@@ -380,6 +383,8 @@ and an explicit empty literal renders as `''`.
 | `SYNC_DISPATCH_MODE` | Select sync dispatch lane | backend | env | closed | — | — | — | — | keep | — | unowned |
 | `SYNC_LEDGER_FENCE_MODE` | Select sync ledger fence authority | backend | env | closed | env_var | env_var | env_var | — | keep | — | unowned |
 | `SYNC_PHASE_METRICS_EXPORT_ENABLED` | Export aggregate sync phase histograms through a bounded background flush; default off, enabled by reviewed deploy overlays | backend | env | closed | — | {value: 'true', category: telemetry} | {value: 'true', category: telemetry} | — | keep | — | dazheng |
+| `TRANSCRIPTION_FINAL_PASS_BACKEND` | Select pyannote, legacy AHC or contract-compatible Nemotron | backend | env | closed | — | — | — | — | keep | — | dazheng |
+| `TRANSCRIPTION_FINAL_PASS_DIARIZER` | Default-off shared final-pass diarization admission | backend | env | closed | — | — | — | — | keep | — | dazheng |
 | `TYPESENSE_CONVERSATION_INDEX_WRITES` | Write conversations to Typesense index | backend | env | closed | — | — | — | — | keep | — | unowned |
 | `USE_VERTEX_AI` | Select Vertex AI model route | backend | env | closed | true | true (backend-listen (chart), cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, desktop-backend, gke/backend-listen) | true (backend-listen (chart), cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, desktop-backend, gke/backend-listen) | — | keep | — | unowned |
 | `VAD_GATE_MODE` | Select off, shadow, or active server VAD gate | backend, mobile | env | closed | — | active (backend-listen (chart)) | active (backend-listen (chart)) | — | keep | — | unowned |
@@ -463,6 +468,11 @@ their code default (`fail` tells you which way a missing value resolves).
 - `SYNC_BACKFILL_ROUTING_ENABLED` — Route eligible sync work to backfill lane (fail: closed)
 - `SYNC_DISPATCH_MODE` — Select sync dispatch lane (fail: closed)
 - `SYNC_LINEAGE_RESOLVE_ENABLED` — Bind each segment of a recording-id safety-WAL upload to the live rollover generation that owns its audio, and stamp live generations with their origin recording id (default on) (fail: open)
+- `TRANSCRIPTION_FINAL_PASS_AUTHORITATIVE` — Revision-fenced replacement of the transcript of record (fail: closed)
+- `TRANSCRIPTION_FINAL_PASS_BACKEND` — Select pyannote, legacy AHC or contract-compatible Nemotron (fail: closed)
+- `TRANSCRIPTION_FINAL_PASS_DIARIZER` — Default-off shared final-pass diarization admission (fail: closed)
+- `TRANSCRIPTION_FINAL_PASS_PERCENT` — Shared diarization cohort percentage (fail: closed)
+- `TRANSCRIPTION_FINAL_PASS_SYNC_ENABLED` — Shared diarization and centroid naming for sync and safety WAL (fail: closed)
 - `TRANSLATION_OUTPUT_GUARD_ENABLED` — Reject conservative same-language translation rewrites (fail: open)
 - `TRANSLATION_PROFILE_GATE_ENABLED` — Defer short out-of-profile translation guesses (fail: open)
 - `TYPESENSE_CONVERSATION_INDEX_WRITES` — Write conversations to Typesense index (fail: closed)

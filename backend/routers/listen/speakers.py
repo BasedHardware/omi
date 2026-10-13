@@ -7,6 +7,7 @@ import logging
 import time
 from collections import deque
 from dataclasses import dataclass, replace
+from utils.conversations.final_pass_assignment import select_live_match as select_speaker_match
 from typing import Any, Deque, Dict, Mapping, Optional, Tuple, cast
 
 import config.speaker_match_scores as match_scores
@@ -39,7 +40,6 @@ from utils.stt.speaker_match import (
     arbitrate_owner_matches,
     mean_embedding,
     owner_near_miss,
-    select_speaker_match,
 )
 from utils.stt.speaker_recovery import VoiceRecovery, recovery_voice_blocked
 from utils.transcribe_decisions import USER_SELF_PERSON_ID, should_spawn_speaker_match

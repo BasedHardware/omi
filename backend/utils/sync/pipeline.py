@@ -126,6 +126,7 @@ from utils.other.storage import (
 )
 from utils.observability.fallback import record_fallback
 from utils.observability.transcription import record_sync_transcription_outcome
+from utils.conversations.final_pass_sync import sync_enabled_for, run_sync_final_pass
 from utils.speaker_assignment import process_speaker_assigned_segments
 from utils.speaker_identification import detect_speaker_from_text
 from utils.speaker_learning_jobs import schedule_person_voice_learning_retries
@@ -1379,16 +1380,39 @@ def process_segment(
 
         # Download once for matching and optional private-cloud chunk storage.
         phase = 'download'
-        audio_bytes = _download_audio_bytes(url) if (person_embeddings_cache or private_cloud_sync_enabled) else None
+        audio_bytes = (
+            _download_audio_bytes(url)
+            if (person_embeddings_cache or private_cloud_sync_enabled or sync_enabled_for(uid))
+            else None
+        )
         try:
-            identify_speakers_for_segments(
-                transcript_segments,
-                audio_bytes if person_embeddings_cache else None,
-                person_embeddings_cache if person_embeddings_cache is not None else PersonEmbeddingsCache(False),
-                uid,
-                language=language,
-                owner_reserved=owner_reserved,
-            )
+            final_segments = None
+            if sync_enabled_for(uid) and audio_bytes is not None:
+                final_segments, final_outcome = run_sync_final_pass(
+                    uid,
+                    audio_bytes,
+                    words,
+                    transcript_segments,
+                    person_embeddings_cache or {},
+                    scope=speaker_scope or f'sync:{timestamp}',
+                    owner_reserved=owner_reserved,
+                )
+                logger.info('event=sync_final_pass outcome=%s', final_outcome['outcome'])
+            if final_segments:
+                transcript_segments = final_segments
+                for segment in transcript_segments:
+                    segment.speaker_id_scope = speaker_scope or f'sync:{timestamp}'
+                    segment.stt_provider = model
+                segment_end_timestamp = timestamp + max(segment.end for segment in transcript_segments)
+            else:
+                identify_speakers_for_segments(
+                    transcript_segments,
+                    audio_bytes if person_embeddings_cache else None,
+                    person_embeddings_cache if person_embeddings_cache is not None else PersonEmbeddingsCache(False),
+                    uid,
+                    language=language,
+                    owner_reserved=owner_reserved,
+                )
         except Exception as e:
             logger.warning('event=sync_speaker_id outcome=failed exception_type=%s', _bounded_exception_type(e))
         finally:

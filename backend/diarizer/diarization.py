@@ -2,15 +2,9 @@ import os
 import uuid
 from typing import Any, Dict, List
 
-import torch  # type: ignore[reportMissingImports]  # torch not installed in dev venv
 from fastapi import UploadFile
-from pyannote.audio import Pipeline  # type: ignore[reportMissingImports]  # pyannote.audio not installed in dev venv
 
-# Instantiate pretrained speaker diarization pipeline
-device: Any = torch.device("cuda" if torch.cuda.is_available() else "cpu")  # type: ignore[reportUnknownMemberType]  # torch untyped
-diarization_pipeline: Any = Pipeline.from_pretrained(  # type: ignore[reportUnknownMemberType]  # pyannote untyped
-    "pyannote/speaker-diarization-community-1", token=os.getenv('HUGGINGFACE_TOKEN')
-).to(device)
+from final_pass import pipeline
 
 os.makedirs('_temp', exist_ok=True)
 
@@ -26,7 +20,7 @@ def diarization_endpoint(file: UploadFile) -> List[Dict[str, Any]]:
         List of diarization segments with speaker labels, start time, end time
     """
     upload_id = str(uuid.uuid4())
-    file_path = f"_temp/{upload_id}_{file.filename}"
+    file_path = f"_temp/{upload_id}_{os.path.basename(file.filename or 'audio.wav')}"
 
     try:
         # Save uploaded file
@@ -34,7 +28,7 @@ def diarization_endpoint(file: UploadFile) -> List[Dict[str, Any]]:
             f.write(file.file.read())
 
         # Run diarization
-        output: Any = diarization_pipeline(file_path)
+        output: Any = pipeline()(file_path)
 
         # Extract segments
         data: List[Dict[str, Any]] = []

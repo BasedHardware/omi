@@ -5,6 +5,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 import wave
+import pytest
 
 from models.transcript_segment import TranscriptSegment
 from utils.conversations import transcription_shadow as shadow
@@ -326,3 +327,40 @@ def test_result_write_is_fenced_by_account_deletion_intent(monkeypatch):
     shadow._store_result('synthetic-uid', 'synthetic-conversation', {'outcome': 'ok'})
     parent.get.assert_called_once_with(transaction=transaction)
     transaction.set.assert_called_once_with(parent.collection.return_value.document.return_value, {'outcome': 'ok'})
+
+
+def test_flag_off_output_is_byte_identical_to_legacy(monkeypatch):
+    """Synthetic baseline payload from the pre-cutover _make_pass path."""
+    import json
+    from uuid import UUID
+    from models import transcript_segment
+
+    monkeypatch.setattr(transcript_segment.uuid, 'uuid4', lambda: UUID(int=1))
+    monkeypatch.setattr(shadow, 'iter_audio_chunk_pcm', lambda *_a: iter([(100.0, b'\x01\x00' * 160000)]))
+    monkeypatch.setattr(shadow, 'build_person_embeddings_cache', lambda _: {})
+    monkeypatch.setattr(shadow, 'identify_speakers_for_segments', lambda *_a, **_kw: None)
+    monkeypatch.setattr(shadow, 'speaker_embedding_configured', lambda: False)
+    monkeypatch.setattr(shadow, 'run_final_pass', lambda *_a, **_kw: pytest.fail('flag-off calls diarizer'))
+    monkeypatch.setattr(
+        shadow,
+        'parakeet_prerecorded_from_bytes',
+        lambda *_a, **_kw: [{'timestamp': [2.0, 3.0], 'speaker': 'SPEAKER_00', 'text': 'synthetic'}],
+    )
+
+    def run():
+        conversation = SimpleNamespace(
+            id='fixture',
+            language='en',
+            audio_files=[SimpleNamespace(chunk_timestamps=[100.0])],
+            started_at=None,
+            finished_at=None,
+            transcript_segments=[],
+        )
+        segments, audio = shadow._make_pass('fixture', conversation, deadline=float('inf'), reserved_seconds=10)
+        return json.dumps({'segments': [s.model_dump() for s in segments], 'audio': audio}, sort_keys=True)
+
+    monkeypatch.delenv('TRANSCRIPTION_FINAL_PASS_DIARIZER', raising=False)
+    absent = run()
+    monkeypatch.setenv('TRANSCRIPTION_FINAL_PASS_DIARIZER', 'legacy')
+    explicit = run()
+    assert absent.encode() == explicit.encode()

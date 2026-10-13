@@ -59,6 +59,8 @@ from utils.other.portability_read import (
     iter_portability_guarded,
     verified_encrypted_read,
 )
+from config.transcription_final_pass import authoritative_for
+from utils.conversations.final_pass_remap import remap_final_record
 import config.speaker_match_scores as match_scores
 import config.owner_recognition_diagnostics as owner_diagnostics
 import utils.firestore_document_size as document_size
@@ -3900,3 +3902,67 @@ def get_last_completed_conversation(uid: str) -> Optional[dict]:
             conversations.append(data)
     conversation = conversations[0] if conversations else None
     return conversation
+
+
+def promote_final_pass_if_current(
+    uid, conversation_id, segments, *, expected_updated_at, clock_offset, firestore_client=None
+):
+    """Revision-fenced, protected record swap; every annotation remaps atomically."""
+    if expected_updated_at is None or not authoritative_for(uid):
+        return False
+    client = firestore_client if firestore_client is not None else get_firestore_client()
+    parent = client.collection('users').document(uid).collection(conversations_collection).document(conversation_id)
+    deletion = client.collection('account_deletions').document(uid)
+
+    @firestore.transactional
+    def commit(transaction):
+        if not authoritative_for(uid):
+            return False
+        snapshot = parent.get(transaction=transaction)
+        deleting = deletion.get(transaction=transaction)
+        current = snapshot.to_dict() or {}
+        if (
+            not snapshot.exists
+            or deleting.exists
+            or is_soft_deleted(current)
+            or current.get('is_locked')
+            or current.get('discarded')
+            or current.get('status') != 'completed'
+            or firestore_revision_datetime(snapshot.update_time) != expected_updated_at
+        ):
+            return False
+        old = decode_transcript_segments_verified(
+            uid, current.get('transcript_segments', []), bool(current.get('transcript_segments_compressed'))
+        )
+        receipt = decode_manual_speaker_assignments(
+            uid, current.get('manual_speaker_assignments'), bool(current.get('manual_speaker_assignments_compressed'))
+        )
+        readable = prepare_conversation_for_read(copy.deepcopy(current), uid)
+        if readable is None:
+            return False
+        patch = remap_final_record(
+            old, [s.model_dump() for s in segments], receipt, readable.get('structured', {}), clock_offset=clock_offset
+        )
+        # Derived references/materializations outside structured have their own
+        # contracts. Refuse promotion until those consumers support remapping.
+        if current.get('translation_materializations') or current.get('apps_results') or current.get('note_claims'):
+            return False
+        # The owning write boundary reapplies the current, remapped receipt.
+        patch['transcript_segments'] = apply_manual_assignments(
+            patch['transcript_segments'], patch['manual_speaker_assignments']
+        )
+        patch['speaker_resolution'] = {
+            'status': 'resolved',
+            'participant_speaker_ids': sorted(
+                {s.speaker_id for s in segments if s.speaker_id is not None and s.speaker_id >= 0}
+            ),
+        }
+        prepared = encode_conversation_for_write(uid, patch, current.get('data_protection_level') or 'standard')
+        _guard_match_score_size(prepared, current, getattr(parent, 'path', None))
+        transaction.update(parent, prepared)
+        return True
+
+    written = run_transactional(client, commit)
+    if written:
+        invalidate_people_stats_cache(uid)
+    return bool(written)
