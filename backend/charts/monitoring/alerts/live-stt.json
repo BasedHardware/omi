@@ -116,7 +116,7 @@
     "for": "0s",
     "keep_firing_for": "0s",
     "annotations": {
-      "__dashboardUid__": "855b2e16-c098-407a-85dc-dc9ce87698a9",
+      "dashboard_url": "https://monitor.omi.me/d/855b2e16-c098-407a-85dc-dc9ce87698a9",
       "summary": "Live STT - provider authentication refusals",
       "user_impact": "A provider rejects authentication or authorization; sessions depend on the remaining tail. Budget/quota deaths have the separate provider-budget page.",
       "scope": "backend-listen-metrics; bounded provider and outcome labels.",
@@ -258,7 +258,7 @@
     "for": "2m",
     "keep_firing_for": "0s",
     "annotations": {
-      "__dashboardUid__": "855b2e16-c098-407a-85dc-dc9ce87698a9",
+      "dashboard_url": "https://monitor.omi.me/d/855b2e16-c098-407a-85dc-dc9ce87698a9",
       "summary": "Parakeet canary capacity_full: set PARAKEET_WINDOW_ALLOCATION_PERCENT to 0 if sustained.",
       "user_impact": "TDT capacity is full and new sessions are taking the configured tail.",
       "scope": "backend-listen-metrics; bounded provider and outcome labels.",
@@ -400,7 +400,7 @@
     "for": "10m",
     "keep_firing_for": "0s",
     "annotations": {
-      "__dashboardUid__": "855b2e16-c098-407a-85dc-dc9ce87698a9",
+      "dashboard_url": "https://monitor.omi.me/d/855b2e16-c098-407a-85dc-dc9ce87698a9",
       "summary": "Live TDT - sustained session cap",
       "user_impact": "The admitted TDT cohort has used almost all process session slots.",
       "scope": "backend-listen-metrics; bounded provider and outcome labels.",
@@ -542,7 +542,7 @@
     "for": "5m",
     "keep_firing_for": "0s",
     "annotations": {
-      "__dashboardUid__": "855b2e16-c098-407a-85dc-dc9ce87698a9",
+      "dashboard_url": "https://monitor.omi.me/d/855b2e16-c098-407a-85dc-dc9ce87698a9",
       "summary": "Live TDT - batch POST errors",
       "user_impact": "Speech windows fail at /v1/transcribe and sessions move to the tail.",
       "scope": "backend-listen-metrics; bounded provider and outcome labels.",
@@ -684,7 +684,7 @@
     "for": "10m",
     "keep_firing_for": "0s",
     "annotations": {
-      "__dashboardUid__": "855b2e16-c098-407a-85dc-dc9ce87698a9",
+      "dashboard_url": "https://monitor.omi.me/d/855b2e16-c098-407a-85dc-dc9ce87698a9",
       "summary": "Live STT - provider leg connection errors",
       "user_impact": "A provider fails more than half of its connection attempts (after any typed error class); surviving sessions depend on the remaining tail. Retired providers (intentionally unfunded, e.g. hosted Deepgram) are excluded via omi_stt_provider_retired.",
       "scope": "backend-listen omi_stt_provider_connect_total by provider and error_class; emitted on every connect path (legacy order and configured chain), unlike the configured-chain-only omi_stt_leg_attempts_total this rule previously read and which was empty in prod while the chain was off.",
@@ -826,7 +826,7 @@
     "for": "10m",
     "keep_firing_for": "0s",
     "annotations": {
-      "__dashboardUid__": "855b2e16-c098-407a-85dc-dc9ce87698a9",
+      "dashboard_url": "https://monitor.omi.me/d/855b2e16-c098-407a-85dc-dc9ce87698a9",
       "summary": "Live transcription is working for under 90% of sessions that should have produced a transcript.",
       "user_impact": "Roughly one in ten or more live sessions ended with no transcript at all - the 2026-09-26 incident shape (whole chain degraded for hours without a page on the user outcome).",
       "scope": "backend-listen omi_live_session_transcript_outcome_total, emitted exactly once per backend-STT listen session at teardown (all three outcome children are pre-created at process start). too_short sessions (under 10s of audio or no VAD speech) are excluded from the denominator; custom-STT sessions are not counted.",
@@ -948,7 +948,7 @@
     "for": "10m",
     "keep_firing_for": "0s",
     "annotations": {
-      "__dashboardUid__": "855b2e16-c098-407a-85dc-dc9ce87698a9",
+      "dashboard_url": "https://monitor.omi.me/d/855b2e16-c098-407a-85dc-dc9ce87698a9",
       "summary": "Soniox real-time streams are being rate limited",
       "user_impact": "Live transcription is exposed to a provider-wide rate limit or to a single-provider outage.",
       "scope": "backend-listen-metrics; bounded provider and outcome labels.",
@@ -1070,7 +1070,7 @@
     "for": "10m",
     "keep_firing_for": "0s",
     "annotations": {
-      "__dashboardUid__": "855b2e16-c098-407a-85dc-dc9ce87698a9",
+      "dashboard_url": "https://monitor.omi.me/d/855b2e16-c098-407a-85dc-dc9ce87698a9",
       "summary": "Soniox carries over 90% of live streams without recent funded fallback success",
       "user_impact": "Live transcription is exposed to a provider-wide rate limit or to a single-provider outage.",
       "scope": "backend-listen-metrics; bounded provider and outcome labels.",
@@ -1212,7 +1212,7 @@
     "for": "10m",
     "keep_firing_for": "0s",
     "annotations": {
-      "__dashboardUid__": "855b2e16-c098-407a-85dc-dc9ce87698a9",
+      "dashboard_url": "https://monitor.omi.me/d/855b2e16-c098-407a-85dc-dc9ce87698a9",
       "summary": "top up Soniox: monthly spend reached 70% of the configured ceiling.",
       "user_impact": "Soniox monthly spend has reached 70% of the configured ceiling; paid fallback runway may narrow.",
       "scope": "Backend-listen Soniox usage API or metered audio estimate; no uid labels.",
@@ -1354,7 +1354,7 @@
     "for": "10m",
     "keep_firing_for": "0s",
     "annotations": {
-      "__dashboardUid__": "855b2e16-c098-407a-85dc-dc9ce87698a9",
+      "dashboard_url": "https://monitor.omi.me/d/855b2e16-c098-407a-85dc-dc9ce87698a9",
       "summary": "top up Soniox: monthly spend reached 90% of the configured ceiling.",
       "user_impact": "Soniox monthly spend has reached 90% of the configured ceiling; paid fallback runway may narrow.",
       "scope": "Backend-listen Soniox usage API or metered audio estimate; no uid labels.",
@@ -1476,7 +1476,7 @@
     "for": "0s",
     "keep_firing_for": "0s",
     "annotations": {
-      "__dashboardUid__": "855b2e16-c098-407a-85dc-dc9ce87698a9",
+      "dashboard_url": "https://monitor.omi.me/d/855b2e16-c098-407a-85dc-dc9ce87698a9",
       "summary": "Soniox balance exhausted — top up now",
       "user_impact": "Soniox refused a live stream because its organization balance or project budget is exhausted; sessions depending on Soniox may lose transcription.",
       "scope": "backend-listen omi_stt_stream_close_total{provider=\"soniox\",reason=\"provider_budget_exhausted\"}; one or more closes in the rolling 5m window.",
@@ -1618,7 +1618,7 @@
     "for": "10m",
     "keep_firing_for": "0s",
     "annotations": {
-      "__dashboardUid__": "855b2e16-c098-407a-85dc-dc9ce87698a9",
+      "dashboard_url": "https://monitor.omi.me/d/855b2e16-c098-407a-85dc-dc9ce87698a9",
       "summary": "Modulate failing — traffic on Soniox. Watch Soniox runway and provider outcome SLI.",
       "user_impact": "Modulate connection failures are sending live sessions to Soniox; paid fallback volume and cost may rise.",
       "scope": "backend-listen provider connection outcomes only; bounded provider/outcome labels.",
@@ -1760,7 +1760,7 @@
     "for": "30m",
     "keep_firing_for": "0s",
     "annotations": {
-      "__dashboardUid__": "855b2e16-c098-407a-85dc-dc9ce87698a9",
+      "dashboard_url": "https://monitor.omi.me/d/855b2e16-c098-407a-85dc-dc9ce87698a9",
       "summary": "Parakeet canary no_text: roll window allocation back to 0 if sustained.",
       "user_impact": "TDT capacity is full and new sessions are taking the configured tail.",
       "scope": "backend-listen-metrics, windowed TDT only; no user identifier labels.",
@@ -1902,7 +1902,7 @@
     "for": "30m",
     "keep_firing_for": "0s",
     "annotations": {
-      "__dashboardUid__": "855b2e16-c098-407a-85dc-dc9ce87698a9",
+      "dashboard_url": "https://monitor.omi.me/d/855b2e16-c098-407a-85dc-dc9ce87698a9",
       "summary": "Parakeet canary first-text p95 reaches the 55 s alert threshold; roll allocation back to 0 if sustained for 30m.",
       "user_impact": "TDT capacity is full and new sessions are taking the configured tail.",
       "scope": "backend-listen-metrics, windowed TDT only; no user identifier labels.",
@@ -2044,7 +2044,7 @@
     "for": "2m",
     "keep_firing_for": "0s",
     "annotations": {
-      "__dashboardUid__": "855b2e16-c098-407a-85dc-dc9ce87698a9",
+      "dashboard_url": "https://monitor.omi.me/d/855b2e16-c098-407a-85dc-dc9ce87698a9",
       "summary": "Parakeet canary batch queue depth warning. Parakeet canary: set PARAKEET_WINDOW_ALLOCATION_PERCENT=0",
       "user_impact": "Batch queue has four pending requests; live window admission should stand down.",
       "scope": "Shared Parakeet GPU batch path; prerecorded includes sync backfill.",
@@ -2186,7 +2186,7 @@
     "for": "2m",
     "keep_firing_for": "0s",
     "annotations": {
-      "__dashboardUid__": "855b2e16-c098-407a-85dc-dc9ce87698a9",
+      "dashboard_url": "https://monitor.omi.me/d/855b2e16-c098-407a-85dc-dc9ce87698a9",
       "summary": "Parakeet canary batch queue p95 warning. Parakeet canary: set PARAKEET_WINDOW_ALLOCATION_PERCENT=0",
       "user_impact": "Batch queue p95 has reached one second; check sync backfill before ramping.",
       "scope": "Shared Parakeet GPU batch path; prerecorded includes sync backfill.",
@@ -2328,7 +2328,7 @@
     "for": "2m",
     "keep_firing_for": "0s",
     "annotations": {
-      "__dashboardUid__": "855b2e16-c098-407a-85dc-dc9ce87698a9",
+      "dashboard_url": "https://monitor.omi.me/d/855b2e16-c098-407a-85dc-dc9ce87698a9",
       "summary": "Parakeet sync prerecorded errors warning. Parakeet canary: set PARAKEET_WINDOW_ALLOCATION_PERCENT=0",
       "user_impact": "Prerecorded Parakeet errors threaten sync backfill; inspect the shared GPU pool.",
       "scope": "Parakeet prerecorded requests excluding live TDT; includes sync backfill.",
@@ -2470,7 +2470,7 @@
     "for": "10m",
     "keep_firing_for": "0s",
     "annotations": {
-      "__dashboardUid__": "855b2e16-c098-407a-85dc-dc9ce87698a9",
+      "dashboard_url": "https://monitor.omi.me/d/855b2e16-c098-407a-85dc-dc9ce87698a9",
       "summary": "Live STT - terminal failure after delivered text",
       "user_impact": "A recording is truncated after some text was delivered; any-text success does not prove continuity.",
       "scope": "All production listen traffic (job=backend-listen-metrics), including stable and former-canary series; the volume floor and ratio denominator count same-interval transcribed sessions (omi_live_session_transcript_outcome_total outcome=transcribed), emitted at the same session teardown as the terminal counter so long-running sessions appear in both. Requires the pinned STT_FAILOVER_RECOVERY_ENABLED flag, now enabled across production listen. The independent mid-session terminal rule covers every path.",
@@ -2612,7 +2612,7 @@
     "for": "10m",
     "keep_firing_for": "0s",
     "annotations": {
-      "__dashboardUid__": "855b2e16-c098-407a-85dc-dc9ce87698a9",
+      "dashboard_url": "https://monitor.omi.me/d/855b2e16-c098-407a-85dc-dc9ce87698a9",
       "summary": "Live STT - mid-session terminal failures",
       "user_impact": "Live sessions fail during a provider connection or audio send.",
       "scope": "Every backend-listen STT path; aggregate metrics only.",
@@ -2754,7 +2754,7 @@
     "for": "10m",
     "keep_firing_for": "0s",
     "annotations": {
-      "__dashboardUid__": "855b2e16-c098-407a-85dc-dc9ce87698a9",
+      "dashboard_url": "https://monitor.omi.me/d/855b2e16-c098-407a-85dc-dc9ce87698a9",
       "summary": "Live STT - paid adapter capacity deaths",
       "user_impact": "Paid spillover has exceeded adapter capacity and risks losing captured audio.",
       "scope": "Every backend-listen STT path; aggregate metrics only.",
@@ -2896,7 +2896,7 @@
     "for": "10m",
     "keep_firing_for": "0s",
     "annotations": {
-      "__dashboardUid__": "855b2e16-c098-407a-85dc-dc9ce87698a9",
+      "dashboard_url": "https://monitor.omi.me/d/855b2e16-c098-407a-85dc-dc9ce87698a9",
       "summary": "Live STT - combined admission pressure",
       "user_impact": "Window admission refusals transfer live demand to paid providers.",
       "scope": "Every backend-listen STT path; aggregate metrics only.",
@@ -3038,7 +3038,7 @@
     "for": "2m",
     "keep_firing_for": "0s",
     "annotations": {
-      "__dashboardUid__": "855b2e16-c098-407a-85dc-dc9ce87698a9",
+      "dashboard_url": "https://monitor.omi.me/d/855b2e16-c098-407a-85dc-dc9ce87698a9",
       "summary": "Live STT - window POST latency",
       "user_impact": "Slow GPU decoding delays text and increases progress-rescue exposure.",
       "scope": "Every backend-listen STT path; aggregate metrics only.",
@@ -3180,7 +3180,7 @@
     "for": "30m",
     "keep_firing_for": "0s",
     "annotations": {
-      "__dashboardUid__": "855b2e16-c098-407a-85dc-dc9ce87698a9",
+      "dashboard_url": "https://monitor.omi.me/d/855b2e16-c098-407a-85dc-dc9ce87698a9",
       "summary": "Live STT - replay continuity loss",
       "user_impact": "Recovery skips unanswered audio or the successor dies during replay.",
       "scope": "Requires STT_FAILOVER_RECOVERY_ENABLED; replay and recovery metrics are default-off.",
@@ -3322,7 +3322,7 @@
     "for": "1m",
     "keep_firing_for": "0s",
     "annotations": {
-      "__dashboardUid__": "855b2e16-c098-407a-85dc-dc9ce87698a9",
+      "dashboard_url": "https://monitor.omi.me/d/855b2e16-c098-407a-85dc-dc9ce87698a9",
       "summary": "Live STT - health evidence persistence gaps",
       "user_impact": "Routing evidence is incomplete; stages cannot qualify a rollout.",
       "scope": "omi_stt_cost_routing_settlements_total requires the configured chain; health persistence metrics are diagnostic.",
@@ -3464,7 +3464,7 @@
     "for": "30m",
     "keep_firing_for": "0s",
     "annotations": {
-      "__dashboardUid__": "855b2e16-c098-407a-85dc-dc9ce87698a9",
+      "dashboard_url": "https://monitor.omi.me/d/855b2e16-c098-407a-85dc-dc9ce87698a9",
       "summary": "Live STT - managed leg lifecycle gap",
       "user_impact": "Managed transports lack a matching open or settlement; routing evidence is incomplete.",
       "scope": "omi_stt_managed_legs_opened_total, omi_stt_managed_legs_settled_total and omi_stt_managed_legs_open require the configured chain; per instance and target, never pooled.",
@@ -3606,7 +3606,7 @@
     "for": "1m",
     "keep_firing_for": "0s",
     "annotations": {
-      "__dashboardUid__": "855b2e16-c098-407a-85dc-dc9ce87698a9",
+      "dashboard_url": "https://monitor.omi.me/d/855b2e16-c098-407a-85dc-dc9ce87698a9",
       "summary": "Live STT - stale, missing or unknown snapshot",
       "user_impact": "Routing readiness is unknown; retain static selection until evidence is complete.",
       "scope": "Cost router activity requires fresh per-pod Redis snapshots. NaN and absent snapshots cannot qualify rollout.",
@@ -3748,7 +3748,7 @@
     "for": "5m",
     "keep_firing_for": "0s",
     "annotations": {
-      "__dashboardUid__": "855b2e16-c098-407a-85dc-dc9ce87698a9",
+      "dashboard_url": "https://monitor.omi.me/d/855b2e16-c098-407a-85dc-dc9ce87698a9",
       "summary": "Live STT - persistent cross-pod stage disagreement",
       "user_impact": "Routing readiness is unknown; retain static selection until evidence is complete.",
       "scope": "Shadow or on router pods disagree about the same target health stage; compare image, identity namespace and snapshot freshness.",
@@ -3890,7 +3890,7 @@
     "for": "1m",
     "keep_firing_for": "0s",
     "annotations": {
-      "__dashboardUid__": "855b2e16-c098-407a-85dc-dc9ce87698a9",
+      "dashboard_url": "https://monitor.omi.me/d/855b2e16-c098-407a-85dc-dc9ce87698a9",
       "summary": "Live STT - selected target state unknown",
       "user_impact": "Routing readiness is unknown; retain static selection until evidence is complete.",
       "scope": "The shadow/on proposed primary target lacks shared health evidence on at least one pod.",

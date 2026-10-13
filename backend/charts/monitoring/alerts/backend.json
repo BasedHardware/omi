@@ -1084,7 +1084,7 @@
       "severity": "critical"
     },
     "annotations": {
-      "__dashboardUid__": "d2d782ef-f537-46b8-969d-f73561ec7d07",
+      "dashboard_url": "https://monitor.omi.me/d/d2d782ef-f537-46b8-969d-f73561ec7d07",
       "safe_next_action": "Do not deploy a new Cloud Run revision (starts will fail). Check GCP status for us-central1. Wait for instance starts to succeed.",
       "scope": "Cloud Run revisions in based-hardware matching STARTUP TCP probe failed or instance could not start successfully.",
       "summary": "Cloud Run instances are failing to start (STARTUP TCP probe / instance could not start).",

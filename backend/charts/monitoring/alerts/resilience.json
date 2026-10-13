@@ -676,7 +676,7 @@
       "component": "live-transcription",
       "impact": "user-experience"
     },
-    "isPaused": false,
+    "isPaused": true,
     "notification_settings": {
       "receiver": "Omi - Services Alerting (Telegram)",
       "group_by": ["alertname"], "group_wait": "5m", "group_interval": "1h", "repeat_interval": "24h"
@@ -957,7 +957,7 @@
     "for": "5m",
     "keep_firing_for": "0s",
     "annotations": {
-      "__dashboardUid__": "omi-core-features",
+      "dashboard_url": "https://monitor.omi.me/d/omi-core-features",
       "runbook": "backend/docs/runbooks/llm-gateway-fallback.md",
       "summary": "Client fallback, open circuit, zero gateway successes under traffic, or p95 first-byte latency indicates the gateway is unreachable or stalling",
       "threshold": "fallback >5%, circuit open, no serving success for 10 requests, or p95 first byte >5s",
@@ -973,7 +973,7 @@
       "component": "ai-chat",
       "impact": "user-experience"
     },
-    "isPaused": false,
+    "isPaused": true,
     "notification_settings": {
       "receiver": "Omi - Services Alerting (Telegram)",
       "group_by": ["alertname"], "group_wait": "5m", "group_interval": "1h", "repeat_interval": "24h"
@@ -1001,7 +1001,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum(kube_endpoint_address_available{namespace=\"prod-omi-backend\",endpoint=\"prod-omi-llm-gateway\"}) < bool 1",
+          "expr": "(sum(kube_endpoint_address{namespace=\"prod-omi-backend\",endpoint=\"prod-omi-llm-gateway\",ready=\"true\"}) or vector(0)) < bool 1",
           "instant": true,
           "intervalMs": 1000,
           "maxDataPoints": 43200,
@@ -1058,7 +1058,7 @@
     "for": "5m",
     "keep_firing_for": "0s",
     "annotations": {
-      "__dashboardUid__": "omi-core-features",
+      "dashboard_url": "https://monitor.omi.me/d/omi-core-features",
       "runbook": "backend/docs/runbooks/llm-gateway-fallback.md",
       "summary": "The production LLM Gateway Service has no ready EndpointSlice address or kube-state-metrics is absent",
       "threshold": "ready endpoint count <1",
@@ -1218,7 +1218,7 @@
       "component": "llm-gateway",
       "impact": "user-experience"
     },
-    "isPaused": false,
+    "isPaused": true,
     "notification_settings": {
       "receiver": "Omi - Services Alerting (Telegram)",
       "group_by": ["alertname"], "group_wait": "30s", "group_interval": "5m", "repeat_interval": "4h"
@@ -1359,7 +1359,7 @@
       "component": "llm-gateway",
       "impact": "product"
     },
-    "isPaused": false,
+    "isPaused": true,
     "notification_settings": {
       "receiver": "Omi - Services Alerting (Telegram)",
       "group_by": ["alertname"], "group_wait": "30s", "group_interval": "5m", "repeat_interval": "4h"
@@ -2624,7 +2624,7 @@
     "for": "5m",
     "keep_firing_for": "0s",
     "annotations": {
-      "__dashboardUid__": "omi-core-features",
+      "dashboard_url": "https://monitor.omi.me/d/omi-core-features",
       "summary": "A durable queue has a ready item older than 6 hours, or an age sample is absent or unknown",
       "threshold": "oldest ready age > 6h, absent(), or unknown sample for 5m",
       "user_impact": "Independent items behind a poison head can stall: memories, task integrations, Chat-first cards, or capture finalization may stop advancing.",
@@ -2640,7 +2640,7 @@
       "component": "api",
       "impact": "user-experience"
     },
-    "isPaused": false,
+    "isPaused": true,
     "notification_settings": {
       "receiver": "Omi - Services Alerting (Telegram)",
       "group_by": ["alertname"], "group_wait": "30s", "group_interval": "5m", "repeat_interval": "4h"

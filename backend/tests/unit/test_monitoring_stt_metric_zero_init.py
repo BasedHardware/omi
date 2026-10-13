@@ -20,7 +20,6 @@ BACKEND = Path(__file__).resolve().parents[2]
 # Existing sparse series are debt, not healthy zeroes. Remove entries as their
 # startup paths are added; don't mask new alert metrics with a blanket exception.
 DECLARED_SPARSE = {
-    'llm_gateway_request_rejections_total': 'Children appear only on pre-route validation rejection.',
     'llm_gateway_requests_total': 'Route/outcome children appear only when a real request finishes.',
     'llm_gateway_chat_extraction_requests_total': 'Client extraction outcome children appear on requests.',
     'llm_gateway_client_first_byte_seconds_bucket': 'Client first-byte histogram children appear on gateway traffic.',

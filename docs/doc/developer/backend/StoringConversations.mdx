@@ -52,6 +52,15 @@ xcrun swift test --package-path desktop/macos/Desktop --filter 'ConversationProj
 These hermetic tests exercise decode, reconciliation, and production SQLite storage. Named-bundle
 end-to-end acceptance remains a separate check.
 
+## Restoring access to already-transcribed content
+
+Subscription upgrades restore access by clearing lock metadata on stored
+conversations, memories, and action items. The optional reset recovery path uses
+the same updates in bounded pages after an authenticated HTTP request, once per
+UTC quota month and only while the current plan allowance is available. It does
+not retranscribe audio or debit transcription usage. Partial recovery resumes on
+later requests; clients continue using the existing `is_locked` field.
+
 ## Architecture Diagram
 
 ```mermaid
