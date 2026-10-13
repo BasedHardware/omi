@@ -11,20 +11,20 @@ import 'package:omi/pages/onboarding/knowledge_graph_step.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
 
 Future<Map<String, dynamic>> _sampleFiveNodeGraph() async => {
-      'nodes': [
-        {'id': '1', 'label': 'Sam', 'node_type': 'user'},
-        {'id': '2', 'label': 'Coffee', 'node_type': 'thing'},
-        {'id': '3', 'label': 'Work', 'node_type': 'thing'},
-        {'id': '4', 'label': 'Alice', 'node_type': 'person'},
-        {'id': '5', 'label': 'Gym', 'node_type': 'place'},
-      ],
-      'edges': [
-        {'source_id': '1', 'target_id': '2', 'label': 'drinks'},
-        {'source_id': '1', 'target_id': '3', 'label': 'works_at'},
-        {'source_id': '1', 'target_id': '4', 'label': 'knows'},
-        {'source_id': '1', 'target_id': '5', 'label': 'goes_to'},
-      ]
-    };
+  'nodes': [
+    {'id': '1', 'label': 'Sam', 'node_type': 'user'},
+    {'id': '2', 'label': 'Coffee', 'node_type': 'thing'},
+    {'id': '3', 'label': 'Work', 'node_type': 'thing'},
+    {'id': '4', 'label': 'Alice', 'node_type': 'person'},
+    {'id': '5', 'label': 'Gym', 'node_type': 'place'},
+  ],
+  'edges': [
+    {'source_id': '1', 'target_id': '2', 'label': 'drinks'},
+    {'source_id': '1', 'target_id': '3', 'label': 'works_at'},
+    {'source_id': '1', 'target_id': '4', 'label': 'knows'},
+    {'source_id': '1', 'target_id': '5', 'label': 'goes_to'},
+  ]
+};
 
 Widget _app(Widget home) {
   return MaterialApp(
