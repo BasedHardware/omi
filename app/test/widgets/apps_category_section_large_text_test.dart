@@ -105,6 +105,25 @@ void main() {
       );
       await tester.pump();
 
+      final cardFinder = find.byType(SectionAppItemCard).first;
+      final renderedStack =
+          tester.getSize(find.descendant(of: cardFinder, matching: find.text('Productivity Booster Pro'))).height +
+              tester.getSize(find.descendant(of: cardFinder, matching: find.text('Productivity'))).height +
+              tester.getSize(find.descendant(of: cardFinder, matching: find.textContaining('4.8'))).height +
+              4;
+      final renderedCardHeight = tester.getSize(cardFinder).height;
+      final expectedTargetHeight = const [85.0, 88.0, 97.0, 109.0][textScales.indexOf(scale)];
+
+      expect(
+        renderedCardHeight,
+        expectedTargetHeight,
+        reason: 'The measured card target should follow rendered text height at $scale scale.',
+      );
+      expect(
+        renderedCardHeight,
+        greaterThanOrEqualTo(renderedStack + 16),
+        reason: 'Card text and its vertical padding must fit at $scale scale.',
+      );
       expect(
         tester.takeException(),
         isNull,
