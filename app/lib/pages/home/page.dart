@@ -21,7 +21,9 @@ import 'package:omi/pages/chat/chat_route.dart';
 import 'package:omi/pages/chat/page.dart';
 import 'package:omi/pages/action_items/widgets/task_selection_action_bar.dart';
 import 'package:omi/pages/conversations/widgets/merge_action_bar.dart';
+import 'package:omi/pages/action_items/widgets/tasks_more_menu.dart';
 import 'package:omi/pages/home/home_content.dart';
+import 'package:omi/pages/home/widgets/home_page_stack.dart';
 import 'package:omi/pages/home/widgets/home_tab_switcher.dart';
 import 'package:omi/pages/home/home_widgets_publisher.dart';
 import 'package:omi/pages/phone_calls/active_call_banner.dart';
@@ -776,7 +778,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
               child: Scaffold(
                 backgroundColor: OmiColors.surface0,
                 resizeToAvoidBottomInset: false,
-                appBar: _buildAppBar(context, onHome),
+                appBar: _buildAppBar(context),
                 body: GestureDetector(
                   onTap: () => primaryFocus?.unfocus(),
                   child: Stack(
@@ -784,7 +786,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                       Column(
                         children: [
                           HomeTabSwitcher(
-                            trailing: onHome ? null : _buildTasksActions(context),
+                            trailing: _buildPageActions(context, onHome),
                             onTabTap: (index, isRepeat) {
                               if (isRepeat) {
                                 _scrollToTop(index);
@@ -820,7 +822,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                           // Home shows an active call in its capture row; Tasks gets the slim bar.
                           if (!onHome) const ActiveCallTopBar(),
                           Expanded(
-                            child: IndexedStack(index: selectedIndex, children: _buildPages(selectedIndex)),
+                            child: HomePageStack(index: selectedIndex, children: _buildPages(selectedIndex)),
                           ),
                         ],
                       ),
@@ -939,39 +941,23 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
     );
   }
 
-  /// Export and the completed toggle, beside the switcher while Tasks is showing.
-  Widget _buildTasksActions(BuildContext context) {
-    return Consumer<ActionItemsProvider>(
-      builder: (context, actionItemsProvider, _) {
-        final showCompleted = actionItemsProvider.showCompletedView;
-        return Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            HeaderCircleButton(
-              semanticLabel: context.l10n.exportButton,
-              icon: FaIcon(FontAwesomeIcons.arrowUpFromBracket, size: 16, color: OmiColors.textSecondary),
-              onTap: () {
+  /// The selected page's one action, bare beside the switcher: Home filters by date, Tasks opens
+  /// its menu (select, group, completed, export). Cross-fades when the page changes.
+  Widget _buildPageActions(BuildContext context, bool onHome) {
+    return AnimatedSwitcher(
+      duration: OmiMotion.of(context).quick,
+      child: onHome
+          ? OmiIconButton(
+              key: const ValueKey('home_calendar_button'),
+              icon: const FaIcon(FontAwesomeIcons.calendar, size: 18),
+              label: context.l10n.filterByDate,
+              color: OmiColors.textSecondary,
+              onPressed: () {
                 OmiHaptics.selection();
-                PlatformManager.instance.analytics.exportTasksBannerClicked();
-                routeToPage(context, const TaskIntegrationsPage());
+                unawaited(_openCalendar(context));
               },
-            ),
-            HeaderCircleButton(
-              semanticLabel: context.l10n.completed,
-              color: showCompleted ? OmiColors.surface3 : OmiColors.surface1,
-              icon: FaIcon(
-                FontAwesomeIcons.solidCircleCheck,
-                size: 16,
-                color: showCompleted ? OmiColors.textPrimary : OmiColors.textSecondary,
-              ),
-              onTap: () {
-                OmiHaptics.light();
-                actionItemsProvider.toggleShowCompletedView();
-              },
-            ),
-          ],
-        );
-      },
+            )
+          : const TasksMoreMenu(),
     );
   }
 
@@ -992,7 +978,9 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
     );
   }
 
-  PreferredSizeWidget _buildAppBar(BuildContext context, bool onHome) {
+  /// The shell header: device, search and settings, the same on Home and Tasks. Page actions sit
+  /// beside the switcher instead (see [_buildPageActions]).
+  PreferredSizeWidget _buildAppBar(BuildContext context) {
     return AppBar(
       automaticallyImplyLeading: false,
       backgroundColor: Theme.of(context).colorScheme.surface,
@@ -1010,16 +998,6 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
           ),
           Row(
             children: [
-              if (onHome)
-                HeaderCircleButton(
-                  key: const ValueKey('home_calendar_button'),
-                  semanticLabel: context.l10n.filterByDate,
-                  icon: FaIcon(FontAwesomeIcons.calendar, size: 16, color: OmiColors.textSecondary),
-                  onTap: () {
-                    OmiHaptics.selection();
-                    unawaited(_openCalendar(context));
-                  },
-                ),
               // Search: conversations, recaps, tasks and memories, from any page of the shell.
               HeaderCircleButton(
                 key: const ValueKey('home_search_button'),

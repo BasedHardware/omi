@@ -9306,7 +9306,7 @@ abstract class AppLocalizations {
   /// Guidance on the empty Tasks tab: start a conversation to create a task.
   ///
   /// In en, this message translates to:
-  /// **'Start a conversation to create a task.'**
+  /// **'To-dos from your conversations will show up here.'**
   String get tasksEmptyStateMessage;
 
   /// Menu item text for clearing chat history

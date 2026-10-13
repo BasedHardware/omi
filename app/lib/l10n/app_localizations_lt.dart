@@ -4892,7 +4892,7 @@ class AppLocalizationsLt extends AppLocalizations {
       'Tęsdami, jūsų pokalbiai, įrašai ir asmeninė informacija bus saugiai saugomi mūsų serveriuose. Jūsų garso įrašai ir transkripcijos apdorojami trečiųjų šalių AI paslaugų (įskaitant Deepgram transkripcijai ir OpenAI analizei), kad suteiktų jums AI paremtas įžvalgas ir įgalintų visas programėlės funkcijas.';
 
   @override
-  String get tasksEmptyStateMessage => 'Pradėkite pokalbį, kad sukurtumėte užduotį.';
+  String get tasksEmptyStateMessage => 'Užduotys iš jūsų pokalbių bus rodomos čia.';
 
   @override
   String get clearChatAction => 'Išvalyti pokalbį';

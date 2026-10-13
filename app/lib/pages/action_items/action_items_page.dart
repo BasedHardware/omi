@@ -2,7 +2,6 @@ import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:flutter/material.dart';
 
 import 'package:provider/provider.dart';
-import 'package:pull_down_button/pull_down_button.dart';
 
 import 'package:omi/backend/http/action_items_api_contract.dart';
 import 'package:omi/backend/http/api_presentation.dart';
@@ -58,9 +57,6 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
   bool _overdueExpanded = true;
 
   bool _noDeadlineExpanded = true;
-
-  /// Group the list by project instead of by due date (offered once projects exist).
-  bool _groupByProject = false;
 
   // Search header lifecycle objects.
   final TextEditingController _searchController = TextEditingController();
@@ -199,7 +195,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
 
   Widget _buildPageHeader(ActionItemsProvider provider) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 8, 12, 4),
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
       child: Row(
         children: [
           Expanded(
@@ -219,72 +215,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
               },
             ),
           ),
-          const SizedBox(width: 4),
-          _buildOverflowMenu(provider),
         ],
-      ),
-    );
-  }
-
-  Widget _buildOverflowMenu(ActionItemsProvider provider) {
-    final showingCompleted = provider.showCompletedView;
-    final hasItems = provider.actionItems.isNotEmpty;
-    final allSelected = hasItems && provider.selectedCount == provider.actionItems.length;
-
-    return PullDownButton(
-      itemBuilder: (context) => [
-        PullDownMenuItem(
-          title: context.l10n.selectActionItems,
-          iconWidget: const Icon(Icons.check_box_outlined, size: 18),
-          onTap: () {
-            OmiHaptics.light();
-            _searchFocusNode.unfocus();
-            provider.startSelection();
-          },
-        ),
-        PullDownMenuItem(
-          title: allSelected ? context.l10n.deselectAllTasksMenu : context.l10n.selectAllTasksMenu,
-          iconWidget: Icon(allSelected ? Icons.deselect_rounded : Icons.select_all_rounded, size: 18),
-          onTap: () {
-            OmiHaptics.light();
-            _searchFocusNode.unfocus();
-            if (allSelected) {
-              provider.clearSelection();
-            } else {
-              if (!provider.isSelectionMode) provider.startSelection();
-              provider.selectAllItems();
-            }
-          },
-        ),
-        if (context.read<ReviewProvider?>()?.isOn ?? false)
-          PullDownMenuItem(
-            title: _groupByProject ? context.l10n.tasksGroupByDate : context.l10n.tasksGroupByProject,
-            iconWidget: Icon(_groupByProject ? Icons.event_outlined : Icons.folder_outlined, size: 18),
-            onTap: () {
-              OmiHaptics.light();
-              final review = context.read<ReviewProvider?>();
-              if (!_groupByProject && review != null && review.projects.isEmpty) review.loadProjects();
-              setState(() => _groupByProject = !_groupByProject);
-            },
-          ),
-        PullDownMenuItem(
-          title: showingCompleted ? context.l10n.hideCompletedTasks : context.l10n.showCompletedTasks,
-          iconWidget: Icon(showingCompleted ? Icons.visibility_off_outlined : Icons.visibility_outlined, size: 18),
-          onTap: () {
-            OmiHaptics.light();
-            provider.toggleShowCompletedView();
-          },
-        ),
-      ],
-      buttonBuilder: (context, showMenu) => OmiIconButton.filled(
-        icon: const Icon(Icons.more_horiz_rounded),
-        label: context.l10n.moreOptions,
-        color: OmiColors.textSecondary,
-        diameter: 40,
-        onPressed: () {
-          OmiHaptics.selection();
-          showMenu();
-        },
       ),
     );
   }
@@ -568,7 +499,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
                 );
               }, childCount: filteredItems.length),
             ),
-        ] else if (_groupByProject) ...[
+        ] else if (provider.groupByProject) ...[
           const SliverPadding(padding: EdgeInsets.only(top: 6)),
           ...projectTaskSections(
             context: context,

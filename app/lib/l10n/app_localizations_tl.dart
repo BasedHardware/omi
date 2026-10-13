@@ -4933,7 +4933,7 @@ class AppLocalizationsTl extends AppLocalizations {
       'Sa pagpapatuloy, ang iyong mga pag-uusap, recording, at personal na impormasyon ay ligtas na maiimbak sa aming mga server. Ang iyong mga audio recording at transcript ay pinoproseso ng third-party na mga serbisyo ng AI (kabilang ang Deepgram para sa transcription at OpenAI para sa analysis) upang mabigyan ka ng AI-powered na mga insight at ma-enable ang lahat ng feature ng app.';
 
   @override
-  String get tasksEmptyStateMessage => 'Magsimula ng pag-uusap para gumawa ng gawain.';
+  String get tasksEmptyStateMessage => 'Lalabas dito ang mga gagawin mula sa iyong mga usapan.';
 
   @override
   String get clearChatAction => 'Burahin ang Chat';

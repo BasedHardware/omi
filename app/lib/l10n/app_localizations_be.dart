@@ -4904,7 +4904,7 @@ class AppLocalizationsBe extends AppLocalizations {
       'Працягваючы, вашы размовы, запісы і асабістая інфармацыя будуць надзейна захоўвацца на нашых серверах. Вашы аўдыязапісы і транскрыпцыі апрацоўваюцца староннімі сэрвісамі ШІ (уключаючы Deepgram для транскрыпцыі і OpenAI для аналізу), каб забяспечыць вас аналітыкай на аснове ШІ і ўключыць усе функцыі праграмы.';
 
   @override
-  String get tasksEmptyStateMessage => 'Пачніце размову, каб стварыць задачу.';
+  String get tasksEmptyStateMessage => 'Справы з вашых размоў з\'явяцца тут.';
 
   @override
   String get clearChatAction => 'Очыстіць Чат';

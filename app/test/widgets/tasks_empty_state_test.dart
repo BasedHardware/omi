@@ -48,7 +48,7 @@ void main() {
       expect(title, findsOneWidget);
       expect(hint, findsOneWidget);
       expect(icon, findsOneWidget);
-      expect(l10n.tasksEmptyStateMessage, 'Start a conversation to create a task.');
+      expect(l10n.tasksEmptyStateMessage, 'To-dos from your conversations will show up here.');
       expect(create, findsNothing);
       expect(find.byType(OmiButton), findsNothing);
       expect(find.byType(FloatingActionButton), findsNothing);

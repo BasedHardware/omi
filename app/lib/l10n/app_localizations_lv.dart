@@ -4899,7 +4899,7 @@ class AppLocalizationsLv extends AppLocalizations {
       'Turpinot, jūsu sarunas, ieraksti un personiskā informācija tiks droši glabāta mūsu serveros. Jūsu audio ieraksti un transkripcijas tiek apstrādātas ar trešo pušu AI pakalpojumiem (ieskaitot Deepgram transkripcijai un OpenAI analīzei), lai sniegtu jums AI vadītus ieskatus un iespējotu visas lietotnes funkcijas.';
 
   @override
-  String get tasksEmptyStateMessage => 'Sāciet sarunu, lai izveidotu uzdevumu.';
+  String get tasksEmptyStateMessage => 'Uzdevumi no jūsu sarunām parādīsies šeit.';
 
   @override
   String get clearChatAction => 'Notīrīt tērzēšanu';
