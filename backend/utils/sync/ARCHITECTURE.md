@@ -113,30 +113,32 @@ labels a different survivor voice.
 
 `SYNC_SAFETY_WAL_DEDUPE_ENABLED` is on in dev/prod runtime config for Cloud Run
 backend, backend-sync, backend-sync-backfill and backend-integration; code defaults
-off. No UID allowlist or S1 claim is required. Set it to `false` on all four
-services and deploy their updated runtime env to disable coverage cuts, fuzzy
-transcript drops and legacy playback overlap trimming. Provider stamps remain.
+off. Set it to `false` on all four services and redeploy runtime env to restore
+coverage, transcript dedupe and provider stamps to their previous behavior.
+Playback merge is unchanged, including negative gaps and nested legacy chunks.
 
-Before VAD/STT, a bounded stored-audio energy probe must establish a unique clock
-offset (at most 90 seconds). Coverage uses spans or decoded chunk durations, unions
-adjacent intervals, and retains one-second margins. Missing/ambiguous fingerprints,
-unsupported WAVs and lookup failures retain the original WAL. Genuine uncovered
-gaps remain separate WAVs; corrected timestamps survive VAD and audio storage.
-Existing S1-mapped paths retain their frame-based handling. Compatible temporal
-candidates may supply coverage evidence, but this does not change assignment:
-timestamp hints still cannot adopt live rows.
+Before VAD/STT, stored chunks are listed and decoded once per conversation per job.
+A uniquely locked clock offset is reused, but each six-second WAL tile requires
+its own non-silent envelope correlation and per-bin energy agreement before it
+can supply coverage. Spans alone and an opening fingerprint authorize no cut.
+One-second margins and unmatched tiles remain; this path always retains boundary
+audio and cannot authorize a suppress-all SUCCESS. Future derivative filenames,
+weak or silent probes, unknown legacy batch gaps and lookup failures keep originals.
+Existing S1-mapped paths retain their separate committed-frame handling.
 
-Live-target transcript dedupe compares normalized token sequences/sets at 0.8,
-requires at least five tokens on each side and keeps 60-second slop after every
-revision. Two consistent text matches can estimate skew when the audio probe
-abstains. Legacy playback trims overlapping heads, including nested chunks.
+Live text drops require an explicitly corroborated offset or two independent exact
+anchor lines agreeing within two seconds. Each matched live line is consumed once,
+including constituents of a combined live window. Only known compatible speaker
+identity can match; provider-local labels are not identity proof. After clock
+correction, lines must align within two seconds, so later sayings survive. There
+is no default-zero offset. The token floor is eight: 8–11 tokens require exact
+tokens; longer lines require an order-sensitive sequence ratio of at least 0.95.
+This intentionally preserves uncertain duplicates and changed short instructions.
+No clock slop is removed after a sync revision.
 
 Observe `sync_safety_wal_seconds_skipped_total`,
 `sync_safety_wal_segments_deduped_total`, `sync_safety_wal_audio_bytes_not_stored_total`
-(by reason) and `event=sync_safety_wal_coverage` per job. Audio byte counters measure
-suppressed decoded PCM bytes, not final Opus billing. Deploy through the existing
-release workflow; verify genuine-gap recovery and dedupe rates before extending
-rollout. Risks: short/noisy probes abstain; repeated similar long utterances may
-fuzzy-match within slop. No historical transcript rewrite. Client 30-second edge
-suppression remains separate. PR #20688 touches VAD/cleanup hunks in `pipeline.py`;
-#21362 touches client WAL recovery, outside these server changes.
+(by reason) and `event=sync_safety_wal_coverage` per job. Byte counters measure
+suppressed decoded PCM bytes. No historical rewrite. Client 30-second edge
+suppression remains separate. #20688 touches different VAD/cleanup hunks in
+`pipeline.py`; #21362 touches client WAL recovery.

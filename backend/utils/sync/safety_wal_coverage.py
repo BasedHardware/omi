@@ -16,9 +16,14 @@ import wave
 from collections.abc import Awaitable, Callable, Collection
 from concurrent.futures import Executor
 from typing import Any
+from dataclasses import dataclass, field
 
 import numpy as np
 
+from database import conversations
+from utils.other import storage
+from utils.sync.assignment import compatible_capture
+from utils.request_validation import parse_sync_filename_timestamp
 from config.sync_safety_wal import sync_safety_wal_enabled
 from utils.observability.fallback import record_fallback
 from utils.sync.files import get_timestamp_from_path, get_wav_duration
@@ -104,6 +109,13 @@ def uncovered_intervals(
 def _materialize(path: str, intervals: list[tuple[float, float]], offset: float) -> list[str]:
     outputs = []
     directory = os.path.join(os.path.dirname(path), 'safety-coverage', uuid.uuid4().hex)
+    # Validate every rewritten name before creating any derivative.
+    with wave.open(path, 'rb') as source:
+        rate = source.getframerate()
+    timestamp = get_timestamp_from_path(path)
+    for first, _last in intervals:
+        candidate = f'wal_{timestamp + offset + math.floor(first * rate) / rate:.6f}.wav'
+        parse_sync_filename_timestamp(candidate)
     try:
         os.makedirs(directory)
         with wave.open(path, 'rb') as source:
@@ -130,66 +142,118 @@ def _materialize(path: str, intervals: list[tuple[float, float]], offset: float)
         raise
 
 
-def cut_live_coverage(uid: str, row: dict, path: str) -> tuple[list[str], str, float, int]:
-    from utils.other import storage
+@dataclass
+class LiveCoverage:
+    probes: list[tuple[float, np.ndarray]] = field(default_factory=list)
+    offset: float | None = None
 
-    start, duration = get_timestamp_from_path(path), get_wav_duration(path)
+
+def load_live_coverage(uid: str, row: dict, batch_start: float, batch_end: float) -> LiveCoverage:
+    """One bounded listing/decode pass per conversation per job."""
+    snapshot = LiveCoverage()
     chunks = storage.list_audio_chunks(uid, row['id'], timeout=5, max_count=10000)
-    coverage, probes = [], []
-    budget = 0
-    attempts = 0
-    deadline = time.monotonic() + 15
-    for chunk in sorted(chunks, key=lambda c: abs(float(c['timestamp']) - start)):
+    budget, attempts, deadline = 0, 0, time.monotonic() + 15
+    for chunk in sorted(chunks, key=lambda c: abs(float(c['timestamp']) - batch_start)):
         span = chunk.get('span')
-        # Legacy batches concatenate payloads without preserving internal gaps.
-        # Their aggregate decoded duration cannot prove continuous wall coverage.
         if chunk.get('is_batch') and not span:
             continue
         left = float(span['start'] if span else chunk['timestamp'])
-        # Legacy chunks may extend across the WAL start; don't infer duration
-        # from encoded size. Decode relevant chunks, bounded by bytes/count.
-        if left > start + duration + MAX_SKEW:
+        if left > batch_end + MAX_SKEW:
             continue
         if span:
-            seconds = float(span['samples']) / float(span['sample_rate'])
-            if left + seconds < start - MAX_SKEW:
+            if left + float(span['samples']) / float(span['sample_rate']) < batch_start - MAX_SKEW:
                 continue
-            coverage.append((left, left + seconds))
-        elif left < start - MAX_SKEW - 3600:
+        elif left < batch_start - MAX_SKEW - 3600:
             continue
-        needs_probe = abs(left - start) <= MAX_SKEW + 60
-        if not span or needs_probe:
-            if (
-                int(chunk.get('size') or 0) > 8 * 1024 * 1024
-                or budget >= MAX_PCM_BYTES
-                or attempts >= 32
-                or time.monotonic() >= deadline
-            ):
-                continue
-            attempts += 1
-            pcm = storage.download_audio_chunk_pcm(uid, chunk['path'], RATE)
-            if not pcm:
-                continue
-            budget += len(pcm)
-            seconds = len(pcm) / (RATE * 2)
-            if not span:
-                coverage.append((left, left + seconds))
-            if needs_probe and len(probes) < 12:
-                probes.append((left, energy_envelope(pcm[: RATE * 2 * 180])))
+        if (
+            int(chunk.get('size') or 0) > 8 * 1024 * 1024
+            or budget >= MAX_PCM_BYTES
+            or attempts >= 32
+            or time.monotonic() >= deadline
+        ):
+            continue
+        attempts += 1
+        pcm = storage.download_audio_chunk_pcm(uid, chunk['path'], RATE)
+        if not pcm:
+            continue
+        budget += len(pcm)
+        # Never extrapolate un-downloaded span bytes into suppression evidence.
+        snapshot.probes.append((left, energy_envelope(pcm)))
+    return snapshot
+
+
+def _read_wal_envelope(path: str) -> np.ndarray | None:
     with wave.open(path, 'rb') as source:
         if source.getnchannels() != 1 or source.getsampwidth() != 2 or source.getframerate() != RATE:
-            return [path], 'unsupported_wav', 0.0, 0
-        envelope = energy_envelope(source.readframes(RATE * 20))
-    offset = estimate_offset(envelope, start, probes)
-    if offset is None:
+            return None
+        blocks = []
+        while payload := source.readframes(RATE * 60):
+            blocks.append(energy_envelope(payload))
+    return np.concatenate(blocks) if blocks else np.array([], dtype=np.float32)
+
+
+def interval_envelopes_match(wal: np.ndarray, live: np.ndarray) -> bool:
+    """Every bin must agree; a correlation of the opening cannot hide a dropout."""
+    if len(wal) < 60 or len(wal) != len(live) or np.any(wal < 10) or np.any(live < 10):
+        return False
+    gain = float(np.median(wal / live))
+    if not math.isfinite(gain) or gain <= 0:
+        return False
+    aligned = live * gain
+    if np.any(np.abs(wal - aligned) > np.maximum(wal, aligned) * 0.20):
+        return False
+    a, b = wal - wal.mean(), aligned - aligned.mean()
+    denominator = float(np.linalg.norm(a) * np.linalg.norm(b))
+    return (
+        denominator > 1
+        and float(np.std(a)) >= 10
+        and float(np.std(b)) >= 10
+        and float(np.dot(a, b) / denominator) >= 0.92
+    )
+
+
+def matched_coverage(wal: np.ndarray, start: float, offset: float, snapshot: LiveCoverage) -> list[tuple[float, float]]:
+    """Six-second tiles each need their own full, non-silent envelope match."""
+    matched = []
+    for first in range(0, len(wal) - 59, 60):
+        last = first + 60
+        absolute_start = start + offset + first / 10
+        for live_start, live in snapshot.probes:
+            live_first = round((absolute_start - live_start) * 10)
+            if live_first < 0 or live_first + 60 > len(live):
+                continue
+            if interval_envelopes_match(wal[first:last], live[live_first : live_first + 60]):
+                matched.append((absolute_start, start + offset + last / 10))
+                break
+    return matched
+
+
+def cut_live_coverage(
+    uid: str, row: dict, path: str, snapshot: LiveCoverage | None = None
+) -> tuple[list[str], str, float, int]:
+    start, duration = get_timestamp_from_path(path), get_wav_duration(path)
+    if snapshot is None:
+        snapshot = load_live_coverage(uid, row, start, start + duration)
+    wal = _read_wal_envelope(path)
+    if wal is None:
+        return [path], 'unsupported_wav', 0.0, 0
+    if snapshot.offset is None:
+        snapshot.offset = estimate_offset(wal, start, snapshot.probes)
+    if snapshot.offset is None:
         return [path], 'unreliable_clock', 0.0, 0
-    intervals = uncovered_intervals(start, duration, coverage, offset)
-    if len(intervals) > 128:
+    coverage = matched_coverage(wal, start, snapshot.offset, snapshot)
+    intervals = uncovered_intervals(start, duration, coverage, snapshot.offset)
+    # Boundary audio is always retained. This path cannot authorize suppress-all
+    # SUCCESS; a match of one interval never vouches for another interval.
+    if not intervals or len(intervals) > 128:
         return [path], 'fragmented_coverage', 0.0, 0
     skipped = duration - sum(last - first for first, last in intervals)
     if skipped <= 0:
         return [path], 'no_coverage', 0.0, 0
-    outputs = _materialize(path, intervals, offset)
+    try:
+        outputs = _materialize(path, intervals, snapshot.offset)
+    except ValueError:
+        return [path], 'unreliable_clock', 0.0, 0
     return outputs, 'energy_match', skipped, int(skipped * RATE * 2)
 
 
@@ -205,29 +269,44 @@ async def apply_safety_wal_coverage(
     protected_paths: Collection[str] = (),
     capture_partition: dict[str, Any] | None = None,
 ) -> tuple[list[str], set[str]]:
-    from database import conversations
-
     results, generated = [], set()
+    snapshots: dict[str, LiveCoverage | None] = {}
+    target_rows: dict[str, Any] = {}
+    batch_bounds = []
+    file_bounds: dict[str, tuple[float, float]] = {}
     reasons, skipped, saved = set(), 0.0, 0
     enabled = sync_safety_wal_enabled()
+    if enabled:
+        for path in wav_paths:
+            if path not in protected_paths:
+                try:
+                    duration = await run_blocking(storage_executor, get_wav_duration, path)
+                    start = get_timestamp_from_path(path)
+                    file_bounds[path] = (start, duration)
+                    batch_bounds.append((start, start + duration))
+                except Exception:
+                    # One bad header cannot prevent other files from recovering.
+                    continue
+    batch_start = min((bounds[0] for bounds in batch_bounds), default=0)
+    batch_end = max((bounds[1] for bounds in batch_bounds), default=0)
     for path in wav_paths:
         reason, seconds, size, outputs = 'disabled', 0.0, 0, [path]
         if path in protected_paths:
             reason = 's1_mapped'
         elif enabled:
             try:
-                start = get_timestamp_from_path(path)
-                duration = await run_blocking(storage_executor, get_wav_duration, path)
-                row = (
-                    await run_blocking(db_executor, conversations.get_conversation, uid, target_id)
-                    if target_id
-                    else await run_blocking(
+                start, duration = file_bounds[path]
+                if target_id:
+                    if target_id not in target_rows:
+                        target_rows[target_id] = await run_blocking(
+                            db_executor, conversations.get_conversation, uid, target_id
+                        )
+                    row = target_rows[target_id]
+                else:
+                    row = await run_blocking(
                         db_executor, conversations.get_closest_conversation_to_timestamps, uid, start, start + duration
                     )
-                )
                 # A sync-only row cannot prove coverage from the live socket.
-                from utils.sync.assignment import compatible_capture
-
                 live = (
                     row
                     and not row.get('deleted')
@@ -235,9 +314,21 @@ async def apply_safety_wal_coverage(
                     and (capture_partition is None or compatible_capture(row, capture_partition))
                 )
                 if live:
-                    outputs, reason, seconds, size = await run_blocking(
-                        storage_executor, cut_live_coverage, uid, row, path
-                    )
+                    cid = row['id']
+                    if cid not in snapshots:
+                        # Cache failures too: a failed listing cannot restart for
+                        # every ten-second WAL in the same job.
+                        snapshots[cid] = None
+                        snapshots[cid] = await run_blocking(
+                            storage_executor, load_live_coverage, uid, row, batch_start, batch_end
+                        )
+                    snapshot = snapshots[cid]
+                    if snapshot is not None:
+                        outputs, reason, seconds, size = await run_blocking(
+                            storage_executor, cut_live_coverage, uid, row, path, snapshot
+                        )
+                    else:
+                        reason = 'lookup_or_cut_failed'
                 else:
                     reason = 'no_live_target'
             except Exception as exc:
