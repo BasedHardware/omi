@@ -424,8 +424,8 @@ final class SBOnboardingBackNavigationTests: XCTestCase {
     let talk = ShortcutSettings.KeyboardShortcut(modifierOnly: .control)
     let openData = try JSONEncoder().encode(open)
     let talkData = try JSONEncoder().encode(talk)
-    defaults.set(openData, forKey: "shortcut_askOmiKey")
-    defaults.set(talkData, forKey: "shortcut_pttKey")
+    defaults.set(openData, forKey: ShortcutSettings.askOmiShortcutDefaultsKey)
+    defaults.set(talkData, forKey: ShortcutSettings.pttShortcutDefaultsKey)
     let appState = AppState()
     let model = SBOnboardingModel(appState: appState, chatProvider: ChatProvider(), onComplete: nil)
     for (step, expected) in [(SBOnboardingModel.Step.shortcutOpen, open), (.shortcutTalk, talk)] {
@@ -437,8 +437,8 @@ final class SBOnboardingBackNavigationTests: XCTestCase {
     }
     XCTAssertEqual(settings.askOmiShortcut, open)
     XCTAssertEqual(settings.pttShortcut, talk)
-    XCTAssertEqual(defaults.data(forKey: "shortcut_askOmiKey"), openData)
-    XCTAssertEqual(defaults.data(forKey: "shortcut_pttKey"), talkData)
+    XCTAssertEqual(defaults.data(forKey: ShortcutSettings.askOmiShortcutDefaultsKey), openData)
+    XCTAssertEqual(defaults.data(forKey: ShortcutSettings.pttShortcutDefaultsKey), talkData)
   }
 
   func testRegistrationFailureRequiresAnotherChoiceAndCustomStillRequiresAChoice() {
