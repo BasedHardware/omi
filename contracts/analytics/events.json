@@ -3715,6 +3715,173 @@
         "subscription-funnel"
       ],
       "correlation": null
+    },
+    {
+      "id": "onboardingFirstCaptureShown",
+      "wire_name": "Onboarding First Capture Shown",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {},
+      "consumers": [
+        "mobile-instrumentation-presence"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "onboardingFirstCaptureChoiceSelected",
+      "wire_name": "Onboarding First Capture Choice Selected",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {
+        "choice": {
+          "type": "enum",
+          "wire_name": "choice",
+          "values": [
+            "omi",
+            "apple_watch",
+            "phone",
+            "skipped"
+          ]
+        }
+      },
+      "consumers": [
+        "mobile-instrumentation-presence"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "onboardingFirstCaptureRecordingStarted",
+      "wire_name": "Onboarding First Capture Recording Started",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {},
+      "consumers": [
+        "mobile-instrumentation-presence"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "onboardingFirstCaptureRecordingCompleted",
+      "wire_name": "Onboarding First Capture Recording Completed",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {
+        "durationS": {
+          "type": "int",
+          "wire_name": "duration_s"
+        },
+        "transcriptObserved": {
+          "type": "bool",
+          "wire_name": "transcript_observed"
+        }
+      },
+      "consumers": [
+        "mobile-instrumentation-presence"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "onboardingFirstCaptureConversationShown",
+      "wire_name": "Onboarding First Capture Conversation Shown",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {
+        "latencyMs": {
+          "type": "int",
+          "wire_name": "latency_ms"
+        }
+      },
+      "consumers": [
+        "mobile-instrumentation-presence"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "onboardingFirstCaptureEmptyResult",
+      "wire_name": "Onboarding First Capture Empty Result",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {},
+      "consumers": [
+        "mobile-instrumentation-presence"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "onboardingFirstCaptureSkipped",
+      "wire_name": "Onboarding First Capture Skipped",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {},
+      "consumers": [
+        "mobile-instrumentation-presence"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "onboardingStepCompleted",
+      "wire_name": "Onboarding Step Completed",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {
+        "step": {
+          "type": "enum",
+          "wire_name": "step",
+          "values": [
+            "auth",
+            "ai_consent",
+            "name",
+            "primary_language",
+            "acquisition_source",
+            "permissions",
+            "speech_profile",
+            "knowledge_graph",
+            "setup",
+            "first_capture"
+          ]
+        },
+        "index": {
+          "type": "int",
+          "wire_name": "index"
+        },
+        "elapsedMs": {
+          "type": "int",
+          "wire_name": "elapsed_ms"
+        },
+        "skipped": {
+          "type": "bool",
+          "wire_name": "skipped"
+        },
+        "platform": {
+          "type": "enum",
+          "wire_name": "platform",
+          "values": [
+            "ios",
+            "android",
+            "other"
+          ]
+        }
+      },
+      "consumers": [
+        "mobile-instrumentation-presence"
+      ],
+      "correlation": null
     }
   ]
 }

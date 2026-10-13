@@ -30,6 +30,7 @@ Future<void> retryOfflineSavedDevice(Future<void> Function() connect) => connect
 class FoundDevices extends StatefulWidget {
   final bool isFromOnboarding;
   final VoidCallback goNext;
+  final VoidCallback? onConnectionFailed;
 
   const FoundDevices({
     super.key,
@@ -37,6 +38,7 @@ class FoundDevices extends StatefulWidget {
     required this.isFromOnboarding,
     this.onRescan,
     this.showStatus = true,
+    this.onConnectionFailed,
   });
 
   /// Draws the "Searching for devices" / "N devices found" line. Off once a scan has ended with
@@ -288,7 +290,9 @@ class _FoundDevicesState extends State<FoundDevices> {
         final visibleDevices = provider.visibleDeviceList;
         return MessageListener<OnboardingProvider>(
           showError: (error) {
-            if (error == 'DEVICE_CONNECT_FAILED') {
+            if (error == 'DEVICE_CONNECT_FAILED' && widget.onConnectionFailed != null) {
+              widget.onConnectionFailed!();
+            } else if (error == 'DEVICE_CONNECT_FAILED') {
               OmiFeedback.error(
                 context,
                 context.l10n.anErrorOccurredTryAgain,

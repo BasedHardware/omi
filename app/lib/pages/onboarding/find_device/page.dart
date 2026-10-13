@@ -21,6 +21,7 @@ class FindDevicesPage extends StatefulWidget {
   final VoidCallback goNext;
   final VoidCallback? onSkip;
   final bool includeSkip;
+  final VoidCallback? onConnectionFailed;
 
   const FindDevicesPage({
     super.key,
@@ -28,6 +29,7 @@ class FindDevicesPage extends StatefulWidget {
     this.includeSkip = true,
     this.isFromOnboarding = false,
     this.onSkip,
+    this.onConnectionFailed,
   });
 
   @override
@@ -109,6 +111,7 @@ class _FindDevicesPageState extends State<FindDevicesPage> {
             // found it draws nothing, so "Searching for devices" does not sit above "No Omi Found".
             FoundDevices(
               goNext: widget.goNext,
+              onConnectionFailed: widget.onConnectionFailed,
               isFromOnboarding: widget.isFromOnboarding,
               onRescan: _scanAgain,
               showStatus: !cantFind,

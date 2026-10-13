@@ -167,6 +167,14 @@ Source: events.json. Presence is not task success. Existing SDK provenance/ident
 | subscriptionCancelConfirmed | Subscription Cancel Confirmed | reason, has_details | active | subscription-funnel |
 | subscriptionCancelKeptPlan | Subscription Cancel Kept Plan | step, reason | active | subscription-funnel |
 | subscriptionCancelAbandoned | Subscription Cancel Abandoned | step, reason | active | subscription-funnel |
+| onboardingFirstCaptureShown | Onboarding First Capture Shown | none | active | mobile-instrumentation-presence |
+| onboardingFirstCaptureChoiceSelected | Onboarding First Capture Choice Selected | choice | active | mobile-instrumentation-presence |
+| onboardingFirstCaptureRecordingStarted | Onboarding First Capture Recording Started | none | active | mobile-instrumentation-presence |
+| onboardingFirstCaptureRecordingCompleted | Onboarding First Capture Recording Completed | duration_s, transcript_observed | active | mobile-instrumentation-presence |
+| onboardingFirstCaptureConversationShown | Onboarding First Capture Conversation Shown | latency_ms | active | mobile-instrumentation-presence |
+| onboardingFirstCaptureEmptyResult | Onboarding First Capture Empty Result | none | active | mobile-instrumentation-presence |
+| onboardingFirstCaptureSkipped | Onboarding First Capture Skipped | none | active | mobile-instrumentation-presence |
+| onboardingStepCompleted | Onboarding Step Completed | step, index, elapsed_ms, skipped, platform | active | mobile-instrumentation-presence |
 
 ## App Review Opportunity decisions
 

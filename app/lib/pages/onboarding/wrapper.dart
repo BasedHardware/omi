@@ -1,4 +1,7 @@
 import 'package:omi/services/onboarding_sync_runtime.dart';
+import 'package:omi/utils/analytics/registry/events.g.dart';
+import 'onboarding_step_telemetry.dart';
+import 'package:omi/utils/analytics/registry/typed_events.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:flutter/material.dart';
 
@@ -57,6 +60,9 @@ class OnboardingWrapper extends StatefulWidget {
         knowledgeGraphStepEnabled: knowledgeGraphStepEnabled,
       );
 
+  @visibleForTesting
+  static int resumeStepForTesting(int saved) => _OnboardingWrapperState.resolveResumeStep(saved);
+
   @override
   State<OnboardingWrapper> createState() => _OnboardingWrapperState();
 }
@@ -72,7 +78,7 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
   static const int kSpeechProfilePage = 6; // Guided voice introduction
   static const int kKnowledgeGraphPage = 7; // Memory graph preview
   static const int kSetupPage = 8; // "Setting up your Omi" + rating pre-prompt; flag-gated, else skipped
-  static const int kCompletePage = 9; // "You're all set" completion screen
+  static const int kCompletePage = 9; // Capture choice; keep persisted index stable.
   static const int kPageCount = 10;
 
   /// The steps the progress dots count, in order. Auth, consent and the completion screen are not
@@ -101,6 +107,14 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
   bool? _setupPageEnabledResolved;
   ProductAttempt? _onboardingAttempt;
   bool _finishing = false;
+  late final _stepTelemetry = MobileOnboardingStepTelemetry(
+    emit: const TypedEvents().emit,
+    platform: () => switch (Theme.of(context).platform) {
+      TargetPlatform.iOS => OnboardingStepCompletedPlatform.ios,
+      TargetPlatform.android => OnboardingStepCompletedPlatform.android,
+      _ => OnboardingStepCompletedPlatform.other,
+    },
+  );
   GuidedVoiceController? _voiceController;
 
   GuidedVoiceController _getVoiceController() {
@@ -120,10 +134,12 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
         surface: ProductSurface.onboarding,
       );
     }
+    _stepTelemetry; // Start timing the first visible step.
     // Auth, AiConsent, Name, Lang, FoundOmi, Permissions, SpeechProfile, KnowledgeGraph, Setup, Complete
     _controller = TabController(length: kPageCount, vsync: this);
     _controller!.addListener(() {
       if (!mounted) return;
+      _stepTelemetry.enter(_controller!.index);
       setState(() {});
       _rememberStep(_controller!.index);
       // Update background image when page changes
@@ -193,6 +209,7 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
   }
 
   Future<void> _routeWithPermissionsCheck(BuildContext context) async {
+    _stepTelemetry.exit();
     if (!SharedPreferencesUtil().permissionsCompleted) {
       final granted = await arePermissionsGranted();
       if (!granted) {
@@ -265,7 +282,11 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
   /// or Name.
   int _resumeStep() {
     final saved = SharedPreferencesUtil().getInt(_resumeKey, defaultValue: kNamePage);
-    if (!_isResumableStep(saved)) return kNamePage;
+    return resolveResumeStep(saved);
+  }
+
+  static int resolveResumeStep(int saved) {
+    if (!isResumableStepForTesting(saved)) return kNamePage;
     if (!kKnowledgeGraphStepEnabled && saved == kKnowledgeGraphPage) {
       return stepAfterKnowledgeGraph(setupPageEnabled: false);
     }
@@ -529,6 +550,7 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
               },
               onSkip: () {
                 PlatformManager.instance.analytics.speechProfileSkipped();
+                _stepTelemetry.skipped = true;
                 _leaveSpeechProfile();
               },
             ),
@@ -541,6 +563,7 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
         },
       ),
       OnboardingCompleteScreen(
+        onSkipped: () => _stepTelemetry.skipped = true,
         onComplete: () async {
           if (_finishing) return;
           _finishing = true;
@@ -554,6 +577,7 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
           SharedPreferencesUtil().onboardingCompleted = true;
           SharedPreferencesUtil().permissionsCompleted = true;
           SharedPreferencesUtil().remove(_resumeKey);
+          _stepTelemetry.exit();
           _completeOnboardingTelemetry();
           PlatformManager.instance.analytics.onboardingCompleted();
           PaintingBinding.instance.imageCache.clear();

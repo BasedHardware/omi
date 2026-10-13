@@ -2452,3 +2452,108 @@ final class SubscriptionCancelAbandoned extends RegisteredEvent {
   @override
   Map<String, Object> get properties => {"step": step, "reason": reason.wireName};
 }
+
+final class OnboardingFirstCaptureShown extends RegisteredEvent {
+  const OnboardingFirstCaptureShown();
+  @override
+  String get wireName => "Onboarding First Capture Shown";
+  @override
+  Map<String, Object> get properties => {};
+}
+
+enum OnboardingFirstCaptureChoiceSelectedChoice {
+  omi("omi"),
+  appleWatch("apple_watch"),
+  phone("phone"),
+  skipped("skipped");
+  const OnboardingFirstCaptureChoiceSelectedChoice(this.wireName);
+  final String wireName;
+}
+
+final class OnboardingFirstCaptureChoiceSelected extends RegisteredEvent {
+  const OnboardingFirstCaptureChoiceSelected({required this.choice});
+  final OnboardingFirstCaptureChoiceSelectedChoice choice;
+  @override
+  String get wireName => "Onboarding First Capture Choice Selected";
+  @override
+  Map<String, Object> get properties => {"choice": choice.wireName};
+}
+
+final class OnboardingFirstCaptureRecordingStarted extends RegisteredEvent {
+  const OnboardingFirstCaptureRecordingStarted();
+  @override
+  String get wireName => "Onboarding First Capture Recording Started";
+  @override
+  Map<String, Object> get properties => {};
+}
+
+final class OnboardingFirstCaptureRecordingCompleted extends RegisteredEvent {
+  const OnboardingFirstCaptureRecordingCompleted({required this.durationS, required this.transcriptObserved});
+  final int durationS;
+  final bool transcriptObserved;
+  @override
+  String get wireName => "Onboarding First Capture Recording Completed";
+  @override
+  Map<String, Object> get properties => {"duration_s": durationS, "transcript_observed": transcriptObserved};
+}
+
+final class OnboardingFirstCaptureConversationShown extends RegisteredEvent {
+  const OnboardingFirstCaptureConversationShown({required this.latencyMs});
+  final int latencyMs;
+  @override
+  String get wireName => "Onboarding First Capture Conversation Shown";
+  @override
+  Map<String, Object> get properties => {"latency_ms": latencyMs};
+}
+
+final class OnboardingFirstCaptureEmptyResult extends RegisteredEvent {
+  const OnboardingFirstCaptureEmptyResult();
+  @override
+  String get wireName => "Onboarding First Capture Empty Result";
+  @override
+  Map<String, Object> get properties => {};
+}
+
+final class OnboardingFirstCaptureSkipped extends RegisteredEvent {
+  const OnboardingFirstCaptureSkipped();
+  @override
+  String get wireName => "Onboarding First Capture Skipped";
+  @override
+  Map<String, Object> get properties => {};
+}
+
+enum OnboardingStepCompletedStep {
+  auth("auth"),
+  aiConsent("ai_consent"),
+  name("name"),
+  primaryLanguage("primary_language"),
+  acquisitionSource("acquisition_source"),
+  permissions("permissions"),
+  speechProfile("speech_profile"),
+  knowledgeGraph("knowledge_graph"),
+  setup("setup"),
+  firstCapture("first_capture");
+  const OnboardingStepCompletedStep(this.wireName);
+  final String wireName;
+}
+
+enum OnboardingStepCompletedPlatform {
+  ios("ios"),
+  android("android"),
+  other("other");
+  const OnboardingStepCompletedPlatform(this.wireName);
+  final String wireName;
+}
+
+final class OnboardingStepCompleted extends RegisteredEvent {
+  const OnboardingStepCompleted({required this.step, required this.index, required this.elapsedMs, required this.skipped, required this.platform});
+  final OnboardingStepCompletedStep step;
+  final int index;
+  final int elapsedMs;
+  final bool skipped;
+  final OnboardingStepCompletedPlatform platform;
+  @override
+  String get wireName => "Onboarding Step Completed";
+  @override
+  Map<String, Object> get properties => {"step": step.wireName, "index": index, "elapsed_ms": elapsedMs, "skipped": skipped, "platform": platform.wireName};
+}

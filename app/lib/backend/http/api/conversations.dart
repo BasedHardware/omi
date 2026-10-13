@@ -30,20 +30,24 @@ import 'package:omi/utils/wal_sync_upload.dart';
 /// already finalized. Reporting it floods crash reporting with noise.
 bool isBenignInProgressConversationCreateStatus(int statusCode) => statusCode == 404;
 
-Future<CreateConversationResponse?> processInProgressConversation() async {
+Future<CreateConversationResponse?> processInProgressConversation({bool throwOnFailure = false}) async {
   var response = await makeApiCall(
     url: '${Env.apiBaseUrl}v1/conversations',
     headers: {},
     method: 'POST',
     body: jsonEncode({}),
   );
-  if (response == null) return null;
+  if (response == null) {
+    if (throwOnFailure) throw StateError('process now transport failed');
+    return null;
+  }
   Logger.debug('createConversationServer: ${response.body}');
   if (response.statusCode == 200) {
     return CreateConversationResponse.fromGeneratedWireJson(jsonDecode(response.body) as Map<String, dynamic>);
   } else if (isBenignInProgressConversationCreateStatus(response.statusCode)) {
     Logger.debug('processInProgressConversation: no in-progress conversation (already finalized), skipping');
   } else {
+    if (throwOnFailure) throw StateError('process now HTTP failure');
     PlatformManager.instance.crashReporter.reportCrash(
       Exception('Failed to create conversation'),
       StackTrace.current,

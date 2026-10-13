@@ -133,7 +133,15 @@
     "onboardingSetupRatingPromptShown",
     "onboardingSetupRatingPromptAnswered",
     "firstSummaryRatingPromptShown",
-    "firstSummaryRatingPromptAnswered"
+    "firstSummaryRatingPromptAnswered",
+    "onboardingFirstCaptureShown",
+    "onboardingFirstCaptureChoiceSelected",
+    "onboardingFirstCaptureRecordingStarted",
+    "onboardingFirstCaptureRecordingCompleted",
+    "onboardingFirstCaptureConversationShown",
+    "onboardingFirstCaptureEmptyResult",
+    "onboardingFirstCaptureSkipped",
+    "onboardingStepCompleted"
   ],
   "namespace_property": "$app_namespace",
   "dimensions": [

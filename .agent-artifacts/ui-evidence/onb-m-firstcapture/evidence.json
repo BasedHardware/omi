@@ -1,0 +1,31 @@
+{
+  "lane": "onb-m-firstcapture",
+  "viewport_logical": [
+    393,
+    852
+  ],
+  "pixel_ratio": 3,
+  "theme": "light",
+  "fonts": "Real SF Pro Display and SDK Roboto; explicit themed controls",
+  "source": "app/test/widgets/first_capture_test.dart",
+  "command": "FIRST_CAPTURE_RENDER=1 flutter test --no-pub test/widgets/first_capture_test.dart",
+  "fixtures": "Hermetic phone IO; real ConnectDevicePage with inert BLE providers; synthetic conversation",
+  "screenshots": [
+    "android-choice.png",
+    "android-empty.png",
+    "android-omi-handoff.png",
+    "android-processing.png",
+    "android-recording-30s.png",
+    "android-recording-5s.png",
+    "android-result.png",
+    "iOS-choice.png",
+    "iOS-empty.png",
+    "iOS-omi-handoff.png",
+    "iOS-processing.png",
+    "iOS-recording-30s.png",
+    "iOS-recording-5s.png",
+    "iOS-result.png",
+    "iOS-watch-instructions.png"
+  ],
+  "limits": "Widget rendering; no physical-device, production API, BLE, or Watch end-to-end acceptance."
+}
