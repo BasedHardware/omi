@@ -18,7 +18,7 @@ void main() {
     expect(data.current!.line, r"You're on Plus · $19.99/mo · renews Nov 1");
     expect(data.current!.legacyNote, isNull);
     expect(data.yearlyToggleLabel, 'Yearly · 2 months free');
-    expect(data.tiers.map((tier) => tier.planId), ['operator', 'basic', 'plus', 'architect']);
+    expect(data.tiers.map((tier) => tier.planId), ['operator', 'plus', 'architect']);
     final pro = data.tiers.singleWhere((tier) => tier.recommended);
     expect(pro.name, 'Pro');
     expect(pro.hoursLine, 'About 280 hours of recording a month, enough to wear it all day');
@@ -34,6 +34,8 @@ void main() {
     expect(plus.ctaLabel, isNull);
     expect(plus.bullets, isEmpty);
     expect(plus.prices.map((price) => price.interval), ['year']);
+    expect(plus.priceFor('year')!.headline, r'$19.99/month');
+    expect(plus.priceFor('year')!.subline, r'$199.90 billed yearly · 2 months free');
     expect(plus.priceFor('year')!.ctaLabel, r'Switch to yearly · save $39.98');
     expect(data.usage!.showBudgetNudge, isFalse);
     for (final version in [1, 3, '2', null]) {
@@ -590,11 +592,13 @@ void main() {
     );
     final architect =
         PlanStorefront.fromJson(fixture('architect_settings')).tiers.singleWhere((tier) => tier.planId == 'architect');
+    expect(architect.priceFor('year')!.headline, r'$199.00/month');
     expect(architect.priceFor('year')!.ctaLabel, r'Switch to yearly · save $398.00');
     expect(architect.ctaLabel, isNull);
     final free = PlanStorefront.fromJson(fixture('free_settings'));
     final basic = free.tiers.singleWhere((tier) => tier.planId == 'basic');
     expect(basic.compact, isTrue);
+    expect(basic.priceFor('month')!.headline, r'$0');
     expect(basic.priceFor('month')!.id, isNull);
     expect(basic.priceFor('month')!.renewalLine, isNull);
     expect(

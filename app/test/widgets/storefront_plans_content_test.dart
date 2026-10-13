@@ -170,7 +170,8 @@ void main() {
     expect(find.text('Recommended'), findsOneWidget);
     expect(find.text('Your plan'), findsOneWidget);
     expect(find.text(r'$49.99/month'), findsOneWidget);
-    expect(find.text(r'$16.66/month'), findsOneWidget);
+    expect(find.text(r'$19.99/month'), findsWidgets);
+    expect(find.text(r'$16.66/month'), findsNothing);
     expect(find.text(r'$199.90 billed yearly · 2 months free'), findsOneWidget);
     expect(find.text(r'Switch to yearly · save $39.98'), findsOneWidget);
     expect(find.text('Upgrade to Pro'), findsOneWidget);
@@ -187,6 +188,10 @@ void main() {
     expect(find.text(r'$499.90 billed yearly · 2 months free'), findsOneWidget);
     expect(find.text('Renews yearly until you cancel. Cancel anytime in settings.'), findsWidgets);
     expect(find.text(r'Switch to yearly · save $39.98'), findsOneWidget);
+    expect(
+      find.descendant(of: find.byKey(const Key('storefront_tier_plus')), matching: find.text(r'$19.99/month')),
+      findsOneWidget,
+    );
     await tester.ensureVisible(find.byKey(const Key('storefront_buy_operator')));
     await tester.tap(find.byKey(const Key('storefront_buy_operator')).hitTestable());
     await tester.pumpAndSettle();
@@ -209,12 +214,11 @@ void main() {
     final children = (list.childrenDelegate as SliverChildListDelegate).children;
     final pro = children.indexWhere((child) => child.key == const Key('storefront_tier_operator'));
     final plus = children.indexWhere((child) => child.key == const Key('storefront_tier_plus'));
-    final free = children.indexWhere((child) => child.key == const Key('storefront_tier_basic'));
     final architect = children.indexWhere((child) => child.key == const Key('storefront_tier_architect'));
     expect(pro, greaterThanOrEqualTo(0));
     expect(plus, greaterThan(pro));
-    expect(free, greaterThan(plus));
-    expect(architect, greaterThan(free));
+    expect(architect, greaterThan(plus));
+    expect(find.byKey(const Key('storefront_tier_basic')), findsNothing);
     final scrollable =
         find.descendant(of: find.byKey(const Key('storefront_scroll')), matching: find.byType(Scrollable));
     await tester.scrollUntilVisible(find.byKey(const Key('storefront_tier_architect')), 80, scrollable: scrollable);
@@ -337,7 +341,7 @@ void main() {
       }
       if (entry.key == 'free_settings') {
         expect(find.text('Get Plus'), findsOneWidget);
-        expect(find.text(r'$0.00/month'), findsOneWidget);
+        expect(find.text(r'$0'), findsOneWidget);
         expect(find.descendant(of: find.byKey(const Key('storefront_tier_basic')), matching: find.textContaining('•')),
             findsNothing);
       }
@@ -556,14 +560,14 @@ void main() {
   testWidgets('compact and current cards render no bullets', (tester) async {
     await pumpSheet(tester, data: PlanStorefront.fromJson(fixture('free_settings')));
     final free = find.byKey(const Key('storefront_tier_basic'));
-    expect(find.descendant(of: free, matching: find.text(r'$0.00/month')), findsOneWidget);
+    expect(find.descendant(of: free, matching: find.text(r'$0')), findsOneWidget);
     expect(find.descendant(of: free, matching: find.textContaining('•')), findsNothing);
     expect(find.descendant(of: free, matching: find.byType(OmiButton)), findsNothing);
 
     await pumpSheet(tester, data: PlanStorefront.fromJson(fixture()));
     final plus = find.byKey(const Key('storefront_tier_plus'));
     expect(find.descendant(of: plus, matching: find.text('Your plan')), findsOneWidget);
-    expect(find.descendant(of: plus, matching: find.text(r'$16.66/month')), findsOneWidget);
+    expect(find.descendant(of: plus, matching: find.text(r'$19.99/month')), findsOneWidget);
     expect(find.descendant(of: plus, matching: find.textContaining('•')), findsNothing);
     expect(find.byKey(const Key('storefront_buy_plus')), findsOneWidget);
     expect(tester.takeException(), isNull);
