@@ -348,7 +348,7 @@ extension SettingsContentView {
 
             Text(
               subscription.deprecationMessage
-                ?? "Your Unlimited plan is being retired. Try the new Operator plan — same great features at \(operatorDeprecationFallbackPrice)."
+                ?? "Your Unlimited plan is being retired. Try the new Pro plan — same great features at \(operatorDeprecationFallbackPrice)."
             )
             .scaledFont(size: OmiType.body)
             .foregroundColor(Ink.secondary)
@@ -357,7 +357,7 @@ extension SettingsContentView {
             Button(action: {
               selectedPlanIdForCheckout = "operator"
             }) {
-              Text("Try Operator")
+              Text("Try Pro")
                 .scaledFont(size: OmiType.body, weight: .semibold)
             }
             .buttonStyle(OmiButtonStyle(.primary, size: .compact))
@@ -390,6 +390,14 @@ extension SettingsContentView {
     }
     .sheet(isPresented: $showOverageExplainer) {
       overageExplainerSheet
+    }
+    .onAppear {
+      // The plan grid is part of this settings section, so this is a settings
+      // impression, not a blocked purchase gate. Quota and usage-limit surfaces
+      // keep their own sources.
+      AnalyticsManager.shared.paywallOpened(
+        source: "macos_settings_view",
+        currentPlan: userSubscription?.subscription.plan.rawValue ?? "unknown")
     }
   }
 

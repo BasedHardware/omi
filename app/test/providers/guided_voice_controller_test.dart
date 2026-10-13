@@ -427,4 +427,47 @@ void _registerRecorderAndLifecycleTests() {
     expect(flow.active, isFalse);
     expect(flow.busy, isFalse);
   });
+
+  test('failed or unacknowledged memory saves lock answers and preserve content on retry (#20792)', () async {
+    final io = FakeVoiceIO()..memorySuccess = false;
+    final flow = GuidedVoiceController(io);
+    addTearDown(flow.dispose);
+    await flow.start();
+    for (var i = 0; i < 4; i++) {
+      io.text = i == 3 ? 'Goal $i' : 'Personal memory $i';
+      io.speak();
+      await flow.next();
+    }
+    expect(flow.stage, IntroductionStage.review);
+    // Before save, answers are not locked: user can edit and toggle keep
+    expect(flow.answers[0].locked, isFalse);
+    flow.edit(0, 'Edited personal memory 0');
+    expect(flow.answers[0].text, 'Edited personal memory 0');
+
+    // First save: memory saving fails (e.g. readback 503 or transient network failure)
+    await flow.saveMemories();
+    expect(flow.error, 'memories');
+    expect(flow.answers[0].saved, isFalse);
+    // FakeVoiceIO.remember returns before recording when memorySuccess is false.
+    expect(io.remembered, isEmpty);
+
+    // Once attempted, memory answers must be locked against edits and unchecking
+    expect(flow.answers[0].locked, isTrue);
+    expect(flow.answers[1].locked, isTrue);
+    expect(flow.answers[2].locked, isTrue);
+
+    // Attempting to edit or uncheck locked answers is ignored
+    flow.edit(0, 'Mutated text that must not be saved');
+    expect(flow.answers[0].text, 'Edited personal memory 0');
+    flow.setKeep(0, false);
+    expect(flow.answers[0].keep, isTrue);
+
+    // Retry with memorySuccess = true
+    io.memorySuccess = true;
+    await flow.saveMemories();
+    expect(flow.allMemoriesSaved, isTrue);
+    expect(flow.stage, IntroductionStage.done);
+    // Retried writes must preserve the original confirmed content so backend dedupes
+    expect(io.remembered, ['Edited personal memory 0', 'Personal memory 1', 'Personal memory 2']);
+  });
 }

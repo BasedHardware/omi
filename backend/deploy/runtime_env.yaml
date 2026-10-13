@@ -2434,6 +2434,9 @@ environments:
             DREAM_AGENT_DAILY_USD: {value: '60', category: rollout}
             PROACTIVITY_V2_POSTHOG_TOKEN: {value: phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y, category: rollout}
             PROACTIVITY_V2_POSTHOG_HOST: {value: 'https://us.posthog.com', category: rollout}
+            POSTHOG_BILLING_API_KEY:
+              value: phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y
+              category: telemetry
             MENTOR_PIPELINE: {value: cohort, category: rollout}
             SPEAKER_GROUPING_SHADOW: {value: cohort, category: rollout}
             SPEAKER_GROUPING_SHADOW_PERCENT: {value: '10', category: rollout}

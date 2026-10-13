@@ -6,6 +6,27 @@ description: "Sequence diagrams and finalization policy for the /v4/listen WebSo
 
 # Listen + Pusher Pipeline — Sequence Diagrams
 
+The standalone `POST /v1/stt/transcribe` Parakeet proxy uses the shared
+managed-transcription allowance before calling the provider. It probes the
+uploaded media duration and rejects a file that exceeds the remaining allowance;
+successful provider responses increment root `hourly_usage.transcription_seconds`
+by that duration, rounded up to a second. Deepgram BYOK cannot exempt this
+Omi-managed Parakeet call. This proxy does not measure VAD speech or change the
+live-listen, offline-sync, or locked-conversation policies.
+
+Admission and usage recording are not a distributed monthly reservation. The
+proxy probes the seekable upload spool and initially checks allowance before
+acquiring a provider slot, then rechecks allowance after queueing. It holds its
+four-slot semaphore through the usage write attempt, bounding dispatched but
+unaccounted requests to four per serving process/event loop. A failed usage
+write emits fallback telemetry and returns the completed transcript, avoiding
+a retry-driven duplicate provider call. With healthy, launched monthly accounting, the conservative overshoot bound is
+`N × D` seconds, where `N ≤ 4 × P` for `P` serving processes and `D` is the maximum
+accounted media duration admitted per request. The finite allowance check bounds
+`D` by the plan allowance; the configured production Parakeet one-hour file cap
+normally narrows it further. The semaphore is not shared across replicas, and an
+accounting-write outage does not have this finite cumulative bound.
+
 > Last updated: 2026-09-30 (safety-WAL segments bind to their live rollover generation through `external_data.recording_origin_id`, staged by SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST, kill switch SYNC_LINEAGE_RESOLVE_ENABLED=false; same-occasion smart merge at finalization (default on, kill switch CONVERSATION_SMART_MERGE_MODE=off); S1 capture-evidence exploratory dark write; live STT language profile, Soniox hints and conformance telemetry; optional Parakeet final-pass shadow; conversation-wide speaker resolution for sync-captured conversations; Cloud Run sync shares the diarizer ILB via `HOSTED_SPEAKER_EMBEDDING_API_URL`; cross-device overlap linked without discard at finalization; provider-scoped speaker identity and bounded clustering; durable meeting receipt; bounded client-kind propagation; end-of-conversation wake-word command adjudication; private conversation start-location provenance; explicit finalization capability admission; semantic release probes; identity-bound Pusher promotion receipts; bounded sync empty-retry with phase-attributed failure telemetry)
 
 Conversation finalization notes and opted-in mobile/app chat use shaped invocation
@@ -3169,15 +3190,17 @@ Live query admission additionally records the following closed-label counters:
 
 | Counter | Meaning and reading |
 | --- | --- |
-| `omi_speaker_id_budget_exits_total{cap="voice\|socket\|both"}` | One increment per denied reservation, classified exclusively at the same refill snapshot. Sum the three caps to recover `omi_speaker_id_match_exits_total{reason="embedding_budget"}`. `voice` means only the 12-attempt cap blocked; `socket` means only the shared bucket blocked; `both` means both blocked. |
+| `omi_speaker_id_budget_exits_total{cap="voice\|socket\|both"}` | One increment per denied reservation, classified exclusively at the same refill snapshot. Sum the three caps to recover `omi_speaker_id_match_exits_total{reason="embedding_budget"}`. `voice` means only the current voice allowance (12 initially, up to 18 after bounded recovery) blocked; `socket` means only the shared bucket blocked; `both` means both blocked. |
 | `omi_speaker_id_embedding_attempts_total{outcome="reserved\|succeeded\|failed"}` | `reserved` counts synchronously spent voice attempts/socket tokens. `succeeded` means query extraction returned, even if matching subsequently rejects, loses authority, or becomes stale. `failed` means encoding/extraction raised or the caller was cancelled; a cancelled executor request may still finish remotely. Neither completion refunds budget. Completions can lag reservations. |
 | `omi_speaker_id_budget_voices_total{cap="voice\|socket\|both"}` | First denial per admitted numeric voice per matcher generation, classified by its first cap. Provider scope changes of the same numeric voice do not reset the admission cap or incidence marker. Rollovers reset this marker, including for carried voices whose attempts remain spent. |
 | `omi_speaker_id_budget_sockets_total{cap="voice\|socket\|both"}` | First denial per socket lifetime, classified by the first cap, including a voice-only denial. It counts sockets experiencing any budget denial, not exclusively sockets exhausting tokens; rollovers do not reset it. |
+| `omi_speaker_id_rejector_demotions_total{action="deferred\|coalesced"}` | `deferred` counts newly created or converted proven-rejector pending entries placed behind ordinary work; `coalesced` counts provider updates absorbed into an existing pending rejector entry. Repeated queue inspection does not recount either. These measure scheduling opportunities, not comparisons or saved GPU calls. |
+| `omi_speaker_id_rejector_tail_denials_total{reason="reserved_tail"}` | One otherwise-admissible reservation denied because a proven rejector would spend the last two socket tokens. No token or voice attempt is spent. Actual voice/socket exhaustion still uses the existing exclusive cap counters instead. |
 
 Compare exit rates by cap to locate pressure. Compare summed exits with summed
 voice/socket incidence over a long window to distinguish repeated blocked updates
 from affected voices/sockets; these are incidence cohorts, not active gauges or
-distinct-user counts. Each counter has exactly three preinitialized label values:
+distinct-user counts. Each of the four original budget/extraction counters has exactly three preinitialized label values:
 12 counter series per target, plus 12 Prometheus `_created` series. No UID, socket,
 recording, conversation, generation, speaker, or provider scope is a metric label.
 
@@ -3190,11 +3213,42 @@ UIDs occur only in this log; there is no transcript, PCM, or embedding payload.
 The old per-update `speaker_id_exit reason=embedding_budget` log is suppressed;
 its legacy metric continues to increment alongside the exclusive counter.
 
-The live matcher queue holds at most 100 pending provider updates in FIFO arrival
-order. Same-voice updates remain separate; there is no untried, near-owner,
-duration, or age-based priority. Queued work carries timing/identity metadata
+The live matcher queue holds at most 100 pending entries. Ordinary provider
+updates remain separate and in exact FIFO arrival order; there is no untried,
+near-owner, duration, or age-based priority. Queued work carries timing/identity metadata
 and the enqueue-time matcher generation, never PCM or transcript text. The
 existing per-voice lock serializes tasks, and at most 16 matcher tasks run.
+
+Only a proven rejector is deferred behind all ordinary work, and its pending
+updates coalesce with merged audio intervals and the latest segment ID. Three
+completed comparison rounds in the current matcher generation must all clearly
+reject every enrolled owner/person candidate. Each round requires the existing
+five-second evidence floor; attempts, extraction failures, duplicate audio,
+pending evidence and roster re-evaluations do not count as completed rounds.
+Any non-clear completed result permanently prevents proof in that generation:
+accepts, margin ambiguity, contention, invalid/empty comparisons and the whole
+calibrated owner near band remain protected. Known manual authority also
+prevents demotion. Current distances are rechecked, so profile re-evaluation
+cannot leave a newly close voice in the rejector tail. Proof resets on rollover.
+Coalescing never crosses generation, conversation or provider-scope fences;
+each entry retains at most 128 disjoint intervals. Other voices use identical
+per-update clip selection and initial-evidence cadence.
+Deferred entries retain their earliest enqueue position. If current proof is
+revoked by manual authority or profile re-evaluation, the pending entry returns
+to that position among ordinary work; later arrivals cannot keep overtaking it.
+The entry drops its pooled audio ranges and restores the latest provider update's
+original start, end and duration, so ordinary clip selection uses only that latest
+interval rather than the former rejector pool.
+
+After the existing monotonic socket refill and actual cap checks, a proven
+rejector cannot reserve with two or fewer tokens remaining. Those tokens remain
+available to any ordinary voice, including a tried voice still building initial
+evidence. This records `rejector_tail_reserved` in the bounded exit/diagnostic
+reason vocabulary, separately from actual `embedding_budget` exhaustion. It
+does not add tokens, refund failures, or create retries.
+The approved cutoff applies to the fractional balance literally: a balance of
+2.1 can spend one token and leave 1.1. It does not reserve two whole request
+opportunities at every fractional balance; that would require a different cutoff.
 
 Each dequeued update contributes its own audio interval to the existing pending
 minimum-evidence accumulation. Successful queries subtract already-embedded
@@ -3204,18 +3258,20 @@ queue entry: only an ordinary provider update can drive another query. Duplicate
 or overlapping updates cannot double-count successful evidence. Failures and
 budget denials retain pending metadata, but introduce no autonomous retry.
 
-This restores the scheduling/query cadence preceding #21181 while preserving
-its budget telemetry and all authority/stale-generation guards. The telemetry
+This retains the restored scheduling/query cadence for all ordinary voices,
+while preserving #21181 budget telemetry and all authority/stale-generation guards. The telemetry
 names, labels, first-block semantics, and exclusive-cap/legacy-count equality
-above remain compatible with owner-recognition diagnostics. The 12-attempt
-voice cap, shared 16-token burst/refill of 240 per hour, acceptance thresholds,
+above remain compatible with owner-recognition diagnostics. The initial 12-attempt
+voice allowance (with targeted recovery below), shared 16-token burst/refill of 240 per hour, acceptance thresholds,
 margins, manual veto, and contention remain unchanged. Actual calls and latency
-can differ from the coalescing scheduler inside the same request ceiling.
+can differ for proven rejectors inside the same request ceiling. The new
+counters add exactly three `_total` series (plus three `_created` series) using
+closed labels and no UID, socket, conversation, scope or speaker labels.
 
 Owner diagnostics keep their query/comparison, budget, progress/refusal and
 stop hooks with this FIFO scheduler. Stop/checkpoint `pending_queue` samples
-`queue.qsize()`: it counts pending provider updates, including separate entries
-for the same voice. Closed generation summaries stay frozen when stale queued
+`queue.qsize()`: it counts pending entries, including separate ordinary updates
+for the same voice and a collapsed entry per proven rejector/fence. Closed generation summaries stay frozen when stale queued
 work is examined after a rollover.
 
 The old `too_short` exit is three reasons: `segment_shorter_than_minimum`, `no_fresh_audio`, and
@@ -3856,7 +3912,22 @@ the three-entry evidence deque will evict before gating the next extraction.
 A rejected voice, including a far/noisy rejection, can then reach another
 five-second decision on later clean audio. Pooling skips unavailable PCM intervals and embeds
 the usable remainder only if its actual PCM duration still meets the extraction
-floor. `no_pcm` means none of the pooled intervals yielded PCM; a usable but short
+floor. Exact stored span ends use the span's integer byte count: subtracting
+large epoch timestamps and truncating the result can discard one real sample per
+frame, making an exactly sufficient physical window appear too short. Interior
+endpoints retain the existing PCM16 floor, gaps stay absent, and byte proof uses
+the same boundary rule as extraction. No tolerance, silence padding, thresholds,
+budget, scheduling or identity authority changes are introduced.
+`omi_speaker_id_pcm_windows_restored_total{reason="full_span_rounding"}` counts
+selected candidate windows whose actual PCM meets the current extraction floor
+while the old floored byte count on those selected windows would not. It records
+candidate qualification before quota admission; it does not count unique voices,
+GPU reservations, owner comparisons or owner recognition gains. Recovery's
+newer-audio pool passes the same floor to avoid counting an insufficient pool
+before an older-audio fallback. The one preinitialized closed label adds one total
+series, with no IDs (the shared metrics endpoint suppresses `_created`). Compare
+its rate with short-window exits, actual reservations/comparisons per conversation,
+and live owner outcomes after deployment. `no_pcm` means none of the pooled intervals yielded PCM; a usable but short
 remainder reports `window_shorter_than_minimum`.
 
 Live owner decisions with nearest distance in `[0.65, 0.70)` and an enrolled
@@ -3875,17 +3946,97 @@ acceptance lift from wider thresholds; the pending band must not be interpreted
 as a measured recall improvement.
 
 Each conversation admits at most 128 voice ids, with at most 128 pending intervals
-per voice, 16 in-flight tasks and 12 embedding attempts per voice. Rollover resets
-uncarried voices' attempts; validated automatic owner carry and copied manual
-mappings retain their attempts. Same-conversation profile refresh does not reset
-them. Accepted voices stop spending. Rejected voices keep fresh-audio recovery
-opportunities within both budgets, regardless of their initial distance: noisy
-early clips may be evicted by later clean audio. A recovered owner re-arbitrates
+per voice, 16 in-flight tasks and an initial 12 embedding attempts per voice.
+Rollover resets uncarried voices' attempts and recovery state; validated automatic
+owner carry and copied manual mappings retain both. Same-conversation profile
+refresh and provider scope changes do not reset them. Accepted voices stop spending.
+Within the initial allowance, rejected voices can retry with later provider audio.
+Beyond it, recovery is restricted to a current calibrated owner near-miss or a
+voice with no completed owner/person comparison in its retained session ledger. Completed
+clear-far voices are excluded after even one round, before they can qualify as
+proven rejectors. Other completed results outside the calibrated owner near-miss
+predicate (including margin abstention and contention) receive no extra quota. A recovered owner re-arbitrates
 all evidenced voices and withdraws competing automatic owner mappings.
 Near-threshold misses, print-margin ambiguity, owner contention and missing prints
 stay retryable. No new exit reason is added.
 Retained evidence can still be re-arbitrated or rechecked against a recovered owner
 without another embedding request.
+
+An exhausted voice may receive at most two recovery tranches of three attempts,
+for a hard maximum of 18 attempts per voice-generation. The first checkpoint is
+made when the twelfth reservation spends quota. A grant requires at least ten
+seconds of distinct, proven PCM after that checkpoint (or the prior grant), and
+30 monotonic seconds after exhaustion/prior grant. Each tranche is granted only
+when the current allowance is exhausted and a socket token can be reserved;
+eligibility is rechecked before every extra reservation, including unused attempts
+in an already granted tranche. The existing near-miss predicate requires the owner
+to be nearest with distance in [0.65, 0.70), the existing 0.10 runner-up gap and no
+contention. The completed-comparison ledger and any already-decided carried/manual row,
+not attempts, failures or pending evidence, distinguish undecided voices.
+Before rollover clears decision rows, retained quota snapshots a bounded decided
+marker. An absent row remains ineligible until a current rebuilt near-miss permits
+recovery; profile/donor awaits cannot turn an accepted carried owner into an
+undecided voice or replace its multi-clip centroid with a recovery clip. The marker
+supplies no identity authority or rejector proof, and resets with uncarried quota.
+Roster re-evaluation alone never counts as a completed round. Current profile
+distances are rechecked, so a later close/far result can change eligibility without
+resetting attempts, tranches, freshness checkpoints or cooldowns;
+there is no timer, automatic failed-request retry, refund, or socket exemption.
+Freshness uses the ring's absolute append byte positions AND a capture-axis
+high-watermark, with sample-aligned, non-overlapping span proof. Segment duration,
+client/provider timestamps, arrival gaps, repeated pending windows, and overlapping
+PCM spans cannot mint fresh seconds. Old prebuffered audio is excluded; a replaced
+ring starts a new byte checkpoint while retaining the capture watermark and granted attempts. Reordered
+windows can conservatively lose credit. State is bounded by the existing 128-voice
+inventory, contains scalar metadata, and holds only a weak reference to the ring.
+Unproven buffers fail closed. Grant consumption discards excess pre-grant credit;
+a second grant needs another ten new seconds and another cooldown.
+
+Recovery snapshots its selection boundary before observing new proof, pools
+post-checkpoint ranges first up to ten seconds (including gapped phrases), and
+uses older pending audio only when new physical PCM is below the evidence minimum.
+The boundary remains available throughout the active tranche; advancing the proof
+cursor cannot demote unreserved phrases. Grant checkpoints advance over all current
+PCM only when post-checkpoint audio is selected for reservation and the increased
+allowance covers the next attempt. Longer/newer intervals win within each pool,
+using the newest end of long turns. The physical PCM
+sample count is also capped at ten seconds even if malformed timestamp spans
+overlap. Existing centroid eviction, thresholds/margins, manual authority,
+owner contention and stale-generation fences still decide acceptance.
+
+`omi_speaker_id_recovery_tranches_total{tranche="first|second"}` counts each
+allowance grant exactly once, synchronously with its first admitted reservation.
+`omi_speaker_id_recovery_acceptances_total{target="owner|person"}` counts the first
+automatic acceptance per voice-generation after a successful recovery extraction;
+it excludes manual labels, failed/stale extraction and contended/rejected results.
+Later re-arbitration may accept that evidenced voice; repeated/reinstated acceptance
+does not count twice. Carried state is not counted as a new recovery cohort.
+`omi_speaker_id_recovery_denials_total{reason="proven_rejector|clearly_far|completed_not_near_owner"}`
+counts each otherwise attempted extra reservation refused by eligibility, including
+a grant request or an unused attempt in an existing tranche. `proven_rejector`
+requires the unchanged three-round proof; `clearly_far` covers completed clear
+rejection before that proof; `completed_not_near_owner` covers other completed
+results outside the current calibrated near-miss predicate, including a retained
+decided voice whose current row is absent during refresh. These refusals spend
+no attempt/token and never advance the tranche checkpoint. Freshness, cooldown,
+tranche/attempt ceilings and socket refusals are not counted in this eligibility
+family; they retain the existing cap/legacy telemetry. Rates measure refusals,
+not unique voices or causal GPU savings. These three recovery families add seven
+counter series per target plus seven `_created` series; all label values are
+preinitialized and closed, and no IDs are labels or new log payloads. Existing
+#21181/#21235 budget/diagnostic and #21298 rejector counters keep their meanings.
+Compare summed grants, first/second usage, eligibility denials and owner
+recovery acceptance rates with voice-cap incidence and finalized outcomes on the
+same instrumented pods. Acceptance/grants is descriptive, not a causal success
+rate: a voice can use two grants, and acceptance can lag a grant. Lower exit counts
+alone do not prove better recognition. Use a matched control and monitor false
+acceptance/contention, latency and extraction request rates.
+
+Worst-case additional GPU requests are six per qualifying voice-generation
+(+50% versus its initial allowance), each at most ten seconds of PCM. Failed or
+cancelled reservations spend this allowance too. All voices still share the
+unchanged socket envelope below, so the socket's maximum request rate cannot rise;
+actual utilization can rise within it.
 
 The socket token bucket starts with 16 attempts, has capacity 16, and refills
 at 240/3600 attempts per monotonic wall second (one every 15 seconds). Over `t`
@@ -3925,9 +4076,16 @@ is cache-policy isolation, not a retrofit of the old image's independent matchin
 behavior; old pusher still lacks the partial/late repair improvements.
 
 After pusher finishes its private-cloud uploads, process-wide admission allows
-at most two submitted/running late batches, without a waiting queue. Each scans
+at most two submitted/running late batches. Saturated admission can retain at
+most two additional ID-only batches, each with at most 128 distinct candidates.
+These wait asynchronously for 5, 15, 30, 60 and 120 seconds (230 seconds total),
+then expire if admission is still unavailable. Waiting performs no Firestore,
+audio, or model calls and borrows no executor thread. Submissions coalesce across
+active and waiting keys; the handoff is atomic. Fresh eligibility, consent,
+manual authority and the document revision are read only after admission.
+The waiting path retains no PCM and changes no audio retention policy. Each admitted batch scans
 at most 128 distinct conversations and selects at most eight eligible rows,
-including all deferred completion rechecks. Rows still `in_progress` or
+including all deferred completion rechecks; admission waits spend none of those passes. Rows still `in_progress` or
 `processing` retain their attempt: async waits of 5, 15, 30, 60 and 120 seconds
 re-read only those rows (at most six metadata snapshots per candidate, 768 per
 batch). Waits borrow no executor thread but retain the batch's admission slot.
@@ -4050,7 +4208,10 @@ people/projection, entitlement and name reads are separate. The bounded owner
 work does not replenish after a session-hour. Live audio adds at most 256 model
 attempts plus three owner-enrollment repairs per socket (existing paid-person
 repair is separate). Late audio adds at most 192 model attempts per admitted
-batch and zero enrollment repairs, with at most two batches per process.
+batch and zero enrollment repairs, with at most two active batches and two
+ID-only admission waiters per process. At most 512 distinct `(uid, conversation)` keys
+are tracked; only the 256 active candidate keys can own executor work. Waiting
+can improve utilization of the existing two slots, without adding GPU concurrency.
 
 ### Relevance decision analytics
 
@@ -4118,15 +4279,29 @@ Another batch after completion may count the same conversation again. These
 are attempts, not unique conversations or evidence of owner speech.
 The counter cannot reconstruct historical failures or identify an account.
 
-The 28 funnel `(stage,reason)` pairs are closed:
+The 29 funnel `(stage,reason)` pairs are closed:
 
 | Stage | Reasons | Meaning |
 | --- | --- | --- |
 | entry | candidate | Known deduplicated candidates, before slot/scan admission; first passes at resolver entry. |
 | eligible | candidate | Late snapshot passed existing retry eligibility and ID check; first pass has a nonempty conversation model. |
+| deferred | slot_limit | Candidates retained in one of two bounded ID-only admission waiters; no snapshot or audio has been read. |
 | skipped | slot_limit, scan_limit, pass_limit, missing, not_completed, deleted, discarded, locked, channel_source, private_cloud_disabled, missing_revision, already_resolved_owner, id_mismatch, empty_transcript, manual_receipt_unavailable, read_error, processing_error, submission_error | One terminal skip; capacity reasons mean the candidate was not scanned, not that its audio was ineligible. |
 | cas_refused | missing, account_deleting, deleted, discarded, locked, not_completed, revision_changed | Late-only terminal verdict from the actual transaction snapshot, emitted after the outer transaction returns. |
 | cas_committed | done | Late-only terminal commit, including canonical identity no-op; transaction callback retries do not increment. |
+
+Admission deferral uses the same closed retry funnel: `pass=late,stage=deferred,reason=slot_limit`
+counts retained candidates. Full waiting capacity, expiry and cancellation
+before admission emit
+`stage=skipped,reason=slot_limit`; coalesced duplicates add no entry. This adds
+one bounded stage/reason pair (61 pairs, at most 122 series across both passes);
+UID and conversation IDs remain outside Prometheus labels. Deferred admission
+counts are not commits or owner additions. Terminal waiters remove their keys
+under the admission lock before recording the skip; later callbacks release only
+their waiting permit and cannot erase a same-turn resubmission. Cancellation,
+including before the waiter starts, records one skip and releases only its
+metadata reservation; handed-off batches add no admission skip. A cancelled active coordinator still
+retains its slot until the storage future finishes.
 
 `resolver_exit` has exactly 30 primary reasons: `resolved`, `partial`, `disabled`,
 `no_audio`, `all_short`, `no_eligible`, `no_vectors`, `global_manifest_ambiguity`,
@@ -4171,3 +4346,34 @@ Cloud Run backend, backend-sync and backend-sync-backfill for their first-pass
 coverage. No new flags, indexes, stored fields, routes or app release are needed.
 This telemetry adds no retries, audio downloads, embedding calls or profile
 reads. Mixed image versions are safe; older images simply emit no new samples.
+
+## Dark at-cap choice contract
+
+`HELD_CONTENT_ENABLED` defaults to `false`; `X-Omi-Held-Content: 1` is also
+required for `GET` and `PUT /v1/users/budget-choice`. Missing/unknown capabilities
+receive 404 before route auth and any choice or allowance read for a valid body.
+Malformed PUT JSON can return 422 before dependencies; it performs no Firestore reads. This foundation does not change
+sync/listen admission or existing `is_locked` rows.
+
+The API uses the existing UTC calendar-month usage bucket (including annual
+subscriptions). One metadata-only document at
+`users/{uid}/budget_choice/current` holds the period, `on_device` or `upgrade`,
+and `dont_ask_again`. Identical writes are idempotent; conflicting writes in the
+same period return 409. A new period logically expires the old choice and
+replaces the same document, avoiding unbounded history. Delayed older-period
+writes cannot overwrite a newer choice. `upgrade` records intent only; managed
+processing still requires a positive answer from the existing allowance resolver.
+A lookup failure or platform trial paywall is `unavailable`, never a cap hit.
+`X-App-Platform` reaches the allowance resolver. Drifted BYOK recovery clears
+invalid keys before this route; it cannot grant managed access. GET and PUT share
+a boost-exempt six-per-minute UID limit, failing closed before monthly usage
+reads when Redis is unavailable. The plans API alone owns storefront visibility;
+this response makes no upgrade-availability claim. Responses are typed OpenAPI
+models with generated wire DTOs, not manual client JSON adapters. The API adds no entitlement,
+quota, provider, subscription, or captured-content mutation.
+
+Do not enable this flag before capable clients, capture custody, recovery and
+on-device continuation are implemented and verified. In particular, staged sync
+audio expires after one day and is not a safe month-long hold store. Client WAL
+custody must survive a hold until successful processing, within the existing
+retention contract. No new client capability is advertised by this foundation.

@@ -229,64 +229,6 @@ jobs:
       - name: Show Output
         run: echo ${{ steps.deploy.outputs.url }}
 
-      - name: Provision chat-first materialization decision review
-        if: github.event.inputs.environment == 'prod'
-        env:
-          ALERT_CHANNELS: ${{ vars.SYNC_BACKFILL_ALERT_NOTIFICATION_CHANNELS }}
-        run: |
-          set -euo pipefail
-          test -n "$ALERT_CHANNELS"
-          metric='chat_first_materialization_review_due'
-          display_name='Chat-first materialization decision review due'
-          documentation='The weekly read-only materialization verdict is ready. Inspect the notifications-job chat_first_materialization_health log entry for the delivered, dropped, in-flight, undated, and drop-rate aggregates, then run backend/scripts/chat_first_materialization_drop_rate.py --json for the source and block-type breakdown. This signal intentionally routes zero-drop verdicts too so the canonical server-materialization decision cannot disappear into silence.'
-          log_filter='resource.type="cloud_run_job" resource.labels.job_name="notifications-job" "chat_first_materialization_health review=true"'
-
-          if gcloud logging metrics describe "$metric" --project="${{ vars.GCP_PROJECT_ID }}" >/dev/null 2>&1; then
-            gcloud logging metrics update "$metric" \
-              --project="${{ vars.GCP_PROJECT_ID }}" \
-              --description="$display_name" \
-              --log-filter="$log_filter"
-          else
-            gcloud logging metrics create "$metric" \
-              --project="${{ vars.GCP_PROJECT_ID }}" \
-              --description="$display_name" \
-              --log-filter="$log_filter"
-          fi
-
-          policy="$(
-            gcloud monitoring policies list \
-              --project="${{ vars.GCP_PROJECT_ID }}" \
-              --filter="displayName=\"${display_name}\"" \
-              --format='value(name)' \
-              --limit=1
-          )"
-          if [[ -z "$policy" ]]; then
-            policy="$(
-              gcloud monitoring policies create \
-                --project="${{ vars.GCP_PROJECT_ID }}" \
-                --display-name="$display_name" \
-                --condition-display-name="$display_name" \
-                --condition-filter="metric.type=\"logging.googleapis.com/user/${metric}\" AND resource.type=\"cloud_run_job\"" \
-                --duration=0s \
-                --if='> 0' \
-                --trigger-count=1 \
-                --combiner=OR \
-                --notification-channels="$ALERT_CHANNELS" \
-                --documentation="$documentation" \
-                --format='value(name)'
-            )"
-          else
-            gcloud monitoring policies update "$policy" \
-              --project="${{ vars.GCP_PROJECT_ID }}" \
-              --enabled \
-              --set-notification-channels="$ALERT_CHANNELS" \
-              --documentation="$documentation"
-          fi
-          test -n "$policy"
-          gcloud monitoring policies describe "$policy" \
-            --project="${{ vars.GCP_PROJECT_ID }}" \
-            --format='value(notificationChannels)' | grep -q .
-
       - name: Provision prod Redis used_memory 90% alarm
         if: github.event.inputs.environment == 'prod'
         env:
@@ -445,6 +387,71 @@ jobs:
           test -n "$policy"
           gcloud monitoring policies describe "$policy" --project="${{ vars.GCP_PROJECT_ID }}" \
             --format='value(notificationChannels)' | grep -q .
+
+      # Core-feature recap outcome counters. Log-based, so they do not depend on
+      # the job's Managed Prometheus sidecar or on a scrape landing before exit.
+      # Grafana reads them through the Cloud Monitoring datasource (PromQL name
+      # logging_googleapis_com:user_<metric>): Core Features "Daily recap" stats
+      # and alert omi-daily-recap-generation-failing.
+      - name: Provision daily recap outcome log metrics
+        if: github.event.inputs.environment == 'prod'
+        run: |
+          set -euo pipefail
+          config_dir="$RUNNER_TEMP/daily-recap-log-metrics"
+          mkdir -p "$config_dir"
+          python3 - "$config_dir" <<'PY_LOG_METRICS'
+          import json, sys
+          job = 'resource.type="cloud_run_job" resource.labels.job_name="notifications-job" '
+          def label(key, description):
+              return {'key': key, 'valueType': 'STRING', 'description': description}
+          metrics = {
+              'daily_summary_recap_generated': {
+                  'description': 'Daily recap: current-day recap persisted for a recipient (backfill excluded).',
+                  'filter': job + 'textPayload:"daily_summary_generated "',
+                  'labels': [label('retry', 'True when generated on a retry pass.')],
+                  'labelExtractors': {'retry': 'REGEXP_EXTRACT(textPayload, "retry=(True|False)")'},
+              },
+              'daily_summary_user_failed': {
+                  'description': 'Daily recap: recipient failed (generation error, delivery error, or per-user budget).',
+                  'filter': job + 'textPayload:"daily_summary_user_failed "',
+                  'labels': [
+                      label('reason', 'generation_error or user_budget_exceeded.'),
+                      label('error_type', 'Exception class name; empty for budget timeouts.'),
+                  ],
+                  'labelExtractors': {
+                      'reason': 'REGEXP_EXTRACT(textPayload, "reason=([a-z_]+)")',
+                      'error_type': 'REGEXP_EXTRACT(textPayload, "error_type=([A-Za-z0-9_]+)")',
+                  },
+              },
+          }
+          for name, spec in metrics.items():
+              body = {
+                  'name': name,
+                  'description': spec['description'],
+                  'filter': spec['filter'],
+                  'metricDescriptor': {
+                      'metricKind': 'DELTA',
+                      'valueType': 'INT64',
+                      'unit': '1',
+                      'labels': spec['labels'],
+                  },
+                  'labelExtractors': spec['labelExtractors'],
+              }
+              with open(f'{sys.argv[1]}/{name}.json', 'w') as output:
+                  json.dump(body, output)
+          PY_LOG_METRICS
+          for metric in daily_summary_recap_generated daily_summary_user_failed; do
+            config="$config_dir/$metric.json"
+            if gcloud logging metrics describe "$metric" --project="${{ vars.GCP_PROJECT_ID }}" >/dev/null 2>&1; then
+              gcloud logging metrics update "$metric" --project="${{ vars.GCP_PROJECT_ID }}" \
+                --config-from-file="$config"
+            else
+              gcloud logging metrics create "$metric" --project="${{ vars.GCP_PROJECT_ID }}" \
+                --config-from-file="$config"
+            fi
+            gcloud logging metrics describe "$metric" --project="${{ vars.GCP_PROJECT_ID }}" \
+              --format='value(labelExtractors)' | grep -q 'REGEXP_EXTRACT'
+          done
 
       - name: Reconcile notifications Scheduler trigger
         env:

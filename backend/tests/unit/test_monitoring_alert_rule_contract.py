@@ -173,7 +173,7 @@ def test_combined_alert_export_matches_every_split_source_rule():
         assert combined[uid] == split[uid], uid
 
 
-def test_durable_queue_oldest_ready_alert_pages_on_age_or_absent_gauge():
+def test_durable_queue_oldest_ready_alert_pages_on_age_absence_or_sustained_unknown():
     for rules in _all_rule_exports().values():
         rule = rules['omi-queue-oldest-ready']
         assert len(rule['uid']) < 40
@@ -181,6 +181,8 @@ def test_durable_queue_oldest_ready_alert_pages_on_age_or_absent_gauge():
         assert 'omi_queue_oldest_ready_age_seconds' in expr
         assert 'absent(omi_queue_oldest_ready_age_seconds)' in expr
         assert '21600' in expr
+        assert 'max(omi_queue_oldest_ready_sample_unknown) > 0' in expr
+        assert rule['for'] == '5m'
         assert rule['noDataState'] == 'Alerting'
         assert rule['labels']['alert_identity'] == 'omi-queue-oldest-ready'
 
@@ -318,13 +320,17 @@ def test_llm_gateway_alerts_cover_client_black_holes_and_ready_endpoints():
     assert expected <= split.keys()
     assert expected <= combined.keys()
     reachability_expr = split["omi-llm-gateway-client-reachability"]["data"][0]["model"]["expr"]
-    assert "llm_gateway_chat_extraction_requests_total" in reachability_expr
-    assert "llm_gateway_circuit_open" in reachability_expr
-    assert 'outcome="success"' in reachability_expr
-    assert "llm_gateway_client_first_byte_seconds_bucket" in reachability_expr
+    # Only the initialized circuit gauge is a live client signal; the extraction and
+    # first-byte families had zero prod series for 10 days (2026-10-13 backtest).
+    # Gateway pods export a permanent 0 for this client gauge; scope to client jobs so it cannot mask them.
+    assert reachability_expr == 'max(llm_gateway_circuit_open{job=~"backend-listen-metrics|pusher-metrics"}) > bool 0'
+    assert "llm_gateway_chat_extraction_requests_total" not in reachability_expr
+    assert "llm_gateway_client_first_byte_seconds_bucket" not in reachability_expr
     endpoint_rule = split["omi-llm-gateway-no-ready-endpoints"]
     assert endpoint_rule["noDataState"] == "Alerting"
-    assert "kube_endpoint_address_available" in endpoint_rule["data"][0]["model"]["expr"]
+    assert 'kube_endpoint_address{' in endpoint_rule["data"][0]["model"]["expr"]
+    assert 'ready="true"' in endpoint_rule["data"][0]["model"]["expr"]
+    assert 'or vector(0)' in endpoint_rule["data"][0]["model"]["expr"]
 
 
 def test_llm_gateway_fallback_ticket_counts_only_successful_actual_failover():
@@ -679,12 +685,18 @@ STT_CHAIN_EXHAUSTED_RATIO_EXPR = (
 STT_CHAIN_EXHAUSTED_TRAFFIC_EXPR = 'sum(increase(omi_listen_accepted_total{job="backend-listen-metrics"}[5m]))'
 STT_FALLBACK_LEG_ATTEMPTS_EXPR = (
     'sum by (to_mode) (increase(omi_fallback_total{job="backend-listen-metrics",'
-    'component=~"stt_selection|stt_live_session"}[6h]))'
+    'component=~"stt_selection|stt_live_session",to_mode!="unavailable"}[6h]))'
+    ' unless on(to_mode) label_replace(max by (provider) (omi_stt_provider_retired{job="backend-listen-metrics"} == 1),'
+    ' "to_mode", "$1", "provider", "(.*)")'
 )
+# Retired providers (e.g. Deepgram) are intentionally unfunded and must not page.
+# to_mode="unavailable" is the no-provider-left sentinel: it can never recover, so
+# including it made the rule fire on every evaluation (2026-10-13 replay).
 STT_FALLBACK_LEG_RECOVERED_EXPR = (
     'sum by (to_mode) (increase(omi_fallback_total{job="backend-listen-metrics",'
-    'component=~"stt_selection|stt_live_session",outcome="recovered"}[6h])) or sum by (to_mode) '
-    '(increase(omi_fallback_total{job="backend-listen-metrics",component=~"stt_selection|stt_live_session"}[6h])) * 0'
+    'component=~"stt_selection|stt_live_session",to_mode!="unavailable",outcome="recovered"}[6h])) or sum by (to_mode) '
+    '(increase(omi_fallback_total{job="backend-listen-metrics",component=~"stt_selection|stt_live_session",'
+    'to_mode!="unavailable"}[6h])) * 0'
 )
 STT_PROVIDER_BUDGET_EXPR = (
     '(sum by (provider) (increase(omi_stt_stream_close_total{job="backend-listen-metrics",'
@@ -965,7 +977,7 @@ EXTERNAL_ALERT_METRICS = {
     # kube-state-metrics
     "kube_deployment_status_replicas": "kube-state-metrics",
     "kube_deployment_status_replicas_ready": "kube-state-metrics",
-    "kube_endpoint_address_available": "kube-state-metrics",
+    "kube_endpoint_address": "kube-state-metrics",
     "kube_horizontalpodautoscaler_status_target_metric": "kube-state-metrics",
     "kube_pod_container_resource_limits": "kube-state-metrics",
     "kube_pod_container_status_restarts_total": "kube-state-metrics",

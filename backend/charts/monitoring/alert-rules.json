@@ -131,7 +131,8 @@
     },
     "isPaused": false,
     "notification_settings": {
-      "receiver": "Omi - Services Alerting (Telegram)"
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": ["alertname"], "group_wait": "5m", "group_interval": "1h", "repeat_interval": "24h"
     },
     "record": null,
     "labels": {
@@ -281,7 +282,8 @@
     },
     "isPaused": false,
     "notification_settings": {
-      "receiver": "Omi - Services Alerting (Telegram)"
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": ["alertname"], "group_wait": "30s", "group_interval": "5m", "repeat_interval": "4h"
     },
     "record": null
   },
@@ -417,7 +419,8 @@
     },
     "isPaused": false,
     "notification_settings": {
-      "receiver": "Omi - Services Alerting (Telegram)"
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": ["alertname"], "group_wait": "5m", "group_interval": "1h", "repeat_interval": "24h"
     },
     "record": null,
     "labels": {
@@ -539,7 +542,8 @@
     },
     "isPaused": false,
     "notification_settings": {
-      "receiver": "Omi - Services Alerting (Telegram)"
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": ["alertname"], "group_wait": "5m", "group_interval": "1h", "repeat_interval": "24h"
     },
     "record": null,
     "labels": {
@@ -682,7 +686,8 @@
     },
     "isPaused": false,
     "notification_settings": {
-      "receiver": "Omi - Services Alerting (Telegram)"
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": ["alertname"], "group_wait": "5m", "group_interval": "1h", "repeat_interval": "24h"
     },
     "record": null,
     "labels": {
@@ -804,7 +809,8 @@
     },
     "isPaused": false,
     "notification_settings": {
-      "receiver": "Omi - Services Alerting (Telegram)"
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": ["alertname"], "group_wait": "5m", "group_interval": "1h", "repeat_interval": "24h"
     },
     "record": null,
     "labels": {
@@ -947,7 +953,8 @@
     },
     "isPaused": false,
     "notification_settings": {
-      "receiver": "Omi - Services Alerting (Telegram)"
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": ["alertname"], "group_wait": "5m", "group_interval": "1h", "repeat_interval": "24h"
     },
     "record": null,
     "labels": {
@@ -1097,7 +1104,8 @@
     },
     "isPaused": false,
     "notification_settings": {
-      "receiver": "Omi - Services Alerting (Telegram)"
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": ["alertname"], "group_wait": "30s", "group_interval": "5m", "repeat_interval": "4h"
     },
     "record": null
   },
@@ -1233,7 +1241,8 @@
     },
     "isPaused": false,
     "notification_settings": {
-      "receiver": "Omi - Services Alerting (Telegram)"
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": ["alertname"], "group_wait": "5m", "group_interval": "1h", "repeat_interval": "24h"
     },
     "record": null,
     "labels": {
@@ -1381,7 +1390,8 @@
     },
     "isPaused": false,
     "notification_settings": {
-      "receiver": "Omi - Services Alerting (Telegram)"
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": ["alertname"], "group_wait": "5m", "group_interval": "1h", "repeat_interval": "24h"
     },
     "record": null,
     "labels": {
@@ -1524,7 +1534,8 @@
     },
     "isPaused": false,
     "notification_settings": {
-      "receiver": "Omi - Services Alerting (Telegram)"
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": ["alertname"], "group_wait": "5m", "group_interval": "1h", "repeat_interval": "24h"
     },
     "record": null,
     "labels": {
@@ -1693,7 +1704,8 @@
     },
     "isPaused": false,
     "notification_settings": {
-      "receiver": "Omi - Services Alerting (Telegram)"
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": ["alertname"], "group_wait": "5m", "group_interval": "1h", "repeat_interval": "24h"
     },
     "record": null,
     "labels": {
@@ -1872,7 +1884,8 @@
     },
     "isPaused": false,
     "notification_settings": {
-      "receiver": "Omi - Services Alerting (Telegram)"
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": ["alertname"], "group_wait": "30s", "group_interval": "5m", "repeat_interval": "4h"
     },
     "record": null
   },
@@ -2018,7 +2031,8 @@
     },
     "isPaused": false,
     "notification_settings": {
-      "receiver": "Omi - Services Alerting (Telegram)"
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": ["alertname"], "group_wait": "5m", "group_interval": "1h", "repeat_interval": "24h"
     },
     "record": null
   },
@@ -2176,7 +2190,8 @@
     },
     "isPaused": false,
     "notification_settings": {
-      "receiver": "Omi - Services Alerting (Telegram)"
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": ["alertname"], "group_wait": "5m", "group_interval": "1h", "repeat_interval": "24h"
     },
     "record": null,
     "labels": {
@@ -2349,7 +2364,8 @@
     },
     "isPaused": false,
     "notification_settings": {
-      "receiver": "Omi - Services Alerting (Telegram)"
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": ["alertname"], "group_wait": "5m", "group_interval": "1h", "repeat_interval": "24h"
     },
     "record": null,
     "labels": {
@@ -2502,7 +2518,8 @@
     },
     "isPaused": false,
     "notification_settings": {
-      "receiver": "Omi - Services Alerting (Telegram)"
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": ["alertname"], "group_wait": "5m", "group_interval": "1h", "repeat_interval": "24h"
     },
     "record": null
   },
@@ -2664,7 +2681,8 @@
     },
     "isPaused": false,
     "notification_settings": {
-      "receiver": "Omi - Services Alerting (Telegram)"
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": ["alertname"], "group_wait": "5m", "group_interval": "1h", "repeat_interval": "24h"
     },
     "record": null,
     "labels": {
@@ -2840,7 +2858,8 @@
     },
     "isPaused": false,
     "notification_settings": {
-      "receiver": "Omi - Services Alerting (Telegram)"
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": ["alertname"], "group_wait": "30s", "group_interval": "5m", "repeat_interval": "4h"
     },
     "record": null
   },
@@ -2998,7 +3017,8 @@
     },
     "isPaused": false,
     "notification_settings": {
-      "receiver": "Omi - Services Alerting (Telegram)"
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": ["alertname"], "group_wait": "5m", "group_interval": "1h", "repeat_interval": "24h"
     },
     "record": null,
     "labels": {
@@ -3171,7 +3191,8 @@
     },
     "isPaused": false,
     "notification_settings": {
-      "receiver": "Omi - Services Alerting (Telegram)"
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": ["alertname"], "group_wait": "5m", "group_interval": "1h", "repeat_interval": "24h"
     },
     "record": null,
     "labels": {
@@ -3293,7 +3314,8 @@
     },
     "isPaused": false,
     "notification_settings": {
-      "receiver": "Omi - Services Alerting (Telegram)"
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": ["alertname"], "group_wait": "5m", "group_interval": "1h", "repeat_interval": "24h"
     },
     "record": null,
     "labels": {
@@ -3443,7 +3465,8 @@
     },
     "isPaused": false,
     "notification_settings": {
-      "receiver": "Omi - Services Alerting (Telegram)"
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": ["alertname"], "group_wait": "30s", "group_interval": "5m", "repeat_interval": "4h"
     },
     "record": null
   },
@@ -3583,7 +3606,8 @@
     },
     "isPaused": false,
     "notification_settings": {
-      "receiver": "Omi - Services Alerting (Telegram)"
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": ["alertname"], "group_wait": "30s", "group_interval": "5m", "repeat_interval": "4h"
     },
     "record": null
   },
@@ -3725,7 +3749,8 @@
     },
     "isPaused": false,
     "notification_settings": {
-      "receiver": "Omi - Services Alerting (Telegram)"
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": ["alertname"], "group_wait": "5m", "group_interval": "1h", "repeat_interval": "24h"
     },
     "record": null
   },
@@ -3868,7 +3893,8 @@
     },
     "isPaused": false,
     "notification_settings": {
-      "receiver": "Omi - Services Alerting (Telegram)"
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": ["alertname"], "group_wait": "5m", "group_interval": "1h", "repeat_interval": "24h"
     },
     "record": null
   },
@@ -4011,7 +4037,8 @@
     },
     "isPaused": false,
     "notification_settings": {
-      "receiver": "Omi - Services Alerting (Telegram)"
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": ["alertname"], "group_wait": "5m", "group_interval": "1h", "repeat_interval": "24h"
     },
     "record": null
   },
@@ -4154,7 +4181,8 @@
     },
     "isPaused": false,
     "notification_settings": {
-      "receiver": "Omi - Services Alerting (Telegram)"
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": ["alertname"], "group_wait": "30s", "group_interval": "5m", "repeat_interval": "4h"
     },
     "record": null
   },
@@ -4290,7 +4318,8 @@
     },
     "isPaused": false,
     "notification_settings": {
-      "receiver": "Omi - Services Alerting (Telegram)"
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": ["alertname"], "group_wait": "5m", "group_interval": "1h", "repeat_interval": "24h"
     },
     "record": null,
     "labels": {
@@ -4440,7 +4469,8 @@
     },
     "isPaused": false,
     "notification_settings": {
-      "receiver": "Omi - Services Alerting (Telegram)"
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": ["alertname"], "group_wait": "30s", "group_interval": "5m", "repeat_interval": "4h"
     },
     "record": null
   },
@@ -4577,7 +4607,8 @@
     },
     "isPaused": false,
     "notification_settings": {
-      "receiver": "Omi - Services Alerting (Telegram)"
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": ["alertname"], "group_wait": "5m", "group_interval": "1h", "repeat_interval": "24h"
     },
     "record": null,
     "labels": {
@@ -4725,7 +4756,8 @@
     },
     "isPaused": false,
     "notification_settings": {
-      "receiver": "Omi - Services Alerting (Telegram)"
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": ["alertname"], "group_wait": "5m", "group_interval": "1h", "repeat_interval": "24h"
     },
     "record": null,
     "labels": {
@@ -4880,7 +4912,8 @@
     },
     "isPaused": false,
     "notification_settings": {
-      "receiver": "Omi - Services Alerting (Telegram)"
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": ["alertname"], "group_wait": "5m", "group_interval": "1h", "repeat_interval": "24h"
     },
     "record": null,
     "labels": {
@@ -5035,7 +5068,8 @@
     },
     "isPaused": false,
     "notification_settings": {
-      "receiver": "Omi - Services Alerting (Telegram)"
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": ["alertname"], "group_wait": "30s", "group_interval": "5m", "repeat_interval": "4h"
     },
     "record": null
   },
@@ -5186,7 +5220,8 @@
     },
     "isPaused": false,
     "notification_settings": {
-      "receiver": "Omi - Services Alerting (Telegram)"
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": ["alertname"], "group_wait": "5m", "group_interval": "1h", "repeat_interval": "24h"
     },
     "record": null
   },
@@ -5333,7 +5368,8 @@
     },
     "isPaused": false,
     "notification_settings": {
-      "receiver": "Omi - Services Alerting (Telegram)"
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": ["alertname"], "group_wait": "5m", "group_interval": "1h", "repeat_interval": "24h"
     },
     "record": null
   },
@@ -5499,7 +5535,8 @@
     },
     "isPaused": false,
     "notification_settings": {
-      "receiver": "Omi - Services Alerting (Telegram)"
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": ["alertname"], "group_wait": "5m", "group_interval": "1h", "repeat_interval": "24h"
     },
     "record": null,
     "labels": {
@@ -5675,7 +5712,8 @@
     },
     "isPaused": false,
     "notification_settings": {
-      "receiver": "Omi - Services Alerting (Telegram)"
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": ["alertname"], "group_wait": "30s", "group_interval": "5m", "repeat_interval": "4h"
     },
     "record": null
   },
@@ -5833,7 +5871,8 @@
     },
     "isPaused": false,
     "notification_settings": {
-      "receiver": "Omi - Services Alerting (Telegram)"
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": ["alertname"], "group_wait": "5m", "group_interval": "1h", "repeat_interval": "24h"
     },
     "record": null,
     "labels": {
@@ -6006,7 +6045,8 @@
     },
     "isPaused": false,
     "notification_settings": {
-      "receiver": "Omi - Services Alerting (Telegram)"
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": ["alertname"], "group_wait": "5m", "group_interval": "1h", "repeat_interval": "24h"
     },
     "record": null,
     "labels": {
@@ -6165,7 +6205,8 @@
     },
     "isPaused": false,
     "notification_settings": {
-      "receiver": "Omi - Services Alerting (Telegram)"
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": ["alertname"], "group_wait": "5m", "group_interval": "1h", "repeat_interval": "24h"
     },
     "record": null,
     "labels": {
@@ -6338,7 +6379,8 @@
     },
     "isPaused": false,
     "notification_settings": {
-      "receiver": "Omi - Services Alerting (Telegram)"
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": ["alertname"], "group_wait": "5m", "group_interval": "1h", "repeat_interval": "24h"
     },
     "record": null,
     "labels": {
@@ -6503,7 +6545,8 @@
     },
     "isPaused": false,
     "notification_settings": {
-      "receiver": "Omi - Services Alerting (Telegram)"
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": ["alertname"], "group_wait": "5m", "group_interval": "1h", "repeat_interval": "24h"
     },
     "record": null,
     "labels": {
@@ -6683,7 +6726,8 @@
     },
     "isPaused": false,
     "notification_settings": {
-      "receiver": "Omi - Services Alerting (Telegram)"
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": ["alertname"], "group_wait": "5m", "group_interval": "1h", "repeat_interval": "24h"
     },
     "record": null
   },
@@ -6803,7 +6847,8 @@
     },
     "isPaused": false,
     "notification_settings": {
-      "receiver": "Omi - Services Alerting (Telegram)"
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": ["alertname"], "group_wait": "30s", "group_interval": "5m", "repeat_interval": "4h"
     },
     "record": null
   },
@@ -6923,7 +6968,8 @@
     },
     "isPaused": false,
     "notification_settings": {
-      "receiver": "Omi - Services Alerting (Telegram)"
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": ["alertname"], "group_wait": "30s", "group_interval": "5m", "repeat_interval": "4h"
     },
     "record": null
   },
@@ -7043,7 +7089,8 @@
     },
     "isPaused": false,
     "notification_settings": {
-      "receiver": "Omi - Services Alerting (Telegram)"
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": ["alertname"], "group_wait": "30s", "group_interval": "5m", "repeat_interval": "4h"
     },
     "record": null
   },
@@ -7163,7 +7210,8 @@
     },
     "isPaused": false,
     "notification_settings": {
-      "receiver": "Omi - Services Alerting (Telegram)"
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": ["alertname"], "group_wait": "30s", "group_interval": "5m", "repeat_interval": "4h"
     },
     "record": null
   },
@@ -7283,7 +7331,8 @@
     },
     "isPaused": false,
     "notification_settings": {
-      "receiver": "Omi - Services Alerting (Telegram)"
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": ["alertname"], "group_wait": "30s", "group_interval": "5m", "repeat_interval": "4h"
     },
     "record": null
   },
@@ -7423,7 +7472,8 @@
     },
     "isPaused": false,
     "notification_settings": {
-      "receiver": "Omi - Services Alerting (Telegram)"
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": ["alertname"], "group_wait": "30s", "group_interval": "5m", "repeat_interval": "4h"
     },
     "record": null
   },
@@ -7546,7 +7596,8 @@
     },
     "isPaused": false,
     "notification_settings": {
-      "receiver": "Omi - Services Alerting (Telegram)"
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": ["alertname"], "group_wait": "5m", "group_interval": "1h", "repeat_interval": "24h"
     },
     "record": null
   },
@@ -7685,7 +7736,8 @@
     },
     "isPaused": false,
     "notification_settings": {
-      "receiver": "Omi - Services Alerting (Telegram)"
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": ["alertname"], "group_wait": "5m", "group_interval": "1h", "repeat_interval": "24h"
     },
     "record": null
   },
@@ -7824,7 +7876,8 @@
     },
     "isPaused": false,
     "notification_settings": {
-      "receiver": "Omi - Services Alerting (Telegram)"
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": ["alertname"], "group_wait": "5m", "group_interval": "1h", "repeat_interval": "24h"
     },
     "record": null
   },
@@ -7963,7 +8016,8 @@
     },
     "isPaused": false,
     "notification_settings": {
-      "receiver": "Omi - Services Alerting (Telegram)"
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": ["alertname"], "group_wait": "5m", "group_interval": "1h", "repeat_interval": "24h"
     },
     "record": null
   },
@@ -7975,20 +8029,90 @@
     "title": "Capture finalization - durable terminal emission stalled",
     "condition": "D",
     "data": [
-      {"refId": "A", "queryType": "", "relativeTimeRange": {"from": 1800, "to": 0}, "datasourceUid": "prometheus", "model": {"datasource": {"type": "prometheus", "uid": "prometheus"}, "expr": "clamp_min(delta((max(listen_finalization_durable_jobs{state=\"accepted\"}))[30m:]), 0)", "instant": true, "intervalMs": 1000, "maxDataPoints": 43200, "refId": "A"}},
-      {"refId": "B", "queryType": "", "relativeTimeRange": {"from": 1800, "to": 0}, "datasourceUid": "prometheus", "model": {"datasource": {"type": "prometheus", "uid": "prometheus"}, "expr": "sum(clamp_min(delta((max by (state) (listen_finalization_durable_jobs{state=~\"success|failure|stale\"}))[30m:]), 0))", "instant": true, "intervalMs": 1000, "maxDataPoints": 43200, "refId": "B"}},
-      {"refId": "C", "queryType": "", "relativeTimeRange": {"from": 0, "to": 0}, "datasourceUid": "__expr__", "model": {"datasource": {"type": "__expr__", "uid": "__expr__"}, "expression": "$A >= 5 && $B == 0", "intervalMs": 1000, "maxDataPoints": 43200, "refId": "C", "type": "math"}},
-      {"refId": "D", "queryType": "", "relativeTimeRange": {"from": 0, "to": 0}, "datasourceUid": "__expr__", "model": {"conditions": [{"evaluator": {"params": [], "type": "gt"}, "operator": {"type": "and"}, "query": {"params": ["D"]}, "reducer": {"params": [], "type": "last"}, "type": "query"}], "datasource": {"type": "__expr__", "uid": "__expr__"}, "expression": "C", "intervalMs": 1000, "maxDataPoints": 43200, "reducer": "last", "refId": "D", "type": "reduce"}}
+      {
+        "refId": "A",
+        "queryType": "",
+        "relativeTimeRange": {"from": 1800, "to": 0},
+        "datasourceUid": "prometheus",
+        "model": {
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "expr": "clamp_min(delta((max(listen_finalization_durable_jobs{state=\"accepted\"}))[30m:]), 0)",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "A"
+        }
+      },
+      {
+        "refId": "B",
+        "queryType": "",
+        "relativeTimeRange": {"from": 1800, "to": 0},
+        "datasourceUid": "prometheus",
+        "model": {
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "expr": "sum(clamp_min(delta((max by (state) (listen_finalization_durable_jobs{state=~\"success|failure|stale\"}))[30m:]), 0))",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "B"
+        }
+      },
+      {
+        "refId": "C",
+        "queryType": "",
+        "relativeTimeRange": {"from": 0, "to": 0},
+        "datasourceUid": "__expr__",
+        "model": {
+          "datasource": {"type": "__expr__", "uid": "__expr__"},
+          "expression": "$A >= 5 && $B == 0",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "C",
+          "type": "math"
+        }
+      },
+      {
+        "refId": "D",
+        "queryType": "",
+        "relativeTimeRange": {"from": 0, "to": 0},
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [{"evaluator": {"params": [], "type": "gt"}, "operator": {"type": "and"}, "query": {"params": ["D"]}, "reducer": {"params": [], "type": "last"}, "type": "query"}],
+          "datasource": {"type": "__expr__", "uid": "__expr__"},
+          "expression": "C",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "reducer": "last",
+          "refId": "D",
+          "type": "reduce"
+        }
+      }
     ],
     "updated": "2026-07-25T00:00:00Z",
     "noDataState": "NoData",
     "execErrState": "Error",
     "for": "10m",
     "keep_firing_for": "0s",
-    "annotations": {"__dashboardUid__": "omi-resilience-fallbacks", "__panelId__": "9", "summary": "At least five durable capture jobs were accepted in 30m with no durable terminal movement", "threshold": "accepted movement >= 5; success + failure + stale movement = 0", "user_impact": "Capture finalization can be accepted without reaching a customer-visible terminal outcome.", "scope": "The durable Firestore capture-finalization projection on backend-listen.", "verification": "Confirm the replicated gauge with max across listener pods and inspect nonterminal age before intervention.", "safe_next_action": "Use the capture-finalization runbook; do not infer terminal counts from process-local counters or logs."},
-    "labels": {"severity": "warning", "instatus_component": "speech-processing", "alert_identity": "omi-capture-finalization-dead-emission", "component": "speech-processing", "impact": "user-experience"},
+    "annotations": {
+      "__dashboardUid__": "omi-resilience-fallbacks",
+      "__panelId__": "9",
+      "summary": "At least five durable capture jobs were accepted in 30m with no durable terminal movement",
+      "threshold": "accepted movement >= 5; success + failure + stale movement = 0",
+      "user_impact": "Capture finalization can be accepted without reaching a customer-visible terminal outcome.",
+      "scope": "The durable Firestore capture-finalization projection on backend-listen.",
+      "verification": "Confirm the replicated gauge with max across listener pods and inspect nonterminal age before intervention.",
+      "safe_next_action": "Use the capture-finalization runbook; do not infer terminal counts from process-local counters or logs."
+    },
+    "labels": {
+      "severity": "warning",
+      "instatus_component": "speech-processing",
+      "alert_identity": "omi-capture-finalization-dead-emission",
+      "component": "speech-processing",
+      "impact": "user-experience"
+    },
     "isPaused": false,
-    "notification_settings": {"receiver": "Omi - Services Alerting (Telegram)"},
+    "notification_settings": {"receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": ["alertname"], "group_wait": "5m", "group_interval": "1h", "repeat_interval": "24h"},
     "record": null
   },
   {
@@ -8088,7 +8212,8 @@
     },
     "isPaused": false,
     "notification_settings": {
-      "receiver": "Omi - Services Alerting (Telegram)"
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": ["alertname"], "group_wait": "5m", "group_interval": "1h", "repeat_interval": "24h"
     },
     "record": null
   },
@@ -8113,7 +8238,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "(sum(rate(llm_gateway_chat_extraction_requests_total{mode=\"fallback\"}[15m])) / clamp_min(sum(rate(llm_gateway_chat_extraction_requests_total{mode=~\"serving|fallback\"}[15m])), 1e-9) > bool 0.05) or (max(llm_gateway_circuit_open) > bool 0) or ((sum(increase(llm_gateway_chat_extraction_requests_total{mode=~\"serving|fallback\"}[15m])) >= bool 10) and (sum(increase(llm_gateway_chat_extraction_requests_total{mode=\"serving\",outcome=\"success\"}[15m])) == bool 0)) or (histogram_quantile(0.95, sum(rate(llm_gateway_client_first_byte_seconds_bucket[5m])) by (le)) > bool 5)",
+          "expr": "max(llm_gateway_circuit_open{job=~\"backend-listen-metrics|pusher-metrics\"}) > bool 0",
           "instant": true,
           "intervalMs": 1000,
           "maxDataPoints": 43200,
@@ -8170,11 +8295,12 @@
     "for": "5m",
     "keep_firing_for": "0s",
     "annotations": {
+      "dashboard_url": "https://monitor.omi.me/d/omi-core-features",
       "runbook": "backend/docs/runbooks/llm-gateway-fallback.md",
-      "summary": "Client fallback, open circuit, zero gateway successes under traffic, or p95 first-byte latency indicates the gateway is unreachable or stalling",
-      "threshold": "fallback >5%, circuit open, no serving success for 10 requests, or p95 first byte >5s",
+      "summary": "A backend process opened its LLM gateway circuit after transport failures and is bypassing the gateway",
+      "threshold": "max(llm_gateway_circuit_open) > 0 for 5m",
       "user_impact": "Users may be unable to complete this Omi interaction or may experience degraded results.",
-      "scope": "The Omi AI chat production service path.",
+      "scope": "Gateway clients in backend-listen and pusher pods (llm_gateway_circuit_open is initialized to 0 there). llm-gateway pods are excluded because they import the gauge but never open a client circuit, so their permanent 0 would mask a client series. If both client jobs stop being scraped, the result is NoData (OK); the backend-listen and pusher scrape/up alerts own that case. The former fallback-share, zero-success and first-byte arms were removed on 2026-10-13: llm_gateway_chat_extraction_requests_total and llm_gateway_client_first_byte_seconds had zero series in prod for 10 days because the main gateway path does not record them.",
       "verification": "Verify the condition in the linked Grafana panel and correlate it with production traffic before intervention.",
       "safe_next_action": "Inspect the linked dashboard and the affected user path; mitigate through the documented service runbook only after verification."
     },
@@ -8187,7 +8313,8 @@
     },
     "isPaused": false,
     "notification_settings": {
-      "receiver": "Omi - Services Alerting (Telegram)"
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": ["alertname"], "group_wait": "5m", "group_interval": "1h", "repeat_interval": "24h"
     },
     "record": null
   },
@@ -8212,7 +8339,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum(kube_endpoint_address_available{namespace=\"prod-omi-backend\",endpoint=\"prod-omi-llm-gateway\"}) < bool 1",
+          "expr": "(sum(kube_endpoint_address{namespace=\"prod-omi-backend\",endpoint=\"prod-omi-llm-gateway\",ready=\"true\"}) or vector(0)) < bool 1",
           "instant": true,
           "intervalMs": 1000,
           "maxDataPoints": 43200,
@@ -8269,6 +8396,7 @@
     "for": "5m",
     "keep_firing_for": "0s",
     "annotations": {
+      "dashboard_url": "https://monitor.omi.me/d/omi-core-features",
       "runbook": "backend/docs/runbooks/llm-gateway-fallback.md",
       "summary": "The production LLM Gateway Service has no ready EndpointSlice address or kube-state-metrics is absent",
       "threshold": "ready endpoint count <1",
@@ -8286,7 +8414,8 @@
     },
     "isPaused": false,
     "notification_settings": {
-      "receiver": "Omi - Services Alerting (Telegram)"
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": ["alertname"], "group_wait": "5m", "group_interval": "1h", "repeat_interval": "24h"
     },
     "record": null
   },
@@ -8425,7 +8554,8 @@
     },
     "isPaused": false,
     "notification_settings": {
-      "receiver": "Omi - Services Alerting (Telegram)"
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": ["alertname"], "group_wait": "5m", "group_interval": "1h", "repeat_interval": "24h"
     },
     "record": null
   },
@@ -8524,7 +8654,8 @@
     },
     "isPaused": false,
     "notification_settings": {
-      "receiver": "Omi - Services Alerting (Telegram)"
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": ["alertname"], "group_wait": "30s", "group_interval": "5m", "repeat_interval": "4h"
     },
     "record": null
   },
@@ -8623,7 +8754,206 @@
     },
     "isPaused": false,
     "notification_settings": {
-      "receiver": "Omi - Services Alerting (Telegram)"
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": ["alertname"], "group_wait": "30s", "group_interval": "5m", "repeat_interval": "4h"
+    },
+    "record": null
+  },
+  {
+    "uid": "cft8izabmcjk0e",
+    "orgID": 1,
+    "folderUID": "betdycdziadc0e",
+    "ruleGroup": "Parakeet",
+    "title": "Parakeet GPU OOM events detected",
+    "condition": "B",
+    "data": [
+      {
+        "refId": "A",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 900,
+          "to": 0
+        },
+        "datasourceUid": "prometheus",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum by (pod) (increase(parakeet_gpu_oom_total{container=\"parakeet\",namespace=\"prod-omi-backend\"}[5m]))",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "A"
+        }
+      },
+      {
+        "refId": "B",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [
+                  0
+                ],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "B"
+                ]
+              },
+              "reducer": {
+                "params": [],
+                "type": "last"
+              },
+              "type": "query"
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "A",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "B",
+          "type": "threshold"
+        }
+      }
+    ],
+    "updated": "2026-07-23T00:00:00Z",
+    "noDataState": "OK",
+    "execErrState": "Error",
+    "for": "1m",
+    "keep_firing_for": "0s",
+    "annotations": {
+      "dashboard_url": "https://monitor.omi.me/d/07e4c65f-ae79-414d-bf05-99468267d199",
+      "summary": "A Parakeet worker hit a CUDA out-of-memory error while transcribing.",
+      "user_impact": "Requests on the affected replica may fail or fall back to another STT provider until it recovers.",
+      "scope": "One production Parakeet GPU pod (grouped by pod).",
+      "verification": "Confirm parakeet_gpu_oom_total stops increasing for the pod and that the replica serves successful transcription requests again.",
+      "safe_next_action": "Check the pod for oversized batches or concurrent streams above its admission limit; recycle the replica if OOMs repeat."
+    },
+    "labels": {
+      "instatus_component": "speech-processing",
+      "severity": "critical",
+      "alert_identity": "cft8izabmcjk0e",
+      "component": "speech-processing",
+      "impact": "infrastructure"
+    },
+    "isPaused": false,
+    "notification_settings": {
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": ["alertname"], "group_wait": "30s", "group_interval": "5m", "repeat_interval": "4h"
+    },
+    "record": null
+  },
+  {
+    "uid": "dft8iyoy04s8wf",
+    "orgID": 1,
+    "folderUID": "betdycdziadc0e",
+    "ruleGroup": "Parakeet",
+    "title": "GPU VRAM utilization > 90% on node",
+    "condition": "B",
+    "data": [
+      {
+        "refId": "A",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 900,
+          "to": 0
+        },
+        "datasourceUid": "prometheus",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "max by (Hostname, gpu) (DCGM_FI_DEV_FB_USED / DCGM_FI_DEV_FB_TOTAL * 100)",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "A"
+        }
+      },
+      {
+        "refId": "B",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [
+                  90
+                ],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "B"
+                ]
+              },
+              "reducer": {
+                "params": [],
+                "type": "last"
+              },
+              "type": "query"
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "A",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "B",
+          "type": "threshold"
+        }
+      }
+    ],
+    "updated": "2026-07-23T00:00:00Z",
+    "noDataState": "OK",
+    "execErrState": "Error",
+    "for": "10m",
+    "keep_firing_for": "0s",
+    "annotations": {
+      "dashboard_url": "https://monitor.omi.me/d/07e4c65f-ae79-414d-bf05-99468267d199",
+      "summary": "A GPU has used more than 90% of its framebuffer memory for 10 minutes.",
+      "user_impact": "No user impact yet; the next allocation spike on this GPU may OOM and fail transcription requests.",
+      "scope": "One GPU on one GKE node (DCGM exporter, grouped by Hostname and gpu).",
+      "verification": "Confirm framebuffer use drops below 90% and that no parakeet_gpu_oom_total increase followed.",
+      "safe_next_action": "Check stream admission and batch settings for the workload on that GPU before raising capacity."
+    },
+    "labels": {
+      "instatus_component": "speech-processing",
+      "severity": "warning",
+      "alert_identity": "dft8iyoy04s8wf",
+      "component": "speech-processing",
+      "impact": "infrastructure"
+    },
+    "isPaused": false,
+    "notification_settings": {
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": ["alertname"], "group_wait": "5m", "group_interval": "1h", "repeat_interval": "24h"
     },
     "record": null
   },
@@ -8747,6 +9077,7 @@
     "for": "15m",
     "keep_firing_for": "0s",
     "annotations": {
+      "dashboard_url": "https://monitor.omi.me/d/omi-core-features",
       "summary": "Cloud Run application metrics are arriving under Stackdriver-mangled names instead of their plain omi_ names",
       "threshold": "> 0 un-normalized omi series on the cloud-run-application-metrics job for 15m",
       "user_impact": "No user impact by itself, but every alert and dashboard built on these metrics is silently matching nothing, so a real user-facing failure on a Cloud Run path could pass unnoticed.",
@@ -8764,7 +9095,8 @@
     },
     "isPaused": false,
     "notification_settings": {
-      "receiver": "Omi - Services Alerting (Telegram)"
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": ["alertname"], "group_wait": "30s", "group_interval": "5m", "repeat_interval": "4h"
     },
     "record": null
   },
@@ -8888,6 +9220,7 @@
     "for": "15m",
     "keep_firing_for": "0s",
     "annotations": {
+      "dashboard_url": "https://monitor.omi.me/d/omi-core-features",
       "summary": "The Cloud Run metrics exporter is failing its Cloud Monitoring queries, so no omi_ series are being imported",
       "threshold": "stackdriver_monitoring_last_scrape_error > 0 on the cloud-run-application-metrics job for 15m",
       "user_impact": "No direct user impact, but every Cloud Run journey metric stops arriving while the exporter Deployment stays Available and its Prometheus target stays up. Panels render empty and read as no traffic rather than no ingestion, so a real user-facing failure on a Cloud Run path can run unnoticed for as long as this is firing.",
@@ -8905,7 +9238,8 @@
     },
     "isPaused": false,
     "notification_settings": {
-      "receiver": "Omi - Services Alerting (Telegram)"
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": ["alertname"], "group_wait": "30s", "group_interval": "5m", "repeat_interval": "4h"
     },
     "record": null
   },
@@ -9029,6 +9363,7 @@
     "for": "15m",
     "keep_firing_for": "0s",
     "annotations": {
+      "dashboard_url": "https://monitor.omi.me/d/omi-core-features",
       "summary": "The Cloud Run metrics exporter is not being scraped, so no omi_ series can reach Prometheus",
       "threshold": "up < 1 on the cloud-run-application-metrics job for 15m; an absent job counts as down",
       "user_impact": "No direct user impact, but every Cloud Run journey metric stops arriving. This is the case the query-rejected alert cannot see: a crashlooping or unscraped exporter publishes no error metric at all, so an error-based rule reads healthy while nothing is ingested and panels render as no traffic.",
@@ -9046,7 +9381,8 @@
     },
     "isPaused": false,
     "notification_settings": {
-      "receiver": "Omi - Services Alerting (Telegram)"
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": ["alertname"], "group_wait": "30s", "group_interval": "5m", "repeat_interval": "4h"
     },
     "record": null
   },
@@ -9189,7 +9525,8 @@
     },
     "isPaused": false,
     "notification_settings": {
-      "receiver": "Omi - Services Alerting (Telegram)"
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": ["alertname"], "group_wait": "30s", "group_interval": "5m", "repeat_interval": "4h"
     },
     "record": null
   },
@@ -9329,7 +9666,8 @@
     },
     "isPaused": false,
     "notification_settings": {
-      "receiver": "Omi - Services Alerting (Telegram)"
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": ["alertname"], "group_wait": "30s", "group_interval": "5m", "repeat_interval": "4h"
     },
     "record": null
   },
@@ -9469,7 +9807,8 @@
     },
     "isPaused": false,
     "notification_settings": {
-      "receiver": "Omi - Services Alerting (Telegram)"
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": ["alertname"], "group_wait": "30s", "group_interval": "5m", "repeat_interval": "4h"
     },
     "record": null
   },
@@ -9612,7 +9951,8 @@
     },
     "isPaused": false,
     "notification_settings": {
-      "receiver": "Omi - Services Alerting (Telegram)"
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": ["alertname"], "group_wait": "30s", "group_interval": "5m", "repeat_interval": "4h"
     },
     "record": null
   },
@@ -9755,7 +10095,8 @@
     },
     "isPaused": false,
     "notification_settings": {
-      "receiver": "Omi - Services Alerting (Telegram)"
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": ["alertname"], "group_wait": "30s", "group_interval": "5m", "repeat_interval": "4h"
     },
     "record": null
   },
@@ -9837,6 +10178,7 @@
     "for": "2h",
     "keep_firing_for": "0s",
     "annotations": {
+      "dashboard_url": "https://monitor.omi.me/d/3e7c5f57-a1be-4175-81e6-1f0c7c28b9dd",
       "summary": "Firestore document read_count (metric stackdriver_firestore_instance_firestore_googleapis_com_document_read_count, type=\"NOT_FOUND\") is running more than 2x its volume from the same hour yesterday, sustained for 2h.",
       "threshold": "avg_over_time(avg(...)[1h:1m]) > 2x the same expression offset 24h, sustained 2h",
       "user_impact": "No direct user impact; this is a cost signal, not an outage. NOT_FOUND reads are Firestore reads for documents that do not exist, so they are near-pure waste: the read is billed but returns nothing. The day-over-day comparison survives organic growth and diurnal swing, so a sustained step here is a regression rather than load.",
@@ -9853,7 +10195,8 @@
     },
     "isPaused": false,
     "notification_settings": {
-      "receiver": "Omi - Services Alerting (Telegram)"
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": ["alertname"], "group_wait": "5m", "group_interval": "1h", "repeat_interval": "24h"
     },
     "record": null
   },
@@ -9935,6 +10278,7 @@
     "for": "30m",
     "keep_firing_for": "0s",
     "annotations": {
+      "dashboard_url": "https://monitor.omi.me/d/3e7c5f57-a1be-4175-81e6-1f0c7c28b9dd",
       "summary": "Firestore document read_count (metric stackdriver_firestore_instance_firestore_googleapis_com_document_read_count, type=\"NOT_FOUND\") has averaged more than 750 reads/sec over a rolling 6h window. Measured separation over 2026-08-18..25: the highest pre-incident 6h mean was 668/sec and the lowest post-incident 6h mean was 899/sec, so this threshold sits in a clean gap with ~12% margin on each side.",
       "threshold": "avg_over_time(avg(...)[6h:5m]) / 60 > 750 reads/sec, sustained 30m",
       "user_impact": "No direct user impact; this is a cost signal, not an outage. NOT_FOUND reads are Firestore reads for documents that do not exist, so they are near-pure waste: the read is billed but returns nothing. At the 2026-08-23 incident rate of ~950/sec this class of read alone costs roughly $740/month. This is the backstop for a leak already running at a steady elevated rate, which the day-over-day step detector cannot see because both sides of its comparison are equally elevated.",
@@ -9951,7 +10295,8 @@
     },
     "isPaused": false,
     "notification_settings": {
-      "receiver": "Omi - Services Alerting (Telegram)"
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": ["alertname"], "group_wait": "5m", "group_interval": "1h", "repeat_interval": "24h"
     },
     "record": null
   },
@@ -10033,6 +10378,7 @@
     "for": "30m",
     "keep_firing_for": "0s",
     "annotations": {
+      "dashboard_url": "https://monitor.omi.me/d/3e7c5f57-a1be-4175-81e6-1f0c7c28b9dd",
       "summary": "The Firestore read-volume series (stackdriver_firestore_instance_firestore_googleapis_com_document_read_count, type=\"NOT_FOUND\") has been absent from Prometheus for 30m, so both Firestore cost alerts are blind.",
       "threshold": "absent(...) for 30m",
       "user_impact": "No direct user impact. This is a watchdog for the cost alerts themselves. Both Firestore cost rules are written as `expr > threshold`, which returns an empty vector when not firing; with noDataState=OK, a metric that stops arriving is indistinguishable from a healthy one. This rule is what makes that difference visible.",
@@ -10049,7 +10395,8 @@
     },
     "isPaused": false,
     "notification_settings": {
-      "receiver": "Omi - Services Alerting (Telegram)"
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": ["alertname"], "group_wait": "5m", "group_interval": "1h", "repeat_interval": "24h"
     },
     "record": null
   },
@@ -10131,6 +10478,7 @@
     "for": "3h",
     "keep_firing_for": "0s",
     "annotations": {
+      "dashboard_url": "https://monitor.omi.me/d/3e7c5f57-a1be-4175-81e6-1f0c7c28b9dd",
       "summary": "Projected Firestore document-read spend has exceeded $500/day on a 6h rolling mean. Measured baseline on 2026-08-25 was $344-368/day (~14,200 reads/sec), so this is ~40% headroom.",
       "threshold": "avg_over_time(...)[6h:5m] / 60 * 86400 / 100000 * $0.03 > $500/day, sustained 3h",
       "user_impact": "No direct user impact; this is the money rule. Unlike the NOT_FOUND rules it is shape-agnostic -- it catches a regression in LOOKUP, QUERY, or NOT_FOUND reads, from application code OR from a Firebase Extension, which the app-side probe cannot see. On 2026-08-25 QUERY reads were ~13,000/sec against NOT_FOUND ~920/sec, so a NOT_FOUND-only alert watches ~7% of the bill.",
@@ -10147,7 +10495,8 @@
     },
     "isPaused": false,
     "notification_settings": {
-      "receiver": "Omi - Services Alerting (Telegram)"
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": ["alertname"], "group_wait": "5m", "group_interval": "1h", "repeat_interval": "24h"
     },
     "record": null
   },
@@ -10229,6 +10578,7 @@
     "for": "1h",
     "keep_firing_for": "0s",
     "annotations": {
+      "dashboard_url": "https://monitor.omi.me/d/3e7c5f57-a1be-4175-81e6-1f0c7c28b9dd",
       "summary": "An instrumented Firestore read family is reading more than 2x the documents per second it read at the same time yesterday, and is above 100 docs/sec in absolute terms.",
       "threshold": "per-family rate > 2x the same rate offset 24h, AND > 100 docs/sec, sustained 1h",
       "user_impact": "No direct user impact; cost signal. This is the rule that names WHICH read path regressed -- the platform metric cannot, because all 31 firestore.googleapis.com descriptors lack any collection dimension. The 100 docs/sec floor stops small families from flapping; the 2x factor matches the measured day-over-day envelope (normal peaks reached 1.94x over 2026-08-18..25).",
@@ -10245,7 +10595,8 @@
     },
     "isPaused": false,
     "notification_settings": {
-      "receiver": "Omi - Services Alerting (Telegram)"
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": ["alertname"], "group_wait": "5m", "group_interval": "1h", "repeat_interval": "24h"
     },
     "record": null
   },
@@ -10327,6 +10678,7 @@
     "for": "30m",
     "keep_firing_for": "0s",
     "annotations": {
+      "dashboard_url": "https://monitor.omi.me/d/3e7c5f57-a1be-4175-81e6-1f0c7c28b9dd",
       "summary": "The Firestore read-volume series is still present but has not been updated in over 15 minutes, so the cost alerts are running on frozen data.",
       "threshold": "time() - max(timestamp(...)) > 900s, sustained 30m",
       "user_impact": "No direct user impact; this is a watchdog for the cost alerts. It is the companion to omi-firestore-metric-absent: absent() catches a series that vanished, this catches a series that is present but wedged. Every other cost rule here is written as `expr > threshold`, which returns empty when not firing, and with noDataState=OK a frozen or missing metric is indistinguishable from a healthy one.",
@@ -10343,7 +10695,8 @@
     },
     "isPaused": false,
     "notification_settings": {
-      "receiver": "Omi - Services Alerting (Telegram)"
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": ["alertname"], "group_wait": "5m", "group_interval": "1h", "repeat_interval": "24h"
     },
     "record": null
   },
@@ -10445,7 +10798,8 @@
     },
     "isPaused": false,
     "notification_settings": {
-      "receiver": "Omi - Services Alerting (Telegram)"
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": ["alertname"], "group_wait": "30s", "group_interval": "5m", "repeat_interval": "4h"
     },
     "record": null
   },
@@ -10457,10 +10811,108 @@
     "title": "Capture finalization - success rate below paging floor",
     "condition": "D",
     "data": [
-      {"refId": "A", "queryType": "", "relativeTimeRange": {"from": 1800, "to": 0}, "datasourceUid": "prometheus", "model": {"datasource": {"type": "prometheus", "uid": "prometheus"}, "expr": "sum(increase(omi_journey_accepted_total{journey=\"capture_finalization\"}[30m]))", "instant": true, "intervalMs": 1000, "maxDataPoints": 43200, "refId": "A"}},
-      {"refId": "B", "queryType": "", "relativeTimeRange": {"from": 1800, "to": 0}, "datasourceUid": "prometheus", "model": {"datasource": {"type": "prometheus", "uid": "prometheus"}, "expr": "sum(increase(omi_journey_terminal_total{journey=\"capture_finalization\",outcome=\"success\"}[30m])) / clamp_min(sum(increase(omi_journey_terminal_total{journey=\"capture_finalization\",outcome=~\"success|failure\"}[30m])), 1)", "instant": true, "intervalMs": 1000, "maxDataPoints": 43200, "refId": "B"}},
-      {"refId": "C", "queryType": "", "relativeTimeRange": {"from": 0, "to": 0}, "datasourceUid": "__expr__", "model": {"datasource": {"type": "__expr__", "uid": "__expr__"}, "expression": "$A >= 20 && $B < 0.90", "intervalMs": 1000, "maxDataPoints": 43200, "refId": "C", "type": "math"}},
-      {"refId": "D", "queryType": "", "relativeTimeRange": {"from": 0, "to": 0}, "datasourceUid": "__expr__", "model": {"conditions": [{"evaluator": {"params": [], "type": "gt"}, "operator": {"type": "and"}, "query": {"params": ["D"]}, "reducer": {"params": [], "type": "last"}, "type": "query"}], "datasource": {"type": "__expr__", "uid": "__expr__"}, "expression": "C", "intervalMs": 1000, "maxDataPoints": 43200, "reducer": "last", "refId": "D", "type": "reduce"}}
+      {
+        "refId": "A",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 1800,
+          "to": 0
+        },
+        "datasourceUid": "prometheus",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(increase(omi_journey_accepted_total{journey=\"capture_finalization\"}[30m]))",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "A"
+        }
+      },
+      {
+        "refId": "B",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 1800,
+          "to": 0
+        },
+        "datasourceUid": "prometheus",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(increase(omi_journey_terminal_total{journey=\"capture_finalization\",outcome=\"success\"}[30m])) / clamp_min(sum(increase(omi_journey_terminal_total{journey=\"capture_finalization\",outcome=~\"success|failure\"}[30m])), 1)",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "B"
+        }
+      },
+      {
+        "refId": "C",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "$A >= 20 && $B < 0.90",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "C",
+          "type": "math"
+        }
+      },
+      {
+        "refId": "D",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "D"
+                ]
+              },
+              "reducer": {
+                "params": [],
+                "type": "last"
+              },
+              "type": "query"
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "C",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "reducer": "last",
+          "refId": "D",
+          "type": "reduce"
+        }
+      }
     ],
     "updated": "2026-08-30T00:00:00Z",
     "noDataState": "NoData",
@@ -10487,7 +10939,8 @@
     },
     "isPaused": false,
     "notification_settings": {
-      "receiver": "Omi - Services Alerting (Telegram)"
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": ["alertname"], "group_wait": "30s", "group_interval": "5m", "repeat_interval": "4h"
     },
     "record": null
   },
@@ -10499,10 +10952,108 @@
     "title": "Pusher session - success rate below paging floor",
     "condition": "D",
     "data": [
-      {"refId": "A", "queryType": "", "relativeTimeRange": {"from": 1800, "to": 0}, "datasourceUid": "prometheus", "model": {"datasource": {"type": "prometheus", "uid": "prometheus"}, "expr": "sum(increase(omi_journey_accepted_total{journey=\"pusher_session\"}[30m]))", "instant": true, "intervalMs": 1000, "maxDataPoints": 43200, "refId": "A"}},
-      {"refId": "B", "queryType": "", "relativeTimeRange": {"from": 1800, "to": 0}, "datasourceUid": "prometheus", "model": {"datasource": {"type": "prometheus", "uid": "prometheus"}, "expr": "sum(increase(omi_journey_terminal_total{journey=\"pusher_session\",outcome=\"success\"}[30m])) / clamp_min(sum(increase(omi_journey_terminal_total{journey=\"pusher_session\",outcome=~\"success|failure\"}[30m])), 1)", "instant": true, "intervalMs": 1000, "maxDataPoints": 43200, "refId": "B"}},
-      {"refId": "C", "queryType": "", "relativeTimeRange": {"from": 0, "to": 0}, "datasourceUid": "__expr__", "model": {"datasource": {"type": "__expr__", "uid": "__expr__"}, "expression": "$A >= 20 && $B < 0.90", "intervalMs": 1000, "maxDataPoints": 43200, "refId": "C", "type": "math"}},
-      {"refId": "D", "queryType": "", "relativeTimeRange": {"from": 0, "to": 0}, "datasourceUid": "__expr__", "model": {"conditions": [{"evaluator": {"params": [], "type": "gt"}, "operator": {"type": "and"}, "query": {"params": ["D"]}, "reducer": {"params": [], "type": "last"}, "type": "query"}], "datasource": {"type": "__expr__", "uid": "__expr__"}, "expression": "C", "intervalMs": 1000, "maxDataPoints": 43200, "reducer": "last", "refId": "D", "type": "reduce"}}
+      {
+        "refId": "A",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 1800,
+          "to": 0
+        },
+        "datasourceUid": "prometheus",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(increase(omi_journey_accepted_total{journey=\"pusher_session\"}[30m]))",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "A"
+        }
+      },
+      {
+        "refId": "B",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 1800,
+          "to": 0
+        },
+        "datasourceUid": "prometheus",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(increase(omi_journey_terminal_total{journey=\"pusher_session\",outcome=\"success\"}[30m])) / clamp_min(sum(increase(omi_journey_terminal_total{journey=\"pusher_session\",outcome=~\"success|failure\"}[30m])), 1)",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "B"
+        }
+      },
+      {
+        "refId": "C",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "$A >= 20 && $B < 0.90",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "C",
+          "type": "math"
+        }
+      },
+      {
+        "refId": "D",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "D"
+                ]
+              },
+              "reducer": {
+                "params": [],
+                "type": "last"
+              },
+              "type": "query"
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "C",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "reducer": "last",
+          "refId": "D",
+          "type": "reduce"
+        }
+      }
     ],
     "updated": "2026-08-30T00:00:00Z",
     "noDataState": "NoData",
@@ -10529,7 +11080,8 @@
     },
     "isPaused": false,
     "notification_settings": {
-      "receiver": "Omi - Services Alerting (Telegram)"
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": ["alertname"], "group_wait": "30s", "group_interval": "5m", "repeat_interval": "4h"
     },
     "record": null
   },
@@ -10541,10 +11093,108 @@
     "title": "Chat response - success rate below paging floor",
     "condition": "D",
     "data": [
-      {"refId": "A", "queryType": "", "relativeTimeRange": {"from": 1800, "to": 0}, "datasourceUid": "prometheus", "model": {"datasource": {"type": "prometheus", "uid": "prometheus"}, "expr": "sum(increase(omi_journey_accepted_total{journey=\"chat_response\"}[30m]))", "instant": true, "intervalMs": 1000, "maxDataPoints": 43200, "refId": "A"}},
-      {"refId": "B", "queryType": "", "relativeTimeRange": {"from": 1800, "to": 0}, "datasourceUid": "prometheus", "model": {"datasource": {"type": "prometheus", "uid": "prometheus"}, "expr": "sum(increase(omi_journey_terminal_total{journey=\"chat_response\",outcome=\"success\"}[30m])) / clamp_min(sum(increase(omi_journey_terminal_total{journey=\"chat_response\",outcome=~\"success|failure\"}[30m])), 1)", "instant": true, "intervalMs": 1000, "maxDataPoints": 43200, "refId": "B"}},
-      {"refId": "C", "queryType": "", "relativeTimeRange": {"from": 0, "to": 0}, "datasourceUid": "__expr__", "model": {"datasource": {"type": "__expr__", "uid": "__expr__"}, "expression": "$A >= 20 && $B < 0.90", "intervalMs": 1000, "maxDataPoints": 43200, "refId": "C", "type": "math"}},
-      {"refId": "D", "queryType": "", "relativeTimeRange": {"from": 0, "to": 0}, "datasourceUid": "__expr__", "model": {"conditions": [{"evaluator": {"params": [], "type": "gt"}, "operator": {"type": "and"}, "query": {"params": ["D"]}, "reducer": {"params": [], "type": "last"}, "type": "query"}], "datasource": {"type": "__expr__", "uid": "__expr__"}, "expression": "C", "intervalMs": 1000, "maxDataPoints": 43200, "reducer": "last", "refId": "D", "type": "reduce"}}
+      {
+        "refId": "A",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 1800,
+          "to": 0
+        },
+        "datasourceUid": "prometheus",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(increase(omi_journey_accepted_total{journey=\"chat_response\"}[30m]))",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "A"
+        }
+      },
+      {
+        "refId": "B",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 1800,
+          "to": 0
+        },
+        "datasourceUid": "prometheus",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(increase(omi_journey_terminal_total{journey=\"chat_response\",outcome=\"success\"}[30m])) / clamp_min(sum(increase(omi_journey_terminal_total{journey=\"chat_response\",outcome=~\"success|failure\"}[30m])), 1)",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "B"
+        }
+      },
+      {
+        "refId": "C",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "$A >= 20 && $B < 0.90",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "C",
+          "type": "math"
+        }
+      },
+      {
+        "refId": "D",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "D"
+                ]
+              },
+              "reducer": {
+                "params": [],
+                "type": "last"
+              },
+              "type": "query"
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "C",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "reducer": "last",
+          "refId": "D",
+          "type": "reduce"
+        }
+      }
     ],
     "updated": "2026-08-30T00:00:00Z",
     "noDataState": "NoData",
@@ -10571,7 +11221,8 @@
     },
     "isPaused": false,
     "notification_settings": {
-      "receiver": "Omi - Services Alerting (Telegram)"
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": ["alertname"], "group_wait": "30s", "group_interval": "5m", "repeat_interval": "4h"
     },
     "record": null
   },
@@ -10583,10 +11234,108 @@
     "title": "Capture finalization - accepted work is not settling",
     "condition": "D",
     "data": [
-      {"refId": "A", "queryType": "", "relativeTimeRange": {"from": 3600, "to": 0}, "datasourceUid": "prometheus", "model": {"datasource": {"type": "prometheus", "uid": "prometheus"}, "expr": "sum(increase(omi_journey_accepted_total{journey=\"capture_finalization\"}[1h]))", "instant": true, "intervalMs": 1000, "maxDataPoints": 43200, "refId": "A"}},
-      {"refId": "B", "queryType": "", "relativeTimeRange": {"from": 3600, "to": 0}, "datasourceUid": "prometheus", "model": {"datasource": {"type": "prometheus", "uid": "prometheus"}, "expr": "sum(increase(omi_journey_accepted_total{journey=\"capture_finalization\"}[1h])) - sum(increase(omi_journey_terminal_total{journey=\"capture_finalization\"}[1h]))", "instant": true, "intervalMs": 1000, "maxDataPoints": 43200, "refId": "B"}},
-      {"refId": "C", "queryType": "", "relativeTimeRange": {"from": 0, "to": 0}, "datasourceUid": "__expr__", "model": {"datasource": {"type": "__expr__", "uid": "__expr__"}, "expression": "$A >= 100 && $B > 50", "intervalMs": 1000, "maxDataPoints": 43200, "refId": "C", "type": "math"}},
-      {"refId": "D", "queryType": "", "relativeTimeRange": {"from": 0, "to": 0}, "datasourceUid": "__expr__", "model": {"conditions": [{"evaluator": {"params": [], "type": "gt"}, "operator": {"type": "and"}, "query": {"params": ["D"]}, "reducer": {"params": [], "type": "last"}, "type": "query"}], "datasource": {"type": "__expr__", "uid": "__expr__"}, "expression": "C", "intervalMs": 1000, "maxDataPoints": 43200, "reducer": "last", "refId": "D", "type": "reduce"}}
+      {
+        "refId": "A",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 3600,
+          "to": 0
+        },
+        "datasourceUid": "prometheus",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(increase(omi_journey_accepted_total{journey=\"capture_finalization\"}[1h]))",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "A"
+        }
+      },
+      {
+        "refId": "B",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 3600,
+          "to": 0
+        },
+        "datasourceUid": "prometheus",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(increase(omi_journey_accepted_total{journey=\"capture_finalization\"}[1h])) - sum(increase(omi_journey_terminal_total{journey=\"capture_finalization\"}[1h]))",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "B"
+        }
+      },
+      {
+        "refId": "C",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "$A >= 100 && $B > 50",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "C",
+          "type": "math"
+        }
+      },
+      {
+        "refId": "D",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "D"
+                ]
+              },
+              "reducer": {
+                "params": [],
+                "type": "last"
+              },
+              "type": "query"
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "C",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "reducer": "last",
+          "refId": "D",
+          "type": "reduce"
+        }
+      }
     ],
     "updated": "2026-08-30T00:00:00Z",
     "noDataState": "NoData",
@@ -10613,7 +11362,8 @@
     },
     "isPaused": false,
     "notification_settings": {
-      "receiver": "Omi - Services Alerting (Telegram)"
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": ["alertname"], "group_wait": "30s", "group_interval": "5m", "repeat_interval": "4h"
     },
     "record": null
   },
@@ -10625,9 +11375,111 @@
     "title": "Capture finalization - oldest unfinished job too old",
     "condition": "C",
     "data": [
-      {"refId": "A", "queryType": "", "relativeTimeRange": {"from": 300, "to": 0}, "datasourceUid": "prometheus", "model": {"datasource": {"type": "prometheus", "uid": "prometheus"}, "expr": "max(listen_finalization_oldest_nonterminal_age_seconds)", "instant": true, "intervalMs": 1000, "maxDataPoints": 43200, "refId": "A"}},
-      {"refId": "B", "queryType": "", "relativeTimeRange": {"from": 0, "to": 0}, "datasourceUid": "__expr__", "model": {"conditions": [{"evaluator": {"params": [], "type": "gt"}, "operator": {"type": "and"}, "query": {"params": ["B"]}, "reducer": {"params": [], "type": "last"}, "type": "query"}], "datasource": {"type": "__expr__", "uid": "__expr__"}, "expression": "A", "intervalMs": 1000, "maxDataPoints": 43200, "reducer": "last", "refId": "B", "type": "reduce"}},
-      {"refId": "C", "queryType": "", "relativeTimeRange": {"from": 0, "to": 0}, "datasourceUid": "__expr__", "model": {"conditions": [{"evaluator": {"params": [3600], "type": "gt"}, "operator": {"type": "and"}, "query": {"params": ["C"]}, "reducer": {"params": [], "type": "last"}, "type": "query"}], "datasource": {"type": "__expr__", "uid": "__expr__"}, "expression": "B", "intervalMs": 1000, "maxDataPoints": 43200, "refId": "C", "type": "threshold"}}
+      {
+        "refId": "A",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 300,
+          "to": 0
+        },
+        "datasourceUid": "prometheus",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "max(listen_finalization_oldest_nonterminal_age_seconds)",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "A"
+        }
+      },
+      {
+        "refId": "B",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "B"
+                ]
+              },
+              "reducer": {
+                "params": [],
+                "type": "last"
+              },
+              "type": "query"
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "A",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "reducer": "last",
+          "refId": "B",
+          "type": "reduce"
+        }
+      },
+      {
+        "refId": "C",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [
+                  3600
+                ],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "C"
+                ]
+              },
+              "reducer": {
+                "params": [],
+                "type": "last"
+              },
+              "type": "query"
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "B",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "C",
+          "type": "threshold"
+        }
+      }
     ],
     "updated": "2026-08-30T00:00:00Z",
     "noDataState": "Alerting",
@@ -10654,7 +11506,8 @@
     },
     "isPaused": false,
     "notification_settings": {
-      "receiver": "Omi - Services Alerting (Telegram)"
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": ["alertname"], "group_wait": "30s", "group_interval": "5m", "repeat_interval": "4h"
     },
     "record": null
   },
@@ -10666,9 +11519,111 @@
     "title": "Capture finalization - dead-letter surge",
     "condition": "C",
     "data": [
-      {"refId": "A", "queryType": "", "relativeTimeRange": {"from": 3600, "to": 0}, "datasourceUid": "prometheus", "model": {"datasource": {"type": "prometheus", "uid": "prometheus"}, "expr": "sum(increase(listen_finalization_dead_letter_total[1h]))", "instant": true, "intervalMs": 1000, "maxDataPoints": 43200, "refId": "A"}},
-      {"refId": "B", "queryType": "", "relativeTimeRange": {"from": 0, "to": 0}, "datasourceUid": "__expr__", "model": {"conditions": [{"evaluator": {"params": [], "type": "gt"}, "operator": {"type": "and"}, "query": {"params": ["B"]}, "reducer": {"params": [], "type": "last"}, "type": "query"}], "datasource": {"type": "__expr__", "uid": "__expr__"}, "expression": "A", "intervalMs": 1000, "maxDataPoints": 43200, "reducer": "last", "refId": "B", "type": "reduce"}},
-      {"refId": "C", "queryType": "", "relativeTimeRange": {"from": 0, "to": 0}, "datasourceUid": "__expr__", "model": {"conditions": [{"evaluator": {"params": [50], "type": "gt"}, "operator": {"type": "and"}, "query": {"params": ["C"]}, "reducer": {"params": [], "type": "last"}, "type": "query"}], "datasource": {"type": "__expr__", "uid": "__expr__"}, "expression": "B", "intervalMs": 1000, "maxDataPoints": 43200, "refId": "C", "type": "threshold"}}
+      {
+        "refId": "A",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 3600,
+          "to": 0
+        },
+        "datasourceUid": "prometheus",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(increase(listen_finalization_dead_letter_total[1h]))",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "A"
+        }
+      },
+      {
+        "refId": "B",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "B"
+                ]
+              },
+              "reducer": {
+                "params": [],
+                "type": "last"
+              },
+              "type": "query"
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "A",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "reducer": "last",
+          "refId": "B",
+          "type": "reduce"
+        }
+      },
+      {
+        "refId": "C",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [
+                  50
+                ],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "C"
+                ]
+              },
+              "reducer": {
+                "params": [],
+                "type": "last"
+              },
+              "type": "query"
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "B",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "C",
+          "type": "threshold"
+        }
+      }
     ],
     "updated": "2026-08-30T00:00:00Z",
     "noDataState": "Alerting",
@@ -10695,7 +11650,8 @@
     },
     "isPaused": false,
     "notification_settings": {
-      "receiver": "Omi - Services Alerting (Telegram)"
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": ["alertname"], "group_wait": "30s", "group_interval": "5m", "repeat_interval": "4h"
     },
     "record": null
   },
@@ -10807,6 +11763,7 @@
       "severity": "critical"
     },
     "annotations": {
+      "dashboard_url": "https://monitor.omi.me/d/d2d782ef-f537-46b8-969d-f73561ec7d07",
       "safe_next_action": "Do not deploy a new Cloud Run revision (starts will fail). Check GCP status for us-central1. Wait for instance starts to succeed.",
       "scope": "Cloud Run revisions in based-hardware matching STARTUP TCP probe failed or instance could not start successfully.",
       "summary": "Cloud Run instances are failing to start (STARTUP TCP probe / instance could not start).",
@@ -10815,46 +11772,8 @@
       "verification": "Cloud Logging: resource.type=cloud_run_revision AND textPayload:STARTUP TCP probe failed. Contrast api.omi.me vs a warm instance."
     },
     "notification_settings": {
-      "receiver": "Omi - Services Alerting (Telegram)"
-    },
-    "record": null
-  },
-  {
-    "uid": "omi-chat-first-proactive-stalled",
-    "orgID": 1,
-    "folderUID": "betdycdziadc0e",
-    "ruleGroup": "Resilience",
-    "title": "Chat-first proactive delivery - ready queue stalled",
-    "condition": "C",
-    "data": [
-      {"refId": "A", "queryType": "", "relativeTimeRange": {"from": 3600, "to": 0}, "datasourceUid": "prometheus", "model": {"datasource": {"type": "prometheus", "uid": "prometheus"}, "expr": "sum(rate(chat_first_proactive_total{event=\"stalled\"}[1h]))", "instant": true, "intervalMs": 1000, "maxDataPoints": 43200, "refId": "A"}},
-      {"refId": "B", "queryType": "", "relativeTimeRange": {"from": 0, "to": 0}, "datasourceUid": "__expr__", "model": {"conditions": [{"evaluator": {"params": [], "type": "gt"}, "operator": {"type": "and"}, "query": {"params": ["B"]}, "reducer": {"params": [], "type": "last"}, "type": "query"}], "datasource": {"type": "__expr__", "uid": "__expr__"}, "expression": "A", "intervalMs": 1000, "maxDataPoints": 43200, "reducer": "last", "refId": "B", "type": "reduce"}},
-      {"refId": "C", "queryType": "", "relativeTimeRange": {"from": 0, "to": 0}, "datasourceUid": "__expr__", "model": {"conditions": [{"evaluator": {"params": [0], "type": "gt"}, "operator": {"type": "and"}, "query": {"params": ["C"]}, "reducer": {"params": [], "type": "last"}, "type": "query"}], "datasource": {"type": "__expr__", "uid": "__expr__"}, "expression": "B", "intervalMs": 1000, "maxDataPoints": 43200, "refId": "C", "type": "threshold"}}
-    ],
-    "updated": "2026-09-01T00:00:00Z",
-    "noDataState": "OK",
-    "execErrState": "Error",
-    "for": "5m",
-    "keep_firing_for": "0s",
-    "annotations": {
-      "summary": "A Chat-first proactive queue with an intent older than 24 hours was fetched during the last hour",
-      "threshold": "non-zero stalled event rate over 1h for 5m",
-      "user_impact": "Meeting notes and daily opener cards may be delayed behind an intent that is not reaching a terminal state.",
-      "scope": "The account-scoped Chat-first proactive fetch and acknowledgement path.",
-      "verification": "Break down chat_first_proactive_total by source and reason, then compare fetch, rejected, reconciled, and dead-letter events.",
-      "safe_next_action": "Inspect recent backend and desktop kernel errors; verify poison intents are reaching reconciled or dead-letter state before changing any retry budget.",
-      "runbook": "backend/docs/runbooks/real-traffic-journeys.md"
-    },
-    "labels": {
-      "severity": "critical",
-      "instatus_component": "ai-chat",
-      "alert_identity": "omi-chat-first-proactive-stalled",
-      "component": "ai-chat",
-      "impact": "user-experience"
-    },
-    "isPaused": false,
-    "notification_settings": {
-      "receiver": "Omi - Services Alerting (Telegram)"
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": ["alertname"], "group_wait": "30s", "group_interval": "5m", "repeat_interval": "4h"
     },
     "record": null
   },
@@ -10866,7 +11785,7 @@
     "title": "Durable queue - oldest ready item stalled",
     "condition": "C",
     "data": [
-      {"refId": "A", "queryType": "", "relativeTimeRange": {"from": 3600, "to": 0}, "datasourceUid": "prometheus", "model": {"datasource": {"type": "prometheus", "uid": "prometheus"}, "expr": "max(omi_queue_oldest_ready_age_seconds) > 21600 or absent(omi_queue_oldest_ready_age_seconds)", "instant": true, "intervalMs": 1000, "maxDataPoints": 43200, "refId": "A"}},
+      {"refId": "A", "queryType": "", "relativeTimeRange": {"from": 3600, "to": 0}, "datasourceUid": "prometheus", "model": {"datasource": {"type": "prometheus", "uid": "prometheus"}, "expr": "max(omi_queue_oldest_ready_age_seconds) > 21600 or absent(omi_queue_oldest_ready_age_seconds) or max(omi_queue_oldest_ready_sample_unknown) > 0", "instant": true, "intervalMs": 1000, "maxDataPoints": 43200, "refId": "A"}},
       {"refId": "B", "queryType": "", "relativeTimeRange": {"from": 0, "to": 0}, "datasourceUid": "__expr__", "model": {"conditions": [{"evaluator": {"params": [], "type": "gt"}, "operator": {"type": "and"}, "query": {"params": ["B"]}, "reducer": {"params": [], "type": "last"}, "type": "query"}], "datasource": {"type": "__expr__", "uid": "__expr__"}, "expression": "A", "intervalMs": 1000, "maxDataPoints": 43200, "reducer": "last", "refId": "B", "type": "reduce"}},
       {"refId": "C", "queryType": "", "relativeTimeRange": {"from": 0, "to": 0}, "datasourceUid": "__expr__", "model": {"conditions": [{"evaluator": {"params": [0], "type": "gt"}, "operator": {"type": "and"}, "query": {"params": ["C"]}, "reducer": {"params": [], "type": "last"}, "type": "query"}], "datasource": {"type": "__expr__", "uid": "__expr__"}, "expression": "B", "intervalMs": 1000, "maxDataPoints": 43200, "refId": "C", "type": "threshold"}}
     ],
@@ -10876,11 +11795,12 @@
     "for": "5m",
     "keep_firing_for": "0s",
     "annotations": {
-      "summary": "A durable queue has a ready item older than 6 hours, or the omi_queue_oldest_ready_age_seconds gauge is absent",
-      "threshold": "oldest ready age > 6h or absent() for 5m",
+      "dashboard_url": "https://monitor.omi.me/d/omi-core-features",
+      "summary": "A durable queue has a ready item older than 6 hours, or an age sample is absent or unknown",
+      "threshold": "oldest ready age > 6h, absent(), or unknown sample for 5m",
       "user_impact": "Independent items behind a poison head can stall: memories, task integrations, Chat-first cards, or capture finalization may stop advancing.",
       "scope": "Every backend durable queue that publishes omi_queue_oldest_ready_age_seconds.",
-      "verification": "Break down omi_queue_oldest_ready_age_seconds by queue, then inspect that queue's dead-letter rows and last_error_text before changing retry budgets.",
+      "verification": "Break down omi_queue_oldest_ready_age_seconds and omi_queue_oldest_ready_sample_unknown by queue; check the sampler read cap and metadata failures, then inspect that queue's dead-letter rows and last_error_text before changing retry budgets.",
       "safe_next_action": "Confirm poison items reached a dead letter; redrive by identity only after the error is understood. Do not raise the attempt budget.",
       "runbook": "backend/docs/runbooks/real-traffic-journeys.md"
     },
@@ -10891,9 +11811,10 @@
       "component": "api",
       "impact": "user-experience"
     },
-    "isPaused": false,
+    "isPaused": true,
     "notification_settings": {
-      "receiver": "Omi - Services Alerting (Telegram)"
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": ["alertname"], "group_wait": "30s", "group_interval": "5m", "repeat_interval": "4h"
     },
     "record": null
   },
@@ -11035,7 +11956,8 @@
     },
     "isPaused": false,
     "notification_settings": {
-      "receiver": "Omi - Services Alerting (Telegram)"
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": ["alertname"], "group_wait": "5m", "group_interval": "1h", "repeat_interval": "24h"
     },
     "record": null
   },
@@ -11177,7 +12099,8 @@
     },
     "isPaused": false,
     "notification_settings": {
-      "receiver": "Omi - Services Alerting (Telegram)"
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": ["alertname"], "group_wait": "30s", "group_interval": "5m", "repeat_interval": "4h"
     },
     "record": null
   },
@@ -11202,7 +12125,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum by (to_mode) (increase(omi_fallback_total{job=\"backend-listen-metrics\",component=~\"stt_selection|stt_live_session\"}[6h]))",
+          "expr": "sum by (to_mode) (increase(omi_fallback_total{job=\"backend-listen-metrics\",component=~\"stt_selection|stt_live_session\",to_mode!=\"unavailable\"}[6h])) unless on(to_mode) label_replace(max by (provider) (omi_stt_provider_retired{job=\"backend-listen-metrics\"} == 1), \"to_mode\", \"$1\", \"provider\", \"(.*)\")",
           "instant": true,
           "intervalMs": 1000,
           "maxDataPoints": 43200,
@@ -11222,7 +12145,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum by (to_mode) (increase(omi_fallback_total{job=\"backend-listen-metrics\",component=~\"stt_selection|stt_live_session\",outcome=\"recovered\"}[6h])) or sum by (to_mode) (increase(omi_fallback_total{job=\"backend-listen-metrics\",component=~\"stt_selection|stt_live_session\"}[6h])) * 0",
+          "expr": "sum by (to_mode) (increase(omi_fallback_total{job=\"backend-listen-metrics\",component=~\"stt_selection|stt_live_session\",to_mode!=\"unavailable\",outcome=\"recovered\"}[6h])) or sum by (to_mode) (increase(omi_fallback_total{job=\"backend-listen-metrics\",component=~\"stt_selection|stt_live_session\",to_mode!=\"unavailable\"}[6h])) * 0",
           "instant": true,
           "intervalMs": 1000,
           "maxDataPoints": 43200,
@@ -11301,14 +12224,14 @@
       "__dashboardUid__": "omi-resilience-fallbacks",
       "__panelId__": "16",
       "summary": "A live-STT fallback leg (to_mode) had at least 50 selection or mid-session hops in 6h and recovered none of them",
-      "threshold": "recovered < 1 with >= 50 stt_selection|stt_live_session attempts in 6h, per to_mode, for 30m",
-      "user_impact": "That provider is not serving live sessions. The chain may still recover via another leg; if every remaining leg is also dead, sessions exhaust (see chain-exhaustion alerts). Deepgram has been in this state since 2026-09-14. Soniox was in this state for 27.5h on 2026-09-19/20 because recovered was recorded at connect.",
-      "scope": "backend-listen omi_fallback_total component=~stt_selection|stt_live_session, grouped by to_mode. job=backend-listen-metrics Counter.",
-      "verification": "Evidence layer is Cloud Logging. Deepgram: recovered=0 in both the 2026-09-18 09:00Z 5m tolerable window and the 2026-09-19 04:40-10:40Z 6h incident window; exhausted-to-deepgram was 20000+ (query cap) in that 6h. Soniox mid-session: omi_fallback_event was recorded as component=other from=modulate to=soniox outcome=recovered at connect (58 recovered alongside 42 budget closes in the 2026-09-19 16:00Z 2m window). After truthful recovery those hops are exhausted, recovered=0, so this rule would fire on to_mode=soniox. 2m budget-close/connect samples: 2026-09-19 03:00Z 30/30, 04:40Z 32/32, 2026-09-20 04:00Z 40/39 versus good 2026-09-18 09:00Z 0/16 and 2026-09-20 07:30Z 0/13. Prometheus evaluation of this exact increase() expression is still owed.",
+      "threshold": "recovered < 1 with >= 50 stt_selection|stt_live_session attempts in 6h, per to_mode (excluding the terminal to_mode=unavailable), for 30m",
+      "user_impact": "That provider is not serving live sessions. The chain may still recover via another leg; if every remaining leg is also dead, sessions exhaust (see chain-exhaustion alerts). Retired providers (omi_stt_provider_retired == 1, e.g. Deepgram) are excluded so an intentionally unfunded leg cannot page. Soniox was in this state for 27.5h on 2026-09-19/20 because recovered was recorded at connect.",
+      "scope": "backend-listen omi_fallback_total component=~stt_selection|stt_live_session, grouped by to_mode. to_mode=unavailable is the no-provider-left sentinel, never a leg that can recover, so it is excluded (chain-exhaustion alerts own it). job=backend-listen-metrics Counter.",
+      "verification": "Evidence layer is Cloud Logging. Deepgram: recovered=0 in both the 2026-09-18 09:00Z 5m tolerable window and the 2026-09-19 04:40-10:40Z 6h incident window; exhausted-to-deepgram was 20000+ (query cap) in that 6h. Soniox mid-session: omi_fallback_event was recorded as component=other from=modulate to=soniox outcome=recovered at connect (58 recovered alongside 42 budget closes in the 2026-09-19 16:00Z 2m window). After truthful recovery those hops are exhausted, recovered=0, so this rule would fire on to_mode=soniox. 2m budget-close/connect samples: 2026-09-19 03:00Z 30/30, 04:40Z 32/32, 2026-09-20 04:00Z 40/39 versus good 2026-09-18 09:00Z 0/16 and 2026-09-20 07:30Z 0/13. Prometheus replay 2026-10-13 (30m steps, 10 days, after excluding unavailable and retired legs): one real episode, to_mode=parakeet 10-06 13:43 to 10-07 04:13 (capacity_full exhaustion during the L4 stockout), plus two single samples.",
       "safe_next_action": "Identify the to_mode on panel 16. For budget exhaustion see panel 18 and raise the vendor cap. For Deepgram, confirm the account/handshake error in backend-listen logs; do not rotate unrelated provider keys.",
       "runbook": "backend/docs/runbooks/resilience-dashboards.md",
-      "evaluated_bad": "to_mode=soniox: Cloud Logging proxy of the lying recovered series was 58 in 2m at 2026-09-19 16:00Z with 42 budget closes the same 2m — after the fix recovered=0 and attempts>=50 over 6h. to_mode=deepgram recovered=0, exhausted>=20000 in 2026-09-19 04:40-10:40Z. Prometheus evaluation still owed.",
-      "evaluated_good": "to_mode=soniox: 2026-09-18 09:00Z and 2026-09-20 after 07:30Z had 0 budget closes (0/16 and 0/13 connections); hops that transcribe would recover. to_mode=deepgram recovered=0 also in the 2026-09-18 09:00Z tolerable window — that leg has been dead through both periods, which is why the alert is the standing-failure detector. Prometheus evaluation still owed."
+      "evaluated_bad": "to_mode=soniox: Cloud Logging proxy of the lying recovered series was 58 in 2m at 2026-09-19 16:00Z with 42 budget closes the same 2m — after the fix recovered=0 and attempts>=50 over 6h. to_mode=deepgram recovered=0, exhausted>=20000 in 2026-09-19 04:40-10:40Z. Prometheus replay 2026-10-13 confirmed (see verification).",
+      "evaluated_good": "to_mode=soniox: 2026-09-18 09:00Z and 2026-09-20 after 07:30Z had 0 budget closes (0/16 and 0/13 connections); hops that transcribe would recover. to_mode=deepgram recovered=0 also in the 2026-09-18 09:00Z tolerable window — that leg has been dead through both periods, which is why the alert is the standing-failure detector. Prometheus replay 2026-10-13 confirmed (see verification)."
     },
     "labels": {
       "alert_identity": "omi-stt-fallback-leg-dead",
@@ -11319,7 +12242,8 @@
     },
     "isPaused": false,
     "notification_settings": {
-      "receiver": "Omi - Services Alerting (Telegram)"
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": ["alertname"], "group_wait": "5m", "group_interval": "1h", "repeat_interval": "24h"
     },
     "record": null
   },
@@ -11441,7 +12365,8 @@
     },
     "isPaused": false,
     "notification_settings": {
-      "receiver": "Omi - Services Alerting (Telegram)"
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": ["alertname"], "group_wait": "30s", "group_interval": "5m", "repeat_interval": "4h"
     },
     "record": null
   },
@@ -11623,9 +12548,10 @@
       "severity": "warning",
       "instatus_component": "speech-processing"
     },
-    "isPaused": false,
+    "isPaused": true,
     "notification_settings": {
-      "receiver": "Omi - Services Alerting (Telegram)"
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": ["alertname"], "group_wait": "5m", "group_interval": "1h", "repeat_interval": "24h"
     },
     "record": null
   },
@@ -11746,6 +12672,7 @@
     "for": "0s",
     "keep_firing_for": "0s",
     "annotations": {
+      "dashboard_url": "https://monitor.omi.me/d/855b2e16-c098-407a-85dc-dc9ce87698a9",
       "summary": "Live STT - provider authentication refusals",
       "user_impact": "A provider rejects authentication or authorization; sessions depend on the remaining tail. Budget/quota deaths have the separate provider-budget page.",
       "scope": "backend-listen-metrics; bounded provider and outcome labels.",
@@ -11765,7 +12692,8 @@
     },
     "isPaused": false,
     "notification_settings": {
-      "receiver": "Omi - Services Alerting (Telegram)"
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": ["alertname"], "group_wait": "30s", "group_interval": "5m", "repeat_interval": "4h"
     },
     "record": null
   },
@@ -11886,6 +12814,7 @@
     "for": "2m",
     "keep_firing_for": "0s",
     "annotations": {
+      "dashboard_url": "https://monitor.omi.me/d/855b2e16-c098-407a-85dc-dc9ce87698a9",
       "summary": "Parakeet canary capacity_full: set PARAKEET_WINDOW_ALLOCATION_PERCENT to 0 if sustained.",
       "user_impact": "TDT capacity is full and new sessions are taking the configured tail.",
       "scope": "backend-listen-metrics; bounded provider and outcome labels.",
@@ -11905,7 +12834,8 @@
     },
     "isPaused": false,
     "notification_settings": {
-      "receiver": "Omi - Services Alerting (Telegram)"
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": ["alertname"], "group_wait": "5m", "group_interval": "1h", "repeat_interval": "24h"
     },
     "record": null
   },
@@ -12026,6 +12956,7 @@
     "for": "10m",
     "keep_firing_for": "0s",
     "annotations": {
+      "dashboard_url": "https://monitor.omi.me/d/855b2e16-c098-407a-85dc-dc9ce87698a9",
       "summary": "Live TDT - sustained session cap",
       "user_impact": "The admitted TDT cohort has used almost all process session slots.",
       "scope": "backend-listen-metrics; bounded provider and outcome labels.",
@@ -12045,7 +12976,8 @@
     },
     "isPaused": false,
     "notification_settings": {
-      "receiver": "Omi - Services Alerting (Telegram)"
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": ["alertname"], "group_wait": "5m", "group_interval": "1h", "repeat_interval": "24h"
     },
     "record": null
   },
@@ -12166,6 +13098,7 @@
     "for": "5m",
     "keep_firing_for": "0s",
     "annotations": {
+      "dashboard_url": "https://monitor.omi.me/d/855b2e16-c098-407a-85dc-dc9ce87698a9",
       "summary": "Live TDT - batch POST errors",
       "user_impact": "Speech windows fail at /v1/transcribe and sessions move to the tail.",
       "scope": "backend-listen-metrics; bounded provider and outcome labels.",
@@ -12185,7 +13118,8 @@
     },
     "isPaused": false,
     "notification_settings": {
-      "receiver": "Omi - Services Alerting (Telegram)"
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": ["alertname"], "group_wait": "5m", "group_interval": "1h", "repeat_interval": "24h"
     },
     "record": null
   },
@@ -12306,6 +13240,7 @@
     "for": "10m",
     "keep_firing_for": "0s",
     "annotations": {
+      "dashboard_url": "https://monitor.omi.me/d/855b2e16-c098-407a-85dc-dc9ce87698a9",
       "summary": "Live STT - provider leg connection errors",
       "user_impact": "A provider fails more than half of its connection attempts (after any typed error class); surviving sessions depend on the remaining tail. Retired providers (intentionally unfunded, e.g. hosted Deepgram) are excluded via omi_stt_provider_retired.",
       "scope": "backend-listen omi_stt_provider_connect_total by provider and error_class; emitted on every connect path (legacy order and configured chain), unlike the configured-chain-only omi_stt_leg_attempts_total this rule previously read and which was empty in prod while the chain was off.",
@@ -12325,7 +13260,8 @@
     },
     "isPaused": false,
     "notification_settings": {
-      "receiver": "Omi - Services Alerting (Telegram)"
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": ["alertname"], "group_wait": "5m", "group_interval": "1h", "repeat_interval": "24h"
     },
     "record": null
   },
@@ -12446,6 +13382,7 @@
     "for": "10m",
     "keep_firing_for": "0s",
     "annotations": {
+      "dashboard_url": "https://monitor.omi.me/d/855b2e16-c098-407a-85dc-dc9ce87698a9",
       "summary": "Live transcription is working for under 90% of sessions that should have produced a transcript.",
       "user_impact": "Roughly one in ten or more live sessions ended with no transcript at all - the 2026-09-26 incident shape (whole chain degraded for hours without a page on the user outcome).",
       "scope": "backend-listen omi_live_session_transcript_outcome_total, emitted exactly once per backend-STT listen session at teardown (all three outcome children are pre-created at process start). too_short sessions (under 10s of audio or no VAD speech) are excluded from the denominator; custom-STT sessions are not counted.",
@@ -12465,7 +13402,8 @@
     },
     "isPaused": false,
     "notification_settings": {
-      "receiver": "Omi - Services Alerting (Telegram)"
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": ["alertname"], "group_wait": "30s", "group_interval": "5m", "repeat_interval": "4h"
     },
     "record": null
   },
@@ -12566,6 +13504,7 @@
     "for": "10m",
     "keep_firing_for": "0s",
     "annotations": {
+      "dashboard_url": "https://monitor.omi.me/d/855b2e16-c098-407a-85dc-dc9ce87698a9",
       "summary": "Soniox real-time streams are being rate limited",
       "user_impact": "Live transcription is exposed to a provider-wide rate limit or to a single-provider outage.",
       "scope": "backend-listen-metrics; bounded provider and outcome labels.",
@@ -12585,7 +13524,8 @@
     },
     "isPaused": false,
     "notification_settings": {
-      "receiver": "Omi - Services Alerting (Telegram)"
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": ["alertname"], "group_wait": "30s", "group_interval": "5m", "repeat_interval": "4h"
     },
     "record": null
   },
@@ -12686,6 +13626,7 @@
     "for": "10m",
     "keep_firing_for": "0s",
     "annotations": {
+      "dashboard_url": "https://monitor.omi.me/d/855b2e16-c098-407a-85dc-dc9ce87698a9",
       "summary": "Soniox carries over 90% of live streams without recent funded fallback success",
       "user_impact": "Live transcription is exposed to a provider-wide rate limit or to a single-provider outage.",
       "scope": "backend-listen-metrics; bounded provider and outcome labels.",
@@ -12705,7 +13646,8 @@
     },
     "isPaused": false,
     "notification_settings": {
-      "receiver": "Omi - Services Alerting (Telegram)"
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": ["alertname"], "group_wait": "30s", "group_interval": "5m", "repeat_interval": "4h"
     },
     "record": null
   },
@@ -12826,6 +13768,7 @@
     "for": "10m",
     "keep_firing_for": "0s",
     "annotations": {
+      "dashboard_url": "https://monitor.omi.me/d/855b2e16-c098-407a-85dc-dc9ce87698a9",
       "summary": "top up Soniox: monthly spend reached 70% of the configured ceiling.",
       "user_impact": "Soniox monthly spend has reached 70% of the configured ceiling; paid fallback runway may narrow.",
       "scope": "Backend-listen Soniox usage API or metered audio estimate; no uid labels.",
@@ -12845,7 +13788,8 @@
     },
     "isPaused": false,
     "notification_settings": {
-      "receiver": "Omi - Services Alerting (Telegram)"
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": ["alertname"], "group_wait": "5m", "group_interval": "1h", "repeat_interval": "24h"
     },
     "record": null
   },
@@ -12966,6 +13910,7 @@
     "for": "10m",
     "keep_firing_for": "0s",
     "annotations": {
+      "dashboard_url": "https://monitor.omi.me/d/855b2e16-c098-407a-85dc-dc9ce87698a9",
       "summary": "top up Soniox: monthly spend reached 90% of the configured ceiling.",
       "user_impact": "Soniox monthly spend has reached 90% of the configured ceiling; paid fallback runway may narrow.",
       "scope": "Backend-listen Soniox usage API or metered audio estimate; no uid labels.",
@@ -12985,7 +13930,8 @@
     },
     "isPaused": false,
     "notification_settings": {
-      "receiver": "Omi - Services Alerting (Telegram)"
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": ["alertname"], "group_wait": "30s", "group_interval": "5m", "repeat_interval": "4h"
     },
     "record": null
   },
@@ -13106,6 +14052,7 @@
     "for": "10m",
     "keep_firing_for": "0s",
     "annotations": {
+      "dashboard_url": "https://monitor.omi.me/d/855b2e16-c098-407a-85dc-dc9ce87698a9",
       "summary": "Modulate failing — traffic on Soniox. Watch Soniox runway and provider outcome SLI.",
       "user_impact": "Modulate connection failures are sending live sessions to Soniox; paid fallback volume and cost may rise.",
       "scope": "backend-listen provider connection outcomes only; bounded provider/outcome labels.",
@@ -13125,7 +14072,8 @@
     },
     "isPaused": false,
     "notification_settings": {
-      "receiver": "Omi - Services Alerting (Telegram)"
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": ["alertname"], "group_wait": "5m", "group_interval": "1h", "repeat_interval": "24h"
     },
     "record": null
   },
@@ -13246,6 +14194,7 @@
     "for": "30m",
     "keep_firing_for": "0s",
     "annotations": {
+      "dashboard_url": "https://monitor.omi.me/d/855b2e16-c098-407a-85dc-dc9ce87698a9",
       "summary": "Parakeet canary no_text: roll window allocation back to 0 if sustained.",
       "user_impact": "TDT capacity is full and new sessions are taking the configured tail.",
       "scope": "backend-listen-metrics, windowed TDT only; no user identifier labels.",
@@ -13265,7 +14214,8 @@
     },
     "isPaused": false,
     "notification_settings": {
-      "receiver": "Omi - Services Alerting (Telegram)"
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": ["alertname"], "group_wait": "5m", "group_interval": "1h", "repeat_interval": "24h"
     },
     "record": null
   },
@@ -13386,6 +14336,7 @@
     "for": "30m",
     "keep_firing_for": "0s",
     "annotations": {
+      "dashboard_url": "https://monitor.omi.me/d/855b2e16-c098-407a-85dc-dc9ce87698a9",
       "summary": "Parakeet canary first-text p95 reaches the 55 s alert threshold; roll allocation back to 0 if sustained for 30m.",
       "user_impact": "TDT capacity is full and new sessions are taking the configured tail.",
       "scope": "backend-listen-metrics, windowed TDT only; no user identifier labels.",
@@ -13405,7 +14356,8 @@
     },
     "isPaused": false,
     "notification_settings": {
-      "receiver": "Omi - Services Alerting (Telegram)"
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": ["alertname"], "group_wait": "5m", "group_interval": "1h", "repeat_interval": "24h"
     },
     "record": null
   },
@@ -13526,6 +14478,7 @@
     "for": "2m",
     "keep_firing_for": "0s",
     "annotations": {
+      "dashboard_url": "https://monitor.omi.me/d/855b2e16-c098-407a-85dc-dc9ce87698a9",
       "summary": "Parakeet canary batch queue depth warning. Parakeet canary: set PARAKEET_WINDOW_ALLOCATION_PERCENT=0",
       "user_impact": "Batch queue has four pending requests; live window admission should stand down.",
       "scope": "Shared Parakeet GPU batch path; prerecorded includes sync backfill.",
@@ -13545,7 +14498,8 @@
     },
     "isPaused": false,
     "notification_settings": {
-      "receiver": "Omi - Services Alerting (Telegram)"
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": ["alertname"], "group_wait": "5m", "group_interval": "1h", "repeat_interval": "24h"
     },
     "record": null
   },
@@ -13666,6 +14620,7 @@
     "for": "2m",
     "keep_firing_for": "0s",
     "annotations": {
+      "dashboard_url": "https://monitor.omi.me/d/855b2e16-c098-407a-85dc-dc9ce87698a9",
       "summary": "Parakeet canary batch queue p95 warning. Parakeet canary: set PARAKEET_WINDOW_ALLOCATION_PERCENT=0",
       "user_impact": "Batch queue p95 has reached one second; check sync backfill before ramping.",
       "scope": "Shared Parakeet GPU batch path; prerecorded includes sync backfill.",
@@ -13685,7 +14640,8 @@
     },
     "isPaused": false,
     "notification_settings": {
-      "receiver": "Omi - Services Alerting (Telegram)"
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": ["alertname"], "group_wait": "5m", "group_interval": "1h", "repeat_interval": "24h"
     },
     "record": null
   },
@@ -13806,6 +14762,7 @@
     "for": "2m",
     "keep_firing_for": "0s",
     "annotations": {
+      "dashboard_url": "https://monitor.omi.me/d/855b2e16-c098-407a-85dc-dc9ce87698a9",
       "summary": "Parakeet sync prerecorded errors warning. Parakeet canary: set PARAKEET_WINDOW_ALLOCATION_PERCENT=0",
       "user_impact": "Prerecorded Parakeet errors threaten sync backfill; inspect the shared GPU pool.",
       "scope": "Parakeet prerecorded requests excluding live TDT; includes sync backfill.",
@@ -13825,7 +14782,8 @@
     },
     "isPaused": false,
     "notification_settings": {
-      "receiver": "Omi - Services Alerting (Telegram)"
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": ["alertname"], "group_wait": "5m", "group_interval": "1h", "repeat_interval": "24h"
     },
     "record": null
   },
@@ -13926,6 +14884,7 @@
     "for": "0s",
     "keep_firing_for": "0s",
     "annotations": {
+      "dashboard_url": "https://monitor.omi.me/d/855b2e16-c098-407a-85dc-dc9ce87698a9",
       "summary": "Soniox balance exhausted — top up now",
       "user_impact": "Soniox refused a live stream because its organization balance or project budget is exhausted; sessions depending on Soniox may lose transcription.",
       "scope": "backend-listen omi_stt_stream_close_total{provider=\"soniox\",reason=\"provider_budget_exhausted\"}; one or more closes in the rolling 5m window.",
@@ -13945,7 +14904,8 @@
     },
     "isPaused": false,
     "notification_settings": {
-      "receiver": "Omi - Services Alerting (Telegram)"
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": ["alertname"], "group_wait": "30s", "group_interval": "5m", "repeat_interval": "4h"
     },
     "record": null
   },
@@ -14066,6 +15026,7 @@
     "for": "10m",
     "keep_firing_for": "0s",
     "annotations": {
+      "dashboard_url": "https://monitor.omi.me/d/855b2e16-c098-407a-85dc-dc9ce87698a9",
       "summary": "Live STT - terminal failure after delivered text",
       "user_impact": "A recording is truncated after some text was delivered; any-text success does not prove continuity.",
       "scope": "All production listen traffic (job=backend-listen-metrics), including stable and former-canary series; the volume floor and ratio denominator count same-interval transcribed sessions (omi_live_session_transcript_outcome_total outcome=transcribed), emitted at the same session teardown as the terminal counter so long-running sessions appear in both. Requires the pinned STT_FAILOVER_RECOVERY_ENABLED flag, now enabled across production listen. The independent mid-session terminal rule covers every path.",
@@ -14085,7 +15046,8 @@
     },
     "isPaused": false,
     "notification_settings": {
-      "receiver": "Omi - Services Alerting (Telegram)"
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": ["alertname"], "group_wait": "5m", "group_interval": "1h", "repeat_interval": "24h"
     },
     "record": null
   },
@@ -14206,6 +15168,7 @@
     "for": "10m",
     "keep_firing_for": "0s",
     "annotations": {
+      "dashboard_url": "https://monitor.omi.me/d/855b2e16-c098-407a-85dc-dc9ce87698a9",
       "summary": "Live STT - mid-session terminal failures",
       "user_impact": "Live sessions fail during a provider connection or audio send.",
       "scope": "Every backend-listen STT path; aggregate metrics only.",
@@ -14225,7 +15188,8 @@
     },
     "isPaused": false,
     "notification_settings": {
-      "receiver": "Omi - Services Alerting (Telegram)"
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": ["alertname"], "group_wait": "5m", "group_interval": "1h", "repeat_interval": "24h"
     },
     "record": null
   },
@@ -14346,6 +15310,7 @@
     "for": "10m",
     "keep_firing_for": "0s",
     "annotations": {
+      "dashboard_url": "https://monitor.omi.me/d/855b2e16-c098-407a-85dc-dc9ce87698a9",
       "summary": "Live STT - paid adapter capacity deaths",
       "user_impact": "Paid spillover has exceeded adapter capacity and risks losing captured audio.",
       "scope": "Every backend-listen STT path; aggregate metrics only.",
@@ -14365,7 +15330,8 @@
     },
     "isPaused": false,
     "notification_settings": {
-      "receiver": "Omi - Services Alerting (Telegram)"
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": ["alertname"], "group_wait": "5m", "group_interval": "1h", "repeat_interval": "24h"
     },
     "record": null
   },
@@ -14486,6 +15452,7 @@
     "for": "10m",
     "keep_firing_for": "0s",
     "annotations": {
+      "dashboard_url": "https://monitor.omi.me/d/855b2e16-c098-407a-85dc-dc9ce87698a9",
       "summary": "Live STT - combined admission pressure",
       "user_impact": "Window admission refusals transfer live demand to paid providers.",
       "scope": "Every backend-listen STT path; aggregate metrics only.",
@@ -14505,7 +15472,8 @@
     },
     "isPaused": false,
     "notification_settings": {
-      "receiver": "Omi - Services Alerting (Telegram)"
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": ["alertname"], "group_wait": "5m", "group_interval": "1h", "repeat_interval": "24h"
     },
     "record": null
   },
@@ -14626,6 +15594,7 @@
     "for": "2m",
     "keep_firing_for": "0s",
     "annotations": {
+      "dashboard_url": "https://monitor.omi.me/d/855b2e16-c098-407a-85dc-dc9ce87698a9",
       "summary": "Live STT - window POST latency",
       "user_impact": "Slow GPU decoding delays text and increases progress-rescue exposure.",
       "scope": "Every backend-listen STT path; aggregate metrics only.",
@@ -14645,7 +15614,8 @@
     },
     "isPaused": false,
     "notification_settings": {
-      "receiver": "Omi - Services Alerting (Telegram)"
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": ["alertname"], "group_wait": "5m", "group_interval": "1h", "repeat_interval": "24h"
     },
     "record": null
   },
@@ -14766,6 +15736,7 @@
     "for": "30m",
     "keep_firing_for": "0s",
     "annotations": {
+      "dashboard_url": "https://monitor.omi.me/d/855b2e16-c098-407a-85dc-dc9ce87698a9",
       "summary": "Live STT - replay continuity loss",
       "user_impact": "Recovery skips unanswered audio or the successor dies during replay.",
       "scope": "Requires STT_FAILOVER_RECOVERY_ENABLED; replay and recovery metrics are default-off.",
@@ -14785,7 +15756,8 @@
     },
     "isPaused": false,
     "notification_settings": {
-      "receiver": "Omi - Services Alerting (Telegram)"
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": ["alertname"], "group_wait": "5m", "group_interval": "1h", "repeat_interval": "24h"
     },
     "record": null
   },
@@ -14906,6 +15878,7 @@
     "for": "1m",
     "keep_firing_for": "0s",
     "annotations": {
+      "dashboard_url": "https://monitor.omi.me/d/855b2e16-c098-407a-85dc-dc9ce87698a9",
       "summary": "Live STT - health evidence persistence gaps",
       "user_impact": "Routing evidence is incomplete; stages cannot qualify a rollout.",
       "scope": "omi_stt_cost_routing_settlements_total requires the configured chain; health persistence metrics are diagnostic.",
@@ -14925,7 +15898,8 @@
     },
     "isPaused": false,
     "notification_settings": {
-      "receiver": "Omi - Services Alerting (Telegram)"
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": ["alertname"], "group_wait": "5m", "group_interval": "1h", "repeat_interval": "24h"
     },
     "record": null
   },
@@ -15046,6 +16020,7 @@
     "for": "30m",
     "keep_firing_for": "0s",
     "annotations": {
+      "dashboard_url": "https://monitor.omi.me/d/855b2e16-c098-407a-85dc-dc9ce87698a9",
       "summary": "Live STT - managed leg lifecycle gap",
       "user_impact": "Managed transports lack a matching open or settlement; routing evidence is incomplete.",
       "scope": "omi_stt_managed_legs_opened_total, omi_stt_managed_legs_settled_total and omi_stt_managed_legs_open require the configured chain; per instance and target, never pooled.",
@@ -15065,7 +16040,8 @@
     },
     "isPaused": false,
     "notification_settings": {
-      "receiver": "Omi - Services Alerting (Telegram)"
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": ["alertname"], "group_wait": "5m", "group_interval": "1h", "repeat_interval": "24h"
     },
     "record": null
   },
@@ -15186,6 +16162,7 @@
     "for": "1m",
     "keep_firing_for": "0s",
     "annotations": {
+      "dashboard_url": "https://monitor.omi.me/d/855b2e16-c098-407a-85dc-dc9ce87698a9",
       "summary": "Live STT - stale, missing or unknown snapshot",
       "user_impact": "Routing readiness is unknown; retain static selection until evidence is complete.",
       "scope": "Cost router activity requires fresh per-pod Redis snapshots. NaN and absent snapshots cannot qualify rollout.",
@@ -15205,7 +16182,8 @@
     },
     "isPaused": false,
     "notification_settings": {
-      "receiver": "Omi - Services Alerting (Telegram)"
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": ["alertname"], "group_wait": "5m", "group_interval": "1h", "repeat_interval": "24h"
     },
     "record": null
   },
@@ -15326,6 +16304,7 @@
     "for": "5m",
     "keep_firing_for": "0s",
     "annotations": {
+      "dashboard_url": "https://monitor.omi.me/d/855b2e16-c098-407a-85dc-dc9ce87698a9",
       "summary": "Live STT - persistent cross-pod stage disagreement",
       "user_impact": "Routing readiness is unknown; retain static selection until evidence is complete.",
       "scope": "Shadow or on router pods disagree about the same target health stage; compare image, identity namespace and snapshot freshness.",
@@ -15345,7 +16324,8 @@
     },
     "isPaused": false,
     "notification_settings": {
-      "receiver": "Omi - Services Alerting (Telegram)"
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": ["alertname"], "group_wait": "5m", "group_interval": "1h", "repeat_interval": "24h"
     },
     "record": null
   },
@@ -15466,6 +16446,7 @@
     "for": "1m",
     "keep_firing_for": "0s",
     "annotations": {
+      "dashboard_url": "https://monitor.omi.me/d/855b2e16-c098-407a-85dc-dc9ce87698a9",
       "summary": "Live STT - selected target state unknown",
       "user_impact": "Routing readiness is unknown; retain static selection until evidence is complete.",
       "scope": "The shadow/on proposed primary target lacks shared health evidence on at least one pod.",
@@ -15485,7 +16466,8 @@
     },
     "isPaused": false,
     "notification_settings": {
-      "receiver": "Omi - Services Alerting (Telegram)"
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": ["alertname"], "group_wait": "5m", "group_interval": "1h", "repeat_interval": "24h"
     },
     "record": null
   },
@@ -15626,6 +16608,7 @@
     "for": "2h",
     "keep_firing_for": "0s",
     "annotations": {
+      "dashboard_url": "https://monitor.omi.me/d/omi-core-features",
       "summary": "The share of live and sync conversations that identified their owner is under half of that share over the last 7 days.",
       "user_impact": "Owner voice labels may be missing on new conversations. This is a new counter, so confirm the series is populated before treating the page as a recognition outage.",
       "scope": "omi_owner_recognition_conversations_total from process_conversation on pusher and Cloud Run (backend, backend-sync). surface is live or sync. too_little_speech is outside the share. The owner_identified numerator is zero-filled so a missing success series still reads as zero when other judged outcomes exist. Quiet traffic stays No Data.",
@@ -15645,7 +16628,8 @@
     },
     "isPaused": false,
     "notification_settings": {
-      "receiver": "Omi - Services Alerting (Telegram)"
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": ["alertname"], "group_wait": "5m", "group_interval": "1h", "repeat_interval": "24h"
     },
     "record": null
   },
@@ -15789,7 +16773,8 @@
     },
     "isPaused": false,
     "notification_settings": {
-      "receiver": "Omi - Services Alerting (Telegram)"
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": ["alertname"], "group_wait": "5m", "group_interval": "1h", "repeat_interval": "24h"
     },
     "record": null
   },
@@ -15930,7 +16915,185 @@
     },
     "isPaused": false,
     "notification_settings": {
-      "receiver": "Omi - Services Alerting (Telegram)"
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": ["alertname"], "group_wait": "30s", "group_interval": "5m", "repeat_interval": "4h"
+    },
+    "record": null
+  },
+  {
+    "uid": "omi-daily-recap-generation-failing",
+    "orgID": 1,
+    "folderUID": "betdycdziadc0e",
+    "ruleGroup": "Daily recaps",
+    "title": "Daily recap generation is failing",
+    "condition": "C",
+    "data": [
+      {
+        "refId": "A",
+        "queryType": "timeSeriesList",
+        "relativeTimeRange": {
+          "from": 10800,
+          "to": 0
+        },
+        "datasourceUid": "beuxmaq8oxhq8e",
+        "model": {
+          "aliasBy": "generation failures",
+          "datasource": {
+            "type": "stackdriver",
+            "uid": "beuxmaq8oxhq8e"
+          },
+          "instant": false,
+          "intervalMs": 60000,
+          "maxDataPoints": 43200,
+          "queryType": "timeSeriesList",
+          "range": true,
+          "refId": "A",
+          "timeSeriesList": {
+            "alignmentPeriod": "+60s",
+            "crossSeriesReducer": "REDUCE_SUM",
+            "filters": [
+              "metric.type",
+              "=",
+              "logging.googleapis.com/user/daily_summary_user_failed",
+              "AND",
+              "resource.label.job_name",
+              "=",
+              "notifications-job",
+              "AND",
+              "metric.label.reason",
+              "=",
+              "generation_error",
+              "AND",
+              "metric.label.error_type",
+              "!=",
+              "DailySummaryDeliveryError"
+            ],
+            "groupBys": [],
+            "perSeriesAligner": "ALIGN_DELTA",
+            "preprocessor": "none",
+            "projectName": "based-hardware",
+            "view": "FULL"
+          }
+        }
+      },
+      {
+        "refId": "B",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "B",
+          "type": "reduce",
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "B"
+                ]
+              },
+              "reducer": {
+                "params": [],
+                "type": "last"
+              },
+              "type": "query"
+            }
+          ],
+          "expression": "A",
+          "reducer": "sum",
+          "settings": {
+            "mode": "dropNN"
+          }
+        }
+      },
+      {
+        "refId": "C",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "C",
+          "type": "threshold",
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [
+                  24
+                ],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "C"
+                ]
+              },
+              "reducer": {
+                "params": [],
+                "type": "last"
+              },
+              "type": "query"
+            }
+          ],
+          "expression": "B"
+        }
+      }
+    ],
+    "updated": "2026-10-13T00:00:00Z",
+    "noDataState": "OK",
+    "execErrState": "Error",
+    "for": "15m",
+    "keep_firing_for": "0s",
+    "annotations": {
+      "__dashboardUid__": "omi-core-features",
+      "__panelId__": "73",
+      "summary": "More than 24 daily recaps failed to generate in the last 3 hours.",
+      "user_impact": "Users who recorded conversations today get no daily recap notification and no recap in the app for this day until generation recovers and the backfill walk fills the hole.",
+      "scope": "notifications-job current-day recap generation (daily_summary_generated and daily_summary_user_failed log lines, as Cloud Logging metrics daily_summary_recap_generated and daily_summary_user_failed). Excludes DailySummaryDeliveryError, where the recap was generated and only the push failed. Failures are counted per cohort pass, so one recipient retried every 15 minutes counts up to four times per hour.",
+      "verification": "Open the Core Features Daily recap stats and the Recap outcomes graph. Then read notifications-job daily_summary_user_failed lines for the dominant error_type, and daily_summary_job_summary for attempted and failed counts.",
+      "safe_next_action": "For APIConnectionError or provider errors, check the LLM gateway endpoint the notifications job is deployed with (OMI_LLM_GATEWAY_URL) and the gateway lane health, then redeploy the job from main. Do not clear cohort cursors or re-run generation by hand; failed recipients are retried and later backfilled. Runbook: backend/docs/runbooks/daily-summary-cutover.md.",
+      "runbook": "backend/docs/runbooks/daily-summary-cutover.md",
+      "threshold": "Generation failures (reason=generation_error, excluding DailySummaryDeliveryError) summed over a trailing 3h > 24, for 15m. Queries Cloud Monitoring as timeSeriesList: the datasource PromQL query type panics Grafana's alert evaluator (nil pointer at tsdb/cloud-monitoring/promql_query.go:23, 2026-10-13), and a missing generated series reads as NoData, which masked exactly the total-outage case. No failures means no series, which is OK.",
+      "evaluated_bad": "2026-10-10 05:33 UTC to 2026-10-12: every generation failed with APIConnectionError. 8 to 516 generation failures per hour, so the trailing 3h sum crossed 24 within the first hour at busy hours and within 3h at the quietest hours.",
+      "evaluated_good": "2026-10-08: zero generation failures (all failures were DailySummaryDeliveryError, excluded). One persistently retried recipient adds at most 12 in 3h (4 passes per hour), below the threshold."
+    },
+    "labels": {
+      "alert_identity": "omi-daily-recap-generation-failing",
+      "component": "daily-recap",
+      "impact": "product",
+      "severity": "warning",
+      "instatus_component": "api"
+    },
+    "isPaused": false,
+    "notification_settings": {
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": ["alertname"], "group_wait": "5m", "group_interval": "1h", "repeat_interval": "24h"
     },
     "record": null
   }

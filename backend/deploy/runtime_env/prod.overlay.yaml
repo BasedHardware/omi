@@ -569,6 +569,10 @@ overlay:
           PROACTIVITY_V2_POSTHOG_HOST:
             value: https://us.posthog.com
             category: rollout
+          # Public project token for billing capture only. Not a secret mount.
+          POSTHOG_BILLING_API_KEY:
+            value: phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y
+            category: telemetry
           POSTHOG_HOST:
             value: https://us.posthog.com
             category: telemetry

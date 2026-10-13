@@ -7,7 +7,17 @@ from collections import Counter
 
 from pydantic import ValidationError
 
-from config.dream_agent import Caps, mode, concurrency, auto_apply_kinds, apply_policy
+from config.dream_agent import (
+    Caps,
+    mode,
+    concurrency,
+    auto_apply_kinds,
+    apply_policy,
+    context_mode,
+    full_context_enabled,
+    FULL_PASS_SECONDS,
+    FULL_DRAIN_SECONDS,
+)
 from database import dream_scheduler, dream_store, dream_feedback, review_changes, review_store
 from database.dream_dirty import dream_writing
 from models.dream_agent import Triage, Plan
@@ -20,13 +30,21 @@ from utils.dream_metrics import record_pass
 from utils.dream_diagnostics import initialize, counts_only
 
 from utils.dream_prompt import mount, evidence_message, evidence_chars, person_names, TRIAGE_INSTRUCTIONS, triage_budget
+from utils.dream_prompt import full_mount, full_evidence_message, select_full_records
 
 
 async def plan_pass(uid, records, caps, *, turn=None, usage_sink=None, vocabulary=None):
+    caps = caps.for_uid(uid)
+
     async def invoke(uid, lane, mount, messages):
         if usage_sink is not None:
             key = 'triage_evidence_chars' if lane == dream_transport.TRIAGE_LANE else 'reasoning_evidence_chars'
             usage_sink[key] = evidence_chars(messages)
+            if caps.context_mode != 'full':
+                usage_sink['context_mode'] = 'bounded'
+                usage_sink['input_tokens_estimate'] = usage_sink.get(
+                    'input_tokens_estimate', 0
+                ) + dream_transport.input_estimate(messages, mount.schema.model_json_schema())
             if lane == dream_transport.MAIN_LANE:
                 usage_sink['reasoning_attempted'] = True
         previous_unknown = bool(usage_sink and usage_sink.get('usage_unknown'))
@@ -48,6 +66,29 @@ async def plan_pass(uid, records, caps, *, turn=None, usage_sink=None, vocabular
             usage_sink['tokens'] += result.tokens
             usage_sink['usage_unknown'] = previous_unknown
         return result
+
+    if caps.context_mode == 'full':
+        selected = EvidenceRecords(select_full_records(records, caps, vocabulary), targets=target_refs(records))
+        selected.targets &= set(selected)
+        selected.context_mode = 'full'
+        active_mount = full_mount(caps)
+        messages = full_evidence_message(selected, caps, vocabulary)
+        if usage_sink is not None:
+            usage_sink.update(
+                context_mode='full',
+                targets=len(selected.targets),
+                records=len(selected),
+                input_tokens_estimate=dream_transport.input_estimate(
+                    active_mount.messages(messages), Plan.model_json_schema()
+                ),
+            )
+            usage_sink['admitted_records'] = selected
+        main = await run_loop(active_mount, messages, partial(invoke, uid, dream_transport.MAIN_LANE))
+        if main.reason != 'stopped':
+            raise ValueError('dream_reasoning_budget')
+        if usage_sink is not None:
+            usage_sink['raw_plan'] = main.value.model_dump(mode='python')
+        return dream_guards.filter_plan(main.value, selected, usage_sink=usage_sink), main.tokens
 
     triage_tokens = triage_budget(caps)
     # The byte-based transport gate remains authoritative, including schema.
@@ -88,6 +129,8 @@ async def plan_pass(uid, records, caps, *, turn=None, usage_sink=None, vocabular
     )
     if main.reason != 'stopped':
         raise ValueError('dream_reasoning_budget')
+    if usage_sink is not None:
+        usage_sink['raw_plan'] = main.value.model_dump(mode='python')
     return (
         dream_guards.filter_plan(main.value, selected, targets=targets, usage_sink=usage_sink),
         triage.tokens + main.tokens,
@@ -105,7 +148,7 @@ async def dry_run_retrieval(uid, records, *, targets=None, caps=None, vocabulary
     No lease, admission, inference, acknowledgement, product writes or report writes.
     Embedding search may call the existing provider. The caller owns authorization.
     """
-    caps = caps or Caps.from_env()
+    caps = (caps or Caps.from_env()).for_uid(uid)
     evidence = EvidenceRecords(records, targets=target_refs(records) if targets is None else targets)
     if not evidence.targets <= set(evidence):
         raise ValueError('dream_unknown_target')
@@ -139,10 +182,23 @@ async def dry_run(uid, records, *, targets=None, caps=None, turn=None, vocabular
     if not evidence.targets <= set(evidence):
         raise ValueError('dream_unknown_target')
     sink: dict[str, Any] = {'tokens': 0}
-    plan, tokens = await plan_pass(
-        uid, evidence, caps or Caps.from_env(), turn=turn, vocabulary=vocabulary, usage_sink=sink
-    )
+    caps = (caps or Caps.from_env()).for_uid(uid)
+    plan, tokens = await plan_pass(uid, evidence, caps, turn=turn, vocabulary=vocabulary, usage_sink=sink)
+    evidence = sink.pop('admitted_records', evidence)
     plan = dream_guards.filter_plan(plan, evidence, targets=evidence.targets, usage_sink=sink)
+    if caps.context_mode == 'full':
+        accepted = []
+        for feedback in plan.feedback:
+            try:
+                await run_blocking(
+                    postprocess_executor, dream_feedback.validate, feedback, evidence, vocabulary or [], uid=uid
+                )
+                accepted.append(feedback)
+            except ValueError:
+                counts = Counter(sink.get('rejected', {}))
+                counts['privacy_rejected'] += 1
+                sink['rejected'] = dict(counts)
+        plan = plan.model_copy(update={'feedback': dream_guards.cap_feedback(accepted, usage_sink=sink)})
     proposed = plan.model_dump(mode='python')
     for edit, row in zip(plan.edits, proposed['edits']):
         reason = spelling_grounding_rejection(edit, evidence, vocabulary or [])
@@ -152,17 +208,28 @@ async def dry_run(uid, records, *, targets=None, caps=None, turn=None, vocabular
             sink['rejected'][reason] += 1
             if len(proposed['questions']) < 3:
                 proposed['questions'].append(spelling_question(edit).model_dump(mode='python'))
-    return {
+    result = {
         'plan': proposed,
         'guard_decisions': sink.get('rejected', {}),
         'role_counts': {'target': len(evidence.targets), 'context': len(evidence) - len(evidence.targets)},
         'tokens': tokens,
     }
+    result['raw_plan'] = sink.get('raw_plan', Plan().model_dump(mode='python'))
+    if caps.context_mode == 'full':
+        result.update(context_mode='full', input_tokens_estimate=sink.get('input_tokens_estimate', 0))
+    return result
 
 
-async def run_pass(uid, *, caps=None, turn=None, trigger='schedule', canary=False, timeout_seconds=180, progress=None):
+async def run_pass(uid, *, caps=None, turn=None, trigger='schedule', canary=False, timeout_seconds=None, progress=None):
+    caps = (caps or Caps.from_env()).for_uid(uid)
+    maximum = FULL_PASS_SECONDS if caps.context_mode == 'full' else 180
+    timeout_seconds = maximum if timeout_seconds is None else min(timeout_seconds, maximum)
     # Injected synthetic turns need no provider admission. Real/manual/canary calls do.
-    slot = await dream_capacity.claim(concurrency()) if turn is None else None
+    slot = (
+        await dream_capacity.claim(concurrency(), slot_seconds=FULL_DRAIN_SECONDS)
+        if turn is None and caps.context_mode == 'full'
+        else await dream_capacity.claim(concurrency()) if turn is None else None
+    )
     if turn is None and slot is None:
         report = {'status': 'waiting', 'reason': 'reserved_capacity'}
         record_pass(report)
@@ -174,7 +241,7 @@ async def run_pass(uid, *, caps=None, turn=None, trigger='schedule', canary=Fals
             turn=turn,
             trigger=trigger,
             canary=canary,
-            timeout_seconds=min(timeout_seconds, 180),
+            timeout_seconds=timeout_seconds,
             progress=progress,
         )
     except dream_store.AdmissionDenied:
@@ -216,6 +283,10 @@ async def _run_admitted_pass(
         'triage_evidence_chars': 0,
         'reasoning_evidence_chars': 0,
         'cost_usd': 0.0,
+        'context_mode': caps.context_mode,
+        'input_tokens_estimate': 0,
+        'targets': 0,
+        'records': 0,
     }
     initialize(report)
     consumed = []
@@ -249,6 +320,7 @@ async def _run_admitted_pass(
             report['seed_errors'] = getattr(records, 'seed_errors', 0)
             report['dirty_read'] = len(consumed)
             report['records_read'] = len(records)
+            report.update(targets=len(target_refs(records)), records=len(records))
             report['role_counts'] = {
                 'target': len(target_refs(records)),
                 'context': len(records) - len(target_refs(records)),
@@ -264,6 +336,8 @@ async def _run_admitted_pass(
                     if isinstance(row.get(key), str):
                         names.append({'spelling': row[key]})
             plan, tokens = await plan_pass(uid, records, caps, turn=turn, usage_sink=report, vocabulary=vocabulary)
+            records = report.pop('admitted_records', records)
+            report.pop('raw_plan', None)  # Raw private feedback is only returned to the dry-run caller.
             plan = dream_guards.filter_plan(plan, records, targets=target_refs(records), usage_sink=report)
             report.update(
                 status='planned',
@@ -414,6 +488,8 @@ async def _run_admitted_pass(
         success = True
         refund = True
     except Exception as exc:
+        report.pop('admitted_records', None)
+        report.pop('raw_plan', None)
         report.update(status='failed', error_type=type(exc).__name__)
         if isinstance(exc, dream_transport.CapacityWait):
             report.update(status='waiting', reason='reserved_capacity')
@@ -468,9 +544,10 @@ async def drain(*, limit=100):
     page = None
     tried = set()
     stop = asyncio.Event()
-    deadline = asyncio.get_running_loop().time() + DRAIN_TIMEOUT_SECONDS
+    drain_seconds = FULL_DRAIN_SECONDS if full_context_enabled() else DRAIN_TIMEOUT_SECONDS
+    deadline = asyncio.get_running_loop().time() + drain_seconds
     try:
-        async with asyncio.timeout(DRAIN_TIMEOUT_SECONDS):
+        async with asyncio.timeout(drain_seconds):
             if await dream_capacity.available_model() is None:
                 report = {'status': 'waiting', 'reason': 'reserved_capacity'}
                 record_pass(report)
@@ -482,7 +559,8 @@ async def drain(*, limit=100):
                 for uid in owners:
                     if mode() == 'off' or stop.is_set():
                         return
-                    if deadline - asyncio.get_running_loop().time() < PASS_TIMEOUT_SECONDS + FINISH_MARGIN_SECONDS:
+                    pass_seconds = FULL_PASS_SECONDS if context_mode(uid) == 'full' else PASS_TIMEOUT_SECONDS
+                    if deadline - asyncio.get_running_loop().time() < pass_seconds + FINISH_MARGIN_SECONDS:
                         stop.set()
                         results.append({'status': 'deadline'})
                         return

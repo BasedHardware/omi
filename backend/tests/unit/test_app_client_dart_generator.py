@@ -526,3 +526,14 @@ def test_conversation_fixtures_validate_against_python_schema_authority():
         conversation = Conversation.model_validate(payload)
         assert conversation.id, name
         assert conversation.structured is not None, name
+
+
+def test_budget_choice_wire_models_are_generated_from_named_response_schemas():
+    specification = json.loads(SPEC_PATH.read_text(encoding='utf-8'))
+    group = generate_dart_models.SCHEMA_GROUPS['budget_choice']
+    output = generate_dart_models.build_output(specification, 'budget_choice')
+    assert group['output'].read_text(encoding='utf-8') == output
+    assert 'class GeneratedBudgetChoiceResponse' in output
+    assert 'final GeneratedBudgetChoiceRecord? choice;' in output
+    assert 'class GeneratedBudgetChoiceWriteResponse' in output
+    assert 'final GeneratedBudgetChoiceRecord choice;' in output

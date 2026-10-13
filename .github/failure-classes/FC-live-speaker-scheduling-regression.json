@@ -1,13 +1,14 @@
 {
   "schema_version": 1,
   "id": "FC-live-speaker-scheduling-regression",
-  "violated_contract": "Live scheduling must preserve provider-update FIFO order and query cadence: a partially evidenced voice cannot be bypassed by later untried voices through implicit priority, queued updates cannot change acoustic clip boundaries through coalescing, and unselected audio cannot spend additional budget without another provider update.",
+  "violated_contract": "Live scheduling must preserve provider-update FIFO order and query cadence: a partially evidenced voice cannot be bypassed by later untried voices through implicit priority, ordinary (non-proven-rejector) updates cannot change acoustic clip boundaries through coalescing, and unselected audio cannot spend additional budget without another provider update. A proven rejector may keep one fenced pending entry until proof is revoked, after which clip selection returns to its latest original interval.",
   "canonical_prevention": "Keep bounded FIFO timing/identity entries with enqueue-generation fencing. Consume one provider update at a time under the existing voice locks, authority rules and unchanged reservation caps; clear pending metadata after success without autonomous leftover requeue. Pin both last-token arrival orders, separate initial-evidence queries, overlap deduplication and long-buffer no-update behavior through the real matcher runner, alongside unchanged telemetry and authority guards.",
   "canonical_prevention_artifact": [
     "backend/tests/unit/test_speaker_queue_fairness.py",
     "backend/tests/unit/test_speaker_budget_telemetry.py",
     "backend/tests/unit/test_owner_recognition_embedding_budget.py",
-    "backend/tests/unit/test_speaker_fifo_diagnostics.py"
+    "backend/tests/unit/test_speaker_fifo_diagnostics.py",
+    "backend/tests/unit/test_speaker_targeted_fairness.py"
   ],
   "evidence_prs": [],
   "scope_hints": [

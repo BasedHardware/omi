@@ -41,6 +41,9 @@ def _get_build_subscription_fn():
         'Dict': Dict,
         'Optional': Optional,
         'cast': _cast,
+        'project_subscription': __import__(
+            'utils.subscription_state_machine', fromlist=['project_subscription']
+        ).project_subscription,
         'PlanType': PlanType,
         'SubscriptionStatus': SubscriptionStatus,
         'Subscription': Subscription,
@@ -60,21 +63,12 @@ def _get_build_subscription_fn():
 
 
 def _get_current_paid_guard_fn():
-    source = (Path(__file__).resolve().parents[2] / "routers" / "payment.py").read_text(encoding="utf-8")
-    func_start = source.index('def _has_current_paid_subscription_for_different_stripe_sub')
-    next_func = source.index('\ndef ', func_start + 1)
-    func_source = source[func_start:next_func]
-    func_source = func_source.replace('Subscription | None', 'object')
-    func_source = func_source.replace('str | None', 'object')
-    func_source = func_source.replace('int | None', 'object')
+    from utils.subscription_state_machine import preserves_current_paid_subscription
 
-    namespace = {
-        'SubscriptionStatus': SubscriptionStatus,
-        'is_paid_plan': lambda plan: plan in {PlanType.unlimited, PlanType.architect, PlanType.operator},
-        'time': MagicMock(time=MagicMock(return_value=1_700_000_000)),
-    }
-    exec(compile(func_source, '<payment.py>', 'exec'), namespace)
-    return namespace['_has_current_paid_subscription_for_different_stripe_sub']
+    def guard(current, event_id, now=None):
+        return preserves_current_paid_subscription(current, event_id, now or 1_700_000_000)
+
+    return guard
 
 
 # ── Behavioral tests for _build_subscription_from_stripe_object ─────────────
@@ -197,7 +191,7 @@ class TestStripeWebhookDuplicateAndCustomerSourceLevel:
         duplicate_idx = source.find('Duplicate webhook event for existing subscription')
         assert duplicate_idx != -1, "duplicate checkout guard not found"
         guard_block = source[max(0, duplicate_idx - 600) : duplicate_idx]
-        assert 'is_paid_plan(existing_subscription.plan)' in guard_block
+        assert 'checkout_decision.outcome' in guard_block
 
     def test_subscription_events_persist_customer_id_for_uid_metadata_path(self):
         source = self._read_source()
@@ -223,20 +217,22 @@ class TestStripeWebhookDuplicateAndCustomerSourceLevel:
         set_customer_idx = handler_block.find("users_db.set_stripe_customer_id")
         assert set_customer_idx != -1, "set_stripe_customer_id call not found in subscription handler"
         # The guard flag must precede the set_stripe_customer_id call
-        guard_idx = handler_block.find("adopted_active_paid = False")
+        guard_idx = handler_block.find("decision = transition(")
         assert guard_idx != -1, "adopted_active_paid flag not found"
         assert guard_idx < set_customer_idx, "guard flag must precede customer id write"
         # The write must be gated on NOT adopting active_paid
         guard_block = handler_block[max(0, set_customer_idx - 400) : set_customer_idx]
-        assert "not adopted_active_paid" in guard_block, "customer id write must be gated on not adopted_active_paid"
+        assert (
+            "'set_customer' in decision.effects" in guard_block
+        ), "customer id write must be gated on not adopted_active_paid"
 
     def test_billing_projection_follows_reconciliation_and_durable_subscription_write(self):
         source = self._read_source()
         handler_start = source.index("'customer.subscription.updated'")
         handler_end = source.index("subscription_schedule.completed", handler_start)
         handler = source[handler_start:handler_end]
-        projection = handler.find("emit_billing_product_event(")
-        guard = handler.find("adopted_active_paid = False")
+        projection = handler.find("await schedule_billing_webhook_events(")
+        guard = handler.find("decision = transition(")
         durable_write = handler.find("users_db.update_user_subscription")
         assert projection != -1
         assert guard != -1

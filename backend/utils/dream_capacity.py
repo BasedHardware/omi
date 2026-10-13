@@ -159,7 +159,7 @@ def _release_local(token):
             del slots[index]
 
 
-async def claim(limit):
+async def claim(limit, *, slot_seconds=SLOT_SECONDS):
     model = await available_model()
     if model is None:
         return None
@@ -169,7 +169,7 @@ async def claim(limit):
     index = next((i for i in range(limit) if local.slots.get(i, ('', 0))[1] <= time.monotonic()), None)
     if index is None:
         return _decision(model, 'saturated', waiting=True, source='local_slots')
-    local.slots[index] = token, time.monotonic() + SLOT_SECONDS
+    local.slots[index] = token, time.monotonic() + slot_seconds
     fallback = ('dream-local:' + str(index), token)
     try:
         client = reservation_state.client()
@@ -178,7 +178,7 @@ async def claim(limit):
         async with asyncio.timeout(0.5):
             for index in range(limit):
                 key = reservation_state.key() + ':dream-slot:' + str(index)
-                if await client.set(key, token, nx=True, ex=SLOT_SECONDS):
+                if await client.set(key, token, nx=True, ex=slot_seconds):
                     return key, token
     except Exception:
         record_fallback(

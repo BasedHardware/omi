@@ -1712,45 +1712,148 @@ class AnalyticsManager {
   void deletedActionItem(ServerConversation conversation) =>
       track('Deleted Action Item', properties: getConversationEventProperties(conversation));
 
-  void paywallOpened(String source) => track('Paywall Opened', properties: {'source': source});
+  /// [source] is a closed surface id (`chat_quota_exceeded`, `locked_memory`, …).
+  /// [currentPlan] is a catalog tier id. Unknown wires collapse to `unknown`.
+  void paywallOpened(String source, {String currentPlan = 'unknown'}) => const TypedEvents().emit(
+        PaywallOpened(
+          source:
+              _closedEnum(PaywallOpenedSource.values, source, PaywallOpenedSource.unknown, (value) => value.wireName),
+          currentPlan: _closedEnum(
+            PaywallOpenedCurrentPlan.values,
+            _planWire(currentPlan),
+            PaywallOpenedCurrentPlan.unknown,
+            (value) => value.wireName,
+          ),
+        ),
+      );
 
-  void upgradePlanSelected({required String plan, required String source}) =>
-      track('Upgrade Plan Selected', properties: {'plan': plan, 'source': source});
+  /// [plan] is the tier id. [billingInterval] is `month` or `year`, not the
+  /// sheet's yearly/monthly toggle. [source] is the surface that opened the sheet.
+  void upgradePlanSelected({required String plan, required String billingInterval, required String source}) =>
+      const TypedEvents().emit(
+        UpgradePlanSelected(
+          plan: _closedEnum(
+            UpgradePlanSelectedPlan.values,
+            _planWire(plan),
+            UpgradePlanSelectedPlan.unknown,
+            (value) => value.wireName,
+          ),
+          billingInterval: _closedEnum(
+            UpgradePlanSelectedBillingInterval.values,
+            _intervalWire(billingInterval),
+            UpgradePlanSelectedBillingInterval.unknown,
+            (value) => value.wireName,
+          ),
+          source: _closedEnum(
+            UpgradePlanSelectedSource.values,
+            source,
+            UpgradePlanSelectedSource.unknown,
+            (value) => value.wireName,
+          ),
+        ),
+      );
 
   void upgradeSucceeded({required String previousPlan, required String newPlan, required String billingInterval}) {
-    track(
-      'Subscription Plan Changed',
-      properties: {
-        'previous_plan': previousPlan,
-        'new_plan': newPlan,
-        'billing_interval': billingInterval,
-        'change_source': 'mobile_checkout',
-      },
+    const TypedEvents().emit(
+      SubscriptionPlanChanged(
+        previousPlan: _closedEnum(
+          SubscriptionPlanChangedPreviousPlan.values,
+          _planWire(previousPlan),
+          SubscriptionPlanChangedPreviousPlan.unknown,
+          (value) => value.wireName,
+        ),
+        newPlan: _closedEnum(
+          SubscriptionPlanChangedNewPlan.values,
+          _planWire(newPlan),
+          SubscriptionPlanChangedNewPlan.unknown,
+          (value) => value.wireName,
+        ),
+        billingInterval: _closedEnum(
+          SubscriptionPlanChangedBillingInterval.values,
+          _intervalWire(billingInterval),
+          SubscriptionPlanChangedBillingInterval.unknown,
+          (value) => value.wireName,
+        ),
+        changeSource: SubscriptionPlanChangedChangeSource.mobileCheckout,
+      ),
+    );
+    // Released `Upgrade Succeeded` cannot gain properties. Tier and interval
+    // ride the attributed event emitted in the same checkout-success call.
+    const TypedEvents().emit(
+      UpgradeSucceededAttributed(
+        plan: _closedEnum(
+          UpgradeSucceededAttributedPlan.values,
+          _planWire(newPlan),
+          UpgradeSucceededAttributedPlan.unknown,
+          (value) => value.wireName,
+        ),
+        billingInterval: _closedEnum(
+          UpgradeSucceededAttributedBillingInterval.values,
+          _intervalWire(billingInterval),
+          UpgradeSucceededAttributedBillingInterval.unknown,
+          (value) => value.wireName,
+        ),
+      ),
     );
     const TypedEvents().emit(const UpgradeSucceeded());
   }
 
   void upgradeCancelled() => const TypedEvents().emit(const UpgradeCancelled());
 
+  /// Store-update prompt (`upgrade_alert.dart`), not the subscription paywall.
   void upgradeModalDismissed() => const TypedEvents().emit(const UpgradeModalDismissed());
 
+  /// Store-update prompt (`upgrade_alert.dart`), not the subscription paywall.
   void upgradeModalClicked() => const TypedEvents().emit(const UpgradeModalClicked());
 
   void subscriptionCancelFlowStarted() => const TypedEvents().emit(const SubscriptionCancelFlowStarted());
 
-  void subscriptionCancelReasonSelected({required String reason}) =>
-      track('Subscription Cancel Reason Selected', properties: {'reason': reason});
-
-  void subscriptionCancelConfirmed({required String reason, String? details}) => track(
-        'Subscription Cancel Confirmed',
-        properties: {'reason': reason, 'has_details': details?.isNotEmpty == true},
+  void subscriptionCancelReasonSelected({required String reason}) => const TypedEvents().emit(
+        SubscriptionCancelReasonSelected(
+          reason: _closedEnum(
+            SubscriptionCancelReasonSelectedReason.values,
+            _cancelReasonWire(reason),
+            SubscriptionCancelReasonSelectedReason.unknown,
+            (value) => value.wireName,
+          ),
+        ),
       );
 
-  void subscriptionCancelKeptPlan({required int step, String? reason}) =>
-      track('Subscription Cancel Kept Plan', properties: {'step': step, 'reason': reason});
+  void subscriptionCancelConfirmed({required String reason, String? details}) => const TypedEvents().emit(
+        SubscriptionCancelConfirmed(
+          reason: _closedEnum(
+            SubscriptionCancelConfirmedReason.values,
+            _cancelReasonWire(reason),
+            SubscriptionCancelConfirmedReason.unknown,
+            (value) => value.wireName,
+          ),
+          hasDetails: details?.isNotEmpty == true,
+        ),
+      );
 
-  void subscriptionCancelAbandoned({required int step, String? reason}) =>
-      track('Subscription Cancel Abandoned', properties: {'step': step, 'reason': reason});
+  void subscriptionCancelKeptPlan({required int step, String? reason}) => const TypedEvents().emit(
+        SubscriptionCancelKeptPlan(
+          step: step,
+          reason: _closedEnum(
+            SubscriptionCancelKeptPlanReason.values,
+            _cancelReasonWire(reason),
+            SubscriptionCancelKeptPlanReason.unknown,
+            (value) => value.wireName,
+          ),
+        ),
+      );
+
+  void subscriptionCancelAbandoned({required int step, String? reason}) => const TypedEvents().emit(
+        SubscriptionCancelAbandoned(
+          step: step,
+          reason: _closedEnum(
+            SubscriptionCancelAbandonedReason.values,
+            _cancelReasonWire(reason),
+            SubscriptionCancelAbandonedReason.unknown,
+            (value) => value.wireName,
+          ),
+        ),
+      );
 
   void connectFriendClicked() => const TypedEvents().emit(const ConnectFriendClicked());
 
@@ -2887,6 +2990,44 @@ class AnalyticsManager {
     if (resultsCount != null) properties['results_count'] = resultsCount;
     return properties;
   }
+}
+
+T _closedEnum<T>(Iterable<T> values, String? raw, T fallback, String Function(T value) wire) {
+  final normalized = raw?.trim() ?? '';
+  for (final value in values) {
+    if (wire(value) == normalized) return value;
+  }
+  return fallback;
+}
+
+String _planWire(String? raw) {
+  switch (raw?.trim()) {
+    case 'free':
+      return 'basic';
+    case 'pro':
+      return 'unknown';
+    default:
+      return raw?.trim() ?? '';
+  }
+}
+
+String _intervalWire(String? raw) {
+  switch (raw?.trim().toLowerCase()) {
+    case 'month':
+    case 'monthly':
+      return 'month';
+    case 'year':
+    case 'yearly':
+    case 'annual':
+      return 'year';
+    default:
+      return raw?.trim().toLowerCase() ?? '';
+  }
+}
+
+String _cancelReasonWire(String? raw) {
+  final trimmed = raw?.trim() ?? '';
+  return trimmed.isEmpty ? 'none' : trimmed;
 }
 
 class _QueuedAnalyticsEvent {
