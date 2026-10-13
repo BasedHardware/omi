@@ -106,13 +106,13 @@ void main() {
         insightsGainedLimit: 0,
         availablePlans: [],
       ));
-      final price = _plan(data, 'plus').priceFor('month')!;
+      final price = _plan(data, 'plus').priceFor('year')!;
       usage.debugSetAvailablePlans({
         'plans': [
           {
             'id': price.id,
             'plan_id': 'plus',
-            'interval': 'month',
+            'interval': 'year',
             'unit_amount': price.amountMinor,
             'title': 'Plus',
             'price_string': price.headline,
@@ -134,6 +134,7 @@ void main() {
           .onSelect(_plan(data, 'plus'), price);
       await tester.pumpAndSettle();
       expect(usage.checkedOutPrice, isNull);
+      expect(find.text('Confirm Upgrade'), findsNothing);
       expect(find.text('Change Plan'), findsNothing);
       expect(tester.takeException(), isNull);
     });
@@ -204,15 +205,26 @@ void main() {
     addTearDown(tester.view.resetDevicePixelRatio);
     final usage = _Usage();
     addTearDown(usage.dispose);
-    final json = jsonDecode(File('test/fixtures/storefront_v2/plus_monthly_yearly_toggle.json').readAsStringSync())
+    final json = jsonDecode(File('test/fixtures/storefront_v2/plus_annual_current.json').readAsStringSync())
         as Map<String, dynamic>;
-    json['current']['price_id'] = 'fixture_plus_year';
-    json['current']['legacy'] = false;
+    final plusTier =
+        (json['tiers'] as List).cast<Map<String, dynamic>>().firstWhere((tier) => tier['plan_id'] == 'plus');
+    plusTier['action'] = 'checkout';
+    plusTier['cta_label'] = 'Get Plus';
+    (plusTier['prices'] as List).insert(0, {
+      'price_id': 'price_plus_month',
+      'interval': 'month',
+      'amount_minor': 1999,
+      'currency': 'usd',
+      'headline': r'$19.99/month',
+      'subline': null,
+      'renewal_line': 'Renews monthly until you cancel. Cancel anytime in settings.',
+    });
     final data = PlanStorefront.fromJson(json);
     final price = _plan(data, 'plus').priceFor('month')!;
     usage.debugSetSubscription(UserSubscriptionResponse(
       subscription:
-          Subscription(plan: PlanType.plus, status: SubscriptionStatus.active, currentPriceId: 'fixture_plus_year'),
+          Subscription(plan: PlanType.plus, status: SubscriptionStatus.active, currentPriceId: data.current!.priceId),
       transcriptionSecondsUsed: 0,
       transcriptionSecondsLimit: 0,
       wordsTranscribedUsed: 0,
@@ -253,6 +265,68 @@ void main() {
     expect(usage.checkedOutPrice, isNull);
     expect(usage.sessionPrice, isNull);
     expect(find.text('Change Plan'), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+  testWidgets('tapping Switch to yearly reaches upgrade with the yearly price', (tester) async {
+    tester.view.physicalSize = const Size(1000, 2200);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final usage = _Usage();
+    addTearDown(usage.dispose);
+    final data = PlanStorefront.fromJson(
+        jsonDecode(File('test/fixtures/storefront_v2/plus_monthly_yearly_toggle.json').readAsStringSync()));
+    final price = _plan(data, 'plus').priceFor('year')!;
+    expect(price.ctaLabel, r'Switch to yearly · save $39.98');
+    expect(price.id, 'price_plus_year');
+    usage.debugSetSubscription(UserSubscriptionResponse(
+      subscription:
+          Subscription(plan: PlanType.plus, status: SubscriptionStatus.active, currentPriceId: data.current!.priceId),
+      transcriptionSecondsUsed: 0,
+      transcriptionSecondsLimit: 0,
+      wordsTranscribedUsed: 0,
+      wordsTranscribedLimit: 0,
+      insightsGainedUsed: 0,
+      insightsGainedLimit: 0,
+      availablePlans: [
+        SubscriptionPlan(id: 'plus', title: 'Plus', prices: [
+          PricingOption(id: price.id!, title: 'Yearly', priceString: price.headline),
+        ])
+      ],
+    ));
+    usage.debugSetAvailablePlans({
+      'plans': [
+        {
+          'id': price.id,
+          'plan_id': 'plus',
+          'interval': 'year',
+          'unit_amount': price.amountMinor,
+          'title': 'Plus',
+          'price_string': price.headline,
+          'is_active': false
+        }
+      ]
+    });
+    await tester.pumpWidget(ChangeNotifierProvider<UsageProvider>.value(
+        value: usage,
+        child: MaterialApp(
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            supportedLocales: AppLocalizations.supportedLocales,
+            home: Scaffold(body: _Host(data)))));
+    await tester.pumpAndSettle();
+    final button = find.text(r'Switch to yearly · save $39.98');
+    await tester.ensureVisible(button);
+    await tester.tap(button.hitTestable());
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+    await tester.tap(find.text('Confirm Upgrade').hitTestable());
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+    await tester.tap(find.text('Change Plan').hitTestable());
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(usage.upgradedPrice, price.id);
+    expect(usage.sessionPrice, isNull);
     expect(tester.takeException(), isNull);
   });
   testWidgets('cancel scheduled taps only Resubscribe and it checks out the current price', (tester) async {
@@ -580,6 +654,15 @@ void main() {
       plusTier['is_current'] = false;
       plusTier['action'] = 'checkout';
       plusTier['cta_label'] = 'Get Plus';
+      (plusTier['prices'] as List).insert(0, {
+        'price_id': 'price_plus_month',
+        'interval': 'month',
+        'amount_minor': 1999,
+        'currency': 'usd',
+        'headline': r'$19.99/month',
+        'subline': null,
+        'renewal_line': 'Renews monthly until you cancel. Cancel anytime in settings.',
+      });
       final data = PlanStorefront.fromJson(json);
       final price = _plan(data, 'plus').priceFor('month')!;
       final catalogId = mismatch == 'id' ? 'fixture_different_price' : price.id!;

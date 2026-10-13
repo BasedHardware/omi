@@ -28,6 +28,13 @@ void main() {
     expect(pro.priceFor('year')!.subline, r'$499.90 billed yearly · 2 months free');
     expect(pro.priceFor('year')!.monthsFree, 2);
     expect(pro.priceFor('year')!.renewalLine, 'Renews yearly until you cancel. Cancel anytime in settings.');
+    final plus = data.tiers.singleWhere((tier) => tier.isCurrent);
+    expect(plus.planId, 'plus');
+    expect(plus.action, 'checkout');
+    expect(plus.ctaLabel, isNull);
+    expect(plus.bullets, isEmpty);
+    expect(plus.prices.map((price) => price.interval), ['year']);
+    expect(plus.priceFor('year')!.ctaLabel, r'Switch to yearly · save $39.98');
     expect(data.usage!.showBudgetNudge, isFalse);
     for (final version in [1, 3, '2', null]) {
       expect(() => PlanStorefront.fromJson(fixture()..['schema_version'] = version), throwsFormatException);
@@ -61,7 +68,9 @@ void main() {
       expect(data.tiers.singleWhere((tier) => tier.recommended).planId, entry.value);
       if (entry.key == 'free_mcp_cap') {
         expect(data.header, "You've used today's 100 MCP requests");
-        expect(data.tiers.every((tier) => tier.bullets.first.contains('MCP')), isTrue);
+        expect(data.tiers.singleWhere((tier) => tier.isCurrent).bullets, isEmpty);
+        expect(data.tiers.where((tier) => tier.bullets.isNotEmpty).every((tier) => tier.bullets.first.contains('MCP')),
+            isTrue);
       }
       if (entry.key == 'free_pro_gate_proactive') {
         expect(data.tiers.singleWhere((tier) => tier.planId == 'operator').bullets.first,
@@ -77,11 +86,25 @@ void main() {
   });
 
   test('legacy note is required only for a legacy plan', () {
-    final legacy = PlanStorefront.fromJson(fixture('legacy_unlimited'));
-    expect(legacy.current!.legacy, isTrue);
-    expect(legacy.current!.legacyNote, 'We don\'t sell this plan anymore, but yours stays exactly as it is.');
-    expect(legacy.shouldGate('proactive_agent'), isFalse);
-    expect(legacy.showBudgetNudge, isFalse);
+    for (final name in ['legacy_unlimited', 'legacy_neo']) {
+      final legacy = PlanStorefront.fromJson(fixture(name));
+      expect(legacy.current!.legacy, isTrue, reason: name);
+      expect(legacy.current!.legacyNote, 'We don\'t sell this plan anymore, but yours stays exactly as it is.',
+          reason: name);
+      expect(legacy.shouldGate('proactive_agent'), isFalse, reason: name);
+      expect(legacy.showBudgetNudge, isFalse, reason: name);
+      final pro = legacy.tiers.singleWhere((tier) => tier.planId == 'operator');
+      expect(
+        storefrontCheckoutDecision(
+            legacy.current, PlanType.fromWire(legacy.current!.planId), pro, pro.priceFor('month')!),
+        StorefrontCheckoutDecision.refuse,
+        reason: name,
+      );
+    }
+    expect(PlanStorefront.fromJson(fixture('legacy_unlimited')).current!.line,
+        r"You're on Unlimited · $29.99/mo · renews Nov 1");
+    expect(PlanStorefront.fromJson(fixture('legacy_neo')).current!.line, r"You're on Neo · $19.99/mo · renews Nov 1");
+    expect(PlanStorefront.fromJson(fixture('legacy_neo')).current!.planId, 'unlimited');
     final missing = fixture('legacy_unlimited');
     missing['current']['legacy_note'] = null;
     expect(() => PlanStorefront.fromJson(missing), throwsFormatException);
@@ -224,8 +247,11 @@ void main() {
             legacyNote: legacy ? 'We don\'t sell this plan anymore, but yours stays exactly as it is.' : null);
 
     final plusMonth = priced('plus_month', 'month');
+    final plusMonthOther = priced('plus_month_other', 'month');
     final plusYear = priced('plus_year', 'year');
     final plus = tier('plus', [plusMonth, plusYear]);
+    final plusYearOnly = tier('plus', [plusYear]);
+    final plusTwoMonths = tier('plus', [plusMonth, plusMonthOther]);
     final operatorMonth = priced('operator_month', 'month');
     final operator = tier('operator', [operatorMonth, priced('operator_year', 'year')]);
     final architectMonth = priced('architect_month', 'month');
@@ -492,10 +518,37 @@ void main() {
         false,
         false
       ),
+      (
+        'monthly current checks out the only yearly price',
+        StorefrontCheckoutDecision.checkout,
+        current('plus', priceId: plusMonth.id),
+        PlanType.plus,
+        plusYearOnly,
+        plusYear,
+        false,
+        false
+      ),
+      (
+        'same-tier other monthly price refuses',
+        StorefrontCheckoutDecision.refuse,
+        current('plus', priceId: plusMonth.id),
+        PlanType.plus,
+        plusTwoMonths,
+        plusMonthOther,
+        false,
+        false
+      ),
+      (
+        'same-tier other yearly price refuses when already yearly',
+        StorefrontCheckoutDecision.refuse,
+        current('plus', priceId: 'other_year', interval: 'year'),
+        PlanType.plus,
+        plusYearOnly,
+        plusYear,
+        false,
+        false
+      ),
     ];
-
-    expect(PlanStorefront.fromJson(fixture('legacy_unlimited')).current!.line,
-        r"You're on Neo · $29.99/mo · renews Nov 1");
 
     for (final entry in cases) {
       final (name, expected, held, live, selectedTier, selectedPrice, usageLegacy, cancelScheduled) = entry;
@@ -526,10 +579,11 @@ void main() {
       ),
       r'Switch to yearly · save $39.98',
     );
+    expect(plus.priceFor('month'), isNull);
     expect(
       storefrontActionLabel(
         tier: plus,
-        price: plus.priceFor('month')!,
+        price: plus.priceFor('year')!,
         decision: StorefrontCheckoutDecision.refuse,
       ),
       isNull,
@@ -547,10 +601,15 @@ void main() {
       storefrontCheckoutDecision(free.current, PlanType.basic, basic, basic.priceFor('month')!),
       StorefrontCheckoutDecision.refuse,
     );
-    final neo =
-        PlanStorefront.fromJson(fixture('legacy_unlimited')).tiers.singleWhere((tier) => tier.planId == 'unlimited');
+    final unlimited =
+        PlanStorefront.fromJson(fixture('legacy_unlimited')).tiers.singleWhere((tier) => tier.planId == 'unlimited_v2');
+    expect(unlimited.hoursLine, isEmpty);
+    expect(unlimited.compact, isTrue);
+    expect(unlimited.bullets, isEmpty);
+    final neo = PlanStorefront.fromJson(fixture('legacy_neo')).tiers.singleWhere((tier) => tier.planId == 'unlimited');
     expect(neo.hoursLine, isEmpty);
     expect(neo.compact, isTrue);
+    expect(neo.bullets, isEmpty);
     final cleared = fixture();
     cleared['tiers'] = null;
     expect(PlanStorefront.fromJson(cleared).tiers, isEmpty);
@@ -563,6 +622,11 @@ void main() {
     expect(pro.blockedLine, 'Resubscribe first to change plans');
     expect(currentTier.blockedLine, isNull);
     expect(currentTier.compact, isFalse);
+    expect(currentTier.bullets, isEmpty);
+    expect(currentTier.prices, hasLength(1));
+    expect(currentTier.priceFor('year'), isNull);
+    expect(currentTier.priceFor('month')!.id, cancelled.current!.priceId);
+    expect(cancelled.yearlyToggleLabel, isNull);
     expect(cancelled.header, 'Your Plus plan ends Nov 1');
     expect(cancelled.current!.line, r"You're on Plus · $19.99/mo");
     expect(
@@ -570,8 +634,7 @@ void main() {
       StorefrontCheckoutDecision.refuse,
     );
     expect(
-      storefrontCheckoutDecision(cancelled.current, PlanType.plus, currentTier, currentTier.priceFor('year')!,
-          cancelScheduled: true),
+      storefrontCheckoutDecision(cancelled.current, PlanType.plus, pro, pro.priceFor('year')!, cancelScheduled: true),
       StorefrontCheckoutDecision.refuse,
     );
     expect(
@@ -590,13 +653,20 @@ void main() {
       ),
       isNull,
     );
-    expect(
-      storefrontActionLabel(
-        tier: currentTier,
-        price: currentTier.priceFor('year')!,
-        decision: StorefrontCheckoutDecision.refuse,
-      ),
-      isNull,
-    );
+    expect(currentTier.priceFor('year'), isNull);
+  });
+
+  test('every current card publishes no bullets', () {
+    final names = Directory('test/fixtures/storefront_v2')
+        .listSync()
+        .whereType<File>()
+        .where((file) => file.path.endsWith('.json'))
+        .map((file) => file.uri.pathSegments.last.replaceFirst('.json', ''));
+    expect(names, hasLength(13));
+    for (final name in names) {
+      final data = PlanStorefront.fromJson(fixture(name));
+      expect(data.tiers.where((tier) => tier.isCurrent), isNotEmpty, reason: name);
+      expect(data.tiers.where((tier) => tier.isCurrent).every((tier) => tier.bullets.isEmpty), isTrue, reason: name);
+    }
   });
 }

@@ -104,13 +104,13 @@ StorefrontPrice? _priceOnTier(StorefrontTier tier, String? id) {
 
 /// Single checkout boundary for rendering and every tap or handoff.
 ///
-/// Paid subscribers may move up the ladder, or from monthly to annual on the
-/// same tier. Same-tier annual to monthly is refused from the held yearly
-/// price or from [StorefrontCurrentPlan.interval], including when the payload
-/// omits that yearly price. Legacy prices, unlimited plans, and unrecognized
-/// ids never check out. While a cancellation is scheduled the payment API
-/// rejects every other price, so the only purchase is resubscribe on the
-/// current price.
+/// Paid subscribers may move up the ladder. The only same-tier purchase is
+/// monthly to annual, and only from a monthly current price — including when
+/// that card publishes just the yearly price. Annual to monthly and every
+/// other same-tier price are refused. Legacy prices, unlimited plans, and
+/// unrecognized ids never check out. While a cancellation is scheduled the
+/// payment API rejects every other price, so the only purchase is resubscribe
+/// on the current price.
 StorefrontCheckoutDecision storefrontCheckoutDecision(
   StorefrontCurrentPlan? current,
   PlanType? livePlan,
@@ -130,9 +130,10 @@ StorefrontCheckoutDecision storefrontCheckoutDecision(
       (_isNonLadderLegacyPlan(PlanType.fromWire(current.planId)) || PlanType.fromWire(current.planId).isUnknown)) {
     return StorefrontCheckoutDecision.refuse;
   }
-  // `none` is not purchasable. `current` is the held tier: only a price the
-  // backend marked with cta_label (for example yearly switch) can proceed, and
-  // the rank, interval, legacy, and cancellation checks below still apply.
+  // `none` is not purchasable. `current` proceeds only when that price has a
+  // cta_label. `checkout` may omit the tier label when the price label is the
+  // words (same-tier yearly switch). Rank, interval, legacy, and cancellation
+  // checks below still apply.
   if (tier.action == 'none' || !tier.prices.contains(price)) {
     return StorefrontCheckoutDecision.refuse;
   }
@@ -165,6 +166,10 @@ StorefrontCheckoutDecision storefrontCheckoutDecision(
     return cancelScheduled ? StorefrontCheckoutDecision.resubscribe : StorefrontCheckoutDecision.refuse;
   }
   if (cancelScheduled) return StorefrontCheckoutDecision.refuse;
+  final sameTier = current != null && PlanType.fromWire(current.planId) == PlanType.fromWire(tier.planId);
+  if (sameTier && !(current.interval == 'month' && price.interval == 'year')) {
+    return StorefrontCheckoutDecision.refuse;
+  }
   return StorefrontCheckoutDecision.checkout;
 }
 
@@ -214,7 +219,7 @@ class StorefrontTier {
       throw const FormatException('Unsupported storefront action');
     }
     final cta = _optionalText(json, 'cta_label');
-    if (action == 'checkout' && cta == null) throw const FormatException('Missing storefront cta_label');
+    // A checkout tier may leave cta_label null when the price carries the label.
     final prices = (json['prices'] as List).map((row) => StorefrontPrice.fromJson(_object(row))).toList();
     if (prices.map((price) => price.interval).toSet().length != prices.length) {
       throw const FormatException('Duplicate storefront price interval');

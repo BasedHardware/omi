@@ -122,8 +122,10 @@ class _StorefrontPlansContentState extends State<StorefrontPlansContent> {
     final primaryIds = primary.map((tier) => tier.tierId).toSet();
     final rest = tiers.where((tier) => !primaryIds.contains(tier.tierId)).toList();
     final interval = cancelScheduled ? (data.current?.interval ?? 'month') : _interval;
+    // A null yearly label means the backend is not offering an interval choice.
+    final showIntervalToggle = !cancelScheduled && data.yearlyToggleLabel != null;
     return [
-      if (!cancelScheduled) ...[
+      if (showIntervalToggle) ...[
         Wrap(spacing: OmiSpacing.xs, runSpacing: OmiSpacing.xxs, children: [
           OmiFilterChip(
             key: const Key('storefront_month'),
@@ -133,7 +135,7 @@ class _StorefrontPlansContentState extends State<StorefrontPlansContent> {
           ),
           OmiFilterChip(
             key: const Key('storefront_year'),
-            label: data.yearlyToggleLabel ?? context.l10n.billingYearly,
+            label: data.yearlyToggleLabel!,
             selected: _interval == 'year',
             onSelected: () => setState(() => _interval = 'year'),
           ),
@@ -163,9 +165,15 @@ class _StorefrontPlansContentState extends State<StorefrontPlansContent> {
     ];
   }
 
+  /// Selected interval when that price exists. A card with one price shows it on
+  /// either chip, so a yearly switch stays visible while other tiers stay monthly.
+  StorefrontPrice? _offeredPrice(StorefrontTier tier, String interval) {
+    return tier.priceFor(interval) ?? (tier.prices.length == 1 ? tier.prices.single : null);
+  }
+
   Widget _tierCard(StorefrontTier tier, PlanStorefront storefront, String interval) {
     final cancelScheduled = _cancelScheduled(storefront);
-    final price = tier.priceFor(interval);
+    final price = _offeredPrice(tier, interval);
     final decision = price == null
         ? StorefrontCheckoutDecision.refuse
         : storefrontCheckoutDecision(

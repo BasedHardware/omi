@@ -4,14 +4,14 @@
     {
       "file": "001-mobile-ios-architect-settings.png",
       "platform": "mobile-ios",
-      "description": "Architect yearly price with the backend switch label, compact off so bullets stay, See all plans below",
+      "description": "Architect current card shows only the yearly price and Switch to yearly · save $398.00, with no bullets",
       "captured_by": "agent",
       "source": "visual-audit"
     },
     {
       "file": "002-mobile-ios-cancel-scheduled-plus.png",
       "platform": "mobile-ios",
-      "description": "Cancel scheduled: Resubscribe on Plus, blocked_line in place of the CTA on Free",
+      "description": "Cancel scheduled: no interval toggle, Resubscribe on Plus with no bullets, blocked_line on other tiers",
       "captured_by": "agent",
       "source": "visual-audit"
     },
@@ -53,35 +53,35 @@
     {
       "file": "008-mobile-ios-legacy-unlimited.png",
       "platform": "mobile-ios",
-      "description": "Legacy Neo line, the legacy note, and Manage billing. Ladder cards stay hidden",
+      "description": "Legacy Unlimited line, the legacy note, and Manage billing. No checkout",
       "captured_by": "agent",
       "source": "visual-audit"
     },
     {
       "file": "009-mobile-ios-plus-annual-current.png",
       "platform": "mobile-ios",
-      "description": "Annual Plus opens on yearly: compact current card with price and hours, no button, Upgrade to Pro",
+      "description": "Annual Plus opens on yearly. Current card shows the yearly price and hours, no bullets and no button",
       "captured_by": "agent",
       "source": "visual-audit"
     },
     {
       "file": "010-mobile-ios-plus-budget-80.png",
       "platform": "mobile-ios",
-      "description": "Plus 80% header, recommended Pro, current Plus keeps bullets because compact is false",
+      "description": "Plus 80% header. Monthly stays selected. Current Plus shows only the yearly switch and no bullets",
       "captured_by": "agent",
       "source": "visual-audit"
     },
     {
       "file": "011-mobile-ios-plus-monthly-yearly-toggle.png",
       "platform": "mobile-ios",
-      "description": "Yearly toggle renders Switch to yearly · save $39.98 from the price cta_label",
+      "description": "Yearly toggle. Current Plus shows Switch to yearly · save $39.98 from the price label and no bullets",
       "captured_by": "agent",
       "source": "visual-audit"
     },
     {
       "file": "012-mobile-ios-pro-settings.png",
       "platform": "mobile-ios",
-      "description": "Pro yearly price renders Switch to yearly · save $99.98, with See all plans below",
+      "description": "Pro current card shows only the yearly price and Switch to yearly · save $99.98, with no bullets",
       "captured_by": "agent",
       "source": "visual-audit"
     },
@@ -117,6 +117,13 @@
       "file": "017-mobile-ios-error.png",
       "platform": "mobile-ios",
       "description": "Load error copy with a Try again button",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "018-mobile-ios-legacy-neo.png",
+      "platform": "mobile-ios",
+      "description": "Legacy Neo line, the legacy note, and Manage billing. No checkout, same shape as Unlimited",
       "captured_by": "agent",
       "source": "visual-audit"
     }
