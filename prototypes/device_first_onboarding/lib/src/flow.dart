@@ -74,9 +74,9 @@ class _DeviceFirstFlowState extends State<DeviceFirstFlow> {
   String _outcome = '';
 
   void _go(DfStep next) => setState(() {
-    _history.add(_step);
-    _step = next;
-  });
+        _history.add(_step);
+        _step = next;
+      });
 
   void _back() {
     if (_history.isEmpty) {
@@ -87,11 +87,11 @@ class _DeviceFirstFlowState extends State<DeviceFirstFlow> {
   }
 
   void _restart() => setState(() {
-    _history.clear();
-    _step = DfStep.welcome;
-    _outcome = '';
-    _path = 'Has an Omi';
-  });
+        _history.clear();
+        _step = DfStep.welcome;
+        _outcome = '';
+        _path = 'Has an Omi';
+      });
 
   @override
   Widget build(BuildContext context) {

@@ -331,7 +331,9 @@ class _SetupScreenState extends State<SetupScreen> with SingleTickerProviderStat
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: <Widget>[
-                  Row(children: <Widget>[for (var i = 0; i < 5; i++) Icon(Icons.star_rounded, size: 16, color: t.text)]),
+                  Row(children: <Widget>[
+                    for (var i = 0; i < 5; i++) Icon(Icons.star_rounded, size: 16, color: t.text)
+                  ]),
                   const SizedBox(height: 6),
                   // TODO(confirm): replace with a real App Store review.
                   Text(
@@ -362,7 +364,8 @@ class _SetupStep extends StatelessWidget {
     final t = DfThemeScope.of(context);
     return Row(
       children: <Widget>[
-        Icon(done ? Icons.check_circle : Icons.radio_button_unchecked, size: 18, color: done ? t.success : t.textTertiary),
+        Icon(done ? Icons.check_circle : Icons.radio_button_unchecked,
+            size: 18, color: done ? t.success : t.textTertiary),
         const SizedBox(width: 10),
         Expanded(
           child: Text(

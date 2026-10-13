@@ -132,8 +132,7 @@ class DfHeadline extends StatelessWidget {
   final TextAlign? align;
 
   @override
-  Widget build(BuildContext context) =>
-      Text(text, textAlign: align, style: DfThemeScope.of(context).headline(size));
+  Widget build(BuildContext context) => Text(text, textAlign: align, style: DfThemeScope.of(context).headline(size));
 }
 
 class DfBody extends StatelessWidget {
@@ -165,8 +164,7 @@ class DfEyebrow extends StatelessWidget {
   final Color? color;
 
   @override
-  Widget build(BuildContext context) =>
-      Text(text.toUpperCase(), style: DfThemeScope.of(context).eyebrow(color: color));
+  Widget build(BuildContext context) => Text(text.toUpperCase(), style: DfThemeScope.of(context).eyebrow(color: color));
 }
 
 class DfCard extends StatelessWidget {
@@ -225,14 +223,19 @@ class DfListRow extends StatelessWidget {
         child: Row(
           children: <Widget>[
             if (icon != null) ...<Widget>[Icon(icon, size: 20, color: iconColor ?? t.text), const SizedBox(width: 12)],
-            Expanded(child: Text(label, style: t.label(weight: weight, color: labelColor))),
+            Expanded(flex: 3, child: Text(label, style: t.label(weight: weight, color: labelColor))),
             if (value != null) const SizedBox(width: 12),
+            // Right-aligned value that wraps (rather than overflows) when it is long.
             if (value != null)
               Flexible(
-                child: Text(
-                  value,
-                  textAlign: TextAlign.right,
-                  style: t.label(color: valueColor ?? t.textTertiary, weight: weight),
+                flex: 2,
+                child: Align(
+                  alignment: Alignment.centerRight,
+                  child: Text(
+                    value,
+                    textAlign: TextAlign.right,
+                    style: t.label(color: valueColor ?? t.textTertiary, weight: weight),
+                  ),
                 ),
               ),
             if (trailing != null) trailing,

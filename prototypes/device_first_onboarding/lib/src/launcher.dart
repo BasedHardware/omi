@@ -21,7 +21,8 @@ class _PrototypeLauncherState extends State<PrototypeLauncher> {
     final navigator = Navigator.of(context);
     navigator.push(
       MaterialPageRoute<void>(
-        builder: (_) => DeviceFirstFlow(direction: _direction, trial: _trial, initialStep: step, onExit: () => navigator.pop()),
+        builder: (_) =>
+            DeviceFirstFlow(direction: _direction, trial: _trial, initialStep: step, onExit: () => navigator.pop()),
       ),
     );
   }

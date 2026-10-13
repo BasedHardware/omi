@@ -106,12 +106,12 @@ class DfTheme {
   Gradient get badgeGradient => LinearGradient(colors: glow ?? <Color>[success, success]);
 
   TextStyle headline(double size) => TextStyle(
-    fontSize: size,
-    height: 1.1,
-    fontWeight: FontWeight.w600,
-    letterSpacing: headlineTracking * size,
-    color: text,
-  );
+        fontSize: size,
+        height: 1.1,
+        fontWeight: FontWeight.w600,
+        letterSpacing: headlineTracking * size,
+        color: text,
+      );
 
   TextStyle body({double size = 16, Color? color, FontWeight weight = FontWeight.w400, double height = 1.4}) =>
       TextStyle(fontSize: size, height: height, fontWeight: weight, color: color ?? textSecondary);

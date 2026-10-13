@@ -206,9 +206,7 @@ class DfHeroArt extends StatelessWidget {
         child: Padding(
           padding: EdgeInsets.only(top: top),
           child: Center(
-            child: t.hasGlow && !product
-                ? DfOrb(size: height * 0.55)
-                : DfPendant(size: height * 0.4, glow: product),
+            child: t.hasGlow && !product ? DfOrb(size: height * 0.55) : DfPendant(size: height * 0.4, glow: product),
           ),
         ),
       ),

@@ -95,7 +95,8 @@ class CheckoutScreen extends StatelessWidget {
                 child: Container(
                   width: 40,
                   height: 40,
-                  decoration: BoxDecoration(shape: BoxShape.circle, border: Border.all(color: t.textTertiary, width: 5)),
+                  decoration:
+                      BoxDecoration(shape: BoxShape.circle, border: Border.all(color: t.textTertiary, width: 5)),
                 ),
               ),
               _BoxItem(label: 'Lanyard', child: Icon(Icons.all_inclusive, size: 40, color: t.textTertiary)),
