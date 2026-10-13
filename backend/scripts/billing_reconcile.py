@@ -37,7 +37,7 @@ def read_live(project: str) -> tuple[list[dict], list[dict]]:
     try:
         users = [
             dict(doc.to_dict(), uid=doc.id)
-            for doc in client.collection('users').select(['subscription', 'stripe_customer_id']).stream()
+            for doc in client.collection('users').select(['subscription', 'stripe_customer_id', 'referral']).stream()
         ]
     finally:
         client.close()
@@ -70,19 +70,15 @@ def main(argv=None) -> int:
                 load_snapshot(args.users_snapshot, 'users'),
             )
         )
-        price_plans = (
-            json.loads(args.price_map.read_text())
-            if args.price_map
-            else {price: plan.value for price, plan in RECOGNIZED_STRIPE_PRICE_PLAN_TYPES.items()}
-        )
+        price_plans = {price: plan.value for price, plan in RECOGNIZED_STRIPE_PRICE_PLAN_TYPES.items()}
+        if args.price_map:
+            price_plans.update(json.loads(args.price_map.read_text()))
         report = reconcile(subscriptions, users, price_plans, as_of=args.as_of)
-        from utils.observability.billing_reconciliation import record_report
+        from utils.observability.billing_reconciliation import record_report, export_metrics
 
         record_report(report)
         if args.prometheus_output:
-            from prometheus_client import generate_latest
-
-            args.prometheus_output.write_bytes(generate_latest())
+            args.prometheus_output.write_bytes(export_metrics())
     except Exception as error:
         # Never stringify provider exceptions or key values into operator logs.
         print(f'billing reconciliation failed: {type(error).__name__}', file=sys.stderr)

@@ -7,6 +7,7 @@ OUTCOMES = (
     'duplicate',
     'busy',
     'acknowledged',
+    'retryable_skip',
     'out_of_order',
     'claim_error',
     'finish_error',

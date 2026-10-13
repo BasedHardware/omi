@@ -17,6 +17,7 @@ DRIFT_CATEGORIES = (
     'unknown_price',
     'unmapped_owner',
     'manual_payment_entitlement',
+    'referral_trial_entitlement',
 )
 
 
@@ -48,6 +49,7 @@ def reconcile(
         if user.get('stripe_customer_id'):
             customers[user['stripe_customer_id']].append(user['uid'])
     entitled = defaultdict(list)
+    ambiguous_owners = set()
     for sub in subscriptions:
         metadata = sub.get('metadata') or {}
         if metadata.get('app_id'):
@@ -58,6 +60,8 @@ def reconcile(
         if not uid:
             owners = customers.get(sub.get('customer'), [])
             uid = owners[0] if len(owners) == 1 else None
+            if len(owners) > 1:
+                ambiguous_owners.update(owners)
         if uid not in by_uid:
             counts['unmapped_owner'] += 1
             continue
@@ -75,6 +79,20 @@ def reconcile(
             counts['manual_payment_entitlement'] += 1
             continue
 
+        stored_paid = (
+            stored.get('plan', 'basic') not in ('basic', 'free')
+            and bool(stored.get('current_period_end'))
+            and stored['current_period_end'] >= as_of
+        )
+        if (
+            stored_paid
+            and user.get('referral')
+            and not stored.get('subscription_id')
+            and not stored.get('stripe_subscription_id')
+        ):
+            counts['referral_trial_entitlement'] += 1
+            continue
+
         all_candidates = entitled.get(uid, [])
         unknown = [s for s in all_candidates if _price_id(s) not in price_plans]
         counts['unknown_price'] += len(unknown)
@@ -83,14 +101,8 @@ def reconcile(
             continue  # Unknown price cannot prove either access or lack of access.
         if len(all_candidates) > 1:
             counts['multiple_entitled_subscriptions'] += 1
-        stored_paid = (
-            stored.get('plan', 'basic') not in ('basic', 'free')
-            and stored.get('status', 'active') == 'active'
-            and bool(stored.get('current_period_end'))
-            and stored['current_period_end'] >= as_of
-        )
         if not candidates:
-            if stored_paid:
+            if stored_paid and uid not in ambiguous_owners:
                 counts['paid_in_firestore_no_stripe_entitlement'] += 1
             continue
         if not stored_paid:
@@ -119,7 +131,11 @@ def reconcile(
         elif stored['current_price_id'] != price_id:
             counts['wrong_price'] += 1
         if (
-            any(stored.get(field) != chosen.get(field) for field in ('current_period_start', 'current_period_end'))
+            stored.get('current_period_end') != chosen.get('current_period_end')
+            or (
+                stored.get('current_period_start') is not None
+                and stored['current_period_start'] != chosen.get('current_period_start')
+            )
             or not chosen.get('current_period_end')
             or chosen['current_period_end'] < as_of
         ):

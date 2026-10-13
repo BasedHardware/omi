@@ -25,7 +25,7 @@ from utils.subscription_state_machine import (
     transition,
 )
 from utils.billing_flags import webhook_ledger_enabled
-from utils.stripe_webhook_ledger import dispatch_with_ledger
+from utils.stripe_webhook_ledger import dispatch_with_ledger, RetryableBillingSkip
 from utils.fair_use import clear_fair_use_on_upgrade
 from utils.notifications import send_notification, send_subscription_paid_personalized_notification
 from models.users import PlanType, Subscription, SubscriptionStatus, PlanLimits
@@ -264,7 +264,7 @@ def _build_subscription_from_stripe_object(stripe_sub: dict) -> Subscription | N
     return project_subscription(stripe_sub, plan, get_plan_limits(plan))
 
 
-def _update_subscription_from_session(uid: str, session: stripe.checkout.Session):
+def _update_subscription_from_session(uid: str, session: stripe.checkout.Session) -> bool:
     customer_id = session.get('customer')
     subscription_id = session.get('subscription')
 
@@ -276,6 +276,8 @@ def _update_subscription_from_session(uid: str, session: stripe.checkout.Session
             stripe_sub = stripe.Subscription.retrieve(subscription_id)
             if stripe_sub:
                 new_subscription = _build_subscription_from_stripe_object(stripe_sub.to_dict())
+                if new_subscription is None:
+                    return False
                 if new_subscription:
                     users_db.update_user_subscription(uid, new_subscription.model_dump())
                     logger.info(f"Subscription for user {uid} updated from session {session.id}.")
@@ -283,6 +285,8 @@ def _update_subscription_from_session(uid: str, session: stripe.checkout.Session
         logger.warning(
             f"Stripe webhook: user {uid} not found in Firestore, " f"skipping checkout session subscription update"
         )
+
+    return True
 
 
 def _try_reactivate_subscription(uid: str, target_price_id: str) -> dict | None:
@@ -954,7 +958,7 @@ async def _handle_stripe_event(event: dict, background_tasks: BackgroundTasks | 
                 if checkout_decision.outcome == 'duplicate_checkout':
                     logger.warning(f"Duplicate webhook event for existing subscription: {session.get('subscription')}")
                     return {"status": "success", "message": "Subscription already processed."}
-                else:
+                elif 'cancel_old_subscription' in checkout_decision.effects:
                     # Cancel the old subscription to prevent double-charging
                     old_sub_id = existing_subscription.stripe_subscription_id
                     logger.info(
@@ -968,7 +972,9 @@ async def _handle_stripe_event(event: dict, background_tasks: BackgroundTasks | 
                             f"Failed to cancel old subscription {old_sub_id} for user {uid}: {sanitize(str(e))}"
                         )
 
-            await run_blocking(stripe_executor, _update_subscription_from_session, uid, session)
+            persisted = await run_blocking(stripe_executor, _update_subscription_from_session, uid, session)
+            if persisted is False:
+                return RetryableBillingSkip(status='success')
             await run_blocking(db_executor, set_credits_invalidation_signal, uid)
             await run_blocking(db_executor, clear_trial_paywall_cache, uid)
             subscription = await run_blocking(db_executor, users_db.get_user_subscription, uid)
@@ -1098,7 +1104,8 @@ async def _handle_stripe_event(event: dict, background_tasks: BackgroundTasks | 
                         billing_owner_confirmed,
                     ),
                 )
-                assert decision.next_state is not None
+                if decision.next_state is None:
+                    raise ValueError('Subscription transition requires a projected state')
                 new_subscription = decision.next_state
                 adopted_active_paid = decision.adopted_active_paid
                 try:
@@ -1155,6 +1162,7 @@ async def _handle_stripe_event(event: dict, background_tasks: BackgroundTasks | 
                     f"Stripe webhook: could not build subscription for user {uid}, "
                     f"subscription {subscription_id}, price {price_id} — unknown price ID"
                 )
+                return RetryableBillingSkip(status='success')
 
     # Handle subscription schedule events
     if event['type'] in [
@@ -1190,7 +1198,8 @@ async def _handle_stripe_event(event: dict, background_tasks: BackgroundTasks | 
                                     schedule_status=schedule_obj.get('status'),
                                 ),
                             )
-                            assert decision.next_state is not None
+                            if decision.next_state is None:
+                                raise ValueError('Schedule transition requires a projected state')
                             new_subscription = decision.next_state
                             await run_blocking(
                                 db_executor, users_db.update_user_subscription, uid, new_subscription.model_dump()
@@ -1238,7 +1247,8 @@ async def _handle_stripe_event(event: dict, background_tasks: BackgroundTasks | 
                                     schedule_status=schedule_obj.get('status'),
                                 ),
                             )
-                            assert decision.next_state is not None
+                            if decision.next_state is None:
+                                raise ValueError('Schedule transition requires a projected state')
                             new_subscription = decision.next_state
                             await run_blocking(
                                 db_executor, users_db.update_user_subscription, uid, new_subscription.model_dump()

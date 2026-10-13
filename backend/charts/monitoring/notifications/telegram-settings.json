@@ -1,0 +1,5 @@
+{
+  "message": "{{ template \"omi.telegram.message\" . }}",
+  "parse_mode": "None",
+  "disable_web_page_preview": true
+}

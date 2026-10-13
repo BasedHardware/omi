@@ -89,8 +89,6 @@ def claim_event(event: dict[str, Any], token: str, *, now: datetime | None = Non
                 'expires_at': expiry,
             },
         )
-        if watermark:
-            transaction.set(watermark, {'latest_created': max(created, latest), 'expires_at': expiry})
         return Claim('claimed', token, out_of_order)
 
     return claim(client.transaction())
@@ -129,6 +127,14 @@ def finish_event(
                 'out_of_order': out_of_order,
             },
         )
+        if succeeded and watermark:
+            transaction.set(
+                watermark,
+                {
+                    'latest_created': max(existing['event_created'], order.get('latest_created', -1)),
+                    'expires_at': now + timedelta(days=RETENTION_DAYS),
+                },
+            )
         return bool(out_of_order)
 
     return finish(client.transaction())
