@@ -167,6 +167,8 @@ Source: events.json. Presence is not task success. Existing SDK provenance/ident
 | subscriptionCancelConfirmed | Subscription Cancel Confirmed | reason, has_details | active | subscription-funnel |
 | subscriptionCancelKeptPlan | Subscription Cancel Kept Plan | step, reason | active | subscription-funnel |
 | subscriptionCancelAbandoned | Subscription Cancel Abandoned | step, reason | active | subscription-funnel |
+| guidedIntroPayoffShown | Guided Intro Payoff Shown | memories_count, answer_source, latency_ms | active | guided-intro-payoff-presence |
+| guidedIntroPayoffContinued | Guided Intro Payoff Continued | none | active | guided-intro-payoff-presence |
 
 ## App Review Opportunity decisions
 

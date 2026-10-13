@@ -88,6 +88,8 @@ void main() {
     await tester.ensureVisible(find.byKey(const Key('introduction_next')));
     await tester.tap(find.byKey(const Key('introduction_next')));
     await tester.pumpAndSettle();
+    await flow.confirmAnswer();
+    await tester.pumpAndSettle();
     expect(flow.promptIndex, 1);
     expect(flow.active, isTrue);
     expect(find.byKey(const Key('speech_profile_start')), findsNothing);
@@ -148,6 +150,7 @@ void main() {
     io.text = 'Launch my project';
     io.speak();
     await flow.next();
+    await flow.confirmAnswer();
     await tester.pumpAndSettle();
     expect(find.text('My goal'), findsOneWidget);
     expect(io.goals, isEmpty);
@@ -155,10 +158,10 @@ void main() {
     await tester.pumpAndSettle();
     expect(io.goals, ['Launch my project']);
     expect(io.remembered, isEmpty);
-    expect(find.text('Your goal is saved'), findsOneWidget);
+    expect(find.byKey(const Key('payoff_title')), findsOneWidget);
   });
 
-  testWidgets('one save action saves voice and goal and exits without Continue', (tester) async {
+  testWidgets('one save action saves voice and goal and presents payoff before Continue', (tester) async {
     final io = FakeVoiceIO();
     final flow = GuidedVoiceController(io);
     addTearDown(flow.dispose);
@@ -169,6 +172,7 @@ void main() {
     io.text = 'Right now my number one goal is to ship Omi.';
     io.speak();
     await flow.next();
+    await flow.confirmAnswer();
     var exits = 0;
     await pump(tester, flow, next: () => exits++);
     expect(find.text('Ship Omi'), findsOneWidget);
@@ -177,6 +181,9 @@ void main() {
     await tester.pumpAndSettle();
     expect(io.uploads, hasLength(1));
     expect(io.goals, ['Ship Omi']);
+    expect(exits, 0);
+    expect(find.byKey(const Key('payoff_title')), findsOneWidget);
+    await tester.tap(find.byKey(const Key('payoff_continue')));
     expect(exits, 1);
   });
 
@@ -191,6 +198,7 @@ void main() {
     io.text = 'My goal is to ship Omi.';
     io.speak();
     await flow.next();
+    await flow.confirmAnswer();
     await pump(tester, flow);
     await tester.ensureVisible(find.text('Use Original Wording'));
     await tester.tap(find.text('Use Original Wording'));
@@ -209,6 +217,7 @@ void main() {
     await flow.start();
     io.speak();
     await flow.next();
+    await flow.confirmAnswer();
     await pump(tester, flow, size: const Size(320, 568), scale: 2);
     tester.view.viewInsets = const FakeViewPadding(bottom: 240);
     addTearDown(tester.view.resetViewInsets);
@@ -227,6 +236,7 @@ void main() {
     await flow.start();
     io.speak();
     await flow.next();
+    await flow.confirmAnswer();
     await flow.skipPrompt();
     await flow.skipPrompt();
     await flow.skipPrompt();
@@ -247,6 +257,7 @@ void main() {
     await flow.start();
     io.speak();
     await flow.next();
+    await flow.confirmAnswer();
     await flow.skipPrompt();
     await flow.skipPrompt();
     await flow.skipPrompt();

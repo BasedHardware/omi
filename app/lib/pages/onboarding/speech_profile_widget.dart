@@ -14,6 +14,7 @@ import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/logger.dart';
 import 'guided_voice_controller.dart';
 import 'guided_voice_io.dart';
+import 'guided_voice_payoff.dart';
 
 /// A bounded introduction: user-paced prompts, independent voice enrollment,
 /// and explicit review before any personal statement becomes a memory.
@@ -50,6 +51,7 @@ class _SpeechProfileWidgetState extends State<SpeechProfileWidget> with WidgetsB
   Future<void> Function()? _resumeCapture;
   bool _captureChecked = false;
   final _scrollController = ScrollController();
+  final _typedAnswer = TextEditingController();
   int _shownPrompt = 0;
   bool _reportedBusy = false;
   String? _lastError;
@@ -86,7 +88,7 @@ class _SpeechProfileWidgetState extends State<SpeechProfileWidget> with WidgetsB
   /// Re-reads the microphone permission while the step shows the microphone error (on entering that
   /// error, and on return from Settings).
   void _refreshMicrophoneStatus() {
-    if (flow.error != 'microphone') return;
+    if (!flow.permissionBlocked) return;
     unawaited(() async {
       OmiPermissionStatus status;
       try {
@@ -124,6 +126,7 @@ class _SpeechProfileWidgetState extends State<SpeechProfileWidget> with WidgetsB
     flow.removeListener(_reportBusy);
     flow.removeListener(_checkMicrophone);
     _scrollController.dispose();
+    _typedAnswer.dispose();
     if (widget.controller == null) flow.dispose();
     final resume = _resumeCapture;
     if (resume != null) {
@@ -183,10 +186,8 @@ class _SpeechProfileWidgetState extends State<SpeechProfileWidget> with WidgetsB
       unawaited(context.read<GoalsProvider>().loadGoals());
     }
     if (flow.stage == IntroductionStage.done) {
-      _finishing = true;
       OmiHaptics.success();
-      OmiFeedback.confirm(context, copy('savedAll'));
-      widget.goNext();
+      _finishWithPayoff();
     } else {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted && _scrollController.hasClients) {
@@ -202,16 +203,35 @@ class _SpeechProfileWidgetState extends State<SpeechProfileWidget> with WidgetsB
     }
   }
 
+  void _finishWithPayoff() {
+    if (_finishing) return;
+    if (flow.savedAnswers.isEmpty) {
+      _finishing = true;
+      widget.goNext();
+      return;
+    }
+    final goal = flow.savedAnswers.where((a) => a.isGoal);
+    final fallback = goal.isNotEmpty ? goal.first.text : flow.savedAnswers.map((a) => a.text).join('\n\n');
+    unawaited(flow.showPayoff(context.l10n.guidedVoiceExperience('question'), fallback));
+  }
+
+  void _continuePayoff() {
+    if (_finishing) return;
+    _finishing = true;
+    flow.continuePayoff();
+    widget.goNext();
+  }
+
   Future<void> _skip() async {
     flow.markSkipped();
     await flow.pause();
     if (mounted) widget.onSkip();
   }
 
-  Widget _button(String text, VoidCallback? onPressed, String key, {bool secondary = false}) {
-    return secondary
-        ? OmiButton.secondary(key: Key(key), label: text, onPressed: onPressed, expand: true)
-        : OmiButton(key: Key(key), label: text, onPressed: onPressed, expand: true);
+  Widget _button(String text, VoidCallback? onPressed, String key) {
+    final labelStyle = OmiType.callout
+        .copyWith(fontWeight: FontWeight.w600, fontFamily: Theme.of(context).textTheme.bodyMedium?.fontFamily);
+    return OmiButton(key: Key(key), label: text, onPressed: onPressed, expand: true, labelStyle: labelStyle);
   }
 
   /// A low-emphasis text action ("Try another prompt", "Skip Question").
@@ -287,6 +307,18 @@ class _SpeechProfileWidgetState extends State<SpeechProfileWidget> with WidgetsB
             ),
             child: Text(copy('another'), textAlign: TextAlign.center),
           ),
+        if (flow.stage == IntroductionStage.typing) ...[
+          const SizedBox(height: OmiSpacing.md),
+          TextField(
+            key: Key('introduction_typed_${flow.promptIndex}'),
+            controller: _typedAnswer,
+            minLines: 3,
+            maxLines: 5,
+            maxLength: flow.isGoalPrompt ? 500 : 2000,
+            onChanged: (_) => setState(() {}),
+            decoration: InputDecoration(labelText: context.l10n.guidedVoiceExperience('typing')),
+          ),
+        ],
         if (flow.active) ...[
           Semantics(
             label: context.l10n.microphone,
@@ -298,6 +330,8 @@ class _SpeechProfileWidgetState extends State<SpeechProfileWidget> with WidgetsB
               child: CustomPaint(painter: AudioWavePainter(levels: _waveform)),
             ),
           ),
+          Text(context.l10n.secondsCount(flow.seconds.floor()),
+              key: const Key('introduction_elapsed'), style: OmiType.footnote),
           // Only while the microphone hears nothing; speech coming through needs no instructions.
           if (flow.quiet) ...[
             const SizedBox(height: OmiSpacing.xs),
@@ -309,21 +343,24 @@ class _SpeechProfileWidgetState extends State<SpeechProfileWidget> with WidgetsB
             ),
           ],
         ] else if (flow.busy || _stoppingCapture)
-          _status(transcribing ? context.l10n.transcribing : context.l10n.loading, loading: true)
+          _status(transcribing ? context.l10n.guidedVoiceExperience('transcribing') : context.l10n.loading,
+              loading: true)
         else if (paused)
           _status(context.l10n.recordingPaused),
+        if (flow.stage == IntroductionStage.confirmation) ...[
+          const SizedBox(height: OmiSpacing.md),
+          _status(context.l10n.guidedVoiceExperience('heard'), success: true),
+        ],
         if (flow.transcript.isNotEmpty) ...[
           const SizedBox(height: OmiSpacing.md),
           Text(
             flow.transcript,
             key: const Key('introduction_transcript'),
             textAlign: TextAlign.center,
-            maxLines: 3,
-            overflow: TextOverflow.ellipsis,
             style: OmiType.body.copyWith(color: OmiColors.textSecondary, height: 1.4),
           ),
         ],
-        if (flow.error == 'microphone') ...[
+        if (flow.permissionBlocked) ...[
           const SizedBox(height: OmiSpacing.sm),
           OmiPermissionRow(
             key: const Key('introduction_microphone_permission'),
@@ -336,7 +373,11 @@ class _SpeechProfileWidgetState extends State<SpeechProfileWidget> with WidgetsB
         ] else if (flow.error != null) ...[
           const SizedBox(height: OmiSpacing.sm),
           Text(
-            copy('transcriptionError'),
+            context.l10n.guidedVoiceExperience(flow.error == 'transcription_unavailable'
+                ? 'unavailable'
+                : flow.error == 'engine_start_failed'
+                    ? 'engine'
+                    : 'failed'),
             textAlign: TextAlign.center,
             style: TextStyle(color: OmiColors.textPrimary, height: 1.5),
           ),
@@ -456,8 +497,45 @@ class _SpeechProfileWidgetState extends State<SpeechProfileWidget> with WidgetsB
     // Scaffold removes consumed insets from its body MediaQuery. Read the
     // view to retain keyboard visibility after the body has been resized.
     final editing = View.of(context).viewInsets.bottom > 0;
+    if (flow.stage == IntroductionStage.payoff) {
+      return [_button(context.l10n.continueButton, _continuePayoff, 'payoff_continue')];
+    }
     if (flow.stage == IntroductionStage.done) {
-      return [_button(context.l10n.continueButton, widget.goNext, 'introduction_continue')];
+      return [_button(context.l10n.continueButton, _finishWithPayoff, 'introduction_continue')];
+    }
+    if (flow.stage == IntroductionStage.typing) {
+      return [
+        _button(
+            context.l10n.guidedVoiceExperience('answer'),
+            _typedAnswer.text.trim().isEmpty
+                ? null
+                : () {
+                    final text = _typedAnswer.text;
+                    _typedAnswer.clear();
+                    FocusScope.of(context).unfocus();
+                    unawaited(flow.submitTyped(text));
+                  },
+            'introduction_save_typed'),
+        _textAction(copy('skipPrompt'), () {
+          _typedAnswer.clear();
+          unawaited(flow.skipPrompt());
+        }, 'introduction_skip_prompt'),
+      ];
+    }
+    if (flow.stage == IntroductionStage.confirmation) {
+      return [
+        _button(context.l10n.guidedVoiceExperience('confirm'), () => unawaited(flow.confirmAnswer()),
+            'introduction_confirm'),
+        _textAction(
+            context.l10n.guidedVoiceExperience('type'), () => unawaited(flow.typeInstead()), 'introduction_type'),
+      ];
+    }
+    if (flow.error != null && flow.promptIndex < GuidedVoiceController.promptCount && !flow.busy) {
+      return [
+        _button(context.l10n.guidedVoiceExperience('type'), () => unawaited(flow.typeInstead()), 'introduction_type'),
+        _textAction(context.l10n.guidedVoiceExperience('retry'), () => unawaited(_start()), 'speech_profile_start'),
+        _textAction(copy('skipPrompt'), () => unawaited(flow.skipPrompt()), 'introduction_skip_prompt'),
+      ];
     }
     if (flow.promptIndex >= GuidedVoiceController.promptCount && flow.answers.isEmpty) {
       return [_button(context.l10n.continueButton, widget.onSkip, 'introduction_continue')];
@@ -485,7 +563,7 @@ class _SpeechProfileWidgetState extends State<SpeechProfileWidget> with WidgetsB
         if (!editing)
           TextButton(
             key: const Key('introduction_leave_review'),
-            onPressed: flow.busy ? null : widget.goNext,
+            onPressed: flow.busy ? null : _finishWithPayoff,
             child: Text(
               copy(_attemptedSave ? 'continueSaved' : 'without'),
               textAlign: TextAlign.center,
@@ -533,6 +611,7 @@ class _SpeechProfileWidgetState extends State<SpeechProfileWidget> with WidgetsB
     return [
       _button(copy('start'), _stoppingCapture ? null : () => unawaited(_start()), 'speech_profile_start'),
       const SizedBox(height: OmiSpacing.xs),
+      _textAction(context.l10n.guidedVoiceExperience('type'), () => unawaited(flow.typeInstead()), 'introduction_type'),
       Center(child: _textAction(context.l10n.skip, () => unawaited(_skip()), 'speech_profile_skip_intro')),
     ];
   }
@@ -601,7 +680,13 @@ class _SpeechProfileWidgetState extends State<SpeechProfileWidget> with WidgetsB
               child: SafeArea(
                 child: Column(
                   children: [
-                    Expanded(child: done || reviewing ? _scrolling(done) : _prompting()),
+                    Expanded(
+                        child: flow.stage == IntroductionStage.payoff
+                            ? SingleChildScrollView(
+                                padding: const EdgeInsets.all(24), child: GuidedVoicePayoff(flow: flow))
+                            : done || reviewing
+                                ? _scrolling(done)
+                                : _prompting()),
                     Padding(
                       padding: const EdgeInsets.fromLTRB(24, 8, 24, 12),
                       child: Column(

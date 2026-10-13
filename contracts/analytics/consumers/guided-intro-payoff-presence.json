@@ -1,0 +1,17 @@
+{
+  "id": "guided-intro-payoff-presence",
+  "kind": "question",
+  "owner": "Mobile onboarding",
+  "question": "Are saved-answer payoffs shown and continued in this mobile build, and how many use chat versus the deterministic summary?",
+  "query": "contracts/analytics/consumers/guided-intro-payoff-presence.sql",
+  "events": [
+    "guidedIntroPayoffShown",
+    "guidedIntroPayoffContinued"
+  ],
+  "namespace_property": "$app_namespace",
+  "dimensions": [
+    "git_sha",
+    "build_number"
+  ],
+  "zero_policy": "No rows means no recorded payoff in this namespace/build; it does not imply a failure without successful answer saves."
+}

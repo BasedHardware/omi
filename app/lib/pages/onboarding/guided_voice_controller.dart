@@ -7,8 +7,22 @@ import 'package:uuid/uuid.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
 import 'goal_text_cleanup.dart';
+import 'package:omi/backend/http/api_fallback.dart';
+import 'package:omi/utils/analytics/registry/events.g.dart';
+import 'package:omi/utils/analytics/registry/typed_events.dart';
 
 class VoiceEnrollmentUnavailable implements Exception {}
+
+class GuidedVoiceFailure implements Exception {
+  const GuidedVoiceFailure(this.failureClass);
+  final String failureClass;
+}
+
+/// Optional experience boundary keeps existing recorder-only callers independent.
+abstract class GuidedVoiceExperienceIO {
+  Future<bool> preflight();
+  Future<String> ask(String question, List<String> savedAnswers);
+}
 
 enum IntroductionStage {
   ready,
@@ -16,6 +30,9 @@ enum IntroductionStage {
   recording,
   paused,
   transcribing,
+  confirmation,
+  typing,
+  payoff,
   review,
   savingVoice,
   voiceError,
@@ -59,8 +76,23 @@ class GuidedVoiceController extends ChangeNotifier {
     this.flowSource = 'first_run',
     this.flowVariant = 'guided_voice_v1',
     this.accountUid,
+    this.preflightTimeout = const Duration(seconds: 4),
+    this.payoffTimeout = const Duration(seconds: 8),
   });
   final GuidedVoiceIO io;
+  final Duration preflightTimeout;
+  final Duration payoffTimeout;
+  bool _preflightPassed = false;
+  String payoffAnswer = '';
+  String payoffSource = 'fallback';
+  bool payoffLoading = false;
+  bool _payoffStarted = false;
+  bool _payoffShown = false;
+  bool _payoffContinued = false;
+  DateTime? _payoffStartedAt;
+  String get transcriptionPath => io.livePreview ? 'on_device' : 'cloud';
+  List<IntroductionAnswer> get savedAnswers => answers.where((a) => a.saved).toList(growable: false);
+  bool get permissionBlocked => error == 'permission_denied' || error == 'permission_permanently_denied';
   final String flowSource;
   final String flowVariant;
   final String? accountUid;
@@ -135,16 +167,18 @@ class GuidedVoiceController extends ChangeNotifier {
 
   int _promptDurationMs() => _promptViewedAt == null ? 0 : DateTime.now().difference(_promptViewedAt!).inMilliseconds;
 
-  void _recordCompletedPrompt({required String result, required bool transcriptPresent}) {
-    PlatformManager.instance.analytics.guidedIntroPromptCompleted(
-      sessionId: _sessionId,
-      source: flowSource,
-      variant: flowVariant,
-      promptIndex: promptIndex,
-      result: result,
-      durationMs: _promptDurationMs(),
-      transcriptPresent: transcriptPresent,
-    );
+  void _recordCompletedPrompt({required String result, required bool transcriptPresent, String? failureClass}) {
+    PlatformManager.instance.analytics.track('Guided Intro Prompt Completed', properties: {
+      'session_id': _sessionId,
+      'source': flowSource,
+      'variant': flowVariant,
+      'prompt_index': promptIndex,
+      'result': result,
+      'duration_ms': _promptDurationMs(),
+      'transcript_present': transcriptPresent,
+      'transcription_path': transcriptionPath,
+      if (failureClass != null) 'failure_class': failureClass,
+    });
   }
 
   void _recordTerminal({required String completionMode}) {
@@ -203,7 +237,7 @@ class GuidedVoiceController extends ChangeNotifier {
   bool _current(int generation) => !_disposed && _generation == generation;
 
   Future<void> start() async {
-    if (busy || active || _disposed) return;
+    if (busy || active || _disposed || promptIndex >= promptCount) return;
     markStarted();
     _autoStart = true;
     final generation = ++_generation;
@@ -212,6 +246,12 @@ class GuidedVoiceController extends ChangeNotifier {
     _quietSeconds = 0;
     _emit();
     try {
+      if (!_preflightPassed && io is GuidedVoiceExperienceIO) {
+        final available = await (io as GuidedVoiceExperienceIO).preflight().timeout(preflightTimeout);
+        if (!_current(generation)) return;
+        if (!available) throw const GuidedVoiceFailure('transcription_unavailable');
+        _preflightPassed = true;
+      }
       if (!_prepared) {
         await io.prepare();
         _prepared = true;
@@ -253,17 +293,22 @@ class GuidedVoiceController extends ChangeNotifier {
         attempt: _recordingAttempts,
       );
       _previewTimer = Timer.periodic(const Duration(seconds: 3), (_) => _updatePreview(generation));
-    } catch (_) {
+    } catch (failure) {
       if (!_current(generation)) return;
       stage = IntroductionStage.paused;
-      error = 'microphone';
-      PlatformManager.instance.analytics.guidedIntroRecordingFailed(
-        sessionId: _sessionId,
-        source: flowSource,
-        variant: flowVariant,
-        promptIndex: promptIndex,
-        failureClass: 'microphone',
-      );
+      error = failure is GuidedVoiceFailure
+          ? failure.failureClass
+          : !_preflightPassed && io is GuidedVoiceExperienceIO
+              ? 'transcription_unavailable'
+              : 'engine_start_failed';
+      PlatformManager.instance.analytics.track('Guided Intro Recording Failed', properties: {
+        'session_id': _sessionId,
+        'source': flowSource,
+        'variant': flowVariant,
+        'prompt_index': promptIndex,
+        'failure_class': error!,
+        'transcription_path': transcriptionPath,
+      });
       await io.stop();
     }
     _emit();
@@ -309,30 +354,67 @@ class GuidedVoiceController extends ChangeNotifier {
         await _preview;
       } catch (_) {}
       if (!_current(generation)) return;
-      final audio = _frames.toBytes();
-      final text = (await io.transcribe(audio)).trim();
+      final text = (await io.transcribe(_frames.toBytes()).timeout(const Duration(seconds: 30))).trim();
       if (!_current(generation)) return;
-      if (text.isEmpty) throw StateError('No speech');
-      final uid = accountUid ?? (SharedPreferencesUtil().uid.isNotEmpty ? SharedPreferencesUtil().uid : null);
-      final answerId = isGoalPrompt ? 'intro-goal-${uid ?? _sessionId}' : 'intro-$_sessionId-${answers.length}';
-      final answer = IntroductionAnswer(
-        isGoalPrompt ? cleanIntroductionGoal(text) : text,
-        audio,
-        answerId,
-        isGoal: isGoalPrompt,
-        originalText: isGoalPrompt ? text : null,
-      );
-      answer.keep = answer.text.isNotEmpty;
-      answers.add(answer);
-      _recordCompletedPrompt(result: 'answered', transcriptPresent: true);
-      await _advance();
-    } catch (_) {
+      if (text.isEmpty) throw const GuidedVoiceFailure('transcribe_empty');
+      transcript = text;
+      stage = IntroductionStage.confirmation;
+      _emit();
+    } catch (failure) {
       if (!_current(generation)) return;
       stage = IntroductionStage.paused;
-      error = 'transcription';
-      _recordCompletedPrompt(result: 'transcription_failed', transcriptPresent: false);
+      error = failure is GuidedVoiceFailure
+          ? failure.failureClass
+          : failure is TimeoutException
+              ? 'transcribe_timeout'
+              : 'transcribe_http_error';
+      _recordCompletedPrompt(result: 'transcription_failed', transcriptPresent: false, failureClass: error);
       _emit();
     }
+  }
+
+  Future<void> confirmAnswer() async {
+    if (stage != IntroductionStage.confirmation || _disposed) return;
+    await _acceptAnswer(transcript, _frames.toBytes());
+  }
+
+  Future<void> typeInstead() async {
+    if (busy || _disposed || promptIndex >= promptCount) return;
+    ++_generation;
+    _autoStart = false;
+    _previewTimer?.cancel();
+    final generation = _generation;
+    stage = IntroductionStage.starting;
+    _emit();
+    await io.stop();
+    if (!_current(generation)) return;
+    stage = IntroductionStage.typing;
+    transcript = '';
+    _emit();
+  }
+
+  Future<void> submitTyped(String text) async {
+    if (stage != IntroductionStage.typing || busy || _disposed || text.trim().isEmpty) return;
+    markStarted();
+    await _acceptAnswer(text.trim(), Uint8List(0));
+  }
+
+  Future<void> _acceptAnswer(String text, Uint8List audio) async {
+    final uid = accountUid?.isNotEmpty == true
+        ? accountUid
+        : (SharedPreferencesUtil().uid.isNotEmpty ? SharedPreferencesUtil().uid : null);
+    final answerId = isGoalPrompt ? 'intro-goal-${uid ?? _sessionId}' : 'intro-$_sessionId-${answers.length}';
+    final answer = IntroductionAnswer(
+      isGoalPrompt ? cleanIntroductionGoal(text) : text,
+      audio,
+      answerId,
+      isGoal: isGoalPrompt,
+      originalText: isGoalPrompt ? text : null,
+    );
+    answer.keep = answer.text.isNotEmpty;
+    answers.add(answer);
+    _recordCompletedPrompt(result: 'answered', transcriptPresent: true);
+    await _advance();
   }
 
   Future<void> skipPrompt() async {
@@ -422,12 +504,14 @@ class GuidedVoiceController extends ChangeNotifier {
     _savingAll = true;
     error = null;
     try {
-      if (!voiceSaved) await _saveVoice();
+      if (!voiceSaved && answers.any((a) => a.audio.isNotEmpty)) await _saveVoice();
       if (_disposed) return;
       voiceError = voiceSaved ? null : error;
       await _saveMemories();
       if (_disposed) return;
-      stage = voiceSaved && allMemoriesSaved ? IntroductionStage.done : IntroductionStage.review;
+      stage = allMemoriesSaved && (voiceSaved || answers.every((a) => a.audio.isEmpty))
+          ? IntroductionStage.done
+          : IntroductionStage.review;
       if (stage == IntroductionStage.done) _recordTerminal(completionMode: 'saved');
     } finally {
       _savingAll = false;
@@ -611,6 +695,55 @@ class GuidedVoiceController extends ChangeNotifier {
       error = saveError ?? 'memories';
     }
     _emit();
+  }
+
+  Future<void> showPayoff(String question, String fallback) async {
+    if (_disposed || _payoffStarted || savedAnswers.isEmpty) return;
+    _payoffStarted = true;
+    _payoffStartedAt = DateTime.now();
+    stage = IntroductionStage.payoff;
+    payoffAnswer = fallback;
+    payoffLoading = true;
+    _emit();
+    try {
+      if (io is! GuidedVoiceExperienceIO) throw StateError('Chat unavailable');
+      final text = await (io as GuidedVoiceExperienceIO)
+          .ask(question, savedAnswers.map((a) => a.text).toList(growable: false))
+          .timeout(payoffTimeout);
+      if (_disposed || _payoffContinued) return;
+      if (text.trim().isEmpty) throw StateError('Empty answer');
+      payoffAnswer = text.trim();
+      payoffSource = 'chat';
+    } catch (_) {
+      recordFallback(const ApiFallbackEvent(reason: ApiFallbackReason.staleData, outcome: ApiFallbackOutcome.degraded));
+      // The saved-answer summary is already visible and needs no network.
+    } finally {
+      if (!_disposed && !_payoffContinued) {
+        payoffLoading = false;
+        _recordPayoffShown();
+        _emit();
+      }
+    }
+  }
+
+  void _recordPayoffShown() {
+    if (_payoffShown) return;
+    _payoffShown = true;
+    const TypedEvents().emit(GuidedIntroPayoffShown(
+      memoriesCount: savedMemoryCount,
+      answerSource: payoffSource == 'chat'
+          ? GuidedIntroPayoffShownAnswerSource.chat
+          : GuidedIntroPayoffShownAnswerSource.fallback,
+      latencyMs: _payoffStartedAt == null ? 0 : DateTime.now().difference(_payoffStartedAt!).inMilliseconds,
+    ));
+  }
+
+  void continuePayoff() {
+    if (_disposed || _payoffContinued || stage != IntroductionStage.payoff) return;
+    _payoffContinued = true;
+    payoffLoading = false;
+    _recordPayoffShown();
+    const TypedEvents().emit(const GuidedIntroPayoffContinued());
   }
 
   void markSkipped() {

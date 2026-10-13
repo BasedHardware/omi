@@ -2452,3 +2452,29 @@ final class SubscriptionCancelAbandoned extends RegisteredEvent {
   @override
   Map<String, Object> get properties => {"step": step, "reason": reason.wireName};
 }
+
+enum GuidedIntroPayoffShownAnswerSource {
+  chat("chat"),
+  fallback("fallback");
+  const GuidedIntroPayoffShownAnswerSource(this.wireName);
+  final String wireName;
+}
+
+final class GuidedIntroPayoffShown extends RegisteredEvent {
+  const GuidedIntroPayoffShown({required this.memoriesCount, required this.answerSource, required this.latencyMs});
+  final int memoriesCount;
+  final GuidedIntroPayoffShownAnswerSource answerSource;
+  final int latencyMs;
+  @override
+  String get wireName => "Guided Intro Payoff Shown";
+  @override
+  Map<String, Object> get properties => {"memories_count": memoriesCount, "answer_source": answerSource.wireName, "latency_ms": latencyMs};
+}
+
+final class GuidedIntroPayoffContinued extends RegisteredEvent {
+  const GuidedIntroPayoffContinued();
+  @override
+  String get wireName => "Guided Intro Payoff Continued";
+  @override
+  Map<String, Object> get properties => {};
+}
