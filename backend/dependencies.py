@@ -370,7 +370,7 @@ async def _check_api_key_rate_limit_async(
     )
 
 
-async def _check_dev_api_key_rate_limit_async(
+async def check_developer_api_key_rate_limit(
     *,
     request: Optional[Request],
     auth: ApiKeyAuth,
@@ -405,8 +405,8 @@ async def _check_conversation_read_budgets_async(
     per-route policy would hand each key a fresh bucket and raise the total number of
     conversation reads it can make -- the opposite of what these limits are for.
     """
-    await _check_dev_api_key_rate_limit_async(request=request, auth=auth, policy_name="dev:conversation_reads_total")
-    await _check_dev_api_key_rate_limit_async(request=request, auth=auth, policy_name=route_policy_name)
+    await check_developer_api_key_rate_limit(request=request, auth=auth, policy_name="dev:conversation_reads_total")
+    await check_developer_api_key_rate_limit(request=request, auth=auth, policy_name=route_policy_name)
 
 
 async def get_auth_with_conversations_read(
@@ -445,7 +445,7 @@ async def get_uid_with_conversations_read_ask(
     a leaked or overused key can't turn it into an unbounded billable endpoint.
     """
     _require_conversations_read_scope(auth)
-    await _check_dev_api_key_rate_limit_async(request=request, auth=auth, policy_name="dev:ask")
+    await check_developer_api_key_rate_limit(request=request, auth=auth, policy_name="dev:ask")
     return auth.uid
 
 
@@ -490,7 +490,7 @@ async def get_uid_with_conversations_from_segments_write(
     can never raise the aggregate conversation-write limit. Failure logging
     includes remote IP and user agent: this route is a scripted-abuse target.
     """
-    await _check_dev_api_key_rate_limit_async(
+    await check_developer_api_key_rate_limit(
         request=request,
         auth=auth,
         policy_name="dev:conversations_from_segments",

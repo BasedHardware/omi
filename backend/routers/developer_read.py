@@ -12,7 +12,7 @@ from dependencies import (
     get_api_key_auth,
     get_auth_with_conversations_read,
     get_developer_memory_default_memory_read_context,
-    _check_dev_api_key_rate_limit_async,
+    check_developer_api_key_rate_limit,
 )
 from utils.external_read_contract import reject_unknown_query, utc_window
 from utils.scopes import has_scope
@@ -57,7 +57,7 @@ def external_read_scope(scope: str):
         if not has_scope(auth.scopes, scope):
             raise HTTPException(status_code=403, detail=f"Insufficient permissions. Required scope: {scope}")
         # Share the existing read ceiling; new endpoints cannot multiply a key's budget.
-        await _check_dev_api_key_rate_limit_async(request=request, auth=auth, policy_name="dev:conversations_read")
+        await check_developer_api_key_rate_limit(request=request, auth=auth, policy_name="dev:conversations_read")
         return auth
 
     return authorize
@@ -140,7 +140,13 @@ def get_people(request: Request, auth: ApiKeyAuth = Depends(external_read_scope(
     return _tool_call(handler, auth.uid, {})
 
 
-@router.get('/v1/dev/user/profile', tags=['Profile'], operation_id='getUserProfile', response_model=ProfileResponse)
+@router.get(
+    '/v1/dev/user/profile',
+    tags=['Profile'],
+    operation_id='getUserProfile',
+    response_model=ProfileResponse,
+    response_model_exclude_unset=True,
+)
 def get_profile(request: Request, auth: ApiKeyAuth = Depends(external_read_scope('profile:read'))):
     from utils.mcp_server.handlers.profile import get_user_profile
 

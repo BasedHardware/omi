@@ -47,7 +47,7 @@ def routes():
                 get_api_key_auth=auth,
                 get_auth_with_conversations_read=auth,
                 get_developer_memory_default_memory_read_context=memory_auth,
-                _check_dev_api_key_rate_limit_async=charge,
+                check_developer_api_key_rate_limit=charge,
             ),
             'utils.memory.product_authorization': module(
                 'utils.memory.product_authorization',
@@ -144,3 +144,17 @@ def test_profile_and_screen_require_explicit_scopes_and_share_handlers(routes):
     assert screen.call_args.kwargs['cursor_kind'] == 'developer_screen_activity'
     assert screen.call_args.kwargs['cursor_token'] == 'prior'
     assert screen.call_args.kwargs['limit'] == 25
+
+
+def test_existing_profile_does_not_fabricate_an_absence_signal(routes):
+    client, app, _, auth, _, _, _, _, _, profile, _ = routes
+
+    async def scoped_auth():
+        return SimpleNamespace(uid='owner', scopes=['profile:read'])
+
+    app.dependency_overrides[auth] = scoped_auth
+    profile.return_value = {'profile_text': 'Synthetic stored profile', 'generated_at': None, 'data_sources_used': 0}
+    response = client.get('/v1/dev/user/profile')
+    assert response.status_code == 200
+    assert response.json() == profile.return_value
+    assert 'profile' not in response.json()
