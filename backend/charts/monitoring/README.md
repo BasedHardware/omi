@@ -671,6 +671,11 @@ Alerting is configured through Grafana unified alerting (not Prometheus AlertMan
 
 Loki ruler is configured to send alerts to AlertManager at `http://prod-kube-prometheus-stack-alertmanager:9093`.
 
+### Telegram notification quality
+
+See [template, severity timing, examples and supervisor rollout](notifications/README.md).
+Rules own direct notification timing; Helm does not provision the contact or template.
+
 ### Human-Impact Alert Contract
 
 Grafana rules are operational runbook entries, not raw metric dumps. The split files in `alerts/*.json` are the

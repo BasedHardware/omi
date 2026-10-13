@@ -1,0 +1,27 @@
+{{ define "omi.telegram.link" -}}
+{{- if and . (le (len .) 200) }}{{ . }}{{ else }}See rule in Grafana (link unavailable/oversized){{ end -}}
+{{- end }}
+{{ define "omi.telegram.message" -}}
+{{- $alerts := .Alerts.Firing -}}
+{{- if eq .Status "resolved" }}{{ $alerts = .Alerts.Resolved }}{{ end -}}
+{{- if $alerts -}}
+{{- $a := index $alerts 0 -}}
+{{- if eq .Status "resolved" }}✅ RESOLVED{{ else if eq $a.Labels.severity "critical" }}🚨{{ else }}⚠️ DIGEST{{ end }} {{ printf "%.100s" $a.Labels.alertname }} | {{ printf "%.80s" $a.Annotations.scope }}
+{{ if eq .Status "resolved" -}}
+Recovered: {{ len $alerts }} instance(s).
+Rule: {{ template "omi.telegram.link" $a.GeneratorURL }}
+{{- else -}}
+Firing: {{ len .Alerts.Firing }}; resolved: {{ len .Alerts.Resolved }}. First affected instance:
+Summary: {{ printf "%.180s" $a.Annotations.summary }}{{ if gt (len $a.Annotations.summary) 180 }}… (full text in rule){{ end }}
+Impact: {{ printf "%.180s" $a.Annotations.user_impact }}{{ if gt (len $a.Annotations.user_impact) 180 }}… (full text in rule){{ end }}
+Values: {{ if $a.Values }}{{ printf "%.100s" (printf "%v" $a.Values) }}{{ else }}unavailable; check panel{{ end }}
+Affected: pod={{ with $a.Labels.pod }}{{ printf "%.50s" . }}{{ else }}n/a{{ end }} lane={{ with $a.Labels.lane }}{{ printf "%.50s" . }}{{ else }}n/a{{ end }} provider={{ with $a.Labels.provider }}{{ printf "%.50s" . }}{{ else }}n/a{{ end }}
+Dashboard/panel: {{ if $a.PanelURL }}{{ template "omi.telegram.link" $a.PanelURL }}{{ else }}{{ template "omi.telegram.link" $a.DashboardURL }}{{ end }}
+Next: {{ printf "%.220s" $a.Annotations.safe_next_action }}{{ if gt (len $a.Annotations.safe_next_action) 220 }}… (full text in rule){{ end }}
+{{ with $a.Annotations.runbook }}Runbook: {{ printf "%.120s" . }}
+{{ end -}}
+Rule/all instances: {{ template "omi.telegram.link" $a.GeneratorURL }}
+Silence: {{ template "omi.telegram.link" $a.SilenceURL }}
+{{- end -}}
+{{- else }}Grafana notification has no instances; inspect Alerting.{{ end -}}
+{{- end }}

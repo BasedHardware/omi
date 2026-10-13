@@ -115,7 +115,8 @@
     },
     "isPaused": false,
     "notification_settings": {
-      "receiver": "Omi - Services Alerting (Telegram)"
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": ["alertname"], "group_wait": "30s", "group_interval": "5m", "repeat_interval": "4h"
     },
     "record": null
   },
@@ -235,7 +236,8 @@
     },
     "isPaused": false,
     "notification_settings": {
-      "receiver": "Omi - Services Alerting (Telegram)"
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": ["alertname"], "group_wait": "30s", "group_interval": "5m", "repeat_interval": "4h"
     },
     "record": null
   },
@@ -355,7 +357,8 @@
     },
     "isPaused": false,
     "notification_settings": {
-      "receiver": "Omi - Services Alerting (Telegram)"
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": ["alertname"], "group_wait": "30s", "group_interval": "5m", "repeat_interval": "4h"
     },
     "record": null
   },
@@ -475,7 +478,8 @@
     },
     "isPaused": false,
     "notification_settings": {
-      "receiver": "Omi - Services Alerting (Telegram)"
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": ["alertname"], "group_wait": "30s", "group_interval": "5m", "repeat_interval": "4h"
     },
     "record": null
   },
@@ -595,7 +599,8 @@
     },
     "isPaused": false,
     "notification_settings": {
-      "receiver": "Omi - Services Alerting (Telegram)"
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": ["alertname"], "group_wait": "30s", "group_interval": "5m", "repeat_interval": "4h"
     },
     "record": null
   },
@@ -735,7 +740,8 @@
     },
     "isPaused": false,
     "notification_settings": {
-      "receiver": "Omi - Services Alerting (Telegram)"
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": ["alertname"], "group_wait": "30s", "group_interval": "5m", "repeat_interval": "4h"
     },
     "record": null
   },
@@ -878,7 +884,8 @@
     },
     "isPaused": false,
     "notification_settings": {
-      "receiver": "Omi - Services Alerting (Telegram)"
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": ["alertname"], "group_wait": "30s", "group_interval": "5m", "repeat_interval": "4h"
     },
     "record": null
   }

@@ -138,7 +138,8 @@
     },
     "isPaused": false,
     "notification_settings": {
-      "receiver": "Omi - Services Alerting (Telegram)"
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": ["alertname"], "group_wait": "30s", "group_interval": "5m", "repeat_interval": "4h"
     },
     "record": null
   },
@@ -278,7 +279,8 @@
     },
     "isPaused": false,
     "notification_settings": {
-      "receiver": "Omi - Services Alerting (Telegram)"
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": ["alertname"], "group_wait": "30s", "group_interval": "5m", "repeat_interval": "4h"
     },
     "record": null
   },
@@ -420,7 +422,8 @@
     },
     "isPaused": false,
     "notification_settings": {
-      "receiver": "Omi - Services Alerting (Telegram)"
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": ["alertname"], "group_wait": "5m", "group_interval": "1h", "repeat_interval": "24h"
     },
     "record": null
   },
@@ -563,7 +566,8 @@
     },
     "isPaused": false,
     "notification_settings": {
-      "receiver": "Omi - Services Alerting (Telegram)"
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": ["alertname"], "group_wait": "5m", "group_interval": "1h", "repeat_interval": "24h"
     },
     "record": null
   },
@@ -706,7 +710,8 @@
     },
     "isPaused": false,
     "notification_settings": {
-      "receiver": "Omi - Services Alerting (Telegram)"
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": ["alertname"], "group_wait": "5m", "group_interval": "1h", "repeat_interval": "24h"
     },
     "record": null
   },
@@ -849,7 +854,8 @@
     },
     "isPaused": false,
     "notification_settings": {
-      "receiver": "Omi - Services Alerting (Telegram)"
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": ["alertname"], "group_wait": "30s", "group_interval": "5m", "repeat_interval": "4h"
     },
     "record": null
   },
@@ -948,7 +954,8 @@
     },
     "isPaused": false,
     "notification_settings": {
-      "receiver": "Omi - Services Alerting (Telegram)"
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": ["alertname"], "group_wait": "30s", "group_interval": "5m", "repeat_interval": "4h"
     },
     "record": null
   },
@@ -1047,7 +1054,8 @@
     },
     "isPaused": false,
     "notification_settings": {
-      "receiver": "Omi - Services Alerting (Telegram)"
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": ["alertname"], "group_wait": "30s", "group_interval": "5m", "repeat_interval": "4h"
     },
     "record": null
   },
@@ -1129,6 +1137,7 @@
     "for": "1m",
     "keep_firing_for": "0s",
     "annotations": {
+      "__dashboardUid__": "3714dbfa-114b-47a0-99ca-1a26354e792a",
       "summary": "A Parakeet worker hit a CUDA out-of-memory error while transcribing.",
       "user_impact": "Requests on the affected replica may fail or fall back to another STT provider until it recovers.",
       "scope": "One production Parakeet GPU pod (grouped by pod).",
@@ -1144,7 +1153,8 @@
     },
     "isPaused": false,
     "notification_settings": {
-      "receiver": "Omi - Services Alerting (Telegram)"
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": ["alertname"], "group_wait": "30s", "group_interval": "5m", "repeat_interval": "4h"
     },
     "record": null
   },
@@ -1226,6 +1236,7 @@
     "for": "10m",
     "keep_firing_for": "0s",
     "annotations": {
+      "__dashboardUid__": "3714dbfa-114b-47a0-99ca-1a26354e792a",
       "summary": "A GPU has used more than 90% of its framebuffer memory for 10 minutes.",
       "user_impact": "No user impact yet; the next allocation spike on this GPU may OOM and fail transcription requests.",
       "scope": "One GPU on one GKE node (DCGM exporter, grouped by Hostname and gpu).",
@@ -1241,7 +1252,8 @@
     },
     "isPaused": false,
     "notification_settings": {
-      "receiver": "Omi - Services Alerting (Telegram)"
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": ["alertname"], "group_wait": "5m", "group_interval": "1h", "repeat_interval": "24h"
     },
     "record": null
   }
