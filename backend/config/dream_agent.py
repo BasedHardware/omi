@@ -14,7 +14,9 @@ SUGGESTIONS_PER_DAY = 3
 # The reserved Dream models have a 1M input window. Keep completion headroom
 # inside that window too, even when an operator requests a larger budget.
 FULL_CONTEXT_WINDOW = 1048576
-FULL_PASS_SECONDS = 600
+# K=3 sequential 480s calls, one 120s cooldown and 60s effect headroom.
+# Extra retries/samples use survivors when this request-wide deadline cannot fit them.
+FULL_PASS_SECONDS = 1620
 FULL_MODEL_SECONDS = 480
 FULL_COMPLETION_TOKENS = 32768
 FULL_THINKING_TOKENS = 16384

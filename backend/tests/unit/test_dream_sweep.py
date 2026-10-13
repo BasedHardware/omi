@@ -288,7 +288,7 @@ def test_prod_scheduler_and_writer_env_contract():
     )
     assert dream['target']['oidc'] == sequencer['target']['oidc']
     assert dream['retry'] == sequencer['retry']
-    assert dream['attempt_deadline'] == '720s'
+    assert dream['attempt_deadline'] == '1740s'
     assert FULL_DRAIN_SECONDS + 30 < int(dream['attempt_deadline'][:-1])
     assert (
         dream_agent.PASS_TIMEOUT_SECONDS + dream_agent.FINISH_MARGIN_SECONDS
