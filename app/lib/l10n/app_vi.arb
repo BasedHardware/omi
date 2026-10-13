@@ -4045,5 +4045,6 @@
     "onboardingActNoAudioOmi": "Không nghe thấy Omi. Hãy kiểm tra xem nó đã bật và ở gần chưa.",
     "onboardingActNoAudioPhone": "Chưa nghe thấy bạn. Hãy thử nói to hơn một chút.",
     "onboardingActDictateBodyOmi": "Cứ nói thôi. Omi đang lắng nghe.",
-    "voiceProfileCardDismissed": "Bạn có thể thiết lập Hồ sơ giọng nói bất cứ lúc nào trong Cài đặt."
+    "voiceProfileCardDismissed": "Bạn có thể thiết lập Hồ sơ giọng nói bất cứ lúc nào trong Cài đặt.",
+    "homeNewRecordingButton": "Ghi âm mới"
 }

@@ -4045,5 +4045,6 @@
     "onboardingActNoAudioOmi": "Не чуваме Omi. Уверете се, че е включен и наблизо.",
     "onboardingActNoAudioPhone": "Още не ви чуваме. Опитайте да говорите малко по-силно.",
     "onboardingActDictateBodyOmi": "Просто говорете. Omi слуша.",
-    "voiceProfileCardDismissed": "Можете да настроите гласовия профил по всяко време от Настройки."
+    "voiceProfileCardDismissed": "Можете да настроите гласовия профил по всяко време от Настройки.",
+    "homeNewRecordingButton": "Нов запис"
 }

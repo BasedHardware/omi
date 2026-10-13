@@ -13228,4 +13228,7 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get voiceProfileCardDismissed => 'A hangprofilt bármikor beállíthatod a Beállításokban.';
+
+  @override
+  String get homeNewRecordingButton => 'Új felvétel';
 }

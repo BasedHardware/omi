@@ -11482,5 +11482,6 @@
     "onboardingActNoAudioOmi": "तुमचा Omi ऐकू येत नाही. तो सुरू आहे आणि जवळ आहे का ते पाहा.",
     "onboardingActNoAudioPhone": "अजून तुमचा आवाज ऐकू येत नाही. थोडं मोठ्याने बोलून पाहा.",
     "onboardingActDictateBodyOmi": "फक्त बोला. तुमचा Omi ऐकत आहे.",
-    "voiceProfileCardDismissed": "सेटिंग्जमध्ये कधीही व्हॉइस प्रोफाइल सेट करू शकता."
+    "voiceProfileCardDismissed": "सेटिंग्जमध्ये कधीही व्हॉइस प्रोफाइल सेट करू शकता.",
+    "homeNewRecordingButton": "नवीन रेकॉर्डिंग"
 }

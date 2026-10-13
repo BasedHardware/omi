@@ -4045,5 +4045,6 @@
     "onboardingActNoAudioOmi": "Omit pole kuulda. Veendu, et see on sees ja lähedal.",
     "onboardingActNoAudioPhone": "Me ei kuule sind veel. Proovi natuke valjemini rääkida.",
     "onboardingActDictateBodyOmi": "Lihtsalt räägi. Sinu Omi kuulab.",
-    "voiceProfileCardDismissed": "Häälprofiili saad seadistada igal ajal seadetes."
+    "voiceProfileCardDismissed": "Häälprofiili saad seadistada igal ajal seadetes.",
+    "homeNewRecordingButton": "Uus salvestus"
 }

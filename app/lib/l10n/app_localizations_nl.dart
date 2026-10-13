@@ -13211,4 +13211,7 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get voiceProfileCardDismissed => 'Je kunt je stemprofiel altijd instellen via Instellingen.';
+
+  @override
+  String get homeNewRecordingButton => 'Nieuwe opname';
 }

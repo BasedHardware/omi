@@ -13186,4 +13186,7 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get voiceProfileCardDismissed => 'Anda dapat mengatur Profil Suara kapan saja di Pengaturan.';
+
+  @override
+  String get homeNewRecordingButton => 'Rekaman Baru';
 }

@@ -13181,4 +13181,7 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get voiceProfileCardDismissed => 'Du kan ställa in din röstprofil när som helst i Inställningar.';
+
+  @override
+  String get homeNewRecordingButton => 'Ny inspelning';
 }

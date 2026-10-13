@@ -4045,5 +4045,6 @@
     "onboardingActNoAudioOmi": "Omi nav dzirdams. Pārliecinieties, ka tas ir ieslēgts un tuvumā.",
     "onboardingActNoAudioPhone": "Vēl jūs nedzirdam. Mēģiniet runāt mazliet skaļāk.",
     "onboardingActDictateBodyOmi": "Vienkārši runājiet. Jūsu Omi klausās.",
-    "voiceProfileCardDismissed": "Balss profilu varat iestatīt jebkurā laikā iestatījumos."
+    "voiceProfileCardDismissed": "Balss profilu varat iestatīt jebkurā laikā iestatījumos.",
+    "homeNewRecordingButton": "Jauns ieraksts"
 }

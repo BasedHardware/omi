@@ -13190,4 +13190,7 @@ class AppLocalizationsUr extends AppLocalizations {
 
   @override
   String get voiceProfileCardDismissed => 'آپ کسی بھی وقت سیٹنگز میں وائس پروفائل سیٹ کر سکتے ہیں۔';
+
+  @override
+  String get homeNewRecordingButton => 'نئی ریکارڈنگ';
 }

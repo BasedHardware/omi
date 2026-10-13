@@ -11482,5 +11482,6 @@
     "onboardingActNoAudioOmi": "Omi শোনা যাচ্ছে না। এটি চালু আছে ও কাছে আছে কিনা দেখুন।",
     "onboardingActNoAudioPhone": "এখনও আপনাকে শোনা যাচ্ছে না। একটু জোরে বলে দেখুন।",
     "onboardingActDictateBodyOmi": "শুধু কথা বলুন। আপনার Omi শুনছে।",
-    "voiceProfileCardDismissed": "সেটিংসে যেকোনো সময় ভয়েস প্রোফাইল সেট করতে পারেন।"
+    "voiceProfileCardDismissed": "সেটিংসে যেকোনো সময় ভয়েস প্রোফাইল সেট করতে পারেন।",
+    "homeNewRecordingButton": "নতুন রেকর্ডিং"
 }

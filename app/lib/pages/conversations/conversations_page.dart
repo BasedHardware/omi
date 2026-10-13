@@ -540,7 +540,8 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
             physics: const AlwaysScrollableScrollPhysics(),
             slivers: [
               // The live capture row: recording, a call, or a conversation being captured.
-              const SliverToBoxAdapter(child: ConversationCaptureWidget(showsCall: true)),
+              const SliverToBoxAdapter(
+                  child: ConversationCaptureWidget(showsCall: true, deviceStatusInBottomBar: true)),
               const SliverToBoxAdapter(child: OnboardingWelcomeCard()),
               const SliverToBoxAdapter(child: SpeechProfileCardWidget()),
               const SliverToBoxAdapter(child: UpdateFirmwareCardWidget()),

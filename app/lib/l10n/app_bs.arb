@@ -11482,5 +11482,6 @@
     "onboardingActNoAudioOmi": "Ne čujemo Omi. Provjerite je li uključen i blizu.",
     "onboardingActNoAudioPhone": "Još vas ne čujemo. Pokušajte govoriti malo glasnije.",
     "onboardingActDictateBodyOmi": "Samo pričajte. Vaš Omi sluša.",
-    "voiceProfileCardDismissed": "Glasovni profil možete podesiti bilo kada u Postavkama."
+    "voiceProfileCardDismissed": "Glasovni profil možete podesiti bilo kada u Postavkama.",
+    "homeNewRecordingButton": "Novo snimanje"
 }

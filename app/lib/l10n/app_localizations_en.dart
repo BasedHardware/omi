@@ -13160,4 +13160,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get voiceProfileCardDismissed => 'You can set up Voice Profile anytime in Settings.';
+
+  @override
+  String get homeNewRecordingButton => 'New Recording';
 }

@@ -4045,5 +4045,6 @@
     "onboardingActNoAudioOmi": "ไม่ได้ยินเสียงจาก Omi ตรวจดูว่าเปิดอยู่และอยู่ใกล้ๆ",
     "onboardingActNoAudioPhone": "ยังไม่ได้ยินเสียงคุณ ลองพูดดังขึ้นอีกนิด",
     "onboardingActDictateBodyOmi": "พูดได้เลย Omi กำลังฟังอยู่",
-    "voiceProfileCardDismissed": "คุณตั้งค่าโปรไฟล์เสียงได้ทุกเมื่อในการตั้งค่า"
+    "voiceProfileCardDismissed": "คุณตั้งค่าโปรไฟล์เสียงได้ทุกเมื่อในการตั้งค่า",
+    "homeNewRecordingButton": "บันทึกใหม่"
 }

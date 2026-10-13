@@ -12992,4 +12992,7 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get voiceProfileCardDismissed => '음성 프로필은 설정에서 언제든지 설정할 수 있어요.';
+
+  @override
+  String get homeNewRecordingButton => '새 녹음';
 }

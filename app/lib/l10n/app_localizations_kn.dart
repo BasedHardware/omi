@@ -13214,4 +13214,7 @@ class AppLocalizationsKn extends AppLocalizations {
 
   @override
   String get voiceProfileCardDismissed => 'ಸೆಟ್ಟಿಂಗ್‌ಗಳಲ್ಲಿ ಯಾವಾಗ ಬೇಕಾದರೂ ಧ್ವನಿ ಪ್ರೊಫೈಲ್ ಹೊಂದಿಸಬಹುದು.';
+
+  @override
+  String get homeNewRecordingButton => 'ಹೊಸ ರೆಕಾರ್ಡಿಂಗ್';
 }

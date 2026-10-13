@@ -13274,4 +13274,7 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get voiceProfileCardDismissed => 'Dein Stimmprofil kannst du jederzeit in den Einstellungen einrichten.';
+
+  @override
+  String get homeNewRecordingButton => 'Neue Aufnahme';
 }

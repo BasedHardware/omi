@@ -13204,4 +13204,7 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get voiceProfileCardDismissed => 'Balss profilu varat iestatīt jebkurā laikā iestatījumos.';
+
+  @override
+  String get homeNewRecordingButton => 'Jauns ieraksts';
 }

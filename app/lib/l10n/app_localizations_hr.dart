@@ -13210,4 +13210,7 @@ class AppLocalizationsHr extends AppLocalizations {
 
   @override
   String get voiceProfileCardDismissed => 'Glasovni profil možete postaviti bilo kada u Postavkama.';
+
+  @override
+  String get homeNewRecordingButton => 'Novo snimanje';
 }

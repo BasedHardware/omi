@@ -13227,4 +13227,7 @@ class AppLocalizationsTe extends AppLocalizations {
 
   @override
   String get voiceProfileCardDismissed => 'సెట్టింగ్‌లలో ఎప్పుడైనా వాయిస్ ప్రొఫైల్ సెటప్ చేయవచ్చు.';
+
+  @override
+  String get homeNewRecordingButton => 'కొత్త రికార్డింగ్';
 }

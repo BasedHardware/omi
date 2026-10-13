@@ -4045,5 +4045,6 @@
     "onboardingActNoAudioOmi": "Hör inte din Omi. Kontrollera att den är på och nära.",
     "onboardingActNoAudioPhone": "Hör dig inte än. Försök prata lite högre.",
     "onboardingActDictateBodyOmi": "Prata bara. Din Omi lyssnar.",
-    "voiceProfileCardDismissed": "Du kan ställa in din röstprofil när som helst i Inställningar."
+    "voiceProfileCardDismissed": "Du kan ställa in din röstprofil när som helst i Inställningar.",
+    "homeNewRecordingButton": "Ny inspelning"
 }

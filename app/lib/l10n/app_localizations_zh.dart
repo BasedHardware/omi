@@ -12967,4 +12967,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get voiceProfileCardDismissed => '你可以随时在设置中设置声音档案。';
+
+  @override
+  String get homeNewRecordingButton => '新录音';
 }

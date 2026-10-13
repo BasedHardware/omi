@@ -13224,4 +13224,7 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String get voiceProfileCardDismissed => 'Можете да настроите гласовия профил по всяко време от Настройки.';
+
+  @override
+  String get homeNewRecordingButton => 'Нов запис';
 }

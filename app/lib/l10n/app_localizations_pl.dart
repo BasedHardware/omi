@@ -13215,4 +13215,7 @@ class AppLocalizationsPl extends AppLocalizations {
 
   @override
   String get voiceProfileCardDismissed => 'Profil głosowy możesz skonfigurować w każdej chwili w Ustawieniach.';
+
+  @override
+  String get homeNewRecordingButton => 'Nowe nagranie';
 }

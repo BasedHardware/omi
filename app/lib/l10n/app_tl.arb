@@ -11482,5 +11482,6 @@
     "onboardingActNoAudioOmi": "Hindi marinig ang Omi mo. Siguraduhing naka-on ito at malapit.",
     "onboardingActNoAudioPhone": "Hindi ka pa marinig. Subukang magsalita nang medyo malakas.",
     "onboardingActDictateBodyOmi": "Magsalita ka lang. Nakikinig ang Omi mo.",
-    "voiceProfileCardDismissed": "Maaari mong i-set up ang Voice Profile anumang oras sa Settings."
+    "voiceProfileCardDismissed": "Maaari mong i-set up ang Voice Profile anumang oras sa Settings.",
+    "homeNewRecordingButton": "Bagong Recording"
 }

@@ -4045,5 +4045,6 @@
     "onboardingActNoAudioOmi": "Omiの音声が聞こえません。電源が入っていて近くにあるか確認してください。",
     "onboardingActNoAudioPhone": "まだ声が聞こえません。少し大きな声で話してみてください。",
     "onboardingActDictateBodyOmi": "話すだけでOK。Omiが聞いています。",
-    "voiceProfileCardDismissed": "ボイスプロフィールは設定からいつでも設定できます。"
+    "voiceProfileCardDismissed": "ボイスプロフィールは設定からいつでも設定できます。",
+    "homeNewRecordingButton": "新規録音"
 }

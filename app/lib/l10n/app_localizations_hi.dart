@@ -13158,4 +13158,7 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String get voiceProfileCardDismissed => 'आप सेटिंग्स में कभी भी वॉइस प्रोफ़ाइल सेट कर सकते हैं।';
+
+  @override
+  String get homeNewRecordingButton => 'नई रिकॉर्डिंग';
 }

@@ -13237,4 +13237,7 @@ class AppLocalizationsMk extends AppLocalizations {
 
   @override
   String get voiceProfileCardDismissed => 'Гласовниот профил можете да го поставите во секое време во Поставки.';
+
+  @override
+  String get homeNewRecordingButton => 'Ново снимање';
 }

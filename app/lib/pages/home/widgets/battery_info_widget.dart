@@ -10,6 +10,8 @@ import 'package:omi/gen/assets.gen.dart';
 import 'package:omi/pages/capture/connect.dart';
 import 'package:omi/pages/conversation_capturing/page.dart';
 import 'package:omi/pages/home/device.dart';
+import 'package:omi/pages/home/widgets/home_bottom_controls.dart';
+import 'package:omi/pages/home/widgets/grow_route.dart';
 import 'package:omi/pages/phone_calls/phone_calls_page.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/device_provider.dart';
@@ -32,8 +34,6 @@ const EdgeInsets _pillTargetMargin = EdgeInsets.symmetric(vertical: (kMinTapTarg
 
 /// Battery at or below this shows a low-battery glyph and a warning colour, not just a dot.
 const int kLowBatteryPercent = 20;
-
-const _stopGlyphRadius = BorderRadius.all(Radius.circular(4)); // omi-ux-allow: radius-literal -- a glyph
 
 class BatteryInfoWidget extends StatefulWidget {
   const BatteryInfoWidget({super.key});
@@ -219,10 +219,13 @@ class _DevicePill extends StatelessWidget {
   }
 }
 
-/// Circular phone-mic record button shown to the right of the home chat bar.
-/// Tap starts/stops recording; long-press opens the record options sheet (phone call). The options
-/// are announced as the long-press action, and a one-time tip points them out after the first
-/// recording.
+/// Home's main bottom control, a light pill beside Ask Omi:
+/// - "+ New" starts a recording with the phone, and the live transcript grows out of the pill;
+/// - "Stop" while the phone records (its status is the card at the top of Home);
+/// - with a device connected, the device itself: its picture, what it is doing and its battery.
+///   Tap opens what it is capturing; hold offers the phone instead.
+/// Long-press on "New" opens the record options sheet (phone call) when calls are offered, and a
+/// one-time tip points that out after the first recording.
 class HomeRecordButton extends StatefulWidget {
   const HomeRecordButton({super.key});
 
@@ -232,6 +235,17 @@ class HomeRecordButton extends StatefulWidget {
 
 class _HomeRecordButtonState extends State<HomeRecordButton> {
   static const _optionsTipKey = 'v2/homeRecordOptionsTipShown';
+
+  /// Finishing takes a moment (the last audio is flushed): the pill says so at once.
+  bool _stopping = false;
+
+  /// The phone recording is this pill's own: live, paused, or reconnecting to transcription.
+  static bool _phoneOwnsCapture(CaptureProvider capture) {
+    final state = capture.recordingState;
+    return state == RecordingState.record ||
+        capture.isPhoneMicPaused ||
+        (state == RecordingState.interrupted && capture.liveCaptureSource == 'phone');
+  }
 
   void _showRecordOptions(BuildContext context) {
     OmiHaptics.light();
@@ -319,10 +333,16 @@ class _HomeRecordButtonState extends State<HomeRecordButton> {
   Future<void> _startPhoneRecording(BuildContext context) async {
     final captureProvider = context.read<CaptureProvider>();
     OmiHaptics.medium();
-    if (captureProvider.recordingState == RecordingState.record || captureProvider.isPhoneMicPaused) {
+    if (_phoneOwnsCapture(captureProvider)) {
       // The phone recording is this button's own: finish it (processed, except Transcribe Later,
       // whose local file is finalized on stop), then any pendant it paused resumes.
-      await captureProvider.finishCapture();
+      if (_stopping) return;
+      setState(() => _stopping = true);
+      try {
+        await captureProvider.finishCapture();
+      } finally {
+        if (mounted) setState(() => _stopping = false);
+      }
       PlatformManager.instance.analytics.phoneMicRecordingStopped();
       if (context.mounted) _maybeShowOptionsTip(context);
       return;
@@ -351,104 +371,98 @@ class _HomeRecordButtonState extends State<HomeRecordButton> {
       }
       return;
     }
-    if (context.mounted) {
-      routeToPage(context, ConversationCapturingPage(topConversationId: captureProvider.topConversationId));
+    if (context.mounted) _openTranscript(context);
+  }
+
+  final GlobalKey _pillKey = GlobalKey();
+
+  /// The live transcript, grown out of this pill.
+  void _openTranscript(BuildContext context) {
+    final capture = context.read<CaptureProvider>();
+    pushGrowingFrom<void>(
+      context,
+      from: _pillKey,
+      page: ConversationCapturingPage(topConversationId: capture.topConversationId),
+    );
+  }
+
+  /// The capturing pendant's pill: its live transcript, or the call while an Omi call owns it.
+  void _openDevice(BuildContext context) {
+    OmiHaptics.selection();
+    if (_callInProgress(context)) {
+      routeToPage(context, const ActiveCallPage());
+      return;
     }
+    final capture = context.read<CaptureProvider>();
+    PlatformManager.instance.analytics.liveTranscriptCardClicked(
+      hasSegments: capture.segments.isNotEmpty,
+      hasPhotos: capture.photos.isNotEmpty,
+      segmentCount: capture.segments.length,
+      photoCount: capture.photos.length,
+    );
+    _openTranscript(context);
   }
 
   @override
   Widget build(BuildContext context) {
-    return Consumer<CaptureProvider>(
-      builder: (context, captureProvider, _) {
-        // The phone recording is this button's own (live or paused); anything else is idle here.
-        final isRecording = captureProvider.recordingState == RecordingState.record || captureProvider.isPhoneMicPaused;
-        final isInitialising = captureProvider.recordingState == RecordingState.initialising;
-        // The options sheet only adds a phone call; with calls hidden there is nothing else to offer.
-        final canShowOptions = PhoneCallsFeature.visible && !isRecording && !isInitialising;
-        final l10n = context.l10n;
-        final circle = Semantics(
-          button: true,
-          label: isRecording ? l10n.stopRecording : l10n.startRecording,
-          enabled: !isInitialising,
-          // The child's gestures are excluded below, so the actions (tap, and long-press for the
-          // record options) are declared here where assistive tech can reach them.
-          onTap: isInitialising ? null : () => _startRecording(context),
-          onLongPress: canShowOptions ? () => _showRecordOptions(context) : null,
-          onLongPressHint: canShowOptions ? l10n.moreOptions : null,
-          excludeSemantics: true,
-          child: GestureDetector(
-            behavior: HitTestBehavior.opaque,
-            onTap: () => _startRecording(context),
-            onLongPress: canShowOptions ? () => _showRecordOptions(context) : null,
-            // "Record with this phone": a neutral circle with a white dot, a stop square while the
-            // phone records. The ⌄ badge opens the other ways to record.
-            child: Container(
-              width: 62,
-              height: 62,
-              alignment: Alignment.center,
-              decoration: BoxDecoration(
-                color: OmiColors.surface1,
-                shape: BoxShape.circle,
-                border: Border.all(color: OmiColors.border, width: 1),
-              ),
-              child: isRecording
-                  ? Container(
-                      width: 18,
-                      height: 18,
-                      decoration: BoxDecoration(
-                        color: OmiColors.textPrimary,
-                        borderRadius: _stopGlyphRadius,
-                      ),
-                    )
-                  : isInitialising
-                      ? const OmiSpinner(size: OmiSpinnerSize.small)
-                      : Container(
-                          width: 20,
-                          height: 20,
-                          decoration: BoxDecoration(color: OmiColors.textPrimary, shape: BoxShape.circle),
-                        ),
-            ),
-          ),
-        );
-        // The badge is its own control (and its own accessibility node) beside the circle's.
-        return SizedBox(
-          width: 62,
-          height: 62,
-          child: Stack(clipBehavior: Clip.none, children: [
-            circle,
-            if (canShowOptions)
-              Positioned(
-                right: 0,
-                bottom: 0,
-                child: Semantics(
-                  button: true,
-                  label: l10n.moreWaysToRecord,
-                  child: GestureDetector(
-                    behavior: HitTestBehavior.opaque,
-                    onTap: () => _showRecordOptions(context),
-                    // A 30pt hit area around the 22pt badge, inside the button's 62pt box (a Stack
-                    // does not hit-test outside its bounds, and 44pt would cover the circle's
-                    // centre). Screen readers also get the options as the circle's long-press action.
-                    child: Padding(
-                      padding: const EdgeInsets.all(4),
-                      child: Container(
-                        width: 22,
-                        height: 22,
-                        alignment: Alignment.center,
-                        decoration: BoxDecoration(
-                          color: OmiColors.surface3,
-                          shape: BoxShape.circle,
-                          border: Border.all(color: OmiColors.surface0, width: 2),
-                        ),
-                        child: Icon(Icons.keyboard_arrow_down_rounded, size: 16, color: OmiColors.textPrimary),
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-          ]),
-        );
-      },
+    final l10n = context.l10n;
+    final capture = context.watch<CaptureProvider>();
+    final device = context.select<DeviceProvider, BtDevice?>((d) => d.connectedDevice);
+    final phoneRecording = _phoneOwnsCapture(capture);
+    final starting = capture.recordingState == RecordingState.initialising;
+    // The pendant stands in for "New" only while it is capturing live; connected but idle (or
+    // saving for Transcribe Later), the phone is still one tap away and the header shows the device.
+    final pendantCapturing = device != null && _pendantHasCapture(capture);
+    // The options sheet only adds a phone call; with calls hidden there is nothing else to offer.
+    final canShowOptions = PhoneCallsFeature.visible && !phoneRecording && !starting;
+
+    final Widget pill;
+    if (phoneRecording) {
+      pill = HomeControlSurface(
+        key: const ValueKey('home_record_pill_stop'),
+        semanticsLabel: l10n.stopRecording,
+        onTap: _stopping ? null : () => _startRecording(context),
+        child: HomeStopPillContent(stopping: _stopping),
+      );
+    } else if (pendantCapturing && !starting) {
+      final paused = capture.isPaused;
+      final status = paused ? l10n.paused : l10n.listening;
+      pill = HomeControlSurface(
+        key: const ValueKey('home_record_pill_device'),
+        semanticsLabel: '${device.name}, $status',
+        semanticsHint: l10n.liveTranscript,
+        onTap: () => _openDevice(context),
+        // Holding it offers the phone instead (or a call), as tapping record used to.
+        onLongPress: () => _showPendantListening(context),
+        longPressHint: l10n.moreOptions,
+        child: HomeDevicePillContent(device: device, status: status, live: !paused),
+      );
+    } else {
+      pill = HomeControlSurface(
+        key: const ValueKey('home_record_pill_new'),
+        semanticsLabel: l10n.newRecording,
+        onTap: starting ? null : () => _startRecording(context),
+        onLongPress: canShowOptions ? () => _showRecordOptions(context) : null,
+        longPressHint: l10n.moreWaysToRecord,
+        child: HomeNewPillContent(starting: starting),
+      );
+    }
+
+    return KeyedSubtree(
+      key: _pillKey,
+      child: AnimatedSwitcher(
+        duration: OmiMotion.of(context).standard,
+        switchInCurve: Curves.easeOut,
+        switchOutCurve: Curves.easeIn,
+        // Cross-fade with a slight rise, so a change of state reads as the same control updating.
+        transitionBuilder: (child, animation) => FadeTransition(
+          opacity: animation,
+          child: ScaleTransition(scale: Tween(begin: 0.98, end: 1.0).animate(animation), child: child),
+        ),
+        layoutBuilder: (current, previous) =>
+            Stack(alignment: Alignment.center, children: [...previous, if (current != null) current]),
+        child: pill,
+      ),
     );
   }
 }

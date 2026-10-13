@@ -15940,5 +15940,9 @@
     "voiceProfileCardDismissed": "You can set up Voice Profile anytime in Settings.",
     "@voiceProfileCardDismissed": {
         "description": "Toast after dismissing the Teach Omi your voice card on Home; points to Settings > Voice Profile."
+    },
+    "homeNewRecordingButton": "New Recording",
+    "@homeNewRecordingButton": {
+        "description": "Label on Home's main bottom button that starts a new recording with the phone."
     }
 }

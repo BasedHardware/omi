@@ -13281,4 +13281,7 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get voiceProfileCardDismissed => 'Maaari mong i-set up ang Voice Profile anumang oras sa Settings.';
+
+  @override
+  String get homeNewRecordingButton => 'Bagong Recording';
 }

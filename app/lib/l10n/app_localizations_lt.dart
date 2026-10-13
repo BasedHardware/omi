@@ -13200,4 +13200,7 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get voiceProfileCardDismissed => 'Balso profilį galite nustatyti bet kada nustatymuose.';
+
+  @override
+  String get homeNewRecordingButton => 'Naujas įrašas';
 }

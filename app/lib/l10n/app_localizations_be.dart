@@ -13211,4 +13211,7 @@ class AppLocalizationsBe extends AppLocalizations {
 
   @override
   String get voiceProfileCardDismissed => 'Профіль голасу заўсёды можна наладзіць у Наладах.';
+
+  @override
+  String get homeNewRecordingButton => 'Новы запіс';
 }

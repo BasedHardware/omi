@@ -13216,4 +13216,7 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get voiceProfileCardDismissed => 'Puedes configurar tu perfil de voz cuando quieras en Ajustes.';
+
+  @override
+  String get homeNewRecordingButton => 'Nueva grabación';
 }

@@ -13081,4 +13081,7 @@ class AppLocalizationsHe extends AppLocalizations {
 
   @override
   String get voiceProfileCardDismissed => 'אפשר להגדיר פרופיל קולי בכל עת בהגדרות.';
+
+  @override
+  String get homeNewRecordingButton => 'הקלטה חדשה';
 }

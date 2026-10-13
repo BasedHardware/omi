@@ -13200,4 +13200,7 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get voiceProfileCardDismissed => 'Você pode configurar o perfil de voz a qualquer momento em Ajustes.';
+
+  @override
+  String get homeNewRecordingButton => 'Nova gravação';
 }

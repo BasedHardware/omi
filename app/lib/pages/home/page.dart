@@ -23,6 +23,7 @@ import 'package:omi/pages/action_items/widgets/task_selection_action_bar.dart';
 import 'package:omi/pages/conversations/widgets/merge_action_bar.dart';
 import 'package:omi/pages/action_items/widgets/tasks_more_menu.dart';
 import 'package:omi/pages/home/home_content.dart';
+import 'package:omi/pages/home/widgets/home_bottom_controls.dart';
 import 'package:omi/pages/home/widgets/home_page_stack.dart';
 import 'package:omi/pages/home/widgets/home_tab_switcher.dart';
 import 'package:omi/pages/home/home_widgets_publisher.dart';
@@ -843,9 +844,9 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                                 bottom: homeChatBarOffset(context),
                                 child: Row(
                                   children: [
-                                    Expanded(child: _buildChatBar(context)),
+                                    HomeChatButton(onTap: _openChat, onLongPress: () => _openChat(voice: true)),
                                     const SizedBox(width: 10),
-                                    const HomeRecordButton(),
+                                    const Expanded(child: HomeRecordButton()),
                                   ],
                                 ),
                               ),
@@ -879,66 +880,6 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
     OmiHaptics.selection();
     PlatformManager.instance.analytics.bottomNavigationTabClicked(voice ? 'Chat Voice' : 'Chat');
     openChatSheet(context, ChatPage(isPivotBottom: false, autoStartVoice: voice));
-  }
-
-  Widget _buildChatBar(BuildContext context) {
-    return Semantics(
-      container: true,
-      button: true,
-      label: context.l10n.askOmi,
-      onTap: _openChat,
-      child: GestureDetector(
-        key: const ValueKey('home_ask_omi_bar'),
-        behavior: HitTestBehavior.opaque,
-        onTap: _openChat,
-        child: Container(
-          height: kHomeChatBarHeight,
-          decoration: BoxDecoration(
-            color: OmiColors.surface1,
-            borderRadius: OmiRadius.pillAll,
-            border: Border.all(color: OmiColors.border, width: 1),
-          ),
-          child: Row(
-            children: [
-              const SizedBox(width: 18),
-              Expanded(
-                child: ExcludeSemantics(
-                  child: Text(
-                    context.l10n.askOmi,
-                    style: OmiType.subhead.copyWith(color: OmiColors.textTertiary),
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-              ),
-              GestureDetector(
-                // The mic sits inside the chat bar's own tap target, so a near miss
-                // does not do nothing: it opens text chat instead of voice. Own the
-                // bar's full height and its rounded end, not just the 42pt circle.
-                behavior: HitTestBehavior.opaque,
-                onTap: () => _openChat(voice: true),
-                child: Semantics(
-                  container: true,
-                  button: true,
-                  label: context.l10n.voiceMode,
-                  child: Container(
-                    height: kHomeChatBarHeight,
-                    padding: const EdgeInsets.only(left: 8, right: 6),
-                    alignment: Alignment.center,
-                    child: Container(
-                      width: 42,
-                      height: 42,
-                      alignment: Alignment.center,
-                      decoration: BoxDecoration(color: OmiColors.accent, shape: BoxShape.circle),
-                      child: FaIcon(FontAwesomeIcons.microphone, size: 15, color: OmiColors.onAccent),
-                    ),
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
   }
 
   /// The selected page's one action, bare beside the switcher: Home filters by date, Tasks opens

@@ -4045,5 +4045,6 @@
     "onboardingActNoAudioOmi": "Dein Omi ist nicht zu hören. Ist es an und in der Nähe?",
     "onboardingActNoAudioPhone": "Wir hören dich noch nicht. Sprich etwas lauter.",
     "onboardingActDictateBodyOmi": "Sprich einfach. Dein Omi hört zu.",
-    "voiceProfileCardDismissed": "Dein Stimmprofil kannst du jederzeit in den Einstellungen einrichten."
+    "voiceProfileCardDismissed": "Dein Stimmprofil kannst du jederzeit in den Einstellungen einrichten.",
+    "homeNewRecordingButton": "Neue Aufnahme"
 }

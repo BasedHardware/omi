@@ -12986,4 +12986,7 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get voiceProfileCardDismissed => 'ボイスプロフィールは設定からいつでも設定できます。';
+
+  @override
+  String get homeNewRecordingButton => '新規録音';
 }

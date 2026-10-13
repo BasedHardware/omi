@@ -13177,4 +13177,7 @@ class AppLocalizationsNo extends AppLocalizations {
 
   @override
   String get voiceProfileCardDismissed => 'Du kan sette opp stemmeprofilen når som helst i Innstillinger.';
+
+  @override
+  String get homeNewRecordingButton => 'Ny opptak';
 }

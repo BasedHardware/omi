@@ -11482,5 +11482,6 @@
     "onboardingActNoAudioOmi": "صدای Omi نمی‌آید. مطمئن شوید روشن و نزدیک است.",
     "onboardingActNoAudioPhone": "هنوز صدایتان نمی‌آید. کمی بلندتر صحبت کنید.",
     "onboardingActDictateBodyOmi": "فقط صحبت کنید. Omi گوش می‌دهد.",
-    "voiceProfileCardDismissed": "هر زمان می‌توانید نمایه صدا را در تنظیمات راه‌اندازی کنید."
+    "voiceProfileCardDismissed": "هر زمان می‌توانید نمایه صدا را در تنظیمات راه‌اندازی کنید.",
+    "homeNewRecordingButton": "ضبط جدید"
 }

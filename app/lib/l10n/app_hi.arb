@@ -4045,5 +4045,6 @@
     "onboardingActNoAudioOmi": "आपका Omi सुनाई नहीं दे रहा। देखें कि वह चालू है और पास है।",
     "onboardingActNoAudioPhone": "अभी आपकी आवाज़ नहीं आ रही। थोड़ा ज़ोर से बोलकर देखें।",
     "onboardingActDictateBodyOmi": "बस बोलिए। आपका Omi सुन रहा है।",
-    "voiceProfileCardDismissed": "आप सेटिंग्स में कभी भी वॉइस प्रोफ़ाइल सेट कर सकते हैं।"
+    "voiceProfileCardDismissed": "आप सेटिंग्स में कभी भी वॉइस प्रोफ़ाइल सेट कर सकते हैं।",
+    "homeNewRecordingButton": "नई रिकॉर्डिंग"
 }

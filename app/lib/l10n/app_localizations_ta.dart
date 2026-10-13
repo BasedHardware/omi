@@ -13268,4 +13268,7 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String get voiceProfileCardDismissed => 'அமைப்புகளில் எப்போது வேண்டுமானாலும் குரல் சுயவிவரத்தை அமைக்கலாம்.';
+
+  @override
+  String get homeNewRecordingButton => 'புதிய பதிவு';
 }

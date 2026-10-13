@@ -13170,4 +13170,7 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get voiceProfileCardDismissed => 'Häälprofiili saad seadistada igal ajal seadetes.';
+
+  @override
+  String get homeNewRecordingButton => 'Uus salvestus';
 }

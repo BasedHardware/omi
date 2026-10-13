@@ -13171,4 +13171,7 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String get voiceProfileCardDismissed => 'هر زمان می‌توانید نمایه صدا را در تنظیمات راه‌اندازی کنید.';
+
+  @override
+  String get homeNewRecordingButton => 'ضبط جدید';
 }

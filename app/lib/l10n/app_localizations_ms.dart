@@ -13207,4 +13207,7 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get voiceProfileCardDismissed => 'Anda boleh menyediakan Profil Suara pada bila-bila masa dalam Tetapan.';
+
+  @override
+  String get homeNewRecordingButton => 'Rakaman Baharu';
 }

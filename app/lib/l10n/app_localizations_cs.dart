@@ -13177,4 +13177,7 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get voiceProfileCardDismissed => 'Hlasový profil můžete kdykoli nastavit v Nastavení.';
+
+  @override
+  String get homeNewRecordingButton => 'Nový záznam';
 }

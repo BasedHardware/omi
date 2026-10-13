@@ -13222,4 +13222,7 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get voiceProfileCardDismissed => 'Голосовой профиль можно настроить в любое время в Настройках.';
+
+  @override
+  String get homeNewRecordingButton => 'Новая запись';
 }

@@ -13261,4 +13261,7 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get voiceProfileCardDismissed => 'Μπορείτε να ρυθμίσετε το προφίλ φωνής ανά πάσα στιγμή από τις Ρυθμίσεις.';
+
+  @override
+  String get homeNewRecordingButton => 'Νέα ηχογράφηση';
 }

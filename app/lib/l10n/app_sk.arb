@@ -4045,5 +4045,6 @@
     "onboardingActNoAudioOmi": "Omi nepočuť. Skontrolujte, či je zapnuté a blízko.",
     "onboardingActNoAudioPhone": "Zatiaľ vás nepočuť. Skúste hovoriť trochu hlasnejšie.",
     "onboardingActDictateBodyOmi": "Jednoducho hovorte. Vaše Omi počúva.",
-    "voiceProfileCardDismissed": "Hlasový profil si môžete kedykoľvek nastaviť v Nastaveniach."
+    "voiceProfileCardDismissed": "Hlasový profil si môžete kedykoľvek nastaviť v Nastaveniach.",
+    "homeNewRecordingButton": "Nový záznam"
 }

@@ -13171,4 +13171,7 @@ class AppLocalizationsBn extends AppLocalizations {
 
   @override
   String get voiceProfileCardDismissed => 'সেটিংসে যেকোনো সময় ভয়েস প্রোফাইল সেট করতে পারেন।';
+
+  @override
+  String get homeNewRecordingButton => 'নতুন রেকর্ডিং';
 }

@@ -29,10 +29,15 @@ import 'package:omi/pages/phone_calls/active_call_page.dart';
 import 'package:omi/ui/ui.dart';
 
 class ConversationCaptureWidget extends StatefulWidget {
-  const ConversationCaptureWidget({super.key, this.showsCall = false});
+  const ConversationCaptureWidget({super.key, this.showsCall = false, this.deviceStatusInBottomBar = false});
 
   /// Home shows an Omi call on this card; the Conversations tab has its own call banner.
   final bool showsCall;
+
+  /// Home's bottom pill already says the connected pendant is listening, so the card stays out
+  /// of the way then; it still shows whenever there is more to say (paused, reconnecting, saving
+  /// for later, a dropped pendant) or the phone is the one recording.
+  final bool deviceStatusInBottomBar;
 
   @override
   State<ConversationCaptureWidget> createState() => _ConversationCaptureWidgetState();
@@ -136,6 +141,9 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
         if (provider.liveCaptureSource == null && !phoneLive && !batch) {
           return const SizedBox.shrink();
         }
+        if (widget.deviceStatusInBottomBar && !phoneLive && !batch && _pendantJustListening(provider)) {
+          return const SizedBox.shrink();
+        }
 
         return GestureDetector(
           onTap: () async {
@@ -172,6 +180,18 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
         );
       },
     );
+  }
+
+  /// The pendant is capturing and all is well: nothing to say beyond Home's pill.
+  static bool _pendantJustListening(CaptureProvider provider) {
+    final source = provider.liveCaptureSource;
+    return source != null &&
+        source != 'phone' &&
+        !provider.isPaused &&
+        provider.pendantCaptureVerified &&
+        provider.transcriptServiceReady &&
+        provider.terminalTranscriptionFailure == null &&
+        provider.customSttBufferingDuration == null;
   }
 
   /// The live card's glyph and 44pt Pause target carry their own air, so its edges are tighter

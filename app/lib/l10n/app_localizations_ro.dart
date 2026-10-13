@@ -13231,4 +13231,7 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get voiceProfileCardDismissed => 'Poți configura profilul vocal oricând din Setări.';
+
+  @override
+  String get homeNewRecordingButton => 'Înregistrare nouă';
 }

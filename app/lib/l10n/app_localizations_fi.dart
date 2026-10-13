@@ -13181,4 +13181,7 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get voiceProfileCardDismissed => 'Voit määrittää ääniprofiilin milloin tahansa asetuksissa.';
+
+  @override
+  String get homeNewRecordingButton => 'Uusi tallennus';
 }

@@ -13189,4 +13189,7 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get voiceProfileCardDismissed => 'Ses profilini istediğin zaman Ayarlar\'dan kurabilirsin.';
+
+  @override
+  String get homeNewRecordingButton => 'Yeni Kayıt';
 }

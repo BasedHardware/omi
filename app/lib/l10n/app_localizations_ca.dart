@@ -13244,4 +13244,7 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get voiceProfileCardDismissed => 'Pots configurar el perfil de veu quan vulguis a Configuració.';
+
+  @override
+  String get homeNewRecordingButton => 'Nova gravació';
 }

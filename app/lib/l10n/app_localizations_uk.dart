@@ -13206,4 +13206,7 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get voiceProfileCardDismissed => 'Голосовий профіль можна налаштувати будь-коли в Налаштуваннях.';
+
+  @override
+  String get homeNewRecordingButton => 'Новий запис';
 }

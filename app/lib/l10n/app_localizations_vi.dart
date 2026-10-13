@@ -13174,4 +13174,7 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get voiceProfileCardDismissed => 'Bạn có thể thiết lập Hồ sơ giọng nói bất cứ lúc nào trong Cài đặt.';
+
+  @override
+  String get homeNewRecordingButton => 'Ghi âm mới';
 }

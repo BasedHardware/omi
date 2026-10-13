@@ -23462,6 +23462,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'You can set up Voice Profile anytime in Settings.'**
   String get voiceProfileCardDismissed;
+
+  /// Label on Home's main bottom button that starts a new recording with the phone.
+  ///
+  /// In en, this message translates to:
+  /// **'New Recording'**
+  String get homeNewRecordingButton;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

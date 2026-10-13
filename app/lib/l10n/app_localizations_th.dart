@@ -13107,4 +13107,7 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get voiceProfileCardDismissed => 'คุณตั้งค่าโปรไฟล์เสียงได้ทุกเมื่อในการตั้งค่า';
+
+  @override
+  String get homeNewRecordingButton => 'บันทึกใหม่';
 }

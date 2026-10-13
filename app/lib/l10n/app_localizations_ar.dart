@@ -13100,4 +13100,7 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get voiceProfileCardDismissed => 'يمكنك إعداد بصمة صوتك في أي وقت من الإعدادات.';
+
+  @override
+  String get homeNewRecordingButton => 'تسجيل جديد';
 }
