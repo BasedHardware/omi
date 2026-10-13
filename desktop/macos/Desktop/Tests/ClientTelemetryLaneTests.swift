@@ -222,9 +222,9 @@ import XCTest
         sleeps: TelemetrySleepLog(),
         now: now,
         jitter: 0)
-      let oldest = UUID(uuidString: "00000000-0000-0000-0000-000000000001")!
-      let middle = UUID(uuidString: "00000000-0000-0000-0000-000000000002")!
-      let newest = UUID(uuidString: "00000000-0000-0000-0000-000000000003")!
+      let oldest = UUID(uuidString: "00000000-0000-0000-0000-000000000001") ?? UUID()
+      let middle = UUID(uuidString: "00000000-0000-0000-0000-000000000002") ?? UUID()
+      let newest = UUID(uuidString: "00000000-0000-0000-0000-000000000003") ?? UUID()
       await overflow.enqueue(telemetryObservation(ownerID: "owner-a", eventID: oldest, enqueuedAt: now))
       await overflow.enqueue(
         telemetryObservation(ownerID: "owner-a", eventID: middle, enqueuedAt: now.addingTimeInterval(1)))
@@ -599,9 +599,28 @@ private func lane3FixtureObservations() -> [ClientTelemetryObservation] {
     population: String, phase: String, operation: String, intent: String, route: String, reason: String?,
     duration: Int?, outcome: String?
   ) -> ClientTelemetryObservation {
-    ClientTelemetryShadow.voiceObservation(
-      ownerID: owner, channel: channel, population: population, phase: phase, operationRaw: operation, intent: intent,
-      route: route, reason: reason, durationMs: duration, outcome: outcome, occurredAt: occurredAt)!
+    let observation = ClientTelemetryShadow.voiceObservation(
+      ownerID: owner, channel: channel, population: population, phase: phase, operationRaw: operation,
+      intent: intent, route: route, reason: reason, durationMs: duration, outcome: outcome,
+      occurredAt: occurredAt)
+    return observation
+      ?? ClientTelemetryObservation(
+        eventID: UUID(),
+        occurredAt: occurredAt,
+        platform: "macos",
+        channel: channel,
+        family: "voice_turn",
+        attributes: [
+          "operation_id": .string(operation),
+          "phase": .string(phase),
+          "population": .string(population),
+          "route": .string(route),
+          "intent": .string(intent),
+        ],
+        ownerID: owner,
+        enqueuedAt: occurredAt,
+        attemptCount: 0
+      )
   }
   let physicalA = "11111111-1111-1111-1111-111111111111"
   let physicalB = "22222222-2222-2222-2222-222222222222"

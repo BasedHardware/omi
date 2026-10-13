@@ -3953,7 +3953,7 @@ final class DesktopAutomationActionRegistry {
       let now = Date()
       let operationID = UUID()
       let observation = ClientTelemetryObservation(
-        eventID: observationID,
+        eventID: UUID(),
         occurredAt: now,
         platform: "macos",
         channel: "e2e",
