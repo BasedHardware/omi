@@ -38,9 +38,10 @@ class _Doc:
 class _Query:
     """Firestore query stand-in with completed equality filtering (production semantics)."""
 
-    def __init__(self, docs, completed=None):
+    def __init__(self, docs, completed=None, order_by_fields=None):
         self._docs = docs
         self._completed = completed
+        self._order_by_fields = list(order_by_fields or [])
         self._offset = 0
         self._limit = None
 
@@ -52,10 +53,16 @@ class _Query:
             value = getattr(filt, 'value', None)
             if field == 'completed':
                 completed = value
-        return _Query(self._docs, completed=completed)
+        q = _Query(self._docs, completed=completed, order_by_fields=self._order_by_fields)
+        q._offset = self._offset
+        q._limit = self._limit
+        return q
 
-    def order_by(self, *a, **k):
-        return self
+    def order_by(self, field, direction=None):
+        q = _Query(self._docs, completed=self._completed, order_by_fields=self._order_by_fields + [(field, direction)])
+        q._offset = self._offset
+        q._limit = self._limit
+        return q
 
     def select(self, _fields):
         return self
@@ -73,6 +80,12 @@ class _Query:
         if self._completed is not None:
             # Firestore equality excludes missing/null completed fields.
             d = [doc for doc in d if doc._data.get('completed') is self._completed]
+        for field, direction in self._order_by_fields:
+            if field == 'due_at':
+                d = [doc for doc in d if doc._data.get('due_at') is not None]
+                d.sort(key=lambda doc: doc._data.get('due_at'))
+            elif field == 'created_at':
+                d.sort(key=lambda doc: doc._data.get('created_at') or datetime.min.replace(tzinfo=timezone.utc), reverse=True)
         d = d[self._offset :]
         if self._limit is not None:
             d = d[: self._limit]
@@ -182,3 +195,37 @@ def test_completed_normalized_to_bool(raw, expected_completed, expected_status):
     out = action_items.prepare_action_item_for_read(dict(raw))
     assert out['completed'] is expected_completed
     assert out['status'] == expected_status
+
+
+def test_large_active_task_pagination_no_duplicates_or_skips(fake_db):
+    """Regression test for #21225: 200 active tasks with ids t000..t199 (ascending)
+    and due dates reversed so t199 is due soonest. Offset pagination must return
+    globally soonest-due tasks on page 1, and page 2 must continue with zero
+    duplicates or omitted tasks across pages."""
+    large_docs = [
+        _Doc(
+            f't{i:03d}',
+            created_at=BASE + timedelta(minutes=i),
+            due_at=BASE + timedelta(days=200 - i),
+            completed=False,
+        )
+        for i in range(200)
+    ]
+    query = _Query(large_docs)
+    fake_db.collection.return_value.document.return_value.collection.return_value = query
+
+    page1 = [item['id'] for item in action_items.get_action_items('uid1', limit=100, offset=0)]
+    page2 = [item['id'] for item in action_items.get_action_items('uid1', limit=100, offset=100)]
+
+    assert len(page1) == 100
+    assert len(page2) == 100
+    # Page 1 contains soonest-due first: t199 is due in 1 day, t198 in 2 days, etc.
+    assert page1[:3] == ['t199', 't198', 't197']
+    assert page1[-1] == 't100'
+    assert page2[0] == 't099'
+    assert page2[-1] == 't000'
+
+    # Exactly 0 duplicates across pages
+    assert set(page1).intersection(set(page2)) == set()
+    # All 200 tasks returned across the 2 pages
+    assert set(page1).union(set(page2)) == {f't{i:03d}' for i in range(200)}

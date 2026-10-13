@@ -61,10 +61,11 @@ class _FakeAggregation:
 
 
 class _FakeQuery:
-    def __init__(self, docs: List[_FakeDoc], filters: Optional[List] = None, *, count_error: Any = None):
+    def __init__(self, docs: List[_FakeDoc], filters: Optional[List] = None, *, count_error: Any = None, order_by: Any = None):
         self._docs = docs
         self._filters = list(filters or [])
         self._count_error = count_error
+        self._order_by = order_by
         self._limit = None
         self._offset = 0
         self._select: Optional[List[str]] = None
@@ -73,17 +74,21 @@ class _FakeQuery:
 
     def where(self, *args, **kwargs):
         filt = kwargs.get('filter') or (args[0] if args else None)
-        q = _FakeQuery(self._docs, self._filters + [filt], count_error=self._count_error)
+        q = _FakeQuery(self._docs, self._filters + [filt], count_error=self._count_error, order_by=self._order_by)
         q._limit = self._limit
         q._offset = self._offset
         q._select = self._select
         return q
 
-    def order_by(self, *args, **kwargs):
-        return self
+    def order_by(self, field, direction=None):
+        q = _FakeQuery(self._docs, self._filters, count_error=self._count_error, order_by=(field, direction))
+        q._limit = self._limit
+        q._offset = self._offset
+        q._select = self._select
+        return q
 
     def select(self, fields):
-        q = _FakeQuery(self._docs, self._filters, count_error=self._count_error)
+        q = _FakeQuery(self._docs, self._filters, count_error=self._count_error, order_by=self._order_by)
         q._limit = self._limit
         q._offset = self._offset
         q._select = list(fields)
@@ -91,14 +96,14 @@ class _FakeQuery:
         return q
 
     def offset(self, n: int):
-        q = _FakeQuery(self._docs, self._filters, count_error=self._count_error)
+        q = _FakeQuery(self._docs, self._filters, count_error=self._count_error, order_by=self._order_by)
         q._limit = self._limit
         q._offset = n
         q._select = self._select
         return q
 
     def limit(self, n: int):
-        q = _FakeQuery(self._docs, self._filters, count_error=self._count_error)
+        q = _FakeQuery(self._docs, self._filters, count_error=self._count_error, order_by=self._order_by)
         q._limit = n
         q._offset = self._offset
         q._select = self._select
@@ -113,6 +118,17 @@ class _FakeQuery:
             value = getattr(filt, 'value', None)
             if field == 'completed' and op == '==':
                 docs = [d for d in docs if 'completed' in d.data and d.data.get('completed') is value]
+            elif field == 'completed' and op == 'in' and isinstance(value, (list, tuple, set, frozenset)):
+                docs = [d for d in docs if 'completed' in d.data and d.data.get('completed') in value]
+            elif field == 'conversation_id' and op == '==':
+                docs = [d for d in docs if d.data.get('conversation_id') == value]
+        if self._order_by is not None:
+            field, direction = self._order_by
+            if field == 'due_at':
+                docs = [d for d in docs if d.data.get('due_at') is not None]
+                docs = sorted(docs, key=lambda d: d.data.get('due_at'))
+            elif field == 'created_at':
+                docs = sorted(docs, key=lambda d: d.data.get('created_at') or datetime.min.replace(tzinfo=timezone.utc), reverse=True)
             elif field == 'completed' and op == 'in' and isinstance(value, (list, tuple, set, frozenset)):
                 docs = [d for d in docs if 'completed' in d.data and d.data.get('completed') in value]
             elif field == 'conversation_id' and op == '==':
