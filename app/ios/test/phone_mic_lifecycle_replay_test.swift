@@ -737,6 +737,46 @@ struct Harness {
             stop(controller)
         }
 
+        // Late-window recovery must keep the already-armed fast deadline. The
+        // 1s fault fire is armed when the interruption lands; recovering 0.85s
+        // into that window leaves only ~0.15s on it. Re-anchoring the deadline
+        // to resume + 1s (the regression this pins) would delay the beat past
+        // the check window — and, late enough, past Dart's unchanged 10s stall
+        // deadline, restarting a fully recovered session.
+        do {
+            let world = ReplayWorld()
+            let writers = WriterBox()
+            let controller = world.makeBatchController(writers: writers)
+            guard case .success = startBatch(controller, 21) else {
+                preconditionFailure("preserved deadline: start failed")
+            }
+            drainMain(seconds: 0.5)
+            world.monitorBox.monitor!.fire(.interruptionBegan)
+            waitUntil({
+                world.sink.deliveries.contains { $0.kind == .state && $0.state == "interrupted" }
+            }, "preserved deadline: interrupted")
+            // 0.6s into the fault window: no fault beat has fired yet, and the
+            // armed one is ~0.4s out — enough margin that queue latency cannot
+            // let it fire before recovery completes.
+            drainMain(seconds: 0.6)
+            world.monitorBox.monitor!.fire(.interruptionEnded(shouldResume: true))
+            waitUntil({
+                world.sink.deliveries.contains { $0.kind == .state && $0.state == "running" }
+            }, "preserved deadline: resumed")
+            precondition(progressCount(world.sink) == 0,
+                "preserved deadline: no beat expected before recovery (timing drifted)")
+            drainMain(seconds: 0.7)
+            precondition(progressCount(world.sink) > 0,
+                "recovery must keep the already-armed fast fire (~0.15s out), not re-anchor it to resume + 1s")
+            let preservedBeatCount = progressCount(world.sink)
+            // After the preserved beat the cadence returns to healthy: no
+            // second beat on the old 1s fault repeat.
+            drainMain(seconds: 2.0)
+            precondition(progressCount(world.sink) == preservedBeatCount,
+                "after the preserved beat the heartbeat must return to the healthy cadence")
+            stop(controller)
+        }
+
         print("phone-mic lifecycle replay: all 8 canonical vectors passed (stale/terminal-cleanup drops verified)")
     }
 }

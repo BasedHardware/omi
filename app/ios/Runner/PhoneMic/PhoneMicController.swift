@@ -554,10 +554,12 @@ final class PhoneMicController {
 
     /// Arm, or retarget, the batch heartbeat. `repeating` is what subsequent
     /// ticks use; `first` can be shorter so an anomaly gets one fast beat
-    /// before returning to the healthy cadence.
+    /// before returning to the healthy cadence. Leeway is sized for the
+    /// soonest fire so a fast recovery beat cannot be coalesced into the
+    /// looser healthy tolerance.
     private func syncProgressTimer(first: TimeInterval, repeating: TimeInterval) {
         guard mode == .batch, state != .idle, batchWriter != nil else { return }
-        let leeway: DispatchTimeInterval = repeating >= Self.healthyProgressTickInterval
+        let leeway: DispatchTimeInterval = min(first, repeating) >= Self.healthyProgressTickInterval
             ? .milliseconds(500)
             : .milliseconds(50)
         if let timer = progressTimer {
@@ -585,10 +587,13 @@ final class PhoneMicController {
         if interval == Self.healthyProgressTickInterval,
            progressIntervalArmed != 0, progressIntervalArmed != Self.healthyProgressTickInterval {
             // Retargeting out of a fault window (resume/rebuild recovery reaching
-            // `.running`): keep the already-scheduled fast first fire so the beat
-            // gap cannot silently grow past the Dart 10s stall deadline, and only
-            // switch the repeating cadence back to the slow interval afterward.
-            syncProgressTimer(first: Self.fastProgressTickInterval, repeating: interval)
+            // `.running`): keep the already-armed fast fire exactly as armed.
+            // Re-scheduling here would re-anchor its deadline to `now + 1s` with
+            // the healthy cadence's looser leeway, so a recovery late in the
+            // fault window could deliver its beat after Dart's unchanged 10s
+            // stall deadline and restart a fully recovered session. The tick
+            // handler switches the repeating cadence back to the slow interval
+            // once the preserved fire has emitted the recovery beat.
             return
         }
         syncProgressTimer(first: interval, repeating: interval)
