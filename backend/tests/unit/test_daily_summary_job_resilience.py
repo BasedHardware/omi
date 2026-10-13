@@ -9,6 +9,12 @@ seams (fake Redis, injected clock, injected per-user worker).
 """
 
 import asyncio
+import functools
+import json
+import re
+import subprocess
+import sys
+import tempfile
 import threading
 from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
@@ -17,6 +23,7 @@ from types import ModuleType, SimpleNamespace
 from typing import Any, Dict, Iterator, List, Tuple
 
 import pytest
+import yaml
 
 from testing.import_isolation import AutoMockModule, load_module_fresh, stub_modules
 
@@ -578,7 +585,6 @@ def test_scheduled_send_carries_the_memory_review_card() -> None:
     ``memories_learned``, so the parameter kept its None default, the summary's
     list was always empty, and the block was never attached on the only path real
     users receive. The card was dead in production as shipped."""
-    import json
 
     with _loaded_send_path([_MEMORY]) as (notifications, sends, seen):
         notifications._send_summary_notification(('uid-00', ['token-00']))
@@ -887,6 +893,85 @@ def test_current_day_generation_metric_excludes_backfill(created, retry, expecte
         assert {
             outcome: metrics.RECIPIENTS.labels(outcome=outcome)._value.get() - before[outcome] for outcome in before
         } == {outcome: int(outcome == expected) for outcome in before}
+
+
+@functools.lru_cache(maxsize=1)
+def _recap_log_metric_specs() -> Dict[str, Dict[str, Any]]:
+    """Execute the workflow's embedded LogMetric builder; return {metric name: LogMetric body}."""
+    import json
+
+    workflow = yaml.load(
+        (BACKEND_DIR.parent / '.github/workflows/gcp_notifications_job.yml').read_text(), Loader=yaml.BaseLoader
+    )
+    step = next(
+        step
+        for step in workflow['jobs']['deploy']['steps']
+        if step['name'] == 'Provision daily recap outcome log metrics'
+    )
+    builder = step['run'].split("<<'PY_LOG_METRICS'\n", 1)[1].split('\nPY_LOG_METRICS', 1)[0]
+    with tempfile.TemporaryDirectory() as target:
+        subprocess.run([sys.executable, '-', target], input=builder, text=True, check=True)
+        return {path.stem: json.loads(path.read_text()) for path in Path(target).glob('*.json')}
+
+
+def _extract(extractor: str, payload: str) -> str:
+    """Apply a Cloud Logging REGEXP_EXTRACT(textPayload, "...") extractor the way Logging does."""
+    match = re.fullmatch(r'REGEXP_EXTRACT\(textPayload, "(.+)"\)', extractor)
+    assert match, extractor
+    found = re.search(match.group(1), payload)
+    return found.group(1) if found else ''
+
+
+def _text_payload(record: Any) -> str:
+    # logging.basicConfig in modal/job.py writes LEVEL:logger:message to stderr -> textPayload.
+    return f'{record.levelname}:utils.other.notifications:{record.getMessage()}'
+
+
+@pytest.mark.parametrize('created,retry', [(True, False), (True, True), (False, False)])
+def test_generated_log_line_feeds_the_recap_log_metric(caplog, created, retry) -> None:
+    """The durable core-feature counter counts exactly current-day generations.
+
+    The job's Prometheus counters never reached Cloud Monitoring (the sidecar's
+    exports were rejected), so this log line is the outcome signal. A filter
+    token or extractor that drifts from the emitted text is the same outage as no
+    signal at all.
+    """
+    spec = _recap_log_metric_specs()['daily_summary_recap_generated']
+    token = spec['filter'].split('textPayload:"', 1)[1].rstrip('"')
+    with _loaded_job() as (notifications, _db, _redis, _fallbacks):
+        notifications._generate_and_store_daily_summary = lambda *_a, **_k: (
+            {'id': 'recap', 'notification_delivery_completed': True},
+            created,
+            None,
+        )
+        notifications._backfill_recent_daily_summaries = lambda *_a: None
+        with caplog.at_level('INFO'):
+            notifications._send_summary_notification(('uid-7', [], 'UTC', None, False, retry))
+    payloads = [_text_payload(r) for r in caplog.records if token in _text_payload(r)]
+    assert len(payloads) == int(created)
+    for payload in payloads:
+        assert _extract(spec['labelExtractors']['retry'], payload) == str(retry)
+
+
+def test_failed_log_line_feeds_the_recap_failure_log_metric(caplog) -> None:
+    spec = _recap_log_metric_specs()['daily_summary_user_failed']
+    token = spec['filter'].split('textPayload:"', 1)[1].rstrip('"')
+    with _loaded_job() as (notifications, _db, _redis, _fallbacks):
+
+        class APIConnectionError(Exception):
+            pass
+
+        def worker(user):
+            if user[0] == 'uid-01':
+                raise APIConnectionError('Connection error.')
+
+        notifications._send_summary_notification = worker
+        with caplog.at_level('INFO'):
+            asyncio.run(notifications._send_bulk_summary_notification(_users(3), target_hour=22))
+    payloads = [_text_payload(r) for r in caplog.records if token in _text_payload(r)]
+    assert len(payloads) == 1
+    assert _extract(spec['labelExtractors']['reason'], payloads[0]) == 'generation_error'
+    assert _extract(spec['labelExtractors']['error_type'], payloads[0]) == 'APIConnectionError'
 
 
 def test_cursor_age_metric_retains_abandonment_signature_then_resets_on_fresh_tick() -> None:

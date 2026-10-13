@@ -532,3 +532,23 @@ async def test_anthropic_stream_cleanup_failure_still_observes_one_terminal(monk
     assert len(recorded) == 1
     assert recorded[0]['outcome'] == 'error'
     assert recorded[0]['error_class'] == 'eof_before_terminal_marker'
+
+
+@pytest.mark.parametrize('streaming', [False, True])
+@pytest.mark.parametrize('status_code', [400, 422, 429, 529])
+def test_anthropic_error_observation_passes_upstream_status(
+    _reset_anthropic_client, monkeypatch, streaming, status_code
+):
+    fake = _reset_anthropic_client
+    observations = []
+    monkeypatch.setattr(anthropic_messages, 'observe_route_result', lambda *args, **kwargs: observations.append(kwargs))
+    fake._post_response = httpx.Response(status_code, json={'error': {'type': 'test_error'}})
+    fake._stream_context = _FakeAsyncStreamContext(status_code=status_code, chunks=[b'{"error":{"type":"test_error"}}'])
+
+    response = TestClient(app).post('/v1/messages', json=_agentic_request(stream=streaming), headers=_auth_headers())
+
+    assert response.status_code == status_code
+    assert len(observations) == 1
+    assert observations[0]['upstream_http_status'] == status_code
+    assert observations[0]['streaming'] is streaming
+    assert observations[0]['error_class'] == anthropic_messages._provider_status_error_class(status_code)

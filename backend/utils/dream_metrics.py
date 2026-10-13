@@ -4,11 +4,13 @@ import logging
 import json
 
 from prometheus_client import Counter
+from utils.dream_diagnostics import counts_only
 
 POLICY_WARNINGS = Counter('omi_dream_policy_warning_total', 'Ignored auto-apply policy kinds')
 
 PASSES = Counter('omi_dream_pass_total', 'Dream terminal pass outcomes', ['status', 'error_type'])
 TOKENS = Counter('omi_dream_tokens_total', 'Observed dream model tokens')
+RESPONSE_RETRIES = Counter('omi_dream_response_retries_total', 'Dream malformed/truncated JSON response retries')
 CANARY = Counter('omi_dream_canary_total', 'Dream synthetic loop outcomes', ['status', 'stage'])
 
 REJECTED = Counter('omi_dream_rejected_total', 'Dream deterministic proposal rejections', ['reason'])
@@ -24,14 +26,34 @@ REJECTION_REASONS = {
     'feedback_cap',
     'privacy_rejected',
     'invalid_evidence',
+    'invalid_spelling',
     'stale_task_evidence',
     'task_too_recent',
     'bad_target',
     'common_word',
+    'context_target',
+    'ungrounded_spelling',
+    'edit_cap',
+    'invalid_edit',
+    'duplicate_edit',
+    'noop',
+    'contradictory_spelling',
+    'invalid_question_evidence',
+    'consensus_rejected',
 }
 
 logger = logging.getLogger(__name__)
 EVIDENCE_CHARS = Counter('omi_dream_evidence_chars_total', 'Projected dream evidence characters', ['lane'])
+RETRIEVAL = Counter(
+    'omi_dream_retrieval_total', 'Dream retrieval operations and candidate dispositions', ['path', 'count']
+)
+RETRIEVAL_FAILURES = Counter(
+    'omi_dream_retrieval_failure_total', 'Dream retrieval exception classes', ['path', 'exception_class']
+)
+TARGET_CONTEXT = Counter('omi_dream_target_context_total', 'Dream target retrieval coverage', ['coverage'])
+DIRTY_READS = Counter('omi_dream_dirty_read_total', 'Dream queue selection dispositions', ['count'])
+INPUT_CONTENT = Counter('omi_dream_input_content_total', 'Dream input content availability', ['count'])
+CONTEXT_BUDGET = Counter('omi_dream_context_budget_total', 'Dream context allocation diagnostics', ['count'])
 
 ERROR_TYPES = {
     'TimeoutError',
@@ -39,6 +61,7 @@ ERROR_TYPES = {
     'ValidationError',
     'RuntimeError',
     'PreTokenFailure',
+    'CapacityWait',
     'ReadError',
     'ReadTimeout',
     'ConnectError',
@@ -48,16 +71,20 @@ ERROR_TYPES = {
     'NotFound',
     'DeadlineExceeded',
     'AdmissionDenied',
+    'DreamTranscriptReadError',
+    'InvalidModelResponse',
 }
 
 
 def record_pass(report):
     status = report.get('status', 'failed')
-    if status not in {'complete', 'failed', 'deadline', 'not_admitted'}:
+    if status not in {'complete', 'failed', 'deadline', 'not_admitted', 'waiting'}:
         status = 'failed'
     error = report.get('error_type')
     PASSES.labels(status, error if error in ERROR_TYPES else 'other' if error else 'none').inc()
     TOKENS.inc(max(0, int(report.get('tokens', 0))))
+    retries = max(0, int(report.get('response_retries', 0)))
+    RESPONSE_RETRIES.inc(retries)
 
     for reason, count in report.get('rejected', {}).items():
         if reason in REJECTION_REASONS:
@@ -67,14 +94,54 @@ def record_pass(report):
     reasoning = max(0, int(report.get('reasoning_evidence_chars', 0)))
     EVIDENCE_CHARS.labels('triage').inc(triage)
     EVIDENCE_CHARS.labels('reasoning').inc(reasoning)
+    diagnostics = counts_only(report)
+    for path, counts in diagnostics['retrieval_counts'].items():
+        for key, count in counts.items():
+            RETRIEVAL.labels(path, key).inc(count)
+    for path, counts in diagnostics['retrieval_failure_counts'].items():
+        for name, count in counts.items():
+            RETRIEVAL_FAILURES.labels(path, name).inc(count)
+    for key, count in diagnostics['dirty_counts'].items():
+        DIRTY_READS.labels(key).inc(count)
+    for key, count in diagnostics['target_context_counts'].items():
+        TARGET_CONTEXT.labels(key).inc(count)
+    for key, count in diagnostics['input_content_counts'].items():
+        INPUT_CONTENT.labels(key).inc(count)
+    for key, count in diagnostics['context_budget_counts'].items():
+        CONTEXT_BUDGET.labels(key).inc(count)
     logger.info(
-        'Dream pass status=%s triage_evidence_chars=%d reasoning_evidence_chars=%d '
-        'dropped_invalid=%s validation_errors=%s rejected=%s poisoned=%d',
+        'Dream pass status=%s context_mode=%s input_tokens_estimate=%d targets=%d records=%d response_retries=%d '
+        'samples_requested=%d samples_returned=%d samples_failed=%d consensus_threshold=%d '
+        'triage_evidence_chars=%d reasoning_evidence_chars=%d '
+        'dropped_invalid=%s validation_errors=%s rejected=%s poisoned=%d retrieval_counts=%s '
+        'retrieval_failure_counts=%s dirty_counts=%s target_context_counts=%s input_content_counts=%s context_budget_counts=%s',
         status,
+        'full' if report.get('context_mode') == 'full' else 'bounded',
+        max(0, int(report.get('input_tokens_estimate', 0))),
+        max(0, int(report.get('targets', 0))),
+        max(0, int(report.get('records', 0))),
+        retries,
+        max(0, int(report.get('samples_requested', 0))),
+        max(0, int(report.get('samples_returned', 0))),
+        max(0, int(report.get('samples_failed', 0))),
+        max(0, int(report.get('consensus_threshold', 0))),
         triage,
         reasoning,
         json.dumps(report.get('dropped_invalid', {}), sort_keys=True),
         json.dumps(report.get('validation_errors', {}), sort_keys=True),
-        json.dumps(report.get('rejected', {}), sort_keys=True),
+        json.dumps(
+            {
+                reason: max(0, int(count))
+                for reason, count in report.get('rejected', {}).items()
+                if reason in REJECTION_REASONS
+            },
+            sort_keys=True,
+        ),
         max(0, int(report.get('poisoned', 0))),
+        json.dumps(diagnostics['retrieval_counts'], sort_keys=True),
+        json.dumps(diagnostics['retrieval_failure_counts'], sort_keys=True),
+        json.dumps(diagnostics['dirty_counts'], sort_keys=True),
+        json.dumps(diagnostics['target_context_counts'], sort_keys=True),
+        json.dumps(diagnostics['input_content_counts'], sort_keys=True),
+        json.dumps(diagnostics['context_budget_counts'], sort_keys=True),
     )

@@ -4,9 +4,11 @@ The production backend deploy provisions the `backend_route_5xx` Cloud
 Logging counter and the "Backend single-route 5xx regression" Cloud
 Monitoring alert in `based-hardware`. The counter matches Cloud Run request
 log entries for the `backend` service with `httpRequest.status` in
-[500, 600), and the alert fires when one route family exceeds **15 errors
-inside a rolling 900-second window for 600 consecutive seconds**. It routes
-through `SYNC_BACKFILL_ALERT_NOTIFICATION_CHANNELS`.
+[500, 600), and the alert fires when one route family exceeds **60 errors
+inside a rolling 3600-second window for 600 consecutive seconds**. It routes
+through `SYNC_BACKFILL_ALERT_NOTIFICATION_CHANNELS`. Notifications fire
+when an incident opens (`alertStrategy.notificationPrompts` is `OPENED`
+only); closure is visible in the Cloud Monitoring console, not by email.
 
 Route identity is `method` + `route`. `route` is extracted by
 `^https?://[^/?#]+((?:/v[0-9]+)?(?:/[a-z][a-z_-]*){1,3})(?:/|[?#]|$)`: an
@@ -43,14 +45,9 @@ count is bounded by traffic shape, not by a fixed route list.
 ## Why these numbers
 
 - The 2026-10-02 People regression returned 504 on ~30% of calls at 70-90
-  per hour: 17.5-22.5 errors per 15-minute window. The 16th error lands
-  `16/r*60` ≈ 10.7-13.7 minutes after the first; the 10-minute dwell then
-  holds, so the policy pages ≈20.7-23.7 minutes after onset, plus
-  log-ingestion and evaluation latency — inside the four-hour blind spot
-  that let it go unnoticed.
-- Firing needs more than 15 errors inside one family's rolling 15-minute
-  window held for 10 minutes — a sustained rate above ~60 errors/hour.
-  Measured chronic per-15-minute averages sit far below:
+  per hour. That is a sustained rate above ~60 errors/hour, which is still
+  the floor: more than 60 errors in a rolling 60-minute window, held for
+  10 minutes. Measured chronic per-15-minute averages sit far below:
   `/v1/dev/user/memories` 2.75, `/v1/dev/user/goals` 2.55, `/v3/memories`
   1.29 POST / 1.66 GET (methods group separately, so the combined 283 does
   not stack), `/v1/conversations` 1.43 at the 137 reported parent calls
@@ -60,6 +57,25 @@ count is bounded by traffic shape, not by a fixed route list.
   chronic average pages continuously, but unmeasured parent-family volume
   or bursts could — the threshold intentionally has no exemptions so
   unseen routes still page.
+- The original 15-in-15-minutes rule paged a People-style onset in
+  ≈21-24 minutes. It also flapped: short 16-26 error blips (once 66) on
+  `POST /v3/memories`, `POST`/`DELETE /v1/conversations`, and
+  `GET /v1/proactivity/feed` opened for 2-8 minutes then resolved; and
+  from ~2026-10-06 10:10 UTC, `POST /v1/conversations/from-segments`
+  produced 97-135 5xx per 15 minutes every hour (~100x its 1.14 chronic
+  average). Each burst opened an incident that resolved in 25-39 minutes
+  as the 15-minute window drained, then reopened — ~15-17 incidents/day
+  plus RESOLVED emails. The from-segments 5xx is a real ongoing failure
+  and needs a separate fix; this window only stops the re-page cycle.
+- A 60-minute rolling sum at threshold 60 keeps the same ~60/hour floor.
+  Isolated blips stay under 60/window. An hourly from-segments burst
+  keeps the hour above 60, so one incident stays open until the
+  endpoint is fixed. `notificationPrompts` is `["OPENED"]` so recovery
+  does not email.
+- Trade-off: a steady People-style 70-90 errors/hour now pages ≈50-61
+  minutes after onset instead of ≈21-24 minutes (still inside the
+  four-hour blind spot the alert was built for). Hard outages (hundreds
+  of errors/hour) still page in ≈15-20 minutes.
 
 ## Respond to an alert
 
@@ -77,6 +93,17 @@ count is bounded by traffic shape, not by a fixed route list.
 
 Re-deploying does not churn the alert: the provisioner reconciles
 read-before-write, writes nothing when the metric filter/extractors and
-policy already match, and carries over the existing condition's resource
-name when it does update — unchanged deploys never restart the 600-second
-dwell.
+managed policy fields already match (including `notificationPrompts`),
+and carries over the existing condition's resource name when it does
+update — unchanged deploys never restart the 600-second dwell. Create
+uses `gcloud monitoring policies create` flags, which cannot set
+`alertStrategy`; the post-create describe then updates in place when
+`notificationPrompts` is missing so the live policy matches the JSON.
+
+To roll the threshold and window back, revert the policy JSON and
+re-run the prod backend deploy. Reverting `alertStrategy` out of the
+file does **not** restore CLOSED notifications by itself: either set
+`notificationPrompts` to `["OPENED", "CLOSED"]` in the JSON (the drift
+check then enforces it) or edit that field on the live policy after
+deploy. Do not rename the policy; the provisioner looks it up by
+display name.

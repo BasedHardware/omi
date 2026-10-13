@@ -16,6 +16,7 @@ from utils.llm.shaped_agent import Budget, Mount
 
 @pytest.fixture
 def transport(monkeypatch):
+    monkeypatch.setattr(dream_transport.dream_capacity, 'available_model', AsyncMock(return_value='gemini-2.5-flash'))
     client = type('Client', (), {'post': AsyncMock()})()
     monkeypatch.setattr(dream_transport, 'get_llm_gateway_client', lambda: client)
     monkeypatch.setattr(dream_transport, 'get_llm_gateway_base_url', lambda: 'https://synthetic.invalid')
@@ -66,6 +67,8 @@ def test_plan_caps_all_arrays_including_optional_referenced_models(transport):
         'kind': 'speaker',
         'title': 'synthetic',
         'created_at': '2026-10-09T00:00:00Z',
+        'source_ref': 'conversations/synthetic',
+        'quote': 'synthetic',
         'speaker': {
             'prompt_id': 'synthetic',
             'conversation_id': 'synthetic',
@@ -82,10 +85,19 @@ def test_plan_caps_all_arrays_including_optional_referenced_models(transport):
         'kind': 'spelling',
         'title': 'synthetic',
         'created_at': '2026-10-09T00:00:00Z',
+        'source_ref': 'conversations/synthetic',
+        'quote': 'synthetic',
         'spelling': {'term_id': 'synthetic', 'options': ['a', 'b', 'c', 'd'], 'allow_custom': True},
     }
     items = {
-        'edits': {'kind': 'spelling', 'target': ref, 'reason': 'synthetic', 'evidence': [ref] * 11},
+        'edits': {
+            'kind': 'spelling',
+            'target': ref,
+            'before': 'wrng',
+            'after': 'right',
+            'reason': 'synthetic',
+            'evidence': [ref] * 11,
+        },
         'questions': question,
         'vocabulary': {'kind': 'jargon', 'spelling': 'synthetic', 'aliases': ['a'] * 6, 'evidence': [ref] * 11},
         'frames': {'screen_ref': ref, 'question': 'synthetic'},
@@ -134,10 +146,19 @@ def test_mixed_plan_retains_valid_items_in_every_list(transport):
         'kind': 'spelling',
         'title': 'Invented spelling',
         'created_at': '2026-10-09T00:00:00Z',
+        'source_ref': 'conversations/synthetic',
+        'quote': 'synthetic',
         'spelling': {'term_id': 'invented', 'options': ['a', 'b'], 'allow_custom': True},
     }
     valid = {
-        'edits': {'kind': 'spelling', 'target': ref, 'reason': 'Invented typo', 'evidence': [ref]},
+        'edits': {
+            'kind': 'spelling',
+            'target': ref,
+            'before': 'wrng',
+            'after': 'right',
+            'reason': 'Invented typo',
+            'evidence': [ref],
+        },
         'questions': question,
         'vocabulary': {'kind': 'jargon', 'spelling': 'Invented', 'evidence': [ref]},
         'frames': {'screen_ref': ref, 'question': 'Invented question'},
@@ -163,7 +184,9 @@ def test_mixed_plan_retains_valid_items_in_every_list(transport):
     response['edits'].insert(1, {**valid['edits'], 'reason': ''})
     sink = {'tokens': 0}
     value = transport(Plan, response, sink=sink)
-    assert value == Plan.model_validate({key: [item] for key, item in valid.items()})
+    expected = Plan.model_validate({key: [item] for key, item in valid.items()})
+    server_time = {'questions': {'__all__': {'created_at'}}}
+    assert value.model_dump(exclude=server_time) == expected.model_dump(exclude=server_time)
     assert sink['dropped_invalid'] == {key: 2 if key == 'edits' else 1 for key in valid}
     assert sink['validation_errors'] == {
         'edits.evidence:too_short': 1,
@@ -182,6 +205,8 @@ def test_matching_payload_validator_still_drops_question(transport):
         'kind': 'task',
         'title': 'Invented',
         'created_at': '2026-10-09T00:00:00Z',
+        'source_ref': 'conversations/synthetic',
+        'quote': 'synthetic',
         'spelling': {'term_id': 'invented', 'options': ['a', 'b'], 'allow_custom': True},
     }
     sink = {'tokens': 0}

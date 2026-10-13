@@ -1,5 +1,4 @@
 import 'dart:io';
-import 'dart:typed_data';
 
 import 'package:flutter/foundation.dart';
 
@@ -74,6 +73,34 @@ class OnDeviceWhisperProvider implements ISttProvider {
     );
   }
 
+  /// Length of the audio in [bytes], in seconds.
+  ///
+  /// [bytes] is the buffer handed to whisper: a WAV container on every
+  /// transcoder path this provider is built with. Deriving the duration from
+  /// the whole buffer length divided by a fixed 32000 (16000 Hz * 2 bytes)
+  /// counted the 44-byte header as audio and reported an 8 kHz WAV at half
+  /// its real length, which corrupts the segment timeline the conversation is
+  /// persisted from. Read the sample rate and the PCM length out of the
+  /// header instead, and fall back to 16 kHz mono for non-WAV input.
+  @visibleForTesting
+  static double audioDurationSeconds(Uint8List bytes) {
+    const fallbackBytesPerSecond = 32000.0; // 16000 Hz, 16-bit mono
+    if (bytes.lengthInBytes < 44) {
+      return bytes.lengthInBytes / fallbackBytesPerSecond;
+    }
+
+    final data = ByteData.sublistView(bytes);
+    final sampleRate = data.getUint32(24, Endian.little);
+    final pcmBytes = data.getUint32(40, Endian.little);
+
+    if (sampleRate == 0 || pcmBytes == 0 || pcmBytes > bytes.lengthInBytes - 44) {
+      return bytes.lengthInBytes / fallbackBytesPerSecond;
+    }
+
+    // 16-bit mono PCM: 2 bytes per sample.
+    return pcmBytes / (sampleRate * 2);
+  }
+
   @override
   Future<SttTranscriptionResult?> transcribe(
     Uint8List audioData, {
@@ -103,7 +130,7 @@ class OnDeviceWhisperProvider implements ISttProvider {
         cleanText = cleanText.replaceAll(RegExp(r'\[.*?\]'), '').trim();
         cleanText = cleanText.replaceAll(RegExp(r'\(.*?\)'), '').trim();
 
-        final duration = audioData.lengthInBytes / 32000.0;
+        final duration = audioDurationSeconds(audioData);
         final filteredText = _qualityGate.filter(
           cleanText,
           audioData: audioData,

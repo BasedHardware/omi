@@ -8,6 +8,7 @@ import 'package:omi/backend/schema/geolocation.dart';
 import 'package:omi/services/account_cutover/account_cutover_runtime.dart';
 import 'package:omi/services/wals/sync_rate_limit_reconciliation.dart';
 import 'package:omi/services/wals/sync_rate_limiter.dart';
+import 'package:omi/services/wals/sync_job_poller.dart';
 import 'package:omi/utils/analytics/analytics_manager.dart';
 import 'package:omi/utils/mutex.dart';
 import 'package:uuid/uuid.dart';
@@ -173,9 +174,11 @@ class SyncUploadGate {
       }
       if (!allowed) {
         throw SyncRateLimitedException(
-          kind: _limiter.reason == RateLimitReason.backendBusy
-              ? SyncRateLimitKind.backendCapacity
-              : SyncRateLimitKind.fairUse,
+          kind: switch (_limiter.reason) {
+            RateLimitReason.backendBusy => SyncRateLimitKind.backendCapacity,
+            RateLimitReason.edgeThrottle => SyncRateLimitKind.edgeThrottle,
+            _ => SyncRateLimitKind.fairUse,
+          },
           retryAfterSeconds: _limiter.activeRetryAfterSeconds,
         );
       }
@@ -206,7 +209,8 @@ class SyncUploadGate {
           claimLiveCapture: claimLiveCapture,
           geolocation: geolocation,
         );
-        _limiter.clear();
+        SyncJobPoller.instance.validateOwner(result);
+        if (_limiter.reason != RateLimitReason.edgeThrottle) _limiter.clear();
         _emitTelemetry(
           RecordingUploadTelemetry.completedEvent,
           RecordingUploadTelemetry.completedPayload(
@@ -223,12 +227,12 @@ class SyncUploadGate {
       } on SyncRateLimitedException catch (error) {
         _limiter.markLimited(
           retryAfterSeconds: error.retryAfterSeconds,
-          reason: error.kind == SyncRateLimitKind.fairUse ? RateLimitReason.fairUse : RateLimitReason.backendBusy,
+          reason: error.kind.cooldownReason,
         );
         // Paced historical recovery is the server asking us to wait. The WAL
         // stays pending and retries on Retry-After; it is not a user-visible
         // upload failure. Fair-use and unscoped 429s still are.
-        if (!isPacedBackfillReasonCode(error.reasonCode)) {
+        if (!isPacedBackfillReasonCode(error.reasonCode) && error.reasonCode != 'sync_content_in_progress') {
           _recordUploadFailure(
             error,
             attemptId: attemptId,

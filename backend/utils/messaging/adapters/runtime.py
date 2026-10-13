@@ -52,7 +52,7 @@ def configured_adapters():
 
 
 async def recover_pending(gateways, stop, *, interval=30):
-    # Running jobs/leases are deliberately excluded: effects/delivery may be ambiguous.
+    # Pending wakes transactionally settle expired heads without replaying ambiguous effects.
     while not stop.is_set():
         for gateway in gateways:
             try:

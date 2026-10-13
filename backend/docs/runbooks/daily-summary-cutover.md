@@ -155,6 +155,39 @@ The heartbeat expects continuous operation of the 15-minute Scheduler; verify
 at least one summary after provisioning. Investigate job errors and Scheduler
 state when heartbeat is missing; investigate retry recipients, cohort age,
 query errors and budget skips when cohorts stay incomplete. Inspect the
-"Daily recaps — delivery job health" row in the Core Features dashboard.
+"Daily recaps — generation and delivery job health" row in the Core Features dashboard.
 Dashboard ingestion setup and post-deploy checks:
 [Cloud Run metrics ingestion](cloud-run-metrics-ingestion.md#notifications-job-metrics).
+
+### Recap generation outcome (core feature signal)
+
+The 2026-10-10 outage (every generation failed with `APIConnectionError` for two
+days) was invisible on both existing paths. The `omi_daily_summary_*` Prometheus
+counters never left the job: its runtime identity `backend-jobs-runtime` lacks
+`roles/monitoring.metricWriter`, so every sidecar export is rejected with
+`PermissionDenied` while the execution still succeeds. And
+`daily_summary_cohort_incomplete` cannot tell an outage from a healthy day: one
+persistently failing recipient keeps every pass `complete=False`, and its
+900-second `ALIGN_RATE` window empties whenever two passes log more than 900
+seconds apart (26 of 47 gaps on 2026-10-10), resetting the three-hour duration.
+It opened one incident, on 2026-10-12 05:44 UTC, emailed to two addresses.
+
+The outcome signal is now log-based and scrape-independent. The job logs
+`daily_summary_generated uid=… retry=…` for each current-day recap it persists, beside
+the existing `daily_summary_user_failed … reason=… error_type=…`. The production
+deploy provisions the `daily_summary_recap_generated` (label `retry`) and
+`daily_summary_user_failed` (labels `reason`, `error_type`) log metrics. Grafana reads them through the Cloud
+Monitoring datasource as `logging_googleapis_com:user_<metric>`:
+
+- Core Features, top row: generation success over 3 hours,
+  `generated / (generated + failed)` without `DailySummaryDeliveryError` (red under 90%);
+  recaps generated in 24 hours (red at zero); generation failures over 3 hours; job passes in the last hour (expect 4).
+- Alert `omi-daily-recap-generation-failing` (Telegram, `for: 15m`): at least 10
+  generation failures in an hour with under half succeeding, or at least 20
+  failures in three hours with zero generated. Failures count per cohort pass,
+  so one recipient retried every 15 minutes counts up to four per hour.
+
+Grafana alert rules are not imported on merge. Import the committed rule after
+the first production notifications deploy creates both metrics. To light the
+Prometheus row panels, grant `backend-jobs-runtime` `roles/monitoring.metricWriter`
+and confirm collector logs show no `PermissionDenied`.

@@ -16,7 +16,14 @@ import base64
 from datetime import datetime, timezone
 from typing import List, Optional
 from pathlib import Path
-from utils.executors import critical_executor, db_executor, llm_executor, storage_executor, sync_executor, run_blocking
+from utils.executors import (
+    critical_executor,
+    db_executor,
+    llm_executor,
+    storage_executor,
+    sync_executor,
+    run_blocking,
+)
 
 from fastapi import (
     APIRouter,
@@ -119,6 +126,7 @@ import logging
 logger = logging.getLogger(__name__)
 
 router = APIRouter(route_class=MultipartMaxPartSizeRoute)
+
 
 # WS idle timeout: close if no audio bytes received for this long
 _WS_IDLE_TIMEOUT_S = 60
