@@ -153,7 +153,7 @@ class LocalRecordingsProvider extends ChangeNotifier {
       }
       final uid = SharedPreferencesUtil().uid;
       final ownersFile = File('${dir.path}/$_ownersFileName');
-      final owners = _readOwners(ownersFile);
+      final owners = await _readOwners(ownersFile);
       if (owners == null) {
         _recordings = [];
         _ownedNames = {};
@@ -163,7 +163,8 @@ class LocalRecordingsProvider extends ChangeNotifier {
       final list = <LocalRecording>[];
       final seen = <String>{};
       final onDisk = <String>{};
-      for (final entity in dir.listSync().whereType<File>()) {
+      await for (final entity in dir.list()) {
+        if (entity is! File) continue;
         final name = entity.path.split('/').last;
         // Only batch recordings (audio_omibatch* — includes the omibatchlimitless
         // marker) — never offline-sync WAL flushes, which share this directory and
@@ -588,10 +589,10 @@ class LocalRecordingsProvider extends ChangeNotifier {
     await temp.rename(file.path);
   }
 
-  Map<String, String>? _readOwners(File file) {
+  Future<Map<String, String>?> _readOwners(File file) async {
     try {
-      if (!file.existsSync()) return {};
-      final decoded = jsonDecode(file.readAsStringSync());
+      if (!await file.exists()) return {};
+      final decoded = jsonDecode(await file.readAsString());
       if (decoded is! Map<String, dynamic>) return null;
       final owners = <String, String>{};
       for (final entry in decoded.entries) {
@@ -662,8 +663,13 @@ Future<UploadFilesResult> uploadNativeBatchRecording(
 /// loaded whole into memory, and only counts a frame once its full payload is
 /// present — a truncated tail frame (e.g. from a crash-recovered file) is not
 /// counted, keeping the duration exact.
-Future<int> countBatchRecordingFrames(String path) async {
-  final raf = await File(path).open();
+/// Cold caches scan every recording at Home startup. Keep both the I/O and
+/// per-frame parsing in a worker: asynchronous reads alone still run the parse
+/// loop and hundreds of read-completion callbacks on the UI isolate.
+Future<int> countBatchRecordingFrames(String path) => compute(_countBatchRecordingFrames, path);
+
+int _countBatchRecordingFrames(String path) {
+  final raf = File(path).openSync();
   try {
     const chunkSize = 64 * 1024;
     final buf = Uint8List(chunkSize);
@@ -673,7 +679,7 @@ Future<int> countBatchRecordingFrames(String path) async {
     var inPayload = false;
     var frames = 0;
     while (true) {
-      final read = await raf.readInto(buf, 0, chunkSize);
+      final read = raf.readIntoSync(buf, 0, chunkSize);
       if (read <= 0) break;
       var i = 0;
       while (i < read) {
@@ -700,6 +706,6 @@ Future<int> countBatchRecordingFrames(String path) async {
     }
     return frames; // any in-flight (truncated) frame is intentionally not counted
   } finally {
-    await raf.close();
+    raf.closeSync();
   }
 }
