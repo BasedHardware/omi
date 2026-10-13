@@ -1,0 +1,11 @@
+{
+  "schema_version": 1,
+  "tiers": [
+    {"plan_id": "basic", "display_name": "Free", "tagline": "Start building your memory", "recommended": false, "mcp_daily_cap": 100},
+    {"plan_id": "plus", "display_name": "Plus", "tagline": "Your everyday memory companion", "recommended": true, "mcp_daily_cap": 500, "proposed_prices": {"month": 1999, "year": 19990}},
+    {"plan_id": "operator", "display_name": "Pro", "tagline": "Proactive help with screen context", "recommended": false, "mcp_daily_cap": 5000, "proposed_prices": {"month": 4999, "year": 49990}},
+    {"plan_id": "architect", "display_name": "Architect", "tagline": "For demanding workflows", "recommended": false, "mcp_daily_cap": 5000}
+  ],
+  "currency": "usd",
+  "entitlement_version": "ladder_v1"
+}
