@@ -16,7 +16,7 @@ def test_promotion_is_atomic_preserves_manual_edits_and_fences_current_revision(
     other = datetime(2026, 1, 2, tzinfo=timezone.utc)
     old = TranscriptSegment(
         id='old',
-        text='a sufficiently long synthetic sentence',
+        text='a sufficiently long synthetic sentence edited',
         start=0,
         end=4,
         is_user=False,
@@ -24,7 +24,9 @@ def test_promotion_is_atomic_preserves_manual_edits_and_fences_current_revision(
         speaker_label_source='manual',
         translations=[{'lang': 'fr', 'text': 'synthetic translation'}],
     )
-    candidate = TranscriptSegment(id='new', text=old.text, start=0, end=4, is_user=True, speaker_id=1)
+    candidate = TranscriptSegment(
+        id='new', text='a sufficiently long synthetic sentence', start=0, end=4, is_user=True, speaker_id=1
+    )
     data = db.encode_conversation_for_write(
         uid,
         {
@@ -59,10 +61,11 @@ def test_promotion_is_atomic_preserves_manual_edits_and_fences_current_revision(
     stored = db.prepare_conversation_for_read(client.rows[path], uid)
     if written:
         segment = stored['transcript_segments'][0]
-        assert segment['id'] == 'new' and segment['is_user'] is False
+        assert segment['id'] == 'old' and segment['is_user'] is False
+        assert segment['text'] == old.text
         assert segment['translations'] == [{'lang': 'fr', 'text': 'synthetic translation'}]
-        assert stored['structured']['notes'][0]['source_segment_ids'] == ['new']
-        assert stored['manual_speaker_assignments']['segments']['new']['generation'] == 1
+        assert stored['structured']['notes'][0]['source_segment_ids'] == ['old']
+        assert stored['manual_speaker_assignments']['segments']['old']['generation'] == 1
     else:
         assert stored['transcript_segments'][0]['id'] == 'old'
 

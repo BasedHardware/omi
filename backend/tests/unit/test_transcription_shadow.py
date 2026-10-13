@@ -331,7 +331,11 @@ def test_result_write_is_fenced_by_account_deletion_intent(monkeypatch):
 
 
 def test_flag_off_output_is_byte_identical_to_legacy(monkeypatch):
-    """Synthetic baseline payload from the pre-cutover _make_pass path."""
+    """Fixture executed from origin/main e2edc7c15ca (not this PR's code).
+
+    Capture uses synthetic PCM, ASR, cache and a fixed segment UUID; only the
+    provider seams are mocked. The real main _make_pass generated the fixture.
+    """
     import json
     from uuid import UUID
     from models import transcript_segment
@@ -367,7 +371,9 @@ def test_flag_off_output_is_byte_identical_to_legacy(monkeypatch):
     absent = run()
     monkeypatch.setenv('TRANSCRIPTION_FINAL_PASS_DIARIZER', 'legacy')
     explicit = run()
-    assert absent.encode() == explicit.encode()
+    expected = (Path(__file__).parent / 'fixtures' / 'transcription_shadow_main.json').read_bytes().rstrip(b'\n')
+    assert absent.encode() == expected
+    assert explicit.encode() == expected
 
 
 def test_v2_audio_collection_and_duplicate_trim_stay_on_pcm16_sample_boundaries(monkeypatch):

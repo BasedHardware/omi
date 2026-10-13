@@ -4432,21 +4432,32 @@ v2 scalar outcomes/comparisons are separate. No private text or vectors enter me
 
 `TRANSCRIPTION_FINAL_PASS_SYNC_ENABLED=false` independently gates sync/WAL cutover.
 When enabled for the same cohort, sync reuses its matching/storage WAV download
-and passes provider word clocks through the same triage, diarizer and naming seam.
+and passes absolute provider word clocks through the same triage, diarizer and naming seam.
+Persisted sync segments use the legacy first-word origin and two-decimal clocks.
 Failure retains legacy matching; manual owner reservations remain authoritative.
 Live matching enters through an adapter preserving its clip policy unchanged.
 
 `TRANSCRIPTION_FINAL_PASS_AUTHORITATIVE=false` independently gates record replacement.
 Promotion requires complete audio and a current completed, unlocked conversation
-revision. A transaction rechecks rollout, deletion and revision; remaps manual
-receipts, edited identities, translations and structured source IDs together;
-and protects the write with the existing encryption boundary. Unsafe splits,
-conflicting annotations, translation materializations and app/note derived
-references block promotion. This background swap does not rerun downstream memory
+revision. A transaction rechecks rollout, deletion and revision, verifies segment
+correspondence, and changes only speaker fields on stored segments. Stored text,
+IDs, clocks, translations and structured source IDs remain unchanged. Manual
+receipts are resolved to the retained IDs; person edits and either direction of a
+bare legacy `is_user` disagreement are protected. Conflicting speakers within a
+stored segment, unsafe mappings, translation materializations and app/note derived
+references block promotion. The existing encryption boundary protects the write.
+This background speaker update does not rerun downstream memory
 or summary jobs; authoritative rollout must qualify that integration before enablement.
 
-Deploy diarizer image first (additive `/v2/diarization` and `/metrics`), then backend
+Deploy the additive diarizer image first, then a separate batch Helm release
+(`batch_main:app`, `DIARIZATION_V2_ENABLED=true`) on its own GPUs, then backend
 and pusher with all cutover flags off, then a separately reviewed cohort flag PR.
+The default embedding/v1 app eagerly warms its models before TCP readiness and
+keeps concurrent legacy routes without the batch lock. The batch app warms its
+models before listening; failures abort startup. `/v2/diarization` uses the batch
+ClusterIP, not the embedding ingress. See `scripts/diarization_eval/capacity.md`
+for routing and the opt-in release overlay; verify caller reachability before
+cohort enablement.
 Rollback: disable authoritative/sync flags first, set mode to `legacy`, then restore
 previous backend and diarizer image digests if needed. No stored-history reversal
 is automatic. Shared scorer instructions: `scripts/diarization_eval/README.md`.

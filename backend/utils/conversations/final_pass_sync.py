@@ -18,7 +18,7 @@ def run_sync_final_pass(uid, audio, words, segments, cache, *, scope, owner_rese
         waveform = AudioSegment.from_wav(io.BytesIO(audio)).set_channels(1).set_frame_rate(16000).set_sample_width(2)
         if len(waveform) > 7200 * 1000:
             raise ValueError('audio too long')
-        first_word = min((float(w['timestamp'][0]) for w in words), default=0)
+        first_word = round(float(words[0]['timestamp'][0]), 2) if words else 0
         evidence_segments = [s.model_copy(deep=True) for s in segments]
         for segment in evidence_segments:
             segment.start += first_word
@@ -47,6 +47,11 @@ def run_sync_final_pass(uid, audio, words, segments, cache, *, scope, owner_rese
             vectors=vectors,
             owner_reserved=owner_reserved,
         )
+        # The diarizer sees absolute WAV clocks. Persist the legacy sync clock,
+        # whose origin is the first ASR word (also used for upload end time).
+        for segment in passed or []:
+            segment.start = round(round(segment.start, 2) - first_word, 2)
+            segment.end = round(round(segment.end, 2) - first_word, 2)
         return passed, outcome
     except Exception:
         OUTCOMES.labels(outcome='failed:sync_audio').inc()

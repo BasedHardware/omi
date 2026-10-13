@@ -66,6 +66,13 @@ def _get_inference(version: int) -> Any:
     return inference
 
 
+def initialize_embeddings(*, batch_only: bool = False) -> None:
+    """Startup-only warmup; failures propagate and prevent readiness."""
+    if not batch_only:
+        _get_inference(1)
+    _get_inference(2)
+
+
 def embedding_inference(audio: Dict[str, Any]) -> Any:
     return _get_inference(1)(audio)
 

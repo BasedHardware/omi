@@ -3906,7 +3906,7 @@ def get_last_completed_conversation(uid: str) -> Optional[dict]:
 def promote_final_pass_if_current(
     uid, conversation_id, segments, *, expected_updated_at, clock_offset, firestore_client=None
 ):
-    """Revision-fenced, protected record swap; every annotation remaps atomically."""
+    """Revision-fenced speaker-only promotion preserving the stored transcript."""
     if expected_updated_at is None or not authoritative_for(uid):
         return False
     from utils.conversations.final_pass_remap import remap_final_record
@@ -3955,7 +3955,11 @@ def promote_final_pass_if_current(
         patch['speaker_resolution'] = {
             'status': 'resolved',
             'participant_speaker_ids': sorted(
-                {s.speaker_id for s in segments if s.speaker_id is not None and s.speaker_id >= 0}
+                {
+                    s['speaker_id']
+                    for s in patch['transcript_segments']
+                    if s.get('speaker_id') is not None and s['speaker_id'] >= 0
+                }
             ),
         }
         prepared = encode_conversation_for_write(uid, patch, current.get('data_protection_level') or 'standard')

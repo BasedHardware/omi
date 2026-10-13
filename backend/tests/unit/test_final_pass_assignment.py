@@ -72,14 +72,14 @@ def test_manual_receipts_preserved(identity):
     patch = remap_final_record(old, new, receipt, {}, clock_offset=0)
     for key, value in identity.items():
         assert patch['transcript_segments'][0][key] == value
-    assert patch['manual_speaker_assignments']['segments']['new']['generation'] == 1
+    assert patch['manual_speaker_assignments']['segments']['old']['generation'] == 1
 
 
 def test_translations_and_summary_references_preserved():
     old = [segment('old', translations=[{'lang': 'fr', 'text': 'synthetic translation'}])]
     patch = remap_final_record(old, [segment('new')], {}, {'notes': [{'source_segment_ids': ['old']}]}, clock_offset=0)
     assert patch['transcript_segments'][0]['translations'] == old[0]['translations']
-    assert patch['structured']['notes'][0]['source_segment_ids'] == ['new']
+    assert patch['structured']['notes'][0]['source_segment_ids'] == ['old']
 
 
 def test_edited_is_user_false_preserved_without_receipt():
@@ -91,13 +91,13 @@ def test_edited_is_user_false_preserved_without_receipt():
     assert patch['transcript_segments'][0]['speaker_match_source'] is None
 
 
-def test_translation_split_fails_closed():
+def test_conflicting_speaker_split_fails_closed():
     old = [segment('old', translations=[{'lang': 'fr', 'text': 'synthetic'}])]
     new = [
-        dict(id='a', start=0, end=2, text='a sufficiently long'),
-        dict(id='b', start=2, end=4, text='synthetic sentence'),
+        dict(id='a', start=0, end=2, text='a sufficiently long', speaker_id=0),
+        dict(id='b', start=2, end=4, text='synthetic sentence', speaker_id=1),
     ]
-    with pytest.raises(ValueError, match='translation'):
+    with pytest.raises(ValueError, match='conflicting speakers'):
         remap_final_record(old, new, {}, {}, clock_offset=0)
 
 
@@ -221,7 +221,8 @@ def test_activity_fallback_keeps_overlap_separate():
     assert overlap_regions(activity) == [{'start': 1, 'end': 2, 'speakers': ['a', 'b']}]
 
 
-def test_sync_adapter_uses_same_assignment_pipeline_and_raw_word_clock(monkeypatch):
+@pytest.mark.parametrize('start,end,duration', [(2, 6, 4), (2.004, 6.006, 4.01)])
+def test_sync_adapter_uses_absolute_audio_evidence_and_rebases_persisted_clock(monkeypatch, start, end, duration):
     import io
     import wave
     from models.transcript_segment import TranscriptSegment
@@ -236,25 +237,25 @@ def test_sync_adapter_uses_same_assignment_pipeline_and_raw_word_clock(monkeypat
         handle.writeframes(b'\x01\x00' * 160000)
     monkeypatch.setattr(sync, 'speaker_embedding_configured', lambda: False)
     result = DiarizationResult(
-        turns=[{'start': 2, 'end': 6, 'speaker': 'x'}],
+        turns=[{'start': start, 'end': end, 'speaker': 'x'}],
         centroids={'x': {'embedding': [1, 0], 'evidence_seconds': 10}},
         embedding_space=OMI_EMBEDDING_SPACE,
         version='synthetic',
         provenance={'backend': 'pyannote'},
     )
     monkeypatch.setattr(pipeline, 'get_diarizer_backend', lambda: SimpleNamespace(diarize=lambda *_a, **_kw: result))
-    old = TranscriptSegment(text='synthetic', start=0, end=4, is_user=False)
+    old = TranscriptSegment(text='synthetic', start=0, end=duration, is_user=False)
     segments, outcome = sync.run_sync_final_pass(
         'fixture',
         buffer.getvalue(),
-        [{'timestamp': [2, 6], 'text': 'synthetic', 'speaker': 'provider'}],
+        [{'timestamp': [start, end], 'text': 'synthetic', 'speaker': 'provider'}],
         [old],
         {'user': {'embedding': np.array([1, 0])}},
         scope='sync:fixture',
         owner_reserved=False,
     )
     assert outcome['outcome'] == 'diarized'
-    assert segments[0].start == 2 and segments[0].end == 6 and segments[0].is_user
+    assert segments[0].start == 0 and segments[0].end == duration and segments[0].is_user
     assert old.start == 0
 
 
@@ -274,7 +275,7 @@ def test_remap_uses_current_manual_scope_and_segment_tie_precedence(stale_scope)
     receipt = {'speakers': {'0': speaker}, 'segments': {'old': {'is_user': False, 'generation': 2}}}
     patch = remap_final_record(old, new, receipt, {}, clock_offset=0)
     assert patch['transcript_segments'][0]['is_user'] is False
-    assert patch['manual_speaker_assignments']['segments']['new']['generation'] == 2
+    assert patch['manual_speaker_assignments']['segments']['old']['generation'] == 2
 
 
 def test_agreement_uses_resolved_legacy_labels_not_reused_upload_local_ids(monkeypatch):
@@ -353,3 +354,28 @@ def test_http_timeout_is_reported_without_changing_legacy_output(monkeypatch):
     segments, outcome = final.run_final_pass(b'', [], None, {}, deadline=float('inf'), conversation_id='fixture')
     assert segments is None
     assert outcome == {'outcome': 'failed:timeout'}
+
+
+@pytest.mark.parametrize('stored_owner', [True, False])
+def test_bare_legacy_owner_edit_is_protected(stored_owner):
+    old, new = [segment('old')], [segment('new')]
+    old[0]['is_user'] = stored_owner
+    new[0]['is_user'] = not stored_owner
+    patch = remap_final_record(old, new, {}, {}, clock_offset=0)
+    assert patch['transcript_segments'][0]['is_user'] is stored_owner
+    assert patch['transcript_segments'][0]['speaker_label_source'] == 'manual'
+
+
+def test_promotion_keeps_stored_text_and_every_non_speaker_field():
+    old, new = [segment('old')], [segment('new')]
+    old[0]['text'] = 'a sufficiently long synthetic sentence edited'
+    old[0]['translations'] = [{'lang': 'fr', 'text': 'synthetic translation'}]
+    old[0]['start'], old[0]['end'] = 2, 6
+    new[0]['speaker_id'] = 7
+    new[0]['start'], new[0]['end'] = 12, 16
+    patch = remap_final_record(old, new, {}, {'notes': [{'source_segment_ids': ['old']}]}, clock_offset=10)
+    stored = patch['transcript_segments'][0]
+    assert stored['speaker_id'] == 7
+    for field in ('id', 'text', 'translations', 'start', 'end'):
+        assert stored[field] == old[0][field]
+    assert patch['structured']['notes'][0]['source_segment_ids'] == ['old']

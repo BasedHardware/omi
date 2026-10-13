@@ -4,7 +4,19 @@ from typing import Any, Dict, List
 
 from fastapi import UploadFile
 
-from final_pass import pipeline
+from functools import lru_cache
+
+import torch  # type: ignore[reportMissingImports]  # GPU runtime dependency
+from pyannote.audio import Pipeline  # type: ignore[reportMissingImports]  # GPU runtime dependency
+
+
+@lru_cache(maxsize=1)
+def initialize_diarization() -> Any:
+    # Preserve the v1 model contract independently of the pinned batch pipeline.
+    return Pipeline.from_pretrained(
+        "pyannote/speaker-diarization-community-1", token=os.getenv('HUGGINGFACE_TOKEN')
+    ).to(torch.device("cuda" if torch.cuda.is_available() else "cpu"))
+
 
 os.makedirs('_temp', exist_ok=True)
 
@@ -28,7 +40,7 @@ def diarization_endpoint(file: UploadFile) -> List[Dict[str, Any]]:
             f.write(file.file.read())
 
         # Run diarization
-        output: Any = pipeline()(file_path)
+        output: Any = initialize_diarization()(file_path)
 
         # Extract segments
         data: List[Dict[str, Any]] = []

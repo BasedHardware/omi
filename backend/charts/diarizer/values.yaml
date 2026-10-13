@@ -131,4 +131,8 @@ podMonitoring:
 
 # Raise for long final-pass requests when enabling a cohort behind the ingress.
 backendConfig:
+  name: diarizer-backend-config
   timeoutSeconds: 30
+
+# Empty keeps the image entrypoint serving concurrent legacy embeddings/v1.
+command: []
