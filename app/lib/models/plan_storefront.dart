@@ -87,7 +87,8 @@ StorefrontPrice? _priceOnTier(StorefrontTier tier, String? id) {
 ///
 /// Paid subscribers may move up the ladder, or from monthly to annual on the
 /// same tier. Legacy prices, unlimited plans, and unrecognized ids never
-/// check out. A scheduled cancellation resubscribes the current price only.
+/// check out. A scheduled cancellation resubscribes the current price and
+/// still allows those same upward moves.
 StorefrontCheckoutDecision storefrontCheckoutDecision(
   StorefrontCurrentPlan? current,
   PlanType? livePlan,
@@ -127,8 +128,49 @@ StorefrontCheckoutDecision storefrontCheckoutDecision(
   if (price.id == current?.priceId) {
     return cancelScheduled ? StorefrontCheckoutDecision.resubscribe : StorefrontCheckoutDecision.refuse;
   }
-  if (cancelScheduled) return StorefrontCheckoutDecision.refuse;
   return StorefrontCheckoutDecision.checkout;
+}
+
+/// Copy-deck label for the current tier's yearly price.
+/// Saving is 12× the monthly amount minus the annual amount, from [tier]'s prices.
+String? storefrontYearlySwitchLabel(StorefrontTier tier) {
+  final month = tier.priceFor('month');
+  final year = tier.priceFor('year');
+  if (month == null || year == null || month.currency != year.currency) return null;
+  final saving = month.amountMinor * 12 - year.amountMinor;
+  if (saving <= 0) return null;
+  final formatted = _formatUsdMinor(saving, month.currency);
+  if (formatted == null) return null;
+  return 'Switch to yearly · save $formatted';
+}
+
+/// Button text for one selected price. The current tier never says "Get {Plan}".
+String? storefrontActionLabel({
+  required StorefrontCurrentPlan? current,
+  required StorefrontTier tier,
+  required StorefrontPrice price,
+  required StorefrontCheckoutDecision decision,
+}) {
+  if (decision == StorefrontCheckoutDecision.refuse) return null;
+  if (decision == StorefrontCheckoutDecision.resubscribe) return tier.ctaLabel;
+  final ownTier = current != null && (tier.isCurrent || current.planId == tier.planId);
+  if (!ownTier) return tier.ctaLabel;
+  if (current.interval == 'month' && price.interval == 'year') return storefrontYearlySwitchLabel(tier);
+  return null;
+}
+
+String? _formatUsdMinor(int minor, String currency) {
+  if (currency.toLowerCase() != 'usd' || minor < 0) return null;
+  final dollars = minor ~/ 100;
+  final cents = minor % 100;
+  final digits = dollars.toString();
+  final grouped = StringBuffer();
+  for (var i = 0; i < digits.length; i++) {
+    if (i > 0 && (digits.length - i) % 3 == 0) grouped.write(',');
+    grouped.write(digits[i]);
+  }
+  final amount = cents == 0 ? grouped.toString() : '$grouped.${cents.toString().padLeft(2, '0')}';
+  return '\$$amount';
 }
 
 class StorefrontTier {

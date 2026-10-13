@@ -173,7 +173,7 @@ class StorefrontUsageMeter extends StatelessWidget {
         borderRadius: OmiRadius.lgAll,
         border: Border.all(color: OmiColors.border),
       ),
-      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
         Text(line, style: OmiType.footnote.copyWith(color: OmiColors.textSecondary)),
         if (percent != null) ...[
           const SizedBox(height: OmiSpacing.xs),

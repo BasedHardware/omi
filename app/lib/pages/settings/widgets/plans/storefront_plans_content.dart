@@ -153,9 +153,10 @@ class _StorefrontPlansContentState extends State<StorefrontPlansContent> {
             cancelScheduled: _cancelScheduled(storefront),
             showSubscriptionUi: storefront.showSubscriptionUi,
           );
-    final cta = decision == StorefrontCheckoutDecision.resubscribe || decision == StorefrontCheckoutDecision.checkout
-        ? tier.ctaLabel
-        : null;
+    final cta = price == null
+        ? null
+        : storefrontActionLabel(current: storefront.current, tier: tier, price: price, decision: decision);
+    final compact = tier.isCurrent;
     return Container(
       key: Key('storefront_tier_${tier.planId}'),
       padding: const EdgeInsets.all(OmiSpacing.md),
@@ -186,14 +187,16 @@ class _StorefrontPlansContentState extends State<StorefrontPlansContent> {
         ],
         const SizedBox(height: OmiSpacing.sm),
         Text(tier.hoursLine, style: OmiType.subhead),
-        const SizedBox(height: OmiSpacing.xs),
-        for (final bullet in tier.bullets)
-          Padding(
-            padding: const EdgeInsets.only(bottom: OmiSpacing.xxs),
-            child: Text('• $bullet', style: OmiType.subhead),
-          ),
-        if (price != null && cta != null) ...[
+        if (!compact) ...[
           const SizedBox(height: OmiSpacing.xs),
+          for (final bullet in tier.bullets)
+            Padding(
+              padding: const EdgeInsets.only(bottom: OmiSpacing.xxs),
+              child: Text('• $bullet', style: OmiType.subhead),
+            ),
+        ],
+        if (price != null && cta != null) ...[
+          SizedBox(height: compact ? OmiSpacing.sm : OmiSpacing.xs),
           OmiButton(
             key: Key('storefront_buy_${tier.planId}'),
             label: cta,

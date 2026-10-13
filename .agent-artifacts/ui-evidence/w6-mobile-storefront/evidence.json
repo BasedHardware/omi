@@ -4,7 +4,7 @@
     {
       "file": "001-mobile-ios-settings.png",
       "platform": "mobile-ios",
-      "description": "Settings sheet: header Choose your plan, Plus current line, Pro recommended, monthly prices",
+      "description": "Settings sheet: Choose your plan, compact Plus card (name, price, hours, no bullets or button), Pro recommended",
       "captured_by": "agent",
       "source": "visual-audit"
     },
@@ -46,7 +46,7 @@
     {
       "file": "007-mobile-ios-legacy.png",
       "platform": "mobile-ios",
-      "description": "Legacy Unlimited line, legacy note, and Manage billing, with no plan cards or Refresh",
+      "description": "Legacy Unlimited at $29.99/mo, legacy note, and Manage billing, with no plan cards or Refresh",
       "captured_by": "agent",
       "source": "visual-audit"
     },
@@ -60,14 +60,14 @@
     {
       "file": "009-mobile-ios-cancel-scheduled.png",
       "platform": "mobile-ios",
-      "description": "Cancel-scheduled Plus line and Resubscribe on the current price",
+      "description": "Cancel scheduled: header Your Plus plan ends Nov 1, Upgrade to Pro, Resubscribe on the current card without bullets",
       "captured_by": "agent",
       "source": "visual-audit"
     },
     {
       "file": "010-mobile-ios-architect.png",
       "platform": "mobile-ios",
-      "description": "Architect subscriber sees only the current card, with no upgrade button",
+      "description": "Architect subscriber sees a compact current card: name, Your plan, price, and hours, with no bullets or button",
       "captured_by": "agent",
       "source": "visual-audit"
     },
@@ -81,7 +81,7 @@
     {
       "file": "012-mobile-ios-meter.png",
       "platform": "mobile-ios",
-      "description": "Usage meter shows the backend meter line and a progress bar, with no title row",
+      "description": "Usage meter hugs the backend line and progress bar, with no title row or empty area under the bar",
       "captured_by": "agent",
       "source": "visual-audit"
     },
@@ -95,14 +95,14 @@
     {
       "file": "014-mobile-ios-yearly.png",
       "platform": "mobile-ios",
-      "description": "Yearly toggle shows monthly-equivalent headlines, yearly sublines, and yearly renewal lines",
+      "description": "Yearly toggle: monthly-equivalent prices, and Switch to yearly · save $39.98 on the current Plus card",
       "captured_by": "agent",
       "source": "visual-audit"
     },
     {
       "file": "015-mobile-ios-see-all-plans.png",
       "platform": "mobile-ios",
-      "description": "See all plans expanded to Free and Architect under the current Plus card",
+      "description": "See all plans expanded to Free and Architect under the compact current Plus card",
       "captured_by": "agent",
       "source": "visual-audit"
     },

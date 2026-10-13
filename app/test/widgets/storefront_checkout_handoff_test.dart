@@ -411,6 +411,10 @@ void main() {
       final json =
           jsonDecode(File('test/fixtures/storefront_v2/settings.json').readAsStringSync()) as Map<String, dynamic>;
       json['current'] = null;
+      final plusTier =
+          (json['tiers'] as List).cast<Map<String, dynamic>>().firstWhere((tier) => tier['plan_id'] == 'plus');
+      plusTier['is_current'] = false;
+      plusTier['cta_label'] = 'Get Plus';
       final data = PlanStorefront.fromJson(json);
       final price = _plan(data, 'plus').priceFor('month')!;
       final catalogId = mismatch == 'id' ? 'fixture_different_price' : price.id;

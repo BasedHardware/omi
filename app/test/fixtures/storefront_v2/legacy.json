@@ -10,7 +10,7 @@
     "interval": "month",
     "legacy": true,
     "cancel_at_period_end": false,
-    "line": "You're on Unlimited · $16.66/mo · renews Nov 1",
+    "line": "You're on Unlimited · $29.99/mo · renews Nov 1",
     "legacy_note": "We don't sell this plan anymore, but yours stays exactly as it is."
   },
   "usage": {
@@ -32,7 +32,7 @@
       "name": "Pro",
       "recommended": true,
       "is_current": false,
-      "hours_line": "About 280 hours a month, enough to wear it all day",
+      "hours_line": "About 280 hours of recording a month, enough to wear it all day",
       "bullets": [
         "Omi reminds you of things you said you'd do",
         "On your Mac, Omi can see what you're working on and help with it",
@@ -119,7 +119,7 @@
       "name": "Architect",
       "recommended": false,
       "is_current": false,
-      "hours_line": "About 1,200 hours a month, for all-day use on more than one device",
+      "hours_line": "About 1,200 hours of recording a month, for all-day use on more than one device",
       "bullets": [
         "Everything in Pro, with over 4 times the usage",
         "At least 5,000 MCP requests a day"

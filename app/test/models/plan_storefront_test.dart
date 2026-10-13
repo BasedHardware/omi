@@ -22,7 +22,7 @@ void main() {
     expect(data.tiers.map((tier) => tier.planId), ['operator', 'basic', 'plus', 'architect']);
     final pro = data.tiers.singleWhere((tier) => tier.recommended);
     expect(pro.name, 'Pro');
-    expect(pro.hoursLine, 'About 280 hours a month, enough to wear it all day');
+    expect(pro.hoursLine, 'About 280 hours of recording a month, enough to wear it all day');
     expect(pro.ctaLabel, 'Upgrade to Pro');
     expect(pro.priceFor('month')!.subline, isNull);
     expect(pro.priceFor('year')!.id, 'fixture_operator_year');
@@ -381,12 +381,32 @@ void main() {
         true
       ),
       (
-        'cancelled different price refuses',
-        StorefrontCheckoutDecision.refuse,
+        'cancelled higher tier still checks out',
+        StorefrontCheckoutDecision.checkout,
         current('plus', priceId: plusMonth.id),
         PlanType.plus,
         operator,
         operatorMonth,
+        false,
+        true
+      ),
+      (
+        'cancelled same-tier yearly still checks out',
+        StorefrontCheckoutDecision.checkout,
+        current('plus', priceId: plusMonth.id),
+        PlanType.plus,
+        plus,
+        plusYear,
+        false,
+        true
+      ),
+      (
+        'cancelled lower tier refuses',
+        StorefrontCheckoutDecision.refuse,
+        current('operator', priceId: operatorMonth.id),
+        PlanType.operator,
+        plus,
+        plusMonth,
         false,
         true
       ),
@@ -422,6 +442,8 @@ void main() {
       ),
     ];
 
+    expect(PlanStorefront.fromJson(fixture('legacy')).current!.line, r"You're on Unlimited · $29.99/mo · renews Nov 1");
+
     for (final entry in cases) {
       final (name, expected, held, live, selectedTier, selectedPrice, usageLegacy, cancelScheduled) = entry;
       expect(
@@ -431,5 +453,65 @@ void main() {
         reason: name,
       );
     }
+  });
+
+  test('same-tier yearly CTA is the live-price saving and never Get on the current tier', () {
+    final settings = PlanStorefront.fromJson(fixture());
+    final plus = settings.tiers.singleWhere((tier) => tier.planId == 'plus');
+    expect(storefrontYearlySwitchLabel(plus), r'Switch to yearly · save $39.98');
+    expect(plus.ctaLabel, storefrontYearlySwitchLabel(plus));
+    expect(
+      storefrontActionLabel(
+        current: settings.current,
+        tier: plus,
+        price: plus.priceFor('year')!,
+        decision: StorefrontCheckoutDecision.checkout,
+      ),
+      r'Switch to yearly · save $39.98',
+    );
+    expect(
+      storefrontActionLabel(
+        current: settings.current,
+        tier: plus,
+        price: plus.priceFor('month')!,
+        decision: StorefrontCheckoutDecision.refuse,
+      ),
+      isNull,
+    );
+    final architect =
+        PlanStorefront.fromJson(fixture('architect')).tiers.singleWhere((tier) => tier.planId == 'architect');
+    expect(architect.ctaLabel, r'Switch to yearly · save $398');
+    final cancelled = PlanStorefront.fromJson(fixture('cancel_scheduled'));
+    final currentTier = cancelled.tiers.singleWhere((tier) => tier.isCurrent);
+    final pro = cancelled.tiers.singleWhere((tier) => tier.planId == 'operator');
+    expect(cancelled.header, 'Your Plus plan ends Nov 1');
+    expect(cancelled.current!.line, r"You're on Plus · $19.99/mo");
+    expect(
+      storefrontActionLabel(
+        current: cancelled.current,
+        tier: currentTier,
+        price: currentTier.priceFor('month')!,
+        decision: StorefrontCheckoutDecision.resubscribe,
+      ),
+      'Resubscribe',
+    );
+    expect(
+      storefrontActionLabel(
+        current: cancelled.current,
+        tier: pro,
+        price: pro.priceFor('month')!,
+        decision: StorefrontCheckoutDecision.checkout,
+      ),
+      'Upgrade to Pro',
+    );
+    expect(
+      storefrontActionLabel(
+        current: cancelled.current,
+        tier: currentTier,
+        price: currentTier.priceFor('year')!,
+        decision: StorefrontCheckoutDecision.checkout,
+      ),
+      r'Switch to yearly · save $39.98',
+    );
   });
 }

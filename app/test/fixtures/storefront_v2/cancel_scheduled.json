@@ -2,7 +2,7 @@
   "schema_version": 2,
   "catalog_revision": 1,
   "show_subscription_ui": true,
-  "header": "Choose your plan",
+  "header": "Your Plus plan ends Nov 1",
   "current": {
     "plan_id": "plus",
     "name": "Plus",
@@ -10,7 +10,7 @@
     "interval": "month",
     "legacy": false,
     "cancel_at_period_end": true,
-    "line": "You're on Plus · ends Nov 1",
+    "line": "You're on Plus · $19.99/mo",
     "legacy_note": null
   },
   "usage": {
@@ -32,13 +32,13 @@
       "name": "Pro",
       "recommended": true,
       "is_current": false,
-      "hours_line": "About 280 hours a month, enough to wear it all day",
+      "hours_line": "About 280 hours of recording a month, enough to wear it all day",
       "bullets": [
         "Omi reminds you of things you said you'd do",
         "On your Mac, Omi can see what you're working on and help with it",
         "5,000 MCP requests a day"
       ],
-      "action": "none",
+      "action": "checkout",
       "prices": [
         {
           "price_id": "fixture_operator_month",
@@ -59,7 +59,8 @@
           "renewal_line": "Renews yearly until you cancel. Cancel anytime in settings.",
           "months_free": 2
         }
-      ]
+      ],
+      "cta_label": "Upgrade to Pro"
     },
     {
       "tier_id": "basic:ladder_v1",
@@ -118,12 +119,12 @@
       "name": "Architect",
       "recommended": false,
       "is_current": false,
-      "hours_line": "About 1,200 hours a month, for all-day use on more than one device",
+      "hours_line": "About 1,200 hours of recording a month, for all-day use on more than one device",
       "bullets": [
         "Everything in Pro, with over 4 times the usage",
         "At least 5,000 MCP requests a day"
       ],
-      "action": "none",
+      "action": "checkout",
       "prices": [
         {
           "price_id": "fixture_architect_month",
@@ -144,7 +145,8 @@
           "renewal_line": "Renews yearly until you cancel. Cancel anytime in settings.",
           "months_free": 2
         }
-      ]
+      ],
+      "cta_label": "Upgrade to Architect"
     }
   ],
   "yearly_toggle_label": "Yearly · 2 months free"
