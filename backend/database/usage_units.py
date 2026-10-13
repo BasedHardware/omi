@@ -111,12 +111,11 @@ def hourly_shadow(updates: Mapping[str, Any], metadata: Mapping[str, Any] | None
         priced['reasons'].append('accepted_speech_unavailable')
         if source in {'sync_v1', 'sync_v2'}:
             priced['reasons'].append('initial_vad_counter_ratio_estimate')
-    return {
-        'shadow_v1': {
-            'rate_card': 'v1',
-            'features': {'transcription': {'funding': {funding: _leaf(priced, provider=provider, source=source)}}},
-        }
-    }
+    leaf = _leaf(priced, provider=provider, source=source)
+    leaf['legacy_counter_seconds'] = firestore.Increment(elapsed or 0)
+    if accepted is not None and funding == 'omi' and priced['status'] != 'missing':
+        leaf['accepted_speech_seconds'] = firestore.Increment(float(accepted))
+    return {'shadow_v1': {'rate_card': 'v1', 'features': {'transcription': {'funding': {funding: leaf}}}}}
 
 
 def gateway_shadow(data: Mapping[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]:
@@ -199,6 +198,8 @@ def get_usage_units(
     funding_totals: dict[str, int] = {}
     missing_hourly = 0
     missing_days = 0
+    missing_attempts = 0
+    missing_seconds = 0.0
 
     def consume(features: Mapping[str, Any]) -> None:
         for feature, feature_data in features.items():
@@ -221,9 +222,19 @@ def get_usage_units(
         data = snap.to_dict() or {}
         shadow = data.get('shadow_v1')
         if isinstance(shadow, Mapping):
-            consume(shadow.get('features', {}))
+            features = shadow.get('features', {})
+            consume(features)
+            covered = sum(
+                float(leaf.get('legacy_counter_seconds', 0))
+                for leaf in features.get('transcription', {}).get('funding', {}).values()
+            )
+            residual = max(float(data.get('transcription_seconds', 0)) - covered, 0)
+            missing_seconds += residual
+            if residual:
+                missing_hourly += 1
         elif data.get('transcription_seconds') or data.get('speech_seconds'):
             missing_hourly += 1
+            missing_seconds += float(data.get('transcription_seconds', 0))
     hashed = hashlib.sha256(uid.encode()).hexdigest()[:16]
     day = start
     while day < end:
@@ -234,11 +245,21 @@ def get_usage_units(
         )
         data = snap.to_dict() or {}
         shadow = data.get('shadow_v1')
+        projected = 0
         if isinstance(shadow, Mapping):
             for hour in shadow.get('hours', {}).values():
-                consume(hour.get('features', {}))
-        elif data.get('attempts'):
+                features = hour.get('features', {})
+                consume(features)
+                projected += sum(
+                    int(leaf.get('events', 0))
+                    for feature, row in features.items()
+                    if feature != 'web_search_tool'
+                    for leaf in row.get('funding', {}).values()
+                )
+        residual = max(int(data.get('attempts', 0)) - projected, 0)
+        if residual:
             missing_days += 1
+            missing_attempts += residual
         day += timedelta(days=1)
     return {
         'used_units': float(Decimal(sum(totals.values())) / 1_000_000),
@@ -250,6 +271,8 @@ def get_usage_units(
             'by_feature': statuses,
             'unprojected_hourly_docs': missing_hourly,
             'unprojected_gateway_days': missing_days,
+            'unprojected_gateway_attempts': missing_attempts,
+            'unprojected_transcription_seconds': missing_seconds,
             'coverage_gaps': list(COVERAGE_GAPS),
         },
         'entitlement_version': entitlements['entitlement_version'],

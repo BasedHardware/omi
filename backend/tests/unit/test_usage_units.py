@@ -302,3 +302,37 @@ def test_byok_search_excludes_provider_tokens_but_host_infra_is_omi_funded(units
     assert annotation['micro_units'] == 0
     assert features['web_search']['funding']['byok']['micro_units'] == 0
     assert features['web_search_tool']['funding']['omi']['micro_units'] == 1000000
+
+
+def test_mixed_old_and_new_hour_and_day_documents_report_unprojected_residuals(units):
+    uid = 'u'
+    store = Store()
+    month = datetime(2026, 10, 1, tzinfo=timezone.utc)
+    hourly = {}
+    merge(
+        hourly,
+        units.hourly_shadow(
+            {'transcription_seconds': 12}, {'funding': 'omi', 'provider': 'parakeet', 'source': 'test'}
+        ),
+    )
+    hourly.update(year=2026, month=10, transcription_seconds=82)
+    store.docs['users/u/hourly_usage/2026-10-01-08'] = hourly
+    _, rollup = units.gateway_shadow(
+        {
+            'payer': 'omi',
+            'feature': 'web_search',
+            'usage_status': 'not_reported',
+            'occurred_at': '2026-10-01T08:00:00+00:00',
+            'date': '2026-10-01',
+        }
+    )
+    day = {}
+    merge(day, rollup)
+    day['attempts'] = 6
+    store.docs['llm_gateway_user_days/2026-10-01_' + hashlib.sha256(uid.encode()).hexdigest()[:16]] = day
+    result = units.get_usage_units(uid, month, firestore_client=store)
+    completeness = result['completeness']
+    assert completeness['unprojected_transcription_seconds'] == 70
+    assert completeness['unprojected_hourly_docs'] == 1
+    assert completeness['unprojected_gateway_attempts'] == 5
+    assert completeness['unprojected_gateway_days'] == 1
