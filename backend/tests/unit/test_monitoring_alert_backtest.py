@@ -168,3 +168,32 @@ def test_retired_proactive_rule_is_absent_from_both_exports():
     assert 'omi-chat-first-proactive-stalled' not in b.rules()
     combined = json.loads((b.MONITORING / 'alert-rules.json').read_text())
     assert all(r['uid'] != 'omi-chat-first-proactive-stalled' for r in combined)
+
+
+def test_admission_hold_cannot_be_unpaused_by_a_quiet_lint():
+    r = rule()
+    inventory = {'metrics': ['fixture_total'], 'admission_holds': {'fixture': 'incident triage required'}}
+    assert b.lint({'fixture': r}, inventory)['failures']
+    r['isPaused'] = True
+    assert not b.lint({'fixture': r}, inventory)['failures']
+
+
+def test_daily_chunks_preserve_grid_and_series_identity(monkeypatch):
+    client = b.Prometheus(url='http://unused.invalid')
+    calls = []
+
+    def get(endpoint, **params):
+        calls.append(params)
+        return {
+            'result': [
+                {
+                    'metric': {'pod': 'a'},
+                    'values': [[t, '1'] for t in range(params['start'], params['end'] + 1, params['step'])],
+                }
+            ]
+        }
+
+    monkeypatch.setattr(client, 'get', get)
+    series = client.range('fixture_total', 0, 86400, 300)
+    assert [t for t, _ in series[0]['values']] == list(range(0, 86401, 300))
+    assert [(c['start'], c['end']) for c in calls] == [(0, 86100), (86400, 86400)]

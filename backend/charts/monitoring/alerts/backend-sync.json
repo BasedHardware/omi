@@ -975,7 +975,7 @@
       "severity": "warning",
       "instatus_component": "speech-processing"
     },
-    "isPaused": false,
+    "isPaused": true,
     "notification_settings": {
       "receiver": "Omi - Services Alerting (Telegram)"
     },

@@ -94,8 +94,24 @@ class Prometheus:
                     timeout=150,
                 )
                 if result.returncode:
-                    # stderr can contain credentials: never persist it.
-                    raise RuntimeError('kube proxy request failed')
+                    # Classify only known phrases; stderr can contain credentials.
+                    message = (result.stderr + result.stdout).lower()
+                    category = next(
+                        (
+                            label
+                            for phrase, label in (
+                                ('too many samples', 'sample budget exceeded'),
+                                ('timeout', 'request timeout'),
+                                ('deadline', 'request timeout'),
+                                ('forbidden', 'authorization failed'),
+                                ('unauthorized', 'authorization failed'),
+                                ('badrequest', 'query rejected'),
+                            )
+                            if phrase in message
+                        ),
+                        'kube proxy request failed',
+                    )
+                    raise RuntimeError(category)
                 data = json.loads(result.stdout)
             if data.get('status') != 'success' or data.get('warnings'):
                 raise RuntimeError('Prometheus failed or returned partial/warned results')
@@ -105,6 +121,18 @@ class Prometheus:
             return data['data']
         except (subprocess.TimeoutExpired, OSError) as error:
             raise RuntimeError(f'Prometheus transport failed: {type(error).__name__}') from None
+
+    def range(self, query, start, end, step):
+        # Exact grid, daily chunks: avoid ten-day counter scans timing out.
+        series = {}
+        cursor = start
+        while cursor <= end:
+            stop = min(end, cursor + max(1, 86400 // step - 1) * step)
+            for item in self.get('query_range', query=query, start=cursor, end=stop, step=step)['result']:
+                key = tuple(sorted(item['metric'].items()))
+                series.setdefault(key, {'metric': item['metric'], 'values': []})['values'].extend(item['values'])
+            cursor = stop + step
+        return list(series.values())
 
 
 def threshold(value, evaluator):
@@ -386,9 +414,7 @@ def replay(rule, client, start, end, step):
             history[node['refId']] = ticks
             continue
         offset = node.get('relativeTimeRange', {}).get('to', 0)
-        result = client.get('query_range', query=model['expr'], start=start - offset, end=end - offset, step=step)[
-            'result'
-        ]
+        result = client.range(model['expr'], start - offset, end - offset, step)
         query_series[node['refId']] = len(result)
         ticks = {}
         for series in result:
@@ -478,8 +504,10 @@ def lint(all_rules, inventory):
     for uid, rule in all_rules.items():
         try:
             errors = lint_rule(rule, inventory)
-        except (ValueError, KeyError) as error:
+        except (ValueError, KeyError, TypeError, SyntaxError) as error:
             errors = [str(error)]
+        if uid in inventory.get('admission_holds', {}) and not rule.get('isPaused'):
+            errors.append('admission hold must remain paused: ' + inventory['admission_holds'][uid])
         if errors:
             baseline = inventory.get('legacy_debt', {}).get(uid, {})
             if baseline.get('sha256') == fingerprint(rule) and baseline.get('errors') == errors:
@@ -535,7 +563,13 @@ def main():
         old = json.loads(args.inventory.read_text()) if args.inventory.exists() else {}
         args.inventory.write_text(
             json.dumps(
-                dict(captured_at=end, window_days=10, metrics=sorted(metrics), legacy_debt=old.get('legacy_debt', {})),
+                dict(
+                    captured_at=end,
+                    window_days=10,
+                    metrics=sorted(metrics),
+                    legacy_debt=old.get('legacy_debt', {}),
+                    admission_holds=old.get('admission_holds', {}),
+                ),
                 indent=2,
             )
             + '\n'
@@ -583,7 +617,7 @@ def main():
     if args.markdown_output:
         args.markdown_output.write_text(markdown(output))
     print(markdown(output))
-    return 0
+    return int(any(r['verdict'] in ('dead-metric', 'mistuned-noisy', 'needs-human') for r in output))
 
 
 if __name__ == '__main__':

@@ -1107,7 +1107,8 @@ Range datasource queries use their declared frame resolution and one bounded
 request per evaluation (potentially slow); resample, ambiguous joins and unknown
 nodes fail closed as `needs-human`. Non-Prometheus rules require separate evidence.
 `NoData` and `KeepLast` intervals are reported as unknown, requiring human review;
-DatasourceNoData routing is not simulated. Pages/week counts instance starts,
+DatasourceNoData routing is not simulated. Long lookbacks near the retention edge
+are flagged as incomplete; review the warmed portion separately. Pages/week counts instance starts,
 not Telegram messages or repeat notifications. Noise means over 5% firing time;
 flapping means at least ten episodes no longer than two steps or ten minutes.
 
@@ -1116,5 +1117,7 @@ boolean threshold units, reduction/math support and pending periods on rate,
 ratio or average queries. `legacy_debt` pins unchanged pre-existing findings to
 a rule hash; any rule edit invalidates the exception. It is debt, never deployment
 approval. The snapshot is historical presence, not proof of current ingestion.
+Explicit `admission_holds` require a rule to stay paused until its reviewed hold
+is removed. Live replay exits nonzero on dead, noisy or unproven results.
 The CI gate catches structural regressions; live threshold calibration remains
 a required admission review before an operator sends a rule to Telegram.

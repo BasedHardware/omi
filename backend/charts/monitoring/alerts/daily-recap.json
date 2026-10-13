@@ -169,7 +169,7 @@
       "severity": "warning",
       "instatus_component": "api"
     },
-    "isPaused": false,
+    "isPaused": true,
     "notification_settings": {
       "receiver": "Omi - Services Alerting (Telegram)"
     },

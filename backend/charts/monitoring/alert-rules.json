@@ -8185,7 +8185,7 @@
       "component": "ai-chat",
       "impact": "user-experience"
     },
-    "isPaused": false,
+    "isPaused": true,
     "notification_settings": {
       "receiver": "Omi - Services Alerting (Telegram)"
     },
@@ -8423,7 +8423,7 @@
       "component": "live-transcription",
       "impact": "user-experience"
     },
-    "isPaused": false,
+    "isPaused": true,
     "notification_settings": {
       "receiver": "Omi - Services Alerting (Telegram)"
     },
@@ -9381,7 +9381,7 @@
       "component": "llm-gateway",
       "impact": "user-experience"
     },
-    "isPaused": false,
+    "isPaused": true,
     "notification_settings": {
       "receiver": "Omi - Services Alerting (Telegram)"
     },
@@ -9521,7 +9521,7 @@
       "component": "llm-gateway",
       "impact": "product"
     },
-    "isPaused": false,
+    "isPaused": true,
     "notification_settings": {
       "receiver": "Omi - Services Alerting (Telegram)"
     },
@@ -11046,7 +11046,7 @@
       "component": "api",
       "impact": "user-experience"
     },
-    "isPaused": false,
+    "isPaused": true,
     "notification_settings": {
       "receiver": "Omi - Services Alerting (Telegram)"
     },
@@ -11472,7 +11472,7 @@
       "severity": "warning",
       "instatus_component": "live-transcription"
     },
-    "isPaused": false,
+    "isPaused": true,
     "notification_settings": {
       "receiver": "Omi - Services Alerting (Telegram)"
     },
@@ -11778,7 +11778,7 @@
       "severity": "warning",
       "instatus_component": "speech-processing"
     },
-    "isPaused": false,
+    "isPaused": true,
     "notification_settings": {
       "receiver": "Omi - Services Alerting (Telegram)"
     },
@@ -16259,7 +16259,7 @@
       "severity": "warning",
       "instatus_component": "api"
     },
-    "isPaused": false,
+    "isPaused": true,
     "notification_settings": {
       "receiver": "Omi - Services Alerting (Telegram)"
     },
