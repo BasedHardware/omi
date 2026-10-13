@@ -20,6 +20,7 @@ import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
 import android.os.PowerManager
+import android.os.SystemClock
 import android.os.Build
 import android.util.Log
 import androidx.core.app.NotificationCompat
@@ -153,6 +154,9 @@ class OmiBleForegroundService : Service() {
         var hasEverConnected: Boolean = false,
         var pendingReconnect: Runnable? = null,
         var pendingReconnectDelayMs: Long = 0L,
+        /** Uptime deadline of the pending retry, 0 when none is scheduled.
+         * Monotonic so it survives wall-clock changes while the app sleeps. */
+        var pendingReconnectDeadlineMs: Long = 0L,
         var stabilityTimerRunnable: Runnable? = null,
         /** Reset to false on each connectGatt attempt; set true when the GATT
          *  callback reports CONNECTED. Used to distinguish fail-to-connect from
@@ -492,6 +496,7 @@ class OmiBleForegroundService : Service() {
         managed.pendingReconnect?.let { handler.removeCallbacks(it) }
         managed.pendingReconnect = null
         managed.pendingReconnectDelayMs = 0L
+        managed.pendingReconnectDeadlineMs = 0L
         managed.retryCount = 0
         reconnectBackoff.reset(addr)
         connectToDevice(addr, source)
@@ -560,6 +565,7 @@ class OmiBleForegroundService : Service() {
                 managed.pendingReconnect?.let { handler.removeCallbacks(it) }
                 managed.pendingReconnect = null
                 managed.pendingReconnectDelayMs = 0L
+                managed.pendingReconnectDeadlineMs = 0L
                 managed.retryCount = 0
                 // Close the stuck GATT so connectToDevice opens a fresh one
                 if (bleManager.connectedGatts.containsKey(addr)) {
@@ -669,10 +675,12 @@ class OmiBleForegroundService : Service() {
         val runnable = Runnable {
             managed.pendingReconnect = null
             managed.pendingReconnectDelayMs = 0L
+            managed.pendingReconnectDeadlineMs = 0L
             connectToDevice(address, source)
         }
         managed.pendingReconnect = runnable
         managed.pendingReconnectDelayMs = delayMs
+        managed.pendingReconnectDeadlineMs = SystemClock.uptimeMillis() + delayMs
         handler.postDelayed(runnable, delayMs)
     }
 
@@ -686,9 +694,18 @@ class OmiBleForegroundService : Service() {
     fun onAppForegrounded() {
         for ((addr, managed) in managedDevices) {
             val pending = managed.pendingReconnect
-            val pulledForward = reconnectBackoff.foregroundDelayMs(
-                if (pending != null) managed.pendingReconnectDelayMs else null,
-            )
+            // Compare the remaining wait, not the originally scheduled duration:
+            // resuming late in a long wait must pull the retry earlier, never
+            // postpone a callback that is about to fire.
+            val remainingMs = if (pending != null && managed.pendingReconnectDeadlineMs > 0L) {
+                reconnectBackoff.remainingDelayMs(
+                    managed.pendingReconnectDelayMs,
+                    SystemClock.uptimeMillis() - (managed.pendingReconnectDeadlineMs - managed.pendingReconnectDelayMs),
+                )
+            } else {
+                null
+            }
+            val pulledForward = reconnectBackoff.foregroundDelayMs(remainingMs)
             managed.retryCount = 0
             reconnectBackoff.reset(addr)
             if (pending == null || pulledForward == null) continue

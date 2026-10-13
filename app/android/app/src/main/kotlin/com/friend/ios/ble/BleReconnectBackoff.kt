@@ -59,6 +59,15 @@ internal class BleReconnectBackoff(
         return fastest
     }
 
+    /**
+     * The remaining wait for a pending retry. [scheduledDelayMs] is what the timer
+     * was posted with; [elapsedMs] is how much of it has already passed, so callers
+     * that resume late in a long wait compare the true remaining delay instead of
+     * the original duration.
+     */
+    fun remainingDelayMs(scheduledDelayMs: Long, elapsedMs: Long): Long =
+        (scheduledDelayMs - elapsedMs).coerceAtLeast(0L)
+
     companion object {
         val DEFAULT_STEPS_MS = longArrayOf(3_000L, 6_000L, 12_000L, 30_000L, 60_000L)
         const val FASTEST_DELAY_MS = 3_000L

@@ -53,6 +53,25 @@ class BleReconnectBackoffTest {
     }
 
     @Test
+    fun `foreground compares the remaining wait not the scheduled duration`() {
+        val backoff = BleReconnectBackoff()
+        repeat(6) { backoff.nextDelayMs("A") }
+
+        // 5s into a 6s wait: 1s remains, which is shorter than the fastest
+        // interval, so foregroundDelayMs must decline to replace the timer.
+        assertEquals(1_000L, backoff.remainingDelayMs(scheduledDelayMs = 6_000L, elapsedMs = 5_000L))
+        assertNull(backoff.foregroundDelayMs(backoff.remainingDelayMs(6_000L, 5_000L)))
+
+        // 1s into a 60s wait: 59s remains, so it is pulled forward to 3s.
+        assertEquals(59_000L, backoff.remainingDelayMs(60_000L, 1_000L))
+        assertEquals(3_000L, backoff.foregroundDelayMs(backoff.remainingDelayMs(60_000L, 1_000L)))
+
+        // Elapsed can never exceed the schedule.
+        assertEquals(0L, backoff.remainingDelayMs(3_000L, 10_000L))
+        assertNull(backoff.foregroundDelayMs(backoff.remainingDelayMs(3_000L, 10_000L)))
+    }
+
+    @Test
     fun `CCCD recovery does not advance or replenish the ordinary schedule`() {
         val backoff = BleReconnectBackoff()
         assertEquals(3_000L, backoff.delayForFailure("A", cccdTimeout = true, cccdDelayMs = 3_000L))
