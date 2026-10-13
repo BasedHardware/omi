@@ -777,6 +777,50 @@ struct Harness {
             stop(controller)
         }
 
+        // A fault arriving before the preserved fire must not re-anchor it
+        // either. Recovery re-enters `.running` with the fast fire still
+        // pending; a rebuild in that window must keep the original deadline —
+        // re-anchoring to `now + 1s` on every fault is what let repeated
+        // faults push the only liveness beat past Dart's unchanged 10s stall
+        // deadline after one lost healthy beat.
+        do {
+            let world = ReplayWorld()
+            let writers = WriterBox()
+            let controller = world.makeBatchController(writers: writers)
+            guard case .success = startBatch(controller, 22) else {
+                preconditionFailure("repeated fault: start failed")
+            }
+            drainMain(seconds: 0.5)
+            world.monitorBox.monitor!.fire(.interruptionBegan)
+            waitUntil({
+                world.sink.deliveries.contains { $0.kind == .state && $0.state == "interrupted" }
+            }, "repeated fault: interrupted")
+            drainMain(seconds: 0.6)
+            world.monitorBox.monitor!.fire(.interruptionEnded(shouldResume: true))
+            waitUntil({
+                world.sink.deliveries.contains { $0.kind == .state && $0.state == "running" }
+            }, "repeated fault: resumed")
+            // A second fault lands before the preserved fire (~0.4s out) and
+            // recovers; neither may re-anchor the deadline.
+            world.monitorBox.monitor!.fire(.routeChanged(reasonDescription: "fault"))
+            waitUntil({
+                world.sink.deliveries.contains { $0.kind == .state && $0.state == "rebuilding" }
+            }, "repeated fault: rebuilding")
+            waitUntil({
+                world.sink.deliveries.contains {
+                    $0.kind == .state && $0.state == "running" && $0.sessionId == 22
+                } && world.sink.deliveries.filter {
+                    $0.kind == .state && $0.state == "running"
+                }.count >= 2
+            }, "repeated fault: running again")
+            precondition(progressCount(world.sink) == 0,
+                "repeated fault: no beat expected before the second fault (timing drifted)")
+            drainMain(seconds: 0.7)
+            precondition(progressCount(world.sink) > 0,
+                "a fault before the preserved fire must keep the original deadline, not re-anchor it")
+            stop(controller)
+        }
+
         print("phone-mic lifecycle replay: all 8 canonical vectors passed (stale/terminal-cleanup drops verified)")
     }
 }

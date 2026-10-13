@@ -584,17 +584,22 @@ final class PhoneMicController {
 
     private func applyProgressCadence() {
         let interval = desiredProgressInterval()
-        if interval == Self.healthyProgressTickInterval,
-           progressIntervalArmed != 0, progressIntervalArmed != Self.healthyProgressTickInterval {
-            // Retargeting out of a fault window (resume/rebuild recovery reaching
-            // `.running`): keep the already-armed fast fire exactly as armed.
-            // Re-scheduling here would re-anchor its deadline to `now + 1s` with
-            // the healthy cadence's looser leeway, so a recovery late in the
-            // fault window could deliver its beat after Dart's unchanged 10s
-            // stall deadline and restart a fully recovered session. The tick
-            // handler switches the repeating cadence back to the slow interval
-            // once the preserved fire has emitted the recovery beat.
-            return
+        if progressIntervalArmed != 0 {
+            // An armed fire's deadline is at most one interval out, so
+            // re-anchoring it to `now + interval` can only delay the next
+            // liveness beat. Keep any already-armed deadline — a preserved
+            // fast fire through recovery, a second fault arriving before that
+            // fire, or an unchanged healthy window — and let the tick handler
+            // retarget the repeating cadence after the beat fires. Only a
+            // fault pulling a far-off healthy deadline in to the fast cadence
+            // re-schedules. Delaying the beat is what let a late-window
+            // recovery or a repeated fault push the only liveness event past
+            // Dart's unchanged 10s stall deadline, restarting a recovered
+            // session.
+            if progressIntervalArmed == Self.fastProgressTickInterval
+                || progressIntervalArmed == interval {
+                return
+            }
         }
         syncProgressTimer(first: interval, repeating: interval)
     }
