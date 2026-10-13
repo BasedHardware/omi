@@ -36,6 +36,10 @@ def source_label_for_path(path: PurePath, root_dir: PurePath = ROOT_DIR) -> str:
 # $ref dependencies automatically.
 TARGET_SCHEMAS = (
     'StorefrontResponse',
+    'BudgetChoiceRequest',
+    'BudgetChoiceRecord',
+    'BudgetChoiceResponse',
+    'BudgetChoiceWriteResponse',
     'ProactivityTarget',
     'ProactivityFeedItem',
     'ProactivityFeedResponse',

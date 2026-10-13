@@ -5022,6 +5022,125 @@
         "title": "Body_upload_profile_v3_upload_audio_post",
         "type": "object"
       },
+      "BudgetChoiceRecord": {
+        "additionalProperties": false,
+        "properties": {
+          "choice": {
+            "enum": [
+              "on_device",
+              "upgrade"
+            ],
+            "title": "Choice",
+            "type": "string"
+          },
+          "dont_ask_again": {
+            "default": false,
+            "title": "Dont Ask Again",
+            "type": "boolean"
+          },
+          "period": {
+            "title": "Period",
+            "type": "string"
+          }
+        },
+        "required": [
+          "period",
+          "choice"
+        ],
+        "title": "BudgetChoiceRecord",
+        "type": "object"
+      },
+      "BudgetChoiceRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "choice": {
+            "enum": [
+              "on_device",
+              "upgrade"
+            ],
+            "title": "Choice",
+            "type": "string"
+          },
+          "dont_ask_again": {
+            "default": false,
+            "title": "Dont Ask Again",
+            "type": "boolean"
+          },
+          "period": {
+            "title": "Period",
+            "type": "string"
+          }
+        },
+        "required": [
+          "period",
+          "choice"
+        ],
+        "title": "BudgetChoiceRequest",
+        "type": "object"
+      },
+      "BudgetChoiceResponse": {
+        "properties": {
+          "ask": {
+            "title": "Ask",
+            "type": "boolean"
+          },
+          "choice": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/BudgetChoiceRecord"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "period": {
+            "title": "Period",
+            "type": "string"
+          },
+          "state": {
+            "enum": [
+              "managed",
+              "unavailable",
+              "on_device",
+              "held_pending_choice"
+            ],
+            "title": "State",
+            "type": "string"
+          }
+        },
+        "required": [
+          "period",
+          "state",
+          "choice",
+          "ask"
+        ],
+        "title": "BudgetChoiceResponse",
+        "type": "object"
+      },
+      "BudgetChoiceWriteResponse": {
+        "properties": {
+          "ask": {
+            "const": false,
+            "default": false,
+            "title": "Ask",
+            "type": "boolean"
+          },
+          "choice": {
+            "$ref": "#/components/schemas/BudgetChoiceRecord"
+          },
+          "period": {
+            "title": "Period",
+            "type": "string"
+          }
+        },
+        "required": [
+          "period",
+          "choice"
+        ],
+        "title": "BudgetChoiceWriteResponse",
+        "type": "object"
+      },
       "BulkAssignSegmentsRequest": {
         "properties": {
           "assign_type": {
@@ -68335,6 +68454,194 @@
         "tags": [
           "v1"
         ]
+      }
+    },
+    "/v1/users/budget-choice": {
+      "get": {
+        "operationId": "get_budget_choice_v1_users_budget_choice_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Omi-Held-Content",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Omi-Held-Content"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BudgetChoiceResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Get Budget Choice"
+      },
+      "put": {
+        "operationId": "put_budget_choice_v1_users_budget_choice_put",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Omi-Held-Content",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Omi-Held-Content"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BudgetChoiceRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BudgetChoiceWriteResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Put Budget Choice"
       }
     },
     "/v1/users/daily-summaries": {
