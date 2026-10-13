@@ -118,7 +118,9 @@ def test_non_cascade_delete_purges_prompt_evidence_after_intent_without_purging_
         'record_product_event': MagicMock(),
     }
     delete = function('routers/conversations.py', 'delete_conversation', namespace)
-    assert delete('c', MagicMock(), False, None, 'u') == {'status': 'Ok'}
+    # The handler returns no body: the route is 204 No Content, the contract the
+    # released mobile client gates on (test_conversation_delete_wire_contract.py).
+    assert delete('c', MagicMock(), False, None, 'u') is None
     assert calls == [('prompt', True), ('parent', True)]
     audio.assert_not_called()
 
@@ -165,7 +167,7 @@ def test_user_delete_records_intent_before_retraction_and_cleanup(store, failure
             delete('c', MagicMock(), True, None, 'u')
         assert 'users/u/conversations/c' in store.rows
     else:
-        assert delete('c', MagicMock(), True, None, 'u') == {'status': 'Ok'}
+        assert delete('c', MagicMock(), True, None, 'u') is None
         assert 'users/u/conversations/c' not in store.rows
     assert tombstones.is_deleted('u', 'c')
 

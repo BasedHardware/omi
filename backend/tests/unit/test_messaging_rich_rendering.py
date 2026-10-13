@@ -109,16 +109,16 @@ def test_link_builder_has_ruling_domain_and_encoded_id_only(kind):
 def test_item_buttons_bounded_labels_and_overflow():
     items = [dict(title='Long title ' * 10, url=rendering.item_link('task', str(i))) for i in range(7)]
     rows = rendering.item_buttons(items)['inline_keyboard']
-    assert len(rows) == 6
+    assert len(rows) == 5
     assert all(len(row[0]['text']) <= 32 for row in rows)
-    assert rows[-1] == [dict(text='Open in Omi', url='https://h.omi.me')]
+    assert all(row[0]['url'] != 'https://h.omi.me' for row in rows)
     assert all('callback_data' not in row[0] for row in rows)
 
 
 def test_links_from_existing_blocks_deduplicated():
     items = rendering.linked_items(
         dict(
-            text='Task',
+            text='Task a and Memory b',
             content_blocks=[
                 dict(type='taskCard', task_id='a'),
                 dict(type='taskCard', task_id='a'),
@@ -164,12 +164,121 @@ def test_button_labels_do_not_split_joiners_or_leak_into_urls():
     title = ('x' * 30) + '👨\u200d👩'
     rows = rendering.item_buttons([dict(title=title, url=rendering.item_link('memory', 'id'))])['inline_keyboard']
     label = rows[0][0]['text']
-    assert len(label) <= 32
+    assert len(label) <= 30
     assert not label.endswith('\u200d')
     assert title not in rows[0][0]['url']
     assert rows[0][0]['url'] == 'https://h.omi.me/memory/id'
 
 
+def test_narrow_table_escapes_markup_inside_pre():
+    text = '| a | b |\n|---|---|\n| </pre><b>x</b> | y |'
+    result = rendering.render_markdown(text, rich=True)
+    assert '&lt;/pre&gt;&lt;b&gt;x&lt;/b&gt;' in result
+    assert result.count('<pre>') == result.count('</pre>') == 1
+
+
 def test_adversarial_unclosed_citation_does_not_backtrack():
     text = '[0,' + ' 0,' * 20000
     assert rendering.source_phrases(text) == text
+
+
+@pytest.mark.parametrize('rich', [False, True])
+def test_tables_strip_pipes_and_inline_markdown(rich):
+    text = '| Name | State |\n|---|---|\n| **Alpha** | `Ready` |\n| Beta | Done |'
+    result = rendering.render_markdown(text, rich=rich)
+    assert '|' not in result and '**' not in result and '`' not in result
+    if rich:
+        assert result == '<pre>Name   State\nAlpha  Ready\nBeta   Done</pre>'
+    else:
+        assert result == 'Alpha\nState: Ready\n\nBeta\nState: Done'
+
+
+@pytest.mark.parametrize('rich', [False, True])
+def test_wide_table_uses_row_lists(rich):
+    value = 'A long description that exceeds the phone width'
+    result = rendering.render_markdown('| Task | Detail |\n|---|---|\n| **Alpha** | ' + value + ' |', rich=rich)
+    assert '<pre>' not in result and '|' not in result
+    assert ('<b>Alpha</b>' if rich else 'Alpha') in result
+    assert 'Detail: ' + value in result
+
+
+@pytest.mark.parametrize('rich', [False, True])
+def test_common_block_markdown_does_not_leak(rich):
+    result = rendering.render_markdown(
+        '# Title\n\n> quote\n\n3. first\n4. second\n\n---\n\n```python\ncode\n```', rich=rich
+    )
+    assert '# ' not in result and '> quote' not in result and '```' not in result and '---' not in result
+    assert '3. first' in result and '4. second' in result and 'code' in result
+
+
+def test_item_selection_matches_answer_in_order_and_rejects_unmentioned_tools():
+    sources = [
+        dict(kind='task', id=str(i), title=title)
+        for i, title in enumerate(
+            [
+                'Make a prediction market about the election',
+                'Send both documents out for Signature',
+                'Set up a session with the team',
+                'Do YC application with Nick',
+                'Try the double-click-to-mute feature',
+            ]
+        )
+    ]
+    result = rendering.linked_items(
+        dict(
+            text='**Set up a session with the team**, then Send both documents out for Signature.',
+            conversations=sources,
+        )
+    )
+    assert [item['id'] for item in result] == ['2', '1']
+    assert rendering.linked_items(dict(text='Nothing useful.', conversations=sources)) == []
+    assert rendering.linked_items(dict(text='Open task 0.', conversations=sources))[0]['id'] == '0'
+    assert rendering.button_label(sources[0]['title']) == 'Make a prediction market…'
+    assert rendering.button_label(sources[1]['title']) == 'Send both documents out for…'
+
+
+def test_gfm_strikethrough_does_not_leak_markers():
+    assert rendering.telegram('~~retired~~') == ('<s>retired</s>',)
+    assert rendering.plain('~~retired~~') == 'retired'
+
+
+def test_exact_list_order_encoding_and_shared_base(monkeypatch):
+    monkeypatch.setenv('OMI_SHARE_BASE_URL', 'https://share.example.com/omi/')
+    items = [
+        {'kind': 'memory', 'id': 'space &+=/雪'},
+        {'kind': 'task', 'id': 'two'},
+        {'kind': 'memory', 'id': 'three'},
+        {'kind': 'conversation', 'id': 'four'},
+    ]
+    url = rendering.item_list_link(items)
+    assert (
+        url
+        == 'https://share.example.com/omi/items?memory=space%20%26%2B%3D%2F%E9%9B%AA&task=two&memory=three&conversation=four'
+    )
+    assert (
+        rendering.item_link('memory', items[0]['id'])
+        == 'https://share.example.com/omi/memory/space%20%26%2B%3D%2F%E9%9B%AA'
+    )
+    assert rendering.valid_item_link(url)
+    assert rendering.valid_item_link(rendering.item_link('task', 'two'))
+    assert not rendering.valid_item_link('https://h.omi.me/task/two')
+    assert not rendering.valid_item_link(url + '&title=private')
+    assert not rendering.valid_item_link('https://share.example.com/omi')
+
+
+def test_list_cap_and_reply_order():
+    sources = [{'kind': 'task', 'id': f'id-{i}', 'title': f'Complete action {i} now'} for i in range(12)]
+    items = rendering.linked_items(
+        {'text': '\n'.join(item['title'] for item in reversed(sources)), 'conversations': sources}
+    )
+    assert [item['id'] for item in items] == [f'id-{i}' for i in range(11, 1, -1)]
+    assert rendering.item_list_link(items + sources) == 'https://h.omi.me/items?' + '&'.join(
+        f'task=id-{i}' for i in range(11, 1, -1)
+    )
+    assert len(rendering.item_buttons(items)['inline_keyboard']) == 5
+
+
+@pytest.mark.parametrize('items', [[], [{'kind': 'unknown', 'id': 'a'}], [{'kind': 'task', 'id': ''}]])
+def test_list_requires_valid_items(items):
+    with pytest.raises(ValueError):
+        rendering.item_list_link(items)

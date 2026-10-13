@@ -408,6 +408,12 @@ def isolate_e2e_state(fake_firestore, fake_redis, fake_storage):
         clear_user_data(DEV_UID)
         fake_redis.flushall()
         clear_fake_storage()
+        # Memory reads share a process-wide admission burst. Independent E2E
+        # cases must not spend each other's tokens; retain the real per-case
+        # admission policy and refill/in-flight limits unchanged.
+        from utils.memory import read_resilience
+
+        read_resilience._retry_allowance = read_resilience.RetryAllowance()
         # Listen admission is process-local; the fixed E2E uid must start with
         # a fresh burst for each isolated test, just like the fake stores.
         try:

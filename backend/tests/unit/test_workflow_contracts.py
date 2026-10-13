@@ -2009,3 +2009,23 @@ def test_notifications_job_deploy_restores_singleton_before_action_and_reattache
     assert '--job' in attach['run'] and '--detach' not in attach['run']
     assert 'if' not in detach and 'if' not in attach
     assert workflow['concurrency']['cancel-in-progress'] is False
+
+
+def test_notifications_job_renders_the_verified_gateway_endpoint():
+    """The manifest default for OMI_LLM_GATEWAY_URL is the inert http://127.0.0.1:9.
+
+    The 2026-10-10 deploy rendered without the gated endpoint and every daily
+    recap generation failed with APIConnectionError until the next redeploy.
+    """
+    workflow = yaml.safe_load(
+        (BACKEND_DIR.parent / ".github" / "workflows" / "gcp_notifications_job.yml").read_text(encoding="utf-8")
+    )
+    steps = workflow["jobs"]["deploy"]["steps"]
+    ids = [step.get("id") for step in steps]
+    gate = ids.index("gateway-serving")
+    render = ids.index("runtime-env")
+    assert gate < render
+    assert "verify-llm-gateway-serving.py" in steps[gate]["run"]
+    assert "--github-output" in steps[gate]["run"]
+    assert steps[render]["env"]["OMI_LLM_GATEWAY_URL"] == "${{ steps.gateway-serving.outputs.gateway_url }}"
+    assert "http://127.0.0.1:9" in steps[render]["run"]

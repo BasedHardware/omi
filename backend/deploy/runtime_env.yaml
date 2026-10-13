@@ -603,6 +603,9 @@ environments:
               value: '1'
             FIRESTORE_READ_LEDGER_SERVICE:
               value: backend
+            OMI_VERTEX_RESERVATION_PROJECT:
+              value: based-hardware-dev
+              category: runtime_identity
             AUDIO_TIMELINE_SPANS: {value: 'false', category: rollout}
             LIVE_SPEAKER_SPAN_RESOLUTION: {value: 'false', category: rollout}
             LIVE_CAPTURE_WINDOW_RETENTION: {value: 'false', category: rollout}
@@ -636,6 +639,7 @@ environments:
             TRANSLATION_ONDEMAND_UID_DAILY_CHARS: {value: '10000000', category: rollout}
             TRANSLATION_ONDEMAND_GLOBAL_DAILY_CHARS: {value: '1000000000', category: rollout}
             TRANSLATION_ONDEMAND_MAX_CATCHUP_PAGES: {value: '4', category: rollout}
+            SYNC_SAFETY_WAL_DEDUPE_ENABLED: {value: 'true', category: rollout}
             SYNC_WAL_AUDIO_COVERAGE_ENABLED: {value: 'true', category: rollout}
             FREE_TIER_LOCAL_PROCESSING: {category: rollout, value: 'true'}
             FREE_TIER_LOCAL_PROCESSING_COHORT:
@@ -792,6 +796,9 @@ environments:
               secret: POSTHOG_PROJECT_API_KEY
               version: latest
           env:
+            OMI_VERTEX_RESERVATION_PROJECT:
+              value: based-hardware-dev
+              category: runtime_identity
             TYPESENSE_HOST_PORT:
               value: '443'
               category: service_discovery
@@ -821,6 +828,7 @@ environments:
             SYNC_ASSIGNMENT_RECOVERY_ENABLED: {value: 'true', category: rollout}
             SYNC_LINEAGE_LIVE_DEDUPE_ENABLED: {value: 'true', category: rollout}
             SYNC_LINEAGE_S1_REQUIRED: {value: 'true', category: rollout}
+            SYNC_SAFETY_WAL_DEDUPE_ENABLED: {value: 'true', category: rollout}
             SYNC_WAL_AUDIO_COVERAGE_ENABLED: {value: 'true', category: rollout}
             FREE_TIER_LOCAL_PROCESSING: {category: rollout, value: 'true'}
             FREE_TIER_LOCAL_PROCESSING_COHORT:
@@ -1014,6 +1022,7 @@ environments:
             SYNC_ASSIGNMENT_RECOVERY_ENABLED: {value: 'true', category: rollout}
             SYNC_LINEAGE_LIVE_DEDUPE_ENABLED: {value: 'true', category: rollout}
             SYNC_LINEAGE_S1_REQUIRED: {value: 'true', category: rollout}
+            SYNC_SAFETY_WAL_DEDUPE_ENABLED: {value: 'true', category: rollout}
             SYNC_WAL_AUDIO_COVERAGE_ENABLED: {value: 'true', category: rollout}
             FREE_TIER_LOCAL_PROCESSING: {category: rollout, value: 'true'}
             FREE_TIER_LOCAL_PROCESSING_COHORT:
@@ -1195,6 +1204,7 @@ environments:
             SYNC_ASSIGNMENT_RECOVERY_ENABLED: {value: 'true', category: rollout}
             SYNC_LINEAGE_LIVE_DEDUPE_ENABLED: {value: 'true', category: rollout}
             SYNC_LINEAGE_S1_REQUIRED: {value: 'true', category: rollout}
+            SYNC_SAFETY_WAL_DEDUPE_ENABLED: {value: 'true', category: rollout}
             SYNC_WAL_AUDIO_COVERAGE_ENABLED: {value: 'true', category: rollout}
             FREE_TIER_LOCAL_PROCESSING: {category: rollout, value: 'true'}
             FREE_TIER_LOCAL_PROCESSING_COHORT:
@@ -2298,6 +2308,9 @@ environments:
               value: '1'
             FIRESTORE_READ_LEDGER_SERVICE:
               value: backend
+            OMI_VERTEX_RESERVATION_PROJECT:
+              value: based-hardware
+              category: runtime_identity
             AUDIO_TIMELINE_SPANS: {value: 'false', category: rollout}
             LIVE_SPEAKER_SPAN_RESOLUTION: {value: 'true', category: rollout}
             LIVE_CAPTURE_WINDOW_RETENTION: {value: 'false', category: rollout}
@@ -2331,6 +2344,7 @@ environments:
             TRANSLATION_ONDEMAND_UID_DAILY_CHARS: {value: '10000000', category: rollout}
             TRANSLATION_ONDEMAND_GLOBAL_DAILY_CHARS: {value: '1000000000', category: rollout}
             TRANSLATION_ONDEMAND_MAX_CATCHUP_PAGES: {value: '4', category: rollout}
+            SYNC_SAFETY_WAL_DEDUPE_ENABLED: {value: 'true', category: rollout}
             SYNC_WAL_AUDIO_COVERAGE_ENABLED: {value: 'true', category: rollout}
             FREE_TIER_LOCAL_PROCESSING: {category: rollout, value: 'false'}
             FREE_TIER_LOCAL_PROCESSING_COHORT: {category: rollout, value: ''}
@@ -2425,6 +2439,9 @@ environments:
             DREAM_AGENT_DAILY_USD: {value: '60', category: rollout}
             PROACTIVITY_V2_POSTHOG_TOKEN: {value: phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y, category: rollout}
             PROACTIVITY_V2_POSTHOG_HOST: {value: 'https://us.posthog.com', category: rollout}
+            POSTHOG_BILLING_API_KEY:
+              value: phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y
+              category: telemetry
             MENTOR_PIPELINE: {value: cohort, category: rollout}
             SPEAKER_GROUPING_SHADOW: {value: cohort, category: rollout}
             SPEAKER_GROUPING_SHADOW_PERCENT: {value: '10', category: rollout}
@@ -2546,6 +2563,9 @@ environments:
               secret: DREAM_AGENT_FEEDBACK_SALT
               version: latest
           env:
+            OMI_VERTEX_RESERVATION_PROJECT:
+              value: based-hardware
+              category: runtime_identity
             TYPESENSE_HOST_PORT:
               value: '443'
               category: service_discovery
@@ -2575,6 +2595,7 @@ environments:
             SYNC_ASSIGNMENT_RECOVERY_ENABLED: {value: 'true', category: rollout}
             SYNC_LINEAGE_LIVE_DEDUPE_ENABLED: {value: 'true', category: rollout}
             SYNC_LINEAGE_S1_REQUIRED: {value: 'true', category: rollout}
+            SYNC_SAFETY_WAL_DEDUPE_ENABLED: {value: 'true', category: rollout}
             SYNC_WAL_AUDIO_COVERAGE_ENABLED: {value: 'true', category: rollout}
             FREE_TIER_LOCAL_PROCESSING: {category: rollout, value: 'false'}
             FREE_TIER_LOCAL_PROCESSING_COHORT: {category: rollout, value: ''}
@@ -2669,10 +2690,13 @@ environments:
             DREAM_AGENT_MODE: {value: 'on', category: rollout}
             REVIEW_SURFACE_MODE: {value: 'on', category: rollout}
             DREAM_AGENT_UID_ALLOWLIST: {value: '9OqYLlKJv4hmeYpIhwJcHBR975i2,vi7SA9ckQCe4ccobWNxlbdcNdC23', category: rollout}
+            DREAM_AGENT_CONTEXT_MODE: {value: full, category: rollout}
+            DREAM_AGENT_FULL_CONTEXT_UIDS: {value: vi7SA9ckQCe4ccobWNxlbdcNdC23, category: rollout}
+            DREAM_AGENT_FULL_SAMPLES: {value: '3', category: rollout}
             DREAM_AGENT_AUTO_APPLY_KINDS: {value: 'title,overview,vocabulary', category: rollout}
             DREAM_AGENT_PASSES_PER_DAY: {value: '24', category: rollout}
             DREAM_AGENT_MANUAL_RUNS_PER_DAY: {value: '20', category: rollout}
-            DREAM_AGENT_DAILY_USD: {value: '60', category: rollout}
+            DREAM_AGENT_DAILY_USD: {value: '250', category: rollout}
             DREAM_AGENT_CANARY_UID: {value: dream-canary-prod-01, category: rollout}
             SYNC_PHASE_METRICS_EXPORT_ENABLED:
               value: 'true'
@@ -2798,6 +2822,7 @@ environments:
             SYNC_ASSIGNMENT_RECOVERY_ENABLED: {value: 'true', category: rollout}
             SYNC_LINEAGE_LIVE_DEDUPE_ENABLED: {value: 'true', category: rollout}
             SYNC_LINEAGE_S1_REQUIRED: {value: 'true', category: rollout}
+            SYNC_SAFETY_WAL_DEDUPE_ENABLED: {value: 'true', category: rollout}
             SYNC_WAL_AUDIO_COVERAGE_ENABLED: {value: 'true', category: rollout}
             FREE_TIER_LOCAL_PROCESSING: {category: rollout, value: 'false'}
             FREE_TIER_LOCAL_PROCESSING_COHORT: {category: rollout, value: ''}
@@ -3010,6 +3035,7 @@ environments:
             SYNC_ASSIGNMENT_RECOVERY_ENABLED: {value: 'true', category: rollout}
             SYNC_LINEAGE_LIVE_DEDUPE_ENABLED: {value: 'true', category: rollout}
             SYNC_LINEAGE_S1_REQUIRED: {value: 'true', category: rollout}
+            SYNC_SAFETY_WAL_DEDUPE_ENABLED: {value: 'true', category: rollout}
             SYNC_WAL_AUDIO_COVERAGE_ENABLED: {value: 'true', category: rollout}
             FREE_TIER_LOCAL_PROCESSING: {category: rollout, value: 'false'}
             FREE_TIER_LOCAL_PROCESSING_COHORT: {category: rollout, value: ''}

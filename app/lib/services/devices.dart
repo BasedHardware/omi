@@ -188,7 +188,17 @@ class DeviceService {
         await connection.connect(
           onConnectionStateChanged: onDeviceConnectionStateChanged,
         );
-      } catch (_) {
+      } catch (e) {
+        final isTimeout = e is TimeoutException || (e is DeviceConnectionException && e.isTimeout);
+        if (isTimeout) {
+          // A launch connection attempt timed out waiting for an offline or
+          // out-of-range device. Native BLE maintains auto-reconnect in the
+          // background; preserve the transport and registration so when the
+          // peripheral comes back in range, native device-ready events restore
+          // the connection and resume capture.
+          rethrow;
+        }
+
         // A native GATT link may already be up even when device-specific
         // initialization (for example, a protected Limitless write) fails.
         // Tear that partial connection down so the UI cannot retain a ghost

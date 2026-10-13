@@ -762,8 +762,14 @@ OMI_CLIENT_JOURNEY_DURATION_SECONDS = Histogram(
 # different images, mixes two different answers to the same question.
 LISTEN_FINALIZATION_OLDEST_NONTERMINAL_AGE_SECONDS = Gauge(
     'listen_finalization_oldest_nonterminal_age_seconds',
-    'Global age of the oldest queued, leased, or blocked listen finalization job; '
+    'Global age of the oldest queued or leased listen finalization job; '
     'replicated per process, aggregate with max() not sum()',
+)
+
+LISTEN_FINALIZATION_OLDEST_BLOCKED_BYOK_AGE_SECONDS = Gauge(
+    'listen_finalization_oldest_blocked_byok_age_seconds',
+    'Global age of the oldest listen finalization job waiting for user BYOK credentials; '
+    'replicated per process, aggregate with max() not sum(); informational only',
 )
 
 # Durable-queue substrate age. Every replica publishes the same Firestore-derived
@@ -778,15 +784,50 @@ OMI_QUEUE_OLDEST_READY_AGE_SECONDS = Gauge(
 OMI_QUEUE_NAMES = (
     'memory_outbox',
     'candidate_integration_outbox',
-    'chat_first_proactive_intents',
     'conversation_finalization_jobs',
     'daily_summary_hour_groups',
     'daily_memory_sweep',
     'vector_repair_outbox',
     'task_recurrence_inbox',
     'frame_deletion_outbox',
-    'projection_repairs',
 )
+
+# Closed queue inventory bounds cardinality. Before the first tick, age absence
+# remains the startup signal; thereafter unknown is explicit per queue.
+OMI_QUEUE_OLDEST_READY_SAMPLE_UNKNOWN = Gauge(
+    'omi_queue_oldest_ready_sample_unknown',
+    'Whether the latest durable-queue age sample is unknown; aggregate with max()',
+    ['queue'],
+)
+for _queue_name in OMI_QUEUE_NAMES:
+    OMI_QUEUE_OLDEST_READY_SAMPLE_UNKNOWN.labels(queue=_queue_name).set(0)
+
+# Closed sweep dispositions. Zero-initialize every child so an idle process
+# exports the whole set; never label by uid.
+CANDIDATE_INTEGRATION_SWEEP_DISPOSITIONS = (
+    'dead_letter_generation_mismatch',
+    'dead_letter_in_doubt',
+    'dead_letter_malformed',
+    'dead_letter_missing_created_at',
+    'dead_letter_stale_abandoned',
+    'error',
+    'recovered_external_id',
+    'retried',
+    'skipped_account_deleting',
+    'skipped_attempt_budget',
+    'skipped_live_lease',
+    'skipped_not_claimed',
+    'skipped_not_due',
+    'skipped_pending_young',
+)
+OMI_CANDIDATE_INTEGRATION_SWEEP_TOTAL = Counter(
+    'omi_candidate_integration_sweep_total',
+    'Candidate integration outbox sweep rows by closed disposition',
+    ['disposition'],
+)
+for _disposition in CANDIDATE_INTEGRATION_SWEEP_DISPOSITIONS:
+    OMI_CANDIDATE_INTEGRATION_SWEEP_TOTAL.labels(disposition=_disposition)
+
 
 LISTEN_FINALIZATION_JOB_STATUS = Gauge(
     'listen_finalization_jobs',
@@ -1277,12 +1318,6 @@ TASK_INTELLIGENCE_ATTRIBUTION_TOTAL = Counter(
     'task_intelligence_attribution_total',
     'Privacy-safe task intervention, feedback, and outcome events',
     ['event', 'subject_kind', 'code'],
-)
-
-CHAT_FIRST_PROACTIVE_TOTAL = Counter(
-    'chat_first_proactive_total',
-    'Chat-first proactive engine activity with no user content',
-    ['event', 'source', 'reason'],
 )
 
 MEMORY_UNIVERSAL_READ_ORIGIN_TOTAL = Counter(

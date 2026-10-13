@@ -1648,4 +1648,93 @@ class AnalyticsManager {
     PostHogManager.shared.track("knowledge_graph_build_failed", properties: props)
   }
 
+  // MARK: - Subscription funnel
+  //
+  // Same wire names as mobile. `Upgrade Succeeded` stays property-less because
+  // that released registry id cannot gain properties; tier and interval are on
+  // `Upgrade Succeeded Attributed`, emitted with it.
+
+  func paywallOpened(source: String, currentPlan: String) {
+    PostHogManager.shared.track(
+      "Paywall Opened",
+      properties: SubscriptionFunnelWire.paywallProperties(source: source, currentPlan: currentPlan))
+  }
+
+  func upgradePlanSelected(plan: String, billingInterval: String, source: String) {
+    PostHogManager.shared.track(
+      "Upgrade Plan Selected",
+      properties: SubscriptionFunnelWire.planSelectedProperties(
+        plan: plan, billingInterval: billingInterval, source: source))
+  }
+
+  func upgradeSucceeded(plan: String, billingInterval: String) {
+    let properties = SubscriptionFunnelWire.upgradeSucceededProperties(plan: plan, billingInterval: billingInterval)
+    PostHogManager.shared.track("Upgrade Succeeded Attributed", properties: properties)
+    PostHogManager.shared.track("Upgrade Succeeded")
+  }
+
+  func upgradeCancelled() {
+    PostHogManager.shared.track("Upgrade Cancelled")
+  }
+
+}
+
+enum SubscriptionFunnelWire {
+  static func plan(_ raw: String?) -> String {
+    switch raw?.trimmingCharacters(in: .whitespacesAndNewlines) {
+    case "free":
+      return "basic"
+    case "pro":
+      return "unknown"
+    case "basic", "plus", "unlimited", "unlimited_v2", "operator", "architect", "unknown":
+      return (raw ?? "unknown").trimmingCharacters(in: .whitespacesAndNewlines)
+    default:
+      return "unknown"
+    }
+  }
+
+  static func interval(_ raw: String?) -> String {
+    switch raw?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() {
+    case "month", "monthly":
+      return "month"
+    case "year", "yearly", "annual":
+      return "year"
+    default:
+      return "unknown"
+    }
+  }
+
+  static func source(_ raw: String) -> String {
+    switch raw {
+    case "chat_quota_exceeded", "freemium_switch", "locked_conversation", "locked_memory", "chat_apps",
+      "usage_page", "transcription_settings", "unlimited_deeplink", "macos_billing", "macos_usage_limit",
+      "macos_chat_quota_banner", "windows_billing", "windows_usage_limit", "web_plans",
+      "macos_settings_view", "windows_settings_view", "unknown":
+      return raw
+    default:
+      return "unknown"
+    }
+  }
+
+  static func paywallProperties(source: String, currentPlan: String) -> [String: String] {
+    [
+      "source": self.source(source),
+      "current_plan": plan(currentPlan),
+    ]
+  }
+
+  static func planSelectedProperties(plan: String, billingInterval: String, source: String) -> [String: String] {
+    [
+      "plan": self.plan(plan),
+      "billing_interval": interval(billingInterval),
+      "source": self.source(source),
+    ]
+  }
+
+  static func upgradeSucceededProperties(plan: String, billingInterval: String) -> [String: String] {
+    [
+      "plan": self.plan(plan),
+      "billing_interval": interval(billingInterval),
+    ]
+  }
 }

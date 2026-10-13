@@ -11,13 +11,12 @@ import logging
 import asyncio
 import json
 import uuid
-import re
 import base64
 from datetime import datetime, timezone
 from typing import Optional
 from utils.executors import db_executor, llm_executor, run_blocking
 from utils.messaging.receipt_presentation import app_receipt_text
-from utils.messaging.adapters.rendering import CITATION_PATTERN
+from utils.chat_citations import resolve_conversation_citations
 from fastapi import HTTPException
 from fastapi.responses import StreamingResponse
 from starlette.concurrency import iterate_in_threadpool
@@ -429,16 +428,7 @@ def _run_chat_turn(uid, surface, session, message, reply_sink, *, principal, opt
                     type(evidence_exc).__name__,
                 )
 
-        # cited extraction
-        citation_pattern = CITATION_PATTERN
-        cited_conversation_idxs = {
-            int(index)
-            for marker in re.finditer(citation_pattern, response)
-            for index in re.findall(r'\d+', marker.group(0))
-        }
-        if cited_conversation_idxs:
-            response = re.sub(citation_pattern, '', response)
-        memories = [memories[i - 1] for i in cited_conversation_idxs if 0 < i and i <= len(memories)]
+        response, memories = resolve_conversation_citations(response, memories)
 
         memories_id = extract_memory_ids(memories) if memories else []
         receipt_blocks = [receipt.content_block for receipt in callback_data.get('action_receipts', ())]

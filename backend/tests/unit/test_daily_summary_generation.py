@@ -877,6 +877,22 @@ def test_contended_retry_stays_pending_without_releasing_another_workers_lock(mo
     assert sent == released == []
 
 
+@pytest.mark.parametrize('push_receipt', [True, False])
+def test_retry_locked_by_a_finished_worker_resolves_from_the_durable_record(monkeypatch, push_receipt):
+    _generated, created, sent, released, _webhooks = _install_generation_fakes(monkeypatch)
+    monkeypatch.setattr(notif, '_backfill_recent_daily_summaries', lambda *_a: None)
+    monkeypatch.setattr(notif, 'try_acquire_daily_summary_lock', lambda *_a: False)
+    stored = {'id': 'sum1', 'date': '2026-10-12', 'notification_delivery_completed': push_receipt}
+    monkeypatch.setattr(notif.daily_summaries_db, 'get_daily_summary_by_date', lambda *_a: stored)
+    delivered = notif.Event()
+
+    notif._send_summary_notification(('uid1', ['tok1'], 'UTC', None, not push_receipt, True, delivered))
+
+    assert delivered.is_set()
+    assert created == []
+    assert len(sent) == (0 if push_receipt else 1)
+
+
 @pytest.mark.parametrize('late_push_succeeds', [False, True])
 def test_timeout_after_persistence_retries_uncertain_push_and_honors_late_receipt(monkeypatch, late_push_succeeds):
     generated, created, sent, _released, _webhooks = _install_generation_fakes(monkeypatch)

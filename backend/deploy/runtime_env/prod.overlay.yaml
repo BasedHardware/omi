@@ -569,6 +569,10 @@ overlay:
           PROACTIVITY_V2_POSTHOG_HOST:
             value: https://us.posthog.com
             category: rollout
+          # Public project token for billing capture only. Not a secret mount.
+          POSTHOG_BILLING_API_KEY:
+            value: phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y
+            category: telemetry
           POSTHOG_HOST:
             value: https://us.posthog.com
             category: telemetry
@@ -767,12 +771,17 @@ overlay:
           # Dream passes run here; mode=on admission and Review proposals require the Review surface.
           REVIEW_SURFACE_MODE: {value: 'on', category: rollout}
           DREAM_AGENT_UID_ALLOWLIST: {value: '9OqYLlKJv4hmeYpIhwJcHBR975i2,vi7SA9ckQCe4ccobWNxlbdcNdC23', category: rollout}
+          # Full-context consensus for the existing QA owner; other allowlisted accounts stay bounded.
+          DREAM_AGENT_CONTEXT_MODE: {value: full, category: rollout}
+          DREAM_AGENT_FULL_CONTEXT_UIDS: {value: 'vi7SA9ckQCe4ccobWNxlbdcNdC23', category: rollout}
+          DREAM_AGENT_FULL_SAMPLES: {value: '3', category: rollout}
           # Spelling fixes go to Review until auto-apply requires supporting context (scheduled passes run here).
           DREAM_AGENT_AUTO_APPLY_KINDS: {value: 'title,overview,vocabulary', category: rollout}
           # 2026-10-09: hourly dogfood + manual runs; reserve room for both users and canary.
           DREAM_AGENT_PASSES_PER_DAY: {value: '24', category: rollout}
           DREAM_AGENT_MANUAL_RUNS_PER_DAY: {value: '20', category: rollout}
-          DREAM_AGENT_DAILY_USD: {value: '60', category: rollout}
+          # Reserved-capacity accounting-only budget intent: 24 per-user hourly K=3 passes (~$200 settled) plus ~$26 reservation headroom.
+          DREAM_AGENT_DAILY_USD: {value: '250', category: rollout}
           DREAM_AGENT_CANARY_UID: {value: 'dream-canary-prod-01', category: rollout}
           CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE: {value: 'shadow', category: rollout}
           SYNC_PHASE_METRICS_EXPORT_ENABLED: {value: 'true', category: telemetry}

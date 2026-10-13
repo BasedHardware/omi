@@ -1,0 +1,1720 @@
+{
+  "schema_version": 1,
+  "source_base": "e52113704226457f55b72a10d20143182921f11c",
+  "inventory_metric_names": 2004,
+  "selector_audit_at": 1791868952,
+  "original_backtest": [
+    {
+      "uid": "omi-capture-finalization-dead-emission",
+      "start": 1791004500,
+      "end": 1791868200,
+      "step": 300,
+      "episodes": 0,
+      "total_duration_seconds": 0,
+      "longest_seconds": 0,
+      "percent_time_firing": 0.0,
+      "would_page_per_week": 0.0,
+      "never_fired": true,
+      "flap": false,
+      "unknown_ticks": 0,
+      "open_episodes": 0,
+      "metrics": {
+        "listen_finalization_durable_jobs": 147
+      },
+      "metric_exists": true,
+      "series_count": 147,
+      "queries": {
+        "A": "clamp_min(delta((max(listen_finalization_durable_jobs{state=\"accepted\"}))[30m:]), 0)",
+        "B": "sum(clamp_min(delta((max by (state) (listen_finalization_durable_jobs{state=~\"success|failure|stale\"}))[30m:]), 0))"
+      },
+      "verdict": "never-fires"
+    },
+    {
+      "uid": "omi-chat-first-proactive-stalled",
+      "start": 1791004500,
+      "end": 1791868200,
+      "step": 300,
+      "episodes": 0,
+      "total_duration_seconds": 0,
+      "longest_seconds": 0,
+      "percent_time_firing": 0.0,
+      "would_page_per_week": 0.0,
+      "never_fired": true,
+      "flap": false,
+      "unknown_ticks": 0,
+      "open_episodes": 0,
+      "metrics": {
+        "chat_first_proactive_total": 0
+      },
+      "metric_exists": false,
+      "series_count": 0,
+      "queries": {
+        "A": "sum(rate(chat_first_proactive_total{event=\"stalled\"}[1h]))"
+      },
+      "verdict": "dead-metric"
+    },
+    {
+      "uid": "omi-daily-recap-generation-failing",
+      "start": 1791004500,
+      "end": 1791868200,
+      "step": 300,
+      "verdict": "needs-human",
+      "reason": "non-Prometheus datasource: separate aggregate evidence required"
+    },
+    {
+      "uid": "omi-journey-chat-fail",
+      "start": 1791004500,
+      "end": 1791868200,
+      "step": 300,
+      "episodes": 0,
+      "total_duration_seconds": 0,
+      "longest_seconds": 0,
+      "percent_time_firing": 0.0,
+      "would_page_per_week": 0.0,
+      "never_fired": true,
+      "flap": false,
+      "unknown_ticks": 0,
+      "open_episodes": 0,
+      "metrics": {
+        "omi_journey_terminal_total": 552
+      },
+      "metric_exists": true,
+      "series_count": 552,
+      "queries": {
+        "A": "sum(increase(omi_journey_terminal_total{journey=\"chat_response\",outcome=~\"success|failure\"}[30m]))",
+        "B": "sum(increase(omi_journey_terminal_total{journey=\"chat_response\",outcome=\"failure\"}[30m])) / clamp_min(sum(increase(omi_journey_terminal_total{journey=\"chat_response\",outcome=~\"success|failure\"}[30m])), 1)"
+      },
+      "verdict": "never-fires"
+    },
+    {
+      "uid": "omi-journey-chat-success-critical",
+      "start": 1791004500,
+      "end": 1791868200,
+      "step": 300,
+      "episodes": 0,
+      "total_duration_seconds": 0,
+      "longest_seconds": 0,
+      "percent_time_firing": 0.0,
+      "would_page_per_week": 0.0,
+      "never_fired": true,
+      "flap": false,
+      "unknown_ticks": 0,
+      "open_episodes": 0,
+      "metrics": {
+        "omi_journey_accepted_total": 138,
+        "omi_journey_terminal_total": 552
+      },
+      "metric_exists": true,
+      "series_count": 690,
+      "queries": {
+        "A": "sum(increase(omi_journey_accepted_total{journey=\"chat_response\"}[30m]))",
+        "B": "sum(increase(omi_journey_terminal_total{journey=\"chat_response\",outcome=\"success\"}[30m])) / clamp_min(sum(increase(omi_journey_terminal_total{journey=\"chat_response\",outcome=~\"success|failure\"}[30m])), 1)"
+      },
+      "verdict": "never-fires"
+    },
+    {
+      "uid": "omi-journey-live-transcription-fail",
+      "start": 1791004500,
+      "end": 1791868200,
+      "step": 300,
+      "episodes": 1,
+      "total_duration_seconds": 1200,
+      "longest_seconds": 1200,
+      "percent_time_firing": 0.139,
+      "would_page_per_week": 0.7,
+      "never_fired": false,
+      "flap": false,
+      "unknown_ticks": 0,
+      "open_episodes": 0,
+      "metrics": {
+        "omi_live_stt_accepted_total": 209,
+        "omi_live_stt_terminal_total": 339
+      },
+      "metric_exists": true,
+      "series_count": 548,
+      "queries": {
+        "A": "sum(increase(omi_live_stt_accepted_total[30m]))",
+        "B": "sum(increase(omi_live_stt_terminal_total{outcome=\"failure\"}[30m])) / clamp_min(sum(increase(omi_live_stt_accepted_total[30m])), 1)"
+      },
+      "verdict": "ok"
+    },
+    {
+      "uid": "omi-journey-pusher-fail",
+      "start": 1791004500,
+      "end": 1791868200,
+      "step": 300,
+      "episodes": 0,
+      "total_duration_seconds": 0,
+      "longest_seconds": 0,
+      "percent_time_firing": 0.0,
+      "would_page_per_week": 0.0,
+      "never_fired": true,
+      "flap": false,
+      "unknown_ticks": 0,
+      "open_episodes": 0,
+      "metrics": {
+        "omi_journey_terminal_total": 552
+      },
+      "metric_exists": true,
+      "series_count": 552,
+      "queries": {
+        "A": "sum(increase(omi_journey_terminal_total{journey=\"pusher_session\",outcome=~\"success|failure\"}[30m]))",
+        "B": "sum(increase(omi_journey_terminal_total{journey=\"pusher_session\",outcome=\"failure\"}[30m])) / clamp_min(sum(increase(omi_journey_terminal_total{journey=\"pusher_session\",outcome=~\"success|failure\"}[30m])), 1)"
+      },
+      "verdict": "never-fires"
+    },
+    {
+      "uid": "omi-journey-pusher-success-critical",
+      "start": 1791004500,
+      "end": 1791868200,
+      "step": 300,
+      "episodes": 0,
+      "total_duration_seconds": 0,
+      "longest_seconds": 0,
+      "percent_time_firing": 0.0,
+      "would_page_per_week": 0.0,
+      "never_fired": true,
+      "flap": false,
+      "unknown_ticks": 0,
+      "open_episodes": 0,
+      "metrics": {
+        "omi_journey_accepted_total": 138,
+        "omi_journey_terminal_total": 552
+      },
+      "metric_exists": true,
+      "series_count": 690,
+      "queries": {
+        "A": "sum(increase(omi_journey_accepted_total{journey=\"pusher_session\"}[30m]))",
+        "B": "sum(increase(omi_journey_terminal_total{journey=\"pusher_session\",outcome=\"success\"}[30m])) / clamp_min(sum(increase(omi_journey_terminal_total{journey=\"pusher_session\",outcome=~\"success|failure\"}[30m])), 1)"
+      },
+      "verdict": "never-fires"
+    },
+    {
+      "uid": "omi-journey-signal-dead",
+      "start": 1791004500,
+      "end": 1791868200,
+      "step": 300,
+      "episodes": 0,
+      "total_duration_seconds": 0,
+      "longest_seconds": 0,
+      "percent_time_firing": 0.0,
+      "would_page_per_week": 0.0,
+      "never_fired": true,
+      "flap": false,
+      "unknown_ticks": 0,
+      "open_episodes": 0,
+      "metrics": {
+        "omi_journey_accepted_total": 138,
+        "llm_gateway_requests_total": 235
+      },
+      "metric_exists": true,
+      "series_count": 373,
+      "queries": {
+        "A": "(sum by (journey) (increase(omi_journey_accepted_total{journey=~\"pusher_session|capture_finalization\"}[1h])) < bool 1) * on() group_left() (sum(increase(llm_gateway_requests_total[1h])) > bool 100) or (sum by (journey) (increase(omi_journey_accepted_total{journey=\"chat_response\"}[1h])) < bool 1) * on() group_left() (sum(increase(llm_gateway_requests_total{lane_id=\"omi:auto:chat-agent\"}[1h])) > bool 20)"
+      },
+      "verdict": "never-fires"
+    },
+    {
+      "uid": "omi-llm-gateway-client-reachability",
+      "start": 1791004500,
+      "end": 1791868200,
+      "step": 300,
+      "episodes": 0,
+      "total_duration_seconds": 0,
+      "longest_seconds": 0,
+      "percent_time_firing": 0.0,
+      "would_page_per_week": 0.0,
+      "never_fired": true,
+      "flap": false,
+      "unknown_ticks": 0,
+      "open_episodes": 0,
+      "metrics": {
+        "llm_gateway_client_first_byte_seconds_bucket": 0,
+        "llm_gateway_circuit_open": 35,
+        "llm_gateway_chat_extraction_requests_total": 0
+      },
+      "metric_exists": false,
+      "series_count": 35,
+      "queries": {
+        "A": "(sum(rate(llm_gateway_chat_extraction_requests_total{mode=\"fallback\"}[15m])) / clamp_min(sum(rate(llm_gateway_chat_extraction_requests_total{mode=~\"serving|fallback\"}[15m])), 1e-9) > bool 0.05) or (max(llm_gateway_circuit_open) > bool 0) or ((sum(increase(llm_gateway_chat_extraction_requests_total{mode=~\"serving|fallback\"}[15m])) >= bool 10) and (sum(increase(llm_gateway_chat_extraction_requests_total{mode=\"serving\",outcome=\"success\"}[15m])) == bool 0)) or (histogram_quantile(0.95, sum(rate(llm_gateway_client_first_byte_seconds_bucket[5m])) by (le)) > bool 5)"
+      },
+      "verdict": "dead-metric"
+    },
+    {
+      "uid": "omi-llm-gateway-invalid-requests",
+      "start": 1791004500,
+      "end": 1791868200,
+      "step": 300,
+      "episodes": 0,
+      "total_duration_seconds": 0,
+      "longest_seconds": 0,
+      "percent_time_firing": 0.0,
+      "would_page_per_week": 0.0,
+      "never_fired": true,
+      "flap": false,
+      "unknown_ticks": 0,
+      "open_episodes": 0,
+      "metrics": {
+        "llm_gateway_request_rejections_total": 1
+      },
+      "metric_exists": true,
+      "series_count": 1,
+      "queries": {
+        "A": "sum(increase(llm_gateway_request_rejections_total{error_class=\"invalid_request\"}[30m])) or vector(0)"
+      },
+      "verdict": "never-fires"
+    },
+    {
+      "uid": "omi-llm-gateway-lane-failure-ratio",
+      "start": 1791004500,
+      "end": 1791868200,
+      "step": 300,
+      "episodes": 11,
+      "total_duration_seconds": 59700,
+      "longest_seconds": 14400,
+      "percent_time_firing": 6.562,
+      "would_page_per_week": 7.7,
+      "never_fired": false,
+      "flap": false,
+      "unknown_ticks": 0,
+      "open_episodes": 0,
+      "metrics": {
+        "llm_gateway_requests_total": 235
+      },
+      "metric_exists": true,
+      "series_count": 235,
+      "queries": {
+        "A": "sum by (lane_id) (increase(llm_gateway_requests_total[1h]))",
+        "B": "sum by (lane_id) (increase(llm_gateway_requests_total{outcome!=\"success\"}[1h])) / clamp_min(sum by (lane_id) (increase(llm_gateway_requests_total[1h])), 1)"
+      },
+      "verdict": "mistuned-noisy"
+    },
+    {
+      "uid": "omi-llm-gateway-lane-zero-success",
+      "start": 1791004500,
+      "end": 1791868200,
+      "step": 300,
+      "episodes": 0,
+      "total_duration_seconds": 0,
+      "longest_seconds": 0,
+      "percent_time_firing": 0.0,
+      "would_page_per_week": 0.0,
+      "never_fired": true,
+      "flap": false,
+      "unknown_ticks": 0,
+      "open_episodes": 0,
+      "metrics": {
+        "llm_gateway_requests_total": 235
+      },
+      "metric_exists": true,
+      "series_count": 235,
+      "queries": {
+        "A": "sum by (lane_id) (increase(llm_gateway_requests_total[6h]))",
+        "B": "sum by (lane_id) (increase(llm_gateway_requests_total{outcome=\"success\"}[6h])) or sum by (lane_id) (increase(llm_gateway_requests_total[6h])) * 0"
+      },
+      "verdict": "never-fires"
+    },
+    {
+      "uid": "omi-llm-gateway-no-ready-endpoints",
+      "start": 1791004500,
+      "end": 1791868200,
+      "step": 300,
+      "episodes": 1,
+      "total_duration_seconds": 863700,
+      "longest_seconds": 863700,
+      "percent_time_firing": 99.965,
+      "would_page_per_week": 0.7,
+      "never_fired": false,
+      "flap": false,
+      "unknown_ticks": 0,
+      "open_episodes": 1,
+      "metrics": {
+        "kube_endpoint_address_available": 0
+      },
+      "metric_exists": false,
+      "series_count": 0,
+      "queries": {
+        "A": "sum(kube_endpoint_address_available{namespace=\"prod-omi-backend\",endpoint=\"prod-omi-llm-gateway\"}) < bool 1"
+      },
+      "verdict": "dead-metric"
+    },
+    {
+      "uid": "omi-owner-identified-share-drop",
+      "start": 1791004500,
+      "end": 1791868200,
+      "step": 300,
+      "episodes": 0,
+      "total_duration_seconds": 0,
+      "longest_seconds": 0,
+      "percent_time_firing": 0.0,
+      "would_page_per_week": 0.0,
+      "never_fired": true,
+      "flap": false,
+      "unknown_ticks": 0,
+      "open_episodes": 0,
+      "metrics": {
+        "omi_owner_recognition_conversations_total": 462
+      },
+      "metric_exists": true,
+      "series_count": 462,
+      "queries": {
+        "A": "sum(increase(omi_owner_recognition_conversations_total{job=~\"pusher-metrics|cloud-run-application-metrics\",surface=~\"live|sync\",outcome=~\"owner_identified|owner_not_identified|single_speaker_all_owner|no_owner_profile\"}[2h]))",
+        "B": "(sum(increase(omi_owner_recognition_conversations_total{job=~\"pusher-metrics|cloud-run-application-metrics\",surface=~\"live|sync\",outcome=\"owner_identified\"}[2h])) or vector(0)) / clamp_min(sum(increase(omi_owner_recognition_conversations_total{job=~\"pusher-metrics|cloud-run-application-metrics\",surface=~\"live|sync\",outcome=~\"owner_identified|owner_not_identified|single_speaker_all_owner|no_owner_profile\"}[2h])), 1)",
+        "C": "(sum(increase(omi_owner_recognition_conversations_total{job=~\"pusher-metrics|cloud-run-application-metrics\",surface=~\"live|sync\",outcome=\"owner_identified\"}[7d])) or vector(0)) / clamp_min(sum(increase(omi_owner_recognition_conversations_total{job=~\"pusher-metrics|cloud-run-application-metrics\",surface=~\"live|sync\",outcome=~\"owner_identified|owner_not_identified|single_speaker_all_owner|no_owner_profile\"}[7d])), 1)"
+      },
+      "verdict": "never-fires"
+    },
+    {
+      "uid": "omi-parakeet-fatal-cuda",
+      "start": 1791004500,
+      "end": 1791868200,
+      "step": 300,
+      "episodes": 0,
+      "total_duration_seconds": 0,
+      "longest_seconds": 0,
+      "percent_time_firing": 0.0,
+      "would_page_per_week": 0.0,
+      "never_fired": true,
+      "flap": false,
+      "unknown_ticks": 0,
+      "open_episodes": 0,
+      "metrics": {
+        "parakeet_gpu_fatal_errors_total": 5
+      },
+      "metric_exists": true,
+      "series_count": 5,
+      "queries": {
+        "A": "sum by (pod) (increase(parakeet_gpu_fatal_errors_total{container=\"parakeet\",namespace=\"prod-omi-backend\"}[5m]))"
+      },
+      "verdict": "never-fires"
+    },
+    {
+      "uid": "omi-parakeet-ready-pod-no-success",
+      "start": 1791004500,
+      "end": 1791868200,
+      "step": 300,
+      "episodes": 0,
+      "total_duration_seconds": 0,
+      "longest_seconds": 0,
+      "percent_time_firing": 0.0,
+      "would_page_per_week": 0.0,
+      "never_fired": true,
+      "flap": false,
+      "unknown_ticks": 0,
+      "open_episodes": 0,
+      "metrics": {
+        "parakeet_requests_total": 12,
+        "kube_pod_status_ready": 1086
+      },
+      "metric_exists": true,
+      "series_count": 1098,
+      "queries": {
+        "A": "((sum by (pod) (increase(parakeet_requests_total{container=\"parakeet\",namespace=\"prod-omi-backend\",status=\"error\"}[5m])) >= 10) unless on (pod) (sum by (pod) (increase(parakeet_requests_total{container=\"parakeet\",namespace=\"prod-omi-backend\",status=\"success\"}[5m])) > 0)) and on (pod) (max by (pod) (kube_pod_status_ready{namespace=\"prod-omi-backend\",condition=\"true\",pod=~\"prod-omi-parakeet-.*\"}) == 1)"
+      },
+      "verdict": "never-fires"
+    },
+    {
+      "uid": "omi-parakeet-stream-capacity-critical",
+      "start": 1791004500,
+      "end": 1791868200,
+      "step": 300,
+      "episodes": 0,
+      "total_duration_seconds": 0,
+      "longest_seconds": 0,
+      "percent_time_firing": 0.0,
+      "would_page_per_week": 0.0,
+      "never_fired": true,
+      "flap": false,
+      "unknown_ticks": 0,
+      "open_episodes": 0,
+      "metrics": {
+        "kube_deployment_status_replicas_ready": 38,
+        "parakeet_active_streams": 5
+      },
+      "metric_exists": true,
+      "series_count": 43,
+      "queries": {
+        "A": "sum(parakeet_active_streams{container=\"parakeet\", namespace=\"prod-omi-backend\"}) / clamp_min(sum(kube_deployment_status_replicas_ready{deployment=\"prod-omi-parakeet\", namespace=\"prod-omi-backend\"}), 1)"
+      },
+      "verdict": "never-fires"
+    },
+    {
+      "uid": "omi-parakeet-stream-capacity-warning",
+      "start": 1791004500,
+      "end": 1791868200,
+      "step": 300,
+      "episodes": 0,
+      "total_duration_seconds": 0,
+      "longest_seconds": 0,
+      "percent_time_firing": 0.0,
+      "would_page_per_week": 0.0,
+      "never_fired": true,
+      "flap": false,
+      "unknown_ticks": 0,
+      "open_episodes": 0,
+      "metrics": {
+        "kube_deployment_status_replicas_ready": 38,
+        "parakeet_active_streams": 5
+      },
+      "metric_exists": true,
+      "series_count": 43,
+      "queries": {
+        "A": "sum(parakeet_active_streams{container=\"parakeet\", namespace=\"prod-omi-backend\"}) / clamp_min(sum(kube_deployment_status_replicas_ready{deployment=\"prod-omi-parakeet\", namespace=\"prod-omi-backend\"}), 1)"
+      },
+      "verdict": "never-fires"
+    },
+    {
+      "uid": "omi-queue-oldest-ready",
+      "start": 1791004500,
+      "end": 1791868200,
+      "step": 300,
+      "episodes": 1,
+      "total_duration_seconds": 863700,
+      "longest_seconds": 863700,
+      "percent_time_firing": 99.965,
+      "would_page_per_week": 0.7,
+      "never_fired": false,
+      "flap": false,
+      "unknown_ticks": 0,
+      "open_episodes": 1,
+      "metrics": {
+        "omi_queue_oldest_ready_sample_unknown": 0,
+        "omi_queue_oldest_ready_age_seconds": 310
+      },
+      "metric_exists": false,
+      "series_count": 310,
+      "queries": {
+        "A": "max(omi_queue_oldest_ready_age_seconds) > 21600 or absent(omi_queue_oldest_ready_age_seconds) or max(omi_queue_oldest_ready_sample_unknown) > 0"
+      },
+      "verdict": "dead-metric"
+    },
+    {
+      "uid": "omi-soniox-runway-70",
+      "start": 1791004500,
+      "end": 1791868200,
+      "step": 300,
+      "episodes": 0,
+      "total_duration_seconds": 0,
+      "longest_seconds": 0,
+      "percent_time_firing": 0.0,
+      "would_page_per_week": 0.0,
+      "never_fired": true,
+      "flap": false,
+      "unknown_ticks": 0,
+      "open_episodes": 0,
+      "metrics": {
+        "omi_soniox_usage_sample_timestamp_seconds": 43,
+        "omi_soniox_month_ceiling_usd": 43,
+        "omi_soniox_month_spend_usd": 43
+      },
+      "metric_exists": true,
+      "series_count": 129,
+      "queries": {
+        "A": "max(omi_soniox_month_ceiling_usd{job=\"backend-listen-metrics\"}) * (max(time() - omi_soniox_usage_sample_timestamp_seconds{job=\"backend-listen-metrics\"}) < bool 7200)",
+        "B": "max(omi_soniox_month_spend_usd{job=\"backend-listen-metrics\"}) / clamp_min(max(omi_soniox_month_ceiling_usd{job=\"backend-listen-metrics\"}), 1)"
+      },
+      "verdict": "never-fires"
+    },
+    {
+      "uid": "omi-soniox-runway-90",
+      "start": 1791004500,
+      "end": 1791868200,
+      "step": 300,
+      "episodes": 0,
+      "total_duration_seconds": 0,
+      "longest_seconds": 0,
+      "percent_time_firing": 0.0,
+      "would_page_per_week": 0.0,
+      "never_fired": true,
+      "flap": false,
+      "unknown_ticks": 0,
+      "open_episodes": 0,
+      "metrics": {
+        "omi_soniox_usage_sample_timestamp_seconds": 43,
+        "omi_soniox_month_ceiling_usd": 43,
+        "omi_soniox_month_spend_usd": 43
+      },
+      "metric_exists": true,
+      "series_count": 129,
+      "queries": {
+        "A": "max(omi_soniox_month_ceiling_usd{job=\"backend-listen-metrics\"}) * (max(time() - omi_soniox_usage_sample_timestamp_seconds{job=\"backend-listen-metrics\"}) < bool 7200)",
+        "B": "max(omi_soniox_month_spend_usd{job=\"backend-listen-metrics\"}) / clamp_min(max(omi_soniox_month_ceiling_usd{job=\"backend-listen-metrics\"}), 1)"
+      },
+      "verdict": "never-fires"
+    },
+    {
+      "uid": "omi-stt-chain-exhausted-page",
+      "start": 1791004500,
+      "end": 1791868200,
+      "step": 300,
+      "verdict": "needs-human",
+      "reason": "kube proxy request failed"
+    },
+    {
+      "uid": "omi-stt-chain-exhausted-warn",
+      "start": 1791004500,
+      "end": 1791868200,
+      "step": 300,
+      "verdict": "needs-human",
+      "reason": "kube proxy request failed"
+    },
+    {
+      "uid": "omi-stt-fallback-leg-dead",
+      "start": 1791004500,
+      "end": 1791868200,
+      "step": 300,
+      "verdict": "needs-human",
+      "reason": "kube proxy request failed"
+    },
+    {
+      "uid": "omi-stt-provider-budget",
+      "start": 1791004500,
+      "end": 1791868200,
+      "step": 300,
+      "episodes": 0,
+      "total_duration_seconds": 0,
+      "longest_seconds": 0,
+      "percent_time_firing": 0.0,
+      "would_page_per_week": 0.0,
+      "never_fired": true,
+      "flap": false,
+      "unknown_ticks": 0,
+      "open_episodes": 0,
+      "metrics": {
+        "omi_stt_stream_close_total": 1705,
+        "omi_stt_provider_retired": 172,
+        "omi_stt_provider_circuit_open": 344
+      },
+      "metric_exists": true,
+      "series_count": 2221,
+      "queries": {
+        "A": "(sum by (provider) (increase(omi_stt_stream_close_total{job=\"backend-listen-metrics\",reason=\"provider_budget_exhausted\"}[5m])) > 0 or max by (provider) (omi_stt_provider_circuit_open{job=\"backend-listen-metrics\",kind=\"account\"}) == 1) unless on (provider) (max by (provider) (omi_stt_provider_retired{job=\"backend-listen-metrics\"} == 1))"
+      },
+      "verdict": "never-fires"
+    },
+    {
+      "uid": "omi-sync-intake-fragmented",
+      "start": 1791004500,
+      "end": 1791868200,
+      "step": 300,
+      "verdict": "needs-human",
+      "reason": "non-Prometheus datasource: separate aggregate evidence required"
+    },
+    {
+      "uid": "tz_chat_agent_requests_zero",
+      "start": 1791004500,
+      "end": 1791868200,
+      "step": 300,
+      "episodes": 0,
+      "total_duration_seconds": 0,
+      "longest_seconds": 0,
+      "percent_time_firing": 0.0,
+      "would_page_per_week": 0.0,
+      "never_fired": true,
+      "flap": false,
+      "unknown_ticks": 0,
+      "open_episodes": 0,
+      "metrics": {
+        "llm_gateway_requests_total": 235
+      },
+      "metric_exists": true,
+      "series_count": 235,
+      "queries": {
+        "A": "sum(increase(llm_gateway_requests_total{lane_id=\"omi:auto:chat-agent\"}[1h])) or vector(0)"
+      },
+      "verdict": "never-fires"
+    }
+  ],
+  "retries": [
+    {
+      "uid": "omi-llm-gateway-no-ready-endpoints",
+      "start": 1791005400,
+      "end": 1791869100,
+      "step": 300,
+      "episodes": 0,
+      "total_duration_seconds": 0,
+      "longest_seconds": 0,
+      "percent_time_firing": 0.0,
+      "would_page_per_week": 0.0,
+      "never_fired": true,
+      "flap": false,
+      "unknown_ticks": 0,
+      "open_episodes": 0,
+      "metrics": {
+        "kube_endpoint_address": 426
+      },
+      "selectors": {
+        "kube_endpoint_address{namespace=\"prod-omi-backend\",endpoint=\"prod-omi-llm-gateway\",ready=\"true\"}": 2
+      },
+      "query_series": {
+        "A": 1
+      },
+      "metric_exists": true,
+      "series_count": 426,
+      "queries": {
+        "A": "(sum(kube_endpoint_address{namespace=\"prod-omi-backend\",endpoint=\"prod-omi-llm-gateway\",ready=\"true\"}) or vector(0)) < bool 1"
+      },
+      "verdict": "never-fires"
+    },
+    {
+      "uid": "omi-stt-chain-exhausted-page",
+      "start": 1791006000,
+      "end": 1791869700,
+      "step": 300,
+      "lookback_seconds": 300.0,
+      "incomplete_lookback_until": 1791006300.0,
+      "definition_sha256": "17d1ce3f347dd20043b4e0f5e534dc3960edd97bcf579f84eb0fef5fa00501ad",
+      "episodes": 0,
+      "total_duration_seconds": 0,
+      "longest_seconds": 0,
+      "percent_time_firing": 0.0,
+      "would_page_per_week": 0.0,
+      "never_fired": true,
+      "flap": false,
+      "unknown_ticks": 0,
+      "open_episodes": 0,
+      "metrics": {
+        "omi_listen_accepted_total": 271,
+        "omi_fallback_total": 39447
+      },
+      "selectors": {
+        "omi_listen_accepted_total{job=\"backend-listen-metrics\"}": 271,
+        "omi_fallback_total{job=\"backend-listen-metrics\",component=\"stt_selection\",outcome=\"exhausted\"}": 3140
+      },
+      "query_series": {
+        "A": 1,
+        "B": 1
+      },
+      "metric_exists": true,
+      "series_count": 39718,
+      "queries": {
+        "A": "sum(increase(omi_listen_accepted_total{job=\"backend-listen-metrics\"}[5m]))",
+        "B": "sum(increase(omi_fallback_total{job=\"backend-listen-metrics\",component=\"stt_selection\",outcome=\"exhausted\"}[5m])) / clamp_min(sum(increase(omi_listen_accepted_total{job=\"backend-listen-metrics\"}[5m])), 1)"
+      },
+      "verdict": "never-fires"
+    },
+    {
+      "uid": "omi-stt-chain-exhausted-warn",
+      "start": 1791006000,
+      "end": 1791869700,
+      "step": 300,
+      "lookback_seconds": 300.0,
+      "incomplete_lookback_until": 1791006300.0,
+      "definition_sha256": "d068cb40e444b822192d144b313dbed3ca0fa86b6a953e9bbac958746b610887",
+      "episodes": 0,
+      "total_duration_seconds": 0,
+      "longest_seconds": 0,
+      "percent_time_firing": 0.0,
+      "would_page_per_week": 0.0,
+      "never_fired": true,
+      "flap": false,
+      "unknown_ticks": 0,
+      "open_episodes": 0,
+      "metrics": {
+        "omi_listen_accepted_total": 271,
+        "omi_fallback_total": 39447
+      },
+      "selectors": {
+        "omi_listen_accepted_total{job=\"backend-listen-metrics\"}": 271,
+        "omi_fallback_total{job=\"backend-listen-metrics\",component=\"stt_selection\",outcome=\"exhausted\"}": 3140
+      },
+      "query_series": {
+        "A": 1,
+        "B": 1
+      },
+      "metric_exists": true,
+      "series_count": 39718,
+      "queries": {
+        "A": "sum(increase(omi_listen_accepted_total{job=\"backend-listen-metrics\"}[5m]))",
+        "B": "sum(increase(omi_fallback_total{job=\"backend-listen-metrics\",component=\"stt_selection\",outcome=\"exhausted\"}[5m])) / clamp_min(sum(increase(omi_listen_accepted_total{job=\"backend-listen-metrics\"}[5m])), 1)"
+      },
+      "verdict": "never-fires"
+    },
+    {
+      "uid": "omi-stt-fallback-leg-dead",
+      "start": 1791006000,
+      "end": 1791869700,
+      "step": 300,
+      "lookback_seconds": 21600.0,
+      "incomplete_lookback_until": 1791027600.0,
+      "definition_sha256": "6306d82963948b8eac8e5797e8af4cd3e138522e9d68ed84e71a3278bfbfa640",
+      "verdict": "needs-human",
+      "reason": "kube proxy request failed"
+    }
+  ],
+  "decisions": [
+    {
+      "uid": "omi-capture-finalization-dead-emission",
+      "decision": "DEPLOY",
+      "reason": "Current committed selectors exist; retained-history replay has zero firing episodes.",
+      "backtest": {
+        "uid": "omi-capture-finalization-dead-emission",
+        "start": 1791004500,
+        "end": 1791868200,
+        "step": 300,
+        "episodes": 0,
+        "total_duration_seconds": 0,
+        "longest_seconds": 0,
+        "percent_time_firing": 0.0,
+        "would_page_per_week": 0.0,
+        "never_fired": true,
+        "flap": false,
+        "unknown_ticks": 0,
+        "open_episodes": 0,
+        "metrics": {
+          "listen_finalization_durable_jobs": 147
+        },
+        "metric_exists": true,
+        "series_count": 147,
+        "queries": {
+          "A": "clamp_min(delta((max(listen_finalization_durable_jobs{state=\"accepted\"}))[30m:]), 0)",
+          "B": "sum(clamp_min(delta((max by (state) (listen_finalization_durable_jobs{state=~\"success|failure|stale\"}))[30m:]), 0))"
+        },
+        "verdict": "never-fires"
+      },
+      "current_selectors": {
+        "listen_finalization_durable_jobs{state=\"accepted\"}": 21,
+        "listen_finalization_durable_jobs{state=~\"success|failure|stale\"}": 63
+      },
+      "committed_sha256": "076f39094e9896c0b76a89783a3678eb12b69ea66d1e323ce3e03807b416d5e0"
+    },
+    {
+      "uid": "omi-chat-first-proactive-stalled",
+      "decision": "DELETE",
+      "reason": "Retired feature #20665; selector has zero series. Removed both exports and sparse test debt.",
+      "backtest": {
+        "uid": "omi-chat-first-proactive-stalled",
+        "start": 1791004500,
+        "end": 1791868200,
+        "step": 300,
+        "episodes": 0,
+        "total_duration_seconds": 0,
+        "longest_seconds": 0,
+        "percent_time_firing": 0.0,
+        "would_page_per_week": 0.0,
+        "never_fired": true,
+        "flap": false,
+        "unknown_ticks": 0,
+        "open_episodes": 0,
+        "metrics": {
+          "chat_first_proactive_total": 0
+        },
+        "metric_exists": false,
+        "series_count": 0,
+        "queries": {
+          "A": "sum(rate(chat_first_proactive_total{event=\"stalled\"}[1h]))"
+        },
+        "verdict": "dead-metric"
+      },
+      "current_selectors": {
+        "chat_first_proactive_total{event=\"stalled\"}": 0
+      },
+      "committed_sha256": null
+    },
+    {
+      "uid": "omi-daily-recap-generation-failing",
+      "decision": "FIX",
+      "reason": "Cloud Monitoring datasource: obtain aligned generation-failure aggregates and replay 3h sum >24 for 15m. Paused.",
+      "backtest": {
+        "uid": "omi-daily-recap-generation-failing",
+        "start": 1791004500,
+        "end": 1791868200,
+        "step": 300,
+        "verdict": "needs-human",
+        "reason": "non-Prometheus datasource: separate aggregate evidence required"
+      },
+      "current_selectors": {},
+      "committed_sha256": "57a1b6caf5c6f652b345d37ffaeb9d1044962c8766a594406ba8d4ebe4da9f62"
+    },
+    {
+      "uid": "omi-journey-chat-fail",
+      "decision": "DEPLOY",
+      "reason": "Current committed selectors exist; retained-history replay has zero firing episodes.",
+      "backtest": {
+        "uid": "omi-journey-chat-fail",
+        "start": 1791004500,
+        "end": 1791868200,
+        "step": 300,
+        "episodes": 0,
+        "total_duration_seconds": 0,
+        "longest_seconds": 0,
+        "percent_time_firing": 0.0,
+        "would_page_per_week": 0.0,
+        "never_fired": true,
+        "flap": false,
+        "unknown_ticks": 0,
+        "open_episodes": 0,
+        "metrics": {
+          "omi_journey_terminal_total": 552
+        },
+        "metric_exists": true,
+        "series_count": 552,
+        "queries": {
+          "A": "sum(increase(omi_journey_terminal_total{journey=\"chat_response\",outcome=~\"success|failure\"}[30m]))",
+          "B": "sum(increase(omi_journey_terminal_total{journey=\"chat_response\",outcome=\"failure\"}[30m])) / clamp_min(sum(increase(omi_journey_terminal_total{journey=\"chat_response\",outcome=~\"success|failure\"}[30m])), 1)"
+        },
+        "verdict": "never-fires"
+      },
+      "current_selectors": {
+        "omi_journey_terminal_total{journey=\"chat_response\",outcome=~\"success|failure\"}": 92,
+        "omi_journey_terminal_total{journey=\"chat_response\",outcome=\"failure\"}": 46
+      },
+      "committed_sha256": "54cd371818ec39482752d89e69986f6abaaa958fab7085ecf8d6975b3f8e0fcc"
+    },
+    {
+      "uid": "omi-journey-chat-success-critical",
+      "decision": "DEPLOY",
+      "reason": "Current committed selectors exist; retained-history replay has zero firing episodes.",
+      "backtest": {
+        "uid": "omi-journey-chat-success-critical",
+        "start": 1791004500,
+        "end": 1791868200,
+        "step": 300,
+        "episodes": 0,
+        "total_duration_seconds": 0,
+        "longest_seconds": 0,
+        "percent_time_firing": 0.0,
+        "would_page_per_week": 0.0,
+        "never_fired": true,
+        "flap": false,
+        "unknown_ticks": 0,
+        "open_episodes": 0,
+        "metrics": {
+          "omi_journey_accepted_total": 138,
+          "omi_journey_terminal_total": 552
+        },
+        "metric_exists": true,
+        "series_count": 690,
+        "queries": {
+          "A": "sum(increase(omi_journey_accepted_total{journey=\"chat_response\"}[30m]))",
+          "B": "sum(increase(omi_journey_terminal_total{journey=\"chat_response\",outcome=\"success\"}[30m])) / clamp_min(sum(increase(omi_journey_terminal_total{journey=\"chat_response\",outcome=~\"success|failure\"}[30m])), 1)"
+        },
+        "verdict": "never-fires"
+      },
+      "current_selectors": {
+        "omi_journey_accepted_total{journey=\"chat_response\"}": 46,
+        "omi_journey_terminal_total{journey=\"chat_response\",outcome=\"success\"}": 46,
+        "omi_journey_terminal_total{journey=\"chat_response\",outcome=~\"success|failure\"}": 92
+      },
+      "committed_sha256": "117b623712eb8b1f00f4c0de8306f80368169171f0ffa16b001127e54db0cff3"
+    },
+    {
+      "uid": "omi-journey-live-transcription-fail",
+      "decision": "FIX",
+      "reason": "One 20-minute episode; validate the incident before admission. Paused pending triage.",
+      "backtest": {
+        "uid": "omi-journey-live-transcription-fail",
+        "start": 1791004500,
+        "end": 1791868200,
+        "step": 300,
+        "episodes": 1,
+        "total_duration_seconds": 1200,
+        "longest_seconds": 1200,
+        "percent_time_firing": 0.139,
+        "would_page_per_week": 0.7,
+        "never_fired": false,
+        "flap": false,
+        "unknown_ticks": 0,
+        "open_episodes": 0,
+        "metrics": {
+          "omi_live_stt_accepted_total": 209,
+          "omi_live_stt_terminal_total": 339
+        },
+        "metric_exists": true,
+        "series_count": 548,
+        "queries": {
+          "A": "sum(increase(omi_live_stt_accepted_total[30m]))",
+          "B": "sum(increase(omi_live_stt_terminal_total{outcome=\"failure\"}[30m])) / clamp_min(sum(increase(omi_live_stt_accepted_total[30m])), 1)"
+        },
+        "verdict": "ok"
+      },
+      "current_selectors": {
+        "omi_live_stt_accepted_total": 210,
+        "omi_live_stt_terminal_total{outcome=\"failure\"}": 38
+      },
+      "committed_sha256": "e54a8c3f3c6ad0b45d61e497e99d9270b4a877318d01892be568be5991ed5118"
+    },
+    {
+      "uid": "omi-journey-pusher-fail",
+      "decision": "DEPLOY",
+      "reason": "Current committed selectors exist; retained-history replay has zero firing episodes.",
+      "backtest": {
+        "uid": "omi-journey-pusher-fail",
+        "start": 1791004500,
+        "end": 1791868200,
+        "step": 300,
+        "episodes": 0,
+        "total_duration_seconds": 0,
+        "longest_seconds": 0,
+        "percent_time_firing": 0.0,
+        "would_page_per_week": 0.0,
+        "never_fired": true,
+        "flap": false,
+        "unknown_ticks": 0,
+        "open_episodes": 0,
+        "metrics": {
+          "omi_journey_terminal_total": 552
+        },
+        "metric_exists": true,
+        "series_count": 552,
+        "queries": {
+          "A": "sum(increase(omi_journey_terminal_total{journey=\"pusher_session\",outcome=~\"success|failure\"}[30m]))",
+          "B": "sum(increase(omi_journey_terminal_total{journey=\"pusher_session\",outcome=\"failure\"}[30m])) / clamp_min(sum(increase(omi_journey_terminal_total{journey=\"pusher_session\",outcome=~\"success|failure\"}[30m])), 1)"
+        },
+        "verdict": "never-fires"
+      },
+      "current_selectors": {
+        "omi_journey_terminal_total{journey=\"pusher_session\",outcome=~\"success|failure\"}": 92,
+        "omi_journey_terminal_total{journey=\"pusher_session\",outcome=\"failure\"}": 46
+      },
+      "committed_sha256": "e0423fdcce9b472ddbe1ef401acb5150b78262f238da102b498bce26b923915e"
+    },
+    {
+      "uid": "omi-journey-pusher-success-critical",
+      "decision": "DEPLOY",
+      "reason": "Current committed selectors exist; retained-history replay has zero firing episodes.",
+      "backtest": {
+        "uid": "omi-journey-pusher-success-critical",
+        "start": 1791004500,
+        "end": 1791868200,
+        "step": 300,
+        "episodes": 0,
+        "total_duration_seconds": 0,
+        "longest_seconds": 0,
+        "percent_time_firing": 0.0,
+        "would_page_per_week": 0.0,
+        "never_fired": true,
+        "flap": false,
+        "unknown_ticks": 0,
+        "open_episodes": 0,
+        "metrics": {
+          "omi_journey_accepted_total": 138,
+          "omi_journey_terminal_total": 552
+        },
+        "metric_exists": true,
+        "series_count": 690,
+        "queries": {
+          "A": "sum(increase(omi_journey_accepted_total{journey=\"pusher_session\"}[30m]))",
+          "B": "sum(increase(omi_journey_terminal_total{journey=\"pusher_session\",outcome=\"success\"}[30m])) / clamp_min(sum(increase(omi_journey_terminal_total{journey=\"pusher_session\",outcome=~\"success|failure\"}[30m])), 1)"
+        },
+        "verdict": "never-fires"
+      },
+      "current_selectors": {
+        "omi_journey_accepted_total{journey=\"pusher_session\"}": 46,
+        "omi_journey_terminal_total{journey=\"pusher_session\",outcome=\"success\"}": 46,
+        "omi_journey_terminal_total{journey=\"pusher_session\",outcome=~\"success|failure\"}": 92
+      },
+      "committed_sha256": "d664a12364d5b68f169c729a4078bc338b294c0192d9e4f3ad49aee2e808f47c"
+    },
+    {
+      "uid": "omi-journey-signal-dead",
+      "decision": "DEPLOY",
+      "reason": "Current committed selectors exist; retained-history replay has zero firing episodes.",
+      "backtest": {
+        "uid": "omi-journey-signal-dead",
+        "start": 1791004500,
+        "end": 1791868200,
+        "step": 300,
+        "episodes": 0,
+        "total_duration_seconds": 0,
+        "longest_seconds": 0,
+        "percent_time_firing": 0.0,
+        "would_page_per_week": 0.0,
+        "never_fired": true,
+        "flap": false,
+        "unknown_ticks": 0,
+        "open_episodes": 0,
+        "metrics": {
+          "omi_journey_accepted_total": 138,
+          "llm_gateway_requests_total": 235
+        },
+        "metric_exists": true,
+        "series_count": 373,
+        "queries": {
+          "A": "(sum by (journey) (increase(omi_journey_accepted_total{journey=~\"pusher_session|capture_finalization\"}[1h])) < bool 1) * on() group_left() (sum(increase(llm_gateway_requests_total[1h])) > bool 100) or (sum by (journey) (increase(omi_journey_accepted_total{journey=\"chat_response\"}[1h])) < bool 1) * on() group_left() (sum(increase(llm_gateway_requests_total{lane_id=\"omi:auto:chat-agent\"}[1h])) > bool 20)"
+        },
+        "verdict": "never-fires"
+      },
+      "current_selectors": {
+        "omi_journey_accepted_total{journey=~\"pusher_session|capture_finalization\"}": 92,
+        "omi_journey_accepted_total{journey=\"chat_response\"}": 46,
+        "llm_gateway_requests_total": 236,
+        "llm_gateway_requests_total{lane_id=\"omi:auto:chat-agent\"}": 22
+      },
+      "committed_sha256": "04fed24d6914e2b569ba1fa8bb2dee982b2963cc46826d974cb70cee5d519801"
+    },
+    {
+      "uid": "omi-llm-gateway-client-reachability",
+      "decision": "FIX",
+      "reason": "Two absent client families; initialize/ingest all client arms and replay. Paused.",
+      "backtest": {
+        "uid": "omi-llm-gateway-client-reachability",
+        "start": 1791004500,
+        "end": 1791868200,
+        "step": 300,
+        "episodes": 0,
+        "total_duration_seconds": 0,
+        "longest_seconds": 0,
+        "percent_time_firing": 0.0,
+        "would_page_per_week": 0.0,
+        "never_fired": true,
+        "flap": false,
+        "unknown_ticks": 0,
+        "open_episodes": 0,
+        "metrics": {
+          "llm_gateway_client_first_byte_seconds_bucket": 0,
+          "llm_gateway_circuit_open": 35,
+          "llm_gateway_chat_extraction_requests_total": 0
+        },
+        "metric_exists": false,
+        "series_count": 35,
+        "queries": {
+          "A": "(sum(rate(llm_gateway_chat_extraction_requests_total{mode=\"fallback\"}[15m])) / clamp_min(sum(rate(llm_gateway_chat_extraction_requests_total{mode=~\"serving|fallback\"}[15m])), 1e-9) > bool 0.05) or (max(llm_gateway_circuit_open) > bool 0) or ((sum(increase(llm_gateway_chat_extraction_requests_total{mode=~\"serving|fallback\"}[15m])) >= bool 10) and (sum(increase(llm_gateway_chat_extraction_requests_total{mode=\"serving\",outcome=\"success\"}[15m])) == bool 0)) or (histogram_quantile(0.95, sum(rate(llm_gateway_client_first_byte_seconds_bucket[5m])) by (le)) > bool 5)"
+        },
+        "verdict": "dead-metric"
+      },
+      "current_selectors": {
+        "llm_gateway_circuit_open": 35,
+        "llm_gateway_chat_extraction_requests_total{mode=\"fallback\"}": 0,
+        "llm_gateway_chat_extraction_requests_total{mode=~\"serving|fallback\"}": 0,
+        "llm_gateway_chat_extraction_requests_total{mode=\"serving\",outcome=\"success\"}": 0,
+        "llm_gateway_client_first_byte_seconds_bucket": 0
+      },
+      "committed_sha256": "6e97705e18544d3e3defd9503001dae12a2331dff0761d061f0a11df14e4ee54"
+    },
+    {
+      "uid": "omi-llm-gateway-invalid-requests",
+      "decision": "FIX",
+      "reason": "invalid_request selector has 0 series; initialize startup children (applied), redeploy gateway, then replay. Paused.",
+      "backtest": {
+        "uid": "omi-llm-gateway-invalid-requests",
+        "start": 1791004500,
+        "end": 1791868200,
+        "step": 300,
+        "episodes": 0,
+        "total_duration_seconds": 0,
+        "longest_seconds": 0,
+        "percent_time_firing": 0.0,
+        "would_page_per_week": 0.0,
+        "never_fired": true,
+        "flap": false,
+        "unknown_ticks": 0,
+        "open_episodes": 0,
+        "metrics": {
+          "llm_gateway_request_rejections_total": 1
+        },
+        "metric_exists": true,
+        "series_count": 1,
+        "queries": {
+          "A": "sum(increase(llm_gateway_request_rejections_total{error_class=\"invalid_request\"}[30m])) or vector(0)"
+        },
+        "verdict": "never-fires"
+      },
+      "current_selectors": {
+        "llm_gateway_request_rejections_total{error_class=\"invalid_request\"}": 0
+      },
+      "committed_sha256": "facd6ce24bc19c413898ef7bddf044f0b402969f8ebb291fe6c0365b711dc570"
+    },
+    {
+      "uid": "omi-llm-gateway-lane-failure-ratio",
+      "decision": "FIX",
+      "reason": "11 episodes, 6.562% time firing, 7.7 instance starts/week; triage lanes and calibrate with good/bad evidence. Paused.",
+      "backtest": {
+        "uid": "omi-llm-gateway-lane-failure-ratio",
+        "start": 1791004500,
+        "end": 1791868200,
+        "step": 300,
+        "episodes": 11,
+        "total_duration_seconds": 59700,
+        "longest_seconds": 14400,
+        "percent_time_firing": 6.562,
+        "would_page_per_week": 7.7,
+        "never_fired": false,
+        "flap": false,
+        "unknown_ticks": 0,
+        "open_episodes": 0,
+        "metrics": {
+          "llm_gateway_requests_total": 235
+        },
+        "metric_exists": true,
+        "series_count": 235,
+        "queries": {
+          "A": "sum by (lane_id) (increase(llm_gateway_requests_total[1h]))",
+          "B": "sum by (lane_id) (increase(llm_gateway_requests_total{outcome!=\"success\"}[1h])) / clamp_min(sum by (lane_id) (increase(llm_gateway_requests_total[1h])), 1)"
+        },
+        "verdict": "mistuned-noisy"
+      },
+      "current_selectors": {
+        "llm_gateway_requests_total": 236,
+        "llm_gateway_requests_total{outcome!=\"success\"}": 24
+      },
+      "committed_sha256": "8ee45054faa8c31fea63335e0c66f8fcf287132c85eb9a6ad0ddbd985ed3ba90"
+    },
+    {
+      "uid": "omi-llm-gateway-lane-zero-success",
+      "decision": "DEPLOY",
+      "reason": "Current committed selectors exist; retained-history replay has zero firing episodes.",
+      "backtest": {
+        "uid": "omi-llm-gateway-lane-zero-success",
+        "start": 1791004500,
+        "end": 1791868200,
+        "step": 300,
+        "episodes": 0,
+        "total_duration_seconds": 0,
+        "longest_seconds": 0,
+        "percent_time_firing": 0.0,
+        "would_page_per_week": 0.0,
+        "never_fired": true,
+        "flap": false,
+        "unknown_ticks": 0,
+        "open_episodes": 0,
+        "metrics": {
+          "llm_gateway_requests_total": 235
+        },
+        "metric_exists": true,
+        "series_count": 235,
+        "queries": {
+          "A": "sum by (lane_id) (increase(llm_gateway_requests_total[6h]))",
+          "B": "sum by (lane_id) (increase(llm_gateway_requests_total{outcome=\"success\"}[6h])) or sum by (lane_id) (increase(llm_gateway_requests_total[6h])) * 0"
+        },
+        "verdict": "never-fires"
+      },
+      "current_selectors": {
+        "llm_gateway_requests_total": 236,
+        "llm_gateway_requests_total{outcome=\"success\"}": 212
+      },
+      "committed_sha256": "19d625be98825b7641b8a4fde1c912b20bb932f9b69a2cd3696bf166fc30fb9d"
+    },
+    {
+      "uid": "omi-llm-gateway-no-ready-endpoints",
+      "decision": "DEPLOY",
+      "reason": "Corrected kube_endpoint_address{ready=\"true\"}; 2 current addresses, corrected replay has zero episodes.",
+      "backtest": {
+        "uid": "omi-llm-gateway-no-ready-endpoints",
+        "start": 1791005400,
+        "end": 1791869100,
+        "step": 300,
+        "episodes": 0,
+        "total_duration_seconds": 0,
+        "longest_seconds": 0,
+        "percent_time_firing": 0.0,
+        "would_page_per_week": 0.0,
+        "never_fired": true,
+        "flap": false,
+        "unknown_ticks": 0,
+        "open_episodes": 0,
+        "metrics": {
+          "kube_endpoint_address": 426
+        },
+        "selectors": {
+          "kube_endpoint_address{namespace=\"prod-omi-backend\",endpoint=\"prod-omi-llm-gateway\",ready=\"true\"}": 2
+        },
+        "query_series": {
+          "A": 1
+        },
+        "metric_exists": true,
+        "series_count": 426,
+        "queries": {
+          "A": "(sum(kube_endpoint_address{namespace=\"prod-omi-backend\",endpoint=\"prod-omi-llm-gateway\",ready=\"true\"}) or vector(0)) < bool 1"
+        },
+        "verdict": "never-fires"
+      },
+      "current_selectors": {
+        "kube_endpoint_address_available{namespace=\"prod-omi-backend\",endpoint=\"prod-omi-llm-gateway\"}": 0
+      },
+      "committed_sha256": "7733712f53894f08d51a5d5c5e0a3794cf0fd2e1a40abd6b12247bb4ef11c95f"
+    },
+    {
+      "uid": "omi-owner-identified-share-drop",
+      "decision": "DEPLOY",
+      "reason": "Quiet; 7-day baseline extends beyond retention in the early window, so only the warmed tail establishes full-lookback quiet.",
+      "backtest": {
+        "uid": "omi-owner-identified-share-drop",
+        "start": 1791004500,
+        "end": 1791868200,
+        "step": 300,
+        "episodes": 0,
+        "total_duration_seconds": 0,
+        "longest_seconds": 0,
+        "percent_time_firing": 0.0,
+        "would_page_per_week": 0.0,
+        "never_fired": true,
+        "flap": false,
+        "unknown_ticks": 0,
+        "open_episodes": 0,
+        "metrics": {
+          "omi_owner_recognition_conversations_total": 462
+        },
+        "metric_exists": true,
+        "series_count": 462,
+        "queries": {
+          "A": "sum(increase(omi_owner_recognition_conversations_total{job=~\"pusher-metrics|cloud-run-application-metrics\",surface=~\"live|sync\",outcome=~\"owner_identified|owner_not_identified|single_speaker_all_owner|no_owner_profile\"}[2h]))",
+          "B": "(sum(increase(omi_owner_recognition_conversations_total{job=~\"pusher-metrics|cloud-run-application-metrics\",surface=~\"live|sync\",outcome=\"owner_identified\"}[2h])) or vector(0)) / clamp_min(sum(increase(omi_owner_recognition_conversations_total{job=~\"pusher-metrics|cloud-run-application-metrics\",surface=~\"live|sync\",outcome=~\"owner_identified|owner_not_identified|single_speaker_all_owner|no_owner_profile\"}[2h])), 1)",
+          "C": "(sum(increase(omi_owner_recognition_conversations_total{job=~\"pusher-metrics|cloud-run-application-metrics\",surface=~\"live|sync\",outcome=\"owner_identified\"}[7d])) or vector(0)) / clamp_min(sum(increase(omi_owner_recognition_conversations_total{job=~\"pusher-metrics|cloud-run-application-metrics\",surface=~\"live|sync\",outcome=~\"owner_identified|owner_not_identified|single_speaker_all_owner|no_owner_profile\"}[7d])), 1)"
+        },
+        "verdict": "never-fires"
+      },
+      "current_selectors": {
+        "omi_owner_recognition_conversations_total{job=~\"pusher-metrics|cloud-run-application-metrics\",surface=~\"live|sync\",outcome=~\"owner_identified|owner_not_identified|single_speaker_all_owner|no_owner_profile\"}": 280,
+        "omi_owner_recognition_conversations_total{job=~\"pusher-metrics|cloud-run-application-metrics\",surface=~\"live|sync\",outcome=\"owner_identified\"}": 71
+      },
+      "committed_sha256": "7ec9a5962cb2c8ce95206e61022c1db35538b9a34f1624997dc2f3f18c566a84"
+    },
+    {
+      "uid": "omi-parakeet-fatal-cuda",
+      "decision": "DEPLOY",
+      "reason": "Current committed selectors exist; retained-history replay has zero firing episodes.",
+      "backtest": {
+        "uid": "omi-parakeet-fatal-cuda",
+        "start": 1791004500,
+        "end": 1791868200,
+        "step": 300,
+        "episodes": 0,
+        "total_duration_seconds": 0,
+        "longest_seconds": 0,
+        "percent_time_firing": 0.0,
+        "would_page_per_week": 0.0,
+        "never_fired": true,
+        "flap": false,
+        "unknown_ticks": 0,
+        "open_episodes": 0,
+        "metrics": {
+          "parakeet_gpu_fatal_errors_total": 5
+        },
+        "metric_exists": true,
+        "series_count": 5,
+        "queries": {
+          "A": "sum by (pod) (increase(parakeet_gpu_fatal_errors_total{container=\"parakeet\",namespace=\"prod-omi-backend\"}[5m]))"
+        },
+        "verdict": "never-fires"
+      },
+      "current_selectors": {
+        "parakeet_gpu_fatal_errors_total{container=\"parakeet\",namespace=\"prod-omi-backend\"}": 5
+      },
+      "committed_sha256": "356b16034bd6edeb7080a30dbd97a9868d0677f9d2ac8a99a6baa4bfca050735"
+    },
+    {
+      "uid": "omi-parakeet-ready-pod-no-success",
+      "decision": "DEPLOY",
+      "reason": "Current committed selectors exist; retained-history replay has zero firing episodes.",
+      "backtest": {
+        "uid": "omi-parakeet-ready-pod-no-success",
+        "start": 1791004500,
+        "end": 1791868200,
+        "step": 300,
+        "episodes": 0,
+        "total_duration_seconds": 0,
+        "longest_seconds": 0,
+        "percent_time_firing": 0.0,
+        "would_page_per_week": 0.0,
+        "never_fired": true,
+        "flap": false,
+        "unknown_ticks": 0,
+        "open_episodes": 0,
+        "metrics": {
+          "parakeet_requests_total": 12,
+          "kube_pod_status_ready": 1086
+        },
+        "metric_exists": true,
+        "series_count": 1098,
+        "queries": {
+          "A": "((sum by (pod) (increase(parakeet_requests_total{container=\"parakeet\",namespace=\"prod-omi-backend\",status=\"error\"}[5m])) >= 10) unless on (pod) (sum by (pod) (increase(parakeet_requests_total{container=\"parakeet\",namespace=\"prod-omi-backend\",status=\"success\"}[5m])) > 0)) and on (pod) (max by (pod) (kube_pod_status_ready{namespace=\"prod-omi-backend\",condition=\"true\",pod=~\"prod-omi-parakeet-.*\"}) == 1)"
+        },
+        "verdict": "never-fires"
+      },
+      "current_selectors": {
+        "kube_pod_status_ready{namespace=\"prod-omi-backend\",condition=\"true\",pod=~\"prod-omi-parakeet-.*\"}": 5,
+        "parakeet_requests_total{container=\"parakeet\",namespace=\"prod-omi-backend\",status=\"error\"}": 2,
+        "parakeet_requests_total{container=\"parakeet\",namespace=\"prod-omi-backend\",status=\"success\"}": 10
+      },
+      "committed_sha256": "0b95e89e2532786f7ccb64f6543f70401997c300d44da36d4a338ee95356a5d7"
+    },
+    {
+      "uid": "omi-parakeet-stream-capacity-critical",
+      "decision": "DEPLOY",
+      "reason": "Current committed selectors exist; retained-history replay has zero firing episodes.",
+      "backtest": {
+        "uid": "omi-parakeet-stream-capacity-critical",
+        "start": 1791004500,
+        "end": 1791868200,
+        "step": 300,
+        "episodes": 0,
+        "total_duration_seconds": 0,
+        "longest_seconds": 0,
+        "percent_time_firing": 0.0,
+        "would_page_per_week": 0.0,
+        "never_fired": true,
+        "flap": false,
+        "unknown_ticks": 0,
+        "open_episodes": 0,
+        "metrics": {
+          "kube_deployment_status_replicas_ready": 38,
+          "parakeet_active_streams": 5
+        },
+        "metric_exists": true,
+        "series_count": 43,
+        "queries": {
+          "A": "sum(parakeet_active_streams{container=\"parakeet\", namespace=\"prod-omi-backend\"}) / clamp_min(sum(kube_deployment_status_replicas_ready{deployment=\"prod-omi-parakeet\", namespace=\"prod-omi-backend\"}), 1)"
+        },
+        "verdict": "never-fires"
+      },
+      "current_selectors": {
+        "parakeet_active_streams{container=\"parakeet\", namespace=\"prod-omi-backend\"}": 5,
+        "kube_deployment_status_replicas_ready{deployment=\"prod-omi-parakeet\", namespace=\"prod-omi-backend\"}": 1
+      },
+      "committed_sha256": "86855bbc1eae51839f8d502ebf941ade99f95a0cae8d956125e2c1e320d6f040"
+    },
+    {
+      "uid": "omi-parakeet-stream-capacity-warning",
+      "decision": "DEPLOY",
+      "reason": "Current committed selectors exist; retained-history replay has zero firing episodes.",
+      "backtest": {
+        "uid": "omi-parakeet-stream-capacity-warning",
+        "start": 1791004500,
+        "end": 1791868200,
+        "step": 300,
+        "episodes": 0,
+        "total_duration_seconds": 0,
+        "longest_seconds": 0,
+        "percent_time_firing": 0.0,
+        "would_page_per_week": 0.0,
+        "never_fired": true,
+        "flap": false,
+        "unknown_ticks": 0,
+        "open_episodes": 0,
+        "metrics": {
+          "kube_deployment_status_replicas_ready": 38,
+          "parakeet_active_streams": 5
+        },
+        "metric_exists": true,
+        "series_count": 43,
+        "queries": {
+          "A": "sum(parakeet_active_streams{container=\"parakeet\", namespace=\"prod-omi-backend\"}) / clamp_min(sum(kube_deployment_status_replicas_ready{deployment=\"prod-omi-parakeet\", namespace=\"prod-omi-backend\"}), 1)"
+        },
+        "verdict": "never-fires"
+      },
+      "current_selectors": {
+        "parakeet_active_streams{container=\"parakeet\", namespace=\"prod-omi-backend\"}": 5,
+        "kube_deployment_status_replicas_ready{deployment=\"prod-omi-parakeet\", namespace=\"prod-omi-backend\"}": 1
+      },
+      "committed_sha256": "cd0e73d1c1098beca2967a4b26edaf62e3a60d359aa70348c2846aba91751443"
+    },
+    {
+      "uid": "omi-queue-oldest-ready",
+      "decision": "FIX",
+      "reason": "99.965% firing; queue retirement decision blocks admission; unknown-sample family absent. Paused.",
+      "backtest": {
+        "uid": "omi-queue-oldest-ready",
+        "start": 1791004500,
+        "end": 1791868200,
+        "step": 300,
+        "episodes": 1,
+        "total_duration_seconds": 863700,
+        "longest_seconds": 863700,
+        "percent_time_firing": 99.965,
+        "would_page_per_week": 0.7,
+        "never_fired": false,
+        "flap": false,
+        "unknown_ticks": 0,
+        "open_episodes": 1,
+        "metrics": {
+          "omi_queue_oldest_ready_sample_unknown": 0,
+          "omi_queue_oldest_ready_age_seconds": 310
+        },
+        "metric_exists": false,
+        "series_count": 310,
+        "queries": {
+          "A": "max(omi_queue_oldest_ready_age_seconds) > 21600 or absent(omi_queue_oldest_ready_age_seconds) or max(omi_queue_oldest_ready_sample_unknown) > 0"
+        },
+        "verdict": "dead-metric"
+      },
+      "current_selectors": {
+        "omi_queue_oldest_ready_age_seconds": 310,
+        "omi_queue_oldest_ready_sample_unknown": 0
+      },
+      "committed_sha256": "1264cca098ce0dc2e895e19c0f903092e91c75e361eda7833f4684e0649464b1"
+    },
+    {
+      "uid": "omi-soniox-runway-70",
+      "decision": "DEPLOY",
+      "reason": "Current committed selectors exist; retained-history replay has zero firing episodes.",
+      "backtest": {
+        "uid": "omi-soniox-runway-70",
+        "start": 1791004500,
+        "end": 1791868200,
+        "step": 300,
+        "episodes": 0,
+        "total_duration_seconds": 0,
+        "longest_seconds": 0,
+        "percent_time_firing": 0.0,
+        "would_page_per_week": 0.0,
+        "never_fired": true,
+        "flap": false,
+        "unknown_ticks": 0,
+        "open_episodes": 0,
+        "metrics": {
+          "omi_soniox_usage_sample_timestamp_seconds": 43,
+          "omi_soniox_month_ceiling_usd": 43,
+          "omi_soniox_month_spend_usd": 43
+        },
+        "metric_exists": true,
+        "series_count": 129,
+        "queries": {
+          "A": "max(omi_soniox_month_ceiling_usd{job=\"backend-listen-metrics\"}) * (max(time() - omi_soniox_usage_sample_timestamp_seconds{job=\"backend-listen-metrics\"}) < bool 7200)",
+          "B": "max(omi_soniox_month_spend_usd{job=\"backend-listen-metrics\"}) / clamp_min(max(omi_soniox_month_ceiling_usd{job=\"backend-listen-metrics\"}), 1)"
+        },
+        "verdict": "never-fires"
+      },
+      "current_selectors": {
+        "omi_soniox_month_ceiling_usd{job=\"backend-listen-metrics\"}": 21,
+        "omi_soniox_usage_sample_timestamp_seconds{job=\"backend-listen-metrics\"}": 21,
+        "omi_soniox_month_spend_usd{job=\"backend-listen-metrics\"}": 21
+      },
+      "committed_sha256": "222e2ef6c5cc5ef8d30c1379de149143da0e39f34379106898b9b51fc5eb2ba8"
+    },
+    {
+      "uid": "omi-soniox-runway-90",
+      "decision": "DEPLOY",
+      "reason": "Current committed selectors exist; retained-history replay has zero firing episodes.",
+      "backtest": {
+        "uid": "omi-soniox-runway-90",
+        "start": 1791004500,
+        "end": 1791868200,
+        "step": 300,
+        "episodes": 0,
+        "total_duration_seconds": 0,
+        "longest_seconds": 0,
+        "percent_time_firing": 0.0,
+        "would_page_per_week": 0.0,
+        "never_fired": true,
+        "flap": false,
+        "unknown_ticks": 0,
+        "open_episodes": 0,
+        "metrics": {
+          "omi_soniox_usage_sample_timestamp_seconds": 43,
+          "omi_soniox_month_ceiling_usd": 43,
+          "omi_soniox_month_spend_usd": 43
+        },
+        "metric_exists": true,
+        "series_count": 129,
+        "queries": {
+          "A": "max(omi_soniox_month_ceiling_usd{job=\"backend-listen-metrics\"}) * (max(time() - omi_soniox_usage_sample_timestamp_seconds{job=\"backend-listen-metrics\"}) < bool 7200)",
+          "B": "max(omi_soniox_month_spend_usd{job=\"backend-listen-metrics\"}) / clamp_min(max(omi_soniox_month_ceiling_usd{job=\"backend-listen-metrics\"}), 1)"
+        },
+        "verdict": "never-fires"
+      },
+      "current_selectors": {
+        "omi_soniox_month_ceiling_usd{job=\"backend-listen-metrics\"}": 21,
+        "omi_soniox_usage_sample_timestamp_seconds{job=\"backend-listen-metrics\"}": 21,
+        "omi_soniox_month_spend_usd{job=\"backend-listen-metrics\"}": 21
+      },
+      "committed_sha256": "e9e51db707e5d5ba2fa678c1faa71178556748643295e2b9eb321de9b5637e02"
+    },
+    {
+      "uid": "omi-stt-chain-exhausted-page",
+      "decision": "DEPLOY",
+      "reason": "Daily chunks completed all 2880 evaluations, quiet; original broad request failed.",
+      "backtest": {
+        "uid": "omi-stt-chain-exhausted-page",
+        "start": 1791006000,
+        "end": 1791869700,
+        "step": 300,
+        "lookback_seconds": 300.0,
+        "incomplete_lookback_until": 1791006300.0,
+        "definition_sha256": "17d1ce3f347dd20043b4e0f5e534dc3960edd97bcf579f84eb0fef5fa00501ad",
+        "episodes": 0,
+        "total_duration_seconds": 0,
+        "longest_seconds": 0,
+        "percent_time_firing": 0.0,
+        "would_page_per_week": 0.0,
+        "never_fired": true,
+        "flap": false,
+        "unknown_ticks": 0,
+        "open_episodes": 0,
+        "metrics": {
+          "omi_listen_accepted_total": 271,
+          "omi_fallback_total": 39447
+        },
+        "selectors": {
+          "omi_listen_accepted_total{job=\"backend-listen-metrics\"}": 271,
+          "omi_fallback_total{job=\"backend-listen-metrics\",component=\"stt_selection\",outcome=\"exhausted\"}": 3140
+        },
+        "query_series": {
+          "A": 1,
+          "B": 1
+        },
+        "metric_exists": true,
+        "series_count": 39718,
+        "queries": {
+          "A": "sum(increase(omi_listen_accepted_total{job=\"backend-listen-metrics\"}[5m]))",
+          "B": "sum(increase(omi_fallback_total{job=\"backend-listen-metrics\",component=\"stt_selection\",outcome=\"exhausted\"}[5m])) / clamp_min(sum(increase(omi_listen_accepted_total{job=\"backend-listen-metrics\"}[5m])), 1)"
+        },
+        "verdict": "never-fires"
+      },
+      "current_selectors": {
+        "omi_listen_accepted_total{job=\"backend-listen-metrics\"}": 256,
+        "omi_fallback_total{job=\"backend-listen-metrics\",component=\"stt_selection\",outcome=\"exhausted\"}": 2753
+      },
+      "committed_sha256": "17d1ce3f347dd20043b4e0f5e534dc3960edd97bcf579f84eb0fef5fa00501ad"
+    },
+    {
+      "uid": "omi-stt-chain-exhausted-warn",
+      "decision": "DEPLOY",
+      "reason": "Daily chunks completed all 2880 evaluations, quiet; original broad request failed.",
+      "backtest": {
+        "uid": "omi-stt-chain-exhausted-warn",
+        "start": 1791006000,
+        "end": 1791869700,
+        "step": 300,
+        "lookback_seconds": 300.0,
+        "incomplete_lookback_until": 1791006300.0,
+        "definition_sha256": "d068cb40e444b822192d144b313dbed3ca0fa86b6a953e9bbac958746b610887",
+        "episodes": 0,
+        "total_duration_seconds": 0,
+        "longest_seconds": 0,
+        "percent_time_firing": 0.0,
+        "would_page_per_week": 0.0,
+        "never_fired": true,
+        "flap": false,
+        "unknown_ticks": 0,
+        "open_episodes": 0,
+        "metrics": {
+          "omi_listen_accepted_total": 271,
+          "omi_fallback_total": 39447
+        },
+        "selectors": {
+          "omi_listen_accepted_total{job=\"backend-listen-metrics\"}": 271,
+          "omi_fallback_total{job=\"backend-listen-metrics\",component=\"stt_selection\",outcome=\"exhausted\"}": 3140
+        },
+        "query_series": {
+          "A": 1,
+          "B": 1
+        },
+        "metric_exists": true,
+        "series_count": 39718,
+        "queries": {
+          "A": "sum(increase(omi_listen_accepted_total{job=\"backend-listen-metrics\"}[5m]))",
+          "B": "sum(increase(omi_fallback_total{job=\"backend-listen-metrics\",component=\"stt_selection\",outcome=\"exhausted\"}[5m])) / clamp_min(sum(increase(omi_listen_accepted_total{job=\"backend-listen-metrics\"}[5m])), 1)"
+        },
+        "verdict": "never-fires"
+      },
+      "current_selectors": {
+        "omi_listen_accepted_total{job=\"backend-listen-metrics\"}": 256,
+        "omi_fallback_total{job=\"backend-listen-metrics\",component=\"stt_selection\",outcome=\"exhausted\"}": 2753
+      },
+      "committed_sha256": "d068cb40e444b822192d144b313dbed3ca0fa86b6a953e9bbac958746b610887"
+    },
+    {
+      "uid": "omi-stt-fallback-leg-dead",
+      "decision": "FIX",
+      "reason": "Current selectors exist (16571 attempts, 197 recovered), but both broad and daily reads failed; reduce query cost and prove complete history. Paused.",
+      "backtest": {
+        "uid": "omi-stt-fallback-leg-dead",
+        "start": 1791006000,
+        "end": 1791869700,
+        "step": 300,
+        "lookback_seconds": 21600.0,
+        "incomplete_lookback_until": 1791027600.0,
+        "definition_sha256": "6306d82963948b8eac8e5797e8af4cd3e138522e9d68ed84e71a3278bfbfa640",
+        "verdict": "needs-human",
+        "reason": "kube proxy request failed"
+      },
+      "current_selectors": {
+        "omi_fallback_total{job=\"backend-listen-metrics\",component=~\"stt_selection|stt_live_session\"}": 16571,
+        "omi_fallback_total{job=\"backend-listen-metrics\",component=~\"stt_selection|stt_live_session\",outcome=\"recovered\"}": 197
+      },
+      "committed_sha256": "c0fdd49ac0b588149d329cf6d09ead64d7a8f1bc275639302b517cfe14b1e87f"
+    },
+    {
+      "uid": "omi-stt-provider-budget",
+      "decision": "DEPLOY",
+      "reason": "Quiet; backend-listen image 6ef38cd includes #21327; budget-exhausted selector has 105 series.",
+      "backtest": {
+        "uid": "omi-stt-provider-budget",
+        "start": 1791004500,
+        "end": 1791868200,
+        "step": 300,
+        "episodes": 0,
+        "total_duration_seconds": 0,
+        "longest_seconds": 0,
+        "percent_time_firing": 0.0,
+        "would_page_per_week": 0.0,
+        "never_fired": true,
+        "flap": false,
+        "unknown_ticks": 0,
+        "open_episodes": 0,
+        "metrics": {
+          "omi_stt_stream_close_total": 1705,
+          "omi_stt_provider_retired": 172,
+          "omi_stt_provider_circuit_open": 344
+        },
+        "metric_exists": true,
+        "series_count": 2221,
+        "queries": {
+          "A": "(sum by (provider) (increase(omi_stt_stream_close_total{job=\"backend-listen-metrics\",reason=\"provider_budget_exhausted\"}[5m])) > 0 or max by (provider) (omi_stt_provider_circuit_open{job=\"backend-listen-metrics\",kind=\"account\"}) == 1) unless on (provider) (max by (provider) (omi_stt_provider_retired{job=\"backend-listen-metrics\"} == 1))"
+        },
+        "verdict": "never-fires"
+      },
+      "current_selectors": {
+        "omi_stt_provider_retired{job=\"backend-listen-metrics\"}": 84,
+        "omi_stt_stream_close_total{job=\"backend-listen-metrics\",reason=\"provider_budget_exhausted\"}": 105,
+        "omi_stt_provider_circuit_open{job=\"backend-listen-metrics\",kind=\"account\"}": 84
+      },
+      "committed_sha256": "9df0352e686cfaccf2c11727388263c21e9f6e643404984f978fcfddc4bc91b2"
+    },
+    {
+      "uid": "omi-sync-intake-fragmented",
+      "decision": "FIX",
+      "reason": "Logging datasource: obtain aggregate intake counts or replace with bounded initialized Prometheus counters, then replay. Paused.",
+      "backtest": {
+        "uid": "omi-sync-intake-fragmented",
+        "start": 1791004500,
+        "end": 1791868200,
+        "step": 300,
+        "verdict": "needs-human",
+        "reason": "non-Prometheus datasource: separate aggregate evidence required"
+      },
+      "current_selectors": {},
+      "committed_sha256": "d870e0c78fec75abda3f37ecb9fe53a265e5f7cc2aad29ed7b1bdb5bd7de9f58"
+    },
+    {
+      "uid": "tz_chat_agent_requests_zero",
+      "decision": "DEPLOY",
+      "reason": "Current committed selectors exist; retained-history replay has zero firing episodes.",
+      "backtest": {
+        "uid": "tz_chat_agent_requests_zero",
+        "start": 1791004500,
+        "end": 1791868200,
+        "step": 300,
+        "episodes": 0,
+        "total_duration_seconds": 0,
+        "longest_seconds": 0,
+        "percent_time_firing": 0.0,
+        "would_page_per_week": 0.0,
+        "never_fired": true,
+        "flap": false,
+        "unknown_ticks": 0,
+        "open_episodes": 0,
+        "metrics": {
+          "llm_gateway_requests_total": 235
+        },
+        "metric_exists": true,
+        "series_count": 235,
+        "queries": {
+          "A": "sum(increase(llm_gateway_requests_total{lane_id=\"omi:auto:chat-agent\"}[1h])) or vector(0)"
+        },
+        "verdict": "never-fires"
+      },
+      "current_selectors": {
+        "llm_gateway_requests_total{lane_id=\"omi:auto:chat-agent\"}": 22
+      },
+      "committed_sha256": "6ea02c144d630eda7ac0eeda8d1e2d99bc325e75c130eabce5b587657cd57d7e"
+    }
+  ],
+  "limitations": [
+    "Five-minute sampling can miss shorter incidents; initial pending state unknown and edge episodes censored.",
+    "Instance starts are not Telegram messages; grouping/repeats/inhibition and DatasourceNoData routing are outside replay.",
+    "Long lookbacks near the retention edge are incomplete; inspect the warmed tail.",
+    "DEPLOY certifies a quiet sampled history plus current selector presence, not sensitivity to a reproduced outage."
+  ]
+}
