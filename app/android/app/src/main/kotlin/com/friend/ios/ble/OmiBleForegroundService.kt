@@ -46,6 +46,8 @@ class OmiBleForegroundService : Service() {
         private const val MTU_REQUEST_DELAY_MS = 100L
         private const val MTU_SIZE = 512
         private const val STABILITY_TIMER_MS = 60_000L
+        // Base delay for CCCD-timeout recovery. Ordinary out-of-range retries use
+        // reconnectBackoff so a fixed 3s loop cannot spin the radio forever.
         private const val RECONNECT_DELAY_MS = 3_000L
         private const val COMPANION_RATE_LIMIT_MS = 15_000L
         private const val PREFS_NAME = "ble_config"
@@ -150,6 +152,7 @@ class OmiBleForegroundService : Service() {
         var currentGattHash: Int? = null,
         var hasEverConnected: Boolean = false,
         var pendingReconnect: Runnable? = null,
+        var pendingReconnectDelayMs: Long = 0L,
         var stabilityTimerRunnable: Runnable? = null,
         /** Reset to false on each connectGatt attempt; set true when the GATT
          *  callback reports CONNECTED. Used to distinguish fail-to-connect from
@@ -161,6 +164,7 @@ class OmiBleForegroundService : Service() {
     }
 
     private val managedDevices = ConcurrentHashMap<String, ManagedDevice>()
+    private val reconnectBackoff = BleReconnectBackoff()
     private val handler = Handler(Looper.getMainLooper())
     private var isDestroying = false
     private var isBluetoothEnabled = true
@@ -203,6 +207,7 @@ class OmiBleForegroundService : Service() {
             }
             backfillTimeToReconnect(addr, managed)
             managed.retryCount = 0
+            reconnectBackoff.reset(addr)
             managed.hasEverConnected = true
             managed.currentAttemptEstablished = true
             managed.pendingReconnect?.let { handler.removeCallbacks(it) }
@@ -423,6 +428,7 @@ class OmiBleForegroundService : Service() {
         val managed = managedDevices[addr] ?: return
         persistDisconnectEvent(addr, 0, isManual = true, eventType = "disconnect")
         managedDevices.remove(addr)
+        reconnectBackoff.reset(addr)
 
         Log.i(TAG, "unmanageDevice: $addr")
 
@@ -485,7 +491,9 @@ class OmiBleForegroundService : Service() {
 
         managed.pendingReconnect?.let { handler.removeCallbacks(it) }
         managed.pendingReconnect = null
+        managed.pendingReconnectDelayMs = 0L
         managed.retryCount = 0
+        reconnectBackoff.reset(addr)
         connectToDevice(addr, source)
     }
 
@@ -522,6 +530,7 @@ class OmiBleForegroundService : Service() {
         val managed = managedDevices.getOrPut(addr) { ManagedDevice(address = addr, requiresBond = requiresBond) }
         if (requiresBond && !managed.requiresBond) managed.requiresBond = true
         managed.retryCount = 0
+        reconnectBackoff.reset(addr)
         managed.currentGattHash = bleManager.connectedGatts[addr]?.hashCode()
         managed.hasEverConnected = true
         managed.currentAttemptEstablished = true
@@ -536,6 +545,8 @@ class OmiBleForegroundService : Service() {
      */
     private fun forceReconnect(address: String, requiresBond: Boolean, source: String) {
         val addr = address.uppercase()
+        // A user or system connect request connects now. It must not sit out a raised backoff.
+        reconnectBackoff.reset(addr)
 
         synchronized(syncLock) {
             val managed = managedDevices[addr] ?: run {
@@ -548,6 +559,7 @@ class OmiBleForegroundService : Service() {
                 // Cancel any pending retry so it doesn't race with the fresh attempt
                 managed.pendingReconnect?.let { handler.removeCallbacks(it) }
                 managed.pendingReconnect = null
+                managed.pendingReconnectDelayMs = 0L
                 managed.retryCount = 0
                 // Close the stuck GATT so connectToDevice opens a fresh one
                 if (bleManager.connectedGatts.containsKey(addr)) {
@@ -579,6 +591,9 @@ class OmiBleForegroundService : Service() {
 
             val duration = managed.connectionStartTime?.let { System.currentTimeMillis() - it } ?: 0
             if (duration >= STABILITY_TIMER_MS) {
+                // connectionStartTime is stamped when the attempt starts, so a slow
+                // failure also lands here. Leave the backoff step in place; a real
+                // link clears it in onGattConnected.
                 managed.retryCount = 0
             }
 
@@ -635,19 +650,51 @@ class OmiBleForegroundService : Service() {
 
         if (isDestroying || status == -1 || status == 137 || !isBluetoothEnabled) return false
 
-        val delayMs = bleManager.cccdReconnectPolicy.reconnectDelay(
-            addr, status == OmiBleManager.CCCD_TIMEOUT_STATUS, RECONNECT_DELAY_MS,
-        ) ?: return false
-        managed.retryCount++
+        val cccdTimeout = status == OmiBleManager.CCCD_TIMEOUT_STATUS
+        val cccdDelay = if (cccdTimeout) {
+            bleManager.cccdReconnectPolicy.reconnectDelay(addr, true, RECONNECT_DELAY_MS)
+        } else {
+            null
+        }
+        // CCCD recovery keeps its own budget. Ordinary failures advance the capped backoff.
+        val delayMs = reconnectBackoff.delayForFailure(addr, cccdTimeout, cccdDelay) ?: return false
+        managed.retryCount = (managed.retryCount + 1).coerceAtMost(reconnectBackoff.maxTrackedFailures)
         Log.i(TAG, "Retry #${managed.retryCount} for $addr in ${delayMs}ms (status=$status)")
+        scheduleReconnect(addr, managed, delayMs, "retry_${managed.retryCount}")
+        return true
+    }
 
+    private fun scheduleReconnect(address: String, managed: ManagedDevice, delayMs: Long, source: String) {
+        managed.pendingReconnect?.let { handler.removeCallbacks(it) }
         val runnable = Runnable {
             managed.pendingReconnect = null
-            connectToDevice(addr, "retry_${managed.retryCount}")
+            managed.pendingReconnectDelayMs = 0L
+            connectToDevice(address, source)
         }
         managed.pendingReconnect = runnable
+        managed.pendingReconnectDelayMs = delayMs
         handler.postDelayed(runnable, delayMs)
-        return true
+    }
+
+    /**
+     * The activity is in the foreground, so the user can see device status.
+     * Return every device to the fastest retry interval. A pending automatic wait
+     * longer than that interval is pulled forward; one that is already fastest is
+     * left in place. This does not itself open a GATT connection — an explicit
+     * connect still goes through [forceReconnect] and runs immediately.
+     */
+    fun onAppForegrounded() {
+        for ((addr, managed) in managedDevices) {
+            val pending = managed.pendingReconnect
+            val pulledForward = reconnectBackoff.foregroundDelayMs(
+                if (pending != null) managed.pendingReconnectDelayMs else null,
+            )
+            managed.retryCount = 0
+            reconnectBackoff.reset(addr)
+            if (pending == null || pulledForward == null) continue
+            handler.removeCallbacks(pending)
+            scheduleReconnect(addr, managed, pulledForward, "foreground")
+        }
     }
 
     private fun reportCccdRecovery(address: String, generation: String, exhausted: Boolean) {
