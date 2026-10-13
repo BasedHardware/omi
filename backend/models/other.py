@@ -3,7 +3,7 @@ from enum import Enum
 import math
 from typing import Any, Callable, Iterable, List, Literal, Mapping, Optional
 
-from zoneinfo import ZoneInfo
+import pytz
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 from pydantic.json_schema import SkipJsonSchema
@@ -11,9 +11,37 @@ from pydantic.json_schema import SkipJsonSchema
 from models.person_confidence import person_confidence
 
 
+def is_schedulable_time_zone(value: Optional[str]) -> bool:
+    """Return True if ``value`` is a non-empty timezone recognized by pytz."""
+    if not value:
+        return False
+    stripped = value.strip()
+    if not stripped:
+        return False
+    try:
+        pytz.timezone(stripped)
+        return True
+    except Exception:
+        return False
+
+
+def _validate_iana_timezone(value: str) -> str:
+    stripped = value.strip()
+    if not stripped:
+        raise ValueError("time_zone must be a non-empty IANA timezone")
+    if not is_schedulable_time_zone(stripped):
+        raise ValueError("time_zone must be a valid IANA timezone")
+    return stripped
+
+
 class SaveFcmTokenRequest(BaseModel):
     fcm_token: str
     time_zone: str
+
+    @field_validator("time_zone")
+    @classmethod
+    def validate_timezone(cls, value: str) -> str:
+        return _validate_iana_timezone(value)
 
 
 class SyncUserTimeZoneRequest(BaseModel):
@@ -22,14 +50,7 @@ class SyncUserTimeZoneRequest(BaseModel):
     @field_validator("time_zone")
     @classmethod
     def validate_timezone(cls, value: str) -> str:
-        stripped = value.strip()
-        if not stripped:
-            raise ValueError("time_zone must be a non-empty IANA timezone")
-        try:
-            ZoneInfo(stripped)
-        except Exception as exc:
-            raise ValueError("time_zone must be a valid IANA timezone") from exc
-        return stripped
+        return _validate_iana_timezone(value)
 
 
 class FcmTokenResponse(BaseModel):
