@@ -2,9 +2,9 @@
 
 from datetime import datetime, timezone
 import math
-from typing import Any, Optional
+from typing import Any, Literal, Optional
 
-from fastapi import APIRouter, Depends, Header, HTTPException
+from fastapi import APIRouter, Depends, Header, HTTPException, Query
 import stripe
 
 import config.plan_catalog_generated as catalog
@@ -73,6 +73,8 @@ def _usage(uid: str, subscription: Subscription) -> StorefrontUsage:
 
 @router.get('/v2/payments/plans', response_model=StorefrontResponse, tags=['payments'])
 def get_storefront(
+    source: Optional[str] = Query(None, description='Paywall Opened source vocabulary (#21337)'),
+    trigger: Optional[Literal['proactive_agent', 'screen_context', 'usage_budget', 'mcp_daily_cap']] = Query(None),
     uid: str = Depends(auth.get_current_user_uid_no_byok_validation),
     x_app_platform: Optional[str] = Header(None, alias='X-App-Platform'),
     x_app_version: Optional[str] = Header(None, alias='X-App-Version'),
@@ -108,4 +110,6 @@ def get_storefront(
         retrieve_price=_retrieve_price,
         purchasable=subscription_utils.is_purchasable_price_id,
         usage=_usage(uid, subscription),
+        source=source,
+        trigger=trigger,
     )

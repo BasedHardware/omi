@@ -25,7 +25,7 @@ def price(identifier, amount, interval='month', **overrides):
     }
 
 
-def build(plan='basic', current_price=None, rows=None, bindings=None, recognized=None):
+def build(plan='basic', current_price=None, rows=None, bindings=None, recognized=None, source=None, trigger=None):
     return build_storefront(
         catalog_revision=6,
         ladder=load_ladder(),
@@ -35,6 +35,8 @@ def build(plan='basic', current_price=None, rows=None, bindings=None, recognized
         retrieve_price=lambda key: (rows or {})[key],
         purchasable=lambda key: True,
         usage=StorefrontUsage(),
+        source=source,
+        trigger=trigger,
     )
 
 
@@ -237,3 +239,75 @@ def test_shared_client_fixture_matches_production_presentation():
             )
     expected = json.loads((Path(__file__).parent / 'fixtures/storefront/ladder_v1_free.json').read_text())
     assert build(rows=rows, bindings=list(rows), recognized=recognized).model_dump() == expected
+
+
+@pytest.mark.parametrize('plan', ['basic', 'plus', 'operator', 'architect', 'unlimited', 'unlimited_v2'])
+@pytest.mark.parametrize('trigger', [None, 'proactive_agent', 'screen_context', 'usage_budget', 'mcp_daily_cap'])
+def test_contextual_recommendation_per_subscription_and_gate(plan, trigger):
+    rows = {f'price_{p}': price(f'price_{p}', amount) for p, amount in [('plus', 1999), ('operator', 4999)]}
+    recognized = [
+        {
+            'price_id': key,
+            'plan_id': key.removeprefix('price_'),
+            'interval': 'month',
+            'entitlement_version': 'ladder_v1',
+        }
+        for key in rows
+    ]
+    # Non-basic includes legacy plans; their recommendation must not authorize migration.
+    sheet = build(
+        plan,
+        None if plan == 'basic' else 'price_legacy',
+        rows,
+        list(rows),
+        recognized,
+        source='macos_usage_limit',
+        trigger=trigger,
+    )
+    expected = 'operator' if plan != 'basic' or trigger in {'proactive_agent', 'screen_context'} else 'plus'
+    assert [tier.plan_id for tier in sheet.tiers if tier.recommended] == [expected]
+    if plan != 'basic':
+        assert not any(tier.action == 'upgrade' for tier in sheet.tiers)
+
+
+@pytest.mark.parametrize(
+    'trigger,expected',
+    [
+        (None, 'plus'),
+        ('proactive_agent', 'operator'),
+        ('screen_context', 'operator'),
+        ('usage_budget', 'plus'),
+        ('mcp_daily_cap', 'plus'),
+    ],
+)
+def test_endpoint_forwards_opening_context(client, monkeypatch, trigger, expected):
+    rows = {f'price_{p}': price(f'price_{p}', amount) for p, amount in [('plus', 1999), ('operator', 4999)]}
+    monkeypatch.setattr(route.catalog, 'LADDER_V1_STRIPE_PRICES', list(rows), raising=False)
+    monkeypatch.setattr(
+        route.catalog, 'RECOGNIZED_STRIPE_ENTITLEMENT_VERSIONS', {key: 'ladder_v1' for key in rows}, raising=False
+    )
+    monkeypatch.setattr(
+        route.catalog, 'RECOGNIZED_STRIPE_PRICE_PLAN_TYPES', {key: PlanType(key.removeprefix('price_')) for key in rows}
+    )
+    monkeypatch.setattr(route.catalog, 'RECOGNIZED_STRIPE_PRICE_INTERVALS', {key: 'month' for key in rows})
+    monkeypatch.setattr(route.subscription_utils, 'is_purchasable_price_id', lambda key: True)
+    monkeypatch.setattr(route, '_retrieve_price', lambda key: rows[key])
+    real_build = route.build_storefront
+    seen = {}
+
+    def capture(**kwargs):
+        seen.update(kwargs)
+        return real_build(**kwargs)
+
+    monkeypatch.setattr(route, 'build_storefront', capture)
+    params = {'source': 'macos_usage_limit'}
+    if trigger:
+        params['trigger'] = trigger
+    response = client.get('/v2/payments/plans', params=params)
+    assert response.status_code == 200
+    assert seen['source'] == 'macos_usage_limit' and seen['trigger'] == trigger
+    assert [tier['plan_id'] for tier in response.json()['tiers'] if tier['recommended']] == [expected]
+
+
+def test_invalid_gate_is_rejected(client):
+    assert client.get('/v2/payments/plans?trigger=typo').status_code == 422

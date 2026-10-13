@@ -78433,6 +78433,46 @@
         "operationId": "get_storefront_v2_payments_plans_get",
         "parameters": [
           {
+            "description": "Paywall Opened source vocabulary (#21337)",
+            "in": "query",
+            "name": "source",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Paywall Opened source vocabulary (#21337)",
+              "title": "Source"
+            }
+          },
+          {
+            "in": "query",
+            "name": "trigger",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "proactive_agent",
+                    "screen_context",
+                    "usage_budget",
+                    "mcp_daily_cap"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Trigger"
+            }
+          },
+          {
             "in": "header",
             "name": "X-App-Platform",
             "required": false,

@@ -36,6 +36,23 @@ price is archived. Existing subscribers never receive an automatic migration
 or an upgrade checkout from this sheet: higher tiers use contact until migration
 policy is separately approved. Lower tiers are explicitly not offered.
 
+## Contextual recommendation
+
+Requests may pass `source` using the #21337 `Paywall Opened` vocabulary and
+`trigger` (`proactive_agent`, `screen_context`, `usage_budget`, `mcp_daily_cap`).
+Source describes the opening surface; trigger describes the gate on that surface.
+Pro-only gates recommend Pro, including for Free callers. Free budget/MCP-cap
+callers recommend Plus. Plus and all other paid callers (including legacy
+subscribers priced at or above Plus) recommend Pro. Without gate context, Free
+gets Plus and everyone else gets Pro. Unknown sources use the same default;
+invalid triggers return 422.
+
+`recommended` is a backend-authored badge, never a selection or checkout action.
+It may appear on a current/contact tier; legacy migration actions stay contact.
+If the recommended tier has no usable registered price and is hidden, no badge
+is returned. `next_offer_tier_id` remains the first offered upgrade, independent
+of the badge. Clients must never preselect a recommended tier.
+
 ## Prices and audience
 
 The v2 ladder is platform independent: Free, Plus, Pro (`operator`), Architect.

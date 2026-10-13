@@ -91,8 +91,15 @@ def build_storefront(
     retrieve_price: Callable[[str], dict[str, Any]],
     purchasable: Callable[[str], bool],
     usage: StorefrontUsage,
+    source: str | None = None,
+    trigger: str | None = None,
 ) -> StorefrontResponse:
     current_plan = subscription.plan.value
+    # Sources use the Paywall Opened vocabulary (#21337). A separate trigger
+    # carries gate semantics because a surface (e.g. settings) is not a gate.
+    recommended_plan = (
+        'operator' if trigger in {'proactive_agent', 'screen_context'} or current_plan != 'basic' else 'plus'
+    )
     current_price = subscription.current_price_id
     # Missing historical price never implies the new entitlement version.
     legacy = current_plan != 'basic' and current_price not in bindings
@@ -155,7 +162,7 @@ def build_storefront(
                 features=_features(tier),
                 prices=prices,
                 action=action,
-                recommended=tier['recommended'] and action == 'upgrade',
+                recommended=plan == recommended_plan,
             )
         )
     if legacy or (current_plan != 'basic' and not any(tier.action == 'current' for tier in tiers)):
