@@ -8,7 +8,7 @@ the command import `database/users` or its create-on-miss subscription readers.
 
 Use complete exports shaped as `{"complete": true, "subscriptions": [...]}` and
 `{"complete": true, "users": [...]}`. User rows need only `uid`,
-`stripe_customer_id`, and `subscription`; do not export content. An incomplete
+`stripe_customer_id`, `subscription`, and the sibling `referral` map (if present); do not export content. An incomplete
 Stripe export cannot establish reverse drift, so the command rejects it.
 
 ```bash
@@ -64,6 +64,11 @@ Organization admin one-time grants carry `subscription_id=pi_...`. They are
 reported separately as `manual_payment_entitlement`, not reverse subscription
 drift; the restricted subscription reader cannot validate PaymentIntents. No
 organization grant is changed or reinterpreted.
+
+Unexpired claimed desktop referrals with no Stripe or PaymentIntent id are
+reported as `referral_trial_entitlement`, never reverse drift. A missing legacy
+`current_period_start` is not drift; a present mismatched start still is.
+Ambiguous customer ownership cannot establish reverse drift.
 
 Categories can overlap. Multiple subscriptions are compared using the stored id
 when possible; the command does not pick a winner arbitrarily. JPY amounts and
