@@ -1,10 +1,11 @@
 import { createElement, type ReactNode } from 'react';
-import { cleanup, render, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, waitFor } from '@testing-library/react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 let query = '';
 let authUser: { uid: string } | null = null;
+const signInHarness = vi.hoisted(() => ({ google: vi.fn(), apple: vi.fn() }));
 const routerHarness = vi.hoisted(() => ({ push: vi.fn() }));
 const referralHarness = vi.hoisted(() => ({
   claim: vi.fn(),
@@ -30,13 +31,14 @@ vi.mock('@/components/auth/AuthProvider', () => ({
   useAuth: () => ({
     user: authUser,
     loading: false,
-    signInWithApple: vi.fn(),
-    signInWithGoogle: vi.fn(),
+    signInWithApple: signInHarness.apple,
+    signInWithGoogle: signInHarness.google,
+    clearRedirectSignInError: vi.fn(),
   }),
 }));
 
 vi.mock('@/lib/firebase', () => ({
-  isFirebaseAuthConfigured: false,
+  isFirebaseAuthConfigured: true,
 }));
 
 vi.mock('@/lib/referrals', () => ({
@@ -145,4 +147,52 @@ describe('LoginClient return path', () => {
     render(createElement(LoginClient));
     await waitFor(() => expect(routerHarness.push).toHaveBeenCalledWith('/home'));
   });
+});
+
+describe('LoginClient sign-in navigation timing', () => {
+  beforeEach(() => {
+    Object.defineProperty(window, 'matchMedia', {
+      configurable: true,
+      value: vi.fn(() => ({
+        matches: false,
+        addListener: vi.fn(),
+        removeListener: vi.fn(),
+      })),
+    });
+    authUser = null;
+    query =
+      'next=%2Fitems%3Ftask%3D6zDh2tLd9O8JDbAVKezY%26task%3D3j79CowojdreNQv5k27J%26task%3D8fMv4K1jvc3eKsW4lVXF';
+    routerHarness.push.mockReset();
+    signInHarness.google.mockReset().mockResolvedValue(undefined);
+    signInHarness.apple.mockReset().mockResolvedValue(undefined);
+  });
+  afterEach(cleanup);
+
+  it.each(['Google', 'Apple'] as const)(
+    'waits for the auth subscriber after %s resolves',
+    async (provider) => {
+      const view = render(createElement(LoginClient));
+      fireEvent.click(view.getByRole('button', { name: `Sign in with ${provider}` }));
+      await waitFor(() =>
+        expect(
+          signInHarness[provider.toLowerCase() as 'google' | 'apple'],
+        ).toHaveBeenCalledTimes(1),
+      );
+      await waitFor(() =>
+        expect(
+          view.getByRole('button', { name: `Sign in with ${provider}` }),
+        ).not.toBeDisabled(),
+      );
+      expect(routerHarness.push).not.toHaveBeenCalled();
+
+      authUser = { uid: 'authenticated' };
+      view.rerender(createElement(LoginClient));
+      await waitFor(() =>
+        expect(routerHarness.push).toHaveBeenCalledWith(
+          '/items?task=6zDh2tLd9O8JDbAVKezY&task=3j79CowojdreNQv5k27J&task=8fMv4K1jvc3eKsW4lVXF',
+        ),
+      );
+      expect(routerHarness.push).toHaveBeenCalledTimes(1);
+    },
+  );
 });
