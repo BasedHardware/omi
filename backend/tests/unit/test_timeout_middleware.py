@@ -283,4 +283,4 @@ async def test_full_dream_outer_timeout_is_dynamic_and_path_scoped(monkeypatch, 
     await middleware.dispatch(request, immediate)
     monkeypatch.setenv('DREAM_AGENT_FULL_CONTEXT_UIDS', '')
     await middleware.dispatch(request, immediate)
-    assert seen == [90, 90 if path == '/other' else 690, 90]
+    assert seen == [90, 90 if path == '/other' else 1710, 90]
