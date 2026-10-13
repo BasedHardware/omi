@@ -2504,6 +2504,424 @@
       "correlation": null
     },
     {
+      "id": "billingSubscriptionStarted",
+      "wire_name": "Billing Subscription Started",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {
+        "plan": {
+          "type": "enum",
+          "wire_name": "plan",
+          "values": [
+            "basic",
+            "plus",
+            "unlimited",
+            "unlimited_v2",
+            "operator",
+            "architect",
+            "unknown"
+          ]
+        },
+        "interval": {
+          "type": "enum",
+          "wire_name": "interval",
+          "values": [
+            "month",
+            "year",
+            "unknown"
+          ]
+        },
+        "reason": {
+          "type": "enum",
+          "wire_name": "reason",
+          "values": [
+            "cancellation_requested",
+            "payment_failure",
+            "payment_disputed",
+            "none"
+          ]
+        },
+        "priceGeneration": {
+          "type": "enum",
+          "wire_name": "price_generation",
+          "values": [
+            "legacy",
+            "ladder_v1",
+            "unknown"
+          ]
+        },
+        "isTrial": {
+          "type": "bool",
+          "wire_name": "is_trial"
+        },
+        "billingMeasurement": {
+          "type": "enum",
+          "wire_name": "billing_measurement",
+          "values": [
+            "trial_plan_entitlement",
+            "paid_plan_entitlement"
+          ]
+        },
+        "mrrCents": {
+          "type": "int",
+          "wire_name": "mrr_cents"
+        }
+      },
+      "consumers": [
+        "billing-lifecycle-events"
+      ],
+      "correlation": null,
+      "backend_properties": {
+        "$insert_id": {
+          "type": "uuid"
+        },
+        "billing_event_id": {
+          "type": "bounded_string",
+          "max_length": 128
+        },
+        "occurred_at": {
+          "type": "iso8601",
+          "nullable": true
+        },
+        "billing_source": {
+          "type": "constant",
+          "value": "stripe_webhook_authoritative_owner"
+        },
+        "price_id": {
+          "type": "bounded_string",
+          "max_length": 128
+        },
+        "currency": {
+          "type": "bounded_string",
+          "max_length": 16
+        }
+      }
+    },
+    {
+      "id": "billingSubscriptionChurned",
+      "wire_name": "Billing Subscription Churned",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {
+        "plan": {
+          "type": "enum",
+          "wire_name": "plan",
+          "values": [
+            "basic",
+            "plus",
+            "unlimited",
+            "unlimited_v2",
+            "operator",
+            "architect",
+            "unknown"
+          ]
+        },
+        "interval": {
+          "type": "enum",
+          "wire_name": "interval",
+          "values": [
+            "month",
+            "year",
+            "unknown"
+          ]
+        },
+        "reason": {
+          "type": "enum",
+          "wire_name": "reason",
+          "values": [
+            "cancellation_requested",
+            "payment_failure",
+            "payment_disputed",
+            "none"
+          ]
+        },
+        "priceGeneration": {
+          "type": "enum",
+          "wire_name": "price_generation",
+          "values": [
+            "legacy",
+            "ladder_v1",
+            "unknown"
+          ]
+        },
+        "isTrial": {
+          "type": "bool",
+          "wire_name": "is_trial"
+        },
+        "billingMeasurement": {
+          "type": "enum",
+          "wire_name": "billing_measurement",
+          "values": [
+            "trial_plan_entitlement",
+            "paid_plan_entitlement"
+          ]
+        },
+        "mrrCents": {
+          "type": "int",
+          "wire_name": "mrr_cents"
+        }
+      },
+      "consumers": [
+        "billing-lifecycle-events"
+      ],
+      "correlation": null,
+      "backend_properties": {
+        "$insert_id": {
+          "type": "uuid"
+        },
+        "billing_event_id": {
+          "type": "bounded_string",
+          "max_length": 128
+        },
+        "occurred_at": {
+          "type": "iso8601",
+          "nullable": true
+        },
+        "billing_source": {
+          "type": "constant",
+          "value": "stripe_webhook_authoritative_owner"
+        },
+        "price_id": {
+          "type": "bounded_string",
+          "max_length": 128
+        },
+        "currency": {
+          "type": "bounded_string",
+          "max_length": 16
+        }
+      }
+    },
+    {
+      "id": "billingSubscriptionCancellationScheduled",
+      "wire_name": "Billing Subscription Cancellation Scheduled",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {
+        "plan": {
+          "type": "enum",
+          "wire_name": "plan",
+          "values": [
+            "basic",
+            "plus",
+            "unlimited",
+            "unlimited_v2",
+            "operator",
+            "architect",
+            "unknown"
+          ]
+        },
+        "interval": {
+          "type": "enum",
+          "wire_name": "interval",
+          "values": [
+            "month",
+            "year",
+            "unknown"
+          ]
+        },
+        "reason": {
+          "type": "enum",
+          "wire_name": "reason",
+          "values": [
+            "cancellation_requested",
+            "payment_failure",
+            "payment_disputed",
+            "none"
+          ]
+        },
+        "priceGeneration": {
+          "type": "enum",
+          "wire_name": "price_generation",
+          "values": [
+            "legacy",
+            "ladder_v1",
+            "unknown"
+          ]
+        },
+        "isTrial": {
+          "type": "bool",
+          "wire_name": "is_trial"
+        },
+        "billingMeasurement": {
+          "type": "enum",
+          "wire_name": "billing_measurement",
+          "values": [
+            "trial_plan_entitlement",
+            "paid_plan_entitlement"
+          ]
+        },
+        "mrrCents": {
+          "type": "int",
+          "wire_name": "mrr_cents"
+        }
+      },
+      "consumers": [
+        "billing-lifecycle-events"
+      ],
+      "correlation": null,
+      "backend_properties": {
+        "$insert_id": {
+          "type": "uuid"
+        },
+        "billing_event_id": {
+          "type": "bounded_string",
+          "max_length": 128
+        },
+        "occurred_at": {
+          "type": "iso8601",
+          "nullable": true
+        },
+        "billing_source": {
+          "type": "constant",
+          "value": "stripe_webhook_authoritative_owner"
+        },
+        "price_id": {
+          "type": "bounded_string",
+          "max_length": 128
+        },
+        "currency": {
+          "type": "bounded_string",
+          "max_length": 16
+        }
+      }
+    },
+    {
+      "id": "billingSubscriptionPlanChanged",
+      "wire_name": "Billing Subscription Plan Changed",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {
+        "previousPlan": {
+          "type": "enum",
+          "wire_name": "previous_plan",
+          "values": [
+            "basic",
+            "plus",
+            "unlimited",
+            "unlimited_v2",
+            "operator",
+            "architect",
+            "unknown"
+          ]
+        },
+        "newPlan": {
+          "type": "enum",
+          "wire_name": "new_plan",
+          "values": [
+            "basic",
+            "plus",
+            "unlimited",
+            "unlimited_v2",
+            "operator",
+            "architect",
+            "unknown"
+          ]
+        },
+        "interval": {
+          "type": "enum",
+          "wire_name": "interval",
+          "values": [
+            "month",
+            "year",
+            "unknown"
+          ]
+        },
+        "mrrBeforeCents": {
+          "type": "int",
+          "wire_name": "mrr_before_cents"
+        },
+        "mrrAfterCents": {
+          "type": "int",
+          "wire_name": "mrr_after_cents"
+        },
+        "plan": {
+          "type": "enum",
+          "wire_name": "plan",
+          "values": [
+            "basic",
+            "plus",
+            "unlimited",
+            "unlimited_v2",
+            "operator",
+            "architect",
+            "unknown"
+          ]
+        },
+        "reason": {
+          "type": "enum",
+          "wire_name": "reason",
+          "values": [
+            "cancellation_requested",
+            "payment_failure",
+            "payment_disputed",
+            "none"
+          ]
+        },
+        "priceGeneration": {
+          "type": "enum",
+          "wire_name": "price_generation",
+          "values": [
+            "legacy",
+            "ladder_v1",
+            "unknown"
+          ]
+        },
+        "isTrial": {
+          "type": "bool",
+          "wire_name": "is_trial"
+        },
+        "billingMeasurement": {
+          "type": "enum",
+          "wire_name": "billing_measurement",
+          "values": [
+            "trial_plan_entitlement",
+            "paid_plan_entitlement"
+          ]
+        },
+        "mrrCents": {
+          "type": "int",
+          "wire_name": "mrr_cents"
+        }
+      },
+      "consumers": [
+        "billing-plan-changes"
+      ],
+      "correlation": null,
+      "backend_properties": {
+        "$insert_id": {
+          "type": "uuid"
+        },
+        "billing_event_id": {
+          "type": "bounded_string",
+          "max_length": 128
+        },
+        "occurred_at": {
+          "type": "iso8601",
+          "nullable": true
+        },
+        "billing_source": {
+          "type": "constant",
+          "value": "stripe_webhook_authoritative_owner"
+        },
+        "price_id": {
+          "type": "bounded_string",
+          "max_length": 128
+        },
+        "currency": {
+          "type": "bounded_string",
+          "max_length": 16
+        }
+      }
+    },
+    {
       "id": "speakerTagPromptsClosed",
       "wire_name": "Speaker Tag Prompts Closed",
       "status": "active",

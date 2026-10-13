@@ -515,6 +515,10 @@ overlay:
         # Attached runtime identity (credential hygiene D4 phase 2): same contract as backend-sync.
         service_account: backend-runtime@based-hardware.iam.gserviceaccount.com
         secrets:
+          # Billing-only alias: never supply the shared key to unrelated capture/rollout clients.
+          POSTHOG_BILLING_API_KEY:
+            secret: POSTHOG_PROJECT_API_KEY
+            version: latest
           TELEGRAM_BOT_TOKEN:
             secret: TELEGRAM_BOT_TOKEN
             version: latest

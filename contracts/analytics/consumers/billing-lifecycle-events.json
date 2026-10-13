@@ -1,0 +1,18 @@
+{
+  "id": "billing-lifecycle-events",
+  "kind": "question",
+  "owner": "Billing",
+  "question": "Are Stripe Started, Churned and Cancellation Scheduled events present in the instrumentation cohort? This executable query is a presence probe; paid conversion uses non-trial movements, and ARPMAU stock MRR comes from the Stripe-book snapshot in BigQuery.",
+  "query": "contracts/analytics/consumers/billing-lifecycle-events.sql",
+  "events": [
+    "billingSubscriptionStarted",
+    "billingSubscriptionChurned",
+    "billingSubscriptionCancellationScheduled"
+  ],
+  "namespace_property": "$app_namespace",
+  "dimensions": [
+    "git_sha",
+    "build_number"
+  ],
+  "zero_policy": "Zero can mean no qualifying webhook transitions or missing capture. These presence counts are not a stock MRR estimate."
+}

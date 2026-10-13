@@ -137,7 +137,19 @@ def emit_billing_product_event(
     # webhook status cannot prove churn: another subscription may retain access.
     # Trialing counts as paid-plan entitlement, matching the product authority;
     # this signal is not a cash/revenue measurement.
-    if resulting_paid_subscription_id and not previous_paid_subscription_id:
+    if resulting_paid_subscription_id and (
+        not previous_paid_subscription_id
+        or (
+            obj.get('id') == resulting_paid_subscription_id
+            and (
+                stripe_event_type == 'customer.subscription.created'
+                or (
+                    stripe_event_type == 'customer.subscription.updated'
+                    and (previous_attributes or {}).get('status') == 'incomplete'
+                )
+            )
+        )
+    ):
         event_name = 'Billing Subscription Started'
     elif previous_paid_subscription_id and not resulting_paid_subscription_id:
         if previous_paid_subscription_id != obj.get('id'):
@@ -156,22 +168,33 @@ def emit_billing_product_event(
     mrr_cents = _monthly_mrr_cents(price, interval, obj.get('status'))
     try:
         occurred_at = None
-        if isinstance(stripe_event_created, (int, float)):
+        # Initial activation deduplicates checkout/created/updated delivery
+        # order. Recovery is a later movement, keyed and dated by its own event.
+        initial_activation = event_name == 'Billing Subscription Started' and (
+            stripe_event_type == 'customer.subscription.created'
+            or (previous_attributes or {}).get('status') == 'incomplete'
+        )
+        event_time = obj.get('created', stripe_event_created) if initial_activation else stripe_event_created
+        if isinstance(event_time, (int, float)):
             from datetime import datetime, timezone
 
-            occurred_at = (
-                datetime.fromtimestamp(float(stripe_event_created), tz=timezone.utc).isoformat().replace('+00:00', 'Z')
-            )
+            occurred_at = datetime.fromtimestamp(float(event_time), tz=timezone.utc).isoformat().replace('+00:00', 'Z')
         from utils.product_telemetry import emit_product_event
 
         emit_product_event(
             uid=uid,
             event=event_name,
             properties={
+                '$insert_id': _billing_insert_id(
+                    event_name, obj.get('id'), stripe_event_id, initial_activation=initial_activation
+                ),
                 'billing_event_id': stripe_event_id[:128],
                 'occurred_at': occurred_at,
                 'billing_source': 'stripe_webhook_authoritative_owner',
-                'billing_measurement': 'paid_plan_entitlement_including_trial',
+                'billing_measurement': (
+                    'trial_plan_entitlement' if obj.get('status') == 'trialing' else 'paid_plan_entitlement'
+                ),
+                'is_trial': obj.get('status') == 'trialing',
                 'plan': plan,
                 'interval': interval,
                 'reason': reason,
@@ -183,6 +206,17 @@ def emit_billing_product_event(
         )
     except Exception:
         logger.warning('billing_product_event_emit_failed event=%s', event_name, exc_info=True)
+
+
+def _billing_insert_id(
+    event: str, subscription_id: Any, stripe_event_id: str, *, initial_activation: bool = False
+) -> str:
+    from uuid import NAMESPACE_URL, uuid5
+
+    # Only initial activation is subscription-scoped. Recovery and other
+    # movements are event-scoped so replay is safe without erasing later starts.
+    key = subscription_id if initial_activation and subscription_id else stripe_event_id
+    return str(uuid5(NAMESPACE_URL, f'omi:billing:{event}:{key}'))
 
 
 def _reachable_reasons(event: str) -> tuple[str, ...]:
@@ -330,3 +364,73 @@ def _record(
     reason = _resolve_cancellation_reason(subscription_obj) if event == _REASON_BEARING_EVENT else 'none'
 
     OMI_SUBSCRIPTION_EVENTS.labels(event=event, plan=plan, interval=interval, reason=reason).inc()
+
+
+def emit_billing_plan_changed(
+    *,
+    uid: str,
+    stripe_event_id: str | None,
+    stripe_event_created: int | float | None,
+    stripe_event_type: str,
+    subscription_obj: Mapping[str, Any] | None,
+    previous_paid_subscription_id: str | None,
+    resulting_paid_subscription_id: str | None,
+    previous_attributes: Mapping[str, Any] | None = None,
+) -> None:
+    """Project a confirmed same-subscription paid price change; no writes."""
+    from datetime import datetime, timezone
+    from utils.product_telemetry import emit_product_event
+
+    if (
+        not uid
+        or not stripe_event_id
+        or stripe_event_type != 'customer.subscription.updated'
+        or not isinstance(subscription_obj, Mapping)
+        or not resulting_paid_subscription_id
+        or previous_paid_subscription_id != resulting_paid_subscription_id
+        or subscription_obj.get('id') != resulting_paid_subscription_id
+        or not isinstance(previous_attributes, Mapping)
+    ):
+        return
+    before = _first_item_price(previous_attributes)
+    after = _first_item_price(subscription_obj)
+    if not before.get('id') or not after.get('id') or before['id'] == after['id']:
+        return
+    previous_plan = _resolve_plan(previous_attributes)
+    new_plan = _resolve_plan(subscription_obj)
+    # Unknown historical prices cannot prove a paid-to-paid price transition.
+    if previous_plan in {'basic', 'unknown'} or new_plan in {'basic', 'unknown'}:
+        return
+    interval = _resolve_interval(subscription_obj)
+    is_trial = subscription_obj.get('status') == 'trialing'
+    currency = _currency_wire(after)
+    # Stripe previous_attributes is partial: absent status means unchanged.
+    previous_status = previous_attributes.get('status', subscription_obj.get('status'))
+    before_mrr = _monthly_mrr_cents(before, _resolve_interval(previous_attributes), previous_status)
+    after_mrr = _monthly_mrr_cents(after, interval, subscription_obj.get('status'))
+    occurred_at = None
+    if isinstance(stripe_event_created, (int, float)):
+        occurred_at = datetime.fromtimestamp(stripe_event_created, timezone.utc).isoformat().replace('+00:00', 'Z')
+    event = 'Billing Subscription Plan Changed'
+    emit_product_event(
+        uid=uid,
+        event=event,
+        properties={
+            '$insert_id': _billing_insert_id(event, subscription_obj.get('id'), stripe_event_id),
+            'billing_event_id': stripe_event_id[:128],
+            'occurred_at': occurred_at,
+            'billing_source': 'stripe_webhook_authoritative_owner',
+            'billing_measurement': 'trial_plan_entitlement' if is_trial else 'paid_plan_entitlement',
+            'currency': currency,
+            'is_trial': is_trial,
+            'plan': new_plan,
+            'previous_plan': previous_plan,
+            'new_plan': new_plan,
+            'interval': interval,
+            'reason': 'none',
+            'price_id': after['id'][:128],
+            'price_generation': price_catalog_generation(after['id']),
+            **({'mrr_cents': after_mrr, 'mrr_after_cents': after_mrr} if after_mrr is not None else {}),
+            **({'mrr_before_cents': before_mrr} if before_mrr is not None else {}),
+        },
+    )
