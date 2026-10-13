@@ -118,7 +118,7 @@ def test_manual_lease_cap_and_idle_are_separate_from_schedule(store, client):
 
 def test_manual_respects_global_ceiling(store, client):
     dream_store.mark_dirty(UID, [('conversations', 'c1')])
-    store.rows[('dream_spend', datetime.now(timezone.utc).date().isoformat())] = {'reserved_usd': 20}
+    store.rows[('dream_users', UID, 'spend', datetime.now(timezone.utc).date().isoformat())] = {'reserved_usd': 20}
     assert client.post('/v1/dream/runs', json={}).status_code == 503
     assert 'lease' not in store.rows[('dream_users', UID)]
 
@@ -130,7 +130,7 @@ def test_manual_idle_refunds_correct_allowance(store, client, monkeypatch):
     assert response.status_code == 200 and response.json()['status'] == 'idle'
     state = store.rows[('dream_users', UID)]
     assert state['manual_runs'] == state['passes'] == 0
-    assert store.rows[('dream_spend', state['day'])]['reserved_usd'] == 0
+    assert store.rows[('dream_users', UID, 'spend', state['day'])]['reserved_usd'] == 0
     assert client.get('/v1/dream/runs').json()['runs'] == []
 
 
@@ -380,6 +380,7 @@ def test_full_manual_json_retry_stays_in_one_lease_and_preserves_usage(store, cl
     assert stored['response_retries'] == 1 and stored['usage_unknown'] is False
     assert stored['cost_usd'] == pytest.approx(50 * (samples + 1) * Caps().max_usd_per_token)
     state = dream_store.state_ref(store, UID).get().to_dict()
+    assert store.rows[('dream_users', UID, 'spend', state['day'])]['reserved_usd'] == pytest.approx(stored['cost_usd'])
     assert state['manual_runs'] == 1 and state['lease'] is None
     assert gateway.post.await_count == samples + 1 and dream_store.dirty_count(UID) == 0
     assert stored['samples_returned'] == samples and stored['samples_failed'] == 0
