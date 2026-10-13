@@ -10,7 +10,7 @@ from pathlib import Path
 
 import pytest
 
-from config.entitlement_versions import (
+from config.plan_catalog import (
     get_entitlement_version,
     resolve_price_entitlements,
     resolve_subscription_entitlements,
@@ -60,7 +60,7 @@ def test_ladder_budgets_exist_without_activating_any_price():
 
 
 def test_fixture_ladder_price_resolves_by_price_without_env_activation(monkeypatch):
-    import config.entitlement_versions as versions
+    import config.plan_catalog as versions
     import config.plan_catalog as catalog
 
     monkeypatch.setitem(catalog.RECOGNIZED_STRIPE_PRICE_PLAN_TYPES, 'price_fixture', catalog.PlanType.plus)

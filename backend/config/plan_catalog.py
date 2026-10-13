@@ -10,9 +10,12 @@ legacy behavior while a decision remains open.
 from __future__ import annotations
 
 import os
+from copy import deepcopy
 from typing import Any, Mapping, Optional
 
 from config.plan_catalog_generated import (  # noqa: F401 - this module is the public facade
+    ENTITLEMENT_VERSIONS,
+    RECOGNIZED_STRIPE_ENTITLEMENT_VERSIONS,
     BILLING_ENV_VAR_PLAN_TYPES,
     CATALOG_AUTHORITY,
     CATALOG_REVISION,
@@ -179,7 +182,60 @@ def resolve_stripe_price_plan(
     raise ValueError(f'Price ID {price_id} does not correspond to a known plan.')
 
 
+def get_entitlement_version(plan: PlanType | str, version: str = 'legacy') -> dict[str, Any]:
+    plan = PlanType(plan)
+    if version == 'legacy':
+        return {
+            'plan_id': plan.value,
+            'entitlement_version': version,
+            'policy': deepcopy(get_plan_definition(plan)),
+            'budget': None,
+        }
+    if version != 'ladder_v1':
+        raise ValueError(f'Unknown entitlement version: {version}')
+    ladder = ENTITLEMENT_VERSIONS[version]
+    if plan.value not in ladder['monthly_budgets']:
+        raise ValueError(f'{plan.value} has no ladder_v1 entitlements')
+    return {
+        'plan_id': plan.value,
+        'entitlement_version': version,
+        'budget': deepcopy(ladder['monthly_budgets'][plan.value]),
+        'rate_card_version': ladder['rate_card_version'],
+        'unit_usd_micros': ladder['unit_usd_micros'],
+    }
+
+
+def resolve_price_entitlements(price_id: str, environ: Mapping[str, str] | None = None) -> dict[str, Any]:
+    plan = resolve_stripe_price_plan(price_id, environ)
+    # Unretained env-configured prices preserve legacy semantics; env cannot activate ladder v1.
+    version = RECOGNIZED_STRIPE_ENTITLEMENT_VERSIONS.get(price_id, 'legacy')
+    return get_entitlement_version(plan, version)
+
+
+def resolve_subscription_entitlements(subscription: Any, environ: Mapping[str, str] | None = None) -> dict[str, Any]:
+    """Resolve stored Subscription objects or mappings without remote reads."""
+
+    def field(name: str, default: Any = None) -> Any:
+        return (
+            subscription.get(name, default)
+            if isinstance(subscription, Mapping)
+            else getattr(subscription, name, default)
+        )
+
+    plan = PlanType(field('plan', 'basic'))
+    if field('status', 'active') != 'active':
+        return get_entitlement_version(PlanType.basic)
+    price = field('current_price_id')
+    if price:
+        return resolve_price_entitlements(price, environ)
+    # Old persisted paid records can predate current_price_id.
+    return get_entitlement_version(plan)
+
+
 __all__ = [
+    "get_entitlement_version",
+    "resolve_price_entitlements",
+    "resolve_subscription_entitlements",
     'BILLING_ENV_VAR_PLAN_TYPES',
     'CATALOG_AUTHORITY',
     'CATALOG_REVISION',
