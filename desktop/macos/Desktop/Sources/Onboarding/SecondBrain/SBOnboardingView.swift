@@ -92,6 +92,7 @@ struct SBOnboardingView: View {
     }
     .onReceive(importConnectorStatusStore.connectorDidSync) { connectorID in
       model.markPersistedContextConnectorConnected(connectorID)
+      if model.step == .context { PermissionDragGuidance.returnToOmi() }
     }
     .dismissableSheet(item: $selectedImportConnector) { connector in
       ImportConnectorSheet(

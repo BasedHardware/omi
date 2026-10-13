@@ -111,6 +111,7 @@ final class SBOnboardingBackNavigationTests: XCTestCase {
     let completedKey = SBOnboardingModel.shortcutsCompletedKey
     let previousCompleted = UserDefaults.standard.bool(forKey: completedKey)
     defer { UserDefaults.standard.set(previousCompleted, forKey: completedKey) }
+    // omi-test-quality: shared-defaults -- integration: the onboarding completion gate owns standard defaults
     UserDefaults.standard.set(false, forKey: completedKey)
     UserDefaults.standard.set(SBOnboardingModel.Step.shortcutOpen.rawValue, forKey: resumeStepKey)
     let appState = AppState()
@@ -378,8 +379,10 @@ final class SBOnboardingBackNavigationTests: XCTestCase {
       settings.askOmiEnabled = previousOpenEnabled
       settings.pttShortcut = previousTalkShortcut
       settings.pttEnabled = previousTalkEnabled
+      // omi-test-quality: shared-defaults -- integration: the onboarding completion gate owns standard defaults
       UserDefaults.standard.set(previousCompleted, forKey: completedKey)
     }
+    // omi-test-quality: shared-defaults -- integration: the onboarding completion gate owns standard defaults
     UserDefaults.standard.set(false, forKey: completedKey)
     let appState = AppState()
     let model = SBOnboardingModel(appState: appState, chatProvider: ChatProvider(), onComplete: nil)
@@ -462,6 +465,7 @@ final class SBOnboardingBackNavigationTests: XCTestCase {
     // Simulate a legacy user who persisted a resume state past the shortcut stages
     // before shortcuts were mandatory, without the completion flag.
     UserDefaults.standard.set(SBOnboardingModel.Step.screenDemo.rawValue, forKey: resumeKey)
+    // omi-test-quality: shared-defaults -- integration: the onboarding completion gate owns standard defaults
     UserDefaults.standard.set(false, forKey: completedKey)
 
     // Hold a strong reference to AppState for the life of the test. SBOnboardingModel
@@ -479,6 +483,7 @@ final class SBOnboardingBackNavigationTests: XCTestCase {
     // A legacy resume at exactly shortcutTalk (without the completion flag) is also
     // clamped back to shortcutOpen — completing only Talk would bypass Open Omi.
     UserDefaults.standard.set(SBOnboardingModel.Step.shortcutTalk.rawValue, forKey: resumeKey)
+    // omi-test-quality: shared-defaults -- integration: the onboarding completion gate owns standard defaults
     UserDefaults.standard.set(false, forKey: completedKey)
     let modelMid = SBOnboardingModel(
       appState: appState, chatProvider: ChatProvider(), onComplete: nil)
