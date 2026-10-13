@@ -13178,4 +13178,7 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get onboardingActDictateBodyOmi => 'Prata bara. Din Omi lyssnar.';
+
+  @override
+  String get voiceProfileCardDismissed => 'Du kan ställa in din röstprofil när som helst i Inställningar.';
 }

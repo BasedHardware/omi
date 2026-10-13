@@ -4044,5 +4044,6 @@
     "onboardingActMicFallbackBody": "Omi ei saada veel heli. Kasuta praegu oma telefoni.",
     "onboardingActNoAudioOmi": "Omit pole kuulda. Veendu, et see on sees ja lähedal.",
     "onboardingActNoAudioPhone": "Me ei kuule sind veel. Proovi natuke valjemini rääkida.",
-    "onboardingActDictateBodyOmi": "Lihtsalt räägi. Sinu Omi kuulab."
+    "onboardingActDictateBodyOmi": "Lihtsalt räägi. Sinu Omi kuulab.",
+    "voiceProfileCardDismissed": "Häälprofiili saad seadistada igal ajal seadetes."
 }

@@ -4044,5 +4044,6 @@
     "onboardingActMicFallbackBody": "Omi가 아직 오디오를 보내지 않아요. 지금은 휴대폰을 사용하세요.",
     "onboardingActNoAudioOmi": "Omi 소리가 들리지 않아요. 켜져 있고 가까이 있는지 확인하세요.",
     "onboardingActNoAudioPhone": "아직 목소리가 들리지 않아요. 조금 더 크게 말해 보세요.",
-    "onboardingActDictateBodyOmi": "그냥 말하세요. Omi가 듣고 있어요."
+    "onboardingActDictateBodyOmi": "그냥 말하세요. Omi가 듣고 있어요.",
+    "voiceProfileCardDismissed": "음성 프로필은 설정에서 언제든지 설정할 수 있어요."
 }

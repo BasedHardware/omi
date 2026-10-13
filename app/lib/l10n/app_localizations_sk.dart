@@ -13168,4 +13168,7 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get onboardingActDictateBodyOmi => 'Jednoducho hovorte. Vaše Omi počúva.';
+
+  @override
+  String get voiceProfileCardDismissed => 'Hlasový profil si môžete kedykoľvek nastaviť v Nastaveniach.';
 }

@@ -13155,4 +13155,7 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String get onboardingActDictateBodyOmi => 'बस बोलिए। आपका Omi सुन रहा है।';
+
+  @override
+  String get voiceProfileCardDismissed => 'आप सेटिंग्स में कभी भी वॉइस प्रोफ़ाइल सेट कर सकते हैं।';
 }

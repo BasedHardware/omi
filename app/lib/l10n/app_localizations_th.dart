@@ -13104,4 +13104,7 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get onboardingActDictateBodyOmi => 'พูดได้เลย Omi กำลังฟังอยู่';
+
+  @override
+  String get voiceProfileCardDismissed => 'คุณตั้งค่าโปรไฟล์เสียงได้ทุกเมื่อในการตั้งค่า';
 }

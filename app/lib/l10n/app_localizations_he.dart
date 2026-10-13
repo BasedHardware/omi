@@ -13078,4 +13078,7 @@ class AppLocalizationsHe extends AppLocalizations {
 
   @override
   String get onboardingActDictateBodyOmi => 'פשוט דבר. ה-Omi שלך מקשיב.';
+
+  @override
+  String get voiceProfileCardDismissed => 'אפשר להגדיר פרופיל קולי בכל עת בהגדרות.';
 }

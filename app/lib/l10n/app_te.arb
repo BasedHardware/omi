@@ -11481,5 +11481,6 @@
     "onboardingActMicFallbackBody": "మీ Omi ఇంకా ఆడియో పంపడం లేదు. ప్రస్తుతానికి మీ ఫోన్ వాడండి.",
     "onboardingActNoAudioOmi": "మీ Omi వినిపించడం లేదు. అది ఆన్‌లో ఉందో, దగ్గర్లో ఉందో చూడండి.",
     "onboardingActNoAudioPhone": "ఇంకా మీ గొంతు వినిపించడం లేదు. కొంచెం గట్టిగా మాట్లాడి చూడండి.",
-    "onboardingActDictateBodyOmi": "మాట్లాడండి చాలు. మీ Omi వింటోంది."
+    "onboardingActDictateBodyOmi": "మాట్లాడండి చాలు. మీ Omi వింటోంది.",
+    "voiceProfileCardDismissed": "సెట్టింగ్‌లలో ఎప్పుడైనా వాయిస్ ప్రొఫైల్ సెటప్ చేయవచ్చు."
 }

@@ -4044,5 +4044,6 @@
     "onboardingActMicFallbackBody": "你的 Omi 还没有传来声音，先用手机吧。",
     "onboardingActNoAudioOmi": "听不到你的 Omi。请确认它已开启并在附近。",
     "onboardingActNoAudioPhone": "还听不到你的声音，试着大声一点。",
-    "onboardingActDictateBodyOmi": "直接说就好，你的 Omi 正在听。"
+    "onboardingActDictateBodyOmi": "直接说就好，你的 Omi 正在听。",
+    "voiceProfileCardDismissed": "你可以随时在设置中设置声音档案。"
 }

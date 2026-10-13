@@ -11481,5 +11481,6 @@
     "onboardingActMicFallbackBody": "Omi яшчэ не перадае гук. Пакуль скарыстайцеся тэлефонам.",
     "onboardingActNoAudioOmi": "Не чуваць Omi. Пераканайцеся, што ён уключаны і побач.",
     "onboardingActNoAudioPhone": "Пакуль вас не чуваць. Паспрабуйце гаварыць крыху гучней.",
-    "onboardingActDictateBodyOmi": "Проста гаварыце. Omi слухае."
+    "onboardingActDictateBodyOmi": "Проста гаварыце. Omi слухае.",
+    "voiceProfileCardDismissed": "Профіль голасу заўсёды можна наладзіць у Наладах."
 }

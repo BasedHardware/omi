@@ -4079,5 +4079,6 @@
     "onboardingActMicFallbackBody": "Votre Omi n'envoie pas encore de son. Utilisez votre téléphone pour l'instant.",
     "onboardingActNoAudioOmi": "On n'entend pas votre Omi. Vérifiez qu'il est allumé et proche.",
     "onboardingActNoAudioPhone": "On ne vous entend pas encore. Parlez un peu plus fort.",
-    "onboardingActDictateBodyOmi": "Parlez simplement. Votre Omi vous écoute."
+    "onboardingActDictateBodyOmi": "Parlez simplement. Votre Omi vous écoute.",
+    "voiceProfileCardDismissed": "Vous pouvez configurer votre profil vocal à tout moment dans les Réglages."
 }

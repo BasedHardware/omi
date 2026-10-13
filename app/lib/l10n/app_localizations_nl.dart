@@ -13208,4 +13208,7 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get onboardingActDictateBodyOmi => 'Praat gewoon. Je Omi luistert.';
+
+  @override
+  String get voiceProfileCardDismissed => 'Je kunt je stemprofiel altijd instellen via Instellingen.';
 }

@@ -13161,4 +13161,7 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String get onboardingActDictateBodyOmi => 'Bare tal. Din Omi lytter.';
+
+  @override
+  String get voiceProfileCardDismissed => 'Du kan altid oprette din stemmeprofil under Indstillinger.';
 }

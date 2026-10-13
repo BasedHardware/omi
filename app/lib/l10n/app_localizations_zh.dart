@@ -12964,4 +12964,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get onboardingActDictateBodyOmi => '直接说就好，你的 Omi 正在听。';
+
+  @override
+  String get voiceProfileCardDismissed => '你可以随时在设置中设置声音档案。';
 }

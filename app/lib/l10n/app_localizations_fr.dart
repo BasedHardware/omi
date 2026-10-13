@@ -13277,4 +13277,7 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get onboardingActDictateBodyOmi => 'Parlez simplement. Votre Omi vous écoute.';
+
+  @override
+  String get voiceProfileCardDismissed => 'Vous pouvez configurer votre profil vocal à tout moment dans les Réglages.';
 }

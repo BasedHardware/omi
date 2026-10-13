@@ -13167,4 +13167,7 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get onboardingActDictateBodyOmi => 'Lihtsalt räägi. Sinu Omi kuulab.';
+
+  @override
+  String get voiceProfileCardDismissed => 'Häälprofiili saad seadistada igal ajal seadetes.';
 }

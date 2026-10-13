@@ -4044,5 +4044,6 @@
     "onboardingActMicFallbackBody": "Omi ei vielä lähetä ääntä. Käytä toistaiseksi puhelinta.",
     "onboardingActNoAudioOmi": "Omia ei kuulu. Varmista, että se on päällä ja lähellä.",
     "onboardingActNoAudioPhone": "Emme kuule sinua vielä. Kokeile puhua vähän kovempaa.",
-    "onboardingActDictateBodyOmi": "Puhu vain. Omisi kuuntelee."
+    "onboardingActDictateBodyOmi": "Puhu vain. Omisi kuuntelee.",
+    "voiceProfileCardDismissed": "Voit määrittää ääniprofiilin milloin tahansa asetuksissa."
 }

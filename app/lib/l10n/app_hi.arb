@@ -4044,5 +4044,6 @@
     "onboardingActMicFallbackBody": "आपका Omi अभी ऑडियो नहीं भेज रहा। फ़िलहाल अपना फ़ोन इस्तेमाल करें।",
     "onboardingActNoAudioOmi": "आपका Omi सुनाई नहीं दे रहा। देखें कि वह चालू है और पास है।",
     "onboardingActNoAudioPhone": "अभी आपकी आवाज़ नहीं आ रही। थोड़ा ज़ोर से बोलकर देखें।",
-    "onboardingActDictateBodyOmi": "बस बोलिए। आपका Omi सुन रहा है।"
+    "onboardingActDictateBodyOmi": "बस बोलिए। आपका Omi सुन रहा है।",
+    "voiceProfileCardDismissed": "आप सेटिंग्स में कभी भी वॉइस प्रोफ़ाइल सेट कर सकते हैं।"
 }

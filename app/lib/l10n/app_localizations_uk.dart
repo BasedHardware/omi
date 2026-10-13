@@ -13203,4 +13203,7 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get onboardingActDictateBodyOmi => 'Просто говоріть. Omi слухає.';
+
+  @override
+  String get voiceProfileCardDismissed => 'Голосовий профіль можна налаштувати будь-коли в Налаштуваннях.';
 }

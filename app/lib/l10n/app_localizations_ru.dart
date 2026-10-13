@@ -13219,4 +13219,7 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get onboardingActDictateBodyOmi => 'Просто говорите. Omi слушает.';
+
+  @override
+  String get voiceProfileCardDismissed => 'Голосовой профиль можно настроить в любое время в Настройках.';
 }

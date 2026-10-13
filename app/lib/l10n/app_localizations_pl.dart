@@ -13212,4 +13212,7 @@ class AppLocalizationsPl extends AppLocalizations {
 
   @override
   String get onboardingActDictateBodyOmi => 'Po prostu mów. Twoje Omi słucha.';
+
+  @override
+  String get voiceProfileCardDismissed => 'Profil głosowy możesz skonfigurować w każdej chwili w Ustawieniach.';
 }

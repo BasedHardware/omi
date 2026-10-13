@@ -4086,5 +4086,6 @@
     "onboardingActMicFallbackBody": "Din Omi sender ikke lyd endnu. Brug din telefon indtil videre.",
     "onboardingActNoAudioOmi": "Kan ikke høre din Omi. Tjek, at den er tændt og tæt på.",
     "onboardingActNoAudioPhone": "Kan ikke høre dig endnu. Prøv at tale lidt højere.",
-    "onboardingActDictateBodyOmi": "Bare tal. Din Omi lytter."
+    "onboardingActDictateBodyOmi": "Bare tal. Din Omi lytter.",
+    "voiceProfileCardDismissed": "Du kan altid oprette din stemmeprofil under Indstillinger."
 }

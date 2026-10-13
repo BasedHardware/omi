@@ -13225,4 +13225,7 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get onboardingActDictateBodyOmi => 'Csak beszélj. Az Omid figyel.';
+
+  @override
+  String get voiceProfileCardDismissed => 'A hangprofilt bármikor beállíthatod a Beállításokban.';
 }

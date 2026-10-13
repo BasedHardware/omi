@@ -11481,5 +11481,6 @@
     "onboardingActMicFallbackBody": "Omi још не шаље звук. За сада користите телефон.",
     "onboardingActNoAudioOmi": "Не чујемо Omi. Проверите да ли је укључен и близу.",
     "onboardingActNoAudioPhone": "Још вас не чујемо. Покушајте да говорите мало гласније.",
-    "onboardingActDictateBodyOmi": "Само причајте. Ваш Omi слуша."
+    "onboardingActDictateBodyOmi": "Само причајте. Ваш Omi слуша.",
+    "voiceProfileCardDismissed": "Гласовни профил можете подесити било када у Подешавањима."
 }

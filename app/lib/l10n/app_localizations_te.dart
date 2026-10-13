@@ -13224,4 +13224,7 @@ class AppLocalizationsTe extends AppLocalizations {
 
   @override
   String get onboardingActDictateBodyOmi => 'మాట్లాడండి చాలు. మీ Omi వింటోంది.';
+
+  @override
+  String get voiceProfileCardDismissed => 'సెట్టింగ్‌లలో ఎప్పుడైనా వాయిస్ ప్రొఫైల్ సెటప్ చేయవచ్చు.';
 }

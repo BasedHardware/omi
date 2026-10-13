@@ -12989,4 +12989,7 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get onboardingActDictateBodyOmi => '그냥 말하세요. Omi가 듣고 있어요.';
+
+  @override
+  String get voiceProfileCardDismissed => '음성 프로필은 설정에서 언제든지 설정할 수 있어요.';
 }
