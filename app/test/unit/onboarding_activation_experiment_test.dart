@@ -97,6 +97,25 @@ void main() {
     });
   });
 
+  group('experiment exposure', () {
+    const flag = '\$feature/onboarding-activation-flow';
+
+    test('carries the PostHog variant the arm came from', () async {
+      await OnboardingActivationExperiment.resolve(readEnabled: (_) async => true, readValue: (_) async => 'test');
+      expect(OnboardingActivationExperiment.exposureProperties(), {flag: 'test'});
+      await OnboardingActivationExperiment.resolve(readEnabled: (_) async => true, readValue: (_) async => 'control');
+      expect(OnboardingActivationExperiment.exposureProperties(), {flag: 'control'});
+    });
+
+    test('readers who fell back to control carry no variant, so they stay out of the analysis', () async {
+      await OnboardingActivationExperiment.resolve(readEnabled: (_) async => true, readValue: (_) async => 'test');
+      await OnboardingActivationExperiment.resolve(readEnabled: (_) async => false);
+      expect(OnboardingActivationExperiment.exposureProperties(), isEmpty);
+      await OnboardingActivationExperiment.resolve(readEnabled: (_) => Future.error(StateError('no sdk')));
+      expect(OnboardingActivationExperiment.exposureProperties(), isEmpty);
+    });
+  });
+
   group('per-account memory', () {
     setUp(() async {
       SharedPreferences.setMockInitialValues({});

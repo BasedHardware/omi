@@ -342,7 +342,10 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
     OnboardingActivationExperiment.remember(SharedPreferencesUtil().uid, ending);
     // The arm the reader actually sees (a slow flag read falls back to control while PostHog may
     // still log the flag call as treatment): compare arms on this, not on the flag exposure.
-    PlatformManager.instance.analytics.track('Onboarding Ending Shown', properties: {'ending': ending.wireName});
+    PlatformManager.instance.analytics.track(
+      'Onboarding Ending Shown',
+      properties: {'ending': ending.wireName, ...OnboardingActivationExperiment.exposureProperties()},
+    );
     PlatformManager.instance.analytics.setUserProperty('Onboarding Ending', ending.wireName);
     _controller!.animateTo(kSpeechProfilePage);
   }

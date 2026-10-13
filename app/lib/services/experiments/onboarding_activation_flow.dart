@@ -70,6 +70,16 @@ abstract final class OnboardingActivationExperiment {
 
   static const Duration _variantTimeout = Duration(seconds: 2);
 
+  /// The PostHog variant behind the last [resolve] (`test`, `control`, …), or null when the arm did
+  /// not come from the flag (override, debug default, no identity, timeout, error). The app turns
+  /// off `$feature_flag_called`, so this rides on the exposure event as `$feature/<flag>` for the
+  /// PostHog experiment to attribute it; fallback readers carry none and stay out of the analysis.
+  static String? lastFlagVariant;
+
+  /// Exposure properties for the PostHog experiment: `$feature/<flag>` when the arm came from it.
+  static Map<String, Object> exposureProperties() =>
+      lastFlagVariant == null ? const {} : {'\$feature/$enabledFlag': lastFlagVariant!};
+
   /// The arm for a flag value: `true` or a treatment variant is treatment, everything else
   /// (false, null, `control`, an unknown variant, a payload-only value) is control.
   static OnboardingEnding endingForFlagValue(Object? value) {
@@ -86,6 +96,7 @@ abstract final class OnboardingActivationExperiment {
     Future<bool> Function(String key)? readEnabled,
     Future<Object?> Function(String key)? readValue,
   }) async {
+    lastFlagVariant = null;
     final override = debugOverride ?? debugDefault;
     if (override != null) return override;
     try {
@@ -94,6 +105,11 @@ abstract final class OnboardingActivationExperiment {
       final enabled = await (readEnabled ?? AnalyticsManager().isFeatureEnabled)(enabledFlag);
       if (!enabled) return OnboardingEnding.voiceIntro;
       final value = await (readValue ?? _readPosthogValue)(enabledFlag).timeout(_variantTimeout);
+      if (value is String && value.trim().isNotEmpty) {
+        lastFlagVariant = value.trim();
+      } else if (value == true) {
+        lastFlagVariant = 'true';
+      }
       return endingForFlagValue(value);
     } catch (_) {
       return OnboardingEnding.voiceIntro;
