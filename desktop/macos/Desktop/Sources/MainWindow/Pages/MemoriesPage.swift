@@ -78,7 +78,7 @@ enum MemoryLayerFilter: String, CaseIterable, Identifiable {
   var description: String {
     switch self {
     case .defaultAccess: return "Short-term + Long-term"
-    case .shortTerm: return "Fresh source-backed memories"
+    case .shortTerm: return "Recent memories, not yet confirmed as lasting"
     case .longTerm: return "Stable memories"
     case .archive: return "Explicit archive search"
     }
@@ -115,7 +115,7 @@ enum MemoryTemporalFilter: String, CaseIterable, Identifiable {
   }
   var description: String {
     switch self {
-    case .usefulNow: return "Current, fading, and not-yet-classified memories"
+    case .usefulNow: return "Memories Omi is using now"
     case .history: return "Dated memories from the server history"
     case .all: return "Useful now and history"
     }
@@ -2507,7 +2507,7 @@ struct MemoriesPage: View {
     .popover(isPresented: $showCategoryFilter, arrowEdge: .bottom) {
       categoryFilterPopover
     }
-    .help("Filter memories by lifecycle, source, or type")
+    .help("Filter memories by status, source, or type")
     .accessibilityIdentifier("memories-filter-menu")
   }
 

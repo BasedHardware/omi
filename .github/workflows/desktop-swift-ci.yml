@@ -39,6 +39,8 @@ jobs:
       should_run: ${{ steps.changed.outputs.should_run }}
       should_run_static: ${{ steps.changed.outputs.should_run_static }}
       should_run_tests: ${{ steps.changed.outputs.should_run_tests }}
+      should_test_compile: ${{ steps.changed.outputs.should_test_compile }}
+      should_siri_advisory: ${{ steps.changed.outputs.should_siri_advisory }}
       should_release_compile: ${{ steps.changed.outputs.should_release_compile }}
       should_release_test_compile: ${{ steps.changed.outputs.should_release_test_compile }}
       should_notification_release_regression: ${{ steps.changed.outputs.should_notification_release_regression }}
@@ -144,7 +146,7 @@ jobs:
   desktop-swift-verify:
     name: Desktop Swift Static & Test Contracts
     needs: changes
-    if: ${{ needs.changes.outputs.full_ci == 'true' && (needs.changes.outputs.should_run_static == 'true' || needs.changes.outputs.should_run_tests == 'true') }}
+    if: ${{ needs.changes.outputs.full_ci == 'true' && (needs.changes.outputs.should_run_static == 'true' || needs.changes.outputs.should_run_tests == 'true' || needs.changes.outputs.should_test_compile == 'true') }}
     runs-on: macos-26
     # Bounds manifest checks, launcher coverage, and the debug suite — a
     # wedge-guard, not a lane budget: the ceiling must admit one legitimate
@@ -248,7 +250,7 @@ jobs:
       # uploading without reducing a subsequent run. Retain only SwiftPM's
       # dependency cache, which is small and reusable when the manifest matches.
       - name: Restore SwiftPM dependency cache
-        if: ${{ always() && !cancelled() && needs.changes.outputs.should_run_tests == 'true' }}
+        if: ${{ always() && !cancelled() && (needs.changes.outputs.should_run_tests == 'true' || needs.changes.outputs.should_test_compile == 'true') }}
         id: swiftpm-cache
         uses: actions/cache/restore@v6
         with:
@@ -259,8 +261,18 @@ jobs:
             ${{ runner.os }}-desktop-swift-build-xcode266-
 
       - name: Install Swift system dependencies
-        if: ${{ always() && !cancelled() && needs.changes.outputs.should_run_tests == 'true' }}
+        if: ${{ always() && !cancelled() && (needs.changes.outputs.should_run_tests == 'true' || needs.changes.outputs.should_test_compile == 'true') }}
         run: brew install actionlint pkg-config webp
+
+      # Generated-client-only PRs keep app AND test compilation, using the same
+      # debug prebuild as the suite runner (502.55s in run 38131335528). They
+      # skip suite execution and launcher tests; all other desktop PRs retain
+      # the existing lane. Main and health events never select this shortcut.
+      - name: Compile desktop Swift app and tests
+        if: ${{ always() && !cancelled() && needs.changes.outputs.should_test_compile == 'true' }}
+        id: desktop_swift_test_compile
+        working-directory: desktop/macos
+        run: ./scripts/run-swift-ci.sh --test-compile
 
       # Debug build+test only on the PR critical path. Release compile is a
       # separate job (main push, scheduled health, manual dispatch, or a PR
@@ -433,7 +445,7 @@ jobs:
       # do not archive Desktop/.build: its PR-scoped 5.3 GB cache misses in
       # ordinary new-commit runs and increases billed macOS time on every save.
       - name: Save SwiftPM dependency cache after test attempt
-        if: ${{ always() && !cancelled() && needs.changes.outputs.should_run_tests == 'true' && steps.swiftpm-cache.outputs.cache-hit != 'true' }}
+        if: ${{ always() && !cancelled() && (needs.changes.outputs.should_run_tests == 'true' || needs.changes.outputs.should_test_compile == 'true') && steps.swiftpm-cache.outputs.cache-hit != 'true' }}
         uses: actions/cache/save@v6
         with:
           path: |
@@ -445,9 +457,11 @@ jobs:
         env:
           STATIC_REQUIRED: ${{ needs.changes.outputs.should_run_static }}
           TESTS_REQUIRED: ${{ needs.changes.outputs.should_run_tests }}
+          COMPILE_REQUIRED: ${{ needs.changes.outputs.should_test_compile }}
           STATIC_OUTCOME: ${{ steps.macos_manifest_checks.outcome }}
           LAUNCHER_OUTCOME: ${{ steps.desktop_launcher_tests.outcome }}
           TEST_OUTCOME: ${{ steps.desktop_swift_tests.outcome }}
+          COMPILE_OUTCOME: ${{ steps.desktop_swift_test_compile.outcome }}
         run: |
           require_success() {
             local required="$1"
@@ -462,6 +476,7 @@ jobs:
           require_success "$STATIC_REQUIRED" "macOS manifest checks" "$STATIC_OUTCOME"
           require_success "$TESTS_REQUIRED" "desktop launcher script tests" "$LAUNCHER_OUTCOME"
           require_success "$TESTS_REQUIRED" "desktop Swift tests" "$TEST_OUTCOME"
+          require_success "$COMPILE_REQUIRED" "desktop Swift app and test compilation" "$COMPILE_OUTCOME"
 
   desktop-swift:
     # Keep this name a literal: desktop release planning looks this check up by
@@ -482,14 +497,15 @@ jobs:
           RELEASE_RESULT: ${{ needs.desktop-swift-release-compile.result }}
           STATIC_REQUIRED: ${{ needs.changes.outputs.should_run_static }}
           TESTS_REQUIRED: ${{ needs.changes.outputs.should_run_tests }}
+          COMPILE_REQUIRED: ${{ needs.changes.outputs.should_test_compile }}
           RELEASE_REQUIRED: ${{ needs.changes.outputs.should_release_compile }}
         run: |
           if [ "$FULL_CI" != true ]; then
-            if [ "$STATIC_REQUIRED" = true ] || [ "$TESTS_REQUIRED" = true ] || [ "$RELEASE_REQUIRED" = true ]; then
+            if [ "$STATIC_REQUIRED" = true ] || [ "$TESTS_REQUIRED" = true ] || [ "$COMPILE_REQUIRED" = true ] || [ "$RELEASE_REQUIRED" = true ]; then
               notice='fork PR — a maintainer adds label ci:full, then Re-run all jobs'
               echo "::notice title=Heavy CI deferred::$notice"
               echo "Heavy CI deferred: $notice" >> "$GITHUB_STEP_SUMMARY"
-              if { [ "$STATIC_REQUIRED" = true ] || [ "$TESTS_REQUIRED" = true ]; } && [ "$VERIFY_RESULT" != skipped ]; then
+              if { [ "$STATIC_REQUIRED" = true ] || [ "$TESTS_REQUIRED" = true ] || [ "$COMPILE_REQUIRED" = true ]; } && [ "$VERIFY_RESULT" != skipped ]; then
                 echo "Deferred Desktop Swift verification must be skipped, got: $VERIFY_RESULT" >&2
                 exit 1
               fi
@@ -502,7 +518,7 @@ jobs:
             echo 'Desktop Swift Build & Tests: no heavy checks selected' | tee -a "$GITHUB_STEP_SUMMARY"
             exit 0
           fi
-          if [ "$STATIC_REQUIRED" = true ] || [ "$TESTS_REQUIRED" = true ]; then
+          if [ "$STATIC_REQUIRED" = true ] || [ "$TESTS_REQUIRED" = true ] || [ "$COMPILE_REQUIRED" = true ]; then
             test "$VERIFY_RESULT" = success
           else
             test "$VERIFY_RESULT" = skipped
@@ -651,10 +667,13 @@ jobs:
 
   # David's runner ruling: this previews the Siri release compiler without
   # making every desktop PR wait for the capacity-limited xcode-27 pool.
+  # PRs now preview only Siri/App Intents or selection-contract inputs. Other
+  # events keep the existing full/static selection, including exact-SHA main
+  # evidence and path-independent scheduled/manual health coverage.
   desktop-siri-xcode27-advisory:
     name: Desktop Siri Xcode 27 Advisory
     needs: changes
-    if: ${{ needs.changes.outputs.full_ci == 'true' && (needs.changes.outputs.should_run_static == 'true' || needs.changes.outputs.should_run_tests == 'true') }}
+    if: ${{ needs.changes.outputs.full_ci == 'true' && ((github.event_name == 'pull_request' && needs.changes.outputs.should_siri_advisory == 'true') || (github.event_name != 'pull_request' && (needs.changes.outputs.should_run_static == 'true' || needs.changes.outputs.should_run_tests == 'true'))) }}
     runs-on: xcode-27
     continue-on-error: true
     timeout-minutes: 60

@@ -22,7 +22,9 @@ class MemoryEdit(BaseModel):
     duplicate_memory_id: str | None = Field(default=None, min_length=1, max_length=128, pattern=r'^[^/]+$')
 
 
-def record_memory_change(uid: str, change: ReviewChange, edit: MemoryEdit, edit_key: str) -> ReviewChange:
+def record_memory_change(
+    uid: str, change: ReviewChange, edit: MemoryEdit, edit_key: str, *, expected_records: dict | None = None
+) -> ReviewChange:
     from models.product_memory import LedgerWriteReason, MemorySubjectScope
     from utils.memory.canonical_memory_adapter import read_canonical_memory_item
     from utils.memory.knowledge_ledger import LedgerProvenance, amend_fact
@@ -40,6 +42,7 @@ def record_memory_change(uid: str, change: ReviewChange, edit: MemoryEdit, edit_
             if data['edit_key'] != edit_key or data['memory_edit'] != edit.model_dump(exclude_none=True):
                 raise store.ReviewConflict('Change identity conflict')
             return data
+        store.validate_records(uid, tx, expected_records)
         if blocked or current is None:
             raise store.ReviewConflict('Memory unavailable or operation was undone')
         if current.ledger_schema_version != 'knowledge_ledger.v1' or current.kind.value != 'fact':

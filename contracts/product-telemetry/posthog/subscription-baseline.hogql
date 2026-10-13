@@ -1,0 +1,101 @@
+-- Weekly subscription baseline (spec §1 / workstream W2). Read-only. One row.
+--
+-- ARPMAU's numerator is NOT in this file. It is SUM(mrr_usd) from BigQuery
+-- `based-hardware.omi_finops.plan_revenue_daily` for the latest snapshot_date
+-- that is <= this row's exclusive week end. See
+-- contracts/product-telemetry/bigquery/plan-revenue-mrr.sql.
+-- ARPMAU = that MRR / mau. NULL when either side is missing.
+--
+-- Webhook-derived MRR stays NULL here until a payer census exists. Started
+-- and Churned fire only on the transition into or out of a paid id, so they
+-- omit the subscribers who were already paying and omit in-place upgrades.
+-- Summing mrr_cents from those events would publish a partial book. The
+-- columns webhook_mrr_cents, arpmau_usd, and payer_net_mrr_retention are
+-- therefore constant NULL. Started / Churned / Cancellation Scheduled counts
+-- below are movement, not the book.
+--
+-- Pass one UTC Monday week: {date_from} is Monday 00:00 and {date_to} is
+-- seven days later. The non-`$` predicate is exactly the 30 days ending at
+-- {date_to}. A join of raw events, and toStartOfWeek() inside that predicate,
+-- hit the PostHog API time limit (HTTP 504, about 11s) on project 302298
+-- on 2026-10-13. Each aggregate below is its own filtered scan.
+-- A read-only run of this file for [2026-10-05, 2026-10-12) finished in
+-- 6.22s: mau 21977, activated_users 1247, movement counts 0, and the NULL
+-- columns NULL. MAU's 30 days are [2026-09-12, 2026-10-12).
+--
+-- MAU
+--   Distinct coalesce(person_id, distinct_id) with at least one event whose
+--   name does not start with '$' in [{date_to} - 30 days, {date_to}).
+--
+-- Activation
+--   activated_users is the count of actors whose earliest `Product Value`
+--   in [{date_from} - 120 days, {date_to}) falls in [{date_from}, {date_to}).
+--   The lookback covers that event's whole history as of 2026-10 (it begins
+--   2026-09-22).
+--
+-- 30-day paid conversion
+--   paid_by_day_30 would count a `Billing Subscription Started` in
+--   [activation, activation + 30 days), and paid_conversion is that count
+--   divided by activated_users. Both stay NULL until the week is mature
+--   (week start + 37 days <= {date_to}) AND at least one Started row exists
+--   in the lookback. A zero would claim nobody pays. The join that would
+--   compute the ratio does not fit beside the MAU scan inside the API limit,
+--   so this statement leaves the columns NULL rather than timing out.
+--   Billing events are paid-plan entitlement including trials, not cash.
+--
+-- Payer net MRR retention stays NULL until Started, Churned, and a
+-- still-paid price-change event cover the payer base. That price-change
+-- event is not emitted here.
+
+SELECT
+    toString({date_from}) AS week_start,
+    toString({date_to}) AS week_end,
+    (
+        SELECT uniqExact(coalesce(person_id, distinct_id))
+        FROM events
+        WHERE timestamp >= {date_to} - INTERVAL 30 DAY
+          AND timestamp < {date_to}
+          AND NOT startsWith(event, '$')
+    ) AS mau,
+    (
+        SELECT count()
+        FROM (
+            SELECT min(timestamp) AS activated_at
+            FROM events
+            WHERE event = 'Product Value'
+              AND timestamp >= {date_from} - INTERVAL 120 DAY
+              AND timestamp < {date_to}
+            GROUP BY coalesce(person_id, distinct_id)
+            HAVING activated_at >= {date_from}
+               AND activated_at < {date_to}
+        )
+    ) AS activated_users,
+    -- NULL until the cohort is mature and a Started census exists. See header.
+    nullIf(toInt(0), 0) AS paid_by_day_30,
+    nullIf(toFloat(0), toFloat(0)) AS paid_conversion,
+    (
+        SELECT count()
+        FROM events
+        WHERE event = 'Billing Subscription Started'
+          AND timestamp >= {date_from}
+          AND timestamp < {date_to}
+    ) AS started_in_week,
+    (
+        SELECT count()
+        FROM events
+        WHERE event = 'Billing Subscription Churned'
+          AND timestamp >= {date_from}
+          AND timestamp < {date_to}
+    ) AS churned_in_week,
+    (
+        SELECT count()
+        FROM events
+        WHERE event = 'Billing Subscription Cancellation Scheduled'
+          AND timestamp >= {date_from}
+          AND timestamp < {date_to}
+    ) AS cancellation_scheduled_in_week,
+    -- NULL until a payer census exists. Do not sum webhook mrr_cents.
+    nullIf(toInt(0), 0) AS webhook_mrr_cents,
+    nullIf(toFloat(0), toFloat(0)) AS arpmau_usd,
+    nullIf(toFloat(0), toFloat(0)) AS payer_net_mrr_retention
+LIMIT 50001

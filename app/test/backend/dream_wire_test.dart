@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:omi/backend/schema/gen/dream_wire.g.dart';
+import 'package:omi/backend/schema/dream_report.dart';
 
 Map<String, dynamic> completedRun() => {
       'run_id': 'synthetic-run',
@@ -71,6 +72,10 @@ void main() {
     expect(run.feedback!.single.count, 3);
     expect(run.privacyRejected, 1);
     expect(GeneratedDreamRunsResponse.fromJson(page.toJson()).runs.single.costUsd, 0.0108);
+    final report = DreamReport.fromGenerated(page);
+    expect(report.runs.single.runId, 'synthetic-run');
+    expect(report.runs.single.edits.single.targetLabel, run.edits!.single.targetLabel);
+    expect(report.manualRunsLeft, 2);
   });
 
   test('generated POST response decodes idle, failed and deadline without an envelope', () {
@@ -89,6 +94,8 @@ void main() {
       expect(run.costUsd, 0.0);
       expect(run.edits, isEmpty);
       expect(run.errorType, json['error_type']);
+      expect(DreamRun.fromGenerated(run), isNull);
+      expect(DreamRun.fromJson({...run.toJson(), 'run_id': status})!.runId, status);
     }
   });
 

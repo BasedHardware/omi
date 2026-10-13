@@ -17,6 +17,90 @@ no-data semantics lives in [`expected-targets.prod.yaml`](./expected-targets.pro
 - Live Instatus delivery verification and notification-policy rework remain
   maintainer-approved Phase 2 work (not claimed by the inventory).
 
+## Telemetry cost cuts
+
+The 2026-10-13 audit measured 527,780 head series. Production kubelet
+`metricRelabelings` drop `kubernetes_feature_enabled` and the
+`rest_client_{request,response}_size_bytes_{bucket,sum,count}` families;
+`probesMetricRelabelings` drop `prober_probe_duration_seconds_{bucket,sum,count}`.
+No committed consumer or live Prometheus rule referenced these families.
+The main ServiceMonitor contributed 16,526 active series (about 3.1% of head).
+The chart's existing storage-operation bucket drop is preserved because Helm
+replaces relabeling lists. Probe-result counters, used latency histograms,
+HPA inputs, scrape intervals, resource requests and 10-day retention stay intact.
+
+`backend/tests/unit/test_monitoring_cost_contract.py` guards these cuts against
+committed alerts, dashboards (including vendored defaults), recording rules,
+adapter queries and Prometheus-reading code. Generate the conservative usage map
+with `python3 backend/scripts/monitoring_metric_usage.py --metrics-file <names.json>`;
+the input is a JSON name array or `/api/v1/label/__name__/values` response.
+A missing committed reference is a candidate for review, not proof that an
+operator never uses a metric in Explore. Before deploying, check live rules and
+operator-managed dashboards again; after deploying compare post-relabel samples
+and head series after compaction. Removed history ages out over the existing
+retention window. Series reductions only save dollars when capacity can be reduced.
+
+## Grafana storage
+
+Grafana 12.1.0 uses SQLite on the existing 20Gi `standard-rwo` PVC. Prod and
+dev enable `[database] wal=true`, `query_retries=10`, and
+`transaction_retries=10` without changing the database type, path or persistence.
+These options are defined in [v12.1.0 defaults.ini](https://github.com/grafana/grafana/blob/v12.1.0/conf/defaults.ini)
+and parsed in [database_config.go](https://github.com/grafana/grafana/blob/v12.1.0/pkg/services/sqlstore/database_config.go);
+their defaults are false, 0 and 5. There is no dedicated SQLite busy-timeout INI
+option in that version. Retry counts are not a wall-clock timeout guarantee.
+
+On 2026-10-12, prod logged 11 locked-database lines at 03:02Z and 67 at 09:02Z:
+alert evaluation ticks dropped, Alertmanager configuration failed, a provisioning
+GET returned 500 after 32.7 seconds, and health probes failed. WAL allows readers
+alongside a writer; retries help transient contention but do not remove SQLite's
+single-writer limit. Migrating Grafana to PostgreSQL is the proper follow-up.
+
+The values change rolls the single Grafana pod, briefly interrupting dashboards,
+alert evaluation and Grafana notifications until it is ready; the PVC is retained.
+Probe settings are unchanged. Review rendered chart probe timeout/period/failure
+threshold and measured restart evidence before tuning them.
+
+12.1.0 also defines `[unified_alerting] state_periodic_save_interval` (default 5m),
+but it only applies with `alertingSaveStatePeriodic`. Evaluate its crash/restart
+state recovery trade-off separately. `[unified_alerting.state_history] backend=loki`
+exists, but needs an authenticated writer, retention/query validation and a plan
+for existing SQL annotation history before migration. Neither is enabled here;
+alert history is retained.
+
+## Dead-man
+
+Cloud Monitoring owns **Prod Grafana external health** and **Prod Grafana dead-man:
+health failing for 5 minutes**, declared in
+[`grafana-deadman.json`](../../deploy/monitoring/grafana-deadman.json). It GETs
+`https://monitor.omi.me/api/health` over validated HTTPS every 60 seconds from
+USA, Europe and Asia Pacific, with a 10-second request timeout and exactly HTTP
+200 accepted. The policy scopes `uptime_check/check_passed` to the assigned check
+ID; more than one failing checker location for 300 seconds pages (60-second
+next-older alignment, count-false reduction grouped by check ID, count > 1).
+Detection also includes Monitoring ingestion/evaluation latency. This tests endpoint health, not end-to-end notification delivery or all
+rule evaluations, and no samples are not treated as a failed HTTP check.
+
+Before merge/deployment, create the repo or `prod` Environment variable
+`MONITORING_DEADMAN_NOTIFICATION_CHANNELS` containing comma-separated full
+`projects/based-hardware/notificationChannels/<id>` names of approved external
+channels. Unset, blank, malformed or duplicate entries fail closed. The
+monitoring workflow's prod WIF identity needs Monitoring uptime-check and
+alert-policy list/get/create/update permissions (for example Monitoring Editor);
+verify that grant through the normal IAM ownership process. No IAM is changed here.
+
+After merge, `workflow_dispatch` **Deploy Cloud Run Metrics Egress**
+(`gcp_cloud_run_metrics_egress.yml`) on `main` with `environment=prod`; it requires
+`prod` Environment approval. The ensure step runs before Helm, independently of
+Grafana, reconciles unique display names, preserves assigned check/policy and
+condition IDs, verifies writes, and fails on duplicates/API errors. Unchanged
+runs do not write. Updates patch only supported drifted uptime-check fields;
+immutable drift (resource, period, checker type or disabled state) fails with a
+manual delete-and-recreate instruction. Rerun afterward to bind the policy to
+the new check ID. After rollout, operators should confirm Grafana readiness,
+healthy multi-region samples and approved channel delivery; this change has only
+local validation, not a live acceptance receipt.
+
 ## Architecture
 
 ```
@@ -64,7 +148,7 @@ no-data semantics lives in [`expected-targets.prod.yaml`](./expected-targets.pro
 
 Note: Stackdriver exporter is scraped by Prometheus (job `prometheus-stackdriver-metrics`), then prometheus-adapter queries Prometheus for those metrics. The exporter does not feed the adapter directly.
 
-Cloud Run application metrics take a push-then-pull bridge because a public URL scrape reaches only one random autoscaled instance. Each `backend` and `desktop-backend` instance exposes its registry on loopback port 9090 to Google's Managed Service for Prometheus sidecar. The sidecar writes `prometheus.googleapis.com/omi_*` to Cloud Monitoring. A separate, rate-limited Stackdriver exporter imports only those two Cloud Run services, and Prometheus scrapes it as `cloud-run-application-metrics`. **`backend-sync` is not in that allowlist**, so `omi_sync_intake_total`, `omi_sync_lane_jobs_total`, and `omi_conversation_*` with `source="sync"` are empty in Prometheus until a follow-up adds it (see below). Sync intake and sync conversation shape are readable today through Cloud Logging of `omi_sync_intake` and `omi_conversation_shape`. See [`../../docs/runbooks/cloud-run-metrics-ingestion.md`](../../docs/runbooks/cloud-run-metrics-ingestion.md).
+Cloud Run application metrics take a push-then-pull bridge because a public URL scrape reaches only one random autoscaled instance. Each `backend` and `desktop-backend` instance exposes its registry on loopback port 9090 to Google's Managed Service for Prometheus sidecar. The sidecar writes `prometheus.googleapis.com/omi_*` to Cloud Monitoring. A separate, rate-limited Stackdriver exporter imports Cloud Run backend, desktop-backend, sync services, and notifications-job, and Prometheus scrapes it as `cloud-run-application-metrics`. The checked-in namespace allowlist includes those services and `notifications-job`; deployed ingestion still requires each sidecar and the matching metrics-egress release (see below). Sync intake and sync conversation shape are readable today through Cloud Logging of `omi_sync_intake` and `omi_conversation_shape`. See [`../../docs/runbooks/cloud-run-metrics-ingestion.md`](../../docs/runbooks/cloud-run-metrics-ingestion.md).
 
 ## Components
 
@@ -104,7 +188,7 @@ Backend-listen, pusher, and llm-gateway require bearer token auth via the `metri
 
 **3. Cloud Run GMP sidecar -> Cloud Monitoring -> isolated Stackdriver exporter**
 
-Used by: Cloud Run `backend` and `desktop-backend`. The sidecar scrapes an unauthenticated loopback-only listener on port 9090; the public port 8080 `/metrics` route remains bearer protected. The isolated exporter is intentionally separate from the 1-second load-balancer exporter so per-instance application series are read from the Cloud Monitoring API only every 30 seconds.
+Used by: Cloud Run `backend`, `desktop-backend`, sync services, and `notifications-job` (after their deployments). The sidecar scrapes an unauthenticated loopback-only listener on port 9090; the public port 8080 `/metrics` route remains bearer protected. The isolated exporter is intentionally separate from the 1-second load-balancer exporter so per-instance application series are read from the Cloud Monitoring API only every 30 seconds.
 
 ### Custom Scrape Jobs (prod)
 
@@ -118,7 +202,7 @@ These are the `additionalScrapeConfigs` and ServiceMonitor targets. Built-in kub
 | `dg_engine_metrics` | DG engine pods in `prod-omi-dg-self-hosted` | 2s | None |
 | `gpu-metrics` | all pods in `gke-managed-system` (includes DCGM exporter) | 1s | None |
 | `prometheus-stackdriver-metrics` | Load-balancer Stackdriver exporter in `prod-omi-monitoring` | 1s | None |
-| `cloud-run-application-metrics` | `prometheus.googleapis.com/omi_*` for Cloud Run `backend` and `desktop-backend` via isolated exporter | 30s | None |
+| `cloud-run-application-metrics` | `prometheus.googleapis.com/omi_*` for Cloud Run `backend`, `desktop-backend`, sync services, and `notifications-job` via isolated exporter | 30s | None |
 | ServiceMonitor: `parakeet` | parakeet pods `/metrics:9091` | 15s | None |
 
 For llm-gateway streams, `llm_gateway_requests_total{outcome="success"}` is emitted only after the provider's
@@ -186,17 +270,17 @@ Parakeet adapter rules are defined in the parakeet chart's `values.yaml` and are
 Bridges GCP Cloud Monitoring into Prometheus. Two releases share the existing Workload Identity service account (`prod-omi-prom-stackdriver-gsa`):
 
 - `prod-omi-prometheus-stackdriver-exporter` keeps the latency-sensitive load-balancer prefixes at the existing 1-second Prometheus scrape interval.
-- `prod-omi-cloud-run-metrics-exporter` reads only `prometheus.googleapis.com/omi_*`, filtered to the Cloud Run monitored-resource namespaces `backend` and `desktop-backend`; Prometheus scrapes this release every 30 seconds.
+- `prod-omi-cloud-run-metrics-exporter` reads only `prometheus.googleapis.com/omi_*`, filtered to the Cloud Run monitored-resource namespaces `backend`, `desktop-backend`, `backend-sync`, `backend-sync-backfill`, and `notifications-job`; Prometheus scrapes this release every 30 seconds.
 
 The application exporter is separate to prevent Cloud Monitoring API read cost from multiplying every per-instance application series by the legacy 1-second scrape rate. Stackdriver exporter exposes normalized names such as `stackdriver_prometheus_target_prometheus_googleapis_com_<metric>_<type>`; retain the `service_name` and `instance` labels and aggregate counters across instances in PromQL.
 
-### Follow-up: scrape Cloud Run `backend-sync`
+### Deployment verification: scrape Cloud Run `backend-sync`
 
-Not implemented here (needs `.github/` workflow and Helm values). Until it lands, `omi_sync_intake_total`, `omi_sync_lane_jobs_total`, and `omi_conversation_{duration_seconds,speech_seconds,segments}{source="sync"}` are empty in Prometheus. Alerts and the Core Features sync panel use Cloud Logging of `omi_sync_intake` / `omi_conversation_shape` instead.
+The checked-in allowlist includes sync services; until the matching sidecar and metrics-egress release deploy, `omi_sync_intake_total`, `omi_sync_lane_jobs_total`, and `omi_conversation_{duration_seconds,speech_seconds,segments}{source="sync"}` are empty in Prometheus. Alerts and the Core Features sync panel use Cloud Logging of `omi_sync_intake` / `omi_conversation_shape` instead.
 
 Concrete change, cost, verify:
 
-1. **Exporter filter** — `backend/charts/monitoring/prometheus-stackdriver-exporter/{dev,prod}_omi_cloud_run_metrics_exporter.yaml` currently restricts Cloud Monitoring reads to `resource.labels.namespace=one_of("backend","desktop-backend")`. Add `"backend-sync"` to that `one_of`. Keep the `prometheus.googleapis.com/omi_*` prefix. Do **not** fold this into the 1-second load-balancer exporter.
+1. **Exporter filter** — `backend/charts/monitoring/prometheus-stackdriver-exporter/{dev,prod}_omi_cloud_run_metrics_exporter.yaml` restricts Cloud Monitoring reads with `resource.labels.namespace=one_of(...)`, including `backend-sync`, `backend-sync-backfill`, and `notifications-job`. Apply those values through the metrics-egress workflow. Keep the `prometheus.googleapis.com/omi_*` prefix. Do **not** fold this into the 1-second load-balancer exporter.
 2. **Sidecar on the service** — `.github/workflows` that deploy `backend-sync` must attach the same GMP sidecar + `PROMETHEUS_SIDECAR_PORT=9090` loopback listener used by `backend` / `desktop-backend` (`backend/docs/runbooks/cloud-run-metrics-ingestion.md`). Without the sidecar there is nothing for Cloud Monitoring to ingest.
 3. **Cost** — GMP samples scale with `series × instances × 30s`. Shape histograms are 342 children per process (6 sources × 3 families); sync only populates `source="sync"` plus the existing `omi_sync_*` families. Sidecar adds 1 vCPU + 512 MiB per active `backend-sync` instance (same as backend). Isolated exporter API reads grow by one namespace, still at 30s.
 4. **Verify** — after deploy, `count({job="cloud-run-application-metrics", __name__=~"omi_.*", service_name="backend-sync"})` must be > 0, and `omi-cloud-run-metric-names-unnormalized` stays at 0. Then `sum(rate(omi_conversation_duration_seconds_count{source="sync"}[5m]))` and `sum(rate(omi_sync_intake_total[5m]))` should match Cloud Logging counts of `omi_conversation_shape source=sync` and `omi_sync_intake` within the 30s exporter offset. Do not enable a Prometheus alert on those series before this proof.
@@ -254,7 +338,7 @@ Most are bundled with kube-prometheus-stack and auto-provisioned. Custom dashboa
 | Kubernetes / Scheduler | `2e6b6a3b4bddf1427b3a55aa1311c656` | `kubernetes-mixin` | Bundled |
 | Node Exporter / AIX | `7e0a61e486f727d763fb1d86fdd629c2` | `node-exporter-mixin` | Bundled |
 | Node Exporter / MacOS | `629701ea43bf69291922ea45f4a87d37` | `node-exporter-mixin` | Bundled |
-| Omi Core Features | `omi-core-features` | — | **Custom** — user-outcome view: journeys, subscriptions, LLM gateway, capture pipeline, PTT transport (realtime_voice client journey), conversation shape (length p10/p50/p90 and <2min share by source). Conversation-shape histograms for `source="sync"` and `omi_sync_intake_total` are empty in Prometheus until backend-sync is scraped; the collapsed row's third panel reads Cloud Logging of `omi_sync_intake` instead. The finalization gauges it reads are one global value republished by every backend-listen replica: aggregate with `max()`, never `sum()`. |
+| Omi Core Features | `omi-core-features` | — | **Custom** — user-outcome view: journeys, subscriptions, LLM gateway, capture pipeline, PTT transport (realtime_voice client journey), conversation shape (length p10/p50/p90 and <2min share by source), and conversation search freshness (summary-vector writes and retrieval degradation). Conversation-shape histograms for `source="sync"` and `omi_sync_intake_total` are empty in Prometheus until backend-sync is scraped; the collapsed row's third panel reads Cloud Logging of `omi_sync_intake` instead. The finalization gauges it reads are one global value republished by every backend-listen replica: aggregate with `max()`, never `sum()`. |
 | Node Exporter / Nodes | `7d57716318ee0dddbac5a7f451fb7753` | `node-exporter-mixin` | Bundled |
 | Node Exporter / USE Method / Cluster | `3e97d1d02672cdd0861f4c97c64f89b2` | `node-exporter-mixin` | Bundled |
 | Node Exporter / USE Method / Node | `fac67cfbe174d3ef53eb473d73d9212f` | `node-exporter-mixin` | Bundled |
@@ -606,9 +690,14 @@ curl -s -X POST -H "Authorization: Bearer $PROD_GRAFANA_TOKEN" \
 
 ### Alert Rules
 
-Alerting is configured through Grafana unified alerting (not Prometheus AlertManager rules directly). Alert screenshots are enabled via the Grafana image renderer.
+Alerting is configured through Grafana unified alerting (not Prometheus AlertManager rules directly). Alert screenshots are disabled: renders call back into Grafana and stalled it under load (2026-10-13). Notifications link to the dashboard panel instead.
 
 Loki ruler is configured to send alerts to AlertManager at `http://prod-kube-prometheus-stack-alertmanager:9093`.
+
+### Telegram notification quality
+
+See [template, severity timing, examples and supervisor rollout](notifications/README.md).
+Rules own direct notification timing; Helm does not provision the contact or template.
 
 ### Human-Impact Alert Contract
 
@@ -638,11 +727,16 @@ live Grafana provisioning (`--mode fleet`). That run prints committed-but-absent
 live-but-uncommitted, present-but-paused, and present-but-divergent UIDs. Default
 `--fail-on none` reports drift without failing; `--fail-on gated` fails only on
 UIDs listed in `live-alert-gate.json`. The monitoring workflow uses `--mode
-import` to upsert only committed rules in `live-stt.json` by stable UID (POST
+import` to upsert the committed live-STT allowlist and the two Redis cache connection rules
+(`omi-redis-cache-conn-warn`/`page` from `resilience.json`) by stable UID (POST
 when absent, PUT when present), then runs `--mode fleet --alert-set live-stt
 --fail-on gated`. The import verifies each rule's `alert_identity` and Telegram
 receiver and confirms that receiver exists with resolve notifications enabled;
-it never deletes or pauses other rules. Soniox runway UIDs remain pending until
+it never deletes or pauses other rules. The `live-stt` verification scope includes those Redis rules and fails closed
+when either is absent, paused, or divergent. They are Grafana-managed alerts,
+not PrometheusRule CRDs. Their `component="other"` selector matches the shared
+fallback bucket for `redis_cache`; cache-write children are initialized at zero.
+Soniox runway UIDs remain pending until
 their metrics have a data source. The token is read from a mode-0600 file and
 neither token material nor contact-point settings are logged. Split-vs-combined
 equality in unit tests is not evidence a rule is live; only the workflow's
@@ -692,9 +786,10 @@ specifically for failures that stay green on every other signal, and are documen
 Thresholds on these rules are set from measured production distributions, not intuition, and the
 measurement belongs in the rule's `threshold` annotation and in the runbook.
 
-A rule must not be added for a signal that is not yet ingested. `omi-journey-signal-dead` excludes
-`journey="chat_response"` because that counter is emitted from Cloud Run, which Prometheus does not
-scrape; adding it before an ingestion path exists would page permanently and get muted.
+A rule must not be added for a signal that is not yet ingested. The Cloud Run bridge now ingests
+`journey="chat_response"`; `omi-journey-signal-dead` covers it with a chat-agent traffic gate.
+[Proposed journey SLOs](./SLOS.md) record measured ingestion, targets and backtests; sync/upload
+remains withheld until a valid terminal-outcome pair is ingested.
 
 Parakeet stream-capacity alerts use the existing `parakeet_active_streams` gauge divided by ready Parakeet replicas:
 
@@ -810,6 +905,23 @@ spec:
 Place alert YAML in the `alerts/` directory and configure Grafana sidecar to load from it.
 
 ### Metrics Contract
+
+`omi_stt_stream_close_total{provider,reason}` pre-creates 55 zero-valued children:
+the four bounded providers plus the `unknown` fallback, crossed with the eleven
+bounded close reasons in `utils/stt/stream_close.py`. Initialization runs on that
+module's import (including direct Soniox users) and beside the connect initializer
+in `utils/stt/streaming.py`. It is idempotent and never resets a count. A zero
+must be scraped before a close for `increase()` to observe the first event;
+events before the first scrape still cannot be recovered by this initialization.
+
+`tests/unit/test_monitoring_stt_metric_zero_init.py` checks every Prometheus
+expression in `alerts/*.json` against the metrics defined in `utils/metrics.py`
+and `llm_gateway/gateway/metrics.py`. Gauges and unlabelled metrics qualify;
+labelled counters and histograms must expose startup children or have an explicit
+one-line reason in `DECLARED_SPARSE`. The allowlist records existing debt and
+must shrink as initialization is added. Exporter/GPU/other service registries and
+full selector coverage are outside this family-level contract; stream-close
+selector coverage has its own unit test.
 
 Each service that exposes Prometheus metrics should document them alongside its ServiceMonitor or in its chart's values comments. Minimum contract:
 
@@ -993,3 +1105,48 @@ helm -n dev-omi-monitoring --kube-context "$DEV_CONTEXT" upgrade --install dev-o
 2. Check Alloy collects from the right namespace (configured in Alloy values)
 3. Verify Loki gateway is reachable and basic auth secret exists
 4. Query in Grafana Explore with Loki datasource: `{namespace="{env}-omi-backend"}`
+
+## Alert admission backtest
+
+`backend/scripts/alert_backtest.py` is read-only and uses only the Python standard
+library. `--lint` runs offline in the existing local/CI checks manifest and the
+monitoring unit suite. Regenerate the committed metric-name snapshot with:
+
+```bash
+source ~/.local/bin/gcp-agent-env.sh ro-prod
+python3 backend/scripts/alert_backtest.py \
+  --kube-context gke_based-hardware_us-central1_prod-omi-gke --refresh-inventory
+python3 backend/scripts/alert_backtest.py --lint
+python3 backend/scripts/alert_backtest.py \
+  --kube-context gke_based-hardware_us-central1_prod-omi-gke \
+  --uids omi-parakeet-stream-capacity-warning --json-output /tmp/backtest.json \
+  --markdown-output /tmp/backtest.md
+```
+
+Direct Prometheus access uses `--prom-url`. `--rules` accepts exported JSON files;
+without it all `alerts/*.json` are loaded. The replay uses retained history up to
+10 days, with the rule's `interval` or five minutes. `--step` must be at least a
+minute. Sampling can miss shorter incidents, and the initial pending state is
+unknown; episodes at the window edges are censored. No deployment is authorized
+by a quiet replay alone: inspect current raw selector counts and traffic gates.
+
+The evaluator preserves series labels, reduces each range frame separately,
+interprets math without Python `eval`, and implements threshold/classic nodes.
+Range datasource queries use their declared frame resolution and one bounded
+request per evaluation (potentially slow); resample, ambiguous joins and unknown
+nodes fail closed as `needs-human`. Non-Prometheus rules require separate evidence.
+`NoData` and `KeepLast` intervals are reported as unknown, requiring human review;
+DatasourceNoData routing is not simulated. Long lookbacks near the retention edge
+are flagged as incomplete; review the warmed portion separately. Pages/week counts instance starts,
+not Telegram messages or repeat notifications. Noise means over 5% firing time;
+flapping means at least ten episodes no longer than two steps or ten minutes.
+
+Lint checks inventory names, dependency/condition structure, finite thresholds,
+boolean threshold units, reduction/math support and pending periods on rate,
+ratio or average queries. `legacy_debt` pins unchanged pre-existing findings to
+a rule hash; any rule edit invalidates the exception. It is debt, never deployment
+approval. The snapshot is historical presence, not proof of current ingestion.
+Explicit `admission_holds` require a rule to stay paused until its reviewed hold
+is removed. Live replay exits nonzero on dead, noisy or unproven results.
+The CI gate catches structural regressions; live threshold calibration remains
+a required admission review before an operator sends a rule to Telegram.

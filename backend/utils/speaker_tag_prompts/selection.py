@@ -1,13 +1,8 @@
-"""Pick the few speaker clips worth asking the user about.
-Pure: no IO. Feeds decoded conversations from the last 48 hours and returns a ranked, capped list of prompts:
-1. "Is this you?" on the loudest unnamed voice when owner was missed or has no voiceprint.
-2. "Is this <name>?" on an automatic match nobody has reviewed.
-3. "Is this you?" on an automatic owner label nobody has reviewed.
-4. "Who is this?" on the unnamed voices that talked the most.
-With the pinned-speaker prior, an unnamed voice that nearly matched a pinned person asks
-"Is this <name>?" instead, and "Who is this?" offers people ranked by recorded voice match.
-Voices the user marked Not a Person are never asked about again.
-Only clean clips qualify: one speaker, consecutive segments >= MIN_CLIP_SECONDS, not decided, with stored audio.
+"""Pure selection of a bounded daily set of speaker questions.
+
+Owner checks use supplied pooled voice evidence nearest distance .50 and its
+centroid representative, with one complete excerpt per conversation. Paid
+person cards retain longest-run selection and the optional pinned prior.
 """
 
 from __future__ import annotations
@@ -27,10 +22,20 @@ from models.speaker_tag_prompts import (
 from models.transcript_segment import legacy_conversation_segment_id
 from utils.manual_speaker_assignments import manual_rejected_speakers
 from utils.speaker_tag_prompts.coverage import prompt_window_covered
+from utils.speaker_tag_prompts.owner_confirmation import (
+    FIELD,
+    MAX_SECONDS,
+    MIN_SECONDS,
+    StaleOwnerConfirmation,
+    source_key,
+    validate_window,
+    label_identity,
+    baseline_origin,
+)
 
 PROMPT_WINDOW = timedelta(hours=48)
-MIN_CLIP_SECONDS = 5.0
-MAX_CLIP_SECONDS = 10.0
+MIN_CLIP_SECONDS = MIN_SECONDS
+MAX_CLIP_SECONDS = MAX_SECONDS
 MAX_GAP_SECONDS = 1.5
 DEFAULT_LIMIT = 4
 MAX_PER_CONVERSATION = 2
@@ -87,13 +92,7 @@ def speaker_id_of(segment: Mapping[str, Any]) -> int:
 
 
 def _identity(segment: Mapping[str, Any]) -> str:
-    if segment.get('speaker_identity_status') == 'ambiguous':
-        return 'none'
-    if segment.get('is_user'):
-        return 'user'
-    if segment.get('person_id'):
-        return f"person:{segment['person_id']}"
-    return 'none'
+    return label_identity(segment)
 
 
 def _normalized_segments(conversation: Mapping[str, Any]) -> List[Dict[str, Any]]:
@@ -116,7 +115,7 @@ def _manually_decided(conversation: Mapping[str, Any]) -> Tuple[set, set]:
     return speakers, segments
 
 
-def _runs(segments: Sequence[Mapping[str, Any]], decided_segments: set) -> List[_Run]:
+def _runs(segments: Sequence[Mapping[str, Any]], decided_segments: set, *, split_identity: bool = True) -> List[_Run]:
     """Maximal same-speaker, same-identity stretches with no other voice in between."""
     runs: List[_Run] = []
     current: List[Mapping[str, Any]] = []
@@ -126,7 +125,9 @@ def _runs(segments: Sequence[Mapping[str, Any]], decided_segments: set) -> List[
             runs.append(
                 _Run(
                     speaker_id=current[0]['speaker_id'],
-                    identity=_identity(current[0]),
+                    identity=(
+                        _identity(current[0]) if len({_identity(segment) for segment in current}) == 1 else 'mixed'
+                    ),
                     segment_ids=tuple(s['id'] for s in current),
                     start=float(current[0].get('start') or 0),
                     end=max(float(s.get('end') or 0) for s in current),
@@ -147,7 +148,9 @@ def _runs(segments: Sequence[Mapping[str, Any]], decided_segments: set) -> List[
             gap = float(segment.get('start') or 0) - float(previous.get('end') or 0)
             if (
                 segment['speaker_id'] != previous['speaker_id']
-                or _identity(segment) != _identity(previous)
+                or (split_identity and _identity(segment) != _identity(previous))
+                or segment.get('speaker_id_scope') != previous.get('speaker_id_scope')
+                or source_key(segment) != source_key(previous)
                 or segment.get('audio_capture_run') != previous.get('audio_capture_run')
                 or gap > MAX_GAP_SECONDS
             ):
@@ -155,6 +158,44 @@ def _runs(segments: Sequence[Mapping[str, Any]], decided_segments: set) -> List[
         current.append(segment)
     flush()
     return runs
+
+
+def complete_owner_runs(conversation: Mapping[str, Any]) -> List[_Run]:
+    """Partition eligible speech into complete, uncropped, source-consistent excerpts."""
+    if conversation.get(FIELD):
+        return []
+    segments = _normalized_segments(conversation)
+    speakers, decided = _manually_decided(conversation)
+    by_id = {s['id']: s for s in segments}
+    result = []
+    for run in _runs(segments, decided, split_identity=False):
+        if str(run.speaker_id) in speakers:
+            continue
+        current = []
+        for sid in run.segment_ids:
+            segment = by_id[sid]
+            if current and float(segment.get('end') or 0) - float(current[0]['start']) > MAX_CLIP_SECONDS:
+                current = []
+            current.append(segment)
+            start, end = float(current[0].get('start') or 0), float(segment.get('end') or 0)
+            if end - start > MAX_CLIP_SECONDS:
+                current = []
+                continue
+            if end - start < MIN_CLIP_SECONDS:
+                continue
+            ids = tuple(s['id'] for s in current)
+            text = ' '.join((s.get('text') or '').strip() for s in current).strip()
+            try:
+                validate_window(conversation, ids, start, end)
+            except StaleOwnerConfirmation:
+                current = []
+                continue
+            if text:
+                identities = {_identity(segment) for segment in current}
+                identity = next(iter(identities)) if len(identities) == 1 else 'mixed'
+                result.append(_Run(run.speaker_id, identity, ids, start, end, text))
+            current = []
+    return result
 
 
 def _clip_window(run: _Run) -> Tuple[float, float]:
@@ -262,6 +303,7 @@ def select_prompts(
     verify: Optional[Callable[[Mapping[str, Any], SpeakerTagPrompt, str], bool]] = None,
     max_verifications: int = 4,
     on_skip: Optional[Callable[[str], None]] = None,
+    owner_evidence: Optional[Callable[[Mapping[str, Any], List[_Run]], Optional[Tuple[_Run, float]]]] = None,
 ) -> List[SpeakerTagPrompt]:
     """Return at most ``limit`` prompts, best first. ``people`` maps person id to name."""
     recent_people = [pid for pid in recent_person_ids(conversations) if pid in people]
@@ -279,7 +321,6 @@ def select_prompts(
             talk[segment['speaker_id']] = talk.get(segment['speaker_id'], 0.0) + max(
                 0.0, float(segment.get('end') or 0) - float(segment.get('start') or 0)
             )
-        has_owner = any(_identity(segment) == 'user' for segment in segments)
         labeled_here = {s['person_id'] for s in segments if s.get('person_id')}
 
         best_run: Dict[Tuple[int, str], _Run] = {}
@@ -331,8 +372,8 @@ def select_prompts(
                 conversation_started_at=started,
                 speaker_id=run.speaker_id,
                 segment_ids=list(run.segment_ids),
-                clip_start=round(clip_start, 3),
-                clip_end=round(clip_end, 3),
+                clip_start=clip_start if kind == SpeakerTagPromptKind.owner_check else round(clip_start, 3),
+                clip_end=clip_end if kind == SpeakerTagPromptKind.owner_check else round(clip_end, 3),
                 excerpt=_excerpt(excerpt),
                 **extra,
             )
@@ -346,10 +387,24 @@ def select_prompts(
             if expected_text:
                 candidates.append(_Candidate(score + freshness, prompt, conversation, expected_text))
 
+        if owner_has_voice and owner_evidence is not None:
+            owner = owner_evidence(
+                conversation,
+                [
+                    run
+                    for run in complete_owner_runs(conversation)
+                    if f'{conversation_id}:{run.speaker_id}' not in ignored
+                ],
+            )
+            if owner is not None:
+                run, distance = owner
+                baseline = baseline_origin([segment for segment in segments if segment['id'] in run.segment_ids])
+                # Mixed is a server quality category, not a released wire enum.
+                origin = SpeakerTagPromptOrigin.unnamed if baseline == 'mixed' else SpeakerTagPromptOrigin(baseline)
+                add(run, SpeakerTagPromptKind.owner_check, origin, 4.0 - abs(distance - 0.50))
+
         for (_, identity), run in best_run.items():
-            if identity == 'user':
-                add(run, SpeakerTagPromptKind.owner_check, SpeakerTagPromptOrigin.auto_user, 2.0)
-            elif identity.startswith('person:') and named_allowed:
+            if identity.startswith('person:') and named_allowed:
                 person_id = identity.split(':', 1)[1]
                 if person_id in people:
                     add(
@@ -361,14 +416,12 @@ def select_prompts(
                         suggested_person_name=people[person_id],
                     )
 
-        for rank, run in enumerate(unnamed):
+        for run in unnamed:
             voice = run_voice_candidates(segments, run.segment_ids) if prior_enabled else {}
             near = next(
                 (pid for pid, entry in voice.items() if entry['suggest'] and pid in pinned and pid in people), None
             )
-            if rank == 0 and (not has_owner or not owner_has_voice):
-                add(run, SpeakerTagPromptKind.owner_check, SpeakerTagPromptOrigin.unnamed, 3.0)
-            elif named_allowed and near is not None and near not in labeled_here:
+            if named_allowed and near is not None and near not in labeled_here:
                 add(
                     run,
                     SpeakerTagPromptKind.confirm_person,
@@ -393,13 +446,16 @@ def select_prompts(
     per_conversation: Counter = Counter()
     per_speaker: set = set()
     owner_checks = 0
+    owner_conversations = set()
     attempted = 0
     for candidate in candidates:
         prompt = candidate.prompt
         speaker_key = (prompt.conversation_id, prompt.speaker_id)
         if per_conversation[prompt.conversation_id] >= MAX_PER_CONVERSATION or speaker_key in per_speaker:
             continue
-        if prompt.kind == SpeakerTagPromptKind.owner_check and owner_checks >= MAX_OWNER_CHECKS:
+        if prompt.kind == SpeakerTagPromptKind.owner_check and (
+            owner_checks >= MAX_OWNER_CHECKS or prompt.conversation_id in owner_conversations
+        ):
             continue
         if verify is not None:
             if attempted >= max_verifications:
@@ -409,6 +465,7 @@ def select_prompts(
                 continue
         if prompt.kind == SpeakerTagPromptKind.owner_check:
             owner_checks += 1
+            owner_conversations.add(prompt.conversation_id)
         chosen.append(prompt)
         per_conversation[prompt.conversation_id] += 1
         per_speaker.add(speaker_key)

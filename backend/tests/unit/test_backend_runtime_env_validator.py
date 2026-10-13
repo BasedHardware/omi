@@ -68,6 +68,7 @@ def render_cloud_run_state(env_config: dict, monkeypatch) -> dict:
 
 def with_memory_env(payload: str) -> str:
     memory_env = '''\
+        {"name": "REDIS_DB_PORT", "value": "13151"},
         {"name": "FREE_TIER_LOCAL_PROCESSING", "value": "true"},
         {"name": "FREE_TIER_LOCAL_PROCESSING_COHORT", "value": ""},
         {"name": "FREE_TIER_EMERGENCY_STOP", "value": "false"},
@@ -131,7 +132,8 @@ def with_conversation_notes_v2_env(payload: str) -> str:
     )
     payload = re.sub(
         r'("backend":\s*\{.*?"env":\s*\[\s*\{"name": "GOOGLE_CLOUD_PROJECT", "value": "based-hardware"\},)',
-        flags + r'\n        {"name": "BASIC_PLAN_GATE_PROXY_EMBED_ENABLED", "value": "true"},',
+        flags + r'\n        {"name": "OMI_VERTEX_RESERVATION_PROJECT", "value": "based-hardware-dev"},'
+        r'\n        {"name": "BASIC_PLAN_GATE_PROXY_EMBED_ENABLED", "value": "true"},',
         payload,
         count=1,
         flags=re.DOTALL,
@@ -139,7 +141,11 @@ def with_conversation_notes_v2_env(payload: str) -> str:
     return re.sub(
         r'("backend-sync":\s*\{.*?"env":\s*\[\s*\{"name": "GOOGLE_CLOUD_PROJECT", "value": "based-hardware"\},)',
         # backend-sync finalizes conversations, so it reads this environment's frame docs.
-        flags + r'\n        {"name": "BUCKET_SCREEN_FRAMES", "value": "based-hardware-dev-screen-frames"},',
+        flags + r'\n        {"name": "OMI_VERTEX_RESERVATION_PROJECT", "value": "based-hardware-dev"},'
+        r'\n        {"name": "BUCKET_SCREEN_FRAMES", "value": "based-hardware-dev-screen-frames"},'
+        r'\n        {"name": "TYPESENSE_HOST_PORT", "value": "443"},'
+        r'\n        {"name": "TYPESENSE_HOST", "valueFrom": {"secretKeyRef": {"name": "TYPESENSE_HOST", "key": "latest"}}},'
+        r'\n        {"name": "TYPESENSE_API_KEY", "valueFrom": {"secretKeyRef": {"name": "TYPESENSE_API_KEY", "key": "latest"}}},',
         payload,
         count=1,
         flags=re.DOTALL,
@@ -376,32 +382,23 @@ def with_screen_frame_egress_env(payload: str) -> str:
 
 
 def with_cloud_run_oauth_secrets(payload: str) -> str:
-    payload = with_backend_public_shared_chat_auth_env(
-        with_wake_word_adjudication_env(
-            with_jev_flags_env(
-                with_capture_jev_shadow_env(
-                    with_conversation_notes_v2_env(
-                        with_backend_pusher_env(
-                            with_parity_pack_env(
-                                with_listen_finalization_orphan_env(
-                                    with_belief_model_env(
-                                        with_memory_env(
-                                            with_sync_ledger_fence_mode(with_account_cutover_enforcement(payload))
-                                        )
-                                    )
-                                )
-                            )
-                        )
-                    )
-                )
-            )
-        )
-    )
-    payload = with_firestore_read_ledger_env(
-        with_screen_frame_egress_env(with_capture_evidence_env(with_audio_timeline_span_env(payload)))
-    )
-    # The final-pass shadow is dark by default on the dev finalization worker.
-    # Its deployed-state fixture must carry every explicit runtime binding.
+    payload = with_account_cutover_enforcement(payload)
+    payload = with_sync_ledger_fence_mode(payload)
+    payload = with_memory_env(payload)
+    payload = with_belief_model_env(payload)
+    payload = with_listen_finalization_orphan_env(payload)
+    payload = with_parity_pack_env(payload)
+    payload = with_backend_pusher_env(payload)
+    payload = with_conversation_notes_v2_env(payload)
+    payload = with_capture_jev_shadow_env(payload)
+    payload = with_jev_flags_env(payload)
+    payload = with_wake_word_adjudication_env(payload)
+    payload = with_backend_public_shared_chat_auth_env(payload)
+    payload = with_audio_timeline_span_env(payload)
+    payload = with_capture_evidence_env(payload)
+    payload = with_screen_frame_egress_env(payload)
+    payload = with_firestore_read_ledger_env(payload)
+    # Carry the dev finalization worker's explicit dark shadow bindings.
     payload = re.sub(
         r'("backend-sync":\s*\{.*?"env":\s*\[\s*\{"name": "GOOGLE_CLOUD_PROJECT", "value": "based-hardware"\},)',
         r'\1\n        {"name": "TRANSCRIPTION_SHADOW_ENABLED", "value": "false"},'
@@ -419,9 +416,7 @@ def with_cloud_run_oauth_secrets(payload: str) -> str:
         payload,
         flags=re.MULTILINE,
     )
-    # These fixtures exercise unrelated gateway and secret failures, so include
-    # the default-on translation bindings declared for the serving backend.
-    # Owner decision 2026-09-29: on-demand ships enabled; flags are kill switches.
+    # 2026-09-29: translation ships enabled; keep unrelated failure fixtures complete.
     translation_defaults = {
         'TRANSLATION_DEMAND_SHADOW_ENABLED': 'false',
         'TRANSLATION_DEMAND_GATE_ENABLED': 'true',
@@ -438,12 +433,7 @@ def with_cloud_run_oauth_secrets(payload: str) -> str:
         'TRANSLATION_ONDEMAND_GLOBAL_DAILY_CHARS': '1000000000',
         'TRANSLATION_ONDEMAND_MAX_CATCHUP_PAGES': '4',
     }
-    entries = ',\n'.join(
-        '        ' + json.dumps({'name': name, 'value': value})
-        for name, value in {
-            **translation_defaults,
-        }.items()
-    )
+    entries = ',\n'.join('        ' + json.dumps({'name': k, 'value': v}) for k, v in translation_defaults.items())
     payload = re.sub(
         r'("backend":\s*\{.*?"env":\s*\[\s*\{"name": "GOOGLE_CLOUD_PROJECT", "value": "based-hardware"\},)',
         lambda match: match.group(1) + '\n' + entries + ',',
@@ -451,8 +441,7 @@ def with_cloud_run_oauth_secrets(payload: str) -> str:
         count=1,
         flags=re.DOTALL,
     )
-    # Gateway/secret fixtures must include the task-preservation binding on each
-    # Cloud Run conversation-processing host, leaving their intended error intact.
+    # Preserve task bindings on every Cloud Run processing host.
     payload = re.sub(
         r'("backend(?:-sync|-sync-backfill|-integration)?":\s*\{.*?"env":\s*\[)',
         r'\1\n        {"name": "ACTION_ITEM_REFRESH_PRESERVE_ENABLED", "value": "true"},',
@@ -463,7 +452,8 @@ def with_cloud_run_oauth_secrets(payload: str) -> str:
         r'("backend(?:-sync|-sync-backfill|-integration)?":\s*\{.*?"env":\s*\[)',
         r'\1\n        {"name": "SYNC_LINEAGE_S1_REQUIRED", "value": "true"},'
         r'\n        {"name": "SYNC_WAL_AUDIO_COVERAGE_ENABLED", "value": "true"},'
-        r'\n        {"name": "SYNC_LINEAGE_LIVE_DEDUPE_ENABLED", "value": "true"},',
+        r'\n        {"name": "SYNC_LINEAGE_LIVE_DEDUPE_ENABLED", "value": "true"},'
+        r'\n        {"name": "SYNC_SAFETY_WAL_DEDUPE_ENABLED", "value": "true"},',
         payload,
         flags=re.DOTALL,
     )
@@ -473,8 +463,7 @@ def with_cloud_run_oauth_secrets(payload: str) -> str:
         payload,
         flags=re.DOTALL,
     )
-    # Unrelated failure fixtures still need the explicit ledger bindings on
-    # each host declared by the runtime manifest.
+    # Carry each host's explicit ledger bindings.
     payload = re.sub(
         r'("(?P<service>backend(?:-sync|-sync-backfill|-integration)?)":\s*\{.*?"env":\s*\[)',
         lambda match: match.group(1)
@@ -498,13 +487,11 @@ def with_cloud_run_oauth_secrets(payload: str) -> str:
         r'apiKey = "(phc_[^"]+)"',
         (ROOT.parent / 'desktop/macos/Desktop/Sources/PostHogManager.swift').read_text(),
     )[1]
-    entries = ',\n'.join(
-        '        ' + json.dumps({'name': name, 'value': value})
-        for name, value in {
-            'PROACTIVITY_V2_POSTHOG_TOKEN': public_token,
-            'PROACTIVITY_V2_POSTHOG_HOST': 'https://us.posthog.com',
-        }.items()
-    )
+    public_bindings = {
+        'PROACTIVITY_V2_POSTHOG_TOKEN': public_token,
+        'PROACTIVITY_V2_POSTHOG_HOST': 'https://us.posthog.com',
+    }
+    entries = ',\n'.join('        ' + json.dumps({'name': k, 'value': v}) for k, v in public_bindings.items())
     payload = re.sub(
         r'("backend(?:-sync|-sync-backfill|-integration)?":\s*\{.*?"env":\s*\[)',
         lambda match: match.group(1) + '\n' + entries + ',',
@@ -1249,15 +1236,35 @@ def test_firestore_readiness_contract_rejects_backend_deployment_credentials(wor
     assert any('must not receive backend deployment credentials' in error.message for error in errors)
 
 
-def test_repo_prod_rendered_cloud_run_state_matches_manifest(monkeypatch):
+@pytest.mark.parametrize('service', ['backend', 'backend-sync'])
+@pytest.mark.parametrize(
+    'setting,stale',
+    [
+        ('DREAM_AGENT_FEEDBACK_SALT', None),
+        ('DREAM_AGENT_FEEDBACK_SALT', '1'),
+        ('DREAM_AGENT_PASSES_PER_DAY', '4'),
+        ('DREAM_AGENT_MANUAL_RUNS_PER_DAY', '3'),
+        ('DREAM_AGENT_DAILY_USD', '20'),
+    ],
+)
+def test_repo_prod_rendered_cloud_run_state_matches_manifest(monkeypatch, service, setting, stale):
     validator = load_validator()
     manifest = validator._load_yaml(validator.DEFAULT_MANIFEST)
     env_config = validator._get_env_config(manifest, 'prod')
     rendered_state = render_cloud_run_state(env_config, monkeypatch)
-
     errors = validator._validate_cloud_run(env_config, rendered_state, strict_provisional=False)
-
     assert errors == []
+    entries = rendered_state['services'][service]['env']
+    entry = next(item for item in entries if item['name'] == setting)
+    if stale is None:
+        entries.remove(entry)
+    elif setting in {'DREAM_AGENT_FEEDBACK_SALT'}:
+        entry['valueFrom']['secretKeyRef']['key'] = stale
+    else:
+        entry['value'] = stale
+    errors = validator._validate_cloud_run(env_config, rendered_state, strict_provisional=False)
+    assert len(errors) == 1 and errors[0].scope == f'cloud_run/{service}'
+    assert setting in errors[0].message
 
 
 def test_dev_cloud_run_pusher_contract_rejects_legacy_and_non_listener_bindings(monkeypatch):
@@ -3540,3 +3547,72 @@ def test_production_speaker_match_scores_on_all_computing_and_persisting_hosts()
         ROOT / 'charts/pusher/prod_omi_pusher_values.yaml',
     ):
         assert parse_env_entries(chart.read_text())['SPEAKER_MATCH_SCORES_ENABLED'].value == 'true'
+
+
+def _posthog_billing_key_bindings(node, path='manifest'):
+    found = []
+    if isinstance(node, dict):
+        for key, value in node.items():
+            child = f'{path}.{key}'
+            if key == 'POSTHOG_BILLING_API_KEY':
+                found.append((child, value))
+            else:
+                found.extend(_posthog_billing_key_bindings(value, child))
+    elif isinstance(node, list):
+        for index, value in enumerate(node):
+            found.extend(_posthog_billing_key_bindings(value, f'{path}[{index}]'))
+    return found
+
+
+def test_prod_backend_billing_key_is_public_project_token(monkeypatch):
+    validator = load_validator()
+    manifest = validator._load_yaml(validator.DEFAULT_MANIFEST)
+    prod_backend = manifest['environments']['prod']['cloud_run']['services']['backend']
+    token = prod_backend['env']['PROACTIVITY_V2_POSTHOG_TOKEN']['value']
+    assert token.startswith('phc_')
+    assert prod_backend['env']['POSTHOG_BILLING_API_KEY'] == {'value': token, 'category': 'telemetry'}
+    assert prod_backend['env']['POSTHOG_HOST'] == {'value': 'https://us.posthog.com', 'category': 'telemetry'}
+    assert 'POSTHOG_PROJECT_API_KEY' not in prod_backend['env']
+    assert 'POSTHOG_PROJECT_API_KEY' not in prod_backend['secrets']
+    classification = json.loads((ROOT.parent / 'config/deployment-setting-classification.json').read_text())
+    assert 'POSTHOG_BILLING_API_KEY' in classification['kinds']['config']
+    assert 'POSTHOG_BILLING_API_KEY' not in classification['kinds']['secret']
+    assert 'POSTHOG_PROJECT_API_KEY' in classification['kinds']['secret']
+    assert _posthog_billing_key_bindings(manifest) == [
+        (
+            'manifest.environments.prod.cloud_run.services.backend.env.POSTHOG_BILLING_API_KEY',
+            {'value': token, 'category': 'telemetry'},
+        )
+    ]
+
+    env_config = validator._get_env_config(manifest, 'prod')
+    deployed = render_cloud_run_state(env_config, monkeypatch)
+    for service_name, service in deployed['services'].items():
+        matches = [item for item in service['env'] if item['name'] == 'POSTHOG_BILLING_API_KEY']
+        if service_name == 'backend':
+            assert matches == [{'name': 'POSTHOG_BILLING_API_KEY', 'value': token}]
+        else:
+            assert matches == []
+        assert all(item['name'] != 'POSTHOG_PROJECT_API_KEY' for item in service['env'])
+    for job in deployed['jobs'].values():
+        assert all(item['name'] != 'POSTHOG_BILLING_API_KEY' for item in job['env'])
+    assert validator._validate_cloud_run(env_config, deployed, strict_provisional=False) == []
+
+
+@pytest.mark.parametrize('mutation', ['remove', 'placeholder', 'secret_ref'])
+def test_prod_backend_billing_key_rejects_non_public_binding(monkeypatch, mutation):
+    validator = load_validator()
+    manifest = validator._load_yaml(validator.DEFAULT_MANIFEST)
+    env_config = validator._get_env_config(manifest, 'prod')
+    deployed = render_cloud_run_state(env_config, monkeypatch)
+    entries = deployed['services']['backend']['env']
+    entry = next(item for item in entries if item['name'] == 'POSTHOG_BILLING_API_KEY')
+    if mutation == 'remove':
+        entries.remove(entry)
+    elif mutation == 'placeholder':
+        entry['value'] = 'disabled'
+    else:
+        del entry['value']
+        entry['valueFrom'] = {'secretKeyRef': {'name': 'POSTHOG_PROJECT_API_KEY', 'key': 'latest'}}
+    errors = validator._validate_cloud_run(env_config, deployed, strict_provisional=False)
+    assert any(error.scope == 'cloud_run/backend' and 'POSTHOG_BILLING_API_KEY' in error.message for error in errors)

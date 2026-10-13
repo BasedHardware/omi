@@ -7,7 +7,15 @@ from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, R
 
 from database import candidates, review_changes, review_store
 from models.entity_pages import EntitiesResponse, EntityCorrection, EntityPage
-from models.review import ReviewAnswer, ReviewAnswerReceipt, ReviewChange, ReviewChangesResponse, ReviewItemsResponse
+from models.review import (
+    ReviewAnswer,
+    ReviewAnswerReceipt,
+    ReviewChange,
+    ReviewChangesResponse,
+    ReviewItemsResponse,
+    ReviewItemsResponseV2,
+    ReviewAnswerV2,
+)
 from utils import entity_pages, review
 from utils.other import endpoints as auth
 from utils.speaker_tag_prompts.service import TagPromptInvalid
@@ -45,6 +53,20 @@ def get_review_items(uid: str = ReadUser):
 
 @router.post('/v1/review/items/{item_id}/answer', response_model=ReviewAnswerReceipt, tags=['review'])
 def answer_review_item(item_id: str, answer: ReviewAnswer, background_tasks: BackgroundTasks, uid: str = WriteUser):
+    if item_id.startswith('agent_proposal:'):
+        raise HTTPException(status_code=409, detail='Agent proposals require Review v2')
+    return _call(review.answer_item, uid, item_id, answer, schedule=background_tasks.add_task)
+
+
+@router.get('/v2/review/items', response_model=ReviewItemsResponseV2, tags=['review'])
+def get_review_items_v2(uid: str = ReadUser):
+    return _call(review.get_items, uid, include_agent_proposals=True)
+
+
+@router.post('/v2/review/items/{item_id}/answer', response_model=ReviewAnswerReceipt, tags=['review'])
+def answer_review_item_v2(
+    item_id: str, answer: ReviewAnswerV2, background_tasks: BackgroundTasks, uid: str = WriteUser
+):
     return _call(review.answer_item, uid, item_id, answer, schedule=background_tasks.add_task)
 
 

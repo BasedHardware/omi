@@ -15,8 +15,9 @@ from google.cloud import firestore
 from google.cloud.firestore_v1.base_query import FieldFilter
 
 from database._client import get_firestore_client
+from database.firestore_transaction_retry import run_with_transaction_contention_retry
 from database import review_queries
-from models.review import ReviewItem, ReviewAnswerReceipt
+from models.review import ReviewItem, ReviewItemV2, ReviewAnswerReceipt
 
 DAILY_BUDGET = 3
 
@@ -50,30 +51,72 @@ def require_enabled() -> None:
         raise ReviewConflict('review_surface_disabled')
 
 
-def enqueue_review_proposal(uid: str, item: ReviewItem, *, evidence_version: str) -> str:
+def enqueue_review_proposal(
+    uid: str,
+    item: ReviewItem | ReviewItemV2,
+    *,
+    evidence_version: str,
+    source: dict | None = None,
+    edit_key: str | None = None,
+    dream_run_id: str | None = None,
+    now: datetime | None = None,
+) -> str:
     """Dream writer: same stable item_id + same evidence version is an idempotent enqueue.
 
-    Only same_person and spelling are owned here. New evidence_version explicitly
+    Identity, spelling and agent proposals share this queue. New evidence_version explicitly
     permits re-asking an uncertain answer. Resolved decisions remain terminal.
     """
     require_enabled()
-    if item.kind not in {'same_person', 'spelling'} or not evidence_version.strip():
-        raise ValueError('Proposal requires same_person/spelling and an evidence version')
+    is_agent = item.kind == 'agent_proposal'
+    if item.kind not in {'same_person', 'spelling', 'agent_proposal'} or not evidence_version.strip():
+        raise ValueError('Unsupported proposal kind or evidence version')
+    if dream_run_id and item.kind != 'spelling':
+        raise ValueError('Dream atomic question admission requires spelling')
     if not item.item_id.startswith(f'{item.kind}:') or '/' in item.item_id:
         raise ValueError('item_id must be <kind>:<opaque source id>')
     ref = user(uid).collection('review_proposals').document(safe_id(item.item_id))
 
+    if is_agent and (not source or not edit_key):
+        raise ValueError('Agent proposals require a source snapshot and suppression key')
+    day = (now or datetime.now(timezone.utc)).astimezone(timezone.utc).date().isoformat()
+    budget_ref = user(uid).collection('review_attention').document(day)
+    marker = user(uid).collection('review_do_not_redo').document(safe_id(edit_key)) if edit_key else None
+
     @firestore.transactional
     def enqueue(tx):
+        budget = (budget_ref.get(transaction=tx).to_dict() or {}) if is_agent or dream_run_id else {}
         current = decode_doc(uid, ref.get(transaction=tx).to_dict()) or {}
+        if marker is not None and marker.get(transaction=tx).exists:
+            return 'suppressed'
         if current.get('status') == 'resolved' or current.get('evidence_version') == evidence_version:
-            return
+            return 'already_suggested'
+        if dream_run_id:
+            state = client().collection('dream_users').document(uid)
+            data = state.get(transaction=tx).to_dict() or {}
+            if (data.get('lease') or {}).get('run_id') != dream_run_id:
+                raise ReviewConflict('dream_lease_lost')
+            questions = data.get('questions', 0) if data.get('question_day') == day else 0
+            if questions + budget.get('dream_suggestions', 0) >= DAILY_BUDGET or budget.get('used', 0) >= DAILY_BUDGET:
+                return 'suggestion_cap'
+            tx.update(state, {'question_day': day, 'questions': questions + 1})
+        if is_agent:
+            from config.dream_agent import SUGGESTIONS_PER_DAY
+
+            dream_state = client().collection('dream_users').document(uid).get(transaction=tx).to_dict() or {}
+            questions = dream_state.get('questions', 0) if dream_state.get('question_day') == day else 0
+            if (
+                budget.get('dream_suggestions', 0) + questions >= SUGGESTIONS_PER_DAY
+                or budget.get('used', 0) >= DAILY_BUDGET
+            ):
+                return 'suggestion_cap'
+            tx.set(budget_ref, {'dream_suggestions': budget.get('dream_suggestions', 0) + 1}, merge=True)
         tx.set(
             ref,
             encode_doc(
                 uid,
                 {
                     'item': item.model_dump(mode='python'),
+                    'source': source or {},
                     'created_at': item.created_at,
                     'evidence_version': evidence_version,
                     'status': 'pending',
@@ -81,8 +124,21 @@ def enqueue_review_proposal(uid: str, item: ReviewItem, *, evidence_version: str
             ),
         )
 
-    enqueue(client().transaction())
-    return item.item_id
+        return 'suggested'
+
+    result = run_with_transaction_contention_retry(
+        client().transaction, enqueue, operation_name='review_proposal_enqueue'
+    )
+    return result if is_agent or dream_run_id else item.item_id
+
+
+def validate_records(uid: str, tx, expected_records: dict | None) -> None:
+    """Fence the offered target/evidence snapshots in the edit's transaction."""
+    for path, expected in (expected_records or {}).items():
+        collection, key = path.split('/', 1)
+        current = user(uid).collection(collection).document(key).get(transaction=tx).to_dict()
+        if current != expected:
+            raise ReviewConflict('Dream proposal evidence changed during apply')
 
 
 def list_proposals(uid: str) -> list[dict]:
@@ -100,7 +156,7 @@ def remaining_today(uid: str, now: datetime | None = None) -> int:
     return max(0, DAILY_BUDGET - int(data.get('used', 0)))
 
 
-def offer_item(uid: str, item: ReviewItem, source: dict, version: str) -> bool:
+def offer_item(uid: str, item: ReviewItem | ReviewItemV2, source: dict, version: str) -> bool:
     """Atomically publish a version, preserving unanswered/terminal receipts."""
     ref = user(uid).collection('review_answers').document(safe_id(item.item_id))
 
@@ -135,8 +191,8 @@ def begin_answer(uid: str, item_id: str, answer_hash: str, now: datetime | None 
 
     @firestore.transactional
     def begin(tx):
-        data = decode_doc(uid, ref.get(transaction=tx).to_dict())
         budget = budget_ref.get(transaction=tx).to_dict() or {}
+        data = decode_doc(uid, ref.get(transaction=tx).to_dict())
         if not data:
             raise ReviewNotFound('Review item was not offered')
         if data['state'] in {'answered', 'uncertain'}:
@@ -149,10 +205,10 @@ def begin_answer(uid: str, item_id: str, answer_hash: str, now: datetime | None 
         if used >= DAILY_BUDGET:
             raise ReviewConflict('Daily attention budget exhausted')
         tx.update(ref, {'state': 'applying', 'answer_hash': answer_hash, 'day': day})
-        tx.set(budget_ref, {'used': used + 1})
+        tx.set(budget_ref, {'used': used + 1}, merge=True)
         return data | {'day': day, 'retry': False}
 
-    return begin(client().transaction())
+    return run_with_transaction_contention_retry(client().transaction, begin, operation_name='review_answer_begin')
 
 
 def finish_answer(
@@ -170,7 +226,7 @@ def finish_answer(
 
         proposal_ref = None
         proposal = None
-        if item_id.startswith(('same_person:', 'spelling:')) and not uncertain:
+        if item_id.startswith(('same_person:', 'spelling:', 'agent_proposal:')) and not uncertain:
             proposal_ref = user(uid).collection('review_proposals').document(safe_id(item_id))
             proposal = decode_doc(uid, proposal_ref.get(transaction=tx).to_dict())
 
@@ -197,7 +253,7 @@ def release_failed_answer(uid: str, item_id: str) -> None:
         budget = budget_ref.get(transaction=tx).to_dict() or {}
         if data.get('state') == 'applying':
             tx.update(ref, {'state': 'offered'})
-            tx.set(budget_ref, {'used': max(0, budget.get('used', 0) - 1)})
+            tx.set(budget_ref, {'used': max(0, budget.get('used', 0) - 1)}, merge=True)
 
     release(client().transaction())
 

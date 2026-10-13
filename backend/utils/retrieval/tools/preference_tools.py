@@ -11,6 +11,8 @@ from typing import Any, Dict, Optional, cast
 from langchain_core.tools import tool  # type: ignore[reportUnknownVariableType]  # langchain @tool decorator partially typed
 from langchain_core.runnables import RunnableConfig
 
+from utils.messaging.undo import record_write
+from utils.messaging.projection import surface_runtime
 from database._client import get_data_plane_firestore_client
 from models.knowledge_ledger_policy import canonicalize_ledger_slot
 from models.memory_contracts import deterministic_contract_id
@@ -28,6 +30,13 @@ from utils.memory.memory_system import MemorySystem, ensure_canonical_apply_cont
 from testing.parity_pack_v0.live_capture import capture_memory_write
 
 logger = logging.getLogger(__name__)
+
+
+def _capture_app_memory_write(**kwargs):
+    runtime = surface_runtime.get()
+    if runtime is None or runtime.surface == 'app':
+        capture_memory_write(**kwargs)
+
 
 PREFERENCE_DUPLICATE_THRESHOLD = 0.90
 
@@ -154,7 +163,7 @@ def _save_compatibility_preference(uid: str, preference: str, *, user_stated: bo
         upsert_vector=False,
         require_canonical_promotion=True,
     )
-    capture_memory_write(
+    _capture_app_memory_write(
         principal_id=uid,
         source="agent_preference_memory_create",
         session_id=memory_id,
@@ -245,7 +254,9 @@ def save_user_preference_tool(
                     operation='correct_user_preference',
                 )
                 memory_id = replacement
-            return f"Preference updated (memory_id={memory_id}): {preference}"
+            return f"Preference updated (memory_id={memory_id}): {preference}" + record_write(
+                uid, 'memory', memory_id, prior.content, preference
+            )
         except Exception as e:
             logger.error("Failed to update preference error_type=%s", type(e).__name__)
             return "Error updating preference"
@@ -282,7 +293,7 @@ def save_user_preference_tool(
                 user_asserted=user_stated,
                 db_client=firestore_client,
             )
-            capture_memory_write(
+            _capture_app_memory_write(
                 principal_id=uid,
                 source="agent_preference_ledger_write",
                 session_id=provenance.source_id,
@@ -298,7 +309,9 @@ def save_user_preference_tool(
         else:
             raise RuntimeError(f"preference writer is not admitted in {writer_mode.value} mode")
         logger.info("Saved user preference: %s", sanitize_pii(preference))
-        return f"Preference saved (memory_id={memory_id}): {preference}"
+        return f"Preference saved (memory_id={memory_id}): {preference}" + record_write(
+            uid, 'memory', memory_id, None, preference
+        )
     except Exception as e:
         logger.error("Failed to save preference error_type=%s", type(e).__name__)
         return "Error saving preference"

@@ -369,6 +369,30 @@ def test_reject_hides_when_belief_flag_off(monkeypatch):
     assert stored.belief_class is None
 
 
+def test_expired_review_is_not_requeued_by_consolidation_replay():
+    source = _item('mem_expired_review', 'A synthetic review candidate.')
+    db = _db_for_items(source)
+    decision = ConsolidationAgentDecision(
+        source_memory_id=source.memory_id,
+        route='review',
+        evidence_ids=[],
+        relationship_to_user='unclear',
+        basis_for_memory='weak_or_none',
+        rationale='Needs review.',
+    )
+    _apply(source, decision, db)
+    stored = MemoryItem(**db.docs[f'users/{UID}/memory_items/{source.memory_id}'])
+    review_path = f'users/{UID}/memory_review_queue/review:{source.memory_id}:r{stored.item_revision}:'
+    db.docs[review_path].update({'status': 'expired', 'permitted_uses': []})
+    before = {path: dict(row) for path, row in db.docs.items()}
+
+    assert canonical_consolidation._is_promotable_for_consolidation(stored, now=NOW) is False
+    _apply(source, decision, db)
+
+    assert db.docs == before
+    assert db.docs[review_path]['status'] == 'expired'
+
+
 def test_reject_stays_listed_as_archive_residue_when_belief_flag_on(monkeypatch):
     monkeypatch.setenv("MEMORY_BELIEF_MODEL_ENABLED", "true")
     source = _item("mem_reject_on", "A broad but non-durable observation.")

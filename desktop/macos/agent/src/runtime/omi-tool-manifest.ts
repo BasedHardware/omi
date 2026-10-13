@@ -834,6 +834,19 @@ const swiftToolSurfacePatches: Record<string, OmiToolSurfacePatch> = {
         "Request Omi's macOS permission through the kernel-authorized native executor by opening the native prompt or relevant System Settings pane. Screen share, screen sharing, and screen-share mean Screen Recording. Supports Screen Recording, microphone, notifications, Accessibility, Automation, and Full Disk Access.",
     },
   },
+  get_product_kb: {
+    surfaces: ["desktop_chat"],
+    capabilityDoc: doc(
+      "Get Product Knowledge",
+      "Read the product guide shipped with this build of Omi for Mac.",
+      [
+        "Use when the user asks how to use, enable, or configure Omi on this Mac: Only Meetings versus Always On, permissions, settings paths, and what a screen does.",
+        "Do not use it for the user's personal conversations, memories, tasks, or screen history. Those belong to the data tools.",
+        "Pass query to search, or topic to read one document id. Omit both to list topics.",
+        "This is local. If the result says \"knowledge base unavailable\", say so and do not invent a settings path.",
+      ],
+    ),
+  },
   scan_files: {
     surfaces: ["onboarding"],
     capabilityDoc: doc("Scan Files", "Scan selected files/folders during onboarding to build local context.", [
@@ -2003,6 +2016,36 @@ const swiftToolManifestDrafts: OmiToolManifestEntryDraft[] = [
     executor: { kind: "swiftTool" },
     intendedForAgents: true,
     runtimePreconditions: ["Requires explicit current-turn user consent; some macOS permissions require the user to toggle Settings manually."],
+    adapters: piAndStdio(),
+  },
+  {
+    name: "get_product_kb",
+    label: "Get Product Knowledge",
+    description:
+      "Read the product guide shipped inside this Mac app. Use for how to use, enable, or configure Omi — capture modes, permissions, settings paths, and what each screen does. Do not use it for the user's personal conversations, memories, tasks, or screen history.",
+    promptSnippet: "get_product_kb - Read the shipped Omi for Mac product guide",
+    promptGuidelines: [
+      "Use when the user asks how to use, enable, or configure Omi on this Mac: Only Meetings versus Always On, permissions, settings paths, and what a screen does.",
+      "Do not use it for the user's personal conversations, memories, tasks, or screen history. Those belong to the data tools.",
+      "Pass query to search, or topic to read one document id. Omit both to list topics.",
+      "This is local. If the result says \"knowledge base unavailable\", say so and do not invent a settings path.",
+    ],
+    latency: "fast local",
+    inputSchema: schema({
+      query: {
+        type: "string",
+        description: "What to look up, such as 'Only Meetings' or 'permissions'. Omit to list topics.",
+      },
+      topic: {
+        type: "string",
+        description: "Document id from a list result: capture-modes, permissions, surfaces, or data-and-account.",
+      },
+    }),
+    annotations: readOnlyLocal,
+    timeoutClass: "normal",
+    executor: { kind: "swiftTool" },
+    intendedForAgents: true,
+    runtimePreconditions: ["Reads the guide bundled with this app. No network."],
     adapters: piAndStdio(),
   },
   {

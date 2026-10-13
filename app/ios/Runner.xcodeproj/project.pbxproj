@@ -43,6 +43,7 @@
 		CAD20002CAD20002CAD20002 /* OmiBleCaptureSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = CAD20001CAD20001CAD20001 /* OmiBleCaptureSession.swift */; };
 		CAD10002CAD10002CAD10002 /* OmiCaptureHealth.swift in Sources */ = {isa = PBXBuildFile; fileRef = CAD10001CAD10001CAD10001 /* OmiCaptureHealth.swift */; };
 		E91B0002E91B0002E91B0002 /* OmiBleEnergyPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = E91B0001E91B0001E91B0001 /* OmiBleEnergyPolicy.swift */; };
+		387657874D0C4CD5BAE2E8F1 /* OmiDeviceHealthStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 56F18562DF5D43B1890404F7 /* OmiDeviceHealthStore.swift */; };
 		E91C0002E91C0002E91C0002 /* OmiBlePairingPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = E91C0001E91C0001E91C0001 /* OmiBlePairingPolicy.swift */; };
 		E91D0002E91D0002E91D0002 /* OmiBleDiscoveryNaming.swift in Sources */ = {isa = PBXBuildFile; fileRef = E91D0001E91D0001E91D0001 /* OmiBleDiscoveryNaming.swift */; };
 		42B17C7C2F69BC6600BFDA9D /* PigeonCommunicator.g.swift in Sources */ = {isa = PBXBuildFile; fileRef = 42B17C7B2F69BC6600BFDA9D /* PigeonCommunicator.g.swift */; };
@@ -81,6 +82,7 @@
 		7AA100000000000000000006 /* TtsPcmPlayer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7AA100000000000000000008 /* TtsPcmPlayer.swift */; };
 		7AA100000000000000000007 /* TtsPcmPlayer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7AA100000000000000000008 /* TtsPcmPlayer.swift */; };
 		E1293501E1293501E1293501 /* SpeechDeadline.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1293503E1293503E1293503 /* SpeechDeadline.swift */; };
+		A2047901A2047901A2047901 /* WatchAudioChunkRelay.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2047903A2047903A2047903 /* WatchAudioChunkRelay.swift */; };
 		D71C4A0B2F0A11E700DE7001 /* DeviceToolsService.swift in Sources */ = {isa = PBXBuildFile; fileRef = D71C4A0A2F0A11E700DE7000 /* DeviceToolsService.swift */; };
 		D71C4A0C2F0A11E700DE7002 /* DeviceToolsService.swift in Sources */ = {isa = PBXBuildFile; fileRef = D71C4A0A2F0A11E700DE7000 /* DeviceToolsService.swift */; };
 		7B703A24854FEB9BACB52CCA /* PhoneMicOpusShim.m in Sources */ = {isa = PBXBuildFile; fileRef = BAADF00DF00DF00DF00DFD0D /* PhoneMicOpusShim.m */; };
@@ -93,6 +95,7 @@
 		873C99F3D85C142369688A1D /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 74858FAE1ED2DC5600515810 /* AppDelegate.swift */; };
 		51794E0451794E0451794E04 /* SyncTransferBackgroundLease.swift in Sources */ = {isa = PBXBuildFile; fileRef = 51794E0151794E0151794E01 /* SyncTransferBackgroundLease.swift */; };
 		E1293502E1293502E1293502 /* SpeechDeadline.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1293503E1293503E1293503 /* SpeechDeadline.swift */; };
+		A2047902A2047902A2047902 /* WatchAudioChunkRelay.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2047903A2047903A2047903 /* WatchAudioChunkRelay.swift */; };
 		97C146FC1CF9000F007C117D /* Main.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 97C146FA1CF9000F007C117D /* Main.storyboard */; };
 		97C146FE1CF9000F007C117D /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 97C146FD1CF9000F007C117D /* Assets.xcassets */; };
 		97C147011CF9000F007C117D /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 97C146FF1CF9000F007C117D /* LaunchScreen.storyboard */; };
@@ -101,6 +104,7 @@
 		CAD20003CAD20003CAD20003 /* OmiBleCaptureSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = CAD20001CAD20001CAD20001 /* OmiBleCaptureSession.swift */; };
 		CAD10003CAD10003CAD10003 /* OmiCaptureHealth.swift in Sources */ = {isa = PBXBuildFile; fileRef = CAD10001CAD10001CAD10001 /* OmiCaptureHealth.swift */; };
 		E91B0003E91B0003E91B0003 /* OmiBleEnergyPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = E91B0001E91B0001E91B0001 /* OmiBleEnergyPolicy.swift */; };
+		9C1738D70A50495EA3AFADF5 /* OmiDeviceHealthStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 56F18562DF5D43B1890404F7 /* OmiDeviceHealthStore.swift */; };
 		E91C0003E91C0003E91C0003 /* OmiBlePairingPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = E91C0001E91C0001E91C0001 /* OmiBlePairingPolicy.swift */; };
 		E91D0003E91D0003E91D0003 /* OmiBleDiscoveryNaming.swift in Sources */ = {isa = PBXBuildFile; fileRef = E91D0001E91D0001E91D0001 /* OmiBleDiscoveryNaming.swift */; };
 		9A25BD940EC94B21766CB950 /* Pods_Runner.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 8E5BBFB39079A4743502BBEE /* Pods_Runner.framework */; };
@@ -269,6 +273,7 @@
 		CAD20001CAD20001CAD20001 /* OmiBleCaptureSession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OmiBleCaptureSession.swift; sourceTree = "<group>"; };
 		CAD10001CAD10001CAD10001 /* OmiCaptureHealth.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OmiCaptureHealth.swift; sourceTree = "<group>"; };
 		E91B0001E91B0001E91B0001 /* OmiBleEnergyPolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OmiBleEnergyPolicy.swift; sourceTree = "<group>"; };
+		56F18562DF5D43B1890404F7 /* OmiDeviceHealthStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OmiDeviceHealthStore.swift; sourceTree = "<group>"; };
 		E91C0001E91C0001E91C0001 /* OmiBlePairingPolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OmiBlePairingPolicy.swift; sourceTree = "<group>"; };
 		E91D0001E91D0001E91D0001 /* OmiBleDiscoveryNaming.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OmiBleDiscoveryNaming.swift; sourceTree = "<group>"; };
 		42B17C7B2F69BC6600BFDA9D /* PigeonCommunicator.g.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PigeonCommunicator.g.swift; sourceTree = "<group>"; };
@@ -300,6 +305,7 @@
 		7AA100000000000000000005 /* minimp3.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = NativeVendor/minimp3.h; sourceTree = "<group>"; };
 		7AA100000000000000000008 /* TtsPcmPlayer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TtsPcmPlayer.swift; sourceTree = "<group>"; };
 		E1293503E1293503E1293503 /* SpeechDeadline.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = SpeechDeadline.swift; sourceTree = "<group>"; };
+		A2047903A2047903A2047903 /* WatchAudioChunkRelay.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = WatchAudioChunkRelay.swift; sourceTree = "<group>"; };
 		D71C4A0A2F0A11E700DE7000 /* DeviceToolsService.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = DeviceToolsService.swift; sourceTree = "<group>"; };
 		79B00761CB247C7EC7C8983B /* devRelease.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = devRelease.xcconfig; path = Flutter/devRelease.xcconfig; sourceTree = "<group>"; };
 		7AFA3C8E1D35360C0083082E /* Release.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; name = Release.xcconfig; path = Flutter/Release.xcconfig; sourceTree = "<group>"; };
@@ -596,6 +602,7 @@
 				7AA100000000000000000005 /* minimp3.h */,
 				7AA100000000000000000008 /* TtsPcmPlayer.swift */,
 				E1293503E1293503E1293503 /* SpeechDeadline.swift */,
+				A2047903A2047903A2047903 /* WatchAudioChunkRelay.swift */,
 				D71C4A0A2F0A11E700DE7000 /* DeviceToolsService.swift */,
 				CD12345678901234567890CD /* AppleRemindersService.swift */,
 				CD12345678901234567890CE /* AppleHealthService.swift */,
@@ -613,6 +620,7 @@
 			isa = PBXGroup;
 			children = (
 				E91B0001E91B0001E91B0001 /* OmiBleEnergyPolicy.swift */,
+				56F18562DF5D43B1890404F7 /* OmiDeviceHealthStore.swift */,
 				DAD10001DAD10001DAD10001 /* OmiBleConnectionPolicy.swift */,
 				CAD20001CAD20001CAD20001 /* OmiBleCaptureSession.swift */,
 				CAD10001CAD10001CAD10001 /* OmiCaptureHealth.swift */,
@@ -1084,7 +1092,9 @@
 				7AA100000000000000000001 /* TtsMp3Decoder.c in Sources */,
 				7AA100000000000000000006 /* TtsPcmPlayer.swift in Sources */,
 				E1293501E1293501E1293501 /* SpeechDeadline.swift in Sources */,
+				A2047901A2047901A2047901 /* WatchAudioChunkRelay.swift in Sources */,
 				E91B0002E91B0002E91B0002 /* OmiBleEnergyPolicy.swift in Sources */,
+				387657874D0C4CD5BAE2E8F1 /* OmiDeviceHealthStore.swift in Sources */,
 				DAD10002DAD10002DAD10002 /* OmiBleConnectionPolicy.swift in Sources */,
 				CAD20002CAD20002CAD20002 /* OmiBleCaptureSession.swift in Sources */,
 				CAD10002CAD10002CAD10002 /* OmiCaptureHealth.swift in Sources */,
@@ -1153,7 +1163,9 @@
 				7AA100000000000000000002 /* TtsMp3Decoder.c in Sources */,
 				7AA100000000000000000007 /* TtsPcmPlayer.swift in Sources */,
 				E1293502E1293502E1293502 /* SpeechDeadline.swift in Sources */,
+				A2047902A2047902A2047902 /* WatchAudioChunkRelay.swift in Sources */,
 				E91B0003E91B0003E91B0003 /* OmiBleEnergyPolicy.swift in Sources */,
+				9C1738D70A50495EA3AFADF5 /* OmiDeviceHealthStore.swift in Sources */,
 				DAD10003DAD10003DAD10003 /* OmiBleConnectionPolicy.swift in Sources */,
 				CAD20003CAD20003CAD20003 /* OmiBleCaptureSession.swift in Sources */,
 				CAD10003CAD10003CAD10003 /* OmiCaptureHealth.swift in Sources */,

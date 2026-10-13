@@ -546,7 +546,10 @@ def validate_manual_workflow(text: str, root: Path = ROOT) -> list[str]:
             "git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main",
             "manual source admission must fetch the current main ancestry",
         ),
-        ("git cat-file -e \"${DEPLOY_SHA}^{commit}\"", "manual source admission must require a commit object"),
+        (
+            '[ "$(git cat-file -t "${DEPLOY_SHA}" 2>/dev/null)" = "commit" ]',
+            "manual source admission must require a commit object",
+        ),
         (
             "git merge-base --is-ancestor \"$DEPLOY_SHA\" \"$main_sha\"",
             "manual source admission must require the requested SHA to be on main",

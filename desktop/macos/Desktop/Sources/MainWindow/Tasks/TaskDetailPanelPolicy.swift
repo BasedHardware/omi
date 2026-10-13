@@ -228,7 +228,7 @@ enum TaskDetailSourceLinkPolicy {
       return "You added this task directly."
     }
     if task.source?.contains("screen") == true || task.source == "screenshot" {
-      return "It matched context on this Mac."
+      return "Omi spotted it on your screen."
     }
     if task.source?.contains("transcription") == true || task.source?.contains("conversation") == true {
       return "It came from a conversation you captured."

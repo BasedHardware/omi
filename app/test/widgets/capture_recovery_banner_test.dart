@@ -163,7 +163,8 @@ void main() {
 
     testWidgets('admission-blocked storage shows a localized phone-storage risk warning', (tester) async {
       final monitor = makeMonitor(transferRetry: () async {});
-      monitor.observeStorageAtRisk(engagedAt: DateTime(2026), blockedCount: 1, retainedCount: 720, reason: 'count_cap');
+      monitor.observeStorageAtRisk(
+          engagedAt: DateTime(2026), blockedCount: 1, retainedCount: 720, reason: 'disk_reserve');
 
       await pumpBanner(tester, monitor);
 

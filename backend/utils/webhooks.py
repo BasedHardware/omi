@@ -23,6 +23,7 @@ from database.webhook_health import (
     _DEV_FAILURE_THRESHOLD,
 )
 from models.conversation import Conversation
+from models.transcript_segment import transcript_segment_for_client
 from models.users import WebhookType, webhook_url_from_setting
 from utils.conversations.render import populate_speaker_names, populate_folder_names
 from utils.conversations.render import conversation_to_dict, redact_conversation_for_integration
@@ -446,7 +447,7 @@ async def realtime_transcript_webhook(uid, segments: List[dict], *, client_kind:
             response = await _post_dev_webhook(
                 'realtime_transcript_webhook',
                 webhook_url,
-                json={'segments': segments, 'session_id': uid},
+                json={'segments': [transcript_segment_for_client(s) for s in segments], 'session_id': uid},
                 headers={'Content-Type': 'application/json'},
                 dlq_uid=uid,
             )

@@ -112,6 +112,7 @@ from utils.conversations import lifecycle as lifecycle_service
 from utils.conversations.subjects import infer_subject_from_segments
 from utils.conversations.owner_attribution import OwnerAttributionEvidence, may_attribute_to_owner
 from utils.conversations.speaker_resolution import resolve_speakers_for_processing
+from utils.observability.owner_identity_retry import identity_pass
 from utils.memory.memory_service import MemoryService
 from utils.memory.decision_path_telemetry import (
     classify_model_about,
@@ -129,6 +130,7 @@ from utils.observability.owner_recognition import (
     owner_recognition_needs_profile,
 )
 from utils.metrics import (
+    OMI_CONVERSATION_SUMMARY_VECTOR_UPSERTS_TOTAL,
     record_jit_first_open,
     record_lazy_desktop_deferral,
     record_memory_owner_jev,
@@ -277,7 +279,8 @@ class DerivedEffectsDisposition(str, Enum):
 
     RUN is the paid/legacy bundle (or the empty-bundle memory-extraction
     fallback). TERMINAL_NO_DERIVED_EFFECTS is a successful persist that must
-    not extract memories, fan out apps, or run any other derived effect.
+    not extract memories or fan out the intelligence bundle. The finalizer
+    still writes the summary vector behind its winning claim.
     Reporting persistence True alone is unsafe: the finalizer treats an empty
     bundle as "extract memories now". The terminal value is also written onto
     the Firestore document (see ``TERMINAL_NO_DERIVED_EFFECTS_FIELD``) so a
@@ -2171,36 +2174,54 @@ def _save_action_items(
     )
 
 
-def save_structured_vector(uid: str, conversation: Conversation, update_only: bool = False) -> None:
-    vector = generate_embedding(str(conversation.structured)) if not update_only else None
-    tz = notification_db.get_user_time_zone(uid) or ''
+def save_structured_vector(uid: str, conversation: Conversation, update_only: bool = False) -> bool:
+    if not update_only and conversation.discarded:
+        OMI_CONVERSATION_SUMMARY_VECTOR_UPSERTS_TOTAL.labels(outcome='skipped_discarded').inc()
+        return False
+    if not update_only and not conversation.structured:
+        OMI_CONVERSATION_SUMMARY_VECTOR_UPSERTS_TOTAL.labels(outcome='skipped_no_structured').inc()
+        return False
+    try:
+        vector = generate_embedding(str(conversation.structured)) if not update_only else None
+        tz = notification_db.get_user_time_zone(uid) or ''
 
-    metadata: Dict[str, Any] = {}
+        metadata: Dict[str, Any] = {}
 
-    # Extract metadata based on conversation source
-    if conversation.source == ConversationSource.external_integration:
-        ext_data: Dict[str, Any] = conversation.external_data or {}
-        text_source = ext_data.get('text_source')
-        text_content = ext_data.get('text')
-        if text_content and len(text_content) > 0 and text_content and len(text_content) > 0:
-            text_source_spec = ext_data.get('text_source_spec') or ''
-            if text_source == ExternalIntegrationConversationSource.message.value:
-                metadata = retrieve_metadata_from_message(
-                    uid, conversation.created_at, text_content, tz, text_source_spec
-                )
-            elif text_source == ExternalIntegrationConversationSource.other.value:
-                metadata = retrieve_metadata_from_text(uid, conversation.created_at, text_content, tz, text_source_spec)
-    else:
-        metadata = retrieve_metadata_fields_from_structured(uid, conversation.created_at, conversation.structured, tz)
+        # Extract metadata based on conversation source
+        if conversation.source == ConversationSource.external_integration:
+            ext_data: Dict[str, Any] = conversation.external_data or {}
+            text_source = ext_data.get('text_source')
+            text_content = ext_data.get('text')
+            if text_content and len(text_content) > 0 and text_content and len(text_content) > 0:
+                text_source_spec = ext_data.get('text_source_spec') or ''
+                if text_source == ExternalIntegrationConversationSource.message.value:
+                    metadata = retrieve_metadata_from_message(
+                        uid, conversation.created_at, text_content, tz, text_source_spec
+                    )
+                elif text_source == ExternalIntegrationConversationSource.other.value:
+                    metadata = retrieve_metadata_from_text(
+                        uid, conversation.created_at, text_content, tz, text_source_spec
+                    )
+        else:
+            metadata = retrieve_metadata_fields_from_structured(
+                uid, conversation.created_at, conversation.structured, tz
+            )
 
-    metadata['created_at'] = int(conversation.created_at.timestamp())
+        metadata['created_at'] = int(conversation.created_at.timestamp())
+    except Exception:
+        if not update_only:
+            OMI_CONVERSATION_SUMMARY_VECTOR_UPSERTS_TOTAL.labels(outcome='error').inc()
+        raise
 
     if not update_only:
         logger.info('save_structured_vector creating vector')
-        upsert_vector2(uid, conversation.id, cast(List[float], vector), metadata)
+        if not upsert_vector2(uid, conversation.id, cast(List[float], vector), metadata):
+            return False
+        OMI_CONVERSATION_SUMMARY_VECTOR_UPSERTS_TOTAL.labels(outcome='success').inc()
     else:
         logger.info('save_structured_vector updating metadata')
         update_vector_metadata(uid, conversation.id, metadata)
+    return True
 
 
 def _update_personas_async(uid: str):  # type: ignore[reportUnusedFunction]  # referenced in tests
@@ -2942,7 +2963,8 @@ def process_conversation(
 
     _enrich_meeting_context(uid, conversation)
     # Everything below reads speaker_id as one voice; capture only guarantees that per piece.
-    speaker_receipt_applied = resolve_speakers_for_processing(uid, conversation)
+    with identity_pass(None if already_observed else 'first'):
+        speaker_receipt_applied = resolve_speakers_for_processing(uid, conversation)
     if speaker_receipt_observer is not None:
         speaker_receipt_observer(speaker_receipt_applied)
 
@@ -3039,7 +3061,9 @@ def process_conversation(
     report_persistence(persisted, completed=conversation)
     if not persisted:
         logger.info(
-            'processing result fenced before completion side effects uid=%s conversation=%s', uid, conversation.id
+            'processing result fenced before canonical completion side effects uid=%s conversation=%s',
+            uid,
+            conversation.id,
         )
         return conversation
 
@@ -3164,7 +3188,9 @@ def process_conversation(
                     'suggested_summarization_apps': conversation.suggested_summarization_apps,
                 }
                 conversations_db.update_conversation(uid, conversation.id, app_updates)
-            if not is_reprocess:
+            # Durable finalization writes its vector directly behind the fanout claim,
+            # including completed replays and terminal intelligence suppression.
+            if not defer_derived_effects and not is_reprocess:
                 submit_with_context(postprocess_executor, save_structured_vector, uid, conversation)
             if not defer_memory_extraction:
                 # Canonical source replacement is universal and intentionally

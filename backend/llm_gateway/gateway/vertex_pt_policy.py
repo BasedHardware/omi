@@ -17,6 +17,7 @@ from collections.abc import Callable
 
 from llm_gateway.gateway.provider_types import ProviderFailure
 from llm_gateway.gateway.schemas import FailureClass
+from llm_gateway.gateway.vertex_diagnostics import vertex_attempt_labels, vertex_error_metadata
 from llm_gateway.gateway.vertex_wire import _bounded_error_text  # pyright: ignore[reportPrivateUsage]
 from llm_gateway.gateway.vertex_wire import _vertex_rejection_reason  # pyright: ignore[reportPrivateUsage]
 from utils.llm import vertex_pt_routing as ptr
@@ -90,12 +91,31 @@ class VertexPTPolicyMixin:
         if 400 <= status_code < 500:
             # JSON stdout is parsed into jsonPayload by Cloud Logging. Values
             # are allowlisted metadata; never include the raw provider error.
+            message = _bounded_error_text(preview)
+            failure = FailureClass.PROVIDER_INVALID_REQUEST
+            if capacity == ptr.REQUEST_TYPE_DEDICATED and (
+                ptr.is_provisioned_capacity_exhausted(status_code, message)
+                or ptr.is_provisioned_capacity_absent(status_code, message)
+                or ptr.is_model_unavailable(status_code, message)
+            ):
+                failure = FailureClass.RESERVED_CAPACITY_UNAVAILABLE
+            elif status_code in {401, 403}:
+                failure = FailureClass.INVALID_CONFIG
+            elif status_code == 408:
+                failure = FailureClass.TIMEOUT_BEFORE_OUTPUT
+            elif status_code == 429:
+                failure = FailureClass.PROVIDER_429_OMI_PAID
+            served_model = model if model in ptr.DESKTOP_TEXT_LANES else 'other'
             print(
                 json.dumps(
                     {
                         'severity': 'WARNING',
                         'event': 'vertex_provider_rejection',
-                        'served_model': model if model in ptr.DESKTOP_TEXT_LANES else 'other',
+                        **vertex_attempt_labels(),
+                        **vertex_error_metadata(preview),
+                        'served_model': served_model,
+                        'model': served_model,
+                        'failure_class': failure.value,
                         'status': status_code,
                         'reason': _vertex_rejection_reason(preview),
                     }

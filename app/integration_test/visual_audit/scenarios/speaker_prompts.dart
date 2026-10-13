@@ -45,6 +45,7 @@ GeneratedSpeakerTagPrompt _prompt(String kind) => GeneratedSpeakerTagPrompt(
       conversationStartedAt: DateTime.now().subtract(const Duration(hours: 20)),
       speakerId: 2,
       segmentIds: const ['s1'],
+      evidenceId: kind == 'owner_check' ? 'synthetic-owner-evidence' : null,
       clipStart: 12,
       clipEnd: 19,
       excerpt: kind == 'owner_check'
@@ -76,7 +77,7 @@ Uint8List _clip() {
 Future<SpeakerTagPromptsProvider> _pumpCard(AuditRun a, String kind, {bool playClip = true}) async {
   final prompts = SpeakerTagPromptsProvider(
     fetchPrompts: () async => ApiSuccess(GeneratedSpeakerTagPromptsResponse(prompts: [_prompt(kind)])),
-    markShown: (_) async => const ApiSuccess(false),
+    markShown: (_, {bool setShown = true}) async => const ApiSuccess(false),
     dismiss: () async => const ApiSuccess<void>(null),
     submitAnswer: (request) async =>
         ApiSuccess(GeneratedSpeakerTagPromptAnswerResponse(qualityOutcome: 'skipped', personId: request.personId)),
