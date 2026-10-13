@@ -3677,7 +3677,7 @@ class AppLocalizationsRu extends AppLocalizations {
   String get settingsHeader => 'НАСТРОЙКИ';
 
   @override
-  String get plansAndBilling => 'Plans';
+  String get plansAndBilling => 'Планы и Оплата';
 
   @override
   String get calendarIntegration => 'Интеграция Календаря';
@@ -13069,7 +13069,7 @@ class AppLocalizationsRu extends AppLocalizations {
   }
 
   @override
-  String get paywallRecommended => 'Рекомендуется';
+  String get paywallRecommended => 'Recommended';
 
   @override
   String get paywallNoPlans => 'Plans aren\'t available right now. Try again in a minute.';
@@ -13078,16 +13078,7 @@ class AppLocalizationsRu extends AppLocalizations {
   String get paywallOtherPlans => 'See all plans';
 
   @override
-  String get paywallLegacyPlanStays => 'Ваш план остаётся именно таким, какой он есть.';
-
-  @override
-  String get paywallMcpDailyRequests => 'Больше ежедневных запросов MCP';
-
-  @override
   String get paywallComparePlans => 'See plans';
-
-  @override
-  String get paywallLegacyPlan => 'Прежний план';
 
   @override
   String get paywallYourPlan => 'Your plan';
@@ -13103,4 +13094,10 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get paywallLoadError => 'Couldn\'t load plans. Check your connection and try again.';
+
+  @override
+  String get paywallPlans => 'Plans';
+
+  @override
+  String get paywallResubscribeFirst => 'Resubscribe first to change plans';
 }

@@ -3696,7 +3696,7 @@ class AppLocalizationsTa extends AppLocalizations {
   String get settingsHeader => 'அமைப்புகள்';
 
   @override
-  String get plansAndBilling => 'Plans';
+  String get plansAndBilling => 'திட்டங்கள் மற்றும் பில்லிங்';
 
   @override
   String get calendarIntegration => 'நாட்காட்டி ஒருங்கிணைப்பு';
@@ -13113,7 +13113,7 @@ class AppLocalizationsTa extends AppLocalizations {
   }
 
   @override
-  String get paywallRecommended => 'பரிந்துரைக்கப்படுகிறது';
+  String get paywallRecommended => 'Recommended';
 
   @override
   String get paywallNoPlans => 'Plans aren\'t available right now. Try again in a minute.';
@@ -13122,16 +13122,7 @@ class AppLocalizationsTa extends AppLocalizations {
   String get paywallOtherPlans => 'See all plans';
 
   @override
-  String get paywallLegacyPlanStays => 'உங்கள் திட்டம் இருப்பது போலவே இருக்கும்.';
-
-  @override
-  String get paywallMcpDailyRequests => 'கூடுதல் தினசரி MCP கோரிக்கைகள்';
-
-  @override
   String get paywallComparePlans => 'See plans';
-
-  @override
-  String get paywallLegacyPlan => 'பழைய திட்டம்';
 
   @override
   String get paywallYourPlan => 'Your plan';
@@ -13147,4 +13138,10 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String get paywallLoadError => 'Couldn\'t load plans. Check your connection and try again.';
+
+  @override
+  String get paywallPlans => 'Plans';
+
+  @override
+  String get paywallResubscribeFirst => 'Resubscribe first to change plans';
 }

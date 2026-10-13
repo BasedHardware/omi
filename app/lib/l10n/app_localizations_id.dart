@@ -3672,7 +3672,7 @@ class AppLocalizationsId extends AppLocalizations {
   String get settingsHeader => 'PENGATURAN';
 
   @override
-  String get plansAndBilling => 'Plans';
+  String get plansAndBilling => 'Paket & Penagihan';
 
   @override
   String get calendarIntegration => 'Integrasi Kalender';
@@ -13033,7 +13033,7 @@ class AppLocalizationsId extends AppLocalizations {
   }
 
   @override
-  String get paywallRecommended => 'Direkomendasikan';
+  String get paywallRecommended => 'Recommended';
 
   @override
   String get paywallNoPlans => 'Plans aren\'t available right now. Try again in a minute.';
@@ -13042,16 +13042,7 @@ class AppLocalizationsId extends AppLocalizations {
   String get paywallOtherPlans => 'See all plans';
 
   @override
-  String get paywallLegacyPlanStays => 'Paket Anda tetap seperti sekarang.';
-
-  @override
-  String get paywallMcpDailyRequests => 'Lebih banyak permintaan MCP harian';
-
-  @override
   String get paywallComparePlans => 'See plans';
-
-  @override
-  String get paywallLegacyPlan => 'Paket lama';
 
   @override
   String get paywallYourPlan => 'Your plan';
@@ -13067,4 +13058,10 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get paywallLoadError => 'Couldn\'t load plans. Check your connection and try again.';
+
+  @override
+  String get paywallPlans => 'Plans';
+
+  @override
+  String get paywallResubscribeFirst => 'Resubscribe first to change plans';
 }

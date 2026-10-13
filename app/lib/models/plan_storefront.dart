@@ -24,8 +24,16 @@ class PlanStorefront {
   /// Current and usage snapshots must both permit a nonblocking budget nudge.
   bool get showBudgetNudge => showSubscriptionUi && current?.legacy == false && usage?.showBudgetNudge == true;
 
-  bool shouldGate(String feature) =>
-      showSubscriptionUi && current != null && current?.legacy == false && usage?.proGates.contains(feature) == true;
+  /// Pro gates apply below Pro. A live or payload Pro/Architect (or higher) plan
+  /// already includes them, even when a stale payload still lists the gate.
+  bool shouldGate(String feature, {PlanType? livePlan}) {
+    if (!showSubscriptionUi || current == null || current!.legacy) return false;
+    if (usage?.proGates.contains(feature) != true) return false;
+    final rank = _higherRank(_storefrontLadderRank(current!.planId), _storefrontLadderRank(livePlan?.wireName));
+    final proRank = _storefrontLadderRank('operator');
+    if (rank != null && proRank != null && rank >= proRank) return false;
+    return true;
+  }
 
   factory PlanStorefront.fromJson(Map<String, dynamic> json) {
     if (json['schema_version'] != 2) throw const FormatException('Unsupported storefront schema');
@@ -87,8 +95,8 @@ StorefrontPrice? _priceOnTier(StorefrontTier tier, String? id) {
 ///
 /// Paid subscribers may move up the ladder, or from monthly to annual on the
 /// same tier. Legacy prices, unlimited plans, and unrecognized ids never
-/// check out. A scheduled cancellation resubscribes the current price and
-/// still allows those same upward moves.
+/// check out. While a cancellation is scheduled the payment API rejects every
+/// other price, so the only purchase is resubscribe on the current price.
 StorefrontCheckoutDecision storefrontCheckoutDecision(
   StorefrontCurrentPlan? current,
   PlanType? livePlan,
@@ -128,20 +136,21 @@ StorefrontCheckoutDecision storefrontCheckoutDecision(
   if (price.id == current?.priceId) {
     return cancelScheduled ? StorefrontCheckoutDecision.resubscribe : StorefrontCheckoutDecision.refuse;
   }
+  if (cancelScheduled) return StorefrontCheckoutDecision.refuse;
   return StorefrontCheckoutDecision.checkout;
 }
 
 /// Copy-deck label for the current tier's yearly price.
 /// Saving is 12× the monthly amount minus the annual amount, from [tier]'s prices.
+/// The currency symbol and separators come from the monthly headline so a non-USD
+/// price still produces a label and the switch button stays visible.
 String? storefrontYearlySwitchLabel(StorefrontTier tier) {
   final month = tier.priceFor('month');
   final year = tier.priceFor('year');
   if (month == null || year == null || month.currency != year.currency) return null;
   final saving = month.amountMinor * 12 - year.amountMinor;
   if (saving <= 0) return null;
-  final formatted = _formatUsdMinor(saving, month.currency);
-  if (formatted == null) return null;
-  return 'Switch to yearly · save $formatted';
+  return 'Switch to yearly · save ${_formatMinor(saving, month.currency, month.headline)}';
 }
 
 /// Button text for one selected price. The current tier never says "Get {Plan}".
@@ -159,18 +168,56 @@ String? storefrontActionLabel({
   return null;
 }
 
-String? _formatUsdMinor(int minor, String currency) {
-  if (currency.toLowerCase() != 'usd' || minor < 0) return null;
-  final dollars = minor ~/ 100;
-  final cents = minor % 100;
-  final digits = dollars.toString();
+/// Stripe zero-decimal currencies: the minor unit is already the major unit.
+const _zeroDecimalCurrencies = {
+  'bif',
+  'clp',
+  'djf',
+  'gnf',
+  'jpy',
+  'kmf',
+  'krw',
+  'mga',
+  'pyg',
+  'rwf',
+  'ugx',
+  'vnd',
+  'vuv',
+  'xaf',
+  'xof',
+  'xpf',
+};
+
+String _formatMinor(int minor, String currency, String headline) {
+  final zeroDecimal = _zeroDecimalCurrencies.contains(currency.toLowerCase());
+  final affix = _currencyAffix(headline);
+  final whole = zeroDecimal ? minor : minor ~/ 100;
+  final fraction = zeroDecimal ? 0 : minor.abs() % 100;
+  final thousandsSep = affix.decimalSep == ',' ? '.' : ',';
+  final digits = whole.abs().toString();
   final grouped = StringBuffer();
+  if (whole < 0) grouped.write('-');
   for (var i = 0; i < digits.length; i++) {
-    if (i > 0 && (digits.length - i) % 3 == 0) grouped.write(',');
+    if (i > 0 && (digits.length - i) % 3 == 0) grouped.write(thousandsSep);
     grouped.write(digits[i]);
   }
-  final amount = cents == 0 ? grouped.toString() : '$grouped.${cents.toString().padLeft(2, '0')}';
-  return '\$$amount';
+  final amount = !zeroDecimal && fraction != 0
+      ? '$grouped${affix.decimalSep}${fraction.toString().padLeft(2, '0')}'
+      : grouped.toString();
+  if (affix.prefix.isEmpty && affix.suffix.trim().isEmpty) return '${currency.toUpperCase()} $amount';
+  return '${affix.prefix}$amount${affix.suffix}';
+}
+
+({String prefix, String suffix, String decimalSep}) _currencyAffix(String headline) {
+  final price = headline.split('/').first.trim();
+  final match = RegExp(r'^(\D*)(\d[\d.,]*\d|\d)(\D*)$').firstMatch(price);
+  if (match == null) return (prefix: '', suffix: '', decimalSep: '.');
+  final number = match.group(2)!;
+  final comma = number.lastIndexOf(',');
+  final dot = number.lastIndexOf('.');
+  var decimalSep = '.';
+  if (comma > dot && number.length - comma - 1 == 2) decimalSep = ',';
+  return (prefix: match.group(1) ?? '', suffix: match.group(3) ?? '', decimalSep: decimalSep);
 }
 
 class StorefrontTier {

@@ -4159,9 +4159,9 @@
     "@account": {
         "description": "Account section label"
     },
-    "plansAndBilling": "Plans",
+    "plansAndBilling": "Plans & Billing",
     "@plansAndBilling": {
-        "description": "Title of the plans sheet."
+        "description": "Plans and billing section"
     },
     "calendarIntegration": "Calendar Integration",
     "@calendarIntegration": {
@@ -15780,21 +15780,9 @@
     "@paywallOtherPlans": {
         "description": "Collapsed section that reveals the rest of the plan ladder."
     },
-    "paywallLegacyPlanStays": "Your plan stays exactly as it is.",
-    "@paywallLegacyPlanStays": {
-        "description": "Reassurance on the legacy plan view. No migration or checkout."
-    },
-    "paywallMcpDailyRequests": "More daily MCP requests",
-    "@paywallMcpDailyRequests": {
-        "description": "First benefit on the recommended card when the sheet opened from the daily MCP cap."
-    },
     "paywallComparePlans": "See plans",
     "@paywallComparePlans": {
         "description": "Primary button on the usage banner."
-    },
-    "paywallLegacyPlan": "Legacy plan",
-    "@paywallLegacyPlan": {
-        "description": "Marker beside the true name of a legacy subscription."
     },
     "paywallYourPlan": "Your plan",
     "@paywallYourPlan": {
@@ -15815,5 +15803,13 @@
     "paywallLoadError": "Couldn't load plans. Check your connection and try again.",
     "@paywallLoadError": {
         "description": "Plans sheet error copy. The retry button is separate."
+    },
+    "paywallPlans": "Plans",
+    "@paywallPlans": {
+        "description": "Title of the new plans sheet. The previous sheet keeps Plans & Billing."
+    },
+    "paywallResubscribeFirst": "Resubscribe first to change plans",
+    "@paywallResubscribeFirst": {
+        "description": "Shown in place of a plan button while a cancellation is scheduled."
     }
 }

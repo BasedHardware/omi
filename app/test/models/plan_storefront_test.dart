@@ -135,6 +135,18 @@ void main() {
     }
   });
 
+  test('a live Pro or Architect plan is not gated by stale pro gates', () {
+    final architect = PlanStorefront.fromJson(fixture('architect'));
+    expect(architect.usage!.proGates, containsAll(['proactive_agent', 'screen_context']));
+    expect(architect.current!.planId, 'architect');
+    expect(architect.shouldGate('proactive_agent'), isFalse);
+    expect(architect.shouldGate('screen_context'), isFalse);
+    final plus = PlanStorefront.fromJson(fixture());
+    expect(plus.shouldGate('proactive_agent'), isTrue);
+    expect(plus.shouldGate('proactive_agent', livePlan: PlanType.operator), isFalse);
+    expect(plus.shouldGate('screen_context', livePlan: PlanType.architect), isFalse);
+  });
+
   test('Pro gates follow server decisions and never override legacy access', () {
     final json = fixture();
     expect(PlanStorefront.fromJson(json).shouldGate('proactive_agent'), isTrue);
@@ -381,8 +393,8 @@ void main() {
         true
       ),
       (
-        'cancelled higher tier still checks out',
-        StorefrontCheckoutDecision.checkout,
+        'cancelled higher tier refuses',
+        StorefrontCheckoutDecision.refuse,
         current('plus', priceId: plusMonth.id),
         PlanType.plus,
         operator,
@@ -391,8 +403,8 @@ void main() {
         true
       ),
       (
-        'cancelled same-tier yearly still checks out',
-        StorefrontCheckoutDecision.checkout,
+        'cancelled same-tier yearly refuses',
+        StorefrontCheckoutDecision.refuse,
         current('plus', priceId: plusMonth.id),
         PlanType.plus,
         plus,
@@ -481,11 +493,53 @@ void main() {
     final architect =
         PlanStorefront.fromJson(fixture('architect')).tiers.singleWhere((tier) => tier.planId == 'architect');
     expect(architect.ctaLabel, r'Switch to yearly · save $398');
+    const eur = StorefrontTier(
+      tierId: 'plus:ladder_v1',
+      planId: 'plus',
+      name: 'Plus',
+      hoursLine: 'About 100 hours of recording a month',
+      bullets: ['Included'],
+      recommended: false,
+      isCurrent: true,
+      prices: [
+        StorefrontPrice(
+          id: 'eur_month',
+          interval: 'month',
+          amountMinor: 1999,
+          currency: 'eur',
+          headline: '€19.99/month',
+          renewalLine: 'Renews monthly until you cancel. Cancel anytime in settings.',
+        ),
+        StorefrontPrice(
+          id: 'eur_year',
+          interval: 'year',
+          amountMinor: 19990,
+          currency: 'eur',
+          headline: '€16.66/month',
+          renewalLine: 'Renews yearly until you cancel. Cancel anytime in settings.',
+        ),
+      ],
+      action: 'checkout',
+      ctaLabel: 'Get Plus',
+    );
+    expect(storefrontYearlySwitchLabel(eur), 'Switch to yearly · save €39.98');
     final cancelled = PlanStorefront.fromJson(fixture('cancel_scheduled'));
     final currentTier = cancelled.tiers.singleWhere((tier) => tier.isCurrent);
     final pro = cancelled.tiers.singleWhere((tier) => tier.planId == 'operator');
+    expect(cancelled.tiers.first.planId, 'plus');
+    expect(cancelled.tiers.where((tier) => tier.recommended), isEmpty);
+    expect(pro.action, 'none');
     expect(cancelled.header, 'Your Plus plan ends Nov 1');
     expect(cancelled.current!.line, r"You're on Plus · $19.99/mo");
+    expect(
+      storefrontCheckoutDecision(cancelled.current, PlanType.plus, pro, pro.priceFor('month')!, cancelScheduled: true),
+      StorefrontCheckoutDecision.refuse,
+    );
+    expect(
+      storefrontCheckoutDecision(cancelled.current, PlanType.plus, currentTier, currentTier.priceFor('year')!,
+          cancelScheduled: true),
+      StorefrontCheckoutDecision.refuse,
+    );
     expect(
       storefrontActionLabel(
         current: cancelled.current,
@@ -500,18 +554,18 @@ void main() {
         current: cancelled.current,
         tier: pro,
         price: pro.priceFor('month')!,
-        decision: StorefrontCheckoutDecision.checkout,
+        decision: StorefrontCheckoutDecision.refuse,
       ),
-      'Upgrade to Pro',
+      isNull,
     );
     expect(
       storefrontActionLabel(
         current: cancelled.current,
         tier: currentTier,
         price: currentTier.priceFor('year')!,
-        decision: StorefrontCheckoutDecision.checkout,
+        decision: StorefrontCheckoutDecision.refuse,
       ),
-      r'Switch to yearly · save $39.98',
+      isNull,
     );
   });
 }

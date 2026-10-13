@@ -60,7 +60,7 @@
     {
       "file": "009-mobile-ios-cancel-scheduled.png",
       "platform": "mobile-ios",
-      "description": "Cancel scheduled: header Your Plus plan ends Nov 1, Upgrade to Pro, Resubscribe on the current card without bullets",
+      "description": "Cancel scheduled: only Resubscribe on the current Plus price; other tiers say Resubscribe first to change plans",
       "captured_by": "agent",
       "source": "visual-audit"
     },

@@ -3677,7 +3677,7 @@ class AppLocalizationsVi extends AppLocalizations {
   String get settingsHeader => 'CÀI ĐẶT';
 
   @override
-  String get plansAndBilling => 'Plans';
+  String get plansAndBilling => 'Gói và Thanh toán';
 
   @override
   String get calendarIntegration => 'Tích hợp Lịch';
@@ -13021,7 +13021,7 @@ class AppLocalizationsVi extends AppLocalizations {
   }
 
   @override
-  String get paywallRecommended => 'Đề xuất';
+  String get paywallRecommended => 'Recommended';
 
   @override
   String get paywallNoPlans => 'Plans aren\'t available right now. Try again in a minute.';
@@ -13030,16 +13030,7 @@ class AppLocalizationsVi extends AppLocalizations {
   String get paywallOtherPlans => 'See all plans';
 
   @override
-  String get paywallLegacyPlanStays => 'Gói của bạn giữ nguyên như hiện tại.';
-
-  @override
-  String get paywallMcpDailyRequests => 'Thêm yêu cầu MCP mỗi ngày';
-
-  @override
   String get paywallComparePlans => 'See plans';
-
-  @override
-  String get paywallLegacyPlan => 'Gói cũ';
 
   @override
   String get paywallYourPlan => 'Your plan';
@@ -13055,4 +13046,10 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get paywallLoadError => 'Couldn\'t load plans. Check your connection and try again.';
+
+  @override
+  String get paywallPlans => 'Plans';
+
+  @override
+  String get paywallResubscribeFirst => 'Resubscribe first to change plans';
 }

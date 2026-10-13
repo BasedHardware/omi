@@ -3677,7 +3677,7 @@ class AppLocalizationsNl extends AppLocalizations {
   String get settingsHeader => 'INSTELLINGEN';
 
   @override
-  String get plansAndBilling => 'Plans';
+  String get plansAndBilling => 'Plannen & Facturering';
 
   @override
   String get calendarIntegration => 'Agenda-integratie';
@@ -13059,7 +13059,7 @@ class AppLocalizationsNl extends AppLocalizations {
   }
 
   @override
-  String get paywallRecommended => 'Aanbevolen';
+  String get paywallRecommended => 'Recommended';
 
   @override
   String get paywallNoPlans => 'Plans aren\'t available right now. Try again in a minute.';
@@ -13068,16 +13068,7 @@ class AppLocalizationsNl extends AppLocalizations {
   String get paywallOtherPlans => 'See all plans';
 
   @override
-  String get paywallLegacyPlanStays => 'Je abonnement blijft precies zoals het is.';
-
-  @override
-  String get paywallMcpDailyRequests => 'Meer dagelijkse MCP-verzoeken';
-
-  @override
   String get paywallComparePlans => 'See plans';
-
-  @override
-  String get paywallLegacyPlan => 'Oud abonnement';
 
   @override
   String get paywallYourPlan => 'Your plan';
@@ -13093,4 +13084,10 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get paywallLoadError => 'Couldn\'t load plans. Check your connection and try again.';
+
+  @override
+  String get paywallPlans => 'Plans';
+
+  @override
+  String get paywallResubscribeFirst => 'Resubscribe first to change plans';
 }

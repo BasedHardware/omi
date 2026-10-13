@@ -4113,7 +4113,7 @@
     "@account": {
         "description": "Account section label"
     },
-    "plansAndBilling": "Plans",
+    "plansAndBilling": "طرح‌ها و صورت‌حساب",
     "@plansAndBilling": {
         "description": "Plans and billing section"
     },
@@ -11442,16 +11442,15 @@
     "reviewProposalSuggested": "پیشنهادی",
     "reviewProposalConflict": "این مورد پس از پیشنهاد Dream تغییر کرده است، بنابراین چیزی اعمال نشد.",
     "itemLinkListTitle": "{count, plural, =0{هیچ موردی نیست} =1{۱ مورد} other{{count} مورد}}",
-    "paywallRecommended": "پیشنهادی",
+    "paywallRecommended": "Recommended",
     "paywallNoPlans": "Plans aren't available right now. Try again in a minute.",
     "paywallOtherPlans": "See all plans",
-    "paywallLegacyPlanStays": "طرح شما دقیقاً به همین شکل باقی می‌ماند.",
-    "paywallMcpDailyRequests": "درخواست‌های روزانه MCP بیشتر",
     "paywallComparePlans": "See plans",
-    "paywallLegacyPlan": "طرح قدیمی",
     "paywallYourPlan": "Your plan",
     "paywallNotNow": "Not now",
     "paywallTryAgain": "Try again",
     "paywallManageBilling": "Manage billing",
-    "paywallLoadError": "Couldn't load plans. Check your connection and try again."
+    "paywallLoadError": "Couldn't load plans. Check your connection and try again.",
+    "paywallPlans": "Plans",
+    "paywallResubscribeFirst": "Resubscribe first to change plans"
 }

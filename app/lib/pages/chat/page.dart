@@ -737,7 +737,7 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
     await provider.retryFailedReply(failed);
   }
 
-  void _showPlansSheetOnQuotaExceeded() {
+  Future<void> _showPlansSheetOnQuotaExceeded() async {
     if (!mounted) return;
     final usage = context.read<UsageProvider>();
     // Refresh subscription data so the plans sheet is up-to-date
@@ -746,9 +746,11 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
       'chat_quota_exceeded',
       currentPlan: usage.subscription?.subscription.plan.wireName ?? 'unknown',
     );
+    final title = await plansSheetTitle(context);
+    if (!mounted) return;
     showOmiSheet<void>(
       context: context,
-      title: context.l10n.plansAndBilling,
+      title: title,
       padding: EdgeInsets.zero,
       builder: (_) => const _PlansSheetWrapper(analyticsSource: 'chat_quota_exceeded'),
     );

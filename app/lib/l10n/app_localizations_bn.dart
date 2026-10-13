@@ -3672,7 +3672,7 @@ class AppLocalizationsBn extends AppLocalizations {
   String get settingsHeader => 'সেটিংস';
 
   @override
-  String get plansAndBilling => 'Plans';
+  String get plansAndBilling => 'পরিকল্পনা ও বিলিং';
 
   @override
   String get calendarIntegration => 'ক্যালেন্ডার ইন্টিগ্রেশন';
@@ -13020,7 +13020,7 @@ class AppLocalizationsBn extends AppLocalizations {
   }
 
   @override
-  String get paywallRecommended => 'প্রস্তাবিত';
+  String get paywallRecommended => 'Recommended';
 
   @override
   String get paywallNoPlans => 'Plans aren\'t available right now. Try again in a minute.';
@@ -13029,16 +13029,7 @@ class AppLocalizationsBn extends AppLocalizations {
   String get paywallOtherPlans => 'See all plans';
 
   @override
-  String get paywallLegacyPlanStays => 'আপনার প্ল্যান ঠিক যেমন আছে তেমনই থাকবে।';
-
-  @override
-  String get paywallMcpDailyRequests => 'আরও দৈনিক MCP অনুরোধ';
-
-  @override
   String get paywallComparePlans => 'See plans';
-
-  @override
-  String get paywallLegacyPlan => 'পুরনো প্ল্যান';
 
   @override
   String get paywallYourPlan => 'Your plan';
@@ -13054,4 +13045,10 @@ class AppLocalizationsBn extends AppLocalizations {
 
   @override
   String get paywallLoadError => 'Couldn\'t load plans. Check your connection and try again.';
+
+  @override
+  String get paywallPlans => 'Plans';
+
+  @override
+  String get paywallResubscribeFirst => 'Resubscribe first to change plans';
 }

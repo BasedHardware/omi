@@ -3668,7 +3668,7 @@ class AppLocalizationsNo extends AppLocalizations {
   String get settingsHeader => 'INNSTILLINGER';
 
   @override
-  String get plansAndBilling => 'Plans';
+  String get plansAndBilling => 'Planer og Fakturering';
 
   @override
   String get calendarIntegration => 'Kalenderintegrasjon';
@@ -13024,7 +13024,7 @@ class AppLocalizationsNo extends AppLocalizations {
   }
 
   @override
-  String get paywallRecommended => 'Anbefalt';
+  String get paywallRecommended => 'Recommended';
 
   @override
   String get paywallNoPlans => 'Plans aren\'t available right now. Try again in a minute.';
@@ -13033,16 +13033,7 @@ class AppLocalizationsNo extends AppLocalizations {
   String get paywallOtherPlans => 'See all plans';
 
   @override
-  String get paywallLegacyPlanStays => 'Abonnementet ditt forblir nøyaktig som det er.';
-
-  @override
-  String get paywallMcpDailyRequests => 'Flere daglige MCP-forespørsler';
-
-  @override
   String get paywallComparePlans => 'See plans';
-
-  @override
-  String get paywallLegacyPlan => 'Eldre abonnement';
 
   @override
   String get paywallYourPlan => 'Your plan';
@@ -13058,4 +13049,10 @@ class AppLocalizationsNo extends AppLocalizations {
 
   @override
   String get paywallLoadError => 'Couldn\'t load plans. Check your connection and try again.';
+
+  @override
+  String get paywallPlans => 'Plans';
+
+  @override
+  String get paywallResubscribeFirst => 'Resubscribe first to change plans';
 }

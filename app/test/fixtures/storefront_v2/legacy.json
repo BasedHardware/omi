@@ -82,7 +82,7 @@
       "plan_id": "plus",
       "name": "Plus",
       "recommended": false,
-      "is_current": true,
+      "is_current": false,
       "hours_line": "About 100 hours of recording a month, around 3 hours a day",
       "bullets": [
         "Everything in Free, with much more room",

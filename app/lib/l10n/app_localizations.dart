@@ -7077,10 +7077,10 @@ abstract class AppLocalizations {
   /// **'SETTINGS'**
   String get settingsHeader;
 
-  /// Title of the plans sheet.
+  /// Plans and billing section
   ///
   /// In en, this message translates to:
-  /// **'Plans'**
+  /// **'Plans & Billing'**
   String get plansAndBilling;
 
   /// Calendar integration section
@@ -23235,29 +23235,11 @@ abstract class AppLocalizations {
   /// **'See all plans'**
   String get paywallOtherPlans;
 
-  /// Reassurance on the legacy plan view. No migration or checkout.
-  ///
-  /// In en, this message translates to:
-  /// **'Your plan stays exactly as it is.'**
-  String get paywallLegacyPlanStays;
-
-  /// First benefit on the recommended card when the sheet opened from the daily MCP cap.
-  ///
-  /// In en, this message translates to:
-  /// **'More daily MCP requests'**
-  String get paywallMcpDailyRequests;
-
   /// Primary button on the usage banner.
   ///
   /// In en, this message translates to:
   /// **'See plans'**
   String get paywallComparePlans;
-
-  /// Marker beside the true name of a legacy subscription.
-  ///
-  /// In en, this message translates to:
-  /// **'Legacy plan'**
-  String get paywallLegacyPlan;
 
   /// Badge on the tier card for the plan the person already has.
   ///
@@ -23288,6 +23270,18 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Couldn\'t load plans. Check your connection and try again.'**
   String get paywallLoadError;
+
+  /// Title of the new plans sheet. The previous sheet keeps Plans & Billing.
+  ///
+  /// In en, this message translates to:
+  /// **'Plans'**
+  String get paywallPlans;
+
+  /// Shown in place of a plan button while a cancellation is scheduled.
+  ///
+  /// In en, this message translates to:
+  /// **'Resubscribe first to change plans'**
+  String get paywallResubscribeFirst;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

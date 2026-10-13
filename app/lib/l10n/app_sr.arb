@@ -4113,7 +4113,7 @@
     "@account": {
         "description": "Account section label"
     },
-    "plansAndBilling": "Plans",
+    "plansAndBilling": "Планови и наплате",
     "@plansAndBilling": {
         "description": "Plans and billing section"
     },
@@ -11442,16 +11442,15 @@
     "reviewProposalSuggested": "Predloženo",
     "reviewProposalConflict": "Ovo se promenilo otkako je Dream to predložio, pa ništa nije primenjeno.",
     "itemLinkListTitle": "{count, plural, =0{Нема ставки} =1{1 ставка} other{{count} ставки}}",
-    "paywallRecommended": "Препоручено",
+    "paywallRecommended": "Recommended",
     "paywallNoPlans": "Plans aren't available right now. Try again in a minute.",
     "paywallOtherPlans": "See all plans",
-    "paywallLegacyPlanStays": "Ваш план остаје тачно такав какав јесте.",
-    "paywallMcpDailyRequests": "Више дневних MCP захтева",
     "paywallComparePlans": "See plans",
-    "paywallLegacyPlan": "Стари план",
     "paywallYourPlan": "Your plan",
     "paywallNotNow": "Not now",
     "paywallTryAgain": "Try again",
     "paywallManageBilling": "Manage billing",
-    "paywallLoadError": "Couldn't load plans. Check your connection and try again."
+    "paywallLoadError": "Couldn't load plans. Check your connection and try again.",
+    "paywallPlans": "Plans",
+    "paywallResubscribeFirst": "Resubscribe first to change plans"
 }

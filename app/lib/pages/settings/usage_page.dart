@@ -542,7 +542,7 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin, Wi
     );
   }
 
-  void _showPlansSheet({required String source, required bool trackOpen}) {
+  Future<void> _showPlansSheet({required String source, required bool trackOpen}) async {
     if (!context.read<UsageProvider>().showSubscriptionUI) {
       return;
     }
@@ -550,9 +550,11 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin, Wi
       final plan = context.read<UsageProvider>().subscription?.subscription.plan.wireName ?? 'unknown';
       PlatformManager.instance.analytics.paywallOpened(source, currentPlan: plan);
     }
+    final title = await plansSheetTitle(context);
+    if (!mounted || !context.read<UsageProvider>().showSubscriptionUI) return;
     showOmiSheet(
       context: context,
-      title: context.l10n.plansAndBilling,
+      title: title,
       padding: EdgeInsets.zero,
       builder: (context) => PlansSheet(
         waveController: _waveController,

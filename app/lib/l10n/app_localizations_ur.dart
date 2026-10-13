@@ -3676,7 +3676,7 @@ class AppLocalizationsUr extends AppLocalizations {
   String get settingsHeader => 'ترتیبات';
 
   @override
-  String get plansAndBilling => 'Plans';
+  String get plansAndBilling => 'منصوبے اور بلنگ';
 
   @override
   String get calendarIntegration => 'کیلنڈر کا انضمام';
@@ -13037,7 +13037,7 @@ class AppLocalizationsUr extends AppLocalizations {
   }
 
   @override
-  String get paywallRecommended => 'تجویز کردہ';
+  String get paywallRecommended => 'Recommended';
 
   @override
   String get paywallNoPlans => 'Plans aren\'t available right now. Try again in a minute.';
@@ -13046,16 +13046,7 @@ class AppLocalizationsUr extends AppLocalizations {
   String get paywallOtherPlans => 'See all plans';
 
   @override
-  String get paywallLegacyPlanStays => 'آپ کا پلان بالکل ویسا ہی رہتا ہے۔';
-
-  @override
-  String get paywallMcpDailyRequests => 'مزید روزانہ MCP درخواستیں';
-
-  @override
   String get paywallComparePlans => 'See plans';
-
-  @override
-  String get paywallLegacyPlan => 'پرانا پلان';
 
   @override
   String get paywallYourPlan => 'Your plan';
@@ -13071,4 +13062,10 @@ class AppLocalizationsUr extends AppLocalizations {
 
   @override
   String get paywallLoadError => 'Couldn\'t load plans. Check your connection and try again.';
+
+  @override
+  String get paywallPlans => 'Plans';
+
+  @override
+  String get paywallResubscribeFirst => 'Resubscribe first to change plans';
 }

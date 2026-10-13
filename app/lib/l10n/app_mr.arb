@@ -4113,7 +4113,7 @@
     "@account": {
         "description": "Account section label"
     },
-    "plansAndBilling": "Plans",
+    "plansAndBilling": "योजना आणि बिलिंग",
     "@plansAndBilling": {
         "description": "Plans and billing section"
     },
@@ -11442,16 +11442,15 @@
     "reviewProposalSuggested": "सुचवलेले",
     "reviewProposalConflict": "Dream ने सुचवल्यानंतर हे बदलले, म्हणून काहीही लागू केले नाही.",
     "itemLinkListTitle": "{count, plural, =0{कोणतेही आयटम नाहीत} =1{1 आयटम} other{{count} आयटम}}",
-    "paywallRecommended": "शिफारस केलेले",
+    "paywallRecommended": "Recommended",
     "paywallNoPlans": "Plans aren't available right now. Try again in a minute.",
     "paywallOtherPlans": "See all plans",
-    "paywallLegacyPlanStays": "तुमची योजना जशी आहे तशीच राहते.",
-    "paywallMcpDailyRequests": "अधिक दैनिक MCP विनंत्या",
     "paywallComparePlans": "See plans",
-    "paywallLegacyPlan": "जुनी योजना",
     "paywallYourPlan": "Your plan",
     "paywallNotNow": "Not now",
     "paywallTryAgain": "Try again",
     "paywallManageBilling": "Manage billing",
-    "paywallLoadError": "Couldn't load plans. Check your connection and try again."
+    "paywallLoadError": "Couldn't load plans. Check your connection and try again.",
+    "paywallPlans": "Plans",
+    "paywallResubscribeFirst": "Resubscribe first to change plans"
 }

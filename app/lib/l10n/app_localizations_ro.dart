@@ -3687,7 +3687,7 @@ class AppLocalizationsRo extends AppLocalizations {
   String get settingsHeader => 'SETĂRI';
 
   @override
-  String get plansAndBilling => 'Plans';
+  String get plansAndBilling => 'Planuri și Facturare';
 
   @override
   String get calendarIntegration => 'Integrare Calendar';
@@ -13078,7 +13078,7 @@ class AppLocalizationsRo extends AppLocalizations {
   }
 
   @override
-  String get paywallRecommended => 'Recomandat';
+  String get paywallRecommended => 'Recommended';
 
   @override
   String get paywallNoPlans => 'Plans aren\'t available right now. Try again in a minute.';
@@ -13087,16 +13087,7 @@ class AppLocalizationsRo extends AppLocalizations {
   String get paywallOtherPlans => 'See all plans';
 
   @override
-  String get paywallLegacyPlanStays => 'Planul tău rămâne exact așa cum este.';
-
-  @override
-  String get paywallMcpDailyRequests => 'Mai multe cereri MCP zilnice';
-
-  @override
   String get paywallComparePlans => 'See plans';
-
-  @override
-  String get paywallLegacyPlan => 'Plan vechi';
 
   @override
   String get paywallYourPlan => 'Your plan';
@@ -13112,4 +13103,10 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get paywallLoadError => 'Couldn\'t load plans. Check your connection and try again.';
+
+  @override
+  String get paywallPlans => 'Plans';
+
+  @override
+  String get paywallResubscribeFirst => 'Resubscribe first to change plans';
 }

@@ -3667,7 +3667,7 @@ class AppLocalizationsLt extends AppLocalizations {
   String get settingsHeader => 'NUSTATYMAI';
 
   @override
-  String get plansAndBilling => 'Plans';
+  String get plansAndBilling => 'Planai ir Atsiskaitymas';
 
   @override
   String get calendarIntegration => 'Kalendoriaus Integracija';
@@ -13047,7 +13047,7 @@ class AppLocalizationsLt extends AppLocalizations {
   }
 
   @override
-  String get paywallRecommended => 'Rekomenduojama';
+  String get paywallRecommended => 'Recommended';
 
   @override
   String get paywallNoPlans => 'Plans aren\'t available right now. Try again in a minute.';
@@ -13056,16 +13056,7 @@ class AppLocalizationsLt extends AppLocalizations {
   String get paywallOtherPlans => 'See all plans';
 
   @override
-  String get paywallLegacyPlanStays => 'Jūsų planas lieka toks, koks yra.';
-
-  @override
-  String get paywallMcpDailyRequests => 'Daugiau kasdienių MCP užklausų';
-
-  @override
   String get paywallComparePlans => 'See plans';
-
-  @override
-  String get paywallLegacyPlan => 'Ankstesnis planas';
 
   @override
   String get paywallYourPlan => 'Your plan';
@@ -13081,4 +13072,10 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get paywallLoadError => 'Couldn\'t load plans. Check your connection and try again.';
+
+  @override
+  String get paywallPlans => 'Plans';
+
+  @override
+  String get paywallResubscribeFirst => 'Resubscribe first to change plans';
 }

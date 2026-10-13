@@ -99,27 +99,34 @@ class _StorefrontPlansContentState extends State<StorefrontPlansContent> {
   }
 
   List<Widget> _plans(PlanStorefront data) {
-    final tiers = data.tiers;
-    final primary = tiers.where((tier) => tier.recommended || tier.isCurrent).toList();
-    final rest = tiers.where((tier) => !tier.recommended && !tier.isCurrent).toList();
+    final cancelScheduled = _cancelScheduled(data);
+    final tiers = _orderedTiers(data.tiers, cancelScheduled);
+    final primary = cancelScheduled
+        ? tiers.where((tier) => tier.isCurrent || tier.prices.isNotEmpty).toList()
+        : tiers.where((tier) => tier.recommended || tier.isCurrent).toList();
+    final primaryIds = primary.map((tier) => tier.tierId).toSet();
+    final rest = tiers.where((tier) => !primaryIds.contains(tier.tierId)).toList();
+    final interval = cancelScheduled ? (data.current?.interval ?? 'month') : _interval;
     return [
-      Wrap(spacing: OmiSpacing.xs, runSpacing: OmiSpacing.xxs, children: [
-        OmiFilterChip(
-          key: const Key('storefront_month'),
-          label: context.l10n.billingMonthly,
-          selected: _interval == 'month',
-          onSelected: () => setState(() => _interval = 'month'),
-        ),
-        OmiFilterChip(
-          key: const Key('storefront_year'),
-          label: data.yearlyToggleLabel ?? context.l10n.billingYearly,
-          selected: _interval == 'year',
-          onSelected: () => setState(() => _interval = 'year'),
-        ),
-      ]),
-      const SizedBox(height: OmiSpacing.sm),
+      if (!cancelScheduled) ...[
+        Wrap(spacing: OmiSpacing.xs, runSpacing: OmiSpacing.xxs, children: [
+          OmiFilterChip(
+            key: const Key('storefront_month'),
+            label: context.l10n.billingMonthly,
+            selected: _interval == 'month',
+            onSelected: () => setState(() => _interval = 'month'),
+          ),
+          OmiFilterChip(
+            key: const Key('storefront_year'),
+            label: data.yearlyToggleLabel ?? context.l10n.billingYearly,
+            selected: _interval == 'year',
+            onSelected: () => setState(() => _interval = 'year'),
+          ),
+        ]),
+        const SizedBox(height: OmiSpacing.sm),
+      ],
       for (final tier in primary) ...[
-        _tierCard(tier, data),
+        _tierCard(tier, data, interval),
         const SizedBox(height: OmiSpacing.sm),
       ],
       if (rest.isNotEmpty) ...[
@@ -135,14 +142,15 @@ class _StorefrontPlansContentState extends State<StorefrontPlansContent> {
         if (_allPlansExpanded)
           for (final tier in rest) ...[
             const SizedBox(height: OmiSpacing.sm),
-            _tierCard(tier, data),
+            _tierCard(tier, data, interval),
           ],
       ],
     ];
   }
 
-  Widget _tierCard(StorefrontTier tier, PlanStorefront storefront) {
-    final price = tier.priceFor(_interval);
+  Widget _tierCard(StorefrontTier tier, PlanStorefront storefront, String interval) {
+    final cancelScheduled = _cancelScheduled(storefront);
+    final price = tier.priceFor(interval);
     final decision = price == null
         ? StorefrontCheckoutDecision.refuse
         : storefrontCheckoutDecision(
@@ -150,27 +158,29 @@ class _StorefrontPlansContentState extends State<StorefrontPlansContent> {
             widget.livePlan,
             tier,
             price,
-            cancelScheduled: _cancelScheduled(storefront),
+            usageLegacy: storefront.usage?.kind == 'transcription',
+            cancelScheduled: cancelScheduled,
             showSubscriptionUi: storefront.showSubscriptionUi,
           );
     final cta = price == null
         ? null
         : storefrontActionLabel(current: storefront.current, tier: tier, price: price, decision: decision);
+    final showHold = cancelScheduled && decision != StorefrontCheckoutDecision.resubscribe;
     final compact = tier.isCurrent;
+    final highlight = tier.recommended && !cancelScheduled;
     return Container(
       key: Key('storefront_tier_${tier.planId}'),
       padding: const EdgeInsets.all(OmiSpacing.md),
       decoration: BoxDecoration(
         color: OmiColors.surface1,
         borderRadius: OmiRadius.lgAll,
-        border:
-            Border.all(color: tier.recommended ? OmiColors.accent : OmiColors.border, width: tier.recommended ? 2 : 1),
+        border: Border.all(color: highlight ? OmiColors.accent : OmiColors.border, width: highlight ? 2 : 1),
       ),
       child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
         Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Expanded(child: Semantics(header: true, child: Text(tier.name, style: OmiType.title3))),
           Wrap(spacing: OmiSpacing.xxs, runSpacing: OmiSpacing.xxs, alignment: WrapAlignment.end, children: [
-            if (tier.recommended) _badge(context.l10n.paywallRecommended),
+            if (tier.recommended && !cancelScheduled) _badge(context.l10n.paywallRecommended),
             if (tier.isCurrent) _badge(context.l10n.paywallYourPlan),
           ]),
         ]),
@@ -210,9 +220,26 @@ class _StorefrontPlansContentState extends State<StorefrontPlansContent> {
             key: Key('storefront_renewal_${tier.planId}'),
             style: OmiType.caption.copyWith(color: OmiColors.textSecondary),
           ),
+        ] else if (showHold) ...[
+          SizedBox(height: compact ? OmiSpacing.sm : OmiSpacing.xs),
+          Text(
+            context.l10n.paywallResubscribeFirst,
+            key: Key('storefront_hold_${tier.planId}'),
+            style: OmiType.footnote.copyWith(color: OmiColors.textSecondary),
+          ),
         ],
       ]),
     );
+  }
+
+  List<StorefrontTier> _orderedTiers(List<StorefrontTier> tiers, bool cancelScheduled) {
+    if (!cancelScheduled) return tiers;
+    final indexed = tiers.asMap().entries.toList()
+      ..sort((a, b) {
+        if (a.value.isCurrent != b.value.isCurrent) return a.value.isCurrent ? -1 : 1;
+        return a.key.compareTo(b.key);
+      });
+    return [for (final entry in indexed) entry.value];
   }
 
   Widget _badge(String label) {

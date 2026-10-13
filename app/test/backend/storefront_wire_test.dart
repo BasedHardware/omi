@@ -2,32 +2,29 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:omi/backend/schema/gen/storefront_wire.g.dart';
+import 'package:omi/models/plan_storefront.dart';
 
+/// The request path is [PlanStorefront.fromJson] (schema 2). Schema 1 is not decoded here.
 void main() {
-  Map<String, dynamic> fixture() =>
-      jsonDecode(File('../backend/tests/unit/fixtures/storefront/ladder_v1_free.json').readAsStringSync())
-          as Map<String, dynamic>;
+  Map<String, dynamic> fixture(String name) =>
+      jsonDecode(File('test/fixtures/storefront_v2/$name.json').readAsStringSync()) as Map<String, dynamic>;
 
-  test('generated DTO decodes the backend fixture without client plan rules', () {
-    final json = fixture();
-    final sheet = GeneratedStorefrontResponse.fromJson(json);
-    final tiers = sheet.tiers!;
-    expect(sheet.schemaVersion, 1);
-    expect(sheet.nextOfferTierId, 'plus:ladder_v1');
-    expect(tiers.map((tier) => tier.displayName), ['Free', 'Plus', 'Pro', 'Architect']);
-    expect(tiers[1].prices[1].annualSavings!.amountMinor, 3998);
-    expect(tiers[1].prices[1].monthlyEquivalent, r'$16.66/mo');
-    expect(GeneratedStorefrontResponse.fromJson(sheet.toJson()).toJson(), sheet.toJson());
+  test('request path decodes schema 2 and keeps additive fields from changing the plan', () {
+    final json = fixture('settings');
+    json['future_field'] = true;
+    final first = (json['tiers'] as List).first as Map<String, dynamic>;
+    first['plan_id'] = 'future_backend_plan';
+    first['tier_id'] = 'future_backend_plan:ladder_v1';
+    first['future_field'] = true;
+    final sheet = PlanStorefront.fromJson(json);
+    expect(sheet.header, 'Choose your plan');
+    expect(sheet.tiers.first.planId, 'future_backend_plan');
+    expect(sheet.tiers.first.ctaLabel, 'Upgrade to Pro');
   });
 
-  test('wire tier identity tolerates a future backend plan and additive fields', () {
-    final json = fixture();
-    final tiers = json['tiers'] as List<dynamic>;
-    final first = tiers.first as Map<String, dynamic>;
-    first['plan_id'] = 'future_backend_plan';
-    first['future_field'] = true;
-    final sheet = GeneratedStorefrontResponse.fromJson(json);
-    expect(sheet.tiers!.first.planId, 'future_backend_plan');
+  test('schema 1 is rejected by the request path', () {
+    final json = fixture('free');
+    json['schema_version'] = 1;
+    expect(() => PlanStorefront.fromJson(json), throwsFormatException);
   });
 }

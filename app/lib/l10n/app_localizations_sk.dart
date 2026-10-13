@@ -3672,7 +3672,7 @@ class AppLocalizationsSk extends AppLocalizations {
   String get settingsHeader => 'NASTAVENIA';
 
   @override
-  String get plansAndBilling => 'Plans';
+  String get plansAndBilling => 'Plány a Fakturácia';
 
   @override
   String get calendarIntegration => 'Integrácia Kalendára';
@@ -13019,7 +13019,7 @@ class AppLocalizationsSk extends AppLocalizations {
   }
 
   @override
-  String get paywallRecommended => 'Odporúčané';
+  String get paywallRecommended => 'Recommended';
 
   @override
   String get paywallNoPlans => 'Plans aren\'t available right now. Try again in a minute.';
@@ -13028,16 +13028,7 @@ class AppLocalizationsSk extends AppLocalizations {
   String get paywallOtherPlans => 'See all plans';
 
   @override
-  String get paywallLegacyPlanStays => 'Váš plán zostáva presne taký, aký je.';
-
-  @override
-  String get paywallMcpDailyRequests => 'Viac denných požiadaviek MCP';
-
-  @override
   String get paywallComparePlans => 'See plans';
-
-  @override
-  String get paywallLegacyPlan => 'Pôvodný plán';
 
   @override
   String get paywallYourPlan => 'Your plan';
@@ -13053,4 +13044,10 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get paywallLoadError => 'Couldn\'t load plans. Check your connection and try again.';
+
+  @override
+  String get paywallPlans => 'Plans';
+
+  @override
+  String get paywallResubscribeFirst => 'Resubscribe first to change plans';
 }

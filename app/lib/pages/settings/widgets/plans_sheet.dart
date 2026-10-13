@@ -31,6 +31,13 @@ import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/pages/settings/payment_webview_page.dart';
 
+/// The old sheet keeps "Plans & Billing". "Plans" is only the storefront title, and only while its flag is on.
+Future<String> plansSheetTitle(BuildContext context, {Future<bool> Function()? sheetEnabled}) async {
+  final enabled = await (sheetEnabled ?? PlanStorefrontGate.sheetEnabled)();
+  if (!context.mounted) return '';
+  return enabled ? context.l10n.paywallPlans : context.l10n.plansAndBilling;
+}
+
 /// Plan picker, upgrade/downgrade and payment management.
 ///
 /// Content for a bottom sheet: present it with `showOmiSheet(context: context, padding:
@@ -123,6 +130,7 @@ class _PlansSheetState extends State<PlansSheet> {
       sub?.plan,
       tier,
       price,
+      usageLegacy: _storefront?.usage?.kind == 'transcription',
       cancelScheduled: (sub?.cancelAtPeriodEnd ?? false) || (_storefront?.current?.cancelAtPeriodEnd ?? false),
       showSubscriptionUi: _storefront?.showSubscriptionUi ?? false,
     );
@@ -358,15 +366,9 @@ class _PlansSheetState extends State<PlansSheet> {
     // Check if user is upgrading from monthly to annual
     final provider = context.read<UsageProvider>();
     final currentSub = provider.subscription?.subscription;
+    // Pending cancellation rejects every price except the one already on the subscription.
     if (currentSub?.cancelAtPeriodEnd == true && priceId != currentSub?.currentPriceId) {
-      final resubscribingCurrent =
-          storefrontPrice != null && priceId == storefrontPrice.id && priceId == _storefront?.current?.priceId;
-      if (!resubscribingCurrent) {
-        if (storefrontPrice != null && mounted) {
-          OmiFeedback.error(context, context.l10n.selectedPlanNotAvailable);
-        }
-        return;
-      }
+      return;
     }
     // Only show "no charge until renewal" dialog for same-tier monthly→annual switch.
     // Cross-tier changes are immediate+prorated on the backend, not deferred.

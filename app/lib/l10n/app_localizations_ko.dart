@@ -3613,7 +3613,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get settingsHeader => '설정';
 
   @override
-  String get plansAndBilling => 'Plans';
+  String get plansAndBilling => '플랜 및 결제';
 
   @override
   String get calendarIntegration => '캘린더 통합';
@@ -12842,7 +12842,7 @@ class AppLocalizationsKo extends AppLocalizations {
   }
 
   @override
-  String get paywallRecommended => '추천';
+  String get paywallRecommended => 'Recommended';
 
   @override
   String get paywallNoPlans => 'Plans aren\'t available right now. Try again in a minute.';
@@ -12851,16 +12851,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get paywallOtherPlans => 'See all plans';
 
   @override
-  String get paywallLegacyPlanStays => '현재 요금제는 그대로 유지됩니다.';
-
-  @override
-  String get paywallMcpDailyRequests => '더 많은 일일 MCP 요청';
-
-  @override
   String get paywallComparePlans => 'See plans';
-
-  @override
-  String get paywallLegacyPlan => '기존 요금제';
 
   @override
   String get paywallYourPlan => 'Your plan';
@@ -12876,4 +12867,10 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get paywallLoadError => 'Couldn\'t load plans. Check your connection and try again.';
+
+  @override
+  String get paywallPlans => 'Plans';
+
+  @override
+  String get paywallResubscribeFirst => 'Resubscribe first to change plans';
 }

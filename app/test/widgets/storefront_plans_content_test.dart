@@ -298,9 +298,18 @@ void main() {
       }
       if (entry.key == 'cancel_scheduled') {
         expect(find.text('Your Plus plan ends Nov 1'), findsOneWidget);
-        expect(find.text('Upgrade to Pro'), findsOneWidget);
+        expect(find.text('Upgrade to Pro'), findsNothing);
+        expect(find.text('Switch to yearly · save \$39.98'), findsNothing);
+        expect(find.text('Recommended'), findsNothing);
         expect(find.text('Resubscribe'), findsOneWidget);
-        expect(find.byKey(const Key('storefront_buy_operator')), findsOneWidget);
+        expect(find.text('Resubscribe first to change plans'), findsWidgets);
+        expect(find.byKey(const Key('storefront_buy_operator')), findsNothing);
+        expect(find.byKey(const Key('storefront_buy_plus')), findsOneWidget);
+        expect(find.byKey(const Key('storefront_year')), findsNothing);
+        expect(
+          tester.getTopLeft(find.byKey(const Key('storefront_tier_plus'))).dy,
+          lessThan(tester.getTopLeft(find.byKey(const Key('storefront_tier_operator'))).dy),
+        );
         expect(find.descendant(of: find.byKey(const Key('storefront_tier_plus')), matching: find.textContaining('•')),
             findsNothing);
       }
@@ -461,15 +470,19 @@ void main() {
     expect(find.byKey(const Key('storefront_manage')), findsNothing);
   });
 
-  testWidgets('cancel scheduled shows Upgrade to Pro on higher tiers and Resubscribe on the current tier',
-      (tester) async {
+  testWidgets('cancel scheduled offers only Resubscribe and tells other tiers to resubscribe first', (tester) async {
     await pumpSheet(tester, data: PlanStorefront.fromJson(fixture('cancel_scheduled')));
     expect(find.text('Your Plus plan ends Nov 1'), findsOneWidget);
     expect(find.text(r"You're on Plus · $19.99/mo"), findsOneWidget);
-    expect(find.text('Upgrade to Pro'), findsOneWidget);
-    expect(find.byKey(const Key('storefront_buy_operator')), findsOneWidget);
+    expect(find.text('Upgrade to Pro'), findsNothing);
+    expect(find.text('Upgrade to Architect'), findsNothing);
+    expect(find.text('Recommended'), findsNothing);
+    expect(find.byKey(const Key('storefront_year')), findsNothing);
     expect(find.text('Resubscribe'), findsOneWidget);
     expect(find.byKey(const Key('storefront_buy_plus')), findsOneWidget);
+    expect(find.byKey(const Key('storefront_buy_operator')), findsNothing);
+    expect(find.byKey(const Key('storefront_hold_operator')), findsOneWidget);
+    expect(find.text('Resubscribe first to change plans'), findsWidgets);
     final current = find.byKey(const Key('storefront_tier_plus'));
     expect(find.descendant(of: current, matching: find.textContaining('•')), findsNothing);
     expect(
@@ -483,11 +496,18 @@ void main() {
         findsWidgets);
     final scrollable =
         find.descendant(of: find.byKey(const Key('storefront_scroll')), matching: find.byType(Scrollable));
-    await tester.scrollUntilVisible(find.byKey(const Key('storefront_other_plans')), 200, scrollable: scrollable);
-    await tester.tap(find.byKey(const Key('storefront_other_plans')).hitTestable());
-    await tester.pumpAndSettle();
-    await tester.scrollUntilVisible(find.byKey(const Key('storefront_buy_architect')), 80, scrollable: scrollable);
-    expect(find.text('Upgrade to Architect'), findsOneWidget);
+    await tester.scrollUntilVisible(find.byKey(const Key('storefront_hold_architect')), 80, scrollable: scrollable);
+    expect(find.byKey(const Key('storefront_buy_architect')), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('transcription usage legacy hides checkout buttons', (tester) async {
+    final json = fixture();
+    json['usage']['kind'] = 'transcription';
+    await pumpSheet(tester, data: PlanStorefront.fromJson(json));
+    expect(find.byKey(const Key('storefront_buy_operator')), findsNothing);
+    expect(find.byKey(const Key('storefront_buy_plus')), findsNothing);
+    expect(find.text('Upgrade to Pro'), findsNothing);
     expect(tester.takeException(), isNull);
   });
 

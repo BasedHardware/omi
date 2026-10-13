@@ -28,7 +28,7 @@ Future<bool> openContextualPlans(
   await showOmiSheet(
       context: context,
       padding: EdgeInsets.zero,
-      title: context.l10n.plansAndBilling,
+      title: context.l10n.paywallPlans,
       builder: (_) => _ContextualPlansHost(source: source, trigger: trigger, storefront: storefront));
   return true;
 }
@@ -78,7 +78,7 @@ Future<bool> showProGateUpsell(BuildContext context, {required String feature, r
     return false;
   }
   final data = result.data;
-  if (!data.shouldGate(feature)) return false;
+  if (!data.shouldGate(feature, livePlan: provider.subscription?.subscription.plan)) return false;
   return openContextualPlans(context, source: source, trigger: feature, storefront: data);
 }
 
