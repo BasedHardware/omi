@@ -39,6 +39,7 @@ REJECTION_REASONS = {
     'noop',
     'contradictory_spelling',
     'invalid_question_evidence',
+    'consensus_rejected',
 }
 
 logger = logging.getLogger(__name__)
@@ -110,6 +111,7 @@ def record_pass(report):
         CONTEXT_BUDGET.labels(key).inc(count)
     logger.info(
         'Dream pass status=%s context_mode=%s input_tokens_estimate=%d targets=%d records=%d response_retries=%d '
+        'samples_requested=%d samples_returned=%d samples_failed=%d consensus_threshold=%d '
         'triage_evidence_chars=%d reasoning_evidence_chars=%d '
         'dropped_invalid=%s validation_errors=%s rejected=%s poisoned=%d retrieval_counts=%s '
         'retrieval_failure_counts=%s dirty_counts=%s target_context_counts=%s input_content_counts=%s context_budget_counts=%s',
@@ -119,6 +121,10 @@ def record_pass(report):
         max(0, int(report.get('targets', 0))),
         max(0, int(report.get('records', 0))),
         retries,
+        max(0, int(report.get('samples_requested', 0))),
+        max(0, int(report.get('samples_returned', 0))),
+        max(0, int(report.get('samples_failed', 0))),
+        max(0, int(report.get('consensus_threshold', 0))),
         triage,
         reasoning,
         json.dumps(report.get('dropped_invalid', {}), sort_keys=True),
