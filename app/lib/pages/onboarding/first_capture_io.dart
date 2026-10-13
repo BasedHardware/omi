@@ -59,7 +59,10 @@ class PhoneFirstCaptureIO implements FirstCaptureIO {
         }
         return conversation;
       }
-      if (conversation.status == ConversationStatus.failed) throw StateError('processing failed');
+      if (conversation.status == ConversationStatus.failed) {
+        if (conversation.discarded) return conversation;
+        throw StateError('processing failed');
+      }
       await wait(const Duration(seconds: 2));
       if (isCurrent?.call() == false) return null;
       conversation = await loadConversation(conversation.id) ?? conversation;

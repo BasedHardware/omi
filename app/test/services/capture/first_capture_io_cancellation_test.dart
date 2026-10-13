@@ -36,6 +36,20 @@ class _Capture implements CaptureProvider {
 }
 
 void main() {
+  test('terminal discarded failure reaches the guided outcome classifier', () async {
+    final capture = _Capture();
+    final io = PhoneFirstCaptureIO(capture);
+    await io.start();
+    final discarded = ServerConversation(
+        id: 'discarded',
+        createdAt: DateTime(2026),
+        structured: Structured('', ''),
+        status: ConversationStatus.failed,
+        discarded: true);
+    capture.pending.complete(CreateConversationResponse(messages: [], conversation: discarded));
+    expect(await io.finish(), same(discarded));
+  });
+
   test('leaving while Finish awaits never cancels; superseded attempt performs no more polling', () async {
     final capture = _Capture();
     final sleep = Completer<void>();

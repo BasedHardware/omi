@@ -30,6 +30,7 @@ import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/analytics/registry/events.g.dart';
 
 Widget host(Widget child, {TargetPlatform platform = TargetPlatform.iOS}) => MaterialApp(
+      debugShowCheckedModeBanner: false,
       theme: buildOmiTheme(brightness: Brightness.light).copyWith(
           platform: platform,
           appBarTheme: buildOmiTheme(brightness: Brightness.light).appBarTheme.copyWith(
@@ -547,10 +548,13 @@ void main() {
         await tester.pumpWidget(const SizedBox());
         await tester.pump();
         await tester.pumpWidget(RepaintBoundary(key: boundary, child: host(child, platform: platform)));
+        await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 100)));
         await tester.pump(const Duration(milliseconds: 500));
         if (interact != null) {
           await interact();
+          await tester.pump();
           await tester.pump(const Duration(milliseconds: 350));
+          expect(find.byType(OmiAlertDialog), findsOneWidget, reason: name);
         }
         expect(tester.takeException(), isNull, reason: name);
         await tester.runAsync(() async {
