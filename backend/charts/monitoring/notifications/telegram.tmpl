@@ -16,7 +16,7 @@ Summary: {{ printf "%.180s" $a.Annotations.summary }}{{ if gt (len $a.Annotation
 Impact: {{ printf "%.180s" $a.Annotations.user_impact }}{{ if gt (len $a.Annotations.user_impact) 180 }}… (full text in rule){{ end }}
 Values: {{ if $a.Values }}{{ printf "%.100s" (printf "%v" $a.Values) }}{{ else }}unavailable; check panel{{ end }}
 Affected: pod={{ with $a.Labels.pod }}{{ printf "%.50s" . }}{{ else }}n/a{{ end }} lane={{ with $a.Labels.lane }}{{ printf "%.50s" . }}{{ else }}n/a{{ end }} provider={{ with $a.Labels.provider }}{{ printf "%.50s" . }}{{ else }}n/a{{ end }}
-Dashboard/panel: {{ if $a.PanelURL }}{{ template "omi.telegram.link" $a.PanelURL }}{{ else }}{{ template "omi.telegram.link" $a.DashboardURL }}{{ end }}
+Dashboard/panel: {{ if $a.PanelURL }}{{ template "omi.telegram.link" $a.PanelURL }}{{ else if $a.DashboardURL }}{{ template "omi.telegram.link" $a.DashboardURL }}{{ else }}{{ template "omi.telegram.link" $a.Annotations.dashboard_url }}{{ end }}
 Next: {{ printf "%.220s" $a.Annotations.safe_next_action }}{{ if gt (len $a.Annotations.safe_next_action) 220 }}… (full text in rule){{ end }}
 {{ with $a.Annotations.runbook }}Runbook: {{ printf "%.120s" . }}
 {{ end -}}

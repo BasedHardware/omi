@@ -33,6 +33,11 @@ def test_severity_timing_and_actionable_annotations():
             assert annotations.get('__dashboardUid__') in dashboards or annotations.get('dashboard_url', '').startswith(
                 'https://monitor.omi.me/d/'
             ), rule['uid']
+            # Grafana rejects a rule with __dashboardUid__ but no __panelId__ (HTTP 400 on provisioning PUT);
+            # dashboard-only links use the dashboard_url annotation instead.
+            assert ('__dashboardUid__' in annotations) == ('__panelId__' in annotations), rule['uid']
+            if 'dashboard_url' in annotations:
+                assert annotations['dashboard_url'].removeprefix('https://monitor.omi.me/d/') in dashboards, rule['uid']
 
 
 @pytest.fixture(scope='module')
@@ -119,6 +124,14 @@ def test_real_grafana_silence_url_is_kept(render):
     message = render(data)
     assert f'Silence: {silence}' in message
     assert len(message.encode('utf-16-le')) // 2 < 4096
+
+
+def test_dashboard_url_annotation_is_the_fallback_link(render):
+    data = payload()
+    alert = data['Alerts']['Firing'][0]
+    alert['PanelURL'] = alert['DashboardURL'] = ''
+    alert['Annotations']['dashboard_url'] = 'https://monitor.omi.me/d/omi-core-features'
+    assert 'Dashboard/panel: https://monitor.omi.me/d/omi-core-features' in render(data)
 
 
 def test_storm_unicode_links_and_resolved_stay_bounded(render):
