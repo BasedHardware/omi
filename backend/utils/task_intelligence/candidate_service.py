@@ -92,7 +92,14 @@ def create_candidate(
     )
 
 
-def _fail_missing_task(uid: str, candidate_id: str, *, account_generation: int, lease_token: str) -> None:
+def _fail_missing_task(
+    uid: str,
+    candidate_id: str,
+    *,
+    account_generation: int,
+    lease_token: str,
+    firestore_client: Any = None,
+) -> None:
     integration_outbox_db.complete_candidate_integration_dispatch(
         uid,
         candidate_id,
@@ -100,6 +107,7 @@ def _fail_missing_task(uid: str, candidate_id: str, *, account_generation: int, 
         lease_token=lease_token,
         succeeded=False,
         error_text='task_not_found',
+        firestore_client=firestore_client,
     )
     record_fallback(
         component='other',
@@ -134,9 +142,25 @@ def _record_integration_result(
     )
     if not noted:
         return False
+
+    def _record_attempted_provider(app_key: str) -> bool:
+        return integration_outbox_db.note_candidate_integration_provider_attempt(
+            uid,
+            candidate_id,
+            lease_token=lease_token,
+            outcome='in_doubt',
+            export_platform=app_key,
+            firestore_client=firestore_client,
+        )
+
     try:
         result, outcome, external_task_id = asyncio.run(
-            auto_sync_action_item_with_outcome(uid, task, skip_apple_reminders=False)
+            auto_sync_action_item_with_outcome(
+                uid,
+                task,
+                skip_apple_reminders=False,
+                on_provider_attempt=_record_attempted_provider,
+            )
         )
     except Exception:
         integration_outbox_db.complete_candidate_integration_dispatch(
@@ -147,6 +171,7 @@ def _record_integration_result(
             succeeded=False,
             error_text='integration_exception',
             provider_attempt_outcome='in_doubt',
+            firestore_client=firestore_client,
         )
         record_fallback(
             component='other',
@@ -156,6 +181,8 @@ def _record_integration_result(
             outcome='degraded',
         )
         raise
+    if result.get('reason') == 'lease_lost':
+        return False
     terminal_noop = result.get('reason') in {
         'no_default_integration',
         'integration_not_found',
@@ -174,6 +201,7 @@ def _record_integration_result(
         error_text=None if succeeded else 'integration_not_synced',
         provider_attempt_outcome=_classified_provider_outcome(outcome, succeeded=succeeded),
         external_task_id=external_task_id,
+        firestore_client=firestore_client,
     )
     if not succeeded:
         record_fallback(
@@ -186,18 +214,36 @@ def _record_integration_result(
     return True
 
 
-def _claim_task_integration(uid: str, candidate_id: str, task_id: str, *, account_generation: int):
-    """Claim the outbox row and load the task. ``(None, None)`` when the claim is lost."""
+def _claim_task_integration(
+    uid: str,
+    candidate_id: str,
+    task_id: str,
+    *,
+    account_generation: int,
+    firestore_client: Any = None,
+):
+    """Claim the outbox row and load the task. ``(None, None)`` when the claim is lost.
+
+    The claim transaction is the only gate that may schedule a provider call.
+    ``in_doubt`` and a recorded external id are resolved there, on ``firestore_client``.
+    """
     lease_token = integration_outbox_db.claim_candidate_integration_dispatch(
         uid,
         candidate_id,
         account_generation=account_generation,
+        firestore_client=firestore_client,
     )
     if lease_token is None:
         return None, None
     task = action_items_db.get_action_item(uid, task_id)
     if not task:
-        _fail_missing_task(uid, candidate_id, account_generation=account_generation, lease_token=lease_token)
+        _fail_missing_task(
+            uid,
+            candidate_id,
+            account_generation=account_generation,
+            lease_token=lease_token,
+            firestore_client=firestore_client,
+        )
         return lease_token, None
     return lease_token, task
 
@@ -270,7 +316,13 @@ def dispatch_task_integration_blocking(
     """
     if provider_dispatch_blocked_by_account_deletion(uid):
         return False
-    lease_token, task = _claim_task_integration(uid, candidate_id, task_id, account_generation=account_generation)
+    lease_token, task = _claim_task_integration(
+        uid,
+        candidate_id,
+        task_id,
+        account_generation=account_generation,
+        firestore_client=firestore_client,
+    )
     if lease_token is None:
         return False
     if task is None:

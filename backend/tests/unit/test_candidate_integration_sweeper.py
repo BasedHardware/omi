@@ -407,6 +407,32 @@ def test_blocking_dispatch_skips_the_provider_when_the_lease_is_lost_before_the_
     assert store.rows[path]['lease_token'] == 'stolen'
 
 
+def test_blocking_dispatch_uses_the_injected_client_for_claim_and_completion(store, monkeypatch):
+    now = _now()
+    path = _put(store, 'due', now=now, status='failed', provider_attempt_outcome='definite_error')
+    empty = StrictFirestore()
+    empty.rows[('users', 'user-1', 'task_intelligence_control', 'state')] = {
+        'workflow_mode': 'read',
+        'account_generation': 9,
+    }
+    monkeypatch.setattr(integration_outbox_db, 'db', empty)
+    monkeypatch.setattr(integration_outbox_db, 'get_firestore_client', lambda: empty)
+    calls = _allow_sync(monkeypatch, {'synced': True, 'provider_attempt_outcome': 'accepted'})
+
+    recorded = candidate_service.dispatch_task_integration_blocking(
+        'user-1',
+        'due',
+        'task-1',
+        account_generation=3,
+        firestore_client=_GroupClient(store),
+    )
+
+    assert recorded is True
+    assert calls == ['task-1']
+    assert store.rows[path]['status'] == 'completed'
+    assert ('users', 'user-1', 'candidate_integration_outbox', 'due') not in empty.rows
+
+
 def test_row_and_wall_clock_budgets_stop_the_pass(store, monkeypatch):
     now = _now()
     _forbid_provider(monkeypatch)
@@ -451,6 +477,7 @@ def test_ambiguous_and_legacy_failures_are_not_sent_to_the_provider_again(store,
         task_id='task-recorded',
         provider_attempt_outcome='in_doubt',
         external_task_id='ext-recorded',
+        export_platform='todoist',
     )
     updates = []
 
@@ -473,7 +500,15 @@ def test_ambiguous_and_legacy_failures_are_not_sent_to_the_provider_again(store,
     assert store.rows[safe]['status'] == 'completed'
     assert store.rows[recorded]['status'] == 'completed'
     assert updates == [
-        ('task-recorded', {'exported': True, 'export_date': now, 'external_task_id': 'ext-recorded'}),
+        (
+            'task-recorded',
+            {
+                'exported': True,
+                'export_date': now,
+                'external_task_id': 'ext-recorded',
+                'export_platform': 'todoist',
+            },
+        ),
     ]
 
 
@@ -556,6 +591,42 @@ def test_sweep_cursor_moves_past_rows_that_stay_in_the_same_status(store, monkey
     assert second['skipped_not_due'] == 1 and second['retried'] == 0
     assert third['retried'] == 1
     assert calls == ['task-due']
+
+
+def test_two_sweeps_reach_a_processing_row_behind_a_full_future_failed_page(store, monkeypatch):
+    now = _now()
+    calls = _allow_sync(monkeypatch, {'synced': True, 'provider_attempt_outcome': 'accepted'})
+    for index in range(sweeper.MAX_ROWS):
+        _put(
+            store,
+            f'failed-{index:03d}',
+            now=now,
+            available_at=now + timedelta(hours=1),
+            provider_attempt_outcome='definite_error',
+        )
+    _put(
+        store,
+        'reclaim',
+        now=now,
+        status='processing',
+        task_id='task-reclaim',
+        claimed_at=now - timedelta(hours=2),
+        lease_token='abandoned',
+        provider_attempt_outcome='definite_error',
+    )
+
+    first, _client = _sweep(store, now=now)
+
+    assert first['inspected'] == sweeper.MAX_ROWS
+    assert first['skipped_not_due'] == sweeper.MAX_ROWS
+    assert first['retried'] == 0
+    assert calls == []
+
+    second, _client = _sweep(store, now=now)
+
+    assert second['inspected'] == 1
+    assert second['retried'] == 1
+    assert calls == ['task-reclaim']
 
 
 def test_generation_mismatch_rechecks_the_control_document_in_the_write_transaction(store, monkeypatch):

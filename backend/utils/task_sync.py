@@ -1,5 +1,5 @@
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional
 
 import httpx
 
@@ -53,14 +53,23 @@ def _external_task_id(result: Dict[str, Any]) -> Optional[str]:
 class _CloudAttempt:
     """Candidate-only record of one cloud create. Absent on the public batch path."""
 
-    def __init__(self) -> None:
+    def __init__(self, on_provider_attempt: Optional[Callable[[str], bool]] = None) -> None:
         self.outcome = "not_sent"
         self.external_task_id: Optional[str] = None
+        self.export_platform: Optional[str] = None
+        self._on_provider_attempt = on_provider_attempt
 
     def note(self, outcome: str, external_task_id: Optional[str] = None) -> None:
         self.outcome = outcome
         if external_task_id is not None:
             self.external_task_id = external_task_id
+
+    def begin_provider(self, app_key: str) -> bool:
+        """Remember the app key and let the caller persist it before the POST."""
+        self.export_platform = app_key
+        if self._on_provider_attempt is None:
+            return True
+        return self._on_provider_attempt(app_key)
 
 
 async def auto_sync_action_item(
@@ -84,16 +93,22 @@ async def auto_sync_action_item(
 
 
 async def auto_sync_action_item_with_outcome(
-    uid: str, action_item: Dict[str, Any], skip_apple_reminders: bool = False
+    uid: str,
+    action_item: Dict[str, Any],
+    skip_apple_reminders: bool = False,
+    *,
+    on_provider_attempt: Optional[Callable[[str], bool]] = None,
 ) -> tuple[Dict[str, Any], str, Optional[str]]:
     """Run auto-sync and report the provider attempt without changing the public dict.
 
     The dict is the origin/main ``auto_sync_action_item`` result. The outcome and
     recorded provider id are for candidate integration dispatch only. A failed
     export-marker write stays ``in_doubt`` and still carries the provider id,
-    which the public error dict does not.
+    which the public error dict does not. ``on_provider_attempt`` runs with the
+    app key immediately before a cloud create so the outbox can store
+    ``export_platform``.
     """
-    attempt = _CloudAttempt()
+    attempt = _CloudAttempt(on_provider_attempt)
     try:
         default_app = await run_blocking(db_executor, users_db.get_default_task_integration, uid)
         if not default_app:
@@ -146,6 +161,9 @@ async def _sync_to_cloud_service(
             if attempt is not None:
                 attempt.note("not_sent")
             return {"synced": True, "platform": app_key, "reason": "already_exported"}
+
+    if attempt is not None and not attempt.begin_provider(app_key):
+        return {"synced": False, "reason": "lease_lost"}
 
     async with httpx.AsyncClient(timeout=10.0) as client:
         result = await create_task_internal(

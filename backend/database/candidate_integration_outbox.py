@@ -7,7 +7,9 @@ from uuid import uuid4
 from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter
 
+from database import dream_dirty
 from database._client import db, get_firestore_client
+from database.action_items_cache import bump_action_items_list_version
 from database.candidates import (
     TASK_INTELLIGENCE_CONTROL_COLLECTION,
     TASK_INTELLIGENCE_CONTROL_DOCUMENT,
@@ -40,6 +42,7 @@ SWEEP_METADATA_FIELDS = (
     'candidate_id',
     'claimed_at',
     'created_at',
+    'export_platform',
     'external_task_id',
     'provider_attempt_outcome',
     'redriven_at',
@@ -47,6 +50,9 @@ SWEEP_METADATA_FIELDS = (
     'task_id',
 )
 ABANDON_REASONS = frozenset({'stale_abandoned', 'generation_mismatch', 'missing_created_at', 'in_doubt'})
+# Same collection ``database.action_items`` writes. Kept here so a claim recovery
+# can mark the existing task in the outbox transaction without importing that module.
+_ACTION_ITEMS_COLLECTION = 'action_items'
 
 
 def _firestore(firestore_client: Any = None) -> Any:
@@ -97,18 +103,63 @@ def _processing_lease_is_current(payload: dict[str, Any], now: datetime) -> bool
     return claimed_at + timedelta(seconds=CANDIDATE_INTEGRATION_LEASE_SECONDS) > now
 
 
-def _task_control_ref(uid: str):
-    return (
-        db.collection('users')
-        .document(uid)
-        .collection(TASK_INTELLIGENCE_CONTROL_COLLECTION)
-        .document(TASK_INTELLIGENCE_CONTROL_DOCUMENT)
-    )
-
-
 def _snapshot_dict(snapshot: Any) -> dict[str, Any]:
     payload = snapshot.to_dict()
     return cast(dict[str, Any], payload) if isinstance(payload, dict) else {}
+
+
+def _recorded_external_task_id(payload: dict[str, Any]) -> Optional[str]:
+    external_id = payload.get('external_task_id')
+    if isinstance(external_id, str) and external_id:
+        return external_id
+    return None
+
+
+def _recorded_export_platform(payload: dict[str, Any]) -> Optional[str]:
+    platform = payload.get('export_platform')
+    if isinstance(platform, str) and platform:
+        return platform
+    return None
+
+
+def recorded_export_action_fields(
+    *,
+    now: datetime,
+    external_task_id: str,
+    export_platform: Any = None,
+) -> dict[str, Any]:
+    """Action-item fields a successful cloud create writes, without ``updated_at``.
+
+    ``update_action_item`` stamps ``updated_at`` itself. A transaction that writes
+    the task directly must add that timestamp to the returned dict.
+    """
+    patch: dict[str, Any] = {
+        'exported': True,
+        'export_date': now,
+        'external_task_id': external_task_id,
+    }
+    platform = export_platform if isinstance(export_platform, str) and export_platform else None
+    if platform is not None:
+        patch['export_platform'] = platform
+    return patch
+
+
+class _ClaimApply:
+    def __init__(self, lease_token: Optional[str] = None, exported_task_id: Optional[str] = None) -> None:
+        self.lease_token = lease_token
+        self.exported_task_id = exported_task_id
+
+
+def _in_doubt_dead_letter_patch(now: datetime) -> dict[str, Any]:
+    """Same terminal patch as ``abandon`` for reason ``in_doubt``. Does not clear a recorded id."""
+    return {
+        'status': 'dead_letter',
+        'lease_token': None,
+        'updated_at': now,
+        'last_error_text': None,
+        'dead_letter_reason': 'in_doubt',
+        'provider_attempt_outcome': PROVIDER_ATTEMPT_IN_DOUBT,
+    }
 
 
 def claim_candidate_integration_dispatch(
@@ -118,24 +169,60 @@ def claim_candidate_integration_dispatch(
     account_generation: int,
     now: Optional[datetime] = None,
     lease_seconds: int = CANDIDATE_INTEGRATION_LEASE_SECONDS,
+    firestore_client: Any = None,
 ) -> Optional[str]:
-    """Claim a durable accepted-task integration side effect for delivery."""
+    """Claim a durable accepted-task integration side effect for delivery.
 
-    outbox_ref = _integration_outbox_ref(uid, candidate_id)
+    A row whose outcome is ``in_doubt``, or that already has an external task id,
+    is not claimed and is not sent to the provider. An external id marks the
+    existing action item exported (including ``export_platform`` when the outbox
+    recorded one) and completes the row. ``in_doubt`` without an id is
+    dead-lettered in this transaction, the same disposition the sweeper uses.
+    A live processing lease is left untouched. Fresh rows and rows whose outcome
+    is ``not_sent`` or ``definite_error`` claim as before.
+    """
+
     claim_time = now or datetime.now(timezone.utc)
-    transaction = db.transaction()
+    client = _firestore(firestore_client)
+    outbox_ref = _outbox_ref(uid, candidate_id, firestore_client=client)
+    control_ref = _control_ref(uid, firestore_client=client)
+    transaction = client.transaction()
 
     @firestore.transactional
-    def apply(write_transaction):
+    def apply(write_transaction) -> _ClaimApply:
         snapshot = outbox_ref.get(transaction=write_transaction)
         if not snapshot.exists:
-            return None
+            return _ClaimApply()
         payload = _snapshot_dict(snapshot)
-        control_snapshot = _task_control_ref(uid).get(transaction=write_transaction)
+        control_snapshot = control_ref.get(transaction=write_transaction)
         control = TaskWorkflowControl()
         if control_snapshot.exists:
             control = parse_snapshot_strict(TaskWorkflowControl, control_snapshot)
-        if payload.get('account_generation') != account_generation or control.account_generation != account_generation:
+        generation_mismatch = (
+            payload.get('account_generation') != account_generation or control.account_generation != account_generation
+        )
+        status = payload.get('status')
+        external_id = _recorded_external_task_id(payload)
+        task_id = payload.get('task_id')
+        live_lease = False
+        if status == 'processing':
+            claimed_at = payload.get('claimed_at')
+            if isinstance(claimed_at, datetime) and claimed_at + timedelta(seconds=lease_seconds) > claim_time:
+                live_lease = True
+        terminal = status in {'completed', 'suppressed', 'dead_letter'}
+        action_ref = None
+        action_snapshot = None
+        if (
+            not generation_mismatch
+            and not terminal
+            and not live_lease
+            and external_id is not None
+            and isinstance(task_id, str)
+            and task_id
+        ):
+            action_ref = client.collection('users').document(uid).collection(_ACTION_ITEMS_COLLECTION).document(task_id)
+            action_snapshot = action_ref.get(transaction=write_transaction)
+        if generation_mismatch:
             write_transaction.update(
                 outbox_ref,
                 {
@@ -144,13 +231,37 @@ def claim_candidate_integration_dispatch(
                     'updated_at': claim_time,
                 },
             )
-            return None
-        if payload.get('status') in {'completed', 'suppressed', 'dead_letter'}:
-            return None
-        if payload.get('status') == 'processing':
-            claimed_at = payload.get('claimed_at')
-            if isinstance(claimed_at, datetime) and claimed_at + timedelta(seconds=lease_seconds) > claim_time:
-                return None
+            return _ClaimApply()
+        if terminal or live_lease:
+            return _ClaimApply()
+        if external_id is not None:
+            if action_ref is not None and action_snapshot is not None and action_snapshot.exists:
+                marker = recorded_export_action_fields(
+                    now=claim_time,
+                    external_task_id=external_id,
+                    export_platform=_recorded_export_platform(payload),
+                )
+                marker['updated_at'] = claim_time
+                write_transaction.update(action_ref, marker)
+                write_transaction.update(
+                    outbox_ref,
+                    {
+                        'status': 'completed',
+                        'completed_at': claim_time,
+                        'lease_token': None,
+                        'updated_at': claim_time,
+                        'last_error_text': None,
+                        'dead_letter_reason': None,
+                        'provider_attempt_outcome': PROVIDER_ATTEMPT_ACCEPTED,
+                        'external_task_id': external_id,
+                    },
+                )
+                return _ClaimApply(exported_task_id=task_id if isinstance(task_id, str) else None)
+            write_transaction.update(outbox_ref, _in_doubt_dead_letter_patch(claim_time))
+            return _ClaimApply()
+        if payload.get('provider_attempt_outcome') == PROVIDER_ATTEMPT_IN_DOUBT:
+            write_transaction.update(outbox_ref, _in_doubt_dead_letter_patch(claim_time))
+            return _ClaimApply()
         lease_token = uuid4().hex
         write_transaction.update(
             outbox_ref,
@@ -164,9 +275,13 @@ def claim_candidate_integration_dispatch(
                 'external_task_id': None,
             },
         )
-        return lease_token
+        return _ClaimApply(lease_token=lease_token)
 
-    return apply(transaction)
+    applied = apply(transaction)
+    if applied.exported_task_id is not None:
+        bump_action_items_list_version(uid)
+        dream_dirty.notify(uid, [('action_items', applied.exported_task_id)])
+    return applied.lease_token
 
 
 def refresh_candidate_integration_lease(
@@ -217,11 +332,14 @@ def note_candidate_integration_provider_attempt(
     outcome: str,
     now: Optional[datetime] = None,
     firestore_client: Any = None,
+    export_platform: Optional[str] = None,
 ) -> bool:
     """Record the provider attempt before the create is issued.
 
     A crash after this write and before ``complete`` leaves ``in_doubt``, so the
-    sweeper will not send the create again.
+    sweeper will not send the create again. ``export_platform`` is the app key
+    of the create about to be sent, restored onto the action item if that create
+    is later recovered from a recorded external id.
     """
     if outcome not in {
         PROVIDER_ATTEMPT_NOT_SENT,
@@ -243,13 +361,13 @@ def note_candidate_integration_provider_attempt(
         payload = _snapshot_dict(snapshot)
         if payload.get('status') != 'processing' or payload.get('lease_token') != lease_token:
             return False
-        write_transaction.update(
-            outbox_ref,
-            {
-                'provider_attempt_outcome': outcome,
-                'updated_at': noted_at,
-            },
-        )
+        patch: dict[str, Any] = {
+            'provider_attempt_outcome': outcome,
+            'updated_at': noted_at,
+        }
+        if export_platform:
+            patch['export_platform'] = export_platform
+        write_transaction.update(outbox_ref, patch)
         return True
 
     return apply(transaction)
@@ -266,10 +384,13 @@ def complete_candidate_integration_dispatch(
     error_text: Optional[str] = None,
     provider_attempt_outcome: Optional[str] = None,
     external_task_id: Optional[str] = None,
+    firestore_client: Any = None,
 ) -> bool:
     completion_time = now or datetime.now(timezone.utc)
-    outbox_ref = _integration_outbox_ref(uid, candidate_id)
-    transaction = db.transaction()
+    client = _firestore(firestore_client)
+    outbox_ref = _outbox_ref(uid, candidate_id, firestore_client=client)
+    control_ref = _control_ref(uid, firestore_client=client)
+    transaction = client.transaction()
 
     @firestore.transactional
     def apply(write_transaction):
@@ -277,7 +398,7 @@ def complete_candidate_integration_dispatch(
         if not snapshot.exists:
             return False
         payload = _snapshot_dict(snapshot)
-        control_snapshot = _task_control_ref(uid).get(transaction=write_transaction)
+        control_snapshot = control_ref.get(transaction=write_transaction)
         control = TaskWorkflowControl()
         if control_snapshot.exists:
             control = parse_snapshot_strict(TaskWorkflowControl, control_snapshot)
@@ -677,6 +798,7 @@ __all__ = [
     'claim_candidate_integration_dispatch',
     'complete_candidate_integration_dispatch',
     'complete_candidate_integration_recorded_export',
+    'recorded_export_action_fields',
     'current_task_account_generation',
     'dead_letter_candidate_integration_generation_mismatch',
     'dead_letter_malformed_candidate_integration',

@@ -16,7 +16,9 @@ and this pass's blocking dispatch does the same just before the provider call.
 
 The scan orders each status by document name and continues from the previous
 pass's cursor, so rows that stay in the same status do not pin the budget on
-the same prefix.
+the same prefix. One invocation reads each status at most once. An empty page
+after a cursor clears that cursor for the next invocation and moves on; it
+does not reread the prefix in this pass.
 """
 
 import logging
@@ -144,11 +146,11 @@ async def _recover_recorded_export(
             action_items_db.update_action_item,
             uid,
             task_id,
-            {
-                'exported': True,
-                'export_date': now,
-                'external_task_id': external_id,
-            },
+            integration_outbox_db.recorded_export_action_fields(
+                now=now,
+                external_task_id=external_id,
+                export_platform=row.get('export_platform'),
+            ),
         )
     except Exception as error:
         logger.error(
@@ -373,13 +375,11 @@ async def sweep_candidate_integrations(
             firestore_client=client,
         )
         if not rows and cursor:
+            # The cursor is past the last row of this status. Clear it for the
+            # next invocation and move on. Rereading the prefix here spends the
+            # rest of this pass on rows the previous pass already skipped.
             cursors.pop(status, None)
-            rows, reached_end = await _page(
-                status,
-                limit=page_limit,
-                start_after_path=None,
-                firestore_client=client,
-            )
+            continue
         inspected_paths: list[str] = []
         for row in rows:
             if remaining <= 0 or clock() >= deadline:
