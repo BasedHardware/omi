@@ -210,9 +210,7 @@ class _SpeechProfileWidgetState extends State<SpeechProfileWidget> with WidgetsB
       widget.goNext();
       return;
     }
-    final goal = flow.savedAnswers.where((a) => a.isGoal);
-    final fallback = goal.isNotEmpty ? goal.first.text : flow.savedAnswers.map((a) => a.text).join('\n\n');
-    unawaited(flow.showPayoff(context.l10n.guidedVoiceExperience('question'), fallback));
+    unawaited(flow.showPayoff(context.l10n.guidedVoiceExperience('question')));
   }
 
   void _continuePayoff() {
@@ -269,14 +267,14 @@ class _SpeechProfileWidgetState extends State<SpeechProfileWidget> with WidgetsB
     if (flow.isGoalPrompt) return copy('goalPrompt');
     if (flow.alternative == 1) return copy('food');
     if (flow.alternative == 2) return copy('remember');
+    if (flow.promptIndex == 0) return context.l10n.guidedVoiceExperience('namePrompt');
     return copy(['name', 'work', 'enjoy'][flow.promptIndex.clamp(0, 2)]);
   }
 
   /// The prompt screen, before and while recording: a small "1 of 4", the sentence centred, then
   /// either Try Another Prompt (before recording) or the live waveform (while recording).
   Widget _recording() {
-    final ready = flow.stage == IntroductionStage.ready;
-    final paused = flow.stage == IntroductionStage.paused;
+    final paused = flow.stage == IntroductionStage.paused && flow.error == null;
     final transcribing = flow.stage == IntroductionStage.transcribing;
     final position = (flow.promptIndex + 1).clamp(1, GuidedVoiceController.promptCount);
     return Column(
@@ -297,16 +295,6 @@ class _SpeechProfileWidgetState extends State<SpeechProfileWidget> with WidgetsB
           style: OmiType.title1.copyWith(height: 1.35, fontWeight: FontWeight.w600),
         ),
         const SizedBox(height: OmiSpacing.md),
-        if (ready && !flow.isGoalPrompt)
-          TextButton(
-            key: const Key('introduction_another'),
-            onPressed: flow.changePrompt,
-            style: TextButton.styleFrom(
-              foregroundColor: OmiColors.textPrimary.withValues(alpha: 0.7),
-              minimumSize: const Size(44, 44),
-            ),
-            child: Text(copy('another'), textAlign: TextAlign.center),
-          ),
         if (flow.stage == IntroductionStage.typing) ...[
           const SizedBox(height: OmiSpacing.md),
           TextField(
@@ -531,11 +519,15 @@ class _SpeechProfileWidgetState extends State<SpeechProfileWidget> with WidgetsB
             'introduction_confirm'),
         _textAction(
             context.l10n.guidedVoiceExperience('type'), () => unawaited(flow.typeInstead()), 'introduction_type'),
+        _textAction(copy('skipPrompt'), () => unawaited(flow.skipPrompt()), 'introduction_skip_prompt'),
       ];
     }
     if (flow.error != null && flow.promptIndex < GuidedVoiceController.promptCount && !flow.busy) {
       return [
         _button(context.l10n.guidedVoiceExperience('type'), () => unawaited(flow.typeInstead()), 'introduction_type'),
+        if (flow.error!.startsWith('transcribe_') && flow.canFinish)
+          _textAction(context.l10n.guidedVoiceExperience('retryTranscription'), () => unawaited(flow.next()),
+              'introduction_retry_transcription'),
         _textAction(context.l10n.guidedVoiceExperience('retry'), () => unawaited(_start()), 'speech_profile_start'),
         _textAction(copy('skipPrompt'), () => unawaited(flow.skipPrompt()), 'introduction_skip_prompt'),
       ];
@@ -681,25 +673,33 @@ class _SpeechProfileWidgetState extends State<SpeechProfileWidget> with WidgetsB
             child: ColoredBox(
               color: OmiColors.surface0,
               child: SafeArea(
-                child: Column(
-                  children: [
-                    Expanded(
-                        child: flow.stage == IntroductionStage.payoff
-                            ? SingleChildScrollView(
-                                padding: const EdgeInsets.all(24), child: GuidedVoicePayoff(flow: flow))
-                            : done || reviewing
-                                ? _scrolling(done)
-                                : _prompting()),
-                    Padding(
-                      padding: const EdgeInsets.fromLTRB(24, 8, 24, 12),
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: _actions(),
-                      ),
-                    ),
-                  ],
-                ),
+                child: LayoutBuilder(
+                    builder: (context, constraints) => Column(
+                          children: [
+                            Expanded(
+                                child: flow.stage == IntroductionStage.payoff
+                                    ? SingleChildScrollView(
+                                        padding: const EdgeInsets.all(24), child: GuidedVoicePayoff(flow: flow))
+                                    : done || reviewing
+                                        ? _scrolling(done)
+                                        : _prompting()),
+                            ConstrainedBox(
+                              constraints: BoxConstraints(maxHeight: constraints.maxHeight * 0.6),
+                              child: SingleChildScrollView(
+                                padding: const EdgeInsets.fromLTRB(24, 8, 24, 12),
+                                child: Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                                  children: [
+                                    ..._actions(),
+                                    if (flow.stage == IntroductionStage.ready && !flow.isGoalPrompt)
+                                      _textAction(copy('another'), flow.changePrompt, 'introduction_another'),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ],
+                        )),
               ),
             ),
           );

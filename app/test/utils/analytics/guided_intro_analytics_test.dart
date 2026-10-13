@@ -1,3 +1,5 @@
+import 'dart:async';
+import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:omi/backend/preferences.dart';
@@ -71,8 +73,8 @@ void main() {
       final flow = GuidedVoiceController(ExperienceIO()..chatFails = fail);
       await typedReview(flow);
       await flow.saveAll();
-      await flow.showPayoff('Question', 'Saved answer summary');
-      await flow.showPayoff('Question', 'Another summary');
+      await flow.showPayoff('Question');
+      await flow.showPayoff('Question');
       flow.continuePayoff();
       flow.continuePayoff();
       flow.dispose();
@@ -104,7 +106,7 @@ void main() {
     await flow.saveAll();
     expect(flow.stage, IntroductionStage.review);
     expect(flow.goalSaved, isTrue);
-    await flow.showPayoff('Question', 'Finish my project');
+    await flow.showPayoff('Question');
     flow.continuePayoff();
     flow.continuePayoff();
     flow.dispose();
@@ -116,6 +118,34 @@ void main() {
     expect(completed.single.properties['goal_result'], 'saved');
   });
 
+  test('payoff counts saved goals and reports precise fallback causes', () async {
+    final adapter = _FakeAnalyticsAdapter();
+    AnalyticsManager.configure(adapter);
+    await AnalyticsManager.init();
+    for (final failure in [TimeoutException('slow'), const SocketException('offline'), StateError('bad')]) {
+      final io = ExperienceIO()..pendingChat = Completer<String>();
+      final flow = GuidedVoiceController(io);
+      await flow.typeInstead();
+      await flow.submitTyped('I build bicycles.');
+      await flow.skipPrompt();
+      await flow.skipPrompt();
+      await flow.typeInstead();
+      await flow.submitTyped('Finish my design');
+      await flow.saveAll();
+      final asking = flow.showPayoff('Question');
+      io.pendingChat!.completeError(failure);
+      await asking;
+      flow.dispose();
+    }
+    await AnalyticsManager.flushPending(force: true);
+    expect(
+        adapter.events
+            .where((e) => e.eventName == 'Guided Intro Payoff Shown')
+            .map((e) => e.properties['memories_count']),
+        [2, 2, 2]);
+    expect(adapter.events.where((e) => e.eventName == 'fallback_triggered').map((e) => e.properties['reason']),
+        ['timeout', 'offline', 'error']);
+  });
   test('guided intro events carry bounded funnel properties without content', () async {
     final adapter = _FakeAnalyticsAdapter();
     AnalyticsManager.configure(adapter);

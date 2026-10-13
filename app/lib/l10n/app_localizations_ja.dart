@@ -533,8 +533,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get unpairDialogTitle => 'デバイスのペアリング解除';
 
   @override
-  String get unpairDialogMessage =>
-      'これにより、デバイスのペアリングが解除され、別の電話に接続できるようになります。プロセスを完了するには、設定 > Bluetoothに移動してデバイスを忘れる必要があります。';
+  String get unpairDialogMessage => 'これにより、デバイスのペアリングが解除され、別の電話に接続できるようになります。プロセスを完了するには、設定 > Bluetoothに移動してデバイスを忘れる必要があります。';
 
   @override
   String get deviceNotConnected => 'デバイスが接続されていません';
@@ -1809,8 +1808,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get permissionGrantedNow => '許可されました！次は：\n\nApple WatchでOmiアプリを開き、下の「続ける」をタップしてください';
 
   @override
-  String get needMicrophonePermission =>
-      'マイクの許可が必要です。\n\n1. 「許可する」をタップ\n2. iPhoneで許可を選択\n3. Watchアプリが閉じます\n4. 再度開いて「続ける」をタップ';
+  String get needMicrophonePermission => 'マイクの許可が必要です。\n\n1. 「許可する」をタップ\n2. iPhoneで許可を選択\n3. Watchアプリが閉じます\n4. 再度開いて「続ける」をタップ';
 
   @override
   String get grantPermissionButton => '許可する';
@@ -1819,8 +1817,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get needHelp => 'ヘルプ';
 
   @override
-  String get troubleshootingSteps =>
-      'トラブルシューティング：\n\n1. WatchにOmiがインストールされているか確認\n2. WatchでOmiアプリを開く\n3. 許可のポップアップを探す\n4. 「許可」をタップ\n5. Watchアプリが閉じたら再度開く\n6. iPhoneに戻り「続ける」をタップ';
+  String get troubleshootingSteps => 'トラブルシューティング：\n\n1. WatchにOmiがインストールされているか確認\n2. WatchでOmiアプリを開く\n3. 許可のポップアップを探す\n4. 「許可」をタップ\n5. Watchアプリが閉じたら再度開く\n6. iPhoneに戻り「続ける」をタップ';
 
   @override
   String get recordingStartedSuccessfully => '録音が正常に開始されました！';
@@ -2298,8 +2295,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get unpairDeviceDialogTitle => 'デバイスのペアリング解除';
 
   @override
-  String get unpairDeviceDialogMessage =>
-      'これにより、デバイスのペアリングが解除され、別の電話に接続できるようになります。設定 > Bluetoothに移動し、デバイスを削除してプロセスを完了する必要があります。';
+  String get unpairDeviceDialogMessage => 'これにより、デバイスのペアリングが解除され、別の電話に接続できるようになります。設定 > Bluetoothに移動し、デバイスを削除してプロセスを完了する必要があります。';
 
   @override
   String get unpair => 'ペアリング解除';
@@ -4806,8 +4802,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get additionalSpeechSampleRemoved => '追加の音声サンプルを削除しました';
 
   @override
-  String get consentDataMessage =>
-      '続行することで、会話、録音、個人情報は安全に当社のサーバーに保存されます。音声録音と文字起こしは、サードパーティのAIサービス（文字起こし用のDeepgramと分析用のOpenAIを含む）によって処理され、AI駆動のインサイトを提供し、すべてのアプリ機能を有効にします。';
+  String get consentDataMessage => '続行することで、会話、録音、個人情報は安全に当社のサーバーに保存されます。音声録音と文字起こしは、サードパーティのAIサービス（文字起こし用のDeepgramと分析用のOpenAIを含む）によって処理され、AI駆動のインサイトを提供し、すべてのアプリ機能を有効にします。';
 
   @override
   String get tasksEmptyStateMessage => '会話を始めてタスクを作成しましょう。';
@@ -4861,8 +4856,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get iveInstalledAndOpenedTheApp => 'アプリをインストールして開きました';
 
   @override
-  String get unableToOpenWatchApp =>
-      'Apple Watchアプリを開けませんでした。Apple WatchのWatchアプリを手動で開き、「利用可能なApp」セクションからOmiをインストールしてください。';
+  String get unableToOpenWatchApp => 'Apple Watchアプリを開けませんでした。Apple WatchのWatchアプリを手動で開き、「利用可能なApp」セクションからOmiをインストールしてください。';
 
   @override
   String get appleWatchConnectedSuccessfully => 'Apple Watchが正常に接続されました！';
@@ -5314,8 +5308,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get howToTakeGoodSample => '良いサンプルの取り方は？';
 
   @override
-  String get goodSampleInstructions =>
-      '1. 静かな場所にいることを確認してください。\n2. 明確に自然に話してください。\n3. デバイスが首の自然な位置にあることを確認してください。\n\n作成後、いつでも改善したり、やり直したりできます。';
+  String get goodSampleInstructions => '1. 静かな場所にいることを確認してください。\n2. 明確に自然に話してください。\n3. デバイスが首の自然な位置にあることを確認してください。\n\n作成後、いつでも改善したり、やり直したりできます。';
 
   @override
   String get noDeviceConnectedUseMic => '接続されているデバイスがありません。電話のマイクを使用します。';
@@ -8062,8 +8055,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get fairUseAboutTitle => 'フェアユースについて';
 
   @override
-  String get fairUseAboutBody =>
-      'Omiは個人的な会話、会議、ライブのやり取りのために設計されています。利用量は接続時間ではなく、話している時間で測定されます。通常の個人利用を大きく上回る場合は、まず警告が表示されます。大量の利用が続くと、文字起こしが遅くなったり制限されたりすることがあります。';
+  String get fairUseAboutBody => 'Omiは個人的な会話、会議、ライブのやり取りのために設計されています。利用量は接続時間ではなく、話している時間で測定されます。通常の個人利用を大きく上回る場合は、まず警告が表示されます。大量の利用が続くと、文字起こしが遅くなったり制限されたりすることがあります。';
 
   @override
   String fairUseCaseRefCopied(String caseRef) {
@@ -8101,8 +8093,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get improveConnectionTitle => '接続を改善';
 
   @override
-  String get improveConnectionContent =>
-      'Omiがデバイスとの接続を維持する方法を改善しました。これを有効にするには、デバイス情報ページに移動し、「デバイスを切断」をタップしてから、デバイスを再度ペアリングしてください。';
+  String get improveConnectionContent => 'Omiがデバイスとの接続を維持する方法を改善しました。これを有効にするには、デバイス情報ページに移動し、「デバイスを切断」をタップしてから、デバイスを再度ペアリングしてください。';
 
   @override
   String get improveConnectionAction => '了解';
@@ -8496,8 +8487,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get firmwareWarningTitle => '重要：更新前にお読みください';
 
   @override
-  String get firmwareFormatWarning =>
-      'このファームウェアはSDカードをフォーマットします。アップグレード前にすべてのオフラインデータが同期されていることを確認してください。\n\nこのバージョンのインストール後に赤いライトが点滅しても心配しないでください。デバイスをアプリに接続するだけで青に変わるはずです。赤いライトはデバイスの時計がまだ同期されていないことを意味します。';
+  String get firmwareFormatWarning => 'このファームウェアはSDカードをフォーマットします。アップグレード前にすべてのオフラインデータが同期されていることを確認してください。\n\nこのバージョンのインストール後に赤いライトが点滅しても心配しないでください。デバイスをアプリに接続するだけで青に変わるはずです。赤いライトはデバイスの時計がまだ同期されていないことを意味します。';
 
   @override
   String get continueAnyway => '続行';
@@ -8517,8 +8507,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get tasksMarkComplete => '完了としてマーク';
 
   @override
-  String get appleHealthManageNote =>
-      'Omi は Apple の HealthKit フレームワークを通じて Apple Health にアクセスします。アクセスはいつでも iOS の設定から取り消せます。';
+  String get appleHealthManageNote => 'Omi は Apple の HealthKit フレームワークを通じて Apple Health にアクセスします。アクセスはいつでも iOS の設定から取り消せます。';
 
   @override
   String get appleHealthConnectCta => 'Apple Health に接続';
@@ -8551,8 +8540,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get appleHealthDeniedTitle => 'Apple Health へのアクセスが拒否されました';
 
   @override
-  String get appleHealthDeniedBody =>
-      'Omi は Apple Health データを読み取る権限がありません。iOS の設定 → プライバシーとセキュリティ → ヘルスケア → Omi で有効にしてください。';
+  String get appleHealthDeniedBody => 'Omi は Apple Health データを読み取る権限がありません。iOS の設定 → プライバシーとセキュリティ → ヘルスケア → Omi で有効にしてください。';
 
   @override
   String get deleteFlowReasonTitle => 'どうして離れるのですか?';
@@ -9006,8 +8994,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get backgroundModeDescription => 'アプリを完全に閉じても Omi の録音を続けます。';
 
   @override
-  String get backgroundModeUnavailable =>
-      '互換性のあるデバイスが接続されていないため、バックグラウンドモードは利用できません。この機能を使用するには、Omi、OpenGlass、またはFriend Pendantデバイスを接続してください。';
+  String get backgroundModeUnavailable => '互換性のあるデバイスが接続されていないため、バックグラウンドモードは利用できません。この機能を使用するには、Omi、OpenGlass、またはFriend Pendantデバイスを接続してください。';
 
   @override
   String get regenerateRecap => '要約を再生成';
@@ -9028,8 +9015,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get syncCustomSttWarningTitle => '同期では Omi の文字起こしを使用します';
 
   @override
-  String get syncCustomSttWarningMessage =>
-      'ご自身の文字起こしプロバイダーを使用しています。これらの録音を同期すると Omi のサーバーで文字起こしされ、プランの文字起こし上限にカウントされます。';
+  String get syncCustomSttWarningMessage => 'ご自身の文字起こしプロバイダーを使用しています。これらの録音を同期すると Omi のサーバーで文字起こしされ、プランの文字起こし上限にカウントされます。';
 
   @override
   String get transcribeLaterTitle => '後で文字起こし';
@@ -9208,8 +9194,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get connectRayBanMeta => 'Ray-Ban Meta を接続';
 
   @override
-  String get raybanMetaSetupDescription =>
-      'Ray-Ban Meta グラスを、会話や視覚的なコンテキストのための Omi のキャプチャデバイスとして使用します。Omi が Meta AI アプリを開いてグラスをリンクします。';
+  String get raybanMetaSetupDescription => 'Ray-Ban Meta グラスを、会話や視覚的なコンテキストのための Omi のキャプチャデバイスとして使用します。Omi が Meta AI アプリを開いてグラスをリンクします。';
 
   @override
   String get raybanMetaOpenMetaAI => 'Meta AI 経由で接続';
@@ -9233,8 +9218,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get raybanMetaAudioOnlyTitle => 'Ray-Ban Meta 音声のみモード';
 
   @override
-  String get raybanMetaAudioOnlyExplanation =>
-      'このバージョンの Omi は Bluetooth 経由でグラスのマイクを使用できます。写真の撮影には Omi の Meta 開発者ビルドが必要です。';
+  String get raybanMetaAudioOnlyExplanation => 'このバージョンの Omi は Bluetooth 経由でグラスのマイクを使用できます。写真の撮影には Omi の Meta 開発者ビルドが必要です。';
 
   @override
   String get raybanMetaMusicPauseNote => 'グラスのマイクの使用中は、スマートフォンの音楽が一時停止します。';
@@ -9584,8 +9568,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get pendantRecordingSyncBlocked => 'Pendantはまだ録音中のため、保存された音声を転送できません。Pendantのボタンを押して録音を停止してから、もう一度同期してください。';
 
   @override
-  String get pendantFullSyncBlocked =>
-      'Pendantのストレージが満杯で、まだ録音モードのままのため、保存された音声を転送できません。Pendantのボタンを押して録音を停止してから、もう一度同期してください。';
+  String get pendantFullSyncBlocked => 'Pendantのストレージが満杯で、まだ録音モードのままのため、保存された音声を転送できません。Pendantのボタンを押して録音を停止してから、もう一度同期してください。';
 
   @override
   String speechProfileOwnerTitle(String name) {
@@ -9703,10 +9686,12 @@ class AppLocalizationsJa extends AppLocalizations {
         'retry': 'Try Speaking Again',
         'title': 'Here\'s what I\'ll remember',
         'question': 'What should I focus on this week?',
-        'fallback': 'Based on what you shared',
+        'fallback': 'I’ll use these to help you.',
         'thinking': 'Thinking about your answers…',
         'failed': 'We couldn\'t transcribe that answer. You can type it instead or try speaking again.',
         'engine': 'The microphone couldn\'t start. Try again or type your answer instead.',
+        'retryTranscription': 'Retry transcription',
+        'namePrompt': 'My name is ___, and I usually ___.',
         'other': '',
       },
     );
@@ -9719,8 +9704,7 @@ class AppLocalizationsJa extends AppLocalizations {
       part,
       {
         'title': 'Let Omi get to know you',
-        'intro':
-            'Finish four short sentences out loud. This helps Omi recognize your voice and remember what matters to you. Share only what you want.',
+        'intro': 'Finish four short sentences out loud. This helps Omi recognize your voice and remember what matters to you. Share only what you want.',
         'hint': 'Say the whole sentence and finish it in your own words.',
         'name': 'My name is ___, and I spend most of my time ___.',
         'work': 'Right now, I am working on ___.',
@@ -9752,11 +9736,9 @@ class AppLocalizationsJa extends AppLocalizations {
         'voiceOnlyHint': 'You can skip any personal prompt and talk about something else.',
         'goalPrompt': 'Right now my number one goal is to ___.',
         'savedGoal': 'Your goal is saved',
-        'goalError':
-            'Your goal could not be saved. Retry to save the same goal without duplicating it. Any memories already saved are safe.',
+        'goalError': 'Your goal could not be saved. Retry to save the same goal without duplicating it. Any memories already saved are safe.',
         'goalLong': 'Shorten your goal to 500 characters or fewer, then try again.',
-        'voiceUnavailable':
-            'Voice setup is temporarily unavailable. Saved answers are safe. Retry, or continue and set up your voice later.',
+        'voiceUnavailable': 'Voice setup is temporarily unavailable. Saved answers are safe. Retry, or continue and set up your voice later.',
         'saveFinish': 'Save and Finish',
         'retryRemaining': 'Retry Remaining',
         'saveHint': 'Saves your voice profile and checked answers.',
@@ -10360,8 +10342,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get firmwareUpdateFailedTitle => 'アップデートに失敗しました';
 
   @override
-  String get firmwareUpdateFailedMessage =>
-      'アップデートは完了しませんでした。デバイスは現在のファームウェアのままで、安全に使用できます。充電してスマートフォンの近くに置き、もう一度お試しください。';
+  String get firmwareUpdateFailedMessage => 'アップデートは完了しませんでした。デバイスは現在のファームウェアのままで、安全に使用できます。充電してスマートフォンの近くに置き、もう一度お試しください。';
 
   @override
   String get firmwareDownloadFailedMessage => 'アップデートをダウンロードできませんでした。デバイスは変更されていません。インターネット接続を確認して、もう一度お試しください。';
@@ -10821,8 +10802,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get leaveBlank => '空白のままにする';
 
   @override
-  String get mcpOAuthSetup =>
-      'claude.aiでカスタムコネクタを追加し、サーバーURLを貼り付けてください。Claudeが高度なOAuth Client IDを求めてきた場合は、以下の値を使用し、シークレットは空欄のままにしてください。MCP APIキーをOAuthシークレットとして使用しないでください。';
+  String get mcpOAuthSetup => 'claude.aiでカスタムコネクタを追加し、サーバーURLを貼り付けてください。Claudeが高度なOAuth Client IDを求めてきた場合は、以下の値を使用し、シークレットは空欄のままにしてください。MCP APIキーをOAuthシークレットとして使用しないでください。';
 
   @override
   String get claudeCode => 'Claude Code';
@@ -10831,8 +10811,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get addToClaudeCodeConfig => '~/.claude.jsonに追加';
 
   @override
-  String get claudeDesktopConnectorSetup =>
-      'Claude Desktop → Settings → Connectorsでカスタムコネクタを追加し、サーバーURLを貼り付けてください。Claudeが高度なOAuth Client IDを求めてきた場合は、以下の値を使用し、シークレットは空欄のままにしてください。MCP APIキーをOAuthシークレットとして使用しないでください。';
+  String get claudeDesktopConnectorSetup => 'Claude Desktop → Settings → Connectorsでカスタムコネクタを追加し、サーバーURLを貼り付けてください。Claudeが高度なOAuth Client IDを求めてきた場合は、以下の値を使用し、シークレットは空欄のままにしてください。MCP APIキーをOAuthシークレットとして使用しないでください。';
 
   @override
   String get transcriptionUnavailableRecordingContinues => '文字起こしは利用できません。録音は端末上で続き、後で処理されます';
@@ -10908,12 +10887,10 @@ class AppLocalizationsJa extends AppLocalizations {
   String get captureMicInUseElsewhere => '別のアプリがマイクを使用中';
 
   @override
-  String get captureMicInterruptedDetail =>
-      '通話または別のアプリがマイクを使用しているため、Omiは今は聞き取れません。マイクが空くとOmiは自動で再開します。それまでに録音した内容は保存されています。';
+  String get captureMicInterruptedDetail => '通話または別のアプリがマイクを使用しているため、Omiは今は聞き取れません。マイクが空くとOmiは自動で再開します。それまでに録音した内容は保存されています。';
 
   @override
-  String get captureCustomSttUnreachableDetail =>
-      'カスタムの音声認識サービスに接続できません。Omiは音声をこのスマートフォンに保持し、サービスが復旧したら送信します。何も失われません。';
+  String get captureCustomSttUnreachableDetail => 'カスタムの音声認識サービスに接続できません。Omiは音声をこのスマートフォンに保持し、サービスが復旧したら送信します。何も失われません。';
 
   @override
   String get captureStarting => '開始中…';
@@ -10925,8 +10902,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get captureStorageAlmostFull => '空き容量わずか';
 
   @override
-  String get capturePendantDisconnectedDetail =>
-      'ペンダントとこのスマートフォンの接続が切れました。ペンダントの電源が入っていて近くにあれば、Omiは自動で再接続します。それまでに録音した内容は保存されています。';
+  String get capturePendantDisconnectedDetail => 'ペンダントとこのスマートフォンの接続が切れました。ペンダントの電源が入っていて近くにあれば、Omiは自動で再接続します。それまでに録音した内容は保存されています。';
 
   @override
   String get capturePendantDisconnectedShort => 'Omiは自動で再接続します';
@@ -11088,8 +11064,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get sendToSupport => 'Send to support';
 
   @override
-  String get deviceDiagnosticsUploadDescription =>
-      'Review the diagnostics JSON below. It includes your device identifier, connection history, battery readings, firmware diagnostics, and BLE events. No audio or transcripts are included.';
+  String get deviceDiagnosticsUploadDescription => 'Review the diagnostics JSON below. It includes your device identifier, connection history, battery readings, firmware diagnostics, and BLE events. No audio or transcripts are included.';
 
   @override
   String get deviceDiagnosticsTicket => 'Support ticket code';
@@ -12595,8 +12570,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get chatAppsTelegramOtherDevice => '別のデバイスでTelegramを使いますか？';
 
   @override
-  String get chatAppsHeroMessage =>
-      '今日のことを聞いたり、メモリを保存したり、タスクを管理したりできます。TelegramでもiMessageでも使えます。チャットは使っているアプリに残り、Omiは話した内容をどこでも覚えています。';
+  String get chatAppsHeroMessage => '今日のことを聞いたり、メモリを保存したり、タスクを管理したりできます。TelegramでもiMessageでも使えます。チャットは使っているアプリに残り、Omiは話した内容をどこでも覚えています。';
 
   @override
   String get chatAppsTryRemind => '日曜日にお母さんに電話するようリマインドして';

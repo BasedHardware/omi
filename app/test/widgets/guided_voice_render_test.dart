@@ -63,7 +63,8 @@ void main() {
       'typing',
       'review',
       'payoff-chat',
-      'payoff-fallback'
+      'payoff-fallback',
+      'paused'
     ]) {
       testWidgets('${platform.name} $state at 393x852', (tester) async {
         debugDefaultTargetPlatformOverride = platform;
@@ -85,12 +86,16 @@ void main() {
             final pcm = Uint8List(32000 * 6);
             final data = ByteData.sublistView(pcm);
             for (var i = 0; i < pcm.length; i += 2) {
-              data.setInt16(i, i % 8 == 0 ? 1300 : 400, Endian.little);
+              final amplitude = [180, 500, 1100, 1650, 850, 300, 1400][(i ~/ 3200) % 7];
+              data.setInt16(i, i % 8 == 0 ? amplitude : amplitude ~/ 3, Endian.little);
             }
             for (var offset = 0; offset < pcm.length; offset += 3200) {
               io.audio!(Uint8List.sublistView(pcm, offset, offset + 3200));
             }
-            if (state == 'transcribing') {
+            if (state == 'recording') expect(flow.levelHistory.toSet().length, greaterThan(3));
+            if (state == 'paused') {
+              await flow.pause();
+            } else if (state == 'transcribing') {
               io.pendingTranscription = Completer<String>();
               pending = flow.next();
             } else if (state == 'failed') {
@@ -109,7 +114,7 @@ void main() {
                   if (state == 'payoff-chat') {
                     io.pendingChat = Completer<String>()..complete('Focus on **finishing** your bicycle project.');
                   }
-                  await flow.showPayoff('What should I focus on this week?', 'My name is Robin and I build bicycles.');
+                  await flow.showPayoff('What should I focus on this week?');
                 }
               }
             }
@@ -142,6 +147,12 @@ void main() {
           await tester.pump(const Duration(milliseconds: 300));
         }
         expect(tester.takeException(), isNull);
+        for (final key in ['introduction_skip_prompt', 'speech_profile_skip_intro', 'introduction_another']) {
+          final link = find.byKey(Key(key));
+          if (link.evaluate().isNotEmpty) {
+            expect(tester.getRect(link).bottom, lessThanOrEqualTo(852), reason: '$state bottom link $key');
+          }
+        }
         if (output.isNotEmpty) {
           await tester.runAsync(() async {
             final render = boundary.currentContext!.findRenderObject()! as RenderRepaintBoundary;
@@ -158,8 +169,11 @@ void main() {
               'payoff-chat',
               'payoff-fallback'
             ];
-            final ordinal =
-                (states.indexOf(state) + 1 + (platform == TargetPlatform.iOS ? 0 : 9)).toString().padLeft(3, '0');
+            final ordinal = (state == 'paused'
+                    ? (platform == TargetPlatform.iOS ? 19 : 20)
+                    : states.indexOf(state) + 1 + (platform == TargetPlatform.iOS ? 0 : 9))
+                .toString()
+                .padLeft(3, '0');
             final platformSlug = platform == TargetPlatform.iOS ? 'mobile-ios' : 'mobile-android';
             final file = File('$output/$ordinal-$platformSlug-$state.png');
             await file.parent.create(recursive: true);

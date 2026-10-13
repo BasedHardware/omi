@@ -25,23 +25,18 @@ class GuidedVoicePayoff extends StatelessWidget {
             const SizedBox(height: OmiSpacing.sm),
           ],
           const SizedBox(height: OmiSpacing.lg),
-          Text(context.l10n.guidedVoiceExperience('question'), style: OmiType.title3),
-          const SizedBox(height: OmiSpacing.sm),
-          if (flow.payoffLoading) ...[
-            Text(context.l10n.guidedVoiceExperience('thinking'), style: OmiType.footnote),
+          if (flow.payoffLoading) Text(context.l10n.guidedVoiceExperience('thinking'), style: OmiType.footnote),
+          if (flow.payoffSource == 'chat') ...[
+            Text(context.l10n.guidedVoiceExperience('question'), style: OmiType.title3),
             const SizedBox(height: OmiSpacing.sm),
-          ],
-          if (flow.payoffSource == 'fallback') ...[
-            Text(context.l10n.guidedVoiceExperience('fallback'), style: OmiType.footnote),
-            const SizedBox(height: OmiSpacing.sm),
-          ],
-          Semantics(
-            key: const Key('payoff_answer'),
-            liveRegion: true,
-            child: flow.payoffSource == 'chat'
-                ? MarkdownBody(data: flow.payoffAnswer, styleSheet: MarkdownStyleSheet(p: OmiType.body))
-                : Text(flow.payoffAnswer, style: OmiType.body),
-          ),
+            Semantics(
+              key: const Key('payoff_answer'),
+              liveRegion: true,
+              child: MarkdownBody(data: flow.payoffAnswer, styleSheet: MarkdownStyleSheet(p: OmiType.body)),
+            ),
+          ] else if (!flow.payoffLoading)
+            Text(context.l10n.guidedVoiceExperience('fallback'),
+                key: const Key('payoff_fallback'), style: OmiType.body),
         ],
       );
 }

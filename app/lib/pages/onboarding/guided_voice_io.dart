@@ -30,6 +30,7 @@ class DeviceGuidedVoiceIO implements GuidedVoiceIO, GuidedVoiceExperienceIO {
   final IMicRecorderService? _mic;
   IMicRecorderService get _recorder => _mic ?? ServiceManager.instance().mic;
   bool _local = false;
+  bool _selectionLocked = false;
   bool _recording = false;
   bool _closed = false;
   // Non-null while a start() call is awaiting the recorder's own start-up. A stop()
@@ -51,25 +52,30 @@ class DeviceGuidedVoiceIO implements GuidedVoiceIO, GuidedVoiceExperienceIO {
     final prefs = SharedPreferencesUtil();
     _language = prefs.hasSetPrimaryLanguage ? prefs.userPrimaryLanguage : 'en';
     if (_language == 'multi') _language = 'en';
-    _local = Platform.isIOS && await OnDeviceAppleProvider.isOnDeviceAvailable(_language);
+    final local = Platform.isIOS && await OnDeviceAppleProvider.isOnDeviceAvailable(_language);
+    // A slow preflight may finish after recording has been allowed. Never
+    // switch its engine after prepare selected the recognizer/cloud path.
+    if (!_selectionLocked && !_closed) _local = local;
     return _local || await guidedVoicePreflight();
   }
 
   @override
   Future<String> ask(String question, List<String> savedAnswers) async {
-    PlatformManager.instance.analytics.chatMessageSent(
-      message: question,
-      includesFiles: false,
-      numberOfFiles: 0,
-      chatTargetId: 'omi',
-      isPersonaChat: false,
-      isVoiceInput: false,
-    );
-    return askGuidedPayoff(question, savedAnswers);
+    return askGuidedPayoff(question, savedAnswers, onAccepted: () {
+      PlatformManager.instance.analytics.chatMessageSent(
+        message: question,
+        includesFiles: false,
+        numberOfFiles: 0,
+        chatTargetId: 'omi',
+        isPersonaChat: false,
+        isVoiceInput: false,
+      );
+    });
   }
 
   @override
   Future<void> prepare() async {
+    _selectionLocked = true;
     final permission = await Permission.microphone.request();
     if (!permission.isGranted) {
       throw GuidedVoiceFailure(permission.isPermanentlyDenied ? 'permission_permanently_denied' : 'permission_denied');

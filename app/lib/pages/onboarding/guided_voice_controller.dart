@@ -8,6 +8,7 @@ import 'package:omi/backend/preferences.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
 import 'goal_text_cleanup.dart';
 import 'package:omi/backend/http/api_fallback.dart';
+import 'package:omi/backend/http/streaming_error.dart';
 import 'package:omi/utils/analytics/registry/events.g.dart';
 import 'package:omi/utils/analytics/registry/typed_events.dart';
 
@@ -101,6 +102,7 @@ class GuidedVoiceController extends ChangeNotifier {
   int alternative = 0;
   final answers = <IntroductionAnswer>[];
   final _frames = BytesBuilder(copy: true);
+  Uint8List _typedAudio = Uint8List(0);
   String transcript = '';
   String? error;
   String? voiceError;
@@ -238,6 +240,13 @@ class GuidedVoiceController extends ChangeNotifier {
 
   Future<void> start() async {
     if (busy || active || _disposed || promptIndex >= promptCount) return;
+    if (error?.startsWith('transcribe_') == true) {
+      _frames.clear();
+      seconds = 0;
+      level = 0;
+      levelHistory.clear();
+      transcript = '';
+    }
     markStarted();
     _autoStart = true;
     final generation = ++_generation;
@@ -247,7 +256,10 @@ class GuidedVoiceController extends ChangeNotifier {
     _emit();
     try {
       if (!_preflightPassed && io is GuidedVoiceExperienceIO) {
-        final available = await (io as GuidedVoiceExperienceIO).preflight().timeout(preflightTimeout);
+        // A slow health check is inconclusive; the final transcription still
+        // has the same-clip retry and typed recovery paths.
+        final available =
+            await (io as GuidedVoiceExperienceIO).preflight().timeout(preflightTimeout, onTimeout: () => true);
         if (!_current(generation)) return;
         if (!available) throw const GuidedVoiceFailure('transcription_unavailable');
         _preflightPassed = true;
@@ -380,6 +392,8 @@ class GuidedVoiceController extends ChangeNotifier {
 
   Future<void> typeInstead() async {
     if (busy || _disposed || promptIndex >= promptCount) return;
+    // Correcting a heard transcript changes the text, not the enrollment clip.
+    _typedAudio = stage == IntroductionStage.confirmation ? _frames.toBytes() : Uint8List(0);
     ++_generation;
     _autoStart = false;
     _previewTimer?.cancel();
@@ -396,7 +410,7 @@ class GuidedVoiceController extends ChangeNotifier {
   Future<void> submitTyped(String text) async {
     if (stage != IntroductionStage.typing || busy || _disposed || text.trim().isEmpty) return;
     markStarted();
-    await _acceptAnswer(text.trim(), Uint8List(0));
+    await _acceptAnswer(text.trim(), _typedAudio);
   }
 
   Future<void> _acceptAnswer(String text, Uint8List audio) async {
@@ -432,6 +446,7 @@ class GuidedVoiceController extends ChangeNotifier {
   Future<void> _advance() async {
     ++_generation;
     _frames.clear();
+    _typedAudio = Uint8List(0);
     seconds = 0;
     transcript = '';
     level = 0;
@@ -697,12 +712,12 @@ class GuidedVoiceController extends ChangeNotifier {
     _emit();
   }
 
-  Future<void> showPayoff(String question, String fallback) async {
+  Future<void> showPayoff(String question) async {
     if (_disposed || _payoffStarted || savedAnswers.isEmpty) return;
     _payoffStarted = true;
     _payoffStartedAt = DateTime.now();
     stage = IntroductionStage.payoff;
-    payoffAnswer = fallback;
+    payoffAnswer = '';
     payoffLoading = true;
     _emit();
     try {
@@ -714,9 +729,17 @@ class GuidedVoiceController extends ChangeNotifier {
       if (text.trim().isEmpty) throw StateError('Empty answer');
       payoffAnswer = text.trim();
       payoffSource = 'chat';
-    } catch (_) {
-      recordFallback(const ApiFallbackEvent(reason: ApiFallbackReason.staleData, outcome: ApiFallbackOutcome.degraded));
-      // The saved-answer summary is already visible and needs no network.
+    } catch (failure) {
+      final kind = classifyChatStreamFailure(failure).kind;
+      recordFallback(ApiFallbackEvent(
+        reason: kind == ChatStreamFailureClass.timeout
+            ? ApiFallbackReason.timeout
+            : kind == ChatStreamFailureClass.offline
+                ? ApiFallbackReason.offline
+                : ApiFallbackReason.error,
+        outcome: ApiFallbackOutcome.degraded,
+      ));
+      // Saved cards and a short acknowledgment need no network or repeated text.
     } finally {
       if (!_disposed && !_payoffContinued) {
         payoffLoading = false;
@@ -730,7 +753,7 @@ class GuidedVoiceController extends ChangeNotifier {
     if (_payoffShown) return;
     _payoffShown = true;
     const TypedEvents().emit(GuidedIntroPayoffShown(
-      memoriesCount: savedMemoryCount,
+      memoriesCount: savedAnswers.length,
       answerSource: payoffSource == 'chat'
           ? GuidedIntroPayoffShownAnswerSource.chat
           : GuidedIntroPayoffShownAnswerSource.fallback,

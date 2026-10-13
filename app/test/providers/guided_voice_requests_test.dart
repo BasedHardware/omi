@@ -4,6 +4,8 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:omi/env/env.dart';
+import 'package:omi/backend/http/shared.dart';
+import 'package:omi/backend/http/streaming_error.dart';
 import 'package:omi/pages/onboarding/guided_voice_controller.dart';
 import 'package:omi/pages/onboarding/guided_voice_requests.dart';
 
@@ -30,6 +32,33 @@ void main() {
     }
     expect(await guidedVoicePreflight(probe: (_) async => http.Response('{"available":true}', 200)), isTrue);
     expect(await guidedVoicePreflight(probe: (_) async => throw const SocketException('offline')), isFalse);
+  });
+  test('slow preflight is unknown rather than unavailable', () async {
+    final probe = Completer<http.Response>();
+    expect(await guidedVoicePreflight(probe: (_) => probe.future, timeout: const Duration(milliseconds: 2)), isTrue);
+    expect(await guidedVoicePreflight(probe: (_) async => throw TimeoutException('slow')), isTrue);
+    probe.complete(http.Response('{"available":false}', 200));
+  });
+  test('chat acceptance is emitted after HTTP 200, never offline or rejected', () async {
+    for (final status in [200, 503, 402, -1]) {
+      var accepted = 0;
+      final asking = askGuidedPayoff('Question', ['Saved'],
+          onAccepted: () => accepted++,
+          seams: ApiStreamingSeams(
+            headers: (_) async => {},
+            transport: (_) async {
+              expect(accepted, 0);
+              if (status == -1) throw const SocketException('offline');
+              return http.StreamedResponse(Stream.value(utf8.encode('${done('Answer')}\n\n')), status);
+            },
+          ));
+      if (status == 200) {
+        expect(await asking, 'Answer');
+      } else {
+        await expectLater(asking, throwsA(anything));
+      }
+      expect(accepted, status == 200 ? 1 : 0);
+    }
   });
   test('transcription keeps empty and HTTP errors separate without swallowing timeout', () async {
     final file = File('/synthetic/no-read.wav');
@@ -63,7 +92,6 @@ void main() {
   for (final frame in [
     'error:402:{}',
     'error: {"error":"quota_exceeded","message":"quota_exceeded"}',
-    'error: {"error":"timeout","message":"timeout"}',
     'unrecognized frame',
     'data: Partial'
   ]) {
@@ -71,6 +99,12 @@ void main() {
       await expectLater(askGuidedPayoff('Question', ['Saved'], stream: (_) => Stream.value(frame)), throwsStateError);
     });
   }
+  test('server timeout frame preserves timeout fallback classification', () async {
+    await expectLater(
+        askGuidedPayoff('Question', ['Saved'],
+            stream: (_) => Stream.value('error: {"error":"timeout","message":"timeout"}')),
+        throwsA(isA<ChatStreamException>().having((e) => e.kind, 'kind', ChatStreamFailureClass.timeout)));
+  });
   test('payoff cancels a silent stream at its total deadline', () async {
     var cancelled = false;
     final source = StreamController<String>(onCancel: () => cancelled = true);

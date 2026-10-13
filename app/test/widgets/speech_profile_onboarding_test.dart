@@ -134,7 +134,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(io.remembered, ['I build bicycles.']);
     expect(flow.payoffLoading, isTrue);
-    expect(find.byKey(const Key('payoff_answer')), findsOneWidget);
+    expect(find.byKey(const Key('payoff_answer')), findsNothing);
     await tester.tap(find.byKey(const Key('payoff_continue')));
     expect(exits, 1);
     io.pendingChat!.complete('Late answer');
@@ -142,6 +142,44 @@ void main() {
     expect(flow.payoffSource, 'fallback');
   });
 
+  testWidgets('failure offers same-clip retry without claiming Recording Paused; confirmation can skip',
+      (tester) async {
+    final io = ExperienceIO()..transcriptionFails = true;
+    final flow = GuidedVoiceController(io);
+    addTearDown(flow.dispose);
+    await flow.start();
+    io.speak();
+    await flow.next();
+    await pump(tester, flow);
+    expect(find.text('Recording Paused'), findsNothing);
+    expect(find.byKey(const Key('introduction_retry_transcription')), findsOneWidget);
+    io.transcriptionFails = false;
+    await tester.tap(find.byKey(const Key('introduction_retry_transcription')));
+    await tester.pumpAndSettle();
+    expect(io.startCount, 1);
+    expect(find.byKey(const Key('introduction_skip_prompt')), findsOneWidget);
+    await tester.tap(find.byKey(const Key('introduction_skip_prompt')));
+    await tester.pumpAndSettle();
+    expect(flow.answers, isEmpty);
+    expect(flow.promptIndex, 1);
+    await flow.pause();
+  });
+  testWidgets('fallback shows each saved sentence once with no repeated question block', (tester) async {
+    final flow = GuidedVoiceController(ExperienceIO()..chatFails = true);
+    addTearDown(flow.dispose);
+    await flow.typeInstead();
+    await flow.submitTyped('I build bicycles.');
+    await flow.skipPrompt();
+    await flow.skipPrompt();
+    await flow.skipPrompt();
+    await flow.saveAll();
+    await flow.showPayoff('What should I focus on this week?');
+    await pump(tester, flow);
+    expect(find.text('I build bicycles.'), findsOneWidget);
+    expect(find.text('What should I focus on this week?'), findsNothing);
+    expect(find.byKey(const Key('payoff_fallback')), findsOneWidget);
+    expect(find.byKey(const Key('payoff_continue')), findsOneWidget);
+  });
   testWidgets('typed prompt stays scrollable with a keyboard on a small phone at large text', (tester) async {
     final flow = GuidedVoiceController(ExperienceIO());
     addTearDown(flow.dispose);

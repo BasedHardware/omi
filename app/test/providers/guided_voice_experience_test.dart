@@ -66,13 +66,14 @@ void main() {
     expect(io.checks, 2);
   });
 
-  test('preflight timeout and navigation during check never start the mic', () async {
+  test('slow preflight allows speaking but navigation during check never starts the mic', () async {
     final io = ExperienceIO()..pendingCheck = Completer<bool>();
     final flow = GuidedVoiceController(io, preflightTimeout: const Duration(milliseconds: 2));
     addTearDown(flow.dispose);
     await flow.start();
-    expect(io.startCount, 0);
-    expect(flow.error, 'transcription_unavailable');
+    expect(io.startCount, 1);
+    expect(flow.error, isNull);
+    expect(flow.stage, IntroductionStage.recording);
     io.pendingCheck!.complete(true);
     final second = ExperienceIO()..pendingCheck = Completer<bool>();
     final other = GuidedVoiceController(second);
@@ -128,6 +129,75 @@ void main() {
     await flow.confirmAnswer();
     expect(flow.answers.single.text, io.text);
   });
+  test('failed transcription followed by speaking starts a fresh clip and cap', () async {
+    final io = ExperienceIO();
+    final flow = GuidedVoiceController(io);
+    addTearDown(flow.dispose);
+    await flow.start();
+    io.speak(40);
+    io.failure = const GuidedVoiceFailure('transcribe_http_error');
+    await flow.next();
+    expect(flow.seconds, 40);
+    io.failure = null;
+    await flow.start();
+    expect(flow.seconds, 0);
+    expect(flow.level, 0);
+    expect(flow.levelHistory, isEmpty);
+    expect(flow.canFinish, isFalse);
+    io.speak(6);
+    expect(flow.seconds, 6);
+    expect(flow.active, isTrue);
+    await flow.next();
+    await flow.confirmAnswer();
+    expect(flow.answers.single.audio.length, 6 * 32000);
+  });
+  test('retry transcription resends the same clip without opening mic', () async {
+    final io = ExperienceIO();
+    final flow = GuidedVoiceController(io);
+    addTearDown(flow.dispose);
+    await flow.start();
+    io.speak(6);
+    io.failure = const GuidedVoiceFailure('transcribe_empty');
+    await flow.next();
+    io.failure = null;
+    await flow.next();
+    expect(io.startCount, 1);
+    expect(flow.stage, IntroductionStage.confirmation);
+    await flow.confirmAnswer();
+    expect(flow.answers.single.audio.length, 6 * 32000);
+  });
+  test('ordinary pause and resume retain the clip', () async {
+    final io = ExperienceIO();
+    final flow = GuidedVoiceController(io);
+    addTearDown(flow.dispose);
+    await flow.start();
+    io.speak(6);
+    await flow.pause();
+    expect(flow.error, isNull);
+    await flow.start();
+    io.speak(2);
+    expect(flow.seconds, 8);
+    await flow.next();
+    await flow.confirmAnswer();
+    expect(flow.answers.single.audio.length, 8 * 32000);
+  });
+  test('typing a correction preserves the confirmed clip for enrollment', () async {
+    final io = ExperienceIO();
+    final flow = GuidedVoiceController(io);
+    addTearDown(flow.dispose);
+    await flow.start();
+    io.speak(6);
+    await flow.next();
+    await flow.typeInstead();
+    await flow.submitTyped('Corrected bicycle fact');
+    expect(flow.answers.single.audio.length, 6 * 32000);
+    await flow.skipPrompt();
+    await flow.skipPrompt();
+    await flow.skipPrompt();
+    await flow.saveAll();
+    expect(io.uploads.single.length, 6 * 32000);
+    expect(io.remembered, ['Corrected bicycle fact']);
+  });
   test('typed-only Save and Finish saves memories without requiring voice enrollment', () async {
     final io = ExperienceIO();
     final flow = GuidedVoiceController(io);
@@ -177,7 +247,7 @@ void main() {
     addTearDown(flow.dispose);
     await typedReview(flow);
     await flow.saveAll();
-    await flow.showPayoff('What should I focus on this week?', 'I build bicycles.');
+    await flow.showPayoff('What should I focus on this week?');
     expect(flow.payoffSource, 'chat');
     expect(io.chatFacts, ['I build bicycles.']);
     expect(flow.payoffAnswer, contains('bicycle project'));
@@ -189,9 +259,9 @@ void main() {
     addTearDown(other.dispose);
     await typedReview(other);
     await other.saveAll();
-    await other.showPayoff('Question', 'I build bicycles.');
+    await other.showPayoff('Question');
     expect(other.payoffSource, 'fallback');
-    expect(other.payoffAnswer, 'I build bicycles.');
+    expect(other.payoffAnswer, isEmpty);
   });
   test('payoff timeout retains summary and early Continue ignores late chat', () async {
     final io = ExperienceIO()..pendingChat = Completer<String>();
@@ -199,27 +269,27 @@ void main() {
     addTearDown(flow.dispose);
     await typedReview(flow);
     await flow.saveAll();
-    await flow.showPayoff('Question', 'I build bicycles.');
+    await flow.showPayoff('Question');
     expect(flow.payoffLoading, isFalse);
     expect(flow.payoffSource, 'fallback');
     io.pendingChat!.complete('Late');
     await Future<void>.delayed(Duration.zero);
-    expect(flow.payoffAnswer, 'I build bicycles.');
+    expect(flow.payoffAnswer, isEmpty);
     final second = ExperienceIO()..pendingChat = Completer<String>();
     final other = GuidedVoiceController(second);
     addTearDown(other.dispose);
     await typedReview(other);
     await other.saveAll();
-    final asking = other.showPayoff('Question', 'Saved summary');
+    final asking = other.showPayoff('Question');
     other.continuePayoff();
     second.pendingChat!.complete('Late');
     await asking;
-    expect(other.payoffAnswer, 'Saved summary');
+    expect(other.payoffAnswer, isEmpty);
   });
   test('skip everything or save nothing has no payoff', () async {
     final flow = GuidedVoiceController(ExperienceIO());
     addTearDown(flow.dispose);
-    await flow.showPayoff('Question', 'Summary');
+    await flow.showPayoff('Question');
     expect(flow.stage, IntroductionStage.ready);
     expect(flow.payoffLoading, isFalse);
   });
