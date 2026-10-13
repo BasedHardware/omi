@@ -111,7 +111,10 @@ class HomeDailyRecapsState extends State<HomeDailyRecaps> {
     );
   }
 
-  void _openAll() => routeToPage(context, const DailyRecapsPage());
+  Future<void> _openAll() async {
+    await routeToPage(context, const DailyRecapsPage());
+    if (mounted) await _refreshRecaps();
+  }
 
   Widget _card(BuildContext context, DailySummary summary) {
     return DailySummaryCard(

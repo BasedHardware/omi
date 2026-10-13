@@ -6,12 +6,13 @@ import {
   getDailySummaries,
   getDailySummary,
   deleteDailySummary,
-  generateTestDailySummary,
+  createDailySummary,
 } from '@/lib/api';
 import { getCache, setCache, updateCache, CACHE_TTL } from '@/lib/cache';
 
 export interface UseRecapsOptions {
   limit?: number;
+  accountId?: string;
 }
 
 export interface UseRecapsReturn {
@@ -23,7 +24,7 @@ export interface UseRecapsReturn {
   loadMore: () => Promise<void>;
   refresh: () => Promise<void>;
   removeRecap: (id: string) => Promise<boolean>;
-  generateForDate: (date: string) => Promise<DailySummary | null>;
+  generateForDate: (date: string) => Promise<DailySummary>;
   getRecapDetail: (id: string) => Promise<DailySummary | null>;
 }
 
@@ -42,7 +43,11 @@ function getFromCache(): { data: RecapsCacheData; isStale: boolean } | null {
 }
 
 function setToCache(recaps: DailySummary[], offset: number, hasMore: boolean): void {
-  setCache<RecapsCacheData>(RECAPS_CACHE_KEY, { recaps, offset, hasMore }, CACHE_TTL.MEDIUM);
+  setCache<RecapsCacheData>(
+    RECAPS_CACHE_KEY,
+    { recaps, offset, hasMore },
+    CACHE_TTL.MEDIUM,
+  );
 }
 
 function updateCacheRecaps(updater: (recaps: DailySummary[]) => DailySummary[]): void {
@@ -99,7 +104,18 @@ function normalizeRecapsResponse(response: unknown): DailySummary[] {
 }
 
 export function useRecaps(options: UseRecapsOptions = {}): UseRecapsReturn {
-  const { limit = 30 } = options;
+  const { limit = 30, accountId } = options;
+  const creationOwner = useRef(accountId);
+  const creationGeneration = useRef(0);
+  if (creationOwner.current !== accountId) creationGeneration.current++;
+  creationOwner.current = accountId;
+  const creationLifetime = useRef(true);
+  useEffect(() => {
+    creationLifetime.current = true;
+    return () => {
+      creationLifetime.current = false;
+    };
+  }, []);
 
   const cachedEntry = getFromCache();
 
@@ -120,13 +136,16 @@ export function useRecaps(options: UseRecapsOptions = {}): UseRecapsReturn {
   const groupedRecaps = useMemo(() => groupByMonth(recaps), [recaps]);
 
   // Core fetch function
-  const doFetch = useCallback(async (currentOffset: number): Promise<DailySummary[]> => {
-    const result = await getDailySummaries({
-      limit,
-      offset: currentOffset,
-    });
-    return normalizeRecapsResponse(result);
-  }, [limit]);
+  const doFetch = useCallback(
+    async (currentOffset: number): Promise<DailySummary[]> => {
+      const result = await getDailySummaries({
+        limit,
+        offset: currentOffset,
+      });
+      return normalizeRecapsResponse(result);
+    },
+    [limit],
+  );
 
   // Initial load
   useEffect(() => {
@@ -246,21 +265,22 @@ export function useRecaps(options: UseRecapsOptions = {}): UseRecapsReturn {
   }, []);
 
   // Generate recap for a specific date
-  const generateForDate = useCallback(async (date: string): Promise<DailySummary | null> => {
-    try {
-      const newRecap = await generateTestDailySummary(date);
-      setRecaps((prev) => {
-        // Add to beginning and sort by date descending
-        const updated = [newRecap, ...prev.filter((r) => r.id !== newRecap.id)];
-        updated.sort((a, b) => parseLocalDate(b.date).getTime() - parseLocalDate(a.date).getTime());
-        updateCacheRecaps(() => updated);
-        return updated;
-      });
-      return newRecap;
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to generate recap');
-      return null;
+  const generateForDate = useCallback(async (date: string): Promise<DailySummary> => {
+    const generation = creationGeneration.current;
+    const newRecap = await createDailySummary(date);
+    if (!creationLifetime.current || creationGeneration.current !== generation) {
+      throw new Error('Recap request belongs to an earlier session');
     }
+    setRecaps((prev) => {
+      // Add to beginning and sort by date descending
+      const updated = [newRecap, ...prev.filter((r) => r.id !== newRecap.id)];
+      updated.sort(
+        (a, b) => parseLocalDate(b.date).getTime() - parseLocalDate(a.date).getTime(),
+      );
+      updateCacheRecaps(() => updated);
+      return updated;
+    });
+    return newRecap;
   }, []);
 
   // Get single recap detail

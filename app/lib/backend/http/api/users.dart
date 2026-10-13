@@ -859,26 +859,6 @@ Future<bool> deleteDailySummary(String summaryId) async {
   return data.status == 'ok';
 }
 
-/// Generate a daily summary for a specific date (or today if not specified)
-/// Returns the summary_id on success, null on failure
-Future<String?> generateDailySummary({String? date}) async {
-  var response = await makeApiCall(
-    url: '${Env.apiBaseUrl}v1/users/daily-summary-settings/test',
-    headers: {},
-    method: 'POST',
-    body: date != null ? jsonEncode({'date': date}) : '',
-  );
-  if (response == null || response.statusCode != 200) return null;
-
-  try {
-    final data = wire.GeneratedDailySummaryTestResponse.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
-    return data.summaryId;
-  } catch (e) {
-    Logger.debug('Error parsing generate summary response: $e');
-    return null;
-  }
-}
-
 // Onboarding State
 
 Future<Map<String, dynamic>?> getUserOnboardingState() async {

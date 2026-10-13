@@ -63,6 +63,14 @@ import type {
 // Always use proxy to avoid CORS (browser → proxy → api.omi.me)
 const API_BASE_URL = '/api/proxy';
 
+/** Retain the status for safe endpoint-specific recovery messages. */
+export class ApiHttpError extends Error {
+  constructor(public readonly status: number, message: string) {
+    super(message);
+    this.name = 'ApiHttpError';
+  }
+}
+
 /**
  * Make an authenticated API request
  */
@@ -119,9 +127,12 @@ async function fetchWithAuthResponse<T>(
       }
 
       if (response.status === 401) {
-        throw new Error('Unauthorized - please sign in again');
+        throw new ApiHttpError(401, 'Unauthorized - please sign in again');
       }
-      throw new Error(`API error: ${response.status} ${response.statusText}`);
+      throw new ApiHttpError(
+        response.status,
+        `API error: ${response.status} ${response.statusText}`,
+      );
     }
 
     // Handle 204 No Content responses (common for DELETE operations)
@@ -1777,13 +1788,17 @@ export async function deleteDailySummary(id: string): Promise<void> {
 }
 
 /**
- * Generate a test daily summary for a specific date
+ * Generate or return a recap without requiring or sending push notifications.
  */
-export async function generateTestDailySummary(date: string): Promise<DailySummary> {
-  return fetchWithAuth<DailySummary>('/v1/users/daily-summary-settings/test', {
+export async function createDailySummary(date: string): Promise<DailySummary> {
+  const recap = await fetchWithAuth<DailySummary>('/v1/users/daily-summaries', {
     method: 'POST',
     body: JSON.stringify({ date }),
   });
+  if (!recap || typeof recap.id !== 'string' || !recap.id || recap.date !== date) {
+    throw new Error('Invalid recap response');
+  }
+  return recap;
 }
 
 /**

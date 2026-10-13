@@ -29,6 +29,7 @@ import {
 } from '@/components/conversations/FolderDialog';
 import { MoveFolderDialog } from '@/components/conversations/MoveFolderDialog';
 import { RecapDetailPanel } from '@/components/recaps/RecapDetailPanel';
+import { GenerateRecapAction } from '@/components/recaps/GenerateRecapAction';
 import { ConversationGallery, ConversationGallerySkeleton } from './ConversationGallery';
 import { ResizeHandle } from '@/components/ui/ResizeHandle';
 import { PageToolbar } from '@/components/layout/PageToolbar';
@@ -175,7 +176,8 @@ export function ConversationSplitView() {
     hasMore: recapsHasMore,
     loadMore: loadMoreRecaps,
     getRecapDetail,
-  } = useRecaps();
+    generateForDate,
+  } = useRecaps({ accountId: user?.uid });
 
   const {
     conversation: selectedConversation,
@@ -699,6 +701,15 @@ export function ConversationSplitView() {
         }
         actions={
           <>
+            <GenerateRecapAction
+              key={user?.uid}
+              generate={generateForDate}
+              onCreated={(recap) => {
+                preventAutoSelect.current = true;
+                setSelectedRecap(recap);
+                setSelection({ kind: 'recap', id: recap.id });
+              }}
+            />
             <DateFilter selectedDate={filterDate} onDateChange={handleDateFilterChange} />
 
             {/* Select/Cancel button for merge mode */}
