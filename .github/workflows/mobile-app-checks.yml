@@ -874,7 +874,11 @@ jobs:
               done
               exit 0
             fi
-            echo 'Mobile Release Eligibility: no mobile heavy checks selected' | tee -a "$GITHUB_STEP_SUMMARY"
+            if [[ "${HAS_DART:-false}" == true || "${DART_EXPECTED:-false}" == true ]]; then
+              echo 'Mobile Release Eligibility: Dart Analyze & Tests passed; no deferred heavy checks selected' | tee -a "$GITHUB_STEP_SUMMARY"
+            else
+              echo 'Mobile Release Eligibility: no mobile heavy checks selected' | tee -a "$GITHUB_STEP_SUMMARY"
+            fi
             exit 0
           fi
           if [[ "$EMULATOR_EXPECTED" == true && "$ANDROID_EMULATOR_RESULT" != success ]]; then
@@ -935,7 +939,7 @@ jobs:
             expected="${rest#*:}"
             [[ "$EVENT" == push && "$expected" != true && "$result" == skipped ]] && continue
             title="CI post-merge failure: $suite"
-            issue_number="$(gh issue list --repo "$REPO" --state open --search "\"$title\" in:title" --limit 100 --json number,title --jq ".[] | select(.title == \"$title\") | .number" | head -n 1)"
+            issue_number="$(gh api --method GET "repos/$REPO/issues?state=open&per_page=100" --paginate --slurp | jq -r --arg title "$title" '[.[][] | select(.title == $title and .pull_request == null)][0].number // empty')"
             if [[ "$result" == success ]]; then
               if [[ -n "$issue_number" ]]; then
                 gh issue close "$issue_number" --repo "$REPO" --reason completed
