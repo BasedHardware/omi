@@ -491,8 +491,12 @@ private enum ConnectOptionResultMessage {
 /// Quiet door from a connect sheet to the web developer home, for agents without a one-click path
 /// here or for anyone who wants a copy-paste setup prompt or their own key.
 struct DeveloperHomeLink: View {
+  /// Web developer home: copy-paste agent prompts plus MCP and Developer API keys. Every client
+  /// links here rather than keeping its own copy of key management.
+  static let url = URL(string: "https://app.omi.me/developers")!
+
   var body: some View {
-    Button(action: { NSWorkspace.shared.open(DesktopBackendEnvironment.developerHomeURL) }) {
+    Button(action: { NSWorkspace.shared.open(DeveloperHomeLink.url) }) {
       HStack(spacing: OmiSpacing.xs) {
         Text("Using another agent? Get a setup prompt or API key")
           .scaledFont(size: OmiType.caption, weight: .medium)

@@ -377,7 +377,7 @@ extension SettingsContentView {
           Spacer()
         }
 
-        Button(action: { NSWorkspace.shared.open(DesktopBackendEnvironment.developerHomeURL) }) {
+        Button(action: { NSWorkspace.shared.open(DeveloperHomeLink.url) }) {
           Text("Open Developer Home")
             .scaledFont(size: OmiType.body, weight: .semibold)
         }
