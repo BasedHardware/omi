@@ -133,7 +133,7 @@ final class SBOnboardingModel: ObservableObject {
   @Published var shortcutPicked = false
   @Published var shortcutPressed = false
   @Published var shortcutRecording = false
-  /// Set when the chosen Open Omi chord passed the local test press but Carbon could not claim it.
+  /// Set when Carbon could not claim the chosen Open Omi chord.
   /// Keep the stage active so the user can choose another chord instead of finishing with a shortcut
   /// that appears to work only inside onboarding.
   @Published var shortcutRegistrationError: String?
@@ -332,7 +332,7 @@ final class SBOnboardingModel: ObservableObject {
       return "Turn on Automation, so I can help with tasks in the apps you choose."
     case .notifications:
       return
-        "Turn on Notifications, so I can remind you about meetings that are about to start and follow-ups you might miss."
+        "Get your daily recap and a heads-up when meeting notes and follow-ups are ready. Turn on Notifications so I can let you know."
     // Both steps used to invite "press any key", and `acceptsRecordedChord` then refused a bare key
     // in silence — correct (a global bare `L` is unrecoverable) but unexplained. Name the rule.
     case .shortcutOpen:

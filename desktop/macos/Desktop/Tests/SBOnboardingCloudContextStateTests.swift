@@ -204,6 +204,20 @@ final class SBOnboardingCloudContextStateTests: XCTestCase {
     XCTAssertNil(model.contextDetails["gmail"])
   }
 
+  @MainActor
+  func testContextCanAdvanceWhileGoogleConnectorsArePendingOrFailed() {
+    for state in ["connecting", "needsSignIn", "error", "on"] {
+      let appState = AppState()
+      let model = SBOnboardingModel(appState: appState, chatProvider: ChatProvider(), onComplete: nil)
+      model.step = .context
+      model.contextStates = ["gmail": state, "calendar": "connecting"]
+      model.answerContext()
+      XCTAssertEqual(model.step, .capture, "connector state must never gate Continue")
+      XCTAssertEqual(model.contextStates["calendar"], "connecting")
+      model.streamTask?.cancel()
+    }
+  }
+
   private func makeDefaults() throws -> (defaults: UserDefaults, suiteName: String) {
     let suiteName = "SBOnboardingCloudContextStateTests.\(UUID().uuidString)"
     guard let defaults = UserDefaults(suiteName: suiteName) else {
