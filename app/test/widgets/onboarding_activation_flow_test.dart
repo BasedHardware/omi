@@ -186,12 +186,18 @@ void main() {
 
     await tester.pump(const Duration(seconds: 2));
     expect(run.events, ['review']);
+    // Nor a tap just after asking: the pop-up may not be on screen yet.
+    await tester.tapAt(tester.getCenter(find.text('Enjoying Omi so far?')));
+    await tester.pump(const Duration(milliseconds: 50));
+    expect(run.events, ['review']);
+
+    await tester.pump(const Duration(seconds: 2));
     await tester.tapAt(tester.getCenter(find.text('Enjoying Omi so far?')));
     await tester.pump(const Duration(milliseconds: 50)); // The cue runs once the tap is handled.
     expect(run.events, ['review', 'paywall', 'finished'], reason: 'the closed pop-up leads to the paywall');
   });
 
-  testWidgets('Omi owners go straight to the intro (how to wear it is the tutorial on Home)', (tester) async {
+  testWidgets('Omi owners go straight to the intro (how to wear it is the button tutorial before it)', (tester) async {
     await pump(tester, hasDevice: true);
     await tester.pump(const Duration(seconds: 1));
     expect(find.text('Wear your Omi'), findsNothing);
@@ -299,6 +305,10 @@ void main() {
     await tester.tap(find.text('Skip'));
     await tester.pump(const Duration(seconds: 5));
     await tapKey(tester, 'activation_continue_congrats');
+    await tester.pump(const Duration(seconds: 2));
+    await tester.tap(find.byKey(const Key('activation_continue_rating')), warnIfMissed: false);
+    await tester.pump();
+    expect(run.events, ['review'], reason: 'Continue waits for the App Store prompt');
     await tester.pump(const Duration(seconds: 2));
 
     await tapKey(tester, 'activation_continue_rating');

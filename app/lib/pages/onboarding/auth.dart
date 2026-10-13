@@ -38,7 +38,7 @@ class _AuthComponentState extends State<AuthComponent> {
                 label: 'Omi',
                 child: Assets.images.logoTextWhite.image(
                   key: const Key('onboarding_wordmark'),
-                  height: 40,
+                  height: 56,
                   color: p.textPrimary,
                 ),
               ),

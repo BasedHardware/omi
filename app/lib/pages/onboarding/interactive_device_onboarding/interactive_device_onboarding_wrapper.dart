@@ -31,7 +31,11 @@ class InteractiveDeviceOnboardingWrapper extends StatefulWidget {
   // and the tutorial stays reachable from device settings.
   final bool allowExit;
 
-  const InteractiveDeviceOnboardingWrapper({super.key, this.allowExit = false});
+  /// True when shown inside first-run onboarding, right after the Omi connects. Onboarding offers
+  /// the plan at its own end, so closing the tutorial here offers nothing.
+  final bool duringSetup;
+
+  const InteractiveDeviceOnboardingWrapper({super.key, this.allowExit = false, this.duringSetup = false});
 
   @override
   State<InteractiveDeviceOnboardingWrapper> createState() => _InteractiveDeviceOnboardingWrapperState();
@@ -57,7 +61,8 @@ class _InteractiveDeviceOnboardingWrapperState extends State<InteractiveDeviceOn
       await _captureProvider!.suspendBatchModeForOnboarding();
       if (!mounted) return;
       _started = true;
-      AnalyticsManager().deviceOnboardingStarted(source: widget.allowExit ? 'settings' : 'auto');
+      AnalyticsManager().deviceOnboardingStarted(
+          source: widget.allowExit ? 'settings' : (widget.duringSetup ? 'onboarding' : 'auto'));
     });
   }
 
@@ -158,7 +163,7 @@ class _InteractiveDeviceOnboardingWrapperState extends State<InteractiveDeviceOn
   /// Closes the tutorial and, for anyone not subscribed, offers the plan. Applies however the
   /// tutorial ends: finished, skipped, or replayed from Settings.
   void _closeAndOfferUpgrade() {
-    final offerUpgrade = _isFreeUser();
+    final offerUpgrade = !widget.duringSetup && _isFreeUser();
     Navigator.of(context).pop();
     if (offerUpgrade) unawaited(_showSetupCompletePaywall());
   }

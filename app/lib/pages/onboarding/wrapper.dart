@@ -46,6 +46,9 @@ import 'package:omi/utils/analytics/intercom.dart';
 import 'package:omi/utils/analytics/product_telemetry.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/other/temp.dart';
+import 'package:omi/utils/device.dart';
+import 'package:omi/pages/onboarding/interactive_device_onboarding/interactive_device_onboarding_wrapper.dart';
+import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/app_globals.dart';
 import 'package:omi/core/app_shell.dart';
 import 'package:omi/ui/ui.dart';
@@ -184,7 +187,15 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
           }
         }
       }
-      // If not signed in, it stays at the Auth page (index 0)
+      // If not signed in, it stays at the Auth page (index 0): the app's first screen. It records the
+      // welcome and asks for Bluetooth shortly after it appears, so the search for the reader's Omi
+      // can start right after sign-in (the separate "Get Started" welcome screen is gone).
+      if (!widget.forceAuthPage && !AuthService.instance.isSignedIn()) {
+        PlatformManager.instance.analytics.onboardingWelcomeShown();
+        await Future<void>.delayed(const Duration(milliseconds: 800));
+        if (!mounted) return;
+        await context.read<OnboardingProvider>().askForBluetoothAtLaunch();
+      }
     });
   }
 
@@ -290,12 +301,24 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
     }
   }
 
-  void _leaveConnectOmi(OnboardingDeviceChoice choice) {
-    // Device setup is not marked done here: Home shows the Omi button tutorial once onboarding ends
-    // (it marks itself done), as it did before the redesign.
+  Future<void> _leaveConnectOmi(OnboardingDeviceChoice choice) async {
     _deviceChoice = choice;
     PlatformManager.instance.analytics.onboardingStepCompleted('Connect Omi');
+    // A reader who just connected an Omi learns its button now, before trying it; the tutorial
+    // marks itself done, so Home won't show it again.
+    if (choice == OnboardingDeviceChoice.connected && _needsDeviceTutorial()) {
+      await routeToPage(context, const InteractiveDeviceOnboardingWrapper(duringSetup: true));
+      if (!mounted) return;
+    }
     unawaited(_enterEnding());
+  }
+
+  bool _needsDeviceTutorial() {
+    if (SharedPreferencesUtil().deviceOnboardingCompleted) return false;
+    final devices = context.read<DeviceProvider>();
+    final device = devices.connectedDevice;
+    if (device == null || device.type != DeviceType.omi) return false;
+    return DeviceUtils.isOmiCv1(modelNumber: devices.pairedDevice?.modelNumber, deviceName: device.name);
   }
 
   // ---- The ending: voice introduction (control) or activation (treatment) ------------------

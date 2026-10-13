@@ -1252,7 +1252,11 @@ class _RatingAskState extends State<_RatingAsk> with WidgetsBindingObserver {
   static const _gold = Color(0xFFFFC53D); // omi-ux-allow: color-literal -- rating stars in App Store gold
   Timer? _ask;
   Timer? _starsLanded;
+  Timer? _offerContinue;
   bool _promptShowing = false;
+  // Continue stays hidden until the App Store pop-up has had time to appear, so a quick tap can't
+  // skip past it.
+  bool _canContinue = false;
   bool _asked = false;
   bool _done = false;
 
@@ -1269,6 +1273,7 @@ class _RatingAskState extends State<_RatingAsk> with WidgetsBindingObserver {
   void dispose() {
     _ask?.cancel();
     _starsLanded?.cancel();
+    _offerContinue?.cancel();
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
@@ -1279,6 +1284,10 @@ class _RatingAskState extends State<_RatingAsk> with WidgetsBindingObserver {
       await widget.requestReview();
     } catch (_) {}
     _asked = true;
+    // iOS returns before its pop-up is on screen, and may decide not to show it at all.
+    _offerContinue = Timer(const Duration(milliseconds: 1500), () {
+      if (mounted) setState(() => _canContinue = true);
+    });
   }
 
   /// iOS gives no callback for its rating pop-up, but the app goes inactive while it is up and
@@ -1311,7 +1320,7 @@ class _RatingAskState extends State<_RatingAsk> with WidgetsBindingObserver {
       // After the tap has been handled: a tap on Continue has then already moved on (or retried a
       // failed save), and this cue must not count the same tap twice.
       onPointerUp: (_) {
-        if (_asked) Future<void>(_leave);
+        if (_asked && _canContinue) Future<void>(_leave);
       },
       child: _buildStage(context),
     );
@@ -1337,11 +1346,18 @@ class _RatingAskState extends State<_RatingAsk> with WidgetsBindingObserver {
           ],
         ),
       ),
-      bottom: OmiButton(
-        key: const Key('activation_continue_rating'),
-        label: context.l10n.continueButton,
-        expand: true,
-        onPressed: _continue,
+      bottom: IgnorePointer(
+        ignoring: !_canContinue,
+        child: AnimatedOpacity(
+          opacity: _canContinue ? 1 : 0,
+          duration: const Duration(milliseconds: 300),
+          child: OmiButton(
+            key: const Key('activation_continue_rating'),
+            label: context.l10n.continueButton,
+            expand: true,
+            onPressed: _continue,
+          ),
+        ),
       ),
     );
   }

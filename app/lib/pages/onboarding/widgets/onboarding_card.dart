@@ -119,8 +119,11 @@ class OnboardingHeroStep extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           SizedBox(height: heroBottom),
-          Expanded(child: Center(child: SingleChildScrollView(child: headline))),
-          const SizedBox(height: OmiSpacing.md),
+          // The headline sits low, just above the button(s).
+          Expanded(
+            child: Align(alignment: Alignment.bottomCenter, child: SingleChildScrollView(child: headline)),
+          ),
+          const SizedBox(height: OmiSpacing.xxl),
           ...buttons,
           SizedBox(
             height: belowButton,
@@ -164,7 +167,7 @@ class OnboardingHeroButton extends StatelessWidget {
               onPressed: onPressed,
               style: OutlinedButton.styleFrom(
                 side: BorderSide(color: p.textPrimary.withValues(alpha: 0.4)),
-                shape: const StadiumBorder(),
+                shape: const RoundedRectangleBorder(borderRadius: OmiRadius.mdAll),
               ),
               child: child,
             )
@@ -174,7 +177,7 @@ class OnboardingHeroButton extends StatelessWidget {
                 backgroundColor: p.accent,
                 foregroundColor: p.onAccent,
                 elevation: 0,
-                shape: const StadiumBorder(),
+                shape: const RoundedRectangleBorder(borderRadius: OmiRadius.mdAll),
               ),
               child: child,
             ),

@@ -281,9 +281,6 @@ class $AssetsImagesGen {
   AssetGenImage get onboardingBg6 =>
       const AssetGenImage('assets/images/onboarding-bg-6.webp');
 
-  /// File path: assets/images/onboarding.mp4
-  String get onboarding => 'assets/images/onboarding.mp4';
-
   /// File path: assets/images/plaud_note_pin.webp
   AssetGenImage get plaudNotePin =>
       const AssetGenImage('assets/images/plaud_note_pin.webp');
@@ -399,7 +396,6 @@ class $AssetsImagesGen {
         onboardingBg51,
         onboardingBg52,
         onboardingBg6,
-        onboarding,
         plaudNotePin,
         raybanMeta,
         recordingGreenCircleIcon,
