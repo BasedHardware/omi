@@ -18,6 +18,7 @@ import 'package:omi/providers/connectivity_provider.dart';
 import 'package:omi/providers/folder_provider.dart';
 import 'package:omi/providers/home_provider.dart';
 import 'package:omi/providers/integration_provider.dart';
+import 'package:omi/providers/messaging_channels_provider.dart';
 import 'package:omi/providers/message_provider.dart';
 import 'package:omi/providers/usage_provider.dart';
 import 'package:omi/providers/voice_recorder_provider.dart';
@@ -62,6 +63,12 @@ final class JourneyHermeticBoot {
 
     await resetAppState(uid: uid, email: email, extraPrefs: extraPrefs);
     Env.overrideApiBaseUrl(server.baseUrl);
+    // The fixture is a loopback override. Register it as a debug journey
+    // authority so the harness bearer survives the custom-backend strip and
+    // the wrong-owner fault can swap it. User-configured overrides never arm
+    // this registry. Cleared with the override in [stop].
+    Env.armDebugJourneyCredentialTrust();
+    Env.addDebugTrustedAuthority(Uri.parse(server.baseUrl).host);
     PlatformManager.initializeForLocalHarness();
     AuthService.installLocalHarnessTokenGateway(_SyntheticGateway(uid, email));
     return server;
@@ -108,6 +115,7 @@ final class JourneyHermeticBoot {
           ChangeNotifierProvider(create: (_) => createProductionConversationProvider()),
           ChangeNotifierProvider(create: (_) => HomeProvider()),
           ChangeNotifierProvider(create: (_) => IntegrationProvider()),
+          ChangeNotifierProvider(create: (_) => MessagingChannelsProvider(readConfig: () async => ChatAppsConfig.off)),
           ChangeNotifierProvider(create: (_) => FolderProvider()),
           ChangeNotifierProvider(create: (_) => UsageProvider()),
           ChangeNotifierProvider(create: (_) => VoiceRecorderProvider()),

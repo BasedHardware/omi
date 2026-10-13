@@ -289,12 +289,286 @@
       "type": "stat"
     },
     {
+      "datasource": {
+        "type": "stackdriver",
+        "uid": "beuxmaq8oxhq8e"
+      },
+      "description": "Share of current-day recap generations that succeeded in the last 3 hours: generated / (generated + failed). Failed excludes DailySummaryDeliveryError (the recap was generated; only the push failed) and includes per-user budget timeouts. Red under 90%. Reads 'no recaps due' when nobody needed a recap, which is different from every recap failing. The 2026-10-10 gateway outage read 0% here. Source: Cloud Logging metrics from notifications-job (daily_summary_generated / daily_summary_user_failed log lines) read through the Cloud Monitoring datasource, so this does not depend on the job's Prometheus sidecar.",
+      "fieldConfig": {
+        "defaults": {
+          "min": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 90
+              },
+              {
+                "color": "green",
+                "value": 98
+              }
+            ]
+          },
+          "unit": "percent",
+          "max": 100,
+          "noValue": "no recaps due"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 0,
+        "y": 5
+      },
+      "hideTimeOverride": true,
+      "id": 73,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "stackdriver",
+            "uid": "beuxmaq8oxhq8e"
+          },
+          "queryType": "promQL",
+          "refId": "A",
+          "promQLQuery": {
+            "expr": "100 * (sum(increase(logging_googleapis_com:user_daily_summary_recap_generated{monitored_resource=\"cloud_run_job\",job_name=\"notifications-job\"}[3h])) or vector(0)) / (((sum(increase(logging_googleapis_com:user_daily_summary_recap_generated{monitored_resource=\"cloud_run_job\",job_name=\"notifications-job\"}[3h])) or vector(0)) + (sum(increase(logging_googleapis_com:user_daily_summary_user_failed{monitored_resource=\"cloud_run_job\",job_name=\"notifications-job\",error_type!=\"DailySummaryDeliveryError\"}[3h])) or vector(0))) > 0)",
+            "projectName": "based-hardware",
+            "step": "5m"
+          }
+        }
+      ],
+      "timeFrom": "1h",
+      "title": "Daily recap generation (3h)",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "stackdriver",
+        "uid": "beuxmaq8oxhq8e"
+      },
+      "description": "Current-day recaps persisted in the last 24 hours (backfill excluded). Red at zero: a day with no recap generated is a total feature outage, whatever the job's own exit status says. Source: Cloud Logging metrics from notifications-job (daily_summary_generated / daily_summary_user_failed log lines) read through the Cloud Monitoring datasource, so this does not depend on the job's Prometheus sidecar.",
+      "fieldConfig": {
+        "defaults": {
+          "min": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "green",
+                "value": 1
+              }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 6,
+        "y": 5
+      },
+      "hideTimeOverride": true,
+      "id": 74,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "stackdriver",
+            "uid": "beuxmaq8oxhq8e"
+          },
+          "queryType": "promQL",
+          "refId": "A",
+          "promQLQuery": {
+            "expr": "sum(increase(logging_googleapis_com:user_daily_summary_recap_generated{monitored_resource=\"cloud_run_job\",job_name=\"notifications-job\"}[24h])) or vector(0)",
+            "projectName": "based-hardware",
+            "step": "5m"
+          }
+        }
+      ],
+      "timeFrom": "1h",
+      "title": "Daily recaps generated (24h)",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "stackdriver",
+        "uid": "beuxmaq8oxhq8e"
+      },
+      "description": "Recipients whose recap generation failed or exceeded the per-user budget in the last 3 hours, counted per cohort pass (a recipient retried four times in an hour counts four times). Delivery-only failures are excluded. Orange from 10, red from 20 (the alert gate). Source: Cloud Logging metrics from notifications-job (daily_summary_generated / daily_summary_user_failed log lines) read through the Cloud Monitoring datasource, so this does not depend on the job's Prometheus sidecar.",
+      "fieldConfig": {
+        "defaults": {
+          "min": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 10
+              },
+              {
+                "color": "red",
+                "value": 20
+              }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 12,
+        "y": 5
+      },
+      "hideTimeOverride": true,
+      "id": 75,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "stackdriver",
+            "uid": "beuxmaq8oxhq8e"
+          },
+          "queryType": "promQL",
+          "refId": "A",
+          "promQLQuery": {
+            "expr": "sum(increase(logging_googleapis_com:user_daily_summary_user_failed{monitored_resource=\"cloud_run_job\",job_name=\"notifications-job\",error_type!=\"DailySummaryDeliveryError\"}[3h])) or vector(0)",
+            "projectName": "based-hardware",
+            "step": "5m"
+          }
+        }
+      ],
+      "timeFrom": "1h",
+      "title": "Recap generation failures (3h)",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "stackdriver",
+        "uid": "beuxmaq8oxhq8e"
+      },
+      "description": "daily_summary_job_summary lines in the last hour. The notifications job runs every 15 minutes, so 4 is healthy; fewer means the Scheduler, the job, or its run lock stopped a pass. Counts passes, not success: a pass in which every recipient failed still counts here. Source: Cloud Logging metrics from notifications-job (daily_summary_generated / daily_summary_user_failed log lines) read through the Cloud Monitoring datasource, so this does not depend on the job's Prometheus sidecar.",
+      "fieldConfig": {
+        "defaults": {
+          "min": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 2
+              },
+              {
+                "color": "green",
+                "value": 3
+              }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 18,
+        "y": 5
+      },
+      "hideTimeOverride": true,
+      "id": 76,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "stackdriver",
+            "uid": "beuxmaq8oxhq8e"
+          },
+          "queryType": "promQL",
+          "refId": "A",
+          "promQLQuery": {
+            "expr": "sum(increase(logging_googleapis_com:user_daily_summary_job_heartbeat_missing{monitored_resource=\"cloud_run_job\",job_name=\"notifications-job\"}[1h])) or vector(0)",
+            "projectName": "based-hardware",
+            "step": "5m"
+          }
+        }
+      ],
+      "timeFrom": "1h",
+      "title": "Recap job passes (1h, expect 4)",
+      "type": "stat"
+    },
+    {
       "collapsed": true,
       "gridPos": {
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 5
+        "y": 9
       },
       "id": 43,
       "panels": [
@@ -324,7 +598,7 @@
             "h": 8,
             "w": 12,
             "x": 0,
-            "y": 6
+            "y": 10
           },
           "id": 6,
           "interval": "5m",
@@ -379,7 +653,7 @@
             "h": 8,
             "w": 12,
             "x": 12,
-            "y": 6
+            "y": 10
           },
           "id": 7,
           "interval": "5m",
@@ -443,7 +717,7 @@
             "h": 7,
             "w": 24,
             "x": 0,
-            "y": 14
+            "y": 18
           },
           "id": 8,
           "interval": "5m",
@@ -498,7 +772,7 @@
             "h": 7,
             "w": 24,
             "x": 0,
-            "y": 21
+            "y": 25
           },
           "id": 9,
           "interval": "5m",
@@ -537,7 +811,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 6
+        "y": 10
       },
       "id": 10,
       "panels": [
@@ -550,7 +824,7 @@
             "h": 3,
             "w": 24,
             "x": 0,
-            "y": 7
+            "y": 11
           },
           "id": 11,
           "options": {
@@ -586,7 +860,7 @@
             "h": 4,
             "w": 6,
             "x": 0,
-            "y": 10
+            "y": 14
           },
           "id": 12,
           "options": {
@@ -640,7 +914,7 @@
             "h": 4,
             "w": 6,
             "x": 6,
-            "y": 10
+            "y": 14
           },
           "id": 13,
           "options": {
@@ -694,7 +968,7 @@
             "h": 4,
             "w": 6,
             "x": 12,
-            "y": 10
+            "y": 14
           },
           "id": 14,
           "options": {
@@ -748,7 +1022,7 @@
             "h": 4,
             "w": 6,
             "x": 18,
-            "y": 10
+            "y": 14
           },
           "id": 15,
           "options": {
@@ -803,7 +1077,7 @@
             "h": 8,
             "w": 24,
             "x": 0,
-            "y": 14
+            "y": 18
           },
           "id": 16,
           "interval": "5m",
@@ -858,7 +1132,7 @@
             "h": 7,
             "w": 12,
             "x": 0,
-            "y": 22
+            "y": 26
           },
           "id": 17,
           "interval": "5m",
@@ -913,7 +1187,7 @@
             "h": 7,
             "w": 12,
             "x": 12,
-            "y": 22
+            "y": 26
           },
           "id": 18,
           "interval": "5m",
@@ -952,7 +1226,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 7
+        "y": 11
       },
       "id": 19,
       "panels": [
@@ -992,7 +1266,7 @@
             "h": 4,
             "w": 6,
             "x": 0,
-            "y": 8
+            "y": 12
           },
           "id": 20,
           "options": {
@@ -1055,7 +1329,7 @@
             "h": 4,
             "w": 6,
             "x": 6,
-            "y": 8
+            "y": 12
           },
           "id": 21,
           "options": {
@@ -1118,7 +1392,7 @@
             "h": 4,
             "w": 6,
             "x": 12,
-            "y": 8
+            "y": 12
           },
           "id": 22,
           "options": {
@@ -1181,7 +1455,7 @@
             "h": 4,
             "w": 6,
             "x": 18,
-            "y": 8
+            "y": 12
           },
           "id": 23,
           "options": {
@@ -1236,7 +1510,7 @@
             "h": 8,
             "w": 12,
             "x": 0,
-            "y": 12
+            "y": 16
           },
           "id": 24,
           "interval": "5m",
@@ -1291,7 +1565,7 @@
             "h": 8,
             "w": 12,
             "x": 12,
-            "y": 12
+            "y": 16
           },
           "id": 25,
           "interval": "5m",
@@ -1346,7 +1620,7 @@
             "h": 7,
             "w": 24,
             "x": 0,
-            "y": 20
+            "y": 24
           },
           "id": 26,
           "interval": "5m",
@@ -1385,7 +1659,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 8
+        "y": 12
       },
       "id": 27,
       "panels": [],
@@ -1417,7 +1691,7 @@
         "h": 4,
         "w": 6,
         "x": 0,
-        "y": 9
+        "y": 13
       },
       "id": 28,
       "options": {
@@ -1480,7 +1754,7 @@
         "h": 4,
         "w": 6,
         "x": 6,
-        "y": 9
+        "y": 13
       },
       "id": 29,
       "options": {
@@ -1514,7 +1788,7 @@
         "type": "prometheus",
         "uid": "prometheus"
       },
-      "description": "Age of the oldest finalization job that has not reached a terminal state \u2014 a conversation the user is still waiting on. Aggregated with max(), not sum(): every backend-listen replica publishes the same global value. A blank panel means no replica published this series at all: that is \"the reporter is gone\", not \"the value is zero\", and the two must never render the same.",
+      "description": "Oldest queued or leased finalization job: system-owned work only. Jobs waiting for user BYOK reconnect have a separate informational age gauge and do not page. Replicated per process; aggregate with max().",
       "fieldConfig": {
         "defaults": {
           "noValue": "not reporting",
@@ -1547,7 +1821,7 @@
         "h": 4,
         "w": 6,
         "x": 12,
-        "y": 9
+        "y": 13
       },
       "id": 30,
       "options": {
@@ -1573,7 +1847,7 @@
           "refId": "A"
         }
       ],
-      "title": "Oldest unfinished job",
+      "title": "Oldest system-owned job",
       "type": "stat"
     },
     {
@@ -1610,7 +1884,7 @@
         "h": 4,
         "w": 6,
         "x": 18,
-        "y": 9
+        "y": 13
       },
       "id": 31,
       "options": {
@@ -1645,7 +1919,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 13
+        "y": 17
       },
       "id": 44,
       "panels": [
@@ -1675,7 +1949,7 @@
             "h": 8,
             "w": 8,
             "x": 0,
-            "y": 14
+            "y": 18
           },
           "id": 32,
           "interval": "5m",
@@ -1733,7 +2007,7 @@
             "h": 8,
             "w": 8,
             "x": 8,
-            "y": 14
+            "y": 18
           },
           "id": 33,
           "interval": "5m",
@@ -1806,7 +2080,7 @@
             "h": 8,
             "w": 8,
             "x": 16,
-            "y": 14
+            "y": 18
           },
           "id": 34,
           "interval": "5m",
@@ -1872,7 +2146,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 14
+        "y": 18
       },
       "id": 35,
       "panels": [
@@ -1912,7 +2186,7 @@
             "h": 4,
             "w": 6,
             "x": 0,
-            "y": 15
+            "y": 19
           },
           "id": 36,
           "options": {
@@ -1967,7 +2241,7 @@
             "h": 4,
             "w": 6,
             "x": 6,
-            "y": 15
+            "y": 19
           },
           "id": 37,
           "options": {
@@ -2030,7 +2304,7 @@
             "h": 4,
             "w": 6,
             "x": 12,
-            "y": 15
+            "y": 19
           },
           "id": 38,
           "options": {
@@ -2093,7 +2367,7 @@
             "h": 4,
             "w": 6,
             "x": 18,
-            "y": 15
+            "y": 19
           },
           "id": 39,
           "options": {
@@ -2148,7 +2422,7 @@
             "h": 8,
             "w": 8,
             "x": 0,
-            "y": 19
+            "y": 23
           },
           "id": 40,
           "interval": "5m",
@@ -2203,7 +2477,7 @@
             "h": 8,
             "w": 8,
             "x": 8,
-            "y": 19
+            "y": 23
           },
           "id": 41,
           "interval": "5m",
@@ -2258,7 +2532,7 @@
             "h": 8,
             "w": 8,
             "x": 16,
-            "y": 19
+            "y": 23
           },
           "id": 42,
           "interval": "5m",
@@ -2297,7 +2571,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 15
+        "y": 19
       },
       "id": 45,
       "panels": [
@@ -2327,7 +2601,7 @@
             "h": 8,
             "w": 8,
             "x": 0,
-            "y": 16
+            "y": 20
           },
           "id": 46,
           "interval": "5m",
@@ -2405,7 +2679,7 @@
             "h": 8,
             "w": 8,
             "x": 8,
-            "y": 16
+            "y": 20
           },
           "id": 47,
           "interval": "5m",
@@ -2445,7 +2719,7 @@
             "h": 8,
             "w": 8,
             "x": 16,
-            "y": 16
+            "y": 20
           },
           "id": 48,
           "options": {
@@ -2496,7 +2770,7 @@
           },
           "gridPos": {
             "x": 0,
-            "y": 24,
+            "y": 28,
             "w": 8,
             "h": 8
           },
@@ -2537,7 +2811,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 16
+        "y": 20
       },
       "id": 50,
       "panels": [
@@ -2575,7 +2849,7 @@
           },
           "gridPos": {
             "x": 0,
-            "y": 17,
+            "y": 21,
             "w": 6,
             "h": 4
           },
@@ -2640,7 +2914,7 @@
           },
           "gridPos": {
             "x": 6,
-            "y": 17,
+            "y": 21,
             "w": 6,
             "h": 4
           },
@@ -2705,7 +2979,7 @@
           },
           "gridPos": {
             "x": 12,
-            "y": 17,
+            "y": 21,
             "w": 6,
             "h": 4
           },
@@ -2770,7 +3044,7 @@
           },
           "gridPos": {
             "x": 18,
-            "y": 17,
+            "y": 21,
             "w": 6,
             "h": 4
           },
@@ -2835,7 +3109,7 @@
           },
           "gridPos": {
             "x": 0,
-            "y": 21,
+            "y": 25,
             "w": 6,
             "h": 4
           },
@@ -2900,7 +3174,7 @@
           },
           "gridPos": {
             "x": 6,
-            "y": 21,
+            "y": 25,
             "w": 6,
             "h": 4
           },
@@ -2955,7 +3229,7 @@
           },
           "gridPos": {
             "x": 12,
-            "y": 21,
+            "y": 25,
             "w": 6,
             "h": 4
           },
@@ -3010,7 +3284,7 @@
           },
           "gridPos": {
             "x": 18,
-            "y": 21,
+            "y": 25,
             "w": 6,
             "h": 4
           },
@@ -3075,7 +3349,7 @@
           },
           "gridPos": {
             "x": 0,
-            "y": 25,
+            "y": 29,
             "w": 6,
             "h": 4
           },
@@ -3130,7 +3404,7 @@
           },
           "gridPos": {
             "x": 6,
-            "y": 25,
+            "y": 29,
             "w": 6,
             "h": 4
           },
@@ -3171,7 +3445,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 17
+        "y": 21
       },
       "id": 61,
       "panels": [
@@ -3199,7 +3473,7 @@
           },
           "gridPos": {
             "x": 0,
-            "y": 18,
+            "y": 22,
             "w": 6,
             "h": 4
           },
@@ -3264,7 +3538,7 @@
           },
           "gridPos": {
             "x": 6,
-            "y": 18,
+            "y": 22,
             "w": 6,
             "h": 4
           },
@@ -3319,7 +3593,7 @@
           },
           "gridPos": {
             "x": 12,
-            "y": 18,
+            "y": 22,
             "w": 12,
             "h": 8
           },
@@ -3362,6 +3636,470 @@
       ],
       "title": "Pendant capture \u2014 source=omi",
       "type": "row"
+    },
+    {
+      "id": 65,
+      "type": "row",
+      "title": "Daily recaps \u2014 generation and delivery job health",
+      "collapsed": true,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 36
+      },
+      "panels": [
+        {
+          "datasource": {
+            "type": "stackdriver",
+            "uid": "beuxmaq8oxhq8e"
+          },
+          "description": "Current-day recaps generated, and recipient failures by reason and exception class, per 15-minute bucket. Failures are counted per cohort pass, so one persistently failing recipient adds up to four per hour; DailySummaryDeliveryError means the recap was generated but no device accepted the push. Source: Cloud Logging metrics from notifications-job (daily_summary_generated / daily_summary_user_failed log lines) read through the Cloud Monitoring datasource, so this does not depend on the job's Prometheus sidecar.",
+          "fieldConfig": {
+            "defaults": {
+              "custom": {
+                "drawStyle": "line",
+                "fillOpacity": 10,
+                "lineWidth": 1,
+                "showPoints": "never",
+                "stacking": {
+                  "group": "A",
+                  "mode": "none"
+                }
+              },
+              "unit": "short",
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  },
+                  {
+                    "color": "red",
+                    "value": 1
+                  }
+                ]
+              },
+              "displayName": "${__field.labels.outcome}"
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 8,
+            "w": 12,
+            "x": 0,
+            "y": 37
+          },
+          "id": 66,
+          "options": {
+            "legend": {
+              "displayMode": "list",
+              "placement": "bottom",
+              "showLegend": true
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "desc"
+            }
+          },
+          "targets": [
+            {
+              "datasource": {
+                "type": "stackdriver",
+                "uid": "beuxmaq8oxhq8e"
+              },
+              "queryType": "promQL",
+              "refId": "A",
+              "promQLQuery": {
+                "expr": "label_replace(sum(increase(logging_googleapis_com:user_daily_summary_recap_generated{monitored_resource=\"cloud_run_job\",job_name=\"notifications-job\"}[15m])), \"outcome\", \"generated\", \"\", \"\")",
+                "projectName": "based-hardware",
+                "step": "15m"
+              }
+            },
+            {
+              "datasource": {
+                "type": "stackdriver",
+                "uid": "beuxmaq8oxhq8e"
+              },
+              "queryType": "promQL",
+              "refId": "B",
+              "promQLQuery": {
+                "expr": "label_replace(sum by (error_type) (increase(logging_googleapis_com:user_daily_summary_user_failed{monitored_resource=\"cloud_run_job\",job_name=\"notifications-job\",reason=\"generation_error\"}[15m])), \"outcome\", \"failed: $1\", \"error_type\", \"(.+)\")",
+                "projectName": "based-hardware",
+                "step": "15m"
+              }
+            },
+            {
+              "datasource": {
+                "type": "stackdriver",
+                "uid": "beuxmaq8oxhq8e"
+              },
+              "queryType": "promQL",
+              "refId": "C",
+              "promQLQuery": {
+                "expr": "label_replace(sum(increase(logging_googleapis_com:user_daily_summary_user_failed{monitored_resource=\"cloud_run_job\",job_name=\"notifications-job\",reason=\"user_budget_exceeded\"}[15m])), \"outcome\", \"timed out (user budget)\", \"\", \"\")",
+                "projectName": "based-hardware",
+                "step": "15m"
+              }
+            }
+          ],
+          "title": "Recap outcomes per 15 minutes",
+          "type": "timeseries"
+        },
+        {
+          "datasource": {
+            "type": "stackdriver",
+            "uid": "beuxmaq8oxhq8e"
+          },
+          "description": "Job passes (daily_summary_job_summary) and passes that ended with complete=False, per 15-minute bucket. Incomplete is not by itself an outage: a single persistently failing recipient keeps every pass incomplete until its cohort ages out. Read it with the outcome graph. Source: Cloud Logging metrics from notifications-job (daily_summary_generated / daily_summary_user_failed log lines) read through the Cloud Monitoring datasource, so this does not depend on the job's Prometheus sidecar.",
+          "fieldConfig": {
+            "defaults": {
+              "custom": {
+                "drawStyle": "line",
+                "fillOpacity": 10,
+                "lineWidth": 1,
+                "showPoints": "never",
+                "stacking": {
+                  "group": "A",
+                  "mode": "none"
+                }
+              },
+              "unit": "short",
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  },
+                  {
+                    "color": "red",
+                    "value": 1
+                  }
+                ]
+              },
+              "displayName": "${__field.labels.outcome}"
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 8,
+            "w": 12,
+            "x": 12,
+            "y": 37
+          },
+          "id": 67,
+          "options": {
+            "legend": {
+              "displayMode": "list",
+              "placement": "bottom",
+              "showLegend": true
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "desc"
+            }
+          },
+          "targets": [
+            {
+              "datasource": {
+                "type": "stackdriver",
+                "uid": "beuxmaq8oxhq8e"
+              },
+              "queryType": "promQL",
+              "refId": "A",
+              "promQLQuery": {
+                "expr": "label_replace(sum(increase(logging_googleapis_com:user_daily_summary_job_heartbeat_missing{monitored_resource=\"cloud_run_job\",job_name=\"notifications-job\"}[15m])), \"outcome\", \"passes\", \"\", \"\")",
+                "projectName": "based-hardware",
+                "step": "15m"
+              }
+            },
+            {
+              "datasource": {
+                "type": "stackdriver",
+                "uid": "beuxmaq8oxhq8e"
+              },
+              "queryType": "promQL",
+              "refId": "B",
+              "promQLQuery": {
+                "expr": "label_replace(sum(increase(logging_googleapis_com:user_daily_summary_cohort_incomplete{monitored_resource=\"cloud_run_job\",job_name=\"notifications-job\"}[15m])), \"outcome\", \"incomplete\", \"\", \"\")",
+                "projectName": "based-hardware",
+                "step": "15m"
+              }
+            }
+          ],
+          "title": "Cohort passes: all vs incomplete",
+          "type": "timeseries"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "description": "Saved cohort age observed at tick start, before age-out. A fresh tick records zero; the red line marks the 7200-second abandonment bound. Prometheus path (notifications-job GMP sidecar -> Cloud Monitoring -> cloud-run-application-metrics). It stays empty while the job's runtime identity lacks roles/monitoring.metricWriter: the sidecar's exports are rejected with PermissionDenied (measured 2026-10-12).",
+          "fieldConfig": {
+            "defaults": {
+              "custom": {
+                "drawStyle": "line",
+                "fillOpacity": 10,
+                "lineWidth": 1,
+                "showPoints": "never",
+                "stacking": {
+                  "group": "A",
+                  "mode": "none"
+                },
+                "thresholdsStyle": {
+                  "mode": "line"
+                }
+              },
+              "unit": "s",
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  },
+                  {
+                    "color": "red",
+                    "value": 7200
+                  }
+                ]
+              }
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 8,
+            "w": 12,
+            "x": 0,
+            "y": 45
+          },
+          "id": 68,
+          "options": {
+            "legend": {
+              "displayMode": "list",
+              "placement": "bottom",
+              "showLegend": true
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "desc"
+            }
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "expr": "max(omi_daily_summary_resumed_cohort_age_seconds)",
+              "legendFormat": "Cohort age",
+              "instant": false,
+              "range": true
+            }
+          ],
+          "title": "Resumed cohort age",
+          "type": "timeseries"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "description": "Latest maximum saved-cohort age observed at tick start. Red at 7200 seconds; an abandonment tick retains its diagnostic age until a fresh tick records zero. Prometheus path (notifications-job GMP sidecar -> Cloud Monitoring -> cloud-run-application-metrics). It stays empty while the job's runtime identity lacks roles/monitoring.metricWriter: the sidecar's exports are rejected with PermissionDenied (measured 2026-10-12).",
+          "fieldConfig": {
+            "defaults": {
+              "min": 0,
+              "noValue": "No data",
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  },
+                  {
+                    "color": "red",
+                    "value": 7200
+                  }
+                ]
+              },
+              "unit": "s"
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 8,
+            "w": 12,
+            "x": 12,
+            "y": 45
+          },
+          "id": 69,
+          "options": {
+            "colorMode": "value",
+            "graphMode": "none",
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "fields": "",
+              "values": false
+            },
+            "textMode": "auto"
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "expr": "max(omi_daily_summary_resumed_cohort_age_seconds)",
+              "legendFormat": "Cohort age",
+              "instant": true,
+              "range": false
+            }
+          ],
+          "title": "Cohort age now",
+          "type": "stat"
+        }
+      ]
+    },
+    {
+      "id": 72,
+      "type": "row",
+      "title": "Conversation search freshness",
+      "collapsed": true,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 37
+      },
+      "panels": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "description": "Successful summary vector writes divided by successes plus errors; skipped rows are excluded. No traffic produces no percentage.",
+          "fieldConfig": {
+            "defaults": {
+              "max": 100,
+              "min": 0,
+              "noValue": "no traffic",
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "red",
+                    "value": null
+                  },
+                  {
+                    "color": "orange",
+                    "value": 95
+                  },
+                  {
+                    "color": "green",
+                    "value": 99
+                  }
+                ]
+              },
+              "unit": "percent"
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 8,
+            "w": 8,
+            "x": 0,
+            "y": 38
+          },
+          "id": 70,
+          "options": {
+            "colorMode": "value",
+            "graphMode": "none",
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "fields": "",
+              "values": false
+            },
+            "textMode": "auto"
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "expr": "100 * sum(rate(omi_conversation_summary_vector_upserts_total{outcome=\"success\"}[$__range])) / sum(rate(omi_conversation_summary_vector_upserts_total{outcome=~\"success|error\"}[$__range]))",
+              "instant": true,
+              "range": false
+            }
+          ],
+          "title": "Summary vector upsert success %",
+          "type": "stat"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "description": "Retrieval path outcomes per second, aggregated across all processes and scrape jobs (including idle zero-export children). Degraded marks unavailable indexes/errors; empty marks a successful search with no matches.",
+          "fieldConfig": {
+            "defaults": {
+              "custom": {
+                "drawStyle": "line",
+                "fillOpacity": 10,
+                "lineWidth": 1,
+                "showPoints": "never",
+                "stacking": {
+                  "group": "A",
+                  "mode": "none"
+                }
+              },
+              "unit": "short",
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  },
+                  {
+                    "color": "red",
+                    "value": 1
+                  }
+                ]
+              }
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 8,
+            "w": 16,
+            "x": 8,
+            "y": 38
+          },
+          "id": 71,
+          "options": {
+            "legend": {
+              "displayMode": "list",
+              "placement": "bottom",
+              "showLegend": true
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "desc"
+            }
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "expr": "sum by (path, outcome) (rate(omi_chat_search_tool_outcomes_total[5m]))",
+              "legendFormat": "{{path}} / {{outcome}}",
+              "instant": false,
+              "range": true
+            }
+          ],
+          "title": "Chat search paths and outcomes",
+          "type": "timeseries"
+        }
+      ]
     }
   ],
   "refresh": "2m",

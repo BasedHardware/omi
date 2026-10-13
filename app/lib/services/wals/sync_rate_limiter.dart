@@ -13,7 +13,7 @@ import 'package:omi/backend/preferences.dart';
 ///                   saturated and never picked it up. In-memory only — once
 ///                   the app restarts, the cooldown clears so the user sees
 ///                   fresh state if the server has since recovered.
-enum RateLimitReason { fairUse, backendBusy }
+enum RateLimitReason { fairUse, backendBusy, edgeThrottle }
 
 /// Account-global cooldown for rate limiting (HTTP 429) on sync uploads.
 ///
@@ -41,6 +41,14 @@ class SyncRateLimiter extends ChangeNotifier {
     SharedPreferencesUtil().saveInt(_prefKeyRetiredBackfillUntil, 0);
     _scheduleExpiryNotification();
   }
+  DateTime Function() _clock = DateTime.now;
+
+  @visibleForTesting
+  set clockForTesting(DateTime Function()? clock) {
+    _clock = clock ?? DateTime.now;
+    _scheduleExpiryNotification();
+  }
+
   static final SyncRateLimiter instance = SyncRateLimiter._();
 
   static const String _prefKeyUntil = 'syncRateLimitedUntilMs';
@@ -54,6 +62,7 @@ class SyncRateLimiter extends ChangeNotifier {
   // app restart re-probes the backend state instead of trusting a stale
   // local timer.
   int _backendBusyUntilMs = 0;
+  RateLimitReason _inMemoryReason = RateLimitReason.backendBusy;
   Timer? _expiryTimer;
 
   /// Whether a server-confirmed fair-use cooldown is persisted, including an
@@ -65,19 +74,20 @@ class SyncRateLimiter extends ChangeNotifier {
   bool get isFairUseLimited {
     if (!hasPersistedFairUseState) return false;
     final until = SharedPreferencesUtil().getInt(_prefKeyUntil);
-    return until > DateTime.now().millisecondsSinceEpoch;
+    return until > _clock().millisecondsSinceEpoch;
   }
 
-  bool get isBackendBusyLimited => _backendBusyUntilMs > DateTime.now().millisecondsSinceEpoch;
+  bool get isBackendBusyLimited =>
+      _inMemoryReason == RateLimitReason.backendBusy && _backendBusyUntilMs > _clock().millisecondsSinceEpoch;
 
   bool get isLimited {
-    final now = DateTime.now().millisecondsSinceEpoch;
+    final now = _clock().millisecondsSinceEpoch;
     if (_backendBusyUntilMs > now) return true;
     return isFairUseLimited;
   }
 
   DateTime? get until {
-    final now = DateTime.now().millisecondsSinceEpoch;
+    final now = _clock().millisecondsSinceEpoch;
     final persisted = hasPersistedFairUseState ? SharedPreferencesUtil().getInt(_prefKeyUntil) : 0;
     final inMemory = _backendBusyUntilMs;
     final candidates = <int>[if (inMemory > now) inMemory, if (persisted > now) persisted];
@@ -86,14 +96,14 @@ class SyncRateLimiter extends ChangeNotifier {
   }
 
   RateLimitReason? get reason {
-    final now = DateTime.now().millisecondsSinceEpoch;
+    final now = _clock().millisecondsSinceEpoch;
     final persisted = hasPersistedFairUseState ? SharedPreferencesUtil().getInt(_prefKeyUntil) : 0;
     final busyActive = _backendBusyUntilMs > now;
     final rateActive = persisted > now;
     if (!busyActive && !rateActive) return null;
     // Match `until`'s max-based pick so reason and deadline refer to the same cooldown.
     if (busyActive && (!rateActive || _backendBusyUntilMs >= persisted)) {
-      return RateLimitReason.backendBusy;
+      return _inMemoryReason;
     }
     return RateLimitReason.fairUse;
   }
@@ -108,9 +118,12 @@ class SyncRateLimiter extends ChangeNotifier {
         (retryAfterSeconds != null && retryAfterSeconds > 0) ? retryAfterSeconds : _defaultCooldownSeconds;
     final maxCooldown = reason == RateLimitReason.fairUse ? _maxFairUseCooldownSeconds : _maxBackendBusyCooldownSeconds;
     final secs = requested > maxCooldown ? maxCooldown : requested;
-    final untilMs = DateTime.now().add(Duration(seconds: secs)).millisecondsSinceEpoch;
-    if (reason == RateLimitReason.backendBusy) {
-      _backendBusyUntilMs = untilMs;
+    final untilMs = _clock().add(Duration(seconds: secs)).millisecondsSinceEpoch;
+    if (reason != RateLimitReason.fairUse) {
+      if (untilMs >= _backendBusyUntilMs) {
+        _inMemoryReason = reason;
+        _backendBusyUntilMs = untilMs;
+      }
     } else {
       SharedPreferencesUtil().saveInt(_prefKeyUntil, untilMs);
       SharedPreferencesUtil().saveString(_prefKeyReason, reason.name);
@@ -122,7 +135,7 @@ class SyncRateLimiter extends ChangeNotifier {
   int? get activeRetryAfterSeconds {
     final deadline = until;
     if (deadline == null) return null;
-    final remainingMs = deadline.millisecondsSinceEpoch - DateTime.now().millisecondsSinceEpoch;
+    final remainingMs = deadline.millisecondsSinceEpoch - _clock().millisecondsSinceEpoch;
     if (remainingMs <= 0) return null;
     return (remainingMs / 1000).ceil();
   }
@@ -149,7 +162,7 @@ class SyncRateLimiter extends ChangeNotifier {
 
   void _scheduleExpiryNotification() {
     _expiryTimer?.cancel();
-    final now = DateTime.now().millisecondsSinceEpoch;
+    final now = _clock().millisecondsSinceEpoch;
     final deadlines = <int>[
       if (_backendBusyUntilMs > now) _backendBusyUntilMs,
       if (hasPersistedFairUseState && SharedPreferencesUtil().getInt(_prefKeyUntil) > now)

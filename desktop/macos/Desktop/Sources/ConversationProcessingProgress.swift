@@ -28,7 +28,7 @@ enum ConversationProcessingProgress {
   /// First-run title-pass failure is recoverable, not a prior retry.
   static let untitledRecoverableBadgeText = "Title didn't generate"
   static let untitledRecoverableBadgeHelp =
-    "The transcript was captured but the title pass didn't produce one. Try Reprocess."
+    "The transcript was saved, but Omi couldn't write a title. Try Reprocess."
 
   /// Whether the row should show "Adding memories & tasks…" after status
   /// flips to completed. Requires a real title — a completed untitled row

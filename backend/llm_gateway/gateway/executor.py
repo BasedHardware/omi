@@ -50,6 +50,7 @@ from llm_gateway.gateway.schemas import (
     RouteArtifact,
     RouteServingClass,
 )
+from llm_gateway.gateway.vertex_diagnostics import vertex_attempt_scope
 from llm_gateway.gateway.reserved_fallback import can_try_next_provider, record_reserved_rejection_fallback
 from llm_gateway.gateway.validator import ValidatedChatCompletionRequest
 from utils.llm.model_config import uses_explicit_cache_and_chat_sanitizer
@@ -121,6 +122,21 @@ async def execute_chat_completion(
     if current_attempt() is not None:
         max_provider_attempts = 1
     serving_route = _select_serving_route(resolved_route)
+    google = resolved_route.validated_request.forwarded_params.get('google')
+    if (
+        serving_route.lane_id == 'omi:auto:dream-reasoning'
+        and isinstance(google, Mapping)
+        and google.get('dream_reserved_only') is True
+    ):
+        if (
+            serving_route.primary.provider != 'gemini'
+            or serving_route.provider_options.get('reserved_capacity_only') is not True
+        ):
+            raise GatewayProviderFailureError(
+                'Dream reserved capacity unavailable', failure_class=FailureClass.RESERVED_CAPACITY_UNAVAILABLE
+            )
+        # Full samples cannot spend on Luna recovery or a different serving route.
+        max_provider_attempts = 1
     serving_is_lkg = selected_route_is_lkg(resolved_route)
     _validate_credential_mode(serving_route, credential_context)
     deadline_monotonic = monotonic() + serving_route.timeouts.request_ms / 1000.0
@@ -528,17 +544,18 @@ async def _execute_route(
                 param='credentials',
             )
         else:
-            response, error = await _attempt_provider(
-                resolved_route,
-                route,
-                provider,
-                provider_ref,
-                credential_context,
-                attempt_trace=attempt_trace,
-                max_provider_attempts=max_provider_attempts,
-                fallback_reason=current_fallback_reason,
-                deadline_monotonic=deadline_monotonic,
-            )
+            with vertex_attempt_scope(route, provider_ref):
+                response, error = await _attempt_provider(
+                    resolved_route,
+                    route,
+                    provider,
+                    provider_ref,
+                    credential_context,
+                    attempt_trace=attempt_trace,
+                    max_provider_attempts=max_provider_attempts,
+                    fallback_reason=current_fallback_reason,
+                    deadline_monotonic=deadline_monotonic,
+                )
             if error is None:
                 if response is None:
                     raise GatewayProviderFailureError(
@@ -733,6 +750,18 @@ def _provider_request(
     if resolved_route.validated_request.response_format is not None:
         provider_request['response_format'] = dict(resolved_route.validated_request.response_format)
     provider_request.update(dict(resolved_route.validated_request.forwarded_params))
+    # Internal marker, derived only for Dream's opt-in high-thinking request.
+    # It is never an accepted public request field or a Vertex payload field.
+    if (
+        route.lane_id == 'omi:auto:dream-reasoning'
+        and provider_ref.provider == 'gemini'
+        and provider_request.get('reasoning_effort') == 'high'
+    ):
+        google = provider_request.get('google')
+        thinking = google.get('thinking_config') if isinstance(google, Mapping) else None
+        budget = thinking.get('thinking_budget') if isinstance(thinking, Mapping) else None
+        if isinstance(budget, int) and not isinstance(budget, bool) and budget > 0:
+            provider_request['_dream_thinking_budget'] = budget
     mapped_gemini_effort: str | None = None
     if (
         route.lane_id.startswith('omi:auto:desktop-vertex-')

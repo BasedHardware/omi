@@ -7,6 +7,7 @@ import 'harness.dart';
 import 'scenarios/apps.dart';
 import 'scenarios/auth.dart';
 import 'scenarios/capture.dart';
+import 'scenarios/chat_apps.dart';
 import 'scenarios/chat.dart';
 import 'scenarios/conversation_detail.dart';
 import 'scenarios/conversations.dart';
@@ -44,6 +45,7 @@ final auditSuite = AuditSuite(
     ...chatScenarios,
     ...searchScenarios,
     ...appsScenarios,
+    ...chatAppsScenarios,
     ...onboardingScenarios,
     ...authScenarios,
   ],

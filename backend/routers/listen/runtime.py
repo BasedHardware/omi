@@ -24,6 +24,7 @@ from models.message_event import (
 )
 from models.users import PlanType
 from utils.analytics import billable_transcription_seconds, record_usage
+from utils.usage_provenance import live_usage_metadata
 from utils.apps import is_audio_bytes_app_enabled
 from utils.async_tasks import WebSocketTaskSupervisor, drain_tasks, wait_for_event
 from utils.byok import get_byok_keys
@@ -53,6 +54,7 @@ from utils.observability.journeys import ClientJourneyAttempt
 from utils.observability.routing_cohort import RoutingCohort, current_routing_cohort
 from utils.observability.transcription import (
     LiveSTTAttempt,
+    ListenNoAudioObservation,
     LiveSessionTranscriptOutcome,
     record_live_session_transcript_outcome,
     record_live_stt_audio_seconds,
@@ -687,6 +689,12 @@ class ListenSessionRuntime:
             if self.request.websocket.client_state != WebSocketState.CONNECTED:
                 self.state.active = False
                 break
+            observation = getattr(self, '_no_audio_observation', None)
+            if observation is not None:
+                observation.observe(
+                    has_audio=self.state.first_audio_byte_timestamp is not None,
+                    audio_received_at=self.state.last_audio_received_time,
+                )
             if not await self._send_ping():
                 break
             if self.state.last_activity_time and time.time() - self.state.last_activity_time > 90:
@@ -816,6 +824,7 @@ class ListenSessionRuntime:
                     record_usage,
                     self.request.uid,
                     speech_seconds=custom_speech_ms // 1000,
+                    usage_metadata=live_usage_metadata(self),
                 )
             return 0
         if not self.state.last_usage_record_timestamp:
@@ -857,6 +866,7 @@ class ListenSessionRuntime:
                 transcription_seconds=seconds,
                 words_transcribed=words,
                 speech_seconds=speech_seconds,
+                usage_metadata=live_usage_metadata(self),
             )
         if not final:
             self.state.last_usage_record_timestamp = now
@@ -992,6 +1002,8 @@ class ListenSessionRuntime:
             if not await self.receiver.initialize_stt():
                 return
             record_listen_session_accepted(source=self.request.source, platform=self.client_device_context.platform)
+            if not self.use_custom_stt:
+                self._no_audio_observation = ListenNoAudioObservation()
             await self._start_pusher()
             receive_task = self.task_supervisor.create_task(self.receiver.receive_data(), name='receive')
             background.extend(
@@ -1104,6 +1116,9 @@ class ListenSessionRuntime:
                 raise error
 
     async def _teardown(self) -> None:
+        observation = getattr(self, '_no_audio_observation', None)
+        if observation is not None:
+            observation.close()
         try:
             await self._teardown_components()
         finally:

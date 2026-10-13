@@ -14,7 +14,7 @@ from utils.memory.canonical_memory_adapter import mint_direct_user_write_authori
 from utils.memory.knowledge_ledger import LedgerWrite, LedgerProvenance, save_ledger_write, amend_user_fact, save_fact
 
 
-def record_merge(uid, change, edit, edit_key):
+def record_merge(uid, change, edit, edit_key, *, expected_records=None):
     ref = store.user(uid).collection('review_changes').document(store.safe_id(change.change_id))
     marker = store.user(uid).collection('review_do_not_redo').document(store.safe_id(edit_key))
     sources = [
@@ -30,6 +30,7 @@ def record_merge(uid, change, edit, edit_key):
             if current['edit_key'] != edit_key or current['memory_edit'] != edit.model_dump(exclude_none=True):
                 raise store.ReviewConflict('Memory merge identity conflict')
             return current
+        store.validate_records(uid, tx, expected_records)
         if blocked or any(
             s is None
             or s.status.value != 'active'

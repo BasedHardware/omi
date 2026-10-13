@@ -68,6 +68,10 @@ _SYS_MODULE_NAMES = [
     "utils.retrieval",
     "utils.retrieval.agentic",
     "utils.retrieval.chat_scope",
+    "utils.messaging",
+    "utils.messaging.undo",
+    "utils.messaging.projection",
+    "utils.messaging.turn_context",
     "utils.retrieval.tools",
     "utils.retrieval.tools.action_item_tools",
 ]
@@ -76,6 +80,7 @@ _SYS_MODULES_SNAPSHOT = snapshot_sys_modules(_SYS_MODULE_NAMES)
 for _p in [
     "database",
     "utils",
+    "utils.messaging",
     "utils.conversations",
     "utils.retrieval",
     "utils.retrieval.tools",
@@ -92,6 +97,7 @@ for _name, _attrs in {
     ],
     "utils.conversations.render": ["resolve_display_tz", "format_local_time"],
     "utils.retrieval.agentic": ["agent_config_context"],
+    "utils.messaging.undo": ["record_write"],
 }.items():
     _m = _mod(_name)
     for _a in _attrs:
@@ -112,6 +118,9 @@ def _chat_scope_from_config(configurable):
 _chat_scope = _mod("utils.retrieval.chat_scope")
 _chat_scope.apply_chat_scope_dates = _apply_chat_scope_dates
 _chat_scope.chat_scope_from_config = _chat_scope_from_config
+
+_mod("utils.messaging.projection").surface_runtime = types.SimpleNamespace(get=lambda: None)
+_load("utils.messaging.turn_context", "utils/messaging/turn_context.py")
 
 ai = _load("utils.retrieval.tools.action_item_tools", "utils/retrieval/tools/action_item_tools.py")
 

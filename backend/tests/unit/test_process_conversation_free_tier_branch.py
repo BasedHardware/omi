@@ -911,6 +911,8 @@ async def test_finalizer_minimum_desktop_meeting_still_persists_receipt_and_chat
         transcript_segments=[SimpleNamespace(text='Hello from the desktop capture', start=0.0, end=60.0)],
         structured=SimpleNamespace(title='Recording', overview='', action_items=[]),
     )
+    vector = MagicMock(return_value=True)
+    monkeypatch.setattr(persisted_finalizer, 'save_structured_vector', vector)
     extract = MagicMock()
     integrations = MagicMock()
 
@@ -983,6 +985,7 @@ async def test_finalizer_minimum_desktop_meeting_still_persists_receipt_and_chat
     assert disposition == persisted_finalizer.ConversationFinalizationDisposition.completed
     extract.assert_not_called()
     integrations.assert_not_called()
+    assert vector.call_count == 1
     complete.assert_called_once_with('job-1', 2, 3)
 
 
@@ -1025,7 +1028,7 @@ async def _inline_run_blocking(_executor, func, *args, **kwargs):
 # in finalizer.py (attempt 2 would extract memories from a completed minimum)
 @pytest.mark.anyio
 @pytest.mark.parametrize('anyio_backend', ['asyncio'])
-async def test_finalizer_retry_after_minimum_persist_emits_no_derived_effects(monkeypatch, pc, anyio_backend) -> None:
+async def test_finalizer_retry_after_minimum_persist_suppresses_intelligence(monkeypatch, pc, anyio_backend) -> None:
     """Attempt 1 persists the minimum then fails; attempt 2 must not extract."""
     del anyio_backend
     persisted_finalizer = _load_finalizer()
@@ -1036,6 +1039,8 @@ async def test_finalizer_retry_after_minimum_persist_emits_no_derived_effects(mo
         'discarded': False,
     }
     process_calls: list[Any] = []
+    vector = MagicMock(return_value=True)
+    monkeypatch.setattr(persisted_finalizer, 'save_structured_vector', vector)
     extract = MagicMock()
     integrations = AsyncMock()
     complete = MagicMock(return_value=True)
@@ -1119,6 +1124,7 @@ async def test_finalizer_retry_after_minimum_persist_emits_no_derived_effects(mo
     assert len(process_calls) == 1
     extract.assert_not_called()
     integrations.assert_not_called()
+    assert vector.call_count == 2
     complete.assert_called_once_with('job-1', 2, 3)
 
 
@@ -1804,3 +1810,117 @@ def test_eager_extraction_switch_off_first_open_basic_reaches_structured_without
 
     spies['get_structured'].assert_called_once()
     assert auth_calls == []
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize('anyio_backend', ['asyncio'])
+@pytest.mark.parametrize(
+    'mode',
+    [
+        'jit_processing',
+        'completed_replay',
+        'terminal_replay',
+        'discarded_replay',
+        'deleted_replay',
+        'unstructured_replay',
+    ],
+)
+@pytest.mark.parametrize('claim_status', ['claimed', 'fenced', 'completed'])
+async def test_finalizer_summary_vector_requires_winning_claim(monkeypatch, pc, anyio_backend, mode, claim_status):
+    """#21111: replay and suppressed intelligence still index behind the claim.
+
+    The processing case exercises the real JIT coordinator and deferred bundle.
+    Vector writes cannot consume or complete folder/apps obligation receipts.
+    """
+    del anyio_backend
+    finalizer = load_module_fresh('utils.conversations.finalizer', _BACKEND / 'utils/conversations/finalizer.py')
+    conversation = _existing_desktop('vector-conv')
+    conversation.source = ConversationSource.omi
+    if mode == 'jit_processing':
+        conversation.status = ConversationStatus.processing
+    row = {'id': conversation.id, 'status': conversation.status.value, 'source': 'omi'}
+    if mode == 'terminal_replay':
+        row[pc.TERMINAL_NO_DERIVED_EFFECTS_FIELD] = True
+    if mode == 'discarded_replay':
+        conversation.discarded = True
+    if mode == 'deleted_replay':
+        row['deleted'] = True
+    if mode == 'unstructured_replay':
+        conversation.structured = None
+    vector_eligible = mode not in {'discarded_replay', 'deleted_replay', 'unstructured_replay'}
+    events = []
+
+    async def inline(_executor, func, *args, **kwargs):
+        return func(*args, **kwargs)
+
+    def claim(*args):
+        events.append('claim')
+        return {'status': claim_status, 'fanout_key': 'key'}
+
+    def vector(uid, conv):
+        assert events == ['claim']
+        assert uid == 'uid' and conv is conversation
+        events.append('vector')
+        return True
+
+    monkeypatch.setattr(finalizer, 'run_blocking', inline)
+    monkeypatch.setattr(finalizer.conversations_db, 'get_conversation', lambda *a, **k: row)
+    monkeypatch.setattr(finalizer, 'deserialize_conversation', lambda data: conversation)
+    monkeypatch.setattr(finalizer, 'get_cached_user_geolocation', lambda uid: None)
+    monkeypatch.setattr(finalizer, 'await_meeting_evidence', AsyncMock(return_value='not_applicable'))
+    monkeypatch.setattr(finalizer, 'link_duplicate_captures', MagicMock())
+    monkeypatch.setattr(finalizer.lifecycle_service, 'claim_finalization_fanout', claim)
+    monkeypatch.setattr(
+        finalizer.lifecycle_service, 'complete_finalization_fanout', lambda *a: events.append('complete') or True
+    )
+    monkeypatch.setattr(finalizer, 'save_structured_vector', vector)
+    monkeypatch.setattr(finalizer, 'extract_memories', MagicMock())
+    monkeypatch.setattr(finalizer, 'trigger_external_integrations', AsyncMock())
+    monkeypatch.setattr(finalizer, 'record_finalized_meeting_receipt', MagicMock())
+    monkeypatch.setattr(finalizer, 'schedule_person_voice_learning_retry', MagicMock())
+    monkeypatch.setattr(
+        finalizer, 'resolve_frame_request_authority', AsyncMock(return_value=SimpleNamespace(enabled=False))
+    )
+    monkeypatch.setattr(pc, '_get_structured', lambda *a, **k: (conversation.structured, False))
+    monkeypatch.setattr(pc, '_get_conversation_obj', lambda *a, **k: conversation)
+    monkeypatch.setattr(pc.lifecycle_service, 'persist_processed_conversation', MagicMock(return_value=True))
+    monkeypatch.setattr(pc, 'resolve_authorized_first_open_plan', lambda **k: SimpleNamespace(defer_derived_work=True))
+    initialize = MagicMock(return_value=True)
+    monkeypatch.setattr(pc.conversations_db, 'initialize_first_open_work', initialize)
+    apps = MagicMock()
+    folders = MagicMock()
+    submit = MagicMock()
+    monkeypatch.setattr(pc, 'trigger_conversation_apps', apps)
+    monkeypatch.setattr(pc.folders_db, 'get_folders', folders)
+    monkeypatch.setattr(pc, 'submit_with_context', submit)
+    monkeypatch.setattr(pc, '_extract_memories', MagicMock())
+    monkeypatch.setattr(pc, '_save_action_items', MagicMock())
+    receipt = MagicMock()
+    monkeypatch.setattr(pc.conversations_db, 'complete_first_open_effect', receipt)
+
+    result = await finalizer.finalize_persisted_conversation(
+        'uid',
+        conversation.id,
+        finalization_job_id='job',
+        dispatch_generation=1,
+        lease_epoch=1,
+    )
+    assert result.value == ('fenced' if claim_status == 'fenced' else 'completed')
+    # New contract (#21111 follow-up): summary indexing runs on BOTH the
+    # claimed path and the completed-fanout re-finalization path, behind the
+    # same guards. Only the claimed path re-runs fanout completion.
+    expected = ['claim']
+    if claim_status != 'fenced' and vector_eligible:
+        expected.append('vector')
+    if claim_status == 'claimed':
+        expected.append('complete')
+    assert events == expected
+    if mode == 'jit_processing':
+        initialize.assert_called_once_with('uid', conversation.id)
+    apps.assert_not_called()
+    folders.assert_not_called()
+    receipt.assert_not_called()
+    assert all(call.args[1] is not pc.save_structured_vector for call in submit.call_args_list)
+    if mode == 'terminal_replay':
+        finalizer.extract_memories.assert_not_called()
+        finalizer.trigger_external_integrations.assert_not_called()

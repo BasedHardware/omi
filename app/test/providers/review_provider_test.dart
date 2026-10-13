@@ -45,6 +45,23 @@ Map<String, dynamic> _samePersonJson() => {
 
 ReviewItem _item(Map<String, dynamic> json) => ReviewItem.fromJson(json)!;
 
+Map<String, dynamic> _proposalJson({String id = 'agent_proposal:a', String kind = 'retire_task'}) => {
+      'item_id': id,
+      'kind': 'agent_proposal',
+      'title': 'Dream suggestion',
+      'agent_proposal': {
+        'target_label': 'Book the venue',
+        'edit': {
+          'kind': kind,
+          'target': 'action_items/t1',
+          'before': '',
+          'after': '',
+          'reason': 'A later conversation says the venue is booked.',
+          'evidence': ['conversations/c2'],
+        },
+      },
+    };
+
 void main() {
   group('wire parsing', () {
     test('drops items with an unknown kind or a missing payload', () {
@@ -111,6 +128,62 @@ void main() {
       expect(page.organization!.type, EntityType.organization);
       expect(page.facts.single.sourceKind, FactSourceKind.screen);
       expect(page.pendingQuestion!.kind, ReviewItemKind.samePerson);
+    });
+  });
+
+  group('Dream suggestions', () {
+    test('parse from the v2 queue and drop a suggestion without a payload', () {
+      final response = ReviewItemsResponse.fromJson({
+        'items': [
+          _proposalJson(),
+          {'item_id': 'agent_proposal:empty', 'kind': 'agent_proposal'},
+          {
+            'item_id': 'agent_proposal:v',
+            'kind': 'agent_proposal',
+            'agent_proposal': {
+              'target_label': '',
+              'vocabulary': {'kind': 'organization', 'spelling': 'Paraform', 'aliases': [], 'evidence': []},
+            },
+          },
+        ],
+        'remaining_today': 2,
+      });
+      expect(response.items.map((i) => i.itemId), ['agent_proposal:a', 'agent_proposal:v']);
+      final retire = response.items.first.agentProposal!;
+      expect(retire.editKind, 'retire_task');
+      expect(retire.targetLabel, 'Book the venue');
+      expect(retire.reason, 'A later conversation says the venue is booked.');
+      final term = response.items.last.agentProposal!;
+      expect(term.editKind, 'vocabulary');
+      expect(term.after, 'Paraform');
+    });
+
+    test('accept and dismiss serialize to the v2 contract', () {
+      final item = _item(_proposalJson());
+      expect(const ReviewAnswer.acceptProposal().toJson(item.kind), {
+        'agent_proposal': {'decision': 'accept'},
+        'not_sure': false,
+      });
+      expect(const ReviewAnswer.dismissProposal().toJson(item.kind), {
+        'agent_proposal': {'decision': 'dismiss'},
+        'not_sure': false,
+      });
+      expect(const ReviewAnswer.notSure().toJson(item.kind), {'not_sure': true});
+    });
+
+    test('a stale suggestion (409) stays gone and is reported as a conflict', () async {
+      final item = _item(_proposalJson());
+      final provider = ReviewProvider(
+        isEligible: () => true,
+        reportChannel: (_, {appBuild}) async => const ApiSuccess<void>(null),
+        loadItems: () async => ApiSuccess(ReviewItemsResponse(items: [item], remainingToday: 1)),
+        sendAnswer: (_, __) async => const ApiFailure(ApiProblem(ApiProblemKind.rejected, statusCode: 409)),
+      );
+      await provider.load();
+      expect(await provider.answer(item, const ReviewAnswer.acceptProposal()), isFalse);
+      expect(provider.lastAnswerConflict, isTrue);
+      expect(provider.items, isEmpty);
+      expect(provider.remainingToday, 1, reason: 'a refused answer does not use a slot');
     });
   });
 

@@ -19,7 +19,16 @@ def producer(request):
     database = ModuleType('database.action_items')
     database.create_action_item = MagicMock(return_value='task-1')
     database.get_action_item = MagicMock()
-    database.update_action_item = MagicMock(return_value=True)
+
+    def update(*args, **kwargs):
+        if 'expected_chat_state' in kwargs:
+            kwargs['expected_chat_state']['after'] = dict(args[2])
+        return True
+
+    database.update_action_item = MagicMock(side_effect=update)
+    chat_edits = ModuleType('database.chat_edits')
+    chat_edits.snapshot = MagicMock(return_value={'completed': False})
+    chat_edits.envelope = lambda snapshot, summary: {'_snapshot': snapshot, '_summary': summary}
     database.get_action_items = MagicMock(return_value=[])
     notifications = ModuleType('utils.notifications')
     for name in (
@@ -43,12 +52,15 @@ def producer(request):
     chat_scope.chat_scope_from_config = lambda config: None
     agentic = ModuleType('utils.retrieval.agentic')
     agentic.agent_config_context = contextvars.ContextVar('reminder-test-config', default=None)
+    messaging_undo = ModuleType('utils.messaging.undo')
+    messaging_undo.record_write = MagicMock(return_value='')
     langchain_tools = ModuleType('langchain_core.tools')
     langchain_tools.tool = lambda fn: fn
     langchain_runnables = ModuleType('langchain_core.runnables')
     langchain_runnables.RunnableConfig = dict
     fakes = {
         'database.action_items': database,
+        'database.chat_edits': chat_edits,
         'database.notifications': notification_db,
         'utils.notifications': notifications,
         'utils.conversations.render': render,
@@ -56,6 +68,7 @@ def producer(request):
         'utils.retrieval.safety': safety,
         'utils.retrieval.chat_scope': chat_scope,
         'utils.retrieval.agentic': agentic,
+        'utils.messaging.undo': messaging_undo,
         'langchain_core.tools': langchain_tools,
         'langchain_core.runnables': langchain_runnables,
     }

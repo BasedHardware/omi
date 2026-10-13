@@ -493,8 +493,10 @@ void main() {
       'status_code': 0,
       'bundle_bytes': 0,
       'disconnect_count': 0,
-      'schema_version': 0,
     });
+    // No bundle exists. The invalid emitter version is omitted on this
+    // track-only adapter path; wire delivery supplies schema 1.
+    expect(analytics.propertiesOf('Diagnostics Send Failed').single, isNot(contains('schema_version')));
     expect(_CannedUpload.requests, 0);
   });
 }

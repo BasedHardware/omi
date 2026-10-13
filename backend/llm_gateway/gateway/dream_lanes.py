@@ -32,7 +32,8 @@ def dream_lane_items(desktop_lanes, desktop_artifacts):
             lane_id=lane_id,
             route_artifact_id=route_id,
             capabilities=capabilities,
-            timeouts={'request_ms': 60000},
+            # Reasoning shares the full-context model deadline; triage stays cheap.
+            timeouts={'request_ms': 480000 if stage == 'reasoning' else 60000},
             retry={'max_attempts': 1},
         )
         route['evidence'] = {

@@ -40,6 +40,7 @@ from llm_gateway.gateway.errors import (
     GatewayInvalidRouteConfigError,
     GatewayInvalidRequestError,
 )
+from llm_gateway.gateway.schemas import ProviderRejection
 from llm_gateway.gateway.executor import (
     ProviderRegistry,
     execute_chat_completion,
@@ -62,6 +63,7 @@ from llm_gateway.gateway.metrics import (
 from llm_gateway.gateway.output_budget import OutputBudgetDecision, completion_size_bucket, output_budget_bucket
 from llm_gateway.gateway.providers import ProviderFailure
 from llm_gateway.gateway.request_context import request_id_for
+from llm_gateway.gateway.vertex_diagnostics import vertex_attempt_scope
 from llm_gateway.gateway.reserved_fallback import can_try_next_provider, record_reserved_rejection_fallback
 from llm_gateway.gateway.resolver import ResolvedRoute, resolve_chat_completion_route
 from llm_gateway.gateway.schemas import FailureClass, RouteArtifact, RouteServingClass
@@ -287,6 +289,11 @@ def _error_response(exc: GatewayError) -> JSONResponse:
         # Backend composition boundaries need it to preserve intentional
         # credential policy without conflating distinct throttling failures.
         error['failure_class'] = exc.failure_class.value
+    if exc.provider_rejection is not ProviderRejection.NONE:
+        # Bounded gateway-owned classifier over an allowlisted param set, never
+        # an upstream body. Downstream composition boundaries (file chat) need
+        # it to tell request-shape 400s from unreadable user attachments.
+        error['provider_rejection'] = exc.provider_rejection.value
     content: dict[str, object] = {'error': error}
     return JSONResponse(
         status_code=_status_code_for_error(exc),
@@ -514,7 +521,8 @@ async def _prepared_streaming_iterator(
         )
         try:
             while True:
-                first_chunk = await anext(stream)
+                with vertex_attempt_scope(route, provider_ref):
+                    first_chunk = await anext(stream)
                 if first_chunk:
                     break
         except StopAsyncIteration:

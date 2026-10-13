@@ -12,6 +12,7 @@ from unittest.mock import AsyncMock
 import numpy as np
 import pytest
 
+from database import _client as firestore_client_module
 from database import speaker_learning as speaker_learning_db
 from database import speaker_learning_jobs as speaker_learning_jobs_db
 from database import users
@@ -34,6 +35,7 @@ from utils import speaker_sample, speaker_audio
 @pytest.fixture
 def world(monkeypatch):
     store = StrictFirestore()
+    monkeypatch.setattr(firestore_client_module, 'get_firestore_client', lambda: store)
     person_path = ('users', 'account-a', 'people', 'person-1')
     conversation_path = ('users', 'account-a', 'conversations', 'teach-1')
     person = {'id': 'person-1', 'name': 'Synthetic Alex', 'speech_samples_version': 3}
@@ -181,7 +183,7 @@ async def fresh_live_match(monkeypatch, uid, vector):
     monkeypatch.setattr(speakers, 'extract_embedding_from_bytes', lambda *args: vector)
     matcher = speakers.SpeakerMatcher(host)
     # End the worker deterministically once loading finishes; no timer/sleep.
-    matcher.queue = SimpleNamespace(get=AsyncMock(side_effect=asyncio.TimeoutError))
+    monkeypatch.setattr(matcher.queue, 'get', AsyncMock(side_effect=asyncio.TimeoutError))
     await matcher.load_and_run()
     await matcher.match(7, {'id': 'later-segment', 'duration': 10, 'abs_start': 0, 'abs_end': 10})
     return matcher, suggestions

@@ -143,7 +143,7 @@ struct ConversationSuggestedAppsSection: View {
       DetailSectionHeader(title: "Try with Apps", systemImage: "sparkles")
 
       if apps.isEmpty && !isLoadingApps {
-        Text("Enable apps with memory capability to get more insights from your conversations.")
+        Text("Turn on apps that create memories to get more from your conversations.")
           .scaledFont(size: OmiType.caption)
           .foregroundColor(Ink.secondary)
           .fixedSize(horizontal: false, vertical: true)

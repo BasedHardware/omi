@@ -30,6 +30,7 @@ import 'package:omi/providers/folder_provider.dart';
 import 'package:omi/providers/goals_provider.dart';
 import 'package:omi/providers/home_provider.dart';
 import 'package:omi/providers/integration_provider.dart';
+import 'package:omi/providers/messaging_channels_provider.dart';
 import 'package:omi/providers/local_recordings_provider.dart';
 import 'package:omi/providers/locale_provider.dart';
 import 'package:omi/providers/mcp_provider.dart';
@@ -70,6 +71,7 @@ List<SingleChildWidget> defaultAuditProviders() => [
       ChangeNotifierProvider(create: (_) => ConversationProvider(isSignedIn: () => true)),
       ChangeNotifierProvider(create: (_) => HomeProvider()),
       ChangeNotifierProvider(create: (_) => IntegrationProvider()),
+      ChangeNotifierProvider(create: (_) => MessagingChannelsProvider(readConfig: () async => ChatAppsConfig.off)),
       ChangeNotifierProvider(create: (_) => FolderProvider()),
       ChangeNotifierProvider(create: (_) => UsageProvider()),
       ChangeNotifierProvider(create: (_) => VoiceRecorderProvider()),

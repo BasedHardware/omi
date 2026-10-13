@@ -1,6 +1,6 @@
 import logging
 from datetime import datetime, time, timedelta, timezone
-from typing import Any, Dict, Iterable, List, Optional, Tuple, cast
+from typing import Any, Dict, Iterable, List, Mapping, Optional, Tuple, cast
 
 import pytz
 from google.cloud import firestore
@@ -9,7 +9,8 @@ from google.cloud.firestore_v1 import FieldFilter
 from ._client import db
 from .firestore_read_metrics import FirestoreReadFamily, FirestoreReadMode, record_firestore_read
 from .firestore_index_registry import HOURLY_USAGE_UTC_DAY_QUERY
-from .llm_usage import resolve_usage_plan_id
+from .llm_usage import nest_usage_fields, resolve_usage_plan_id
+from .usage_units import hourly_shadow, normalize_plan_usage
 from models.user_usage import UsageStats
 
 logger = logging.getLogger(__name__)
@@ -320,8 +321,8 @@ def get_usage_by_plan(
     )
     for snap in query.stream():
         data = _typed_doc(snap)
-        plan_usage = data.get('plan_usage')
-        if not isinstance(plan_usage, dict):
+        plan_usage = normalize_plan_usage(data)
+        if not plan_usage:
             row = report.setdefault(_UNATTRIBUTED_PLAN, _plan_usage_row())
             _accumulate_plan_data(row, data)
             row['cost_status'] = 'missing'
@@ -359,6 +360,7 @@ def update_hourly_usage(
     cost_usd: float | None = None,
     cost_status: str = 'missing',
     cost_exclusion: str | None = None,
+    usage_metadata: Mapping[str, Any] | None = None,
     firestore_client: Any | None = None,
 ) -> None:
     """Updates or creates usage stats for a specific hour using Firestore atomic increments.
@@ -417,7 +419,8 @@ def update_hourly_usage(
     if platform in ('desktop', 'mobile'):
         update_doc['platforms'] = firestore.ArrayUnion([platform])
 
-    hourly_usage_ref.set(update_doc, merge=True)
+    update_doc.update(hourly_shadow(updates, usage_metadata))
+    hourly_usage_ref.set(nest_usage_fields(update_doc), merge=True)
 
 
 @firestore.transactional
@@ -445,6 +448,7 @@ def update_hourly_usage_once(
     cost_usd: float | None = None,
     cost_status: str = 'missing',
     cost_exclusion: str | None = None,
+    usage_metadata: Mapping[str, Any] | None = None,
     firestore_client: Any | None = None,
 ) -> bool:
     """Atomically increment hourly usage once for a stable sync content key."""
@@ -494,7 +498,10 @@ def update_hourly_usage_once(
     if effective_exclusion:
         safe_exclusion = effective_exclusion.replace('.', '_').replace('/', '_')
         update_doc[f'{plan_prefix}._metadata.cost_exclusions.{safe_exclusion}'] = firestore.Increment(1)
-    return _update_hourly_usage_once_transaction(client.transaction(), marker_ref, usage_ref, update_doc)
+    update_doc.update(hourly_shadow(updates, usage_metadata))
+    return _update_hourly_usage_once_transaction(
+        client.transaction(), marker_ref, usage_ref, nest_usage_fields(update_doc)
+    )
 
 
 def batch_update_hourly_usage(uid: str, hourly_updates: Dict[datetime, Dict[str, Any]]) -> None:

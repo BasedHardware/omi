@@ -10,7 +10,8 @@ class SpeakerSummaryAction extends StatelessWidget {
   @override
   Widget build(BuildContext context) => ListenableBuilder(
         listenable: provider,
-        builder: (context, _) => !provider.offerSpeakerSummaryRefresh
+        // Mid-pass, the labeling bar's Done is the one summary update.
+        builder: (context, _) => !provider.offerSpeakerSummaryRefresh || provider.speakerLabelingSessionActive
             ? const SizedBox.shrink()
             : Align(
                 alignment: Alignment.centerLeft,

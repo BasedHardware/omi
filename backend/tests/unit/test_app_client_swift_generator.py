@@ -98,6 +98,11 @@ def test_swift_generator_handles_refs_optionals_and_enums():
     assert 'public enum Color: String, Codable, CaseIterable {' in color_block
     assert 'case red' in color_block
     assert 'case _unknown = "__unknown__"' in color_block  # tolerant fallback
+    # Exact match first, then a Python-qualified value ("Color.red") by its last component (#21091).
+    exact = color_block.index('if let exact = Color(rawValue: raw) {')
+    unqualified = color_block.index('let unqualified = raw.split(separator: ".").last.map(String.init) ?? raw')
+    fallback = color_block.index('self = Color(rawValue: unqualified) ?? ._unknown')
+    assert exact < unqualified < fallback
 
     nested_block = generate_swift_openapi_types._render_struct('Nested', nested_schema)
     assert 'public struct Nested: Codable {' in nested_block

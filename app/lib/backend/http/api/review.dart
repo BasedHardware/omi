@@ -7,7 +7,8 @@ import 'package:omi/backend/schema/gen/entity_pages_wire.g.dart' as entity_wire;
 import 'package:omi/env/env.dart';
 
 /// The Review queue, its recent-changes journal, and entity pages. Every call returns a typed
-/// [ApiResult]. A 404 from `GET /v1/review/items` means the surface is off for this account; the
+/// [ApiResult]. The queue uses the v2 routes, which add Dream's suggestions; changes, undo and
+/// entity pages stay on v1. A 404 from `GET /v2/review/items` means the surface is off for this account; the
 /// provider hides every entry point on it.
 
 Object? _objectReviver(Object? key, Object? value) {
@@ -18,22 +19,23 @@ Object? _objectReviver(Object? key, Object? value) {
 String _id(String id) => Uri.encodeComponent(id);
 
 Future<ApiResult<ReviewItemsResponse>> getReviewItems() => executeApi(
-      request: ApiRequest(url: '${Env.apiBaseUrl}v1/review/items', method: 'GET'),
-      decode: (body) => ReviewItemsResponse.fromGenerated(
-        wire.GeneratedReviewItemsResponse.fromJson(jsonDecode(body, reviver: _objectReviver) as Map<String, dynamic>),
+      request: ApiRequest(url: '${Env.apiBaseUrl}v2/review/items', method: 'GET'),
+      decode: (body) => ReviewItemsResponse.fromGeneratedV2(
+        wire.GeneratedReviewItemsResponseV2.fromJson(jsonDecode(body, reviver: _objectReviver) as Map<String, dynamic>),
       ),
     );
 
-/// Returns how many answerable items remain today.
+/// Returns how many answerable items remain today. A 409 means the evidence behind a suggestion
+/// changed; nothing was applied and the item is gone.
 Future<ApiResult<int>> answerReviewItem(ReviewItem item, ReviewAnswer answer) => executeApi(
       request: ApiRequest(
-        url: '${Env.apiBaseUrl}v1/review/items/${_id(item.itemId)}/answer',
+        url: '${Env.apiBaseUrl}v2/review/items/${_id(item.itemId)}/answer',
         method: 'POST',
         body: jsonEncode(answer.toJson(item.kind)),
       ),
-      decode: (body) =>
-          wire.GeneratedReviewAnswerReceipt.fromJson(jsonDecode(body, reviver: _objectReviver) as Map<String, dynamic>)
-              .remainingToday,
+      decode: (body) => wire.GeneratedReviewAnswerReceipt.fromJson(
+        jsonDecode(body, reviver: _objectReviver) as Map<String, dynamic>,
+      ).remainingToday,
     );
 
 Future<ApiResult<ReviewChangesPage>> getReviewChanges({String? cursor}) {
@@ -58,7 +60,8 @@ Future<ApiResult<ReviewChange>> setReviewChangeUndone(String changeId, {required
       ),
       decode: (body) {
         return ReviewChange.fromGenerated(
-            wire.GeneratedReviewChange.fromJson(jsonDecode(body, reviver: _objectReviver) as Map<String, dynamic>));
+          wire.GeneratedReviewChange.fromJson(jsonDecode(body, reviver: _objectReviver) as Map<String, dynamic>),
+        );
       },
     );
 
@@ -84,8 +87,8 @@ Future<ApiResult<List<EntityRef>>> getConversationEntities(String conversationId
       request: ApiRequest(url: '${Env.apiBaseUrl}v1/conversations/${_id(conversationId)}/entities', method: 'GET'),
       decode: (body) => EntityRef.listFrom(
         entity_wire.GeneratedEntitiesResponse.fromJson(
-                jsonDecode(body, reviver: _objectReviver) as Map<String, dynamic>)
-            .toJson()['entities'],
+          jsonDecode(body, reviver: _objectReviver) as Map<String, dynamic>,
+        ).toJson()['entities'],
       ),
     );
 
@@ -93,8 +96,8 @@ Future<ApiResult<List<EntityRef>>> getProjectEntities() => executeApi(
       request: ApiRequest(url: '${Env.apiBaseUrl}v1/entities?type=project', method: 'GET'),
       decode: (body) => EntityRef.listFrom(
         entity_wire.GeneratedEntitiesResponse.fromJson(
-                jsonDecode(body, reviver: _objectReviver) as Map<String, dynamic>)
-            .toJson()['entities'],
+          jsonDecode(body, reviver: _objectReviver) as Map<String, dynamic>,
+        ).toJson()['entities'],
       ),
     );
 

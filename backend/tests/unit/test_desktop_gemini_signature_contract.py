@@ -207,6 +207,14 @@ async def test_vertex_400_logs_only_bounded_reason_and_dispatches_once(monkeypat
     assert 'gemini-2.5-flash:generateContent' in str(sent[0].url)
     logged = capsys.readouterr().out
     assert json.loads(logged) == {
+        'request_id': 'unknown',
+        'lane': 'unknown',
+        'route': 'unknown',
+        'provider': 'gemini',
+        'model': 'gemini-2.5-flash',
+        'failure_class': 'provider_invalid_request',
+        'vertex_status': 'INVALID_ARGUMENT',
+        'vertex_field': 'unknown',
         'severity': 'WARNING',
         'event': 'vertex_provider_rejection',
         'served_model': 'gemini-2.5-flash',

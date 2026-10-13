@@ -5,6 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'package:omi/pages/phone_calls/phone_calls_feature.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/backend/schema/conversation.dart';
@@ -527,6 +528,16 @@ void main() {
   });
 
   group('record-with-this-phone button', () {
+    testWidgets('idle with calls hidden: a white dot and no ways-to-record badge', (tester) async {
+      await pump(tester, const HomeRecordButton(), capture: _Capture(_Live.idle));
+      expect(find.bySemanticsLabel(en.startRecording), findsOneWidget);
+      expect(find.bySemanticsLabel(en.moreWaysToRecord), findsNothing);
+      expect(find.byIcon(Icons.keyboard_arrow_down_rounded), findsNothing);
+      await tester.longPress(find.byType(HomeRecordButton));
+      await tester.pumpAndSettle();
+      expect(find.text(en.recordWith), findsNothing, reason: 'the only extra way to record was a phone call');
+    }, skip: PhoneCallsFeature.visible);
+
     testWidgets('idle: a white dot and a badge that opens the ways to record', (tester) async {
       await pump(tester, const HomeRecordButton(), capture: _Capture(_Live.idle));
       expect(find.bySemanticsLabel(en.startRecording), findsOneWidget);
@@ -535,7 +546,7 @@ void main() {
       expect(find.text(en.recordWith), findsOneWidget);
       expect(find.text(en.captureSourcePhoneMic), findsOneWidget);
       expect(find.text(en.phoneCall), findsOneWidget);
-    });
+    }, skip: !PhoneCallsFeature.visible);
 
     testWidgets('while the pendant records, a tap explains instead of taking over', (tester) async {
       final capture = _Capture(_Live.pendant);
@@ -599,7 +610,7 @@ void main() {
       expect(button.inflate(0.1).contains(badge.topLeft) && button.inflate(0.1).contains(badge.bottomRight), isTrue,
           reason: 'a Stack only hit-tests inside its own box');
       expect(badge.contains(button.center), isFalse);
-    });
+    }, skip: !PhoneCallsFeature.visible);
 
     testWidgets('while the phone records, the button is its stop', (tester) async {
       await pump(tester, const HomeRecordButton(), capture: _Capture(_Live.phone));

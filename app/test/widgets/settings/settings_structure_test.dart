@@ -4,6 +4,7 @@ import 'package:package_info_plus/package_info_plus.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'package:omi/pages/phone_calls/phone_calls_feature.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/env/env.dart';
 import 'package:omi/models/subscription.dart';
@@ -227,14 +228,14 @@ void main() {
       SettingsDestination.memories: 'settings_row_memories',
       SettingsDestination.goals: 'settings_row_goals',
     };
-    const movedOffSheet = [
+    final movedOffSheet = [
       SettingsDestination.notifications,
       SettingsDestination.device, // only while connected; the stub is connected
       SettingsDestination.transcription,
       SettingsDestination.conversationDisplay,
       SettingsDestination.conversationTimeout,
       SettingsDestination.offlineSync,
-      SettingsDestination.phoneCalls,
+      if (PhoneCallsFeature.visible) SettingsDestination.phoneCalls,
       SettingsDestination.dataPrivacy,
       SettingsDestination.exportData,
       SettingsDestination.importData,
@@ -292,6 +293,8 @@ void main() {
       SettingsDestination.notificationsGroup,
       SettingsDestination.privacyGroup,
       SettingsDestination.helpGroup,
+      // Hidden for now (PhoneCallsFeature.visible); the destination stays wired for when it returns.
+      if (!PhoneCallsFeature.visible) SettingsDestination.phoneCalls,
     };
     expect(covered, SettingsDestination.values.toSet(), reason: 'a destination is missing from this walk');
 
@@ -303,7 +306,12 @@ void main() {
 
     // Pages hold what the brief says, in order.
     expect(pageTitles['settings_page_account'], [en.name, en.email, en.userId, en.signOut, en.deleteAccountTitle]);
-    expect(pageTitles['settings_page_device'], [en.deviceSettings, en.offlineSync, en.phoneCalls, en.permissions]);
+    expect(pageTitles['settings_page_device'], [
+      en.deviceSettings,
+      en.offlineSync,
+      if (PhoneCallsFeature.visible) en.phoneCalls,
+      en.permissions,
+    ]);
     expect(pageTitles['settings_page_recording'], [
       en.transcription,
       en.language,

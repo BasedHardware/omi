@@ -13,6 +13,7 @@ import 'package:omi/pages/apps/app_detail/app_detail.dart';
 import 'package:omi/pages/settings/asana_settings_page.dart';
 import 'package:omi/pages/settings/clickup_settings_page.dart';
 import 'package:omi/pages/settings/usage_page.dart';
+import 'package:omi/pages/home/home_deep_links.dart';
 import 'package:omi/pages/home/home_navigation.dart';
 import 'package:omi/pages/settings/wrapped_2025_page.dart';
 import 'package:omi/providers/action_items_provider.dart';
@@ -73,6 +74,12 @@ class _AppShellState extends State<AppShell> {
       await HomeNavigation.openRoute(uri.hasQuery ? '${uri.path}?${uri.query}' : uri.path);
       return;
     }
+    // h.omi.me item links (chat edit receipts, messaging channels) open the item in Home.
+    final itemRoute = HomeDeepLink.itemRouteFromAppLink(uri);
+    if (itemRoute != null) {
+      await HomeNavigation.openRoute(itemRoute);
+      return;
+    }
     if (uri.pathSegments.isEmpty) {
       Logger.debug('No path segments in URI: $uri');
       return;
@@ -107,8 +114,10 @@ class _AppShellState extends State<AppShell> {
     } else if (uri.pathSegments.first == 'unlimited') {
       if (mounted) {
         if (!context.read<UsageProvider>().showSubscriptionUI) return;
+        final plan = context.read<UsageProvider>().subscription?.subscription.plan.wireName ?? 'unknown';
         PlatformManager.instance.analytics.track('Plans Opened From DeepLink');
-        routeToPage(context, const UsagePage(showUpgradeDialog: true));
+        PlatformManager.instance.analytics.paywallOpened('unlimited_deeplink', currentPlan: plan);
+        routeToPage(context, const UsagePage(showUpgradeDialog: true, paywallSource: 'unlimited_deeplink'));
       }
     } else if (uri.host == 'todoist' && uri.pathSegments.isNotEmpty && uri.pathSegments.first == 'callback') {
       // Handle Todoist OAuth callback

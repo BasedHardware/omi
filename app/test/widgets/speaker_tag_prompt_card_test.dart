@@ -42,6 +42,7 @@ GeneratedSpeakerTagPrompt _prompt(
       conversationStartedAt: DateTime.now().subtract(const Duration(hours: 3)),
       speakerId: 1,
       segmentIds: const ['s1'],
+      evidenceId: kind == 'owner_check' ? 'bound-evidence' : null,
       clipStart: 0,
       clipEnd: 8,
       excerpt: 'We should ship it on Friday',
@@ -68,12 +69,13 @@ Future<_Harness> _pumpCard(
   bool loadPeople = true,
   double textScale = 1,
   bool reduceMotion = false,
+  bool playOwner = true,
 }) async {
   final answers = <GeneratedSpeakerTagPromptAnswerRequest>[];
   final saves = <bool?>[];
   final provider = SpeakerTagPromptsProvider(
     fetchPrompts: () async => ApiSuccess(GeneratedSpeakerTagPromptsResponse(prompts: prompts, firstTime: firstTime)),
-    markShown: (_) async => ApiSuccess(firstTime),
+    markShown: (_, {bool setShown = true}) async => ApiSuccess(firstTime),
     dismiss: () async => const ApiSuccess<void>(null),
     submitAnswer: (request) async {
       answers.add(request);
@@ -88,6 +90,8 @@ Future<_Harness> _pumpCard(
       saves.add(saveOtherVoiceProfiles);
       return ApiSuccess(GeneratedVoiceProfileSettings(saveOtherVoiceProfiles: saveOtherVoiceProfiles ?? true));
     },
+    loadClip: (_) async => ApiSuccess(Uint8List.fromList([1, 2, 3])),
+    playClip: (_, __) async => true,
     emit: (_) {},
     answeredHold: Duration.zero,
   );
@@ -113,6 +117,10 @@ Future<_Harness> _pumpCard(
     ),
   );
   await tester.pumpAndSettle();
+  if (playOwner && provider.current?.kind == 'owner_check') {
+    await provider.togglePlay(provider.current!);
+    await tester.pumpAndSettle();
+  }
   return _Harness(provider, peopleProvider, answers, saves);
 }
 
@@ -146,6 +154,21 @@ void main() {
     VisibilityDetectorController.instance.updateInterval = Duration.zero;
   });
 
+  testWidgets('owner Yes and No require playback while Skip stays available', (tester) async {
+    final h = await _pumpCard(tester, prompts: [_prompt('a', 'owner_check')], playOwner: false, firstTime: true);
+    await tester.tap(find.byKey(const Key('speaker_tag_prompt_answer_me')));
+    await tester.pumpAndSettle();
+    expect(h.provider.pending, isNull);
+    expect(h.answers, isEmpty);
+    expect(find.text('Your answer labels only the played excerpt.'), findsOneWidget);
+    expect(find.byKey(const Key('speaker_tag_prompt_save_voices')), findsNothing);
+    await h.provider.togglePlay(h.provider.current!);
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('speaker_tag_prompt_answer_me')));
+    await _waitOutUndo(tester);
+    expect(h.answers.single.evidenceId, 'bound-evidence');
+  });
+
   testWidgets('voice-card answers and play expose accessibility tap actions', (tester) async {
     final handle = tester.ensureSemantics();
     await _pumpCard(tester, prompts: [_prompt('a', 'owner_check')]);
@@ -177,7 +200,7 @@ void main() {
   testWidgets('voice-card controls support 200 percent text and Reduce Motion', (tester) async {
     await _pumpCard(tester, prompts: [_prompt('a', 'owner_check')], textScale: 2, reduceMotion: true);
     expect(tester.takeException(), isNull);
-    final chip = find.byKey(const Key('speaker_tag_prompt_answer_not_a_person'));
+    final chip = find.byKey(const Key('speaker_tag_prompt_answer_not_me'));
     expect(tester.getSize(chip).height, greaterThanOrEqualTo(44));
     for (final widget in tester.widgetList<AnimatedOpacity>(find.byType(AnimatedOpacity))) {
       expect(widget.duration, Duration.zero);
@@ -192,7 +215,7 @@ void main() {
       prompts: [_prompt('a', 'owner_check'), _prompt('b', 'confirm_person')],
       people: [_person('p1', 'Sam')],
     );
-    expect(find.text('Is this you?'), findsOneWidget);
+    expect(find.text('Was this you?'), findsOneWidget);
     expect(find.textContaining('We should ship it on Friday'), findsOneWidget);
     expect(find.textContaining('Coffee chat'), findsOneWidget);
     expect(find.byKey(const Key('speaker_tag_prompt_save_voices_switch')), findsNothing);
@@ -283,10 +306,11 @@ void main() {
 
   testWidgets("the owner card keeps its own answers and its picker offers no That's Me", (tester) async {
     await _pumpCard(tester, prompts: [_prompt('a', 'owner_check')]);
-    for (final key in ['me', 'not_me', 'not_a_person', 'skip']) {
+    for (final key in ['me', 'not_me', 'skip']) {
       expect(find.byKey(Key('speaker_tag_prompt_answer_$key')), findsOneWidget, reason: key);
     }
     expect(find.byKey(const Key('speaker_tag_prompt_answer_someone_else')), findsNothing);
+    expect(find.byKey(const Key('speaker_tag_prompt_answer_not_a_person')), findsNothing);
   });
 
   testWidgets('Not Sure skips at once, without Undo', (tester) async {
@@ -294,7 +318,7 @@ void main() {
     await _tapKey(tester, 'speaker_tag_prompt_answer_skip');
     await tester.pumpAndSettle();
     expect(h.answers.single.answer, 'skip');
-    expect(find.text('Is this you?'), findsOneWidget);
+    expect(find.text('Was this you?'), findsOneWidget);
   });
 
   testWidgets('identify ranks server candidates by voice match, pinned first, and a pick sends that person', (
@@ -410,7 +434,7 @@ void main() {
       fetchPrompts: () async => ApiSuccess(
         GeneratedSpeakerTagPromptsResponse(prompts: [_prompt('a', 'owner_check'), _prompt('b', 'confirm_person')]),
       ),
-      markShown: (_) async => const ApiSuccess(false),
+      markShown: (_, {bool setShown = true}) async => const ApiSuccess(false),
       loadClip: (item) async => item.id == 'a'
           ? const ApiFailure(ApiProblem(ApiProblemKind.notFound, statusCode: 404))
           : ApiSuccess(Uint8List.fromList([1])),
@@ -433,7 +457,7 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    expect(find.text('Is this you?'), findsOneWidget);
+    expect(find.text('Was this you?'), findsOneWidget);
     await tester.tap(find.byKey(const Key('speaker_tag_prompt_play')));
     await tester.pumpAndSettle();
     expect(find.text('Is this Sam?'), findsOneWidget);

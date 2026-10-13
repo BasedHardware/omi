@@ -376,6 +376,9 @@ def _desktop_transcribe_isolation():
             'utils.llm.usage_tracker',
             'utils.llm.gateway_client',
             'utils.llm.gateway_observability',
+            # The shared chat turn imports app awareness at module load. Keep
+            # its persistence adapter isolated in this router harness.
+            'utils.messaging.app_awareness',
             'utils.conversations.process_conversation',
             'utils.notifications',
             'utils.other.storage',

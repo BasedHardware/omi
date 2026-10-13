@@ -16,6 +16,198 @@
       "correlation": null
     },
     {
+      "id": "recordingProducedNoConversation",
+      "wire_name": "Recording Produced No Conversation",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {
+        "source": {
+          "type": "enum",
+          "wire_name": "source",
+          "values": ["phone", "omi", "watch"]
+        },
+        "durationSeconds": {
+          "type": "int",
+          "wire_name": "duration_s"
+        },
+        "transcriptObserved": {
+          "type": "bool",
+          "wire_name": "transcript_observed"
+        },
+        "reason": {
+          "type": "enum",
+          "wire_name": "reason",
+          "values": ["empty_deleted", "discarded", "null_result"]
+        }
+      },
+      "consumers": ["onboarding-activation-funnel"],
+      "correlation": null
+    },
+    {
+      "id": "onboardingWelcomeShown",
+      "wire_name": "Onboarding Welcome Shown",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {},
+      "consumers": ["onboarding-activation-funnel"],
+      "correlation": null
+    },
+    {
+      "id": "onboardingGetStartedTapped",
+      "wire_name": "Onboarding Get Started Tapped",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {},
+      "consumers": ["onboarding-activation-funnel"],
+      "correlation": null
+    },
+    {
+      "id": "signInStarted",
+      "wire_name": "Sign In Started",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {
+        "provider": {
+          "type": "enum",
+          "wire_name": "provider",
+          "values": ["apple", "google"]
+        }
+      },
+      "consumers": ["onboarding-activation-funnel"],
+      "correlation": null
+    },
+    {
+      "id": "signInFailed",
+      "wire_name": "Sign In Failed",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {
+        "provider": {
+          "type": "enum",
+          "wire_name": "provider",
+          "values": ["apple", "google"]
+        },
+        "errorClass": {
+          "type": "enum",
+          "wire_name": "error_class",
+          "values": ["cancelled", "network", "credential", "configuration", "unknown"]
+        }
+      },
+      "consumers": ["onboarding-activation-funnel"],
+      "correlation": null
+    },
+    {
+      "id": "onboardingPermissionResult",
+      "wire_name": "Onboarding Permission Result",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {
+        "permission": {
+          "type": "enum",
+          "wire_name": "permission",
+          "values": ["notifications", "location", "background_activity"]
+        },
+        "granted": {
+          "type": "bool",
+          "wire_name": "granted"
+        },
+        "permanentlyDenied": {
+          "type": "bool",
+          "wire_name": "permanently_denied"
+        },
+        "servicesDisabled": {
+          "type": "bool",
+          "wire_name": "services_disabled"
+        }
+      },
+      "consumers": ["onboarding-activation-funnel"],
+      "correlation": null
+    },
+    {
+      "id": "devicePairingBlocked",
+      "wire_name": "Device Pairing Blocked",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {
+        "reason": {
+          "type": "enum",
+          "wire_name": "reason",
+          "values": [
+            "bluetooth_permission_denied",
+            "location_permission_missing",
+            "bluetooth_off",
+            "nearby_devices_denied",
+            "no_adapter",
+            "scanner_unavailable"
+          ]
+        },
+        "androidSdk": {
+          "type": "int",
+          "wire_name": "android_sdk"
+        },
+        "iosVersion": {
+          "type": "int",
+          "wire_name": "ios_version"
+        }
+      },
+      "consumers": ["onboarding-activation-funnel"],
+      "correlation": null
+    },
+    {
+      "id": "deviceScanEmpty",
+      "wire_name": "Device Scan Empty",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {
+        "afterSeconds": {
+          "type": "int",
+          "wire_name": "after_seconds"
+        }
+      },
+      "consumers": ["onboarding-activation-funnel"],
+      "correlation": null
+    },
+    {
+      "id": "deviceConnectFailed",
+      "wire_name": "Device Connect Failed",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {
+        "errorClass": {
+          "type": "enum",
+          "wire_name": "error_class",
+          "values": [
+            "timeout",
+            "bluetooth_off",
+            "permission_denied",
+            "not_found",
+            "initialization_failed",
+            "unknown"
+          ]
+        }
+      },
+      "consumers": ["onboarding-activation-funnel"],
+      "correlation": null
+    },
+    {
       "id": "phoneMicRecordingStarted",
       "wire_name": "Phone Mic Recording Started",
       "status": "active",
@@ -1154,7 +1346,8 @@
       "intent": null,
       "properties": {},
       "consumers": [
-        "mobile-instrumentation-presence"
+        "mobile-instrumentation-presence",
+        "subscription-funnel"
       ],
       "correlation": null
     },
@@ -1167,7 +1360,8 @@
       "intent": null,
       "properties": {},
       "consumers": [
-        "mobile-instrumentation-presence"
+        "mobile-instrumentation-presence",
+        "subscription-funnel"
       ],
       "correlation": null
     },
@@ -1180,7 +1374,8 @@
       "intent": null,
       "properties": {},
       "consumers": [
-        "mobile-instrumentation-presence"
+        "mobile-instrumentation-presence",
+        "app-update-prompt"
       ],
       "correlation": null
     },
@@ -1193,7 +1388,8 @@
       "intent": null,
       "properties": {},
       "consumers": [
-        "mobile-instrumentation-presence"
+        "mobile-instrumentation-presence",
+        "app-update-prompt"
       ],
       "correlation": null
     },
@@ -1206,7 +1402,8 @@
       "intent": null,
       "properties": {},
       "consumers": [
-        "mobile-instrumentation-presence"
+        "mobile-instrumentation-presence",
+        "subscription-funnel"
       ],
       "correlation": null
     },
@@ -2499,6 +2696,424 @@
       "correlation": null
     },
     {
+      "id": "billingSubscriptionStarted",
+      "wire_name": "Billing Subscription Started",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {
+        "plan": {
+          "type": "enum",
+          "wire_name": "plan",
+          "values": [
+            "basic",
+            "plus",
+            "unlimited",
+            "unlimited_v2",
+            "operator",
+            "architect",
+            "unknown"
+          ]
+        },
+        "interval": {
+          "type": "enum",
+          "wire_name": "interval",
+          "values": [
+            "month",
+            "year",
+            "unknown"
+          ]
+        },
+        "reason": {
+          "type": "enum",
+          "wire_name": "reason",
+          "values": [
+            "cancellation_requested",
+            "payment_failure",
+            "payment_disputed",
+            "none"
+          ]
+        },
+        "priceGeneration": {
+          "type": "enum",
+          "wire_name": "price_generation",
+          "values": [
+            "legacy",
+            "ladder_v1",
+            "unknown"
+          ]
+        },
+        "isTrial": {
+          "type": "bool",
+          "wire_name": "is_trial"
+        },
+        "billingMeasurement": {
+          "type": "enum",
+          "wire_name": "billing_measurement",
+          "values": [
+            "trial_plan_entitlement",
+            "paid_plan_entitlement"
+          ]
+        },
+        "mrrCents": {
+          "type": "int",
+          "wire_name": "mrr_cents"
+        }
+      },
+      "consumers": [
+        "billing-lifecycle-events"
+      ],
+      "correlation": null,
+      "backend_properties": {
+        "$insert_id": {
+          "type": "uuid"
+        },
+        "billing_event_id": {
+          "type": "bounded_string",
+          "max_length": 128
+        },
+        "occurred_at": {
+          "type": "iso8601",
+          "nullable": true
+        },
+        "billing_source": {
+          "type": "constant",
+          "value": "stripe_webhook_authoritative_owner"
+        },
+        "price_id": {
+          "type": "bounded_string",
+          "max_length": 128
+        },
+        "currency": {
+          "type": "bounded_string",
+          "max_length": 16
+        }
+      }
+    },
+    {
+      "id": "billingSubscriptionChurned",
+      "wire_name": "Billing Subscription Churned",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {
+        "plan": {
+          "type": "enum",
+          "wire_name": "plan",
+          "values": [
+            "basic",
+            "plus",
+            "unlimited",
+            "unlimited_v2",
+            "operator",
+            "architect",
+            "unknown"
+          ]
+        },
+        "interval": {
+          "type": "enum",
+          "wire_name": "interval",
+          "values": [
+            "month",
+            "year",
+            "unknown"
+          ]
+        },
+        "reason": {
+          "type": "enum",
+          "wire_name": "reason",
+          "values": [
+            "cancellation_requested",
+            "payment_failure",
+            "payment_disputed",
+            "none"
+          ]
+        },
+        "priceGeneration": {
+          "type": "enum",
+          "wire_name": "price_generation",
+          "values": [
+            "legacy",
+            "ladder_v1",
+            "unknown"
+          ]
+        },
+        "isTrial": {
+          "type": "bool",
+          "wire_name": "is_trial"
+        },
+        "billingMeasurement": {
+          "type": "enum",
+          "wire_name": "billing_measurement",
+          "values": [
+            "trial_plan_entitlement",
+            "paid_plan_entitlement"
+          ]
+        },
+        "mrrCents": {
+          "type": "int",
+          "wire_name": "mrr_cents"
+        }
+      },
+      "consumers": [
+        "billing-lifecycle-events"
+      ],
+      "correlation": null,
+      "backend_properties": {
+        "$insert_id": {
+          "type": "uuid"
+        },
+        "billing_event_id": {
+          "type": "bounded_string",
+          "max_length": 128
+        },
+        "occurred_at": {
+          "type": "iso8601",
+          "nullable": true
+        },
+        "billing_source": {
+          "type": "constant",
+          "value": "stripe_webhook_authoritative_owner"
+        },
+        "price_id": {
+          "type": "bounded_string",
+          "max_length": 128
+        },
+        "currency": {
+          "type": "bounded_string",
+          "max_length": 16
+        }
+      }
+    },
+    {
+      "id": "billingSubscriptionCancellationScheduled",
+      "wire_name": "Billing Subscription Cancellation Scheduled",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {
+        "plan": {
+          "type": "enum",
+          "wire_name": "plan",
+          "values": [
+            "basic",
+            "plus",
+            "unlimited",
+            "unlimited_v2",
+            "operator",
+            "architect",
+            "unknown"
+          ]
+        },
+        "interval": {
+          "type": "enum",
+          "wire_name": "interval",
+          "values": [
+            "month",
+            "year",
+            "unknown"
+          ]
+        },
+        "reason": {
+          "type": "enum",
+          "wire_name": "reason",
+          "values": [
+            "cancellation_requested",
+            "payment_failure",
+            "payment_disputed",
+            "none"
+          ]
+        },
+        "priceGeneration": {
+          "type": "enum",
+          "wire_name": "price_generation",
+          "values": [
+            "legacy",
+            "ladder_v1",
+            "unknown"
+          ]
+        },
+        "isTrial": {
+          "type": "bool",
+          "wire_name": "is_trial"
+        },
+        "billingMeasurement": {
+          "type": "enum",
+          "wire_name": "billing_measurement",
+          "values": [
+            "trial_plan_entitlement",
+            "paid_plan_entitlement"
+          ]
+        },
+        "mrrCents": {
+          "type": "int",
+          "wire_name": "mrr_cents"
+        }
+      },
+      "consumers": [
+        "billing-lifecycle-events"
+      ],
+      "correlation": null,
+      "backend_properties": {
+        "$insert_id": {
+          "type": "uuid"
+        },
+        "billing_event_id": {
+          "type": "bounded_string",
+          "max_length": 128
+        },
+        "occurred_at": {
+          "type": "iso8601",
+          "nullable": true
+        },
+        "billing_source": {
+          "type": "constant",
+          "value": "stripe_webhook_authoritative_owner"
+        },
+        "price_id": {
+          "type": "bounded_string",
+          "max_length": 128
+        },
+        "currency": {
+          "type": "bounded_string",
+          "max_length": 16
+        }
+      }
+    },
+    {
+      "id": "billingSubscriptionPlanChanged",
+      "wire_name": "Billing Subscription Plan Changed",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {
+        "previousPlan": {
+          "type": "enum",
+          "wire_name": "previous_plan",
+          "values": [
+            "basic",
+            "plus",
+            "unlimited",
+            "unlimited_v2",
+            "operator",
+            "architect",
+            "unknown"
+          ]
+        },
+        "newPlan": {
+          "type": "enum",
+          "wire_name": "new_plan",
+          "values": [
+            "basic",
+            "plus",
+            "unlimited",
+            "unlimited_v2",
+            "operator",
+            "architect",
+            "unknown"
+          ]
+        },
+        "interval": {
+          "type": "enum",
+          "wire_name": "interval",
+          "values": [
+            "month",
+            "year",
+            "unknown"
+          ]
+        },
+        "mrrBeforeCents": {
+          "type": "int",
+          "wire_name": "mrr_before_cents"
+        },
+        "mrrAfterCents": {
+          "type": "int",
+          "wire_name": "mrr_after_cents"
+        },
+        "plan": {
+          "type": "enum",
+          "wire_name": "plan",
+          "values": [
+            "basic",
+            "plus",
+            "unlimited",
+            "unlimited_v2",
+            "operator",
+            "architect",
+            "unknown"
+          ]
+        },
+        "reason": {
+          "type": "enum",
+          "wire_name": "reason",
+          "values": [
+            "cancellation_requested",
+            "payment_failure",
+            "payment_disputed",
+            "none"
+          ]
+        },
+        "priceGeneration": {
+          "type": "enum",
+          "wire_name": "price_generation",
+          "values": [
+            "legacy",
+            "ladder_v1",
+            "unknown"
+          ]
+        },
+        "isTrial": {
+          "type": "bool",
+          "wire_name": "is_trial"
+        },
+        "billingMeasurement": {
+          "type": "enum",
+          "wire_name": "billing_measurement",
+          "values": [
+            "trial_plan_entitlement",
+            "paid_plan_entitlement"
+          ]
+        },
+        "mrrCents": {
+          "type": "int",
+          "wire_name": "mrr_cents"
+        }
+      },
+      "consumers": [
+        "billing-plan-changes"
+      ],
+      "correlation": null,
+      "backend_properties": {
+        "$insert_id": {
+          "type": "uuid"
+        },
+        "billing_event_id": {
+          "type": "bounded_string",
+          "max_length": 128
+        },
+        "occurred_at": {
+          "type": "iso8601",
+          "nullable": true
+        },
+        "billing_source": {
+          "type": "constant",
+          "value": "stripe_webhook_authoritative_owner"
+        },
+        "price_id": {
+          "type": "bounded_string",
+          "max_length": 128
+        },
+        "currency": {
+          "type": "bounded_string",
+          "max_length": 16
+        }
+      }
+    },
+    {
       "id": "speakerTagPromptsClosed",
       "wire_name": "Speaker Tag Prompts Closed",
       "status": "active",
@@ -2879,6 +3494,636 @@
       },
       "consumers": [
         "conversation-untitled-rendered"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "chatAppConnectStarted",
+      "wire_name": "Chat App Connect Started",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {
+        "channel": {
+          "type": "enum",
+          "wire_name": "channel",
+          "values": [
+            "telegram",
+            "imessage"
+          ]
+        }
+      },
+      "consumers": [
+        "chat-apps-funnel"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "chatAppConnected",
+      "wire_name": "Chat App Connected",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {
+        "channel": {
+          "type": "enum",
+          "wire_name": "channel",
+          "values": [
+            "telegram",
+            "imessage"
+          ]
+        }
+      },
+      "consumers": [
+        "chat-apps-funnel"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "chatAppDisconnected",
+      "wire_name": "Chat App Disconnected",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {
+        "channel": {
+          "type": "enum",
+          "wire_name": "channel",
+          "values": [
+            "telegram",
+            "imessage"
+          ]
+        }
+      },
+      "consumers": [
+        "chat-apps-funnel"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "chatAppWaitlistJoined",
+      "wire_name": "Chat App Waitlist Joined",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {},
+      "consumers": [
+        "chat-apps-funnel"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "paywallOpened",
+      "wire_name": "Paywall Opened",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {
+        "source": {
+          "type": "enum",
+          "wire_name": "source",
+          "values": [
+            "chat_quota_exceeded",
+            "freemium_switch",
+            "locked_conversation",
+            "locked_memory",
+            "chat_apps",
+            "usage_page",
+            "transcription_settings",
+            "unlimited_deeplink",
+            "macos_billing",
+            "macos_usage_limit",
+            "macos_chat_quota_banner",
+            "windows_billing",
+            "windows_usage_limit",
+            "web_plans",
+            "macos_settings_view",
+            "windows_settings_view",
+            "unknown"
+          ]
+        },
+        "currentPlan": {
+          "type": "enum",
+          "wire_name": "current_plan",
+          "values": [
+            "basic",
+            "plus",
+            "unlimited",
+            "unlimited_v2",
+            "operator",
+            "architect",
+            "unknown"
+          ]
+        }
+      },
+      "consumers": [
+        "subscription-funnel"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "upgradePlanSelected",
+      "wire_name": "Upgrade Plan Selected",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {
+        "plan": {
+          "type": "enum",
+          "wire_name": "plan",
+          "values": [
+            "basic",
+            "plus",
+            "unlimited",
+            "unlimited_v2",
+            "operator",
+            "architect",
+            "unknown"
+          ]
+        },
+        "billingInterval": {
+          "type": "enum",
+          "wire_name": "billing_interval",
+          "values": [
+            "month",
+            "year",
+            "unknown"
+          ]
+        },
+        "source": {
+          "type": "enum",
+          "wire_name": "source",
+          "values": [
+            "chat_quota_exceeded",
+            "freemium_switch",
+            "locked_conversation",
+            "locked_memory",
+            "chat_apps",
+            "usage_page",
+            "transcription_settings",
+            "unlimited_deeplink",
+            "macos_billing",
+            "macos_usage_limit",
+            "macos_chat_quota_banner",
+            "windows_billing",
+            "windows_usage_limit",
+            "web_plans",
+            "macos_settings_view",
+            "windows_settings_view",
+            "unknown"
+          ]
+        }
+      },
+      "consumers": [
+        "subscription-funnel"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "upgradeSucceededAttributed",
+      "wire_name": "Upgrade Succeeded Attributed",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {
+        "plan": {
+          "type": "enum",
+          "wire_name": "plan",
+          "values": [
+            "basic",
+            "plus",
+            "unlimited",
+            "unlimited_v2",
+            "operator",
+            "architect",
+            "unknown"
+          ]
+        },
+        "billingInterval": {
+          "type": "enum",
+          "wire_name": "billing_interval",
+          "values": [
+            "month",
+            "year",
+            "unknown"
+          ]
+        }
+      },
+      "consumers": [
+        "subscription-funnel"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "subscriptionPlanChanged",
+      "wire_name": "Subscription Plan Changed",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {
+        "previousPlan": {
+          "type": "enum",
+          "wire_name": "previous_plan",
+          "values": [
+            "basic",
+            "plus",
+            "unlimited",
+            "unlimited_v2",
+            "operator",
+            "architect",
+            "unknown"
+          ]
+        },
+        "newPlan": {
+          "type": "enum",
+          "wire_name": "new_plan",
+          "values": [
+            "basic",
+            "plus",
+            "unlimited",
+            "unlimited_v2",
+            "operator",
+            "architect",
+            "unknown"
+          ]
+        },
+        "billingInterval": {
+          "type": "enum",
+          "wire_name": "billing_interval",
+          "values": [
+            "month",
+            "year",
+            "unknown"
+          ]
+        },
+        "changeSource": {
+          "type": "enum",
+          "wire_name": "change_source",
+          "values": [
+            "mobile_checkout",
+            "macos_checkout",
+            "windows_checkout",
+            "web_checkout"
+          ]
+        }
+      },
+      "consumers": [
+        "subscription-funnel"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "subscriptionCancelReasonSelected",
+      "wire_name": "Subscription Cancel Reason Selected",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {
+        "reason": {
+          "type": "enum",
+          "wire_name": "reason",
+          "values": [
+            "too_expensive",
+            "not_using_enough",
+            "missing_features",
+            "audio_quality",
+            "battery_drain",
+            "found_alternative",
+            "other",
+            "none",
+            "unknown"
+          ]
+        }
+      },
+      "consumers": [
+        "subscription-funnel"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "subscriptionCancelConfirmed",
+      "wire_name": "Subscription Cancel Confirmed",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {
+        "reason": {
+          "type": "enum",
+          "wire_name": "reason",
+          "values": [
+            "too_expensive",
+            "not_using_enough",
+            "missing_features",
+            "audio_quality",
+            "battery_drain",
+            "found_alternative",
+            "other",
+            "none",
+            "unknown"
+          ]
+        },
+        "hasDetails": {
+          "type": "bool",
+          "wire_name": "has_details"
+        }
+      },
+      "consumers": [
+        "subscription-funnel"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "subscriptionCancelKeptPlan",
+      "wire_name": "Subscription Cancel Kept Plan",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {
+        "step": {
+          "type": "int",
+          "wire_name": "step"
+        },
+        "reason": {
+          "type": "enum",
+          "wire_name": "reason",
+          "values": [
+            "too_expensive",
+            "not_using_enough",
+            "missing_features",
+            "audio_quality",
+            "battery_drain",
+            "found_alternative",
+            "other",
+            "none",
+            "unknown"
+          ]
+        }
+      },
+      "consumers": [
+        "subscription-funnel"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "subscriptionCancelAbandoned",
+      "wire_name": "Subscription Cancel Abandoned",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {
+        "step": {
+          "type": "int",
+          "wire_name": "step"
+        },
+        "reason": {
+          "type": "enum",
+          "wire_name": "reason",
+          "values": [
+            "too_expensive",
+            "not_using_enough",
+            "missing_features",
+            "audio_quality",
+            "battery_drain",
+            "found_alternative",
+            "other",
+            "none",
+            "unknown"
+          ]
+        }
+      },
+      "consumers": [
+        "subscription-funnel"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "guidedIntroPayoffShown",
+      "wire_name": "Guided Intro Payoff Shown",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {
+        "memoriesCount": {
+          "type": "int",
+          "wire_name": "memories_count"
+        },
+        "answerSource": {
+          "type": "enum",
+          "wire_name": "answer_source",
+          "values": [
+            "chat",
+            "fallback"
+          ]
+        },
+        "latencyMs": {
+          "type": "int",
+          "wire_name": "latency_ms"
+        }
+      },
+      "consumers": [
+        "guided-intro-payoff-presence"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "guidedIntroPayoffContinued",
+      "wire_name": "Guided Intro Payoff Continued",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {},
+      "consumers": [
+        "guided-intro-payoff-presence"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "onboardingFirstCaptureShown",
+      "wire_name": "Onboarding First Capture Shown",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {},
+      "consumers": [
+        "mobile-instrumentation-presence"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "onboardingFirstCaptureChoiceSelected",
+      "wire_name": "Onboarding First Capture Choice Selected",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {
+        "choice": {
+          "type": "enum",
+          "wire_name": "choice",
+          "values": [
+            "omi",
+            "apple_watch",
+            "phone",
+            "skipped"
+          ]
+        }
+      },
+      "consumers": [
+        "mobile-instrumentation-presence"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "onboardingFirstCaptureRecordingStarted",
+      "wire_name": "Onboarding First Capture Recording Started",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {},
+      "consumers": [
+        "mobile-instrumentation-presence"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "onboardingFirstCaptureRecordingCompleted",
+      "wire_name": "Onboarding First Capture Recording Completed",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {
+        "durationS": {
+          "type": "int",
+          "wire_name": "duration_s"
+        },
+        "transcriptObserved": {
+          "type": "bool",
+          "wire_name": "transcript_observed"
+        }
+      },
+      "consumers": [
+        "mobile-instrumentation-presence"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "onboardingFirstCaptureConversationShown",
+      "wire_name": "Onboarding First Capture Conversation Shown",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {
+        "latencyMs": {
+          "type": "int",
+          "wire_name": "latency_ms"
+        }
+      },
+      "consumers": [
+        "mobile-instrumentation-presence"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "onboardingFirstCaptureEmptyResult",
+      "wire_name": "Onboarding First Capture Empty Result",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {},
+      "consumers": [
+        "mobile-instrumentation-presence"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "onboardingFirstCaptureSkipped",
+      "wire_name": "Onboarding First Capture Skipped",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {},
+      "consumers": [
+        "mobile-instrumentation-presence"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "onboardingStepCompleted",
+      "wire_name": "Onboarding Step Completed",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {
+        "step": {
+          "type": "enum",
+          "wire_name": "step",
+          "values": [
+            "auth",
+            "ai_consent",
+            "name",
+            "primary_language",
+            "acquisition_source",
+            "permissions",
+            "speech_profile",
+            "knowledge_graph",
+            "setup",
+            "first_capture"
+          ]
+        },
+        "index": {
+          "type": "int",
+          "wire_name": "index"
+        },
+        "elapsedMs": {
+          "type": "int",
+          "wire_name": "elapsed_ms"
+        },
+        "skipped": {
+          "type": "bool",
+          "wire_name": "skipped"
+        },
+        "platform": {
+          "type": "enum",
+          "wire_name": "platform",
+          "values": [
+            "ios",
+            "android",
+            "other"
+          ]
+        },
+        "exitReason": {
+          "type": "enum",
+          "wire_name": "exit_reason",
+          "values": [
+            "answered",
+            "skipped",
+            "back"
+          ]
+        }
+      },
+      "consumers": [
+        "mobile-instrumentation-presence"
       ],
       "correlation": null
     }

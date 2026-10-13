@@ -857,9 +857,9 @@ def test_phase_a_keeps_cloud_run_credentials_and_isolates_gke_v2_redis():
     }
 
 
-def test_phase_a_cloud_run_secret_refs_match_pre_enablement_main():
-    # Main's declared mounts at cd3326b3a58d. Preserve the resource, env alias,
-    # and version together: a new alias can also introduce a startup dependency.
+def test_prod_cloud_run_secret_refs_match_approved_bindings():
+    # Base mounts, prod-only dream salt and backend-only messaging provider credentials.
+    # Preserve resource, env alias and version: aliases can introduce startup dependencies.
     common = {'GOOGLE_CLIENT_SECRET', 'ENCRYPTION_SECRET', 'MODULATE_API_KEY', 'OMI_LLM_GATEWAY_SERVICE_TOKEN'}
     baseline = {
         'backend': common
@@ -871,8 +871,14 @@ def test_phase_a_cloud_run_secret_refs_match_pre_enablement_main():
             'BETA_PROMOTION_TOKEN',
             'MCP_OAUTH_CLIENTS_JSON',
             'SCREEN_FRAME_SIGNING_SECRET',
+            'DREAM_AGENT_FEEDBACK_SALT',
+            'TELEGRAM_BOT_TOKEN',
+            'TELEGRAM_WEBHOOK_SECRET',
+            'LINQ_API_KEY',
+            'LINQ_WEBHOOK_SECRET',
         },
-        'backend-sync': common | {'GOOGLE_MAPS_API_KEY'},
+        'backend-sync': common
+        | {'GOOGLE_MAPS_API_KEY', 'DREAM_AGENT_FEEDBACK_SALT', 'TYPESENSE_HOST', 'TYPESENSE_API_KEY'},
         'backend-sync-backfill': common,
         'backend-integration': common | {'POSTHOG_EVENTS_API_KEY'},
     }
@@ -883,6 +889,19 @@ def test_phase_a_cloud_run_secret_refs_match_pre_enablement_main():
             (entry['name'], entry['valueFrom']['secretKeyRef']['name'], entry['valueFrom']['secretKeyRef']['key'])
             for entry in refs
         } == {(name, name, 'latest') for name in names}, service
+    backend_env = prod['cloud_run']['services']['backend']['env']
+    token = backend_env['PROACTIVITY_V2_POSTHOG_TOKEN']['value']
+    assert token.startswith('phc_')
+    assert backend_env['POSTHOG_BILLING_API_KEY'] == {'value': token, 'category': 'telemetry'}
+    assert backend_env['POSTHOG_HOST'] == {'value': 'https://us.posthog.com', 'category': 'telemetry'}
+    assert _MODULE['_render_env_entries']({'POSTHOG_BILLING_API_KEY': backend_env['POSTHOG_BILLING_API_KEY']}) == [
+        {'name': 'POSTHOG_BILLING_API_KEY', 'value': token}
+    ]
+    for service_name, service in prod['cloud_run']['services'].items():
+        if service_name == 'backend':
+            continue
+        assert 'POSTHOG_BILLING_API_KEY' not in service.get('env', {})
+        assert 'POSTHOG_BILLING_API_KEY' not in service.get('secrets', {})
     desktop = _MODULE['_render_secret_entries'](prod['desktop_backend']['secrets'])
     assert {
         (entry['name'], entry['valueFrom']['secretKeyRef']['name'], entry['valueFrom']['secretKeyRef']['key'])

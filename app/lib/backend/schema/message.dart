@@ -587,6 +587,10 @@ class ServerMessage {
       case 'memoryLink':
       case 'memory_link':
         return labelled('Memory', [value('summary')]);
+      case 'editReceipt':
+      case 'edit_receipt':
+        // The summary already reads as a sentence ("Renamed the task to …").
+        return value('summary').isEmpty ? 'Change' : value('summary');
       case 'citation':
         return labelled('Source', [value('title'), value('preview')]);
       case 'evidence':

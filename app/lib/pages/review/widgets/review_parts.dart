@@ -12,6 +12,22 @@ String reviewQuestion(BuildContext context, ReviewItem item) {
     ReviewItemKind.task => item.task!.description,
     ReviewItemKind.samePerson => l10n.reviewQuestionSamePerson(item.samePerson!.right.name),
     ReviewItemKind.spelling => l10n.reviewQuestionSpelling,
+    ReviewItemKind.agentProposal => _proposalQuestion(context, item.agentProposal!),
+  };
+}
+
+String _proposalQuestion(BuildContext context, AgentProposalItem proposal) {
+  final l10n = context.l10n;
+  final target = proposal.targetLabel;
+  final other = proposal.otherLabel ?? '';
+  return switch (proposal.editKind) {
+    'close_task' when target.isNotEmpty => l10n.reviewProposalCloseTask(target),
+    'retire_task' when target.isNotEmpty => l10n.reviewProposalRetireTask(target),
+    'merge_people' when target.isNotEmpty && other.isNotEmpty => l10n.reviewProposalMergePeople(target, other),
+    'merge_memories' => l10n.reviewProposalMergeMemories,
+    'memory' => l10n.reviewProposalMemory,
+    'entity_summary' when target.isNotEmpty => l10n.reviewProposalEntitySummary(target),
+    _ => l10n.reviewProposalGeneric,
   };
 }
 
@@ -20,6 +36,7 @@ IconData reviewKindIcon(ReviewItemKind kind) => switch (kind) {
       ReviewItemKind.task => Icons.task_alt,
       ReviewItemKind.samePerson => Icons.people_outline,
       ReviewItemKind.spelling => Icons.spellcheck,
+      ReviewItemKind.agentProposal => Icons.auto_awesome_outlined,
     };
 
 /// A 40pt circle holding a kind's icon, used where a card has no play button.
@@ -99,8 +116,10 @@ class ReviewAnswerPill extends StatelessWidget {
                 label,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: OmiType.subhead
-                    .copyWith(color: foreground, fontWeight: primary ? FontWeight.w600 : FontWeight.w500),
+                style: OmiType.subhead.copyWith(
+                  color: foreground,
+                  fontWeight: primary ? FontWeight.w600 : FontWeight.w500,
+                ),
               ),
             ),
           ),
@@ -190,7 +209,10 @@ class EntityInitialAvatar extends StatelessWidget {
         shape: type == EntityType.person ? BoxShape.circle : BoxShape.rectangle,
         borderRadius: type == EntityType.person ? null : BorderRadius.circular(size / 4),
       ),
-      child: Text(initial, style: OmiType.footnote.copyWith(fontSize: size * 0.42, fontWeight: FontWeight.w600)),
+      child: Text(
+        initial,
+        style: OmiType.footnote.copyWith(fontSize: size * 0.42, fontWeight: FontWeight.w600),
+      ),
     );
   }
 }

@@ -33,14 +33,24 @@ import 'package:omi/utils/other/temp.dart';
 
 class UsagePage extends StatefulWidget {
   final bool showUpgradeDialog;
+
+  /// Surface id used when [showUpgradeDialog] opens the plans sheet.
+  /// The usage-page upgrade button always reports `usage_page`.
+  final String paywallSource;
   @visibleForTesting
   final bool debugSkipFetch;
   @visibleForTesting
   final DateTime? debugNow;
   @visibleForTesting
   final int? debugTooltipIndex;
-  const UsagePage(
-      {super.key, this.showUpgradeDialog = false, this.debugSkipFetch = false, this.debugNow, this.debugTooltipIndex});
+  const UsagePage({
+    super.key,
+    this.showUpgradeDialog = false,
+    this.paywallSource = 'usage_page',
+    this.debugSkipFetch = false,
+    this.debugNow,
+    this.debugTooltipIndex,
+  });
 
   @override
   State<UsagePage> createState() => _UsagePageState();
@@ -228,11 +238,14 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin, Wi
       ),
     );
     final targetApp = outcome.status == ShareResultStatus.success ? shareTargetApp(outcome.raw) : null;
-    PlatformManager.instance.analytics.track('Usage Stats Shared', properties: {
-      'period': sharePeriod,
-      'share_status': outcome.status.name,
-      if (targetApp != null) 'target_app': targetApp,
-    });
+    PlatformManager.instance.analytics.track(
+      'Usage Stats Shared',
+      properties: {
+        'period': sharePeriod,
+        'share_status': outcome.status.name,
+        if (targetApp != null) 'target_app': targetApp,
+      },
+    );
   }
 
   String _getPeriodForIndex(int index) {
@@ -317,7 +330,8 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin, Wi
       _loadAvailablePlans();
       _loadFairUseStatus();
       if (widget.showUpgradeDialog && context.read<UsageProvider>().showSubscriptionUI) {
-        _showPlansSheet();
+        // The opener already emitted Paywall Opened with this source.
+        _showPlansSheet(source: widget.paywallSource, trackOpen: false);
       }
     });
   }
@@ -335,7 +349,9 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin, Wi
 
   Widget _periodSegment(String label) => SizedBox(
         height: 44,
-        child: Center(child: Text(label, maxLines: 1, style: OmiType.footnote.copyWith(fontWeight: FontWeight.w600))),
+        child: Center(
+          child: Text(label, maxLines: 1, style: OmiType.footnote.copyWith(fontWeight: FontWeight.w600)),
+        ),
       );
 
   @override
@@ -422,13 +438,7 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin, Wi
           return TabBarView(
             controller: _tabController,
             children: [
-              _buildUsageListView(
-                provider.todayUsage,
-                provider.todayHistory,
-                'today',
-                _screenshotKeys[0],
-                provider,
-              ),
+              _buildUsageListView(provider.todayUsage, provider.todayHistory, 'today', _screenshotKeys[0], provider),
               _buildUsageListView(
                 provider.monthlyUsage,
                 provider.monthlyHistory,
@@ -436,13 +446,7 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin, Wi
                 _screenshotKeys[1],
                 provider,
               ),
-              _buildUsageListView(
-                provider.yearlyUsage,
-                provider.yearlyHistory,
-                'yearly',
-                _screenshotKeys[2],
-                provider,
-              ),
+              _buildUsageListView(provider.yearlyUsage, provider.yearlyHistory, 'yearly', _screenshotKeys[2], provider),
               _buildUsageListView(
                 provider.allTimeUsage,
                 provider.allTimeHistory,
@@ -489,26 +493,29 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin, Wi
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Flexible(
-                  child: isPaid
-                      ? Container(
-                          padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.sm, vertical: OmiSpacing.xxs),
-                          decoration: BoxDecoration(color: OmiColors.surface2, borderRadius: OmiRadius.pillAll),
-                          child: Text(planLabel, style: OmiType.footnote.copyWith(fontWeight: FontWeight.w700)),
-                        )
-                      : Text(planLabel, style: OmiType.headline)),
+                child: isPaid
+                    ? Container(
+                        padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.sm, vertical: OmiSpacing.xxs),
+                        decoration: BoxDecoration(color: OmiColors.surface2, borderRadius: OmiRadius.pillAll),
+                        child: Text(planLabel, style: OmiType.footnote.copyWith(fontWeight: FontWeight.w700)),
+                      )
+                    : Text(planLabel, style: OmiType.headline),
+              ),
               if (isPaid)
                 Semantics(
                   button: true,
                   child: InkWell(
-                    onTap: _showPlansSheet,
+                    onTap: () => _showPlansSheet(source: 'usage_page', trackOpen: true),
                     borderRadius: OmiRadius.smAll,
                     child: ConstrainedBox(
                       constraints: const BoxConstraints(minHeight: 44),
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          Text(context.l10n.managePlan,
-                              style: OmiType.subhead.copyWith(color: OmiColors.textSecondary)),
+                          Text(
+                            context.l10n.managePlan,
+                            style: OmiType.subhead.copyWith(color: OmiColors.textSecondary),
+                          ),
                           const SizedBox(width: OmiSpacing.xxs),
                           Icon(Icons.chevron_right, color: OmiColors.textSecondary, size: 20),
                         ],
@@ -526,7 +533,7 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin, Wi
               label: context.l10n.upgrade,
               labelStyle: OmiType.callout.copyWith(fontFamily: 'Roboto', fontWeight: FontWeight.w600),
               expand: true,
-              onPressed: _showPlansSheet,
+              onPressed: () => _showPlansSheet(source: 'usage_page', trackOpen: true),
             ),
           ],
         ],
@@ -534,9 +541,13 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin, Wi
     );
   }
 
-  void _showPlansSheet() {
+  void _showPlansSheet({required String source, required bool trackOpen}) {
     if (!context.read<UsageProvider>().showSubscriptionUI) {
       return;
+    }
+    if (trackOpen) {
+      final plan = context.read<UsageProvider>().subscription?.subscription.plan.wireName ?? 'unknown';
+      PlatformManager.instance.analytics.paywallOpened(source, currentPlan: plan);
     }
     showOmiSheet(
       context: context,
@@ -546,6 +557,7 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin, Wi
         notesController: _notesController,
         arrowController: _arrowController,
         arrowAnimation: _arrowAnimation,
+        analyticsSource: source,
       ),
     );
   }
@@ -662,39 +674,44 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin, Wi
                   crossAxisSpacing: OmiSpacing.sm,
                   children: [
                     UsageStatTile(
-                        label: l10n.usageListened,
-                        value: formatUsageDuration(stats.transcriptionSeconds),
-                        exactValue: '${format.format((stats.transcriptionSeconds / 60).round())} ${l10n.minutes}',
-                        color: Colors.blue.shade300),
+                      label: l10n.usageListened,
+                      value: formatUsageDuration(stats.transcriptionSeconds),
+                      exactValue: '${format.format((stats.transcriptionSeconds / 60).round())} ${l10n.minutes}',
+                      color: Colors.blue.shade300,
+                    ),
                     UsageStatTile(
-                        label: l10n.usageWordsHeard,
-                        value: formatUsageCount(stats.wordsTranscribed, l10n.localeName),
-                        exactValue: format.format(stats.wordsTranscribed),
-                        color: Colors.green.shade300),
+                      label: l10n.usageWordsHeard,
+                      value: formatUsageCount(stats.wordsTranscribed, l10n.localeName),
+                      exactValue: format.format(stats.wordsTranscribed),
+                      color: Colors.green.shade300,
+                    ),
                     UsageStatTile(
-                        label: l10n.usageTasksNotes,
-                        value: formatUsageCount(stats.insightsGained, l10n.localeName),
-                        exactValue: format.format(stats.insightsGained),
-                        color: Colors.orange.shade300),
+                      label: l10n.usageTasksNotes,
+                      value: formatUsageCount(stats.insightsGained, l10n.localeName),
+                      exactValue: format.format(stats.insightsGained),
+                      color: Colors.orange.shade300,
+                    ),
                     UsageStatTile(
-                        label: l10n.memories,
-                        value: formatUsageCount(stats.memoriesCreated, l10n.localeName),
-                        exactValue: format.format(stats.memoriesCreated),
-                        color: _memoriesColor),
+                      label: l10n.memories,
+                      value: formatUsageCount(stats.memoriesCreated, l10n.localeName),
+                      exactValue: format.format(stats.memoriesCreated),
+                      color: _memoriesColor,
+                    ),
                   ],
                 ),
                 if (history != null && history.isNotEmpty) ...[
                   const SizedBox(height: OmiSpacing.sm),
                   UsageChart(
-                      history: history,
-                      period: period,
-                      metric: _selectedMetric,
-                      now: widget.debugNow,
-                      debugTooltipIndex: widget.debugTooltipIndex,
-                      onMetricChanged: (value) => setState(() => _selectedMetric = value)),
+                    history: history,
+                    period: period,
+                    metric: _selectedMetric,
+                    now: widget.debugNow,
+                    debugTooltipIndex: widget.debugTooltipIndex,
+                    onMetricChanged: (value) => setState(() => _selectedMetric = value),
+                  ),
                 ],
               ],
-              if (stats != null) ..._buildFreeMeters(provider.subscription),
+              if (stats != null) ..._buildAllowanceMeters(provider.subscription),
               if (stats != null && provider.chatQuotaUnit != null && period == 'monthly') ...[
                 const SizedBox(height: OmiSpacing.sm),
                 _buildChatQuotaLine(context, provider),
@@ -706,16 +723,20 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin, Wi
     );
   }
 
-  List<Widget> _buildFreeMeters(UserSubscriptionResponse? subscription) {
-    if (subscription == null || subscription.subscription.plan != PlanType.basic) return [];
+  List<Widget> _buildAllowanceMeters(UserSubscriptionResponse? subscription) {
+    if (subscription == null) return [];
     final l10n = context.l10n;
     final format = NumberFormat.decimalPattern(l10n.localeName);
     final rows = <Widget>[];
-    if (subscription.transcriptionSecondsLimit > 0) {
+    // Enforcement can be unlimited while an older snapshot carries Free's BYOK cap.
+    final allowance = subscription.transcriptionAllowance;
+    final unlimited = allowance != null && allowance.remainingSeconds == null;
+    if (!unlimited && subscription.transcriptionSecondsLimit > 0) {
       final used = (subscription.transcriptionSecondsUsed / 60).round();
       final limit = (subscription.transcriptionSecondsLimit / 60).round();
       final ratio = (subscription.transcriptionSecondsUsed / subscription.transcriptionSecondsLimit).clamp(0.0, 1.0);
-      rows.add(_UsageMeter(
+      rows.add(
+        _UsageMeter(
           text: l10n.minsUsedThisMonth(format.format(used), limit),
           percentage: ratio,
           color: Colors.blue.shade300,
@@ -723,27 +744,41 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin, Wi
               ? _OnDeviceHint(
                   before: '${l10n.premiumMinutesUsed} ',
                   link: l10n.setupOnDevice,
-                  after: ' ${l10n.forUnlimitedFreeTranscription}')
+                  after: ' ${l10n.forUnlimitedFreeTranscription}',
+                )
               : ratio >= .8
                   ? _OnDeviceHint(
                       before: '${l10n.premiumMinsLeft(limit - used)} ',
                       link: l10n.onDevice,
-                      after: ' ${l10n.alwaysAvailable}')
-                  : null));
+                      after: ' ${l10n.alwaysAvailable}',
+                    )
+                  : null,
+        ),
+      );
     }
-    if (subscription.wordsTranscribedLimit > 0) {
-      rows.add(_UsageMeter(
+    if (subscription.subscription.plan == PlanType.basic && subscription.wordsTranscribedLimit > 0) {
+      rows.add(
+        _UsageMeter(
           text: l10n.wordsUsedThisMonth(
-              format.format(subscription.wordsTranscribedUsed), format.format(subscription.wordsTranscribedLimit)),
+            format.format(subscription.wordsTranscribedUsed),
+            format.format(subscription.wordsTranscribedLimit),
+          ),
           percentage: (subscription.wordsTranscribedUsed / subscription.wordsTranscribedLimit).clamp(0.0, 1.0),
-          color: Colors.green.shade300));
+          color: Colors.green.shade300,
+        ),
+      );
     }
-    if (subscription.insightsGainedLimit > 0) {
-      rows.add(_UsageMeter(
+    if (subscription.subscription.plan == PlanType.basic && subscription.insightsGainedLimit > 0) {
+      rows.add(
+        _UsageMeter(
           text: l10n.insightsUsedThisMonth(
-              format.format(subscription.insightsGainedUsed), format.format(subscription.insightsGainedLimit)),
+            format.format(subscription.insightsGainedUsed),
+            format.format(subscription.insightsGainedLimit),
+          ),
           percentage: (subscription.insightsGainedUsed / subscription.insightsGainedLimit).clamp(0.0, 1.0),
-          color: Colors.orange.shade300));
+          color: Colors.orange.shade300,
+        ),
+      );
     }
     if (rows.isEmpty) return [];
     return [
@@ -751,11 +786,17 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin, Wi
       Container(
         padding: const EdgeInsets.all(OmiSpacing.md),
         decoration: BoxDecoration(
-            color: OmiColors.surface1, borderRadius: OmiRadius.lgAll, border: Border.all(color: OmiColors.border)),
-        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          for (var i = 0; i < rows.length; i++) ...[if (i > 0) const SizedBox(height: OmiSpacing.md), rows[i]],
-        ]),
-      )
+          color: OmiColors.surface1,
+          borderRadius: OmiRadius.lgAll,
+          border: Border.all(color: OmiColors.border),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            for (var i = 0; i < rows.length; i++) ...[if (i > 0) const SizedBox(height: OmiSpacing.md), rows[i]],
+          ],
+        ),
+      ),
     ];
   }
 
@@ -801,23 +842,32 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin, Wi
           borderRadius: OmiRadius.lgAll,
           border: Border.all(color: OmiColors.border),
         ),
-        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Row(children: [
-            Expanded(
-                child: Text(l10n.usageChatThisMonth, style: OmiType.footnote.copyWith(color: OmiColors.textSecondary))),
-            Text(displayText ?? value, maxLines: 1, style: OmiType.footnote),
-          ]),
-          if (usageText != null) ...[
-            const SizedBox(height: OmiSpacing.xs),
-            LinearProgressIndicator(
-              value: percentage,
-              backgroundColor: OmiColors.surface3,
-              valueColor: AlwaysStoppedAnimation<Color>(color),
-              minHeight: 4,
-              borderRadius: OmiRadius.pillAll,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    l10n.usageChatThisMonth,
+                    style: OmiType.footnote.copyWith(color: OmiColors.textSecondary),
+                  ),
+                ),
+                Text(displayText ?? value, maxLines: 1, style: OmiType.footnote),
+              ],
             ),
+            if (usageText != null) ...[
+              const SizedBox(height: OmiSpacing.xs),
+              LinearProgressIndicator(
+                value: percentage,
+                backgroundColor: OmiColors.surface3,
+                valueColor: AlwaysStoppedAnimation<Color>(color),
+                minHeight: 4,
+                borderRadius: OmiRadius.pillAll,
+              ),
+            ],
           ],
-        ]),
+        ),
       ),
     );
   }

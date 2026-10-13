@@ -331,6 +331,8 @@ def _vertex_rejection_reason(preview: bytes) -> str:
     if not isinstance(message, str):
         return 'unknown'
     message = message.lower()
+    if 'too many states' in message:
+        return 'schema_too_many_states'
     if 'missing a thought_signature' in message or 'missing a thought signature' in message:
         return 'missing_thought_signature'
     if 'thought_signature' in message or 'thought signature' in message:
@@ -338,7 +340,7 @@ def _vertex_rejection_reason(preview: bytes) -> str:
     if 'thinking' in message:
         return 'thinking_config'
     if 'schema' in message:
-        if any(token in message for token in ('too complex', 'too many states', 'nesting', 'depth', 'too large')):
+        if any(token in message for token in ('too complex', 'nesting', 'depth', 'too large')):
             return 'schema_complexity'
         if any(token in message for token in ('$ref', '$defs', 'reference', 'ref:')):
             return 'schema_reference'

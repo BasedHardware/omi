@@ -1623,6 +1623,7 @@ test("OMI_TOOLS: required fields match expected per tool", () => {
     list_mail_messages: [],
     send_message: ["to", "text"],
     run_applescript: ["script"],
+    get_product_kb: [],
   };
   for (const tool of OMI_TOOLS) {
     const req = (tool.parameters as any).required ?? [];

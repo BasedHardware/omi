@@ -119,8 +119,6 @@ final class QuickActionsIconPatcher: NSObject {
   var session: WCSession?
     var flutterWatchAPI: WatchRecorderFlutterAPI?
     var rayBanMetaHostApi: RayBanMetaHostApiImpl?
-  private var audioChunks: [Int: (Data, Double)] = [:] // (audioData, sampleRate)
-  private var nextExpectedChunkIndex: Int = 0
   private var isRecordingActive: Bool = false // Track recording state to handle app restarts
 
   private static let periodicSyncIdentifier = "com.omi.recording-sync.refresh"
@@ -199,6 +197,13 @@ final class QuickActionsIconPatcher: NSObject {
   func didInitializeImplicitFlutterEngine(_ engineBridge: FlutterImplicitEngineBridge) {
     GeneratedPluginRegistrant.register(with: engineBridge.pluginRegistry)
     let messenger = engineBridge.applicationRegistrar.messenger()
+    FlutterMethodChannel(name: "com.omi/device_health_policy", binaryMessenger: messenger).setMethodCallHandler { call, result in
+      guard call.method == "setPolicy", let args = call.arguments as? [String: Any], let epoch = args["epoch"] as? NSNumber else {
+        result(FlutterMethodNotImplemented); return
+      }
+      OmiBleManager.shared.setDeviceHealthPolicy(enabled: args["enabled"] as? Bool == true, epoch: epoch.int64Value, retire: args["retire"] as? Bool == true)
+      result(nil)
+    }
     let syncChannel = FlutterMethodChannel(name: "com.omi/periodic_recording_sync", binaryMessenger: messenger)
     periodicSyncChannel = syncChannel
     syncChannel.setMethodCallHandler { [weak self] call, result in
@@ -468,11 +473,21 @@ final class QuickActionsIconPatcher: NSObject {
             result(FlutterError(code: "battery_unavailable", message: "Phone battery unavailable", details: nil))
             return
         }
-        result([
+        let thermal: String?
+        switch ProcessInfo.processInfo.thermalState {
+        case .nominal: thermal = "nominal"
+        case .fair: thermal = "fair"
+        case .serious: thermal = "serious"
+        case .critical: thermal = "critical"
+        @unknown default: thermal = nil
+        }
+        var snapshot: [String: Any] = [
             "battery_level": Int((level * 100).rounded()),
             "battery_charging": state == .charging || state == .full,
             "os_battery_saver": ProcessInfo.processInfo.isLowPowerModeEnabled
-        ])
+        ]
+        if let thermal { snapshot["thermal_state"] = thermal }
+        result(snapshot)
     }
 
     // TestFlight environment detection
@@ -765,53 +780,17 @@ final class QuickActionsIconPatcher: NSObject {
             return
         }
 
-        audioChunks[chunkIndex] = (audioChunk, sampleRate)
-
-        if isLast {
-            reassembleAndSendAudioData()
-        } else {
-            // Prepend 3 dummy bytes so downstream can uniformly strip headers
-            var prefixedChunk = Data([0x00, 0x00, 0x00])
-            prefixedChunk.append(audioChunk)
-            let flutterData = FlutterStandardTypedData(bytes: prefixedChunk)
-            self.flutterWatchAPI?.onAudioChunk(audioChunk: flutterData, chunkIndex: Int64(chunkIndex), isLast: isLast, sampleRate: sampleRate) { result in
-                switch result {
-                case .success:
-                    break
-                case .failure(let error):
-                    print("Audio chunk \(chunkIndex) sent to Flutter - Error: \(error.message)")
-                }
-            }
-        }
-    }
-
-    private func reassembleAndSendAudioData() {
-        // Sort chunks by index and combine them
-        let sortedChunks = audioChunks.sorted(by: { $0.key < $1.key })
-        var combinedData = Data()
-        var sampleRate: Double = 48000.0 // Default fallback
-
-        for (_, chunkTuple) in sortedChunks {
-            let (chunkData, chunkSampleRate) = chunkTuple
-            combinedData.append(chunkData)
-            sampleRate = chunkSampleRate
-        }
-
-        // Prepend 3 dummy bytes for full buffer as well
-        var prefixed = Data([0x00, 0x00, 0x00])
-        prefixed.append(combinedData)
-        let flutterData = FlutterStandardTypedData(bytes: prefixed)
-        self.flutterWatchAPI?.onAudioData(audioData: flutterData) { result in
+        // Each chunk goes straight to Flutter's capture path, the only consumer of Watch audio.
+        guard let payload = WatchAudioChunkRelay.flutterPayload(for: audioChunk) else { return }
+        let flutterData = FlutterStandardTypedData(bytes: payload)
+        self.flutterWatchAPI?.onAudioChunk(audioChunk: flutterData, chunkIndex: Int64(chunkIndex), isLast: isLast, sampleRate: sampleRate) { result in
             switch result {
             case .success:
                 break
             case .failure(let error):
-                print("Complete audio data sent to Flutter - Error: \(error.message)")
+                print("Audio chunk \(chunkIndex) sent to Flutter - Error: \(error.message)")
             }
         }
-
-        audioChunks.removeAll()
-        nextExpectedChunkIndex = 0
     }
 }
 
@@ -841,8 +820,6 @@ extension AppDelegate: WCSessionDelegate {
             switch method {
             case "startRecording":
                 self.isRecordingActive = true
-                self.audioChunks.removeAll()
-                self.nextExpectedChunkIndex = 0
                 
                 DispatchQueue.main.async {
                     self.flutterWatchAPI?.onRecordingStarted() { result in

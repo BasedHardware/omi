@@ -165,9 +165,9 @@ void main() {
     final ines = tester.getTopLeft(find.text('Inês Moreira')).dy;
     expect(maya < because && because < sam && sam < cs && cs < notHeard && notHeard < ines, isTrue);
 
-    expect(find.text('You labeled 6 times · voice ready'), findsOneWidget);
-    expect(find.text('Picked in 2 suggestions · voice ready'), findsOneWidget);
-    expect(find.text('Only auto-matched, never confirmed · needs voice'), findsOneWidget);
+    expect(find.text('You labeled 6 times · voice saved'), findsOneWidget);
+    expect(find.text('Picked in 2 suggestions · voice saved'), findsOneWidget);
+    expect(find.text('Labeled automatically, not confirmed yet · no voice sample yet'), findsOneWidget);
     expect(find.text('Never confirmed · not heard yet'), findsOneWidget);
     expect(find.bySemanticsLabel(RegExp(r'^Maya Chen, Pinned, Confidence: Confirmed')), findsOneWidget);
     expect(find.bySemanticsLabel(RegExp(r'^Because, Confidence: Unverified')), findsOneWidget);
@@ -394,9 +394,9 @@ void main() {
     );
     expect(find.text('Picked in 2 suggestions'), findsWidgets);
     expect(find.text('Helps'), findsWidgets);
-    expect(find.text('1 match moved to someone else'), findsOneWidget);
+    expect(find.text('You changed 1 automatic label to someone else'), findsOneWidget);
     expect(find.text('Hurts'), findsOneWidget);
-    expect(find.text('3 automatic matches nobody confirmed'), findsOneWidget);
+    expect(find.text('3 automatic labels not confirmed yet'), findsOneWidget);
     expect(find.text('Barely helps'), findsOneWidget);
     expect(find.text('Label them in 1 more conversation.'), findsOneWidget);
   });
@@ -416,10 +416,11 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Pin'), findsOneWidget);
-    expect(find.text('Omi asks before matching close voices.'), findsOneWidget);
+    expect(
+        find.text("Pinned people stay at the top of your People list and aren't removed by Clean Up."), findsOneWidget);
     await tester.tap(find.byKey(const Key('person_confidence_pill')));
     await tester.pumpAndSettle();
-    expect(find.text('Maya Chen is Confirmed. Omi keeps learning from each label.'), findsOneWidget);
+    expect(find.text("Maya Chen is Confirmed. There's nothing else you need to do."), findsOneWidget);
     Navigator.of(tester.element(find.text('Confidence'))).pop();
     await tester.pumpAndSettle();
 

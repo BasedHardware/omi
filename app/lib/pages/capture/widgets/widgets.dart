@@ -1,4 +1,5 @@
 import 'package:omi/utils/platform/platform_manager.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import 'package:provider/provider.dart';
@@ -211,11 +212,14 @@ getTranscriptWidget(
   void Function(TranscriptSegment segment)? onRejectSpeakerLabel,
   DateTime? startedAt,
   String? currentSegmentId,
+  ValueListenable<String?>? highlightedSegment,
   String? followTargetSegmentId,
   bool followCurrentSegment = false,
   int playbackFollowRequest = 0,
   VoidCallback? onUserScroll,
   ValueChanged<TranscriptSegment>? onTopVisibleSegmentChanged,
+  Set<String>? selectedSegmentIds,
+  ValueChanged<TranscriptSegment>? onToggleSegmentSelection,
 }) {
   if (conversationCreating) {
     return const Padding(
@@ -260,11 +264,14 @@ getTranscriptWidget(
       onRejectSpeakerLabel: onRejectSpeakerLabel,
       startedAt: startedAt,
       currentSegmentId: currentSegmentId,
+      highlightedSegment: highlightedSegment,
       followTargetSegmentId: followTargetSegmentId,
       followCurrentSegment: followCurrentSegment,
       playbackFollowRequest: playbackFollowRequest,
       onUserScroll: onUserScroll,
       onTopVisibleSegmentChanged: onTopVisibleSegmentChanged,
+      selectedSegmentIds: selectedSegmentIds,
+      onToggleSegmentSelection: onToggleSegmentSelection,
     );
   }
 

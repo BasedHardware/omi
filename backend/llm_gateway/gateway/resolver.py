@@ -161,6 +161,11 @@ def select_lkg_route_for_failure(
 
 def is_lkg_eligible(active_route: RouteArtifact, failure_class: FailureClass | str) -> bool:
     normalized_failure_class = _normalize_failure_class(failure_class)
+    if active_route.lane_id == 'omi:auto:dream-reasoning' and normalized_failure_class in {
+        FailureClass.RESERVED_CAPACITY_UNAVAILABLE,
+        FailureClass.PROVIDER_429_OMI_PAID,
+    }:
+        return False
     if normalized_failure_class in NEVER_LKG_FAILURE_CLASSES or is_byok_failure_class(normalized_failure_class):
         return False
     if normalized_failure_class in set(active_route.fallback_policy.never_fallback_on):

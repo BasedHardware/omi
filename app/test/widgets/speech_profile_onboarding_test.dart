@@ -8,6 +8,7 @@ import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/pages/onboarding/speech_profile_widget.dart';
 import 'package:omi/pages/onboarding/guided_voice_controller.dart';
 import '../providers/guided_voice_controller_test.dart' show FakeVoiceIO;
+import '../providers/guided_voice_experience_test.dart' show ExperienceIO;
 
 Future<void> pump(
   WidgetTester tester,
@@ -88,6 +89,8 @@ void main() {
     await tester.ensureVisible(find.byKey(const Key('introduction_next')));
     await tester.tap(find.byKey(const Key('introduction_next')));
     await tester.pumpAndSettle();
+    await flow.confirmAnswer();
+    await tester.pumpAndSettle();
     expect(flow.promptIndex, 1);
     expect(flow.active, isTrue);
     expect(find.byKey(const Key('speech_profile_start')), findsNothing);
@@ -102,6 +105,95 @@ void main() {
     expect(find.byType(TextFormField), findsOneWidget);
     expect(find.text('Voice profile saved'), findsNothing);
     expect(io.remembered, isEmpty);
+  });
+
+  testWidgets('typed recovery saves through review and payoff Continue stays enabled during chat', (tester) async {
+    final io = ExperienceIO()..transcriptionFails = true;
+    final flow = GuidedVoiceController(io);
+    addTearDown(flow.dispose);
+    await flow.start();
+    io.speak();
+    await flow.next();
+    await pump(tester, flow);
+    expect(find.byKey(const Key('introduction_type')), findsOneWidget);
+    await tester.tap(find.byKey(const Key('introduction_type')));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byKey(const Key('introduction_typed_0')), 'I build bicycles.');
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('introduction_save_typed')));
+    await tester.pumpAndSettle();
+    expect(flow.answers.single.text, 'I build bicycles.');
+    expect(io.remembered, isEmpty, reason: 'typed text still needs final review');
+    await flow.skipPrompt();
+    await flow.skipPrompt();
+    await flow.skipPrompt();
+    io.pendingChat = Completer<String>();
+    var exits = 0;
+    await pump(tester, flow, next: () => exits++);
+    await tester.tap(find.byKey(const Key('introduction_save_all')));
+    await tester.pumpAndSettle();
+    expect(io.remembered, ['I build bicycles.']);
+    expect(flow.payoffLoading, isTrue);
+    expect(find.byKey(const Key('payoff_answer')), findsNothing);
+    await tester.tap(find.byKey(const Key('payoff_continue')));
+    expect(exits, 1);
+    io.pendingChat!.complete('Late answer');
+    await tester.pumpAndSettle();
+    expect(flow.payoffSource, 'fallback');
+  });
+
+  testWidgets('failure offers same-clip retry without claiming Recording Paused; confirmation can skip',
+      (tester) async {
+    final io = ExperienceIO()..transcriptionFails = true;
+    final flow = GuidedVoiceController(io);
+    addTearDown(flow.dispose);
+    await flow.start();
+    io.speak();
+    await flow.next();
+    await pump(tester, flow);
+    expect(find.text('Recording Paused'), findsNothing);
+    expect(find.byKey(const Key('introduction_retry_transcription')), findsOneWidget);
+    io.transcriptionFails = false;
+    await tester.tap(find.byKey(const Key('introduction_retry_transcription')));
+    await tester.pumpAndSettle();
+    expect(io.startCount, 1);
+    expect(find.byKey(const Key('introduction_skip_prompt')), findsOneWidget);
+    await tester.tap(find.byKey(const Key('introduction_skip_prompt')));
+    await tester.pumpAndSettle();
+    expect(flow.answers, isEmpty);
+    expect(flow.promptIndex, 1);
+    await flow.pause();
+  });
+  testWidgets('fallback shows each saved sentence once with no repeated question block', (tester) async {
+    final flow = GuidedVoiceController(ExperienceIO()..chatFails = true);
+    addTearDown(flow.dispose);
+    await flow.typeInstead();
+    await flow.submitTyped('I build bicycles.');
+    await flow.skipPrompt();
+    await flow.skipPrompt();
+    await flow.skipPrompt();
+    await flow.saveAll();
+    await flow.showPayoff('What should I focus on this week?');
+    await pump(tester, flow);
+    expect(find.text('I build bicycles.'), findsOneWidget);
+    expect(find.text('What should I focus on this week?'), findsNothing);
+    expect(find.byKey(const Key('payoff_fallback')), findsOneWidget);
+    expect(find.byKey(const Key('payoff_continue')), findsOneWidget);
+  });
+  testWidgets('typed prompt stays scrollable with a keyboard on a small phone at large text', (tester) async {
+    final flow = GuidedVoiceController(ExperienceIO());
+    addTearDown(flow.dispose);
+    await flow.typeInstead();
+    await pump(tester, flow, scale: 1.8, size: const Size(320, 568));
+    tester.view.viewInsets = const FakeViewPadding(bottom: 250);
+    addTearDown(tester.view.resetViewInsets);
+    await tester.enterText(find.byKey(const Key('introduction_typed_0')), 'I build bicycles.');
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.byKey(const Key('introduction_save_typed')));
+    expect(tester.takeException(), isNull);
+    await tester.tap(find.byKey(const Key('introduction_save_typed')));
+    await tester.pumpAndSettle();
+    expect(flow.answers.single.text, 'I build bicycles.');
   });
 
   testWidgets('the silence hint shows only while the microphone hears nothing', (tester) async {
@@ -148,6 +240,7 @@ void main() {
     io.text = 'Launch my project';
     io.speak();
     await flow.next();
+    await flow.confirmAnswer();
     await tester.pumpAndSettle();
     expect(find.text('My goal'), findsOneWidget);
     expect(io.goals, isEmpty);
@@ -155,10 +248,10 @@ void main() {
     await tester.pumpAndSettle();
     expect(io.goals, ['Launch my project']);
     expect(io.remembered, isEmpty);
-    expect(find.text('Your goal is saved'), findsOneWidget);
+    expect(find.byKey(const Key('payoff_title')), findsOneWidget);
   });
 
-  testWidgets('one save action saves voice and goal and exits without Continue', (tester) async {
+  testWidgets('one save action saves voice and goal and presents payoff before Continue', (tester) async {
     final io = FakeVoiceIO();
     final flow = GuidedVoiceController(io);
     addTearDown(flow.dispose);
@@ -169,6 +262,7 @@ void main() {
     io.text = 'Right now my number one goal is to ship Omi.';
     io.speak();
     await flow.next();
+    await flow.confirmAnswer();
     var exits = 0;
     await pump(tester, flow, next: () => exits++);
     expect(find.text('Ship Omi'), findsOneWidget);
@@ -177,6 +271,9 @@ void main() {
     await tester.pumpAndSettle();
     expect(io.uploads, hasLength(1));
     expect(io.goals, ['Ship Omi']);
+    expect(exits, 0);
+    expect(find.byKey(const Key('payoff_title')), findsOneWidget);
+    await tester.tap(find.byKey(const Key('payoff_continue')));
     expect(exits, 1);
   });
 
@@ -191,6 +288,7 @@ void main() {
     io.text = 'My goal is to ship Omi.';
     io.speak();
     await flow.next();
+    await flow.confirmAnswer();
     await pump(tester, flow);
     await tester.ensureVisible(find.text('Use Original Wording'));
     await tester.tap(find.text('Use Original Wording'));
@@ -209,6 +307,7 @@ void main() {
     await flow.start();
     io.speak();
     await flow.next();
+    await flow.confirmAnswer();
     await pump(tester, flow, size: const Size(320, 568), scale: 2);
     tester.view.viewInsets = const FakeViewPadding(bottom: 240);
     addTearDown(tester.view.resetViewInsets);
@@ -227,6 +326,7 @@ void main() {
     await flow.start();
     io.speak();
     await flow.next();
+    await flow.confirmAnswer();
     await flow.skipPrompt();
     await flow.skipPrompt();
     await flow.skipPrompt();
@@ -247,6 +347,7 @@ void main() {
     await flow.start();
     io.speak();
     await flow.next();
+    await flow.confirmAnswer();
     await flow.skipPrompt();
     await flow.skipPrompt();
     await flow.skipPrompt();

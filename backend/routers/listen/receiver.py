@@ -130,6 +130,7 @@ from utils.stt.speaker_identity import SpeakerProviderEpoch
 from utils.stt.vad_gate import GatedSTTSocket, VADStreamingGate, VAD_GATE_MODE, is_gate_enabled
 from utils.transcribe_decisions import (
     TARGET_SAMPLE_RATE,
+    custom_stt_clock_origin,
     decide_multi_channel_mix,
     decide_multi_channel_stt_send,
     decide_stt_buffer_flush,
@@ -1466,9 +1467,36 @@ class ListenReceiver(ReplayFilterMixin):
         record_live_connection(self.host, self._serving_provider())
         self._pending_live_failover = None if hop.settled else hop
         record_live_stt_failover_accepted(provider=self.host.stt_service.value, platform=self._telemetry_platform())
+        # Bind the identity this adoption now serves BEFORE any proof can
+        # release the episode: the dial-ledger rebase and the receiver-side
+        # session-failure sets both need to know who is holding the session.
+        self.recovery.note_serving_identity(self._attempted_identity(raw, self.host.stt_service))
+        self._release_stt_session_failures(self._serving_provider())
         self.recovery.adopted(self._candidate_token)
         logger.info(f'STT failover mid-session: {dead_provider} -> {self.host.stt_service.value}')
         return True
+
+    def _release_stt_session_failures(self, serving_provider: str) -> None:
+        """Drop the current provider from this session's recovery exclusions.
+
+        A hop the receiver actually adopted is new evidence that the provider
+        serves: its family dialled, connected, and passed the serving gate
+        after this session condemned it. Keeping it failed would pair the
+        controller ledger with a receiver-side veto and exhaust the walk on
+        the next ordinary death. Providers that never re-dialled here keep
+        their session exclusion — this releases only the family now serving,
+        and the provider-level circuit breaker still owns cross-session
+        health.
+        """
+        family = provider_for_service(serving_provider) or serving_provider
+        released = family in self._stt_failed_providers
+        self._stt_failed_providers.discard(family)
+        identity = self.recovery._serving_identity if self.recovery is not None else None
+        if isinstance(identity, str):
+            self._stt_failed_targets.discard(identity)
+        if released:
+            self._stt_rebuild_attempts = 0
+            self._stt_failed_reasons.pop(family, None)
 
     async def _reject_candidate(self, raw: Any, epoch: Any, hop: Any, previous: Any) -> None:
         """Release an unadopted replacement and keep walking the episode."""
@@ -1576,15 +1604,28 @@ class ListenReceiver(ReplayFilterMixin):
                     retry_after=error.retry_after,
                 )
                 return False
+            except LiveChainExhausted as error:
+                # Typed exhaustion is the chain's normal terminal answer, not
+                # an unexpected crash: the dial already emitted its
+                # `omi_fallback_event ... outcome=exhausted` WARNING and the
+                # death monitor converts the exhaustion latch below into the
+                # typed `stt_failed` terminal status. `logger.exception` here
+                # re-printed the chain's own frames once per session
+                # (2026-10-09: the `STT failover connect raised` traceback
+                # mirrored the `LiveChainExhausted` fallback events 1:1,
+                # ~100/30m); one classified line keeps the fault signal.
+                # Untyped dial failures keep the traceback.
+                if managed_chain_enabled(self.host):
+                    self.host.stt_service, self.host.stt_language, self.host.stt_model = previous_selection
+                logger.error('STT failover chain exhausted (%s)', error)
+                hop.note_failure(None)
+                settle_terminal_socket(self.stt_socket, self._serving_provider(), 'connection_lost')
+                self.recovery.exhaust()
+                return False
             except Exception as error:
                 if managed_chain_enabled(self.host):
                     self.host.stt_service, self.host.stt_language, self.host.stt_model = previous_selection
                 logger.exception('STT failover connect raised')
-                if isinstance(error, LiveChainExhausted):
-                    hop.note_failure(None)
-                    settle_terminal_socket(self.stt_socket, self._serving_provider(), 'connection_lost')
-                    self.recovery.exhaust()
-                    return False
                 self._stt_failed_providers.add(provider_for_service(service) or service.value)
                 hop.note_failure(None, continuing=True)
                 continue
@@ -2000,6 +2041,10 @@ class ListenReceiver(ReplayFilterMixin):
         elif kind == 'suggested_transcript' and self.host.use_custom_stt:
             segments = payload.get('segments', [])
             provider = payload.get('stt_provider')
+            state = getattr(self.host, 'state', None)
+            if state is not None and getattr(state, 'first_audio_byte_timestamp', None) is None:
+                # Custom STT may run without forwarding raw audio: set the clock origin, not the first-audio funnel.
+                state.first_audio_byte_timestamp = custom_stt_clock_origin(segments, time.time())
             self._enqueue_stt_segments(segments, provider=provider or 'custom')
         elif kind == 'speaker_assigned':
             await self._handle_speaker_assigned(payload)

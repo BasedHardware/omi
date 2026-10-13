@@ -1,9 +1,67 @@
+import AppKit
 import Foundation
 import XCTest
 
 @testable import Omi_Computer
 
 final class ChatCitationTests: XCTestCase {
+  @MainActor
+  func testLocalRecapAdjacentCitationsRemainOpenableAfterFinalizationAndJournalReload() async throws {
+    let references = (1...8).map {
+      ChatCitationReference(
+        ordinal: $0, kind: .conversation, sourceID: "conversation-\($0)", title: "Meeting \($0)")
+    }
+    let output = ChatToolExecutor.typedReadToolResult(
+      toolName: "get_daily_recap",
+      sections: [
+        [
+          "name": "conversations", "total": references.count,
+          "items": references.map {
+            ["title": $0.title, "sourceId": $0.sourceID, "citationMarker": "[\($0.ordinal)]"]
+          },
+        ]
+      ],
+      totals: ["conversations": references.count])
+    let answer = "You discussed compute costs.[8][7][6] I can name them.[1][2][4][6][7]"
+    let provider = ChatProvider()
+    provider.messages = [
+      ChatMessage(
+        id: "local-recap", text: "You discussed", sender: .ai, isStreaming: true,
+        contentBlocks: [
+          .toolCall(
+            id: "recap-tool", name: "get_daily_recap", status: .completed,
+            toolUseId: "recap-use", input: nil, output: output)
+        ])
+    ]
+    _ = await provider.finalizeAssistantMessageCitations(
+      messageId: "local-recap", queryText: answer, selectedReferences: [],
+      requestedSources: false, terminalCitationReferences: [])
+    let message = try XCTUnwrap(provider.messages.first)
+    let write = message.journalWrite(origin: "legacy", status: .completed)
+    let turn = try XCTUnwrap(
+      KernelJournalTurn(dictionary: [
+        "turnId": message.id, "role": "assistant", "content": message.text,
+        "status": "completed", "contentBlocks": [], "metadataJson": write.metadataJSON,
+        "createdAtMs": 1,
+      ]))
+    let restored = turn.chatMessage()
+    let citations = restored.inlineCitationReferences
+    XCTAssertEqual(Set(citations.map(\.ordinal)), [1, 2, 4, 6, 7, 8])
+    let rendered = try XCTUnwrap(
+      ChatSelectableProse.attributedString(
+        markdown: restored.visibleAnswerText, style: .assistant, fontSize: 14, fontScale: 1,
+        citationOrdinals: Set(citations.map(\.ordinal))))
+    for match in ChatCitationMarkup.markerMatches(
+      in: rendered.string, pattern: ChatCitationMarkup.numericMarkerPattern)
+    {
+      let range = NSRange(match.range, in: rendered.string)
+      let link = try XCTUnwrap(rendered.attribute(.link, at: range.location, effectiveRange: nil) as? URL)
+      XCTAssertEqual(ChatSelectableProse.citationOrdinal(from: link), match.ordinal)
+      XCTAssertTrue(citations.contains { $0.ordinal == match.ordinal && $0.canOpen })
+    }
+    XCTAssertEqual(ChatCitationMarkup.ordinals(in: rendered.string), [8, 7, 6, 1, 2, 4, 6, 7])
+  }
+
   func testOrdinalParserPreservesReadingOrderAndAdjacentMarkers() {
     XCTAssertEqual(
       ChatCitationMarkup.ordinals(in: "Claim.[20][27]\nAnother [3]. Repeated [20]."),

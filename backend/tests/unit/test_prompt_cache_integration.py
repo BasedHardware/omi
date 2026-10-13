@@ -132,9 +132,12 @@ for submodule in [
     "mem_db",
     "notifications",
     "auth",
+    "messaging",
 ]:
     mod = _stub_module(f"database.{submodule}")
     setattr(database_mod, submodule, mod)
+
+sys.modules["database.messaging"].MessagingStore = MagicMock()
 
 sys.modules["database.llm_usage"].record_llm_usage = MagicMock()
 sys.modules["database.notifications"].get_mentor_notification_frequency = MagicMock(return_value=3)
@@ -437,6 +440,11 @@ def _get_agentic_module():
     sys.modules.pop("utils.retrieval.agentic", None)
 
     # Module-scope import in agentic.py; stub is enough for CORE_TOOLS / convert_tools tests.
+    _load_module_from_file("utils.retrieval.chat_mount", BACKEND_DIR / "utils" / "retrieval" / "chat_mount.py")
+    _load_module_from_file(
+        "database.firestore_transaction_retry",
+        BACKEND_DIR / "database" / "firestore_transaction_retry.py",
+    )
     chat_scope_mod = _stub_module("utils.retrieval.chat_scope")
     if not hasattr(chat_scope_mod, "build_chat_scope"):
         chat_scope_mod.build_chat_scope = MagicMock(return_value=None)
@@ -452,6 +460,10 @@ def _get_agentic_module():
 
     # Create mock tools with names that look like real LangChain tools
     tool_names = [
+        "update_conversation",
+        "rename_person",
+        "edit_memory",
+        "delete_memory",
         "get_conversations_tool",
         "search_conversations_tool",
         "get_memories_tool",
@@ -729,10 +741,10 @@ def test_static_prefix_exceeds_minimum_cache_tokens():
 # ---------------------------------------------------------------------------
 
 
-def test_core_tools_has_34_tools():
+def test_core_tools_has_38_tools():
     """CORE_TOOLS includes the three JIT-gated ledger write verbs; web search remains server-built-in."""
     agentic_mod = _get_agentic_module()
-    assert len(agentic_mod.CORE_TOOLS) == 34, f"CORE_TOOLS has {len(agentic_mod.CORE_TOOLS)} tools, expected 34"
+    assert len(agentic_mod.CORE_TOOLS) == 38, f"CORE_TOOLS has {len(agentic_mod.CORE_TOOLS)} tools, expected 38"
 
 
 def test_core_tools_list_creates_independent_copy():
@@ -755,9 +767,9 @@ def test_core_tools_list_creates_independent_copy():
     mock_app_tool.name = "custom_app_tool"
     tools_a.append(mock_app_tool)
 
-    assert len(tools_a) == 35
-    assert len(tools_b) == 34
-    assert len(agentic_mod.CORE_TOOLS) == 34, "CORE_TOOLS was mutated!"
+    assert len(tools_a) == 39
+    assert len(tools_b) == 38
+    assert len(agentic_mod.CORE_TOOLS) == 38, "CORE_TOOLS was mutated!"
 
 
 def test_core_tools_order_matches_exports():
@@ -775,6 +787,10 @@ def test_core_tools_order_matches_exports():
         "get_action_items_tool",
         "create_action_item_tool",
         "update_action_item_tool",
+        "update_conversation",
+        "rename_person",
+        "edit_memory",
+        "delete_memory",
         "get_omi_product_info_tool",
         "get_calendar_events_tool",
         "create_calendar_event_tool",
