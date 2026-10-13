@@ -101,6 +101,7 @@ def entries():
             neutrals={
                 'caps': (Caps(), 'admission policy only'),
                 'rng': (None, 'coin does not alter query shape'),
+                'reclaim_sink': (None, 'count-only output after commit does not alter query shape'),
                 'canary': (False, 'cohort gate only'),
                 'now': (datetime(2026, 10, 9, tzinfo=timezone.utc), 'UTC accounting day only'),
             },

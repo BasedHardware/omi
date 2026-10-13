@@ -875,7 +875,9 @@ def test_dream_entity_summary_and_vocabulary_journal_roundtrip(harness):
     assert store.decode_doc(uid, cache.get().to_dict())['summary'] == edit.after
     assert edit.after not in str(cache.get().to_dict())
     term = Term(kind='project', spelling='ToyBoat', evidence=[edit.target])
-    assert dream_tools.apply_vocabulary(uid, [term]) == 'applied'
+    with pytest.raises(ValueError, match='dream_vocabulary_requires_acceptance'):
+        dream_tools.apply_vocabulary(uid, [term])
+    assert dream_tools.apply_vocabulary(uid, [term], user_accepted=True) == 'applied'
     vocabulary = user.collection('dream_vocabulary').document('current')
     assert 'ToyBoat' not in str(vocabulary.get().to_dict())
     changes = client.get('/v1/review/changes').json()['changes']
