@@ -10,6 +10,7 @@ import 'package:omi/backend/preferences.dart';
 import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/pages/settings/widgets/cancel_subscription_sheet.dart';
 import 'package:omi/models/subscription.dart';
+import 'package:omi/models/plan_storefront.dart';
 import 'package:omi/pages/settings/transcription_settings_page.dart';
 import 'package:omi/pages/settings/widgets/plans/plan_cards.dart';
 import 'package:omi/pages/settings/widgets/plans/plan_display_name.dart';
@@ -221,7 +222,7 @@ class _PlansSheetState extends State<PlansSheet> {
     await _handleSwitchToFreePlan();
   }
 
-  Future<void> _handleUpgradeWithSelectedPlan() async {
+  Future<void> _handleUpgradeWithSelectedPlan({StorefrontPrice? storefrontPrice}) async {
     final bool isYearly = selectedPlan == 'yearly';
 
     // Get the price ID from the available plans
@@ -247,6 +248,11 @@ class _PlansSheetState extends State<PlansSheet> {
     }
 
     final priceId = selectedPlanData['id'] as String;
+    // A presentation payload cannot silently redirect checkout to a different price.
+    if (storefrontPrice != null && storefrontPrice.id != priceId) {
+      OmiFeedback.error(context, context.l10n.selectedPlanNotAvailable);
+      return;
+    }
 
     // Check if user is upgrading from monthly to annual
     final provider = context.read<UsageProvider>();
