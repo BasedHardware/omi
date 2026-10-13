@@ -44,6 +44,7 @@ import 'package:omi/backend/http/shared.dart' show accountDeletionWebSocketClose
 import 'package:omi/services/capture/capture_seams.dart';
 import 'package:omi/services/capture/capture_session_owner.dart';
 import 'package:omi/services/capture/capture_wedge_monitor.dart';
+import 'package:omi/services/capture/empty_recording_notice.dart';
 import 'package:omi/services/capture/optimistic_processing.dart';
 import 'package:omi/services/capture/speaker_suggestions.dart';
 import 'package:omi/services/services.dart';
@@ -115,6 +116,7 @@ class CaptureController extends ChangeNotifier
   final IMicRecorderService? _phoneMicBatchRecorder;
   final Future<bool> Function(String deviceId, int level)? _speakerHaptic;
   final Future<CreateConversationResponse?> Function()? _processInProgressConversationOverride;
+  final Future<InProgressProcessOutcome> Function()? _processInProgressOutcomeOverride;
   final Future<DeviceConnection?> Function(String deviceId)? _deviceConnectionLoader;
   final ValueListenable<PhoneCallState>? _omiCallState;
   final CaptureNativeWriterGate _nativeWriterGate;
@@ -126,6 +128,9 @@ class CaptureController extends ChangeNotifier
   late final NativeBatchGeolocationPreferenceFence _phoneBatchGeolocationPreference =
       NativeBatchGeolocationPreferenceFence(writer: _writePhoneBatchGeolocationPreference);
   final RecordingLifecycleTelemetry _recordingTelemetry;
+  int _captureExplanationGeneration = 0;
+  int? _deliveredExplanationGeneration;
+  int? _announcedNoConversationGeneration;
   final CalendarCaptureGapMonitor? _calendarGapMonitor;
   final CaptureLivenessWatchdog _livenessWatchdog = CaptureLivenessWatchdog();
   bool _livenessCheckRunning = false;
@@ -305,6 +310,7 @@ class CaptureController extends ChangeNotifier
     CaptureConversationSocketOpen? openSocket,
     CaptureSessionOwner? sessionOwner,
     Future<CreateConversationResponse?> Function()? processInProgressConversation,
+    Future<InProgressProcessOutcome> Function()? processInProgressOutcome,
     Future<DeviceConnection?> Function(String deviceId)? deviceConnectionLoader,
     ValueListenable<PhoneCallState>? omiCallState,
     CaptureNativeWriterGate? nativeWriterGate,
@@ -329,6 +335,7 @@ class CaptureController extends ChangeNotifier
         _openSocketOverride = openSocket,
         _sessionOwner = sessionOwner,
         _processInProgressConversationOverride = processInProgressConversation,
+        _processInProgressOutcomeOverride = processInProgressOutcome,
         _deviceConnectionLoader = deviceConnectionLoader,
         _omiCallState = omiCallState,
         _nativeWriterGate = nativeWriterGate ?? const NoopCaptureNativeWriterGate(),
@@ -955,6 +962,24 @@ class CaptureController extends ChangeNotifier
 
   /// Completes when the last Process Now request has an answer.
   Future<void>? _processInFlight;
+  Future<CreateConversationResponse?>? _lastProcessRequest;
+  bool _firstCaptureProcess = false;
+
+  /// Finish through the coordinator and return that exact Process Now response.
+  /// Used by onboarding to avoid attributing an unrelated list refresh to this capture.
+  Future<CreateConversationResponse?> finishCaptureWithResult() async {
+    _lastProcessRequest = null;
+    _firstCaptureProcess = true;
+    try {
+      await finishCapture();
+      final request = _lastProcessRequest;
+      if (request == null) throw StateError('capture did not request live processing');
+      return await request;
+    } finally {
+      _firstCaptureProcess = false;
+    }
+  }
+
   // Force-processing requests share one optimistic row; only the newest may remove it.
   int _processingPlaceholderOwner = 0;
 
@@ -1012,7 +1037,7 @@ class CaptureController extends ChangeNotifier
       final health = _ingressPort?.ingressHealth(deviceId);
       if (_usesNativeIngress && health?.verifiedAt(_now()) == true) {
         _verifiedIngressStartedAt ??= _now();
-        _recordingTelemetry.markStarted(evidence: 'native_ingress');
+        _markCaptureStarted(evidence: 'native_ingress');
       } else if (health == null) {
         _verifiedIngressStartedAt = null;
       }
@@ -1798,6 +1823,7 @@ class CaptureController extends ChangeNotifier
     _voiceCommandSession = null;
     _voiceCommandTrigger = null;
     _lastVoiceCommandAutoSubmitAt = autoSubmitted ? _now() : null;
+    if (autoSubmitted) deviceOnboardingProvider?.onQuestionAutoSubmitted();
 
     // The started-during-onboarding exemption only holds while the tutorial is
     // still active: if onboarding exited (dispose/skip/complete), the session
@@ -2745,7 +2771,7 @@ class CaptureController extends ChangeNotifier
         onRecording: () {
           if (!_admitsCapture(revision)) return;
           updateRecordingState(RecordingState.record);
-          _recordingTelemetry.markStarted();
+          _markCaptureStarted();
         },
         onStop: () {
           if (!_micInterrupted && !_phoneMicPaused) {
@@ -2957,7 +2983,7 @@ class CaptureController extends ChangeNotifier
       // before showing an OS location prompt. Native writers retry the bounded
       // preference while the file is open, so a later fix still gets a sidecar.
       unawaited(_capturePhoneBatchSessionLocation(batchLocationGeneration));
-      _recordingTelemetry.markStarted();
+      _markCaptureStarted();
     } catch (e, st) {
       // No socket to clean in batch — fail visibly instead of recording nothing.
       Logger.error('[CaptureProvider] phone mic batch start failed: $e\n$st');
@@ -3047,7 +3073,7 @@ class CaptureController extends ChangeNotifier
     await _resetState();
 
     if (recordingState == RecordingState.deviceRecord || recordingState == RecordingState.pause) {
-      if (!_usesNativeIngress || _ingressPort?.supportsIngressHealth == false) _recordingTelemetry.markStarted();
+      if (!_usesNativeIngress || _ingressPort?.supportsIngressHealth == false) _markCaptureStarted();
     } else if (deviceRequested) {
       _recordingTelemetry.failStart(failureClass: 'capture_unavailable');
       return const CaptureStageFailure('capture_unavailable');
@@ -3618,14 +3644,31 @@ class CaptureController extends ChangeNotifier
     _clearSessionLocation();
 
     _resetStateVariables();
-    final process = _processInProgressConversationOverride ?? processInProgressConversation;
-    final request = process();
+    final confirmedProcessing = _firstCaptureProcess;
+    final Future<InProgressProcessOutcome> request;
+    if (_processInProgressOutcomeOverride != null) {
+      request = _processInProgressOutcomeOverride!();
+    } else if (_processInProgressConversationOverride != null) {
+      request = _processInProgressConversationOverride!().then(
+        (result) => InProgressProcessOutcome(
+          response: result,
+          absence: result == null ? ProcessAbsence.transport : null,
+        ),
+      );
+    } else {
+      request = processInProgressConversationOutcome();
+    }
+    if (confirmedProcessing) {
+      _lastProcessRequest = request.then((outcome) => outcome.response);
+    }
     _processInFlight = request.then((_) {}, onError: (_) {});
-    request.then<void>((result) async {
+    request.then<void>((outcome) async {
       final conversationId = await OptimisticProcessingPlaceholder.applyProcessResult(
-        result: result,
+        result: outcome.response,
+        absence: outcome.absence,
         actions: externalActions,
         onCreated: _processConversationCreated,
+        onNoConversation: _onProcessProducedNoConversation,
       );
       if (sessionStart > 0 && conversationId != null) {
         if (phoneSync is LocalWalSyncImpl) {
@@ -3635,6 +3678,9 @@ class CaptureController extends ChangeNotifier
         _autoSyncSessionWals();
       }
     }).catchError((Object error, StackTrace stack) {
+      if (confirmedProcessing && placeholderOwner == _processingPlaceholderOwner) {
+        externalActions.removeProcessingConversation(OptimisticProcessingPlaceholder.id);
+      }
       Logger.debug('Process Now result handling failed: ${error.runtimeType}');
       return _reportDetachedCaptureError('capture_process_now', error, stack);
     });
@@ -3811,7 +3857,99 @@ class CaptureController extends ChangeNotifier
     }
 
     externalActions.upsertConversation(conversation);
+    _deliveredExplanationGeneration = _captureExplanationGeneration;
     PlatformManager.instance.analytics.conversationCreated(conversation, recordingDevice: _sessionRecordingDevice);
+    if (conversation.discarded) {
+      _announceNoConversation(
+        EmptyRecordingReason.discarded,
+        facts: RecordingCompletionFacts(
+          source: conversation.source?.name ?? _recordingTelemetry.completionFacts()?.source ?? 'omi',
+          durationSeconds: conversation.getDurationInSeconds(),
+          transcriptObserved: conversation.transcriptSegments.isNotEmpty,
+        ),
+        conversationSource: conversation.source,
+      );
+      return;
+    }
+    // A kept conversation answers this capture. Upsert already cleared Home.
+  }
+
+  void _markCaptureStarted({String? evidence}) {
+    if (!_recordingTelemetry.markStarted(evidence: evidence)) return;
+    _captureExplanationGeneration++;
+    _announcedNoConversationGeneration = null;
+  }
+
+  bool get _conversationDeliveredForCurrentCapture => _deliveredExplanationGeneration == _captureExplanationGeneration;
+
+  ConversationSource? _sessionConversationSource() {
+    final raw = conversationSourceForDeviceType(_sessionRecordingDevice?.type ?? _recordingDevice?.type);
+    if (raw == null) return null;
+    for (final source in ConversationSource.values) {
+      if (source.name == raw) return source;
+    }
+    return null;
+  }
+
+  void _onProcessProducedNoConversation(ProcessAbsence absence) {
+    if (_conversationDeliveredForCurrentCapture) return;
+    switch (absence) {
+      case ProcessAbsence.emptyBody:
+        _announceNoConversation(EmptyRecordingReason.emptyDeleted);
+      case ProcessAbsence.notFound:
+        // POST /v1/conversations returns 404 both when nothing was captured and
+        // when the conversation was already finalized. Let the conversation-created
+        // path set [_deliveredExplanationGeneration] before treating this as empty.
+        final generation = _captureExplanationGeneration;
+        _scheduling.once(Duration.zero, () {
+          if (lifetime.isClosed) return;
+          if (_deliveredExplanationGeneration == generation) return;
+          if (_announcedNoConversationGeneration == generation) return;
+          _announceNoConversation(EmptyRecordingReason.emptyDeleted);
+        });
+      case ProcessAbsence.transport:
+        _announceNoConversation(EmptyRecordingReason.nullResult, showUserCopy: false);
+    }
+  }
+
+  void _announceNoConversation(
+    EmptyRecordingReason reason, {
+    RecordingCompletionFacts? facts,
+    ConversationSource? conversationSource,
+    bool showUserCopy = true,
+  }) {
+    if (_announcedNoConversationGeneration == _captureExplanationGeneration) return;
+    final resolved = facts ?? _recordingTelemetry.completionFacts();
+    try {
+      var showCopy = showUserCopy;
+      if (reason == EmptyRecordingReason.discarded) {
+        final claim = externalActions.claimDiscardedOnlyExplanation();
+        if (claim == DiscardedOnlyClaim.notDiscardedOnly) return;
+        showCopy = claim == DiscardedOnlyClaim.shown;
+      } else if (showCopy) {
+        externalActions.showEmptyRecordingExplanation();
+      }
+      _announcedNoConversationGeneration = _captureExplanationGeneration;
+      PlatformManager.instance.analytics.recordingProducedNoConversation(
+        source: recordingSurfaceForSession(
+          conversationSource: conversationSource,
+          deviceSource: _sessionConversationSource(),
+          telemetrySource: resolved?.source,
+        ),
+        durationSeconds: resolved?.durationSeconds ?? 0,
+        transcriptObserved: resolved?.transcriptObserved ?? false,
+        reason: reason,
+      );
+      if (!showCopy) return;
+      final ctx = globalNavigatorKey.currentContext;
+      if (ctx != null) {
+        AppSnackbar.showSnackbar(
+          reason == EmptyRecordingReason.discarded ? ctx.l10n.discardedOnlyRecording : ctx.l10n.tooShortDesc,
+        );
+      }
+    } catch (error) {
+      Logger.debug('empty recording explanation failed: $error');
+    }
   }
 
   Future<void> _handleLastConvoEvent(String memoryId) async {

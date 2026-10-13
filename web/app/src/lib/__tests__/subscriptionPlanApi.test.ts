@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { version as webAppVersion } from '../../../package.json';
 import { decodePlan, planGrantsPaidCapability } from '@/types/user';
 
 vi.mock('@/lib/firebase', () => ({
@@ -28,23 +29,28 @@ describe('getUserSubscription plan decoding', () => {
   ])('decodes %s without capability inference', async (raw, expectedPaid) => {
     vi.stubGlobal(
       'fetch',
-      vi.fn(async () =>
-        new Response(
-          JSON.stringify({
-            subscription: {
-              plan: raw,
-              status: 'active',
-              features: [],
-              cancel_at_period_end: false,
-            },
-          }),
-          { headers: { 'content-type': 'application/json' } },
-        ),
+      vi.fn(
+        async () =>
+          new Response(
+            JSON.stringify({
+              subscription: {
+                plan: raw,
+                status: 'active',
+                features: [],
+                cancel_at_period_end: false,
+              },
+            }),
+            { headers: { 'content-type': 'application/json' } },
+          ),
       ),
     );
 
     const result = await getUserSubscription();
 
+    const headers = new Headers(vi.mocked(fetch).mock.calls[0][1]?.headers);
+    expect(headers.get('X-App-Platform')).toBe('web');
+    expect(headers.get('X-App-Version')).toBe(webAppVersion);
+    expect(headers.get('X-Omi-Plan-Identity')).toBe('1');
     expect(result).not.toBeNull();
     expect(result?.plan).toBe(raw);
     expect(result?.plan_identity).toEqual(decodePlan(raw));

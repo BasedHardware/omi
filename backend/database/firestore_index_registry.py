@@ -2067,6 +2067,8 @@ FIELD_INDEXING_EXEMPTIONS: tuple[tuple[str, str], ...] = (
     ('screen_activity', 'ocrText'),
     ('screen_activity', 'windowTitle'),
     ('conversations', 'live_transcript_replay_receipt'),
+    # Internal, bounded metadata read by document ID only; descendants inherit.
+    ('conversations', 'owner_recognition_diagnostics'),
 )
 
 FIELD_INDEX_REQUIREMENTS: tuple[FieldIndexRequirement, ...] = (
@@ -2110,7 +2112,6 @@ FIELD_INDEX_REQUIREMENTS: tuple[FieldIndexRequirement, ...] = (
         ('ASCENDING',),
     ),
     FieldIndexRequirement('memory_outbox_status_group_ascending', 'memory_outbox', 'status', ('ASCENDING',)),
-    FieldIndexRequirement('projection_repairs_status_group_ascending', 'projection_repairs', 'status', ('ASCENDING',)),
     FieldIndexRequirement(
         'task_recurrence_inbox_status_group_ascending', 'task_recurrence_inbox', 'status', ('ASCENDING',)
     ),

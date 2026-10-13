@@ -245,6 +245,16 @@ listener. The collector shares the instance network namespace and can scrape
 conditions for cohort work.
 Check execution completion as well as collector export errors after rollout.
 
+Measured 2026-10-12: Cloud Monitoring held no `notifications-job` series for
+`omi_daily_summary_*`; the only series came from `backend`, which imports the
+module and exports its zero-initialized children. The collector scraped the
+job but every export failed with `Permission monitoring.timeSeries.create
+denied`, because prod runs the job as `backend-jobs-runtime`, which has no
+`roles/monitoring.metricWriter`. A rejected export never fails the execution.
+Grant the role, then confirm that collector logs show no `PermissionDenied`.
+Recap outcome health does not wait for this: it reads Cloud Logging metrics
+(see the daily-summary runbook).
+
 Dispatch the notifications job and production metrics-egress workflows after
 merge. The Core Features daily-recap row stays No-data until both ship.
 The two log-based Cloud Monitoring alerts require only the notifications

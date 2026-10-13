@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/person.dart';
+import 'package:omi/services/capture/empty_recording_notice.dart';
 
 abstract interface class CaptureExternalActions {
   bool? get isOutOfCredits;
@@ -24,6 +25,19 @@ abstract interface class CaptureExternalActions {
   void upsertConversation(ServerConversation conversation);
 
   bool hasConversation(String conversationId);
+
+  /// Home should explain that the last recording was too short to keep.
+  void showEmptyRecordingExplanation();
+
+  /// Home should explain a discarded-only list.
+  ///
+  /// [DiscardedOnlyClaim.shown] is the first announcement.
+  /// [DiscardedOnlyClaim.alreadyShown] means the Home line was already shown,
+  /// and the capture should still emit analytics once.
+  /// [DiscardedOnlyClaim.notDiscardedOnly] means there is nothing to explain.
+  DiscardedOnlyClaim claimDiscardedOnlyExplanation();
+
+  void clearEmptyRecordingExplanation();
 
   Future<Person?> createPerson(String name);
 
@@ -67,6 +81,15 @@ class NoopCaptureExternalActions implements CaptureExternalActions {
 
   @override
   bool hasConversation(String conversationId) => false;
+
+  @override
+  void showEmptyRecordingExplanation() {}
+
+  @override
+  DiscardedOnlyClaim claimDiscardedOnlyExplanation() => DiscardedOnlyClaim.notDiscardedOnly;
+
+  @override
+  void clearEmptyRecordingExplanation() {}
 
   @override
   Future<Person?> createPerson(String name) async => null;

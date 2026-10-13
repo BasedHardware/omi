@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "id": "FC-duplicate-placeholder-id-collides-in-sliver-relocation",
+  "violated_contract": "A relayout-time child-relocation lookup for a lazily built sliver must resolve each mounted child to a unique target index. Chat failed replies share the backend placeholder id 0000 (ServerMessage.empty), so a findChildIndexCallback keyed by message id maps every mounted placeholder to the same index when an older-history prepend shifts positions; SliverMultiBoxAdaptorElement.performRebuild stores relocations in a per-index map, so the second write overwrites the first and a failed-reply row (with its Try Again surface) is dropped or the child-order assertion fires.",
+  "canonical_prevention": "Give every row one stable UI identity shared by the sliver's keys, the relocation callback, shouldRebuild, and visibility tracking: persisted messages key by id, placeholder/optimistic rows key by ObjectKey(message) so instance identity disambiguates duplicates. Cover with a widget test that mounts two failed replies, prepends older history, and asserts both Try Again rows stay hit-testable and retry recovers the selected one; the test must fail on indexOf-based relocation.",
+  "canonical_prevention_artifact": [
+    "app/test/widgets/chat_duplicate_failed_reply_test.dart",
+    "app/lib/pages/chat/page.dart"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "app/lib/pages/chat/**",
+    "app/lib/widgets/**"
+  ],
+  "status": "open"
+}
