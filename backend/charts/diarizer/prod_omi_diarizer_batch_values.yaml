@@ -1,0 +1,41 @@
+# Separate release only: -f prod_omi_diarizer_values.yaml -f this file.
+# Lead-owned opt-in deployment; never install over prod-omi-diarizer.
+fullnameOverride: prod-omi-diarizer-batch
+command: [uvicorn, "batch_main:app", "--host", "0.0.0.0", "--port", "8080", "--loop", uvloop]
+replicaCount: 6
+# Pusher/backend callers use http://prod-omi-diarizer-batch:8080/v2/diarization.
+# Internal ClusterIP avoids changing the embedding ingress and its 30s timeout.
+ingress:
+  enabled: false
+env:
+  - name: DIARIZATION_V2_ENABLED
+    value: "true"
+  - name: HUGGINGFACE_TOKEN
+    valueFrom:
+      secretKeyRef:
+        name: prod-omi-backend-secrets
+        key: HUGGINGFACE_TOKEN
+podMonitoring:
+  enabled: true
+autoscaling:
+  enabled: true
+  minReplicas: 6
+  maxReplicas: 18
+  requestLatencyP99: null
+  queueDepthAverageValue: 1
+  behavior:
+    scaleUp:
+      stabilizationWindowSeconds: 0
+      policies:
+        - type: Pods
+          value: 3
+          periodSeconds: 60
+    scaleDown:
+      stabilizationWindowSeconds: 900
+      policies:
+        - type: Pods
+          value: 1
+          periodSeconds: 120
+backendConfig:
+  name: prod-omi-diarizer-batch-backend-config
+  timeoutSeconds: 900

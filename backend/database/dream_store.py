@@ -1,8 +1,7 @@
-"""Transactional dream admission. Leases cannot be stolen, even after expiry.
+"""Transactional Dream admission and conservative stale-lease settlement.
 
-A dead worker's lease requires operator recovery after proving it has exited.
-This intentionally trades liveness for no overlapping per-user passes. Daily
-spend is reserved before inference; ambiguous failures retain their reservation.
+Abandoned workers retain their reservation and pending dirty versions. New
+admission and reclamation share one transaction, fenced by the current run_id.
 """
 
 import os
@@ -16,7 +15,18 @@ from typing import Any
 
 from google.cloud import firestore
 
-from config.dream_agent import backfill_share, Caps, canary_eligible, canary_uid, eligible, may_be_eligible, mode
+from config.dream_agent import (
+    backfill_share,
+    Caps,
+    canary_eligible,
+    canary_uid,
+    eligible,
+    may_be_eligible,
+    mode,
+    FULL_DRAIN_SECONDS,
+    DRAIN_TIMEOUT_SECONDS,
+    LEASE_RECLAIM_MARGIN_SECONDS,
+)
 from config.plan_catalog import PAID_PLAN_IDS
 from database.dream_history import review_id
 from database._client import get_firestore_client
@@ -41,6 +51,14 @@ def state_ref(database, uid):
 def spend_ref(database, uid, day):
     """Per-user UTC-day accounting, shared only by that user's passes and hosts."""
     return state_ref(database, uid).collection('spend').document(day)
+
+
+def lease_spend_ref(database, uid, lease):
+    return (
+        spend_ref(database, uid, lease['day'])
+        if lease.get('spend_scope') == 'user'
+        else database.collection('dream_spend').document(lease['day'])
+    )
 
 
 # Bound retries of a consumed product version after billable reasoning failures.
@@ -138,7 +156,18 @@ class AdmissionDenied(Exception):
         super().__init__(reason)
 
 
-def acquire(uid, caps: Caps, *, rng=None, trigger='schedule', canary=False, now=None, firestore_client=None):
+def acquire(
+    uid,
+    caps: Caps,
+    *,
+    rng=None,
+    trigger='schedule',
+    canary=False,
+    now=None,
+    firestore_client=None,
+    reclaim_sink: dict[str, Any] | None = None,
+):
+    """Return admission and publish count-only reclaim details after commit, even on denial."""
     database = client(firestore_client)
     now = now or datetime.now(timezone.utc)
     now = now.astimezone(timezone.utc)
@@ -149,18 +178,14 @@ def acquire(uid, caps: Caps, *, rng=None, trigger='schedule', canary=False, now=
     run_id = str(uuid4())
     draw = (rng or random.SystemRandom()).random()
 
-    @firestore.transactional
-    def claim(tx):
-        data = state.get(transaction=tx).to_dict() or {}
-        budget = spend.get(transaction=tx).to_dict() or {}
-        user = owner.get(transaction=tx).to_dict() or {}
+    def admit(tx, data, budget, user):
         passes = int(data.get('passes', 0)) if data.get('day') == day else 0
         manual_runs = int(data.get('manual_runs', 0)) if data.get('day') == day else 0
         if trigger == 'manual':
             if data.get('lease'):
                 raise AdmissionDenied('dream_run_in_progress')
             if data.get('score', 0) <= 0 or dirty_count(uid, transaction=tx, firestore_client=database) == 0:
-                return None
+                return None, {}
             if manual_runs >= caps.manual_runs:
                 raise AdmissionDenied('dream_manual_limit')
         # Old drained states predate last_pass_at; their watermark seeds cleanup.
@@ -187,17 +212,16 @@ def acquire(uid, caps: Caps, *, rng=None, trigger='schedule', canary=False, now=
         ):
             if trigger == 'manual':
                 raise AdmissionDenied('dream_budget_unavailable')
-            return None
+            return None, {}
         has_dirty = dirty_count(uid, transaction=tx, firestore_client=database) > 0
         cleanup_selected = not canary and trigger == 'schedule' and draw < backfill_share()
         if not has_dirty:
             if not cleanup_due:
-                return None
+                return None, {}
             # One attempt per hour even when the backfill coin declines. No lease,
             # spend reservation or run-history document for this idle no-op.
-            tx.update(state, {'last_attempt_at': now})
             if not cleanup_selected:
-                return None
+                return None, {'last_attempt_at': now}
         lease = {
             'run_id': run_id,
             'day': day,
@@ -214,24 +238,95 @@ def acquire(uid, caps: Caps, *, rng=None, trigger='schedule', canary=False, now=
             'cleanup_selected': cleanup_selected,
             'canary': canary,
             'mode': 'shadow' if canary else mode(),
+            'context_mode': caps.context_mode,
             'trigger': trigger,
             'started_at': now,
         }
-        tx.set(
-            state,
-            {
-                **data,
-                'lease': lease,
-                'last_attempt_at': now,
-                'day': day,
-                'passes': passes + int(trigger != 'manual'),
-                'manual_runs': manual_runs + int(trigger == 'manual'),
-            },
-        )
-        tx.set(spend, {'reserved_usd': float(budget.get('reserved_usd', 0)) + caps.reservation_usd})
-        return lease
+        return lease, {
+            'lease': lease,
+            'last_attempt_at': now,
+            'day': day,
+            'passes': passes + int(trigger != 'manual'),
+            'manual_runs': manual_runs + int(trigger == 'manual'),
+        }
 
-    return claim(database.transaction())
+    @firestore.transactional
+    def claim(tx):
+        data = state.get(transaction=tx).to_dict() or {}
+        budget = spend.get(transaction=tx).to_dict() or {}
+        user = owner.get(transaction=tx).to_dict() or {}
+        abandoned = data.get('lease') or {}
+        started = abandoned.get('started_at')
+        if isinstance(started, datetime) and started.tzinfo is None:
+            started = started.replace(tzinfo=timezone.utc)
+        # Pre-context-mode leases may have been full; use the longer fence.
+        context = abandoned.get('context_mode', 'full')
+        context = 'bounded' if context == 'bounded' else 'full'
+        duration = (FULL_DRAIN_SECONDS if context == 'full' else DRAIN_TIMEOUT_SECONDS) + LEASE_RECLAIM_MARGIN_SECONDS
+        age_s = (now - started).total_seconds() if isinstance(started, datetime) else 0
+        reclaimed = None
+        old_spend = None
+        old_budget = {}
+        if abandoned and age_s > duration:
+            old_spend = lease_spend_ref(database, uid, abandoned)
+            old_budget = old_spend.get(transaction=tx).to_dict() or {}
+            reservation = float(abandoned['reservation_usd'])
+            previous_charge = float(abandoned.get('budget_charge_usd', reservation))
+            old_budget['reserved_usd'] = float(old_budget.get('reserved_usd', 0)) + reservation - previous_charge
+            if old_spend.path == spend.path:
+                budget = old_budget
+            data = {**data, 'lease': None, 'abandoned_passes': int(data.get('abandoned_passes', 0)) + 1}
+            reclaimed = (int(age_s), context)
+        queued_count = dirty_count(uid, transaction=tx, firestore_client=database) if reclaimed else None
+        denial = None
+        try:
+            lease, patch = admit(tx, data, budget, user)
+        except AdmissionDenied as exc:
+            # A denial must not roll back reclamation (including manual caps).
+            lease, patch, denial = None, {}, exc.reason
+        # All reads, including admission's dirty count, precede settlement writes.
+        if old_spend is not None and isinstance(started, datetime):
+            source = {
+                'status': 'failed',
+                'reason': 'abandoned',
+                'usage_unknown': True,
+                'context_mode': context,
+                'abandoned': 1,
+                'tokens': 0,
+                'records_queued_after': queued_count,
+                'budget_charge_usd': float(abandoned['reservation_usd']),
+            }
+            run = owner.collection('dream_runs').document(abandoned['run_id'])
+            tx.set(
+                run,
+                {
+                    **_review_store().encode_doc(uid, {'source': source}),
+                    'created_at': started,
+                    'expires_at': started + timedelta(days=30),
+                    'mode': abandoned['mode'],
+                    'trigger': abandoned.get('trigger', 'schedule'),
+                    'success': False,
+                    'records_read': 0,
+                    'records_queued_after': queued_count,
+                    'tokens': 0,
+                    'cost_usd': 0,
+                },
+            )
+            if old_spend.path != spend.path or lease is None:
+                tx.set(old_spend, old_budget)
+        if lease:
+            tx.set(state, {**data, **patch})
+            tx.set(spend, {**budget, 'reserved_usd': float(budget.get('reserved_usd', 0)) + caps.reservation_usd})
+        elif reclaimed or patch:
+            tx.set(state, {**data, **patch})
+        return lease, reclaimed, denial
+
+    lease, reclaimed, denial = claim(database.transaction())
+    if reclaimed and reclaim_sink is not None:
+        reclaim_sink.update(age_s=reclaimed[0], context_mode=reclaimed[1])
+    if denial:
+        raise AdmissionDenied(denial)
+    return lease
 
 
 def assert_lease(uid, run_id, *, firestore_client=None):
@@ -263,11 +358,7 @@ def finish(
     run = database.collection('users').document(uid).collection('dream_runs').document(lease['run_id'])
     # Leases admitted before this change still belong to the old shared ledger.
     # Never debit a new user ledger for a reservation it did not acquire.
-    spend = (
-        spend_ref(database, uid, lease['day'])
-        if lease.get('spend_scope') == 'user'
-        else database.collection('dream_spend').document(lease['day'])
-    )
+    spend = lease_spend_ref(database, uid, lease)
     report['dirty_dropped'] = max(0, lease['dirty_dropped'] - lease['dirty_dropped_reported'])
     failure_eligible = count_failure and not success and release and not refund
     now = (now or datetime.now(timezone.utc)).astimezone(timezone.utc)
