@@ -2754,6 +2754,5 @@ _add(
             'database.memories.unlock_all_memories',
         ),
         reason='Shared batch mechanics and bounded projection exercised by upgrade/reset unlock drivers',
-
     )
 )
