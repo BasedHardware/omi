@@ -123,6 +123,9 @@ void main() {
 
     // Later native event brings the device back in range
     transport.emitConnected();
+    // StreamController delivery is asynchronous, just like the native event
+    // channel this transport wraps.
+    await Future<void>.delayed(Duration.zero);
     expect(connection.status, DeviceConnectionState.connected);
 
     // When connection is up, ensureConnection cleanly returns the existing connection

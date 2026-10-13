@@ -45,19 +45,27 @@ class CategorySection extends StatelessWidget {
     final scaler = MediaQuery.textScalerOf(context);
     final direction = Directionality.of(context);
     double lineOf(TextStyle style) {
-      final painter =
-          TextPainter(text: TextSpan(text: 'Ag', style: style), textScaler: scaler, textDirection: direction)..layout();
+      final effectiveStyle = DefaultTextStyle.of(context).style.merge(style);
+      final painter = TextPainter(
+        text: TextSpan(text: 'Ag', style: effectiveStyle),
+        textScaler: scaler,
+        textDirection: direction,
+        maxLines: 1,
+        ellipsis: '\u2026',
+      )..layout();
       final height = painter.height;
       painter.dispose();
       return height;
     }
 
     final rowText = lineOf(OmiType.body) + 2 + lineOf(OmiType.footnote) + 2 + lineOf(OmiType.caption);
-    final double targetItemHeight = max(85.0, 16 + max(52.0, rowText) + 1);
+    // Match the card: a 60 pt icon, three single-line labels with 2 pt gaps,
+    // and 8 pt vertical padding on each side. Keep the existing 85 pt baseline.
+    final double targetItemHeight = max(85.0, 16 + max(60.0, rowText) + 1);
     const double crossAxisSpacing = 0.0;
     const double mainAxisSpacing = 14.0;
     const int maxRows = 3;
-    final double titleSectionHeight = max(60.0, 24 + 16 + lineOf(OmiType.title2));
+    final double titleSectionHeight = max(60.0, 24 + 16 + lineOf(OmiType.title3));
 
     // --- Dynamic Calculation ---
     final int numRows = min(maxRows, displayedApps.length);
