@@ -148,7 +148,7 @@ STT policy: `config/stt_provider_policy.py`. Windowed live rollout: `docs/operat
 - **monitoring** (`backend/charts/monitoring/`) — Prometheus/Grafana, Loki/Alloy, alerts and HPA adapters. Sync export flags, sizing and CPU audit: [runbook](docs/runbooks/sync-cloudrun-rightsizing.md).
 - **backend-secrets** (`backend/charts/backend-secrets/`) — ExternalSecret and SecretStore resources that sync backend runtime secrets into GKE namespaces.
 
-Locked-content recovery is dark behind `LOCKED_CONTENT_RESET_RECOVERY_ENABLED` (default false). Authenticated HTTP requests drain bounded pages once per UTC quota month; see [reset recovery](docs/locked-content-reset-recovery.md).
+Locked-content reset recovery (default off): [guide](docs/locked-content-reset-recovery.md).
 
 Backend runtime env contract: keep `backend/deploy/runtime_env.yaml` aligned with GKE Helm values and Cloud Run runtime env; run `backend/scripts/pre-deploy-check.sh` after backend runtime env or deploy workflow changes. The backend deploy must validate the exact JSON state emitted by `render_backend_runtime_env.py --state-output`, and any Cloud Run export/replace editor must preserve those literal values before apply. The `llm_gateway` manifest section owns the release, ingress, and static-address identity; a reserved address alone is never an endpoint contract. Gateway-mode promotion requires the control-plane gate plus `probe-llm-gateway-from-cloud-run.sh` before Cloud Run revisions are created.
 
