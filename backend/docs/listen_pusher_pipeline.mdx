@@ -1947,6 +1947,7 @@ sequenceDiagram
     Backend->>Firestore: Persist MANUAL decisions and generation atomically
     Backend-->>Client: Acknowledge saved assignment
     Client->>Backend: speaker_assigned notification with acknowledged segment_ids
+    Note over Client: assign_type: "not_a_person" (media exclusion) sends no person_id<br/>and must never queue a voice sample
     Backend->>Backend: Validate receipt and queue best-effort sample (opcode 105)
     Backend->>Pusher: Forward speaker sample request
 
@@ -2199,7 +2200,12 @@ cards. Their negative answers write `rejection: {kind, person_id}` on the receip
 `not_person` earns `AUTO_CORRECTED` once per conversation, `not_a_person`
 stores an ignored-voice marker (`ignored_voices`, newest 200) — and the voice is
 filtered from live matching, resolution, and prompt selection until a newer
-positive decision wins. A segment's `speaker_label_source` projects provenance:
+positive decision wins. The live capture sheet's media exclusion
+(`PATCH /v1/conversations/{id}/segments/assign-bulk` with
+`assign_type: "not_a_person"`) writes the same receipt decision and the same
+ignored-voice marker (fenced by the assignment generation), never queues a
+voice sample, and stays reversible: a later person/user assignment replaces it.
+A segment's `speaker_label_source` projects provenance:
 `manual`/`carried` under a winning decision, `auto` for match-only evidence.
 
 The same transaction keeps each person's `label_evidence` tally

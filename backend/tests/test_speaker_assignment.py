@@ -8,7 +8,7 @@ import ast
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Optional
-from unittest.mock import Mock
+from unittest.mock import ANY, Mock, call
 
 from fastapi import BackgroundTasks, Depends, HTTPException
 from models.conversation import BulkAssignSegmentsRequest
@@ -39,12 +39,16 @@ def test_bulk_not_a_person_is_resolved_persisted_reversible_and_never_teaches():
         ],
     }
     learning = Mock()
+    ignored = Mock()
     namespace = dict(
         Optional=Optional,
         List=list,
         Sequence=list,
         Mapping=dict,
         Any=object,
+        datetime=__import__('datetime').datetime,
+        timezone=__import__('datetime').timezone,
+        voice_profiles_db=SimpleNamespace(record_ignored_voice=ignored),
         teaching_segment_ids=lambda segments, resolved: resolved,
         delete_speech_profile_blob=Mock(),
         run_authorized_person_learning=learning,
@@ -96,6 +100,15 @@ def test_bulk_not_a_person_is_resolved_persisted_reversible_and_never_teaches():
             [{'id': 'later', 'speaker_id': 4, 'is_user': True, 'person_id': None}], raw['manual_speaker_assignments']
         )[0]
         assert future['is_user'] is False and future['person_id'] is None
+    # Each live exclusion records the same ignored-voice marker the reject route
+    # and tag-prompt answers write, fenced by the assignment generation.
+    ignored.assert_has_calls(
+        [
+            call('u', 'conversation', 4, ANY, assignment_generation=1),
+            call('u', 'conversation', 4, ANY, assignment_generation=2),
+        ]
+    )
+    assert ignored.call_count == 2
     learning.assert_not_called()
     for person_id, is_user in [('p1', False), (None, True)]:
         segments, receipt, _, _ = manual_assignment(raw, person_id=person_id, is_user=is_user, speaker_id=4)

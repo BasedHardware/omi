@@ -11,6 +11,7 @@ import database._client as db_client_module
 import database.action_items as action_items_db
 import database.redis_db as redis_db
 import database.users as users_db
+import database.voice_profiles as voice_profiles_db
 from database import conversation_tombstones
 from database.firestore_read_metrics import FirestoreReadSite
 from database.vector_db import (
@@ -1594,6 +1595,25 @@ def _assign_manual_speaker(
         raise HTTPException(status_code=409, detail=str(error)) from error
     conversation = deserialize_conversation(raw)
     resolved_conversation_id = raw.get('id') or conversation_id
+    if excluded:
+        # Live-sheet exclusions write the same ignored-voice marker the reject
+        # route and tag-prompt answers write, so the voice shows under
+        # Settings > Ignored Voices and can be restored from there.
+        resolved_ids = set(resolved)
+        affected = {
+            int(segment['speaker_id'])
+            for segment in raw.get('transcript_segments') or []
+            if segment.get('id') in resolved_ids and isinstance(segment.get('speaker_id'), int)
+        } or ({speaker_id} if speaker_id is not None else set())
+        generation = (raw.get('manual_speaker_assignments') or {}).get('generation')
+        for affected_speaker in sorted(affected):
+            voice_profiles_db.record_ignored_voice(
+                uid,
+                resolved_conversation_id,
+                affected_speaker,
+                datetime.now(timezone.utc),
+                assignment_generation=generation,
+            )
     _drop_display_projection(conversation)
     _emit_speaker_identity_confirmed(
         uid=uid,

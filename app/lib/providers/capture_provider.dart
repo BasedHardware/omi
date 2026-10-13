@@ -30,6 +30,7 @@ class CaptureProvider extends CaptureController {
     super.omiCallState,
     super.captureWedgeMonitor,
     super.calendarGapMonitor,
+    super.excludeSpeaker,
     LocalSegmentStore? localSegmentStore,
   }) : localSegmentStore = localSegmentStore ?? LocalSegmentStore.disabled() {
     addListener(_persistLiveSegments);
