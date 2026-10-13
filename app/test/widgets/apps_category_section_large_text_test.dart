@@ -10,6 +10,7 @@ import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/pages/apps/providers/add_app_provider.dart';
 import 'package:omi/pages/apps/widgets/category_section.dart';
 import 'package:omi/providers/app_provider.dart';
+import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
 
 // Regression test for #19238: CategorySection rows overflow at larger text sizes
@@ -110,7 +111,13 @@ void main() {
         isNull,
         reason: 'CategorySection should not overflow at scale  on width ',
       );
-      expect(find.text('Productivity'), findsOneWidget);
+      expect(
+        find.byWidgetPredicate(
+          (widget) =>
+              widget is Text && widget.data == 'Productivity' && widget.style?.fontSize == OmiType.title3.fontSize,
+        ),
+        findsOneWidget,
+      );
       expect(find.text('Productivity Booster Pro'), findsOneWidget);
     }
   });

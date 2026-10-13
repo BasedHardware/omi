@@ -104,7 +104,7 @@ void main() {
         isNull,
         reason: 'AI app generator suggestion strip should not overflow at scale $scale on width $testWidth',
       );
-      expect(find.text('Try something like'), findsOneWidget);
+      expect(find.text('Try something like…'), findsOneWidget);
       expect(find.text('A playful gratitude spinner for daily positivity'), findsOneWidget);
     }
   });

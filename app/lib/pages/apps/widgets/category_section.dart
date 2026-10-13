@@ -40,24 +40,44 @@ class CategorySection extends StatelessWidget {
     final displayedApps = apps.take(9).toList();
 
     // --- Configuration Constants ---
-    // Heights follow the reader's text size: fixed 85 / 60 pt rows cut the app's name, category
-    // and rating (and the section title) at a larger text size (layout lint, 1.3x).
+    // Heights follow the reader's text size. OmiType leaves `height` unset, so painted text
+    // inherits Material's line height (~1.43). Measuring the raw style misses that and the
+    // name/category/rating column overflows (13px at 1.3x on a 390pt-wide phone).
     final scaler = MediaQuery.textScalerOf(context);
     final direction = Directionality.of(context);
+    final inherited = DefaultTextStyle.of(context).style;
     double lineOf(TextStyle style) {
-      final painter =
-          TextPainter(text: TextSpan(text: 'Ag', style: style), textScaler: scaler, textDirection: direction)..layout();
+      final painter = TextPainter(
+        text: TextSpan(text: 'Ag', style: inherited.merge(style)),
+        textScaler: scaler,
+        textDirection: direction,
+        maxLines: 1,
+      )..layout();
       final height = painter.height;
       painter.dispose();
       return height;
     }
 
-    final rowText = lineOf(OmiType.body) + 2 + lineOf(OmiType.footnote) + 2 + lineOf(OmiType.caption);
-    final double targetItemHeight = max(85.0, 16 + max(52.0, rowText) + 1);
+    final rowText = lineOf(OmiType.body.copyWith(fontWeight: FontWeight.w500)) +
+        2 +
+        lineOf(OmiType.footnote) +
+        2 +
+        lineOf(OmiType.caption);
+    const double cardVerticalPadding = 16;
+    const double artworkExtent = 60;
+    // Compact actions paint at 36pt and pad their tap target out to 48pt.
+    const double actionExtent = 48;
+    final double targetItemHeight = max(
+      85.0,
+      cardVerticalPadding + max(artworkExtent, max(actionExtent, rowText)) + 1,
+    );
     const double crossAxisSpacing = 0.0;
     const double mainAxisSpacing = 14.0;
     const int maxRows = 3;
-    final double titleSectionHeight = max(60.0, 24 + 16 + lineOf(OmiType.title2));
+    final titleLine = lineOf(OmiType.title3);
+    final allChip = lineOf(OmiType.caption.copyWith(fontWeight: FontWeight.w600)) + 4;
+    final headerRow = max(titleLine, max(allChip, 16.0));
+    final double titleSectionHeight = max(60.0, 24 + 16 + headerRow);
 
     // --- Dynamic Calculation ---
     final int numRows = min(maxRows, displayedApps.length);

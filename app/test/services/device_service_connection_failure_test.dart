@@ -121,8 +121,12 @@ void main() {
     expect(service.connectionFor(device.id), same(connection));
     expect(connection.status, DeviceConnectionState.disconnected);
 
-    // Later native event brings the device back in range
+    // Later native event brings the device back in range. Production transports
+    // (and this fake) use an asynchronous broadcast stream, so the connection
+    // applies the event on a later microtask — the same delivery ensureConnection
+    // sees after the event loop turns.
     transport.emitConnected();
+    await pumpEventQueue();
     expect(connection.status, DeviceConnectionState.connected);
 
     // When connection is up, ensureConnection cleanly returns the existing connection
