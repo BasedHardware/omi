@@ -2,6 +2,15 @@ import 'package:flutter/material.dart';
 
 import 'package:omi/ui/ui.dart';
 
+const _thumbShadow = BoxShadow(
+    color: Color(0x26000000), // omi-ux-allow: color-literal -- switch thumb shadow
+    blurRadius: 4,
+    offset: Offset(0, 2));
+const _bangStyle = TextStyle(
+    fontSize: 15, // omi-ux-allow: font-size-literal -- "!" sized to the switch thumb
+    fontWeight: FontWeight.w800,
+    height: 1);
+
 /// A first-run step without artwork: the title (and an optional line under it) at the top, the
 /// step's [body] below, and the step's [action] pinned to the bottom, above the keyboard when it is
 /// up. The host's [MediaQuery] top padding already clears the progress line and back button.
@@ -103,9 +112,7 @@ class OnboardingPermissionToggle extends StatelessWidget {
             ? denyColor
             : OmiColors.surface3;
     // On the accent track the thumb takes the accent's contrast colour (white on black, black on white).
-    final thumb = on
-        ? OmiColors.onAccent
-        : const Color(0xFFFFFFFF); // omi-ux-allow: color-literal -- switch thumb is white when off, as on iOS
+    final thumb = on ? OmiColors.onAccent : const Color(0xFFFFFFFF);
     return AnimatedContainer(
       duration: motion.standard,
       curve: Curves.easeOut,
@@ -123,9 +130,7 @@ class OnboardingPermissionToggle extends StatelessWidget {
           decoration: BoxDecoration(
             color: thumb,
             shape: BoxShape.circle,
-            boxShadow: const [
-              BoxShadow(color: Color(0x26000000), blurRadius: 4, offset: Offset(0, 2))
-            ], // omi-ux-allow: color-literal -- switch thumb shadow
+            boxShadow: const [_thumbShadow],
           ),
           child: Center(
             child: busy
@@ -133,11 +138,7 @@ class OnboardingPermissionToggle extends StatelessWidget {
                 : denied && !on
                     ? Text(
                         '!',
-                        style: TextStyle(
-                            fontSize: 15,
-                            fontWeight: FontWeight.w800,
-                            color: denyColor,
-                            height: 1), // omi-ux-allow: font-size-literal -- "!" glyph sized to the switch thumb
+                        style: _bangStyle.copyWith(color: denyColor),
                       )
                     : null,
           ),

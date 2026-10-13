@@ -4,6 +4,9 @@ import 'package:flutter/material.dart';
 
 import 'package:omi/ui/ui.dart';
 
+const _cardShadow = BoxShadow(
+    color: Color(0x14000000), blurRadius: 24, offset: Offset(0, 8)); // omi-ux-allow: color-literal -- soft card shadow
+
 /// Runs [builder] with a 0→1 value once over [duration] (instant under Reduce Motion).
 class OneShot extends StatefulWidget {
   const OneShot({super.key, required this.duration, required this.builder, this.delay = Duration.zero});
@@ -72,9 +75,7 @@ class NoteCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: OmiColors.surface1,
         borderRadius: OmiRadius.lgAll,
-        boxShadow: const [
-          BoxShadow(color: Color(0x14000000), blurRadius: 24, offset: Offset(0, 8))
-        ], // omi-ux-allow: color-literal -- soft card shadow, same in both themes
+        boxShadow: const [_cardShadow],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
