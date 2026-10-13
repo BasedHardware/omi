@@ -347,6 +347,77 @@ void main() {
     });
   });
 
+  test('a ready delivered while a release is pending is replayed when that release fails', () {
+    fakeAsync((async) {
+      pairPendant();
+      final service = ServiceManager.instance().device;
+      service.ensureConnection(_deviceId, force: true);
+      async.elapse(const Duration(seconds: 61));
+      final connection = service.connectionFor(_deviceId)!;
+      final transportStates = <DeviceTransportState>[];
+      connection.transport.connectionStateStream.listen(transportStates.add);
+
+      // The release hangs; native delivers the ready while it is pending, then
+      // the release fails. The buffered ready must be replayed, not dropped.
+      final release = Completer<void>();
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMessageHandler('dev.flutter.pigeon.omi_pigeon.BleHostApi.unmanageDevice', (message) async {
+        unmanageCalls++;
+        await release.future;
+        return BleHostApi.pigeonChannelCodec
+            .encodeMessage(unmanageFails ? <Object?>['ble', 'native busy', null] : <Object?>[null]);
+      });
+      unmanageFails = true;
+      connection.transport.disconnect();
+      BleBridge.instance.onDeviceReady(_deviceId, _services);
+      release.complete();
+      async.flushMicrotasks();
+
+      expect(transportStates.last, DeviceTransportState.connected,
+          reason: 'the pending ready survives the failed release and re-adopts the live link');
+
+      // Settle the transport like the failed-release test above so tearDown
+      // finds a released, disconnected transport.
+      unmanageFails = false;
+      connection.transport.disconnect();
+      async.elapse(const Duration(seconds: 1));
+      expect(unmanageCalls, 2);
+    });
+  });
+
+  test('a reconcile adopt of a forming connection is dropped when pairing moves on', () {
+    fakeAsync((async) {
+      pairPendant();
+      linkUp = true;
+      // manageDevice replays ready only for the *held* case; a fresh ensure
+      // connection must still complete, driven here by the native replay.
+      nativeReplaysReady = true;
+      final provider = DeviceProvider();
+      final probe = Completer<bool>();
+      final reconciler = NativeLinkReconciler(provider, nativeLinkProbe: (_) => probe.future);
+
+      reconciler.reconcile();
+      probe.complete(true);
+      async.flushMicrotasks();
+      // The transport is forming; the persisted pairing moves on before the
+      // connected admission can run.
+      SharedPreferencesUtil().btDeviceSet(BtDevice(
+        id: 'OTHER-PENDANT',
+        name: 'Omi',
+        type: DeviceType.omi,
+        rssi: -60,
+        locator: DeviceLocator.bluetooth(deviceId: 'OTHER-PENDANT'),
+      ));
+      async.elapse(const Duration(seconds: 5));
+
+      expect(provider.isConnected, isFalse, reason: 'the forming link belongs to a retired pairing');
+      expect(SharedPreferencesUtil().btDevice.id, 'OTHER-PENDANT');
+      reconciler.dispose();
+      provider.dispose();
+      async.flushTimers();
+    });
+  });
+
   test('overlapping connected events for one physical connect run connect side effects once', () {
     fakeAsync((async) {
       pairPendant();
