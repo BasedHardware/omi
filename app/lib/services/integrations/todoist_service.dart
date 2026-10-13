@@ -1,4 +1,4 @@
-import 'package:url_launcher/url_launcher.dart';
+import 'package:omi/services/integrations/integration_oauth.dart';
 
 import 'package:omi/backend/http/api/task_integrations.dart';
 import 'package:omi/utils/logger.dart';
@@ -18,31 +18,7 @@ class TodoistService {
   }
 
   /// Start OAuth authentication flow (get URL from backend)
-  Future<bool> authenticate() async {
-    try {
-      final authUrl = await getOAuthUrl('todoist');
-      if (authUrl == null) {
-        Logger.debug('Failed to get Todoist OAuth URL from backend');
-        return false;
-      }
-
-      final authUri = Uri.parse(authUrl);
-      Logger.debug('Opening Todoist auth URL');
-
-      final canLaunch = await canLaunchUrl(authUri);
-      if (!canLaunch) {
-        Logger.debug('Cannot launch auth URL');
-        return false;
-      }
-
-      await launchUrl(authUri, mode: LaunchMode.externalApplication);
-
-      return true;
-    } catch (e) {
-      Logger.debug('Error starting Todoist authentication: $e');
-      return false;
-    }
-  }
+  Future<bool> authenticate() => launchIntegrationOAuth(() => getOAuthUrl('todoist'));
 
   /// Handle OAuth callback (tokens stored in backend Firebase)
   Future<bool> handleCallback() async {

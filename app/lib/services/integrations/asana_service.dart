@@ -1,4 +1,4 @@
-import 'package:url_launcher/url_launcher.dart';
+import 'package:omi/services/integrations/integration_oauth.dart';
 
 import 'package:omi/backend/http/api/task_integrations.dart';
 import 'package:omi/utils/logger.dart';
@@ -22,31 +22,7 @@ class AsanaService {
   }
 
   /// Start OAuth authentication flow (get URL from backend)
-  Future<bool> authenticate() async {
-    try {
-      final authUrl = await getOAuthUrl('asana');
-      if (authUrl == null) {
-        Logger.debug('Failed to get Asana OAuth URL from backend');
-        return false;
-      }
-
-      final authUri = Uri.parse(authUrl);
-      Logger.debug('Opening Asana auth URL');
-
-      final canLaunch = await canLaunchUrl(authUri);
-      if (!canLaunch) {
-        Logger.debug('Cannot launch auth URL');
-        return false;
-      }
-
-      await launchUrl(authUri, mode: LaunchMode.externalApplication);
-
-      return true;
-    } catch (e) {
-      Logger.debug('Error starting Asana authentication: $e');
-      return false;
-    }
-  }
+  Future<bool> authenticate() => launchIntegrationOAuth(() => getOAuthUrl('asana'));
 
   /// Handle OAuth callback
   Future<bool> handleCallback({String? userGid}) async {

@@ -36,6 +36,14 @@ sequenceDiagram
 
 ---
 
+## Mobile browser handoff
+
+Open provider authorization in a system browser or supported browser tab. Google
+OAuth cannot run in an embedded WebView. Treat opening the browser as the start
+of authorization; confirm the saved connection from the server after the user
+returns. If the browser or status check fails, preserve existing grants and offer
+a retry rather than displaying a successful connection.
+
 ## Prerequisites
 
 Before implementing OAuth, ensure you have:
