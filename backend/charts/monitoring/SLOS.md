@@ -1,133 +1,134 @@
 # Journey SLOs (proposed, not deployed)
 
-Read-only production measurement: **2026-10-03 05:10 to 2026-10-13 05:10 UTC**.
-These are event-weighted success objectives over a rolling **10-day** period,
-not latency or client-rendering guarantees. Targets sit below observed success,
-with useful headroom; they are provisional until an operator accepts the scope.
+Read-only production measurement: **2026-10-03T06:10:00Z to 2026-10-13T06:10:00Z**.
+These are event-weighted, rolling **10-day** objectives. Targets are provisional,
+below corrected measured success, with headroom; they need operator acceptance.
+They measure server delivery/completion boundaries, without client rendering proof.
 
-| Journey key | Target | Measured success | Good / valid events (Prometheus increase, rounded) |
+| Journey | Target | Measured success | Good / valid events |
 | --- | --- | --- | --- |
-| live | 99.0% | 99.1904% | 173,195.19 / 174,608.80 |
-| chat | 99.5% | 99.8384% | 8,048.97 / 8,062.00 |
-| pusher | 99.9% | 99.9685% | 463,904.14 / 464,050.19 |
+| live | 95.0% | 95.5055% | 167,954.37 / 175,858.41 |
+| chat | 99.5% | 99.8470% | 8,056.33 / 8,068.68 |
+| pusher | 95.5% | 96.0863% | 463,701.06 / 482,588.16 |
 
-Each selected counter was present at all 241 hourly inventory samples. This
-establishes ingestion, not continuous scrape coverage or perfect instrumentation.
-`increase` handles per-instance resets before summing; fractional extrapolated
-counts are expected. Baseline queries were evaluated at `1791868200`.
+All selected valid counters were present at 241 hourly inventory samples.
+`increase` is applied per instance before summing, so resets are handled and
+fractional extrapolated counts are expected. Queries use Unix `1791871800`:
 
-SLI: `sum(increase(GOOD[10d])) / sum(increase(VALID[10d]))`, with selectors below.
-For any alert window W, bad share is
-`(sum(increase(BAD[W])) or sum(increase(VALID[W])) * 0) / sum(increase(VALID[W]))`.
-The zero-fill is conditional on a valid denominator: never invent traffic when
-all series are absent. Cancellation is excluded; zero valid events do not burn.
+live:
+```promql
+sum(increase(omi_live_session_transcript_outcome_total{job="backend-listen-metrics",outcome="transcribed"}[10d])) / sum(increase(omi_live_session_transcript_outcome_total{job="backend-listen-metrics",outcome=~"transcribed|no_transcript"}[10d]))
+```
 
-| Key | VALID selector | GOOD outcome | BAD outcomes |
-| --- | --- | --- | --- |
-| live | `omi_client_journey_terminal_total{job="backend-listen-metrics",journey="live_transcription",outcome=~"success\|failure\|degraded\|unknown"}` | success | failure, degraded, unknown |
-| chat | `omi_journey_terminal_total{job="cloud-run-application-metrics",journey="chat_response",outcome=~"success\|failure"}` | success | failure |
-| pusher | `omi_journey_terminal_total{job="pusher-metrics",journey="pusher_session",outcome=~"success\|failure"}` | success | failure |
+chat:
+```promql
+sum(increase(omi_journey_terminal_total{job="cloud-run-application-metrics",journey="chat_response",outcome="success"}[10d])) / sum(increase(omi_journey_accepted_total{job="cloud-run-application-metrics",journey="chat_response"}[10d]))
+```
 
-Replace the outcome filter with `outcome="success"` for GOOD and the BAD regex
-for BAD. Live measures first nonempty transcript delivery, mobile chat measures
-server terminal `done:` delivery, and pusher measures successful WebSocket close
-without application failure. None proves client rendering. See
-[boundary semantics](../../docs/runbooks/real-traffic-journeys.md).
+pusher:
+```promql
+sum(increase(omi_journey_terminal_total{job="pusher-metrics",journey="pusher_session",outcome="success"}[10d])) / sum(increase(omi_journey_accepted_total{job="pusher-metrics",journey="pusher_session"}[10d]))
+```
 
-Inventory exclusions and limitations:
+## Eligibility and failure semantics
 
-- `omi_live_stt_terminal_total`: 160,373 successes / 162,766 success-or-failure
-  terminals (~98.53%). Retain as provider/attempt diagnostic; the selected client
-  boundary measures transcript delivery. `omi_listen_*`, provider-connect and
-  stream-close counts lack a matching final user-outcome denominator.
-- `omi_live_session_transcript_outcome_total`: 167,757 transcribed / 175,660 valid
-  (~95.50%, excludes too_short). This stricter speech-session signal needs its
-  own semantic/incident calibration; do not imply the selected 99% delivery SLO
-  guarantees transcription for every speech-bearing session.
-- Gateway: 28,773.74 success / 28,787.84 success-or-error chat-agent calls
-  (~99.951%). `llm_gateway_requests_total` counts provider terminal completion,
-  includes non-chat lanes and retries/fallbacks; it cannot replace a client SLI.
-- Desktop chat: client journey counters show 27,593.52 success / 91,135.88 valid
-  (~30.28%). A follow-up 10d issue query returned ~63,527 upstream_rejected
-  events; that class includes HTTP 4xx, so this is not a proven 70% service
-  outage or a valid-events SLI. Classify rejections before picking an objective.
-  Do not pool desktop with mobile or choose a meaningless 30% target.
-- **Sync/upload: withheld**. `omi_sync_transcription_job_total[10d]` returned only
-  an upstream_error child with zero increase; the current instant query was
-  empty. No successful job counter or upload terminal pair exists in the queried
-  production inventory. `omi_sync_job_poll_requests_total` rose 44,637,427.46;
-  polling/throttling is traffic, not completed upload/transcription. Sync phase
-  histograms and Parakeet prerecorded outcomes measure substeps, not jobs.
-- Capture finalization has success/failure/stale counters but is a separate
-  journey with durable lifecycle projections; retain its existing pages.
+Live now uses `omi_live_session_transcript_outcome_total`: GOOD is `transcribed`,
+VALID is `transcribed|no_transcript`, BAD is `no_transcript`. This includes the
+review's silent-provider failures closed normally (1000/1001), not just explicit
+provider errors. STT terminal death/1011 counts even before ten seconds of audio.
+Other sessions with >=10 seconds audio and speech but no delivered transcript
+fail. Short/silent sockets, including silent 90-second idle reaps, are `too_short`
+and excluded. Speech-bearing idle reaps without a transcript count as bad.
+The rules use exactly the runtime's `_session_transcript_outcome` classification.
 
-Burn is bad share / (1 - target). Following the
-[Google SRE multiwindow pattern](https://sre.google/workbook/alerting-on-slos/):
+The prior 99.1904% client-terminal SLI excluded cancelled no-transcript sessions
+and included silent idle failures, so it was not an eligible speech-session SLI.
+The corrected 95.5055% is the **same population and query** as the
+previous 95.50% speech-session rate. The small numerical difference is solely the
+shifted measurement endpoint, with fractional extrapolation and changed traffic;
+there is no remaining semantic gap. See `backend/routers/listen/runtime.py`.
 
-| Severity | Pair 1 (both required) | Pair 2 (both required) | live bad share | chat bad share | pusher bad share |
+Chat and pusher use accepted work as VALID, successful terminals as GOOD, and
+`clamp_min(accepted - success, 0)` as BAD per alert window. Cancelled/abandoned
+work and work with no terminal remain in the denominator. The counters cannot
+distinguish legitimate user cancellation, so none is subtracted. Pusher success
+is a WebSocket session completion, not transcript delivery; chat success is the
+server's terminal done delivery. Accepted and terminal events can straddle window
+boundaries: in-flight sessions are conservatively bad, and completions from an
+older window can offset new failures. This aggregate approximation is not a
+cohort deadline SLI. **Retain the existing chat/pusher critical and fail rules**;
+there is no demotion/deletion recommendation for those four identities.
+Pusher's corrected rate is much lower than the old 99.9685% because the old
+terminal-only population hid cancellations and unmatched accepted sessions.
+
+For live window W, bad share is no_transcript / eligible sessions. For chat/pusher,
+it is clamp_min(accepted - success, 0) / accepted. Sparse bad/success series are
+zero-filled only against an observed valid denominator. No traffic burns no
+budget. Missing SLI series is **NoData**, never healthy OK. All seven rules use
+Grafana `noDataState=NoData`, `execErrState=Error` and the existing Telegram receiver.
+The live signal warning ORs `absent()` for the session family and independent
+accepted-audio family, plus <1 session outcome with >20 audio accepts in 1h.
+Both missing families therefore fire even when the scrape endpoint stays up;
+the warning has a five-minute pending period. Quiet outcomes prove emission.
+
+## Burn windows and volume
+
+Burn is bad share / (1 - target). Each pair is AND; positive arms are ORed into
+one critical and one warning identity per journey. No extra pending delay.
+
+| Severity | Pair 1 | Pair 2 | live bad share | chat bad share | pusher bad share |
 | --- | --- | --- | --- | --- | --- |
-| critical | 1h AND 5m >14.4x | 6h AND 30m >6x | 14.4% / 6% | 7.2% / 3% | 1.44% / 0.6% |
-| warning | 24h AND 2h >3x | 3d AND 6h >1x | 3% / 1% | 1.5% / 0.5% | 0.3% / 0.1% |
+| critical | 1h AND 5m >14.4x | 6h AND 30m >6x | 72% / 30% | 7.2% / 3% | 64.8% / 27% |
+| warning | 24h AND 2h >3x | 3d AND 6h >1x | 15% / 5% | 1.5% / 0.5% | 13.5% / 4.5% |
 
-Pairs are ORed into **one critical identity per journey** and one warning identity.
-Both pairs additionally require >=20 long-window and >=5 short-window valid
-terminals. This deliberately suppresses isolated low-volume failures; it can
-miss outages affecting fewer users. No extra pending delay (`for=0s`). Retention
-allows 3d but cannot reconstruct full windows at the oldest retained samples.
-The requested 14.4x/6x thresholds are retained: on a 10d budget, one hour at
-14.4x consumes 6%, and six hours at 6x consumes 15% (not the 30d example's 2%/5%).
-Warnings use 24h/3d, consuming 30% at 3x/1x respectively. Missing data is OK for
-these outcome rules; retain separate scrape/signal health alerts. The added
-`omi-slo-live-signal-dead` warning requires >20 accepted audio attempts but <1
-terminal of any outcome in 1h for 5m. Including cancelled terminals prevents
-quiet sessions from masquerading as dead instrumentation. Query execution
-errors remain Error. All rules use the existing Telegram receiver; warning
-severity alone does not prove quieter delivery without notification-policy review.
+Each pair requires >=20 long-window and >=5 short-window valid events, except
+chat's fast five-minute gate is **2**. Chat averages
+2.80 accepts per five minutes; the old five-event gate exceeded measured volume.
+A ten-minute total chat outage at that rate yields about
+5.60 misses, >7.2% in the 1h window and 100% in the 5m window, so it pages.
+Synthetic exact-expression Prometheus results for cancelled and no-terminal
+chat/pusher outages are saved in the receipt and checked against current rules.
+Pusher additionally pages when >=20 accepted sessions have zero successful completions
+in ten minutes. This independent arm covers complete hangs at the lower target.
+Contracts check **every journey/window gate** against its measured baseline rate.
+These averages do not guarantee pages during lower-volume periods.
 
-## Backtest and rollout
+On a 10d budget, 1h at 14.4x consumes 6% and 6h at 6x consumes 15% under steady
+traffic; warning pairs consume 30%. Full 3d windows fit within 10d retention,
+but the oldest retained data cannot reconstruct full windows.
 
-Backtest results and exclusions are in `slo-backtest.prod.json` and the PR body.
-No existing rule, live gate, or production configuration is changed. Provisioning
-must wait for review and an operator-owned deployment. Before demotion, verify
-live UID/expression equality, healthy sources, and Telegram delivery. Keep scrape,
-provider-budget/authentication, integrity, queue-age and capture-finalization
-alerts: outcome SLOs do not replace those contracts.
+## Backtest, exclusions and rollout
 
-## Conditional demotion list
+| UID | Intervals all / post-warm-up | True samples | Evaluated / expected |
+| --- | --- | --- | --- |
+| `omi-slo-live-critical` | 0 / 0 | 0 | 2881 / 2881 |
+| `omi-slo-live-warning` | 7 / 7 | 173 | 2881 / 2881 |
+| `omi-slo-chat-critical` | 8 / 8 | 9 | 2881 / 2881 |
+| `omi-slo-chat-warning` | 0 / 0 | 0 | 2881 / 2881 |
+| `omi-slo-pusher-critical` | 0 / 0 | 0 | 2881 / 2881 |
+| `omi-slo-pusher-warning` | 8 / 1 | 634 | 2881 / 2881 |
+| `omi-slo-live-signal-dead` | 0 / 0 | 1 | 2881 / 2881 |
 
-After live SLO validation, demote `omi-journey-pusher-success-critical` and
-`omi-journey-chat-success-critical` to warning; delete their duplicate warning
-rules `omi-journey-pusher-fail` and `omi-journey-chat-fail` in favor of SLO warnings.
-Consider deleting `omi-journey-live-transcription-fail` only after confirming its
-provider-attempt scope is fully covered by the selected delivery boundary.
-No existing rules are changed here.
+All changed rules were queried with 300s steps in sequential one-day chunks.
+The receipt contains every sampled UTC interval and exact expression, with first
+6h/3d/1h excluded for conservative critical/warning/liveness warm-up counts.
+Five-minute sampling can miss shorter intervals. These counts are conditions,
+not Grafana incidents or Telegram notifications. Gaps remain gaps, not healthy.
+No causal claim follows from temporal overlap. The October 7 sync poll storm is
+outside this SLI scope; no low burn result establishes sync or whole-product health.
 
-`aew926uoh6o00c` (pusher LB 5xx) is only a demotion candidate after verifying that
-pre-WebSocket admission errors are covered: the session SLO begins at accept,
-so it cannot replace admission monitoring today. Gateway lane-failure and
-zero-success pages cover non-chat consumers and pre-client boundaries; keep
-them until they can be scoped by journey. This slice offers two definite page
-identity demotions and up to three duplicate warnings removed, not a reduction
-of the entire reported ~96-rule fleet. There is no measured cost saving;
-inline rules add evaluations and no stored recording-rule series.
+**Sync/upload: withheld**. The original inventory had no ingested successful job
+counter paired with a terminal denominator; millions of polls are not completed
+uploads. Desktop chat's rejection-heavy counter needs eligibility classification;
+do not pool it with mobile. Provider attempts and gateway completions measure
+other boundaries and retain their diagnostic pages. Capture finalization remains
+its own durable lifecycle journey.
 
-Incident correlation: October 3's live burn coincides with ~223.84 client
-`provider_error` events in the six hours ending 15:50 UTC; provider terminals
-show ~175.68 Soniox failures in that window (different populations, correlation
-only). The [October 7 poll-storm runbook](../../docs/runbooks/request-storm-alerts.md)
-records incident onset at 12:00 UTC; the selected delivery SLIs have no sampled
-page in that interval. They therefore **do not detect the sync poll storm**.
-Keep the dedicated edge-throttling and duplicate-upload policies until a real
-sync/upload outcome SLI is ingested; low delivery burn is not whole-product health.
-
-| Rule family | Critical intervals, all / after 6h warm-up | Warning intervals, all / after 3d warm-up |
-| --- | --- | --- |
-| Live delivery | 4 / 2 | 5 / 0 |
-| Mobile chat | 0 / 0 | 0 / 0 |
-| Pusher session | 0 / 0 | 0 / 0 |
-
-The live counter-silence warning has zero firing intervals. Every query used
-300s steps in sequential one-day chunks. Missing evaluation samples are retained
-as gaps, never filled as healthy; notification timing and intervals shorter than
-five minutes are unverified. Exact expressions and UTC endpoints are saved in
-`slo-backtest.prod.json`. The PR body lists all sampled intervals and demotions.
+No existing rules, live gate, deployment or production configuration changed.
+Keep `omi-journey-chat-success-critical`, `omi-journey-pusher-success-critical`,
+`omi-journey-chat-fail` and `omi-journey-pusher-fail`. Also keep pre-accept LB,
+scrape/signal, gateway non-chat, provider budget/auth, integrity, queue age and
+capture-finalization pages. Any future retirement requires cohort/hang coverage,
+healthy source validation, exact live expression equality and Telegram proof.
+This change closes blind spots; it claims no immediate page-count or cost saving.
+Inline expressions add evaluation work without stored recording-rule series.
