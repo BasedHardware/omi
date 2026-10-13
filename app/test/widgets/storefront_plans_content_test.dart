@@ -96,6 +96,9 @@ Future<void> pumpSheet(WidgetTester tester,
       }
     });
   }
+  // Recreate the capture boundary between states so retained header layers are
+  // painted into every standalone screenshot, including empty/error states.
+  await tester.pumpWidget(const SizedBox.shrink());
   await tester.pumpWidget(RepaintBoundary(
       key: boundaryKey,
       child: MaterialApp(
@@ -152,7 +155,9 @@ void main() {
     expect(find.text('Recommended'), findsOneWidget);
     await Scrollable.ensureVisible(tester.element(find.byKey(const Key('storefront_tier_operator'))), alignment: 0);
     await capture(tester, '003-mobile-ios-storefront-pro.png');
-    await tester.tap(find.byKey(const Key('storefront_buy_operator')));
+    await tester.ensureVisible(find.byKey(const Key('storefront_buy_operator')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('storefront_buy_operator')).hitTestable());
     await tester.pumpAndSettle();
     expect(selectedId, 'fixture_operator_year');
     expect(find.byType(OmiCloseButton), findsOneWidget);
@@ -175,11 +180,13 @@ void main() {
           retry: () => retried = true,
           manage: () => managed = true,
           restore: () => restored = true);
-      expect(find.byType(OmiCloseButton), findsOneWidget);
+      expect(find.byType(OmiCloseButton).hitTestable(), findsOneWidget);
       final index = {'loading': '005', 'empty': '006', 'error': '007'}[state];
       await capture(tester, '$index-mobile-ios-storefront-$state.png');
       if (state == 'error') {
-        await tester.tap(find.text('Try Again'));
+        await tester.ensureVisible(find.text('Try Again'));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('Try Again').hitTestable());
         await tester.pump();
         expect(retried, isTrue);
       }
@@ -187,7 +194,9 @@ void main() {
           scrollable: find.byType(Scrollable).first);
       await tester.tap(find.byKey(const Key('storefront_manage')));
       await tester.pump();
-      await tester.tap(find.byKey(const Key('storefront_restore')));
+      await tester.ensureVisible(find.byKey(const Key('storefront_restore')));
+      await tester.pump(); // Loading state intentionally keeps its spinner animating.
+      await tester.tap(find.byKey(const Key('storefront_restore')).hitTestable());
       await tester.pump();
       expect(managed, isTrue);
       expect(restored, isTrue);
