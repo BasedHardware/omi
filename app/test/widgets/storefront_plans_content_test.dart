@@ -192,7 +192,9 @@ void main() {
       }
       await tester.scrollUntilVisible(find.byKey(const Key('storefront_manage')), 150,
           scrollable: find.byType(Scrollable).first);
-      await tester.tap(find.byKey(const Key('storefront_manage')));
+      await tester.ensureVisible(find.byKey(const Key('storefront_manage')));
+      await tester.pump();
+      await tester.tap(find.byKey(const Key('storefront_manage')).hitTestable());
       await tester.pump();
       await tester.ensureVisible(find.byKey(const Key('storefront_restore')));
       await tester.pump(); // Loading state intentionally keeps its spinner animating.
