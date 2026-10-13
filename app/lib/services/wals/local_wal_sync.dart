@@ -2498,7 +2498,7 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
                 reason: limit?.kind.cooldownReason ?? RateLimitReason.edgeThrottle,
               );
             }
-            break; // Account cooldown installed; stop pass below.
+            break; // 429 edge cooldown installed; stop reconcile pass below (#21279).
           case SyncJobFetchOutcome.transient:
             // Network/5xx — leave as `uploaded`, retry on the next pass.
             DebugLogManager.logEvent('reconcile_poll', {
