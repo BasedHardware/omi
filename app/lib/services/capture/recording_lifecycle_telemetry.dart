@@ -142,8 +142,7 @@ class RecordingLifecycleTelemetry {
         'recovery': 'wal_boundary',
       });
 
-  void captureGap({required String reason, required String phase}) =>
-      _emit('Capture Gap Detected', {
+  void captureGap({required String reason, required String phase}) => _emit('Capture Gap Detected', {
         'recording_id': _recordingId,
         'recording_source': _source,
         'reason': reason,
