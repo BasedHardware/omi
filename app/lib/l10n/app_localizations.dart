@@ -23229,6 +23229,66 @@ abstract class AppLocalizations {
   /// **'{count, plural, =0{No Items} =1{1 Item} other{{count} Items}}'**
   String itemLinkListTitle(int count);
 
+  /// Backend recommended tier badge; highlights a recommendation without preselecting checkout.
+  ///
+  /// In en, this message translates to:
+  /// **'Recommended'**
+  String get paywallRecommended;
+
+  /// Empty state when the plans list has no tiers.
+  ///
+  /// In en, this message translates to:
+  /// **'Plans aren\'t available right now. Try again in a minute.'**
+  String get paywallNoPlans;
+
+  /// Collapsed section that reveals the rest of the plan ladder.
+  ///
+  /// In en, this message translates to:
+  /// **'See all plans'**
+  String get paywallOtherPlans;
+
+  /// Primary button on the usage banner.
+  ///
+  /// In en, this message translates to:
+  /// **'See plans'**
+  String get paywallComparePlans;
+
+  /// Badge on the tier card for the plan the person already has.
+  ///
+  /// In en, this message translates to:
+  /// **'Your plan'**
+  String get paywallYourPlan;
+
+  /// Secondary button on the usage banner.
+  ///
+  /// In en, this message translates to:
+  /// **'Not now'**
+  String get paywallNotNow;
+
+  /// Retry button when the plans sheet fails to load.
+  ///
+  /// In en, this message translates to:
+  /// **'Try again'**
+  String get paywallTryAgain;
+
+  /// Button that opens billing management.
+  ///
+  /// In en, this message translates to:
+  /// **'Manage billing'**
+  String get paywallManageBilling;
+
+  /// Plans sheet error copy. The retry button is separate.
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn\'t load plans. Check your connection and try again.'**
+  String get paywallLoadError;
+
+  /// Title of the new plans sheet. The previous sheet keeps Plans & Billing.
+  ///
+  /// In en, this message translates to:
+  /// **'Plans'**
+  String get paywallPlans;
+
   /// No description provided for @firstCaptureTitle.
   ///
   /// In en, this message translates to:

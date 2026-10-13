@@ -1561,6 +1561,12 @@ export interface ConversationSearchItem {
   visibility?: ConversationVisibility;
 }
 
+export interface ConversationSearchResponse {
+  conversations?: Array<Record<string, unknown>>;
+  message?: string | null;
+  search_coverage: string;
+}
+
 export type ConversationSource = "friend" | "omi" | "fieldy" | "bee" | "plaud" | "frame" | "friend_com" | "apple_watch" | "phone" | "phone_call" | "desktop" | "openglass" | "screenpipe" | "workflow" | "sdcard" | "external_integration" | "limitless" | "rayban_meta" | "onboarding" | "unknown";
 
 export interface ConversationSpeakers {
@@ -2016,9 +2022,13 @@ export interface DeveloperConversation {
   geolocation?: Geolocation | null;
   id: string;
   language?: string | null;
+  participants?: Array<Record<string, unknown>>;
+  participants_included?: boolean;
+  person_ids?: Array<string>;
   source?: string | null;
   started_at: string | null;
   structured: DeveloperConversationStructured;
+  transcript_included?: boolean;
   transcript_segments?: Array<DeveloperTranscriptSegment> | null;
 }
 
@@ -2118,9 +2128,12 @@ export interface DeveloperMemoryVectorPolicy {
 
 export interface DeveloperMemoryVectorSearchResponse {
   archive_default_visible: boolean;
+  effective_limit?: number;
   items?: Array<DeveloperMemoryVectorItem>;
+  message?: string | null;
   policy: DeveloperMemoryVectorPolicy;
   returned_count: number;
+  search_coverage?: string;
 }
 
 export interface DeveloperSuccessResponse {
@@ -2603,6 +2616,9 @@ export interface FullConversation {
   id: string;
   language?: string | null;
   match_snippets?: Array<routers__mcp__TranscriptMatchSnippet>;
+  participants?: Array<Record<string, unknown>>;
+  participants_included?: boolean;
+  person_ids?: Array<string>;
   started_at: string | null;
   structured: SimpleStructured;
   transcript_segments?: Array<SimpleTranscriptSegment>;
@@ -3407,6 +3423,13 @@ export interface MemorySearchPolicyPayload {
   raw_provenance_capability: boolean;
 }
 
+export interface MemorySearchResponse {
+  effective_limit?: number;
+  memories?: Array<Record<string, unknown>>;
+  message?: string | null;
+  search_coverage: string;
+}
+
 export type MemorySubjectScope = "primary_user" | "user_owned_project" | "user_relationship" | "third_party";
 
 export interface MemorySummaryRatingResponse {
@@ -3759,6 +3782,10 @@ export interface PendingSyncResponse {
   synced_items: Array<ActionItemResponse>;
 }
 
+export interface PeopleResponse {
+  people?: Array<Record<string, unknown>>;
+}
+
 export interface Person {
   auto_conversation_count?: number | null;
   confidence?: PersonConfidence;
@@ -4015,6 +4042,14 @@ export interface ProductRolloutObservability {
   reason: string;
   surface: string;
   vector_repair_outbox_enabled?: boolean | null;
+}
+
+export interface ProfileResponse {
+  data_sources_used?: unknown | null;
+  generated_at?: unknown | null;
+  message?: string | null;
+  profile?: Record<string, unknown> | null;
+  profile_text?: string | null;
 }
 
 export interface ProgressExtractRequest {
@@ -4355,6 +4390,12 @@ export interface ScreenActivityCoverage {
   row_limit: number;
   source?: "synced_screen_activity";
   truncated: boolean;
+}
+
+export interface ScreenActivityResponse {
+  has_more: boolean;
+  next_cursor?: string | null;
+  screen_activity?: Array<Record<string, unknown>>;
 }
 
 export interface ScreenActivityRow {
@@ -4731,6 +4772,9 @@ export interface SimpleConversation {
   id: string;
   language?: string | null;
   match_snippets?: Array<routers__mcp__TranscriptMatchSnippet>;
+  participants?: Array<Record<string, unknown>>;
+  participants_included?: boolean;
+  person_ids?: Array<string>;
   started_at: string | null;
   structured: SimpleStructured;
 }
@@ -6185,6 +6229,7 @@ export interface OmiApiSchemas {
   "ConversationScreenFrame": ConversationScreenFrame;
   "ConversationScreenFrameSet": ConversationScreenFrameSet;
   "ConversationSearchItem": ConversationSearchItem;
+  "ConversationSearchResponse": ConversationSearchResponse;
   "ConversationSource": ConversationSource;
   "ConversationSpeakers": ConversationSpeakers;
   "ConversationStatus": ConversationStatus;
@@ -6430,6 +6475,7 @@ export interface OmiApiSchemas {
   "MemoryRevertRequest": MemoryRevertRequest;
   "MemoryReviewItemResponse": MemoryReviewItemResponse;
   "MemorySearchPolicyPayload": MemorySearchPolicyPayload;
+  "MemorySearchResponse": MemorySearchResponse;
   "MemorySubjectScope": MemorySubjectScope;
   "MemorySummaryRatingResponse": MemorySummaryRatingResponse;
   "MemoryUseAction": MemoryUseAction;
@@ -6483,6 +6529,7 @@ export interface OmiApiSchemas {
   "PaymentUpgradeSubscriptionResponse": PaymentUpgradeSubscriptionResponse;
   "PaywallStatusResponse": PaywallStatusResponse;
   "PendingSyncResponse": PendingSyncResponse;
+  "PeopleResponse": PeopleResponse;
   "Person": Person;
   "PersonConfidence": PersonConfidence;
   "PersonConfidenceReason": PersonConfidenceReason;
@@ -6514,6 +6561,7 @@ export interface OmiApiSchemas {
   "ProductMemorySearchItem": ProductMemorySearchItem;
   "ProductMemorySearchResponse": ProductMemorySearchResponse;
   "ProductRolloutObservability": ProductRolloutObservability;
+  "ProfileResponse": ProfileResponse;
   "ProgressExtractRequest": ProgressExtractRequest;
   "ProgressExtractResponse": ProgressExtractResponse;
   "ProgressExtractUpdateResponse": ProgressExtractUpdateResponse;
@@ -6559,6 +6607,7 @@ export interface OmiApiSchemas {
   "SavePayPalPaymentDetailsRequest": SavePayPalPaymentDetailsRequest;
   "ScreenActivityAppSummary": ScreenActivityAppSummary;
   "ScreenActivityCoverage": ScreenActivityCoverage;
+  "ScreenActivityResponse": ScreenActivityResponse;
   "ScreenActivityRow": ScreenActivityRow;
   "ScreenActivitySummaryResponse": ScreenActivitySummaryResponse;
   "ScreenActivitySyncRequest": ScreenActivitySyncRequest;
@@ -8380,6 +8429,16 @@ export interface OmiApiPaths {
       };
     };
   };
+  "/v1/dev/user/conversations/search": {
+    get: {
+      operationId: "searchConversations";
+      responses: {
+        "200": ConversationSearchResponse;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
   "/v1/dev/user/conversations/{conversation_id}": {
     get: {
       operationId: "getConversation";
@@ -8536,6 +8595,16 @@ export interface OmiApiPaths {
       };
     };
   };
+  "/v1/dev/user/memories/search": {
+    get: {
+      operationId: "searchMemories";
+      responses: {
+        "200": MemorySearchResponse;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
   "/v1/dev/user/memories/vector/search": {
     get: {
       operationId: "search_memories_vector_v1_dev_user_memories_vector_search_get";
@@ -8562,6 +8631,34 @@ export interface OmiApiPaths {
         "200": DeveloperSuccessResponse;
         "401": void;
         "404": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/dev/user/people": {
+    get: {
+      operationId: "listPeople";
+      responses: {
+        "200": PeopleResponse;
+        "401": void;
+      };
+    };
+  };
+  "/v1/dev/user/profile": {
+    get: {
+      operationId: "getUserProfile";
+      responses: {
+        "200": ProfileResponse;
+        "401": void;
+      };
+    };
+  };
+  "/v1/dev/user/screen-activity": {
+    get: {
+      operationId: "listScreenActivity";
+      responses: {
+        "200": ScreenActivityResponse;
+        "401": void;
         "422": HTTPValidationError;
       };
     };
@@ -14979,7 +15076,7 @@ export async function deleteActionItem(path: { action_item_id: string }, init?: 
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
-export async function listConversations(query: { start_date?: string | null, end_date?: string | null, categories?: string | null, limit?: number, offset?: number, include_transcript?: boolean, folder_id?: string | null, starred?: boolean | null }, init?: OmiApiClientInit): Promise<Array<DeveloperConversation>> {
+export async function listConversations(query: { start_date?: string | null, end_date?: string | null, categories?: string | null, limit?: number, offset?: number, include_transcript?: boolean, folder_id?: string | null, starred?: boolean | null, cursor?: string | null }, init?: OmiApiClientInit): Promise<Array<DeveloperConversation>> {
   const _base = init?.baseURL ?? "";
   const _path = `/v1/dev/user/conversations`;
   const _params = query ? Object.entries(query)
@@ -15026,6 +15123,24 @@ export async function createConversationFromSegments(body: CreateConversationFro
       ...init?.headers,
     },
     body: body ? JSON.stringify(body) : undefined,
+  });
+  if (!_res.ok) throw new OmiApiError(_res.status, _res);
+  return _res.status === 204 ? (undefined as any) : await _res.json();
+}
+
+export async function searchConversations(query: { query: string, limit?: number, start_date?: string | null, end_date?: string | null }, init?: OmiApiClientInit): Promise<ConversationSearchResponse> {
+  const _base = init?.baseURL ?? "";
+  const _path = `/v1/dev/user/conversations/search`;
+  const _params = query ? Object.entries(query)
+    .filter(([, v]) => v !== undefined && v !== null)
+    .map(([k, v]) => `${k}=${encodeURIComponent(String(v))}`).join('&') : '';
+  const _search = _params ? `?${_params}` : "";
+  const _res = await fetch(`${_base}${_path}${_search}`, {
+    method: "GET",
+    headers: {
+      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      ...init?.headers,
+    },
   });
   if (!_res.ok) throw new OmiApiError(_res.status, _res);
   return _res.status === 204 ? (undefined as any) : await _res.json();
@@ -15299,6 +15414,24 @@ export async function createMemoriesBatch(body: BatchMemoriesRequest, init?: Omi
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
+export async function searchMemories(query: { query: string, limit?: number }, init?: OmiApiClientInit): Promise<MemorySearchResponse> {
+  const _base = init?.baseURL ?? "";
+  const _path = `/v1/dev/user/memories/search`;
+  const _params = query ? Object.entries(query)
+    .filter(([, v]) => v !== undefined && v !== null)
+    .map(([k, v]) => `${k}=${encodeURIComponent(String(v))}`).join('&') : '';
+  const _search = _params ? `?${_params}` : "";
+  const _res = await fetch(`${_base}${_path}${_search}`, {
+    method: "GET",
+    headers: {
+      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      ...init?.headers,
+    },
+  });
+  if (!_res.ok) throw new OmiApiError(_res.status, _res);
+  return _res.status === 204 ? (undefined as any) : await _res.json();
+}
+
 export async function search_memories_vector_v1_dev_user_memories_vector_search_get(query: { query: string, limit?: number }, init?: OmiApiClientInit): Promise<DeveloperMemoryVectorSearchResponse> {
   const _base = init?.baseURL ?? "";
   const _path = `/v1/dev/user/memories/vector/search`;
@@ -15340,6 +15473,54 @@ export async function deleteMemory(path: { memory_id: string }, init?: OmiApiCli
   const _search = "";
   const _res = await fetch(`${_base}${_path}${_search}`, {
     method: "DELETE",
+    headers: {
+      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      ...init?.headers,
+    },
+  });
+  if (!_res.ok) throw new OmiApiError(_res.status, _res);
+  return _res.status === 204 ? (undefined as any) : await _res.json();
+}
+
+export async function listPeople(init?: OmiApiClientInit): Promise<PeopleResponse> {
+  const _base = init?.baseURL ?? "";
+  const _path = `/v1/dev/user/people`;
+  const _search = "";
+  const _res = await fetch(`${_base}${_path}${_search}`, {
+    method: "GET",
+    headers: {
+      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      ...init?.headers,
+    },
+  });
+  if (!_res.ok) throw new OmiApiError(_res.status, _res);
+  return _res.status === 204 ? (undefined as any) : await _res.json();
+}
+
+export async function getUserProfile(init?: OmiApiClientInit): Promise<ProfileResponse> {
+  const _base = init?.baseURL ?? "";
+  const _path = `/v1/dev/user/profile`;
+  const _search = "";
+  const _res = await fetch(`${_base}${_path}${_search}`, {
+    method: "GET",
+    headers: {
+      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      ...init?.headers,
+    },
+  });
+  if (!_res.ok) throw new OmiApiError(_res.status, _res);
+  return _res.status === 204 ? (undefined as any) : await _res.json();
+}
+
+export async function listScreenActivity(query: { start_date?: string | null, end_date?: string | null, app?: string | null, limit?: number, cursor?: string | null }, init?: OmiApiClientInit): Promise<ScreenActivityResponse> {
+  const _base = init?.baseURL ?? "";
+  const _path = `/v1/dev/user/screen-activity`;
+  const _params = query ? Object.entries(query)
+    .filter(([, v]) => v !== undefined && v !== null)
+    .map(([k, v]) => `${k}=${encodeURIComponent(String(v))}`).join('&') : '';
+  const _search = _params ? `?${_params}` : "";
+  const _res = await fetch(`${_base}${_path}${_search}`, {
+    method: "GET",
     headers: {
       ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
       ...init?.headers,
@@ -21954,4 +22135,4 @@ export async function get_speech_profile_v4_speech_profile_get(header: { authori
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
-// Total: 502 client methods generated.
+// Total: 507 client methods generated.

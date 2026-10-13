@@ -51,11 +51,14 @@ class FreemiumSwitchHandler {
       PromptPriority.low,
       // Still relevant when it is finally shown (the plan may have changed meanwhile).
       canShowNow: () => _eligible(context, captureProvider),
-      show: (promptContext) {
+      show: (promptContext) async {
         final plan = promptContext.read<UsageProvider>().subscription?.subscription.plan.wireName ?? 'unknown';
         PlatformManager.instance.analytics.paywallOpened('freemium_switch', currentPlan: plan);
+        final title = await plansSheetTitle(promptContext);
+        if (!promptContext.mounted) return;
         return showOmiSheet<void>(
           context: promptContext,
+          title: title,
           padding: EdgeInsets.zero,
           builder: (_) => const _PlansSheetWrapper(),
         );

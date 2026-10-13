@@ -144,8 +144,8 @@ final class PhoneMicBatchAudioWriter: BaseBatchAudioWriter {
         closeCurrentLocked(reason)
     }
 
-    /// Drain the latched storage-full transition. Called by the controller on its
-    /// 1Hz progress tick (inside `audioQueue.sync`) so at most one onCaptureError
+    /// Drain the latched storage-full transition. The write path reports the edge
+    /// immediately; the progress tick is the backup. At most one onCaptureError
     /// fires per false->true edge.
     func consumeStorageFullTransitionLocked() -> Bool {
         let pending = pendingStorageFullReport

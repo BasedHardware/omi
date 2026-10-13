@@ -18,7 +18,7 @@ from .conversations import (
     document_data_with_revision,
     prepare_conversation_for_read,
     conversations_collection,
-    is_soft_deleted,
+    is_visible_conversation,
 )
 from .firestore_index_registry import MCP_CONVERSATION_CARD_QUERY_SPECS
 from .helpers import prepare_for_read
@@ -32,7 +32,12 @@ def _card_field_paths(extra_field_paths: Optional[Sequence[str]]) -> List[str]:
     paths: List[str] = list(MCP_CONVERSATION_CARD_FIELD_PATHS)
     if extra_field_paths:
         paths.extend(extra_field_paths)
-    return paths
+    # Firestore masks must not contain both a parent and its nested fields.
+    return [
+        path
+        for path in dict.fromkeys(paths)
+        if not any(path.startswith(parent + ".") for parent in paths if parent != path)
+    ]
 
 
 @prepare_for_read(decrypt_func=prepare_conversation_for_read)
@@ -73,7 +78,7 @@ def get_mcp_conversation_cards(
         conversation = document_data_with_revision(doc)
         if conversation is None:
             continue
-        if is_soft_deleted(conversation):
+        if not is_visible_conversation(conversation):
             continue
         conversation.setdefault('id', doc.id)
         conversations.append(conversation)
@@ -147,7 +152,7 @@ def get_mcp_conversation_cards_page(
             conversation = document_data_with_revision(doc)
             if conversation is None:
                 continue
-            if is_soft_deleted(conversation):
+            if not is_visible_conversation(conversation):
                 continue
             conversation.setdefault('id', doc.id)
             visible.append(conversation)
