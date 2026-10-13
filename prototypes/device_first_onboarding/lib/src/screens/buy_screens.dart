@@ -118,7 +118,7 @@ class CheckoutScreen extends StatelessWidget {
           children: <Widget>[
             Icon(Icons.verified_user_outlined, size: 16, color: t.textTertiary),
             const SizedBox(width: 8),
-            Text('1-year limited warranty', style: t.body(size: 13, color: t.textTertiary)),
+            Expanded(child: Text('1-year limited warranty', style: t.body(size: 13, color: t.textTertiary))),
           ],
         ),
         const Spacer(),
@@ -143,7 +143,10 @@ class _BoxItem extends StatelessWidget {
         children: <Widget>[
           SizedBox(height: 52, child: Center(child: child)),
           const SizedBox(height: 8),
-          Text(label, textAlign: TextAlign.center, style: t.body(size: 12, color: t.textTertiary)),
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            child: Text(label, textAlign: TextAlign.center, style: t.body(size: 12, color: t.textTertiary)),
+          ),
         ],
       ),
     );
