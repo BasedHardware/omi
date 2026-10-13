@@ -13030,9 +13030,6 @@ class AppLocalizationsTh extends AppLocalizations {
   }
 
   @override
-  String get onboardingActCongratsBody => 'สวม Omi ตลอดวัน บทสนทนาของคุณจะแสดงที่หน้าหลัก';
-
-  @override
   String get onboardingActRateTitle => 'ชอบ Omi ไหม';
 
   @override

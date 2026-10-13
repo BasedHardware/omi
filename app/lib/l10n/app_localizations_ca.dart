@@ -13166,9 +13166,6 @@ class AppLocalizationsCa extends AppLocalizations {
   }
 
   @override
-  String get onboardingActCongratsBody => 'Porta l\'Omi durant el dia. Les teves converses apareixeran a l\'inici.';
-
-  @override
   String get onboardingActRateTitle => 'T\'agrada Omi de moment?';
 
   @override

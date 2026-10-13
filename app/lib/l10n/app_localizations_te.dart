@@ -13148,9 +13148,6 @@ class AppLocalizationsTe extends AppLocalizations {
   }
 
   @override
-  String get onboardingActCongratsBody => 'రోజంతా Omi ధరించండి. మీ సంభాషణలు హోమ్‌లో కనిపిస్తాయి.';
-
-  @override
   String get onboardingActRateTitle => 'ఇప్పటివరకు Omi నచ్చిందా?';
 
   @override

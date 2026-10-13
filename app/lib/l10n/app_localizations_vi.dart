@@ -13096,9 +13096,6 @@ class AppLocalizationsVi extends AppLocalizations {
   }
 
   @override
-  String get onboardingActCongratsBody => 'Đeo Omi suốt ngày. Cuộc trò chuyện sẽ hiện ở Trang chủ.';
-
-  @override
   String get onboardingActRateTitle => 'Bạn thích Omi chứ?';
 
   @override

@@ -13108,9 +13108,6 @@ class AppLocalizationsId extends AppLocalizations {
   }
 
   @override
-  String get onboardingActCongratsBody => 'Pakai Omi sepanjang hari. Percakapan Anda muncul di Beranda.';
-
-  @override
   String get onboardingActRateTitle => 'Suka Omi sejauh ini?';
 
   @override

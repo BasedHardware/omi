@@ -13004,9 +13004,6 @@ class AppLocalizationsHe extends AppLocalizations {
   }
 
   @override
-  String get onboardingActCongratsBody => 'ענדו את Omi לאורך היום. השיחות שלכם יופיעו בדף הבית.';
-
-  @override
   String get onboardingActRateTitle => 'נהנים מ-Omi עד עכשיו?';
 
   @override

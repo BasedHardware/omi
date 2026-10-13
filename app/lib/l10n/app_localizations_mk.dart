@@ -13158,10 +13158,6 @@ class AppLocalizationsMk extends AppLocalizations {
   }
 
   @override
-  String get onboardingActCongratsBody =>
-      'Носете го Omi во текот на денот. Вашите разговори ќе се појават на почетната страница.';
-
-  @override
   String get onboardingActRateTitle => 'Ви се допаѓа Omi досега?';
 
   @override

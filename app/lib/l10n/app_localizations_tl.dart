@@ -13203,9 +13203,6 @@ class AppLocalizationsTl extends AppLocalizations {
   }
 
   @override
-  String get onboardingActCongratsBody => 'Isuot ang Omi buong araw. Lalabas sa Home ang mga usapan mo.';
-
-  @override
   String get onboardingActRateTitle => 'Gusto mo ba ang Omi sa ngayon?';
 
   @override

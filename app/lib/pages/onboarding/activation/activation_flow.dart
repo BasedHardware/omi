@@ -971,8 +971,8 @@ class _QuietSkip extends StatelessWidget {
   }
 }
 
-/// "You're all set": the title in its usual place, and under it a check that pops in with a burst
-/// of confetti. One Continue.
+/// "You're all set": the title in its usual place, and close under it a check that pops in with a
+/// burst of confetti. One Continue.
 class _Hooray extends StatefulWidget {
   const _Hooray({super.key, required this.onContinue});
 
@@ -1004,26 +1004,29 @@ class _HoorayState extends State<_Hooray> {
     final name = SharedPreferencesUtil().givenName.trim();
     return _Stage(
       title: name.isEmpty ? l10n.youreAllSet : l10n.onboardingActCongratsTitle(name),
-      subtitle: l10n.onboardingActCongratsBody,
-      body: OneShot(
-        duration: const Duration(milliseconds: 2000),
-        builder: (context, t) => SizedBox(
-          width: 280,
-          height: 280,
-          child: Stack(
-            alignment: Alignment.center,
-            children: [
-              Positioned.fill(child: CustomPaint(painter: ConfettiPainter(t: segment(t, 0.2, 1, Curves.linear)))),
-              Transform.scale(
-                scale: Curves.elasticOut.transform(segment(t, 0.12, 0.55, Curves.linear)),
-                child: Container(
-                  width: 104,
-                  height: 104,
-                  decoration: BoxDecoration(color: OmiColors.accent, shape: BoxShape.circle),
-                  child: Icon(Icons.check_rounded, size: 56, color: OmiColors.onAccent),
+      // Lifted above the middle so the check sits close under the title.
+      body: Padding(
+        padding: const EdgeInsets.only(bottom: 120),
+        child: OneShot(
+          duration: const Duration(milliseconds: 2000),
+          builder: (context, t) => SizedBox(
+            width: 280,
+            height: 280,
+            child: Stack(
+              alignment: Alignment.center,
+              children: [
+                Positioned.fill(child: CustomPaint(painter: ConfettiPainter(t: segment(t, 0.2, 1, Curves.linear)))),
+                Transform.scale(
+                  scale: Curves.elasticOut.transform(segment(t, 0.12, 0.55, Curves.linear)),
+                  child: Container(
+                    width: 104,
+                    height: 104,
+                    decoration: BoxDecoration(color: OmiColors.accent, shape: BoxShape.circle),
+                    child: Icon(Icons.check_rounded, size: 56, color: OmiColors.onAccent),
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),

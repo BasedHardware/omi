@@ -13092,9 +13092,6 @@ class AppLocalizationsSk extends AppLocalizations {
   }
 
   @override
-  String get onboardingActCongratsBody => 'Noste Omi celý deň. Vaše rozhovory sa zobrazia na domovskej obrazovke.';
-
-  @override
   String get onboardingActRateTitle => 'Páči sa vám zatiaľ Omi?';
 
   @override

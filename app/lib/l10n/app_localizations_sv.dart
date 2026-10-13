@@ -13102,9 +13102,6 @@ class AppLocalizationsSv extends AppLocalizations {
   }
 
   @override
-  String get onboardingActCongratsBody => 'Bär Omi under dagen. Dina samtal visas på Hem.';
-
-  @override
   String get onboardingActRateTitle => 'Gillar du Omi hittills?';
 
   @override

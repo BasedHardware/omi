@@ -13131,9 +13131,6 @@ class AppLocalizationsHr extends AppLocalizations {
   }
 
   @override
-  String get onboardingActCongratsBody => 'Nosite Omi tijekom dana. Vaši razgovori pojavit će se na početnom zaslonu.';
-
-  @override
   String get onboardingActRateTitle => 'Sviđa li vam se Omi zasad?';
 
   @override

@@ -13145,9 +13145,6 @@ class AppLocalizationsBg extends AppLocalizations {
   }
 
   @override
-  String get onboardingActCongratsBody => 'Носете Omi през деня. Разговорите ви ще се появяват на началния екран.';
-
-  @override
   String get onboardingActRateTitle => 'Харесва ли ви Omi досега?';
 
   @override

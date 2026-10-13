@@ -13093,9 +13093,6 @@ class AppLocalizationsBn extends AppLocalizations {
   }
 
   @override
-  String get onboardingActCongratsBody => 'সারাদিন Omi পরে থাকুন। আপনার কথোপকথন হোমে দেখা যাবে।';
-
-  @override
   String get onboardingActRateTitle => 'এখন পর্যন্ত Omi কেমন লাগছে?';
 
   @override

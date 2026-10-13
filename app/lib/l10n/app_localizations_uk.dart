@@ -13128,9 +13128,6 @@ class AppLocalizationsUk extends AppLocalizations {
   }
 
   @override
-  String get onboardingActCongratsBody => 'Носіть Omi протягом дня. Ваші розмови з\'являться на головній.';
-
-  @override
   String get onboardingActRateTitle => 'Подобається Omi?';
 
   @override

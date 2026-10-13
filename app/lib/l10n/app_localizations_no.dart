@@ -13099,9 +13099,6 @@ class AppLocalizationsNo extends AppLocalizations {
   }
 
   @override
-  String get onboardingActCongratsBody => 'Bruk Omi gjennom dagen. Samtalene dine vises på Hjem.';
-
-  @override
   String get onboardingActRateTitle => 'Liker du Omi så langt?';
 
   @override

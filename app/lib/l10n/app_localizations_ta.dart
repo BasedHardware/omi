@@ -13188,9 +13188,6 @@ class AppLocalizationsTa extends AppLocalizations {
   }
 
   @override
-  String get onboardingActCongratsBody => 'நாள் முழுவதும் Omi-ஐ அணியுங்கள். உங்கள் உரையாடல்கள் முகப்பில் தோன்றும்.';
-
-  @override
   String get onboardingActRateTitle => 'இதுவரை Omi பிடித்திருக்கிறதா?';
 
   @override

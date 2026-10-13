@@ -15872,10 +15872,6 @@
             }
         }
     },
-    "onboardingActCongratsBody": "Wear Omi through your day. Your conversations show up on Home.",
-    "@onboardingActCongratsBody": {
-        "description": "Activation: line under the congratulations title"
-    },
     "onboardingActRateTitle": "Enjoying Omi so far?",
     "@onboardingActRateTitle": {
         "description": "Activation: rating ask on the congratulations screen"

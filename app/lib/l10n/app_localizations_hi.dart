@@ -13079,9 +13079,6 @@ class AppLocalizationsHi extends AppLocalizations {
   }
 
   @override
-  String get onboardingActCongratsBody => 'दिनभर Omi पहनें। आपकी बातचीत होम पर दिखेगी।';
-
-  @override
   String get onboardingActRateTitle => 'अब तक Omi कैसा लगा?';
 
   @override

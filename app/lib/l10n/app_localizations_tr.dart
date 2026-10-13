@@ -13110,9 +13110,6 @@ class AppLocalizationsTr extends AppLocalizations {
   }
 
   @override
-  String get onboardingActCongratsBody => 'Omi\'yi gün boyunca tak. Konuşmaların Ana Sayfa\'da görünür.';
-
-  @override
   String get onboardingActRateTitle => 'Omi\'yi beğendin mi?';
 
   @override

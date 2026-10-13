@@ -12891,9 +12891,6 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
-  String get onboardingActCongratsBody => '整天戴着 Omi，你的对话会显示在首页。';
-
-  @override
   String get onboardingActRateTitle => '目前喜欢 Omi 吗？';
 
   @override

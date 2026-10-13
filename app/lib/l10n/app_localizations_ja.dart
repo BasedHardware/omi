@@ -12910,9 +12910,6 @@ class AppLocalizationsJa extends AppLocalizations {
   }
 
   @override
-  String get onboardingActCongratsBody => '一日中Omiを身につけてください。会話はホームに表示されます。';
-
-  @override
   String get onboardingActRateTitle => 'Omiはいかがですか？';
 
   @override

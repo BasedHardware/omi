@@ -12916,9 +12916,6 @@ class AppLocalizationsKo extends AppLocalizations {
   }
 
   @override
-  String get onboardingActCongratsBody => '하루 종일 Omi를 착용하세요. 대화는 홈에 표시돼요.';
-
-  @override
   String get onboardingActRateTitle => 'Omi 마음에 드시나요?';
 
   @override

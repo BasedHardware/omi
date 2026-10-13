@@ -13182,9 +13182,6 @@ class AppLocalizationsEl extends AppLocalizations {
   }
 
   @override
-  String get onboardingActCongratsBody => 'Φορέστε το Omi όλη μέρα. Οι συνομιλίες σας εμφανίζονται στην Αρχική.';
-
-  @override
   String get onboardingActRateTitle => 'Σας αρέσει το Omi μέχρι τώρα;';
 
   @override

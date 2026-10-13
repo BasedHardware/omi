@@ -13125,9 +13125,6 @@ class AppLocalizationsLv extends AppLocalizations {
   }
 
   @override
-  String get onboardingActCongratsBody => 'Valkājiet Omi visu dienu. Jūsu sarunas parādīsies sākumlapā.';
-
-  @override
   String get onboardingActRateTitle => 'Vai Omi jums patīk?';
 
   @override

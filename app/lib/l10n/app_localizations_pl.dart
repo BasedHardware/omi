@@ -13136,9 +13136,6 @@ class AppLocalizationsPl extends AppLocalizations {
   }
 
   @override
-  String get onboardingActCongratsBody => 'Noś Omi przez cały dzień. Twoje rozmowy pojawią się na ekranie głównym.';
-
-  @override
   String get onboardingActRateTitle => 'Podoba Ci się Omi?';
 
   @override

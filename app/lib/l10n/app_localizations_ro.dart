@@ -13153,9 +13153,6 @@ class AppLocalizationsRo extends AppLocalizations {
   }
 
   @override
-  String get onboardingActCongratsBody => 'Poartă Omi toată ziua. Conversațiile tale apar pe ecranul principal.';
-
-  @override
   String get onboardingActRateTitle => 'Îți place Omi până acum?';
 
   @override

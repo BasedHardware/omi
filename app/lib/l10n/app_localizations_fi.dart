@@ -13102,9 +13102,6 @@ class AppLocalizationsFi extends AppLocalizations {
   }
 
   @override
-  String get onboardingActCongratsBody => 'Pidä Omia päivän ajan. Keskustelusi näkyvät etusivulla.';
-
-  @override
   String get onboardingActRateTitle => 'Pidätkö Omista tähän mennessä?';
 
   @override

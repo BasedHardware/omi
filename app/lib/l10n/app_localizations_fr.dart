@@ -13201,10 +13201,6 @@ class AppLocalizationsFr extends AppLocalizations {
   }
 
   @override
-  String get onboardingActCongratsBody =>
-      'Portez Omi au fil de la journée. Vos conversations s\'affichent dans l\'Accueil.';
-
-  @override
   String get onboardingActRateTitle => 'Omi vous plaît pour l\'instant ?';
 
   @override

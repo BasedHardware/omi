@@ -13150,9 +13150,6 @@ class AppLocalizationsHu extends AppLocalizations {
   }
 
   @override
-  String get onboardingActCongratsBody => 'Viseld az Omit egész nap. A beszélgetéseid a kezdőlapon jelennek meg.';
-
-  @override
   String get onboardingActRateTitle => 'Tetszik eddig az Omi?';
 
   @override

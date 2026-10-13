@@ -13138,9 +13138,6 @@ class AppLocalizationsEs extends AppLocalizations {
   }
 
   @override
-  String get onboardingActCongratsBody => 'Lleva Omi durante el día. Tus conversaciones aparecerán en Inicio.';
-
-  @override
   String get onboardingActRateTitle => '¿Te gusta Omi hasta ahora?';
 
   @override

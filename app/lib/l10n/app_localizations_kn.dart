@@ -13135,9 +13135,6 @@ class AppLocalizationsKn extends AppLocalizations {
   }
 
   @override
-  String get onboardingActCongratsBody => 'ದಿನವಿಡೀ Omi ಧರಿಸಿ. ನಿಮ್ಮ ಸಂಭಾಷಣೆಗಳು ಹೋಮ್‌ನಲ್ಲಿ ಕಾಣಿಸುತ್ತವೆ.';
-
-  @override
   String get onboardingActRateTitle => 'ಇಲ್ಲಿಯವರೆಗೆ Omi ಇಷ್ಟವಾಯಿತೇ?';
 
   @override

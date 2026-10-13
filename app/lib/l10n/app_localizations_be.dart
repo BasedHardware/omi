@@ -13132,9 +13132,6 @@ class AppLocalizationsBe extends AppLocalizations {
   }
 
   @override
-  String get onboardingActCongratsBody => 'Насіце Omi цэлы дзень. Вашы размовы з\'явяцца на галоўнай.';
-
-  @override
   String get onboardingActRateTitle => 'Як вам Omi?';
 
   @override

@@ -13091,9 +13091,6 @@ class AppLocalizationsEt extends AppLocalizations {
   }
 
   @override
-  String get onboardingActCongratsBody => 'Kanna Omit terve päeva. Su vestlused ilmuvad avalehele.';
-
-  @override
   String get onboardingActRateTitle => 'Kas Omi meeldib sulle seni?';
 
   @override

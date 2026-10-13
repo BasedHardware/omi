@@ -13168,9 +13168,6 @@ class AppLocalizationsIt extends AppLocalizations {
   }
 
   @override
-  String get onboardingActCongratsBody => 'Indossa Omi durante la giornata. Le tue conversazioni compaiono nella Home.';
-
-  @override
   String get onboardingActRateTitle => 'Ti piace Omi finora?';
 
   @override

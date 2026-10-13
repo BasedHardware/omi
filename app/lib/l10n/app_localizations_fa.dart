@@ -13093,9 +13093,6 @@ class AppLocalizationsFa extends AppLocalizations {
   }
 
   @override
-  String get onboardingActCongratsBody => 'در طول روز Omi را بپوشید. گفتگوهایتان در صفحهٔ اصلی نمایش داده می‌شوند.';
-
-  @override
   String get onboardingActRateTitle => 'تا اینجا از Omi راضی هستید؟';
 
   @override

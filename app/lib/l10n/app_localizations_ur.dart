@@ -13111,9 +13111,6 @@ class AppLocalizationsUr extends AppLocalizations {
   }
 
   @override
-  String get onboardingActCongratsBody => 'دن بھر Omi پہنیں۔ آپ کی گفتگو ہوم پر نظر آئے گی۔';
-
-  @override
   String get onboardingActRateTitle => 'اب تک Omi پسند آیا؟';
 
   @override

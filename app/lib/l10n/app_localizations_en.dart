@@ -13081,9 +13081,6 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
-  String get onboardingActCongratsBody => 'Wear Omi through your day. Your conversations show up on Home.';
-
-  @override
   String get onboardingActRateTitle => 'Enjoying Omi so far?';
 
   @override

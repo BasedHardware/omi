@@ -23355,12 +23355,6 @@ abstract class AppLocalizations {
   /// **'You\'re all set, {name}'**
   String onboardingActCongratsTitle(String name);
 
-  /// Activation: line under the congratulations title
-  ///
-  /// In en, this message translates to:
-  /// **'Wear Omi through your day. Your conversations show up on Home.'**
-  String get onboardingActCongratsBody;
-
   /// Activation: rating ask on the congratulations screen
   ///
   /// In en, this message translates to:

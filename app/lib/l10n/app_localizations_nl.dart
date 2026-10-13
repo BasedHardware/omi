@@ -13132,9 +13132,6 @@ class AppLocalizationsNl extends AppLocalizations {
   }
 
   @override
-  String get onboardingActCongratsBody => 'Draag Omi de hele dag. Je gesprekken verschijnen op Home.';
-
-  @override
   String get onboardingActRateTitle => 'Bevalt Omi tot nu toe?';
 
   @override
