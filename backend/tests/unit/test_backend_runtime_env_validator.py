@@ -1257,7 +1257,7 @@ def test_repo_prod_rendered_cloud_run_state_matches_manifest(monkeypatch, servic
     entry = next(item for item in entries if item['name'] == setting)
     if stale is None:
         entries.remove(entry)
-    elif setting in {'DREAM_AGENT_FEEDBACK_SALT', 'POSTHOG_BILLING_API_KEY'}:
+    elif setting in {'DREAM_AGENT_FEEDBACK_SALT'}:
         entry['valueFrom']['secretKeyRef']['key'] = stale
     else:
         entry['value'] = stale
@@ -3548,20 +3548,70 @@ def test_production_speaker_match_scores_on_all_computing_and_persisting_hosts()
         assert parse_env_entries(chart.read_text())['SPEAKER_MATCH_SCORES_ENABLED'].value == 'true'
 
 
-@pytest.mark.parametrize('stale_version', [None, '1'])
-def test_prod_backend_billing_secret_requires_live_prebind(monkeypatch, stale_version):
+def _posthog_billing_key_bindings(node, path='manifest'):
+    found = []
+    if isinstance(node, dict):
+        for key, value in node.items():
+            child = f'{path}.{key}'
+            if key == 'POSTHOG_BILLING_API_KEY':
+                found.append((child, value))
+            else:
+                found.extend(_posthog_billing_key_bindings(value, child))
+    elif isinstance(node, list):
+        for index, value in enumerate(node):
+            found.extend(_posthog_billing_key_bindings(value, f'{path}[{index}]'))
+    return found
+
+
+def test_prod_backend_billing_key_is_public_project_token(monkeypatch):
+    validator = load_validator()
+    manifest = validator._load_yaml(validator.DEFAULT_MANIFEST)
+    prod_backend = manifest['environments']['prod']['cloud_run']['services']['backend']
+    token = prod_backend['env']['PROACTIVITY_V2_POSTHOG_TOKEN']['value']
+    assert token.startswith('phc_')
+    assert prod_backend['env']['POSTHOG_BILLING_API_KEY'] == {'value': token, 'category': 'telemetry'}
+    assert prod_backend['env']['POSTHOG_HOST'] == {'value': 'https://us.posthog.com', 'category': 'telemetry'}
+    assert 'POSTHOG_PROJECT_API_KEY' not in prod_backend['env']
+    assert 'POSTHOG_PROJECT_API_KEY' not in prod_backend['secrets']
+    classification = json.loads((ROOT.parent / 'config/deployment-setting-classification.json').read_text())
+    assert 'POSTHOG_BILLING_API_KEY' in classification['kinds']['config']
+    assert 'POSTHOG_BILLING_API_KEY' not in classification['kinds']['secret']
+    assert 'POSTHOG_PROJECT_API_KEY' in classification['kinds']['secret']
+    assert _posthog_billing_key_bindings(manifest) == [
+        (
+            'manifest.environments.prod.cloud_run.services.backend.env.POSTHOG_BILLING_API_KEY',
+            {'value': token, 'category': 'telemetry'},
+        )
+    ]
+
+    env_config = validator._get_env_config(manifest, 'prod')
+    deployed = render_cloud_run_state(env_config, monkeypatch)
+    for service_name, service in deployed['services'].items():
+        matches = [item for item in service['env'] if item['name'] == 'POSTHOG_BILLING_API_KEY']
+        if service_name == 'backend':
+            assert matches == [{'name': 'POSTHOG_BILLING_API_KEY', 'value': token}]
+        else:
+            assert matches == []
+        assert all(item['name'] != 'POSTHOG_PROJECT_API_KEY' for item in service['env'])
+    for job in deployed['jobs'].values():
+        assert all(item['name'] != 'POSTHOG_BILLING_API_KEY' for item in job['env'])
+    assert validator._validate_cloud_run(env_config, deployed, strict_provisional=False) == []
+
+
+@pytest.mark.parametrize('mutation', ['remove', 'placeholder', 'secret_ref'])
+def test_prod_backend_billing_key_rejects_non_public_binding(monkeypatch, mutation):
     validator = load_validator()
     manifest = validator._load_yaml(validator.DEFAULT_MANIFEST)
     env_config = validator._get_env_config(manifest, 'prod')
     deployed = render_cloud_run_state(env_config, monkeypatch)
     entries = deployed['services']['backend']['env']
     entry = next(item for item in entries if item['name'] == 'POSTHOG_BILLING_API_KEY')
-    assert entry['valueFrom']['secretKeyRef'] == {'name': 'POSTHOG_PROJECT_API_KEY', 'key': 'latest'}
-    assert not any(item['name'] == 'POSTHOG_PROJECT_API_KEY' for item in entries)
-    assert validator._validate_cloud_run(env_config, deployed, strict_provisional=False) == []
-    if stale_version is None:
+    if mutation == 'remove':
         entries.remove(entry)
+    elif mutation == 'placeholder':
+        entry['value'] = 'disabled'
     else:
-        entry['valueFrom']['secretKeyRef']['key'] = stale_version
+        del entry['value']
+        entry['valueFrom'] = {'secretKeyRef': {'name': 'POSTHOG_PROJECT_API_KEY', 'key': 'latest'}}
     errors = validator._validate_cloud_run(env_config, deployed, strict_provisional=False)
     assert any(error.scope == 'cloud_run/backend' and 'POSTHOG_BILLING_API_KEY' in error.message for error in errors)
