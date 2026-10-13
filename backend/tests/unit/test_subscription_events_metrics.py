@@ -472,3 +472,10 @@ def test_a_first_event_steps_a_series_that_was_already_exported_at_zero():
     )
 
     assert _exported_series()[series] == before[series] + 1
+
+
+def test_ladder_generation_uses_catalog_activation_list(monkeypatch):
+    from utils.observability import subscription_events
+
+    monkeypatch.setattr(subscription_events, 'LADDER_V1_STRIPE_PRICES', ['price_fixture'])
+    assert subscription_events.price_catalog_generation('price_fixture') == 'ladder_v1'
