@@ -101,40 +101,56 @@ def schedule_completed_identity_retries(uid: str, conversation_ids: Iterable[str
 def _wait_for_admission(uid: str, candidates: tuple[str, ...]) -> None:
     keys = {(uid, cid) for cid in candidates}
     handed_off = False
+    released = False
     deadline = time.monotonic() + sum(ADMISSION_RECHECK_DELAYS)
 
-    def release_waiter() -> None:
+    def discard_waiter(reason: str) -> None:
+        nonlocal released
         with _active_lock:
-            if not handed_off:
-                _waiting.difference_update(keys)
+            if handed_off or released:
+                return
+            # Terminal accounting can trigger a same-turn resubmit. It must see
+            # this reservation removed, and later cleanup must leave it alone.
+            _waiting.difference_update(keys)
+            released = True
+        record_retry('late', 'skipped', reason, len(candidates))
+
+    def release_waiter() -> None:
+        # Also accounts for cancellation before wait() ever starts.
+        discard_waiter('slot_limit')
+        with _active_lock:
             _waiting_slots.release()
 
     async def wait() -> None:
         nonlocal handed_off
-        for delay in ADMISSION_RECHECK_DELAYS:
-            remaining = deadline - time.monotonic()
-            if remaining < 0:
-                break
-            await asyncio.sleep(min(delay, remaining))
-            with _active_lock:
-                admitted = time.monotonic() <= deadline and _slots.acquire(blocking=False)
+        try:
+            for delay in ADMISSION_RECHECK_DELAYS:
+                remaining = deadline - time.monotonic()
+                if remaining < 0:
+                    break
+                await asyncio.sleep(min(delay, remaining))
+                with _active_lock:
+                    admitted = time.monotonic() <= deadline and _slots.acquire(blocking=False)
+                    if admitted:
+                        # Atomic handoff: overlapping submissions always see the keys.
+                        _active.update(keys)
+                        _waiting.difference_update(keys)
+                        handed_off = True
                 if admitted:
-                    # Atomic handoff: overlapping submissions always see the keys.
-                    _active.update(keys)
-                    _waiting.difference_update(keys)
-                    handed_off = True
-            if admitted:
-                # Eligibility and the revision fence use a fresh snapshot here.
-                _start_batch(uid, candidates)
-                return
-        record_retry('late', 'skipped', 'slot_limit', len(candidates))
+                    # Eligibility and the revision fence use a fresh snapshot here.
+                    _start_batch(uid, candidates)
+                    return
+        finally:
+            # Cancellation propagates after one terminal skip; handed-off work
+            # has its own terminal verdict and must not be counted here.
+            discard_waiter('slot_limit')
 
     coro = wait()
     try:
         task = start_background_task(coro, name='speaker_identity_admission')
     except Exception:
         coro.close()
-        record_retry('late', 'skipped', 'submission_error', len(candidates))
+        discard_waiter('submission_error')
         release_waiter()
         raise
     # Also releases a waiter cancelled before its coroutine ever starts.

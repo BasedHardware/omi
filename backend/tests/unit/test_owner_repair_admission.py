@@ -146,6 +146,7 @@ async def test_admission_uses_fresh_policy_and_does_not_repair_disallowed_rows(m
 
 async def test_cancelled_before_start_releases_only_waiter_capacity(monkeypatch):
     futures = []
+    before = count('skipped', 'slot_limit')
 
     def submit(*args):
         f = Future()
@@ -161,6 +162,7 @@ async def test_cancelled_before_start_releases_only_waiter_capacity(monkeypatch)
     waiter.cancel()
     await settle()
     assert not retry._waiting and len(retry._active) == 2
+    assert count('skipped', 'slot_limit') == before + 1
     assert not retry._slots.acquire(blocking=False)
     assert retry._waiting_slots.acquire(blocking=False)
     assert retry._waiting_slots.acquire(blocking=False)
@@ -168,6 +170,80 @@ async def test_cancelled_before_start_releases_only_waiter_capacity(monkeypatch)
     retry._waiting_slots.release()
     retry._waiting_slots.release()
     await finish(futures)
+
+
+async def test_cancel_during_sleep_records_one_terminal_skip_and_propagates(monkeypatch):
+    futures = []
+    sleeping = asyncio.Event()
+
+    def submit(*args):
+        future = Future()
+        futures.append(future)
+        return future
+
+    async def pause(*args):
+        sleeping.set()
+        await asyncio.Event().wait()
+
+    monkeypatch.setattr(retry, 'submit_with_context', submit)
+    monkeypatch.setattr(
+        retry, 'asyncio', SimpleNamespace(sleep=pause, shield=asyncio.shield, wrap_future=asyncio.wrap_future)
+    )
+    monkeypatch.setattr(stage.conversations_db, 'get_conversation', lambda *a: pytest.fail('waiting read'))
+    assert retry.schedule_completed_identity_retries('u', ['a'])
+    assert retry.schedule_completed_identity_retries('u', ['b'])
+    existing = set(executors._background_tasks)
+    before = count('skipped', 'slot_limit')
+    assert retry.schedule_completed_identity_retries('u', ['c', 'd'])
+    waiter = next(iter(set(executors._background_tasks) - existing))
+    await sleeping.wait()
+    waiter.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await waiter
+    await settle()
+    assert waiter.cancelled() and not retry._waiting
+    assert count('skipped', 'slot_limit') == before + 2
+    assert len(futures) == 2 and retry._active == {('u', 'a'), ('u', 'b')}
+    assert not retry._slots.acquire(blocking=False)
+    assert retry._waiting_slots.acquire(blocking=False)
+    assert retry._waiting_slots.acquire(blocking=False)
+    assert not retry._waiting_slots.acquire(blocking=False)
+    retry._waiting_slots.release()
+    retry._waiting_slots.release()
+    assert not waiter.cancel()
+    await finish(futures)
+    assert count('skipped', 'slot_limit') == before + 2
+
+
+async def test_expiry_removes_keys_before_terminal_record_and_keeps_same_turn_resubmit(monkeypatch):
+    assert retry._slots.acquire(blocking=False)
+    assert retry._slots.acquire(blocking=False)
+    monkeypatch.setattr(retry, 'ADMISSION_RECHECK_DELAYS', (0,))
+    monkeypatch.setattr(retry, 'submit_with_context', lambda *a, **kw: pytest.fail('waiting submission'))
+    queued = []
+    record = retry.record_retry
+    before = count('entry', 'candidate')
+    skipped_before = count('skipped', 'slot_limit')
+
+    def resubmit_on_terminal(pass_name, stage_name, reason, amount=1):
+        record(pass_name, stage_name, reason, amount)
+        if stage_name == 'skipped' and reason == 'slot_limit':
+            monkeypatch.setattr(retry, '_wait_for_admission', lambda u, c: queued.append((u, c)))
+            retry.schedule_completed_identity_retries('u', ['c'])
+
+    monkeypatch.setattr(retry, 'record_retry', resubmit_on_terminal)
+    assert retry.schedule_completed_identity_retries('u', ['c'])
+    await settle()
+    assert queued == [('u', ('c',))]
+    assert count('entry', 'candidate') == before + 2
+    assert count('skipped', 'slot_limit') == skipped_before + 1
+    assert retry._waiting == {('u', 'c')} and not retry._active
+    # Only the old permit was released; the replacement still owns one.
+    assert retry._waiting_slots.acquire(blocking=False)
+    assert not retry._waiting_slots.acquire(blocking=False)
+    retry._waiting_slots.release()
+    retry._waiting.clear()
+    retry._waiting_slots.release()
 
 
 async def test_waiter_start_failure_releases_metadata_reservation(monkeypatch):
@@ -191,6 +267,7 @@ async def test_handoff_cleanup_cannot_remove_a_new_waiter_for_the_same_key(monke
     assert retry._slots.acquire(blocking=False)
     monkeypatch.setattr(retry, 'ADMISSION_RECHECK_DELAYS', (0,))
     queued = []
+    skipped_before = count('skipped', 'slot_limit')
 
     def handoff(uid, candidates):
         retry._active.difference_update((uid, cid) for cid in candidates)
@@ -205,6 +282,7 @@ async def test_handoff_cleanup_cannot_remove_a_new_waiter_for_the_same_key(monke
     await settle()
     assert queued == [('u', ('c',))]
     assert ('u', 'c') in retry._waiting
+    assert count('skipped', 'slot_limit') == skipped_before
     # The fake replacement waiter owns its own reservation; test-local cleanup.
     retry._waiting.clear()
     retry._waiting_slots.release()
@@ -293,6 +371,7 @@ async def test_worker_submission_failure_after_handoff_releases_both_reservation
     )
     monkeypatch.setattr(retry, 'submit_with_context', submit)
     before = count('skipped', 'submission_error')
+    skipped_before = count('skipped', 'slot_limit')
     assert retry.schedule_completed_identity_retries('u', ['a'])
     assert retry.schedule_completed_identity_retries('u', ['b'])
     assert retry.schedule_completed_identity_retries('u', ['c'])
@@ -302,6 +381,7 @@ async def test_worker_submission_failure_after_handoff_releases_both_reservation
     release.set()
     await settle()
     assert count('skipped', 'submission_error') == before + 1
+    assert count('skipped', 'slot_limit') == skipped_before
     assert retry._active == {('u', 'b')} and not retry._waiting
     assert retry._slots.acquire(blocking=False)
     assert not retry._slots.acquire(blocking=False)

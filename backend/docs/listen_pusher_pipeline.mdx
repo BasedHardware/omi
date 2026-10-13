@@ -4276,12 +4276,16 @@ The 29 funnel `(stage,reason)` pairs are closed:
 | cas_committed | done | Late-only terminal commit, including canonical identity no-op; transaction callback retries do not increment. |
 
 Admission deferral uses the same closed retry funnel: `pass=late,stage=deferred,reason=slot_limit`
-counts retained candidates. Full waiting capacity and expiry still emit
+counts retained candidates. Full waiting capacity, expiry and cancellation
+before admission emit
 `stage=skipped,reason=slot_limit`; coalesced duplicates add no entry. This adds
 one bounded stage/reason pair (61 pairs, at most 122 series across both passes);
 UID and conversation IDs remain outside Prometheus labels. Deferred admission
-counts are not commits or owner additions. Cancellation before the waiter starts
-releases only its metadata reservation; a cancelled active coordinator still
+counts are not commits or owner additions. Terminal waiters remove their keys
+under the admission lock before recording the skip; later callbacks release only
+their waiting permit and cannot erase a same-turn resubmission. Cancellation,
+including before the waiter starts, records one skip and releases only its
+metadata reservation; handed-off batches add no admission skip. A cancelled active coordinator still
 retains its slot until the storage future finishes.
 
 `resolver_exit` has exactly 30 primary reasons: `resolved`, `partial`, `disabled`,
