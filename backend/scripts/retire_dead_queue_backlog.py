@@ -10,6 +10,10 @@ from datetime import datetime, timezone
 import json
 import subprocess
 
+from google.cloud import firestore
+from google.cloud.firestore_v1 import FieldFilter
+from google.oauth2.credentials import Credentials
+
 CUTOFFS = {
     'projection_repairs': datetime(2026, 8, 28, tzinfo=timezone.utc),
     'chat_first_proactive_intents': datetime(2026, 10, 6, tzinfo=timezone.utc),
@@ -24,8 +28,6 @@ def retire(client, queue, *, execute=False, confirm_queue=None, max_deletes=1000
     query = client.collection_group(queue)
     total = int(query.count().get(timeout=60)[0][0].value)
     if execute:
-        from google.cloud.firestore_v1 import FieldFilter
-
         # Check globally before writing: name-order pages alone cannot prove freshness.
         fresh = query.where(filter=FieldFilter('created_at', '>=', CUTOFFS[queue]))
         if int(fresh.count().get(timeout=60)[0][0].value):
@@ -68,13 +70,9 @@ def main(argv=None):
     cap = args.max_deletes if args.max_deletes is not None else 1000
     if cap < 1 or not 1 <= args.batch_size <= 400:
         parser.error('positive max-deletes and batch-size between 1 and 400 required')
-    from google.cloud import firestore
-
     if args.execute:
         client = firestore.Client(project=args.project)
     else:
-        from google.oauth2.credentials import Credentials
-
         account = subprocess.check_output(['gcloud', 'config', 'get-value', 'account'], text=True).strip()
         if account != 'read-only-bot-account@based-hardware.iam.gserviceaccount.com':
             parser.error('source ~/.local/bin/gcp-agent-env.sh ro-prod first')
