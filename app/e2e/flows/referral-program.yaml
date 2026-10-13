@@ -1,8 +1,8 @@
 # E2E Flow: Referral Program page
-# Tests: navigation to referral, share link, referral stats
+# Tests: referral browser handoff, launch retry and return to Settings
 
 name: referral-program
-description: Settings → Referral Program — view referral link, share, check referral stats
+description: Settings → Referral Program → system browser signup → return to Omi
 covers:
   - app/lib/pages/referral/referral_page.dart
   - app/lib/pages/settings/settings_drawer.dart
@@ -27,8 +27,11 @@ steps:
     assert:
       interactive_count: { min: 2 }
     note: >
-      Shows referral link, share button, and referral stats
-      (number of referrals, rewards earned).
+      Omi opens affiliate.omi.me in the system browser. Complete Google signup
+      there, then return to Omi. If the browser fails to launch, the Omi page
+      shows Try Again; Open remains available after a successful launch.
+      Google completion requires a device and a test account; widget captures
+      only verify the handoff and retry, not an authenticated signup.
 
   - name: Back to settings
     back: true

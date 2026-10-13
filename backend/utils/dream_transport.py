@@ -3,12 +3,19 @@
 import json
 from collections import Counter
 from functools import lru_cache
+from dataclasses import replace
 from typing import get_args, TypedDict
 
 from pydantic import ValidationError
 
 from models.dream_agent import Plan, Triage
-from config.dream_agent import context_mode, FULL_CONTEXT_WINDOW, FULL_MODEL_SECONDS
+from config.dream_agent import (
+    context_mode,
+    FULL_CONTEXT_WINDOW,
+    FULL_MODEL_SECONDS,
+    FULL_COMPLETION_TOKENS,
+    FULL_THINKING_TOKENS,
+)
 
 import httpx
 
@@ -49,6 +56,14 @@ class PreTokenFailure(RuntimeError):
 
 class CapacityWait(PreTokenFailure):
     """Reserved capacity unavailable; retain dirty versions without poisoning."""
+
+
+class InvalidModelResponse(RuntimeError):
+    """Known billed output was truncated or was not JSON. Never retain response text."""
+
+    def __init__(self, tokens):
+        super().__init__('dream_invalid_model_response')
+        self.tokens = tokens
 
 
 def _truncate_arrays(value, schema, root):
@@ -124,6 +139,7 @@ def parse_response(model, content, *, usage_sink=None):
     retained = {}
     dropped = {}
     errors = Counter()
+    question_evidence_failures = 0
     for name, field in model.model_fields.items():
         item_model = get_args(field.annotation)[0]
         retained[name] = []
@@ -133,7 +149,12 @@ def parse_response(model, content, *, usage_sink=None):
                 retained[name].append(item_model.model_validate_json(json.dumps(item)))
             except ValidationError as exc:
                 dropped[name] += 1
-                errors.update(validation_counts(exc, prefix=(name,)))
+                item_errors = validation_counts(exc, prefix=(name,))
+                errors.update(item_errors)
+                if name == 'questions' and any(
+                    key.startswith(('questions.source_ref:', 'questions.quote:')) for key in item_errors
+                ):
+                    question_evidence_failures += 1
     if any(dropped.values()):
         record_fallback(
             component='agent_tools',
@@ -144,6 +165,10 @@ def parse_response(model, content, *, usage_sink=None):
         )
     if usage_sink is not None:
         usage_sink.setdefault('dropped_invalid', {}).update(dropped)
+        rejected = Counter(usage_sink.get('rejected', {}))
+        rejected['invalid_edit'] += dropped.get('edits', 0)
+        rejected['invalid_question_evidence'] += question_evidence_failures
+        usage_sink['rejected'] = {key: count for key, count in rejected.items() if count}
         totals = Counter(usage_sink.get('validation_errors', {}))
         totals.update(errors)
         usage_sink['validation_errors'] = dict(totals)
@@ -151,6 +176,33 @@ def parse_response(model, content, *, usage_sink=None):
 
 
 async def model_turn(uid, lane, mount, messages, *, usage_sink=None, completion_limit=4096):
+    full = context_mode(uid) == 'full' and lane == MAIN_LANE
+    used = 0
+    for attempt in range(2 if full else 1):
+        active = replace(mount, budget=replace(mount.budget, tokens=mount.budget.tokens - used))
+        try:
+            result = await _model_attempt(
+                uid, lane, active, messages, usage_sink=usage_sink, completion_limit=completion_limit
+            )
+        except InvalidModelResponse as exc:
+            used += exc.tokens
+            if not full or attempt == 1:
+                raise
+            if usage_sink is not None:
+                usage_sink['response_retries'] = usage_sink.get('response_retries', 0) + 1
+            record_fallback(
+                component='agent_tools',
+                from_mode='dream_response',
+                to_mode='response_retry',
+                reason='malformed_doc',
+                outcome='degraded',
+            )
+            continue
+        return replace(result, tokens=used + result.tokens)
+    raise AssertionError('unreachable')
+
+
+async def _model_attempt(uid, lane, mount, messages, *, usage_sink=None, completion_limit=4096):
     if usage_sink is not None:
         usage_sink['usage_unknown'] = False
     schema = mount.schema.model_json_schema()
@@ -160,7 +212,9 @@ async def model_turn(uid, lane, mount, messages, *, usage_sink=None, completion_
     remaining = mount.budget.tokens - estimated
     if remaining < 128:
         raise ValueError('dream_input_token_budget')
-    completion = min(16000 if full else 4096 if lane == MAIN_LANE else 768, remaining, completion_limit)
+    completion = min(
+        FULL_COMPLETION_TOKENS if full else 4096 if lane == MAIN_LANE else 768, remaining, completion_limit
+    )
     if full and ceiling + completion > FULL_CONTEXT_WINDOW:
         raise ValueError('dream_model_context_budget')
     reservation_model = None
@@ -194,6 +248,14 @@ async def model_turn(uid, lane, mount, messages, *, usage_sink=None, completion_
                     'type': 'json_schema',
                     'json_schema': {'name': mount.schema.__name__, 'schema': schema},
                 },
+                **(
+                    {
+                        'reasoning_effort': 'high',
+                        'google': {'thinking_config': {'thinking_budget': min(FULL_THINKING_TOKENS, completion // 2)}},
+                    }
+                    if full
+                    else {}
+                ),
             },
         )
     try:
@@ -219,6 +281,12 @@ async def model_turn(uid, lane, mount, messages, *, usage_sink=None, completion_
         usage_sink['tokens'] += tokens
         usage_sink['usage_unknown'] = False
         usage_sink.setdefault('model_lanes', []).append(lane)
-    content = json.loads(body['choices'][0]['message']['content'])
+    choice = body['choices'][0]
+    if choice.get('finish_reason') in {'length', 'max_tokens'}:
+        raise InvalidModelResponse(tokens)
+    try:
+        content = json.loads(choice['message']['content'])
+    except (json.JSONDecodeError, TypeError) as exc:
+        raise InvalidModelResponse(tokens) from exc
     value = parse_response(mount.schema, content, usage_sink=usage_sink)
     return Turn(value=value, tokens=tokens)

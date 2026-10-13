@@ -5,6 +5,15 @@ Source: events.json. Presence is not task success. Existing SDK provenance/ident
 | API | Wire name | Properties | Status | Consumers |
 | --- | --- | --- | --- | --- |
 | onboardingCompleted | Onboarding Completed | none | active | mobile-instrumentation-presence |
+| recordingProducedNoConversation | Recording Produced No Conversation | source, duration_s, transcript_observed, reason | active | onboarding-activation-funnel |
+| onboardingWelcomeShown | Onboarding Welcome Shown | none | active | onboarding-activation-funnel |
+| onboardingGetStartedTapped | Onboarding Get Started Tapped | none | active | onboarding-activation-funnel |
+| signInStarted | Sign In Started | provider | active | onboarding-activation-funnel |
+| signInFailed | Sign In Failed | provider, error_class | active | onboarding-activation-funnel |
+| onboardingPermissionResult | Onboarding Permission Result | permission, granted, permanently_denied, services_disabled | active | onboarding-activation-funnel |
+| devicePairingBlocked | Device Pairing Blocked | reason, android_sdk, ios_version | active | onboarding-activation-funnel |
+| deviceScanEmpty | Device Scan Empty | after_seconds | active | onboarding-activation-funnel |
+| deviceConnectFailed | Device Connect Failed | error_class | active | onboarding-activation-funnel |
 | phoneMicRecordingStarted | Phone Mic Recording Started | none | active | mobile-instrumentation-presence |
 | phoneMicRecordingStopped | Phone Mic Recording Stopped | none | active | mobile-instrumentation-presence |
 | transcribeLaterToggled | Transcribe Later Toggled | enabled | active | mobile-instrumentation-presence |
@@ -167,6 +176,8 @@ Source: events.json. Presence is not task success. Existing SDK provenance/ident
 | subscriptionCancelConfirmed | Subscription Cancel Confirmed | reason, has_details | active | subscription-funnel |
 | subscriptionCancelKeptPlan | Subscription Cancel Kept Plan | step, reason | active | subscription-funnel |
 | subscriptionCancelAbandoned | Subscription Cancel Abandoned | step, reason | active | subscription-funnel |
+| guidedIntroPayoffShown | Guided Intro Payoff Shown | memories_count, answer_source, latency_ms | active | guided-intro-payoff-presence |
+| guidedIntroPayoffContinued | Guided Intro Payoff Continued | none | active | guided-intro-payoff-presence |
 
 ## App Review Opportunity decisions
 
