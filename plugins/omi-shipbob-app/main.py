@@ -8,7 +8,6 @@ and chat tools for managing inventory, WROs, and orders.
 import os
 import sys
 import json
-import html
 import secrets
 import urllib.parse
 import asyncio
