@@ -316,7 +316,10 @@ class _SpeechProfileWidgetState extends State<SpeechProfileWidget> with WidgetsB
             maxLines: 5,
             maxLength: flow.isGoalPrompt ? 500 : 2000,
             onChanged: (_) => setState(() {}),
-            decoration: InputDecoration(labelText: context.l10n.guidedVoiceExperience('typing')),
+            decoration: InputDecoration(
+                labelText: context.l10n.guidedVoiceExperience('typing'),
+                floatingLabelBehavior: FloatingLabelBehavior.always,
+                alignLabelWithHint: true),
           ),
         ],
         if (flow.active) ...[

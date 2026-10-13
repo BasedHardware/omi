@@ -2,7 +2,7 @@
   "id": "guided-intro-payoff-presence",
   "kind": "question",
   "owner": "Mobile onboarding",
-  "question": "Are saved-answer payoffs shown and continued in this mobile build, and how many use chat versus the deterministic summary?",
+  "question": "Are saved-answer payoffs shown and continued in this mobile build?",
   "query": "contracts/analytics/consumers/guided-intro-payoff-presence.sql",
   "events": [
     "guidedIntroPayoffShown",

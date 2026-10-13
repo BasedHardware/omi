@@ -74,10 +74,8 @@ class DeviceGuidedVoiceIO implements GuidedVoiceIO, GuidedVoiceExperienceIO {
     if (!permission.isGranted) {
       throw GuidedVoiceFailure(permission.isPermanentlyDenied ? 'permission_permanently_denied' : 'permission_denied');
     }
-    final prefs = SharedPreferencesUtil();
-    _language = prefs.hasSetPrimaryLanguage ? prefs.userPrimaryLanguage : 'en';
-    if (_language == 'multi') _language = 'en';
-    _local = Platform.isIOS && await OnDeviceAppleProvider.isOnDeviceAvailable(_language);
+    // Keep the language/engine selected by preflight: changing to cloud here
+    // would start a recording without checking that transcription path.
     if (_local) _recognizer = OnDeviceAppleProvider(language: _language);
     _directory = await (await getTemporaryDirectory()).createTemp('omi-introduction-');
     if (_closed) await close();
