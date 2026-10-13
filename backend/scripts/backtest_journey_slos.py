@@ -6,6 +6,7 @@ Uses only explicit-context kubectl get --raw. No provisioning or log payloads.
 
 import argparse
 import json
+import math
 import re
 import subprocess
 import time
@@ -16,17 +17,44 @@ from pathlib import Path
 MONITORING = Path(__file__).resolve().parents[1] / 'charts/monitoring'
 CONTEXT = 'gke_based-hardware_us-central1_prod-omi-gke'
 API = '/api/v1/namespaces/prod-omi-monitoring/services/prod-omi-kube-prometheus-s-prometheus:9090/proxy/api/v1/'
-SCOPES = {
-    'live': ('omi_live_session_transcript_outcome_total', 'job="backend-listen-metrics"', 'transcribed'),
-    'chat': ('omi_journey_terminal_total', 'job="cloud-run-application-metrics",journey="chat_response"', 'success'),
-    'pusher': ('omi_journey_terminal_total', 'job="pusher-metrics",journey="pusher_session"', 'success'),
+# Bad and valid selectors for the alert SLIs. WINDOW is replaced per range.
+SLIS = {
+    'live': (
+        'sum(increase(omi_live_session_transcript_outcome_total{job="backend-listen-metrics",outcome="no_transcript"}[WINDOW]))',
+        'sum(increase(omi_live_session_transcript_outcome_total{job="backend-listen-metrics",outcome=~"transcribed|no_transcript"}[WINDOW]))',
+        'omi_live_session_transcript_outcome_total{job="backend-listen-metrics",outcome=~"transcribed|no_transcript"}',
+    ),
+    'chat': (
+        'sum(increase(omi_journey_terminal_total{job="cloud-run-application-metrics",journey="chat_response",outcome=~"failure|stale"}[WINDOW]))',
+        'sum(increase(omi_journey_accepted_total{job="cloud-run-application-metrics",journey="chat_response"}[WINDOW]))',
+        'omi_journey_accepted_total{job="cloud-run-application-metrics",journey="chat_response"}',
+    ),
+    'pusher': (
+        'sum(increase(omi_journey_terminal_total{job="pusher-metrics",journey="pusher_session",outcome=~"failure|cancelled"}[WINDOW]))',
+        'sum(increase(omi_journey_terminal_total{job="pusher-metrics",journey="pusher_session"}[WINDOW]))',
+        'omi_journey_terminal_total{job="pusher-metrics",journey="pusher_session"}',
+    ),
 }
+OBJECTIVES = {'live': 0.921, 'chat': 0.994, 'pusher': 0.989}
 
 
 def query(expression, **params):
     endpoint = 'query_range' if 'start' in params else 'query'
     url = API + endpoint + '?' + urllib.parse.urlencode(dict(query=expression, **params))
-    result = json.loads(subprocess.check_output(['kubectl', '--context', CONTEXT, 'get', '--raw', url]))
+    last_error = None
+    for attempt in range(4):
+        try:
+            payload = subprocess.check_output(
+                ['kubectl', '--context', CONTEXT, 'get', '--raw', url], stderr=subprocess.STDOUT
+            )
+            break
+        except subprocess.CalledProcessError as error:
+            last_error = error
+            time.sleep(15)
+    else:
+        detail = (last_error.output or b'').decode('utf-8', 'replace').split('query=', 1)[0][:240]
+        raise RuntimeError(f'Prometheus request failed after retries: {detail}') from last_error
+    result = json.loads(payload)
     if result['status'] != 'success' or result.get('warnings'):
         raise RuntimeError('Prometheus query failed or returned warnings')
     return result['data']['result']
@@ -64,34 +92,56 @@ def intervals(samples, pending=0, cutoff=0):
     return result
 
 
-def synthetic_expression(rule, rate, outage_minutes=10):
-    """Substitute aggregate event counts into the exact deployed expression.
+def synthetic_expression(rule, rate, outage_minutes=10, ending='cancelled'):
+    """Substitute aggregate event counts into the exact rule expression.
 
-    A steady baseline is followed by ten minutes of accepted work with zero
-    successes. Cancellation and never-terminal scenarios share those counts.
-    Chat critical counts only explicit failure|stale terminals, so that success
-    gap contributes zero bad events. Pusher still treats the gap as bad via
-    accepted minus success.
+    Ten minutes of the steady rate are the outage. ``cancelled`` turns those
+    minutes into bad terminals (failure|cancelled for pusher). ``no_terminal``
+    leaves them in flight, so they never enter a terminal ratio. Chat counts
+    only failure|stale, so either ending contributes zero bad chat events.
     """
 
     def replace(match):
         metric, labels, window = match.groups()
         minutes = int(window[:-1]) * {'m': 1, 'h': 60, 'd': 1440}[window[-1]]
-        accepted = rate * minutes
-        failed = rate * min(minutes, outage_minutes)
-        if metric == 'omi_journey_accepted_total':
-            value = accepted
+        total = rate * minutes
+        outage = rate * min(minutes, outage_minutes)
+        if 'outcome=~"failure|cancelled"' in labels:
+            value = outage if ending == 'cancelled' else 0
         elif 'outcome=~"failure|stale"' in labels:
             value = 0
-        elif 'outcome="success"' in labels or 'outcome="transcribed"' in labels:
-            value = accepted - failed
+        elif metric == 'omi_journey_accepted_total':
+            value = total
         elif 'outcome="no_transcript"' in labels:
-            value = failed
+            value = outage
+        elif 'outcome="success"' in labels or 'outcome="transcribed"' in labels:
+            value = total - outage
+        elif ending == 'no_terminal' and metric == 'omi_journey_terminal_total':
+            value = total - outage
         else:
-            value = accepted
+            value = total
         return f'vector({value:.12g})'
 
     return re.sub(r'sum\(increase\((\w+)\{([^}]+)\}\[(\d+[mhd])\]\)\)', replace, rule['data'][0]['model']['expr'])
+
+
+def _shares(bad_template, valid_template, start, end, step, window):
+    bad_rows = _aligned(query(bad_template.replace('WINDOW', window), start=start, end=end, step=step))
+    valid_rows = _aligned(query(valid_template.replace('WINDOW', window), start=start, end=end, step=step))
+    rows = []
+    for (timestamp, bad), (other, valid) in zip(bad_rows, valid_rows):
+        if timestamp != other or not valid:
+            raise RuntimeError('bad and valid windows did not align')
+        rows.append(dict(end_utc=utc(timestamp), bad_events=bad, valid_events=valid, share=bad / valid))
+    return rows
+
+
+def _aligned(result):
+    totals = {}
+    for series in result:
+        for timestamp, value in series['values']:
+            totals[int(timestamp)] = totals.get(int(timestamp), 0.0) + float(value)
+    return sorted(totals.items())
 
 
 def vanished_expression(rule):
@@ -130,32 +180,38 @@ def main():
             limitations=[
                 'Five-minute sampled conditions can miss shorter intervals; these are not delivered notifications.',
                 'Oldest retained samples lack full windows; conservative post-warmup intervals reported separately.',
-                'Accepted and successful terminals can straddle window boundaries; unmatched accepted work is conservatively bad.',
+                'Pusher bad share counts terminal failure and cancelled only. In-flight sessions are outside that ratio.',
+                'Chat bad share counts failure and stale terminals. Accepted work with no such terminal is not a miss.',
                 'No Grafana pending history, notification policy or causal incident proof was read.',
             ],
             baselines={},
             rules={},
         )
-        for journey, (metric, scope, outcome) in SCOPES.items():
-            good = f'sum(increase({metric}{{{scope},outcome="{outcome}"}}[10d]))'
-            valid_selector = (
-                f'{metric}{{{scope},outcome=~"transcribed|no_transcript"}}'
-                if journey == 'live'
-                else f'omi_journey_accepted_total{{{scope}}}'
-            )
-            valid = f'sum(increase({valid_selector}[10d]))'
-            g = float(query(good, time=end)[0]['value'][1])
-            v = float(query(valid, time=end)[0]['value'][1])
-            presence = query(f'sum({valid_selector})', start=start, end=end, step=3600)
+        for journey, (bad_template, valid_template, presence_selector) in SLIS.items():
+            bad_query = bad_template.replace('WINDOW', '10d')
+            valid_query = valid_template.replace('WINDOW', '10d')
+            bad = float(query(bad_query, time=end)[0]['value'][1])
+            valid = float(query(valid_query, time=end)[0]['value'][1])
+            presence = query(f'sum({presence_selector})', start=start, end=end, step=3600)
+            daily = _shares(bad_template, valid_template, end - 9 * 86400, end, 86400, '1d')
+            rolling = _shares(bad_template, valid_template, end - 7 * 86400, end, 3600, '3d')
+            worst = max(rolling, key=lambda row: row['share'])
             evidence['baselines'][journey] = dict(
-                good_query=good,
-                valid_query=valid,
-                good_events=g,
-                valid_events=v,
-                success_fraction=g / v,
+                bad_query=bad_query,
+                valid_query=valid_query,
+                good_query=f'({valid_query}) - ({bad_query})',
+                bad_events=bad,
+                good_events=valid - bad,
+                valid_events=valid,
+                success_fraction=(valid - bad) / valid,
+                bad_share=bad / valid,
+                objective=OBJECTIVES[journey],
+                worst_3d=worst,
+                worst_3d_error_budget_fraction=worst['share'] / (1 - OBJECTIVES[journey]),
+                daily=daily,
                 hourly_presence_samples=len(presence[0]['values']),
             )
-            print(journey, g / v, flush=True)
+            print(journey, (valid - bad) / valid, 'worst3d', worst['share'], flush=True)
     rules = json.loads((MONITORING / 'alerts/journey-slos.json').read_text())
     selected = [rule['uid'] for rule in rules]
     unknown = only - set(selected)
@@ -189,19 +245,24 @@ def main():
     evidence['synthetic_cases'] = {}
     for journey in ('chat', 'pusher'):
         rule = next(r for r in rules if r['uid'] == f'omi-slo-{journey}-critical')
+        target = float(rule['annotations']['slo_target'])
+        if not math.isclose(target, OBJECTIVES[journey]):
+            raise SystemExit(f'{journey} objective {target} != {OBJECTIVES[journey]}')
         rate = evidence['baselines'][journey]['valid_events'] / 14400
-        expr = synthetic_expression(rule, rate)
-        value = float(query(expr, time=end)[0]['value'][1])
-        # Chat's explicit failure|stale numerator stays at zero for a success gap.
-        if journey == 'chat':
-            assert value == 0, (journey, value)
-        else:
-            assert value > 0, (journey, value)
         for ending in ('cancelled', 'no_terminal'):
+            expr = synthetic_expression(rule, rate, ending=ending)
+            value = float(query(expr, time=end)[0]['value'][1])
+            # In-flight pusher work and every chat success gap stay at 0.
+            # A pusher cancelled burst is bad terminal share and can page.
+            if journey == 'chat' or ending == 'no_terminal':
+                assert value == 0, (journey, ending, value)
+            else:
+                assert value > 0, (journey, ending, value)
             evidence['synthetic_cases'][f'{journey}_{ending}_10m'] = dict(
                 uid=rule['uid'],
-                accepted_per_minute=rate,
+                events_per_minute=rate,
                 outage_minutes=10,
+                ending=ending,
                 expression=expr,
                 value=value,
             )
@@ -211,6 +272,7 @@ def main():
     assert value > 0
     evidence['synthetic_cases']['live_both_families_vanished'] = dict(uid=rule['uid'], expression=expr, value=value)
     receipt_path.write_text(json.dumps(evidence, indent=2) + '\n')
+    print('receipt written', receipt_path, flush=True)
 
 
 if __name__ == '__main__':
