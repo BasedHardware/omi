@@ -34,11 +34,6 @@ void main() {
       expect(provider.visibleDeviceList.any((d) => d.id == testDevice.id), isTrue);
       expect(provider.isSavedDevice(testDevice), isFalse);
 
-      String? receivedError;
-      provider.errorListener = (error) {
-        receivedError = error;
-      };
-
       // Calling handleTap with an unconnectable fake device will trigger the catch block.
       await provider.handleTap(
         device: testDevice,
@@ -54,8 +49,8 @@ void main() {
       expect(provider.visibleDeviceList.any((d) => d.id == testDevice.id), isTrue);
       expect(provider.foundDevicesMap.containsKey(testDevice.id), isTrue);
 
-      // Error notification must have fired for FoundDevices to display feedback
-      expect(receivedError, 'DEVICE_CONNECT_FAILED');
+      // notifyError stores the code on MessageNotifierMixin.error for FoundDevices to display.
+      expect(provider.error, 'DEVICE_CONNECT_FAILED');
     });
   });
 }
