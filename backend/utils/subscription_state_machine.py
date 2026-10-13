@@ -21,7 +21,7 @@ SUBSCRIPTION_EVENTS = frozenset(
 
 
 def project_subscription(
-    obj: Mapping[str, Any], plan: PlanType | None, limits: PlanLimits | dict
+    obj: Mapping[str, Any], plan: PlanType | None, limits: PlanLimits | dict[str, Any]
 ) -> Subscription | None:
     """Project a snapshot using a price binding resolved by the IO adapter.
 
@@ -29,16 +29,17 @@ def project_subscription(
     unset, matching the original webhook (read-path adoption may set it).
     """
     paid_status = obj['status'] in ('active', 'trialing')
-    if paid_status and plan is None:
+    effective_plan = plan if paid_status else PlanType.basic
+    if effective_plan is None:
         return None
     return Subscription(
-        plan=plan if paid_status else PlanType.basic,
+        plan=effective_plan,
         status=SubscriptionStatus.active,
         current_period_end=obj.get('current_period_end'),
         current_period_start=obj.get('current_period_start'),
         stripe_subscription_id=obj['id'],
         cancel_at_period_end=obj.get('cancel_at_period_end', False) if paid_status else False,
-        limits=limits,
+        limits=PlanLimits.model_validate(limits),
     )
 
 
