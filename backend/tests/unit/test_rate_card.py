@@ -1,4 +1,5 @@
 import hashlib
+from dataclasses import asdict
 from decimal import Decimal
 from pathlib import Path
 
@@ -115,7 +116,12 @@ def test_realtime_and_images_use_pinned_inputs_or_explicit_estimates():
 def test_free_and_equivalents_derive_from_card_and_mix():
     assert standard_chat_units() == Decimal('0.302974')
     assert free_budget_units() == 4853
-    assert budget_units({'budget': {'kind': 'rate_card_mix'}}) == 4853
+    assert (
+        budget_units(
+            {'budget': {'kind': 'rate_card_mix', 'speech_seconds': 18000, 'chat_messages': 30, 'chat_tier': 'standard'}}
+        )
+        == 4853
+    )
     assert budget_units({'budget': None}) is None
     assert budget_units({'budget': {'kind': 'units', 'value': 16360}}) == 16360
     baseline = display_equivalents(239)
@@ -214,3 +220,67 @@ def test_display_uses_routed_provider_shares_and_conservative_unknown_mix():
 def test_invalid_display_mix_is_rejected(shares):
     with pytest.raises(ValueError):
         display_equivalents(100, {'speech_provider_shares': shares})
+
+
+@pytest.fixture(scope='module')
+def realtime_metadata_types():
+    from utils.llm.realtime_usage import RealtimeTurnUsage, realtime_turn_metadata
+
+    return RealtimeTurnUsage, realtime_turn_metadata
+
+
+@pytest.mark.parametrize('include_flag', [False, None])
+def test_realtime_metadata_separate_reasoning_is_priced_at_text_output_rate(include_flag, realtime_metadata_types):
+    RealtimeTurnUsage, realtime_turn_metadata = realtime_metadata_types
+    turn = RealtimeTurnUsage(provider='openai', reasoning_tokens=100, usage_reported=True)
+    usage = asdict(realtime_turn_metadata(turn).usage)
+    if include_flag is None:
+        usage.pop('output_tokens_include_reasoning')
+    priced = price_llm_attempt(event(**usage, configured_model='gpt-realtime-2', modality_tokens={}))
+    expected = price_llm_attempt(event(configured_model='gpt-realtime-2', modality_tokens={'output_text': 100}))
+    assert priced == expected
+    assert priced['status'] == 'complete' and priced['micro_units'] > 0
+
+
+def test_realtime_reasoning_already_in_text_output_is_not_duplicated():
+    baseline = event(configured_model='gpt-realtime-2', modality_tokens={'output_text': 100})
+    assert price_llm_attempt(
+        {**baseline, 'reasoning_tokens': 100, 'output_tokens_include_reasoning': True}
+    ) == price_llm_attempt(baseline)
+
+
+@pytest.mark.parametrize('modalities', [{}, {'input_text': 0, 'output_audio': 0}])
+def test_empty_realtime_splits_use_matching_legacy_estimate_or_missing(modalities):
+    empty = event(configured_model='gpt-realtime-2', modality_tokens=modalities)
+    assert price_llm_attempt(empty) == {'micro_units': 0, 'status': 'missing', 'reasons': ['empty_provider_usage']}
+    fallback = {**empty, 'rate_card_id': 'openai.gpt-realtime-2.modality.2026-09-01', 'estimated_cost_micro_usd': 6400}
+    assert price_llm_attempt(fallback)['status'] == 'estimated'
+    assert price_llm_attempt(fallback)['micro_units'] > 0
+    fallback['rate_card_id'] = 'different'
+    assert price_llm_attempt(fallback)['status'] == 'missing'
+
+
+def test_mix_budget_uses_catalog_quantities():
+    mix = {'kind': 'rate_card_mix', 'speech_seconds': 3600, 'chat_messages': 2, 'chat_tier': 'standard'}
+    speech = Decimal(price_transcription(3600, provider='deepgram', accepted=True)['micro_units']) / 1000000
+    from decimal import ROUND_CEILING
+
+    assert budget_units({'budget': mix}) == int(
+        (speech + 2 * standard_chat_units()).to_integral_value(rounding=ROUND_CEILING)
+    )
+    assert budget_units({'budget': {**mix, 'speech_seconds': 0, 'chat_messages': 0}}) == 0
+
+
+def test_unknown_request_returns_missing():
+    assert price_request('unknown') == {'micro_units': 0, 'status': 'missing', 'reasons': ['request_card_missing']}
+
+
+@pytest.mark.parametrize('provider', ['dg-nova-3', 'deepgram_cloud', 'dg-nova-2', 'nova-3'])
+def test_cloud_deepgram_runtime_ids_use_pinned_provider_card(provider):
+    assert price_transcription(3600, provider=provider, accepted=True) == price_transcription(
+        3600, provider='deepgram', accepted=True
+    )
+
+
+def test_self_hosted_deepgram_retains_unknown_compute_proxy():
+    assert 'provider_unknown' in price_transcription(3600, provider='deepgram_self_hosted', accepted=True)['reasons']

@@ -328,7 +328,7 @@ _add(
         neutrals={'replacements': (None, 'optional rename map; not filter-affecting')},
     )
 )
-_add(DriverEntry('database.action_items.unlock_all_action_items', base={'uid': UID}))
+_add(DriverEntry('database.action_items.unlock_all_action_items', base={'uid': UID}, domains={'limit': [None, 100]}))
 
 _add(
     DriverEntry(
@@ -920,7 +920,7 @@ _add(
         ),
     )
 )
-_add(DriverEntry('database.conversations.unlock_all_conversations', base={'uid': UID}))
+_add(DriverEntry('database.conversations.unlock_all_conversations', base={'uid': UID}, domains={'limit': [None, 100]}))
 
 _add(
     DriverEntry(
@@ -1661,7 +1661,7 @@ _add(
         neutrals={'limit': _LIMIT, 'budget': _BUDGET},
     )
 )
-_add(DriverEntry('database.memories.unlock_all_memories', base={'uid': UID}))
+_add(DriverEntry('database.memories.unlock_all_memories', base={'uid': UID}, domains={'limit': [None, 100]}))
 
 _add(
     DriverEntry(
@@ -1836,13 +1836,6 @@ _add(
 _add(DriverEntry('database.phone_calls.get_phone_number_by_number', base={'uid': UID, 'phone_number': '+15550101'}))
 _add(DriverEntry('database.phone_calls.get_phone_numbers', base={'uid': UID}))
 _add(DriverEntry('database.phone_calls.get_primary_phone_number', base={'uid': UID}))
-_add(
-    DriverEntry(
-        'database.projection_repair.process_projection_repairs',
-        base={'uid': UID, 'fact_loader': noop, 'repair_func': noop},
-        neutrals={'limit': _LIMIT, 'max_attempts': (3, 'retry bound; not filter-affecting')},
-    )
-)
 _add(
     DriverEntry(
         'database.recurrence_inbox.list_pending_recurrence_receipts',
@@ -2712,5 +2705,18 @@ _add(
     DriverEntry(
         'database.chat_receipts.message_receipt_snapshot',
         base={'user_ref': ref_document(f'users/{UID}'), 'message_id': 'msg-1', 'transaction': ref_transaction()},
+    )
+)
+
+
+_add(
+    CoveredByEntry(
+        'database.locked_content.unlock_query_rows',
+        covered_by=(
+            'database.action_items.unlock_all_action_items',
+            'database.conversations.unlock_all_conversations',
+            'database.memories.unlock_all_memories',
+        ),
+        reason='Shared batch mechanics and bounded projection exercised by upgrade/reset unlock drivers',
     )
 )

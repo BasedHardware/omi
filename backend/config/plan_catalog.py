@@ -12,6 +12,7 @@ from __future__ import annotations
 import os
 import logging
 from copy import deepcopy
+from datetime import datetime, timezone
 from typing import Any, Mapping, Optional
 
 from config.rate_card import budget_units as entitlement_budget_units
@@ -217,7 +218,10 @@ def resolve_price_entitlements(price_id: str, environ: Mapping[str, str] | None 
 
 
 def resolve_subscription_entitlements(subscription: Any, environ: Mapping[str, str] | None = None) -> dict[str, Any]:
-    """Resolve stored Subscription objects or mappings without remote reads."""
+    """Resolve shadow metadata without remote reads; never use for live admission.
+
+    Ladder v1 budgets remain dormant until its policy shape is complete.
+    """
 
     def field(name: str, default: Any = None) -> Any:
         return (
@@ -226,8 +230,17 @@ def resolve_subscription_entitlements(subscription: Any, environ: Mapping[str, s
             else getattr(subscription, name, default)
         )
 
-    plan = PlanType(field('plan', 'basic'))
-    if field('status', 'active') not in ('active', 'trialing'):
+    raw_plan = field('plan', 'basic')
+    plan = PlanType.basic if raw_plan == 'free' else PlanType(raw_plan)
+    status = field('status', 'active')
+    period_end = field('current_period_end')
+    inactive_paid_period = (
+        status == 'inactive'
+        and plan in PAID_PLAN_TYPES
+        and period_end is not None
+        and period_end >= datetime.now(timezone.utc).timestamp()
+    )
+    if status not in ('active', 'trialing') and not inactive_paid_period:
         return get_entitlement_version(PlanType.basic)
     price = field('current_price_id')
     if price:

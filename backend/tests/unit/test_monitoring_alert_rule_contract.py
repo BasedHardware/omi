@@ -326,7 +326,9 @@ def test_llm_gateway_alerts_cover_client_black_holes_and_ready_endpoints():
     assert "llm_gateway_client_first_byte_seconds_bucket" in reachability_expr
     endpoint_rule = split["omi-llm-gateway-no-ready-endpoints"]
     assert endpoint_rule["noDataState"] == "Alerting"
-    assert "kube_endpoint_address_available" in endpoint_rule["data"][0]["model"]["expr"]
+    assert 'kube_endpoint_address{' in endpoint_rule["data"][0]["model"]["expr"]
+    assert 'ready="true"' in endpoint_rule["data"][0]["model"]["expr"]
+    assert 'or vector(0)' in endpoint_rule["data"][0]["model"]["expr"]
 
 
 def test_llm_gateway_fallback_ticket_counts_only_successful_actual_failover():
@@ -967,7 +969,7 @@ EXTERNAL_ALERT_METRICS = {
     # kube-state-metrics
     "kube_deployment_status_replicas": "kube-state-metrics",
     "kube_deployment_status_replicas_ready": "kube-state-metrics",
-    "kube_endpoint_address_available": "kube-state-metrics",
+    "kube_endpoint_address": "kube-state-metrics",
     "kube_horizontalpodautoscaler_status_target_metric": "kube-state-metrics",
     "kube_pod_container_resource_limits": "kube-state-metrics",
     "kube_pod_container_status_restarts_total": "kube-state-metrics",
