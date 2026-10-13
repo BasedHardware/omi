@@ -23,6 +23,7 @@ from utils.subscription_state_machine import (
     preserves_current_paid_subscription,
     ResolvedStripeEvent,
     transition,
+    schedule_transition,
 )
 from utils.billing_flags import webhook_ledger_enabled
 from utils.stripe_webhook_ledger import dispatch_with_ledger, RetryableBillingSkip
@@ -1190,16 +1191,7 @@ async def _handle_stripe_event(event: dict, background_tasks: BackgroundTasks | 
                             )
                             return RetryableBillingSkip(status='success')
                         else:
-                            decision = transition(
-                                None,
-                                ResolvedStripeEvent(
-                                    event['type'],
-                                    new_subscription_id,
-                                    new_subscription,
-                                    int(time.time()),
-                                    schedule_status=schedule_obj.get('status'),
-                                ),
-                            )
+                            decision = schedule_transition(event, new_subscription, int(time.time()))
                             if decision.next_state is None:
                                 raise ValueError('Schedule transition requires a projected state')
                             new_subscription = decision.next_state
@@ -1217,20 +1209,13 @@ async def _handle_stripe_event(event: dict, background_tasks: BackgroundTasks | 
                     logger.warning(
                         f"Stripe webhook: user {uid} not found in Firestore, " f"skipping scheduled upgrade update"
                     )
-                except stripe.error.InvalidRequestError as e:
-                    # Stripe confirms this subscription was removed permanently.
-                    if e.code == 'resource_missing':
-                        logger.warning('Schedule subscription no longer exists in Stripe')
-                    elif webhook_ledger_enabled():
-                        raise HTTPException(
-                            status_code=503, detail="Subscription schedule update must be retried"
-                        ) from None
                 except Exception as e:
+                    if isinstance(e, stripe.error.InvalidRequestError) and e.code == 'resource_missing':
+                        logger.warning('Schedule subscription no longer exists in Stripe')
+                        return {"status": "success"}
                     logger.error(f"Error updating subscription after scheduled upgrade: {sanitize(str(e))}")
                     if webhook_ledger_enabled():
-                        raise HTTPException(
-                            status_code=503, detail="Subscription schedule update must be retried"
-                        ) from None
+                        raise HTTPException(503, "Subscription schedule update must be retried") from None
             elif schedule_obj.get('status') == 'canceled':
                 try:
                     if schedule_obj.get('subscription'):
@@ -1248,16 +1233,7 @@ async def _handle_stripe_event(event: dict, background_tasks: BackgroundTasks | 
                             )
                             return RetryableBillingSkip(status='success')
                         else:
-                            decision = transition(
-                                None,
-                                ResolvedStripeEvent(
-                                    event['type'],
-                                    subscription_id,
-                                    new_subscription,
-                                    int(time.time()),
-                                    schedule_status=schedule_obj.get('status'),
-                                ),
-                            )
+                            decision = schedule_transition(event, new_subscription, int(time.time()))
                             if decision.next_state is None:
                                 raise ValueError('Schedule transition requires a projected state')
                             new_subscription = decision.next_state
@@ -1273,20 +1249,13 @@ async def _handle_stripe_event(event: dict, background_tasks: BackgroundTasks | 
                     logger.warning(
                         f"Stripe webhook: user {uid} not found in Firestore, " f"skipping schedule cancellation update"
                     )
-                except stripe.error.InvalidRequestError as e:
-                    # Stripe confirms this subscription was removed permanently.
-                    if e.code == 'resource_missing':
-                        logger.warning('Schedule subscription no longer exists in Stripe')
-                    elif webhook_ledger_enabled():
-                        raise HTTPException(
-                            status_code=503, detail="Subscription schedule update must be retried"
-                        ) from None
                 except Exception as e:
+                    if isinstance(e, stripe.error.InvalidRequestError) and e.code == 'resource_missing':
+                        logger.warning('Schedule subscription no longer exists in Stripe')
+                        return {"status": "success"}
                     logger.error(f"Error updating subscription after schedule cancellation: {sanitize(str(e))}")
                     if webhook_ledger_enabled():
-                        raise HTTPException(
-                            status_code=503, detail="Subscription schedule update must be retried"
-                        ) from None
+                        raise HTTPException(503, "Subscription schedule update must be retried") from None
 
     if event['type'] in ['invoice.paid', 'invoice.payment_succeeded']:
         invoice = event['data']['object']
