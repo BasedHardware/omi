@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
@@ -88,6 +89,35 @@ class SuperwallPilot {
   /// Placement shown to anyone not subscribed when the device tutorial closes (finished, skipped or
   /// replayed). Superwall only: no plans-sheet fallback, so nothing changes when the pilot is off.
   static const deviceSetupCompletePlacement = 'device_setup_complete';
+
+  /// Shows [placement] for the current user and completes once the paywall closes. Returns false
+  /// when nothing was shown (pilot off, no paywall for this user, or an error), so the caller can
+  /// fall back to the plans sheet.
+  Future<bool> showPlacementAndWait(String placement) async {
+    if (!_configured) return false;
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null || user.isAnonymous) return false;
+    await syncUser(user.uid);
+    if (_identifiedUid != user.uid) return false;
+    final closed = Completer<bool>();
+    final handler = PaywallPresentationHandler()
+      ..onDismiss((_, __) {
+        if (!closed.isCompleted) closed.complete(true);
+      })
+      ..onSkip((_) {
+        if (!closed.isCompleted) closed.complete(false);
+      })
+      ..onError((_) {
+        if (!closed.isCompleted) closed.complete(false);
+      });
+    try {
+      await Superwall.shared.registerPlacement(placement, handler: handler);
+    } catch (error) {
+      Logger.debug('Superwall pilot placement failed: $error');
+      return false;
+    }
+    return closed.future;
+  }
 
   /// [showPlacement] for the signed-in, non-anonymous Firebase user.
   Future<bool> showPlacementForCurrentUser(String placement) async {

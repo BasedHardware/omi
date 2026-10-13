@@ -17,6 +17,7 @@ import 'package:omi/pages/onboarding/activation/activation_capture.dart';
 import 'package:omi/pages/onboarding/activation/activation_flow.dart';
 import 'package:omi/pages/onboarding/activation/onboarding_plans_sheet.dart';
 import 'package:omi/pages/onboarding/connect_omi/connect_omi_step.dart';
+import 'package:omi/services/superwall_pilot.dart';
 import 'package:omi/providers/device_provider.dart';
 import 'package:omi/pages/onboarding/knowledge_graph_step.dart';
 import 'package:omi/pages/onboarding/name/name_widget.dart';
@@ -200,6 +201,8 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
   /// The paywall inside the activation, between the celebration and the rating ask.
   Future<void> _showPaywall() async {
     unawaited(context.read<UsageProvider>().fetchSubscription());
+    if (await SuperwallPilot.instance.showPlacementAndWait(SuperwallPilot.deviceSetupCompletePlacement)) return;
+    if (!mounted) return;
     await showOmiSheet<void>(context: context, padding: EdgeInsets.zero, builder: (_) => const OnboardingPlansSheet());
   }
 
