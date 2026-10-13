@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/semantics.dart';
 
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 
@@ -20,6 +21,7 @@ class HomeControlSurface extends StatefulWidget {
     this.onLongPress,
     this.longPressHint,
     this.width,
+    this.semanticsActions,
   });
 
   final Widget child;
@@ -31,6 +33,10 @@ class HomeControlSurface extends StatefulWidget {
 
   /// Fixed width (a circle); null fills the space it is given (the pill).
   final double? width;
+
+  /// Actions of controls inside the surface, which its single label otherwise hides (the live
+  /// pill's stop button).
+  final Map<CustomSemanticsAction, VoidCallback>? semanticsActions;
 
   // White on the canvas like Home's cards, lifted by a soft, wide shadow because the controls
   // float over the list (a hairline would read as a form field).
@@ -66,6 +72,7 @@ class _HomeControlSurfaceState extends State<HomeControlSurface> {
       onTap: widget.onTap,
       onLongPress: widget.onLongPress,
       onLongPressHint: widget.onLongPress == null ? null : widget.longPressHint,
+      customSemanticsActions: widget.semanticsActions,
       excludeSemantics: true,
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
@@ -174,34 +181,125 @@ class HomeNewPillContent extends StatelessWidget {
   }
 }
 
-/// "■ Stop" while the phone records; the status itself is in the card at the top. While the
-/// recording finishes, the square becomes a spinner.
-class HomeStopPillContent extends StatelessWidget {
-  const HomeStopPillContent({super.key, this.stopping = false});
+/// The phone recording, in place of "New": a breathing dot, what it is doing and the newest words
+/// (the pill opens the live transcript), with its own stop button at the end. While the recording
+/// finishes, the square becomes a spinner.
+class HomeLivePillContent extends StatelessWidget {
+  const HomeLivePillContent({
+    super.key,
+    required this.status,
+    required this.onStop,
+    this.lastLine,
+    this.live = true,
+    this.stopping = false,
+  });
 
+  final String status;
+  final String? lastLine;
+  final bool live;
   final bool stopping;
+  final VoidCallback? onStop;
 
   @override
   Widget build(BuildContext context) {
     return Row(
-      mainAxisAlignment: MainAxisAlignment.center,
       children: [
-        _Disc(
-          color: OmiColors.danger,
-          child: stopping
-              ? const OmiSpinner(size: OmiSpinnerSize.small, color: Colors.white)
-              : Container(
-                  width: 10,
-                  height: 10,
-                  decoration: const BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.all(Radius.circular(2.5)), // omi-ux-allow: radius-literal -- a glyph
-                  ),
+        const SizedBox(width: OmiSpacing.md + 2),
+        HomeLiveDot(live: live),
+        const SizedBox(width: OmiSpacing.sm),
+        Expanded(child: _StatusAndWords(status: status, lastLine: lastLine)),
+        Semantics(
+          button: true,
+          label: context.l10n.stopRecording,
+          child: GestureDetector(
+            key: const ValueKey('home_record_pill_stop_button'),
+            behavior: HitTestBehavior.opaque,
+            onTap: stopping ? null : onStop,
+            child: SizedBox(
+              width: kHomeChatBarHeight,
+              height: kHomeChatBarHeight,
+              child: Center(
+                child: _Disc(
+                  color: OmiColors.danger,
+                  child: stopping
+                      ? const OmiSpinner(size: OmiSpinnerSize.small, color: Colors.white)
+                      : Container(
+                          width: 10,
+                          height: 10,
+                          decoration: const BoxDecoration(
+                            color: Colors.white,
+                            borderRadius:
+                                BorderRadius.all(Radius.circular(2.5)), // omi-ux-allow: radius-literal -- a glyph
+                          ),
+                        ),
                 ),
+              ),
+            ),
+          ),
         ),
-        const SizedBox(width: 10),
-        Flexible(child: Text(context.l10n.stop, style: _pillLabel(), maxLines: 1, overflow: TextOverflow.ellipsis)),
-        const SizedBox(width: 6),
+      ],
+    );
+  }
+}
+
+/// One line of status, or, once words arrive, the status small above the newest words. The words
+/// run in from the right and fade out at the left, so the latest is always what shows.
+class _StatusAndWords extends StatelessWidget {
+  const _StatusAndWords({required this.status, this.lastLine, this.title});
+
+  final String status;
+  final String? lastLine;
+
+  /// The device name, before the status.
+  final String? title;
+
+  @override
+  Widget build(BuildContext context) {
+    final words = lastLine?.trim() ?? '';
+    final secondary = OmiType.headline.copyWith(fontWeight: FontWeight.w400, color: OmiColors.textSecondary);
+    if (words.isEmpty) {
+      return Text.rich(
+        TextSpan(children: [
+          if (title != null) TextSpan(text: '$title  ', style: _pillLabel()),
+          TextSpan(text: status, style: title == null ? _pillLabel() : secondary),
+        ]),
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+      );
+    }
+    return Column(
+      mainAxisAlignment: MainAxisAlignment.center,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          title == null ? status : '$title · $status',
+          style: OmiType.caption.copyWith(color: OmiColors.textSecondary),
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
+        SizedBox(
+          height: 20,
+          child: ShaderMask(
+            shaderCallback: (rect) => const LinearGradient(
+              colors: [Colors.transparent, Colors.black],
+              stops: [0, 0.16],
+            ).createShader(rect),
+            blendMode: BlendMode.dstIn,
+            child: ClipRect(
+              child: OverflowBox(
+                maxWidth: double.infinity,
+                alignment: Alignment.centerRight,
+                child: Text(
+                  words,
+                  key: const ValueKey('home_pill_last_words'),
+                  style: OmiType.callout.copyWith(color: OmiColors.textPrimary),
+                  maxLines: 1,
+                  softWrap: false,
+                ),
+              ),
+            ),
+          ),
+        ),
       ],
     );
   }
@@ -215,10 +313,12 @@ class HomeDevicePillContent extends StatelessWidget {
     required this.device,
     required this.status,
     required this.live,
+    this.lastLine,
   });
 
   final BtDevice device;
   final String status;
+  final String? lastLine;
 
   /// Capturing now: the dot is red and breathes; otherwise it is a still grey dot.
   final bool live;
@@ -251,19 +351,7 @@ class HomeDevicePillContent extends StatelessWidget {
             ),
           ),
           const SizedBox(width: OmiSpacing.sm),
-          Flexible(
-            child: Text.rich(
-              TextSpan(children: [
-                TextSpan(text: device.name, style: _pillLabel()),
-                TextSpan(
-                  text: '  $status',
-                  style: OmiType.headline.copyWith(fontWeight: FontWeight.w400, color: OmiColors.textSecondary),
-                ),
-              ]),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
-          ),
+          Flexible(child: _StatusAndWords(title: device.name, status: status, lastLine: lastLine)),
         ],
       ),
     );

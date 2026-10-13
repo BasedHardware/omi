@@ -144,6 +144,9 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
         if (widget.deviceStatusInBottomBar && !phoneLive && !batch && _pendantJustListening(provider)) {
           return const SizedBox.shrink();
         }
+        if (widget.deviceStatusInBottomBar && phoneLive && !batch && _phoneJustListening(provider)) {
+          return const SizedBox.shrink();
+        }
 
         return GestureDetector(
           onTap: () async {
@@ -188,6 +191,16 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
   static bool _pendantJustListening(CaptureProvider provider) {
     final source = provider.liveCaptureSource;
     return source != null && source != 'phone' && !provider.isPaused && provider.terminalTranscriptionFailure == null;
+  }
+
+  /// The phone is recording without trouble: Home's bottom bar shows it (status, newest words, the
+  /// live transcript on tap, Stop), so no card. It stays for paused, the microphone taken or
+  /// recovering, and transcription that has failed.
+  static bool _phoneJustListening(CaptureProvider provider) {
+    return provider.recordingState == RecordingState.record &&
+        !provider.isPaused &&
+        !provider.isPhoneMicPaused &&
+        provider.terminalTranscriptionFailure == null;
   }
 
   /// The live card's glyph and 44pt Pause target carry their own air, so its edges are tighter

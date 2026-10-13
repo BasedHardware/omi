@@ -1,6 +1,7 @@
 import 'package:omi/pages/phone_calls/phone_calls_feature.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/semantics.dart';
 
 import 'package:provider/provider.dart';
 
@@ -418,11 +419,31 @@ class _HomeRecordButtonState extends State<HomeRecordButton> {
 
     final Widget pill;
     if (phoneRecording) {
+      void stop() => _startRecording(context);
+      final paused = capture.isPhoneMicPaused || capture.isPaused;
+      final status = paused ? l10n.paused : l10n.listening;
+      // Transcribe Later has no live transcript to open: the whole pill stops it.
+      final batch = capture.isPhoneMicBatchRecording;
       pill = HomeControlSurface(
         key: const ValueKey('home_record_pill_stop'),
-        semanticsLabel: l10n.stopRecording,
-        onTap: _stopping ? null : () => _startRecording(context),
-        child: HomeStopPillContent(stopping: _stopping),
+        semanticsLabel: batch ? l10n.stopRecording : status,
+        semanticsHint: batch ? null : l10n.liveTranscript,
+        semanticsActions: batch || _stopping ? null : {CustomSemanticsAction(label: l10n.stopRecording): stop},
+        onTap: _stopping
+            ? null
+            : batch
+                ? stop
+                : () {
+                    OmiHaptics.selection();
+                    _openTranscript(context);
+                  },
+        child: HomeLivePillContent(
+          status: status,
+          lastLine: batch ? null : capture.segments.lastOrNull?.text,
+          live: !paused,
+          stopping: _stopping,
+          onStop: stop,
+        ),
       );
     } else if (pendantCapturing && !starting) {
       final paused = capture.isPaused;
@@ -435,7 +456,12 @@ class _HomeRecordButtonState extends State<HomeRecordButton> {
         // Holding it offers the phone instead (or a call), as tapping record used to.
         onLongPress: () => _showPendantListening(context),
         longPressHint: l10n.moreOptions,
-        child: HomeDevicePillContent(device: device, status: status, live: !paused),
+        child: HomeDevicePillContent(
+          device: device,
+          status: status,
+          live: !paused,
+          lastLine: capture.segments.lastOrNull?.text,
+        ),
       );
     } else {
       pill = HomeControlSurface(

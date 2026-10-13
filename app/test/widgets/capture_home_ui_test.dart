@@ -530,6 +530,38 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
+  group('live pill replaces the Home card while recording is healthy', () {
+    testWidgets('the phone pill shows the newest words; Home shows no card', (tester) async {
+      await pump(tester, const HomeRecordButton(),
+          device: _Device(connected: false, paired: false), capture: _Capture(_Live.phone));
+      await tester.pump(const Duration(milliseconds: 300));
+      expect(find.byKey(const ValueKey('home_pill_last_words')), findsOneWidget);
+      expect(find.text('Keep the pendant flow as it is.'), findsOneWidget);
+      await tester.pumpWidget(const SizedBox());
+
+      await pump(tester, const ConversationCaptureWidget(showsCall: true, deviceStatusInBottomBar: true),
+          device: _Device(connected: false, paired: false), capture: _Capture(_Live.phone));
+      expect(find.byType(LiveCaptureCard), findsNothing);
+      await tester.pumpWidget(const SizedBox());
+    });
+
+    testWidgets('a paused or failing phone recording keeps the card', (tester) async {
+      for (final capture in [_Capture(_Live.phone, readerPaused: true), _Capture(_Live.phone, failure: true)]) {
+        await pump(tester, const ConversationCaptureWidget(showsCall: true, deviceStatusInBottomBar: true),
+            device: _Device(connected: false, paired: false), capture: capture);
+        expect(find.byType(LiveCaptureCard), findsOneWidget);
+        await tester.pumpWidget(const SizedBox());
+      }
+    });
+
+    testWidgets('the pendant pill shows the newest words too', (tester) async {
+      await pump(tester, const HomeRecordButton(), capture: _Capture(_Live.pendant), device: _Device(paired: true));
+      await tester.pump(const Duration(milliseconds: 300));
+      expect(find.byKey(const ValueKey('home_pill_last_words')), findsOneWidget);
+      await tester.pumpWidget(const SizedBox());
+    });
+  });
+
   group('record-with-this-phone button', () {
     testWidgets('idle with calls hidden: + New, and no ways-to-record option', (tester) async {
       await pump(tester, const HomeRecordButton(),
@@ -615,12 +647,14 @@ void main() {
       expect(find.byIcon(Icons.add_rounded), findsOneWidget);
     });
 
-    testWidgets('while the phone records, the pill is its Stop', (tester) async {
+    testWidgets('while the phone records, the pill shows it listening and holds its Stop', (tester) async {
       await pump(tester, const HomeRecordButton(),
           device: _Device(connected: false, paired: false), capture: _Capture(_Live.phone));
       await tester.pump(const Duration(milliseconds: 300));
-      expect(find.bySemanticsLabel(en.stopRecording), findsOneWidget);
-      expect(find.text(en.stop), findsOneWidget);
+      expect(find.text(en.listening), findsOneWidget);
+      expect(find.byKey(const ValueKey('home_record_pill_stop_button')), findsOneWidget);
+      final pill = tester.getSemantics(find.byKey(const ValueKey('home_record_pill_stop')));
+      expect(pill.getSemanticsData().customSemanticsActionIds, isNotEmpty, reason: 'Stop reachable by VoiceOver');
       expect(find.text(en.homeNewRecordingButton), findsNothing);
       await tester.pumpWidget(const SizedBox());
     });
@@ -628,7 +662,7 @@ void main() {
     testWidgets('Stop on a phone recording that is reconnecting finishes it, never restarts it', (tester) async {
       final capture = _Capture(_Live.phone, interrupted: true);
       await pump(tester, const HomeRecordButton(), device: _Device(connected: false, paired: false), capture: capture);
-      await tester.tap(find.bySemanticsLabel(en.stopRecording));
+      await tester.tap(find.byKey(const ValueKey('home_record_pill_stop_button')));
       await tester.pump();
       expect(capture.finishes, 1);
       expect(capture.phoneStarts, 0);
