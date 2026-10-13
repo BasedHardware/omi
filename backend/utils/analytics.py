@@ -1,7 +1,11 @@
 from datetime import datetime, timezone
-from typing import Any, Mapping, Optional
+from typing import Any, Mapping, Optional, TypedDict
 
 from database import user_usage as user_usage_db
+
+
+class _MetadataKwargs(TypedDict, total=False):
+    usage_metadata: Mapping[str, Any]
 
 
 def billable_transcription_seconds(
@@ -55,7 +59,7 @@ def record_usage(
         'memories_created': memories_created,
         'speech_seconds': speech_seconds,
     }
-    metadata_kwargs = {'usage_metadata': usage_metadata} if usage_metadata is not None else {}
+    metadata_kwargs: _MetadataKwargs = {'usage_metadata': usage_metadata} if usage_metadata is not None else {}
     if idempotency_key:
         user_usage_db.update_hourly_usage_once(
             uid,

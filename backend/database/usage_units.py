@@ -151,7 +151,10 @@ def gateway_shadow(data: Mapping[str, Any]) -> tuple[dict[str, Any], dict[str, A
 
 def normalize_plan_usage(data: Mapping[str, Any]) -> dict[str, Any]:
     """Add disjoint old literal dotted increments to new nested attribution."""
-    plans = deepcopy(data.get('plan_usage')) if isinstance(data.get('plan_usage'), dict) else {}
+    plans: dict[str, Any] = {}
+    existing = data.get('plan_usage')
+    if isinstance(existing, dict):
+        plans = deepcopy(existing)
     for key, value in data.items():
         if not key.startswith('plan_usage.'):
             continue

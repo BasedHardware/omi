@@ -9,7 +9,7 @@ from google.cloud.firestore_v1 import FieldFilter
 from ._client import db
 from .firestore_read_metrics import FirestoreReadFamily, FirestoreReadMode, record_firestore_read
 from .firestore_index_registry import HOURLY_USAGE_UTC_DAY_QUERY
-from .llm_usage import _nested, resolve_usage_plan_id
+from .llm_usage import nest_usage_fields, resolve_usage_plan_id
 from .usage_units import hourly_shadow, normalize_plan_usage
 from models.user_usage import UsageStats
 
@@ -420,7 +420,7 @@ def update_hourly_usage(
         update_doc['platforms'] = firestore.ArrayUnion([platform])
 
     update_doc.update(hourly_shadow(updates, usage_metadata))
-    hourly_usage_ref.set(_nested(update_doc), merge=True)
+    hourly_usage_ref.set(nest_usage_fields(update_doc), merge=True)
 
 
 @firestore.transactional
@@ -499,7 +499,9 @@ def update_hourly_usage_once(
         safe_exclusion = effective_exclusion.replace('.', '_').replace('/', '_')
         update_doc[f'{plan_prefix}._metadata.cost_exclusions.{safe_exclusion}'] = firestore.Increment(1)
     update_doc.update(hourly_shadow(updates, usage_metadata))
-    return _update_hourly_usage_once_transaction(client.transaction(), marker_ref, usage_ref, _nested(update_doc))
+    return _update_hourly_usage_once_transaction(
+        client.transaction(), marker_ref, usage_ref, nest_usage_fields(update_doc)
+    )
 
 
 def batch_update_hourly_usage(uid: str, hourly_updates: Dict[datetime, Dict[str, Any]]) -> None:
