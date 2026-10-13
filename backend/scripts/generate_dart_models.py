@@ -531,6 +531,18 @@ SCHEMA_GROUPS = {
             'AudioUrlsResponse',
         ),
     },
+    'storefront': {
+        'output': DEFAULT_OUTPUT_DIR / 'storefront_wire.g.dart',
+        'schemas': (
+            'AnnualSavings',
+            'PlanFeature',
+            'StorefrontCurrentPlan',
+            'StorefrontPrice',
+            'StorefrontResponse',
+            'StorefrontTier',
+            'StorefrontUsage',
+        ),
+    },
     'payments': {
         'output': DEFAULT_OUTPUT_DIR / 'payments_wire.g.dart',
         'schemas': (

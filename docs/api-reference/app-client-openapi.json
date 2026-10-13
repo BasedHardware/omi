@@ -1674,6 +1674,29 @@
         "title": "AnnouncementType",
         "type": "string"
       },
+      "AnnualSavings": {
+        "properties": {
+          "amount_minor": {
+            "title": "Amount Minor",
+            "type": "integer"
+          },
+          "formatted": {
+            "title": "Formatted",
+            "type": "string"
+          },
+          "percent": {
+            "title": "Percent",
+            "type": "number"
+          }
+        },
+        "required": [
+          "amount_minor",
+          "percent",
+          "formatted"
+        ],
+        "title": "AnnualSavings",
+        "type": "object"
+      },
       "App": {
         "description": "Full App model - includes large/internal fields for detail views.",
         "properties": {
@@ -23576,6 +23599,29 @@
         "title": "PhoneNumbersResponse",
         "type": "object"
       },
+      "PlanFeature": {
+        "properties": {
+          "included": {
+            "default": true,
+            "title": "Included",
+            "type": "boolean"
+          },
+          "key": {
+            "title": "Key",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          }
+        },
+        "required": [
+          "key",
+          "label"
+        ],
+        "title": "PlanFeature",
+        "type": "object"
+      },
       "PlanIdentitySubscription": {
         "properties": {
           "cancel_at_period_end": {
@@ -29848,6 +29894,256 @@
           "store_recording_permission"
         ],
         "title": "StoreRecordingPermissionResponse",
+        "type": "object"
+      },
+      "StorefrontCurrentPlan": {
+        "properties": {
+          "legacy": {
+            "title": "Legacy",
+            "type": "boolean"
+          },
+          "plan_id": {
+            "title": "Plan Id",
+            "type": "string"
+          },
+          "price_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Price Id"
+          }
+        },
+        "required": [
+          "plan_id",
+          "legacy"
+        ],
+        "title": "StorefrontCurrentPlan",
+        "type": "object"
+      },
+      "StorefrontPrice": {
+        "properties": {
+          "amount_minor": {
+            "title": "Amount Minor",
+            "type": "integer"
+          },
+          "annual_savings": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AnnualSavings"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "currency": {
+            "title": "Currency",
+            "type": "string"
+          },
+          "formatted_amount": {
+            "title": "Formatted Amount",
+            "type": "string"
+          },
+          "interval": {
+            "enum": [
+              "month",
+              "year"
+            ],
+            "title": "Interval",
+            "type": "string"
+          },
+          "monthly_equivalent": {
+            "title": "Monthly Equivalent",
+            "type": "string"
+          },
+          "price_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Price Id"
+          }
+        },
+        "required": [
+          "interval",
+          "currency",
+          "amount_minor",
+          "formatted_amount",
+          "monthly_equivalent"
+        ],
+        "title": "StorefrontPrice",
+        "type": "object"
+      },
+      "StorefrontResponse": {
+        "properties": {
+          "catalog_revision": {
+            "title": "Catalog Revision",
+            "type": "integer"
+          },
+          "current": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/StorefrontCurrentPlan"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "next_offer_tier_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Offer Tier Id"
+          },
+          "schema_version": {
+            "const": 1,
+            "default": 1,
+            "title": "Schema Version",
+            "type": "integer"
+          },
+          "show_subscription_ui": {
+            "default": true,
+            "title": "Show Subscription Ui",
+            "type": "boolean"
+          },
+          "tiers": {
+            "items": {
+              "$ref": "#/components/schemas/StorefrontTier"
+            },
+            "title": "Tiers",
+            "type": "array"
+          },
+          "usage": {
+            "$ref": "#/components/schemas/StorefrontUsage"
+          }
+        },
+        "required": [
+          "catalog_revision"
+        ],
+        "title": "StorefrontResponse",
+        "type": "object"
+      },
+      "StorefrontTier": {
+        "properties": {
+          "action": {
+            "enum": [
+              "current",
+              "upgrade",
+              "downgrade_not_offered",
+              "contact"
+            ],
+            "title": "Action",
+            "type": "string"
+          },
+          "display_name": {
+            "title": "Display Name",
+            "type": "string"
+          },
+          "entitlement_version": {
+            "title": "Entitlement Version",
+            "type": "string"
+          },
+          "features": {
+            "items": {
+              "$ref": "#/components/schemas/PlanFeature"
+            },
+            "title": "Features",
+            "type": "array"
+          },
+          "legacy": {
+            "default": false,
+            "title": "Legacy",
+            "type": "boolean"
+          },
+          "plan_id": {
+            "title": "Plan Id",
+            "type": "string"
+          },
+          "prices": {
+            "items": {
+              "$ref": "#/components/schemas/StorefrontPrice"
+            },
+            "title": "Prices",
+            "type": "array"
+          },
+          "recommended": {
+            "default": false,
+            "title": "Recommended",
+            "type": "boolean"
+          },
+          "tagline": {
+            "title": "Tagline",
+            "type": "string"
+          },
+          "tier_id": {
+            "title": "Tier Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "tier_id",
+          "plan_id",
+          "entitlement_version",
+          "display_name",
+          "tagline",
+          "features",
+          "prices",
+          "action"
+        ],
+        "title": "StorefrontTier",
+        "type": "object"
+      },
+      "StorefrontUsage": {
+        "properties": {
+          "budget_percent": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Budget Percent"
+          },
+          "kind": {
+            "default": "unavailable",
+            "enum": [
+              "transcription",
+              "usage_budget",
+              "unavailable"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "reset_at": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reset At"
+          }
+        },
+        "title": "StorefrontUsage",
         "type": "object"
       },
       "StripeConnectAccountResponse": {
@@ -78129,6 +78425,83 @@
         "summary": "Report Message",
         "tags": [
           "chat"
+        ]
+      }
+    },
+    "/v2/payments/plans": {
+      "get": {
+        "operationId": "get_storefront_v2_payments_plans_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StorefrontResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Get Storefront",
+        "tags": [
+          "payments"
         ]
       }
     },

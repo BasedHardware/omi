@@ -722,6 +722,32 @@ public enum OmiAPI {
   }
 
 
+  public struct AnnualSavings: Codable {
+    public let amountMinor: Int
+    public let formatted: String
+    public let percent: Double
+
+    private enum CodingKeys: String, CodingKey {
+      case amountMinor = "amount_minor"
+      case formatted
+      case percent
+    }
+
+    public init(from decoder: Decoder) throws {
+      let c = try decoder.container(keyedBy: CodingKeys.self)
+      amountMinor = try c.decode(Int.self, forKey: .amountMinor)
+      formatted = try c.decode(String.self, forKey: .formatted)
+      percent = try c.decode(Double.self, forKey: .percent)
+    }
+
+    public init(amountMinor: Int, formatted: String, percent: Double) {
+      self.amountMinor = amountMinor
+      self.formatted = formatted
+      self.percent = percent
+    }
+  }
+
+
   public struct AppResult: Codable {
     public let appId: String?
     public let content: String
@@ -4293,6 +4319,26 @@ public enum OmiAPI {
   }
 
 
+  public struct PlanFeature: Codable {
+    public let included: Bool?
+    public let key: String
+    public let label: String
+
+    public init(from decoder: Decoder) throws {
+      let c = try decoder.container(keyedBy: CodingKeys.self)
+      included = try c.decodeIfPresent(Bool.self, forKey: .included)
+      key = try c.decode(String.self, forKey: .key)
+      label = try c.decode(String.self, forKey: .label)
+    }
+
+    public init(included: Bool? = nil, key: String, label: String) {
+      self.included = included
+      self.key = key
+      self.label = label
+    }
+  }
+
+
   public struct PluginResult: Codable {
     public let content: String
     public let pluginId: String?
@@ -4948,6 +4994,196 @@ public enum OmiAPI {
       self.expiresAt = expiresAt
       self.replaced = replaced
       self.snapshotId = snapshotId
+    }
+  }
+
+
+  public struct StorefrontCurrentPlan: Codable {
+    public let legacy: Bool
+    public let planId: String
+    public let priceId: String?
+
+    private enum CodingKeys: String, CodingKey {
+      case legacy
+      case planId = "plan_id"
+      case priceId = "price_id"
+    }
+
+    public init(from decoder: Decoder) throws {
+      let c = try decoder.container(keyedBy: CodingKeys.self)
+      legacy = try c.decode(Bool.self, forKey: .legacy)
+      planId = try c.decode(String.self, forKey: .planId)
+      priceId = try c.decodeIfPresent(String.self, forKey: .priceId)
+    }
+
+    public init(legacy: Bool, planId: String, priceId: String? = nil) {
+      self.legacy = legacy
+      self.planId = planId
+      self.priceId = priceId
+    }
+  }
+
+
+  public struct StorefrontPrice: Codable {
+    public let amountMinor: Int
+    public let annualSavings: AnnualSavings?
+    public let currency: String
+    public let formattedAmount: String
+    public let interval: String
+    public let monthlyEquivalent: String
+    public let priceId: String?
+
+    private enum CodingKeys: String, CodingKey {
+      case amountMinor = "amount_minor"
+      case annualSavings = "annual_savings"
+      case currency
+      case formattedAmount = "formatted_amount"
+      case interval
+      case monthlyEquivalent = "monthly_equivalent"
+      case priceId = "price_id"
+    }
+
+    public init(from decoder: Decoder) throws {
+      let c = try decoder.container(keyedBy: CodingKeys.self)
+      amountMinor = try c.decode(Int.self, forKey: .amountMinor)
+      annualSavings = try c.decodeIfPresent(AnnualSavings.self, forKey: .annualSavings)
+      currency = try c.decode(String.self, forKey: .currency)
+      formattedAmount = try c.decode(String.self, forKey: .formattedAmount)
+      interval = try c.decode(String.self, forKey: .interval)
+      monthlyEquivalent = try c.decode(String.self, forKey: .monthlyEquivalent)
+      priceId = try c.decodeIfPresent(String.self, forKey: .priceId)
+    }
+
+    public init(amountMinor: Int, annualSavings: AnnualSavings? = nil, currency: String, formattedAmount: String, interval: String, monthlyEquivalent: String, priceId: String? = nil) {
+      self.amountMinor = amountMinor
+      self.annualSavings = annualSavings
+      self.currency = currency
+      self.formattedAmount = formattedAmount
+      self.interval = interval
+      self.monthlyEquivalent = monthlyEquivalent
+      self.priceId = priceId
+    }
+  }
+
+
+  public struct StorefrontResponse: Codable {
+    public let catalogRevision: Int
+    public let current: StorefrontCurrentPlan?
+    public let nextOfferTierId: String?
+    public let schemaVersion: Int?
+    public let showSubscriptionUi: Bool?
+    public let tiers: [StorefrontTier]?
+    public let usage: StorefrontUsage?
+
+    private enum CodingKeys: String, CodingKey {
+      case catalogRevision = "catalog_revision"
+      case current
+      case nextOfferTierId = "next_offer_tier_id"
+      case schemaVersion = "schema_version"
+      case showSubscriptionUi = "show_subscription_ui"
+      case tiers
+      case usage
+    }
+
+    public init(from decoder: Decoder) throws {
+      let c = try decoder.container(keyedBy: CodingKeys.self)
+      catalogRevision = try c.decode(Int.self, forKey: .catalogRevision)
+      current = try c.decodeIfPresent(StorefrontCurrentPlan.self, forKey: .current)
+      nextOfferTierId = try c.decodeIfPresent(String.self, forKey: .nextOfferTierId)
+      schemaVersion = try c.decodeIfPresent(Int.self, forKey: .schemaVersion)
+      showSubscriptionUi = try c.decodeIfPresent(Bool.self, forKey: .showSubscriptionUi)
+      tiers = try c.decodeIfPresent([StorefrontTier].self, forKey: .tiers)
+      usage = try c.decodeIfPresent(StorefrontUsage.self, forKey: .usage)
+    }
+
+    public init(catalogRevision: Int, current: StorefrontCurrentPlan? = nil, nextOfferTierId: String? = nil, schemaVersion: Int? = nil, showSubscriptionUi: Bool? = nil, tiers: [StorefrontTier]? = nil, usage: StorefrontUsage? = nil) {
+      self.catalogRevision = catalogRevision
+      self.current = current
+      self.nextOfferTierId = nextOfferTierId
+      self.schemaVersion = schemaVersion
+      self.showSubscriptionUi = showSubscriptionUi
+      self.tiers = tiers
+      self.usage = usage
+    }
+  }
+
+
+  public struct StorefrontTier: Codable {
+    public let action: String
+    public let displayName: String
+    public let entitlementVersion: String
+    public let features: [PlanFeature]
+    public let legacy: Bool?
+    public let planId: String
+    public let prices: [StorefrontPrice]
+    public let recommended: Bool?
+    public let tagline: String
+    public let tierId: String
+
+    private enum CodingKeys: String, CodingKey {
+      case action
+      case displayName = "display_name"
+      case entitlementVersion = "entitlement_version"
+      case features
+      case legacy
+      case planId = "plan_id"
+      case prices
+      case recommended
+      case tagline
+      case tierId = "tier_id"
+    }
+
+    public init(from decoder: Decoder) throws {
+      let c = try decoder.container(keyedBy: CodingKeys.self)
+      action = try c.decode(String.self, forKey: .action)
+      displayName = try c.decode(String.self, forKey: .displayName)
+      entitlementVersion = try c.decode(String.self, forKey: .entitlementVersion)
+      features = try c.decode([PlanFeature].self, forKey: .features)
+      legacy = try c.decodeIfPresent(Bool.self, forKey: .legacy)
+      planId = try c.decode(String.self, forKey: .planId)
+      prices = try c.decode([StorefrontPrice].self, forKey: .prices)
+      recommended = try c.decodeIfPresent(Bool.self, forKey: .recommended)
+      tagline = try c.decode(String.self, forKey: .tagline)
+      tierId = try c.decode(String.self, forKey: .tierId)
+    }
+
+    public init(action: String, displayName: String, entitlementVersion: String, features: [PlanFeature], legacy: Bool? = nil, planId: String, prices: [StorefrontPrice], recommended: Bool? = nil, tagline: String, tierId: String) {
+      self.action = action
+      self.displayName = displayName
+      self.entitlementVersion = entitlementVersion
+      self.features = features
+      self.legacy = legacy
+      self.planId = planId
+      self.prices = prices
+      self.recommended = recommended
+      self.tagline = tagline
+      self.tierId = tierId
+    }
+  }
+
+
+  public struct StorefrontUsage: Codable {
+    public let budgetPercent: Double?
+    public let kind: String?
+    public let resetAt: Int?
+
+    private enum CodingKeys: String, CodingKey {
+      case budgetPercent = "budget_percent"
+      case kind
+      case resetAt = "reset_at"
+    }
+
+    public init(from decoder: Decoder) throws {
+      let c = try decoder.container(keyedBy: CodingKeys.self)
+      budgetPercent = try c.decodeIfPresent(Double.self, forKey: .budgetPercent)
+      kind = try c.decodeIfPresent(String.self, forKey: .kind)
+      resetAt = try c.decodeIfPresent(Int.self, forKey: .resetAt)
+    }
+
+    public init(budgetPercent: Double? = nil, kind: String? = nil, resetAt: Int? = nil) {
+      self.budgetPercent = budgetPercent
+      self.kind = kind
+      self.resetAt = resetAt
     }
   }
 
@@ -18455,6 +18691,30 @@ public enum OmiAPI {
     return try JSONDecoder().decode(OmiAnyCodable.self, from: data)
   }
 
+  public static func getStorefrontV2PaymentsPlansGet(client: OmiApiClient, xAppPlatform: String? = nil, xAppVersion: String? = nil, authorization: String? = nil, xDeviceIdHash: String? = nil) async throws -> StorefrontResponse {
+    let _path = "/v2/payments/plans"
+    guard let components = URLComponents(string: client.baseURL + _path) else {
+      throw OmiApiError.invalidURL
+    }
+    guard let url = components.url else { throw OmiApiError.invalidURL }
+    var req = URLRequest(url: url)
+    req.httpMethod = "GET"
+    for (name, value) in client.headers { req.setValue(value, forHTTPHeaderField: name) }
+    if let token = client.token {
+      req.setValue("Bearer " + token, forHTTPHeaderField: "Authorization")
+    }
+    if let xAppPlatform { req.setValue(String(xAppPlatform), forHTTPHeaderField: "X-App-Platform") }
+    if let xAppVersion { req.setValue(String(xAppVersion), forHTTPHeaderField: "X-App-Version") }
+    if let authorization { req.setValue(String(authorization), forHTTPHeaderField: "authorization") }
+    if let xDeviceIdHash { req.setValue(String(xDeviceIdHash), forHTTPHeaderField: "X-Device-Id-Hash") }
+    let (data, resp) = try await URLSession.shared.data(for: req)
+    guard let http = resp as? HTTPURLResponse else { throw OmiApiError.invalidURL }
+    guard (200..<300).contains(http.statusCode) else {
+      throw OmiApiError.httpError(status: http.statusCode, data: data)
+    }
+    return try JSONDecoder().decode(StorefrontResponse.self, from: data)
+  }
+
   public static func getReviewItemsV2V2ReviewItemsGet(client: OmiApiClient, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil) async throws -> OmiAnyCodable {
     let _path = "/v2/review/items"
     guard let components = URLComponents(string: client.baseURL + _path) else {
@@ -19293,5 +19553,5 @@ public enum OmiAPI {
     return try JSONDecoder().decode(OmiAnyCodable.self, from: data)
   }
 
-  // Total: 499 Swift client methods generated.
+  // Total: 500 Swift client methods generated.
 }
