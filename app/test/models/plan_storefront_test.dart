@@ -5,6 +5,33 @@ import 'package:omi/models/plan_storefront.dart';
 
 Map<String, dynamic> fixture() => jsonDecode(File('test/fixtures/plan_storefront.json').readAsStringSync());
 void main() {
+  for (final entry in {
+    'free_budget': 'plus',
+    'free_mcp_cap': 'plus',
+    'free_pro_gate': 'operator',
+    'plus_budget': 'operator'
+  }.entries) {
+    test('preserves contextual server recommendation for ${entry.key}', () {
+      final json = jsonDecode(File('test/fixtures/plan_storefront_${entry.key}.json').readAsStringSync())
+          as Map<String, dynamic>;
+      expect(PlanStorefront.fromJson(json).tiers.singleWhere((tier) => tier.recommended).id, entry.value);
+    });
+  }
+  test('rejects unknown actions, ambiguous intervals and nonboolean legacy flags', () {
+    final action = fixture();
+    action['tiers'][1]['action'] = 'redirect';
+    expect(() => PlanStorefront.fromJson(action), throwsFormatException);
+    final duplicate = fixture();
+    duplicate['tiers'][1]['prices'].add(duplicate['tiers'][1]['prices'][0]);
+    expect(() => PlanStorefront.fromJson(duplicate), throwsFormatException);
+    for (final section in ['current', 'usage_context']) {
+      for (final flag in ['true', 1, null]) {
+        final json = fixture();
+        json[section]['legacy'] = flag;
+        expect(() => PlanStorefront.fromJson(json), throwsFormatException);
+      }
+    }
+  });
   test('preserves server order, recommendation, exact prices and computed savings', () {
     final data = PlanStorefront.fromJson(fixture());
     expect(data.tiers.map((t) => t.id), ['basic', 'plus', 'operator', 'architect']);
@@ -31,6 +58,27 @@ void main() {
     expect(() => PlanStorefront.fromJson(duplicate), throwsFormatException);
     final hidden = fixture()..remove('show_subscription_ui');
     expect(PlanStorefront.fromJson(hidden).showSubscriptionUi, isFalse);
+    final missingLegacy = fixture();
+    missingLegacy['current'].remove('legacy');
+    expect(() => PlanStorefront.fromJson(missingLegacy), throwsFormatException);
+  });
+  test('Pro gates follow server decisions and never override legacy access', () {
+    final json = fixture();
+    expect(PlanStorefront.fromJson(json).shouldGate('proactive_agent'), isTrue);
+    expect(PlanStorefront.fromJson(json).shouldGate('future_feature'), isFalse);
+    json['current']['legacy'] = true;
+    expect(PlanStorefront.fromJson(json).shouldGate('proactive_agent'), isFalse);
+    json['current'] = null;
+    expect(PlanStorefront.fromJson(json).shouldGate('proactive_agent'), isFalse);
+    json['show_subscription_ui'] = false;
+    expect(PlanStorefront.fromJson(json).shouldGate('proactive_agent'), isFalse);
+  });
+  test('current legacy alone suppresses the budget nudge', () {
+    final json = fixture();
+    json['current']['legacy'] = true;
+    expect(PlanStorefront.fromJson(json).showBudgetNudge, isFalse);
+    json['current'] = null;
+    expect(PlanStorefront.fromJson(json).showBudgetNudge, isFalse);
   });
   test('legacy budgets never nudge and 100% belongs to W4', () {
     for (final percent in [0, 79, 100, 120]) {

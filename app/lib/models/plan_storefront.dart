@@ -13,6 +13,16 @@ class PlanStorefront {
     required this.showSubscriptionUi,
   });
 
+  /// Current and usage snapshots must both permit a nonblocking budget nudge.
+  bool get showBudgetNudge => showSubscriptionUi && current?.legacy == false && usageContext?.showBudgetNudge == true;
+
+  bool shouldGate(String feature) =>
+      showSubscriptionUi &&
+      current != null &&
+      current?.legacy == false &&
+      usageContext?.legacy != true &&
+      usageContext?.proGates.contains(feature) == true;
+
   factory PlanStorefront.fromJson(Map<String, dynamic> json) {
     if (json['schema_version'] != 1) throw const FormatException('Unsupported storefront schema');
     final tiers = (json['tiers'] as List).map((row) => StorefrontTier.fromJson(_object(row))).toList();
@@ -51,20 +61,30 @@ class StorefrontTier {
       required this.action,
       required this.actionLabel});
 
-  factory StorefrontTier.fromJson(Map<String, dynamic> json) => StorefrontTier(
-        id: _text(json, 'id'),
-        name: _text(json, 'name'),
-        description: _text(json, 'description'),
-        outcomes: List.unmodifiable((json['outcomes'] as List).map((value) {
-          if (value is! String || value.trim().isEmpty) throw const FormatException('Invalid outcome');
-          return value;
-        })),
-        recordingEquivalent: json['recording_equivalent'] as String?,
-        recommended: json['recommended'] == true,
-        prices: List.unmodifiable((json['prices'] as List).map((row) => StorefrontPrice.fromJson(_object(row)))),
-        action: _text(json, 'action'),
-        actionLabel: _text(json, 'action_label'),
-      );
+  factory StorefrontTier.fromJson(Map<String, dynamic> json) {
+    final action = _text(json, 'action');
+    if (!['none', 'checkout', 'manage'].contains(action)) {
+      throw const FormatException('Unsupported storefront action');
+    }
+    final prices = (json['prices'] as List).map((row) => StorefrontPrice.fromJson(_object(row))).toList();
+    if (prices.map((price) => price.interval).toSet().length != prices.length) {
+      throw const FormatException('Duplicate storefront price interval');
+    }
+    return StorefrontTier(
+      id: _text(json, 'id'),
+      name: _text(json, 'name'),
+      description: _text(json, 'description'),
+      outcomes: List.unmodifiable((json['outcomes'] as List).map((value) {
+        if (value is! String || value.trim().isEmpty) throw const FormatException('Invalid outcome');
+        return value;
+      })),
+      recordingEquivalent: json['recording_equivalent'] as String?,
+      recommended: json['recommended'] == true,
+      prices: List.unmodifiable(prices),
+      action: action,
+      actionLabel: _text(json, 'action_label'),
+    );
+  }
 
   StorefrontPrice? priceFor(String interval) {
     for (final price in prices) {
@@ -127,7 +147,7 @@ class StorefrontCurrentPlan {
       id: _text(json, 'id'),
       name: _text(json, 'name'),
       priceId: json['price_id'] as String?,
-      legacy: json['legacy'] == true,
+      legacy: _boolean(json, 'legacy'),
       message: _text(json, 'message'));
 }
 
@@ -161,7 +181,7 @@ class StorefrontUsageContext {
         meter: json['meter'] as String?,
         resetLabel: json['reset_label'] as String?,
         budgetPercent: (percent as num?)?.toDouble(),
-        legacy: json['legacy'] == true,
+        legacy: _boolean(json, 'legacy'),
         proGates: Set.unmodifiable((json['pro_gates'] as List? ?? const []).cast<String>()));
   }
 
@@ -177,5 +197,11 @@ Map<String, dynamic> _object(Object? value) {
 String _text(Map<String, dynamic> json, String key) {
   final value = json[key];
   if (value is! String || value.trim().isEmpty) throw FormatException('Missing storefront $key');
+  return value;
+}
+
+bool _boolean(Map<String, dynamic> json, String key) {
+  final value = json[key];
+  if (value is! bool) throw FormatException('Missing storefront $key');
   return value;
 }
