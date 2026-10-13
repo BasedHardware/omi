@@ -11,7 +11,7 @@ import yaml
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from config.dream_agent import Caps
+from config.dream_agent import Caps, FULL_DRAIN_SECONDS
 from database import dream_history, dream_feedback, dream_store, dream_dirty
 from models.dream_agent import Feedback, Plan, Edit, Term, FrameQuestion, SlowTask
 from models.review import ReviewItem, SpellingItem
@@ -286,7 +286,8 @@ def test_prod_scheduler_and_writer_env_contract():
     )
     assert dream['target']['oidc'] == sequencer['target']['oidc']
     assert dream['retry'] == sequencer['retry']
-    assert dream['attempt_deadline'] == '300s'
+    assert dream['attempt_deadline'] == '720s'
+    assert FULL_DRAIN_SECONDS + 30 < int(dream['attempt_deadline'][:-1])
     assert (
         dream_agent.PASS_TIMEOUT_SECONDS + dream_agent.FINISH_MARGIN_SECONDS
         <= dream_agent.DRAIN_TIMEOUT_SECONDS

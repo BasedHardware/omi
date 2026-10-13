@@ -572,14 +572,4 @@ SCHEMA_GROUPS = {
             'GoalDeleteResponse',
         ),
     },
-    'storefront': {
-        'output': DEFAULT_OUTPUT_DIR / 'storefront_wire.g.dart',
-        'schemas': (
-            'StorefrontCurrent',
-            'StorefrontPrice',
-            'StorefrontResponse',
-            'StorefrontTier',
-            'StorefrontUsage',
-        ),
-    },
 }

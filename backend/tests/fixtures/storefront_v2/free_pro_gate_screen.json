@@ -32,7 +32,7 @@
       "name": "Pro",
       "recommended": true,
       "is_current": false,
-      "hours_line": "About 280 hours a month, enough to wear it all day",
+      "hours_line": "About 280 hours of recording a month, enough to wear it all day",
       "bullets": [
         "On your Mac, Omi can see what you're working on and help with it",
         "Omi reminds you of things you said you'd do",
@@ -40,6 +40,8 @@
       ],
       "action": "checkout",
       "cta_label": "Get Pro",
+      "blocked_line": null,
+      "compact": false,
       "prices": [
         {
           "price_id": "price_operator_month",
@@ -76,6 +78,8 @@
       ],
       "action": "current",
       "cta_label": null,
+      "blocked_line": null,
+      "compact": true,
       "prices": [
         {
           "price_id": null,
@@ -102,6 +106,8 @@
       ],
       "action": "checkout",
       "cta_label": "Get Plus",
+      "blocked_line": null,
+      "compact": false,
       "prices": [
         {
           "price_id": "price_plus_month",
@@ -130,13 +136,15 @@
       "name": "Architect",
       "recommended": false,
       "is_current": false,
-      "hours_line": "About 1,200 hours a month, for all-day use on more than one device",
+      "hours_line": "About 1,200 hours of recording a month, for all-day use on more than one device",
       "bullets": [
         "Everything in Pro, with over 4 times the usage",
         "At least 5,000 MCP requests a day"
       ],
       "action": "checkout",
       "cta_label": "Get Architect",
+      "blocked_line": null,
+      "compact": false,
       "prices": [
         {
           "price_id": "price_architect_month",

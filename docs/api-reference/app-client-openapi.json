@@ -30045,6 +30045,17 @@
             "title": "Amount Minor",
             "type": "integer"
           },
+          "cta_label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cta Label"
+          },
           "currency": {
             "title": "Currency",
             "type": "string"
@@ -30192,12 +30203,28 @@
             "title": "Action",
             "type": "string"
           },
+          "blocked_line": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Blocked Line"
+          },
           "bullets": {
             "items": {
               "type": "string"
             },
             "title": "Bullets",
             "type": "array"
+          },
+          "compact": {
+            "default": false,
+            "title": "Compact",
+            "type": "boolean"
           },
           "cta_label": {
             "anyOf": [

@@ -148,10 +148,15 @@ def header(
     percent: float | None,
     mcp_daily_cap: int | None,
     locale: str | None = None,
+    cancel_scheduled: bool = False,
+    plan_name_text: str | None = None,
+    period_end: int | None = None,
 ) -> str:
     headers = copy_for(locale)['headers']
     if legacy:
         return headers['legacy']
+    if cancel_scheduled and plan_name_text and type(period_end) is int and period_end > 0:
+        return headers['cancel_scheduled'].format(plan=plan_name_text, date=format_date(period_end))
     if trigger == 'proactive_agent':
         return headers['proactive_agent']
     if trigger == 'screen_context':
@@ -182,8 +187,22 @@ def reset_parts(reset_at: int) -> tuple[str, str]:
 
 
 def money(amount_minor: int) -> str:
-    dollars = (Decimal(amount_minor) / Decimal(100)).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
-    return f'${dollars:.2f}'
+    return format_money(amount_minor, 'usd')
+
+
+def format_money(amount_minor: int, currency: str) -> str:
+    """Format a minor-unit amount in its price currency. USD uses the dollar sign."""
+    amount = (Decimal(amount_minor) / Decimal(100)).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
+    if currency.lower() == 'usd':
+        return f'${amount:.2f}'
+    return f'{amount:.2f} {currency.upper()}'
+
+
+def months_free_phrase(count: int, locale: str | None = None) -> str:
+    prices = copy_for(locale)['prices']
+    if count == 1:
+        return prices['months_free_one']
+    return prices['months_free_many'].format(n=count)
 
 
 def months_free(monthly_minor: int, annual_minor: int) -> int | None:
@@ -222,8 +241,13 @@ def current_line(
     if plan_id == 'basic':
         return text['free'], note
     date = format_date(period_end) if type(period_end) is int and period_end > 0 else None
+    # Paid cancel-scheduled: price only. The end date moves to the header.
+    # Legacy keeps the previous "ends {date}" line; resubscribe is not offered.
+    if cancel and not legacy and amount_minor is not None and interval in {'month', 'year'}:
+        period = 'mo' if interval == 'month' else 'yr'
+        return text['cancel'].format(plan=plan_name_text, price=money(amount_minor), period=period), note
     if cancel and date:
-        return text['cancel'].format(plan=plan_name_text, date=date), note
+        return text['cancel_ends'].format(plan=plan_name_text, date=date), note
     if amount_minor is not None and interval in {'month', 'year'}:
         period = 'mo' if interval == 'month' else 'yr'
         price = money(amount_minor)
@@ -266,7 +290,7 @@ def render_price(
         free = months_free(monthly_minor, amount_minor) if monthly_minor else None
         annual = money(amount_minor)
         if free is not None:
-            subline = text['subline_year'].format(amount=annual, n=free)
+            subline = text['subline_year'].format(amount=annual, free=months_free_phrase(free, locale))
         else:
             subline = text['subline_year_no_free'].format(amount=annual)
             free = None
@@ -295,7 +319,21 @@ def render_price(
 def yearly_toggle_label(months: int | None, locale: str | None = None) -> str | None:
     if months is None or months < 1:
         return None
-    return copy_for(locale)['prices']['toggle'].format(n=months)
+    return copy_for(locale)['prices']['toggle'].format(free=months_free_phrase(months, locale))
+
+
+def blocked_line(locale: str | None = None) -> str:
+    return copy_for(locale)['blocked_line']
+
+
+def yearly_switch_label(
+    *, monthly_minor: int, annual_minor: int, currency: str, locale: str | None = None
+) -> str | None:
+    """12× monthly − annual, in the price currency. Absent when the yearly price does not save."""
+    saved = monthly_minor * 12 - annual_minor
+    if saved <= 0:
+        return None
+    return copy_for(locale)['cta']['switch_yearly'].format(saving=format_money(saved, currency))
 
 
 def _wire_percent(percent: float) -> int:

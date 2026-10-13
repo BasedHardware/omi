@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "id": "FC-billing-webhook-acknowledges-failed-entitlement",
+  "violated_contract": "A verified Stripe schedule delivery must remain retryable when retrieving or durably persisting its entitlement fails; returning HTTP 200 must not permanently discard a transient billing update.",
+  "canonical_prevention": "At the schedule webhook adapter boundary, classify transient read/write failures as retryable HTTP 503 under the default-off billing-ingestion rollout gate. The shared event ledger only acknowledges after a successful handler return. Missing/deleted owners keep their intentional acknowledgement. Behavioral contract tests exercise both schedule completion and cancellation, read/write failures, flag-off legacy behavior, flag-on retry receipts, successful duplicate suppression, and deleted-owner acknowledgement.",
+  "canonical_prevention_artifact": [
+    "backend/tests/unit/test_billing_schedule_retry.py"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "backend/routers/payment.py",
+    "backend/utils/stripe_webhook_ledger.py"
+  ],
+  "status": "open"
+}

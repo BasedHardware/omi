@@ -162,3 +162,13 @@ def test_split_and_combined_rule_objects_are_byte_identical():
     assert combined.keys() == split.keys()
     for uid, raw in split.items():
         assert combined[uid] == raw, uid
+
+
+@pytest.mark.parametrize('environment', ['prod', 'dev'])
+def test_alert_screenshots_stay_disabled(environment):
+    # Screenshot renders call back into the same Grafana; under load they timed out,
+    # held its HTTP handlers and made monitor.omi.me flap 502 (2026-10-13).
+    values = (MONITORING / f'kube-prometheus-stack/{environment}_omi_monitoring_values.yaml').read_text()
+    block = re.search(r'unified_alerting\.screenshots:\n(\s+)capture: (\w+)', values)
+    assert block, 'unified_alerting.screenshots must be declared explicitly'
+    assert block.group(2) == 'false'

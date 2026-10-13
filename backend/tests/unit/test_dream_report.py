@@ -287,3 +287,53 @@ def test_untitled_summary_target_is_visible_in_report():
         dream_report.target_label('conversations/synthetic', {'structured': {'title': ''}}) == 'Untitled conversation'
     )
     assert dream_report.target_label('conversations/synthetic', None) == 'Deleted item'
+
+
+def test_full_manual_endpoint_uses_one_turn_and_persists_only_guarded_plan(store, client, monkeypatch):
+    monkeypatch.setenv('DREAM_AGENT_CONTEXT_MODE', 'full')
+    monkeypatch.setenv('DREAM_AGENT_FULL_CONTEXT_UIDS', UID)
+    dream_store.mark_dirty(UID, [('conversations', 'c1')])
+    seen = []
+    plan = Plan(
+        edits=[
+            Edit(
+                kind='title',
+                target='conversations/c1',
+                after='Existing title',
+                reason='Synthetic',
+                evidence=['conversations/c1'],
+            )
+        ],
+        feedback=[
+            Feedback(
+                component='notes',
+                failure_class='success',
+                severity='info',
+                count=1,
+                latency_ms=0,
+                error_rate=0,
+                reproduction='english translation is correct.',
+            )
+        ],
+    )
+
+    async def turn(uid, lane, mount, messages, **kwargs):
+        seen.append((lane, mount.budget.deadline_seconds, kwargs['completion_limit']))
+        sink = kwargs['usage_sink']
+        sink['tokens'] += 10
+        sink['usage_unknown'] = False
+        return Turn(value=plan, tokens=10)
+
+    monkeypatch.setattr(dream_transport, 'model_turn', turn)
+    response = client.post('/v1/dream/runs', json={})
+    assert response.status_code == 200, response.text
+    run = response.json()
+    assert run['status'] == 'complete' and run['tokens'] == 10
+    assert seen == [(dream_transport.MAIN_LANE, 480, 16000)]
+    stored = review_store.decode_doc(UID, store.rows[('users', UID, 'dream_runs', run['run_id'])])['source']
+    assert stored['context_mode'] == 'full'
+    assert stored['rejected'] == {'nonempty_field': 1}
+    assert not stored['proposed']['edits'] and len(stored['proposed']['feedback']) == 1
+    assert 'raw_plan' not in stored and 'admitted_records' not in stored
+    assert stored['targets'] == stored['records'] == 1
+    assert dream_store.dirty_count(UID) == 0

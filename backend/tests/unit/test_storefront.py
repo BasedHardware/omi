@@ -214,6 +214,9 @@ def test_api_openapi_names_the_versioned_presentation_contract(client):
     ]
     assert 'tagline' not in schema['components']['schemas']['StorefrontTier']['properties']
     assert 'hours_line' in schema['components']['schemas']['StorefrontTier']['properties']
+    assert 'blocked_line' in schema['components']['schemas']['StorefrontTier']['properties']
+    assert 'compact' in schema['components']['schemas']['StorefrontTier']['properties']
+    assert 'cta_label' in schema['components']['schemas']['StorefrontPrice']['properties']
     parameters = {item['name'] for item in operation['parameters']}
     assert {'source', 'trigger', 'locale'} <= parameters
 

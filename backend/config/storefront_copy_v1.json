@@ -26,12 +26,14 @@
         "proactive_agent": "Reminders and follow-ups come with Pro",
         "screen_context": "Screen help comes with Pro",
         "mcp_daily_cap": "You've used today's {n} MCP requests",
-        "legacy": "Your plan"
+        "legacy": "Your plan",
+        "cancel_scheduled": "Your {plan} plan ends {date}"
       },
       "current": {
         "free": "You're on Free",
         "paid": "You're on {plan} · {price}/{period} · renews {date}",
-        "cancel": "You're on {plan} · ends {date}",
+        "cancel": "You're on {plan} · {price}/{period}",
+        "cancel_ends": "You're on {plan} · ends {date}",
         "paid_no_date": "You're on {plan} · {price}/{period}",
         "name_only": "You're on {plan}",
         "legacy_note": "We don't sell this plan anymore, but yours stays exactly as it is."
@@ -39,8 +41,8 @@
       "hours_lines": {
         "basic": "About {hours} hours of recording a month",
         "plus": "About {hours} hours of recording a month, around {per_day} hours a day",
-        "operator": "About {hours} hours a month, enough to wear it all day",
-        "architect": "About {hours} hours a month, for all-day use on more than one device"
+        "operator": "About {hours} hours of recording a month, enough to wear it all day",
+        "architect": "About {hours} hours of recording a month, for all-day use on more than one device"
       },
       "per_day": {
         "under_6": "about {n} hours a day",
@@ -79,16 +81,20 @@
         "get_architect": "Get Architect",
         "upgrade_pro": "Upgrade to Pro",
         "upgrade_architect": "Upgrade to Architect",
-        "resubscribe": "Resubscribe"
+        "resubscribe": "Resubscribe",
+        "switch_yearly": "Switch to yearly · save {saving}"
       },
+      "blocked_line": "Resubscribe first to change plans",
       "prices": {
         "headline_month": "{amount}/month",
         "headline_year": "{amount}/month",
-        "subline_year": "{amount} billed yearly · {n} months free",
+        "subline_year": "{amount} billed yearly · {free}",
         "subline_year_no_free": "{amount} billed yearly",
+        "months_free_one": "1 month free",
+        "months_free_many": "{n} months free",
         "renewal_month": "Renews monthly until you cancel. Cancel anytime in settings.",
         "renewal_year": "Renews yearly until you cancel. Cancel anytime in settings.",
-        "toggle": "Yearly · {n} months free"
+        "toggle": "Yearly · {free}"
       },
       "meter": {
         "line": "{percent}% used · about {hours} hours of recording left · {reset}",

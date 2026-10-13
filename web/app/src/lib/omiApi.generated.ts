@@ -4948,6 +4948,7 @@ export interface StorefrontCurrent {
 
 export interface StorefrontPrice {
   amount_minor: number;
+  cta_label?: string | null;
   currency: string;
   headline: string;
   interval: "month" | "year";
@@ -4970,7 +4971,9 @@ export interface StorefrontResponse {
 
 export interface StorefrontTier {
   action: "checkout" | "current" | "none";
+  blocked_line?: string | null;
   bullets: Array<string>;
+  compact?: boolean;
   cta_label?: string | null;
   hours_line: string;
   is_current?: boolean;

@@ -5095,6 +5095,7 @@ public enum OmiAPI {
 
   public struct StorefrontPrice: Codable {
     public let amountMinor: Int
+    public let ctaLabel: String?
     public let currency: String
     public let headline: String
     public let interval: String
@@ -5105,6 +5106,7 @@ public enum OmiAPI {
 
     private enum CodingKeys: String, CodingKey {
       case amountMinor = "amount_minor"
+      case ctaLabel = "cta_label"
       case currency
       case headline
       case interval
@@ -5117,6 +5119,7 @@ public enum OmiAPI {
     public init(from decoder: Decoder) throws {
       let c = try decoder.container(keyedBy: CodingKeys.self)
       amountMinor = try c.decode(Int.self, forKey: .amountMinor)
+      ctaLabel = try c.decodeIfPresent(String.self, forKey: .ctaLabel)
       currency = try c.decode(String.self, forKey: .currency)
       headline = try c.decode(String.self, forKey: .headline)
       interval = try c.decode(String.self, forKey: .interval)
@@ -5126,8 +5129,9 @@ public enum OmiAPI {
       subline = try c.decodeIfPresent(String.self, forKey: .subline)
     }
 
-    public init(amountMinor: Int, currency: String, headline: String, interval: String, monthsFree: Int? = nil, priceId: String? = nil, renewalLine: String? = nil, subline: String? = nil) {
+    public init(amountMinor: Int, ctaLabel: String? = nil, currency: String, headline: String, interval: String, monthsFree: Int? = nil, priceId: String? = nil, renewalLine: String? = nil, subline: String? = nil) {
       self.amountMinor = amountMinor
+      self.ctaLabel = ctaLabel
       self.currency = currency
       self.headline = headline
       self.interval = interval
@@ -5187,7 +5191,9 @@ public enum OmiAPI {
 
   public struct StorefrontTier: Codable {
     public let action: String
+    public let blockedLine: String?
     public let bullets: [String]
+    public let compact: Bool?
     public let ctaLabel: String?
     public let hoursLine: String
     public let isCurrent: Bool?
@@ -5199,7 +5205,9 @@ public enum OmiAPI {
 
     private enum CodingKeys: String, CodingKey {
       case action
+      case blockedLine = "blocked_line"
       case bullets
+      case compact
       case ctaLabel = "cta_label"
       case hoursLine = "hours_line"
       case isCurrent = "is_current"
@@ -5213,7 +5221,9 @@ public enum OmiAPI {
     public init(from decoder: Decoder) throws {
       let c = try decoder.container(keyedBy: CodingKeys.self)
       action = try c.decode(String.self, forKey: .action)
+      blockedLine = try c.decodeIfPresent(String.self, forKey: .blockedLine)
       bullets = try c.decode([String].self, forKey: .bullets)
+      compact = try c.decodeIfPresent(Bool.self, forKey: .compact)
       ctaLabel = try c.decodeIfPresent(String.self, forKey: .ctaLabel)
       hoursLine = try c.decode(String.self, forKey: .hoursLine)
       isCurrent = try c.decodeIfPresent(Bool.self, forKey: .isCurrent)
@@ -5224,9 +5234,11 @@ public enum OmiAPI {
       tierId = try c.decode(String.self, forKey: .tierId)
     }
 
-    public init(action: String, bullets: [String], ctaLabel: String? = nil, hoursLine: String, isCurrent: Bool? = nil, name: String, planId: String, prices: [StorefrontPrice], recommended: Bool? = nil, tierId: String) {
+    public init(action: String, blockedLine: String? = nil, bullets: [String], compact: Bool? = nil, ctaLabel: String? = nil, hoursLine: String, isCurrent: Bool? = nil, name: String, planId: String, prices: [StorefrontPrice], recommended: Bool? = nil, tierId: String) {
       self.action = action
+      self.blockedLine = blockedLine
       self.bullets = bullets
+      self.compact = compact
       self.ctaLabel = ctaLabel
       self.hoursLine = hoursLine
       self.isCurrent = isCurrent

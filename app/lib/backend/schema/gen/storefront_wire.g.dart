@@ -52,6 +52,7 @@ class GeneratedStorefrontCurrent {
 
 class GeneratedStorefrontPrice {
   final int amountMinor;
+  final String? ctaLabel;
   final String currency;
   final String headline;
   final String interval;
@@ -62,6 +63,7 @@ class GeneratedStorefrontPrice {
 
   const GeneratedStorefrontPrice({
     required this.amountMinor,
+    this.ctaLabel,
     required this.currency,
     required this.headline,
     required this.interval,
@@ -74,6 +76,7 @@ class GeneratedStorefrontPrice {
   factory GeneratedStorefrontPrice.fromJson(Map<String, dynamic> json) {
     return GeneratedStorefrontPrice(
       amountMinor: _required(_readFieldValue<int>(_readField(json, const ["amount_minor"]), "amount_minor", _readInt, requiredField: true, nullable: false), "amount_minor"),
+      ctaLabel: _readFieldValue<String>(_readField(json, const ["cta_label"]), "cta_label", _readString, requiredField: false, nullable: true),
       currency: _required(_readFieldValue<String>(_readField(json, const ["currency"]), "currency", _readString, requiredField: true, nullable: false), "currency"),
       headline: _required(_readFieldValue<String>(_readField(json, const ["headline"]), "headline", _readString, requiredField: true, nullable: false), "headline"),
       interval: _required(_readFieldValue<String>(_readField(json, const ["interval"]), "interval", _readString, requiredField: true, nullable: false), "interval"),
@@ -87,6 +90,7 @@ class GeneratedStorefrontPrice {
   Map<String, dynamic> toJson() {
     return {
       'amount_minor': amountMinor,
+      'cta_label': ctaLabel,
       'currency': currency,
       'headline': headline,
       'interval': interval,
@@ -148,7 +152,9 @@ class GeneratedStorefrontResponse {
 
 class GeneratedStorefrontTier {
   final String action;
+  final String? blockedLine;
   final List<String> bullets;
+  final bool compact;
   final String? ctaLabel;
   final String hoursLine;
   final bool isCurrent;
@@ -160,7 +166,9 @@ class GeneratedStorefrontTier {
 
   const GeneratedStorefrontTier({
     required this.action,
+    this.blockedLine,
     required this.bullets,
+    this.compact = false,
     this.ctaLabel,
     required this.hoursLine,
     this.isCurrent = false,
@@ -174,7 +182,9 @@ class GeneratedStorefrontTier {
   factory GeneratedStorefrontTier.fromJson(Map<String, dynamic> json) {
     return GeneratedStorefrontTier(
       action: _required(_readFieldValue<String>(_readField(json, const ["action"]), "action", _readString, requiredField: true, nullable: false), "action"),
+      blockedLine: _readFieldValue<String>(_readField(json, const ["blocked_line"]), "blocked_line", _readString, requiredField: false, nullable: true),
       bullets: _required(_readFieldValue<List<String>>(_readField(json, const ["bullets"]), "bullets", _readStringList, requiredField: true, nullable: false), "bullets"),
+      compact: _required(_readFieldValue<bool>(_readField(json, const ["compact"]), "compact", _readBool, requiredField: false, nullable: false, defaultValue: false), "compact"),
       ctaLabel: _readFieldValue<String>(_readField(json, const ["cta_label"]), "cta_label", _readString, requiredField: false, nullable: true),
       hoursLine: _required(_readFieldValue<String>(_readField(json, const ["hours_line"]), "hours_line", _readString, requiredField: true, nullable: false), "hours_line"),
       isCurrent: _required(_readFieldValue<bool>(_readField(json, const ["is_current"]), "is_current", _readBool, requiredField: false, nullable: false, defaultValue: false), "is_current"),
@@ -189,7 +199,9 @@ class GeneratedStorefrontTier {
   Map<String, dynamic> toJson() {
     return {
       'action': action,
+      'blocked_line': blockedLine,
       'bullets': bullets,
+      'compact': compact,
       'cta_label': ctaLabel,
       'hours_line': hoursLine,
       'is_current': isCurrent,

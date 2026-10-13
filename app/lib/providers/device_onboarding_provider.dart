@@ -45,6 +45,10 @@ class DeviceOnboardingProvider extends ChangeNotifier {
   int doublePressCount = 0;
   bool showSingleTapHint = false;
 
+  /// A step reopened from the All Set summary; finishing it goes back to the summary instead of
+  /// walking through every later step again (#20787).
+  bool reviewingFromSummary = false;
+
   Timer? _hintTimer;
   bool _disposed = false;
 
@@ -68,6 +72,7 @@ class DeviceOnboardingProvider extends ChangeNotifier {
     selectedDoubleTapAction = -1;
     doublePressCount = 0;
     showSingleTapHint = false;
+    reviewingFromSummary = false;
     _hintTimer?.cancel();
     _hintTimer = null;
   }
@@ -81,7 +86,14 @@ class DeviceOnboardingProvider extends ChangeNotifier {
 
   void goToStep(int step) {
     if (step < transcriptionStep || step >= totalSteps || step == currentStep) return;
+    reviewingFromSummary = currentStep == allSetStep;
     currentStep = step;
+    notifyListeners();
+  }
+
+  void returnToSummary() {
+    reviewingFromSummary = false;
+    currentStep = allSetStep;
     notifyListeners();
   }
 
@@ -157,6 +169,15 @@ class DeviceOnboardingProvider extends ChangeNotifier {
   void onVoiceResponseReceived(String response) {
     if (currentStep != askQuestionStep) return;
     aiResponse = response;
+    notifyListeners();
+  }
+
+  /// Capture's 15 s voice-command timeout sent the question without the second press this step
+  /// counts, so move on to "Processing" exactly as the second press would (#20786).
+  void onQuestionAutoSubmitted() {
+    if (!isOnboardingActive || currentStep != askQuestionStep || !voiceSessionActive) return;
+    voiceSessionActive = false;
+    questionSent = true;
     notifyListeners();
   }
 

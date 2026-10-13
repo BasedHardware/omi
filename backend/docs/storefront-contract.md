@@ -30,12 +30,15 @@ not expose the sheet.
 - `usage`: `kind` (`usage_budget`, `transcription`, `unavailable`), nullable
   `percent`, nullable `period_id`, nullable `reset_label`, nullable
   `meter_line`, nullable `nudge_line`, `pro_gates`. Never raw unit amounts.
-- `tiers[]` in display order (recommended first, then ascending rank):
-  `tier_id`, `plan_id`, `name`, `recommended`, `is_current`, `hours_line`,
-  `bullets`, `action`, nullable `cta_label`, `prices`.
+- `tiers[]` in display order (recommended first, then ascending rank; while a
+  cancellation is scheduled, the current tier is first and nothing is
+  recommended): `tier_id`, `plan_id`, `name`, `recommended`, `is_current`,
+  `hours_line`, `bullets`, `action`, nullable `cta_label`, nullable
+  `blocked_line`, `compact`, `prices`.
 - `prices[]`: nullable `price_id`, `interval`, `amount_minor`, `currency`,
-  `headline`, nullable `subline`, nullable `renewal_line`, and `months_free`
-  only when the live yearly price gives at least one free month.
+  `headline`, nullable `subline`, nullable `renewal_line`, `months_free` only
+  when the live yearly price gives at least one free month, and `cta_label`
+  only when that price overrides the tier button.
 
 Actions: `checkout`, `current`, `none`. `recommended` is a badge, never a
 selection or a checkout.
@@ -53,9 +56,25 @@ Legacy cards do not repeat ladder hours or bullets; the legacy sentence is
 `current.legacy_note`.
 
 Same tier: an annual subscriber is not offered the monthly price. A monthly
-subscriber may still see the annual price. `cancel_at_period_end` on a
-non-legacy paid tier sets that tier to `checkout` with `cta_label`
-`Resubscribe` on its current price. Free cancellation does not open checkout.
+subscriber may still see the annual price. That yearly price carries
+`cta_label` `Switch to yearly · save {saving}` (`saving` is 12× the monthly
+amount minus the annual amount, formatted in the price currency). The tier
+button stays empty, so the current plan never says `Get {Plan}`. The current
+card sets `compact` when it has no tier button and no price CTA; the client
+drops bullets. A price CTA or Resubscribe leaves `compact` false and still
+sends no extra tagline.
+
+`cancel_at_period_end` on a non-legacy paid plan offers checkout only on the
+current tier, with tier `cta_label` `Resubscribe` on its current price. Every
+other tier is `action: none`, `cta_label: null`, and
+`blocked_line: "Resubscribe first to change plans"`. There is no switch-to-yearly
+label, no recommended badge, and the current tier is first. The header is
+`Your {Plan} plan ends {date}` and the current line is
+`You're on {Plan} · {$price}/mo` (yearly: `{$price}/yr`). Free cancellation does
+not open checkout. Legacy cancellation still has no checkout anywhere.
+
+`months_free` copy uses `1 month free` when the count is 1 and `{n} months free`
+otherwise, in both the yearly subline and `yearly_toggle_label`.
 
 Pro-only triggers recommend Pro, including for Free. Free budget and MCP-cap
 callers recommend Plus. Other paid callers below Pro recommend Pro. Pro and

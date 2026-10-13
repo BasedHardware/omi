@@ -23,11 +23,16 @@ from utils.storefront_copy import (
     cta_label,
     floor_to_nice,
     hours_line,
+    money,
     months_free,
+    months_free_phrase,
     per_day_phrase,
     present_usage,
     recording_hours,
     recording_hours_left,
+    render_price,
+    yearly_switch_label,
+    yearly_toggle_label,
 )
 
 PERIOD_END = int(datetime(2026, 11, 1, tzinfo=timezone.utc).timestamp())
@@ -118,8 +123,8 @@ def test_recording_hours_match_the_deck():
     )
     assert hours_line('basic') == 'About 15 hours of recording a month'
     assert hours_line('plus') == 'About 100 hours of recording a month, around 3 hours a day'
-    assert hours_line('operator') == 'About 280 hours a month, enough to wear it all day'
-    assert hours_line('architect') == 'About 1,200 hours a month, for all-day use on more than one device'
+    assert hours_line('operator') == 'About 280 hours of recording a month, enough to wear it all day'
+    assert hours_line('architect') == 'About 1,200 hours of recording a month, for all-day use on more than one device'
 
 
 def test_floor_to_nice_and_per_day_phrasing():
@@ -144,13 +149,36 @@ def test_floor_to_nice_and_per_day_phrasing():
     assert months_free(4999, 49990) == 2
 
 
+def test_one_month_free_is_singular_and_yearly_switch_uses_the_price_currency():
+    assert months_free(1000, 11000) == 1
+    assert months_free_phrase(1) == '1 month free'
+    assert months_free_phrase(2) == '2 months free'
+    rendered = render_price(
+        price_id='price_year',
+        interval='year',
+        amount_minor=11000,
+        currency='usd',
+        monthly_minor=1000,
+    )
+    assert rendered['subline'] == '$110.00 billed yearly · 1 month free'
+    assert rendered['months_free'] == 1
+    assert yearly_toggle_label(1) == 'Yearly · 1 month free'
+    assert yearly_toggle_label(2) == 'Yearly · 2 months free'
+    assert yearly_switch_label(monthly_minor=1999, annual_minor=19990, currency='usd') == (
+        'Switch to yearly · save $39.98'
+    )
+    assert yearly_switch_label(monthly_minor=1999, annual_minor=1999 * 12, currency='usd') is None
+    euro = yearly_switch_label(monthly_minor=1999, annual_minor=19990, currency='eur')
+    assert euro == 'Switch to yearly · save 39.98 EUR'
+
+
 def expected_action(current, tier, legacy, cancel):
     rank = {'basic': 0, 'plus': 1, 'operator': 2, 'architect': 3}
     if tier == current:
         if legacy or current == 'basic' or not cancel:
             return 'current'
         return 'checkout'
-    if legacy:
+    if legacy or (cancel and current in rank and current != 'basic'):
         return 'none'
     if current not in rank or tier not in rank or rank[tier] <= rank[current]:
         return 'none'
@@ -239,6 +267,34 @@ def test_built_sheets_match_the_policy_matrix():
             else:
                 available = ['month', 'year']
             assert [item.interval for item in tier.prices] == expected_intervals(plan, plan, interval, available)
+        resubscribe_only = cancel and not legacy and plan in LADDER and plan != 'basic'
+        if resubscribe_only:
+            assert built.header == f"Your {built.current.name} plan ends Nov 1"
+            current_amount = next(item.amount_minor for item in built.tiers[0].prices if item.interval == interval)
+            period = 'mo' if interval == 'month' else 'yr'
+            assert built.current.line == f"You're on {built.current.name} · {money(current_amount)}/{period}"
+            assert built.tiers[0].is_current
+            assert not any(tier.recommended for tier in built.tiers)
+            for tier in built.tiers:
+                if tier.is_current:
+                    assert tier.action == 'checkout' and tier.cta_label == 'Resubscribe'
+                    assert tier.blocked_line is None and tier.compact is False
+                    assert all(item.cta_label is None for item in tier.prices)
+                else:
+                    assert tier.action == 'none' and tier.cta_label is None
+                    assert tier.blocked_line == 'Resubscribe first to change plans'
+                    assert tier.compact is False
+        elif not legacy and plan in {'plus', 'operator', 'architect'}:
+            current_tier = next(tier for tier in built.tiers if tier.is_current)
+            if interval == 'month':
+                yearly = next(item for item in current_tier.prices if item.interval == 'year')
+                assert yearly.cta_label is not None and yearly.cta_label.startswith('Switch to yearly · save $')
+                assert current_tier.compact is False and current_tier.cta_label is None
+            else:
+                assert current_tier.compact is True
+                assert all(item.cta_label is None for item in current_tier.prices)
+        if plan == 'basic':
+            assert next(tier for tier in built.tiers if tier.is_current).compact is True
 
 
 def _scenario(name):
@@ -279,6 +335,8 @@ def _scenario(name):
         )
     if name == 'plus_budget80':
         return sheet_for('plus', price_id='price_plus_month', trigger='usage_budget', percent=80, **common)
+    if name == 'plus_monthly_yearly_toggle':
+        return sheet_for('plus', price_id='price_plus_month', source='settings', **common)
     if name == 'plus_annual_current':
         return sheet_for('plus', price_id='price_plus_year', source='settings', **common)
     if name == 'pro_settings':
@@ -309,6 +367,7 @@ SCENARIOS = (
     'free_pro_gate_screen',
     'free_mcp_cap',
     'plus_budget80',
+    'plus_monthly_yearly_toggle',
     'plus_annual_current',
     'pro_settings',
     'architect_settings',
@@ -327,6 +386,7 @@ def test_golden_storefront_scenarios():
     assert free.header == 'Choose your plan'
     assert free.current.line == "You're on Free"
     assert [tier.plan_id for tier in free.tiers] == ['plus', 'basic', 'operator', 'architect']
+    assert next(tier for tier in free.tiers if tier.is_current).compact is True
     assert rendered['free_budget80'].header == "You've used 80% of this month's usage"
     assert rendered['free_budget80'].usage.meter_line == ('80% used · about 3 hours of recording left · resets Nov 1')
     assert rendered['free_budget80'].usage.nudge_line == ("You've used 80% of this month's usage · resets Nov 1")
@@ -345,6 +405,16 @@ def test_golden_storefront_scenarios():
     assert annual.current.line == "You're on Plus · $199.90/yr · renews Nov 1"
     plus_card = next(tier for tier in annual.tiers if tier.plan_id == 'plus')
     assert [item.interval for item in plus_card.prices] == ['year']
+    assert plus_card.compact is True and plus_card.cta_label is None
+    assert all(item.cta_label is None for item in plus_card.prices)
+    switched = rendered['plus_monthly_yearly_toggle']
+    assert switched.header == 'Choose your plan'
+    plus_month = next(tier for tier in switched.tiers if tier.plan_id == 'plus')
+    assert plus_month.action == 'current' and plus_month.cta_label is None and plus_month.compact is False
+    assert next(item for item in plus_month.prices if item.interval == 'month').cta_label is None
+    assert next(item for item in plus_month.prices if item.interval == 'year').cta_label == (
+        'Switch to yearly · save $39.98'
+    )
     assert rendered['pro_settings'].current.line == "You're on Pro · $49.99/mo · renews Nov 1"
     assert rendered['architect_settings'].current.line == "You're on Architect · $199.00/mo · renews Nov 1"
     legacy = rendered['legacy_unlimited']
@@ -359,9 +429,19 @@ def test_golden_storefront_scenarios():
         'plus',
     }
     cancelled = rendered['cancel_scheduled_plus']
-    assert cancelled.current.line == "You're on Plus · ends Nov 1"
+    assert cancelled.header == 'Your Plus plan ends Nov 1'
+    assert cancelled.current.line == "You're on Plus · $19.99/mo"
+    assert [tier.plan_id for tier in cancelled.tiers][0] == 'plus'
+    assert not any(tier.recommended for tier in cancelled.tiers)
     current_plus = next(tier for tier in cancelled.tiers if tier.is_current)
     assert current_plus.action == 'checkout' and current_plus.cta_label == 'Resubscribe'
+    assert current_plus.blocked_line is None and current_plus.compact is False
+    assert all(item.cta_label is None for item in current_plus.prices)
+    assert all(
+        tier.action == 'none' and tier.cta_label is None and tier.blocked_line == 'Resubscribe first to change plans'
+        for tier in cancelled.tiers
+        if not tier.is_current
+    )
     assert all(rendered[name].yearly_toggle_label == 'Yearly · 2 months free' for name in SCENARIOS)
     french = sheet_for('basic', locale='fr-FR', rows={}, bindings=[], recognized=[])
     assert french.header == 'Choose your plan'
