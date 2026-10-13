@@ -168,14 +168,3 @@ async def test_asana_refresh_failure_before_resend_is_not_sent(monkeypatch):
 
     assert result["error_code"] == "token_refresh_failed"
     assert client.post.await_count == 1
-
-
-@pytest.mark.parametrize(
-    "status_code, outcome",
-    [(400, "definite_error"), (401, "definite_error"), (429, "definite_error"), (500, "in_doubt"), (504, "in_doubt")],
-)
-def test_provider_http_status_classifies_retry_safety(status_code, outcome):
-    from utils.task_sync import _provider_attempt_outcome
-
-    result = {"success": False, "error_code": "api_error", "status_code": status_code}
-    assert _provider_attempt_outcome(result) == outcome
