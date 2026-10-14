@@ -83,4 +83,16 @@ void main() {
 
     expect(SharedPreferencesUtil().cachedConversations, isEmpty);
   });
+
+  test('a background cache write in flight at sign-out never restores the old account cache', () async {
+    final previous = SharedPreferencesUtil.cachedConversationsBackgroundEncodeThreshold;
+    addTearDown(() => SharedPreferencesUtil.cachedConversationsBackgroundEncodeThreshold = previous);
+    SharedPreferencesUtil.cachedConversationsBackgroundEncodeThreshold = 1;
+
+    final slow = SharedPreferencesUtil().cacheConversations([for (var i = 0; i < 25; i++) _conversation(i)]);
+    await SharedPreferencesUtil().clear();
+    await slow;
+
+    expect(SharedPreferencesUtil().getStringList('cachedConversations'), isEmpty);
+  });
 }

@@ -90,6 +90,10 @@ class RuleTests(unittest.TestCase):
         self.assertEqual(count_hits(snippet, "app/lib/backend/http/api/conversations.dart")["json-in-provider"], 0)
         self.assertEqual(count_hits(snippet, "app/lib/pages/foo/bar_provider.dart")["json-in-provider"], 1)
 
+    def test_microsecond_timer_counts(self) -> None:
+        snippet = "Timer.periodic(const Duration(microseconds: 16667), (_) => tick());"
+        self.assertEqual(count_hits(snippet, PROVIDER)["fast-periodic-timer"], 1)
+
     def test_slow_periodic_timer_is_clean(self) -> None:
         snippet = "Timer.periodic(const Duration(milliseconds: 500), (_) => tick());"
         self.assertEqual(count_hits(snippet, PROVIDER)["fast-periodic-timer"], 0)
@@ -188,6 +192,42 @@ class ProviderGraphTests(unittest.TestCase):
             "  // omi-perf-allow: proxy-hook-notify -- page derives from upstream state\n  void updateExternalActions",
         )
         self.assertEqual(hook_violations("updateExternalActions", {"app/lib/x.dart": allowed}), [])
+
+    def test_bang_and_bare_cascades_are_hooks(self) -> None:
+        main_text = "update: (c, a, previous) => previous!..setFoo(a), update2: (c, a, previous) { return previous..setBar(a); }"
+        self.assertEqual(proxy_hooks(main_text), ["setBar", "setFoo"])
+
+    def test_async_future_hook_with_function_params_fails(self) -> None:
+        text = """
+  Future<void> setFoo(void Function() onDone, FooProvider p) async {
+    foo = p;
+    notifyListeners();
+  }
+"""
+        self.assertEqual(len(hook_violations("setFoo", {"app/lib/x.dart": text})), 1)
+
+    def test_arrow_hook_that_notifies_fails(self) -> None:
+        text = "  void setFoo(FooProvider p) => (foo = p, notifyListeners());"
+        self.assertEqual(len(hook_violations("setFoo", {"app/lib/x.dart": text})), 1)
+
+    def test_return_in_a_nested_closure_or_comment_is_not_a_guard(self) -> None:
+        text = """
+  void setFoo(FooProvider p) {
+    // return early when unchanged
+    items.forEach((e) { return; });
+    final note = 'return';
+    foo = p;
+    notifyListeners();
+  }
+"""
+        self.assertEqual(len(hook_violations("setFoo", {"app/lib/x.dart": text})), 1)
+
+    def test_a_graph_with_no_recognised_hooks_fails(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "app/lib").mkdir(parents=True)
+            (root / "app/lib/main.dart").write_text("ChangeNotifierProvider(create: (_) => Foo()),")
+            self.assertEqual(len(check_provider_graph(root)), 1)
 
     def test_graph_check_on_a_tree(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

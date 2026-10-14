@@ -38,7 +38,7 @@ import sys
 from dataclasses import dataclass
 from pathlib import Path
 
-from check_mobile_ux_contract import _in_comment, _in_string, _line_bounds, git_show
+from check_mobile_ux_contract import STRING_LITERAL, _in_comment, _in_string, _line_bounds, git_show
 
 APP_ROOT = "app/lib/"
 MAIN_DART = "app/lib/main.dart"
@@ -86,6 +86,8 @@ def _unsized_image(text: str, match: re.Match[str]) -> bool:
 
 
 def _fast_timer(_text: str, match: re.Match[str]) -> bool:
+    if match.group("unit") == "microseconds":
+        return int(match.group("ms")) < FAST_TIMER_MS * 1000
     return int(match.group("ms")) < FAST_TIMER_MS
 
 
@@ -105,7 +107,7 @@ RULES: tuple[Rule, ...] = (
     ),
     Rule(
         "fast-periodic-timer",
-        re.compile(r"Timer\.periodic\(\s*(?:const\s+)?Duration\(\s*milliseconds:\s*(?P<ms>\d+)"),
+        re.compile(r"Timer\.periodic\(\s*(?:const\s+)?Duration\(\s*(?P<unit>milliseconds|microseconds):\s*(?P<ms>\d+)"),
         "an AnimationController/Ticker, or a dedicated ValueNotifier only the painting widget listens to",
         accept=_fast_timer,
     ),
@@ -202,40 +204,81 @@ def compare(path: str, head_text: str, base_text: str | None) -> list[str]:
 
 # ── provider graph ────────────────────────────────────────────────────────────
 
-PROXY_HOOK_CALL = re.compile(r"previous\?\.\.\s*(\w+)\s*\(")
+PROXY_HOOK_CALL = re.compile(r"\bprevious\s*[?!]?\.\.\s*(\w+)\s*\(")
+LINE_COMMENT = re.compile(r"//[^\n]*")
+BLOCK_COMMENT = re.compile(r"/\*.*?\*/", re.S)
 
 
 def proxy_hooks(main_text: str) -> list[str]:
     return sorted(set(PROXY_HOOK_CALL.findall(main_text)))
 
 
-def _method_body(text: str, open_brace: int) -> str:
+def _mask(text: str) -> str:
+    """Blank out comments and string literals, keeping offsets."""
+    blank = lambda m: re.sub(r"[^\n]", " ", m.group(0))  # noqa: E731
+    text = BLOCK_COMMENT.sub(blank, text)
+    text = STRING_LITERAL.sub(blank, text)
+    return LINE_COMMENT.sub(blank, text)
+
+
+def _matching(text: str, open_index: int, open_char: str, close_char: str) -> int:
     depth = 0
-    for index in range(open_brace, len(text)):
+    for index in range(open_index, len(text)):
         char = text[index]
-        if char == "{":
+        if char == open_char:
             depth += 1
-        elif char == "}":
+        elif char == close_char:
             depth -= 1
             if depth == 0:
-                return text[open_brace + 1 : index]
-    return text[open_brace + 1 :]
+                return index
+    return len(text)
+
+
+def _hook_body(masked: str, after_params: int) -> tuple[str, bool] | None:
+    """(body, is_arrow) for the declaration whose parameter list ends at [after_params]."""
+    rest = re.match(r"\s*(?:async\s*)?(\{|=>)", masked[after_params:])
+    if not rest:
+        return None
+    start = after_params + rest.end(1) - 1
+    if rest.group(1) == "{":
+        return masked[start + 1 : _matching(masked, start, "{", "}")], False
+    end = masked.find(";", start)
+    return masked[start + 2 : end if end != -1 else len(masked)], True
+
+
+def _top_level_return_before(body: str, limit: int) -> bool:
+    """True when a `return` sits directly in the body (not in a nested closure) before [limit]."""
+    depth = 0
+    for match in re.finditer(r"[{}]|\breturn\b", body[:limit]):
+        token = match.group(0)
+        if token == "{":
+            depth += 1
+        elif token == "}":
+            depth -= 1
+        elif depth == 0:
+            return True
+    return False
 
 
 def hook_violations(name: str, sources: dict[str, str]) -> list[str]:
     """Declarations of [name] that notify with no early return before the first notify."""
-    declaration = re.compile(rf"\bvoid\s+{re.escape(name)}\s*\([^)]*\)\s*(?:async\s*)?\{{")
+    declaration = re.compile(rf"\b(?:void|Future<void>|FutureOr<void>)\s+{re.escape(name)}\s*\(")
     problems: list[str] = []
     for path, text in sources.items():
-        for match in declaration.finditer(text):
+        masked = _mask(text)
+        for match in declaration.finditer(masked):
             start, end = _line_bounds(text, match.start())
             if _allowed_at(text, start, end, PROXY_HOOK_RULE):
                 continue
-            body = _method_body(text, match.end() - 1)
+            close = _matching(masked, match.end() - 1, "(", ")")
+            parsed = _hook_body(masked, close + 1)
+            if parsed is None:
+                continue
+            body, is_arrow = parsed
             notify = body.find("notifyListeners()")
             if notify == -1:
                 continue
-            if "return" in body[:notify]:
+            if not is_arrow and _top_level_return_before(body, notify):
                 continue
             line = text.count("\n", 0, match.start()) + 1
             problems.append(
@@ -250,6 +293,10 @@ def check_provider_graph(root: Path) -> list[str]:
     if not main_file.is_file():
         return []
     hooks = proxy_hooks(main_file.read_text(encoding="utf-8", errors="ignore"))
+    if not hooks:
+        # The root graph has proxy providers today; finding none means the parser no longer
+        # recognises their shape, and an empty check would pass vacuously.
+        return [f"{MAIN_DART}: no `previous?..hook(...)` proxy update hooks found; update PROXY_HOOK_CALL"]
     sources: dict[str, str] = {}
     for file in sorted((root / APP_ROOT).rglob("*.dart")):
         rel = file.relative_to(root).as_posix()

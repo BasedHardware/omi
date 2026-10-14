@@ -40,9 +40,14 @@ Details and the measurement tools: [`app/docs/performance.md`](../../app/docs/pe
 - `app/test/perf/notify_amplification_test.dart` — repeated proxy updates do not notify, and
   capture notifies that leave the transcript alone do not walk it.
 - `app/test/perf/conversation_list_off_ui_test.dart` — list parsing and cache encoding give
-  identical results off the UI isolate, and a stale background write never lands.
+  identical results off the UI isolate, and a stale background write never lands (including
+  across sign-out).
 - `app/test/unit/wal_file_manager_save_cost_test.dart` — queued WAL index saves collapse into the
   newest snapshot and large indexes encode off the UI isolate.
+- `app/test/unit/voice_recorder_mic_contention_test.dart` — dictation ticks the waveform, not the
+  provider.
+- `app/test/unit/local_segment_store_test.dart` — the off-isolate transcript digest equals the
+  inline one.
 
 ## Path globs
 

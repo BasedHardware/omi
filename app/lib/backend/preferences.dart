@@ -1146,8 +1146,8 @@ class SharedPreferencesUtil {
     saveStringList('cachedConversations', conversations);
   }
 
-  /// Bumped by every cache write; an older background write never lands over
-  /// a newer write or a sign-out clear.
+  /// Bumped by every cache write and by [clear]; an older background write
+  /// never lands over a newer write or a sign-out clear.
   static int _cachedConversationsGeneration = 0;
 
   @visibleForTesting
@@ -1529,6 +1529,8 @@ class SharedPreferencesUtil {
   Future<bool> remove(String key) async => await _preferences?.remove(key) ?? false;
 
   Future<bool> clear() async {
+    // Drop any in-flight background conversation cache write (sign-out, account deletion).
+    _cachedConversationsGeneration++;
     _authTokenCache = '';
     await _deleteSecureAuthToken();
     return await _preferences?.clear() ?? false;

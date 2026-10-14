@@ -140,9 +140,36 @@ class LocalRecordingsProvider extends ChangeNotifier {
     return LocalRecordingState.pending;
   }
 
+  Future<void>? _refreshInFlight;
+  bool _refreshAgain = false;
+
   /// Rescan the recordings directory and rebuild [recordings]. Cheap and
   /// idempotent — call it on app foreground, after a BLE disconnect, etc.
-  Future<void> refresh() async {
+  ///
+  /// Scans never overlap: the listing is async, so two concurrent scans could
+  /// finish out of order and race on the owners file. A call during a scan
+  /// schedules one more scan and completes after it.
+  Future<void> refresh() {
+    final inFlight = _refreshInFlight;
+    if (inFlight != null) {
+      _refreshAgain = true;
+      return inFlight;
+    }
+    final run = () async {
+      try {
+        do {
+          _refreshAgain = false;
+          await _scan();
+        } while (_refreshAgain && !_disposed);
+      } finally {
+        _refreshInFlight = null;
+      }
+    }();
+    _refreshInFlight = run;
+    return run;
+  }
+
+  Future<void> _scan() async {
     _isLoading = true;
     notifyListeners();
     try {

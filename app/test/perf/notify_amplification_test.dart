@@ -155,8 +155,6 @@ void main() {
     }
     await capture.pendingLiveSegmentWrite;
 
-    expect(transcript.reads - readsAfterFirstPersist, lessThan(transcript.length),
-        reason: 'state/metrics/socket notifies must not cost O(transcript) on the UI isolate');
     expect(transcript.reads - readsAfterFirstPersist, 0,
         reason: 'state/metrics/socket notifies must not cost O(transcript) on the UI isolate');
   });

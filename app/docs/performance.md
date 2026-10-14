@@ -12,11 +12,11 @@ with how much history the user had, not with the screen in front of them.
 
 | Cause | Where | Fix |
 |---|---|---|
-| The WAL index (one JSON file listing every recording chunk) was re-read, re-decoded and fully re-encoded on the UI isolate on every save; ~26 call sites, many per upload batch | `lib/utils/wal_file_manager.dart` | Queued saves collapse into the newest snapshot; the backup copy skips re-decoding a file this process wrote; large indexes encode via `offUiIsolate` |
+| The WAL index (one JSON file listing every recording chunk) was re-read, re-decoded and fully re-encoded on the UI isolate on every save, from dozens of call sites (several per upload batch) | `lib/utils/wal_file_manager.dart` | Queued saves collapse into the newest snapshot; the backup copy skips re-decoding a file this process wrote; large indexes encode via `offUiIsolate` |
 | Proxy update hooks notified unconditionally, so every Conversation/Message/People/Usage notify re-notified Capture, and every Capture notify re-notified Device | `CaptureController.updateExternalActions`, `DeviceProvider.setProviders` | Return early when the injected references are unchanged |
 | A listener on every capture notify joined the whole live transcript into a string; each new segment also hashed and JSON-encoded the whole session | `CaptureProvider._persistLiveSegments`, `LocalSegmentStore` | Cheap change key (list identity, length, `segmentsPhotosVersion`, owner token); long sessions hash/encode via `offUiIsolate` |
 | On resume, multi-megabyte conversation pages (with transcripts) were parsed and re-cached on the UI isolate | `getConversations`, `SharedPreferencesUtil.cacheConversations` | Large bodies parse via `offUiIsolate`; the cache encodes in the background behind a generation guard |
-| `listSync` of the documents directory (which holds every WAL file) on every resume | `LocalRecordingsProvider.refresh` | Async `dir.list()` |
+| `listSync` of the documents directory (which holds every WAL file) on every resume | `LocalRecordingsProvider.refresh` | Async `dir.list()`; overlapping refreshes coalesce into one scan at a time |
 | The memories list re-filtered every memory for each row it built | `MemoriesPage` | Filter once per build |
 | Voice dictation notified the provider at 60 Hz, rebuilding the whole chat composer | `VoiceRecorderProvider` | A dedicated `waveformTick` that only the waveform listens to |
 
@@ -55,6 +55,12 @@ changing it), SD-card/flash-page sync refreshes the WAL list per downloaded chun
 | `test/perf/conversation_list_off_ui_test.dart` | Off-isolate parse/encode drift, stale cache writes, non-sendable payloads | `bash test.sh` |
 | `test/unit/wal_file_manager_save_cost_test.dart` | Save coalescing, off-isolate index encode, backup validation | `bash test.sh` |
 | `test/unit/voice_recorder_mic_contention_test.dart` (waveform case) | 60 Hz provider notifies while dictating | `bash test.sh` |
+| `test/unit/local_segment_store_test.dart` (digest case) | Off-isolate transcript digest drifting from the inline one | `bash test.sh` |
+
+The ratchet compares each changed file with its merge-base version, so a renamed or moved file
+starts at zero and its existing hits read as new; carry them over with allow comments. The
+host perf harness below is deliberately not a CI gate: its frame times depend on the machine and
+its rebuild counts vary a few percent between runs (live binding, real loopback I/O).
 
 Run the ratchet on your files before pushing:
 

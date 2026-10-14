@@ -3,6 +3,11 @@ import 'dart:isolate';
 
 import 'package:flutter/foundation.dart';
 
+/// Times [offUiIsolate] fell back to inline because its input could not cross
+/// isolates.
+@visibleForTesting
+int offUiIsolateFallbacks = 0;
+
 /// Runs CPU-bound, pure [work] (JSON encode/decode, hashing, parsing) on a
 /// background isolate when its input is large, and inline when it is small.
 ///
@@ -16,12 +21,9 @@ import 'package:flutter/foundation.dart';
 /// [work] must be pure: it may run twice (once on a background isolate and
 /// once inline) when its captured values cannot cross isolates, and it must
 /// not touch plugins, platform channels or global mutable state.
-/// `.github/scripts/check_mobile_ui_isolate.py` ratchets the raw alternatives.
-/// Times [offUiIsolate] fell back to inline because its input could not cross
-/// isolates.
-@visibleForTesting
-int offUiIsolateFallbacks = 0;
-
+/// If [work] itself throws an [ArgumentError] it is retried once inline, which
+/// rethrows the same error. `.github/scripts/check_mobile_ui_isolate.py`
+/// ratchets the raw alternatives.
 Future<R> offUiIsolate<R>(
   R Function() work, {
   required int size,

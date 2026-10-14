@@ -46,9 +46,9 @@ void main() {
     if (tempDir.existsSync()) tempDir.deleteSync(recursive: true);
   });
 
-  test('saves queued behind an in-flight save collapse into the newest snapshot', () async {
+  test('back-to-back saves collapse into the newest snapshot', () async {
     final first = WalFileManager.saveWals([_wal(1000)]);
-    // These two queue behind `first`; only the newest snapshot needs writing.
+    // None of these has started writing yet; only the newest snapshot needs writing.
     final second = WalFileManager.saveWals([_wal(1000), _wal(2000)]);
     final third = WalFileManager.saveWals([_wal(1000), _wal(2000), _wal(3000)]);
     expect(identical(second, third), isTrue, reason: 'a queued save is replaced, not appended');
@@ -57,6 +57,7 @@ void main() {
     expect((await WalFileManager.loadWals()).map((w) => w.timerStart), [1000, 2000, 3000]);
   });
 
+  // Guard (also true before coalescing): a replaced caller must not resolve early.
   test('a superseded caller resolves only after a write that contains its snapshot', () async {
     final inFlight = WalFileManager.saveWals([_wal(1000)]);
     final superseded = WalFileManager.saveWals([_wal(1000), _wal(2000)]);
@@ -82,6 +83,7 @@ void main() {
     expect(offUiIsolateFallbacks, 0);
   });
 
+  // Guard for the skip-revalidation shortcut in _createBackup.
   test('an index changed behind our back is re-validated before it may become the backup', () async {
     await WalFileManager.saveWals([_wal(1000)]);
     await WalFileManager.saveWals([_wal(1000), _wal(2000)]);
