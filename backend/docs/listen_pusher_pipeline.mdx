@@ -49,6 +49,13 @@ Rollout, lease/capacity details, test acceptance and rollback belong to the
 lead starts at at most 5% and waits at least 12 hours before any expansion.
 
 
+Parakeet `/v3/stream` receives literal `finalize`, flushes its remaining
+transcript segments, then sends WebSocket close 1000 after every tail send has
+succeeded (including an empty tail). Returning without that frame previously
+made production callers observe synthetic 1006. Client disconnects and failed
+flush/tail delivery retain their existing failure lifecycle; session cleanup and
+admission release run in every case.
+
 The standalone `POST /v1/stt/transcribe` Parakeet proxy uses the shared
 managed-transcription allowance before calling the provider. It probes the
 uploaded media duration and rejects a file that exceeds the remaining allowance;
