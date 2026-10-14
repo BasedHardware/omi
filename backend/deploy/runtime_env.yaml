@@ -1921,8 +1921,8 @@ environments:
           REFERRAL_PUBLIC_BASE_URL:
             category: service_discovery
             value: https://omi.me
-          DREAM_AGENT_MODE: {value: 'on', category: rollout}
-          DREAM_AGENT_UID_ALLOWLIST: {value: '9OqYLlKJv4hmeYpIhwJcHBR975i2,vi7SA9ckQCe4ccobWNxlbdcNdC23', category: rollout}
+          DREAM_AGENT_ENABLED: {value: 'true', category: rollout}
+          DREAM_AGENT_ELIGIBILITY: {value: all, category: rollout}
           PROACTIVITY_V2_POSTHOG_TOKEN: {value: phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y, category: rollout}
           PROACTIVITY_V2_POSTHOG_HOST: {value: 'https://us.posthog.com', category: rollout}
           PROACTIVITY_REDIS_HOST:
@@ -2071,8 +2071,8 @@ environments:
           HOSTED_SPEAKER_EMBEDDING_API_URL:
             category: service_discovery
             value: http://diarizer.omi.me:80
-          DREAM_AGENT_MODE: {value: 'on', category: rollout}
-          DREAM_AGENT_UID_ALLOWLIST: {value: '9OqYLlKJv4hmeYpIhwJcHBR975i2,vi7SA9ckQCe4ccobWNxlbdcNdC23', category: rollout}
+          DREAM_AGENT_ENABLED: {value: 'true', category: rollout}
+          DREAM_AGENT_ELIGIBILITY: {value: all, category: rollout}
           PROACTIVITY_V2_POSTHOG_TOKEN: {value: phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y, category: rollout}
           PROACTIVITY_V2_POSTHOG_HOST: {value: 'https://us.posthog.com', category: rollout}
           POSTHOG_PROJECT_API_KEY:
@@ -2430,13 +2430,13 @@ environments:
             OMI_IMESSAGE_MAX_SEND_RECEIVE_RATIO: {value: '3', category: rollout}
             OMI_MESSAGING_LINK_TARGETS: {value: '{"telegram":{"provider":"telegram","address":"omi_chat_bot","deep_link_template":"https://t.me/{address}?start={proof}"},"imessage":{"provider":"linq","address":"+12062808403"}}',
               category: rollout}
-            DREAM_AGENT_MODE: {value: 'on', category: rollout}
-            DREAM_AGENT_UID_ALLOWLIST: {value: '9OqYLlKJv4hmeYpIhwJcHBR975i2,vi7SA9ckQCe4ccobWNxlbdcNdC23', category: rollout}
-            DREAM_AGENT_AUTO_APPLY_KINDS: {value: 'title,overview,vocabulary', category: rollout}
-            DREAM_SELF_REPORT_MODE: {value: 'on', category: rollout}
-            DREAM_AGENT_PASSES_PER_DAY: {value: '24', category: rollout}
-            DREAM_AGENT_MANUAL_RUNS_PER_DAY: {value: '20', category: rollout}
-            DREAM_AGENT_DAILY_USD: {value: '60', category: rollout}
+            DREAM_AGENT_ENABLED: {value: 'true', category: rollout}
+            DREAM_AGENT_ELIGIBILITY: {value: all, category: rollout}
+            DREAM_AGENT_PASSES_PER_DAY: {value: '2', category: rollout}
+            DREAM_AGENT_MANUAL_RUNS_PER_DAY: {value: '3', category: rollout}
+            DREAM_AGENT_DAILY_USD: {value: '10', category: rollout}
+            DREAM_AGENT_GLOBAL_DAILY_USD: {value: '100', category: rollout}
+            DREAM_AGENT_TOKENS_PER_MINUTE: {value: '2000000', category: rollout}
             PROACTIVITY_V2_POSTHOG_TOKEN: {value: phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y, category: rollout}
             PROACTIVITY_V2_POSTHOG_HOST: {value: 'https://us.posthog.com', category: rollout}
             POSTHOG_BILLING_API_KEY:
@@ -2687,16 +2687,14 @@ environments:
               value: canonical_memory_atoms
               category: memory_rollout
             OMI_SHAPED_AGENT_MODE: {value: 'on', category: rollout}
-            DREAM_AGENT_MODE: {value: 'on', category: rollout}
+            DREAM_AGENT_ENABLED: {value: 'true', category: rollout}
+            DREAM_AGENT_ELIGIBILITY: {value: all, category: rollout}
             REVIEW_SURFACE_MODE: {value: 'on', category: rollout}
-            DREAM_AGENT_UID_ALLOWLIST: {value: '9OqYLlKJv4hmeYpIhwJcHBR975i2,vi7SA9ckQCe4ccobWNxlbdcNdC23', category: rollout}
-            DREAM_AGENT_CONTEXT_MODE: {value: full, category: rollout}
-            DREAM_AGENT_FULL_CONTEXT_UIDS: {value: vi7SA9ckQCe4ccobWNxlbdcNdC23, category: rollout}
-            DREAM_AGENT_FULL_SAMPLES: {value: '3', category: rollout}
-            DREAM_AGENT_AUTO_APPLY_KINDS: {value: 'title,overview,vocabulary', category: rollout}
-            DREAM_AGENT_PASSES_PER_DAY: {value: '24', category: rollout}
-            DREAM_AGENT_MANUAL_RUNS_PER_DAY: {value: '20', category: rollout}
-            DREAM_AGENT_DAILY_USD: {value: '320', category: rollout}
+            DREAM_AGENT_PASSES_PER_DAY: {value: '2', category: rollout}
+            DREAM_AGENT_MANUAL_RUNS_PER_DAY: {value: '3', category: rollout}
+            DREAM_AGENT_DAILY_USD: {value: '10', category: rollout}
+            DREAM_AGENT_GLOBAL_DAILY_USD: {value: '100', category: rollout}
+            DREAM_AGENT_TOKENS_PER_MINUTE: {value: '2000000', category: rollout}
             DREAM_AGENT_CANARY_UID: {value: dream-canary-prod-01, category: rollout}
             SYNC_PHASE_METRICS_EXPORT_ENABLED:
               value: 'true'
@@ -2910,8 +2908,8 @@ environments:
               value: canonical_memory_atoms
               category: memory_rollout
             OMI_SHAPED_AGENT_MODE: {value: 'on', category: rollout}
-            DREAM_AGENT_MODE: {value: 'on', category: rollout}
-            DREAM_AGENT_UID_ALLOWLIST: {value: '9OqYLlKJv4hmeYpIhwJcHBR975i2,vi7SA9ckQCe4ccobWNxlbdcNdC23', category: rollout}
+            DREAM_AGENT_ENABLED: {value: 'true', category: rollout}
+            DREAM_AGENT_ELIGIBILITY: {value: all, category: rollout}
             SYNC_PHASE_METRICS_EXPORT_ENABLED:
               value: 'true'
               category: telemetry
@@ -3096,8 +3094,8 @@ environments:
             GCP_LOCATION:
               value: us-central1
             OMI_SHAPED_AGENT_MODE: {value: 'on', category: rollout}
-            DREAM_AGENT_MODE: {value: 'on', category: rollout}
-            DREAM_AGENT_UID_ALLOWLIST: {value: '9OqYLlKJv4hmeYpIhwJcHBR975i2,vi7SA9ckQCe4ccobWNxlbdcNdC23', category: rollout}
+            DREAM_AGENT_ENABLED: {value: 'true', category: rollout}
+            DREAM_AGENT_ELIGIBILITY: {value: all, category: rollout}
             PROACTIVITY_V2_POSTHOG_TOKEN: {value: phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y, category: rollout}
             PROACTIVITY_V2_POSTHOG_HOST: {value: 'https://us.posthog.com', category: rollout}
             MENTOR_PIPELINE: {value: cohort, category: rollout}

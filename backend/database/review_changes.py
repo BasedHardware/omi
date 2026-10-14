@@ -22,6 +22,7 @@ from database import (
     review_store as store,
 )
 from database import review_exact_undo
+from utils.dream_metrics import record_undo
 from database.read_boundary import parse_payload_strict
 from models.review import ReviewChange, ReviewChangesResponse
 
@@ -287,20 +288,26 @@ def set_undone(uid: str, change_id: str, undone: bool, *, now: datetime | None =
     now = now or datetime.now(timezone.utc)
     ref = store.user(uid).collection('review_changes').document(store.safe_id(change_id))
     data = store.decode_doc(uid, ref.get().to_dict())
+
+    def tracked(change):
+        if undone and data and not data['change']['undone']:
+            record_undo(change)
+        return change
+
     if data and data.get('memory_hygiene'):
         if data['created_at'] < now - WINDOW:
             raise store.ReviewNotFound('Change is outside the 30-day undo window')
-        return review_memory_hygiene.set_undone(uid, change_id, undone)
+        return tracked(review_memory_hygiene.set_undone(uid, change_id, undone))
     if data and data.get('memory_edit'):
         if data['created_at'] < now - WINDOW:
             raise store.ReviewNotFound('Change is outside the 30-day undo window')
         if data.get('memory_merge'):
             from database.review_memory_merges import set_undone as set_memory_merge_undone
 
-            return set_memory_merge_undone(uid, change_id, undone, data)
+            return tracked(set_memory_merge_undone(uid, change_id, undone, data))
         from database.review_memory_changes import set_memory_undone
 
-        return set_memory_undone(uid, change_id, undone, data)
+        return tracked(set_memory_undone(uid, change_id, undone, data))
     result = {}
 
     def build(tx):
@@ -369,8 +376,8 @@ def set_undone(uid: str, change_id: str, undone: bool, *, now: datetime | None =
             uid, None, build, use_current_head=True, firestore_client=store.client()
         )
     except _Unchanged:
-        pass
-    return _wire(result)
+        return _wire(result)
+    return tracked(_wire(result))
 
 
 def list_changes(uid: str, cursor: str | None = None, *, now: datetime | None = None) -> ReviewChangesResponse:

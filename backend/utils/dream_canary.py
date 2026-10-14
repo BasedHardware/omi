@@ -9,12 +9,12 @@ from config.dream_agent import Caps, canary_uid, mode
 from database import dream_canary, dream_store, review_store
 from database.dream_dirty import canary_writing
 from utils.conversations import lifecycle
-from utils import dream_agent, dream_transport
+from utils import dream_agent, dream_harness_transport
 from utils.executors import db_executor, run_blocking
 from utils.dream_metrics import CANARY
 
 logger = logging.getLogger(__name__)
-DEADLINE_SECONDS = 85
+DEADLINE_SECONDS = 600
 
 
 class CanaryFailure(Exception):
@@ -70,16 +70,16 @@ async def check():
             # Schema bytes dominate the cap; only 256 completion tokens per lane.
             # Allow 48 half-hour checks plus retries, sharing the global ceiling.
             caps = replace(
-                Caps.from_env(), tokens=min(16000, Caps.from_env().tokens), passes=96, edits=1, completion_tokens=256
+                Caps.from_env(), tokens=min(96000, Caps.from_env().tokens), passes=96, edits=1, completion_tokens=256
             )
-            report = await dream_agent.run_pass(uid, caps=caps, canary=True, timeout_seconds=65, progress=progress)
+            report = await dream_agent.run_pass(uid, caps=caps, canary=True, timeout_seconds=540, progress=progress)
             progress.clear()
             if not report.get('run_id'):
                 raise CanaryFailure('not_admitted')
             stage = 'model'
             if report.get('status') != 'complete' or set(report.get('model_lanes', [])) != {
-                dream_transport.TRIAGE_LANE,
-                dream_transport.MAIN_LANE,
+                dream_harness_transport.VERIFY_LANE,
+                dream_harness_transport.MAIN_LANE,
             }:
                 error = report.get('error_type') or 'CanaryFailure'
                 raise CanaryFailure('model_incomplete')

@@ -5,7 +5,7 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
-from config.dream_agent import Caps, FULL_DRAIN_SECONDS, DRAIN_TIMEOUT_SECONDS, LEASE_RECLAIM_MARGIN_SECONDS
+from config.dream_agent import Caps, DRAIN_TIMEOUT_SECONDS, LEASE_RECLAIM_MARGIN_SECONDS
 from database import dream_store
 from tests.support.dream_firestore import DreamFirestore
 
@@ -26,7 +26,8 @@ def db(monkeypatch):
         'last_changed_at': NOW,
         'failed_passes': 2,
     }
-    monkeypatch.setenv('DREAM_AGENT_MODE', 'shadow')
+    monkeypatch.setenv('DREAM_AGENT_ENABLED', 'true')
+    monkeypatch.setenv('REVIEW_SURFACE_MODE', 'on')
     monkeypatch.setenv('DREAM_AGENT_UID_ALLOWLIST', UID)
     monkeypatch.setenv('DREAM_AGENT_BACKFILL_SHARE', '0')
     monkeypatch.setattr(dream_store.firestore, 'transactional', lambda fn: fn)
@@ -35,7 +36,7 @@ def db(monkeypatch):
 
 
 def caps(context='bounded', **kw):
-    return Caps(context_mode=context, passes=24, daily_usd=250, **kw)
+    return Caps(passes=24, daily_usd=250, global_daily_usd=1000, **kw)
 
 
 def acquire(db, at=NOW, context='bounded', **kw):
@@ -43,14 +44,13 @@ def acquire(db, at=NOW, context='bounded', **kw):
 
 
 def deadline(context):
-    return (FULL_DRAIN_SECONDS if context == 'full' else DRAIN_TIMEOUT_SECONDS) + LEASE_RECLAIM_MARGIN_SECONDS
+    return DRAIN_TIMEOUT_SECONDS + LEASE_RECLAIM_MARGIN_SECONDS
 
 
 @pytest.mark.parametrize('context', ['bounded', 'full'])
 @pytest.mark.parametrize('offset', [-1, 0, 1])
 def test_only_strictly_older_leases_are_reclaimed(db, context, offset):
     old = acquire(db, context=context)
-    assert old['context_mode'] == context
     before = deepcopy(db.rows)
     new = acquire(db, NOW + timedelta(seconds=deadline(context) + offset), context=context)
     if offset <= 0:
@@ -68,23 +68,17 @@ def test_only_strictly_older_leases_are_reclaimed(db, context, offset):
             ('users', UID, 'dream_runs', old['run_id']),
             ('dream_users', UID),
             ('dream_users', UID, 'spend', old['day']),
+            ('dream_global_spend', old['day']),
         }
         assert not any('dirty' in path or 'reviews' in path for path in paths)
 
 
-def test_saved_context_not_new_caps_controls_the_abandonment_fence(db):
-    old = acquire(db, context='full')
-    assert acquire(db, NOW + timedelta(seconds=deadline('bounded') + 1), context='bounded') is None
-    assert db.rows[('dream_users', UID)]['lease'] == old
-    assert acquire(db, NOW + timedelta(seconds=deadline('full') + 1), context='bounded') is not None
-
-
-def test_legacy_context_uses_conservative_full_fence(db):
+def test_legacy_short_context_cannot_shorten_the_v2_reclaim_fence(db):
     old = acquire(db)
-    db.rows[('dream_users', UID)]['lease'].pop('context_mode')
-    assert acquire(db, NOW + timedelta(seconds=deadline('bounded') + 1)) is None
-    new = acquire(db, NOW + timedelta(seconds=deadline('full') + 1))
-    assert new['run_id'] != old['run_id']
+    db.rows[('dream_users', UID)]['lease']['context_mode'] = 'bounded'
+    assert acquire(db, NOW + timedelta(seconds=301)) is None
+    assert db.rows[('dream_users', UID)]['lease']['run_id'] == old['run_id']
+    assert acquire(db, NOW + timedelta(seconds=1741)) is not None
 
 
 @pytest.mark.parametrize('scope', ['user', 'legacy'])

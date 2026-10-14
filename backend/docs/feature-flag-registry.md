@@ -1,4 +1,4 @@
-<!-- feature-flag-registry as-of: 2026-10-13 -->
+<!-- feature-flag-registry as-of: 2026-10-14 -->
 
 # Feature-flag authority registry
 
@@ -113,7 +113,7 @@ entries are exempt: they are queued for removal, not running.
 
 ## Overdue for a decision
 
-None as of 2026-10-13.
+None as of 2026-10-14.
 
 ## Flags
 
@@ -174,11 +174,6 @@ and an explicit empty literal renders as `''`.
 | `CONVERSATION_SMART_MERGE_MODE` | Fold a finished pendant conversation into its predecessor when Jev says same occasion (default merge; off\|shadow\|merge) | backend | env | open | — | — | — | — | graduate | 2026-10-29 | dazheng |
 | `CONVERSATION_SMART_MERGE_UID_ALLOWLIST` | Limit smart merge to listed UIDs; empty admits every user | backend | env | closed | — | — | — | — | pending | 2026-10-29 | dazheng |
 | `CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE` | Opt-in smart-merge gap policy for proven same-recording live pairs: off keeps the legacy speech-gap gate (code default), shadow logs/meters the corrected wall-clock verdict without acting on it, on rescues legacy-skipped pairs by created_at/finished_at wall clock (unset/blank/unknown = off) | backend | env | open | {value: 'off', category: rollout} | shadow (backend-listen (chart), pusher (chart)); {value: 'shadow', category: rollout} (cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, gke/backend-listen, gke/pusher) | shadow (backend-listen (chart), pusher (chart)); {value: 'shadow', category: rollout} (cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, gke/backend-listen, gke/pusher) | — | keep | 2026-11-05 | dazheng |
-| `DREAM_AGENT_CONTEXT_MODE` | Dream context mode bounded (default) or full; full requires the separate UID allowlist | backend | env | closed | — | — | {value: full, category: rollout} | — | pending | 2026-11-12 | dazheng |
-| `DREAM_AGENT_FULL_CONTEXT_UIDS` | Comma allowlist for full Dream context; empty admits nobody; ordinary Dream eligibility still applies | backend | env | closed | — | — | {value: 'vi7SA9ckQCe4ccobWNxlbdcNdC23', category: rollout} | — | pending | 2026-11-12 | dazheng |
-| `DREAM_AGENT_MODE` | Dream-agent mode; unset, off, or unknown keeps the feature disabled | backend | env | closed | — | — | on (backend-listen (chart), pusher (chart)); {value: 'on', category: rollout} (cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, gke/backend-listen, gke/pusher) | — | pending | 2026-11-08 | dazheng |
-| `DREAM_AGENT_TESTFLIGHT_ENABLED` | Enable the bounded TestFlight dream-agent cohort; default false | backend | env | closed | — | — | — | — | pending | 2026-11-08 | dazheng |
-| `DREAM_SELF_REPORT_MODE` | Owner dream reports and manual runs; off default, on enables cohort only | backend | env | closed | — | — | {value: 'on', category: rollout} | — | pending | 2026-11-08 | dazheng |
 | `FAIR_USE_ENABLED` | Enforce fair-use metering on selected hosts | backend | env | closed | — | true (backend-listen (chart)) | true (backend-listen (chart)) | — | pending | 2026-10-23 | unowned |
 | `FREE_TIER_LOCAL_PROCESSING` | Enable on-device processing for eligible free users | backend | env | closed | declared | true (backend-listen (chart), cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, desktop-backend, gke/backend-listen, gke/pusher, pusher (chart)) | false (backend-listen (chart), cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, desktop-backend, gke/backend-listen, gke/pusher, pusher (chart)) | — | graduate | 2026-10-23 | dazheng |
 | `FREE_TIER_LOCAL_PROCESSING_COHORT` | Admitted UIDs for free-tier local processing | backend | env | closed | declared | config_map (gke/backend-listen, gke/pusher); env_var (cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, desktop-backend); valueFrom (backend-listen (chart), pusher (chart)) | '' (backend-listen (chart), cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, desktop-backend, gke/backend-listen, gke/pusher, pusher (chart)) | — | graduate | 2026-10-23 | dazheng |
@@ -298,6 +293,7 @@ and an explicit empty literal renders as `''`.
 | `DEEPGRAM_SELF_HOSTED_ENABLED` | Select self-hosted Deepgram filler-word policy on pusher | backend | env | closed | — | false (backend-listen (chart)) | false (backend-listen (chart)); true (pusher (chart)) | — | keep | — | unowned |
 | `DESKTOP_LOOP_WATCHDOG_ENABLED` | Desktop event-loop stall warning and liveness signal; default on, false disables both | backend | env | open | — | — | — | — | keep | — | dazheng |
 | `DESKTOP_UPDATE_POINTERS_MODE` | Fall back to legacy desktop update pointers | backend | env | open | primary | primary (backend-listen (chart), cloud_run/backend, gke/backend-listen) | primary (backend-listen (chart), cloud_run/backend, gke/backend-listen) | — | keep | — | unowned |
+| `DREAM_AGENT_ENABLED` | Global Dream harness kill switch; false prevents admission, model dispatch and effects | backend | env | closed | — | — | {value: 'true', category: rollout} | — | keep | — | dazheng |
 | `FAIR_USE_KILL_SWITCH` | Emergency stop for fair-use enforcement | backend | env | inverted | — | false (backend-listen (chart)) | false (backend-listen (chart)) | — | keep | — | unowned |
 | `FRAME_REQUEST_RETENTION_INDEPENDENT_HEALTHY` | Skip shared retention when independent job is healthy | backend | env | closed | false | false | false | — | keep | — | unowned |
 | `FREE_TIER_EMERGENCY_STOP` | Stop all free-tier cohorts | backend | env | inverted | declared | false (backend-listen (chart), cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, desktop-backend, gke/backend-listen, gke/pusher, pusher (chart)) | false (backend-listen (chart), cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, desktop-backend, gke/backend-listen, gke/pusher, pusher (chart)) | — | keep | — | unowned |
@@ -343,15 +339,12 @@ and an explicit empty literal renders as `''`.
 | `COMMITMENT_FOLLOWUP_TASKS_INVOKER_SA` | One-shot commitment due callback transport; absent disables scheduling | backend | env | closed | — | — | — | — | keep | — | dazheng |
 | `COMMITMENT_FOLLOWUP_TASKS_QUEUE` | One-shot commitment due callback transport; absent disables scheduling | backend | env | closed | — | — | — | — | keep | — | dazheng |
 | `DIARIZATION_V2_ENABLED` | Enable the separate batch-only diarizer app; default false; startup loads models before readiness | backend | env | closed | — | — | — | — | keep | — | dazheng |
-| `DREAM_AGENT_BACKFILL_SHARE` | Fraction of eligible Dream passes attempting older cleanup; default 0.1 | backend | env | closed | — | — | — | — | pending | — | dazheng |
 | `DREAM_AGENT_CANARY_UID` | Dedicated synthetic UID in dream-canary- namespace; unset disables canary | backend | env | closed | — | — | {value: 'dream-canary-prod-01', category: rollout} | — | pending | — | dazheng |
 | `DREAM_AGENT_CONCURRENCY` | Parallel Dream workers and shared reserved background slots; default 2; bounded 1 to 8 | backend | env | closed | — | — | — | — | pending | — | dazheng |
-| `DREAM_AGENT_FULL_COMPLETION_TOKENS` | Full Dream total completion ceiling including thinking; default 32768; maximum 32768 | backend | env | closed | — | — | — | — | pending | — | dazheng |
-| `DREAM_AGENT_FULL_CONTEXT_TOKENS` | Full Dream input estimate ceiling; default 400000; framing and schema included; hard model window remains authoritative | backend | env | closed | — | — | — | — | pending | — | dazheng |
-| `DREAM_AGENT_FULL_SAMPLES` | Concurrent independent full Dream reasoning samples; default 3, bounded to 1 through 8; strict majority among returned samples; reserve one JSON retry per sample | backend | env | closed | — | — | {value: '3', category: rollout} | — | pending | — | dazheng |
-| `DREAM_AGENT_MANUAL_RUNS_PER_DAY` | Separate manual dream allowance per UTC day; default 3 | backend | env | closed | — | — | {value: '20', category: rollout} | — | pending | — | dazheng |
-| `DREAM_AGENT_RANDOM_SEED_SHARE` | Uniform sample fraction of cleanup attempts; default 0.1; offsets can bill linear reads | backend | env | closed | — | — | — | — | pending | — | dazheng |
-| `DREAM_AGENT_TESTFLIGHT_MIN_BUILD` | Minimum client asserted TestFlight build admitted to the dream-agent cohort; unset closes the cohort | backend | env | closed | — | — | — | — | pending | — | dazheng |
+| `DREAM_AGENT_ELIGIBILITY` | Eligible owner policy: all default, paid or allowlist; invalid values fail closed | backend | env | closed | — | — | {value: 'all', category: rollout} | — | keep | — | dazheng |
+| `DREAM_AGENT_GLOBAL_DAILY_USD` | Global UTC-day conservative reservation ceiling; default 100 USD | backend | env | closed | — | — | {value: '100', category: rollout} | — | keep | — | dazheng |
+| `DREAM_AGENT_MANUAL_RUNS_PER_DAY` | Separate manual dream allowance per UTC day; default 3 | backend | env | closed | — | — | {value: '3', category: rollout} | — | pending | — | dazheng |
+| `DREAM_AGENT_TOKENS_PER_MINUTE` | Configured reserved-capacity headroom ceiling; default 2000000 tokens per minute | backend | env | closed | — | — | {value: '2000000', category: rollout} | — | keep | — | dazheng |
 | `FIRESTORE_CACHE_ENABLED` | Enable Firestore response cache | backend | env | closed | — | — | — | — | keep | — | unowned |
 | `LISTEN_FINALIZATION_DISPATCH_MODE` | Select conversation finalization dispatch lane | backend | env | closed | — | — | cloud_tasks | — | keep | — | unowned |
 | `LISTEN_RECONNECT_BUDGET_PER_MIN` | Bound per-user and per-device listen websocket reconnect admissions per minute | backend | env | closed | 6 | 6 (backend-listen (chart), gke/backend-listen) | 6 (backend-listen (chart), gke/backend-listen) | — | keep | — | dazheng |
@@ -426,13 +419,7 @@ their code default (`fail` tells you which way a missing value resolves).
 - `CONVERSATION_STORED_MEETING_CONTEXT_ENABLED` — Incident stop for stored meeting context lookup (fail: open)
 - `DESKTOP_LOOP_WATCHDOG_ENABLED` — Desktop event-loop stall warning and liveness signal; default on, false disables both (fail: open)
 - `DIARIZATION_V2_ENABLED` — Enable the separate batch-only diarizer app; default false; startup loads models before readiness (fail: closed)
-- `DREAM_AGENT_BACKFILL_SHARE` — Fraction of eligible Dream passes attempting older cleanup; default 0.1 (fail: closed)
 - `DREAM_AGENT_CONCURRENCY` — Parallel Dream workers and shared reserved background slots; default 2; bounded 1 to 8 (fail: closed)
-- `DREAM_AGENT_FULL_COMPLETION_TOKENS` — Full Dream total completion ceiling including thinking; default 32768; maximum 32768 (fail: closed)
-- `DREAM_AGENT_FULL_CONTEXT_TOKENS` — Full Dream input estimate ceiling; default 400000; framing and schema included; hard model window remains authoritative (fail: closed)
-- `DREAM_AGENT_RANDOM_SEED_SHARE` — Uniform sample fraction of cleanup attempts; default 0.1; offsets can bill linear reads (fail: closed)
-- `DREAM_AGENT_TESTFLIGHT_ENABLED` — Enable the bounded TestFlight dream-agent cohort; default false (fail: closed)
-- `DREAM_AGENT_TESTFLIGHT_MIN_BUILD` — Minimum client asserted TestFlight build admitted to the dream-agent cohort; unset closes the cohort (fail: closed)
 - `FIRESTORE_CACHE_ENABLED` — Enable Firestore response cache (fail: closed)
 - `FREE_TIER_MEMORY_SUPPRESSION` — Suppress cloud memory extraction for eligible free users (fail: closed)
 - `FREE_TIER_MEMORY_SUPPRESSION_COHORT` — Admitted UIDs for free-tier memory suppression (fail: closed)
