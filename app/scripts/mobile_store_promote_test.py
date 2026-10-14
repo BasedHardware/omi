@@ -232,6 +232,47 @@ class AndroidChecks(unittest.TestCase):
                 Mock(), "edit-id", "1.2.3", "23", "New line", status="inProgress", user_fraction=0.25, extra_codes=("23",)
             )
 
+    def test_advancing_a_base_release_preserves_its_metadata(self):
+        client = Mock()
+        staged = {
+            "name": "1.2.3 (23)",
+            "versionCodes": ["23"],
+            "status": "inProgress",
+            "userFraction": 0.05,
+            "countryTargeting": {"countries": ["US", "CA"]},
+            "inAppUpdatePriority": 3,
+            "releaseNotes": [
+                {"language": "en-US", "text": "Shipped"},
+                {"language": "de-DE", "text": "Ausgeliefert"},
+            ],
+        }
+        promote.submit_android(
+            client, "edit-id", "1.2.3", "23", "ignored when notes exist", status="inProgress", user_fraction=0.25,
+            base_release=staged,
+        )
+        release = client.edits().tracks().update.call_args.kwargs["body"]["releases"][0]
+        self.assertEqual(release["countryTargeting"], {"countries": ["US", "CA"]})
+        self.assertEqual(release["inAppUpdatePriority"], 3)
+        self.assertEqual(
+            release["releaseNotes"],
+            [{"language": "en-US", "text": "Shipped"}, {"language": "de-DE", "text": "Ausgeliefert"}],
+        )
+        self.assertEqual(release["userFraction"], 0.25)
+        self.assertEqual(release["versionCodes"], ["23"])
+        self.assertEqual(release["name"], "1.2.3")
+        client.edits().commit.assert_called_once()
+
+    def test_advancing_a_base_release_without_notes_uses_derived_notes(self):
+        client = Mock()
+        staged = {"name": "1.2.3 (23)", "versionCodes": ["23"], "status": "inProgress", "userFraction": 0.05}
+        promote.submit_android(
+            client, "edit-id", "1.2.3", "23", "Derived line", status="completed", base_release=staged
+        )
+        release = client.edits().tracks().update.call_args.kwargs["body"]["releases"][0]
+        self.assertEqual(release["releaseNotes"], [{"language": "en-US", "text": "Derived line"}])
+        self.assertNotIn("userFraction", release)
+        client.edits().commit.assert_called_once()
+
 
 if __name__ == "__main__":
     unittest.main()

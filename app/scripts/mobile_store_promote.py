@@ -317,6 +317,7 @@ def submit_android(
     status: str = "completed",
     user_fraction: float | None = None,
     extra_codes: Sequence[str] = (),
+    base_release: dict[str, object] | None = None,
 ) -> None:
     """Write one production release for the given code(s).
 
@@ -327,6 +328,10 @@ def submit_android(
     decide the exposure path before writing. extra_codes carries any
     additional versionCodes an existing in-flight release already had (a
     multi-APK rollout must not lose its variants when the track is rewritten).
+    base_release is that existing server-returned release: advancing it keeps
+    its metadata (countryTargeting, localized releaseNotes,
+    inAppUpdatePriority, ...) and changes only name/codes/status/fraction —
+    the derived single-locale notes are used only when it carries none.
     """
     if status not in PLAY_RELEASE_STATUSES:
         raise PromotionError("Play release status must be completed, draft, inProgress or halted")
@@ -339,12 +344,16 @@ def submit_android(
     codes = [build_number, *extra_codes]
     if len(set(codes)) != len(codes):
         raise PromotionError("Play release version codes must be unique")
-    release: dict[str, object] = {
-        "name": version,
-        "versionCodes": codes,
-        "status": status,
-        "releaseNotes": [{"language": "en-US", "text": notes}],
-    }
+    existing_notes = base_release.get("releaseNotes") if isinstance(base_release, dict) else None
+    preserved_notes = existing_notes if isinstance(existing_notes, list) and existing_notes else None
+    release: dict[str, object] = dict(base_release) if isinstance(base_release, dict) else {}
+    release["name"] = version
+    release["versionCodes"] = codes
+    release["status"] = status
+    release["releaseNotes"] = preserved_notes if preserved_notes is not None else [
+        {"language": "en-US", "text": notes}
+    ]
+    release.pop("userFraction", None)
     if user_fraction is not None:
         if not 0 < float(user_fraction) < 1:
             raise PromotionError("userFraction must be strictly between 0 and 1 (full rollout is status=completed)")

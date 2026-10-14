@@ -695,7 +695,14 @@ def run_android(*, dry_run: bool, release_date: str) -> str:
         try:
             if hop >= 1.0:
                 promote.submit_android(
-                    client, edit_id, staged_version, codes[0], notes, status="completed", extra_codes=codes[1:]
+                    client,
+                    edit_id,
+                    staged_version,
+                    codes[0],
+                    notes,
+                    status="completed",
+                    extra_codes=codes[1:],
+                    base_release=staged,
                 )
             else:
                 promote.submit_android(
@@ -707,6 +714,7 @@ def run_android(*, dry_run: bool, release_date: str) -> str:
                     status="inProgress",
                     user_fraction=hop,
                     extra_codes=codes[1:],
+                    base_release=staged,
                 )
         except promote.PromotionError as exc:
             raise TrainError(str(exc)) from exc
