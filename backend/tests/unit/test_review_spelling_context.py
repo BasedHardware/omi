@@ -184,3 +184,15 @@ def test_server_context_does_not_enter_the_model_output_schema():
     schema = Plan.model_json_schema()
     assert 'SpellingContext' not in schema.get('$defs', {})
     assert 'context' not in schema['$defs']['SpellingQuestionPayload']['properties']
+
+
+def test_a_long_verbatim_quote_that_fits_the_budget_stays_whole_and_highlighted():
+    quote = 'UL' * 175
+    row = deepcopy(ROW)
+    row['transcript_segments'][1]['text'] = 'before ' * 100 + quote + ' after' * 100
+    context = build_context(item(quote=quote), source(row))
+    main = context.segments[context.main_index].text
+    assert main == quote
+    assert main[context.quote_start : context.quote_end] == quote
+    assert sum(len(segment.text) for segment in context.segments) <= 400
+    assert len(context.segments) == 3

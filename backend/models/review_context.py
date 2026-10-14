@@ -66,12 +66,10 @@ def build_context(item, source, *, load_conversation=None):
         return None
     main = segments[index].get('text') or ''
     match = main.find(quote) if quote else -1
-    start = (
-        max(0, min(match - max(0, (MAIN_SEGMENT_CHARS - len(quote)) // 2), len(main) - MAIN_SEGMENT_CHARS))
-        if match >= 0
-        else 0
-    )
-    shown = main[start : start + MAIN_SEGMENT_CHARS]
+    # Keep a long quote intact whenever it fits the overall excerpt budget.
+    main_limit = min(MAX_CONTEXT_CHARS, max(MAIN_SEGMENT_CHARS, len(quote)))
+    start = max(0, min(match - max(0, (main_limit - len(quote)) // 2), len(main) - main_limit)) if match >= 0 else 0
+    shown = main[start : start + main_limit]
     highlight = match >= start and match + len(quote) <= start + len(shown) and bool(quote)
     indices = list(range(max(0, index - 1), min(len(segments), index + 2)))
     neighbours = len(indices) - 1
