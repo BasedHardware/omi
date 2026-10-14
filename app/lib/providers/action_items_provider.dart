@@ -175,6 +175,12 @@ class ActionItemsProvider extends ChangeNotifier {
   // the fetches that were in flight at commit time (their reads may predate
   // the write); later fetches see the layout server-side and win.
   final Map<String, ({int? sortOrder, int? indentLevel, Set<int>? pendingThreats})> _uncommittedLayout = {};
+  // Monotonic revision of staged layout edits per id. Each debounced batch
+  // snapshots the values it submitted; a batch response may only settle the
+  // revision it carried, never a newer edit the user staged while the older
+  // request was awaiting its response (Codex PRRT sTqip).
+  final Map<String, int> _layoutRevisions = {};
+  int _layoutRevisionCounter = 0;
   int _wholesaleListFetchOrdinal = 0;
   final Set<int> _wholesaleFetchesInFlight = {};
 
@@ -287,6 +293,29 @@ class ActionItemsProvider extends ChangeNotifier {
     _fetchShadowedEdits[row.id] = (row, {..._wholesaleFetchesInFlight});
   }
 
+  /// Merges the visible row's layout into the settled row of a non-layout
+  /// mutation (completion/description/due date). Such a mutation never moves
+  /// the task in the hierarchy, but its echo may omit sort_order/indent_level
+  /// — the wire schema defaults both to 0 — so splicing the echo or
+  /// re-applying it as a fetch shadow would flatten the indent the list
+  /// already shows (hub #4: completing a task never changes its indent).
+  /// Layout truth keeps flowing from list fetches and layout mutations.
+  ActionItemWithMetadata _withVisibleLayout(
+    String id,
+    ActionItemWithMetadata settled,
+  ) {
+    final visibleIndex = _actionItems.indexWhere((i) => i.id == id);
+    if (visibleIndex == -1) return settled;
+    final visible = _actionItems[visibleIndex];
+    if (visible.sortOrder == settled.sortOrder && visible.indentLevel == settled.indentLevel) {
+      return settled;
+    }
+    return settled.copyWith(
+      sortOrder: visible.sortOrder,
+      indentLevel: visible.indentLevel,
+    );
+  }
+
   /// Re-applies not-yet-confirmed sort-order/indent-level changes over [rows],
   /// after edit shadows. Drag-reorder and indent mutations update the visible
   /// rows immediately but only reach the server after the debounce; a fetch
@@ -349,6 +378,7 @@ class ActionItemsProvider extends ChangeNotifier {
       indentLevel: indentLevel ?? existing?.indentLevel,
       pendingThreats: null,
     );
+    _layoutRevisions[id] = ++_layoutRevisionCounter;
   }
 
   /// The batch write for [ids] settled. Success: later fetches see the layout
@@ -356,15 +386,21 @@ class ActionItemsProvider extends ChangeNotifier {
   /// (their reads may predate the write) and then retire. Failure: the server
   /// kept the old layout, but the local rows already show what the user
   /// arranged — retire without re-applying so a later refresh restores truth.
+  /// Settlement applies only to the revision each id carried when this batch
+  /// was submitted; a newer edit staged while the request was in flight stays
+  /// uncommitted and keeps protecting the visible rows.
   void _settleUncommittedLayout(
-    Iterable<String> ids, {
+    Map<String, int> submittedRevisions, {
     required bool committed,
   }) {
-    for (final id in ids) {
+    for (final id in submittedRevisions.keys) {
       final entry = _uncommittedLayout[id];
       if (entry == null) continue;
+      // A newer revision exists: this response settles only the older one.
+      if (_layoutRevisions[id] != submittedRevisions[id]) continue;
       if (!committed || _wholesaleFetchesInFlight.isEmpty) {
         _uncommittedLayout.remove(id);
+        _layoutRevisions.remove(id);
       } else {
         _uncommittedLayout[id] = (
           sortOrder: entry.sortOrder,
@@ -998,7 +1034,10 @@ class ActionItemsProvider extends ChangeNotifier {
       }
       // The mutation is committed server-side; wholesale fetches still in
       // flight predate it and would revert this row in their replacement.
-      _registerFetchShadowedEdit(success);
+      // The echo of a completed-only mutation is not layout-authoritative,
+      // so keep the hierarchy the visible row already shows.
+      final settled = _withVisibleLayout(success.id, success);
+      _registerFetchShadowedEdit(settled);
       // A wholesale fetch that already applied while this mutation was
       // awaiting its response retired its ordinal before the shadow could be
       // registered, so the visible row may still hold the pre-mutation state.
@@ -1006,10 +1045,10 @@ class ActionItemsProvider extends ChangeNotifier {
       // the description and due-date edits already have.
       final settledIndex = _actionItems.indexWhere((i) => i.id == success.id);
       if (settledIndex != -1) {
-        _actionItems[settledIndex] = success;
+        _actionItems[settledIndex] = settled;
         notifyListeners();
       }
-      SiriIntegration.current.queueUpsertTasks([success]);
+      SiriIntegration.current.queueUpsertTasks([settled]);
       // Cancel notification if the action item is marked as completed
       if (newState == true) {
         await ActionItemNotificationHandler.cancelNotification(item.id);
@@ -1070,11 +1109,11 @@ class ActionItemsProvider extends ChangeNotifier {
       // Update the local item with server response
       final index = _actionItems.indexWhere((i) => i.id == item.id);
       if (index != -1) {
-        _actionItems[index] = updatedItem;
+        _actionItems[index] = _withVisibleLayout(updatedItem.id, updatedItem);
         notifyListeners();
       }
       // Wholesale fetches in flight predate this committed edit.
-      _registerFetchShadowedEdit(updatedItem);
+      _registerFetchShadowedEdit(_withVisibleLayout(updatedItem.id, updatedItem));
       SiriIntegration.current.queueUpsertTasks([updatedItem]);
       _pushUpdateToAppleReminder(item, title: newDescription);
       return true;
@@ -1128,11 +1167,11 @@ class ActionItemsProvider extends ChangeNotifier {
       if (updatedItem != null) {
         final idx = _actionItems.indexWhere((i) => i.id == item.id);
         if (idx != -1) {
-          _actionItems[idx] = updatedItem;
+          _actionItems[idx] = _withVisibleLayout(updatedItem.id, updatedItem);
           notifyListeners();
         }
         // Wholesale fetches in flight predate this committed edit.
-        _registerFetchShadowedEdit(updatedItem);
+        _registerFetchShadowedEdit(_withVisibleLayout(updatedItem.id, updatedItem));
         SiriIntegration.current.queueUpsertTasks([updatedItem]);
         _pushUpdateToAppleReminder(item, dueDate: dueDate);
         return true;
@@ -1199,10 +1238,10 @@ class ActionItemsProvider extends ChangeNotifier {
         final index = _actionItems.indexWhere((i) => i.id == item.id);
         if (updatedItem != null) {
           if (index != -1) {
-            _actionItems[index] = updatedItem;
+            _actionItems[index] = _withVisibleLayout(updatedItem.id, updatedItem);
           }
           // Wholesale fetches in flight predate this committed edit.
-          _registerFetchShadowedEdit(updatedItem);
+          _registerFetchShadowedEdit(_withVisibleLayout(updatedItem.id, updatedItem));
           SiriIntegration.current.queueUpsertTasks([updatedItem]);
           successCount++;
         } else if (index != -1) {
@@ -1691,8 +1730,15 @@ class ActionItemsProvider extends ChangeNotifier {
     _pendingSortUpdates.clear();
 
     final items = updates.entries.map((e) => {'id': e.key, 'sort_order': e.value}).toList();
+    // Snapshot each id's revision before the await: the response may only
+    // settle the values this batch actually submitted. (Every pending update
+    // was staged with a revision; ids without one have nothing to settle.)
+    final submitted = {
+      for (final id in updates.keys)
+        if (_layoutRevisions[id] != null) id: _layoutRevisions[id]!,
+    };
     final committed = await _batchUpdateActionItemsRequest(items);
-    _settleUncommittedLayout(updates.keys, committed: committed);
+    _settleUncommittedLayout(submitted, committed: committed);
   }
 
   Future<void> _flushIndentUpdates() async {
@@ -1701,8 +1747,15 @@ class ActionItemsProvider extends ChangeNotifier {
     _pendingIndentUpdates.clear();
 
     final items = updates.entries.map((e) => {'id': e.key, 'indent_level': e.value}).toList();
+    // Snapshot each id's revision before the await: the response may only
+    // settle the values this batch actually submitted. (Every pending update
+    // was staged with a revision; ids without one have nothing to settle.)
+    final submitted = {
+      for (final id in updates.keys)
+        if (_layoutRevisions[id] != null) id: _layoutRevisions[id]!,
+    };
     final committed = await _batchUpdateActionItemsRequest(items);
-    _settleUncommittedLayout(updates.keys, committed: committed);
+    _settleUncommittedLayout(submitted, committed: committed);
   }
 
   ActionItemWithMetadata? _findAndUpdateItemState(
@@ -1894,6 +1947,7 @@ class ActionItemsProvider extends ChangeNotifier {
     _fetchShadowedEdits.clear();
     _preservedCreateIds.clear();
     _uncommittedLayout.clear();
+    _layoutRevisions.clear();
     // Wholesale fetches from the signed-out generation may still resolve
     // later; their ordinals are dead threats. Clear them so a create in the
     // successor account never records a stale ordinal as a fetch threat —
@@ -2001,7 +2055,13 @@ class ActionItemsProvider extends ChangeNotifier {
       _pendingDeletionIds.removeAll(
         bulkIds.where((id) => !deletedIDs.contains(id)),
       );
-      final entries = snapshot.entries.where((entry) => !deletedIDs.contains(entry.value.id)).toList()
+      // Captured temp rows never joined this request (their ids were not
+      // sent), so a partial response cannot report them deleted: filter them
+      // out exactly like the null-response rollback, or this branch would
+      // resurrect a row the user bulk-deleted whose create is still settling.
+      final entries = snapshot.entries
+          .where((entry) => !deletedIDs.contains(entry.value.id) && !entry.value.id.startsWith('temp_'))
+          .toList()
         ..sort((a, b) => a.key.compareTo(b.key));
       for (final entry in entries) {
         _actionItems.insert(

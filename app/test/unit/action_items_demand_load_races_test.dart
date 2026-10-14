@@ -1159,4 +1159,160 @@ void main() {
       provider.dispose();
     });
   });
+
+  group('round 5 review races', () {
+    test('a completion echo without layout fields keeps the visible indent and sort order', () async {
+      final typed = _HeldListApi();
+      final provider = ActionItemsProvider(
+        actionItemsApi: typed,
+        updateActionItemRequest: (id, {description, completed, dueAt}) async =>
+            _row(id).copyWith(completed: completed ?? false),
+      );
+
+      typed.result = ApiSuccess(ActionItemsResponse(
+        actionItems: [_row('a').copyWith(indentLevel: 2, sortOrder: 7)],
+        hasMore: false,
+      ));
+      final load = provider.ensureLoaded(showShimmer: true);
+      await Future<void>.delayed(Duration.zero);
+      typed.resolve();
+      await load;
+
+      await provider.updateActionItemState(provider.actionItems.first, true);
+
+      final row = provider.actionItems.firstWhere((item) => item.id == 'a');
+      expect(row.completed, isTrue);
+      expect(row.indentLevel, 2, reason: 'a completed-only echo must not flatten the visible hierarchy');
+      expect(row.sortOrder, 7);
+      provider.dispose();
+    });
+
+    test('an edit shadow reapplies the settled row with the visible layout', () async {
+      final typed = _HeldListApi();
+      final provider = ActionItemsProvider(
+        actionItemsApi: typed,
+        updateActionItemRequest: (id, {description, completed, dueAt}) async =>
+            _row(id).copyWith(completed: completed ?? false, description: 'settled $id'),
+      );
+
+      typed.result = ApiSuccess(ActionItemsResponse(
+        actionItems: [_row('a').copyWith(indentLevel: 1, sortOrder: 4), _row('b')],
+        hasMore: false,
+      ));
+      final preview = provider.ensureHomeWidgetPreviewLoaded();
+      await Future<void>.delayed(Duration.zero);
+      typed.resolve();
+      await preview;
+
+      final load = provider.ensureLoaded(showShimmer: true);
+      await Future<void>.delayed(Duration.zero);
+
+      await provider.updateActionItemState(provider.actionItems.firstWhere((i) => i.id == 'a'), true);
+
+      typed.result = ApiSuccess(ActionItemsResponse(
+        actionItems: [_row('a').copyWith(indentLevel: 1, sortOrder: 4), _row('b')],
+        hasMore: false,
+      ));
+      typed.resolve();
+      await load;
+      await Future<void>.delayed(Duration.zero);
+
+      final row = provider.actionItems.firstWhere((item) => item.id == 'a');
+      expect(row.completed, isTrue);
+      expect(row.description, 'settled a');
+      expect(row.indentLevel, 1, reason: 'the shadow row must carry the visible layout, not the echo defaults');
+      expect(row.sortOrder, 4);
+      provider.dispose();
+    });
+
+    test('a partial bulk response rolls back only the real rows it failed to delete', () async {
+      final typed = _HeldListApi();
+      final createReleased = Completer<void>();
+      final provider = ActionItemsProvider(
+        actionItemsApi: typed,
+        createActionItemRequest: ({required description, dueAt, conversationId, completed = false}) async {
+          await createReleased.future;
+          return _row('server-7');
+        },
+        deleteActionItemRequest: (id) async => true,
+        bulkDeleteActionItemsRequest: (ids) async => ids.where((id) => id != 'real-2').toList(),
+      );
+
+      typed.result = ApiSuccess(ActionItemsResponse(actionItems: [_row('real-1'), _row('real-2')], hasMore: false));
+      final load = provider.ensureLoaded(showShimmer: true);
+      await Future<void>.delayed(Duration.zero);
+      typed.resolve();
+      await load;
+
+      final created = provider.createActionItem(description: 'slow task');
+      await Future<void>.delayed(Duration.zero);
+      final tempId = provider.actionItems.firstWhere((i) => i.id.startsWith('temp_')).id;
+      provider.startSelectionWithItem(tempId);
+      provider.selectItem('real-1');
+      provider.selectItem('real-2');
+
+      final bulk = provider.deleteSelectedItems();
+      await Future<void>.delayed(Duration.zero);
+      createReleased.complete();
+      await created;
+      final ok = await bulk;
+
+      expect(ok, isFalse, reason: 'the bulk endpoint missed real-2');
+      expect(provider.actionItems.any((i) => i.id == 'real-2'), isTrue,
+          reason: 'the real row the server failed to delete is restored');
+      expect(provider.actionItems.any((i) => i.id == 'real-1'), isFalse, reason: 'the deleted real row stays deleted');
+      expect(provider.actionItems.any((i) => i.id.startsWith('temp_')), isFalse,
+          reason: 'rollback must not resurrect the captured temp row');
+      expect(provider.actionItems.any((i) => i.id == 'server-7'), isFalse,
+          reason: 'the create settle must not reinsert the bulk-deleted confirmed row');
+      provider.dispose();
+    });
+
+    test('an older batch response does not settle a newer staged layout edit', () async {
+      final typed = _HeldListApi();
+      final batches = <Completer<bool>>[];
+      final provider = ActionItemsProvider(
+        actionItemsApi: typed,
+        batchUpdateActionItemsRequest: (items) {
+          final c = Completer<bool>();
+          batches.add(c);
+          return c.future;
+        },
+      );
+
+      typed.result = ApiSuccess(ActionItemsResponse(actionItems: [_row('a').copyWith(sortOrder: 1)], hasMore: false));
+      final load = provider.ensureLoaded(showShimmer: true);
+      await Future<void>.delayed(Duration.zero);
+      typed.resolve();
+      await load;
+
+      // First edit: the debounce fires batch 1, which is held in flight.
+      provider.updateItemSortOrder('a', 5);
+      await Future<void>.delayed(const Duration(milliseconds: 600));
+      expect(batches, hasLength(1));
+
+      // A newer edit lands while batch 1 awaits its response.
+      provider.updateItemSortOrder('a', 9);
+      await Future<void>.delayed(const Duration(milliseconds: 600));
+      expect(batches, hasLength(2));
+
+      // Batch 1 (sortOrder 5) commits successfully.
+      batches[0].complete(true);
+      await Future<void>.delayed(Duration.zero);
+      await Future<void>.delayed(Duration.zero);
+
+      // A fetch predating the newer write returns the old sortOrder; the
+      // newer staged edit must still protect the visible row.
+      typed.result = ApiSuccess(ActionItemsResponse(actionItems: [_row('a').copyWith(sortOrder: 1)], hasMore: false));
+      final refreshed = provider.fetchActionItems();
+      await Future<void>.delayed(Duration.zero);
+      typed.completeAt(0, typed.result);
+      await refreshed;
+      await Future<void>.delayed(Duration.zero);
+
+      final a = provider.actionItems.firstWhere((item) => item.id == 'a');
+      expect(a.sortOrder, 9, reason: 'the older batch settle must not retire the newer staged edit');
+      provider.dispose();
+    });
+  });
 }
