@@ -99,8 +99,8 @@ if [ -n "$INTERPRETER_PREFIX" ] && [ -d "$INTERPRETER_PREFIX" ]; then
 fi
 if [ "$INTERPRETER_PREFIX_PHYS" != "$CANONICAL_PREFIX" ]; then
   echo "dev-init: '$PYTHON_BIN' does not belong to this repo's backend/.venv (sys.prefix '$INTERPRETER_PREFIX'); refusing to install requirements outside the venv." >&2
-  echo "The venv is missing or below the 3.10 floor. Run: make lane-bootstrap (Python 3.11 venv)," >&2
-  echo "or install Python >= 3.10 and re-run dev-init." >&2
+  echo "The venv is missing or points at another checkout. Recreate it pinned:" >&2
+  echo "  rm -rf backend/.venv && python3.11 -m venv backend/.venv, or run: make lane-bootstrap." >&2
   exit 1
 fi
 if ! "$PYTHON_BIN" -m pip --version >/dev/null; then

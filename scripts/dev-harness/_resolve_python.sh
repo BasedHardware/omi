@@ -35,6 +35,18 @@ dev_harness_venv_python_is_pinned_311() {
   "$1" -c 'import sys; raise SystemExit(0 if (3, 11) <= sys.version_info[:2] < (3, 12) else 1)' >/dev/null 2>&1
 }
 
+# Homebrew's keg-only 3.11 (`brew install python@3.11` — the remedy this
+# resolver advertises) has no PATH link when a newer python3 shadows it;
+# probe the same absolute prefixes dev_harness_python enumerates (Codex P1).
+dev_harness_backend_pinned_prefixes() {
+  cat <<'PREFIXES'
+/opt/homebrew/opt/python@3.11/bin/python3.11
+/usr/local/opt/python@3.11/bin/python3.11
+/opt/homebrew/bin/python3.11
+/usr/local/bin/python3.11
+PREFIXES
+}
+
 dev_harness_backend_pinned_python() {
   # An explicit PYTHON= selection is the caller's interpreter choice (the same
   # override dev_harness_python honors); accept it when it passes the pin.
@@ -47,6 +59,14 @@ dev_harness_backend_pinned_python() {
     printf '%s\n' python3.11
     return 0
   fi
+  local prefix_candidate
+  for prefix_candidate in $(dev_harness_backend_pinned_prefixes); do
+    if [ -x "$prefix_candidate" ] \
+      && dev_harness_venv_python_is_pinned_311 "$prefix_candidate"; then
+      printf '%s\n' "$prefix_candidate"
+      return 0
+    fi
+  done
   local uv_bin candidate
   uv_bin="$(command -v uv 2>/dev/null)" || return 1
   candidate="$("$uv_bin" python find 3.11 2>/dev/null)" || return 1

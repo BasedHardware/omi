@@ -1083,3 +1083,55 @@ def test_backend_pinned_python_rejects_below_pin_python_override(
 
     assert result.returncode != 0
     assert result.stdout.strip() == ""
+
+
+def test_backend_pinned_python_probes_keg_only_homebrew_prefix(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The advertised brew remedy must satisfy discovery without uv.
+
+    `brew install python@3.11` is keg-only when a newer python3 shadows it: no
+    `python3.11` on PATH, but a real interpreter at the Homebrew prefix. The
+    helper must probe those absolute prefixes before requiring uv (Codex P1).
+    The prefix list and the pin predicate are stubbed AFTER the source (the
+    resolver's definitions win otherwise) to point at a fixture keg path —
+    creating real /opt/homebrew paths in a test is not possible without root.
+    """
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    keg = tmp_path / "keg" / "bin" / "python3.11"
+    keg.parent.mkdir(parents=True)
+    keg.write_text("#!/usr/bin/env bash\nexit 0\n", encoding="utf-8")
+    keg.chmod(keg.stat().st_mode | 0o755)
+
+    resolver = repo / "scripts/dev-harness/_resolve_python.sh"
+    resolver.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(RESOLVER, resolver)
+    monkeypatch.delenv("PYTHON", raising=False)
+    env = _shell_env()
+    env["PATH"] = os.pathsep.join(("/usr/bin", "/bin"))
+    stubs = (
+        "dev_harness_backend_pinned_prefixes() { printf '%s\\n' \"" + str(keg) + "\"; }\n"
+        "dev_harness_venv_python_is_pinned_311() { [ \"$1\" = \"" + str(keg) + "\" ]; }\n"
+    )
+    result = subprocess.run(
+        [
+            _bash_command(),
+            "-c",
+            'source "$1"; '
+            + stubs
+            + "dev_harness_backend_pinned_python",
+            "bash",
+            _as_bash_path(resolver),
+        ],
+        cwd=repo,
+        env=env,
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        timeout=30,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.strip() == str(keg)
