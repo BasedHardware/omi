@@ -1,8 +1,12 @@
 import asyncio
+import ctypes.util
+import importlib
 import hashlib
 import io
 import struct
 import threading
+import sys
+from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor
 from types import SimpleNamespace
 
@@ -17,6 +21,7 @@ from utils.other.live_audio_archive import LiveAudioArchive
 from utils.other.raw_audio import CapturePack, WAL_FORMAT, decode_capture, provenance, wal_packets
 from utils.other.raw_audio_read import read_pack, verified_pcm_paths
 from utils.other.audio_opus import _get_opuslib
+from utils.other import audio_opus
 from utils import cloud_tasks
 from utils.other import audio_singleflight
 from utils.other import live_audio_archive
@@ -101,6 +106,22 @@ def buckets(monkeypatch):
 def enable(monkeypatch, phase):
     monkeypatch.setenv(f'AUDIO_ARCHIVE_{phase}_ENABLED', 'true')
     monkeypatch.setenv('AUDIO_ARCHIVE_UID_ALLOWLIST', 'owner')
+
+
+@pytest.fixture
+def native_opus(monkeypatch):
+    # macOS protected Git/bash processes strip DYLD_* before hooks run. Resolve
+    # the actually installed library in Python rather than skipping real replay.
+    if audio_opus.opuslib is None and sys.platform == 'darwin':
+        candidates = (Path('/opt/homebrew/lib/libopus.dylib'), Path('/usr/local/lib/libopus.dylib'))
+        installed = next((path for path in candidates if path.is_file()), None)
+        if installed is not None:
+            original = ctypes.util.find_library
+            monkeypatch.setattr(
+                ctypes.util, 'find_library', lambda name: str(installed) if name == 'opus' else original(name)
+            )
+            monkeypatch.setattr(audio_opus, 'opuslib', importlib.import_module('opuslib'))
+    return _get_opuslib()
 
 
 @pytest.mark.parametrize('percent', ['nan', 'inf', '-1', '101', 'garbage'])
@@ -213,8 +234,8 @@ def test_flac_round_trip_preserves_pcm_samples():
     assert decode_capture(raw, {key: str(value) for key, value in metadata.items()}) == pcm
 
 
-def test_opus_replay_is_packet_exact_and_sample_exact(buckets):
-    opus = _get_opuslib()
+def test_opus_replay_is_packet_exact_and_sample_exact(buckets, native_opus):
+    opus = native_opus
     encoder = opus.Encoder(16000, 1, opus.APPLICATION_VOIP)
     decoder = opus.Decoder(16000, 1)
     pack = CapturePack('opus', 16000)
@@ -232,8 +253,8 @@ def test_opus_replay_is_packet_exact_and_sample_exact(buckets):
     assert read_pack(buckets['canonical'], path, 'owner') == b''.join(decoded)
 
 
-def test_stateful_opus_boundary_retirement_uses_capture_identity(buckets):
-    opus = _get_opuslib()
+def test_stateful_opus_boundary_retirement_uses_capture_identity(buckets, native_opus):
+    opus = native_opus
     encoder = opus.Encoder(16000, 1, opus.APPLICATION_VOIP)
     decoder = opus.Decoder(16000, 1)
     first = encoder.encode(struct.pack('<h', 1234) * 160, 160)
