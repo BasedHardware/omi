@@ -1065,7 +1065,7 @@ enum SpeechAnalyzerTranscription {
     /// `installWait`. A pending install continues, but reports not ready.
     /// The caller can offer setup/retry while captured audio stays retained.
     static func isAvailable(language: String, installWait: Double = 8) async -> Bool {
-        guard let locale = await locale(for: language) else {
+        guard SpeechTranscriber.isAvailable, let locale = await locale(for: language) else {
             NSLog("[SpeechAnalyzer] no supported locale for language %@", language)
             return false
         }
@@ -1087,7 +1087,7 @@ enum SpeechAnalyzerTranscription {
     /// Transcribes a whole audio file (the Dart side writes 16 kHz mono WAV
     /// clips) and returns the text, empty when no speech was recognized.
     static func transcribe(fileURL: URL, language: String) async throws -> String {
-        guard let locale = await locale(for: language) else {
+        guard SpeechTranscriber.isAvailable, let locale = await locale(for: language) else {
             throw TranscriptionError.unsupportedLanguage(language)
         }
         let installed: Result<Void, Error> = await SpeechDeadline.run(seconds: 20, operation: {
