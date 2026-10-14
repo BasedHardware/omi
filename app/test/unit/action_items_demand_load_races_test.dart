@@ -829,4 +829,85 @@ void main() {
       provider.dispose();
     });
   });
+
+  group('settled edits overlapping the demand load', () {
+    test('a completed preview row is not resurrected incomplete by the stale demand load', () async {
+      final typed = _HeldListApi();
+      final provider = ActionItemsProvider(
+        actionItemsApi: typed,
+        updateActionItemRequest: (id, {description, completed, dueAt}) async =>
+            _row(id).copyWith(completed: completed ?? false, description: 'edited $id'),
+      );
+
+      // Home's bounded preview populated the visible rows first.
+      typed.result = ApiSuccess(ActionItemsResponse(actionItems: [_row('a'), _row('b')], hasMore: false));
+      final preview = provider.ensureHomeWidgetPreviewLoaded();
+      await Future<void>.delayed(Duration.zero);
+      typed.resolve();
+      await preview;
+
+      // First Tasks visit: the authoritative wholesale fetch is held in flight
+      // while the user completes a preview row and the mutation settles.
+      final load = provider.ensureLoaded(showShimmer: true);
+      await Future<void>.delayed(Duration.zero);
+
+      final row = provider.actionItems.firstWhere((item) => item.id == 'a');
+      await provider.updateActionItemState(row, true);
+
+      // The demand-load response predates the completion.
+      typed.result = ApiSuccess(ActionItemsResponse(actionItems: [_row('a'), _row('b')], hasMore: false));
+      typed.resolve();
+      await load;
+      await Future<void>.delayed(Duration.zero);
+
+      final completed = provider.actionItems.firstWhere((item) => item.id == 'a');
+      expect(completed.completed, isTrue, reason: 'the settled edit must survive the stale wholesale replacement');
+      expect(completed.description, 'edited a', reason: 'the substituted row is the server-confirmed edited row');
+      provider.dispose();
+    });
+
+    test('the edit shadow retires once a fetch that started after the settle applies', () async {
+      final typed = _HeldListApi();
+      final provider = ActionItemsProvider(
+        actionItemsApi: typed,
+        updateActionItemRequest: (id, {description, completed, dueAt}) async =>
+            _row(id).copyWith(completed: completed ?? false, description: 'edited $id'),
+      );
+
+      typed.result = ApiSuccess(ActionItemsResponse(actionItems: [_row('a'), _row('b')], hasMore: false));
+      final preview = provider.ensureHomeWidgetPreviewLoaded();
+      await Future<void>.delayed(Duration.zero);
+      typed.resolve();
+      await preview;
+
+      final load = provider.ensureLoaded(showShimmer: true);
+      await Future<void>.delayed(Duration.zero);
+
+      final row = provider.actionItems.firstWhere((item) => item.id == 'a');
+      await provider.updateActionItemState(row, true);
+
+      typed.result = ApiSuccess(ActionItemsResponse(actionItems: [_row('a'), _row('b')], hasMore: false));
+      typed.resolve();
+      await load;
+      await Future<void>.delayed(Duration.zero);
+
+      // A fetch that started after the mutation settled sees the edit
+      // server-side: its response is authoritative and must replace the
+      // shadow copy, proving the shadow does not stick forever.
+      typed.result = ApiSuccess(ActionItemsResponse(
+        actionItems: [_row('a').copyWith(completed: true, description: 'authoritative'), _row('b')],
+        hasMore: false,
+      ));
+      final refreshed = provider.fetchActionItems();
+      await Future<void>.delayed(Duration.zero);
+      typed.completeAt(0, typed.result);
+      await refreshed;
+
+      final after = provider.actionItems.firstWhere((item) => item.id == 'a');
+      expect(after.completed, isTrue);
+      expect(after.description, 'authoritative',
+          reason: 'a post-settle fetch response must not be overridden by the retired shadow');
+      provider.dispose();
+    });
+  });
 }

@@ -119,6 +119,12 @@ class ActionItemsProvider extends ChangeNotifier {
   // every fetch that was in flight at settle time has applied its replacement.
   final Map<String, ActionItemWithMetadata> _pendingCreates = {};
   final Map<String, (ActionItemWithMetadata, Set<int>)> _fetchShadowedCreates = {};
+  // Server-confirmed rows carrying a settled edit (complete/description/due
+  // date) that wholesale fetches already in flight predate: their responses
+  // hold the pre-edit version and would silently revert the user's change.
+  // The edit survives exactly the replacements of the fetches that were in
+  // flight when the mutation settled; later fetches see it server-side.
+  final Map<String, (ActionItemWithMetadata, Set<int>)> _fetchShadowedEdits = {};
   // Final server ids of creates that were preserved into the visible list but
   // have not yet been observed inside any server page response. They stay out
   // of the pagination offset until the server confirms them, so loadMore never
@@ -159,27 +165,64 @@ class ActionItemsProvider extends ChangeNotifier {
     // populated, and skipping retirement would exclude that row from the
     // pagination offset forever.
     _preservedCreateIds.removeWhere(fetchedIds.contains);
-    if (_pendingCreates.isEmpty && _fetchShadowedCreates.isEmpty) return fetched;
-    // A row the user has deleted — staged behind an Undo toast or deleted
-    // outright — must not be resurrected by preservation: its pending-deletion
-    // tombstone deliberately outlives this replacement (the server delete may
-    // still be in flight), and the server-side filter above already dropped
-    // the row from `fetched`.
-    final hidden = _pendingDeletionIds;
-    final preserved = <ActionItemWithMetadata>[
-      for (final entry in _fetchShadowedCreates.entries)
-        if (entry.value.$2.contains(fetchOrdinal) && !fetchedIds.contains(entry.key) && !hidden.contains(entry.key))
-          entry.value.$1,
-      for (final entry in _pendingCreates.entries)
-        if (!fetchedIds.contains(entry.key) && !hidden.contains(entry.key)) entry.value,
-    ];
     // This replacement has applied, and any shadowed ordinal that is no longer
     // in flight either applied or aborted without replacing the list; neither
-    // can drop the row anymore. Fetches still in flight remain threats.
+    // can drop its shadowed row anymore. Fetches still in flight remain threats.
     final stillThreatening = {..._wholesaleFetchesInFlight}..remove(fetchOrdinal);
-    _fetchShadowedCreates.updateAll((_, shadow) => (shadow.$1, shadow.$2.intersection(stillThreatening)));
-    _fetchShadowedCreates.removeWhere((_, shadow) => shadow.$2.isEmpty);
-    return [...preserved, ...fetched];
+    final List<ActionItemWithMetadata> merged;
+    if (_pendingCreates.isEmpty && _fetchShadowedCreates.isEmpty) {
+      merged = fetched;
+    } else {
+      // A row the user has deleted — staged behind an Undo toast or deleted
+      // outright — must not be resurrected by preservation: its pending-deletion
+      // tombstone deliberately outlives this replacement (the server delete may
+      // still be in flight), and the server-side filter above already dropped
+      // the row from `fetched`.
+      final hidden = _pendingDeletionIds;
+      final preserved = <ActionItemWithMetadata>[
+        for (final entry in _fetchShadowedCreates.entries)
+          if (entry.value.$2.contains(fetchOrdinal) && !fetchedIds.contains(entry.key) && !hidden.contains(entry.key))
+            entry.value.$1,
+        for (final entry in _pendingCreates.entries)
+          if (!fetchedIds.contains(entry.key) && !hidden.contains(entry.key)) entry.value,
+      ];
+      _fetchShadowedCreates.updateAll((_, shadow) => (shadow.$1, shadow.$2.intersection(stillThreatening)));
+      _fetchShadowedCreates.removeWhere((_, shadow) => shadow.$2.isEmpty);
+      merged = [...preserved, ...fetched];
+    }
+    return _withFetchShadowedEdits(merged, fetchOrdinal: fetchOrdinal, stillThreatening: stillThreatening);
+  }
+
+  /// Re-applies settled edits over [rows]. A wholesale replacement whose fetch
+  /// was in flight when the edit settled holds the pre-edit server version;
+  /// substituting the edited row keeps the user's completed/edited task from
+  /// reverting until another refresh. Fetches that started after the mutation
+  /// settled see the edit server-side, so their rows stay authoritative.
+  List<ActionItemWithMetadata> _withFetchShadowedEdits(
+    List<ActionItemWithMetadata> rows, {
+    required int fetchOrdinal,
+    required Set<int> stillThreatening,
+  }) {
+    if (_fetchShadowedEdits.isEmpty) return rows;
+    final reapplied = List<ActionItemWithMetadata>.of(rows);
+    for (var i = 0; i < reapplied.length; i++) {
+      final shadow = _fetchShadowedEdits[reapplied[i].id];
+      if (shadow != null && shadow.$2.contains(fetchOrdinal)) {
+        reapplied[i] = shadow.$1;
+      }
+    }
+    _fetchShadowedEdits.updateAll((_, shadow) => (shadow.$1, shadow.$2.intersection(stillThreatening)));
+    _fetchShadowedEdits.removeWhere((_, shadow) => shadow.$2.isEmpty);
+    return reapplied;
+  }
+
+  /// Records that [row] carries a settled mutation the wholesale fetches
+  /// currently in flight predate. Called with the server-confirmed row right
+  /// after the mutation request succeeds, before any further awaits, so a
+  /// threat fetch completing in between cannot miss the shadow.
+  void _registerFetchShadowedEdit(ActionItemWithMetadata row) {
+    if (_wholesaleFetchesInFlight.isEmpty) return;
+    _fetchShadowedEdits[row.id] = (row, {..._wholesaleFetchesInFlight});
   }
 
   /// Drops [ordinal] from every shadow's threat set. An aborted wholesale
@@ -188,9 +231,14 @@ class ActionItemsProvider extends ChangeNotifier {
   /// aborting caller's `finally` — otherwise the shadow keeps excluding a
   /// server-confirmed row from `_serverBackedRowCount` forever.
   void _dropFetchShadowOrdinal(int ordinal) {
-    if (_fetchShadowedCreates.isEmpty) return;
-    _fetchShadowedCreates.updateAll((_, shadow) => (shadow.$1, shadow.$2.difference({ordinal})));
-    _fetchShadowedCreates.removeWhere((_, shadow) => shadow.$2.isEmpty);
+    if (_fetchShadowedCreates.isNotEmpty) {
+      _fetchShadowedCreates.updateAll((_, shadow) => (shadow.$1, shadow.$2.difference({ordinal})));
+      _fetchShadowedCreates.removeWhere((_, shadow) => shadow.$2.isEmpty);
+    }
+    if (_fetchShadowedEdits.isNotEmpty) {
+      _fetchShadowedEdits.updateAll((_, shadow) => (shadow.$1, shadow.$2.difference({ordinal})));
+      _fetchShadowedEdits.removeWhere((_, shadow) => shadow.$2.isEmpty);
+    }
   }
 
   // Single-task deletes waiting for their Undo toast to close (docs/ux-contract.md §4): hidden
@@ -727,6 +775,9 @@ class ActionItemsProvider extends ChangeNotifier {
         attempt.complete(ProductOutcome.failure, failure: ProductFailure.server);
         return false;
       }
+      // The mutation is committed server-side; wholesale fetches still in
+      // flight predate it and would revert this row in their replacement.
+      _registerFetchShadowedEdit(success);
       SiriIntegration.current.queueUpsertTasks([success]);
       // Cancel notification if the action item is marked as completed
       if (newState == true) {
@@ -785,6 +836,8 @@ class ActionItemsProvider extends ChangeNotifier {
         _actionItems[index] = updatedItem;
         notifyListeners();
       }
+      // Wholesale fetches in flight predate this committed edit.
+      _registerFetchShadowedEdit(updatedItem);
       SiriIntegration.current.queueUpsertTasks([updatedItem]);
       _pushUpdateToAppleReminder(item, title: newDescription);
       return true;
@@ -834,6 +887,8 @@ class ActionItemsProvider extends ChangeNotifier {
           _actionItems[idx] = updatedItem;
           notifyListeners();
         }
+        // Wholesale fetches in flight predate this committed edit.
+        _registerFetchShadowedEdit(updatedItem);
         SiriIntegration.current.queueUpsertTasks([updatedItem]);
         _pushUpdateToAppleReminder(item, dueDate: dueDate);
         return true;
@@ -899,6 +954,8 @@ class ActionItemsProvider extends ChangeNotifier {
           if (index != -1) {
             _actionItems[index] = updatedItem;
           }
+          // Wholesale fetches in flight predate this committed edit.
+          _registerFetchShadowedEdit(updatedItem);
           SiriIntegration.current.queueUpsertTasks([updatedItem]);
           successCount++;
         } else if (index != -1) {
@@ -1468,6 +1525,7 @@ class ActionItemsProvider extends ChangeNotifier {
     _stagedDeleteAliasIds.clear();
     _pendingCreates.clear();
     _fetchShadowedCreates.clear();
+    _fetchShadowedEdits.clear();
     _preservedCreateIds.clear();
     // Wholesale fetches from the signed-out generation may still resolve
     // later; their ordinals are dead threats. Clear them so a create in the
