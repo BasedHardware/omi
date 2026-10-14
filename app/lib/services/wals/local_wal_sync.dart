@@ -703,8 +703,8 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
             timerStart: timerStart,
             data: chunk,
             storage: WalStorage.mem,
-            onDeviceOnly: _pendingPhoneOnly || OnDeviceTranscriptionController.instance.shouldKeepAudioLocal,
-            capturedOnDeviceOnly: _pendingPhoneOnly || OnDeviceTranscriptionController.instance.shouldKeepAudioLocal,
+            onDeviceOnly: _pendingPhoneOnly,
+            capturedOnDeviceOnly: _pendingPhoneOnly,
             status: syncedOffset == chunkFrameCount ? WalStatus.synced : WalStatus.miss,
             device: _deviceId ?? "omi",
             deviceModel: _deviceModel ?? "Omi",
@@ -818,8 +818,8 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
           timerStart: timerStart,
           data: runFrames.map((f) => f.payload).toList(),
           storage: WalStorage.mem,
-          onDeviceOnly: _pendingPhoneOnly || OnDeviceTranscriptionController.instance.shouldKeepAudioLocal,
-          capturedOnDeviceOnly: _pendingPhoneOnly || OnDeviceTranscriptionController.instance.shouldKeepAudioLocal,
+          onDeviceOnly: _pendingPhoneOnly,
+          capturedOnDeviceOnly: _pendingPhoneOnly,
           status: syncedOffset == frameCount ? WalStatus.synced : WalStatus.miss,
           device: _deviceId ?? "omi",
           deviceModel: _deviceModel ?? "Omi",
@@ -925,8 +925,8 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
             timerStart: timerStart,
             data: frames.map((f) => f.payload).toList(),
             storage: WalStorage.mem,
-            onDeviceOnly: _pendingPhoneOnly || OnDeviceTranscriptionController.instance.shouldKeepAudioLocal,
-            capturedOnDeviceOnly: _pendingPhoneOnly || OnDeviceTranscriptionController.instance.shouldKeepAudioLocal,
+            onDeviceOnly: _pendingPhoneOnly,
+            capturedOnDeviceOnly: _pendingPhoneOnly,
             status: syncedOffset == frameCount ? WalStatus.synced : WalStatus.miss,
             device: _deviceId ?? "omi",
             deviceModel: _deviceModel ?? "Omi",
@@ -983,7 +983,7 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
       if (wal.storage == WalStorage.mem) {
         // A policy edge may share a partially filled chunk with previously sent
         // frames. Conservatively retain the whole chunk; never upload its local tail.
-        if (OnDeviceTranscriptionController.instance.shouldKeepAudioLocal) wal.onDeviceOnly = true;
+        // Custody was latched when these frames were captured.
         final fileName = await _uniqueStorageFileName(wal);
         String? filePath = await Wal.getFilePath(fileName);
         if (filePath == null) {
@@ -1581,8 +1581,8 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
           timerStart: timerStart,
           data: chunk,
           storage: WalStorage.mem,
-          onDeviceOnly: _pendingPhoneOnly || OnDeviceTranscriptionController.instance.shouldKeepAudioLocal,
-          capturedOnDeviceOnly: _pendingPhoneOnly || OnDeviceTranscriptionController.instance.shouldKeepAudioLocal,
+          onDeviceOnly: _pendingPhoneOnly,
+          capturedOnDeviceOnly: _pendingPhoneOnly,
           status: syncedOffset == chunkFrameCount ? WalStatus.synced : WalStatus.miss,
           device: _deviceId ?? "omi",
           deviceModel: _deviceModel ?? "Omi",

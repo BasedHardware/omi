@@ -1,8 +1,6 @@
 import 'dart:io';
 
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
-import 'package:omi/services/experiments/on_device_overflow_gate.dart';
 import 'package:flutter/foundation.dart';
 
 import 'package:path_provider/path_provider.dart';
@@ -82,20 +80,6 @@ class FreemiumTranscriptionService extends ChangeNotifier {
 
   Future<FreemiumReadiness> checkReadiness({String? language}) async {
     if (iosOverride ?? Platform.isIOS) {
-      if (await OnDeviceOverflowGate.read()) {
-        try {
-          final status = await const MethodChannel('com.omi/on_device')
-              .invokeMapMethod<String, dynamic>('status', {'language': effectiveLanguage(language: language)});
-          appleReadiness = AppleSpeechReadiness(status?['engine'] as String? ?? 'unknown',
-              status?['phase'] == 'installed' ? 'ready' : status?['phase'] as String? ?? 'unavailable');
-          _readiness = status?['phase'] == 'installed' ? FreemiumReadiness.ready : FreemiumReadiness.requiresSetup;
-        } on PlatformException {
-          appleReadiness = const AppleSpeechReadiness('unknown', 'unavailable');
-          _readiness = FreemiumReadiness.requiresSetup;
-        }
-        notifyListeners();
-        return _readiness;
-      }
       appleReadiness =
           await (appleReadinessReader ?? OnDeviceAppleProvider.readiness)(effectiveLanguage(language: language));
       _readiness = appleReadiness!.ready ? FreemiumReadiness.ready : FreemiumReadiness.requiresSetup;

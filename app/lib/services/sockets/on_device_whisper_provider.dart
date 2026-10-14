@@ -8,7 +8,6 @@ import 'package:whisper_flutter_new/whisper_flutter_new.dart';
 
 import 'package:omi/models/stt_result.dart';
 import 'package:omi/services/experiments/on_device_overflow_gate.dart';
-import 'package:omi/services/on_device/on_device_engine.dart';
 import 'package:omi/utils/audio/wav_bytes.dart';
 import 'package:omi/utils/audio/whisper_pcm.dart';
 import 'package:omi/services/sockets/local_stt_failure.dart';
@@ -178,26 +177,21 @@ class OnDeviceWhisperProvider implements ISttProvider {
         final res = await _whisper!.transcribe(transcribeRequest: req);
 
         if (res.text.isEmpty) {
-          return enhanced
-              ? SttTranscriptionResult(
-                  segments: [], rawText: '', audioEndSeconds: audioOffsetSeconds + pcmWavDurationSeconds(audioData))
-              : null;
+          return null;
         }
 
         String cleanText = res.text.trim();
         cleanText = cleanText.replaceAll(RegExp(r'\[.*?\]'), '').trim();
         cleanText = cleanText.replaceAll(RegExp(r'\(.*?\)'), '').trim();
 
-        final duration = pcmWavDurationSeconds(audioData);
+        final duration = audioDurationSeconds(audioData);
         final filteredText = _qualityGate.filter(
           cleanText,
           audioData: audioData,
         );
         if (filteredText == null) {
           CustomSttLogService.instance.warning('OnDeviceWhisper', 'Dropped low-quality local transcript: $cleanText');
-          return enhanced
-              ? SttTranscriptionResult(segments: [], rawText: '', audioEndSeconds: audioOffsetSeconds + duration)
-              : null;
+          return null;
         }
 
         final speedFactor = sw.elapsedMilliseconds / 1000 / duration;
@@ -207,7 +201,6 @@ class OnDeviceWhisperProvider implements ISttProvider {
         );
 
         return SttTranscriptionResult(
-          audioEndSeconds: enhanced ? audioOffsetSeconds + duration : null,
           segments: enhanced && res.segments?.isNotEmpty == true
               ? [
                   for (final segment in res.segments!)

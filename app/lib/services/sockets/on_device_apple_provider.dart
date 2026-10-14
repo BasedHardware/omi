@@ -32,16 +32,7 @@ class OnDeviceAppleProvider implements ISttProvider, RecoverableLocalSttProvider
       {Future<bool> Function()? useSpeechAnalyzer, bool? isIOS}) async {
     if (!(isIOS ?? Platform.isIOS)) return false;
     try {
-      if (await OnDeviceOverflowGate.read()) {
-        final status =
-            await AppleBatchEngine.channel.invokeMapMethod<String, dynamic>('status', {'language': language});
-        if (status?['engine'] != 'sfspeech') return status?['phase'] == 'installed';
-        return await _channel.invokeMethod<bool>('onDeviceAvailable', {
-              'language': language,
-              'useSpeechAnalyzer': false,
-            }) ??
-            false;
-      }
+      if (useSpeechAnalyzer == null && await OnDeviceOverflowGate.read()) return (await readiness(language)).ready;
       final available = await _channel.invokeMethod<bool>('onDeviceAvailable', {
         'language': language,
         'useSpeechAnalyzer': await (useSpeechAnalyzer ?? AppleSpeechAnalyzerGate.useNewEngine)()
@@ -59,9 +50,18 @@ class OnDeviceAppleProvider implements ISttProvider, RecoverableLocalSttProvider
     bool prepare = false,
   }) async {
     try {
+      var overflowUsesLegacy = false;
+      if (useSpeechAnalyzer == null && await OnDeviceOverflowGate.read()) {
+        final batch = await AppleBatchEngine.channel.invokeMapMethod<String, dynamic>('status', {'language': language});
+        final engine = batch?['engine'] as String? ?? 'unavailable';
+        overflowUsesLegacy = engine == 'sfspeech';
+        if (!overflowUsesLegacy) {
+          return AppleSpeechReadiness(engine, batch?['phase'] == 'installed' ? 'ready' : 'unavailable');
+        }
+      }
       final data = await _channel.invokeMapMethod<String, dynamic>(prepare ? 'prepareSpeech' : 'readiness', {
         'language': language,
-        'useSpeechAnalyzer': await (useSpeechAnalyzer ?? AppleSpeechAnalyzerGate.useNewEngine)(),
+        'useSpeechAnalyzer': !overflowUsesLegacy && await (useSpeechAnalyzer ?? AppleSpeechAnalyzerGate.useNewEngine)(),
       });
       return AppleSpeechReadiness.fromMap(data);
     } catch (_) {
@@ -79,9 +79,10 @@ class OnDeviceAppleProvider implements ISttProvider, RecoverableLocalSttProvider
     String? language,
   }) async {
     try {
+      final normalized = WhisperPcm.normalize(audioData);
       if (await OnDeviceOverflowGate.read()) {
-        final result = await AppleBatchEngine().transcribe(audioData, language: language ?? this.language);
-        final duration = pcmWavDurationSeconds(audioData);
+        final result = await AppleBatchEngine().transcribe(normalized.wav, language: language ?? this.language);
+        final duration = normalized.duration;
         if (result.text.trim().isEmpty) {
           return SttTranscriptionResult(segments: [], rawText: '', audioEndSeconds: audioOffsetSeconds + duration);
         }
@@ -104,7 +105,6 @@ class OnDeviceAppleProvider implements ISttProvider, RecoverableLocalSttProvider
         ]);
       }
       final sw = Stopwatch()..start();
-      final normalized = WhisperPcm.normalize(audioData);
 
       final tempDir = await getTemporaryDirectory();
       final tempFile = File('${tempDir.path}/temp_apple_audio_${DateTime.now().millisecondsSinceEpoch}.wav');
@@ -154,6 +154,10 @@ class OnDeviceAppleProvider implements ISttProvider, RecoverableLocalSttProvider
         }
       }
     } catch (e) {
+      if (e is PlatformException && useSpeechAnalyzer == null && await OnDeviceOverflowGate.read()) {
+        final state = await readiness(language ?? this.language);
+        if (!state.ready) throw LocalSttFailure(state.status, canProbeRecovery: true);
+      }
       if (e is PlatformException && ['UNAUTHORIZED', 'UNAVAILABLE', 'INVALID_ARGS'].contains(e.code)) {
         final details = e.details;
         final status = details is Map ? details['status'] as String? : null;
