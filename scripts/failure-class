@@ -153,6 +153,32 @@ def repository_root(root: Path) -> Path:
     return root
 
 
+_HEAD_TREE_CACHE: dict[Path, frozenset[str] | None] = {}
+
+
+def tracked_at_head(root: Path) -> frozenset[str] | None:
+    """Repository paths tracked at HEAD, or None outside a usable git repo.
+
+    Cone-mode sparse checkouts do not materialise out-of-cone paths, and
+    prevention artifacts name guards across every surface, so existence is
+    judged against the working tree OR the HEAD tree; a path in neither
+    still fails.
+    """
+    key = root.resolve()
+    if key not in _HEAD_TREE_CACHE:
+        try:
+            out = subprocess.run(
+                ["git", "-C", str(key), "ls-tree", "-r", "--name-only", "-z", "HEAD"],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.DEVNULL,
+                check=True,
+            ).stdout
+            _HEAD_TREE_CACHE[key] = frozenset(entry.decode("utf-8") for entry in out.split(b"\0") if entry)
+        except (OSError, subprocess.CalledProcessError):
+            _HEAD_TREE_CACHE[key] = None
+    return _HEAD_TREE_CACHE[key]
+
+
 def definitions_directory(root: Path) -> Path:
     return root / DEFINITIONS_RELATIVE_PATH
 
@@ -197,13 +223,15 @@ def validate_canonical_prevention_artifact(value: Any, path: Path, root: Path) -
                 )
             )
         elif not (root / candidate).exists():
-            errors.append(
-                error(
-                    "missing_canonical_prevention_artifact",
-                    f"'canonical_prevention_artifact' path does not exist: {item}",
-                    path=str(path),
+            tracked = tracked_at_head(root)
+            if tracked is None or item not in tracked:
+                errors.append(
+                    error(
+                        "missing_canonical_prevention_artifact",
+                        f"'canonical_prevention_artifact' path does not exist: {item}",
+                        path=str(path),
+                    )
                 )
-            )
     return errors
 
 
