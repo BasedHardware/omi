@@ -23,6 +23,8 @@ import re
 import subprocess
 import sys
 import time
+import urllib.error
+import urllib.request
 from dataclasses import dataclass
 from datetime import date
 from importlib.util import module_from_spec, spec_from_file_location
@@ -50,6 +52,16 @@ PLAY_SOURCE_TRACKS = ("internal", "alpha")
 ACTIVE_PLAY_STATUSES = ("completed", "inProgress")
 STATE_POLL_SECONDS = 5
 STATE_POLL_ATTEMPTS = 24
+# Self-driving release posture (since 2026-10-14): submissions release on
+# approval instead of piling up approved-but-unreleased versions (ASC has no
+# API to issue the developer-release command, which is why MANUAL versions
+# accumulated). The brake moves post-release: iOS automatic phased rollout is
+# pausable in App Store Connect, Android staged rollout is haltable in Play.
+# Flip RELEASE_TYPE back to "MANUAL" / PHASED_RELEASE to False /
+# STAGED_ROLLOUT_FRACTION to None to restore the queue-for-human behavior.
+RELEASE_TYPE = "AFTER_APPROVAL"
+PHASED_RELEASE = True
+STAGED_ROLLOUT_FRACTION = 0.05
 
 
 class TrainError(Exception):
@@ -279,19 +291,112 @@ def ios_live_locales(asc: Callable[..., object], live_version_id: str) -> list[s
 
 
 def review_submission_for_version(asc: Callable[..., object], version_id: str) -> str:
-    payload = asc("apps", "list-review-submissions", APP_ID, "--platform", "IOS", "--review-submission-state", "COMPLETE")
+    """Locate the completed review submission that carries an App Store version.
+
+    Apple strips the appStoreVersion relationship from submission items when
+    the container reaches COMPLETE, so items must be listed with
+    include=appStoreVersion (the only API surface that still resolves the
+    linkage after completion). The Codemagic CLI items action has no include
+    flag, so this reads the App Store Connect REST API directly with a JWT
+    minted from the APP_STORE_CONNECT_* credentials already present on the
+    build machine (stdlib only: pyjwt availability is not guaranteed there).
+    """
+    base = "https://api.appstoreconnect.apple.com/v1"
+    try:
+        payload = asc("apps", "list-review-submissions", APP_ID, "--platform", "IOS", "--review-submission-state", "COMPLETE")
+    except TrainError:
+        raise
     submissions = sorted(
         _resource_list(payload), key=lambda r: str(_attributes(r).get("submittedDate") or ""), reverse=True
     )
+    token = _asc_rest_token()
+    headers = {"Authorization": f"Bearer {token}"}
     for submission in submissions:
         submission_id = _resource_id(submission)
-        for item in _resource_list(asc("review-submissions", "items", submission_id)):
-            relationships = item.get("relationships", {}) if isinstance(item, dict) else {}
-            version = relationships.get("appStoreVersion", {}) if isinstance(relationships, dict) else {}
-            data = version.get("data") if isinstance(version, dict) else None
-            if isinstance(data, dict) and data.get("id") == version_id:
+        url = f"{base}/reviewSubmissions/{submission_id}/items?include=appStoreVersion"
+        request = urllib.request.Request(url, headers=headers)
+        try:
+            with urllib.request.urlopen(request, timeout=60) as response:
+                payload = json.load(response)
+        except (urllib.error.URLError, ValueError) as exc:
+            raise TrainError(f"App Store Connect items lookup failed for {submission_id}: {exc}") from exc
+        for item in payload.get("included", []) or []:
+            if item.get("type") == "appStoreVersions" and item.get("id") == version_id:
                 return submission_id
     raise TrainError(f"no completed review submission contains App Store version {version_id}")
+
+
+def _asc_rest_token() -> str:
+    """ES256 JWT for the App Store Connect REST API (kid must be a JWT header)."""
+    import base64
+
+    issuer = os.environ.get("APP_STORE_CONNECT_ISSUER_ID", "")
+    key_id = os.environ.get("APP_STORE_CONNECT_KEY_IDENTIFIER", "")
+    pem = os.environ.get("APP_STORE_CONNECT_PRIVATE_KEY", "")
+    if not (issuer and key_id and pem):
+        raise TrainError("missing App Store Connect credential for REST lookup")
+    header = {"alg": "ES256", "kid": key_id, "typ": "JWT"}
+    now = int(time.time())
+    claims = {"iss": issuer, "iat": now, "exp": now + 1200, "aud": "appstoreconnect-v1"}
+    encode = lambda obj: base64.urlsafe_b64encode(
+        json.dumps(obj, separators=(",", ":")).encode()
+    ).rstrip(b"=").decode()
+    signing_input = f"{encode(header)}.{encode(claims)}"
+    try:
+        try:
+            from cryptography.hazmat.primitives.serialization import load_pem_private_key
+
+            key = load_pem_private_key(pem.encode(), password=None)
+            from cryptography.hazmat.primitives.asymmetric import ec
+            from cryptography.hazmat.primitives import hashes
+
+            der = key.sign(signing_input.encode(), ec.ECDSA(hashes.SHA256()))
+        except ImportError:
+            # openssl CLI fallback: DER ECDSA signature over the signing input
+            import subprocess
+            import tempfile
+
+            with tempfile.NamedTemporaryFile("w", suffix=".pem", delete=False) as key_file:
+                key_file.write(pem)
+            with tempfile.NamedTemporaryFile("w", suffix=".txt", delete=False) as data_file:
+                data_file.write(signing_input)
+            try:
+                result = subprocess.run(
+                    ["openssl", "dgst", "-sha256", "-sign", key_file.name, data_file.name],
+                    capture_output=True,
+                    check=True,
+                    timeout=30,
+                )
+                der = result.stdout
+            except (subprocess.CalledProcessError, subprocess.TimeoutExpired, OSError) as exc:
+                raise TrainError(f"openssl could not sign the App Store Connect REST token: {exc}") from exc
+            finally:
+                os.unlink(key_file.name)
+                os.unlink(data_file.name)
+    except TrainError:
+        raise
+    except Exception as exc:
+        raise TrainError(f"could not sign the App Store Connect REST token: {exc}") from exc
+    r, s = _der_ecdsa_sig_to_raw(der)
+    return f"{signing_input}.{base64.urlsafe_b64encode(r + s).rstrip(b'=').decode()}"
+
+
+def _der_ecdsa_sig_to_raw(der: bytes) -> tuple[bytes, bytes]:
+    """Convert a DER ECDSA signature to the 64-byte r||s raw form Apple's ES256 expects."""
+    if len(der) < 8 or der[0] != 0x30:
+        raise TrainError("unexpected DER signature shape")
+    index = 2
+    if der[index] != 0x02:
+        raise TrainError("unexpected DER signature shape")
+    r_len = der[index + 1]
+    r = der[index + 2 : index + 2 + r_len]
+    index += 2 + r_len
+    if der[index] != 0x02:
+        raise TrainError("unexpected DER signature shape")
+    s_len = der[index + 1]
+    s = der[index + 2 : index + 2 + s_len]
+    # JWS raw form: both integers left-padded to exactly 32 bytes
+    return r.rjust(32, b"\x00")[-32:], s.rjust(32, b"\x00")[-32:]
 
 
 def wait_for_version_state(asc: Callable[..., object], version_id: str, expected: str) -> None:
@@ -361,15 +466,16 @@ def run_ios(*, dry_run: bool, release_date: str, asc: Callable[..., object] = as
         reject_pending_ios(asc, plan.reject)
     build = promote.IOSBuild(candidate.build_id, candidate.version, str(candidate.build_number))
     try:
-        promote.submit_ios(build, notes, locales=locales)
+        promote.submit_ios(build, notes, locales=locales, release_type=RELEASE_TYPE, phased=PHASED_RELEASE)
     except promote.PromotionError as exc:
         raise TrainError(str(exc)) from exc
     version_id = ios_build_version_id(asc, candidate.build_id)
     if version_id is None:
         raise TrainError("submission returned but the build is not attached to an App Store version")
     wait_for_version_state(asc, version_id, "WAITING_FOR_REVIEW")
-    log(f"submitted {candidate.version} ({candidate.build_number}) for review; release type MANUAL")
-    return f"ios={plan.action} {candidate.version} ({candidate.build_number}) WAITING_FOR_REVIEW"
+    posture = RELEASE_TYPE + ("/phased" if PHASED_RELEASE else "")
+    log(f"submitted {candidate.version} ({candidate.build_number}) for review; release type {posture}")
+    return f"ios={plan.action} {candidate.version} ({candidate.build_number}) WAITING_FOR_REVIEW ({posture})"
 
 
 # ------------------------------------------------------------------------ Android
@@ -456,9 +562,26 @@ def run_android(*, dry_run: bool, release_date: str) -> str:
         promote.select_play_release(
             tracks[candidate.track], production, candidate.version, candidate.version_code, source_track=candidate.track
         )
-        promote.submit_android(client, edit_id, candidate.version, candidate.version_code, notes, status="draft")
+        if STAGED_ROLLOUT_FRACTION is not None:
+            promote.submit_android(
+                client,
+                edit_id,
+                candidate.version,
+                candidate.version_code,
+                notes,
+                status="inProgress",
+                user_fraction=STAGED_ROLLOUT_FRACTION,
+            )
+        else:
+            promote.submit_android(client, edit_id, candidate.version, candidate.version_code, notes, status="draft")
     except promote.PromotionError as exc:
         raise TrainError(str(exc)) from exc
+    if STAGED_ROLLOUT_FRACTION is not None:
+        log(
+            f"Android production staged rollout started: {candidate.version} ({candidate.version_code}) "
+            f"at {STAGED_ROLLOUT_FRACTION:.0%}; haltable in Play Console"
+        )
+        return f"android=staged {candidate.version} ({candidate.version_code}) @{STAGED_ROLLOUT_FRACTION:.0%}"
     log(f"Android production draft now {candidate.version} ({candidate.version_code}); a human releases it in Play Console")
     return f"android=draft {candidate.version} ({candidate.version_code})"
 

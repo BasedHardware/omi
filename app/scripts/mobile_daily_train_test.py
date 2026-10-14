@@ -1,5 +1,12 @@
 #!/usr/bin/env python3
-"""Offline contract tests for the daily mobile release train."""
+"""Offline contract tests for the daily mobile release train.
+
+The self-driving posture (2026-10-14): iOS submits AFTER_APPROVAL with the
+phased-release brake (pausable in App Store Connect), Android writes a staged
+production rollout at 5% (haltable in Play Console). Apple strips the
+appStoreVersion relationship from items of COMPLETED review submissions, so
+the replace-path lookup reads items?include=appStoreVersion over REST.
+"""
 
 from __future__ import annotations
 
@@ -211,14 +218,38 @@ class RunIOSTests(unittest.TestCase):
             summary = train.run_ios(dry_run=False, release_date="2026-10-06", asc=asc)
         command = captured["command"]
         self.assertEqual(command[:3], ["app-store-connect", "builds", "submit-to-app-store"])
-        self.assertEqual(command[command.index("--release-type") + 1], "MANUAL")
-        self.assertIn("--no-phased-release", command)
+        self.assertEqual(command[command.index("--release-type") + 1], train.RELEASE_TYPE)
+        self.assertIn("--phased-release" if train.PHASED_RELEASE else "--no-phased-release", command)
         self.assertNotIn("--cancel-previous-submissions", command)
         self.assertNotIn("--whats-new", command)
         self.assertEqual(command[-1], "b1334")
         self.assertEqual(captured["localizations"], [{"locale": "en-US", "whats_new": "- New thing"}, {"locale": "fr-FR", "whats_new": "- New thing"}])
-        self.assertEqual(summary, "ios=submit 1.0.554 (1334) WAITING_FOR_REVIEW")
+        self.assertEqual(summary, f"ios=submit 1.0.554 (1334) WAITING_FOR_REVIEW ({train.RELEASE_TYPE}{'/phased' if train.PHASED_RELEASE else ''})")
         self.assertEqual([c for c in asc.calls if c[:2] == ("review-submissions", "cancel")], [])
+
+    def test_manual_release_type_and_no_phased_flag_stay_available(self):
+        # The queue-for-human posture must remain one constant away: MANUAL +
+        # --no-phased-release must still be expressible and correctly wired.
+        build = promote.IOSBuild("b1", "1.0.554", "1334")
+        captured = {}
+
+        def fake_run(command, **kwargs):
+            captured["command"] = command
+            return Mock(returncode=0)
+
+        with patch.object(promote.subprocess, "run", side_effect=fake_run):
+            promote.submit_ios(build, "- n", locales=["en-US"], release_type="MANUAL", phased=False)
+        command = captured["command"]
+        self.assertEqual(command[command.index("--release-type") + 1], "MANUAL")
+        self.assertIn("--no-phased-release", command)
+        self.assertNotIn("--phased-release", command)
+
+    def test_phased_requires_after_approval(self):
+        build = promote.IOSBuild("b1", "1.0.554", "1334")
+        with self.assertRaisesRegex(promote.PromotionError, "AFTER_APPROVAL"):
+            promote.submit_ios(build, "- n", locales=["en-US"], release_type="MANUAL", phased=True)
+        with self.assertRaisesRegex(promote.PromotionError, "MANUAL or AFTER_APPROVAL"):
+            promote.submit_ios(build, "- n", locales=["en-US"], release_type="WHENEVER")
 
     def test_replace_cancels_the_completed_submission_before_submitting(self):
         pending = version("pend", "1.0.554", "PENDING_DEVELOPER_RELEASE")
@@ -230,6 +261,29 @@ class RunIOSTests(unittest.TestCase):
             # after the submission it is attached to the new App Store version.
             return {"id": "v-new", "attributes": {}} if "submit" in order else None
 
+        def rest_items(request, headers=None, timeout=60):
+            # Apple strips the item relationship on COMPLETED submissions; the
+            # include=appStoreVersion REST lookup is the only surviving linkage.
+            url = request.full_url if hasattr(request, "full_url") else request
+
+            class Response:
+                def __enter__(self):
+                    return self
+
+                def __exit__(self, *exc):
+                    return False
+
+                def read(self):
+                    # rs-new sorts first (newest submittedDate) and carries the pending version
+                    body = (
+                        {"included": [{"type": "appStoreVersions", "id": "pend"}]}
+                        if "rs-new" in url
+                        else {"included": [{"type": "appStoreVersions", "id": "older"}]}
+                    )
+                    return json.dumps(body).encode()
+
+            return Response()
+
         asc = FakeASC(
             live_responses(
                 states={"PENDING_DEVELOPER_RELEASE": [pending]},
@@ -239,9 +293,6 @@ class RunIOSTests(unittest.TestCase):
                     ("apps", "list-review-submissions"): [
                         {"id": "rs-old", "attributes": {"state": "COMPLETE", "submittedDate": "2026-09-01T00:00:00Z"}},
                         {"id": "rs-new", "attributes": {"state": "COMPLETE", "submittedDate": "2026-10-01T00:00:00Z"}},
-                    ],
-                    ("review-submissions", "items"): lambda args: [
-                        {"id": "i", "attributes": {"state": "ACCEPTED"}, "relationships": {"appStoreVersion": {"data": {"id": "pend" if args[-1] == "rs-new" else "older"}}}}
                     ],
                     ("review-submissions", "cancel"): {"id": "rs-new", "attributes": {"state": "CANCELING"}},
                     ("app-store-versions", "get"): lambda args: {"id": args[-1], "attributes": {"appStoreState": next(get_states)}},
@@ -260,7 +311,9 @@ class RunIOSTests(unittest.TestCase):
                 order.append("cancel")
             return original_call(*args)
 
-        with patch.object(promote.subprocess, "run", side_effect=fake_run), patch.object(train.time, "sleep"):
+        with patch.object(train.urllib.request, "urlopen", side_effect=rest_items), patch.object(
+            train, "_asc_rest_token", return_value="faketoken"
+        ), patch.object(promote.subprocess, "run", side_effect=fake_run), patch.object(train.time, "sleep"):
             summary = train.run_ios(dry_run=False, release_date="2026-10-06", asc=recording_call)
         self.assertEqual(order, ["cancel", "submit"])
         self.assertIn(("review-submissions", "cancel", "rs-new"), asc.calls)
@@ -271,12 +324,27 @@ class RunIOSTests(unittest.TestCase):
         asc = FakeASC(
             {
                 ("apps", "list-review-submissions"): [{"id": "rs", "attributes": {"state": "COMPLETE", "submittedDate": "x"}}],
-                ("review-submissions", "items"): [{"id": "i", "attributes": {}, "relationships": {"appStoreVersion": {"data": {"id": "pend"}}}}],
                 ("review-submissions", "cancel"): {"id": "rs", "attributes": {}},
                 ("app-store-versions", "get"): {"id": "pend", "attributes": {"appStoreState": "PENDING_DEVELOPER_RELEASE"}},
             }
         )
-        with patch.object(train, "STATE_POLL_ATTEMPTS", 2), patch.object(train.time, "sleep"):
+
+        def rest_items(url, headers=None, timeout=60):
+            class Response:
+                def __enter__(self):
+                    return self
+
+                def __exit__(self, *exc):
+                    return False
+
+                def read(self):
+                    return json.dumps({"included": [{"type": "appStoreVersions", "id": "pend"}]}).encode()
+
+            return Response()
+
+        with patch.object(train.urllib.request, "urlopen", side_effect=rest_items), patch.object(
+            train, "_asc_rest_token", return_value="faketoken"
+        ), patch.object(train, "STATE_POLL_ATTEMPTS", 2), patch.object(train.time, "sleep"):
             with self.assertRaisesRegex(train.TrainError, "did not reach DEVELOPER_REJECTED"):
                 train.reject_pending_ios(asc, train.IOSVersion("pend", "1.0.554", "PENDING_DEVELOPER_RELEASE"))
 
@@ -338,7 +406,7 @@ class AndroidTests(unittest.TestCase):
         self.internal["releases"].append({"name": "1.0.555 (1350)", "versionCodes": ["1350"], "status": "draft"})
         self.assertIsNone(train.pick_play_candidate({"internal": self.internal, "alpha": self.alpha}, self.production))
 
-    def test_draft_is_written_from_the_source_track_and_never_completed(self):
+    def test_staged_rollout_written_from_the_source_track_and_haltable(self):
         client = Mock()
         tracks = {"internal": self.internal, "alpha": self.alpha, "production": self.production}
         with tempfile.TemporaryDirectory() as tmp:
@@ -350,13 +418,38 @@ class AndroidTests(unittest.TestCase):
                 promote, "require_notes", return_value="Faster sync"
             ):
                 summary = train.run_android(dry_run=False, release_date="2026-10-06")
-        self.assertEqual(summary, "android=draft 1.0.554 (1340)")
+        self.assertEqual(summary, f"android=staged 1.0.554 (1340) @{train.STAGED_ROLLOUT_FRACTION:.0%}")
         body = client.edits().tracks().update.call_args.kwargs["body"]
-        self.assertEqual(body["releases"][0]["status"], "draft")
+        self.assertEqual(body["releases"][0]["status"], "inProgress")
+        self.assertEqual(body["releases"][0]["userFraction"], train.STAGED_ROLLOUT_FRACTION)
         self.assertEqual(body["releases"][0]["versionCodes"], ["1340"])
         self.assertEqual(body["releases"][0]["name"], "1.0.554")
         self.assertEqual(body["releases"][0]["releaseNotes"], [{"language": "en-US", "text": "Faster sync"}])
         client.edits().commit.assert_called_once()
+
+    def test_draft_posture_still_available_when_staged_rollout_disabled(self):
+        client = Mock()
+        tracks = {"internal": self.internal, "alpha": self.alpha, "production": self.production}
+        with tempfile.TemporaryDirectory() as tmp:
+            release = Path(tmp) / "1.0.554.json"
+            release.write_text(json.dumps({"version": "1.0.554", "date": "2026-10-06", "changes": ["Faster sync"]}))
+            with patch.object(promote, "play_edit", return_value=(client, "edit")), patch.object(
+                promote, "play_track", side_effect=lambda c, e, name: tracks[name]
+            ), patch.object(train, "ensure_release_notes", return_value=release), patch.object(
+                promote, "require_notes", return_value="Faster sync"
+            ), patch.object(train, "STAGED_ROLLOUT_FRACTION", None):
+                summary = train.run_android(dry_run=False, release_date="2026-10-06")
+        self.assertEqual(summary, "android=draft 1.0.554 (1340)")
+        body = client.edits().tracks().update.call_args.kwargs["body"]
+        self.assertEqual(body["releases"][0]["status"], "draft")
+        self.assertNotIn("userFraction", body["releases"][0])
+        client.edits().commit.assert_called_once()
+
+    def test_user_fraction_requires_staged_status(self):
+        with self.assertRaisesRegex(promote.PromotionError, "inProgress"):
+            promote.submit_android(Mock(), "edit", "1.0.554", "1340", "n", status="completed", user_fraction=0.05)
+        with self.assertRaisesRegex(promote.PromotionError, "strictly between"):
+            promote.submit_android(Mock(), "edit", "1.0.554", "1340", "n", status="inProgress", user_fraction=1.0)
 
     def test_existing_draft_with_the_same_code_is_idempotent(self):
         self.production["releases"].append({"name": "1.0.554 (1340)", "versionCodes": ["1340"], "status": "draft"})

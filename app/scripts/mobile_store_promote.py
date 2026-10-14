@@ -156,7 +156,27 @@ def ios_localizations(locales: Sequence[str], notes: str) -> list[dict[str, str]
     return [{"locale": locale, "whats_new": notes} for locale in unique]
 
 
-def submit_ios(build: IOSBuild, notes: str, *, locales: Sequence[str] | None = None) -> None:
+def submit_ios(
+    build: IOSBuild,
+    notes: str,
+    *,
+    locales: Sequence[str] | None = None,
+    release_type: str = "MANUAL",
+    phased: bool = False,
+) -> None:
+    """Submit a processed build for review.
+
+    release_type MANUAL holds the approved version for an explicit developer
+    release command (App Store Connect has no API to issue that command, so
+    MANUAL versions pile up approved-but-unreleased); AFTER_APPROVAL lets
+    Apple release on approval. phased=True (AFTER_APPROVAL only) requests the
+    7-day automatic phased rollout, which is pausable from App Store Connect
+    as a post-release brake.
+    """
+    if release_type not in ("MANUAL", "AFTER_APPROVAL"):
+        raise PromotionError("iOS release type must be MANUAL or AFTER_APPROVAL")
+    if phased and release_type != "AFTER_APPROVAL":
+        raise PromotionError("phased release requires release type AFTER_APPROVAL")
     command = [
         "app-store-connect",
         "builds",
@@ -166,7 +186,7 @@ def submit_ios(build: IOSBuild, notes: str, *, locales: Sequence[str] | None = N
         "--platform",
         "IOS",
         "--release-type",
-        "MANUAL",
+        release_type,
         "--version-string",
         build.version,
     ]
@@ -178,7 +198,8 @@ def submit_ios(build: IOSBuild, notes: str, *, locales: Sequence[str] | None = N
         with handle:
             json.dump(ios_localizations(locales, notes), handle)
         localizations_file = Path(handle.name)
-        command += ["--no-phased-release", "--app-store-version-localizations", f"@file:{localizations_file}"]
+        command += ["--app-store-version-localizations", f"@file:{localizations_file}"]
+    command += ["--phased-release"] if phased else ["--no-phased-release"]
     command.append(build.id)
     try:
         subprocess.run(command, capture_output=True, text=True, check=True, timeout=600)
@@ -283,21 +304,41 @@ def prepare_android(version: str, build_number: str) -> tuple[object, str]:
     return client, edit_id
 
 
-PLAY_RELEASE_STATUSES = ("completed", "draft")
+PLAY_RELEASE_STATUSES = ("completed", "draft", "inProgress", "halted")
 
 
 def submit_android(
-    client: object, edit_id: str, version: str, build_number: str, notes: str, *, status: str = "completed"
+    client: object,
+    edit_id: str,
+    version: str,
+    build_number: str,
+    notes: str,
+    *,
+    status: str = "completed",
+    user_fraction: float | None = None,
 ) -> None:
-    """Write one production release for an existing code: live ("completed") or a Play Console draft."""
+    """Write one production release for an existing code.
+
+    status "completed" = fully live; "draft" = Play Console draft; "inProgress"
+    = staged rollout (with user_fraction, e.g. 0.05) that is haltable from the
+    Play Console as a post-release brake. userFraction is rejected for
+    completed/draft releases; a completed release cannot later be halted, so
+    decide the exposure path before writing.
+    """
     if status not in PLAY_RELEASE_STATUSES:
-        raise PromotionError("Play release status must be completed or draft")
-    release = {
+        raise PromotionError("Play release status must be completed, draft, inProgress or halted")
+    if user_fraction is not None and status not in ("inProgress", "halted"):
+        raise PromotionError("userFraction requires a staged (inProgress) release")
+    release: dict[str, object] = {
         "name": version,
         "versionCodes": [build_number],
         "status": status,
         "releaseNotes": [{"language": "en-US", "text": notes}],
     }
+    if user_fraction is not None:
+        if not 0 < float(user_fraction) < 1:
+            raise PromotionError("userFraction must be strictly between 0 and 1 (full rollout is status=completed)")
+        release["userFraction"] = float(user_fraction)
     try:
         client.edits().tracks().update(
             packageName=PACKAGE_NAME,

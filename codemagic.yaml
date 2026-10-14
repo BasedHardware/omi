@@ -2955,7 +2955,7 @@ workflows:
             --android-build "${PROMOTE_ANDROID_BUILD:-}"
 
   mobile-daily-train:
-    name: Daily Mobile Store Train (queue for human release)
+    name: Daily Mobile Store Train (self-driving store release)
     instance_type: mac_mini_m2
     max_build_duration: 30
     integrations:
@@ -2968,13 +2968,16 @@ workflows:
         TRAIN_DRY_RUN: "false"
     working_directory: app
     scripts:
-      - name: Queue the newest internal builds for a human release
+      - name: Release the newest internal builds through the stores
         script: |
           set -euo pipefail
-          # Dispatched daily by .github/workflows/mobile_daily_train.yml. iOS: submit the newest
-          # processed TestFlight build for review with release type MANUAL, one submission in flight
-          # at a time; an approved-but-unreleased version is replaced by a newer build. Android: write
-          # the newest internal/alpha build to production as a draft release. Nothing here releases.
+          # Dispatched daily by the operator release gate (.github/workflows/mobile_daily_train.yml).
+          # iOS: submit the newest processed TestFlight build for review with release type
+          # AFTER_APPROVAL and the phased rollout enabled (pausable in App Store Connect); one
+          # submission in flight at a time; an approved-but-unreleased version is replaced by a
+          # newer build (its completed submission is resolved via items?include=appStoreVersion).
+          # Android: start a staged production rollout at 5% from the newest internal/alpha build
+          # (haltable in Play Console). Nothing here bypasses store approval.
           DRY_RUN_FLAG=""
           if [ "${TRAIN_DRY_RUN:-false}" = "true" ]; then
             DRY_RUN_FLAG="--dry-run"

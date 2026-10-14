@@ -81,8 +81,23 @@ UTC schedule was removed 2026-10-14 — dispatch is owned by the operator-side
 release gate, a daily agent cron that audits the candidate against the live
 baseline and only dispatches on a green verdict; manual dispatch with
 `dry_run` remains available) starts the Codemagic `mobile-daily-train` workflow
-on `main`, which runs `app/scripts/mobile_daily_train.py --platform both`. The
-train queues builds for a **human** release; it never releases anything itself.
+on `main`, which runs `app/scripts/mobile_daily_train.py --platform both`.
+
+Self-driving release posture (since 2026-10-14): the train no longer stops at
+a human queue point. iOS submissions use `AFTER_APPROVAL` release type with
+the automatic phased rollout enabled (pausable in App Store Connect as the
+post-release brake — App Store Connect has no API to issue a MANUAL
+developer-release command, which is why approved-but-unreleased versions used
+to pile up). Android candidates go to production as a staged rollout at 5%
+(`inProgress`, `userFraction 0.05`; haltable in Play Console). The posture
+lives in three constants at the top of `mobile_daily_train.py`
+(`RELEASE_TYPE`, `PHASED_RELEASE`, `STAGED_ROLLOUT_FRACTION`); setting them to
+`MANUAL` / `False` / `None` restores the queue-for-a-human behavior. The
+replace path for an approved-but-unreleased version looks up its completed
+review submission via `GET /v1/reviewSubmissions/{id}/items?include=appStoreVersion`
+(REST, stdlib JWT signer) because Apple strips that relationship from items of
+completed submissions. Nothing here releases without the store's own approval;
+the gate's evidence audit always runs first.
 
 iOS (App Store Connect, versions are read per state because the unfiltered
 listing only returns live versions):
