@@ -7,7 +7,7 @@ import 'package:omi/services/experiments/onboarding_webview_gate.dart';
 
 void main() {
   test('flag key is the registered PostHog key', () {
-    expect(OnboardingWebviewGate.flagKey, 'onboarding-webview');
+    expect(OnboardingWebviewGate.enabledFlag, 'onboarding-webview');
     expect(OnboardingWebviewGate.debugOverrideActive, isFalse);
   });
 

@@ -72,7 +72,7 @@ class PaywallExperimentConfig {
 /// https; `onboarding_paywall` is optional and defaults to false.
 abstract final class PaywallExperiment {
   /// PostHog flag key. Registered in `config/feature-flags.yaml`.
-  static const flagKey = 'paywall-variant';
+  static const enabledFlag = 'paywall-variant';
 
   /// Debug-build override: `--dart-define=OMI_PAYWALL_VARIANT=outline|web` (and optionally
   /// `OMI_PAYWALL_WEB_URL=https://…`). `kDebugMode` excludes every store build.
@@ -131,11 +131,11 @@ abstract final class PaywallExperiment {
     final cached = _session;
     if (cached != null && !refresh) return cached;
     try {
-      final variant = await (readVariant ?? AnalyticsManager().getFeatureFlagVariant)(flagKey);
+      final variant = await (readVariant ?? AnalyticsManager().getFeatureFlagVariant)(enabledFlag);
       if (variant == null) return PaywallExperimentConfig.control; // unresolved: try again next time
       final payload = variant == PaywallVariant.control.wireName
           ? null
-          : await (readPayload ?? AnalyticsManager().getFeatureFlagPayload)(flagKey);
+          : await (readPayload ?? AnalyticsManager().getFeatureFlagPayload)(enabledFlag);
       final config = parse(variant: variant, payload: payload);
       _session = config;
       return config;
@@ -147,7 +147,7 @@ abstract final class PaywallExperiment {
   /// Records the exposure PostHog Experiments attribute metrics to (`$feature_flag_called`), once
   /// per arm per process, and tags every later event with `$feature/paywall-variant`.
   static void recordExposure(PaywallExperimentConfig config, {void Function(String key, String variant)? record}) {
-    (record ?? AnalyticsManager().recordFeatureFlagExposure)(flagKey, config.variant.wireName);
+    (record ?? AnalyticsManager().recordFeatureFlagExposure)(enabledFlag, config.variant.wireName);
   }
 
   @visibleForTesting

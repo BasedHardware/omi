@@ -10,7 +10,7 @@ void main() {
   setUp(PaywallExperiment.resetForTesting);
 
   test('flag key is the registered PostHog key', () {
-    expect(PaywallExperiment.flagKey, 'paywall-variant');
+    expect(PaywallExperiment.enabledFlag, 'paywall-variant');
     expect(PaywallExperiment.debugOverrideActive, isFalse);
   });
 

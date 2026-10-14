@@ -12,7 +12,7 @@ import 'package:omi/utils/analytics/analytics_manager.dart';
 /// payload without an https URL all mean native onboarding.
 abstract final class OnboardingWebviewGate {
   /// PostHog flag key (project 302298). Registered in `config/feature-flags.yaml`.
-  static const flagKey = 'onboarding-webview';
+  static const enabledFlag = 'onboarding-webview';
 
   /// Debug-build override: `--dart-define=OMI_ONBOARDING_WEBVIEW_URL=https://…`.
   static const _debugUrl = String.fromEnvironment('OMI_ONBOARDING_WEBVIEW_URL');
@@ -44,9 +44,9 @@ abstract final class OnboardingWebviewGate {
   }) async {
     if (debugOverrideActive) return parse(enabled: true, payload: {'url': _debugUrl});
     try {
-      final enabled = await (readFlag ?? AnalyticsManager().isFeatureEnabled)(flagKey);
+      final enabled = await (readFlag ?? AnalyticsManager().isFeatureEnabled)(enabledFlag);
       if (!enabled) return null;
-      final payload = await (readPayload ?? AnalyticsManager().getFeatureFlagPayload)(flagKey);
+      final payload = await (readPayload ?? AnalyticsManager().getFeatureFlagPayload)(enabledFlag);
       return parse(enabled: true, payload: payload);
     } catch (_) {
       return null;
