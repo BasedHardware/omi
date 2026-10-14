@@ -91,6 +91,11 @@ class _ReadAlongCardState extends State<ReadAlongCard> with SingleTickerProvider
   final List<double> _history = List.filled(_bars, 0, growable: true);
   double _sinceSample = 0;
 
+  /// When each word was heard by Omi (script index, or own-word index): drives its flash.
+  final Map<int, DateTime> _heardAt = {};
+  int _ownSeen = 0;
+  static const _flash = Duration(milliseconds: 750);
+
   @override
   void initState() {
     super.initState();
@@ -108,14 +113,44 @@ class _ReadAlongCardState extends State<ReadAlongCard> with SingleTickerProvider
   void _onLive() {
     final heard = activationTokens(widget.live.value);
     final p = readAlongProgress(_scriptTokens, heard);
+    final now = DateTime.now();
+    var landed = false;
     setState(() {
       if (heard.length >= 3 && p.match < 0.5) {
         _ownWords = true;
-      } else if (!_ownWords) {
-        _confirmed = math.max(_confirmed, p.reached);
+      }
+      if (_ownWords) {
+        final count = widget.live.value.trim().split(RegExp(r'\s+')).length;
+        for (var i = _ownSeen; i < count; i++) {
+          _heardAt[i] = now.add(Duration(milliseconds: 45 * (i - _ownSeen)));
+        }
+        landed = count > _ownSeen;
+        _ownSeen = math.max(_ownSeen, count);
+      } else if (p.reached > _confirmed) {
+        // Omi's words landed: each newly heard word flashes in turn.
+        for (var i = _confirmed; i < p.reached; i++) {
+          _heardAt[i] = now.add(Duration(milliseconds: 45 * (i - _confirmed)));
+        }
+        _confirmed = p.reached;
         _cursor = math.max(_cursor, _confirmed.toDouble());
+        landed = true;
       }
     });
+    if (landed) OmiHaptics.light();
+  }
+
+  /// 1 the moment a word is heard by Omi, easing to 0 over [_flash]; 0 when not flashing.
+  double _flashOf(int i) {
+    final at = _heardAt[i];
+    if (at == null) return 0;
+    final ms = DateTime.now().difference(at).inMilliseconds;
+    if (ms < 0) return 0;
+    return 1 - Curves.easeOut.transform((ms / _flash.inMilliseconds).clamp(0.0, 1.0));
+  }
+
+  bool get _flashing {
+    final now = DateTime.now();
+    return _heardAt.values.any((at) => now.difference(at) < _flash + const Duration(milliseconds: 600));
   }
 
   void _tick(Duration now) {
@@ -143,7 +178,7 @@ class _ReadAlongCardState extends State<ReadAlongCard> with SingleTickerProvider
         changed = true;
       }
     }
-    if (changed && mounted) setState(() {});
+    if ((changed || _flashing) && mounted) setState(() {});
   }
 
   void _wordTick() {
@@ -182,15 +217,34 @@ class _ReadAlongCardState extends State<ReadAlongCard> with SingleTickerProvider
     );
   }
 
+  /// Three clear states: not said yet (faint), heard by the microphone but not yet by Omi (grey),
+  /// and heard by Omi (full ink, arriving with a flash behind it).
   Widget _word(int i, bool reduce) {
     final lit = (_cursor - i).clamp(0.0, 1.0);
     final confirmed = i < _confirmed;
-    final color = Color.lerp(OmiColors.textTertiary, OmiColors.textPrimary, confirmed ? 1 : 0.35 + 0.55 * lit)!;
-    // A word lifts a touch as it lights, then settles.
-    final lift = reduce ? 0.0 : -2.0 * math.sin(math.pi * lit) * (confirmed ? 0 : 1);
+    final color = confirmed
+        ? OmiColors.textPrimary
+        : Color.lerp(OmiColors.textTertiary.withValues(alpha: 0.55), OmiColors.textSecondary, lit)!;
+    // A word lifts a touch as the voice lights it, then settles.
+    final lift = reduce || confirmed ? 0.0 : -2.0 * math.sin(math.pi * lit);
+    return _flashWord(Text('${_scriptWords[i]} ', style: widget.style.copyWith(color: color)), reduce ? 0 : _flashOf(i),
+        lift: lift);
+  }
+
+  /// The moment Omi hears a word: a soft highlight behind it and a small pop, fading out.
+  Widget _flashWord(Widget word, double f, {double lift = 0}) {
     return Transform.translate(
       offset: Offset(0, lift),
-      child: Text('${_scriptWords[i]} ', style: widget.style.copyWith(color: color)),
+      child: Transform.scale(
+        scale: 1 + 0.07 * f,
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            color: OmiColors.textPrimary.withValues(alpha: 0.14 * f),
+            borderRadius: OmiRadius.smAll,
+          ),
+          child: word,
+        ),
+      ),
     );
   }
 
@@ -209,7 +263,10 @@ class _ReadAlongCardState extends State<ReadAlongCard> with SingleTickerProvider
               opacity: t,
               child: Transform.translate(offset: Offset(0, 6 * (1 - t)), child: child),
             ),
-            child: Text('${words[i]} ', style: widget.style.copyWith(color: OmiColors.textPrimary)),
+            child: _flashWord(
+              Text('${words[i]} ', style: widget.style.copyWith(color: OmiColors.textPrimary)),
+              reduce ? 0 : _flashOf(i),
+            ),
           ),
       ],
     );
