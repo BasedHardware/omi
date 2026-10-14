@@ -359,3 +359,30 @@ def test_privacy_erasure_refuses_unindexed_pack(bucket):
     bucket.blob(packs.owner_prefix(packs.PACK_PREFIX, 'alice') + 'orphan.tar').upload_from_string(b'unknown')
     with pytest.raises(RuntimeError, match='unindexed pack'):
         packs.delete_conversation(bucket, 'alice', 'one')
+
+
+def test_privacy_relist_does_not_retrieve_unaffected_archive_pack(bucket, monkeypatch):
+    capture(bucket, conv='keep', day='2020-10-13')
+    packs.pack_owner_day(bucket, 'alice', '2020-10-13')
+    unaffected = manifests(bucket)[0]['pack']
+    capture(bucket, conv='erase', data=b'erase')
+    packs.pack_owner_day(bucket, 'alice', '2020-10-14')
+    original = Blob.download_as_bytes
+
+    def download(blob, **kwargs):
+        if blob.name == unaffected:
+            raise AssertionError('unnecessary Archive retrieval')
+        return original(blob, **kwargs)
+
+    monkeypatch.setattr(Blob, 'download_as_bytes', download)
+    packs.delete_conversation(bucket, 'alice', 'erase')
+    assert bucket.blob(unaffected).exists()
+
+
+def test_privacy_relist_refuses_changed_pack_generation(bucket, monkeypatch):
+    capture(bucket, conv='keep')
+    packs.pack_owner_day(bucket, 'alice', '2020-10-14')
+    name = manifests(bucket)[0]['pack']
+    bucket.blob(name).upload_from_string(bucket.blob(name).download_as_bytes())
+    with pytest.raises(RuntimeError, match='changed pack generation'):
+        packs.delete_conversation(bucket, 'alice', 'erase')

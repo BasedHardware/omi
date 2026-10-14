@@ -339,7 +339,7 @@ def delete_conversation(bucket: Any, uid: str, conversation_id: str) -> None:
     for blob in bucket.list_blobs(prefix=owner_prefix(SOURCE_PREFIX, uid)):
         if affected(json.loads(blob.metadata['capture'])):
             raise RuntimeError('canonical erasure left an affected source')
-    indexed_packs = set()
+    indexed_packs = {}
     for index in bucket.list_blobs(prefix=owner_prefix(INDEX_PREFIX, uid)):
         relative = index.name.removeprefix(owner_prefix(INDEX_PREFIX, uid))
         if relative.split('/', 1)[0] in {'captures', 'deletions', 'links'}:
@@ -348,10 +348,12 @@ def delete_conversation(bucket: Any, uid: str, conversation_id: str) -> None:
         _validate_owner(manifest, uid)
         if manifest['state'] != 'complete' or any(affected(e) for e in manifest['entries']):
             raise RuntimeError('canonical erasure left an affected manifest')
-        verify_pack(bucket.blob(manifest['pack']).download_as_bytes(), manifest)
-        indexed_packs.add(manifest['pack'])
-    if any(b.name not in indexed_packs for b in bucket.list_blobs(prefix=owner_prefix(PACK_PREFIX, uid))):
-        raise RuntimeError('canonical erasure found an unindexed pack')
+        # Complete intents already verified this exact generation. Re-list metadata
+        # instead of paying to retrieve every unaffected Coldline/Archive object.
+        indexed_packs[manifest['pack']] = manifest['pack_generation']
+    live_packs = {b.name: str(b.generation) for b in bucket.list_blobs(prefix=owner_prefix(PACK_PREFIX, uid))}
+    if live_packs != indexed_packs:
+        raise RuntimeError('canonical erasure found an unindexed pack or changed pack generation')
 
 
 def _finish_rewrite(bucket: Any, index: Any, manifest: dict[str, Any], data: bytes | None = None) -> None:
