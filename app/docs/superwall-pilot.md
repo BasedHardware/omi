@@ -1,6 +1,6 @@
 # Superwall paywall pilot
 
-Upgrade entry points (end of onboarding, locked conversations and memories, chat quota, Settings, Usage) show a **Superwall** paywall on **iOS debug builds**, using the pilot's own Superwall test project (public SDK key built in as the default). Store builds and Android always use Omi's existing plans sheet and Stripe checkout. Pass `--dart-define=SUPERWALL_TEST_MODE=false` to see the plans sheet in debug, or `--dart-define=SUPERWALL_API_KEY_IOS=<key>` to point at another project.
+Upgrade entry points (end of onboarding, locked conversations and memories, chat quota, Settings, Usage) go through the paywall experiment (`PaywallRouter`, flag `paywall-variant`): its arm's page, or Omi's existing plans sheet and Stripe checkout for control, paid readers and any failure. On **iOS debug builds** with `--dart-define=SUPERWALL_TEST_MODE=true`, free users get a **Superwall** paywall first instead, using the pilot's own Superwall test project (public SDK key built in as the default); `--dart-define=SUPERWALL_API_KEY_IOS=<key>` points at another project. Store builds and Android never configure Superwall.
 
 ## Before production
 

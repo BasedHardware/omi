@@ -16,9 +16,9 @@ class SuperwallPilot {
 
   static final SuperwallPilot instance = SuperwallPilot._();
 
-  /// On by default in debug builds, so anyone trying the branch sees the paywall; pass
-  /// `--dart-define=SUPERWALL_TEST_MODE=false` to use the plans sheet instead.
-  static const _testEnabled = bool.fromEnvironment('SUPERWALL_TEST_MODE', defaultValue: true);
+  /// Off unless a debug build passes `--dart-define=SUPERWALL_TEST_MODE=true`; otherwise every
+  /// upgrade entry point goes through the paywall experiment (`PaywallRouter`).
+  static const _testEnabled = bool.fromEnvironment('SUPERWALL_TEST_MODE');
 
   /// The pilot's own Superwall test project (public SDK key, meant to ship inside apps). Production
   /// needs Omi's Superwall project and its App Store Connect in-app purchase products instead.
