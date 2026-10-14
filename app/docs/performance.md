@@ -50,7 +50,7 @@ changing it), SD-card/flash-page sync refreshes the WAL list per downloaded chun
 
 | Guard | What it catches | Runs |
 |---|---|---|
-| `.github/scripts/check_mobile_ui_isolate.py` | New sync I/O, provider JSON, fast timers, blur, unsized images, shrinkWrap lists in changed files (no-increase ratchet); any proxy hook that notifies without an early return | `mobile-ui-isolate` in `.github/checks-manifest.yaml` |
+| `.github/scripts/check_mobile_ui_isolate.py` | New sync I/O, provider JSON, JSON outside `offUiIsolate` in the WAL index / live transcript / conversation list / preferences modules, fast timers, blur, unsized images, shrinkWrap lists in changed files (no-increase ratchet); any proxy hook that notifies without an `identical`/`==` early return, or whose declaration it cannot read | `mobile-ui-isolate` in `.github/checks-manifest.yaml` |
 | `test/perf/notify_amplification_test.dart` | Proxy hooks re-notifying; capture notifies walking the transcript | `bash test.sh` |
 | `test/perf/conversation_list_off_ui_test.dart` | Off-isolate parse/encode drift, stale cache writes, non-sendable payloads | `bash test.sh` |
 | `test/unit/wal_file_manager_save_cost_test.dart` | Save coalescing, off-isolate index encode, backup validation | `bash test.sh` |

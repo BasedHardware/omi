@@ -32,8 +32,9 @@ Details and the measurement tools: [`app/docs/performance.md`](../../app/docs/pe
 ## Guard tests
 
 - `.github/scripts/check_mobile_ui_isolate.py` — **no-increase ratchet** per rule and per changed
-  file under `app/lib/` against the PR merge base (new files start at zero), plus an absolute
-  check that every proxy update hook in `app/lib/main.dart` returns early before notifying.
+  file under `app/lib/` against the PR merge base (new files start at zero), including JSON
+  outside `offUiIsolate` in the history-sized modules, plus an absolute check that every proxy
+  update hook in `app/lib/main.dart` returns early on an `identical`/`==` test before notifying.
   Escape hatch: `// omi-perf-allow: <rule> -- <reason>` on the line or the line above.
 - `.github/scripts/test_check_mobile_ui_isolate.py` — proves every rule fails on the defect it
   targets and passes with the allow comment, on an unchanged count and on a decrease.

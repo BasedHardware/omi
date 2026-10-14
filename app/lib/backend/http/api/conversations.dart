@@ -118,8 +118,11 @@ Future<({List<ServerConversation> items, bool ok, bool truncated})> getConversat
     final bodyBytes = response.bodyBytes;
     // Unlocked rows carry full transcripts, so a page can be megabytes; parse
     // it off the UI isolate (this runs on resume, right as the user scrolls).
-    final memories = await offUiIsolate(() => parseConversationListBody(bodyBytes),
-        size: bodyBytes.length, threshold: conversationListBackgroundParseBytes, debugName: 'conversation_list_parse');
+    final memories = await offUiIsolate(
+        () => parseConversationListBody(jsonDecode(utf8.decode(bodyBytes)) as List<dynamic>),
+        size: bodyBytes.length,
+        threshold: conversationListBackgroundParseBytes,
+        debugName: 'conversation_list_parse');
     Logger.debug('getConversations length: ${memories.length}');
     return (items: memories, ok: true, truncated: isOmiListTruncated(response));
   }
@@ -131,11 +134,10 @@ Future<({List<ServerConversation> items, bool ok, bool truncated})> getConversat
 @visibleForTesting
 int conversationListBackgroundParseBytes = 64 * 1024;
 
-/// Decodes UTF-8 bytes first so multi-byte characters survive, then parses.
-List<ServerConversation> parseConversationListBody(List<int> bodyBytes) {
-  return (jsonDecode(utf8.decode(bodyBytes)) as List<dynamic>)
-      .map((conversation) => ServerConversation.fromJson(conversation as Map<String, dynamic>))
-      .toList();
+/// Maps a decoded list body (decode the UTF-8 bytes first so multi-byte
+/// characters survive) into conversations.
+List<ServerConversation> parseConversationListBody(List<dynamic> decoded) {
+  return decoded.map((conversation) => ServerConversation.fromJson(conversation as Map<String, dynamic>)).toList();
 }
 
 bool hasSpeakerReceiptSummaryCapability(Map<String, String> headers) => headers['x-omi-speaker-receipt-summary'] == '1';

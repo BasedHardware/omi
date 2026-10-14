@@ -51,8 +51,18 @@ class LocalSegmentStore {
     final file = _fileFor(dir, sessionId);
     final tmp = File('${file.path}.tmp');
     final rows = segments.map(_segmentToJson).toList();
-    final encoded = await offUiIsolate(() => _encodeSession(sessionId, rows),
-        size: rows.length, threshold: backgroundEncodeThreshold, debugName: 'live_segments_encode');
+    // The rows are already canonical, and hashing them yields the same digest
+    // as hashing the segments ([transcriptSha256FromMaps] canonicalizes again).
+    final encoded = await offUiIsolate(
+        () => jsonEncode(<String, Object?>{
+              'encoding_version': transcriptHashEncodingVersion,
+              'session_id': sessionId,
+              'transcript_sha256': transcriptSha256FromMaps(rows),
+              'segments': rows,
+            }),
+        size: rows.length,
+        threshold: backgroundEncodeThreshold,
+        debugName: 'live_segments_encode');
     await tmp.writeAsString(encoded);
     if (await file.exists()) {
       await file.delete();
@@ -98,17 +108,6 @@ class LocalSegmentStore {
   /// spend it on the UI isolate.
   @visibleForTesting
   static int backgroundEncodeThreshold = 150;
-
-  /// The rows are already canonical, and hashing them yields the same digest
-  /// as hashing the segments ([transcriptSha256FromMaps] canonicalizes again).
-  static String _encodeSession(String sessionId, List<Map<String, Object?>> rows) {
-    return jsonEncode(<String, Object?>{
-      'encoding_version': transcriptHashEncodingVersion,
-      'session_id': sessionId,
-      'transcript_sha256': transcriptSha256FromMaps(rows),
-      'segments': rows,
-    });
-  }
 
   static Map<String, Object?> _segmentToJson(TranscriptSegment segment) {
     final kept = canonicalizeTranscriptSegment(segment);

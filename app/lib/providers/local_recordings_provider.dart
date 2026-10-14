@@ -200,10 +200,13 @@ class LocalRecordingsProvider extends ChangeNotifier {
         );
         if (rec != null) list.add(rec);
       }
-      if (generation != _scanGeneration) return;
+      bool current() => generation == _scanGeneration;
+      if (!current()) return;
       final ownerCount = owners.length;
       owners.removeWhere((name, _) => !onDisk.contains(name));
-      if (ownersChanged || owners.length != ownerCount) await _writeOwners(ownersFile, owners);
+      if (ownersChanged || owners.length != ownerCount) await _writeOwners(ownersFile, owners, stillCurrent: current);
+      // A newer scan may have started during the owners write.
+      if (!current()) return;
       list.sort((a, b) => b.timerStart.compareTo(a.timerStart));
       _recordings = list;
       _ownedNames = seen;
@@ -215,7 +218,7 @@ class LocalRecordingsProvider extends ChangeNotifier {
       // Resume polling if recordings are still awaiting transcription (e.g. the
       // timer was dropped while backgrounded and we just resumed).
       if (_ownedJobs().isNotEmpty) _startReconcileTimer();
-      if (!_disposed) notifyListeners();
+      if (!_disposed && generation == _scanGeneration) notifyListeners();
     }
   }
 
@@ -589,7 +592,9 @@ class LocalRecordingsProvider extends ChangeNotifier {
 
   // ───────────────────────── sidecar ─────────────────────────
 
-  Future<void> _writeOwners(File file, Map<String, String> owners) async {
+  /// [stillCurrent] is checked right before the rename so a superseded scan
+  /// never replaces the owners file a newer scan wrote.
+  Future<void> _writeOwners(File file, Map<String, String> owners, {bool Function()? stillCurrent}) async {
     final temp = File('${file.path}.${DateTime.now().microsecondsSinceEpoch}.tmp');
     final handle = await temp.open(mode: FileMode.write);
     try {
@@ -597,6 +602,10 @@ class LocalRecordingsProvider extends ChangeNotifier {
       await handle.flush();
     } finally {
       await handle.close();
+    }
+    if (stillCurrent != null && !stillCurrent()) {
+      await temp.delete();
+      return;
     }
     await temp.rename(file.path);
   }

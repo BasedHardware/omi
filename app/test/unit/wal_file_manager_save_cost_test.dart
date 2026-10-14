@@ -57,16 +57,19 @@ void main() {
     expect((await WalFileManager.loadWals()).map((w) => w.timerStart), [1000, 2000, 3000]);
   });
 
-  // Guard (also true before coalescing): a replaced caller must not resolve early.
-  test('a superseded caller resolves only after a write that contains its snapshot', () async {
-    final inFlight = WalFileManager.saveWals([_wal(1000)]);
-    final superseded = WalFileManager.saveWals([_wal(1000), _wal(2000)]);
-    WalFileManager.saveWals([_wal(1000), _wal(2000), _wal(3000)]);
+  test('a replaced caller resolves after the newest snapshot is on disk, as serial writes would leave it', () async {
+    final first = WalFileManager.saveWals([_wal(1000)]);
+    final replaced = WalFileManager.saveWals([_wal(1000), _wal(2000)]);
+    // Not a superset: the newest snapshot drops 2000, as a delete would.
+    final newest = WalFileManager.saveWals([_wal(3000)]);
 
-    await superseded;
+    await replaced;
     final onDisk = jsonDecode(walFile.readAsStringSync()) as Map<String, dynamic>;
-    expect((onDisk['wals'] as List).map((w) => w['timer_start']), containsAll([1000, 2000]));
-    await inFlight;
+    expect((onDisk['wals'] as List).map((w) => w['timer_start']), [3000], reason: 'last write wins, as before');
+    final backup = jsonDecode(backupFile.readAsStringSync()) as Map<String, dynamic>;
+    expect((backup['wals'] as List).map((w) => w['timer_start']), [1000, 2000],
+        reason: 'the newest replaced snapshot is the backup');
+    await Future.wait([first, newest]);
   });
 
   test('collapsed saves keep the newest superseded snapshot as the backup', () async {

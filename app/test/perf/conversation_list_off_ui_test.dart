@@ -44,13 +44,15 @@ void main() {
 
   test('a large list body parses identically on a background isolate', () async {
     final body = utf8.encode(jsonEncode([for (var i = 0; i < 30; i++) _conversation(i).toJson()]));
-    final inline = parseConversationListBody(body);
+    final inline = parseConversationListBody(jsonDecode(utf8.decode(body)) as List<dynamic>);
 
     final previous = conversationListBackgroundParseBytes;
     addTearDown(() => conversationListBackgroundParseBytes = previous);
     conversationListBackgroundParseBytes = 1;
-    final viaIsolate = await offUiIsolate(() => parseConversationListBody(body),
-        size: body.length, threshold: conversationListBackgroundParseBytes);
+    final viaIsolate = await offUiIsolate(
+        () => parseConversationListBody(jsonDecode(utf8.decode(body)) as List<dynamic>),
+        size: body.length,
+        threshold: conversationListBackgroundParseBytes);
 
     expect(viaIsolate.map((c) => jsonEncode(c.toJson())), inline.map((c) => jsonEncode(c.toJson())));
     expect(inline.first.structured.title, 'Conversation 0 — café ✓');

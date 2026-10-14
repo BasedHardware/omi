@@ -15,8 +15,9 @@ Two guards:
 
 2. An absolute check on the root provider graph: every ChangeNotifierProxyProvider update hook
    named in app/lib/main.dart (`previous?..hook(...)`) runs on each upstream notify, so a hook
-   that calls notifyListeners() must return early when nothing changed. A hook with no early
-   `return` before its first notify fails.
+   that calls notifyListeners() must return early when nothing changed: an `identical(...)` or
+   `==` test and a `return` before the first notify. A hook with no such guard, or whose
+   declaration cannot be read, fails.
 
 Escape hatch: on the offending line (for a proxy hook, its declaration line) or on the line
 directly above it, write
@@ -82,6 +83,8 @@ def _call_args(text: str, open_paren: int) -> str:
 
 
 def _unsized_image(text: str, match: re.Match[str]) -> bool:
+    if re.search(r"\bResizeImage\s*\(\s*$", text[max(0, match.start() - 80) : match.start()]):
+        return False  # ResizeImage(NetworkImage(url), width: …) decodes at display size
     return not IMAGE_SIZE_HINT.search(_call_args(text, match.end() - 1))
 
 
@@ -92,6 +95,20 @@ def _fast_timer(_text: str, match: re.Match[str]) -> bool:
 
 
 PROVIDER_PATH = re.compile(r"^app/lib/(providers/.*|.*_provider)\.dart$")
+# Modules whose JSON grows with the user's history; they must encode/decode through offUiIsolate.
+HISTORY_JSON_PATH = re.compile(
+    r"^app/lib/(utils/wal_file_manager|services/capture/local_segment_store|backend/http/api/conversations"
+    r"|backend/preferences)\.dart$"
+)
+
+
+def _outside_off_ui_isolate(text: str, match: re.Match[str]) -> bool:
+    """False when the match sits inside an `offUiIsolate(...)` call's arguments."""
+    for call in re.finditer(r"\boffUiIsolate\s*(?:<[^>(]*>)?\s*\(", text[: match.start()]):
+        open_paren = call.end() - 1
+        if open_paren + 1 + len(_call_args(text, open_paren)) >= match.start():
+            return False
+    return True
 
 RULES: tuple[Rule, ...] = (
     Rule(
@@ -104,6 +121,13 @@ RULES: tuple[Rule, ...] = (
         re.compile(r"\bjson(?:En|De)code\s*\("),
         "parse in the API/persistence layer; for collections use offUiIsolate (lib/utils/off_ui_isolate.dart)",
         path_filter=PROVIDER_PATH,
+    ),
+    Rule(
+        "history-json-on-ui",
+        re.compile(r"\bjson(?:En|De)code\s*\("),
+        "offUiIsolate (lib/utils/off_ui_isolate.dart); this module's JSON grows with the user's history",
+        accept=_outside_off_ui_isolate,
+        path_filter=HISTORY_JSON_PATH,
     ),
     Rule(
         "fast-periodic-timer",
@@ -288,6 +312,11 @@ def _top_level_return_before(body: str, limit: int) -> bool:
     return False
 
 
+def _compares_before(body: str, limit: int) -> bool:
+    """The early return must test for "unchanged" (identity or equality), not only for null."""
+    return re.search(r"\bidentical\s*\(|==(?!\s*null\b)", body[:limit]) is not None
+
+
 def hook_violations(name: str, sources: dict[str, str]) -> list[str]:
     """Declarations of [name] that notify with no early return before the first notify.
 
@@ -314,7 +343,7 @@ def hook_violations(name: str, sources: dict[str, str]) -> list[str]:
             notify = body.find("notifyListeners()")
             if notify == -1:
                 continue
-            if not is_arrow and _top_level_return_before(body, notify):
+            if not is_arrow and _top_level_return_before(body, notify) and _compares_before(body, notify):
                 continue
             line = text.count("\n", 0, match.start()) + 1
             problems.append(

@@ -33,11 +33,13 @@ def main(argv: list[str]) -> int:
 
 
 PROVIDER = "app/lib/providers/foo_provider.dart"
+WAL_INDEX = "app/lib/utils/wal_file_manager.dart"
 
 # One violating snippet per rule, each the shape of a defect found in the 2026-10 lag audit.
 VIOLATIONS: dict[str, str] = {
     "sync-file-io": "for (final entity in dir.listSync().whereType<File>()) {",
     "json-in-provider": "SharedPreferencesUtil().cache = jsonEncode(conversations);",
+    "history-json-on-ui": "final jsonString = jsonEncode(jsonData);",
     "fast-periodic-timer": "_timer = Timer.periodic(const Duration(milliseconds: 16), (_) => notifyListeners());",
     "blur-filter": "child: BackdropFilter(filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18), child: box),",
     "unsized-network-image": "child: CachedNetworkImage(imageUrl: app.image, width: 15, height: 15),",
@@ -51,23 +53,27 @@ class RuleTests(unittest.TestCase):
     def test_every_rule_has_a_violation_case(self) -> None:
         self.assertEqual(set(VIOLATIONS), set(RULE_IDS))
 
+    @staticmethod
+    def _path(rule_id: str) -> str:
+        return WAL_INDEX if rule_id == "history-json-on-ui" else PROVIDER
+
     def test_each_rule_fires_on_its_defect(self) -> None:
         for rule_id, snippet in VIOLATIONS.items():
             with self.subTest(rule=rule_id):
-                counts = count_hits(snippet, PROVIDER)
+                counts = count_hits(snippet, self._path(rule_id))
                 self.assertEqual(counts[rule_id], EXPECTED_COUNT.get(rule_id, 1), counts)
 
     def test_allow_comment_on_the_line_suppresses_the_hit(self) -> None:
         for rule_id, snippet in VIOLATIONS.items():
             with self.subTest(rule=rule_id):
                 allowed = f"{snippet} // omi-perf-allow: {rule_id} -- measured, bounded input"
-                self.assertEqual(count_hits(allowed, PROVIDER)[rule_id], 0)
+                self.assertEqual(count_hits(allowed, self._path(rule_id))[rule_id], 0)
 
     def test_allow_comment_on_the_line_above_suppresses_the_hit(self) -> None:
         for rule_id, snippet in VIOLATIONS.items():
             with self.subTest(rule=rule_id):
                 allowed = f"  // omi-perf-allow: {rule_id} -- measured, bounded input\n{snippet}"
-                self.assertEqual(count_hits(allowed, PROVIDER)[rule_id], 0)
+                self.assertEqual(count_hits(allowed, self._path(rule_id))[rule_id], 0)
 
     def test_allow_comment_without_reason_is_ignored(self) -> None:
         snippet = VIOLATIONS["sync-file-io"] + " // omi-perf-allow: sync-file-io"
@@ -94,6 +100,21 @@ class RuleTests(unittest.TestCase):
         snippet = "Timer.periodic(const Duration(microseconds: 16667), (_) => tick());"
         self.assertEqual(count_hits(snippet, PROVIDER)["fast-periodic-timer"], 1)
 
+    def test_history_json_inside_off_ui_isolate_is_clean(self) -> None:
+        wrapped = (
+            "final s = await offUiIsolate(() => jsonEncode(jsonData),\n"
+            "    size: wals.length, threshold: backgroundEncodeThreshold);"
+        )
+        self.assertEqual(count_hits(wrapped, WAL_INDEX)["history-json-on-ui"], 0)
+        unwrapped = "final s = jsonEncode(jsonData);"
+        self.assertEqual(count_hits(unwrapped, WAL_INDEX)["history-json-on-ui"], 1)
+        self.assertEqual(count_hits(unwrapped, "app/lib/backend/http/api/apps.dart")["history-json-on-ui"], 0)
+
+    def test_removing_the_off_ui_isolate_wrapper_fails_the_ratchet(self) -> None:
+        base = "final s = await offUiIsolate(() => jsonEncode(data), size: n, threshold: t);"
+        head = "final s = jsonEncode(data);"
+        self.assertTrue(compare(WAL_INDEX, head, base))
+
     def test_slow_periodic_timer_is_clean(self) -> None:
         snippet = "Timer.periodic(const Duration(milliseconds: 500), (_) => tick());"
         self.assertEqual(count_hits(snippet, PROVIDER)["fast-periodic-timer"], 0)
@@ -103,7 +124,7 @@ class RuleTests(unittest.TestCase):
         sized = "CachedNetworkImage(imageUrl: url, memCacheWidth: (15 * dpr).round(), width: 15)"
         self.assertEqual(count_hits(sized, PROVIDER)["unsized-network-image"], 0)
         resized = "Image(image: ResizeImage(NetworkImage(url), width: 120))"
-        self.assertEqual(count_hits(resized, PROVIDER)["unsized-network-image"], 1, "the inner NetworkImage call")
+        self.assertEqual(count_hits(resized, PROVIDER)["unsized-network-image"], 0, "ResizeImage sizes the decode")
         self.assertEqual(
             count_hits("Image.network(url, cacheWidth: 240, fit: BoxFit.cover)", PROVIDER)["unsized-network-image"], 0
         )
@@ -238,7 +259,10 @@ class ProviderGraphTests(unittest.TestCase):
         self.assertEqual(hook_violations("updateExternalActions", {"app/lib/x.dart": BRACED_GUARD}), [])
 
     def test_return_inside_a_loop_block_counts_but_a_closure_does_not(self) -> None:
-        looped = "  void setFoo(FooProvider p) {\n    for (final x in xs) { return; }\n    notifyListeners();\n  }\n"
+        looped = (
+            "  void setFoo(FooProvider p) {\n    for (final x in xs) { if (identical(x, p)) { return; } }\n"
+            "    notifyListeners();\n  }\n"
+        )
         self.assertEqual(hook_violations("setFoo", {"app/lib/x.dart": looped}), [])
         closure = "  void setFoo(FooProvider p) {\n    run(() { return; });\n    notifyListeners();\n  }\n"
         self.assertEqual(len(hook_violations("setFoo", {"app/lib/x.dart": closure})), 1)
@@ -257,6 +281,10 @@ class ProviderGraphTests(unittest.TestCase):
         problems = hook_violations("setMissing", {"app/lib/x.dart": SILENT})
         self.assertEqual(len(problems), 1)
         self.assertIn("no declaration", problems[0])
+
+    def test_a_null_check_is_not_an_unchanged_guard(self) -> None:
+        text = "  void setFoo(FooProvider? p) {\n    if (p == null) return;\n    foo = p;\n    notifyListeners();\n  }\n"
+        self.assertEqual(len(hook_violations("setFoo", {"app/lib/x.dart": text})), 1)
 
     def test_a_graph_with_no_recognised_hooks_fails(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
