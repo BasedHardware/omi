@@ -96,7 +96,7 @@ def test_gate_contention_maps_to_409_with_retry_after():
     mapped = re.search(
         r"except RuntimeError as error:\s*\n"
         r"\s+#.*\n"
-        r'\s+if type\(error\)\.__name__ not in \{"DestructiveOperationInProgress", "LegalHoldAuthorityUnavailable"\}:\s*\n'
+        r'\s+if type\(error\)\.__name__ not in \{[^}]*"DestructiveGateTakeover"[^}]*\}:\s*\n'
         r"\s+raise\s*\n"
         r"\s+from utils\.other\.account_gate_http import account_gate_busy_http_exception\s*\n"
         r"\s+raise account_gate_busy_http_exception\(\) from error",

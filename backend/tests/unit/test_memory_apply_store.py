@@ -3185,17 +3185,23 @@ def test_receipt_sweep_stops_after_peer_takeover_preserving_next_receipt(store, 
             "privacy_epoch_commit_id": "privacy-commit",
             "expires_at": now,
         }
+
+    def _unwrap(fn):
+        return getattr(fn, "to_wrap", fn)
+
     monkeypatch.setattr(
         legal_holds,
         "_acquire_destructive_operation_transaction",
-        legal_holds._acquire_destructive_operation_transaction.to_wrap,
+        _unwrap(legal_holds._acquire_destructive_operation_transaction),
     )
     monkeypatch.setattr(
         legal_holds,
         "_finish_destructive_operation_transaction",
-        legal_holds._finish_destructive_operation_transaction.to_wrap,
+        _unwrap(legal_holds._finish_destructive_operation_transaction),
     )
-    monkeypatch.setattr(legal_holds, "_place_legal_hold_transaction", legal_holds._place_legal_hold_transaction.to_wrap)
+    monkeypatch.setattr(
+        legal_holds, "_place_legal_hold_transaction", _unwrap(legal_holds._place_legal_hold_transaction)
+    )
     monkeypatch.setattr(store, "destructive_operation_gate", legal_holds.destructive_operation_gate)
     monkeypatch.setattr(store, "assert_destructive_gate_still_ours", legal_holds.assert_destructive_gate_still_ours)
     original_delete = _FakeDocumentRef.delete
