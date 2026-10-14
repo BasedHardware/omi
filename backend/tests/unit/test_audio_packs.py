@@ -296,3 +296,11 @@ def test_packer_refuses_a_pending_privacy_erasure(bucket):
     with pytest.raises(ValueError, match='blocked'):
         packs.pack_owner_day(bucket, 'alice', '2020-10-14')
     assert bucket.list_blobs(packs.owner_prefix(packs.PACK_PREFIX, 'alice')) == []
+
+
+def test_competing_merge_cannot_orphan_the_first_survivor(bucket):
+    packs.link_conversations(bucket, 'alice', ['one'], 'first')
+    packs.link_conversations(bucket, 'alice', ['one'], 'first')
+    with pytest.raises(ValueError, match='another merge'):
+        packs.link_conversations(bucket, 'alice', ['one'], 'second')
+    assert packs.conversation_chain(bucket, 'alice', 'one') == ['one', 'first']

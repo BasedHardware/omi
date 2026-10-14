@@ -385,8 +385,13 @@ def link_conversations(bucket: Any, uid: str, sources: list[str], target: str) -
         if source == target or source in conversation_chain(bucket, uid, target):
             raise ValueError('canonical merge would create a cycle')
         blob = bucket.get_blob(control_path(uid, 'links', source))
-        generation = int(blob.generation) if blob is not None else 0
-        blob = blob or bucket.blob(control_path(uid, 'links', source))
+        if blob is not None:
+            row = json.loads(blob.download_as_bytes(if_generation_match=int(blob.generation)))
+            if row != {'owner': uid, 'source': source, 'target': target}:
+                raise ValueError('canonical source already belongs to another merge')
+            continue
+        generation = 0
+        blob = bucket.blob(control_path(uid, 'links', source))
         blob.upload_from_string(
             _json({'owner': uid, 'source': source, 'target': target}), if_generation_match=generation
         )

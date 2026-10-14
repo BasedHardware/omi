@@ -41,7 +41,7 @@ from utils.observability.fallback import record_fallback
 from utils.other.audio_chunk_replay import RECONCILE_MAX_ATTEMPTS, reconcile_committed_prefix
 from utils.other.deferred_delete import DeferredDeleter
 from utils.other.local_storage import create_storage_client, iam_signing_kwargs, local_public_url
-from database import users as users_db
+from database import users as users_db, conversation_tombstones
 import logging
 
 logger = logging.getLogger(__name__)
@@ -738,6 +738,9 @@ def upload_audio_chunks_batch(
         protection = data_protection_level or users_db.get_data_protection_level(uid)
         encrypted = protection == 'enhanced'
         canonical = get_canonical_audio_bucket()
+        if conversation_tombstones.is_deleted(uid, conversation_id):
+            if len(audio_packs.conversation_chain(canonical, uid, conversation_id)) == 1:
+                raise audio_packs.CaptureDeleted('canonical capture blocked by existing deletion intent')
         with owner_storage_write_gate(uid, canonical):
             audio_packs.archive_capture(
                 canonical,

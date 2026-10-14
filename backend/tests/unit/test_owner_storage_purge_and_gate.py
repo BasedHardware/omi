@@ -259,6 +259,7 @@ def test_merge_cleanup_preserves_canonical_and_explicit_privacy_calls_erase(monk
 
 def test_enhanced_pusher_manifest_matches_envelope_and_full_duration(monkeypatch):
     monkeypatch.setenv('AUDIO_CANONICAL_PACKING_ENABLED', 'true')
+    monkeypatch.setattr(storage_mod.conversation_tombstones, 'is_deleted', lambda *args: False)
     canonical = _Bucket(set())
     monkeypatch.setattr(storage_mod, 'get_canonical_audio_bucket', lambda: canonical)
     archive = MagicMock(side_effect=RuntimeError('stop after canonical intake'))
@@ -275,3 +276,21 @@ def test_enhanced_pusher_manifest_matches_envelope_and_full_duration(monkeypatch
     assert struct.unpack('>I', payload[:4])[0] == len(payload) - 4
     assert archive.call_args.kwargs['provenance']['encryption_envelope'].startswith('uint32be-')
     assert archive.call_args.kwargs['conversation_ranges'][0]['end'] == 1726185601
+
+
+def test_preexisting_conversation_deletion_blocks_new_canonical_admission(monkeypatch):
+    monkeypatch.setenv('AUDIO_CANONICAL_PACKING_ENABLED', 'true')
+    monkeypatch.setattr(storage_mod.conversation_tombstones, 'is_deleted', lambda *args: True)
+    monkeypatch.setattr(storage_mod, 'get_canonical_audio_bucket', lambda: _Bucket(set()))
+    monkeypatch.setattr(storage_mod.audio_packs, 'conversation_chain', lambda *args: ['deleted'])
+    archive = MagicMock()
+    monkeypatch.setattr(storage_mod.audio_packs, 'archive_capture', archive)
+    with pytest.raises(storage_mod.audio_packs.CaptureDeleted):
+        storage_mod.upload_audio_chunks_batch(
+            [{'timestamp': 1726185600, 'data': bytes(32000)}],
+            'owner',
+            'deleted',
+            data_protection_level='standard',
+            sample_rate=16000,
+        )
+    archive.assert_not_called()
