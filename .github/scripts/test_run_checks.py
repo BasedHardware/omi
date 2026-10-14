@@ -28,6 +28,7 @@ from run_checks import (
     command_for_host,
     detect_platform,
     execute_checks,
+    head_blob,
     load_manifest,
     resolve_check_selections,
     resolve_checks,
@@ -346,11 +347,17 @@ class ManifestContractTests(unittest.TestCase):
         offenders: list[str] = []
         for check in manifest.checks:
             for relative in interpreter_invoked_test_modules(check.command):
+                # Cone-mode sparse checkouts keep out-of-cone paths in the
+                # index without materialising them; read disk first, HEAD blob
+                # second, and only report "does not exist" when neither has it.
                 path = REPO_ROOT / relative
-                if not path.exists():
+                source = (
+                    path.read_text(encoding="utf-8") if path.is_file() else head_blob(REPO_ROOT, relative)
+                )
+                if source is None:
                     offenders.append(f"{check.id}: {relative} does not exist")
                     continue
-                reason = non_self_running_reason(path.read_text(encoding="utf-8"))
+                reason = non_self_running_reason(source)
                 if reason:
                     offenders.append(f"{check.id}: {relative} {reason}")
         self.assertEqual(offenders, [], f"manifest test commands that execute no cases: {offenders}")

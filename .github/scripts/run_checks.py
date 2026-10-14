@@ -192,6 +192,18 @@ def _path_exists(root: Path, relative: str, tracked: frozenset[str] | None) -> b
     return tracked is not None and relative in tracked
 
 
+def head_blob(root: Path, relative: str) -> str | None:
+    """Blob content of `relative` at HEAD, or None when HEAD lacks it.
+
+    Lets callers read files that a cone-mode sparse checkout keeps in the
+    index without materialising them.
+    """
+    try:
+        return run_git(root, "show", f"HEAD:{relative}")
+    except (OSError, subprocess.CalledProcessError):
+        return None
+
+
 def validate_manifest(manifest: Manifest, root: Path) -> list[str]:
     errors: list[str] = []
     tracked = head_tree_paths(root)
