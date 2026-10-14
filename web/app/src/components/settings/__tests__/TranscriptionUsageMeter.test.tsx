@@ -35,6 +35,11 @@ describe('legacy monthly allowance presentation', () => {
     expect(screen.getByText('100 h used · No monthly listening cap')).toBeTruthy();
     expect(screen.queryByRole('progressbar')).toBeNull();
   });
+  it('does not round a positive sub-minute balance down to zero', () => {
+    // 90 seconds remain; formatting must not claim the allowance is gone.
+    render(<TranscriptionUsageMeter subscription={subscription('plus', 18000, 17850)} />);
+    expect(screen.getByText('<0.1 h left')).toBeTruthy();
+  });
   it.each([
     subscription('plus'),
     subscription('future', -1, 0),

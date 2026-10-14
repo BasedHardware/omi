@@ -6,6 +6,14 @@ const mocks = vi.hoisted(() => ({
   selected: vi.fn(),
   succeeded: vi.fn(),
   upgrade: vi.fn(async () => ({ status: 'success' })),
+  subscription: {
+    plan: 'plus',
+    status: 'active',
+    is_unlimited: true,
+    current_price_id: 'price_plus',
+    transcription_seconds_limit: 90000,
+    transcription_seconds_used: 45000,
+  } as Record<string, unknown>,
 }));
 vi.mock('@tschk/moonshine-next/navigation', () => ({
   useRouter: () => ({ push: vi.fn(), replace: vi.fn() }),
@@ -35,14 +43,7 @@ vi.mock('@/lib/api', () => ({
   getCustomVocabulary: vi.fn(async () => []),
   getDailySummarySettings: vi.fn(async () => null),
   getAllUsageData: vi.fn(async () => null),
-  getUserSubscription: vi.fn(async () => ({
-    plan: 'plus',
-    status: 'active',
-    is_unlimited: true,
-    current_price_id: 'price_plus',
-    transcription_seconds_limit: 90000,
-    transcription_seconds_used: 45000,
-  })),
+  getUserSubscription: vi.fn(async () => mocks.subscription),
   getAvailablePlans: vi.fn(async () => ({
     plans: [
       {
@@ -84,5 +85,23 @@ describe('Account billing keeps paid identity separate from the allowance', () =
       'usage_page',
     );
     expect(mocks.succeeded).toHaveBeenCalledExactlyOnceWith('unlimited_v2', 'year');
+  });
+
+  it('records the Basic paywall impression only when plan choices become visible', async () => {
+    mocks.subscription = {
+      plan: 'basic',
+      status: 'active',
+      is_unlimited: false,
+      transcription_seconds_limit: 18000,
+      transcription_seconds_used: 3600,
+    };
+    render(<SettingsPage />);
+    // Account section mounted, but the plan grid is still behind "See plans".
+    expect(await screen.findByRole('button', { name: 'See plans' })).toBeTruthy();
+    expect(mocks.opened).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: 'See plans' }));
+    await waitFor(() =>
+      expect(mocks.opened).toHaveBeenCalledExactlyOnceWith('usage_page', 'basic'),
+    );
   });
 });

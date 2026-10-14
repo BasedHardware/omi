@@ -146,6 +146,26 @@ class OnDeviceWhisperProvider implements ISttProvider {
       offset += audioDurationSeconds(chunk);
     }
     if (segments.isEmpty && text.isEmpty) return null;
+    // A silent or gate-rejected trailing chunk returns null but was still
+    // consumed: the polling socket advances its global offset from the last
+    // segment end, so clamp the final segment to the full consumed duration
+    // or the next buffer would be timestamped before its real audio.
+    final consumedEnd = offset;
+    if (segments.isNotEmpty && segments.last.end < consumedEnd) {
+      final last = segments.removeLast();
+      segments.add(
+        SttSegment(
+          text: last.text,
+          start: last.start,
+          end: consumedEnd,
+          speaker: last.speaker,
+          speakerId: last.speakerId,
+          isUser: last.isUser,
+          personId: last.personId,
+          translations: last.translations,
+        ),
+      );
+    }
     return SttTranscriptionResult(segments: segments, rawText: text.join(' '));
   }
 

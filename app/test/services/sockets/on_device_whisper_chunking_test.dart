@@ -5,8 +5,11 @@ import 'package:omi/services/sockets/on_device_whisper_provider.dart';
 import 'package:omi/utils/audio/wav_bytes.dart';
 
 class RecordingWhisper extends OnDeviceWhisperProvider {
-  RecordingWhisper({this.failAt}) : super(modelPath: '/unused');
+  RecordingWhisper({this.failAt, this.silentTailChunks = const {}}) : super(modelPath: '/unused');
   final int? failAt;
+
+  /// Chunks at these indices return null (silence / quality-gate rejection).
+  final Set<int> silentTailChunks;
   final calls = <double>[];
   @override
   Future<SttTranscriptionResult?> transcribeChunk(
@@ -16,8 +19,10 @@ class RecordingWhisper extends OnDeviceWhisperProvider {
   }) async {
     if (calls.length == failAt) throw StateError('decoder failed');
     final duration = OnDeviceWhisperProvider.audioDurationSeconds(data);
+    final index = calls.length;
     calls.add(duration);
     expect(language, 'de');
+    if (silentTailChunks.contains(index)) return null;
     return SttTranscriptionResult(rawText: 'chunk', segments: [
       SttSegment(text: 'chunk', start: audioOffsetSeconds, end: audioOffsetSeconds + duration),
     ]);
@@ -54,5 +59,15 @@ void main() {
     final wav = WavBytes.fromPcm(Uint8List(32000 * 5), sampleRate: 16000, numChannels: 1).asBytes();
     await provider.transcribe(wav, language: 'de');
     expect(provider.calls, [5]);
+  });
+  test('a silent trailing chunk still advances the consumed end', () async {
+    // 65s → chunks 30/30/5; the final 5s chunk returns null (trailing silence).
+    final provider = RecordingWhisper(silentTailChunks: {2});
+    final wav = WavBytes.fromPcm(Uint8List(16000 * 2 * 65), sampleRate: 16000, numChannels: 1).asBytes();
+    final result = await provider.transcribe(wav, language: 'de', audioOffsetSeconds: 10);
+    expect(provider.calls, [30, 30, 5]);
+    // The polling socket advances its offset from segments.last.end; without
+    // this clamp the next buffer would overlap the unvoiced 5 seconds.
+    expect(result!.segments.last.end, 75);
   });
 }

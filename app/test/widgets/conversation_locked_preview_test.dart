@@ -14,7 +14,8 @@ import 'package:omi/providers/usage_provider.dart';
 import 'package:omi/ui/ui.dart';
 
 const _title = 'Planning the next team meeting';
-const _upgrade = 'See plans';
+// The locked preview routes to the usage page, so its action says so.
+const _upgrade = 'View Usage';
 
 class _Routes extends NavigatorObserver {
   final pushed = <Route<dynamic>>[];

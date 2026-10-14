@@ -187,9 +187,7 @@ class MemoryItem extends StatelessWidget {
         child: memory.isLocked
             ? OmiLockedPreview(
                 status: context.l10n.statusPending,
-                label: context.watch<UsageProvider>().showSubscriptionUI
-                    ? context.l10n.paywallComparePlans
-                    : context.l10n.saved,
+                label: context.watch<UsageProvider>().showSubscriptionUI ? context.l10n.viewUsage : context.l10n.saved,
                 onPressed: openMemory,
                 child: rowContent,
               )

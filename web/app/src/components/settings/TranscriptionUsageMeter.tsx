@@ -17,10 +17,15 @@ export function TranscriptionUsageMeter({
     used >= 0;
   const capped = available && limit > 0;
   const percent = capped ? Math.min(100, (used / limit) * 100) : 0;
-  const hours = (seconds: number) =>
-    `${(seconds / 3600).toLocaleString(undefined, {
+  const hours = (seconds: number) => {
+    const value = seconds / 3600;
+    // A positive balance under 0.05 h must not round to "0 h left" — that
+    // tells a user with minutes remaining the allowance is already gone.
+    if (seconds > 0 && value < 0.05) return '<0.1 h';
+    return `${value.toLocaleString(undefined, {
       maximumFractionDigits: 1,
     })} h`;
+  };
 
   return (
     <section
