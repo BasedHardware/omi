@@ -121,7 +121,7 @@ overlay:
           value: parakeet-window,modulate-velma-2,soniox,dg-nova-3
         STT_RESILIENT_RECONNECT:
           value: 'false'
-        # Deploy the presence-only parent commit first; admit David only after all old sockets drain.
+        # Publish presence with an empty allowlist and drain old sockets before deploying this cohort.
         STT_LIVE_DEMAND_ENABLED: {value: 'true', category: rollout}
         STT_LIVE_DEMAND_PERCENT: {value: '0', category: rollout}
         STT_LIVE_DEMAND_UID_ALLOWLIST: {value: 'vi7SA9ckQCe4ccobWNxlbdcNdC23', category: rollout}

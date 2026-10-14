@@ -4654,7 +4654,10 @@ backend-listen: enabled, percentage zero, and David
 (`vi7SA9ckQCe4ccobWNxlbdcNdC23`) allowlisted. Sync archive acceptance is
 unconditional; backend, sync workers and pusher require no admission flags.
 Demand-driven STT presence must finish its empty-allowlist rollout and drain
-old sockets before the David-only listen cohort is deployed.
+old sockets before the David-only listen cohort is deployed. Production Helm
+workflow source is pinned to `main`; its branch input cannot select an
+intermediate presence-only commit. The lead must pre-roll presence on the
+existing dark revision before dispatching the cohort workflow.
 Policy, storage-parity evidence, bounds, VAD benchmark and lead-owned 5%/12-hour
 ramp: [mobile Standard batch](../../app/docs/mobile-standard-batch.md).
 
