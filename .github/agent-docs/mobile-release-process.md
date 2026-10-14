@@ -118,24 +118,45 @@ listing only returns live versions):
   --no-phased-release` with `--app-store-version-localizations` carrying the
   derived iOS notes for every locale of the live version (a bare `--whats-new`
   covers only the primary locale and Apple rejects the submission). The run
-  ends only after the new version reads `WAITING_FOR_REVIEW`.
+  ends only after the new version reads `WAITING_FOR_REVIEW`. Under the
+  self-driving posture the submission carries `--release-type AFTER_APPROVAL
+  --phased-release` instead (`RELEASE_TYPE` / `PHASED_RELEASE` constants), so
+  the version releases on Apple's approval and rolls out over 7 days; pausing
+  the phased rollout in App Store Connect is the post-release brake.
 
 Android (Google Play): candidate = highest version code on the `internal` and
 `alpha` tracks whose release name version is newer than the live `production`
-release. It is written to `production` as a `draft` release
-(`mobile_store_promote.submit_android(..., status="draft")`); a human presses
-Release in Play Console. A later run overwrites the draft with the newer build;
-a draft already holding the candidate code is left alone.
+release. Under the self-driving posture (`STAGED_ROLLOUT_FRACTION = 0.05`) the
+candidate is written to `production` as a staged rollout
+(`mobile_store_promote.submit_android(..., status="inProgress",
+user_fraction=0.05)`), haltable in Play Console. While a rollout is in
+flight, a daily ladder promotes it one hop per gate-green run
+(5% -> 25% -> completed), a HALTED rollout (`status: "halted"` or a missing
+`userFraction`) always waits for a human, and a newer internal build waits
+for the rollout to complete (Play allows only one staged release at a time).
+A legacy Play draft holding the selected code converts straight into the
+staged rollout. Setting `STAGED_ROLLOUT_FRACTION = None` restores the
+queue-for-human behavior: candidates are written as `draft` releases (a human
+presses Release in Play Console), and any rollout already in flight is parked
+for a human instead of being advanced further.
 
-Release notes: the train runs `collect` for the candidate version in its
-checkout (unreleased fragments fold into `releases/<version>.json` without a
-commit, so notes are never empty); it logs the `collect` command to commit the
-same lines to `main`. No release file and no fragments fails the platform. The
-run ends with one `TRAIN SUMMARY:` line; any platform failure exits non-zero.
+Release notes: the train runs `collect` for a **new** candidate version in
+its checkout (unreleased fragments fold into `releases/<version>.json`
+without a commit, so notes are never empty); it logs the `collect` command to
+commit the same lines to `main`. Ladder hops of an in-flight rollout never
+collect: they re-use the What's-New text Play already holds for that rollout
+(the durable release file is only a no-collect fallback), so fragments
+authored for the *next* version are never misattributed to the one mid-flight.
+No release file and no fragments fails the platform. The run ends with one
+`TRAIN SUMMARY:` line; any platform failure exits non-zero.
 
-Rollback: revert the `codemagic.yaml` workflow additions to retire a lane, and
-delete `app/changelog/releases/<version>.json` to drop a collected release.
-Neither affects builds already uploaded to a store.
+Rollback: revert the `codemagic.yaml` workflow additions to retire a lane,
+set the posture constants back (`RELEASE_TYPE = "MANUAL"`,
+`PHASED_RELEASE = False`, `STAGED_ROLLOUT_FRACTION = None`) to restore the
+queue-for-human train, and delete `app/changelog/releases/<version>.json` to
+drop a collected release. Store-side brakes (a paused iOS phased rollout, a
+halted Play rollout) and builds already uploaded to a store are unaffected by
+repo-side rollback.
 
 ## Operator prerequisites
 
@@ -158,6 +179,10 @@ Neither affects builds already uploaded to a store.
   group can receive it; verify the configured group and its capabilities in
   App Store Connect when investigating a failed post-publish task.
 
-No workflow in this document releases a build to users: the daily train stops at
-App Review (manual release) and at a Play production draft, and the manual lane
-needs an explicit confirmation.
+No workflow in this document bypasses store approval or operator brakes:
+both stores' own review must approve before anything ships, iOS rolls out in
+phases pausable in App Store Connect, Android's staged rollout is haltable in
+Play Console, and the manual lane needs an explicit confirmation. What changed
+on 2026-10-14 is the queue point: after approval, releases proceed without a
+further human console press (previously: manual developer release on iOS and
+a Play production draft).

@@ -491,16 +491,77 @@ class AndroidTests(unittest.TestCase):
 
     def test_ladder_leaves_halted_staged_releases_to_a_human(self):
         client = Mock()
+        halted = {"name": "1.0.554 (1340)", "versionCodes": ["1340"], "status": "halted", "userFraction": 0.05}
+        tracks = {"internal": self.internal, "alpha": self.alpha, "production": {"track": "production", "releases": [halted]}}
+        with patch.object(promote, "play_edit", return_value=(client, "edit")), patch.object(
+            promote, "play_track", side_effect=lambda c, e, name: tracks[name]
+        ):
+            summary = train.run_android(dry_run=False, release_date="2026-10-06")
+        self.assertEqual(summary, "android=staged-halted 1.0.554 1340")
+        client.edits().tracks().update.assert_not_called()
+
+    def test_fractionless_inprogress_is_also_the_halted_shape(self):
+        client = Mock()
         halted = {"name": "1.0.554 (1340)", "versionCodes": ["1340"], "status": "inProgress"}
         tracks = {"internal": self.internal, "alpha": self.alpha, "production": {"track": "production", "releases": [halted]}}
+        with patch.object(promote, "play_edit", return_value=(client, "edit")), patch.object(
+            promote, "play_track", side_effect=lambda c, e, name: tracks[name]
+        ):
+            summary = train.run_android(dry_run=False, release_date="2026-10-06")
+        self.assertEqual(summary, "android=staged-halted 1.0.554 1340")
+        client.edits().tracks().update.assert_not_called()
+
+    def test_ladder_keeps_hopping_while_a_newer_candidate_waits(self):
+        client = Mock()
+        staged = {"name": "1.0.554 (1340)", "versionCodes": ["1340"], "status": "inProgress", "userFraction": 0.05}
+        newer_internal = {
+            "track": "internal",
+            "releases": [{"name": "1.0.555 (1350)", "versionCodes": ["1350"], "status": "completed"}],
+        }
+        tracks = {"internal": newer_internal, "alpha": self.alpha, "production": {"track": "production", "releases": [staged]}}
         with tempfile.TemporaryDirectory() as tmp:
             release = Path(tmp) / "1.0.554.json"
             release.write_text(json.dumps({"version": "1.0.554", "date": "2026-10-06", "changes": ["Faster sync"]}))
             with patch.object(promote, "play_edit", return_value=(client, "edit")), patch.object(
                 promote, "play_track", side_effect=lambda c, e, name: tracks[name]
-            ), patch.object(train, "ensure_release_notes", return_value=release):
+            ), patch.object(train, "ensure_release_notes", return_value=release) as ensure_notes, patch.object(
+                promote, "require_notes", return_value="Faster sync"
+            ):
                 summary = train.run_android(dry_run=False, release_date="2026-10-06")
-        self.assertEqual(summary, "android=staged-halted 1.0.554 1340")
+        self.assertEqual(summary, "android=staged 1.0.554 1340 @25%")
+        body = client.edits().tracks().update.call_args.kwargs["body"]
+        self.assertEqual(body["releases"][0]["versionCodes"], ["1340"])
+        self.assertEqual(body["releases"][0]["userFraction"], 0.25)
+        client.edits().commit.assert_called_once()
+
+    def test_ladder_hop_reuses_the_notes_play_already_holds(self):
+        client = Mock()
+        staged = {
+            "name": "1.0.554 (1340)",
+            "versionCodes": ["1340"],
+            "status": "inProgress",
+            "userFraction": 0.05,
+            "releaseNotes": [{"language": "en-US", "text": "Shipped text"}],
+        }
+        tracks = {"internal": self.internal, "alpha": self.alpha, "production": {"track": "production", "releases": [staged]}}
+        with patch.object(promote, "play_edit", return_value=(client, "edit")), patch.object(
+            promote, "play_track", side_effect=lambda c, e, name: tracks[name]
+        ), patch.object(train, "ensure_release_notes") as ensure_notes:
+            summary = train.run_android(dry_run=False, release_date="2026-10-06")
+        self.assertEqual(summary, "android=staged 1.0.554 1340 @25%")
+        body = client.edits().tracks().update.call_args.kwargs["body"]
+        self.assertEqual(body["releases"][0]["releaseNotes"], [{"language": "en-US", "text": "Shipped text"}])
+        ensure_notes.assert_not_called()
+
+    def test_disabled_staged_rollout_parks_an_in_flight_rollout(self):
+        client = Mock()
+        staged = {"name": "1.0.554 (1340)", "versionCodes": ["1340"], "status": "inProgress", "userFraction": 0.05}
+        tracks = {"internal": self.internal, "alpha": self.alpha, "production": {"track": "production", "releases": [staged]}}
+        with patch.object(promote, "play_edit", return_value=(client, "edit")), patch.object(
+            promote, "play_track", side_effect=lambda c, e, name: tracks[name]
+        ), patch.object(train, "STAGED_ROLLOUT_FRACTION", None):
+            summary = train.run_android(dry_run=False, release_date="2026-10-06")
+        self.assertEqual(summary, "android=staged 1.0.554 1340 @5% parked (staged disabled)")
         client.edits().tracks().update.assert_not_called()
 
     def test_existing_draft_with_the_same_code_is_idempotent(self):
@@ -509,10 +570,29 @@ class AndroidTests(unittest.TestCase):
         tracks = {"internal": self.internal, "alpha": self.alpha, "production": self.production}
         with patch.object(promote, "play_edit", return_value=(client, "edit")), patch.object(
             promote, "play_track", side_effect=lambda c, e, name: tracks[name]
-        ):
+        ), patch.object(train, "STAGED_ROLLOUT_FRACTION", None):
             summary = train.run_android(dry_run=False, release_date="2026-10-06")
         self.assertEqual(summary, "android=leave draft 1.0.554 (1340)")
         client.edits().tracks().update.assert_not_called()
+
+    def test_legacy_draft_converts_into_a_staged_rollout(self):
+        self.production["releases"].append({"name": "1.0.554 (1340)", "versionCodes": ["1340"], "status": "draft"})
+        client = Mock()
+        tracks = {"internal": self.internal, "alpha": self.alpha, "production": self.production}
+        with tempfile.TemporaryDirectory() as tmp:
+            release = Path(tmp) / "1.0.554.json"
+            release.write_text(json.dumps({"version": "1.0.554", "date": "2026-10-06", "changes": ["Faster sync"]}))
+            with patch.object(promote, "play_edit", return_value=(client, "edit")), patch.object(
+                promote, "play_track", side_effect=lambda c, e, name: tracks[name]
+            ), patch.object(train, "ensure_release_notes", return_value=release), patch.object(
+                promote, "require_notes", return_value="Faster sync"
+            ):
+                summary = train.run_android(dry_run=False, release_date="2026-10-06")
+        self.assertEqual(summary, f"android=staged 1.0.554 (1340) @{train.STAGED_ROLLOUT_FRACTION:.0%}")
+        body = client.edits().tracks().update.call_args.kwargs["body"]
+        self.assertEqual(body["releases"][0]["status"], "inProgress")
+        self.assertEqual(body["releases"][0]["userFraction"], train.STAGED_ROLLOUT_FRACTION)
+        client.edits().commit.assert_called_once()
 
     def test_dry_run_does_not_write_the_track(self):
         client = Mock()
@@ -520,6 +600,18 @@ class AndroidTests(unittest.TestCase):
         with patch.object(promote, "play_edit", return_value=(client, "edit")), patch.object(
             promote, "play_track", side_effect=lambda c, e, name: tracks[name]
         ), patch.object(train, "ensure_release_notes", return_value=Path("unused")):
+            summary = train.run_android(dry_run=True, release_date="2026-10-06")
+        self.assertEqual(summary, f"android=dry-run:staged 1.0.554 (1340) @{train.STAGED_ROLLOUT_FRACTION:.0%}")
+        client.edits().tracks().update.assert_not_called()
+
+    def test_dry_run_reports_a_draft_when_staged_rollouts_are_disabled(self):
+        client = Mock()
+        tracks = {"internal": self.internal, "alpha": self.alpha, "production": self.production}
+        with patch.object(promote, "play_edit", return_value=(client, "edit")), patch.object(
+            promote, "play_track", side_effect=lambda c, e, name: tracks[name]
+        ), patch.object(train, "ensure_release_notes", return_value=Path("unused")), patch.object(
+            train, "STAGED_ROLLOUT_FRACTION", None
+        ):
             summary = train.run_android(dry_run=True, release_date="2026-10-06")
         self.assertEqual(summary, "android=dry-run:draft 1.0.554 (1340)")
         client.edits().tracks().update.assert_not_called()
