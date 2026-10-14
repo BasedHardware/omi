@@ -259,12 +259,16 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
   }
 
   /// The paywall experiment's end-of-onboarding placement: only arms whose payload asks for it,
-  /// never control, never when subscription UI is hidden (the router checks that), and never when
-  /// the activation already offered a plan.
+  /// never when subscription UI is hidden (the router checks that), and never when the activation
+  /// already offered a plan. Control sees nothing here but is exposed at the same moment.
   Future<void> _maybeShowOnboardingPaywall() async {
     if (SuperwallPilot.instance.offeredDuringOnboarding) return;
     final config = await PaywallExperiment.resolve();
-    if (!mounted || config.isControl || !config.onboardingPaywall) return;
+    if (!mounted || !config.onboardingPaywall) return;
+    if (config.isControl) {
+      PaywallRouter.exposeControl(context, config: config);
+      return;
+    }
     await PaywallRouter.openVariant(context, source: 'onboarding', config: config);
   }
 
