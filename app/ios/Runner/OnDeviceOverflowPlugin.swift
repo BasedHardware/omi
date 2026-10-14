@@ -71,7 +71,7 @@ final class OnDeviceOverflowPlugin {
             BGTaskScheduler.shared.cancel(taskRequestWithIdentifier: "com.omi.on-device.processing")
             let request = BGProcessingTaskRequest(identifier: "com.omi.on-device.processing")
             request.requiresExternalPower = args["charging"] as? Bool ?? true
-            UserDefaults.standard.set(request.requiresExternalPower, forKey: "omi.on-device.background-charging")
+            try? SafeDefaults.store(.bool(request.requiresExternalPower), forKey: "omi.on-device.background-charging", in: UserDefaults.standard)
             request.requiresNetworkConnectivity = false
             request.earliestBeginDate = Date(timeIntervalSinceNow: request.requiresExternalPower ? 60 : 3 * 3600)
             do { try BGTaskScheduler.shared.submit(request); reply(nil) }
@@ -200,13 +200,14 @@ final class OnDeviceOverflowPlugin {
                   let type = NSClassFromString("OMIParakeetEngine") as? NSObject.Type else { throw OverflowError.modelMissing }
             parakeet = type.init()
         }
+        guard let bridge = parakeet else { throw OverflowError.modelMissing }
         var args = arguments; args["directory"] = directory.path
         return try await withCheckedThrowingContinuation { continuation in
             let completion: @convention(block) (NSDictionary?, NSError?) -> Void = { result, error in
                 if let error { continuation.resume(throwing: error) }
                 else { continuation.resume(returning: result ?? [:]) }
             }
-            _ = parakeet!.perform(NSSelectorFromString("run:completion:"), with: args as NSDictionary, with: completion)
+            _ = bridge.perform(NSSelectorFromString("run:completion:"), with: args as NSDictionary, with: completion)
         }
     }
 
