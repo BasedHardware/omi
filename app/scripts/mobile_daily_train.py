@@ -114,27 +114,44 @@ PIN_RE = re.compile(r"^\s*((?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]
 
 @dataclass(frozen=True)
 class StorePin:
-    """A candidate the operator release gate already audited (`X.Y.Z/build`).
+    """A candidate verdict the operator release gate already recorded.
 
-    The self-driving posture removed the last human interception point, so the
-    gate's audited identifiers travel with the dispatch and every releasing
-    action fails closed when the store no longer matches them: the train must
-    ship what was audited, not whatever became newest in the gap between the
-    gate's audit and the Codemagic run.
+    `X.Y.Z/build` pins the audited candidate; `none` records that the gate's
+    audit found NO candidate for the platform (an audited no-op is still an
+    audited verdict). Anything else — including an unset variable — leaves
+    the platform unpinned and selection trusts the store, which is how the
+    gate dispatches today; see `store_pin` for the fail-closed half of this
+    contract (a set-but-mismatched pin refuses to release).
     """
 
-    version: str
-    build: str
+    version: str | None
+    build: str | None
+
+    @property
+    def is_none(self) -> bool:
+        return self.version is None
+
+    def matches(self, version: str, build: str) -> bool:
+        if self.is_none:
+            return False
+        return (self.version, self.build) == (version, build)
 
 
 def store_pin(name: str) -> StorePin | None:
-    """Parse `TRAIN_PIN_*` (`X.Y.Z/build`) into a StorePin; malformed fails closed."""
+    """Parse `TRAIN_PIN_*` (`X.Y.Z/build` or `none`) into a StorePin; malformed fails closed.
+
+    `none` (the gate's audited no-candidate verdict) must match the store
+    actually having no candidate: a build appearing in the audit→dispatch gap
+    is unaudited and is refused, exactly like a stale X.Y.Z/build pin.
+    """
     raw = os.environ.get(name, "")
     if not raw:
         return None
+    if raw.strip().lower() == "none":
+        return StorePin(None, None)
     match = PIN_RE.fullmatch(raw)
     if match is None:
-        raise TrainError(f"{name} must be X.Y.Z/build (got {raw!r}); refusing to select a candidate")
+        raise TrainError(f"{name} must be X.Y.Z/build or none (got {raw!r}); refusing to select a candidate")
     return StorePin(match.group(1), match.group(2))
 
 
@@ -548,13 +565,15 @@ def run_ios(*, dry_run: bool, release_date: str, asc: Callable[..., object] = as
     if plan.submit is None:
         return f"ios={plan.action} ({plan.reason})"
     candidate = plan.submit
-    if pin is not None and (candidate.version, str(candidate.build_number)) != (pin.version, pin.build):
-        # The operator gate audited a specific build; the store moved on in
-        # the gap (a newer TestFlight build processed). Fail closed instead of
-        # self-driving an unaudited build to production.
+    if pin is not None and not pin.matches(candidate.version, str(candidate.build_number)):
+        # The operator gate's audited verdict covers this platform: either a
+        # pinned build that no longer matches, or an audited no-candidate that
+        # the store has since contradicted. A build appearing in the
+        # audit→dispatch gap is unaudited; fail closed instead of
+        # self-driving it to production.
         raise TrainError(
-            f"TRAIN_PIN_IOS {pin.version}/{pin.build} does not match the selected candidate "
-            f"{candidate.version}/{candidate.build_number}; refusing to release an unaudited build"
+            f"TRAIN_PIN_IOS {'none' if pin.is_none else f'{pin.version}/{pin.build}'} does not match the selected "
+            f"candidate {candidate.version}/{candidate.build_number}; refusing to release an unaudited build"
         )
     live = next(v for v in ios_versions_in_state(asc, LIVE_STATE) if v.version == state.live_version)
     if PHASED_RELEASE and ios_phased_release_paused(live.id):
@@ -771,15 +790,21 @@ def run_android(*, dry_run: bool, release_date: str) -> str:
             return f"android=staged {staged_version} {codes[0]} @{current:.0%} (ladder done)"
         hop = next_hops[0]
         log(f"Android live {live}; promoting staged {staged_version} {codes[0]} from {current:.0%} to {hop:.0%}")
-        # The rollout shipped its What's-New text when it started. Re-use the
+        # The staged rollout shipped its What's-New text when it started. Re-use the
         # exact text Play already holds, falling back to the durable release
         # file WITHOUT collecting: collect() would fold the NEXT version's
         # unreleased fragments into this in-flight version and consume them.
         # Resolved before the dry-run return so a plan reports a hop only
-        # when the real run could actually take it.
-        notes = _staged_release_notes(staged) or promote.require_notes(
-            ensure_release_notes(staged_version, release_date, write=False), staged_version, "android"
-        )
+        # when the real run could actually take it. The file must exist here:
+        # require_notes raises PromotionError (not TrainError), which main()
+        # does not catch — a missing staged release file must surface as a
+        # failed platform in TRAIN SUMMARY, not a traceback.
+        try:
+            notes = _staged_release_notes(staged) or promote.require_notes(
+                ensure_release_notes(staged_version, release_date, write=False), staged_version, "android"
+            )
+        except promote.PromotionError as exc:
+            raise TrainError(f"staged {staged_version} has no usable What's-New text: {exc}") from exc
         if dry_run:
             return f"android=dry-run:staged-hop {staged_version} {codes[0]} {current:.0%}->{hop:.0%}"
         try:
@@ -816,15 +841,23 @@ def run_android(*, dry_run: bool, release_date: str) -> str:
         log(f"Android production staged now {staged_version} {codes[0]} at {hop:.0%}")
         return f"android=staged {staged_version} {codes[0]} @{hop:.0%}"
     if candidate is None:
+        if pin is not None and not pin.is_none:
+            # The gate pinned an audited build the store no longer offers;
+            # failing closed beats silently skipping it.
+            raise TrainError(
+                f"TRAIN_PIN_ANDROID {pin.version}/{pin.build} but no internal/alpha build is newer than live "
+                f"{live}; refusing to select an unaudited candidate"
+            )
         log(f"Android live {live}; no internal/alpha build is newer")
         return f"android=nothing (live {live})"
-    if pin is not None and (candidate.version, candidate.version_code) != (pin.version, pin.build):
-        # Same fail-closed rule as iOS: the gate audited this exact build; a
+    if pin is not None and not pin.matches(candidate.version, candidate.version_code):
+        # Same fail-closed rule as iOS: the gate's audited verdict (a pinned
+        # build, or an audited no-candidate) must still match the store; a
         # newer internal build that appeared after the audit must not be
         # self-driven to production.
         raise TrainError(
-            f"TRAIN_PIN_ANDROID {pin.version}/{pin.build} does not match the selected candidate "
-            f"{candidate.version}/{candidate.version_code}; refusing to release an unaudited build"
+            f"TRAIN_PIN_ANDROID {'none' if pin.is_none else f'{pin.version}/{pin.build}'} does not match the selected "
+            f"candidate {candidate.version}/{candidate.version_code}; refusing to release an unaudited build"
         )
     draft = existing_production_draft(production)
     draft_codes = promote.release_codes(draft) if draft is not None else None

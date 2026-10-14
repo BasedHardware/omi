@@ -102,10 +102,14 @@ the gate's evidence audit always runs first.
 Audited-candidate pins: the operator release gate audits a specific
 platform/version/build before dispatching. Those identifiers travel with the
 dispatch as optional `pin_ios` / `pin_android` workflow inputs
-(`TRAIN_PIN_IOS` / `TRAIN_PIN_ANDROID`, `X.Y.Z/build`) and the train fails
-closed — no submission, no rollout start — when the store's newest candidate
-no longer matches the audited build. The self-driving posture removed the old
-human queue's final interception point; the pin is its replacement.
+(`TRAIN_PIN_IOS` / `TRAIN_PIN_ANDROID`, `X.Y.Z/build`, or `none` — an audited
+no-candidate verdict) and the train fails closed — no submission, no rollout
+start — when the store no longer matches the audited verdict: a newer build
+that appeared in the audit→dispatch gap is unaudited and refused, and a
+pinned build that vanished fails closed too. The self-driving posture removed
+the old human queue's final interception point; the pin is its replacement.
+An unset pin leaves the platform unpinned (how the gate dispatches today);
+making pins mandatory belongs to the gate, which lives outside this repo.
 
 Gate receipts: every advancing Android action (starting or hopping a staged
 rollout) stamps the gate date into the Play release name

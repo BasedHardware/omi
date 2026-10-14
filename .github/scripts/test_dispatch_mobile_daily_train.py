@@ -34,6 +34,12 @@ class DispatchTests(unittest.TestCase):
         self.assertNotIn("TRAIN_PIN_IOS", bare["environment"]["variables"])
         self.assertNotIn("TRAIN_PIN_ANDROID", bare["environment"]["variables"])
 
+    def test_payload_accepts_none_as_an_audited_no_candidate(self):
+        payload = dispatcher.build_payload("app-1", dry_run=False, pin_android="none")
+        self.assertEqual(payload["environment"]["variables"]["TRAIN_PIN_ANDROID"], "none")
+        with self.assertRaisesRegex(dispatcher.DispatchError, "X.Y.Z/build, none, or empty"):
+            dispatcher.build_payload("app-1", dry_run=False, pin_ios="1.0.554")
+
     def test_dispatch_passes_pins_through_to_the_build(self):
         with patch.object(dispatcher, "_api_post", return_value={"buildId": "b-1"}) as post:
             self.assertEqual(

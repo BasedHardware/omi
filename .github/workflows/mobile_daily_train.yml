@@ -26,11 +26,11 @@ on:
         type: boolean
         default: false
       pin_ios:
-        description: Audited iOS candidate (X.Y.Z/build) from the operator release gate; empty = no pin
+        description: "Audited iOS candidate (X.Y.Z/build, or none = audited no-candidate) from the operator release gate; empty = no pin"
         type: string
         default: ""
       pin_android:
-        description: Audited Android candidate (X.Y.Z/build) from the operator release gate; empty = no pin
+        description: "Audited Android candidate (X.Y.Z/build, or none = audited no-candidate) from the operator release gate; empty = no pin"
         type: string
         default: ""
 

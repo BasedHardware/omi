@@ -13,12 +13,21 @@ from __future__ import annotations
 
 import argparse
 import os
+import re
 import sys
 from typing import Any
 
 from dispatch_mobile_internal_builds import BUILDS_API, DispatchError, _api_post
 
 WORKFLOW_ID = "mobile-daily-train"
+PIN_RE = re.compile(r"^\s*((?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*))\s*/\s*([1-9][0-9]*)\s*$")
+
+
+def _validate_pin(name: str, value: str) -> str:
+    """Reject a malformed pin at dispatch time (the train fails closed too, but early is kinder)."""
+    if not value or value.strip().lower() == "none" or PIN_RE.fullmatch(value):
+        return value
+    raise DispatchError(f"{name} must be X.Y.Z/build, none, or empty (got {value!r})")
 
 
 def build_payload(app_id: str, *, dry_run: bool, branch: str = "main", pin_ios: str = "", pin_android: str = "") -> dict[str, Any]:
@@ -27,9 +36,9 @@ def build_payload(app_id: str, *, dry_run: bool, branch: str = "main", pin_ios: 
         raise DispatchError("Codemagic app id is required")
     variables: dict[str, str] = {"TRAIN_DRY_RUN": "true" if dry_run else "false"}
     if pin_ios:
-        variables["TRAIN_PIN_IOS"] = pin_ios
+        variables["TRAIN_PIN_IOS"] = _validate_pin("pin_ios", pin_ios)
     if pin_android:
-        variables["TRAIN_PIN_ANDROID"] = pin_android
+        variables["TRAIN_PIN_ANDROID"] = _validate_pin("pin_android", pin_android)
     return {
         "appId": app_id,
         "workflowId": WORKFLOW_ID,
@@ -55,12 +64,12 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--pin-ios",
         default="",
-        help="audited iOS candidate (X.Y.Z/build) from the operator release gate; fails the train closed on drift",
+        help="audited iOS candidate (X.Y.Z/build, or none for an audited no-candidate) from the operator release gate; fails the train closed on drift",
     )
     parser.add_argument(
         "--pin-android",
         default="",
-        help="audited Android candidate (X.Y.Z/build) from the operator release gate; fails the train closed on drift",
+        help="audited Android candidate (X.Y.Z/build, or none for an audited no-candidate) from the operator release gate; fails the train closed on drift",
     )
     args = parser.parse_args(argv)
     token = os.environ.get("CODEMAGIC_API_TOKEN", "")

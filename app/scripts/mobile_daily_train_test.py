@@ -777,6 +777,20 @@ class AndroidTests(unittest.TestCase):
                 train.run_android(dry_run=True, release_date="2026-10-06")
         client.edits().tracks().update.assert_not_called()
 
+    def test_missing_staged_release_file_reports_a_failed_platform_not_a_traceback(self):
+        # A staged release with no Play notes and no durable releases/<v>.json:
+        # require_notes raises PromotionError, which main() does not catch —
+        # the ladder path must convert it so TRAIN SUMMARY reports the failure.
+        client = Mock()
+        staged = {"name": "1.0.554 (1340)", "versionCodes": ["1340"], "status": "inProgress", "userFraction": 0.05}
+        tracks = {"internal": self.internal, "alpha": self.alpha, "production": {"track": "production", "releases": [staged]}}
+        with patch.object(promote, "play_edit", return_value=(client, "edit")), patch.object(
+            promote, "play_track", side_effect=lambda c, e, name: tracks[name]
+        ), patch.object(train, "ensure_release_notes", return_value=Path("/nonexistent/1.0.554.json")):
+            with self.assertRaisesRegex(train.TrainError, "no usable What's-New text"):
+                train.run_android(dry_run=False, release_date="2026-10-06")
+        client.edits().tracks().update.assert_not_called()
+
     def test_existing_draft_with_the_same_code_is_idempotent(self):
         self.production["releases"].append({"name": "1.0.554 (1340)", "versionCodes": ["1340"], "status": "draft"})
         client = Mock()
@@ -865,6 +879,50 @@ class AndroidTests(unittest.TestCase):
                 train.run_android(dry_run=True, release_date="2026-10-06")
         client.edits().tracks().update.assert_not_called()
 
+    def test_a_none_pin_over_a_fresh_candidate_fails_closed(self):
+        # The gate audited "no Android candidate exists"; a build that appeared
+        # in the audit->dispatch gap is unaudited and must not be released.
+        client = Mock()
+        tracks = {"internal": self.internal, "alpha": self.alpha, "production": self.production}
+        with patch.object(promote, "play_edit", return_value=(client, "edit")), patch.object(
+            promote, "play_track", side_effect=lambda c, e, name: tracks[name]
+        ), patch.dict(train.os.environ, {"TRAIN_PIN_ANDROID": "none"}):
+            with self.assertRaisesRegex(train.TrainError, "unaudited"):
+                train.run_android(dry_run=False, release_date="2026-10-06")
+        client.edits().tracks().update.assert_not_called()
+
+    def test_a_none_pin_with_no_candidate_is_an_audited_no_op(self):
+        # Nothing newer than live anywhere: the none verdict matches, android=nothing.
+        client = Mock()
+        stale = {
+            "track": "internal",
+            "releases": [{"name": "1.0.552 (1200)", "versionCodes": ["1200"], "status": "completed"}],
+        }
+        stale_alpha = {"track": "alpha", "releases": [{"name": "1.0.551 (1190)", "versionCodes": ["1190"], "status": "completed"}]}
+        tracks = {"internal": stale, "alpha": stale_alpha, "production": self.production}
+        with patch.object(promote, "play_edit", return_value=(client, "edit")), patch.object(
+            promote, "play_track", side_effect=lambda c, e, name: tracks[name]
+        ), patch.dict(train.os.environ, {"TRAIN_PIN_ANDROID": "none"}):
+            summary = train.run_android(dry_run=False, release_date="2026-10-06")
+        self.assertEqual(summary, "android=nothing (live 1.0.552)")
+        client.edits().tracks().update.assert_not_called()
+
+    def test_a_pinned_candidate_that_vanished_fails_closed(self):
+        # The gate pinned an audited build the store no longer offers.
+        client = Mock()
+        stale = {
+            "track": "internal",
+            "releases": [{"name": "1.0.552 (1200)", "versionCodes": ["1200"], "status": "completed"}],
+        }
+        stale_alpha = {"track": "alpha", "releases": [{"name": "1.0.551 (1190)", "versionCodes": ["1190"], "status": "completed"}]}
+        tracks = {"internal": stale, "alpha": stale_alpha, "production": self.production}
+        with patch.object(promote, "play_edit", return_value=(client, "edit")), patch.object(
+            promote, "play_track", side_effect=lambda c, e, name: tracks[name]
+        ), patch.dict(train.os.environ, {"TRAIN_PIN_ANDROID": "1.0.554/1340"}):
+            with self.assertRaisesRegex(train.TrainError, "no internal/alpha build is newer"):
+                train.run_android(dry_run=False, release_date="2026-10-06")
+        client.edits().tracks().update.assert_not_called()
+
 
 class PinTests(unittest.TestCase):
     def test_store_pin_parses_the_gate_identifier(self):
@@ -875,10 +933,17 @@ class PinTests(unittest.TestCase):
         with patch.dict(train.os.environ, {"TRAIN_PIN_IOS": ""}):
             self.assertIsNone(train.store_pin("TRAIN_PIN_IOS"))
 
+    def test_store_pin_none_encodes_an_audited_no_candidate(self):
+        for raw in ("none", "NONE", " none "):
+            with patch.dict(train.os.environ, {"TRAIN_PIN_ANDROID": raw}):
+                pin = train.store_pin("TRAIN_PIN_ANDROID")
+                self.assertTrue(pin.is_none)
+                self.assertFalse(pin.matches("1.0.554", "1340"))
+
     def test_store_pin_malformed_fails_closed(self):
-        for bad in ("1.0.554", "1334", "1.0.554/13x4", "v1.0.554/1334"):
+        for bad in ("1.0.554", "1334", "1.0.554/13x4", "v1.0.554/1334", "null", "n/a"):
             with patch.dict(train.os.environ, {"TRAIN_PIN_IOS": bad}):
-                with self.assertRaisesRegex(train.TrainError, "X.Y.Z/build"):
+                with self.assertRaisesRegex(train.TrainError, "X.Y.Z/build or none"):
                     train.store_pin("TRAIN_PIN_IOS")
 
     def test_a_matching_ios_pin_still_submits(self):
