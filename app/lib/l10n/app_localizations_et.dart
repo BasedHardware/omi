@@ -13195,4 +13195,10 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get firstCaptureSiriTip => 'Tip: Enable Omi in Shortcuts → Siri.';
+
+  @override
+  String get paywallOutlineHeadline => 'Ära jäta enam ühtegi sõna vahele.';
+
+  @override
+  String get paywallCancelAnytime => 'Tühista igal ajal.';
 }

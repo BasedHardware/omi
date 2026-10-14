@@ -15849,5 +15849,13 @@
     "firstCaptureShortWarning": "A few more sentences help Omi understand you. About 30 seconds is ideal.",
     "firstCaptureCancelTitle": "Leave This Recording?",
     "firstCaptureCancelWarning": "Going back stops this recording. Keep talking to give Omi a few more sentences.",
-    "firstCaptureSiriTip": "Tip: Enable Omi in Shortcuts → Siri."
+    "firstCaptureSiriTip": "Tip: Enable Omi in Shortcuts → Siri.",
+    "paywallOutlineHeadline": "Never miss a word again.",
+    "@paywallOutlineHeadline": {
+        "description": "Headline of the Outline paywall variant (mobile paywall A/B test)"
+    },
+    "paywallCancelAnytime": "Cancel anytime.",
+    "@paywallCancelAnytime": {
+        "description": "Caption under the upgrade button on the Outline paywall variant"
+    }
 }

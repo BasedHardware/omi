@@ -12996,4 +12996,10 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get firstCaptureSiriTip => 'Tip: Enable Omi in Shortcuts → Siri.';
+
+  @override
+  String get paywallOutlineHeadline => '再也不错过任何一句话。';
+
+  @override
+  String get paywallCancelAnytime => '随时取消。';
 }

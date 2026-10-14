@@ -13253,4 +13253,10 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get firstCaptureSiriTip => 'Tip: Enable Omi in Shortcuts → Siri.';
+
+  @override
+  String get paywallOutlineHeadline => 'Soha többé ne maradj le egyetlen szóról sem.';
+
+  @override
+  String get paywallCancelAnytime => 'Bármikor lemondható.';
 }

@@ -13231,4 +13231,10 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get firstCaptureSiriTip => 'Tip: Enable Omi in Shortcuts → Siri.';
+
+  @override
+  String get paywallOutlineHeadline => 'Більше не пропускайте жодного слова.';
+
+  @override
+  String get paywallCancelAnytime => 'Скасовуйте будь-коли.';
 }

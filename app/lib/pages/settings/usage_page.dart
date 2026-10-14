@@ -21,6 +21,7 @@ import 'package:omi/models/subscription.dart';
 import 'package:omi/models/user_usage.dart';
 import 'package:omi/pages/settings/fair_use_page.dart';
 import 'package:omi/pages/settings/transcription_settings_page.dart';
+import 'package:omi/pages/paywall/paywall_router.dart';
 import 'package:omi/pages/settings/widgets/plans_sheet.dart';
 import 'package:omi/pages/settings/widgets/plans/contextual_plans.dart';
 import 'package:omi/pages/settings/widgets/usage/usage_chart.dart';
@@ -44,10 +45,15 @@ class UsagePage extends StatefulWidget {
   final DateTime? debugNow;
   @visibleForTesting
   final int? debugTooltipIndex;
+
+  /// Skip the paywall experiment and open the plans sheet itself: the web variant's fallback
+  /// path, so a dead page never loops back into itself.
+  final bool forceNativePaywall;
   const UsagePage({
     super.key,
     this.showUpgradeDialog = false,
     this.paywallSource = 'usage_page',
+    this.forceNativePaywall = false,
     this.debugSkipFetch = false,
     this.debugNow,
     this.debugTooltipIndex,
@@ -546,6 +552,10 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin, Wi
     if (!context.read<UsageProvider>().showSubscriptionUI) {
       return;
     }
+    if (!widget.forceNativePaywall && await PaywallRouter.openVariant(context, source: source, trackOpen: trackOpen)) {
+      return;
+    }
+    if (!mounted) return;
     if (trackOpen) {
       final plan = context.read<UsageProvider>().subscription?.subscription.plan.wireName ?? 'unknown';
       PlatformManager.instance.analytics.paywallOpened(source, currentPlan: plan);
