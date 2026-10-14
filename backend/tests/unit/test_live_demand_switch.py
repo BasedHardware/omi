@@ -83,6 +83,7 @@ async def test_refused_window_keeps_vendor_serving(monkeypatch, refusal):
         assert actual.host.stt_service == st.STTService.soniox
         assert not initial.retired_for_replay and not initial.is_connection_dead
         assert actual.live_demand.policy.fallback
+        assert not actual.live_demand.window_permitted
     finally:
         actual.stt_socket.finish()
         await stop(raws)

@@ -84,7 +84,7 @@ class LiveDemandRouting:
 
     @property
     def window_permitted(self) -> bool:
-        return self.policy.window_permitted
+        return self.policy.window_permitted and not self.policy.fallback
 
     def observe(self, payload) -> None:
         self.policy.observe(payload)
