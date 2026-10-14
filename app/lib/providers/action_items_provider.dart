@@ -1093,6 +1093,15 @@ class ActionItemsProvider extends ChangeNotifier {
           // The open toast still addresses the temp id; resolve it to the
           // transferred staged delete.
           _stagedDeleteAliasIds[optimisticItem.id] = newItem.id;
+          // A concurrent fetch may have observed the confirmed row before
+          // this create settled and admitted it into the visible lists (the
+          // tombstone still held only the temp id then). The staged state is
+          // hidden by contract: remove the confirmed row everywhere a fresh
+          // stageDeleteActionItem would, so it does not reappear during the
+          // Undo window or outlive a successful commit.
+          _actionItems.removeWhere((item) => item.id == newItem.id);
+          _homeDayItems.removeWhere((item) => item.id == newItem.id);
+          _selectedItems.remove(newItem.id);
           // Keep newItem.id in _preservedCreateIds: no server page has
           // observed the created row yet, so it must not shift the pagination
           // offset. If Undo restores it, the normal page-observed retirement
@@ -1460,6 +1469,13 @@ class ActionItemsProvider extends ChangeNotifier {
     _pendingCreates.clear();
     _fetchShadowedCreates.clear();
     _preservedCreateIds.clear();
+    // Wholesale fetches from the signed-out generation may still resolve
+    // later; their ordinals are dead threats. Clear them so a create in the
+    // successor account never records a stale ordinal as a fetch threat —
+    // otherwise the confirmed row stays excluded from the pagination offset
+    // until the old account's request eventually completes (or forever if it
+    // never does).
+    _wholesaleFetchesInFlight.clear();
     _pendingSortUpdates.clear();
     _pendingIndentUpdates.clear();
     notifyListeners();

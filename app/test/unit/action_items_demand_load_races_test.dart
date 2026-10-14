@@ -714,5 +714,119 @@ void main() {
           reason: 'a committed delete must stay deleted across the wholesale replacement');
       provider.dispose();
     });
+
+    test('clearUserData releases wholesale fetches still in flight for the signed-out account', () async {
+      final typed = _HeldListApi();
+      final provider = ActionItemsProvider(
+        actionItemsApi: typed,
+        createActionItemRequest: ({required description, dueAt, conversationId, completed = false}) async =>
+            _row('server-19'),
+      );
+
+      // The signed-out account's fetch starts and stays pending forever.
+      // (Never awaited or resolved: the point is a stuck old-account fetch.)
+      unawaited(provider.ensureLoaded(showShimmer: true));
+      await Future<void>.delayed(Duration.zero);
+
+      // Sign-out mid-flight, then the successor account creates a task.
+      provider.clearUserData();
+      final created = provider.createActionItem(description: 'successor account');
+      await Future<void>.delayed(Duration.zero);
+      await created;
+
+      // The successor's confirmed row must count as server-backed immediately
+      // (no page has observed it, so it stays out of the offset until one
+      // does) — but the stuck old-account fetch must not be recorded as a
+      // threat. A refresh that observes the row retires the exclusion; the
+      // loadMore offset must then cover every visible row.
+      typed.result = ApiSuccess(
+        ActionItemsResponse(
+          actionItems: [_serverRow('server-19')],
+          // hasMore so the follow-up loadMore actually issues its request.
+          hasMore: true,
+        ),
+      );
+      final refresh = provider.fetchActionItems();
+      await Future<void>.delayed(Duration.zero);
+      typed.completeAt(1, typed.result);
+      await refresh;
+
+      typed.result = ApiSuccess(
+        ActionItemsResponse(actionItems: [for (var i = 0; i < 50; i++) _serverRow('old-$i')], hasMore: true),
+      );
+      final more = provider.loadMoreActionItems();
+      await Future<void>.delayed(Duration.zero);
+      // Index 0 is the stuck signed-out fetch (never resolved); this
+      // loadMore is the only other pending request.
+      typed.completeAt(1, typed.result);
+      await more;
+
+      expect(
+        typed.requestedOffsets.last,
+        1,
+        reason: 'a stuck signed-out fetch must not keep the successor row out of the pagination offset',
+      );
+      provider.dispose();
+    });
+
+    test('a fetch observing the confirmed row mid-toast does not outlive the transferred staged delete', () async {
+      final typed = _HeldListApi();
+      var createResolved = false;
+      final provider = ActionItemsProvider(
+        actionItemsApi: typed,
+        createActionItemRequest: ({required description, dueAt, conversationId, completed = false}) async {
+          while (!createResolved) {
+            await Future<void>.delayed(const Duration(milliseconds: 1));
+          }
+          return _row('server-20');
+        },
+        deleteActionItemRequest: (String id) async => true,
+      );
+
+      // First load completes so later fetches replace the list.
+      typed.result = const ApiSuccess(ActionItemsResponse(actionItems: [], hasMore: false));
+      final load = provider.ensureLoaded(showShimmer: true);
+      await Future<void>.delayed(Duration.zero);
+      typed.resolve();
+      await load;
+
+      // The create starts and its temp row is staged for deletion (D5 toast).
+      final created = provider.createActionItem(description: 'observed transfer');
+      await Future<void>.delayed(Duration.zero);
+      final tempId = provider.actionItems.first.id;
+      provider.stageDeleteActionItem(provider.actionItems.first);
+      expect(provider.actionItems, isEmpty);
+
+      // A wholesale refresh observes the committed server row while the
+      // create future is still pending: the tombstone holds only the temp id,
+      // so the confirmed row is admitted into the visible list.
+      typed.result = ApiSuccess(ActionItemsResponse(actionItems: [_serverRow('server-20')], hasMore: false));
+      final refresh = provider.fetchActionItems();
+      await Future<void>.delayed(Duration.zero);
+      typed.completeAt(0, typed.result);
+      await refresh;
+      expect(
+        provider.actionItems.map((row) => row.id),
+        ['server-20'],
+        reason: 'sanity: the concurrent fetch observed the confirmed row',
+      );
+
+      // The create settles: the staged delete transfers to the confirmed id
+      // and must hide the observed row for the rest of the Undo window.
+      createResolved = true;
+      final item = await created;
+      expect(item?.id, 'server-20');
+      expect(
+        provider.actionItems,
+        isEmpty,
+        reason: 'the transferred staged delete must hide the observed row',
+      );
+
+      // Commit (toast closes) deletes the confirmed row server-side; nothing
+      // may reappear.
+      expect(await provider.commitStagedDelete(tempId), isTrue);
+      expect(provider.actionItems, isEmpty);
+      provider.dispose();
+    });
   });
 }

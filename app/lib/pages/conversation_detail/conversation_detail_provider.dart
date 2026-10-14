@@ -928,6 +928,10 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
             // In-place mutation of app results (e.g. a summary edit) must
             // still notify without re-encoding their content.
             selected.appResults.length,
+            // In-place speaker-identity edits (applySpeakerPromptIdentities)
+            // mutate transcript segments without touching any field above;
+            // fold the provider's revision so they still notify.
+            conversationProvider?.speakerIdentityRevision ?? 0,
           ].join('~');
     return '$catalog##$conversation';
   }
