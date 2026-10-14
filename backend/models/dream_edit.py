@@ -95,5 +95,90 @@ QUESTION_VALUE_DESCRIPTION = (
 )
 
 
-class FullEdit(Edit):
+MEMORY_HYGIENE_KINDS = frozenset({'merge_memories', 'retire_memory', 'supersede_memory'})
+
+
+class MemoryHygieneEdit(Strict):
+    kind: Literal['retire_memory', 'supersede_memory'] = Field(
+        description='Retire garbage (not merely low-importance facts), facts misattributed from another speaker, or facts contradicted by evidence. Supersede an old fact only with a newer time-scoped fact about the same attribute; age alone is not staleness.'
+    )
+    target: str = Field(description=Edit.model_fields['target'].description)
+    before: str = Field(default='', description=Edit.model_fields['before'].description)
+    other: str = Field(
+        default='',
+        description='For supersede_memory, the supplied newer memory ref. Otherwise empty. Choose exactly one of other or after.',
+    )
+    after: str = Field(
+        default='',
+        max_length=2000,
+        description='For supersede_memory without other, the newer time-scoped fact text supported by conversations. Empty for retire_memory.',
+    )
+    reason: str = Field(
+        min_length=1,
+        max_length=1000,
+        description='Required explanation of garbage, another speaker attribution, contradiction, or the newer fact about the same attribute.',
+    )
+    evidence: list[str] = Field(
+        min_length=1,
+        max_length=10,
+        description='Supplied conversation refs or other memory refs supporting retirement or replacement. The target alone is not evidence.',
+    )
+
+    @model_validator(mode='after')
+    def hygiene_semantics(self):
+        if self.kind == 'retire_memory' and (self.other or self.after):
+            raise ValueError('Retirement changes status only')
+        if self.kind == 'supersede_memory' and bool(self.other) == bool(self.after.strip()):
+            raise ValueError('Supersede requires exactly one of other or after')
+        if not self.reason.strip():
+            raise ValueError('Memory hygiene requires a reason')
+        return self
+
+
+class FullEdit(Strict):
+    kind: Literal[
+        'spelling',
+        'title',
+        'overview',
+        'memory',
+        'merge_people',
+        'entity_summary',
+        'close_task',
+        'retire_task',
+        'merge_memories',
+        'retire_memory',
+        'supersede_memory',
+    ] = Field(
+        description='Use retire_memory for garbage, misattribution from another speaker, or contradiction; never for low importance. Use supersede_memory for a newer time-scoped fact about the same attribute, never age alone.'
+    )
+    target: str = Field(description=Edit.model_fields['target'].description)
+    before: str = Field(default='', description=Edit.model_fields['before'].description)
+    other: str = Field(
+        default='',
+        description='Second supplied ref for merges, or the newer memory for supersede_memory. Supersede chooses exactly one of other or after.',
+    )
+    after: str = Field(
+        default='',
+        description='Corrected text for text edits; newer time-scoped fact for supersede_memory without other. Empty for retire_memory.',
+    )
+
+    reason: str = Field(
+        min_length=1,
+        max_length=1000,
+        description='Why this edit improves the data. Memory hygiene must explain duplicate identity, garbage (not low importance), another speaker attribution, contradiction, or a newer fact about the same attribute.',
+    )
+    evidence: list[str] = Field(
+        min_length=1,
+        max_length=10,
+        description='Supplied supporting refs. Retire/supersede use conversations or other memories; the target alone is not support.',
+    )
+
+    @model_validator(mode='after')
+    def full_hygiene(self):
+        if self.kind in {'retire_memory', 'supersede_memory'}:
+            MemoryHygieneEdit.model_validate(self.model_dump(exclude={'value'}))
+        else:
+            Edit.model_validate(self.model_dump(exclude={'value'}))
+        return self
+
     value: int | None = Field(default=None, ge=1, le=5, description=QUESTION_VALUE_DESCRIPTION)

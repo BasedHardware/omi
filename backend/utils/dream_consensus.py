@@ -6,6 +6,7 @@ import json
 import unicodedata
 
 from models.dream_agent import Plan, FullPlan
+from models.dream_edit import MEMORY_HYGIENE_KINDS, FullEdit
 from utils.dream_grounding import rank_questions
 
 
@@ -16,7 +17,11 @@ def normalized(text):
 
 def item_key(field, item):
     if field == 'edits':
-        return item.kind, item.target, normalized(item.before), normalized(item.after)
+        return (
+            (item.kind, item.target, item.other, normalized(item.before), normalized(item.after))
+            if isinstance(item, FullEdit) and item.kind in MEMORY_HYGIENE_KINDS
+            else (item.kind, item.target, normalized(item.before), normalized(item.after))
+        )
     if field == 'questions':
         return item.source_ref, item.quote
     if field == 'vocabulary':
@@ -69,6 +74,14 @@ def majority(plans, *, usage_sink=None):
 
 def unanimous_spelling(edit):
     return edit.kind == 'spelling' and edit.samples >= 2 and edit.agreement == edit.samples
+
+
+def unanimous_memory_hygiene(edit):
+    return edit.kind in MEMORY_HYGIENE_KINDS and edit.samples >= 2 and edit.agreement == edit.samples
+
+
+def unanimous_auto(edit):
+    return unanimous_spelling(edit) or unanimous_memory_hygiene(edit)
 
 
 def plan_dump(plan, *, full=False):

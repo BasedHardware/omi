@@ -196,6 +196,7 @@ export interface AgentProposalAnswer {
 
 export interface AgentProposalItem {
   edit?: Edit | null;
+  memory_hygiene?: MemoryHygieneEdit | null;
   other_label?: string | null;
   target_label?: string;
   vocabulary?: Term | null;
@@ -3385,6 +3386,16 @@ export interface MemoryGlobalReadGateObservability {
   source_path: string;
 }
 
+export interface MemoryHygieneEdit {
+  after?: string;
+  before?: string;
+  evidence: Array<string>;
+  kind: "retire_memory" | "supersede_memory";
+  other?: string;
+  reason: string;
+  target: string;
+}
+
 export type MemoryItemStatus = "active" | "superseded" | "hidden" | "tombstoned";
 
 export type MemoryKind = "fact" | "document" | "trigger";
@@ -6482,6 +6493,7 @@ export interface OmiApiSchemas {
   "MemoryDB": MemoryDB;
   "MemoryEditResponse": MemoryEditResponse;
   "MemoryGlobalReadGateObservability": MemoryGlobalReadGateObservability;
+  "MemoryHygieneEdit": MemoryHygieneEdit;
   "MemoryItemStatus": MemoryItemStatus;
   "MemoryKind": MemoryKind;
   "MemoryLayer": MemoryLayer;

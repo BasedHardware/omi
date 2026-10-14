@@ -94,3 +94,15 @@ class FullPlan(Strict):
     frames: list[FrameQuestion] = Field(default_factory=list, max_length=3)
     feedback: list[Feedback] = Field(default_factory=list, max_length=10)
     slow_tasks: list[SlowTask] = Field(default_factory=list, max_length=3)
+
+
+class HygieneQuestion(Strict):
+    """Server-only ranking envelope; Review uses its existing agent proposal UI."""
+
+    item_id: str
+    kind: Literal['agent_proposal'] = 'agent_proposal'
+    title: str
+    source_ref: str
+    quote: str
+    value: int = Field(ge=1, le=5)
+    why_it_matters: str

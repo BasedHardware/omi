@@ -3,9 +3,9 @@
 from datetime import datetime
 from typing import Literal, Optional
 
-from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, model_validator
+from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, model_validator, model_serializer
 
-from models.dream_edit import Edit, Term
+from models.dream_edit import Edit, MemoryHygieneEdit, Term
 
 EntityType = Literal['person', 'organization', 'project']
 ReviewKind = Literal['speaker', 'task', 'same_person', 'spelling']
@@ -102,11 +102,19 @@ class AgentProposalItem(BaseModel):
     target_label: str = ''
     other_label: Optional[str] = None
     edit: Optional[Edit] = None
+    memory_hygiene: Optional[MemoryHygieneEdit] = None
     vocabulary: Optional[Term] = None
+
+    @model_serializer(mode='wrap')
+    def preserve_existing_wire(self, handler):
+        data = handler(self)
+        if self.memory_hygiene is None:
+            data.pop('memory_hygiene', None)
+        return data
 
     @model_validator(mode='after')
     def single_operation(self):
-        if (self.edit is not None) + (self.vocabulary is not None) != 1:
+        if (self.edit is not None) + (self.memory_hygiene is not None) + (self.vocabulary is not None) != 1:
             raise ValueError('Exactly one agent operation is required')
         return self
 

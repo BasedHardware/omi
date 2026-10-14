@@ -8,7 +8,8 @@ AUTO = frozenset({'title', 'overview', 'spelling'})
 SUGGEST = frozenset(
     {'vocabulary', 'close_task', 'retire_task', 'merge_people', 'merge_memories', 'memory', 'entity_summary'}
 )
-KNOWN_KINDS = AUTO | SUGGEST
+FULL_MEMORY_HYGIENE = frozenset({'merge_memories', 'retire_memory', 'supersede_memory'})
+KNOWN_KINDS = AUTO | SUGGEST | FULL_MEMORY_HYGIENE
 SUGGESTIONS_PER_DAY = 3
 
 # The reserved Dream models have a 1M input window. Keep completion headroom
@@ -43,10 +44,15 @@ def full_context_enabled() -> bool:
 
 
 def auto_apply_kinds(uid: str | None = None) -> frozenset[str]:
-    """An override may narrow safe automation; risky operations always require Review."""
+    """Bounded policy is unchanged; full-owner hygiene additionally requires consensus."""
     value = os.getenv('DREAM_AGENT_AUTO_APPLY_KINDS')
+    full_auto = (
+        {'spelling', 'merge_memories', 'retire_memory', 'supersede_memory'}
+        if uid is not None and context_mode(uid) == 'full'
+        else set()
+    )
     if value is None:
-        return AUTO
+        return AUTO | full_auto
     requested = {kind.strip() for kind in value.split(',') if kind.strip()}
     ignored = requested - AUTO
     if ignored:
@@ -56,7 +62,7 @@ def auto_apply_kinds(uid: str | None = None) -> frozenset[str]:
         POLICY_WARNINGS.inc(len(ignored))
         logging.getLogger(__name__).warning('Dream auto-apply policy ignored kinds count=%d', len(ignored))
     effective = frozenset(requested & AUTO)
-    return effective | {'spelling'} if uid is not None and context_mode(uid) == 'full' else effective
+    return effective | full_auto
 
 
 def apply_policy(kind: str, automatic: frozenset[str]) -> str:

@@ -314,7 +314,8 @@ class AgentProposalItem {
 
   static AgentProposalItem? fromJson(Map<String, dynamic>? json) {
     if (json == null) return null;
-    final edit = _map(json['edit']);
+    final hygiene = _map(json['memory_hygiene']);
+    final edit = hygiene ?? _map(json['edit']);
     final vocabulary = _map(json['vocabulary']);
     final targetLabel = _str(json['target_label']) ?? '';
     if (edit != null) {
@@ -324,8 +325,10 @@ class AgentProposalItem {
         editKind: kind,
         targetLabel: targetLabel,
         otherLabel: _str(json['other_label']),
-        before: _str(edit['before']) ?? '',
-        after: _str(edit['after']) ?? '',
+        before: hygiene != null && (_str(edit['before']) ?? '').isEmpty ? targetLabel : _str(edit['before']) ?? '',
+        after: hygiene != null && (_str(edit['after']) ?? '').isEmpty && kind == 'supersede_memory'
+            ? _str(json['other_label']) ?? ''
+            : _str(edit['after']) ?? '',
         reason: _str(edit['reason']),
       );
     }

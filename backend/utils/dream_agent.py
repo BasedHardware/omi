@@ -25,12 +25,14 @@ from config.dream_agent import (
 )
 from database import dream_scheduler, dream_store, dream_feedback, review_changes, review_store
 from database.dream_dirty import dream_writing
-from models.dream_agent import Triage, Plan, FullPlan, DreamReviewItem
+from models.dream_agent import Triage, Plan, FullPlan
 from models.dream_refs import base_ref, has_ref, cited_value
 from utils import dream_capacity, dream_reads, dream_tools, dream_transport, dream_guards
-from utils.dream_consensus import majority, unanimous_spelling, plan_dump, item_dump
+from utils.dream_consensus import majority, unanimous_spelling, unanimous_auto, plan_dump, item_dump
 from utils.dream_context import EvidenceRecords, target_refs, cluster_hints, REASONING_TARGET_LIMIT
 from utils.dream_grounding import spelling_grounding_rejection, spelling_question, rank_questions
+from models.dream_edit import MEMORY_HYGIENE_KINDS
+from utils.dream_grounding import hygiene_question
 from utils.dream_decisions import edit_decisions, offer_questions
 from utils.executors import db_executor, postprocess_executor, run_blocking
 from utils.llm.shaped_agent import run_loop
@@ -304,12 +306,18 @@ async def dry_run(uid, records, *, targets=None, caps=None, turn=None, vocabular
         plan = plan.model_copy(update={'feedback': dream_guards.cap_feedback(accepted, usage_sink=sink)})
     full = caps.context_mode == 'full'
     proposed = plan_dump(plan, full=full)
-    questions: list[DreamReviewItem] = list(plan.questions)
+    questions: list[Any] = list(plan.questions)
     for edit, row in zip(plan.edits, proposed['edits']):
         reason = spelling_grounding_rejection(edit, evidence, vocabulary or [])
         if full and unanimous_spelling(edit) and reason == 'ungrounded_spelling':
             reason = None
-        row['policy'] = 'suggest' if reason else apply_policy(edit.kind, auto_apply_kinds(uid))
+        row['policy'] = (
+            'suggest'
+            if reason or (edit.kind in MEMORY_HYGIENE_KINDS and not unanimous_auto(edit))
+            else apply_policy(edit.kind, auto_apply_kinds(uid))
+        )
+        if full and edit.kind in MEMORY_HYGIENE_KINDS and row['policy'] == 'suggest':
+            questions.append(hygiene_question(edit, evidence))
         if reason == 'ungrounded_spelling':
             sink.setdefault('rejected', {}).setdefault(reason, 0)
             sink['rejected'][reason] += 1
@@ -539,7 +547,7 @@ async def _run_admitted_pass(
             for term in report['proposed']['vocabulary']:
                 term['policy'] = apply_policy('vocabulary', automatic)
             outcomes: list[dict[str, Any]] = report['outcomes']
-            queued_questions = list(plan.questions)
+            queued_questions: list[Any] = list(plan.questions)
             question_edits = {}
             token = dream_writing.set(True)
             try:
@@ -575,8 +583,15 @@ async def _run_admitted_pass(
                     elif remaining <= 0:
                         status = 'edit_cap'
                     else:
-                        if full and grounding[key] == 'ungrounded_spelling':
-                            item = spelling_question(edit, full=True)
+                        if full and (
+                            grounding[key] == 'ungrounded_spelling'
+                            or (edit.kind in MEMORY_HYGIENE_KINDS and edit_policies[key] == 'suggest')
+                        ):
+                            item = (
+                                hygiene_question(edit, records)
+                                if edit.kind in MEMORY_HYGIENE_KINDS
+                                else spelling_question(edit, full=True)
+                            )
                             queued_questions.append(item)
                             question_edits[item.item_id] = edit
                             outcomes.append({'key': key, 'status': 'suggest_only', 'policy': 'suggest'})
@@ -588,7 +603,7 @@ async def _run_admitted_pass(
                             if edit_policies[key] == 'auto'
                             else dream_tools.suggest_spelling if is_question else dream_tools.suggest_edit
                         )
-                        if full and edit_policies[key] == 'auto' and unanimous_spelling(edit):
+                        if full and edit_policies[key] == 'auto' and unanimous_auto(edit):
                             tool = dream_tools.apply_unanimous_edit
                         try:
                             if is_question:
@@ -604,7 +619,7 @@ async def _run_admitted_pass(
                                 remaining += 1
                             if is_question and status == 'suggestion_cap':
                                 deferred.add(base_ref(edit.target))
-                            if full and status == 'applied' and unanimous_spelling(edit):
+                            if full and status == 'applied' and unanimous_auto(edit):
                                 report['auto_applied_unanimous'] += 1
                         except (ValueError, review_store.ReviewConflict, review_store.ReviewNotFound):
                             status = 'invalid_evidence'

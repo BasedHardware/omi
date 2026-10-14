@@ -6,7 +6,7 @@ import unicodedata
 from datetime import datetime, timezone
 
 from models.review import SpellingItem
-from models.dream_agent import DreamReviewItem, FullReviewItem
+from models.dream_agent import DreamReviewItem, FullReviewItem, HygieneQuestion
 from models.dream_refs import base_ref, has_ref, cited_value
 from utils.conversations.summary_selection import render_sections_markdown
 
@@ -116,6 +116,20 @@ def spelling_question(edit, *, now=None, full=False):
             value=getattr(edit, 'value', None) or 1, why_it_matters='Clarifies future use of this name or term.'
         )
     item = model.model_validate(payload)
+    item.set_agreement(edit.agreement, edit.samples)
+    return item
+
+
+def hygiene_question(edit, records):
+    key = hashlib.sha256(repr((edit.kind, edit.target, edit.other, edit.after)).encode()).hexdigest()
+    item = HygieneQuestion(
+        item_id='agent_proposal:' + key,
+        title=edit.reason,
+        source_ref=edit.target,
+        quote=records[base_ref(edit.target)].get('content') or '',
+        value=getattr(edit, 'value', None) or 1,
+        why_it_matters='Clarifies which facts future agents should use.',
+    )
     item.set_agreement(edit.agreement, edit.samples)
     return item
 

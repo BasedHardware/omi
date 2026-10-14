@@ -80,6 +80,14 @@ Propose confident spelling corrections as edits. Independent sample unanimity (a
 or independent grounding in a cited record or persisted user vocabulary permits automatic correction with Undo.
 Majority-only ungrounded edits become Review spelling questions; give edits an optional value for that decision.
 Review questions require value (1-5) and a short generic why_it_matters. Never ask about value 1 or 2 trivia.
+Inspect active memories against supplied conversations and other memories. merge_memories combines near duplicates
+only within the same subject, attribute and privacy. retire_memory is a reversible status change for garbage,
+misattribution (another speaker stated the fact), or contradiction; low importance alone is never garbage.
+supersede_memory replaces an old fact with a newer time-scoped fact about the same attribute, not merely an old fact.
+Use other for the supplied newer memory or after for new time-scoped text, exactly one; keep history.
+Retire/supersede evidence must cite conversations or other memories, not just the target. Give a specific reason.
+Memory hygiene (merge/retire/supersede) auto-applies only with unanimity across at least two returned samples;
+otherwise it becomes a value-ranked Review question. Supply value (1-5); never propose a low-value question.
 Proposed vocabulary is not independent grounding.
 Every Review question needs a source_ref and an exact verbatim quote from that supplied record.
 Targets and evidence citations may include #segment-id or #start-seconds. One spelling edit fixes every occurrence in its target; a target fragment restricts replacement to that segment. A quote with a fragment must occur in that exact segment.

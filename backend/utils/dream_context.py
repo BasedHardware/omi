@@ -338,6 +338,9 @@ def add_context(
         if reserve_context:
             diagnostics['context_budget_counts']['visible_found'] += 1
         candidate = EvidenceRecords({**records, ref: row}, targets=records.targets)
+        if caps.context_mode == 'full' and not fits_pass(EvidenceRecords({ref: row}), caps, vocabulary):
+            path_count(diagnostics, path, 'budget_skipped')
+            continue
         while reserve_context and not fits_pass(candidate, caps, vocabulary) and len(records.targets) > 1:
             drop = next(key for key in reversed(records) if key in records.targets)
             records = EvidenceRecords(

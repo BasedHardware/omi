@@ -14,7 +14,7 @@ from google.cloud import firestore
 from google.cloud.firestore_v1.base_query import FieldFilter
 from pydantic import BaseModel, ConfigDict, Field
 
-from database import entities, memory_ledger, review_queries, review_store as store
+from database import entities, memory_ledger, review_memory_hygiene, review_queries, review_store as store
 from database.read_boundary import parse_payload_strict
 from models.review import ReviewChange, ReviewChangesResponse
 
@@ -275,6 +275,10 @@ def set_undone(uid: str, change_id: str, undone: bool, *, now: datetime | None =
     now = now or datetime.now(timezone.utc)
     ref = store.user(uid).collection('review_changes').document(store.safe_id(change_id))
     data = store.decode_doc(uid, ref.get().to_dict())
+    if data and data.get('memory_hygiene'):
+        if data['created_at'] < now - WINDOW:
+            raise store.ReviewNotFound('Change is outside the 30-day undo window')
+        return review_memory_hygiene.set_undone(uid, change_id, undone)
     if data and data.get('memory_edit'):
         if data['created_at'] < now - WINDOW:
             raise store.ReviewNotFound('Change is outside the 30-day undo window')
