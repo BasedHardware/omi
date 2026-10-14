@@ -18,6 +18,7 @@ from database._client import get_firestore_client
 from database.firestore_transaction_retry import run_with_transaction_contention_retry
 from database import review_queries
 from models.review import ReviewItem, ReviewItemV2, ReviewAnswerReceipt
+from models.review_context import enrich_spelling
 
 DAILY_BUDGET = 3
 
@@ -67,6 +68,7 @@ def enqueue_review_proposal(
     permits re-asking an uncertain answer. Resolved decisions remain terminal.
     """
     require_enabled()
+    item = enrich_spelling(item, source or {}, overwrite=True)
     is_agent = item.kind == 'agent_proposal'
     if item.kind not in {'same_person', 'spelling', 'agent_proposal'} or not evidence_version.strip():
         raise ValueError('Unsupported proposal kind or evidence version')

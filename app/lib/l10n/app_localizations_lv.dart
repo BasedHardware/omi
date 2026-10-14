@@ -12346,6 +12346,9 @@ class AppLocalizationsLv extends AppLocalizations {
   }
 
   @override
+  String get reviewSpellingContext => 'Sarunas konteksts';
+
+  @override
   String get reviewQuestionSpelling => 'Kā tas tiek rakstīts?';
 
   @override

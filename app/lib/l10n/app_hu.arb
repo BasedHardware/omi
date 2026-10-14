@@ -3902,6 +3902,7 @@
     "reviewRemaining": "{count} maradt",
     "reviewQuestionSpeaker": "Ki mondta ezt?",
     "reviewQuestionSamePerson": "Ugyanaz a személy, mint „{name}”?",
+    "reviewSpellingContext": "A beszélgetés kontextusa",
     "reviewQuestionSpelling": "Hogyan írják ezt?",
     "reviewPlayClip": "Klip lejátszása",
     "reviewStopClip": "Klip leállítása",

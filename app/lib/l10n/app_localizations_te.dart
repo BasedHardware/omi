@@ -12370,6 +12370,9 @@ class AppLocalizationsTe extends AppLocalizations {
   }
 
   @override
+  String get reviewSpellingContext => 'సంభాషణ సందర్భం';
+
+  @override
   String get reviewQuestionSpelling => 'ఇది ఎలా రాస్తారు?';
 
   @override

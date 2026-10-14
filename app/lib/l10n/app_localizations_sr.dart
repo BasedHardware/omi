@@ -12329,6 +12329,9 @@ class AppLocalizationsSr extends AppLocalizations {
   }
 
   @override
+  String get reviewSpellingContext => 'Контекст разговора';
+
+  @override
   String get reviewQuestionSpelling => 'Како се ово пише?';
 
   @override

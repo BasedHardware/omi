@@ -3806,6 +3806,7 @@
     "reviewRemaining": "{count}개 남음",
     "reviewQuestionSpeaker": "누가 한 말인가요?",
     "reviewQuestionSamePerson": "“{name}”과(와) 같은 사람인가요?",
+    "reviewSpellingContext": "대화 맥락",
     "reviewQuestionSpelling": "이건 어떻게 쓰나요?",
     "reviewPlayClip": "클립 재생",
     "reviewStopClip": "클립 중지",

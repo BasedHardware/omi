@@ -11243,6 +11243,7 @@
     "reviewRemaining": "{count} na lang",
     "reviewQuestionSpeaker": "Sino ang nagsabi nito?",
     "reviewQuestionSamePerson": "Siya rin ba si “{name}”?",
+    "reviewSpellingContext": "Konteksto ng pag-uusap",
     "reviewQuestionSpelling": "Paano ito ibabaybay?",
     "reviewPlayClip": "I-play ang clip",
     "reviewStopClip": "Ihinto ang clip",

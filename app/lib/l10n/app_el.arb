@@ -3806,6 +3806,7 @@
     "reviewRemaining": "Απομένουν {count}",
     "reviewQuestionSpeaker": "Ποιος το είπε αυτό;",
     "reviewQuestionSamePerson": "Το ίδιο άτομο με «{name}»;",
+    "reviewSpellingContext": "Πλαίσιο συνομιλίας",
     "reviewQuestionSpelling": "Πώς γράφεται αυτό;",
     "reviewPlayClip": "Αναπαραγωγή κλιπ",
     "reviewStopClip": "Διακοπή κλιπ",

@@ -11243,6 +11243,7 @@
     "reviewRemaining": "{count} ಬಾಕಿ",
     "reviewQuestionSpeaker": "ಇದನ್ನು ಯಾರು ಹೇಳಿದರು?",
     "reviewQuestionSamePerson": "“{name}” ಅವರೇ ಅದೇ ವ್ಯಕ್ತಿಯೇ?",
+    "reviewSpellingContext": "ಸಂಭಾಷಣೆಯ ಸಂದರ್ಭ",
     "reviewQuestionSpelling": "ಇದನ್ನು ಹೇಗೆ ಬರೆಯುತ್ತಾರೆ?",
     "reviewPlayClip": "ಕ್ಲಿಪ್ ಪ್ಲೇ ಮಾಡಿ",
     "reviewStopClip": "ಕ್ಲಿಪ್ ನಿಲ್ಲಿಸಿ",

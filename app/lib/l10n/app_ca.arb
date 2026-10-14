@@ -3806,6 +3806,7 @@
     "reviewRemaining": "Queden {count}",
     "reviewQuestionSpeaker": "Qui ha dit això?",
     "reviewQuestionSamePerson": "És la mateixa persona que «{name}»?",
+    "reviewSpellingContext": "Context de la conversa",
     "reviewQuestionSpelling": "Com s’escriu això?",
     "reviewPlayClip": "Reprodueix el clip",
     "reviewStopClip": "Atura el clip",

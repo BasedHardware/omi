@@ -11243,6 +11243,7 @@
     "reviewRemaining": "{count} மீதம்",
     "reviewQuestionSpeaker": "இதை யார் சொன்னது?",
     "reviewQuestionSamePerson": "“{name}” என்பவரும் இவரும் ஒரே நபரா?",
+    "reviewSpellingContext": "உரையாடலின் சூழல்",
     "reviewQuestionSpelling": "இது எப்படி எழுதப்படுகிறது?",
     "reviewPlayClip": "கிளிப்பை இயக்கு",
     "reviewStopClip": "கிளிப்பை நிறுத்து",

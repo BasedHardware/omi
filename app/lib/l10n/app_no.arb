@@ -3806,6 +3806,7 @@
     "reviewRemaining": "{count} igjen",
     "reviewQuestionSpeaker": "Hvem sa dette?",
     "reviewQuestionSamePerson": "Samme person som «{name}»?",
+    "reviewSpellingContext": "Samtalekontekst",
     "reviewQuestionSpelling": "Hvordan staves dette?",
     "reviewPlayClip": "Spill av klipp",
     "reviewStopClip": "Stopp klipp",

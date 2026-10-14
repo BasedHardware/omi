@@ -12229,6 +12229,9 @@ class AppLocalizationsHe extends AppLocalizations {
   }
 
   @override
+  String get reviewSpellingContext => 'הקשר השיחה';
+
+  @override
   String get reviewQuestionSpelling => 'איך זה נכתב?';
 
   @override

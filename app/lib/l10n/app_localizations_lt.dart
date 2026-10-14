@@ -12340,6 +12340,9 @@ class AppLocalizationsLt extends AppLocalizations {
   }
 
   @override
+  String get reviewSpellingContext => 'Pokalbio kontekstas';
+
+  @override
   String get reviewQuestionSpelling => 'Kaip tai rašoma?';
 
   @override

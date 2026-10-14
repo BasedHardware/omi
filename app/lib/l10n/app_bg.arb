@@ -3806,6 +3806,7 @@
     "reviewRemaining": "Остават {count}",
     "reviewQuestionSpeaker": "Кой го каза?",
     "reviewQuestionSamePerson": "Същият човек като „{name}“?",
+    "reviewSpellingContext": "Контекст на разговора",
     "reviewQuestionSpelling": "Как се пише това?",
     "reviewPlayClip": "Пусни клипа",
     "reviewStopClip": "Спри клипа",

@@ -12305,6 +12305,9 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
+  String get reviewSpellingContext => 'Conversation context';
+
+  @override
   String get reviewQuestionSpelling => 'How is this spelled?';
 
   @override

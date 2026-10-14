@@ -12324,6 +12324,9 @@ class AppLocalizationsSv extends AppLocalizations {
   }
 
   @override
+  String get reviewSpellingContext => 'Samtalets sammanhang';
+
+  @override
   String get reviewQuestionSpelling => 'Hur stavas det här?';
 
   @override

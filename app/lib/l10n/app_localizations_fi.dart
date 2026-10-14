@@ -12322,6 +12322,9 @@ class AppLocalizationsFi extends AppLocalizations {
   }
 
   @override
+  String get reviewSpellingContext => 'Keskustelun asiayhteys';
+
+  @override
   String get reviewQuestionSpelling => 'Miten tämä kirjoitetaan?';
 
   @override

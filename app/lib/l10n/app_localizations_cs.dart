@@ -12320,6 +12320,9 @@ class AppLocalizationsCs extends AppLocalizations {
   }
 
   @override
+  String get reviewSpellingContext => 'Kontext konverzace';
+
+  @override
   String get reviewQuestionSpelling => 'Jak se to píše?';
 
   @override

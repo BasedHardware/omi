@@ -12399,6 +12399,9 @@ class AppLocalizationsEl extends AppLocalizations {
   }
 
   @override
+  String get reviewSpellingContext => 'Πλαίσιο συνομιλίας';
+
+  @override
   String get reviewQuestionSpelling => 'Πώς γράφεται αυτό;';
 
   @override

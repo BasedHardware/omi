@@ -3806,6 +3806,7 @@
     "reviewRemaining": "Liko: {count}",
     "reviewQuestionSpeaker": "Kas tai pasakė?",
     "reviewQuestionSamePerson": "Tas pats asmuo kaip „{name}“?",
+    "reviewSpellingContext": "Pokalbio kontekstas",
     "reviewQuestionSpelling": "Kaip tai rašoma?",
     "reviewPlayClip": "Leisti fragmentą",
     "reviewStopClip": "Sustabdyti fragmentą",

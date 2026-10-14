@@ -3806,6 +3806,7 @@
     "reviewRemaining": "Zbývá {count}",
     "reviewQuestionSpeaker": "Kdo to řekl?",
     "reviewQuestionSamePerson": "Je to stejná osoba jako „{name}“?",
+    "reviewSpellingContext": "Kontext konverzace",
     "reviewQuestionSpelling": "Jak se to píše?",
     "reviewPlayClip": "Přehrát úryvek",
     "reviewStopClip": "Zastavit úryvek",

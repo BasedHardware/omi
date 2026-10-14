@@ -12139,6 +12139,9 @@ class AppLocalizationsJa extends AppLocalizations {
   }
 
   @override
+  String get reviewSpellingContext => '会話の文脈';
+
+  @override
   String get reviewQuestionSpelling => 'この綴りは？';
 
   @override

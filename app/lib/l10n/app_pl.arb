@@ -3841,6 +3841,7 @@
     "reviewRemaining": "Zostało: {count}",
     "reviewQuestionSpeaker": "Kto to powiedział?",
     "reviewQuestionSamePerson": "Ta sama osoba co „{name}”?",
+    "reviewSpellingContext": "Kontekst rozmowy",
     "reviewQuestionSpelling": "Jak to się pisze?",
     "reviewPlayClip": "Odtwórz fragment",
     "reviewStopClip": "Zatrzymaj fragment",

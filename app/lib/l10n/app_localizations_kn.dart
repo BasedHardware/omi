@@ -12356,6 +12356,9 @@ class AppLocalizationsKn extends AppLocalizations {
   }
 
   @override
+  String get reviewSpellingContext => 'ಸಂಭಾಷಣೆಯ ಸಂದರ್ಭ';
+
+  @override
   String get reviewQuestionSpelling => 'ಇದನ್ನು ಹೇಗೆ ಬರೆಯುತ್ತಾರೆ?';
 
   @override

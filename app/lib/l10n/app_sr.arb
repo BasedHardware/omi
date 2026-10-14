@@ -11243,6 +11243,7 @@
     "reviewRemaining": "Преостало: {count}",
     "reviewQuestionSpeaker": "Ко је ово рекао?",
     "reviewQuestionSamePerson": "Иста особа као „{name}“?",
+    "reviewSpellingContext": "Контекст разговора",
     "reviewQuestionSpelling": "Како се ово пише?",
     "reviewPlayClip": "Пусти исечак",
     "reviewStopClip": "Заустави исечак",

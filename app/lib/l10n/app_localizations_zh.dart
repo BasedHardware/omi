@@ -12121,6 +12121,9 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
+  String get reviewSpellingContext => '对话上下文';
+
+  @override
   String get reviewQuestionSpelling => '这个怎么拼写？';
 
   @override

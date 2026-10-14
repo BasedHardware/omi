@@ -12306,6 +12306,9 @@ class AppLocalizationsDa extends AppLocalizations {
   }
 
   @override
+  String get reviewSpellingContext => 'Samtalens kontekst';
+
+  @override
   String get reviewQuestionSpelling => 'Hvordan staves dette?';
 
   @override

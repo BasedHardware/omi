@@ -11243,6 +11243,7 @@
     "reviewRemaining": "Преостануваат {count}",
     "reviewQuestionSpeaker": "Кој го рече ова?",
     "reviewQuestionSamePerson": "Истата личност како „{name}“?",
+    "reviewSpellingContext": "Контекст на разговорот",
     "reviewQuestionSpelling": "Како се пишува ова?",
     "reviewPlayClip": "Пушти клип",
     "reviewStopClip": "Запри клип",

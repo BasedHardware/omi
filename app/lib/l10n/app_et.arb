@@ -3806,6 +3806,7 @@
     "reviewRemaining": "Jäänud {count}",
     "reviewQuestionSpeaker": "Kes seda ütles?",
     "reviewQuestionSamePerson": "Sama inimene mis „{name}“?",
+    "reviewSpellingContext": "Vestluse kontekst",
     "reviewQuestionSpelling": "Kuidas seda kirjutatakse?",
     "reviewPlayClip": "Esita klipp",
     "reviewStopClip": "Peata klipp",

@@ -3806,6 +3806,7 @@
     "reviewRemaining": "{count} kvar",
     "reviewQuestionSpeaker": "Vem sa det här?",
     "reviewQuestionSamePerson": "Samma person som ”{name}”?",
+    "reviewSpellingContext": "Samtalets sammanhang",
     "reviewQuestionSpelling": "Hur stavas det här?",
     "reviewPlayClip": "Spela upp klipp",
     "reviewStopClip": "Stoppa klipp",

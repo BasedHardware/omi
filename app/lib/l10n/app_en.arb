@@ -14738,6 +14738,10 @@
             }
         }
     },
+    "reviewSpellingContext": "Conversation context",
+    "@reviewSpellingContext": {
+        "description": "Heading above the speech around a spelling question in Review."
+    },
     "reviewQuestionSpelling": "How is this spelled?",
     "@reviewQuestionSpelling": {
         "description": "Question card: confirm the spelling of a name or term"

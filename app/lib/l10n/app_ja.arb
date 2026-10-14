@@ -3806,6 +3806,7 @@
     "reviewRemaining": "残り{count}件",
     "reviewQuestionSpeaker": "これは誰の発言ですか？",
     "reviewQuestionSamePerson": "「{name}」と同じ人ですか？",
+    "reviewSpellingContext": "会話の文脈",
     "reviewQuestionSpelling": "この綴りは？",
     "reviewPlayClip": "クリップを再生",
     "reviewStopClip": "クリップを停止",

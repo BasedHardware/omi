@@ -22023,6 +22023,12 @@ abstract class AppLocalizations {
   /// **'Same person as “{name}”?'**
   String reviewQuestionSamePerson(String name);
 
+  /// Heading above the speech around a spelling question in Review.
+  ///
+  /// In en, this message translates to:
+  /// **'Conversation context'**
+  String get reviewSpellingContext;
+
   /// Question card: confirm the spelling of a name or term
   ///
   /// In en, this message translates to:

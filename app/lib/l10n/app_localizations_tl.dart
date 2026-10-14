@@ -12419,6 +12419,9 @@ class AppLocalizationsTl extends AppLocalizations {
   }
 
   @override
+  String get reviewSpellingContext => 'Konteksto ng pag-uusap';
+
+  @override
   String get reviewQuestionSpelling => 'Paano ito ibabaybay?';
 
   @override

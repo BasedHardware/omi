@@ -12314,6 +12314,9 @@ class AppLocalizationsFa extends AppLocalizations {
   }
 
   @override
+  String get reviewSpellingContext => 'زمینهٔ گفتگو';
+
+  @override
   String get reviewQuestionSpelling => 'این چطور نوشته می‌شود؟';
 
   @override

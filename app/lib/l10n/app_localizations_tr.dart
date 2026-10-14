@@ -12330,6 +12330,9 @@ class AppLocalizationsTr extends AppLocalizations {
   }
 
   @override
+  String get reviewSpellingContext => 'Konuşma bağlamı';
+
+  @override
   String get reviewQuestionSpelling => 'Bu nasıl yazılır?';
 
   @override

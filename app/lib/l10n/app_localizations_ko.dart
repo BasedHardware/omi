@@ -12143,6 +12143,9 @@ class AppLocalizationsKo extends AppLocalizations {
   }
 
   @override
+  String get reviewSpellingContext => '대화 맥락';
+
+  @override
   String get reviewQuestionSpelling => '이건 어떻게 쓰나요?';
 
   @override

@@ -12312,6 +12312,9 @@ class AppLocalizationsEt extends AppLocalizations {
   }
 
   @override
+  String get reviewSpellingContext => 'Vestluse kontekst';
+
+  @override
   String get reviewQuestionSpelling => 'Kuidas seda kirjutatakse?';
 
   @override

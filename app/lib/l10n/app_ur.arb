@@ -11243,6 +11243,7 @@
     "reviewRemaining": "{count} باقی",
     "reviewQuestionSpeaker": "یہ کس نے کہا؟",
     "reviewQuestionSamePerson": "کیا یہ “{name}” والا ہی شخص ہے؟",
+    "reviewSpellingContext": "گفتگو کا سیاق و سباق",
     "reviewQuestionSpelling": "یہ کیسے لکھا جاتا ہے؟",
     "reviewPlayClip": "کلپ چلائیں",
     "reviewStopClip": "کلپ روکیں",

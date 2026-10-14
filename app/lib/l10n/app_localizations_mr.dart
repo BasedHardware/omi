@@ -12327,6 +12327,9 @@ class AppLocalizationsMr extends AppLocalizations {
   }
 
   @override
+  String get reviewSpellingContext => 'संभाषणाचा संदर्भ';
+
+  @override
   String get reviewQuestionSpelling => 'हे कसे लिहितात?';
 
   @override

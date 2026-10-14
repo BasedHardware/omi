@@ -17,6 +17,7 @@ from models.candidate import CandidateCreate, TaskCreateCandidate
 from models.review import AgentProposalItem, ChangeRef, ReviewChange, ReviewItem, ReviewItemV2
 from models.dream_refs import base_ref, has_ref, cited_value
 from utils.entity_pages import resolve_entity
+from models.review_context import question_source
 from utils.dream_guards import (
     spelling_rejection,
     summary_rejection,
@@ -382,6 +383,7 @@ def suggest_spelling(uid, edit, records, run_id):
         'edit_key': edit_key(edit, records),
         'spelling_edit': edit.model_dump(mode='python'),
     }
+    source['speaker_names'] = question_source(spelling_question(edit), records).get('speaker_names', {})
     source['fences'] = proposal_fences(uid, source)
     revalidate_proposal(uid, source)
     validate_canonical_proposal(uid, edit)
@@ -686,6 +688,7 @@ def ask(uid, item, records):
             }
         ),
         evidence_version=review_store.fingerprint(records),
+        source=question_source(item, records),
     )
 
 

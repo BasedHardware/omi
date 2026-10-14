@@ -12404,6 +12404,9 @@ class AppLocalizationsTa extends AppLocalizations {
   }
 
   @override
+  String get reviewSpellingContext => 'உரையாடலின் சூழல்';
+
+  @override
   String get reviewQuestionSpelling => 'இது எப்படி எழுதப்படுகிறது?';
 
   @override

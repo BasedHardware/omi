@@ -11243,6 +11243,7 @@
     "reviewRemaining": "{count} مانده",
     "reviewQuestionSpeaker": "این را چه کسی گفت؟",
     "reviewQuestionSamePerson": "همان شخصِ «{name}» است؟",
+    "reviewSpellingContext": "زمینهٔ گفتگو",
     "reviewQuestionSpelling": "این چطور نوشته می‌شود؟",
     "reviewPlayClip": "پخش کلیپ",
     "reviewStopClip": "توقف کلیپ",

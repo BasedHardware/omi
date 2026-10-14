@@ -12254,6 +12254,9 @@ class AppLocalizationsTh extends AppLocalizations {
   }
 
   @override
+  String get reviewSpellingContext => 'บริบทการสนทนา';
+
+  @override
   String get reviewQuestionSpelling => 'สะกดอย่างไร';
 
   @override

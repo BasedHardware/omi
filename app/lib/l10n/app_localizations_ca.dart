@@ -12384,6 +12384,9 @@ class AppLocalizationsCa extends AppLocalizations {
   }
 
   @override
+  String get reviewSpellingContext => 'Context de la conversa';
+
+  @override
   String get reviewQuestionSpelling => 'Com s’escriu això?';
 
   @override

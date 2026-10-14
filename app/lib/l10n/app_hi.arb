@@ -3806,6 +3806,7 @@
     "reviewRemaining": "{count} बाकी",
     "reviewQuestionSpeaker": "यह किसने कहा?",
     "reviewQuestionSamePerson": "क्या यह “{name}” वही व्यक्ति है?",
+    "reviewSpellingContext": "बातचीत का संदर्भ",
     "reviewQuestionSpelling": "यह कैसे लिखा जाता है?",
     "reviewPlayClip": "क्लिप चलाएँ",
     "reviewStopClip": "क्लिप रोकें",

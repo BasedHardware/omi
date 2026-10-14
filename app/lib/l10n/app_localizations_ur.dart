@@ -12332,6 +12332,9 @@ class AppLocalizationsUr extends AppLocalizations {
   }
 
   @override
+  String get reviewSpellingContext => 'گفتگو کا سیاق و سباق';
+
+  @override
   String get reviewQuestionSpelling => 'یہ کیسے لکھا جاتا ہے؟';
 
   @override

@@ -39,4 +39,49 @@ void main() {
     expect(items.items, isEmpty);
     expect(items.remainingToday, 2);
   });
+
+  test('generated spelling context survives the domain adapter and remains optional', () {
+    final question = {
+      'item_id': 'spelling:synthetic',
+      'kind': 'spelling',
+      'title': 'Which spelling?',
+      'created_at': '2026-10-14T12:00:00Z',
+      'quote': 'UL',
+      'spelling': {
+        'term_id': 'synthetic',
+        'options': ['UL', 'URL'],
+        'allow_custom': true,
+        'context': {
+          'conversation_title': 'Launch planning',
+          'conversation_date': '2026-10-14T12:00:00Z',
+          'main_index': 0,
+          'quote_start': 6,
+          'quote_end': 8,
+          'segments': [
+            {'text': '🙂 请发 UL 给我', 'speaker_label': 'You', 'is_user': true}
+          ],
+        },
+      },
+    };
+    for (final withContext in [true, false]) {
+      final payload = Map<String, dynamic>.from(question);
+      final spelling = Map<String, dynamic>.from(question['spelling']! as Map);
+      if (!withContext) spelling.remove('context');
+      payload['spelling'] = spelling;
+      final result = ReviewItemsResponse.fromGeneratedV2(wire.GeneratedReviewItemsResponseV2.fromJson({
+        'items': [payload],
+        'remaining_today': 3,
+      }));
+      expect(result.items.single.spelling!.options, ['UL', 'URL']);
+      final context = result.items.single.spelling!.context;
+      if (withContext) {
+        expect(context!.conversationTitle, 'Launch planning');
+        expect(context.main.text.substring(context.quoteStart!, context.quoteEnd!), 'UL');
+        expect(context.main.isUser, isTrue);
+        expect(context.conversationDate!.toUtc(), DateTime.utc(2026, 10, 14, 12));
+      } else {
+        expect(context, isNull);
+      }
+    }
+  });
 }

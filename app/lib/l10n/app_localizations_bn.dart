@@ -12316,6 +12316,9 @@ class AppLocalizationsBn extends AppLocalizations {
   }
 
   @override
+  String get reviewSpellingContext => 'কথোপকথনের প্রসঙ্গ';
+
+  @override
   String get reviewQuestionSpelling => 'এটি কীভাবে লেখা হয়?';
 
   @override
