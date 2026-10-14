@@ -931,3 +931,7 @@ def test_email_pattern_handles_long_unmatched_and_matched_local_parts():
 
     assert _EMAIL_PATTERN.sub('masked', '%' * 100_000) == '%' * 100_000
     assert _EMAIL_PATTERN.sub('masked', '%' * 100_000 + '@example.com') == 'masked'
+
+
+def test_email_redaction_preserves_sentence_punctuation():
+    assert sanitize('Contact john@example.com.') == 'Contact j***n@example.com.'

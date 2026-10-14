@@ -23,7 +23,7 @@ logger = logging.getLogger(__name__)
 
 # Matches email addresses — mask local part, keep domain for debugging.
 _EMAIL_PATTERN = re.compile(
-    r'(?<![A-Za-z0-9._%+\-])[A-Za-z0-9._%+\-]++@(?:[A-Za-z0-9\-]++\.)++[A-Za-z]{2,}(?![A-Za-z0-9.\-])'
+    r'(?<![A-Za-z0-9._%+\-])[A-Za-z0-9._%+\-]++@(?:[A-Za-z0-9\-]++\.)+[A-Za-z]{2,}(?![A-Za-z0-9\-])'
 )
 
 # Matches continuous runs of 8+ chars from the token character set.
