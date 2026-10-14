@@ -236,7 +236,7 @@ BLOCK_COMMENT = re.compile(r"/\*.*?\*/", re.S)
 
 
 def proxy_hooks(main_text: str) -> list[str]:
-    return sorted(set(PROXY_HOOK_CALL.findall(main_text)))
+    return sorted(set(PROXY_HOOK_CALL.findall(_mask(main_text))))
 
 
 def _mask(text: str) -> str:
@@ -330,6 +330,12 @@ def _guarded_before(body: str, limit: int, params: set[str]) -> bool:
     """
     prefix = body[:limit]
     injected = set(params)
+    locals_ = set(re.findall(r"\b(?:final|var)\s+([A-Za-z_]\w*)\s*=", body))
+    stored = {
+        name
+        for name in re.findall(r"(?<![\w.])(?:this\.)?([A-Za-z_]\w*)\s*=(?!=)", body)
+        if name not in locals_ and name not in params
+    }
     for local in re.finditer(r"\b(?:final|var|[A-Z]\w*(?:<[^;=]*>)?\??)\s+([A-Za-z_]\w*)\s*=\s*([^;]*);", prefix):
         if any(re.search(rf"\b{re.escape(name)}\b", local.group(2)) for name in injected):
             injected.add(local.group(1))
@@ -342,6 +348,9 @@ def _guarded_before(body: str, limit: int, params: set[str]) -> bool:
         if not UNCHANGED_TEST.search(condition):
             continue
         if not any(re.search(rf"\b{re.escape(name)}\b", condition) for name in injected):
+            continue
+        # ...and compare it with the backing reference the hook stores (a field it assigns).
+        if not any(re.search(rf"\b{re.escape(name)}\b", condition) for name in stored):
             continue
         if re.match(r"\s*(?:\{\s*)?return\b", prefix[close + 1 :]):
             return True

@@ -268,8 +268,8 @@ class ProviderGraphTests(unittest.TestCase):
 
     def test_return_inside_a_loop_block_counts_but_a_closure_does_not(self) -> None:
         looped = (
-            "  void setFoo(FooProvider p) {\n    for (final x in xs) { if (identical(x, p)) { return; } }\n"
-            "    notifyListeners();\n  }\n"
+            "  void setFoo(FooProvider p) {\n    for (final x in xs) { if (identical(foo, p)) { return; } }\n"
+            "    foo = p;\n    notifyListeners();\n  }\n"
         )
         self.assertEqual(hook_violations("setFoo", {"app/lib/x.dart": looped}), [])
         closure = "  void setFoo(FooProvider p) {\n    run(() { return; });\n    notifyListeners();\n  }\n"
@@ -314,6 +314,17 @@ class ProviderGraphTests(unittest.TestCase):
 
     def test_a_guard_on_a_local_derived_from_a_parameter_passes(self) -> None:
         self.assertEqual(hook_violations("updateExternalActions", {"app/lib/x.dart": BRACED_GUARD}), [])
+
+    def test_comparing_the_parameter_with_something_else_fails(self) -> None:
+        text = (
+            "  void setFoo(FooProvider p) {\n    if (p == fallbackProvider) return;\n    foo = p;\n"
+            "    notifyListeners();\n  }\n"
+        )
+        self.assertEqual(len(hook_violations("setFoo", {"app/lib/x.dart": text})), 1)
+
+    def test_commented_out_update_calls_are_not_hooks(self) -> None:
+        main_text = "// previous?.setFoo(a);\nfinal s = 'previous?.setBar(';\nupdate: (c, a, previous) => previous?..setBaz(a),"
+        self.assertEqual(proxy_hooks(main_text), ["setBaz"])
 
     def test_a_graph_with_no_recognised_hooks_fails(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

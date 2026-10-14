@@ -3,6 +3,8 @@ import 'dart:isolate';
 
 import 'package:flutter/foundation.dart';
 
+import 'package:omi/backend/http/api_fallback.dart';
+
 /// Times [offUiIsolate] fell back to inline because its input could not cross
 /// isolates.
 @visibleForTesting
@@ -37,6 +39,8 @@ Future<R> offUiIsolate<R>(
     // A captured value was not sendable. Correctness beats latency, but tests
     // assert this stays at zero so the work does not silently move back.
     offUiIsolateFallbacks++;
+    // Mode change (background -> UI isolate): report it per the fallback contract.
+    recordFallback(const ApiFallbackEvent(reason: ApiFallbackReason.error, outcome: ApiFallbackOutcome.degraded));
     return work();
   }
 }
