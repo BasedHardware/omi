@@ -25,6 +25,7 @@ import 'package:omi/utils/other/temp.dart';
 import 'package:omi/utils/processing_timeout.dart';
 import 'package:omi/backend/schema/phone_call.dart';
 import 'package:omi/providers/phone_call_provider.dart';
+import 'package:omi/pages/conversations/widgets/conversation_list_item.dart';
 import 'package:omi/pages/conversations/widgets/live_capture_card.dart';
 import 'package:omi/pages/phone_calls/active_call_page.dart';
 import 'package:omi/ui/ui.dart';
@@ -699,8 +700,15 @@ class ProcessingConversationWidget extends StatefulWidget {
   State<ProcessingConversationWidget> createState() => _ProcessingConversationWidgetState();
 }
 
-class _ProcessingConversationWidgetState extends State<ProcessingConversationWidget> {
+class _ProcessingConversationWidgetState extends State<ProcessingConversationWidget>
+    with SingleTickerProviderStateMixin {
   Timer? _timeoutTicker;
+
+  /// About half a minute of motion — a typical summary — then the row rests, so a slow one does not
+  /// animate for minutes (after the timeout it says so instead).
+  static const _cycles = 18;
+  late final AnimationController _motion =
+      AnimationController(vsync: this, duration: const Duration(milliseconds: 1600))..repeat(count: _cycles);
   bool _timedOut = false;
   bool _retrying = false;
 
@@ -744,6 +752,7 @@ class _ProcessingConversationWidgetState extends State<ProcessingConversationWid
   @override
   void dispose() {
     _timeoutTicker?.cancel();
+    _motion.dispose();
     super.dispose();
   }
 
@@ -774,6 +783,7 @@ class _ProcessingConversationWidgetState extends State<ProcessingConversationWid
         // Fresh attempt — give the new processing pass another full timeout window.
         _processingStartedAt = _now;
         _timedOut = false;
+        _motion.repeat(count: _cycles);
         provider.addProcessingConversation(updated, freshProcessingAttempt: true);
       } else {
         try {
@@ -796,91 +806,166 @@ class _ProcessingConversationWidgetState extends State<ProcessingConversationWid
 
   @override
   Widget build(BuildContext context) {
+    final l10n = context.l10n;
+    final conversation = widget.conversation;
+    final still = _timedOut || OmiMotion.of(context).emphasized == Duration.zero;
+    final seconds = conversation.getDurationInSeconds();
+    final meta = [
+      OmiDateFormat.of(context).time(conversation.startedAt ?? conversation.createdAt),
+      if (seconds > 0) OmiDuration.compact(seconds, l10n),
+    ].join(' • ');
+    final snippet = conversationSnippet(conversation, maxChars: 140);
+    final metaStyle = TextStyle(color: OmiColors.textTertiary, fontSize: 14);
+    // The saved row's layout (glyph, title, time and length), so the finished conversation takes
+    // its place without the card changing shape: the emoji arrives where the glyph is.
     return GestureDetector(
-      onTap: () async {
-        routeToPage(context, ProcessingConversationPage(conversation: widget.conversation));
-      },
+      onTap: () => routeToPage(context, ProcessingConversationPage(conversation: conversation)),
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+        padding: const EdgeInsets.only(top: 8, left: 16, right: 16),
         child: Container(
+          key: const ValueKey('processing_conversation_card'),
           width: double.maxFinite,
-          decoration: BoxDecoration(color: OmiColors.surface1, borderRadius: BorderRadius.circular(24.0)),
-          // Static skeleton - no animation to save CPU/battery
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // Header row
-                Row(
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.xlAll),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _CondensingGlyph(motion: _motion, still: still),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // Icon placeholder
-                    Container(
-                      width: 24,
-                      height: 24,
-                      decoration: BoxDecoration(
-                        color: OmiColors.surface2,
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    // Processing label
-                    Container(
-                      decoration: BoxDecoration(
-                        color: OmiColors.categorySurface,
-                        borderRadius: BorderRadius.circular(16),
-                      ),
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                      child: Text(
-                        captureStateLabel(context.l10n, CaptureDisplayState.processing),
-                        style: OmiType.subhead.copyWith(fontWeight: FontWeight.w500),
-                      ),
-                    ),
-                    const Spacer(),
-                    // The real start time, not a placeholder bar (hub audit #25).
                     Text(
-                      OmiDateFormat.of(context).time(widget.conversation.startedAt ?? widget.conversation.createdAt),
-                      style: OmiType.footnote.copyWith(color: OmiColors.textTertiary),
+                      captureStateLabel(l10n, CaptureDisplayState.processing),
+                      style: Theme.of(context).textTheme.titleMedium,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                     ),
+                    const SizedBox(height: 3),
+                    Text(meta, style: metaStyle, maxLines: 1, overflow: TextOverflow.ellipsis),
+                    if (_timedOut) ...[
+                      const SizedBox(height: OmiSpacing.sm),
+                      Text(
+                        l10n.processingTakingLonger,
+                        style: OmiType.footnote.copyWith(color: OmiColors.textSecondary, height: 1.35),
+                      ),
+                      const SizedBox(height: OmiSpacing.sm),
+                      OmiButton.secondary(
+                        key: const Key('processing_conversation_retry_button'),
+                        label: l10n.tryAgain,
+                        icon: Icons.refresh_rounded,
+                        size: OmiButtonSize.compact,
+                        isLoading: _retrying,
+                        onPressed: _retrying ? null : _onRetry,
+                      ),
+                    ] else if (snippet.isNotEmpty) ...[
+                      const SizedBox(height: OmiSpacing.sm),
+                      // What was said, with a light passing over it while Omi reads it.
+                      _ReadingSweep(
+                        motion: _motion,
+                        still: still,
+                        child: Text(
+                          snippet,
+                          style: OmiType.footnote.copyWith(color: OmiColors.textTertiary, height: 1.35),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
                   ],
                 ),
-                const SizedBox(height: 12),
-                // Title placeholder
-                Container(
-                  width: double.maxFinite,
-                  height: 16,
-                  decoration: BoxDecoration(color: OmiColors.surface2, borderRadius: BorderRadius.circular(4)),
-                ),
-                if (_timedOut) ...[
-                  const SizedBox(height: 12),
-                  Text(
-                    context.l10n.processingTakingLonger,
-                    style: TextStyle(color: OmiColors.textTertiary, fontSize: 13, height: 1.3),
-                  ),
-                  const SizedBox(height: 10),
-                  Align(
-                    alignment: Alignment.centerLeft,
-                    child: GestureDetector(
-                      onTap: () {}, // absorb so the card's open-on-tap does not fire
-                      child: TextButton(
-                        key: const Key('processing_conversation_retry_button'),
-                        onPressed: _retrying ? null : _onRetry,
-                        style: TextButton.styleFrom(
-                          foregroundColor: OmiColors.textPrimary,
-                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                          minimumSize: const Size(44, 44),
-                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                        ),
-                        child: _retrying ? const OmiSpinner(size: OmiSpinnerSize.small) : Text(context.l10n.tryAgain),
-                      ),
-                    ),
-                  ),
-                ],
-              ],
-            ),
+              ),
+            ],
           ),
         ),
+      ),
+    );
+  }
+}
+
+/// The processing row's glyph, in the emoji's square: three transcript lines draw together into
+/// one note and spread back out. Still, it is the three lines.
+class _CondensingGlyph extends StatelessWidget {
+  const _CondensingGlyph({required this.motion, required this.still});
+
+  final Animation<double> motion;
+  final bool still;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 36,
+      height: 36,
+      decoration: BoxDecoration(color: OmiColors.surface2, borderRadius: OmiRadius.mdAll),
+      child: RepaintBoundary(
+        child: AnimatedBuilder(
+          animation: motion,
+          builder: (context, _) => CustomPaint(
+            painter: _CondensingLinesPainter(t: still ? 0 : motion.value, color: OmiColors.textSecondary),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _CondensingLinesPainter extends CustomPainter {
+  _CondensingLinesPainter({required this.t, required this.color});
+
+  final double t;
+  final Color color;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    // 0→0.5: the lines gather into one short line; 0.5→1: they spread back out.
+    final phase = t < 0.5 ? Curves.easeInOutCubic.transform(t * 2) : 1 - Curves.easeInOutCubic.transform((t - 0.5) * 2);
+    final c = size.center(Offset.zero);
+    final paint = Paint()
+      ..strokeCap = StrokeCap.round
+      ..strokeWidth = 2;
+    const widths = [16.0, 12.0, 8.0];
+    for (var k = 0; k < 3; k++) {
+      final y = c.dy + (k - 1) * 5 * (1 - phase);
+      final w = widths[k] * (1 - phase) + 11 * phase;
+      // Each line keeps its left edge, like text, until they meet in the middle.
+      final left = c.dx - widths[0] / 2 * (1 - phase) - w / 2 * phase;
+      paint.color = color.withValues(alpha: k == 1 ? 1 : 1 - 0.6 * phase);
+      canvas.drawLine(Offset(left, y), Offset(left + w, y), paint);
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _CondensingLinesPainter old) => old.t != t || old.color != color;
+}
+
+/// A soft band of light that moves across [child] once per cycle of [motion].
+class _ReadingSweep extends StatelessWidget {
+  const _ReadingSweep({required this.motion, required this.still, required this.child});
+
+  final Animation<double> motion;
+  final bool still;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    if (still) return child;
+    return RepaintBoundary(
+      child: AnimatedBuilder(
+        animation: motion,
+        child: child,
+        builder: (context, child) {
+          final x = -0.3 + 1.6 * Curves.easeInOut.transform(motion.value);
+          return ShaderMask(
+            blendMode: BlendMode.srcIn,
+            shaderCallback: (rect) => LinearGradient(
+              colors: [OmiColors.textTertiary, OmiColors.textPrimary, OmiColors.textTertiary],
+              stops: [(x - 0.2).clamp(0.0, 1.0), x.clamp(0.0, 1.0), (x + 0.2).clamp(0.0, 1.0)],
+            ).createShader(rect),
+            child: child,
+          );
+        },
       ),
     );
   }
