@@ -48,7 +48,9 @@ routing at the BLE packet boundary. A batch-owned packet goes to neither the liv
 socket nor the ordinary streaming safety WAL. Showing the transcript seals the
 batch and sends only subsequent frames live; hiding it admits subsequent frames
 back to batch. There is no replay of earlier batch audio into live STT. Existing
-streamed safety copies keep their current server-evidence reconciliation.
+streamed safety copies keep their current server-evidence reconciliation. Socket
+transcript expectations pause during batch ownership and restart with a fresh
+deadline on live handback; BLE ingress recovery remains active.
 
 A sidecar is persisted before the first append. Writes cross into the OS before
 live delivery can be suppressed; fsync runs each audio-second and at seal. App

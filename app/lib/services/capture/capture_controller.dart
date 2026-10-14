@@ -1715,13 +1715,14 @@ class CaptureController extends ChangeNotifier
         ? _wedgeMonitor.onCaptureSessionConnected(deviceId: _recordingDevice!.id, source: socket.source ?? '')
         : -1;
     _wedgeSession = (socket: socket, handle: handle);
+    if (_mobileBatchOwnsSocketAudio && handle >= 0) _wedgeMonitor.setTranscriptExpected(handle, false);
   }
 
   bool _isHardwareCaptureSocket(TranscriptSegmentSocketService socket) {
     final device = _recordingDevice;
     if (device == null || socket.state != SocketServiceState.connected) return false;
     if (_phoneOwnsCapture || _pendantSuspension != null || isPaused || _preferences.batchModeEnabled) return false;
-    if (_mobileBatchOwnsSocketAudio || socket.onboardingMode || socket.customSttMode) return false;
+    if (socket.onboardingMode || socket.customSttMode) return false;
     final underlying = socket.socket;
     if (underlying is CompositeTranscriptionSocket && !underlying.forwardRawAudioToSecondary) return false;
     return socket.source == _getConversationSourceFromDevice();
@@ -2100,17 +2101,12 @@ class CaptureController extends ChangeNotifier
             geolocation: _sessionGeolocation,
             recordingSessionId: activeRecordingId,
           );
-          if (batched) {
-            _mobileBatchOwnsSocketAudio = true;
-            final socket = _socket;
-            if (socket != null) _completeWedgeSession(socket, intentional: true);
-            return;
+          if (batched != _mobileBatchOwnsSocketAudio) {
+            _mobileBatchOwnsSocketAudio = batched;
+            final handle = _wedgeSession?.handle;
+            if (handle != null && handle >= 0) _wedgeMonitor.setTranscriptExpected(handle, !batched);
           }
-          if (_mobileBatchOwnsSocketAudio) {
-            _mobileBatchOwnsSocketAudio = false;
-            final socket = _socket;
-            if (socket?.state == SocketServiceState.connected) _beginWedgeSession(socket!);
-          }
+          if (batched) return;
         }
 
         // Local safety copy. A connected socket proves only that send() accepted

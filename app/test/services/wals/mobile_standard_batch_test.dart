@@ -41,6 +41,9 @@ class RecordingWedgeMonitor extends CaptureWedgeMonitor {
             platform: () => 'test');
   int connected = 0;
   final List<bool> endedIntentionally = [];
+  final List<bool> transcriptExpected = [];
+  @override
+  void setTranscriptExpected(int handle, bool expected) => transcriptExpected.add(expected);
   @override
   int onCaptureSessionConnected({required String deviceId, required String source}) => ++connected;
   @override
@@ -300,8 +303,8 @@ void main() {
       world.deviceConnection!.emitAudio(value: 7);
       await world.settle();
       await lane.pendingInference;
-      expect(monitor.endedIntentionally.length, endedBeforeBatch + 1);
-      expect(monitor.endedIntentionally.last, true);
+      expect(monitor.endedIntentionally.length, endedBeforeBatch);
+      expect(monitor.transcriptExpected.last, false);
       final startsDuringBatch = monitor.connected;
       expect(world.socket!.sentBinary, isEmpty);
       expect(world.wal.syncs.phone.testFrames, isEmpty);
@@ -309,7 +312,8 @@ void main() {
       world.deviceConnection!.emitAudio(value: 8);
       await world.settle();
       await buffer.pending;
-      expect(monitor.connected, startsDuringBatch + 1);
+      expect(monitor.connected, startsDuringBatch);
+      expect(monitor.transcriptExpected.last, true);
       expect(world.socket!.sentBinary.single, List.filled(80, 8));
       expect(world.wal.syncs.phone.testFrames.single.payload, List.filled(80, 8));
       expect(readFrames(File('${directory.path}/${published.single.filePath}')), [List.filled(80, 7)]);
