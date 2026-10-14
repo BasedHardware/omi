@@ -75,6 +75,8 @@ def runtime(monkeypatch):
     # test_default_pace_waits_for_fifteen_seconds_of_speech pins on its own.
     monkeypatch.setenv('PARAKEET_WINDOW_PACE_SECONDS', '6')
     monkeypatch.setenv('PARAKEET_WINDOW_FIRST_TEXT_DEADLINE_SECONDS', '12')
+    monkeypatch.delenv('PARAKEET_WINDOW_DEADLINE_CUT_ENABLED', raising=False)
+    monkeypatch.delenv('PARAKEET_WINDOW_DEADLINE_CUT_POST_LATENCY_SECONDS', raising=False)
     monkeypatch.setenv('PARAKEET_WINDOW_MAX_EMPTY_STREAK', '4')
     monkeypatch.setenv('SONIOX_API_KEY', 'test')
     monkeypatch.setenv('MODULATE_API_KEY', 'test')
@@ -1459,9 +1461,6 @@ async def test_repeated_short_empty_episodes_exhaust_cumulative_rescue_budget(mo
 async def test_only_emitted_text_resets_answered_empty_speech_budget(monkeypatch):
     _mock_post_pacing(monkeypatch, lambda _delay: _REAL_SLEEP(0))
     actual, base, previous, client, replayed, callbacks, clock, sample = await _fragment_session(monkeypatch)
-    # Isolate accounting with room to hold the sentence until the silence
-    # flush. The production 12s deadline-cut behavior has its own regression.
-    previous.raw._first_text_deadline = 60
     sample = await _settled_fragment_silence(actual, clock, sample, 8)
     sample = await _fragment_frame(actual, clock, sample, speech=True)
     sample = await _settled_fragment_silence(actual, clock, sample, 125)
@@ -4159,39 +4158,103 @@ async def test_expired_rescue_with_no_cheap_capacity_never_extends_paid(monkeypa
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize('flag', [None, 'false', 'invalid', 'true'])
 @pytest.mark.parametrize('progress', [False, True])
-async def test_held_text_emits_before_next_post_would_miss_deadline(monkeypatch, progress):
-    # Real socket, HTTP response parser and sentence-anchor decision. Successful
-    # unpunctuated answers must not be held until the 12s timer kills the leg.
+async def test_normal_paced_first_post_holds_with_deadline_cut_on_or_off(monkeypatch, flag, progress):
+    if flag is None:
+        monkeypatch.delenv('PARAKEET_WINDOW_DEADLINE_CUT_ENABLED', raising=False)
+    else:
+        monkeypatch.setenv('PARAKEET_WINDOW_DEADLINE_CUT_ENABLED', flag)
     now = [100.0]
     monkeypatch.setattr(window, 'time', SimpleNamespace(monotonic=lambda: now[0]))
-    client = UnpunctuatedClient()
-    monkeypatch.setattr(window, 'get_stt_client', lambda: client)
+
+    class PacedClient(UnpunctuatedClient):
+        async def post(self, url, **kwargs):
+            now[0] += 0.8
+            return await super().post(url, **kwargs)
+
+    monkeypatch.setattr(window, 'get_stt_client', lambda: PacedClient())
+    emitted = []
+    sock = window.WindowedParakeetSocket(emitted.extend, 'http://tdt.invalid', 16000, lambda: None)
+    sock.progress_deadline_enabled = progress
+    sock._first_text_recorded = progress
+    forced_before = window.WINDOW_FORCED_CUTS._value.get()
+    try:
+        pcm = b'\x01\x00' * 16000 * 6
+        sock.mark_speech()
+        assert sock.send(pcm[:640])  # First 20ms of speech arms the timer at 100s.
+        now[0] += sock._pace_seconds  # Accumulate a full pace before the POST.
+        sock.mark_speech()
+        assert sock.send(pcm[640:])
+        assert sock._deadline_speech_at == 100.0
+        sock._next_post = now[0] + sock._pace_seconds  # The real pump's scheduling rule.
+        job = sock._next_job()
+        assert job is not None and not job.force
+        await sock._run_job(job)
+        assert now[0] == pytest.approx(106.8)
+        assert emitted == [] and sock._anchor_bytes == 0
+        assert sock._deadline_cut_enabled == (flag == 'true')
+        assert window.WINDOW_FORCED_CUTS._value.get() == forced_before
+    finally:
+        sock.finish()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('progress', [False, True])
+@pytest.mark.parametrize(
+    'flag,bound,rescued',
+    [
+        ('true', None, True),
+        ('true', '0.8', False),
+        ('true', '1.5', True),
+        ('true', 'nan', True),
+        ('false', None, False),
+    ],
+)
+async def test_slow_nonempty_post_near_deadline_survives_only_with_qualified_cut(
+    monkeypatch, progress, flag, bound, rescued
+):
+    # Capture takes a full pace, then a slow but responding HTTP POST leaves
+    # 1.1s before the original timer expires. Exercise the real parser/anchor.
+    monkeypatch.setenv('PARAKEET_WINDOW_DEADLINE_CUT_ENABLED', flag)
+    if bound is not None:
+        monkeypatch.setenv('PARAKEET_WINDOW_DEADLINE_CUT_POST_LATENCY_SECONDS', bound)
+    now = [100.0]
+    monkeypatch.setattr(window, 'time', SimpleNamespace(monotonic=lambda: now[0]))
+
+    class SlowClient(UnpunctuatedClient):
+        async def post(self, url, **kwargs):
+            now[0] += 4.9
+            return await super().post(url, **kwargs)
+
+    monkeypatch.setattr(window, 'get_stt_client', lambda: SlowClient())
     monkeypatch.setattr(window.WindowedParakeetSocket, '_assign_speaker', AsyncMock(return_value=0))
     emitted = []
     sock = window.WindowedParakeetSocket(emitted.extend, 'http://tdt.invalid', 16000, lambda: None)
     sock.progress_deadline_enabled = progress
-    sock._first_text_recorded = progress  # exercise a later progress episode too
-    pcm = b'\x01\x00' * 16000 * 6
+    sock._first_text_recorded = progress
     try:
+        pcm = b'\x01\x00' * 16000 * 6
         sock.mark_speech()
-        assert sock.send(pcm)
+        assert sock.send(pcm[:640])
+        now[0] += sock._pace_seconds
+        sock.mark_speech()
+        assert sock.send(pcm[640:])
+        assert sock._deadline_speech_at == 100.0
+        sock._next_post = now[0] + sock._pace_seconds
         job = sock._next_job()
         assert job is not None and not job.force
         await sock._run_job(job)
-        assert emitted == []  # preserve sentence anchoring with deadline room
-        assert sock._first_text_timer is not None
-        now[0] += 7
-        sock.mark_speech()
-        assert sock.send(pcm)
-        job = sock._next_job()
-        assert job is not None and not job.force
-        await sock._run_job(job)
-        assert emitted and all(segment['text'].strip() for segment in emitted)
-        assert sock._anchor_bytes > 0
-        assert sock._first_text_timer is None
-        now[0] += 6
+        assert now[0] == pytest.approx(110.9)
+        assert bool(emitted) == rescued
+        assert (sock._anchor_bytes > 0) == rescued
+        assert (sock._first_text_timer is None) == rescued
+        now[0] = 112.1
         sock._expire_first_text()
-        assert not sock.is_connection_dead
+        assert sock.is_connection_dead != rescued
+        if rescued:
+            assert all(segment['text'].strip() for segment in emitted)
+        else:
+            assert sock.death_reason == 'first_text_deadline'
     finally:
         sock.finish()

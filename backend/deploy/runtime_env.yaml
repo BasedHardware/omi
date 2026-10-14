@@ -124,6 +124,10 @@ environments:
           PARAKEET_WINDOW_MAX_SESSIONS: {value: '1', category: rollout}
           PARAKEET_WINDOW_POST_TIMEOUT_SECONDS: {value: '8', category: rollout}
           PARAKEET_WINDOW_DIARIZATION: {value: 'false', category: rollout}
+          PARAKEET_WINDOW_DEADLINE_CUT_ENABLED: {value: 'false', category: rollout}
+          PARAKEET_WINDOW_DEADLINE_CUT_POST_LATENCY_SECONDS:
+            value: '1.2'
+            category: reliability
           PARAKEET_WINDOW_PACE_SECONDS: {value: '6', category: rollout}
           PARAKEET_WINDOW_MAX_CONTEXT_SECONDS: {value: '24', category: rollout}
           PARAKEET_BATCH_PRESSURE_POOL_HOST:
@@ -1823,6 +1827,10 @@ environments:
           PARAKEET_WINDOW_MAX_SESSIONS: {value: '16', category: rollout}
           PARAKEET_WINDOW_POST_TIMEOUT_SECONDS: {value: '8', category: rollout}
           PARAKEET_WINDOW_DIARIZATION: {value: 'false', category: rollout}
+          PARAKEET_WINDOW_DEADLINE_CUT_ENABLED: {value: 'false', category: rollout}
+          PARAKEET_WINDOW_DEADLINE_CUT_POST_LATENCY_SECONDS:
+            value: '1.2'
+            category: reliability
           PARAKEET_WINDOW_PACE_SECONDS: {value: '6', category: rollout}
           PARAKEET_WINDOW_MAX_CONTEXT_SECONDS: {value: '24', category: rollout}
           PARAKEET_BATCH_PRESSURE_POOL_HOST:
