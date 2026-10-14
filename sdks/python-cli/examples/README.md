@@ -1,5 +1,6 @@
 # omi-cli examples
 
+* [`backup_bundle.md`](backup_bundle.md) — Package Omi exports into a single gzip-compressed tar bundle with a SHA-256 manifest.
 * [`agent_quickstart.md`](agent_quickstart.md) — how an LLM/agent should drive
   the CLI.
 * [`agent_quickstart.zh-CN.md`](agent_quickstart.zh-CN.md) — 面向 Agent 的
