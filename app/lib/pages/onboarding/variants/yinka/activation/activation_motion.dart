@@ -600,16 +600,15 @@ class _SummaryRevealState extends State<SummaryReveal> with SingleTickerProvider
         final v = _c.value;
         final appear = Curves.easeOutCubic.transform((v / 0.45).clamp(0.0, 1.0));
         final sweep = ((v - 0.55) / 0.45).clamp(0.0, 1.0);
-        Widget out = Opacity(
-          opacity: appear,
-          child: Transform.scale(
-            scale: 0.94 + 0.06 * appear,
-            child: ImageFiltered(
-              imageFilter: ImageFilter.blur(sigmaX: 12 * (1 - appear), sigmaY: 12 * (1 - appear)),
-              child: child,
-            ),
-          ),
-        );
+        // The blur only runs during the 450 ms entrance; once settled the card is drawn plain.
+        final Widget settled = appear >= 1
+            ? child
+            : ImageFiltered(
+                // omi-perf-allow: blur-filter -- one-shot entrance of a single card, gone when appear == 1; never in a list
+                imageFilter: ImageFilter.blur(sigmaX: 12 * (1 - appear), sigmaY: 12 * (1 - appear)),
+                child: child,
+              );
+        Widget out = Opacity(opacity: appear, child: Transform.scale(scale: 0.94 + 0.06 * appear, child: settled));
         if (sweep > 0 && sweep < 1) {
           final x = -1.5 + 3.0 * Curves.easeInOut.transform(sweep);
           out = ShaderMask(
