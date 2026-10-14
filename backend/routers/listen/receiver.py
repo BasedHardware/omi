@@ -9,7 +9,7 @@ import logging
 import time
 import uuid
 
-from utils.manual_speaker_assignments import acknowledged_teaching
+from utils.manual_speaker_assignments import acknowledged_teaching, manual_rejected_speakers
 from collections import OrderedDict, deque
 from typing import Any, Dict, List, Optional, Tuple, cast
 
@@ -2150,6 +2150,35 @@ class ListenReceiver(ReplayFilterMixin):
         by_id = {segment.get('id'): segment for segment in conversation.get('transcript_segments') or []}
         speakers = receipt.get('speakers') or {}
         overrides = receipt.get('segments') or {}
+        # A winning whole-voice rejection (e.g. "Not a person") must retire the
+        # speaker-wide inference map for the rejected voice: leaving it intact
+        # relabels every newly arriving segment of that speaker from the stale
+        # map after the exclusion, and process_speaker_assigned_segments falls
+        # back to speaker_to_person for segments without an explicit override.
+        rejected_speakers = manual_rejected_speakers(receipt)
+        for rejected in rejected_speakers:
+            # Full matcher-state retirement via the shared retraction: popping
+            # speaker_to_person alone left _mapping_origin 'manual' behind, so
+            # a later restore of the ignored voice could never publish a new
+            # automatic match (manual-origin guard) until the matcher reset at
+            # a conversation boundary. The shared path also clears candidates
+            # and pending suggestions, mirroring the reject-route cleanup.
+            self.host.speakers.retire_excluded_voice(rejected)
+            # Per-segment mappings for the rejected speaker retire too: a
+            # segment with an existing entry that this payload does not
+            # mention (e.g. one that arrived while the exclusion PATCH was in
+            # flight) would keep its stale person mapping, and
+            # process_speaker_assigned_segments prefers segment_assignments
+            # over speaker_to_person — later persistence would relabel that
+            # segment despite the winning whole-voice rejection.
+            for sid, segment in by_id.items():
+                if segment.get('speaker_id') == rejected:
+                    self.host.speakers.segment_assignments.pop(sid, None)
+            self.host.speakers.segment_identity_status = {
+                sid: status
+                for sid, status in self.host.speakers.segment_identity_status.items()
+                if not (by_id.get(sid, {}) or {}).get('speaker_id') == rejected
+            }
         for sid in segment_ids:
             segment = by_id.get(sid) or {}
             override = overrides.get(sid)

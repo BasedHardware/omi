@@ -80,3 +80,155 @@ def test_restore_cannot_replace_a_newer_label_or_another_users_marker():
     assert db.ignored_voice_keys(store.rows[STATE]) == {'c1:1'}
     assert db.remove_ignored_voice('u', 'c1', 1, [], firestore_client=store)
     assert store.rows[path]['manual_speaker_assignments']['speakers']['1'] == decision
+
+
+def test_restore_drops_generation_matched_segment_scoped_exclusions():
+    store = StrictFirestore()
+    db.record_ignored_voice('u', 'c1', 1, NOW, assignment_generation=1, firestore_client=store)
+    path = ('users', 'u', 'conversations', 'c1')
+    # Live-sheet bulk exclusion shape: no speakers decision, only segments.
+    store.rows[path] = {
+        'manual_speaker_assignments': {
+            'generation': 1,
+            'segments': {
+                's1': {'generation': 1, 'person_id': None, 'is_user': False, 'speaker_id': 1},
+                's2': {'generation': 1, 'person_id': None, 'is_user': False, 'speaker_id': 1},
+                'keep': {'generation': 1, 'person_id': None, 'is_user': False, 'speaker_id': 2},
+            },
+        }
+    }
+    assert db.remove_ignored_voice('u', 'c1', 1, [], firestore_client=store)
+    raw = store.rows[path]
+    receipt = conversations_db.decode_manual_speaker_assignments(
+        'u', raw['manual_speaker_assignments'], bool(raw.get('manual_speaker_assignments_compressed'))
+    )
+    assert set(receipt['segments']) == {'keep'}
+    assert receipt['generation'] == 2
+    assert db.ignored_voice_keys(store.rows[STATE]) == set()
+
+
+def test_positive_assignment_supersedes_marker():
+    store = StrictFirestore()
+    db.record_ignored_voice('u', 'c1', 1, NOW, assignment_generation=1, firestore_client=store)
+    db.record_ignored_voice('u', 'c2', 2, NOW, assignment_generation=1, firestore_client=store)
+    assert db.clear_ignored_voices('u', 'c1', [1], firestore_client=store) == 1
+    assert db.ignored_voice_keys(store.rows[STATE]) == {'c2:2'}
+    assert db.clear_ignored_voices('u', 'c1', [1], firestore_client=store) == 0
+    assert db.clear_ignored_voices('u', 'c1', [], firestore_client=store) == 0
+
+
+def test_stale_generation_marker_is_not_recorded_after_a_newer_positive():
+    store = StrictFirestore()
+    path = ('users', 'u', 'conversations', 'c1')
+    # A newer whole-voice positive (generation 3) already replaced the exclusion
+    # whose in-flight request is about to record its generation-1 marker.
+    store.rows[path] = {
+        'manual_speaker_assignments': {'generation': 3, 'speakers': {'1': {'generation': 3, 'person_id': 'p1'}}}
+    }
+    db.record_ignored_voice('u', 'c1', 1, NOW, assignment_generation=1, firestore_client=store)
+    # The stale generation was fenced out entirely — no marker, no state doc.
+    assert db.ignored_voice_keys(store.rows.get(STATE) or {'ignored_voices': {}}) == set()
+    # A range-only newer entry does not unseat the exclusion: record stands.
+    store.rows[path] = {
+        'manual_speaker_assignments': {
+            'generation': 3,
+            'segments': {'s1': {'generation': 3, 'person_id': 'p1', 'segment_only': True, 'speaker_id': 1}},
+        }
+    }
+    db.record_ignored_voice('u', 'c1', 1, NOW, assignment_generation=1, firestore_client=store)
+    assert db.ignored_voice_keys(store.rows[STATE]) == {'c1:1'}
+    # No fence applies without an assignment generation (legacy tag prompts).
+    db.record_ignored_voice('u', 'c3', 2, NOW, firestore_client=store)
+    assert 'c3:2' in db.ignored_voice_keys(store.rows[STATE])
+
+
+def test_stale_generation_marker_is_not_recorded_after_a_newer_not_me():
+    store = StrictFirestore()
+    path = ('users', 'u', 'conversations', 'c1')
+    # The supported is_user=false answer commits a whole-voice not_me rejection
+    # at generation 3; a delayed generation-1 exclusion write must not recreate
+    # its marker — the ignored-voice list would suppress and list a voice whose
+    # winning decision is no longer not_a_person.
+    store.rows[path] = {
+        'manual_speaker_assignments': {
+            'generation': 3,
+            'speakers': {'1': {'generation': 3, 'person_id': None, 'is_user': False, 'rejection': {'kind': 'not_me'}}},
+        }
+    }
+    db.record_ignored_voice('u', 'c1', 1, NOW, assignment_generation=1, firestore_client=store)
+    assert db.ignored_voice_keys(store.rows.get(STATE) or {'ignored_voices': {}}) == set()
+    # A newer whole-voice not_a_person at a newer generation is the exclusion
+    # itself re-confirmed: the older in-flight write stays fenced, but a fresh
+    # record at the newest generation stands.
+    store.rows[path] = {
+        'manual_speaker_assignments': {
+            'generation': 4,
+            'speakers': {
+                '1': {'generation': 4, 'person_id': None, 'is_user': False, 'rejection': {'kind': 'not_a_person'}}
+            },
+        }
+    }
+    db.record_ignored_voice('u', 'c1', 1, NOW, assignment_generation=4, firestore_client=store)
+    assert db.ignored_voice_keys(store.rows[STATE]) == {'c1:1'}
+
+
+def test_delayed_clear_cannot_remove_a_newer_decisions_marker():
+    store = StrictFirestore()
+    # Generation 3 positive committed, then a generation 4 re-exclusion
+    # recorded its marker. The generation 3 request's delayed clear must not
+    # remove the newer marker — the voice would silently leave Settings >
+    # Ignored Voices and could no longer be restored from there.
+    db.record_ignored_voice('u', 'c1', 1, NOW, assignment_generation=4, firestore_client=store)
+    assert db.clear_ignored_voices('u', 'c1', [1], assignment_generation=3, firestore_client=store) == 0
+    assert db.ignored_voice_keys(store.rows[STATE]) == {'c1:1'}
+    # The same-generation positive retirement still clears it.
+    assert db.clear_ignored_voices('u', 'c1', [1], assignment_generation=4, firestore_client=store) == 1
+    assert db.ignored_voice_keys(store.rows.get(STATE) or {'ignored_voices': {}}) == set()
+    # A legacy marker without a generation fence stays clearable by any positive.
+    db.record_ignored_voice('u', 'c2', 2, NOW, firestore_client=store)
+    assert db.clear_ignored_voices('u', 'c2', [2], assignment_generation=9, firestore_client=store) == 1
+
+
+def test_delayed_older_exclusion_cannot_overwrite_a_newer_exclusions_marker():
+    store = StrictFirestore()
+    path = ('users', 'u', 'conversations', 'c1')
+    # Two exclusions for the same voice commit at generations N=1 and N+1=2;
+    # the generation-2 write records its marker first. The delayed generation-1
+    # request must not overwrite it: restoring from Settings matches the
+    # marker's generation against the receipt, so a generation-1 marker would
+    # drop only generation-1 entries while the generation-2 rejection stays
+    # active but can no longer be restored.
+    store.rows[path] = {
+        'manual_speaker_assignments': {
+            'generation': 2,
+            'speakers': {
+                '1': {'generation': 2, 'person_id': None, 'is_user': False, 'rejection': {'kind': 'not_a_person'}}
+            },
+        }
+    }
+    db.record_ignored_voice('u', 'c1', 1, NOW, assignment_generation=2, firestore_client=store)
+    db.record_ignored_voice('u', 'c1', 1, NOW + timedelta(minutes=1), assignment_generation=1, firestore_client=store)
+    markers = db.ignored_voices(store.rows[STATE])
+    assert len(markers) == 1
+    assert markers[0]['assignment_generation'] == 2
+
+
+def test_importing_speaker_identification_first_does_not_break_collection():
+    # The generation fence reads the receipt through database.conversations,
+    # which must stay a lazy import: utils.speaker_identification imports
+    # voice_profiles at module level, and a module-level conversations import
+    # here once produced a partially initialized package that failed CI test
+    # collection (ImportError: cannot import name 'conversations_collection').
+    import subprocess
+    import sys
+
+    probe = 'import utils.speaker_identification; import database.voice_profiles; print("ok")'
+    result = subprocess.run(
+        [sys.executable, '-c', probe],
+        cwd=__file__.rsplit('/tests/', 1)[0],
+        capture_output=True,
+        text=True,
+        timeout=120,
+    )
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.strip() == 'ok'

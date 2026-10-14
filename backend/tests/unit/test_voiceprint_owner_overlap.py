@@ -104,6 +104,10 @@ def world(monkeypatch):
     monkeypatch.setattr(speaker_learning_jobs, 'get_firestore_client', lambda: store)
     monkeypatch.setattr(conversations, 'get_conversation', lambda *a: decoded(store))
     monkeypatch.setattr(voice_profiles, 'record_tag_prompt_answered', lambda *a: None)
+    # The shared marker retirement must stay inert here: the card "me" answers
+    # below drive the real assignment transaction, and the marker clear must
+    # not build a real Firestore client.
+    monkeypatch.setattr(voice_profiles, 'clear_ignored_voices', lambda *a, **k: 0)
     monkeypatch.setattr(service, 'emit_product_event', lambda **kw: None)
     reads = []
 

@@ -100,6 +100,7 @@ from utils.conversations.search import (
 )
 from utils.llm.conversation_processing import SummaryProviderError, generate_summary_with_prompt
 from utils.speaker_assignment_teaching import commit_manual_assignment
+from utils.ignored_voice_markers import record_exclusion_markers, retire_exclusion_markers
 from utils.speaker_learning_jobs import schedule_reprocessed_learning
 from utils.other import endpoints as auth
 from utils.other.storage import get_conversation_recording_if_exists
@@ -1562,11 +1563,12 @@ def _assign_manual_speaker(
     use_for_speech_training=True,
     time_range=None,
 ):
-    if assign_type not in {'is_user', 'person_id'}:
+    if assign_type not in {'is_user', 'person_id', 'not_a_person'}:
         raise HTTPException(status_code=400, detail='Invalid assign type')
     value = None if value == 'null' else value
     is_user = assign_type == 'is_user' and str(value).lower() in {'true', '1'}
     person_id = value if assign_type == 'person_id' else None
+    excluded = assign_type == 'not_a_person'
     try:
         raw, resolved, removed, before = commit_manual_assignment(
             uid,
@@ -1576,8 +1578,12 @@ def _assign_manual_speaker(
             segment_ids=segment_ids,
             speaker_id=speaker_id,
             segment_index=segment_index,
-            use_for_speech_training=use_for_speech_training,
-            rejection={'kind': 'not_me', 'person_id': None} if assign_type == 'is_user' and not is_user else None,
+            use_for_speech_training=False if excluded else use_for_speech_training,
+            rejection=(
+                {'kind': 'not_a_person', 'person_id': None}
+                if excluded
+                else {'kind': 'not_me', 'person_id': None} if assign_type == 'is_user' and not is_user else None
+            ),
             background_tasks=background_tasks,
             **({"time_range": time_range} if time_range is not None else {}),
         )
@@ -1589,6 +1595,22 @@ def _assign_manual_speaker(
         raise HTTPException(status_code=409, detail=str(error)) from error
     conversation = deserialize_conversation(raw)
     resolved_conversation_id = raw.get('id') or conversation_id
+    if excluded:
+        # Live-sheet exclusions write the same ignored-voice marker the reject
+        # route and tag-prompt answers write, so the voice shows under
+        # Settings > Ignored Voices and can be restored from there.
+        record_exclusion_markers(uid, resolved_conversation_id, raw, resolved, speaker_id=speaker_id)
+    else:
+        # Every other committed decision must reconcile the ignored-voice
+        # marker, not only person/user positives: the supported
+        # assign_type=is_user&value=false path commits a whole-voice not_me
+        # rejection that supersedes an earlier media exclusion (person_id and
+        # is_user are both false there, which the old `elif` skipped). The
+        # shared helper distinguishes rejection kinds itself — range-only
+        # (segment_only) entries keep the marker restorable and a
+        # still-winning not_a_person keeps it — so route every non-exclusion
+        # assignment through it.
+        retire_exclusion_markers(uid, resolved_conversation_id, raw, resolved, speaker_id=speaker_id)
     _drop_display_projection(conversation)
     _emit_speaker_identity_confirmed(
         uid=uid,

@@ -236,6 +236,51 @@ def ignored_voice_keys(state: Dict[str, Any]) -> set:
     return {ignored_voice_key(entry['conversation_id'], entry['speaker_id']) for entry in ignored_voices(state)}
 
 
+def _newer_superseding_decision(
+    client: Any,
+    transaction: Any,
+    uid: str,
+    conversation_id: str,
+    speaker_id: int,
+    generation: Optional[int],
+) -> bool:
+    """True when a newer whole-voice decision already superseded this exclusion.
+
+    Mirrors ``manual_rejected_speakers`` semantics: a speaker-scoped decision
+    or a non-``segment_only`` segment decision at a newer generation unseats
+    the exclusion — a positive assignment, and equally a different rejection
+    kind (``not_me`` / ``not_person`` / an unnamed card answer), because the
+    ignored-voice marker exists only for ``not_a_person``. A ``segment_only``
+    (range) entry does not unseat a whole-voice decision.
+    """
+    if generation is None:
+        return False
+    # Imported lazily: database.conversations pulls a wide model graph whose
+    # import order must not depend on this module (utils.speaker_identification
+    # imports voice_profiles first, and a module-level import here once broke
+    # test collection with a partially initialized database.conversations).
+    from .conversations import conversations_collection
+    from . import conversations
+
+    conversation_ref = (
+        client.collection('users').document(uid).collection(conversations_collection).document(conversation_id)
+    )
+    raw = conversation_ref.get(transaction=transaction).to_dict() or {}
+    receipt = conversations.decode_manual_speaker_assignments(
+        uid, raw.get('manual_speaker_assignments'), bool(raw.get('manual_speaker_assignments_compressed'))
+    )
+    entries: List[Dict[str, Any]] = []
+    speaker_entry = (receipt.get('speakers') or {}).get(str(speaker_id))
+    if isinstance(speaker_entry, dict):
+        entries.append(speaker_entry)
+    entries.extend(
+        entry
+        for entry in (receipt.get('segments') or {}).values()
+        if isinstance(entry, dict) and entry.get('speaker_id') == speaker_id
+    )
+    return any(not entry.get('segment_only') and entry.get('generation', 0) > generation for entry in entries)
+
+
 def record_ignored_voice(
     uid: str,
     conversation_id: str,
@@ -251,14 +296,44 @@ def record_ignored_voice(
 
     @firestore.transactional
     def record(transaction: Any) -> None:
+        if _newer_superseding_decision(client, transaction, uid, conversation_id, speaker_id, assignment_generation):
+            # A newer decision (positive assignment, or a non-not_a_person
+            # rejection like not_me) already replaced this exclusion; recording
+            # the stale-generation marker would re-ignore a voice the user
+            # reassigned while this request was in flight.
+            return
         snapshot = ref.get(transaction=transaction)
         state = snapshot.to_dict() or {}
+        existing = ignored_voices(state).copy()
+        existing_marker = next(
+            (
+                e
+                for e in existing
+                if ignored_voice_key(str(e['conversation_id']), int(e['speaker_id']))
+                == ignored_voice_key(conversation_id, speaker_id)
+            ),
+            None,
+        )
+        if (
+            existing_marker is not None
+            and assignment_generation is not None
+            and isinstance(existing_marker.get('assignment_generation'), int)
+            and existing_marker['assignment_generation'] > assignment_generation
+        ):
+            # A newer exclusion (or a later decision that re-recorded this
+            # marker) already owns the voice. Overwriting it with this older
+            # write's marker would strand the newer exclusion's restore
+            # linkage: Settings restores by matching the marker's generation
+            # against the receipt, and remove would drop only this older
+            # generation's receipt entries while the newer rejection stays
+            # active but can no longer be restored.
+            return
         entry: Dict[str, Any] = {'conversation_id': conversation_id, 'speaker_id': speaker_id, 'ignored_at': now}
         if assignment_generation is not None:
             entry['assignment_generation'] = assignment_generation
         kept = [
             e
-            for e in ignored_voices(state)
+            for e in existing
             if ignored_voice_key(str(e['conversation_id']), int(e['speaker_id']))
             != ignored_voice_key(conversation_id, speaker_id)
         ]
@@ -289,22 +364,23 @@ def remove_ignored_voice(
         marker = ignored.pop(ignored_voice_key(conversation_id, speaker_id), None)
         if marker is None:
             return False
-        from database import conversations as conversations_db
+        # Imported lazily to keep this module's import order independent of the
+        # wide database.conversations graph (see _newer_positive_decision).
+        from .conversations import conversations_collection
+        from . import conversations
 
         conversation_ref = (
-            client.collection('users')
-            .document(uid)
-            .collection(conversations_db.conversations_collection)
-            .document(conversation_id)
+            client.collection('users').document(uid).collection(conversations_collection).document(conversation_id)
         )
         raw = conversation_ref.get(transaction=transaction).to_dict() or {}
-        receipt = conversations_db.decode_manual_speaker_assignments(
+        receipt = conversations.decode_manual_speaker_assignments(
             uid, raw.get('manual_speaker_assignments'), bool(raw.get('manual_speaker_assignments_compressed'))
         )
         speakers = dict(receipt.get('speakers') or {})
         decision = speakers.get(str(speaker_id)) or {}
         # Restore eligibility without undoing a newer manual label or guessing
         # which decision created a legacy marker without a generation fence.
+        receipt_changed = False
         if marker.get('assignment_generation') is not None and (
             decision.get('generation') == marker['assignment_generation']
             and not decision.get('person_id')
@@ -312,10 +388,35 @@ def remove_ignored_voice(
         ):
             speakers.pop(str(speaker_id), None)
             receipt['speakers'] = speakers
+            receipt_changed = True
+        # Live-sheet bulk exclusions store segment-scoped decisions; a restore
+        # must drop those too, or the speaker stays manually decided (and
+        # prompt-suppressed) while the marker is gone from Settings.
+        if marker.get('assignment_generation') is not None:
+            segments = {
+                segment_id: entry
+                for segment_id, entry in (receipt.get('segments') or {}).items()
+                if not (
+                    entry.get('speaker_id') == speaker_id
+                    and entry.get('generation') == marker['assignment_generation']
+                    and not entry.get('person_id')
+                    and not entry.get('is_user')
+                )
+            }
+            if segments != dict(receipt.get('segments') or {}):
+                if segments:
+                    receipt['segments'] = segments
+                else:
+                    receipt.pop('segments', None)
+                receipt_changed = True
+        if receipt_changed:
             receipt['generation'] = receipt.get('generation', 0) + 1
+            # Imported lazily for the same import-order reason as above.
+            from . import conversations
+
             transaction.update(
                 conversation_ref,
-                conversations_db.encode_conversation_for_write(
+                conversations.encode_conversation_for_write(
                     uid, {'manual_speaker_assignments': receipt}, raw.get('data_protection_level', 'standard')
                 ),
             )
@@ -324,3 +425,58 @@ def remove_ignored_voice(
         return True
 
     return run_transactional(client, remove)
+
+
+def clear_ignored_voices(
+    uid: str,
+    conversation_id: str,
+    speaker_ids: List[int],
+    *,
+    assignment_generation: Optional[int] = None,
+    firestore_client: Any = None,
+) -> int:
+    """Drop ignored-voice markers a newer positive assignment supersedes.
+
+    A later person/user assignment replaces the exclusion (the live sheet is
+    reversible by design), so the marker that keeps the voice listed under
+    Settings > Ignored Voices must not outlive the decision it recorded.
+
+    Like the record path, the clear is fenced by assignment generation: a
+    delayed clear from an older positive request must not remove a marker a
+    newer decision recorded, or the voice would silently leave Settings >
+    Ignored Voices and could no longer be restored from there.
+    """
+
+    if not speaker_ids:
+        return 0
+    client = _client(firestore_client)
+    ref = _state_ref(uid, client)
+
+    @firestore.transactional  # pyright: ignore[reportUntypedFunctionDecorator]
+    def clear(transaction: Any) -> int:
+        snapshot = ref.get(transaction=transaction)
+        state = snapshot.to_dict() or {}
+        ignored = dict(state.get('ignored_voices') or {})
+        removed = 0
+        for speaker_id in speaker_ids:
+            key = ignored_voice_key(conversation_id, speaker_id)
+            marker = ignored.get(key)
+            if marker is None:
+                continue
+            marker_generation = marker.get('assignment_generation')
+            if (
+                assignment_generation is not None
+                and isinstance(marker_generation, int)
+                and marker_generation > assignment_generation
+            ):
+                # A newer decision (e.g. a re-exclusion) recorded this marker
+                # after the positive request that queued this clear committed;
+                # the newer decision owns the voice, so keep its marker.
+                continue
+            ignored.pop(key, None)
+            removed += 1
+        if removed:
+            transaction.update(ref, {'ignored_voices': ignored})
+        return removed
+
+    return run_transactional(client, clear)

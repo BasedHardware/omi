@@ -657,3 +657,113 @@ def test_merged_donor_range_selects_using_original_offsets(world):
     assert ids == ['s1']
     assert raw['transcript_segments'][0]['person_id'] is None
     assert raw['transcript_segments'][1]['person_id'] == 'new'
+
+
+def _matcher_with_manual_mapping():
+    """A real SpeakerMatcher whose voice 4 carries a live manual mapping."""
+    from types import SimpleNamespace as _NS
+
+    from routers.listen.speakers import SpeakerMatcher
+
+    matcher = SpeakerMatcher(_NS())
+    matcher.speaker_to_person[4] = ('old', 'Old Name')
+    matcher._mapping_origin[4] = 'manual'
+    matcher.voice_candidates[4] = ['p9']
+    matcher._suggested_person[4] = 'p9'
+    matcher.segment_identity_status = {'s0': object(), 's1': object()}
+    matcher.segment_assignments = {}
+    return matcher
+
+
+def test_socket_rejection_clears_speaker_wide_inference_map(world):
+    """A winning not_a_person exclusion must retire speaker_to_person.
+
+    Otherwise process_speaker_assigned_segments falls back to the stale map
+    for each newly arriving segment of the rejected speaker, relabeling
+    future media speech after the exclusion.
+    """
+    import asyncio
+    from types import SimpleNamespace
+    from unittest.mock import AsyncMock
+    from routers.listen.receiver import ListenReceiver
+
+    async def exercise():
+        receiver = object.__new__(ListenReceiver)
+
+        def spawn_task(coro, **kwargs):
+            raise AssertionError('no task may spawn for a rejection')
+
+        receiver.host = SimpleNamespace(
+            state=SimpleNamespace(current_conversation_id='c', speaker_map_dirty=False),
+            speakers=_matcher_with_manual_mapping(),
+            transcripts=SimpleNamespace(cache=SimpleNamespace(get=AsyncMock(return_value=read(world)))),
+            private_cloud_sync_enabled=True,
+            send_speaker_sample_request=AsyncMock(),
+            spawn=spawn_task,
+        )
+        # The speaker was already recognized earlier in the live session, then
+        # the user excluded the voice ("Not a person") from another surface.
+        db.assign_conversation_speaker('u', 'c', speaker_id=4, rejection={'kind': 'not_a_person', 'person_id': None})
+        receiver.host.transcripts.cache.get.return_value = read(world)
+
+        await receiver._handle_speaker_assigned(dict(person_id=None, segment_ids=['s1'], assign_type='not_a_person'))
+
+        assert 4 not in receiver.host.speakers.speaker_to_person
+        assert 4 in receiver.host.speakers.voice_identity_status  # retracted to no_match, not deleted
+        # Full matcher state retires with the mapping: a leftover manual
+        # _mapping_origin would block future automatic matches for a restored
+        # voice (manual-origin guard in _publish_decisions), and stale
+        # candidates/suggestions would resurface the rejected label.
+        assert 4 not in receiver.host.speakers._mapping_origin
+        assert 4 not in receiver.host.speakers.voice_candidates
+        assert 4 not in receiver.host.speakers._suggested_person
+        # Segment-level status for the rejected speaker's segments is dropped
+        # (s0/s1 both belong to speaker 4), not left stale.
+        assert 's0' not in receiver.host.speakers.segment_identity_status
+        assert 's1' not in receiver.host.speakers.segment_identity_status
+        assert receiver.host.state.speaker_map_dirty
+
+    asyncio.run(exercise())
+
+
+def test_socket_rejection_clears_per_segment_assignments(world):
+    """A winning whole-voice rejection must drop per-segment person mappings.
+
+    A segment that already carries a segment_assignments entry but is absent
+    from the socket payload (e.g. it arrived while the exclusion PATCH was in
+    flight) keeps its stale mapping otherwise, and
+    process_speaker_assigned_segments prefers segment_assignments over
+    speaker_to_person — later persistence would relabel that segment despite
+    the winning rejection.
+    """
+    import asyncio
+    from types import SimpleNamespace
+    from unittest.mock import AsyncMock
+    from routers.listen.receiver import ListenReceiver
+
+    async def exercise():
+        matcher = _matcher_with_manual_mapping()
+        # s0 belongs to speaker 4 but is NOT in the payload below: its
+        # pre-existing per-segment mapping must still retire with the voice.
+        matcher.segment_assignments = {'s0': 'old', 'unrelated': 'keep'}
+        receiver = object.__new__(ListenReceiver)
+
+        receiver.host = SimpleNamespace(
+            state=SimpleNamespace(current_conversation_id='c', speaker_map_dirty=False),
+            speakers=matcher,
+            transcripts=SimpleNamespace(cache=SimpleNamespace(get=AsyncMock(return_value=read(world)))),
+            private_cloud_sync_enabled=True,
+            send_speaker_sample_request=AsyncMock(),
+            spawn=lambda coro, **kwargs: asyncio.ensure_future(coro),
+        )
+        db.assign_conversation_speaker('u', 'c', speaker_id=4, rejection={'kind': 'not_a_person', 'person_id': None})
+        receiver.host.transcripts.cache.get.return_value = read(world)
+
+        await receiver._handle_speaker_assigned(dict(person_id=None, segment_ids=['s1'], assign_type='not_a_person'))
+
+        # Every by_id segment owned by the rejected speaker loses its mapping;
+        # segments of other speakers keep theirs.
+        assert 's0' not in matcher.segment_assignments
+        assert 'unrelated' in matcher.segment_assignments
+
+    asyncio.run(exercise())

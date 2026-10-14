@@ -54,6 +54,9 @@ def world(monkeypatch):
     store.rows[USER_PATH] = {'save_other_voice_profiles': True}
     store.rows[PERSON_PATH] = dict(id=PERSON, name='Sam')
     monkeypatch.setattr(db, 'get_firestore_client', lambda: store)
+    # The shared marker retirement must stay on the hermetic store: never let
+    # it build a real Firestore client in unit tests.
+    monkeypatch.setattr(service.voice_profiles_db, 'clear_ignored_voices', lambda *a, **k: 0)
     return SimpleNamespace(store=store)
 
 

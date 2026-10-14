@@ -51,6 +51,7 @@ from utils.observability.speaker_tag_prompts import (
     OWNER_CONFIRMATION_EVENTS,
 )
 from utils.product_telemetry import emit_product_event
+from utils.ignored_voice_markers import retire_exclusion_markers
 from utils.executors import (
     ExecutorSaturatedError,
     db_executor,
@@ -740,6 +741,18 @@ def apply_answer(
         conversation, resolved = _assign(
             uid, request, is_user=True, person_id=None, train=False, owner_segment_ids=request.segment_ids
         )
+        # A card "Me"/person answer replaces any live not_a_person exclusion,
+        # so the ignored-voice marker must retire through the same shared
+        # reconciliation the live sheet uses (the router-only copy used to
+        # leave the positively assigned voice listed as ignored).
+        retire_exclusion_markers(
+            uid,
+            conversation.get('id') or request.conversation_id,
+            conversation,
+            resolved,
+            speaker_id=request.speaker_id,
+            logger_=logger,
+        )
         if schedule is not None:
             assigned = set(resolved) & {s.get('id') for s in conversation.get('transcript_segments') or []}
             segment_ids = [sid for sid in request.segment_ids if sid in assigned]
@@ -756,6 +769,14 @@ def apply_answer(
         settings = voice_profiles_db.get_voice_profile_settings(uid)
         train = settings['save_other_voice_profiles']
         conversation, resolved = _assign(uid, request, is_user=False, person_id=person_id, train=train)
+        retire_exclusion_markers(
+            uid,
+            conversation.get('id') or request.conversation_id,
+            conversation,
+            resolved,
+            speaker_id=request.speaker_id,
+            logger_=logger,
+        )
         if not train:
             SPEAKER_TAG_PROMPT_VOICE_SAMPLES.labels(target='person', outcome='disabled_by_user').inc()
         elif schedule is not None:
@@ -785,6 +806,19 @@ def apply_answer(
         else:
             rejection = None
         conversation, resolved = _assign(uid, request, is_user=False, person_id=None, train=False, rejection=rejection)
+        # Any newer non-not_a_person answer supersedes an earlier exclusion:
+        # retire_exclusion_markers distinguishes rejection kinds, so the stale
+        # not_a_person marker is cleared for not_me / not_person / unnamed
+        # answers while a still-winning not_a_person keeps (and re-records)
+        # its marker below.
+        retire_exclusion_markers(
+            uid,
+            conversation.get('id') or request.conversation_id,
+            conversation,
+            resolved,
+            speaker_id=request.speaker_id,
+            logger_=logger,
+        )
         if answer == SpeakerTagPromptAnswer.not_a_person:
             resolved_ids = set(resolved)
             speaker_ids = {
