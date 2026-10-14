@@ -1,5 +1,6 @@
 import asyncio
 import hashlib
+import os
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, BackgroundTasks
 from typing import Annotated, Any, Dict, List, Optional
@@ -1347,7 +1348,11 @@ def delete_conversation(
             except Exception as e:
                 logger.error(f"Error deleting task vectors for {conversation_id}: {e}")
         # Snapshot retained bridge donors before shared metadata cleanup removes them.
-        source_ids = (conversations_db.get_conversation(uid, conversation_id) or {}).get('sync_merged_from', [])
+        source_ids = (
+            (conversations_db.get_conversation(uid, conversation_id) or {}).get('sync_merged_from', [])
+            if os.getenv('BUCKET_CANONICAL_AUDIO')
+            else []
+        )
         background_tasks.add_task(delete_privacy_conversation_audio, uid, conversation_id, source_ids=source_ids)
 
     # Screen frames (meeting-note screenshots) are primary conversation
