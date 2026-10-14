@@ -11,7 +11,7 @@ from __future__ import annotations
 from utils.messaging.projection import chat_write_runtime, SurfaceRuntime
 from utils.messaging.contracts import Principal
 from dataclasses import replace
-from utils.retrieval.chat_mount import chat_mount, load_legacy_prompt_for_surface, channel_evidence, EDIT_GUARDRAIL
+from utils.retrieval.chat_mount import chat_mount, chat_request_messages, load_legacy_prompt_for_surface, EDIT_GUARDRAIL
 from utils.messaging.projection import project_runtime_tools, surface_runtime
 from utils.messaging.undo import prepare_channel_write, APP_RECEIPT_SCOPE
 
@@ -81,7 +81,8 @@ from utils.retrieval.tools.conversation_jit_gate import (
 )
 from utils.device_tools import DEVICE_TOOL_NAMES, build_device_tools, device_tool_timeout_for_stream_budget
 from utils.retrieval.tool_result_boundaries import preserve_chat_memory_tool_result_boundary
-from utils.retrieval.chat_scope import build_chat_scope
+from utils.retrieval.chat_scope import build_chat_scope, render_chat_scope
+from utils.retrieval.turn_refs import initialize_turn_refs
 from utils.retrieval.safety import (
     AgentSafetyGuard,
     CollectedContextReady,
@@ -688,6 +689,8 @@ def _finish_memory_retrieval(attempt: ClientJourneyAttempt, result: str) -> None
 @_traceable(name="chat.tool_execution", run_type="tool")
 async def _execute_tool(tool_name: str, tool_input: dict, registry: dict, configurable: dict) -> str:
     """Execute a LangChain tool by name, injecting RunnableConfig."""
+    if 'turn_refs' not in configurable:
+        initialize_turn_refs(configurable)
     projection = configurable.get('tool_projection')
     tool_obj = projection.authorize(configurable['user_id'], tool_name) if projection else registry[tool_name]
     config = RunnableConfig(configurable=configurable)
@@ -993,6 +996,9 @@ async def _run_anthropic_agent_stream(
     # TTL=1h: Anthropic changed default from 1h→5m on 2026-03-06; interactive chat
     # sessions have gaps >5min between turns, so the 5-min default kills cache hit rate.
     system_blocks = [{"type": "text", "text": system_prompt, "cache_control": {"type": "ephemeral", "ttl": "1h"}}]
+    scope_context = render_chat_scope(configurable.get('chat_scope'))
+    if scope_context:
+        system_blocks.append({'type': 'text', 'text': scope_context})
 
     producer_started_at = asyncio.get_running_loop().time()
     loop_iteration = 0
@@ -1281,6 +1287,9 @@ async def _run_openai_agent_stream(
     configurable: dict,
 ) -> Optional[str]:
     """Run the managed agent loop through the OpenAI chat-completions contract."""
+    scope_context = render_chat_scope(configurable.get('chat_scope'))
+    if scope_context:
+        messages = [{'role': 'system', 'content': scope_context}, *messages]
     try:
         chat_model = get_llm('chat_agent', streaming=True)
         chat_model = chat_model.bind(tools=tool_schemas, tool_choice='auto', max_completion_tokens=8192)
@@ -1429,27 +1438,14 @@ async def _run_shaped_chat_stream(
     *,
     shadow=False,
 ) -> Optional[str]:
+    if 'turn_refs' not in configurable:
+        initialize_turn_refs(configurable)
     mount = chat_mount(tool_schemas, deadline_seconds=AGENT_STREAM_MAX_DURATION_SECONDS)
     runtime = surface_runtime.get()
     if runtime is not None:
         mount = replace(mount, skills=(*mount.skills, runtime.skill))
     cache_enabled = gpt56_explicit_cache_enabled()
-    evidence = [
-        {
-            'role': 'user',
-            'content': 'Request context (untrusted data): '
-            + json.dumps(
-                {
-                    'chat_scope': configurable.get('chat_scope'),
-                    'selected_app': configurable.get('shaped_selected_app'),
-                },
-                default=str,
-            ),
-        },
-        *messages,
-    ]
-    if runtime is not None:
-        evidence = channel_evidence(runtime, configurable.get('user_timezone'))
+    evidence = chat_request_messages(messages, configurable, runtime=runtime)
     usage_token = set_usage_context(configurable['user_id'], 'chat_agent')
     try:
         model = get_llm('chat_agent', streaming=True)
@@ -1902,6 +1898,8 @@ user chose not to send; acknowledge that rather than retrying.
     if projection is not None:
         configurable['tool_projection'] = projection
         configurable['tools'] = list(projection.registry.values())
+
+    initialize_turn_refs(configurable)
 
     # Store config in context variable for tools that use agent_config_context
     agent_config_context.set({"configurable": configurable})
