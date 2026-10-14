@@ -101,6 +101,46 @@ final class ConversationRepositoryTests: XCTestCase {
     XCTAssertEqual(remote.listRequests.map(\.limit), [50, 50])
   }
 
+  func testLoadMoreAdjustsNextPageOffsetWhenVisibleRowRemoved() async {
+    let firstPage = (0..<50).map { index in
+      makeConversation(id: "conversation-\(index)", title: "Conversation \(index)", revision: 100 - Double(index))
+    }
+    let second = makeConversation(id: "second", title: "Older", revision: 1)
+    let remote = FakeConversationRemote(listResult: .success(firstPage), countResult: .success(51))
+    let repository = ConversationRepository(remote: remote, local: FakeConversationLocal())
+
+    await repository.load(query: .all, includeCache: false)
+    repository.remove(id: "conversation-0")
+
+    remote.listResult = .success([second])
+    await repository.loadMore()
+
+    XCTAssertEqual(remote.listRequests.map(\.offset), [0, 49])
+  }
+
+  func testLoadMoreAdjustsNextPageOffsetWhenVisibleRowNoLongerMatchesQuery() async {
+    let firstPage = (0..<50).map { index in
+      makeConversation(
+        id: "conversation-\(index)",
+        title: "Conversation \(index)",
+        starred: true,
+        revision: 100 - Double(index)
+      )
+    }
+    let second = makeConversation(id: "second", title: "Older", starred: true, revision: 1)
+    let remote = FakeConversationRemote(listResult: .success(firstPage), countResult: .success(51))
+    let repository = ConversationRepository(remote: remote, local: FakeConversationLocal())
+
+    await repository.load(query: .starred, includeCache: false)
+    let unstarred = makeConversation(id: "conversation-0", title: "Conversation 0", starred: false, revision: 101)
+    repository.replace(unstarred)
+
+    remote.listResult = .success([second])
+    await repository.loadMore()
+
+    XCTAssertEqual(remote.listRequests.map(\.offset), [0, 49])
+  }
+
   func testLoadMoreRemainsAvailableWhenServerCountFailsOverCachedCount() async {
     let firstPage = (0..<50).map { index in
       makeConversation(id: "conversation-\(index)", title: "Conversation \(index)", revision: 100 - Double(index))
