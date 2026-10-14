@@ -1074,7 +1074,7 @@ async def sync_local_files_v2(
 
         # Keep original bytes before any 202, content-cache hit, decode or VAD.
         # An archive failure leaves the client responsible for retrying its WAL.
-        await run_blocking(storage_executor, archive_mobile_batch_raw_files, uid, paths)
+        await run_blocking(sync_executor, archive_mobile_batch_raw_files, uid, paths)
 
         content_id = await run_blocking(sync_executor, compute_sync_content_id, uid, paths)
 
