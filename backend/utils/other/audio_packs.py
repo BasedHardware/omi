@@ -62,6 +62,7 @@ def archive_capture(
         return None
     if len(payload) > MAX_CAPTURE_BYTES:
         raise ValueError('canonical capture exceeds bounded intake size')
+    assert_capture_allowed(bucket, uid, conversation_ranges)
     key = _sha(_json([identity, format, conversation_ranges]))
     # Day is derived from capture provenance, never retry/packing time.
     day = str(provenance['capture_day'])
@@ -87,11 +88,28 @@ def archive_capture(
             ).decode()
         }:
             raise ValueError('canonical identity metadata conflict')
+    try:
+        assert_capture_allowed(bucket, uid, conversation_ranges)
+    except Exception:
+        try:
+            blob.delete(if_generation_match=int(blob.generation))
+        except NotFound:
+            pass
+        raise
     record = {'source': path, 'generation': str(blob.generation)}
     try:
         receipt.upload_from_string(_json(record), if_generation_match=0)
     except PreconditionFailed:
         pass
+    try:
+        assert_capture_allowed(bucket, uid, conversation_ranges)
+    except Exception:
+        for object_to_delete in (blob, receipt):
+            try:
+                object_to_delete.delete(if_generation_match=int(object_to_delete.generation))
+            except NotFound:
+                pass
+        raise
     return path
 
 
@@ -187,6 +205,8 @@ def pack_owner_day(bucket: Any, uid: str, day: str) -> int:
     for index in bucket.list_blobs(prefix=root):
         manifest = json.loads(index.download_as_bytes(if_generation_match=int(index.generation)))
         _validate_owner(manifest, uid)
+        for entry in manifest['entries']:
+            assert_capture_allowed(bucket, uid, entry['conversation_ranges'])
         _finish(bucket, index, manifest)
         claimed.update(e['source'] for e in manifest['entries'])
     entries: list[dict[str, Any]] = []
@@ -223,6 +243,7 @@ def pack_owner_day(bucket: Any, uid: str, day: str) -> int:
             flush()
             return count  # one new shard/run keeps the account gate bounded
         capture = json.loads(blob.metadata['capture'])
+        assert_capture_allowed(bucket, uid, capture['conversation_ranges'])
         entry = {'source': blob.name, 'generation': str(blob.generation), **capture}
         data = _read(bucket, entry)
         entry.update(member=f'{len(entries):06d}.audio', sha256=_sha(data), size=len(data))
@@ -248,11 +269,22 @@ def delete_conversation(bucket: Any, uid: str, conversation_id: str) -> None:
     Canonical buckets must have versioning and soft deletion disabled.
     """
 
+    marker = bucket.blob(control_path(uid, 'deletions', conversation_id))
+    try:
+        marker.upload_from_string(_json({'owner': uid, 'conversation_id': conversation_id}), if_generation_match=0)
+    except PreconditionFailed:
+        pass
+
     def affected(entry: dict[str, Any]) -> bool:
-        return any(r.get('conversation_id') == conversation_id for r in entry['conversation_ranges'])
+        return any(
+            conversation_id in conversation_chain(bucket, uid, r['conversation_id'])
+            for r in entry['conversation_ranges']
+            if r.get('conversation_id')
+        )
 
     for index in bucket.list_blobs(prefix=owner_prefix(INDEX_PREFIX, uid)):
-        if index.name.startswith(f'{owner_prefix(INDEX_PREFIX, uid)}captures/'):
+        relative = index.name.removeprefix(owner_prefix(INDEX_PREFIX, uid))
+        if relative.split('/', 1)[0] in {'captures', 'deletions', 'links'}:
             continue
         manifest = json.loads(index.download_as_bytes(if_generation_match=int(index.generation)))
         _validate_owner(manifest, uid)
@@ -311,3 +343,72 @@ def _finish_rewrite(bucket: Any, index: Any, manifest: dict[str, Any], data: byt
     verify_pack(current, manifest)
     result = {**manifest, 'state': 'complete', 'pack_generation': str(pack.generation)}
     index.upload_from_string(_json(result), if_generation_match=int(index.generation))
+
+
+def control_path(uid: str, kind: str, conversation_id: str) -> str:
+    return f'{owner_prefix(INDEX_PREFIX, uid)}{kind}/{_sha(conversation_id.encode())}.json'
+
+
+def conversation_chain(bucket: Any, uid: str, conversation_id: str) -> list[str]:
+    chain: list[str] = []
+    current = conversation_id
+    for _ in range(32):
+        if current in chain:
+            raise ValueError('canonical conversation link cycle')
+        chain.append(current)
+        link = bucket.get_blob(control_path(uid, 'links', current))
+        if link is None:
+            return chain
+        row = json.loads(link.download_as_bytes(if_generation_match=int(link.generation)))
+        if row['owner'] != uid or row['source'] != current:
+            raise ValueError('canonical conversation link owner mismatch')
+        current = row['target']
+    raise ValueError('canonical conversation link depth exceeded')
+
+
+def assert_capture_allowed(bucket: Any, uid: str, ranges: list[dict[str, Any]]) -> None:
+    for row in ranges:
+        conversation_id = row.get('conversation_id')
+        if conversation_id:
+            for linked in conversation_chain(bucket, uid, conversation_id):
+                if bucket.blob(control_path(uid, 'deletions', linked)).exists():
+                    raise ValueError('canonical capture blocked by conversation deletion')
+
+
+def link_conversations(bucket: Any, uid: str, sources: list[str], target: str) -> None:
+    """Caller holds the account operation gate. Preserve bytes through manual merges."""
+    assert_capture_allowed(bucket, uid, [{'conversation_id': target}])
+    for source in sources:
+        if source == target or source in conversation_chain(bucket, uid, target):
+            raise ValueError('canonical merge would create a cycle')
+        blob = bucket.get_blob(control_path(uid, 'links', source))
+        generation = int(blob.generation) if blob is not None else 0
+        blob = blob or bucket.blob(control_path(uid, 'links', source))
+        blob.upload_from_string(
+            _json({'owner': uid, 'source': source, 'target': target}), if_generation_match=generation
+        )
+
+
+def pcm_capture_ranges(
+    chunks: list[dict[str, Any]], conversation_id: str, sample_rate: int | None
+) -> list[dict[str, Any]]:
+    ranges: list[dict[str, Any]] = []
+    offset = 0
+    for chunk in sorted(chunks, key=lambda c: c['timestamp']):
+        span = chunk.get('span') or {}
+        rate = span.get('sample_rate') or sample_rate
+        samples = span.get('samples', len(chunk['data']) // 2)
+        start = float(span.get('start', chunk['timestamp']))
+        ranges.append(
+            {
+                'conversation_id': conversation_id,
+                'start': start,
+                'end': start + samples / rate if rate and rate > 0 else None,
+                'samples': samples,
+                'sample_rate': rate,
+                'plaintext_byte_start': offset,
+                'plaintext_byte_length': len(chunk['data']),
+            }
+        )
+        offset += len(chunk['data'])
+    return ranges

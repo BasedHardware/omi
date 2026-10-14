@@ -1346,7 +1346,7 @@ def delete_conversation(
                 delete_action_item_vectors_batch(uid, [item['id'] for item in armed])
             except Exception as e:
                 logger.error(f"Error deleting task vectors for {conversation_id}: {e}")
-        background_tasks.add_task(delete_conversation_audio_files, uid, conversation_id)
+        background_tasks.add_task(delete_conversation_audio_files, uid, conversation_id, delete_canonical=True)
 
     # Screen frames (meeting-note screenshots) are primary conversation
     # content, not cascade-only derived data, so this runs unconditionally

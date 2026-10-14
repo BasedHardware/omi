@@ -4675,3 +4675,11 @@ indexes even when the flag is off. Linked conversation audio deletion rewrites
 only affected packs. Bucket provisioning, exact lifecycle rules, pricing and
 rollback are in `deploy/storage-lifecycle/FORWARD.md`; this code does not apply
 bucket policies or deploy a scheduler.
+
+Canonical conversation erasure has a durable owner-scoped deletion marker.
+Intake checks it before and after source/receipt publication, cleans racing
+uploads, and packing rejects marked captures. Manual merges preserve canonical
+bytes and publish transitive source→survivor links; later survivor deletion
+resolves those links. Shared cache/merge cleanup never implies privacy erasure.
+PCM ranges include sample counts, full tail duration and plaintext byte ranges;
+enhanced encryption envelopes use a **big-endian** uint32 length prefix.

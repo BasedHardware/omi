@@ -102,7 +102,8 @@ def manifests(bucket, owner='alice'):
     return [
         json.loads(b.download_as_bytes())
         for b in bucket.list_blobs(packs.owner_prefix(packs.INDEX_PREFIX, owner))
-        if '/captures/' not in b.name
+        if b.name.removeprefix(packs.owner_prefix(packs.INDEX_PREFIX, owner)).split('/', 1)[0]
+        not in {'captures', 'links', 'deletions'}
     ]
 
 
@@ -177,7 +178,8 @@ def test_conversation_rewrite_resumes_after_pack_replaced(bucket):
     manifest = manifests(bucket)[0]
     assert [e['conversation_ranges'][0]['conversation_id'] for e in manifest['entries']] == ['two']
     packs.verify_pack(bucket.blob(manifest['pack']).download_as_bytes(), manifest)
-    capture(bucket, data=b'one', conv='one')
+    with pytest.raises(ValueError, match='blocked'):
+        capture(bucket, data=b'one', conv='one')
     assert not bucket.list_blobs(packs.owner_prefix(packs.SOURCE_PREFIX, 'alice'))
 
 
@@ -206,10 +208,90 @@ def test_cross_owner_index_fails_closed(bucket):
     capture(bucket)
     packs.pack_owner_day(bucket, 'alice', '2020-10-14')
     index = next(
-        b for b in bucket.list_blobs(packs.owner_prefix(packs.INDEX_PREFIX, 'alice')) if '/captures/' not in b.name
+        b
+        for b in bucket.list_blobs(packs.owner_prefix(packs.INDEX_PREFIX, 'alice'))
+        if b.name.removeprefix(packs.owner_prefix(packs.INDEX_PREFIX, 'alice')).split('/', 1)[0]
+        not in {'captures', 'links', 'deletions'}
     )
     manifest = json.loads(index.download_as_bytes())
     manifest['owner'] = 'bob'
     index.upload_from_string(packs._json(manifest))
     with pytest.raises(ValueError, match='cross-owner'):
         packs.delete_conversation(bucket, 'alice', 'one')
+
+
+def test_merged_capture_survives_and_can_be_erased_via_survivor(bucket):
+    capture(bucket, conv='one')
+    packs.pack_owner_day(bucket, 'alice', '2020-10-14')
+    before = manifests(bucket)[0]
+    old_bytes = bucket.blob(before['pack']).download_as_bytes()
+    packs.link_conversations(bucket, 'alice', ['one'], 'merged')
+    packs.link_conversations(bucket, 'alice', ['merged'], 'merged-again')
+    assert bucket.blob(before['pack']).download_as_bytes() == old_bytes
+    packs.delete_conversation(bucket, 'alice', 'merged-again')
+    assert manifests(bucket)[0]['entries'] == []
+    with pytest.raises(ValueError, match='blocked'):
+        capture(bucket, data=b'late', conv='one')
+
+
+@pytest.mark.parametrize('phase', ['source', 'receipt'])
+def test_deletion_racing_intake_leaves_no_capture(bucket, monkeypatch, phase):
+    original = Blob.upload_from_string
+    triggered = False
+
+    def racing_upload(blob, data, **kwargs):
+        nonlocal triggered
+        result = original(blob, data, **kwargs)
+        is_source = blob.name.startswith(packs.SOURCE_PREFIX)
+        is_receipt = '/captures/' in blob.name
+        if not triggered and ((phase == 'source' and is_source) or (phase == 'receipt' and is_receipt)):
+            triggered = True
+            packs.delete_conversation(bucket, 'alice', 'one')
+        return result
+
+    monkeypatch.setattr(Blob, 'upload_from_string', racing_upload)
+    with pytest.raises(ValueError, match='blocked'):
+        capture(bucket)
+    assert bucket.list_blobs(packs.owner_prefix(packs.SOURCE_PREFIX, 'alice')) == []
+    assert bucket.list_blobs(packs.owner_prefix(packs.PACK_PREFIX, 'alice')) == []
+    with pytest.raises(ValueError, match='blocked'):
+        capture(bucket, data=b'new retry')
+
+
+def test_pcm_capture_range_uses_full_tail_and_authoritative_span():
+    result = packs.pcm_capture_ranges([{'timestamp': 100, 'data': bytes(32000)}], 'c', 16000)
+    assert result[0]['end'] == 101
+    assert result[0]['samples'] == 16000
+    result = packs.pcm_capture_ranges(
+        [
+            {'timestamp': 100, 'data': bytes(32000)},
+            {'timestamp': 102, 'data': bytes(16000), 'span': {'start': 102, 'samples': 8000, 'sample_rate': 16000}},
+        ],
+        'c',
+        16000,
+    )
+    assert result[1]['end'] == 102.5
+    assert result[1]['plaintext_byte_start'] == 32000
+
+
+def test_post_upload_authority_failure_removes_unaccepted_capture(bucket, monkeypatch):
+    calls = 0
+
+    def authority(*args):
+        nonlocal calls
+        calls += 1
+        if calls == 2:
+            raise RuntimeError('authority unavailable')
+
+    monkeypatch.setattr(packs, 'assert_capture_allowed', authority)
+    with pytest.raises(RuntimeError, match='authority unavailable'):
+        capture(bucket)
+    assert bucket.list_blobs(packs.owner_prefix(packs.SOURCE_PREFIX, 'alice')) == []
+
+
+def test_packer_refuses_a_pending_privacy_erasure(bucket):
+    capture(bucket)
+    bucket.blob(packs.control_path('alice', 'deletions', 'one')).upload_from_string(b'{}')
+    with pytest.raises(ValueError, match='blocked'):
+        packs.pack_owner_day(bucket, 'alice', '2020-10-14')
+    assert bucket.list_blobs(packs.owner_prefix(packs.PACK_PREFIX, 'alice')) == []

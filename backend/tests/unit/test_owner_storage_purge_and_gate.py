@@ -1,5 +1,6 @@
 from contextlib import contextmanager
 from types import SimpleNamespace
+import struct
 from unittest.mock import MagicMock
 
 import pytest
@@ -229,3 +230,48 @@ def test_canonical_bucket_rejects_retained_generations(monkeypatch):
     bucket.soft_delete_policy.retention_duration_seconds = 604800
     with pytest.raises(RuntimeError, match='soft delete off'):
         storage_mod.get_canonical_audio_bucket()
+
+
+def test_merge_cleanup_preserves_canonical_and_explicit_privacy_calls_erase(monkeypatch):
+    monkeypatch.setenv('BUCKET_CANONICAL_AUDIO', 'canonical')
+    private = _Bucket(set())
+    monkeypatch.setattr(storage_mod, '_get_storage_client', lambda: _Client({'private': private}))
+    monkeypatch.setattr(storage_mod, 'private_cloud_sync_bucket', 'private')
+    erased = MagicMock()
+    linked = MagicMock()
+    monkeypatch.setattr(storage_mod.audio_packs, 'delete_conversation', erased)
+    monkeypatch.setattr(storage_mod.audio_packs, 'link_conversations', linked)
+    monkeypatch.setattr(storage_mod, 'get_canonical_audio_bucket', lambda: private)
+
+    @contextmanager
+    def gate(*args, **kwargs):
+        yield
+
+    monkeypatch.setattr(storage_mod, 'destructive_operation_gate', gate)
+    storage_mod.delete_conversation_audio_files('u', 'c')
+    erased.assert_not_called()
+    storage_mod.delete_conversation_audio_files('u', 'c', merged_into='merged')
+    linked.assert_called_once_with(private, 'u', ['c'], 'merged')
+    erased.assert_not_called()
+    storage_mod.delete_conversation_audio_files('u', 'merged', delete_canonical=True)
+    erased.assert_called_once_with(private, 'u', 'merged')
+
+
+def test_enhanced_pusher_manifest_matches_envelope_and_full_duration(monkeypatch):
+    monkeypatch.setenv('AUDIO_CANONICAL_PACKING_ENABLED', 'true')
+    canonical = _Bucket(set())
+    monkeypatch.setattr(storage_mod, 'get_canonical_audio_bucket', lambda: canonical)
+    archive = MagicMock(side_effect=RuntimeError('stop after canonical intake'))
+    monkeypatch.setattr(storage_mod.audio_packs, 'archive_capture', archive)
+    with pytest.raises(RuntimeError, match='stop after canonical intake'):
+        storage_mod.upload_audio_chunks_batch(
+            [{'timestamp': 1726185600, 'data': bytes(32000)}],
+            'owner',
+            'conv',
+            data_protection_level='enhanced',
+            sample_rate=16000,
+        )
+    payload = archive.call_args.args[2]
+    assert struct.unpack('>I', payload[:4])[0] == len(payload) - 4
+    assert archive.call_args.kwargs['provenance']['encryption_envelope'].startswith('uint32be-')
+    assert archive.call_args.kwargs['conversation_ranges'][0]['end'] == 1726185601

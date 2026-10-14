@@ -753,18 +753,12 @@ def upload_audio_chunks_batch(
                     'producer': 'pusher',
                     'sample_rate': sample_rate,
                     'encrypted': encrypted,
-                    'encryption_envelope': 'uint32le-nonce12-aes256gcm-hkdf-v1' if encrypted else None,
+                    'encryption_envelope': 'uint32be-nonce12-aes256gcm-hkdf-v1' if encrypted else None,
                     'channels': 1,
                     'bit_depth': 16,
                     'plaintext_sha256': hashlib.sha256(raw).hexdigest(),
                 },
-                conversation_ranges=[
-                    {
-                        'conversation_id': conversation_id,
-                        'start': min(c['timestamp'] for c in chunks),
-                        'end': max(c['timestamp'] for c in chunks),
-                    }
-                ],
+                conversation_ranges=audio_packs.pcm_capture_ranges(chunks, conversation_id, sample_rate),
                 identity=hashlib.sha256(raw).hexdigest(),
             )
 
@@ -983,14 +977,20 @@ def list_audio_chunks(
     return sorted(chunks, key=lambda x: x['timestamp'])
 
 
-def delete_conversation_audio_files(uid: str, conversation_id: str) -> None:
+def delete_conversation_audio_files(
+    uid: str, conversation_id: str, *, delete_canonical: bool = False, merged_into: str | None = None
+) -> None:
     """Delete all audio files (chunks and merged) for a conversation."""
     bucket = _get_storage_client().bucket(private_cloud_sync_bucket)
 
     canonical_name = os.getenv('BUCKET_CANONICAL_AUDIO')
-    if canonical_name:
+    if canonical_name and (delete_canonical or merged_into):
         with destructive_operation_gate(uid, kind='audio_conversation_deletion'):
-            audio_packs.delete_conversation(get_canonical_audio_bucket(), uid, conversation_id)
+            canonical = get_canonical_audio_bucket()
+            if merged_into:
+                audio_packs.link_conversations(canonical, uid, [conversation_id], merged_into)
+            elif delete_canonical:
+                audio_packs.delete_conversation(canonical, uid, conversation_id)
 
     # Delete chunks
     chunks_prefix = f'chunks/{uid}/{conversation_id}/'

@@ -398,6 +398,7 @@ def perform_merge_async(
                 conv["id"],
                 on_authoritative_retraction=mark_source_deletion_started,
                 historical_source_ids=historical_source_ids,
+                merged_into=new_conversation_id,
             )
 
         # Sources are now merged and deleted; preserve the user's manual
@@ -735,7 +736,7 @@ def delete_conversation_with_sync_sources(uid: str, conversation_id: str) -> Non
                 conversation_tombstones.record_deletion(uid, source_id)
             except Exception:
                 logger.exception('merge-source tombstone write failed uid=%s source=%s', uid, source_id)
-            _delete_conversation_and_related_data(uid, source_id, purge_sync_sources=False)
+            _delete_conversation_and_related_data(uid, source_id, purge_sync_sources=False, delete_canonical=True)
     conversations_db.delete_conversation(uid, conversation_id)
     record_survivor_deleted(uid, conversation_id, row)
 
@@ -760,6 +761,8 @@ def _delete_conversation_and_related_data(
     historical_source_ids: Optional[Set[str]] = None,
     retain_capture: bool = False,
     purge_sync_sources: bool = True,
+    merged_into: Optional[str] = None,
+    delete_canonical: bool = False,
 ) -> None:
     """
     Delete a conversation and all its generated/related data.
@@ -844,7 +847,12 @@ def _delete_conversation_and_related_data(
 
     try:
         # Delete audio chunks from GCS
-        delete_conversation_audio_files(uid, conversation_id)
+        if merged_into:
+            delete_conversation_audio_files(uid, conversation_id, merged_into=merged_into)
+        elif delete_canonical:
+            delete_conversation_audio_files(uid, conversation_id, delete_canonical=True)
+        else:
+            delete_conversation_audio_files(uid, conversation_id)
     except Exception as e:
         logger.error(f"Error deleting audio files for {conversation_id}: {e}")
 
