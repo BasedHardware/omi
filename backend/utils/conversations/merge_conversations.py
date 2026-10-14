@@ -442,15 +442,35 @@ def _merge_transcript_segments(conversations: List[Dict]) -> List[Dict]:
     merged = []
     cumulative_offset = 0.0
     allocator = ConversationSpeakerIdAllocator()
+
+    def _is_tagged_source(conv: Dict) -> bool:
+        return bool(
+            conv.get('manual_speaker_assignments')
+            or any(
+                s.get('speaker_label_source') in ('manual', 'carried') for s in (conv.get('transcript_segments') or [])
+            )
+        )
+
     # Full source-receipt migration is outside this change. Never move a
     # manual voice's numeric authority while its receipt remains at the source.
-    reallocate = not any(
-        conv.get('manual_speaker_assignments')
-        or any(s.get('speaker_label_source') in ('manual', 'carried') for s in (conv.get('transcript_segments') or []))
-        for conv in conversations
-    )
+    # Reserve numbers owned by tagged sources upfront so automatic donor sources
+    # are renumbered past reserved IDs regardless of source ordering.
+    for conv in conversations:
+        if _is_tagged_source(conv):
+            segs = conv.get('transcript_segments') or []
+            coerced_segs = []
+            for s in segs:
+                sid = s.get('speaker_id') if isinstance(s, dict) else getattr(s, 'speaker_id', None)
+                if isinstance(sid, str) and sid.isdigit():
+                    s_c = dict(s)
+                    s_c['speaker_id'] = int(sid)
+                    coerced_segs.append(s_c)
+                else:
+                    coerced_segs.append(s)
+            allocator.hydrate(coerced_segs)
+            allocator.hydrate_receipt(conv.get('manual_speaker_assignments') or {})
 
-    def copy_segment(segment, source):
+    def copy_segment(segment, source, should_reallocate):
         copied = copy.deepcopy(segment)
         speaker_id = copied.get('speaker_id')
         if (
@@ -462,7 +482,7 @@ def _merge_transcript_segments(conversations: List[Dict]) -> List[Dict]:
                 # Unidentified legacy inputs cannot establish a new voice scope.
                 if source.get('id'):
                     copied['speaker_id_scope'] = f"legacy-conversation:{source['id']}:{int(speaker_id)}"
-            if reallocate and copied.get('speaker_id_scope'):
+            if should_reallocate and copied.get('speaker_id_scope'):
                 copied['speaker_id'] = int(speaker_id)
                 allocator.assign(copied)
         return copied
@@ -473,10 +493,11 @@ def _merge_transcript_segments(conversations: List[Dict]) -> List[Dict]:
         # segment with an explicit `start`/`end: None`) still returns None here,
         # which crashes the list comprehension / arithmetic below.
         segments = conv.get("transcript_segments") or []
+        should_reallocate = not _is_tagged_source(conv)
 
         if i == 0:
             # First conversation - use segments as-is
-            merged.extend([copy_segment(s, conv) for s in segments])
+            merged.extend([copy_segment(s, conv, should_reallocate) for s in segments])
             if segments:
                 cumulative_offset = max((s.get("end") or 0) for s in segments)
             elif conv.get("finished_at") and conv.get("started_at"):
@@ -497,7 +518,7 @@ def _merge_transcript_segments(conversations: List[Dict]) -> List[Dict]:
 
             # Adjust timestamps for this conversation's segments
             for seg in segments:
-                seg_copy = copy_segment(seg, conv)
+                seg_copy = copy_segment(seg, conv, should_reallocate)
                 seg_copy["start"] = (seg.get("start") or 0) + offset
                 seg_copy["end"] = (seg.get("end") or 0) + offset
                 merged.append(seg_copy)

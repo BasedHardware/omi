@@ -20,7 +20,7 @@ module-scoped fixture via the sanctioned ``stub_modules`` +
 """
 
 import os
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from types import ModuleType
 from unittest.mock import MagicMock
@@ -699,3 +699,234 @@ class TestResolveMergedFinishedAt:
     def test_missing_key_treated_like_none(self, merge):
         later = datetime(2026, 5, 30, 11, 0, tzinfo=timezone.utc)
         assert merge._resolve_merged_finished_at([{}, {"finished_at": later}]) == later
+
+
+# ---------------------------------------------------------------------------
+# Speaker allocation in _merge_transcript_segments (#21201)
+# ---------------------------------------------------------------------------
+
+
+class TestMergeTranscriptSegmentsSpeakerReallocation:
+    def test_manual_tagged_first_preserves_tagged_voice_and_reallocates_automatic(self, merge):
+        at = datetime(2026, 5, 30, 10, tzinfo=timezone.utc)
+        a = {
+            'id': 'A',
+            'started_at': at,
+            'finished_at': at + timedelta(seconds=10),
+            'transcript_segments': [
+                {
+                    'id': 'alice',
+                    'text': 'alice',
+                    'speaker': 'SPEAKER_00',
+                    'speaker_id': 0,
+                    'speaker_id_scope': 'conn:alice',
+                    'speaker_label_source': 'manual',
+                    'person_id': 'p-alice',
+                    'start': 0.0,
+                    'end': 5.0,
+                }
+            ],
+        }
+        b = {
+            'id': 'B',
+            'started_at': at + timedelta(seconds=3600),
+            'finished_at': at + timedelta(seconds=3610),
+            'transcript_segments': [
+                {
+                    'id': 'stranger',
+                    'text': 'stranger',
+                    'speaker': 'SPEAKER_00',
+                    'speaker_id': 0,
+                    'speaker_id_scope': 'conn:stranger',
+                    'start': 0.0,
+                    'end': 5.0,
+                }
+            ],
+        }
+        merged = merge._merge_transcript_segments([a, b])
+        assert [(s['text'], s['speaker_id']) for s in merged] == [('alice', 0), ('stranger', 1)]
+        assert merged[0].get('person_id') == 'p-alice'
+
+    def test_manual_tagged_second_preserves_tagged_voice_and_reallocates_automatic(self, merge):
+        at = datetime(2026, 5, 30, 10, tzinfo=timezone.utc)
+        auto_first = {
+            'id': 'Auto',
+            'started_at': at,
+            'finished_at': at + timedelta(seconds=10),
+            'transcript_segments': [
+                {
+                    'id': 'stranger',
+                    'text': 'stranger',
+                    'speaker': 'SPEAKER_00',
+                    'speaker_id': 0,
+                    'speaker_id_scope': 'conn:stranger',
+                    'start': 0.0,
+                    'end': 5.0,
+                }
+            ],
+        }
+        tagged_second = {
+            'id': 'Tagged',
+            'started_at': at + timedelta(seconds=3600),
+            'finished_at': at + timedelta(seconds=3610),
+            'transcript_segments': [
+                {
+                    'id': 'alice',
+                    'text': 'alice',
+                    'speaker': 'SPEAKER_00',
+                    'speaker_id': 0,
+                    'speaker_id_scope': 'conn:alice',
+                    'speaker_label_source': 'manual',
+                    'person_id': 'p-alice',
+                    'start': 0.0,
+                    'end': 5.0,
+                }
+            ],
+        }
+        merged = merge._merge_transcript_segments([auto_first, tagged_second])
+        assert [(s['text'], s['speaker_id']) for s in merged] == [('stranger', 1), ('alice', 0)]
+        assert merged[1].get('person_id') == 'p-alice'
+
+    def test_manual_receipt_only_source_reserves_speaker_ids(self, merge):
+        at = datetime(2026, 5, 30, 10, tzinfo=timezone.utc)
+        c_receipt = {
+            'id': 'C',
+            'started_at': at,
+            'finished_at': at + timedelta(seconds=10),
+            'transcript_segments': [],
+            'manual_speaker_assignments': {'speakers': {'0': {'person_id': 'p-carol'}}},
+        }
+        d_auto = {
+            'id': 'D',
+            'started_at': at + timedelta(seconds=10),
+            'finished_at': at + timedelta(seconds=20),
+            'transcript_segments': [
+                {
+                    'id': 'dan',
+                    'text': 'dan',
+                    'speaker': 'SPEAKER_00',
+                    'speaker_id': 0,
+                    'speaker_id_scope': 'conn:dan',
+                    'start': 0.0,
+                    'end': 5.0,
+                }
+            ],
+        }
+        merged = merge._merge_transcript_segments([c_receipt, d_auto])
+        assert [(s['text'], s['speaker_id']) for s in merged] == [('dan', 1)]
+
+    def test_all_automatic_sources_reallocate_without_collision(self, merge):
+        at = datetime(2026, 5, 30, 10, tzinfo=timezone.utc)
+        auto1 = {
+            'id': 'Auto1',
+            'started_at': at,
+            'finished_at': at + timedelta(seconds=10),
+            'transcript_segments': [
+                {
+                    'id': 'first',
+                    'text': 'first',
+                    'speaker': 'SPEAKER_00',
+                    'speaker_id': 0,
+                    'speaker_id_scope': 'conn:first',
+                    'start': 0.0,
+                    'end': 5.0,
+                }
+            ],
+        }
+        auto2 = {
+            'id': 'Auto2',
+            'started_at': at + timedelta(seconds=10),
+            'finished_at': at + timedelta(seconds=20),
+            'transcript_segments': [
+                {
+                    'id': 'second',
+                    'text': 'second',
+                    'speaker': 'SPEAKER_00',
+                    'speaker_id': 0,
+                    'speaker_id_scope': 'conn:second',
+                    'start': 0.0,
+                    'end': 5.0,
+                }
+            ],
+        }
+        merged = merge._merge_transcript_segments([auto1, auto2])
+        assert [(s['text'], s['speaker_id']) for s in merged] == [('first', 0), ('second', 1)]
+
+    def test_two_tagged_sources_preserve_existing_numbers(self, merge):
+        at = datetime(2026, 5, 30, 10, tzinfo=timezone.utc)
+        t1 = {
+            'id': 'T1',
+            'started_at': at,
+            'finished_at': at + timedelta(seconds=10),
+            'transcript_segments': [
+                {
+                    'id': 'alice',
+                    'text': 'alice',
+                    'speaker': 'SPEAKER_00',
+                    'speaker_id': 0,
+                    'speaker_id_scope': 'conn:alice',
+                    'speaker_label_source': 'manual',
+                    'start': 0.0,
+                    'end': 5.0,
+                }
+            ],
+        }
+        t2 = {
+            'id': 'T2',
+            'started_at': at + timedelta(seconds=10),
+            'finished_at': at + timedelta(seconds=20),
+            'transcript_segments': [
+                {
+                    'id': 'bob',
+                    'text': 'bob',
+                    'speaker': 'SPEAKER_00',
+                    'speaker_id': 0,
+                    'speaker_id_scope': 'conn:bob',
+                    'speaker_label_source': 'manual',
+                    'start': 0.0,
+                    'end': 5.0,
+                }
+            ],
+        }
+        merged = merge._merge_transcript_segments([t1, t2])
+        assert [(s['text'], s['speaker_id']) for s in merged] == [('alice', 0), ('bob', 0)]
+
+    def test_carried_speaker_label_source_treated_as_tagged(self, merge):
+        at = datetime(2026, 5, 30, 10, tzinfo=timezone.utc)
+        c1 = {
+            'id': 'C1',
+            'started_at': at,
+            'finished_at': at + timedelta(seconds=10),
+            'transcript_segments': [
+                {
+                    'id': 'carried_voice',
+                    'text': 'carried_voice',
+                    'speaker': 'SPEAKER_00',
+                    'speaker_id': 0,
+                    'speaker_id_scope': 'conn:c',
+                    'speaker_label_source': 'carried',
+                    'person_id': 'p-c',
+                    'start': 0.0,
+                    'end': 5.0,
+                }
+            ],
+        }
+        c2 = {
+            'id': 'C2',
+            'started_at': at + timedelta(seconds=10),
+            'finished_at': at + timedelta(seconds=20),
+            'transcript_segments': [
+                {
+                    'id': 'auto_voice',
+                    'text': 'auto_voice',
+                    'speaker': 'SPEAKER_00',
+                    'speaker_id': 0,
+                    'speaker_id_scope': 'conn:auto',
+                    'start': 0.0,
+                    'end': 5.0,
+                }
+            ],
+        }
+        merged = merge._merge_transcript_segments([c1, c2])
+        assert [(s['text'], s['speaker_id']) for s in merged] == [('carried_voice', 0), ('auto_voice', 1)]
+        assert merged[0].get('person_id') == 'p-c'
