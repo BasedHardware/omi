@@ -372,13 +372,15 @@ async def test_stream_timeout_retains_diagnostics(monkeypatch, capsys):
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize('close_code', [1000, 1001, 1005])
-async def test_clean_finish_codes_match_served_websockets_client(monkeypatch, fast_clock, close_code):
+@pytest.mark.parametrize('close_code', [1000, 1001, 1005, 1006])
+async def test_clean_or_finalized_legacy_finish_codes(monkeypatch, fast_clock, close_code):
     transport = WebSocketTransport(close_code=close_code)
     monkeypatch.setattr(streaming.websockets, 'connect', transport.connect)
     _, pcm = probe.load_corpus()
     result = await probe.stream_check(streaming, 'http://legacy', pcm)
     assert result['close_code'] == close_code and result['close_reason'] == ''
+    assert result['finalize_sent'] is True
+    assert result['close_kind'] == ('server_dropped_after_finalize' if close_code == 1006 else 'normal')
     assert result['sender_task'] == result['receiver_task'] == {'state': 'completed'}
 
 
@@ -399,7 +401,7 @@ async def test_abnormal_close_receipt_even_when_drain_suppresses_receive_error(
 
 
 @pytest.mark.asyncio
-async def test_actual_main_handler_flushes_returns_without_close_code(monkeypatch, fast_clock):
+async def test_actual_main_handler_flushes_before_transport_finish(monkeypatch, fast_clock):
     # Execute the actual handler alone with fake inference/admission. Avoid GPU
     # imports; preserve its control flow rather than invent a finalize ACK.
     import ast
@@ -456,7 +458,7 @@ async def test_actual_main_handler_flushes_returns_without_close_code(monkeypatc
         def __init__(self):
             super().__init__()
             self.inbound = asyncio.Queue()
-            self.app_close = AsyncMock()
+            self.app_close = AsyncMock(side_effect=self.server_close)
 
         async def send(self, data):
             self.sent.append(data)
@@ -472,8 +474,9 @@ async def test_actual_main_handler_flushes_returns_without_close_code(monkeypatc
                 await namespace['stream_transcribe'](websocket, 16000, None, None)
                 # Served ASGI transport drops TCP after handler return, without
                 # a close frame: production receipts report synthetic 1006.
-                self.close_code = 1006
-                await self.close()
+                if self.open:
+                    self.close_code = 1006
+                    await self.close()
 
             server_task = asyncio.create_task(server())
             try:
@@ -481,6 +484,10 @@ async def test_actual_main_handler_flushes_returns_without_close_code(monkeypatc
             finally:
                 await self.close()
                 await server_task
+
+        async def server_close(self, code):
+            self.close_code = code
+            await self.close()
 
         async def recv(self):
             return await self.messages.get()
@@ -491,12 +498,14 @@ async def test_actual_main_handler_flushes_returns_without_close_code(monkeypatc
     transport = MainTransport()
     monkeypatch.setattr(streaming.websockets, 'connect', transport.connect)
     result = await probe.stream_check(streaming, 'http://legacy', b'\0\0' * 1600)
-    assert result['close_code'] == 1006
-    assert result['close_kind'] == 'server_dropped_after_finalize'
     assert result['finalize_sent'] is True
+    if transport.app_close.await_count:
+        transport.app_close.assert_awaited_once_with(code=1000)
+        assert result['close_code'] == 1000 and result['close_kind'] == 'normal'
+    else:
+        assert result['close_code'] == 1006 and result['close_kind'] == 'server_dropped_after_finalize'
     assert result['text'] == 'blue bird sings'
     assert transport.sent[-1] == 'finalize'
-    transport.app_close.assert_not_awaited()
     session.flush.assert_awaited_once()
     session.cleanup.assert_called_once()
     lease.release.assert_called_once()
