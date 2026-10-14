@@ -657,8 +657,14 @@ class CaptureController extends ChangeNotifier
     _phoneMic.probeStallAfterForeground();
   }
 
+  /// Called from the proxy provider on every upstream notify (conversations,
+  /// chat, people, usage). Only an actual change of the backing actions is a
+  /// capture state change; re-notifying here would rebuild every capture
+  /// listener, and DeviceProvider after it, on each chat token or list refresh.
   void updateExternalActions(CaptureExternalActions? actions) {
-    externalActions = actions ?? const NoopCaptureExternalActions();
+    final next = actions ?? const NoopCaptureExternalActions();
+    if (next == externalActions) return;
+    externalActions = next;
     notifyListeners();
   }
 

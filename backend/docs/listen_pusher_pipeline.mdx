@@ -4687,6 +4687,34 @@ existing dark revision before dispatching the cohort workflow.
 Policy, storage-parity evidence, bounds, VAD benchmark and lead-owned 5%/12-hour
 ramp: [mobile Standard batch](../../app/docs/mobile-standard-batch.md).
 
+### Forward canonical audio archive (default off)
+
+`AUDIO_CANONICAL_PACKING_ENABLED=true` plus `BUCKET_CANONICAL_AUDIO` routes new
+mobile as-captured Opus to a separate regional canonical archive. Pusher also
+archives its supplied PCM16 capture bytes there after committing playback. Both
+intakes retain their existing primary writes first; optional canonical errors
+are logged and metered without failing those writes. Mobile keeps writing its
+`raw-mobile-batch/` object during rollout. Successful bucket policy reads are
+cached for five minutes per client and bucket. No existing objects are packed. Owner/day tar shards carry stored-byte
+SHA-256, source generations, formats, provenance and conversation ranges. Source
+erasure requires hash verification and embedded-manifest round-trip; durable
+owner intents resume partial cleanup. Account wipe sweeps sources, packs and
+indexes even when the flag is off. Linked conversation audio deletion rewrites
+only affected packs. Bucket provisioning, exact lifecycle rules, pricing and
+rollback are in `deploy/storage-lifecycle/FORWARD.md`; this code does not apply
+bucket policies or deploy a scheduler.
+
+Canonical conversation erasure has a durable owner-scoped deletion marker.
+Intake checks it before and after source/receipt publication, cleans racing
+uploads, and packing rejects marked captures. Manual merges preserve canonical
+bytes, retarget packed and unpacked conversation ranges to the survivor, and
+publish transitive source→survivor links for late retries. Manifest rewrites are
+durable and verified; later survivor deletion re-lists sources, indexes and packs
+before releasing the owner gate. Only the explicit privacy endpoint and account
+wipe erase canonical audio. Shared cache/merge cleanup never implies privacy erasure.
+PCM ranges include sample counts, full tail duration and plaintext byte ranges;
+enhanced encryption envelopes use a **big-endian** uint32 length prefix.
+
 ### Shared Gateway caller routes
 
 NLLB, VAD and every speaker-embedding host (including Parakeet fallback) use
@@ -4696,3 +4724,37 @@ programming and caller reachability before deploying.
 
 Caller deploy order, route requirements and independent rollback are documented
 in [the Gateway caller runbook](internal-gateway-callers.md).
+
+### Recent LEGACY offline-sync admission
+
+V2 resolves identity from `X-App-Platform` + `X-Device-Id-Hash`, but grants
+DEVICE_BOUND capture-time trust only after verifying `X-Omi-Sync-Capture-Manifest`
+and the server conversation window. A present device header alone is not proof.
+Pure offline capture has no such server window; partial conversation drains
+cannot claim the existing immutable manifest either.
+
+`SYNC_LEGACY_FRESH_ENABLED=true` (code/dev/prod default false) lets whole LEGACY
+batches whose oldest capture is within `SYNC_FRESH_MAX_AGE_SECONDS` enter fresh
+capacity after an atomic Redis token reservation. Trust remains LEGACY. Each
+request costs `max(1, ceil(actual multipart bytes / MiB))`; defaults refill 60
+tokens/hour with a ten-token burst per account across replicas and devices.
+`SYNC_LEGACY_FRESH_HOURLY_TOKENS` supports 1–120 and
+`SYNC_LEGACY_FRESH_BURST_TOKENS` 1–60. Bad config, unknown file size or Redis
+failure demotes to backfill. Budget Redis connect/read I/O has a one-second
+timeout and runs off the event loop. Upload retries spend again; timestamp/session-id
+changes cannot reset the account budget. The budget bounds work admission,
+not billed speech. A fresh-only hard restriction or daily ceiling demotes a
+promoted LEGACY batch to backfill before persistence and final admission metrics,
+so optional promotion never introduces a fair-use 429. DEVICE_BOUND fresh keeps
+its existing 429 response. Trusted manifests retain their existing route. Future,
+invalid/missing timestamps, mixed historical batches and lookback rejection
+keep their existing semantics. Deprecated V1 stays unchanged.
+
+`omi_sync_lane_admissions_total{lane,trust,reason}` and `sync_lane_admission`
+record the final budget and fresh-gate decision. New reasons: `recent_legacy_capture`,
+`legacy_fresh_budget_exceeded`, `legacy_fresh_budget_unavailable`,
+`legacy_fresh_hard_restricted`, `legacy_fresh_daily_ceiling`. No account
+labels are added. Optional final-pass logs now include `lane` and
+`duration_seconds`, covering decoding, embedding triage, diarization and naming
+inside the adapter. These times exclude the preceding WAV download and are
+not whole-job latency. See [drain qualification](runbooks/sync-legacy-fresh-drain.md).

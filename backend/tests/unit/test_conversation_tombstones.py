@@ -112,7 +112,7 @@ def test_non_cascade_delete_purges_prompt_evidence_after_intent_without_purging_
         'delete_owner_prompt_embedding_cache': purge,
         'delete_conversation_screen_frames': MagicMock(),
         'delete_conversation_and_frame_evidence': hard_delete,
-        'delete_conversation_audio_files': audio,
+        'delete_privacy_conversation_audio': audio,
         'delete_vector': MagicMock(),
         'delete_transcript_chunk_vectors': MagicMock(),
         'record_product_event': MagicMock(),
@@ -148,6 +148,8 @@ def test_user_delete_records_intent_before_retraction_and_cleanup(store, failure
         'logger': MagicMock(),
         'conversation_tombstones': tombstones,
         'db_client_module': SimpleNamespace(db=store),
+        'conversations_db': SimpleNamespace(get_conversation=lambda *args: {'sync_merged_from': ['donor']}),
+        'os': SimpleNamespace(getenv=lambda *args: 'canonical'),
         'MemoryService': lambda **kw: SimpleNamespace(retract_conversation_memories=retract),
         'retraction_can_be_skipped': lambda *a, **kw: False,
         'ConversationReplacementConflictError': Conflict,
@@ -155,7 +157,7 @@ def test_user_delete_records_intent_before_retraction_and_cleanup(store, failure
         'delete_conversation_screen_frames': cleanup,
         'delete_conversation_and_frame_evidence': hard_delete,
         'action_items_db': MagicMock(get_action_items_by_conversation=MagicMock(return_value=[])),
-        'delete_conversation_audio_files': MagicMock(),
+        'delete_privacy_conversation_audio': MagicMock(),
         'delete_owner_prompt_embedding_cache': MagicMock(),
         'delete_vector': MagicMock(),
         'delete_transcript_chunk_vectors': MagicMock(),
@@ -167,7 +169,11 @@ def test_user_delete_records_intent_before_retraction_and_cleanup(store, failure
             delete('c', MagicMock(), True, None, 'u')
         assert 'users/u/conversations/c' in store.rows
     else:
-        assert delete('c', MagicMock(), True, None, 'u') is None
+        tasks = MagicMock()
+        assert delete('c', tasks, True, None, 'u') is None
+        tasks.add_task.assert_called_once_with(
+            namespace['delete_privacy_conversation_audio'], 'u', 'c', source_ids=['donor']
+        )
         assert 'users/u/conversations/c' not in store.rows
     assert tombstones.is_deleted('u', 'c')
 

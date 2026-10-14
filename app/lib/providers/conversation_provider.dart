@@ -925,7 +925,9 @@ class ConversationProvider extends ChangeNotifier {
           .toList();
     } else if (selectedFolderId == null) {
       // Only cache when viewing all folders
-      SharedPreferencesUtil().cachedConversations = conversations;
+      unawaited(SharedPreferencesUtil().cacheConversations(conversations).catchError((Object e) {
+        Logger.debug('ConversationProvider: caching conversations failed: $e');
+      }));
     }
     conversations = conversations.map(OnDeviceTranscriptionController.instance.displayConversation).toList();
     for (final row in _phoneOnlyConversations.values) {

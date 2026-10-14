@@ -1,5 +1,6 @@
 import asyncio
 import hashlib
+import os
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, BackgroundTasks
 from typing import Annotated, Any, Dict, List, Optional
@@ -20,7 +21,7 @@ from database.vector_db import (
     delete_transcript_chunk_vectors,
 )
 import database.vector_db as vector_db
-from utils.other.storage import delete_conversation_audio_files, delete_owner_prompt_embedding_cache
+from utils.other.storage import delete_privacy_conversation_audio, delete_owner_prompt_embedding_cache
 from utils.screen_frames.store import delete_conversation_screen_frames
 from models.calendar_context import CalendarMeetingContext
 from models.client_processing import PROJECTION_FAMILY_FIELDS, ClientProcessing
@@ -1346,7 +1347,13 @@ def delete_conversation(
                 delete_action_item_vectors_batch(uid, [item['id'] for item in armed])
             except Exception as e:
                 logger.error(f"Error deleting task vectors for {conversation_id}: {e}")
-        background_tasks.add_task(delete_conversation_audio_files, uid, conversation_id)
+        # Snapshot retained bridge donors before shared metadata cleanup removes them.
+        source_ids = (
+            (conversations_db.get_conversation(uid, conversation_id) or {}).get('sync_merged_from', [])
+            if os.getenv('BUCKET_CANONICAL_AUDIO')
+            else []
+        )
+        background_tasks.add_task(delete_privacy_conversation_audio, uid, conversation_id, source_ids=source_ids)
 
     # Screen frames (meeting-note screenshots) are primary conversation
     # content, not cascade-only derived data, so this runs unconditionally

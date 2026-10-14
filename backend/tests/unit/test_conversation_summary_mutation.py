@@ -9,6 +9,7 @@ from datetime import datetime, timezone
 import pytest
 
 from database import conversations as conversations_db
+from models.transcript_segment import legacy_conversation_segment_id
 
 UID = 'summary-user'
 CONVERSATION_ID = 'summary-conversation'
@@ -207,6 +208,36 @@ def test_segment_edit_invalidates_affected_summary_evidence_in_same_transaction(
     assert stored_segments == [
         {'id': 's1', 'text': 'New source text'},
         {'id': 's2', 'text': 'Unaffected source text'},
+    ]
+
+
+def test_segment_edit_resolves_legacy_segment_with_no_stored_id(monkeypatch):
+    """Segments stored before IDs existed (April 2025, d89c2aaec3) have no ``id`` field.
+
+    The read path (``Conversation.__init__``) assigns a deterministic legacy ID and the
+    client sends that ID back on edit; the write path must resolve it the same way instead
+    of only matching segments that already have a stored ``id``.
+    """
+    legacy_id = legacy_conversation_segment_id(CONVERSATION_ID, 1)
+    ref = _install_db(
+        monkeypatch,
+        {
+            'data_protection_level': 'standard',
+            'transcript_segments': [
+                {'text': 'First segment, no id'},
+                {'text': 'Old source text'},
+            ],
+            'structured': {'overview': 'Keep this user-visible overview'},
+        },
+    )
+
+    assert conversations_db.update_conversation_segment_text(UID, CONVERSATION_ID, legacy_id, 'New source text') == 'ok'
+
+    payload = ref.update_calls[0]
+    stored_segments = json.loads(zlib.decompress(payload['transcript_segments']).decode('utf-8'))
+    assert stored_segments == [
+        {'text': 'First segment, no id', 'id': legacy_conversation_segment_id(CONVERSATION_ID, 0)},
+        {'text': 'New source text', 'id': legacy_id},
     ]
 
 

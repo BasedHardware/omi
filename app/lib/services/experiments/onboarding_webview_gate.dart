@@ -38,15 +38,99 @@ abstract final class OnboardingWebviewGate {
 
   /// The page to render, or null for native onboarding. [readFlag] and [readPayload] default to
   /// the analytics manager's flag reads and are injectable for tests.
+  ///
+  /// Right after sign-in the analytics identity is still settling and the SDK's cached flags belong
+  /// to the anonymous id, where a per-user rollout never matches; so this waits (at most
+  /// [identityWait]) for the identity, re-fetches flags for it, and only then reads.
+  static Future<Uri?>? _warmed;
+  static int _warmedEpoch = -1;
+
+  /// Starts resolving early (while the reader is still on the consent screen) with a long identity
+  /// wait, so [resolve] at the tap usually finds the answer ready instead of starting the clock.
+  /// The warm-up is fenced to the analytics identity epoch it started in: an account change
+  /// ("use a different account") discards it, so one account never inherits another's decision.
+  static void warm({
+    Future<bool> Function(String key)? readFlag,
+    Future<Object?> Function(String key)? readPayload,
+    String? Function()? settledIdentity,
+    Future<bool> Function()? reload,
+    int Function()? identityEpoch,
+    Duration identityWait = const Duration(seconds: 20),
+  }) {
+    final epoch = (identityEpoch ?? _currentEpoch)();
+    if (_warmed != null && _warmedEpoch == epoch) return;
+    _warmedEpoch = epoch;
+    _warmed = _resolve(
+      readFlag: readFlag,
+      readPayload: readPayload,
+      settledIdentity: settledIdentity,
+      reload: reload,
+      identityEpoch: identityEpoch,
+      identityWait: identityWait,
+    );
+  }
+
+  /// Drops a pending warm-up (the account is changing).
+  static void invalidate() {
+    _warmed = null;
+    _warmedEpoch = -1;
+  }
+
+  static int _currentEpoch() => AnalyticsManager.identityChanges.value;
+
+  @visibleForTesting
+  static void resetForTesting() => invalidate();
+
   static Future<Uri?> resolve({
     Future<bool> Function(String key)? readFlag,
     Future<Object?> Function(String key)? readPayload,
+    String? Function()? settledIdentity,
+    Future<bool> Function()? reload,
+    int Function()? identityEpoch,
+    Duration identityWait = const Duration(seconds: 3),
+  }) async {
+    final epoch = (identityEpoch ?? _currentEpoch)();
+    final warmed = _warmed;
+    final warmedEpoch = _warmedEpoch;
+    invalidate();
+    if (warmed != null && warmedEpoch == epoch) {
+      // Give a warm-up that is still waiting the same bounded patience as a cold read.
+      return warmed.timeout(identityWait + const Duration(seconds: 2), onTimeout: () => null);
+    }
+    return _resolve(
+      readFlag: readFlag,
+      readPayload: readPayload,
+      settledIdentity: settledIdentity,
+      reload: reload,
+      identityEpoch: identityEpoch,
+      identityWait: identityWait,
+    );
+  }
+
+  static Future<Uri?> _resolve({
+    Future<bool> Function(String key)? readFlag,
+    Future<Object?> Function(String key)? readPayload,
+    String? Function()? settledIdentity,
+    Future<bool> Function()? reload,
+    int Function()? identityEpoch,
+    required Duration identityWait,
   }) async {
     if (debugOverrideActive) return parse(enabled: true, payload: {'url': _debugUrl});
     try {
+      final epoch = (identityEpoch ?? _currentEpoch)();
+      final identity = settledIdentity ?? () => AnalyticsManager().settledDistinctId;
+      final deadline = DateTime.now().add(identityWait);
+      while (identity() == null && DateTime.now().isBefore(deadline)) {
+        await Future<void>.delayed(const Duration(milliseconds: 100));
+      }
+      if (identity() == null) return null;
+      // Stale flags must not decide: a reload that fails or times out is native onboarding.
+      if (!await (reload ?? AnalyticsManager().reloadFeatureFlags)()) return null;
       final enabled = await (readFlag ?? AnalyticsManager().isFeatureEnabled)(enabledFlag);
       if (!enabled) return null;
       final payload = await (readPayload ?? AnalyticsManager().getFeatureFlagPayload)(enabledFlag);
+      // The account changed while this was in flight: the answer belongs to someone else.
+      if ((identityEpoch ?? _currentEpoch)() != epoch) return null;
       return parse(enabled: true, payload: payload);
     } catch (_) {
       return null;

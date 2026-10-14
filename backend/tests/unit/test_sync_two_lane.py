@@ -350,7 +350,7 @@ def test_sync_backfill_lifecycle_is_shared_by_manual_and_auto_dev():
     assert 'id: deploy-backend-sync-backfill' in action
     assert 'render_cloud_run_clone_env.py' in action
     assert 'SYNC_TASKS_QUEUE=sync-backfill' in action
-    # Dispatch concurrency must equal the worker's max instances: offering more
+    # Dispatch concurrency must stay within max instances x concurrency: offering more
     # than the worker admits makes Cloud Run reject the surplus and Cloud Tasks
     # back it off, which previously stranded recordings for hours. A warm
     # instance keeps a scale-from-zero poke from being rejected outright.
@@ -367,7 +367,7 @@ def test_sync_backfill_lifecycle_is_shared_by_manual_and_auto_dev():
     sync_step = stack.split('id: deploy-backend-sync\n', 1)[1].split('- name:', 1)[0]
     assert '--max-instances=50' in sync_step
     assert 'gcloud tasks queues create sync-backfill' in action
-    assert '--max-concurrent-dispatches=40' in action
+    assert '--max-concurrent-dispatches=60' in action
     assert '--max-dispatches-per-second=10' in action
     assert '--max-backoff=60s' in action
     assert 'collection-group=sync_content_ledger' in action
@@ -407,7 +407,7 @@ def test_sync_backfill_dispatch_mode_reconciles_queue_without_platform_mutation(
 
     run = queue['run']
     for flag in (
-        '--max-concurrent-dispatches=40',
+        '--max-concurrent-dispatches=60',
         '--max-dispatches-per-second=10',
         '--min-backoff=5s',
         '--max-backoff=60s',

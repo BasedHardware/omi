@@ -899,6 +899,13 @@ environments:
               provisional: true
               value: '2592000'
               category: rollout
+            SYNC_LEGACY_FRESH_ENABLED: {value: 'false', category: rollout}
+            SYNC_LEGACY_FRESH_HOURLY_TOKENS:
+              value: '60'
+              category: reliability
+            SYNC_LEGACY_FRESH_BURST_TOKENS:
+              value: '10'
+              category: reliability
             SYNC_FRESH_MAX_AGE_SECONDS:
               provisional: true
               value: '21600'
@@ -1096,6 +1103,13 @@ environments:
               provisional: true
               value: '2592000'
               category: rollout
+            SYNC_LEGACY_FRESH_ENABLED: {value: 'false', category: rollout}
+            SYNC_LEGACY_FRESH_HOURLY_TOKENS:
+              value: '60'
+              category: reliability
+            SYNC_LEGACY_FRESH_BURST_TOKENS:
+              value: '10'
+              category: reliability
             SYNC_FRESH_MAX_AGE_SECONDS:
               provisional: true
               value: '21600'
@@ -2700,6 +2714,13 @@ environments:
               provisional: true
               value: '2592000'
               category: rollout
+            SYNC_LEGACY_FRESH_ENABLED: {value: 'false', category: rollout}
+            SYNC_LEGACY_FRESH_HOURLY_TOKENS:
+              value: '60'
+              category: reliability
+            SYNC_LEGACY_FRESH_BURST_TOKENS:
+              value: '10'
+              category: reliability
             SYNC_FRESH_MAX_AGE_SECONDS:
               provisional: true
               value: '21600'
@@ -2944,6 +2965,13 @@ environments:
               provisional: true
               value: '2592000'
               category: rollout
+            SYNC_LEGACY_FRESH_ENABLED: {value: 'false', category: rollout}
+            SYNC_LEGACY_FRESH_HOURLY_TOKENS:
+              value: '60'
+              category: reliability
+            SYNC_LEGACY_FRESH_BURST_TOKENS:
+              value: '10'
+              category: reliability
             SYNC_FRESH_MAX_AGE_SECONDS:
               provisional: true
               value: '21600'
