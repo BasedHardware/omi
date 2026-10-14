@@ -229,7 +229,8 @@ def compare(path: str, head_text: str, base_text: str | None) -> list[str]:
 
 # ── provider graph ────────────────────────────────────────────────────────────
 
-PROXY_HOOK_CALL = re.compile(r"\bprevious\s*[?!]?\.\.\s*(\w+)\s*\(")
+# `previous?..hook(...)` (cascade) and `previous?.hook(...); return previous;` (block form).
+PROXY_HOOK_CALL = re.compile(r"\bprevious\s*[?!]?\.\.?\s*(\w+)\s*\(")
 LINE_COMMENT = re.compile(r"//[^\n]*")
 BLOCK_COMMENT = re.compile(r"/\*.*?\*/", re.S)
 
@@ -397,7 +398,7 @@ def check_provider_graph(root: Path) -> list[str]:
     if not hooks:
         # The root graph has proxy providers today; finding none means the parser no longer
         # recognises their shape, and an empty check would pass vacuously.
-        return [f"{MAIN_DART}: no `previous?..hook(...)` proxy update hooks found; update PROXY_HOOK_CALL"]
+        return [f"{MAIN_DART}: no `previous?..hook(...)` / `previous?.hook(...)` proxy update hooks found; update PROXY_HOOK_CALL"]
     sources: dict[str, str] = {}
     for file in sorted((root / APP_ROOT).rglob("*.dart")):
         rel = file.relative_to(root).as_posix()

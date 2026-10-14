@@ -98,14 +98,9 @@ class LocalRecordingsProvider extends ChangeNotifier {
     BleBridge.instance.addBatchRecordingFinalizedListener(_onRecordingFinalized);
     _jobs = _loadJobs();
     // Trigger (a): auto-upload offline-fallback recordings once the initial scan
-    // is in. Trigger (b): whenever connectivity is (re)gained.
-    refresh().then((_) {
-      _maybeAutoUpload();
-      if (_ownedJobs().isNotEmpty) {
-        _startReconcileTimer();
-        _reconcile();
-      }
-    });
+    // is in (_afterFirstPublishedScan — a refresh started meanwhile may supersede
+    // this one). Trigger (b): whenever connectivity is (re)gained.
+    refresh();
     _connectivitySub = ConnectivityService().onConnectionChange.listen((connected) {
       if (connected) _maybeAutoUpload();
     });
@@ -218,7 +213,25 @@ class LocalRecordingsProvider extends ChangeNotifier {
       // Resume polling if recordings are still awaiting transcription (e.g. the
       // timer was dropped while backgrounded and we just resumed).
       if (_ownedJobs().isNotEmpty) _startReconcileTimer();
-      if (!_disposed && generation == _scanGeneration) notifyListeners();
+      if (!_disposed && generation == _scanGeneration) {
+        notifyListeners();
+        if (!_firstScanPublished) {
+          _firstScanPublished = true;
+          _afterFirstPublishedScan();
+        }
+      }
+    }
+  }
+
+  bool _firstScanPublished = false;
+
+  /// Runs once, after the first scan that was not superseded, so it sees the
+  /// recordings that scan published.
+  void _afterFirstPublishedScan() {
+    _maybeAutoUpload();
+    if (_ownedJobs().isNotEmpty) {
+      _startReconcileTimer();
+      _reconcile();
     }
   }
 

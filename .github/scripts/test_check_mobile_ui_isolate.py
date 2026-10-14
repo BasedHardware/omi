@@ -230,6 +230,10 @@ class ProviderGraphTests(unittest.TestCase):
         )
         self.assertEqual(hook_violations("updateExternalActions", {"app/lib/x.dart": allowed}), [])
 
+    def test_block_form_update_calls_are_hooks(self) -> None:
+        main_text = "update: (c, a, previous) {\n  previous?.setFoo(a);\n  previous!.setBaz(a);\n  return previous ?? Foo();\n}"
+        self.assertEqual(proxy_hooks(main_text), ["setBaz", "setFoo"])
+
     def test_bang_and_bare_cascades_are_hooks(self) -> None:
         main_text = "update: (c, a, previous) => previous!..setFoo(a), update2: (c, a, previous) { return previous..setBar(a); }"
         self.assertEqual(proxy_hooks(main_text), ["setBar", "setFoo"])
