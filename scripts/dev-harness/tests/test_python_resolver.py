@@ -1086,6 +1086,9 @@ def test_backend_pinned_python_rejects_below_pin_python_override(
         "dev_harness_backend_pinned_python",
         path=os.pathsep.join(("/usr/bin", "/bin")),
         extra_env={"PYTHON": str(below)},
+        # Host isolation: a real keg-only Homebrew 3.11 would legitimately
+        # answer after the override is rejected (Codex P2).
+        preamble="dev_harness_backend_pinned_prefixes() { :; }\n",
     )
 
     assert result.returncode != 0

@@ -58,8 +58,8 @@ if [ "$VENV_PREEXISTED" -eq 1 ]; then
   [ -x "$VENV_PY_BIN" ] || VENV_PY_BIN="$PWD/backend/.venv/Scripts/python.exe"
   if ! dev_harness_venv_python_is_pinned_311 "$VENV_PY_BIN"; then
     echo "dev-init: the existing backend/.venv is not the pinned Python 3.11 runtime the backend requires; refusing to install requirements into it." >&2
-    echo "Recover with: rm -rf backend/.venv && dev-init (re-runs the pinned 3.11 discovery)," >&2
-    echo "or: make lane-bootstrap (requires uv)." >&2
+    echo "Recover with: rm -rf backend/.venv && make dev-init (re-runs the pinned" >&2
+    echo "3.11 discovery), or: make lane-bootstrap (requires uv)." >&2
     exit 1
   fi
 fi
