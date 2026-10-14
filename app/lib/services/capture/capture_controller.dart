@@ -226,6 +226,17 @@ class CaptureController extends ChangeNotifier
   /// The conversation-capture recorder. Resolves an injected override first so
   /// deterministic scenarios can drive the real pipeline through the production
   /// decision path, then falls back to the shared service manager.
+  /// Receives a copy of the phone microphone's audio (16 kHz mono PCM16) as it arrives, for a caller
+  /// that needs the sound itself: onboarding enrolls the reader's voice from its first dictation.
+  void Function(List<int> pcm)? phoneMicAudioTap;
+
+  /// Receives each encoded audio packet from the pendant as it arrives (for a live level meter).
+  void Function(List<int> packet)? deviceAudioTap;
+
+  /// Set by a first-run step that explains a short or empty capture itself, so the generic
+  /// "talk for 30 seconds" notice stays away while it is on screen.
+  bool suppressShortCaptureNotice = false;
+
   IMicRecorderService get _phoneMic => _phoneMicRecorderOverride ?? ServiceManager.instance().phoneMic;
 
   DateTime _now() => _nowOverride?.call() ?? DateTime.now();
@@ -496,6 +507,7 @@ class CaptureController extends ChangeNotifier
     await _phoneMic.start(
       onByteReceived: (bytes) {
         if (!_admitsCapture(revision)) return;
+        phoneMicAudioTap?.call(bytes);
         _recordingTelemetry.observeAudio(bytes.length);
         if (bytes.isNotEmpty) _livenessWatchdog.observeFrame(_now());
         final frames = _activeSource?.processBytes(bytes) ?? [];
@@ -2089,6 +2101,7 @@ class CaptureController extends ChangeNotifier
         if (_captureControllerDisposed || !_admitsCapture(revision) || _recordingDevice?.id != deviceId) return;
         final snapshot = List<int>.from(value);
         if (snapshot.isEmpty || snapshot.length < 3) return;
+        deviceAudioTap?.call(snapshot);
 
         // Track bytes received from BLE
         _metrics.addBleBytes(snapshot.length);
@@ -2830,6 +2843,7 @@ class CaptureController extends ChangeNotifier
       await _phoneMic.start(
         onByteReceived: (bytes) {
           if (!_admitsCapture(revision)) return;
+          phoneMicAudioTap?.call(bytes);
           _recordingTelemetry.observeAudio(bytes.length);
           if (bytes.isNotEmpty) _livenessWatchdog.observeFrame(_now());
           // Process through AudioSource for frame splitting and sync key generation
@@ -4040,7 +4054,7 @@ class CaptureController extends ChangeNotifier
         transcriptObserved: resolved?.transcriptObserved ?? false,
         reason: reason,
       );
-      if (!showCopy) return;
+      if (!showCopy || suppressShortCaptureNotice) return;
       final ctx = globalNavigatorKey.currentContext;
       if (ctx != null) {
         AppSnackbar.showSnackbar(
