@@ -153,7 +153,7 @@ class LocalRecordingsProvider extends ChangeNotifier {
       }
       final uid = SharedPreferencesUtil().uid;
       final ownersFile = File('${dir.path}/$_ownersFileName');
-      final owners = _readOwners(ownersFile);
+      final owners = await _readOwners(ownersFile);
       if (owners == null) {
         _recordings = [];
         _ownedNames = {};
@@ -163,7 +163,11 @@ class LocalRecordingsProvider extends ChangeNotifier {
       final list = <LocalRecording>[];
       final seen = <String>{};
       final onDisk = <String>{};
-      for (final entity in dir.listSync().whereType<File>()) {
+      // This directory also holds every offline-sync WAL file, so it can have
+      // thousands of entries; list it without blocking the UI isolate (refresh
+      // runs on every app resume).
+      final files = await dir.list().where((entity) => entity is File).cast<File>().toList();
+      for (final entity in files) {
         final name = entity.path.split('/').last;
         // Only batch recordings (audio_omibatch* — includes the omibatchlimitless
         // marker) — never offline-sync WAL flushes, which share this directory and
@@ -588,10 +592,10 @@ class LocalRecordingsProvider extends ChangeNotifier {
     await temp.rename(file.path);
   }
 
-  Map<String, String>? _readOwners(File file) {
+  Future<Map<String, String>?> _readOwners(File file) async {
     try {
-      if (!file.existsSync()) return {};
-      final decoded = jsonDecode(file.readAsStringSync());
+      if (!await file.exists()) return {};
+      final decoded = jsonDecode(await file.readAsString());
       if (decoded is! Map<String, dynamic>) return null;
       final owners = <String, String>{};
       for (final entry in decoded.entries) {

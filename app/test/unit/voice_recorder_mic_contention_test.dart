@@ -124,6 +124,23 @@ void main() {
       expect(recordingsDir().listSync(), isEmpty);
     });
 
+    test('waveform ticks repaint the waveform, not every provider listener', () async {
+      final mic = _ContendedMic()..failStart = false;
+      final provider = VoiceRecorderProvider(mic: mic);
+      await provider.startRecording();
+      expect(provider.state, VoiceRecorderState.recording);
+
+      var providerNotifies = 0;
+      var waveformTicks = 0;
+      provider.addListener(() => providerNotifies++);
+      provider.waveformTick.addListener(() => waveformTicks++);
+      await Future<void>.delayed(const Duration(milliseconds: 200));
+
+      expect(waveformTicks, greaterThan(3), reason: 'the wave must keep flowing at ~60Hz');
+      expect(providerNotifies, 0, reason: 'a 60Hz provider notify rebuilds the whole chat composer');
+      provider.dispose();
+    });
+
     test('the provider is not wedged — a later start records normally', () async {
       final mic = _ContendedMic();
       final provider = VoiceRecorderProvider(mic: mic);

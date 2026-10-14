@@ -40,6 +40,7 @@ class CaptureProvider extends CaptureController {
 
   final LocalSegmentStore localSegmentStore;
   String? _lastPersistedFingerprint;
+  _LiveSegmentsKey? _lastSeenSegmentsKey;
   Future<void> _liveSegmentWrite = Future<void>.value();
 
   Future<void> get pendingLiveSegmentWrite => _liveSegmentWrite;
@@ -48,6 +49,22 @@ class CaptureProvider extends CaptureController {
     if (!localSegmentStore.enabled) return;
     final sessionId = activeCaptureSessionId ?? activeRecordingId;
     if (sessionId == null) return;
+    // This listener runs on every capture notify (state, metrics, sockets),
+    // most of which leave the transcript untouched. Building the fingerprint
+    // walks the whole transcript, so skip it unless the list, its length or
+    // the content version moved. In-place segment edits must bump
+    // segmentsPhotosVersion; the live transcript UI relies on that already.
+    final ownerToken = sessionOwner?.token;
+    final key = _LiveSegmentsKey(
+      sessionId: sessionId,
+      ownerGeneration: ownerToken?.generation,
+      ownerIdentity: ownerToken?.identity,
+      segments: segments,
+      length: segments.length,
+      version: segmentsPhotosVersion,
+    );
+    if (key == _lastSeenSegmentsKey) return;
+    _lastSeenSegmentsKey = key;
     final fingerprint = segments
         .map(
           (segment) =>
@@ -64,8 +81,42 @@ class CaptureProvider extends CaptureController {
       if (owner != null && token != null && !owner.isCurrent(token)) return;
       _lastPersistedFingerprint = fingerprint;
     }).catchError((Object e) {
+      // Let the next notify retry the same content.
+      if (identical(_lastSeenSegmentsKey, key)) _lastSeenSegmentsKey = null;
       Logger.debug('Error persisting live segments: $e');
     });
     unawaited(_liveSegmentWrite);
   }
+}
+
+class _LiveSegmentsKey {
+  const _LiveSegmentsKey({
+    required this.sessionId,
+    required this.ownerGeneration,
+    required this.ownerIdentity,
+    required this.segments,
+    required this.length,
+    required this.version,
+  });
+
+  final String sessionId;
+  final int? ownerGeneration;
+  final String? ownerIdentity;
+  final List<Object?> segments;
+  final int length;
+  final int version;
+
+  @override
+  bool operator ==(Object other) =>
+      other is _LiveSegmentsKey &&
+      other.sessionId == sessionId &&
+      other.ownerGeneration == ownerGeneration &&
+      other.ownerIdentity == ownerIdentity &&
+      identical(other.segments, segments) &&
+      other.length == length &&
+      other.version == version;
+
+  @override
+  int get hashCode =>
+      Object.hash(sessionId, ownerGeneration, ownerIdentity, identityHashCode(segments), length, version);
 }

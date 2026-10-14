@@ -923,7 +923,7 @@ class ConversationProvider extends ChangeNotifier {
           .toList();
     } else if (selectedFolderId == null) {
       // Only cache when viewing all folders
-      SharedPreferencesUtil().cachedConversations = conversations;
+      unawaited(SharedPreferencesUtil().cacheConversations(conversations));
     }
     if (conversations.isNotEmpty) clearEmptyRecordingExplanation();
     if (searchedConversations.isEmpty) {
