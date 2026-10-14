@@ -4,14 +4,14 @@
     {
       "file": "001-mobile-ios-onboarding-sign-in.png",
       "platform": "mobile-ios",
-      "description": "Sign-in opens straight away, no Get Started screen (local test build shows one local sign-in button where store builds show Apple/Google)",
+      "description": "Sign-in over the launch film, no Get Started screen (OMI_ONBOARDING_HERO=video; local test build shows one local sign-in button where store builds show Apple/Google)",
       "captured_by": "agent",
       "source": "screencapture"
     },
     {
       "file": "002-mobile-ios-onboarding-data-privacy.png",
       "platform": "mobile-ios",
-      "description": "Data & Privacy: the Omi pendant, centred headline, Continue at the standard height",
+      "description": "Data & Privacy over the launch film",
       "captured_by": "agent",
       "source": "screencapture"
     },
