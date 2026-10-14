@@ -19,6 +19,8 @@ from models.dream_refs import base_ref, has_ref, cited_value
 from config.dream_agent import context_mode
 from utils.dream_consensus import unanimous_auto
 from models.dream_edit import Edit, MemoryHygieneEdit
+from models.dream_harness_edit import HarnessEdit
+from models.dream_harness import ProposeEdit
 from database import review_memory_hygiene
 from utils.entity_pages import resolve_entity
 from models.review_context import question_source
@@ -31,6 +33,7 @@ from utils.dream_guards import (
 )
 from utils.dream_context import EvidenceRecords
 from utils.dream_grounding import spelling_grounding_rejection, spelling_question
+from utils import dream_cleanup_edits, dream_change_view
 
 
 def edit_key(edit, records=None):
@@ -70,8 +73,22 @@ def edit_key(edit, records=None):
                 for row in rows
             ]
         )
-    elif edit.kind == 'merge_people' or edit.kind == 'merge_memories':
+    elif edit.kind in {'merge_people', 'merge_memories', 'merge_tasks', 'merge_conversations'}:
         value = sorted([edit.target, edit.other])
+    elif records and has_ref(edit.target, records) and edit.kind in {'retire_memory', 'supersede_memory'}:
+        row = records[base_ref(edit.target)]
+        replacement = edit.after or (records.get(base_ref(edit.other), {}).get('content') if edit.other else '')
+        value = [
+            row.get('content'),
+            replacement,
+            row.get('subject_scope'),
+            row.get('subject_entity_id'),
+            row.get('slot'),
+            row.get('visibility'),
+        ]
+    elif records and has_ref(edit.target, records) and edit.kind in {'retire_task', 'dismiss_person'}:
+        row = records[base_ref(edit.target)]
+        value = [base_ref(edit.target), row.get('description') or row.get('name')]
     return 'dream:' + kind + ':' + hashlib.sha256(json.dumps(value).encode()).hexdigest()
 
 
@@ -123,6 +140,10 @@ def validate_summary_edit(edit, row, *, full=False):
 
 
 def validate_edit(edit, records):
+    if isinstance(edit, HarnessEdit):
+        # model_copy updates are not validated by Pydantic. Re-enter the tool
+        # contract at this shared boundary, including Review acceptance.
+        ProposeEdit.model_validate({'edit': edit.model_dump()})
     reason = spelling_rejection(edit)
     if reason:
         raise ValueError('dream_' + reason)
@@ -134,6 +155,9 @@ def validate_edit(edit, records):
         and not verbatim_quote(edit.before, cited_value(edit.target, records))
     ):
         raise ValueError('dream_invalid_target')
+    if isinstance(edit, HarnessEdit) and edit.kind in dream_cleanup_edits.KINDS:
+        dream_cleanup_edits.validate_cleanup(edit, records)
+        return
     reason = task_rejection(edit, records[base_ref(edit.target)], records)
     if reason:
         raise ValueError('dream_' + reason)
@@ -187,9 +211,9 @@ def validate_edit(edit, records):
 
 
 def validate_memory_hygiene(edit, records):
-    if getattr(records, 'context_mode', 'bounded') != 'full':
+    if not isinstance(edit, HarnessEdit) and getattr(records, 'context_mode', 'bounded') != 'full':
         raise ValueError('dream_invalid_memory')
-    MemoryHygieneEdit.model_validate(edit.model_dump(exclude={'value'}))
+    MemoryHygieneEdit.model_validate(edit.model_dump(exclude={'value', 'why_it_matters'}))
     ref = base_ref(edit.target)
     if ref.partition('/')[0] not in {'memories', 'memory_items'} or '#' in edit.target:
         raise ValueError('dream_invalid_memory')
@@ -226,13 +250,9 @@ def apply_edit(uid, edit, records, *, expected_records=None):
     if not review_changes.agent_change_allowed(uid, key):
         return 'suppressed'
     row = records[base_ref(edit.target)]
-    change = ReviewChange(
-        change_id=str(uuid5(NAMESPACE_URL, uid + ":" + key)),
-        kind='other',
-        title=edit.reason,
-        reason=edit.reason,
-        created_at=datetime.now(timezone.utc),
-    )
+    change = dream_change_view.edit_change(uid, edit, records, key)
+    if isinstance(edit, HarnessEdit) and edit.kind in dream_cleanup_edits.KINDS:
+        return dream_cleanup_edits.apply_cleanup(uid, edit, records, change, key, expected_records=expected_records)
     if edit.kind in {'retire_memory', 'supersede_memory'}:
         change.refs = [ChangeRef(type='memory', id=base_ref(edit.target).split('/', 1)[1], label=proposal_label(row))]
         review_memory_hygiene.record_change(uid, change, edit, key, expected_records=expected_records)
@@ -350,7 +370,11 @@ def apply_edit(uid, edit, records, *, expected_records=None):
             patch = {}
             if structured.get('title') != (current.get('structured') or {}).get('title'):
                 patch['structured.title'] = structured['title']
-            if '#' not in edit.target and current.get('user_title'):
+            if isinstance(edit, HarnessEdit) and '#' not in edit.target:
+                for field in ('overview', 'sections'):
+                    if structured.get(field) != (current.get('structured') or {}).get(field):
+                        patch['structured.' + field] = structured[field]
+            if not isinstance(edit, HarnessEdit) and '#' not in edit.target and current.get('user_title'):
                 patch['user_title'] = replace_term(current['user_title'], edit.before, edit.after)
             segments = copy.deepcopy(current.get('transcript_segments') or [])
             changed_ids = []
@@ -433,6 +457,21 @@ def apply_unanimous_edit(uid, edit, records):
     fences = proposal_fences(uid, {'records': sources})
     revalidate_proposal(uid, {'records': sources})
     return apply_edit(uid, edit, sources, expected_records=fences)
+
+
+def apply_verified_edit(uid, edit, records, *, expected_records):
+    """The harness alone selects this boundary after independent verification.
+
+    User acceptance retains apply_edit. Verification never relaxes schema,
+    current evidence, source/account fences, or durable Undo suppression.
+    """
+    validate_edit(edit, records)
+    refs = {base_ref(ref) for ref in [edit.target, *edit.evidence, *([edit.other] if edit.other else [])]}
+    sources = EvidenceRecords({ref: records[ref] for ref in refs})
+    sources.context_mode = 'full'
+    revalidate_proposal(uid, {'records': sources})
+    validate_canonical_proposal(uid, edit)
+    return apply_edit(uid, edit, sources, expected_records=expected_records)
 
 
 def suggest_spelling(uid, edit, records, run_id):
@@ -619,16 +658,20 @@ def suggest_edit(uid, edit, records, *, run_id=None):
     target_label = proposal_label(records[base_ref(edit.target)])
     other_label = proposal_label(records[base_ref(edit.other)]) if edit.other else None
     proposal = (
-        AgentProposalItem(
-            memory_hygiene=MemoryHygieneEdit.model_validate(edit.model_dump(exclude={'value'})),
-            target_label=target_label,
-            other_label=other_label,
-        )
-        if edit.kind in {'retire_memory', 'supersede_memory'}
-        else AgentProposalItem(
-            edit=Edit.model_validate(edit.model_dump(exclude={'value'})),
-            target_label=target_label,
-            other_label=other_label,
+        AgentProposalItem(harness_edit=edit, target_label=target_label, other_label=other_label)
+        if isinstance(edit, HarnessEdit)
+        else (
+            AgentProposalItem(
+                memory_hygiene=MemoryHygieneEdit.model_validate(edit.model_dump(exclude={'value'})),
+                target_label=target_label,
+                other_label=other_label,
+            )
+            if edit.kind in {'retire_memory', 'supersede_memory'}
+            else AgentProposalItem(
+                edit=Edit.model_validate(edit.model_dump(exclude={'value'})),
+                target_label=target_label,
+                other_label=other_label,
+            )
         )
     )
     item = ReviewItemV2(
@@ -658,8 +701,8 @@ def vocabulary_key(term):
     )
 
 
-def apply_vocabulary(uid, terms, *, expected_records=None, user_accepted=False):
-    if not user_accepted:
+def apply_vocabulary(uid, terms, *, expected_records=None, user_accepted=False, verified=False):
+    if not user_accepted and not verified:
         raise ValueError('dream_vocabulary_requires_acceptance')
     status = 'unchanged'
     for term in terms:
@@ -676,11 +719,19 @@ def apply_vocabulary(uid, terms, *, expected_records=None, user_accepted=False):
         # This policy owns additions; never overwrite an existing user term.
         if term.spelling.casefold() in merged:
             continue
-        merged[term.spelling.casefold()] = {**term.model_dump(), 'authorship': 'user_accepted'}
+        if len(merged) >= 500:
+            raise ValueError('dream_vocabulary_cap')
+        merged[term.spelling.casefold()] = {
+            **term.model_dump(),
+            'authorship': 'user_accepted' if user_accepted else 'dream_verified',
+        }
         change = ReviewChange(
             change_id=str(uuid5(NAMESPACE_URL, uid + ':' + key)),
             kind='other',
             title='Add vocabulary: ' + term.spelling,
+            edit_kind='vocabulary',
+            before='',
+            after=term.spelling,
             created_at=datetime.now(timezone.utc),
         )
         review_changes.record_agent_change(
@@ -737,7 +788,7 @@ def answer_proposal(uid, proposal, source, decision):
         review_changes.suppress_agent_change(uid, source['edit_key'])
         return False
     records = revalidate_proposal(uid, source)
-    selected = proposal.memory_hygiene or proposal.edit
+    selected = proposal.harness_edit or proposal.memory_hygiene or proposal.edit
     try:
         status = (
             apply_edit(uid, selected, records, expected_records=source.get('fences'))

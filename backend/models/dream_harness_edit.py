@@ -1,0 +1,84 @@
+"""Standalone additive Dream v2 edit contract for planner and Review."""
+
+from typing import Literal
+from pydantic import Field, model_validator
+from models.dream_edit import Edit, MemoryHygieneEdit, Strict, QUESTION_VALUE_DESCRIPTION
+
+
+class HarnessEdit(Strict):
+    kind: Literal[
+        'spelling',
+        'title',
+        'overview',
+        'memory',
+        'entity_summary',
+        'close_task',
+        'merge_memories',
+        'retire_memory',
+        'supersede_memory',
+        'dismiss_person',
+        'merge_people',
+        'merge_tasks',
+        'retire_task',
+        'merge_conversations',
+        'set_language',
+    ] = Field(
+        description=(
+            'Correct evidenced defects, never style or low importance. Retire memories only for garbage, '
+            'contradiction or facts spoken by someone else but attributed to the owner. Supersede only with '
+            'a newer fact about the same attribute. Dismiss junk person detections (filler, nationalities, '
+            'fragments), never a real person. Merge tasks only when they represent the same obligation; '
+            'retire duplicates or someone else\'s task misfiled to the owner. Never change manual or edited '
+            'tasks. Merge conversations only for overlapping captures of the same speech, preserving both '
+            'records and audio. Set language to the language actually spoken, never translate speech.'
+        )
+    )
+    target: str = Field(min_length=3, max_length=256, description=Edit.model_fields['target'].description)
+    other: str = Field(
+        default='',
+        max_length=256,
+        description=(
+            'Second fully read ref for a merge; target is retired into other for task/conversation merges. '
+            'For supersede_memory, the existing newer memory. Otherwise empty.'
+        ),
+    )
+    before: str = Field(default='', max_length=16000, description=Edit.model_fields['before'].description)
+    after: str = Field(
+        default='',
+        max_length=16000,
+        description=(
+            'Corrected text or new language tag. For supersede_memory choose new fact text OR other. '
+            'Empty for retirement, dismissal and task/conversation/person merges: preserve the survivor.'
+        ),
+    )
+    reason: str = Field(min_length=1, max_length=1000, description='Explain the defect and cited evidence.')
+    evidence: list[str] = Field(
+        min_length=1,
+        max_length=10,
+        description=(
+            'Fully read owner refs, with segment ids for speech when available. Cited evidence must '
+            'support this change; do not invent refs or use the old memory itself as retirement support.'
+        ),
+    )
+    value: int = Field(default=3, ge=1, le=5, description=QUESTION_VALUE_DESCRIPTION)
+    why_it_matters: str = Field(default='', max_length=200, description='Short explanation of future value.')
+
+    @model_validator(mode='after')
+    def semantics(self):
+        if not self.reason.strip():
+            raise ValueError('An edit requires a nonblank reason')
+        payload = self.model_dump(exclude={'value', 'why_it_matters'})
+        if self.kind in {'retire_memory', 'supersede_memory'}:
+            MemoryHygieneEdit.model_validate(payload)
+        elif self.kind in {'merge_tasks', 'merge_conversations'}:
+            if not self.other or self.other == self.target or self.after:
+                raise ValueError('A merge needs a distinct other ref and preserves its text')
+        elif self.kind in {'dismiss_person', 'retire_task'}:
+            if self.other or self.after:
+                raise ValueError('Dismissal and retirement change status only')
+        elif self.kind == 'set_language':
+            if self.other or not self.after.strip() or len(self.after) > 32:
+                raise ValueError('Language requires a bounded tag, not a second record')
+        else:
+            Edit.model_validate(payload)
+        return self

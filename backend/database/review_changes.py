@@ -8,13 +8,20 @@ of memories or person records. Entity merges retain a redirect node.
 
 import copy
 from datetime import datetime, timedelta, timezone
-from typing import Literal
+from typing import Any, Literal
 
 from google.cloud import firestore
 from google.cloud.firestore_v1.base_query import FieldFilter
 from pydantic import BaseModel, ConfigDict, Field
 
-from database import entities, memory_ledger, review_memory_hygiene, review_queries, review_store as store
+from database import (
+    entities,
+    memory_ledger,
+    review_exact_undo,
+    review_memory_hygiene,
+    review_queries,
+    review_store as store,
+)
 from database.read_boundary import parse_payload_strict
 from models.review import ReviewChange, ReviewChangesResponse
 
@@ -27,7 +34,7 @@ class _Unchanged(Exception):
 
 ALLOWED_FIELDS = {
     'knowledge_nodes': {'label', 'label_lower', 'aliases', 'aliases_lower', 'merged_entity_ids', 'redirect_entity_id'},
-    'people': {'name', 'aliases', 'organization', 'subtitle'},
+    'people': {'name', 'aliases', 'organization', 'subtitle', 'is_dismissed', 'dismissed_at', 'updated_at'},
     'conversations': {
         'user_title',
         'structured.title',
@@ -36,8 +43,10 @@ ALLOWED_FIELDS = {
         'structured.note_claims',
         'transcript_segments',
         'manual_speaker_assignments',
+        'dream_duplicate_of',
+        'language',
     },
-    'action_items': {'status', 'completed', 'completed_at'},
+    'action_items': {'status', 'completed', 'completed_at', 'deleted', 'superseded_by', 'updated_at'},
     'entity_pages': {'summary', 'updated_at'},
     'dream_vocabulary': {'source'},
 }
@@ -97,7 +106,8 @@ def record_agent_change(
     memory_edit=None,
     expected_documents: dict | None = None,
     expected_records: dict | None = None,
-    entity_merge: tuple[str, str] | None = None
+    entity_merge: tuple[str, str] | None = None,
+    exact_undo: bool = False,
 ) -> ReviewChange:
     """Apply and journal a supported edit exactly once, keyed by change_id.
 
@@ -162,13 +172,15 @@ def record_agent_change(
                     'after': {k: {'present': True, 'value': v} for k, v in edit.patch.items()},
                 }
             )
-        journal = {
+        journal: dict[str, Any] = {
             'change': change.model_dump(mode='python'),
             'created_at': change.created_at,
             'edit_key': edit_key,
             'edits': records,
             'entity_merge': list(entity_merge) if entity_merge else None,
         }
+        if exact_undo:
+            journal.update(review_exact_undo.journal_fences(edits, rows, expected_records))
         mutations = (
             [memory_ledger.merge_entities(*entity_merge, evidence={'review_change_id': change.change_id})]
             if entity_merge
@@ -301,14 +313,23 @@ def set_undone(uid: str, change_id: str, undone: bool, *, now: datetime | None =
         if data['change']['undone'] == undone:
             raise _Unchanged
         expected, destination = ('after', 'before') if undone else ('before', 'after')
+        review_exact_undo.validate_generation(uid, tx, data)
         rows = []
+        exact_restores = {}
         for edit in data['edits']:
             target = store.user(uid).collection(edit['collection']).document(edit['document_id'])
             current = target.get(transaction=tx).to_dict()
-            if current is None or current.get('deleted') or current.get('is_dismissed') or current.get('discarded'):
+            exact = review_exact_undo.validate_row(data, edit['collection'], edit['document_id'], current, expected)
+            if current is None or (
+                not exact and (current.get('deleted') or current.get('is_dismissed') or current.get('discarded'))
+            ):
                 raise store.ReviewConflict('Edit target no longer available')
             if any(_get(current, key) != value for key, value in edit[expected].items()):
                 raise store.ReviewConflict('Target has a newer edit')
+            if exact:
+                # A full-row fence permits exact replacement without DELETE_FIELD
+                # transforms. Missing fields stay missing, including after Redo.
+                exact_restores[target.path] = review_exact_undo.restored_row(current, edit[destination])
             rows.append((target, {key: _patch_value(value) for key, value in edit[destination].items()}, current))
         change = dict(data['change'], undone=undone)
         result['change'] = change
@@ -331,7 +352,11 @@ def set_undone(uid: str, change_id: str, undone: bool, *, now: datetime | None =
 
         def write(transaction):
             for target, patch, _ in rows:
-                transaction.update(target, patch)
+                identity = target.path
+                if identity in exact_restores:
+                    transaction.set(target, exact_restores[identity])
+                else:
+                    transaction.update(target, patch)
             transaction.update(ref, store.encode_doc(uid, {'change': change}))
             if undone:
                 marker = store.user(uid).collection('review_do_not_redo').document(store.safe_id(data['edit_key']))

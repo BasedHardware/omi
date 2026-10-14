@@ -776,7 +776,7 @@ def is_visible_conversation(conversation: Optional[Mapping[str, Any]], *, includ
     """Whether a stored conversation may be put in front of a user or downstream job."""
     if not conversation:
         return False
-    if is_soft_deleted(conversation):
+    if is_soft_deleted(conversation) or conversation.get('dream_duplicate_of'):
         return False
     if not include_discarded:
         if conversation.get('discarded') or is_completed_rule_discard(conversation):

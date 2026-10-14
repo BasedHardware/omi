@@ -70,7 +70,9 @@ def record_change(uid, change, edit, edit_key, *, expected_records=None):
         prior = store.decode_doc(uid, ref.get(transaction=tx).to_dict())
         blocked = marker.get(transaction=tx).exists
         if prior:
-            if prior['edit_key'] != edit_key or prior['memory_hygiene']['edit'] != edit.model_dump(exclude={'value'}):
+            if prior['edit_key'] != edit_key or prior['memory_hygiene']['edit'] != edit.model_dump(
+                exclude={'value', 'why_it_matters'}
+            ):
                 raise store.ReviewConflict('Memory change identity conflict')
             return parse_payload_strict(ReviewChange, prior['change'], document_path='review_changes')
         store.validate_records(uid, tx, expected_records)
@@ -188,7 +190,7 @@ def record_change(uid, change, edit, edit_key, *, expected_records=None):
             'created_at': change.created_at,
             'edit_key': edit_key,
             'memory_hygiene': {
-                'edit': edit.model_dump(exclude={'value'}),
+                'edit': edit.model_dump(exclude={'value', 'why_it_matters'}),
                 'before': before,
                 'after': after,
                 'graphs': graphs,

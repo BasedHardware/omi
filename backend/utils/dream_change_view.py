@@ -1,0 +1,61 @@
+"""Owner-visible before/after and speech context on every Dream journal entry."""
+
+from datetime import datetime, timezone
+from types import SimpleNamespace
+from uuid import NAMESPACE_URL, uuid5
+
+from models.dream_refs import base_ref, cited_value
+from models.review import ReviewChange
+from models.review_context import build_context, question_source
+
+
+def label(row):
+    return ' '.join(
+        str(
+            row.get('content')
+            or row.get('description')
+            or row.get('name')
+            or (row.get('structured') or {}).get('title')
+            or 'Item'
+        ).split()
+    )[:4000]
+
+
+def edit_change(uid, edit, records, key):
+    row = records[base_ref(edit.target)]
+    before = edit.before or label(row)
+    after = edit.after or (label(records[base_ref(edit.other)]) if edit.other else '')
+    source_ref = (
+        edit.target
+        if edit.target.startswith('conversations/')
+        else next((ref for ref in edit.evidence if ref.startswith('conversations/')), '')
+    )
+    selected = cited_value(source_ref, records) if '#' in source_ref else None
+    quote = (
+        edit.before
+        if edit.kind == 'spelling'
+        else (
+            (selected or {}).get('text')
+            or next(
+                (
+                    segment.get('text')
+                    for segment in (records.get(base_ref(source_ref), {}).get('transcript_segments') or [])
+                    if segment.get('text')
+                ),
+                '',
+            )
+        )[:200]
+    )
+    item = SimpleNamespace(kind='spelling', source_ref=source_ref, quote=quote)
+    source = question_source(item, records)
+    return ReviewChange(
+        change_id=str(uuid5(NAMESPACE_URL, uid + ':' + key)),
+        kind='other',
+        title=edit.kind.replace('_', ' ').capitalize(),
+        reason=edit.reason,
+        edit_kind=edit.kind,
+        before=before[:4000],
+        after=after[:4000],
+        context=build_context(item, source),
+        created_at=datetime.now(timezone.utc),
+    )
