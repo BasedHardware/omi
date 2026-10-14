@@ -1561,12 +1561,28 @@ degraded telemetry and skips that reminder step without failing the committed
 extraction or blocking vector/export continuation. This is not a durable
 reminder retry; transport and offline-device delivery remain best effort.
 
+Before initial task writes, automatic refreshes and desktop candidate capture,
+`utils/conversations/action_item_extraction.py` rejects named owners that clearly
+do not match the account profile (full/first name or User/me aliases). Empty or
+unknown ownership, including an unavailable profile name, stays compatible.
+A conservative English post-filter drops clear third-person ongoing-status
+sentences. Both rejection reasons increment `omi_action_item_extraction_dropped_total`
+and emit bounded count logs without names or task text. The notes prompt receives
+the account profile identity and asks for only the owner's commitments/direct requests;
+another attendee asking/emailing the owner is that attendee's task, while the owner's
+agreement to deliver becomes a verb-led Send task. Observations are excluded.
+
 Automatic `SMART_MERGE` and `SYNC_UPDATE` refreshes with prior tasks use
 `utils/conversations/action_item_refresh.py`: existing documents (including Apple
 links, completion, edited descriptions/dates, folders, manual assignments and
-provenance) are untouched, even when extraction omits them. Only missing exact
-normalized identities are appended. Repeated identical descriptions pair by
-occurrence, within this conversation only; segment-anchor shadow pairs never act.
+provenance) are untouched, even when extraction omits them. Exact duplicates and
+conservative near-duplicates are skipped, including matches against completed or
+deleted rows and earlier additions in the same refresh. Token-set Jaccard similarity
+must be at least 0.8 after filler removal and a small verb synonym map; substitutions
+are refused and extra content is limited to final/latest/updated/revised modifiers.
+Numbers, codes, negation and directional/time qualifiers stay distinct. No model or
+embedding call is added. Matching remains scoped to one conversation;
+segment-anchor shadow pairs never act. Accepted rewordings become receipt aliases.
 A bounded conversation receipt (`action_item_refresh`, generation + hashed keys
 and task ids) retains aliases after edits and suppresses recreation after hard
 deletion. Soft-deleted rows also suppress recreation. **Hard deletions and original
@@ -1575,10 +1591,12 @@ tombstone would close that historical gap, but is outside this change.
 
 Before smart-merge or sync-bridge donor cleanup, an atomic transaction transfers donor task ids
 to the survivor without delivery. Exact matches are annotated with
-`refresh_duplicate_of`; both live rows remain visible because equal descriptions
-cannot prove their completion, edits, folders or external links are interchangeable.
-Only a user-deleted survivor target (soft deletion or missing receipt target) suppresses
-a matching donor. Donor provenance and user/external fields stay on their own rows.
+`refresh_duplicate_of`; ordinary unedited generated duplicates are soft-hidden,
+keeping the survivor ID. Completion transfers atomically to an active survivor
+only when their current descriptions match exactly. Manual, edited, curated or
+externally linked donor rows stay visible; timestamps or receipt aliases indicating
+possible edits are protected, as are historical rows without usable timestamps.
+Donor provenance and user/external fields stay on their own rows.
 Pending donor delivery markers are retired atomically on transfer, so survivor refresh
 cannot export or reschedule them. Donor deletion receipts transfer too. Existing
 duplicate external objects are not deleted or reconciled.

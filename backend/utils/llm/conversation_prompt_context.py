@@ -224,6 +224,9 @@ def build_conversation_prompt_prefix(
     metadata_lines = [
         f'- Captured at: {started_at_local} ({timezone_name or "UTC"})',
     ]
+    account_owner_name = _one_line(getattr(speaker_map, 'owner_name', None) or '')
+    if account_owner_name:
+        metadata_lines.append(f'- Account owner: {account_owner_name}')
     if roster is not None:
         if roster.display_title:
             metadata_lines.append(f'- Meeting title: {roster.display_title}')
@@ -295,6 +298,7 @@ def build_conversation_prompt_prefix(
         # Calendar invitees are expected; screen listings are observed UI data.
         # Neither listing establishes attendance or speaker identity.
         evidence: dict[str, Any] = {
+            'account_owner_name': account_owner_name or None,
             'started_at': started_at.isoformat(),
             'timezone': timezone_name,
             'language': language_code,

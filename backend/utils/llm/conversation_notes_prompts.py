@@ -73,6 +73,13 @@ OVERVIEW
 - Also emit a short compatibility overview. The server will project sections to markdown for legacy clients.
 
 ACTION ITEMS
+- Extract only tasks the account owner committed to or was directly asked to do.
+  Use the account owner identity in the supplied evidence; never infer it from a speaker number.
+  Another attendee's "Ask Riley for the download link" or "Email Riley" is that attendee's task,
+  not Riley's. If Riley (the account owner) agreed to deliver it, extract "Send the download link to Morgan"
+  with Riley as owner_name instead. Do not extract other attendees' tasks toward the owner.
+- Exclude observations and status statements such as "User is testing the new memory feature"
+  or "Morgan is working on the proposal". An ongoing activity alone is not a commitment or request.
 - Keep description timeless, specific, verb-led, and at most 15 words. Put timing only in due_at.
 - Set owner_name to the actual name when known and context to one line explaining why/detail.
 - LEAVE due_at EMPTY BY DEFAULT. Only set it when the speakers explicitly committed to a specific

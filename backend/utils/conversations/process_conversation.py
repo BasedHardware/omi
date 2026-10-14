@@ -222,6 +222,7 @@ from utils.notifications import send_action_item_data_message, sync_action_item_
 from utils.task_sync import auto_sync_action_items_batch
 from utils.task_intelligence import conversation_capture
 from utils.conversations.action_item_refresh import preserve as preserve_refresh_tasks
+from utils.conversations.action_item_extraction import filter_extracted_items
 from utils.conversations.action_item_identity import plan_replacement, prior_read_kwargs
 from utils.conversations.calendar_linking import get_overlapping_calendar_event
 from utils.conversations.meeting_treatment import (
@@ -2015,6 +2016,7 @@ def _write_action_items(uid: str, conversation: Conversation, trigger: Optional[
     """Preserve automatic-refresh tasks; use legacy replacement for all other processing."""
     now = datetime.now(timezone.utc)
     is_locked = conversation.is_locked
+    extracted_items = filter_extracted_items(uid, conversation.structured.action_items)
     action_items_data: List[Dict[str, Any]] = [
         {
             'description': action_item.description,
@@ -2027,12 +2029,12 @@ def _write_action_items(uid: str, conversation: Conversation, trigger: Optional[
             'is_locked': is_locked,
             **conversation_capture.canonical_conversation_fields(action_item, conversation),
         }
-        for action_item in conversation.structured.action_items
+        for action_item in extracted_items
     ]
 
     if preserve_refresh_tasks(uid, conversation, action_items_data, trigger, upsert_action_item_vectors_batch):
         return
-    if not conversation.structured.action_items:
+    if not extracted_items:
         return
 
     old_items = action_items_db.get_action_items_by_conversation(uid, conversation.id, **prior_read_kwargs())
@@ -2131,6 +2133,8 @@ def _save_action_items(
     if not _proposes_task_candidates(conversation):
         _write_action_items(uid, conversation, trigger)
         return
+
+    conversation.structured.action_items = filter_extracted_items(uid, conversation.structured.action_items)
 
     try:
         wake_word_gate = conversation_capture.prepare_wake_word_capture_gate(uid, conversation, people)
