@@ -76,10 +76,13 @@ file fails the promotion closed.
 
 ## Daily store train
 
-`.github/workflows/mobile_daily_train.yml` (14:00 UTC, or `workflow_dispatch`
-with `dry_run`) starts the Codemagic `mobile-daily-train` workflow on `main`,
-which runs `app/scripts/mobile_daily_train.py --platform both`. The train
-queues builds for a **human** release; it never releases anything itself.
+`.github/workflows/mobile_daily_train.yml` (workflow_dispatch; the fixed 14:00
+UTC schedule was removed 2026-10-14 — dispatch is owned by the operator-side
+release gate, a daily agent cron that audits the candidate against the live
+baseline and only dispatches on a green verdict; manual dispatch with
+`dry_run` remains available) starts the Codemagic `mobile-daily-train` workflow
+on `main`, which runs `app/scripts/mobile_daily_train.py --platform both`. The
+train queues builds for a **human** release; it never releases anything itself.
 
 iOS (App Store Connect, versions are read per state because the unfiltered
 listing only returns live versions):
