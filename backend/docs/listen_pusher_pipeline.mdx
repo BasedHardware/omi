@@ -4649,6 +4649,15 @@ unchanged bytes; the account-deletion storage gate/purge owns this prefix. It ha
 no application TTL. Sync playback and backend VAD's conversation assignment stay
 unchanged. Deploy archive acceptance on backend-sync before advertising permission
 on listen; rollback revokes new batching but continues accepting pending files.
+Production dogfood binds the three `MOBILE_STANDARD_BATCH_*` flags only on
+backend-listen: enabled, percentage zero, and David
+(`vi7SA9ckQCe4ccobWNxlbdcNdC23`) allowlisted. Sync archive acceptance is
+unconditional; backend, sync workers and pusher require no admission flags.
+Demand-driven STT presence must finish its empty-allowlist rollout and drain
+old sockets before the David-only listen cohort is deployed. Production Helm
+workflow source is pinned to `main`; its branch input cannot select an
+intermediate presence-only commit. The lead must pre-roll presence on the
+existing dark revision before dispatching the cohort workflow.
 Policy, storage-parity evidence, bounds, VAD benchmark and lead-owned 5%/12-hour
 ramp: [mobile Standard batch](../../app/docs/mobile-standard-batch.md).
 

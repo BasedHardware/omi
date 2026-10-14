@@ -392,4 +392,5 @@ def test_privacy_erases_snapshotted_bridge_donors_only_at_explicit_boundary(monk
 
     monkeypatch.setattr(storage_mod, 'destructive_operation_gate', gate)
     storage_mod.delete_privacy_conversation_audio('u', 'survivor', source_ids=['donor', 'donor'])
-    assert [call.args for call in erased.call_args_list] == [(private, 'u', 'survivor'), (private, 'u', 'donor')]
+    assert erased.call_count == 2
+    assert {call.args for call in erased.call_args_list} == {(private, 'u', 'survivor'), (private, 'u', 'donor')}

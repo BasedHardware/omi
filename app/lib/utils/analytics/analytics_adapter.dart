@@ -63,4 +63,7 @@ abstract interface class AnalyticsFeatureFlagAdapter {
 
   /// The multivariate arm for [key], or null when the flag is off, boolean or unresolved.
   Future<String?> getFeatureFlagVariant(String key);
+
+  /// Re-fetches flags for the current identity; completes once the fresh values are cached.
+  Future<void> reloadFeatureFlags();
 }

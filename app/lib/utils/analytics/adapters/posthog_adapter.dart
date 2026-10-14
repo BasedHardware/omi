@@ -136,6 +136,9 @@ class PostHogAnalyticsAdapter
   }
 
   @override
+  Future<void> reloadFeatureFlags() => Posthog().reloadFeatureFlags();
+
+  @override
   Future<Object?> getFeatureFlagPayload(String key) async {
     final result = await Posthog().getFeatureFlagResult(key);
     return result?.enabled == true ? result?.payload : null;
