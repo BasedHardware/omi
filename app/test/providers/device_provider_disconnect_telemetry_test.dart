@@ -345,7 +345,7 @@ void main() {
       final provider = DeviceProvider(bleDiagnosticsLoader: (_) async => throw StateError('no diagnostics'));
       addTearDown(provider.dispose);
       addTearDown(capture.dispose);
-      addTearDown(() => BleBridge.instance.unregisterPeripheral(id));
+      addTearDown(() => BleBridge.instance.clearPeripheralForTesting(id));
       provider.captureProvider = capture;
       provider.pairedDevice = _device(id);
       BleBridge.instance.onPeripheralDisconnected(id, recovery ? 'capture_recovery' : null);

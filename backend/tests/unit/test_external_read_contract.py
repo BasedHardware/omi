@@ -6,7 +6,7 @@ from types import SimpleNamespace
 import pytest
 from fastapi import HTTPException
 
-from utils.external_read_contract import pagination_headers, reject_unknown_query, utc_window
+from utils.external_read_contract import ignore_unknown_query, pagination_headers, reject_unknown_query, utc_window
 
 
 def test_unknown_query_is_rejected_without_echoing_input():
@@ -21,6 +21,26 @@ def test_unknown_query_is_rejected_without_echoing_input():
         SimpleNamespace(query_params={'_': '1700000000', 'cacheBust': 'refresh'}),
         {'limit'},
     )
+
+
+def test_released_routes_ignore_unknown_query_and_report_a_count():
+    # Live clients send filters the released list routes never honored
+    # (include_discarded, statuses, order); a 400 broke them in prod.
+    response = SimpleNamespace(headers={})
+    ignore_unknown_query(
+        SimpleNamespace(query_params={'limit': '20', 'include_discarded': 'true', 'statuses': 'completed', '_': '1'}),
+        {'limit'},
+        response,
+    )
+    assert response.headers == {'X-Omi-Ignored-Query-Params': '2'}
+    clean = SimpleNamespace(headers={})
+    ignore_unknown_query(SimpleNamespace(query_params={'limit': '20'}), {'limit'}, clean)
+    assert clean.headers == {}
+    ignore_unknown_query(SimpleNamespace(query_params={'order': 'desc'}), {'limit'}, None)
+    # A search term is never silently dropped: it would return unfiltered "results".
+    with pytest.raises(HTTPException) as exc:
+        ignore_unknown_query(SimpleNamespace(query_params={'query': 'budget'}), {'limit'}, response)
+    assert exc.value.status_code == 400 and '/search' in exc.value.detail
 
 
 def test_array_pagination_headers_report_limit_and_continuation():

@@ -18,6 +18,7 @@ import pytest
 from pydantic import BaseModel
 
 from models.transcript_segment import SpeakerIdentityStatus
+from utils import dream_vocabulary  # noqa: F401 - retain shared keyterms before legacy database stubs
 
 
 def _read_text(path):

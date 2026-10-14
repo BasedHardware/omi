@@ -5615,11 +5615,6 @@ class AppLocalizationsTh extends AppLocalizations {
   String get downloadingFromSdCard => 'กำลังดาวน์โหลดจาก SD Card';
 
   @override
-  String processingProgress(int current, int total) {
-    return 'กำลังประมวลผล $current/$total';
-  }
-
-  @override
   String conversationsCreated(int count) {
     return 'สร้าง $count บทสนทนาแล้ว';
   }
@@ -9040,18 +9035,10 @@ class AppLocalizationsTh extends AppLocalizations {
   }
 
   @override
-  String syncCardProgressOf(int current, int total) {
-    return '$current จาก $total';
-  }
-
-  @override
   String get syncStatusOnDevice => 'อยู่บนอุปกรณ์ของคุณ';
 
   @override
   String get syncStatusDownloadingFromDevice => 'กำลังดาวน์โหลดจากอุปกรณ์ของคุณ';
-
-  @override
-  String get newestFirst => 'ใหม่สุดก่อน';
 
   @override
   String get noSyncedRecordingsYet => 'ยังไม่มีการบันทึกที่ซิงค์แล้ว';
@@ -11933,9 +11920,6 @@ class AppLocalizationsTh extends AppLocalizations {
   }
 
   @override
-  String get localCopiesSection => 'สำเนาในเครื่อง';
-
-  @override
   String speakerLabelLinesLabeled(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,
@@ -12252,6 +12236,9 @@ class AppLocalizationsTh extends AppLocalizations {
   String reviewQuestionSamePerson(String name) {
     return 'คนเดียวกับ “$name” ใช่ไหม';
   }
+
+  @override
+  String get reviewSpellingContext => 'บริบทการสนทนา';
 
   @override
   String get reviewQuestionSpelling => 'สะกดอย่างไร';
@@ -13141,4 +13128,85 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get paywallCancelAnytime => 'ยกเลิกได้ทุกเมื่อ';
+
+  @override
+  String get connectAnAgent => 'เชื่อมต่อเอเจนต์';
+
+  @override
+  String get connectAnAgentSubtitle => 'รับพรอมต์การตั้งค่าสำหรับ Claude, ChatGPT, Codex หรือเอเจนต์ใดก็ได้';
+
+  @override
+  String syncCardSyncingAmount(String amount) {
+    return 'กำลังซิงค์เสียง $amount';
+  }
+
+  @override
+  String get syncCardSyncingTitle => 'กำลังซิงค์การบันทึกของคุณ';
+
+  @override
+  String syncStepDownloadingAmount(String done, String total) {
+    return 'กำลังดาวน์โหลดจาก Omi · $done จาก $total';
+  }
+
+  @override
+  String syncStepUploadingAmount(String done, String total) {
+    return 'กำลังอัปโหลด · $done จาก $total';
+  }
+
+  @override
+  String syncCardTranscribingAmount(String amount) {
+    return 'กำลังแปลง $amount เป็นบทสนทนา';
+  }
+
+  @override
+  String syncCardTranscribedOf(String done, String total) {
+    return 'เสร็จแล้ว $done จาก $total · ออกจากหน้าจอนี้ได้เลย';
+  }
+
+  @override
+  String syncCardReadyAmount(String amount) {
+    return '$amount พร้อมซิงค์';
+  }
+
+  @override
+  String get syncStepLabelDownload => 'Omi → โทรศัพท์';
+
+  @override
+  String get syncStepLabelUpload => 'อัปโหลด';
+
+  @override
+  String get syncStepLabelTranscribe => 'ถอดเสียง';
+
+  @override
+  String get syncDetailsTitle => 'รายละเอียดการซิงค์';
+
+  @override
+  String get syncDetailsRightNow => 'ตอนนี้';
+
+  @override
+  String get syncDetailsYourOmi => 'Omi ของคุณ';
+
+  @override
+  String get syncDetailsTransferSpeed => 'ความเร็วการถ่ายโอน';
+
+  @override
+  String get syncDetailsWaitingOnOmi => 'รอจาก Omi';
+
+  @override
+  String get syncDetailsWaitingOnPhone => 'รอจากโทรศัพท์เครื่องนี้';
+
+  @override
+  String get syncDetailsTranscribing => 'กำลังถอดเสียงบน Omi';
+
+  @override
+  String get syncDetailsForSupport => 'สำหรับฝ่ายสนับสนุน';
+
+  @override
+  String get syncDetailsAudioFiles => 'ไฟล์เสียง';
+
+  @override
+  String get syncDetailsServerJobs => 'งานบนเซิร์ฟเวอร์ (เสร็จ / ทั้งหมด)';
+
+  @override
+  String get syncDetailsCopy => 'คัดลอกรายละเอียดสำหรับฝ่ายสนับสนุน';
 }

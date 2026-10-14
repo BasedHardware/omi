@@ -64,6 +64,7 @@ void main() {
     'free_mcp_cap': 'plus',
     'free_pro_gate_proactive': 'operator',
     'plus_budget80': 'operator',
+    'pro_budget_cap': 'architect',
   }.entries) {
     test('preserves server recommendation for ${entry.key}', () {
       final data = PlanStorefront.fromJson(fixture(entry.key));
@@ -633,6 +634,31 @@ void main() {
     expect(cancelled.yearlyToggleLabel, isNull);
     expect(cancelled.header, 'Your Plus plan ends Nov 1');
     expect(cancelled.current!.line, r"You're on Plus · $19.99/mo");
+    final cancelledFree = cancelled.tiers.singleWhere((tier) => tier.planId == 'basic');
+    expect(cancelled.tiers.map((tier) => tier.planId), ['plus', 'basic', 'operator', 'architect']);
+    expect(cancelledFree.action, 'none');
+    expect(cancelledFree.compact, isTrue);
+    expect(cancelledFree.bullets, isEmpty);
+    expect(cancelledFree.ctaLabel, isNull);
+    expect(cancelledFree.blockedLine, 'Resubscribe first to change plans');
+    expect(cancelledFree.priceFor('month')!.headline, r'$0');
+    final cancelledPro = PlanStorefront.fromJson(fixture('cancel_scheduled_pro'));
+    expect(cancelledPro.tiers.map((tier) => tier.planId), ['operator', 'basic', 'plus', 'architect']);
+    expect(cancelledPro.tiers.where((tier) => tier.recommended), isEmpty);
+    expect(cancelledPro.tiers.singleWhere((tier) => tier.isCurrent).ctaLabel, 'Resubscribe');
+    for (final planId in ['basic', 'plus', 'architect']) {
+      final tier = cancelledPro.tiers.singleWhere((item) => item.planId == planId);
+      expect(tier.action, 'none', reason: planId);
+      expect(tier.blockedLine, 'Resubscribe first to change plans', reason: planId);
+      expect(tier.ctaLabel, isNull, reason: planId);
+    }
+    final cap = PlanStorefront.fromJson(fixture('pro_budget_cap'));
+    final capArchitect = cap.tiers.singleWhere((tier) => tier.recommended);
+    expect(capArchitect.planId, 'architect');
+    expect(capArchitect.action, 'checkout');
+    expect(capArchitect.ctaLabel, 'Upgrade to Architect');
+    expect(cap.tiers.map((tier) => tier.planId), ['architect', 'plus', 'operator']);
+    expect(PlanStorefront.fromJson(fixture('pro_settings')).tiers.map((tier) => tier.planId), ['plus', 'operator']);
     expect(
       storefrontCheckoutDecision(cancelled.current, PlanType.plus, pro, pro.priceFor('month')!, cancelScheduled: true),
       StorefrontCheckoutDecision.refuse,
@@ -666,7 +692,7 @@ void main() {
         .whereType<File>()
         .where((file) => file.path.endsWith('.json'))
         .map((file) => file.uri.pathSegments.last.replaceFirst('.json', ''));
-    expect(names, hasLength(13));
+    expect(names, hasLength(15));
     for (final name in names) {
       final data = PlanStorefront.fromJson(fixture(name));
       expect(data.tiers.where((tier) => tier.isCurrent), isNotEmpty, reason: name);

@@ -18,6 +18,26 @@ def reject_unknown_query(request: Any, allowed: Iterable[str]) -> None:
         raise HTTPException(status_code=400, detail="Unknown query parameter. Check the documented parameters.")
 
 
+def ignore_unknown_query(request: Any, allowed: Iterable[str], response: Any = None) -> None:
+    """Released list/detail routes ignored unknown query parameters before the explicit
+    read contract; live third-party clients still send extra filters (for example
+    ``include_discarded``, ``statuses`` or ``order``), so these routes keep ignoring them.
+    The count is reported in ``X-Omi-Ignored-Query-Params`` so callers can notice."""
+    if request is None or not hasattr(request, 'query_params'):
+        return
+    if 'query' in request.query_params and 'query' not in set(allowed):
+        # A silently ignored search term returns an unfiltered page that looks like results.
+        raise HTTPException(
+            status_code=400, detail="Unknown query parameter. List routes do not search; use the /search route."
+        )
+    allowed_names = set(allowed)
+    ignored = {
+        name for name in request.query_params if name not in allowed_names and not _is_cache_buster_parameter(name)
+    }
+    if ignored and response is not None:
+        response.headers['X-Omi-Ignored-Query-Params'] = str(len(ignored))
+
+
 def _is_cache_buster_parameter(name: str) -> bool:
     """Keep common inert cache-buster query keys compatible with older callers."""
     normalized = ''.join(character for character in name.lower() if character.isalnum())

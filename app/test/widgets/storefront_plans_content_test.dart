@@ -292,8 +292,10 @@ void main() {
       'plus_budget80': '010-mobile-ios-plus-budget-80.png',
       'plus_monthly_yearly_toggle': '011-mobile-ios-plus-monthly-yearly-toggle.png',
       'pro_settings': '012-mobile-ios-pro-settings.png',
+      'pro_budget_cap': '019-mobile-ios-pro-budget-cap.png',
+      'cancel_scheduled_pro': '020-mobile-ios-cancel-scheduled-pro.png',
     };
-    const showYearlyCta = {'architect_settings', 'plus_monthly_yearly_toggle', 'pro_settings'};
+    const showYearlyCta = {'architect_settings', 'plus_monthly_yearly_toggle', 'pro_settings', 'pro_budget_cap'};
     for (final entry in shots.entries) {
       final data = PlanStorefront.fromJson(fixture(entry.key));
       await pumpSheet(tester, data: data);
@@ -329,6 +331,11 @@ void main() {
         expect(find.text('Resubscribe first to change plans'), findsWidgets);
         expect(find.byKey(const Key('storefront_buy_operator')), findsNothing);
         expect(find.byKey(const Key('storefront_buy_plus')), findsOneWidget);
+        expect(find.byKey(const Key('storefront_tier_basic')), findsOneWidget);
+        expect(find.byKey(const Key('storefront_blocked_basic')), findsOneWidget);
+        expect(find.descendant(of: find.byKey(const Key('storefront_tier_basic')), matching: find.textContaining('•')),
+            findsNothing);
+        expect(find.text(r'$0'), findsOneWidget);
         expect(find.byKey(const Key('storefront_month')), findsNothing);
         expect(find.byKey(const Key('storefront_year')), findsNothing);
         expect(data.yearlyToggleLabel, isNull);
@@ -338,6 +345,35 @@ void main() {
         );
         expect(find.descendant(of: find.byKey(const Key('storefront_tier_plus')), matching: find.textContaining('•')),
             findsNothing);
+      }
+      if (entry.key == 'cancel_scheduled_pro') {
+        expect(find.text('Resubscribe'), findsOneWidget);
+        expect(find.text('Upgrade to Architect'), findsNothing);
+        expect(find.text('Recommended'), findsNothing);
+        expect(find.byKey(const Key('storefront_blocked_basic')), findsOneWidget);
+        expect(find.byKey(const Key('storefront_buy_operator')), findsOneWidget);
+        expect(
+          tester.getTopLeft(find.byKey(const Key('storefront_tier_operator'))).dy,
+          lessThan(tester.getTopLeft(find.byKey(const Key('storefront_tier_basic'))).dy),
+        );
+        final scrollable =
+            find.descendant(of: find.byKey(const Key('storefront_scroll')), matching: find.byType(Scrollable));
+        await tester.scrollUntilVisible(find.byKey(const Key('storefront_blocked_plus')), 80, scrollable: scrollable);
+        await tester.scrollUntilVisible(find.byKey(const Key('storefront_blocked_architect')), 80,
+            scrollable: scrollable);
+        expect(find.byKey(const Key('storefront_buy_architect')), findsNothing);
+        await tester.scrollUntilVisible(find.text(data.header), -800, scrollable: scrollable);
+      }
+      if (entry.key == 'pro_budget_cap') {
+        expect(find.text("You've used all of this month's usage"), findsOneWidget);
+        expect(find.text('Upgrade to Architect'), findsOneWidget);
+        expect(find.text('Recommended'), findsOneWidget);
+        expect(find.byKey(const Key('storefront_buy_architect')), findsOneWidget);
+        expect(find.byKey(const Key('storefront_tier_basic')), findsNothing);
+      }
+      if (entry.key == 'pro_settings') {
+        expect(find.byKey(const Key('storefront_tier_architect')), findsNothing);
+        expect(find.text('Upgrade to Architect'), findsNothing);
       }
       if (entry.key == 'free_settings') {
         expect(find.text('Get Plus'), findsOneWidget);
@@ -509,6 +545,10 @@ void main() {
     expect(find.byKey(const Key('storefront_buy_plus')), findsOneWidget);
     expect(find.byKey(const Key('storefront_buy_operator')), findsNothing);
     expect(find.byKey(const Key('storefront_blocked_operator')), findsOneWidget);
+    expect(find.byKey(const Key('storefront_tier_basic')), findsOneWidget);
+    expect(find.byKey(const Key('storefront_blocked_basic')), findsOneWidget);
+    expect(find.descendant(of: find.byKey(const Key('storefront_tier_basic')), matching: find.textContaining('•')),
+        findsNothing);
     expect(find.text('Resubscribe first to change plans'), findsWidgets);
     final current = find.byKey(const Key('storefront_tier_plus'));
     expect(find.descendant(of: current, matching: find.textContaining('•')), findsNothing);

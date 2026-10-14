@@ -83,6 +83,7 @@ from models.conversation_enums import ConversationSource
 from models.geolocation import Geolocation
 from models.transcript_segment import TranscriptSegment
 from utils.analytics import record_usage
+from utils.dream_vocabulary import keyterms
 from utils.byok import get_byok_keys, set_byok_keys, set_byok_uid
 from utils.conversations import lifecycle as lifecycle_service
 from utils.conversations.factory import deserialize_conversation
@@ -1270,7 +1271,7 @@ def process_segment(
         # Apply user transcription preferences (vocabulary, language, model)
         prefs = transcription_prefs or {}
         user_vocab = [w for w in dict.fromkeys(prefs.get('vocabulary', [])) if w != "Omi"]
-        vocabulary = ["Omi"] + user_vocab[:99]
+        vocabulary = asyncio.run(keyterms(uid, ["Omi"] + user_vocab[:99]))
         user_language = prefs.get('language', '') or ''
         single_language_mode = prefs.get('single_language_mode', False)
 

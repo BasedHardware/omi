@@ -1051,8 +1051,12 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
     await _refreshWals(generation);
     if (!_isCurrent(generation)) return;
 
-    if (wal.status == WalStatus.synced) {
-      _trackedServerJobWalIds.remove(wal.id);
+    // Keep finished recordings in the batch until all of it is done. Removing
+    // each one as it finished shrank the total while "processed" stayed at
+    // zero, so the card read "Processing 0/5914 · 0%" for the whole drain.
+    if (_trackedServerJobWalIds.isNotEmpty &&
+        !_allWals.any((w) => w.status == WalStatus.uploaded && _trackedServerJobWalIds.contains(w.id))) {
+      _trackedServerJobWalIds.clear();
     }
     if (wal.status == WalStatus.uploaded || wal.status == WalStatus.synced) {
       _captureWedgeMonitor.onUploadCompleted();
@@ -1192,6 +1196,11 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
   /// still reconciling). Completed = recordings no longer waiting on a job.
   ({int processed, int total}) get offlineServerProcessingCounts {
     return OfflineProcessingDisplay.serverJobCounts(trackedUploadedWalIds: _trackedServerJobWalIds, wals: _allWals);
+  }
+
+  /// [offlineServerProcessingCounts] in seconds of audio, for the status card.
+  ({int doneSeconds, int totalSeconds, bool tracked}) get offlineServerProcessingSeconds {
+    return OfflineProcessingDisplay.serverJobSeconds(trackedUploadedWalIds: _trackedServerJobWalIds, wals: _allWals);
   }
 
   @override

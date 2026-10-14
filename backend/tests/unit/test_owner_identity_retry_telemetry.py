@@ -53,10 +53,10 @@ def test_registration_reuses_collector_and_only_materializes_closed_pairs():
     telemetry.record_retry('late', 'resolver_exit', 'resolved')
     importlib.reload(telemetry)
     assert telemetry.OWNER_IDENTITY_RETRY is counter
-    assert len(telemetry.PAIRS) == 61
-    assert len(telemetry.PAIRS - {p for p in telemetry.PAIRS if p[0] in ('resolver_exit', 'segment_abstained')}) == 29
+    assert len(telemetry.PAIRS) == 67
+    assert len(telemetry.PAIRS - {p for p in telemetry.PAIRS if p[0] in ('resolver_exit', 'segment_abstained')}) == 35
     assert set(counter._metrics) <= {(p, s, r) for p in ('first', 'late') for s, r in telemetry.PAIRS}
-    assert len(counter._metrics) < 122
+    assert len(counter._metrics) < 134
     before = snapshot('late')
     telemetry.record_retry('late', 'dynamic-conversation-id', 'dynamic-uid')
     assert delta('late', before) == {('skipped', 'processing_error'): 1}

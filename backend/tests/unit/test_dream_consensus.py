@@ -99,7 +99,9 @@ def test_votes_normalize_edits_and_count_once_per_sample():
     ]
     sink = {}
     result = majority(plans, usage_sink=sink)
-    assert result.edits == [common]
+    assert [item.model_dump() for item in result.edits] == [common.model_dump()]
+    assert result.edits[0].agreement == 2 and result.edits[0].samples == 3
+    assert result.questions[0].agreement == result.vocabulary[0].agreement == 2
     assert len(result.questions) == len(result.vocabulary) == 1
     assert sink['consensus_threshold'] == 2
     assert sink['rejected'] == {'consensus_rejected': 2}
@@ -109,8 +111,8 @@ def test_votes_normalize_edits_and_count_once_per_sample():
 def test_two_returned_samples_require_both_and_one_requires_one():
     common = edit()
     assert majority([Plan(edits=[common]), Plan()]).edits == []
-    assert majority([Plan(edits=[common]), Plan(edits=[common])]).edits == [common]
-    assert majority([Plan(edits=[common])]).edits == [common]
+    assert majority([Plan(edits=[common]), Plan(edits=[common])]).edits[0].agreement == 2
+    assert majority([Plan(edits=[common])]).edits[0].agreement == 1
 
 
 @pytest.mark.asyncio
@@ -243,7 +245,9 @@ def test_capitalization_votes_preserve_direction():
     forward = edit('borza', 'Borza')
     reverse = edit('Borza', 'borza')
     assert majority([Plan(edits=[forward]), Plan(edits=[reverse]), Plan()]).edits == []
-    assert majority([Plan(edits=[forward]), Plan(edits=[forward]), Plan()]).edits == [forward]
+    assert (
+        majority([Plan(edits=[forward]), Plan(edits=[forward]), Plan()]).edits[0].model_dump() == forward.model_dump()
+    )
 
 
 @pytest.mark.asyncio

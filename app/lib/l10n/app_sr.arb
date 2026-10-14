@@ -6818,18 +6818,6 @@
     "@downloadingFromSdCard": {
         "description": "Progress label when downloading from SD card"
     },
-    "processingProgress": "Обрада {current}/{total}",
-    "@processingProgress": {
-        "description": "Progress label showing current/total items",
-        "placeholders": {
-            "current": {
-                "type": "int"
-            },
-            "total": {
-                "type": "int"
-            }
-        }
-    },
     "conversationsCreated": "{count} разговор(а) креирано",
     "@conversationsCreated": {
         "description": "Success message showing number of conversations created",
@@ -10359,10 +10347,8 @@
     "syncStatusConversationCreated": "Разговор је направљен",
     "syncCardUploadingTitle": "Отпремање на Omi",
     "syncCardDownloadingTitle": "Преузимање са вашег уређаја",
-    "syncCardProgressOf": "{current} од {total}",
     "syncStatusOnDevice": "На вашем уређају",
     "syncStatusDownloadingFromDevice": "Преузимање са вашег уређаја",
-    "newestFirst": "Прво најновије",
     "noSyncedRecordingsYet": "Још нема синхронизованих снимака",
     "morePaymentMethodsComingSoon": "Ускоро више начина плаћања",
     "@morePaymentMethodsComingSoon": {
@@ -11157,7 +11143,6 @@
     "autoRemoveSyncedCopiesTitle": "Аутоматски уклони синхронизоване копије",
     "autoRemoveSyncedCopiesDays": "Синхронизоване копије се бришу после {days} дана",
     "autoRemoveSyncedCopiesDescription": "Брише локалне копије {days} дана после синхронизације. Облачне копије се задржавају.",
-    "localCopiesSection": "Локалне копије",
     "speakerLabelLinesLabeled": "{count, plural, =1{Означен 1 ред} other{Означено редова: {count}}}",
     "speakerLabelVoiceStatus": "{state, select, learned{Глас је научен} pending{Учење гласа…} disabled{Чување гласа је искључено} other{Глас још није научен}}",
     "speakerLabelVoiceDetail": "{state, select, learned{Omi ће препознати особу {name} следећи пут.} pending{Ово траје неколико секунди.} disabled{Укључите чување гласова у подешавањима да би Omi могао да препозна особу {name}.} other{Omi треба више јасног говора особе {name} и наставиће да покушава.}}",
@@ -11243,6 +11228,7 @@
     "reviewRemaining": "Преостало: {count}",
     "reviewQuestionSpeaker": "Ко је ово рекао?",
     "reviewQuestionSamePerson": "Иста особа као „{name}“?",
+    "reviewSpellingContext": "Контекст разговора",
     "reviewQuestionSpelling": "Како се ово пише?",
     "reviewPlayClip": "Пусти исечак",
     "reviewStopClip": "Заустави исечак",
@@ -11492,5 +11478,28 @@
     "firstCaptureCancelWarning": "Going back stops this recording. Keep talking to give Omi a few more sentences.",
     "firstCaptureSiriTip": "Tip: Enable Omi in Shortcuts → Siri.",
     "paywallOutlineHeadline": "Никада више не пропустите ни реч.",
-    "paywallCancelAnytime": "Откажите било када."
+    "paywallCancelAnytime": "Откажите било када.",
+    "connectAnAgent": "Повежите агента",
+    "connectAnAgentSubtitle": "Преузмите упутство за подешавање за Claude, ChatGPT, Codex или било ког агента",
+    "syncCardSyncingAmount": "Синхронизација {amount} звука",
+    "syncCardSyncingTitle": "Синхронизација снимака",
+    "syncStepDownloadingAmount": "Преузимање са уређаја Omi · {done} од {total}",
+    "syncStepUploadingAmount": "Слање · {done} од {total}",
+    "syncCardTranscribingAmount": "Претварање {amount} у разговоре",
+    "syncCardTranscribedOf": "Готово {done} од {total} · можете напустити овај екран",
+    "syncCardReadyAmount": "{amount} спремно за синхронизацију",
+    "syncStepLabelDownload": "Omi → телефон",
+    "syncStepLabelUpload": "Слање",
+    "syncStepLabelTranscribe": "Транскрипција",
+    "syncDetailsTitle": "Детаљи синхронизације",
+    "syncDetailsRightNow": "Тренутно",
+    "syncDetailsYourOmi": "Ваш Omi",
+    "syncDetailsTransferSpeed": "Брзина преноса",
+    "syncDetailsWaitingOnOmi": "Чека на Omi",
+    "syncDetailsWaitingOnPhone": "Чека на овом телефону",
+    "syncDetailsTranscribing": "Транскрипција на Omi",
+    "syncDetailsForSupport": "За подршку",
+    "syncDetailsAudioFiles": "Аудио датотеке",
+    "syncDetailsServerJobs": "Послови на серверу (готово / укупно)",
+    "syncDetailsCopy": "Копирај детаље за подршку"
 }

@@ -91,7 +91,7 @@ from utils.conversations.meeting_receipt import (
     record_finalized_meeting_receipt,
 )
 from utils.executors import postprocess_executor
-from utils.external_read_contract import reject_unknown_query, pagination_headers, utc_window
+from utils.external_read_contract import ignore_unknown_query, pagination_headers, utc_window
 from utils.request_validation import HistoryDays
 from utils.llm.memories import identify_category_for_memory
 from utils.memory.developer_memory_list import read_developer_memories
@@ -358,7 +358,7 @@ def get_memories(
     request: Request = None,  # type: ignore[assignment]
     response: Response = None,  # type: ignore[assignment]
 ):
-    reject_unknown_query(request, {"limit", "offset", "categories"})
+    ignore_unknown_query(request, {"limit", "offset", "categories"}, response)
     uid = auth_context.uid
     # Clamp pagination so a negative value cannot reach Firestore (which raises -> HTTP 500) and an
     # oversized limit cannot stream the whole collection. Mirrors the GET /v3/memories hardening.
@@ -1539,7 +1539,7 @@ def get_conversations(
     - **folder_id**: Filter by folder ID (must be a non-empty string if provided)
     - **starred**: Filter by starred status (true/false)
     """
-    reject_unknown_query(
+    ignore_unknown_query(
         request,
         {
             "start_date",
@@ -1552,6 +1552,7 @@ def get_conversations(
             "starred",
             "cursor",
         },
+        response,
     )
     start_date, end_date = utc_window(start_date, end_date)
     auth = uid
@@ -1761,6 +1762,7 @@ def get_conversation_endpoint(
     include_transcript: bool = False,
     uid: ApiKeyAuth = Depends(get_auth_with_conversation_detail_read),
     request: Request = None,
+    response: Response = None,  # type: ignore[assignment]
 ):
     """
     Get a single conversation by ID.
@@ -1768,7 +1770,7 @@ def get_conversation_endpoint(
     - **conversation_id**: The ID of the conversation to retrieve
     - **include_transcript**: If True, includes full transcript_segments in the response
     """
-    reject_unknown_query(request, {"include_transcript"})
+    ignore_unknown_query(request, {"include_transcript"}, response)
     auth = uid
     uid = auth.uid
     status = 500

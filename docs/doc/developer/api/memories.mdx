@@ -576,7 +576,7 @@ List responses remain arrays. `limit` is clamped to **1–1000**. Read
 `X-Omi-Effective-Limit`, `X-Omi-Has-More`, and `X-Omi-Next-Offset` for continuation.
 `X-Omi-List-Truncated: true` signals that the read budget ran out. An empty
 truncated page cannot guarantee progress; narrow the category filter or reduce
-the page size. Unknown list parameters return 400.
+the page size. Unknown list parameters are ignored and counted in `X-Omi-Ignored-Query-Params`, except `query`, which returns 400; use the search route.
 
 `GET /v1/dev/user/memories/search?query=budget&limit=10` returns
 `{memories, effective_limit, search_coverage, message}` using the same eligible

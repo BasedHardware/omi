@@ -205,6 +205,7 @@ only way to name a transcript speaker — bubbles, the edit-segment and tag-spea
 participant lists, the speaker filter and every copied, shared or exported transcript
 (`TranscriptSegment.segmentsAsString` uses it).
 
+- Server-projected Review excerpts use `SpeakerNames.excerptLabel` for stored names and localized owner/unnamed labels.
 - The owner is **You** in the app; exports use the owner's given name, else "You".
 - A speaker assigned to a person shows the person's name (live people list first).
 - Omi's own speaker is **Omi**, never "Speaker 100".

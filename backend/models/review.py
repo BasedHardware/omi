@@ -71,10 +71,31 @@ class SamePersonItem(BaseModel):
     reason: str
 
 
-class SpellingItem(BaseModel):
+class SpellingContextSegment(BaseModel):
+    text: str
+    speaker_label: Optional[str] = None
+    is_user: bool = False
+
+
+class SpellingContext(BaseModel):
+    conversation_title: str
+    conversation_date: Optional[datetime] = None
+    segments: list[SpellingContextSegment] = Field(min_length=1, max_length=3)
+    main_index: int = Field(ge=0, le=2)
+    quote_start: Optional[int] = Field(default=None, ge=0, description='Inclusive UTF-16 offset in the main segment.')
+    quote_end: Optional[int] = Field(default=None, ge=0, description='Exclusive UTF-16 offset in the main segment.')
+
+
+class SpellingQuestionPayload(BaseModel):
     term_id: str
     options: list[str] = Field(min_length=2, max_length=3)
     allow_custom: bool
+
+
+class SpellingItem(SpellingQuestionPayload):
+    context: Optional[SpellingContext] = Field(
+        default=None, description='Server-computed surrounding speech for this question.'
+    )
 
 
 class AgentProposalItem(BaseModel):
@@ -90,7 +111,7 @@ class AgentProposalItem(BaseModel):
         return self
 
 
-class ReviewQuestionPayload(BaseModel):
+class ReviewQuestionBase(BaseModel):
     """Shared question payload, without choosing a legacy or Dream evidence contract."""
 
     item_id: str
@@ -100,7 +121,6 @@ class ReviewQuestionPayload(BaseModel):
     speaker: Optional[SpeakerItem] = None
     task: Optional[TaskItem] = None
     same_person: Optional[SamePersonItem] = None
-    spelling: Optional[SpellingItem] = None
 
     @model_validator(mode='after')
     def matching_payload(self):
@@ -110,7 +130,12 @@ class ReviewQuestionPayload(BaseModel):
         return self
 
 
-class ReviewItem(ReviewQuestionPayload):
+class ReviewQuestionPayload(ReviewQuestionBase):
+    spelling: Optional[SpellingQuestionPayload] = None
+
+
+class ReviewItem(ReviewQuestionBase):
+    spelling: Optional[SpellingItem] = None
     quote: Optional[str] = None
     source_ref: Optional[str] = None
 

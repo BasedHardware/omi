@@ -16,7 +16,10 @@ from models.action_item import EvidenceRef, EvidenceKind, EvidenceScope, TaskCre
 from models.candidate import CandidateCreate, TaskCreateCandidate
 from models.review import AgentProposalItem, ChangeRef, ReviewChange, ReviewItem, ReviewItemV2
 from models.dream_refs import base_ref, has_ref, cited_value
+from config.dream_agent import context_mode
+from utils.dream_consensus import unanimous_spelling
 from utils.entity_pages import resolve_entity
+from models.review_context import question_source
 from utils.dream_guards import (
     spelling_rejection,
     summary_rejection,
@@ -373,6 +376,17 @@ def apply_grounded_edit(uid, edit, records):
     return apply_edit(uid, edit, sources, expected_records=fences)
 
 
+def apply_unanimous_edit(uid, edit, records):
+    """Full-owner consensus replaces independent spelling support, preserving fences."""
+    if context_mode(uid) != 'full' or not unanimous_spelling(edit):
+        raise ValueError('dream_ungrounded_spelling')
+    validate_edit(edit, records)
+    sources = {base_ref(ref): records[base_ref(ref)] for ref in {edit.target, *edit.evidence}}
+    fences = proposal_fences(uid, {'records': sources})
+    revalidate_proposal(uid, {'records': sources})
+    return apply_edit(uid, edit, sources, expected_records=fences)
+
+
 def suggest_spelling(uid, edit, records, run_id):
     validate_edit(edit, records)
     if not verbatim_quote(edit.before, cited_value(edit.target, records)):
@@ -380,8 +394,9 @@ def suggest_spelling(uid, edit, records, run_id):
     source: dict[str, Any] = {
         'records': {base_ref(ref): records[base_ref(ref)] for ref in {edit.target, *edit.evidence}},
         'edit_key': edit_key(edit, records),
-        'spelling_edit': edit.model_dump(mode='python'),
+        'spelling_edit': edit.model_dump(mode='python', exclude={'value'}),
     }
+    source['speaker_names'] = question_source(spelling_question(edit), records).get('speaker_names', {})
     source['fences'] = proposal_fences(uid, source)
     revalidate_proposal(uid, source)
     validate_canonical_proposal(uid, edit)
@@ -667,16 +682,16 @@ def answer_proposal(uid, proposal, source, decision):
     return status == 'applied'
 
 
-def ask(uid, item, records):
+def ask(uid, item, records, *, run_id=None):
     if item.kind not in {'same_person', 'spelling'}:
         raise ValueError('dream_question_kind')
     if not has_ref(item.source_ref, records) or not verbatim_quote(item.quote, cited_value(item.source_ref, records)):
         raise ValueError('dream_invalid_question_evidence')
-    review_store.enqueue_review_proposal(
+    result = review_store.enqueue_review_proposal(
         uid,
         ReviewItem.model_validate(
             {
-                **item.model_dump(),
+                **item.model_dump(exclude={'value', 'why_it_matters'}),
                 'item_id': item.kind
                 + ':'
                 + str(
@@ -686,7 +701,15 @@ def ask(uid, item, records):
             }
         ),
         evidence_version=review_store.fingerprint(records),
+        source=question_source(item, records),
+        **({'dream_run_id': run_id} if run_id is not None else {}),
     )
+    if run_id is not None:
+        return result
+
+
+def ask_ranked(uid, item, records, run_id):
+    return ask(uid, item, records, run_id=run_id)
 
 
 def request_frame(uid, question, records):

@@ -24,6 +24,7 @@ from utils.conversations.transcript_for_llm import SpeakerMap
 from utils.llm.conversation_notes_prompts import ACTION_ITEM_EXTRACTION_RULES, conversation_notes_static_instructions
 from utils.llm import conversation_processing
 from utils.llm.conversation_prompt_context import build_conversation_prompt_prefix
+from utils.llm.known_spellings import render_known_spellings
 
 
 @pytest.mark.parametrize(
@@ -302,9 +303,13 @@ def test_desktop_candidate_capture_also_filters_ownership_and_status(monkeypatch
 
 
 @pytest.mark.parametrize('rich', [False, True])
-def test_notes_task_suffix_identifies_owner_and_carries_rules_without_changing_shared_bytes(monkeypatch, rich):
+@pytest.mark.parametrize('spellings_enabled', [False, True])
+def test_notes_task_suffix_identifies_owner_and_carries_rules_without_changing_shared_bytes(
+    monkeypatch, rich, spellings_enabled
+):
     monkeypatch.setenv('OMI_SHAPED_AGENT_MODE', 'on')
     speakers = SpeakerMap({0: 'User'}, owner_name='Riley Chen')
+    spellings = render_known_spellings([{'spelling': 'Quorbi', 'aliases': ['Qorby']}], []) if spellings_enabled else ''
     kwargs = dict(
         conversation_id='synthetic',
         transcript='[s1 0] I will send the link.',
@@ -313,12 +318,21 @@ def test_notes_task_suffix_identifies_owner_and_carries_rules_without_changing_s
         language_code='en',
         uid=UID,
     )
-    prefix = build_conversation_prompt_prefix(speaker_map=speakers, **kwargs)
-    plain = build_conversation_prompt_prefix(speaker_map=dict(speakers), **kwargs)
+    prefix = build_conversation_prompt_prefix(speaker_map=speakers, known_spellings=spellings, **kwargs)
+    plain = build_conversation_prompt_prefix(speaker_map=dict(speakers), known_spellings=spellings, **kwargs)
+    baseline = build_conversation_prompt_prefix(speaker_map=dict(speakers), **kwargs)
     assert prefix.account_owner_name == 'Riley Chen'
+    assert prefix.known_spellings == spellings
     assert prefix.context == plain.context
     assert prefix.shaped_context == plain.shaped_context
     assert prefix.messages(cache_enabled=True) == plain.messages(cache_enabled=True)
+    assert prefix.context == baseline.context
+    assert prefix.shaped_context == baseline.shaped_context
+    assert prefix.cache_key == baseline.cache_key
+    assert prefix.cache_eligible == baseline.cache_eligible
+    assert prefix.messages(cache_enabled=True)[:2] == baseline.messages(cache_enabled=True)
+    if spellings:
+        assert prefix.messages(cache_enabled=True)[2] == {'role': 'system', 'content': spellings}
     assert ACTION_ITEM_EXTRACTION_RULES not in conversation_notes_static_instructions('')
 
     captured = []
@@ -367,3 +381,9 @@ def test_notes_task_suffix_identifies_owner_and_carries_rules_without_changing_s
     suffix = json.loads(user['content'])
     assert suffix['account_owner_name'] == 'Riley Chen'
     assert 'action_item_rules' not in suffix
+    if spellings:
+        assert suffix['known_spellings'] == spellings
+        assert spellings not in suffix['capture_evidence']
+        assert spellings not in system_text
+    else:
+        assert 'known_spellings' not in suffix

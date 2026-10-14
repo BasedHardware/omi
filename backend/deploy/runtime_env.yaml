@@ -2696,7 +2696,7 @@ environments:
             DREAM_AGENT_AUTO_APPLY_KINDS: {value: 'title,overview,vocabulary', category: rollout}
             DREAM_AGENT_PASSES_PER_DAY: {value: '24', category: rollout}
             DREAM_AGENT_MANUAL_RUNS_PER_DAY: {value: '20', category: rollout}
-            DREAM_AGENT_DAILY_USD: {value: '250', category: rollout}
+            DREAM_AGENT_DAILY_USD: {value: '320', category: rollout}
             DREAM_AGENT_CANARY_UID: {value: dream-canary-prod-01, category: rollout}
             SYNC_PHASE_METRICS_EXPORT_ENABLED:
               value: 'true'
