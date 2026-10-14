@@ -8,7 +8,7 @@ No audio, transcript, credentials or user identifiers enter metric labels.
 import asyncio
 import hashlib
 import os
-from typing import Any
+from typing import Any, NamedTuple
 
 import redis.asyncio as aioredis
 
@@ -36,6 +36,13 @@ for _, value in ipairs(members) do
 end
 return 0
 """
+
+
+class PresenceSnapshot(NamedTuple):
+    visible: bool
+    unavailable: bool = False
+
+
 _client: Any = None
 
 
@@ -44,8 +51,8 @@ def _key(uid: str) -> str:
     return f'omi:live-stt:demand-v1:{stage()}:{digest}'
 
 
-async def update_presence(uid: str, socket_id: str, state: str) -> bool:
-    """True means a vendor is required; dependency failures are conservative."""
+async def update_presence(uid: str, socket_id: str, state: str) -> PresenceSnapshot:
+    """Visible requires a vendor; dependency failures retain visible admission."""
     global _client
     if state not in {'hidden', 'visible', 'unknown', 'close'}:
         state = 'unknown'
@@ -59,6 +66,9 @@ async def update_presence(uid: str, socket_id: str, state: str) -> bool:
                 socket_timeout=0.1,
                 retry_on_timeout=False,
             )
-        return bool(await asyncio.wait_for(_client.eval(PRESENCE, 1, _key(uid), socket_id, state), timeout=0.15))
+        result = await asyncio.wait_for(_client.eval(PRESENCE, 1, _key(uid), socket_id, state), timeout=0.15)
+        if type(result) is not int or result not in (0, 1):
+            raise ValueError('Invalid demand presence result')
+        return PresenceSnapshot(bool(result))
     except Exception:
-        return True
+        return PresenceSnapshot(True, unavailable=True)

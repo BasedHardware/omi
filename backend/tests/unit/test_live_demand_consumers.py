@@ -51,3 +51,30 @@ async def test_unverifiable_consumer_keeps_vendor(monkeypatch):
     monkeypatch.setattr(demand_routing, 'realtime_consumer_active', AsyncMock(side_effect=OSError))
     assert not await demand.can_admit_window()
     assert demand.consumer is None and not demand.window_permitted
+
+
+@pytest.mark.asyncio
+async def test_failed_consumer_probe_backs_off_while_vendor_keeps_serving(monkeypatch):
+    from routers.listen import demand_routing
+
+    monkeypatch.setenv('STT_LIVE_DEMAND_ENABLED', 'true')
+    monkeypatch.setenv('STT_LIVE_DEMAND_PERCENT', '100')
+    now = [0.0]
+    monkeypatch.setattr(demand_routing.time, 'monotonic', lambda: now[0])
+    state = SimpleNamespace(active=True, stt_terminal_failure=False)
+
+    async def wait(seconds):
+        now[0] += seconds
+        state.active = now[0] < 20
+        return not state.active
+
+    host = SimpleNamespace(request=SimpleNamespace(uid='user'), state=state, wait=wait, stt_model='soniox')
+    receiver = SimpleNamespace(host=host, lane_meter=SimpleNamespace(flush=lambda **kw: None))
+    demand = demand_routing.LiveDemandRouting(receiver, eligible=True)
+    demand.policy.observe({'foreground': False, 'transcript_visible': False})
+    monkeypatch.setattr(demand, 'publish', AsyncMock(return_value=False))
+    consumer = AsyncMock(side_effect=OSError)
+    monkeypatch.setattr(demand_routing, 'realtime_consumer_active', consumer)
+    await demand.run()
+    assert consumer.await_count == 1
+    assert demand.policy.reason == 'consumer_unknown' and not demand.window_permitted

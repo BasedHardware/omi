@@ -6,6 +6,7 @@ import uuid
 from typing import Any, Callable, Mapping
 
 from config.live_demand import language_qualified, resolve_live_demand
+from utils.observability.fallback import record_fallback
 from utils.stt.live_rollout import managed_chain_enabled
 from utils.stt.demand_consumers import realtime_consumer_active
 from utils.stt.demand_presence import update_presence
@@ -74,12 +75,13 @@ class LiveDemandRouting:
         self.receiver = receiver
         self.eligible = eligible
         self._presence_lock = asyncio.Lock()
+        self._presence_unavailable = False
         self._served_window = False
         self.policy = DemandPolicy()
         self.socket_id = uuid.uuid4().hex
         self.closed = False
         self.consumer: bool | None = None
-        self.consumer_checked = 0.0
+        self.consumer_checked: float | None = None
         self._publish_task = None
 
     @property
@@ -96,9 +98,30 @@ class LiveDemandRouting:
 
     async def publish(self) -> bool:
         async with self._presence_lock:
-            return await update_presence(
+            snapshot = await update_presence(
                 self.receiver.host.request.uid, self.socket_id, 'close' if self.closed else self.policy.state
             )
+            if snapshot.unavailable and not self._presence_unavailable and not self.closed:
+                record_fallback(
+                    component='stt_live_session',
+                    from_mode='demand_presence',
+                    to_mode='vendor',
+                    reason='gate_unavailable',
+                    outcome='degraded',
+                )
+            self._presence_unavailable = snapshot.unavailable
+            return snapshot.visible
+
+    def _consumer_unavailable(self) -> None:
+        if self.consumer_checked is None or self.consumer is not None:
+            record_fallback(
+                component='stt_live_session',
+                from_mode='demand_consumer',
+                to_mode='vendor',
+                reason='gate_unavailable',
+                outcome='degraded',
+            )
+        self.consumer = None
 
     async def can_admit_window(self) -> bool:
         # Recheck after the potentially slow candidate dial, while the old
@@ -108,7 +131,8 @@ class LiveDemandRouting:
         try:
             self.consumer = await asyncio.wait_for(realtime_consumer_active(self.receiver.host.request.uid), timeout=2)
         except Exception:
-            self.consumer = None
+            self._consumer_unavailable()
+        self.consumer_checked = time.monotonic()
         return (
             self.policy.decide(
                 enabled=resolve_live_demand().admits(self.receiver.host.request.uid),
@@ -133,12 +157,15 @@ class LiveDemandRouting:
                         return
                     continue
                 now = time.monotonic()
-                if now - self.consumer_checked >= 5:
+                # A timed-out executor leaf can still be running. Bound
+                # outage probe rate instead of filling the shared DB pool.
+                interval = 60 if self.consumer is None else 5
+                if self.consumer_checked is None or now - self.consumer_checked >= interval:
                     try:
                         self.consumer = await asyncio.wait_for(realtime_consumer_active(host.request.uid), timeout=2)
                     except Exception:
-                        self.consumer = None
-                    self.consumer_checked = now
+                        self._consumer_unavailable()
+                    self.consumer_checked = time.monotonic()
                 current = 'parakeet' if host.stt_model == 'parakeet-window' else 'vendor'
                 if self._served_window and current == 'vendor':
                     self.policy.fallback = True

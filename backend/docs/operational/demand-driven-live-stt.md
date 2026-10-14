@@ -33,7 +33,8 @@ registered socket is reconciled within one second, plus bounded consumer reads.
 
 Real-time app and developer webhook state comes from the same authorities as
 listen/pusher fanout. Consumer reads refresh every five seconds, with a two-second
-wall deadline; failed reads require vendors. Mentor uses the existing
+wall deadline; failed reads require vendors and back off for 60 seconds so
+stalled reads cannot flood the shared database executor. Mentor uses the existing
 per-user frequency opt-out, paid admission, and v2 cohort authority. Admitted
 users count as active even while context is buffering; flag errors require
 vendors. Consumers
@@ -55,7 +56,8 @@ Listen counters:
   VAD audio time; pair it with existing vendor audio counters for the cost receipt.
 - `omi_listen_live_lane_switches_total{from_lane,to_lane,reason}`: adopted lane changes, including fallback.
 - `omi_fallback_total{component="stt_live_session",reason,outcome}`: admission,
-  candidate or replay failures, plus existing window recovery causes. Existing
+  candidate or replay failures, gate dependency outages, plus existing window
+  recovery causes. Dependency outages emit once per socket/outage episode. Existing
   window admission/POST metrics distinguish capacity, pressure and degradation.
 
 ## Lead-owned rollout and rollback

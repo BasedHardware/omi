@@ -64,7 +64,7 @@ from utils.live_speaker_suggestions import emit_speaker_suggestion as emit_live_
 from utils.stt.streaming import get_stt_service_for_language
 import utils.stt.replay_delivery as replay_delivery
 from utils.stt.live_failure import terminate_live_stt_backoff
-from utils.stt.live_rollout import managed_chain_enabled, window_allocation, window_selection_kwargs
+from utils.stt.live_rollout import WindowSelection, managed_chain_enabled, window_allocation, window_selection_kwargs
 from utils.stt.live_metrics import (
     COST_CANARY_OUTCOME,
     LIVE_SESSION_TERMINAL_AFTER_TEXT,
@@ -568,13 +568,14 @@ class ListenSessionRuntime:
             and not request.onboarding_mode
             and request.source != 'phone_call'
         )
+        window_kwargs: WindowSelection = {} if demand_vendor_start else window_selection_kwargs(self, request.uid)
         self.stt_service, self.stt_language, self.stt_model = get_stt_service_for_language(
             self.language,
             multi_lang_enabled=self.multi_lang_enabled,
             preferred_service=request.stt_service,
             language_profile=self.language_profile,
             exclude=frozenset({'parakeet'}) if demand_vendor_start else frozenset(),
-            **(window_selection_kwargs(self, request.uid) if not demand_vendor_start else {}),
+            **window_kwargs,
         )
         # The provider the serving policy chose, captured before `_create_stt_socket`
         # can walk the fallback chain. Only the *selected* value is safe to hold onto:

@@ -8,7 +8,7 @@ import os
 import threading
 import time
 from collections import deque
-from typing import TYPE_CHECKING, Awaitable, Callable
+from typing import TYPE_CHECKING, Awaitable, Callable, Mapping
 
 if TYPE_CHECKING:
     from utils.stt.streaming import STTService
@@ -132,7 +132,7 @@ async def connect_configured_chain(
     *,
     primary_service: STTService,
     connect_primary: Connect,
-    callbacks: dict[STTService, Connect | None],
+    callbacks: Mapping[STTService, Connect | None],
     failed: set[str],
     models: list[str],
     routing_uid: str | None = None,
