@@ -1,3 +1,4 @@
+import 'package:omi/models/stt_provider.dart';
 import 'package:flutter/foundation.dart';
 
 import 'package:omi/models/custom_stt_config.dart';
@@ -91,7 +92,10 @@ class SttModeResolver {
     FreemiumReadiness readiness = FreemiumReadiness.ready;
     final flag = flagReader();
     final allowance = allowanceReader();
-    if (flag && !persistedCustomStt.isEnabled && _needsOnDeviceReadiness(allowance)) {
+    if ((persistedCustomStt.provider == SttProvider.onDeviceWhisper &&
+            !kIsWeb &&
+            defaultTargetPlatform == TargetPlatform.iOS) ||
+        (flag && !persistedCustomStt.isEnabled && _needsOnDeviceReadiness(allowance))) {
       readiness = await readinessReader();
     }
     return resolve(
@@ -116,6 +120,10 @@ class SttModeResolver {
     required BleAudioCodec codec,
   }) {
     if (persistedCustomStt.isEnabled) {
+      if (persistedCustomStt.provider == SttProvider.onDeviceWhisper && readiness != FreemiumReadiness.ready) {
+        return const SttModeDecision(
+            path: SttResolvedPath.blocked, reason: 'on_device_not_ready', allowanceOnDevice: true);
+      }
       return SttModeDecision(
         path: SttResolvedPath.honorCustom,
         customSttConfig: persistedCustomStt,

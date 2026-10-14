@@ -8,8 +8,9 @@ import 'package:whisper_flutter_new/whisper_flutter_new.dart';
 
 import 'package:omi/models/stt_result.dart';
 import 'package:omi/services/experiments/on_device_overflow_gate.dart';
-import 'package:omi/services/on_device/on_device_engine.dart';
 import 'package:omi/utils/audio/wav_bytes.dart';
+import 'package:omi/utils/audio/whisper_pcm.dart';
+import 'package:omi/services/sockets/local_stt_failure.dart';
 import 'package:omi/services/custom_stt_log_service.dart';
 import 'package:omi/services/sockets/on_device_transcript_quality_gate.dart';
 import 'package:omi/services/sockets/pure_polling.dart';
@@ -28,7 +29,7 @@ class OnDeviceWhisperProvider implements ISttProvider {
     if (_isInitialized) return;
     try {
       if (!await File(modelPath).exists()) {
-        throw Exception('Model file not found at $modelPath');
+        throw const LocalSttFailure('model_missing');
       }
 
       final dir = p.dirname(modelPath);
@@ -77,33 +78,90 @@ class OnDeviceWhisperProvider implements ISttProvider {
     );
   }
 
+  /// Length of the audio in [bytes], in seconds.
+  ///
+  /// [bytes] is the buffer handed to whisper: a WAV container on every
+  /// transcoder path this provider is built with. Deriving the duration from
+  /// the whole buffer length divided by a fixed 32000 (16000 Hz * 2 bytes)
+  /// counted the 44-byte header as audio and reported an 8 kHz WAV at half
+  /// its real length, which corrupts the segment timeline the conversation is
+  /// persisted from. Read the sample rate and the PCM length out of the
+  /// header instead, and fall back to 16 kHz mono for non-WAV input.
+  @visibleForTesting
+  static double audioDurationSeconds(Uint8List bytes) {
+    const fallbackBytesPerSecond = 32000.0; // 16000 Hz, 16-bit mono
+    if (bytes.lengthInBytes < 44) {
+      return bytes.lengthInBytes / fallbackBytesPerSecond;
+    }
+
+    final data = ByteData.sublistView(bytes);
+    final sampleRate = data.getUint32(24, Endian.little);
+    final pcmBytes = data.getUint32(40, Endian.little);
+
+    if (sampleRate == 0 || pcmBytes == 0 || pcmBytes > bytes.lengthInBytes - 44) {
+      return bytes.lengthInBytes / fallbackBytesPerSecond;
+    }
+
+    // 16-bit mono PCM: 2 bytes per sample.
+    return pcmBytes / (sampleRate * 2);
+  }
+
+  /// Each plugin call allocates and frees a fresh whisper_context. Never pass
+  /// more than 30 seconds, including when retained polling audio grows on retry.
+  @visibleForTesting
+  static Iterable<Uint8List> boundedAudioChunks(Uint8List bytes) sync* {
+    if (audioDurationSeconds(bytes) <= 30) {
+      yield bytes;
+      return;
+    }
+    final header = ByteData.sublistView(bytes);
+    final rate = header.getUint32(24, Endian.little);
+    final pcmSize = header.getUint32(40, Endian.little);
+    if (rate == 0 ||
+        header.getUint16(22, Endian.little) != 1 ||
+        header.getUint16(34, Endian.little) != 16 ||
+        pcmSize > bytes.length - 44 ||
+        pcmSize.isOdd) {
+      throw const FormatException('Expected canonical mono 16-bit PCM WAV');
+    }
+    final limit = 44 + pcmSize;
+    final chunkBytes = rate * 2 * 30;
+    for (var start = 44; start < limit; start += chunkBytes) {
+      final end = (start + chunkBytes).clamp(0, limit);
+      yield WavBytes.fromPcm(Uint8List.sublistView(bytes, start, end), sampleRate: rate, numChannels: 1).asBytes();
+    }
+  }
+
   @override
   Future<SttTranscriptionResult?> transcribe(
     Uint8List audioData, {
     double audioOffsetSeconds = 0,
     String? language,
   }) async {
+    final normalized = WhisperPcm.normalize(audioData);
+    final segments = <SttSegment>[];
+    final text = <String>[];
+    var offset = audioOffsetSeconds;
+    for (final chunk in boundedAudioChunks(normalized.wav)) {
+      final result = await transcribeChunk(chunk, audioOffsetSeconds: offset, language: language);
+      if (result != null) {
+        segments.addAll(result.segments);
+        if (result.rawText?.isNotEmpty == true) text.add(result.rawText!);
+      }
+      offset += audioDurationSeconds(chunk);
+    }
+    return SttTranscriptionResult(
+        segments: segments, rawText: text.join(' '), audioEndSeconds: audioOffsetSeconds + normalized.duration);
+  }
+
+  @visibleForTesting
+  Future<SttTranscriptionResult?> transcribeChunk(
+    Uint8List audioData, {
+    double audioOffsetSeconds = 0,
+    String? language,
+  }) async {
     try {
       final enhanced = onDeviceOverflowEnabled ?? await OnDeviceOverflowGate.read();
-      // Every plugin call creates/frees a fresh whisper_context. Fixed 30s calls
-      // therefore reset context; never decode an accumulated long file in one pass.
-      if (enhanced && audioData.length > 44 && pcmWavDurationSeconds(audioData) > 30) {
-        final rate = ByteData.sublistView(audioData).getUint32(24, Endian.little);
-        if (rate <= 0) throw const FormatException('Invalid PCM sample rate');
-        final segments = <SttSegment>[];
-        var offset = audioOffsetSeconds;
-        for (var start = 44; start < audioData.length; start += rate * 2 * 30) {
-          final end = (start + rate * 2 * 30).clamp(0, audioData.length);
-          final chunk = WavBytes.fromPcm(Uint8List.sublistView(audioData, start, end), sampleRate: rate, numChannels: 1)
-              .asBytes();
-          final result = await transcribe(chunk, audioOffsetSeconds: offset, language: language);
-          if (result != null) segments.addAll(result.segments);
-          offset += (end - start) / (rate * 2);
-        }
-        if (segments.isEmpty) return SttTranscriptionResult(segments: [], rawText: '', audioEndSeconds: offset);
-        return SttTranscriptionResult(
-            segments: segments, rawText: segments.map((s) => s.text).join(' '), audioEndSeconds: offset);
-      }
       final sw = Stopwatch()..start();
       await _ensureInitialized();
 
@@ -119,26 +177,21 @@ class OnDeviceWhisperProvider implements ISttProvider {
         final res = await _whisper!.transcribe(transcribeRequest: req);
 
         if (res.text.isEmpty) {
-          return enhanced
-              ? SttTranscriptionResult(
-                  segments: [], rawText: '', audioEndSeconds: audioOffsetSeconds + pcmWavDurationSeconds(audioData))
-              : null;
+          return null;
         }
 
         String cleanText = res.text.trim();
         cleanText = cleanText.replaceAll(RegExp(r'\[.*?\]'), '').trim();
         cleanText = cleanText.replaceAll(RegExp(r'\(.*?\)'), '').trim();
 
-        final duration = pcmWavDurationSeconds(audioData);
+        final duration = audioDurationSeconds(audioData);
         final filteredText = _qualityGate.filter(
           cleanText,
           audioData: audioData,
         );
         if (filteredText == null) {
           CustomSttLogService.instance.warning('OnDeviceWhisper', 'Dropped low-quality local transcript: $cleanText');
-          return enhanced
-              ? SttTranscriptionResult(segments: [], rawText: '', audioEndSeconds: audioOffsetSeconds + duration)
-              : null;
+          return null;
         }
 
         final speedFactor = sw.elapsedMilliseconds / 1000 / duration;
@@ -148,7 +201,6 @@ class OnDeviceWhisperProvider implements ISttProvider {
         );
 
         return SttTranscriptionResult(
-          audioEndSeconds: enhanced ? audioOffsetSeconds + duration : null,
           segments: enhanced && res.segments?.isNotEmpty == true
               ? [
                   for (final segment in res.segments!)
@@ -176,8 +228,10 @@ class OnDeviceWhisperProvider implements ISttProvider {
       }
     } catch (e) {
       CustomSttLogService.instance.error('OnDeviceWhisper', 'Transcription error: $e');
-      if (onDeviceOverflowEnabled == true || await OnDeviceOverflowGate.read()) rethrow;
-      return null;
+      final message = e.toString();
+      if (message.contains('OMI_STT_PERMANENT_INPUT:')) throw const LocalSttFailure('invalid_audio');
+      if (message.contains('OMI_STT_MODEL_UNAVAILABLE:')) throw const LocalSttFailure('model_invalid');
+      rethrow; // Transient decoder failures retain the complete polling buffer.
     }
   }
 

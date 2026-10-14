@@ -154,6 +154,20 @@
       "description": "Legacy Apple native speech with lower-quality warning and no Omi download",
       "captured_by": "agent",
       "source": "visual-audit"
+    },
+    {
+      "file": "023-mobile-ios-local-speech-permission.png",
+      "platform": "mobile-ios",
+      "description": "Actual shared local speech recovery notice with SF Pro and iOS platform; same component as READY, synthetic UI fixture",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "024-mobile-ios-local-speech-unavailable.png",
+      "platform": "mobile-ios",
+      "description": "Actual shared local speech recovery notice with SF Pro and iOS platform; same component as READY, synthetic UI fixture",
+      "captured_by": "agent",
+      "source": "visual-audit"
     }
   ]
 }

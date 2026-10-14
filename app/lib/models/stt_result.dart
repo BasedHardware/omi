@@ -102,7 +102,7 @@ class SttSegment {
 }
 
 class SttTranscriptionResult {
-  /// Clock through all consumed audio, including trailing silence.
+  /// End of successfully consumed audio, including silence.
   final double? audioEndSeconds;
   final List<SttSegment> segments;
   final String? rawText;
