@@ -3878,12 +3878,8 @@ def get_closest_conversation_to_timestamps(uid: str, start_timestamp: int, end_t
     if not conversations:
         return None
 
-    if logger.isEnabledFor(logging.DEBUG):
-        for conversation in conversations:
-            logger.debug(
-                f"get_closest_conversation_to_timestamps candidate {conversation['id']} "
-                f"{conversation['started_at']} {conversation['finished_at']}"
-            )
+    for conversation in conversations:
+        logger.debug("- %s %s %s", conversation['id'], conversation['started_at'], conversation['finished_at'])
 
     closest_conversation = select_closest_conversation(conversations, start_timestamp, end_timestamp)
     if closest_conversation is None:
