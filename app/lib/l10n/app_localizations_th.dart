@@ -13150,4 +13150,292 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get connectAnAgentSubtitle => 'รับพรอมต์การตั้งค่าสำหรับ Claude, ChatGPT, Codex หรือเอเจนต์ใดก็ได้';
+
+  @override
+  String get onDeviceAtCapTitle => 'คุณใช้การถอดเสียงแบบสดของเดือนนี้หมดแล้ว';
+
+  @override
+  String get onDeviceAtCapBody => 'Omi ยังคงบันทึกอยู่ เลือกวิธีถอดเสียงสำหรับช่วงที่เหลือของเดือนนี้';
+
+  @override
+  String onDeviceLiveHoursReturn(String date) {
+    return 'ชั่วโมงแบบสดจะกลับมาในวันที่ $date';
+  }
+
+  @override
+  String get onDeviceTranscribeOnPhone => 'ถอดเสียงบนโทรศัพท์เครื่องนี้';
+
+  @override
+  String get onDeviceIncluded => 'รวมอยู่แล้ว';
+
+  @override
+  String get onDeviceOptionChargingBody =>
+      'ทำงานขณะชาร์จโทรศัพท์ จึงแทบไม่ใช้แบตเตอรี่ บันทึกคำพูดจะแสดงหลังจากเสียบชาร์จ';
+
+  @override
+  String get onDeviceUpgradeBody => 'ชั่วโมงแบบสดเพิ่มขึ้นในเดือนนี้ พร้อมระบุชื่อผู้พูดและความแม่นยำระดับคลาวด์';
+
+  @override
+  String get onDeviceAtCapFooter => 'ไม่ว่าเลือกแบบไหนก็ไม่มีอะไรสูญหาย คุณเปลี่ยนได้ที่ การตั้งค่า › การถอดเสียง';
+
+  @override
+  String onDeviceStepOf(int step, int total) {
+    return 'ขั้นตอนที่ $step จาก $total';
+  }
+
+  @override
+  String get onDeviceSetupBody =>
+      'Omi จะดาวน์โหลดโมเดลเสียงพูดเพียงครั้งเดียว หลังจากนั้นการบันทึกของคุณจะถูกแปลงเป็นข้อความบนเครื่องนี้เลย โดยไม่ใช้ชั่วโมงแบบสด';
+
+  @override
+  String get onDeviceSpeechModel => 'โมเดลเสียงพูด';
+
+  @override
+  String onDeviceMegabytes(String size) {
+    return '$size MB';
+  }
+
+  @override
+  String onDeviceDownloadingWifi(int percent) {
+    return 'กำลังดาวน์โหลดผ่าน Wi-Fi · $percent%';
+  }
+
+  @override
+  String onDeviceDownloadingPercent(int percent) {
+    return 'กำลังดาวน์โหลด · $percent%';
+  }
+
+  @override
+  String onDeviceTimeLeft(String time) {
+    return 'เหลืออีกประมาณ $time';
+  }
+
+  @override
+  String get onDeviceWaitingForWifi => 'กำลังรอ Wi-Fi';
+
+  @override
+  String get onDeviceDownloadFailed => 'ดาวน์โหลดไม่สำเร็จ';
+
+  @override
+  String get onDeviceModelNotDownloaded => 'ยังไม่ได้ดาวน์โหลด';
+
+  @override
+  String onDeviceModelInstalled(String size) {
+    return 'ติดตั้งแล้ว · $size';
+  }
+
+  @override
+  String get onDeviceModelUnsupported => 'ยังไม่พร้อมใช้งานบนโทรศัพท์เครื่องนี้';
+
+  @override
+  String get onDeviceSetupKeepRecording => 'บันทึกต่อได้ระหว่างดาวน์โหลด ไม่มีอะไรต้องรอ';
+
+  @override
+  String get onDeviceSetupAudioStays => 'เสียงจะอยู่บนโทรศัพท์ของคุณจนกว่าจะถอดเสียงเสร็จ';
+
+  @override
+  String get onDeviceWifiOnly => 'ดาวน์โหลดผ่าน Wi-Fi เท่านั้น';
+
+  @override
+  String get onDeviceDownloadModel => 'ดาวน์โหลดโมเดลเสียงพูด';
+
+  @override
+  String get onDeviceScheduleTitle => 'เวลาถอดเสียง';
+
+  @override
+  String get onDeviceScheduleHeadline => 'ให้ Omi ถอดเสียงเมื่อไร';
+
+  @override
+  String get onDeviceScheduleBody => 'การถอดเสียงเป็นชุดช่วยประหยัดแบตเตอรี่ คุณเปลี่ยนได้ทุกเมื่อ';
+
+  @override
+  String get onDeviceScheduleCharging => 'ขณะชาร์จ';
+
+  @override
+  String get onDeviceScheduleChargingBody => 'บันทึกคำพูดจะแสดงหลังจากเสียบชาร์จ โดยปกติคือช่วงกลางคืน';
+
+  @override
+  String get onDeviceBatteryAlmostNone => 'แบตเตอรี่: แทบไม่ใช้';
+
+  @override
+  String get onDeviceScheduleHours => 'ทุกๆ สองสามชั่วโมง';
+
+  @override
+  String get onDeviceScheduleHoursBody =>
+      'ทยอยถอดเสียงเป็นช่วงสั้นๆ ขณะใช้แบตเตอรี่ บันทึกคำพูดจึงแทบไม่ล่าช้าเกินสองสามชั่วโมง';
+
+  @override
+  String onDeviceBatteryPerDay(int percent) {
+    return 'แบตเตอรี่: ประมาณ $percent% ต่อวัน';
+  }
+
+  @override
+  String get onDeviceScheduleLive => 'ขณะที่คุณพูด';
+
+  @override
+  String get onDeviceScheduleLiveBody => 'ข้อความจะแสดงภายในไม่กี่วินาที เหมือนการถอดเสียงแบบสด';
+
+  @override
+  String onDeviceBatteryPerHour(int percent) {
+    return 'แบตเตอรี่: ประมาณ $percent% ต่อการสนทนาหนึ่งชั่วโมง';
+  }
+
+  @override
+  String onDeviceQueueWaiting(String duration) {
+    return '$duration รอการถอดเสียง';
+  }
+
+  @override
+  String get onDeviceQueueChargingBody => 'จะพร้อมหลังจากคุณเสียบชาร์จโทรศัพท์ การบันทึกดำเนินต่อตามปกติ';
+
+  @override
+  String get onDeviceQueueHoursBody => 'Omi จะทยอยถอดเสียงทุกๆ สองสามชั่วโมง การบันทึกดำเนินต่อตามปกติ';
+
+  @override
+  String get onDeviceQueueLowBatteryBody => 'กำลังรอที่ชาร์จเนื่องจากแบตเตอรี่เหลือน้อย การบันทึกดำเนินต่อตามปกติ';
+
+  @override
+  String get onDeviceTranscribeNow => 'ถอดเสียงตอนนี้';
+
+  @override
+  String get onDeviceUsesBattery => 'ใช้แบตเตอรี่';
+
+  @override
+  String get onDeviceTranscribing => 'กำลังถอดเสียง…';
+
+  @override
+  String get onDeviceWaitingForCharger => 'กำลังรอที่ชาร์จ';
+
+  @override
+  String get onDeviceWaitingToTranscribe => 'รอการถอดเสียง';
+
+  @override
+  String get onDeviceWaitingForSetup => 'บันทึกแล้ว รอการตั้งค่า';
+
+  @override
+  String get onDeviceTranscribedOnIphone => 'ถอดเสียงบน iPhone เครื่องนี้';
+
+  @override
+  String get onDeviceTranscribedOnPhone => 'ถอดเสียงบนโทรศัพท์เครื่องนี้';
+
+  @override
+  String get onDeviceTranscribedSummarizedOnIphone => 'ถอดเสียงและสรุปบน iPhone เครื่องนี้';
+
+  @override
+  String get onDeviceSummarizedByCloud => 'สรุปโดย Omi Cloud';
+
+  @override
+  String get onDeviceWhyPhoneTitle => 'ทำไมจึงทำบนโทรศัพท์ของคุณ';
+
+  @override
+  String get onDeviceWhyLiveHoursUsed =>
+      'คุณใช้ชั่วโมงแบบสดของเดือนนี้หมดแล้ว Omi จึงถอดเสียงบทสนทนานี้บนโทรศัพท์เครื่องนี้';
+
+  @override
+  String get onDeviceWhySavingLiveHours => 'คุณเลือกถอดเสียงบนโทรศัพท์เครื่องนี้เพื่อประหยัดชั่วโมงแบบสด';
+
+  @override
+  String get onDeviceWhySummaryOnPhone => 'สรุปก็เขียนบน iPhone เครื่องนี้เช่นกัน ไม่มีข้อมูลใดออกจากอุปกรณ์';
+
+  @override
+  String get onDeviceWhyNoSummary => 'คุณเก็บทุกอย่างไว้บนโทรศัพท์เครื่องนี้ จึงไม่มีสรุป';
+
+  @override
+  String get onDeviceWhyCloudTitle => 'ทำไม Omi Cloud จึงเขียนสรุปนี้';
+
+  @override
+  String get onDeviceWhyCloudIphone =>
+      'iPhone เครื่องนี้สรุปเองไม่ได้ (ต้องใช้ iPhone 15 Pro ขึ้นไป) บันทึกคำพูดสร้างบนโทรศัพท์ของคุณ และส่งเฉพาะข้อความไปให้ Omi สรุป ไม่ใช้ชั่วโมงแบบสดของคุณ';
+
+  @override
+  String get onDeviceWhyCloudPhone =>
+      'โทรศัพท์เครื่องนี้สรุปเองไม่ได้ บันทึกคำพูดสร้างบนโทรศัพท์ของคุณ และส่งเฉพาะข้อความไปให้ Omi สรุป ไม่ใช้ชั่วโมงแบบสดของคุณ';
+
+  @override
+  String get onDeviceRedoWithCloud => 'ทำใหม่ด้วย Omi Cloud';
+
+  @override
+  String get onDeviceRedoHint => 'รายละเอียดมากขึ้นและระบุชื่อผู้พูด ใช้ชั่วโมงแบบสด';
+
+  @override
+  String get onDeviceKeepEverything => 'เก็บทุกอย่างไว้บนโทรศัพท์เครื่องนี้';
+
+  @override
+  String get onDeviceKeepEverythingSubtitle => 'เฉพาะบันทึกคำพูด ไม่มีสรุป';
+
+  @override
+  String get onDeviceLiveHours => 'ชั่วโมงแบบสด';
+
+  @override
+  String onDeviceLiveHoursUsed(String used, String limit) {
+    return 'ใช้ไป $used จาก $limit ชั่วโมง';
+  }
+
+  @override
+  String onDeviceResets(String date) {
+    return 'รีเซ็ตวันที่ $date';
+  }
+
+  @override
+  String get onDeviceGetMoreLiveHours => 'รับชั่วโมงแบบสดเพิ่ม';
+
+  @override
+  String get onDeviceAfterLiveHours => 'หลังจากชั่วโมงแบบสดหมด';
+
+  @override
+  String get onDeviceWhen => 'เมื่อไร';
+
+  @override
+  String get onDeviceSummaries => 'สรุป';
+
+  @override
+  String get onDeviceSummariesOnIphone => 'บน iPhone เครื่องนี้';
+
+  @override
+  String get onDeviceSummariesCloud => 'โดย Omi Cloud';
+
+  @override
+  String get onDeviceSaveLiveHours => 'ถอดเสียงบนโทรศัพท์เครื่องนี้เพื่อประหยัดชั่วโมงแบบสด';
+
+  @override
+  String get onDeviceSaveLiveHoursSubtitle =>
+      'เก็บชั่วโมงแบบสดไว้ใช้เมื่อต้องการระบุชื่อผู้พูดและความแม่นยำระดับคลาวด์';
+
+  @override
+  String get onDeviceOnThisPhone => 'บนโทรศัพท์เครื่องนี้';
+
+  @override
+  String get onDeviceAudioWaiting => 'เสียงที่รออยู่บนโทรศัพท์';
+
+  @override
+  String get onDeviceRemoveModel => 'ลบโมเดลเสียงพูด';
+
+  @override
+  String get onDeviceRemoveModelTitle => 'ลบโมเดลเสียงพูดไหม';
+
+  @override
+  String get onDeviceRemoveModelMessage =>
+      'การบันทึกจะรออยู่บนโทรศัพท์เครื่องนี้จนกว่าคุณจะดาวน์โหลดอีกครั้งหรือชั่วโมงแบบสดกลับมา';
+
+  @override
+  String get onDeviceRemove => 'ลบ';
+
+  @override
+  String get onDeviceFinishSetupTitle => 'ตั้งค่าให้เสร็จเพื่อดูบันทึกคำพูด';
+
+  @override
+  String get onDeviceFinishSetupBody =>
+      'คุณใช้ชั่วโมงแบบสดของเดือนนี้หมดแล้ว Omi ยังคงบันทึกและเก็บเสียงไว้บนโทรศัพท์ของคุณ ดาวน์โหลดโมเดลเสียงพูดแล้วระบบจะถอดเสียงส่วนที่ค้างให้';
+
+  @override
+  String onDeviceDownloadSize(String size) {
+    return 'ดาวน์โหลด $size';
+  }
+
+  @override
+  String get onDeviceUnsupportedBody =>
+      'โทรศัพท์เครื่องนี้ยังใช้โมเดลเสียงพูดไม่ได้ เสียงจะถูกเก็บไว้จนกว่าชั่วโมงแบบสดจะกลับมาหรือคุณอัปเกรด';
+
+  @override
+  String get onDeviceEntrySubtitle => 'เมื่อชั่วโมงแบบสดหมด ให้ถอดเสียงบนโทรศัพท์เครื่องนี้';
 }

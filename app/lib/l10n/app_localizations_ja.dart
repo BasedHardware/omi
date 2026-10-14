@@ -13030,4 +13030,283 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get connectAnAgentSubtitle => 'Claude、ChatGPT、Codex などのエージェント用セットアップ用プロンプトを取得';
+
+  @override
+  String get onDeviceAtCapTitle => '今月のライブ文字起こしを使い切りました';
+
+  @override
+  String get onDeviceAtCapBody => 'Omiは録音を続けています。今月の残りの文字起こし方法を選んでください。';
+
+  @override
+  String onDeviceLiveHoursReturn(String date) {
+    return 'ライブ時間は$dateに戻ります。';
+  }
+
+  @override
+  String get onDeviceTranscribeOnPhone => 'このスマホで文字起こし';
+
+  @override
+  String get onDeviceIncluded => '追加料金なし';
+
+  @override
+  String get onDeviceOptionChargingBody => '充電中に動作するので、バッテリーはほとんど消費しません。充電器につなぐと文字起こしが表示されます。';
+
+  @override
+  String get onDeviceUpgradeBody => '今月のライブ時間を追加。話者名の表示とクラウドの高い精度も使えます。';
+
+  @override
+  String get onDeviceAtCapFooter => 'どちらを選んでもデータは失われません。設定 › 文字起こしでいつでも変更できます。';
+
+  @override
+  String onDeviceStepOf(int step, int total) {
+    return 'ステップ $step/$total';
+  }
+
+  @override
+  String get onDeviceSetupBody => 'Omiは音声モデルを一度だけダウンロードします。その後は、ライブ時間を使わずに、録音をこの端末上でテキストに変換します。';
+
+  @override
+  String get onDeviceSpeechModel => '音声モデル';
+
+  @override
+  String onDeviceMegabytes(String size) {
+    return '$size MB';
+  }
+
+  @override
+  String onDeviceDownloadingWifi(int percent) {
+    return 'Wi-Fiでダウンロード中 · $percent%';
+  }
+
+  @override
+  String onDeviceDownloadingPercent(int percent) {
+    return 'ダウンロード中 · $percent%';
+  }
+
+  @override
+  String onDeviceTimeLeft(String time) {
+    return '残り約$time';
+  }
+
+  @override
+  String get onDeviceWaitingForWifi => 'Wi-Fi接続を待機中';
+
+  @override
+  String get onDeviceDownloadFailed => 'ダウンロードが完了しませんでした';
+
+  @override
+  String get onDeviceModelNotDownloaded => '未ダウンロード';
+
+  @override
+  String onDeviceModelInstalled(String size) {
+    return 'インストール済み · $size';
+  }
+
+  @override
+  String get onDeviceModelUnsupported => 'このスマホではまだ利用できません';
+
+  @override
+  String get onDeviceSetupKeepRecording => 'ダウンロード中も録音を続けられます。待つ必要はありません。';
+
+  @override
+  String get onDeviceSetupAudioStays => '音声は文字起こしされるまでスマホに保存されます。';
+
+  @override
+  String get onDeviceWifiOnly => 'Wi-Fi接続時のみダウンロード';
+
+  @override
+  String get onDeviceDownloadModel => '音声モデルをダウンロード';
+
+  @override
+  String get onDeviceScheduleTitle => '文字起こしのタイミング';
+
+  @override
+  String get onDeviceScheduleHeadline => 'Omiはいつ文字起こししますか？';
+
+  @override
+  String get onDeviceScheduleBody => 'まとめて文字起こしするとバッテリーを節約できます。いつでも変更できます。';
+
+  @override
+  String get onDeviceScheduleCharging => '充電中';
+
+  @override
+  String get onDeviceScheduleChargingBody => '充電器につなぐと文字起こしが表示されます。通常は夜間です。';
+
+  @override
+  String get onDeviceBatteryAlmostNone => 'バッテリー：ほぼ消費なし';
+
+  @override
+  String get onDeviceScheduleHours => '数時間ごと';
+
+  @override
+  String get onDeviceScheduleHoursBody => 'バッテリー駆動中に短時間ずつ処理するため、文字起こしの遅れは通常数時間以内です。';
+
+  @override
+  String onDeviceBatteryPerDay(int percent) {
+    return 'バッテリー：1日あたり約$percent%';
+  }
+
+  @override
+  String get onDeviceScheduleLive => '話している間';
+
+  @override
+  String get onDeviceScheduleLiveBody => 'ライブ文字起こしのように、数秒でテキストが表示されます。';
+
+  @override
+  String onDeviceBatteryPerHour(int percent) {
+    return 'バッテリー：会話1時間あたり約$percent%';
+  }
+
+  @override
+  String onDeviceQueueWaiting(String duration) {
+    return '$duration分が文字起こし待ち';
+  }
+
+  @override
+  String get onDeviceQueueChargingBody => 'スマホを充電器につなぐと完了します。録音は通常どおり続きます。';
+
+  @override
+  String get onDeviceQueueHoursBody => 'Omiは数時間ごとに処理します。録音は通常どおり続きます。';
+
+  @override
+  String get onDeviceQueueLowBatteryBody => 'バッテリー残量が少ないため、充電を待っています。録音は通常どおり続きます。';
+
+  @override
+  String get onDeviceTranscribeNow => '今すぐ文字起こし';
+
+  @override
+  String get onDeviceUsesBattery => 'バッテリーを消費します';
+
+  @override
+  String get onDeviceTranscribing => '文字起こし中…';
+
+  @override
+  String get onDeviceWaitingForCharger => '充電待ち';
+
+  @override
+  String get onDeviceWaitingToTranscribe => '文字起こし待ち';
+
+  @override
+  String get onDeviceWaitingForSetup => '保存済み・セットアップ待ち';
+
+  @override
+  String get onDeviceTranscribedOnIphone => 'このiPhoneで文字起こし';
+
+  @override
+  String get onDeviceTranscribedOnPhone => 'このスマホで文字起こし';
+
+  @override
+  String get onDeviceTranscribedSummarizedOnIphone => 'このiPhoneで文字起こし・要約';
+
+  @override
+  String get onDeviceSummarizedByCloud => 'Omi Cloudで要約';
+
+  @override
+  String get onDeviceWhyPhoneTitle => 'スマホで処理された理由';
+
+  @override
+  String get onDeviceWhyLiveHoursUsed => '今月のライブ時間を使い切ったため、Omiはこの会話をこのスマホで文字起こししました。';
+
+  @override
+  String get onDeviceWhySavingLiveHours => 'ライブ時間を節約するため、このスマホでの文字起こしを選択しています。';
+
+  @override
+  String get onDeviceWhySummaryOnPhone => '要約もこのiPhoneで作成されました。データは端末の外に出ていません。';
+
+  @override
+  String get onDeviceWhyNoSummary => 'すべてをこのスマホに保存する設定のため、要約はありません。';
+
+  @override
+  String get onDeviceWhyCloudTitle => 'Omi Cloudが要約を作成した理由';
+
+  @override
+  String get onDeviceWhyCloudIphone =>
+      'このiPhoneは単独で要約できません（iPhone 15 Pro以降が必要です）。文字起こしはスマホで行われ、要約のためにテキストのみがOmiに送信されました。ライブ時間は消費しません。';
+
+  @override
+  String get onDeviceWhyCloudPhone => 'このスマホは単独で要約できません。文字起こしはスマホで行われ、要約のためにテキストのみがOmiに送信されました。ライブ時間は消費しません。';
+
+  @override
+  String get onDeviceRedoWithCloud => 'Omi Cloudでやり直す';
+
+  @override
+  String get onDeviceRedoHint => 'より詳細で、話者名も表示されます。ライブ時間を消費します。';
+
+  @override
+  String get onDeviceKeepEverything => 'すべてをこのスマホに保存';
+
+  @override
+  String get onDeviceKeepEverythingSubtitle => '文字起こしのみ、要約なし';
+
+  @override
+  String get onDeviceLiveHours => 'ライブ時間';
+
+  @override
+  String onDeviceLiveHoursUsed(String used, String limit) {
+    return '$used/$limit時間使用';
+  }
+
+  @override
+  String onDeviceResets(String date) {
+    return '$dateにリセット';
+  }
+
+  @override
+  String get onDeviceGetMoreLiveHours => 'ライブ時間を追加';
+
+  @override
+  String get onDeviceAfterLiveHours => 'ライブ時間を使い切った後';
+
+  @override
+  String get onDeviceWhen => 'タイミング';
+
+  @override
+  String get onDeviceSummaries => '要約';
+
+  @override
+  String get onDeviceSummariesOnIphone => 'このiPhoneで';
+
+  @override
+  String get onDeviceSummariesCloud => 'Omi Cloudで';
+
+  @override
+  String get onDeviceSaveLiveHours => 'このスマホで文字起こししてライブ時間を節約';
+
+  @override
+  String get onDeviceSaveLiveHoursSubtitle => '話者名やクラウドの精度が必要なときのために、ライブ時間を残しておけます。';
+
+  @override
+  String get onDeviceOnThisPhone => 'このスマホ';
+
+  @override
+  String get onDeviceAudioWaiting => 'スマホで待機中の音声';
+
+  @override
+  String get onDeviceRemoveModel => '音声モデルを削除';
+
+  @override
+  String get onDeviceRemoveModelTitle => '音声モデルを削除しますか？';
+
+  @override
+  String get onDeviceRemoveModelMessage => '再ダウンロードするかライブ時間が戻るまで、録音はこのスマホで待機します。';
+
+  @override
+  String get onDeviceRemove => '削除';
+
+  @override
+  String get onDeviceFinishSetupTitle => 'セットアップを完了して文字起こしを表示';
+
+  @override
+  String get onDeviceFinishSetupBody => '今月のライブ時間を使い切りました。Omiは録音を続け、音声をスマホに保存しています。音声モデルをダウンロードすると、たまった分を処理します。';
+
+  @override
+  String onDeviceDownloadSize(String size) {
+    return '$sizeのダウンロード';
+  }
+
+  @override
+  String get onDeviceUnsupportedBody => 'このスマホではまだ音声モデルを実行できません。ライブ時間が戻るかアップグレードするまで、音声は保存されます。';
+
+  @override
+  String get onDeviceEntrySubtitle => 'ライブ時間を使い切ったら、このスマホで文字起こし';
 }

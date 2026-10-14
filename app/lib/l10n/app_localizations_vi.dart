@@ -13214,4 +13214,294 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get connectAnAgentSubtitle => 'Nhận lời nhắc thiết lập cho Claude, ChatGPT, Codex hoặc bất kỳ tác nhân nào';
+
+  @override
+  String get onDeviceAtCapTitle => 'Bạn đã dùng hết phiên âm trực tiếp của tháng này';
+
+  @override
+  String get onDeviceAtCapBody => 'Omi vẫn đang ghi âm. Hãy chọn cách phiên âm cho thời gian còn lại của tháng.';
+
+  @override
+  String onDeviceLiveHoursReturn(String date) {
+    return 'Giờ trực tiếp sẽ có lại vào $date.';
+  }
+
+  @override
+  String get onDeviceTranscribeOnPhone => 'Phiên âm trên điện thoại này';
+
+  @override
+  String get onDeviceIncluded => 'Đã bao gồm';
+
+  @override
+  String get onDeviceOptionChargingBody =>
+      'Chạy khi điện thoại đang sạc nên hầu như không tốn pin. Bản ghi sẽ xuất hiện sau khi bạn cắm sạc.';
+
+  @override
+  String get onDeviceUpgradeBody =>
+      'Thêm giờ trực tiếp trong tháng này, kèm tên người nói và độ chính xác của đám mây.';
+
+  @override
+  String get onDeviceAtCapFooter => 'Chọn cách nào cũng không mất gì. Bạn có thể thay đổi trong Cài đặt › Phiên âm.';
+
+  @override
+  String onDeviceStepOf(int step, int total) {
+    return 'Bước $step/$total';
+  }
+
+  @override
+  String get onDeviceSetupBody =>
+      'Omi tải mô hình giọng nói một lần. Sau đó, bản ghi âm của bạn được chuyển thành văn bản ngay tại đây, không dùng giờ trực tiếp.';
+
+  @override
+  String get onDeviceSpeechModel => 'Mô hình giọng nói';
+
+  @override
+  String onDeviceMegabytes(String size) {
+    return '$size MB';
+  }
+
+  @override
+  String onDeviceDownloadingWifi(int percent) {
+    return 'Đang tải qua Wi-Fi · $percent%';
+  }
+
+  @override
+  String onDeviceDownloadingPercent(int percent) {
+    return 'Đang tải · $percent%';
+  }
+
+  @override
+  String onDeviceTimeLeft(String time) {
+    return 'Còn khoảng $time';
+  }
+
+  @override
+  String get onDeviceWaitingForWifi => 'Đang chờ Wi-Fi';
+
+  @override
+  String get onDeviceDownloadFailed => 'Chưa tải xong';
+
+  @override
+  String get onDeviceModelNotDownloaded => 'Chưa tải xuống';
+
+  @override
+  String onDeviceModelInstalled(String size) {
+    return 'Đã cài đặt · $size';
+  }
+
+  @override
+  String get onDeviceModelUnsupported => 'Chưa hỗ trợ trên điện thoại này';
+
+  @override
+  String get onDeviceSetupKeepRecording => 'Cứ tiếp tục ghi âm trong lúc tải. Không có gì phải chờ.';
+
+  @override
+  String get onDeviceSetupAudioStays => 'Âm thanh được giữ trên điện thoại cho đến khi phiên âm xong.';
+
+  @override
+  String get onDeviceWifiOnly => 'Chỉ tải qua Wi-Fi';
+
+  @override
+  String get onDeviceDownloadModel => 'Tải mô hình giọng nói';
+
+  @override
+  String get onDeviceScheduleTitle => 'Thời điểm phiên âm';
+
+  @override
+  String get onDeviceScheduleHeadline => 'Omi nên phiên âm khi nào?';
+
+  @override
+  String get onDeviceScheduleBody => 'Phiên âm theo đợt giúp tiết kiệm pin. Bạn có thể thay đổi bất cứ lúc nào.';
+
+  @override
+  String get onDeviceScheduleCharging => 'Khi đang sạc';
+
+  @override
+  String get onDeviceScheduleChargingBody => 'Bản ghi xuất hiện sau khi bạn cắm sạc, thường là qua đêm.';
+
+  @override
+  String get onDeviceBatteryAlmostNone => 'Pin: gần như không tốn';
+
+  @override
+  String get onDeviceScheduleHours => 'Vài giờ một lần';
+
+  @override
+  String get onDeviceScheduleHoursBody =>
+      'Xử lý bù theo từng đợt ngắn khi dùng pin, nên bản ghi hiếm khi chậm quá vài giờ.';
+
+  @override
+  String onDeviceBatteryPerDay(int percent) {
+    return 'Pin: khoảng $percent% mỗi ngày';
+  }
+
+  @override
+  String get onDeviceScheduleLive => 'Ngay khi bạn nói';
+
+  @override
+  String get onDeviceScheduleLiveBody => 'Văn bản xuất hiện trong vài giây, giống phiên âm trực tiếp.';
+
+  @override
+  String onDeviceBatteryPerHour(int percent) {
+    return 'Pin: khoảng $percent% mỗi giờ hội thoại';
+  }
+
+  @override
+  String onDeviceQueueWaiting(String duration) {
+    return '$duration đang chờ phiên âm';
+  }
+
+  @override
+  String get onDeviceQueueChargingBody =>
+      'Sẽ sẵn sàng sau khi bạn cắm sạc điện thoại. Việc ghi âm vẫn diễn ra bình thường.';
+
+  @override
+  String get onDeviceQueueHoursBody => 'Omi xử lý bù vài giờ một lần. Việc ghi âm vẫn diễn ra bình thường.';
+
+  @override
+  String get onDeviceQueueLowBatteryBody => 'Đang chờ sạc vì pin yếu. Việc ghi âm vẫn diễn ra bình thường.';
+
+  @override
+  String get onDeviceTranscribeNow => 'Phiên âm ngay';
+
+  @override
+  String get onDeviceUsesBattery => 'Tốn pin';
+
+  @override
+  String get onDeviceTranscribing => 'Đang phiên âm…';
+
+  @override
+  String get onDeviceWaitingForCharger => 'Đang chờ sạc';
+
+  @override
+  String get onDeviceWaitingToTranscribe => 'Đang chờ phiên âm';
+
+  @override
+  String get onDeviceWaitingForSetup => 'Đã lưu, đang chờ thiết lập';
+
+  @override
+  String get onDeviceTranscribedOnIphone => 'Đã phiên âm trên iPhone này';
+
+  @override
+  String get onDeviceTranscribedOnPhone => 'Đã phiên âm trên điện thoại này';
+
+  @override
+  String get onDeviceTranscribedSummarizedOnIphone => 'Đã phiên âm và tóm tắt trên iPhone này';
+
+  @override
+  String get onDeviceSummarizedByCloud => 'Được tóm tắt bởi Omi Cloud';
+
+  @override
+  String get onDeviceWhyPhoneTitle => 'Vì sao việc này được làm trên điện thoại của bạn';
+
+  @override
+  String get onDeviceWhyLiveHoursUsed =>
+      'Bạn đã dùng hết giờ trực tiếp của tháng này, nên Omi đã phiên âm cuộc trò chuyện này trên điện thoại này.';
+
+  @override
+  String get onDeviceWhySavingLiveHours => 'Bạn đã chọn phiên âm trên điện thoại này để tiết kiệm giờ trực tiếp.';
+
+  @override
+  String get onDeviceWhySummaryOnPhone => 'Bản tóm tắt cũng được viết trên iPhone này. Không có gì rời khỏi thiết bị.';
+
+  @override
+  String get onDeviceWhyNoSummary => 'Bạn giữ mọi thứ trên điện thoại này nên không có bản tóm tắt.';
+
+  @override
+  String get onDeviceWhyCloudTitle => 'Vì sao Omi Cloud viết bản tóm tắt này';
+
+  @override
+  String get onDeviceWhyCloudIphone =>
+      'iPhone này không thể tự tóm tắt (cần iPhone 15 Pro trở lên). Bản ghi được tạo trên điện thoại của bạn và chỉ phần văn bản được gửi đến Omi để tóm tắt. Việc này không dùng giờ trực tiếp của bạn.';
+
+  @override
+  String get onDeviceWhyCloudPhone =>
+      'Điện thoại này không thể tự tóm tắt. Bản ghi được tạo trên điện thoại của bạn và chỉ phần văn bản được gửi đến Omi để tóm tắt. Việc này không dùng giờ trực tiếp của bạn.';
+
+  @override
+  String get onDeviceRedoWithCloud => 'Làm lại với Omi Cloud';
+
+  @override
+  String get onDeviceRedoHint => 'Chi tiết hơn và có tên người nói. Dùng giờ trực tiếp.';
+
+  @override
+  String get onDeviceKeepEverything => 'Giữ mọi thứ trên điện thoại này';
+
+  @override
+  String get onDeviceKeepEverythingSubtitle => 'Chỉ bản ghi, không có tóm tắt';
+
+  @override
+  String get onDeviceLiveHours => 'Giờ trực tiếp';
+
+  @override
+  String onDeviceLiveHoursUsed(String used, String limit) {
+    return 'Đã dùng $used/$limit giờ';
+  }
+
+  @override
+  String onDeviceResets(String date) {
+    return 'Đặt lại vào $date';
+  }
+
+  @override
+  String get onDeviceGetMoreLiveHours => 'Thêm giờ trực tiếp';
+
+  @override
+  String get onDeviceAfterLiveHours => 'Sau khi hết giờ trực tiếp';
+
+  @override
+  String get onDeviceWhen => 'Khi nào';
+
+  @override
+  String get onDeviceSummaries => 'Tóm tắt';
+
+  @override
+  String get onDeviceSummariesOnIphone => 'Trên iPhone này';
+
+  @override
+  String get onDeviceSummariesCloud => 'Bởi Omi Cloud';
+
+  @override
+  String get onDeviceSaveLiveHours => 'Phiên âm trên điện thoại này để tiết kiệm giờ trực tiếp';
+
+  @override
+  String get onDeviceSaveLiveHoursSubtitle =>
+      'Giờ trực tiếp được để dành cho lúc bạn cần tên người nói và độ chính xác của đám mây.';
+
+  @override
+  String get onDeviceOnThisPhone => 'Trên điện thoại này';
+
+  @override
+  String get onDeviceAudioWaiting => 'Âm thanh đang chờ trên điện thoại';
+
+  @override
+  String get onDeviceRemoveModel => 'Xóa mô hình giọng nói';
+
+  @override
+  String get onDeviceRemoveModelTitle => 'Xóa mô hình giọng nói?';
+
+  @override
+  String get onDeviceRemoveModelMessage =>
+      'Bản ghi âm sẽ chờ trên điện thoại này cho đến khi bạn tải lại hoặc có lại giờ trực tiếp.';
+
+  @override
+  String get onDeviceRemove => 'Xóa';
+
+  @override
+  String get onDeviceFinishSetupTitle => 'Hoàn tất thiết lập để xem bản ghi';
+
+  @override
+  String get onDeviceFinishSetupBody =>
+      'Bạn đã dùng hết giờ trực tiếp của tháng này. Omi vẫn đang ghi âm và lưu âm thanh trên điện thoại của bạn. Hãy tải mô hình giọng nói để xử lý bù.';
+
+  @override
+  String onDeviceDownloadSize(String size) {
+    return 'Tải xuống $size';
+  }
+
+  @override
+  String get onDeviceUnsupportedBody =>
+      'Điện thoại này chưa chạy được mô hình giọng nói. Âm thanh vẫn được lưu cho đến khi có lại giờ trực tiếp hoặc bạn nâng cấp.';
+
+  @override
+  String get onDeviceEntrySubtitle => 'Khi hết giờ trực tiếp, phiên âm trên điện thoại này';
 }

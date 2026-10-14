@@ -13251,4 +13251,297 @@ class AppLocalizationsBe extends AppLocalizations {
 
   @override
   String get connectAnAgentSubtitle => 'Атрымайце падказку для наладкі Claude, ChatGPT, Codex або любога агента';
+
+  @override
+  String get onDeviceAtCapTitle => 'Вы выкарысталі транскрыпцыю ў рэальным часе на гэты месяц';
+
+  @override
+  String get onDeviceAtCapBody => 'Omi працягвае запіс. Выберыце, як будзе транскрыбавацца рэшта месяца.';
+
+  @override
+  String onDeviceLiveHoursReturn(String date) {
+    return 'Гадзіны ў рэальным часе вернуцца $date.';
+  }
+
+  @override
+  String get onDeviceTranscribeOnPhone => 'Транскрыбаваць на гэтым тэлефоне';
+
+  @override
+  String get onDeviceIncluded => 'Уключана';
+
+  @override
+  String get onDeviceOptionChargingBody =>
+      'Працуе, калі тэлефон зараджаецца, таму амаль не расходуе батарэю. Стэнаграмы з\'явяцца пасля падключэння да зарадкі.';
+
+  @override
+  String get onDeviceUpgradeBody =>
+      'Больш гадзін у рэальным часе ў гэтым месяцы, з імёнамі суразмоўцаў і дакладнасцю воблака.';
+
+  @override
+  String get onDeviceAtCapFooter =>
+      'У любым выпадку нічога не страціцца. Гэта можна змяніць у Параметры › Транскрыпцыя.';
+
+  @override
+  String onDeviceStepOf(int step, int total) {
+    return 'Крок $step з $total';
+  }
+
+  @override
+  String get onDeviceSetupBody =>
+      'Omi адзін раз спампоўвае маўленчую мадэль. Пасля гэтага вашы запісы ператвараюцца ў тэкст прама тут, не расходуючы гадзіны ў рэальным часе.';
+
+  @override
+  String get onDeviceSpeechModel => 'Маўленчая мадэль';
+
+  @override
+  String onDeviceMegabytes(String size) {
+    return '$size МБ';
+  }
+
+  @override
+  String onDeviceDownloadingWifi(int percent) {
+    return 'Спампоўванне праз Wi-Fi · $percent%';
+  }
+
+  @override
+  String onDeviceDownloadingPercent(int percent) {
+    return 'Спампоўванне · $percent%';
+  }
+
+  @override
+  String onDeviceTimeLeft(String time) {
+    return 'Засталося каля $time';
+  }
+
+  @override
+  String get onDeviceWaitingForWifi => 'Чаканне Wi-Fi';
+
+  @override
+  String get onDeviceDownloadFailed => 'Спампоўванне не завяршылася';
+
+  @override
+  String get onDeviceModelNotDownloaded => 'Не спампавана';
+
+  @override
+  String onDeviceModelInstalled(String size) {
+    return 'Усталявана · $size';
+  }
+
+  @override
+  String get onDeviceModelUnsupported => 'Пакуль недаступна на гэтым тэлефоне';
+
+  @override
+  String get onDeviceSetupKeepRecording => 'Працягвайце запіс, пакуль ідзе спампоўванне. Нішто гэтага не чакае.';
+
+  @override
+  String get onDeviceSetupAudioStays => 'Аўдыя застаецца на вашым тэлефоне, пакуль не будзе транскрыбавана.';
+
+  @override
+  String get onDeviceWifiOnly => 'Спампоўваць толькі праз Wi-Fi';
+
+  @override
+  String get onDeviceDownloadModel => 'Спампаваць маўленчую мадэль';
+
+  @override
+  String get onDeviceScheduleTitle => 'Калі транскрыбаваць';
+
+  @override
+  String get onDeviceScheduleHeadline => 'Калі Omi транскрыбаваць?';
+
+  @override
+  String get onDeviceScheduleBody => 'Транскрыпцыя партыямі эканоміць батарэю. Гэта можна змяніць у любы час.';
+
+  @override
+  String get onDeviceScheduleCharging => 'Падчас зарадкі';
+
+  @override
+  String get onDeviceScheduleChargingBody => 'Стэнаграмы з\'яўляюцца пасля падключэння да зарадкі, звычайна за ноч.';
+
+  @override
+  String get onDeviceBatteryAlmostNone => 'Батарэя: амаль нічога';
+
+  @override
+  String get onDeviceScheduleHours => 'Кожныя некалькі гадзін';
+
+  @override
+  String get onDeviceScheduleHoursBody =>
+      'Даганяе кароткімі сеансамі ад батарэі, таму стэнаграмы рэдка адстаюць больш чым на некалькі гадзін.';
+
+  @override
+  String onDeviceBatteryPerDay(int percent) {
+    return 'Батарэя: каля $percent% у дзень';
+  }
+
+  @override
+  String get onDeviceScheduleLive => 'Падчас размовы';
+
+  @override
+  String get onDeviceScheduleLiveBody => 'Тэкст з\'яўляецца за лічаныя секунды, як пры транскрыпцыі ў рэальным часе.';
+
+  @override
+  String onDeviceBatteryPerHour(int percent) {
+    return 'Батарэя: каля $percent% за гадзіну размовы';
+  }
+
+  @override
+  String onDeviceQueueWaiting(String duration) {
+    return '$duration чакае транскрыпцыі';
+  }
+
+  @override
+  String get onDeviceQueueChargingBody =>
+      'Яны будуць гатовыя, калі вы падключыце тэлефон да зарадкі. Запіс працягваецца як звычайна.';
+
+  @override
+  String get onDeviceQueueHoursBody => 'Omi даганяе кожныя некалькі гадзін. Запіс працягваецца як звычайна.';
+
+  @override
+  String get onDeviceQueueLowBatteryBody =>
+      'Чакаецца зарадка, бо батарэя разраджаецца. Запіс працягваецца як звычайна.';
+
+  @override
+  String get onDeviceTranscribeNow => 'Транскрыбаваць зараз';
+
+  @override
+  String get onDeviceUsesBattery => 'Расходуе батарэю';
+
+  @override
+  String get onDeviceTranscribing => 'Транскрыбаванне…';
+
+  @override
+  String get onDeviceWaitingForCharger => 'Чакае зарадкі';
+
+  @override
+  String get onDeviceWaitingToTranscribe => 'Чакае транскрыпцыі';
+
+  @override
+  String get onDeviceWaitingForSetup => 'Захавана, чакае наладжвання';
+
+  @override
+  String get onDeviceTranscribedOnIphone => 'Транскрыбавана на гэтым iPhone';
+
+  @override
+  String get onDeviceTranscribedOnPhone => 'Транскрыбавана на гэтым тэлефоне';
+
+  @override
+  String get onDeviceTranscribedSummarizedOnIphone => 'Транскрыбавана і абагульнена на гэтым iPhone';
+
+  @override
+  String get onDeviceSummarizedByCloud => 'Зводку зрабіў Omi Cloud';
+
+  @override
+  String get onDeviceWhyPhoneTitle => 'Чаму гэта зроблена на вашым тэлефоне';
+
+  @override
+  String get onDeviceWhyLiveHoursUsed =>
+      'Вы выкарысталі гадзіны ў рэальным часе на гэты месяц, таму Omi транскрыбаваў гэту размову на гэтым тэлефоне.';
+
+  @override
+  String get onDeviceWhySavingLiveHours =>
+      'Вы выбралі транскрыпцыю на гэтым тэлефоне, каб эканоміць гадзіны ў рэальным часе.';
+
+  @override
+  String get onDeviceWhySummaryOnPhone => 'Зводка таксама створана на гэтым iPhone. Нішто не пакінула прыладу.';
+
+  @override
+  String get onDeviceWhyNoSummary => 'Вы захоўваеце ўсё на гэтым тэлефоне, таму зводкі няма.';
+
+  @override
+  String get onDeviceWhyCloudTitle => 'Чаму гэту зводку напісаў Omi Cloud';
+
+  @override
+  String get onDeviceWhyCloudIphone =>
+      'Гэты iPhone не можа сам ствараць зводкі (для гэтага патрэбны iPhone 15 Pro або навейшы). Стэнаграма створана на вашым тэлефоне, і ў Omi для зводкі адпраўлены толькі яе тэкст. Гадзіны ў рэальным часе на гэта не расходуюцца.';
+
+  @override
+  String get onDeviceWhyCloudPhone =>
+      'Гэты тэлефон не можа сам ствараць зводкі. Стэнаграма створана на вашым тэлефоне, і ў Omi для зводкі адпраўлены толькі яе тэкст. Гадзіны ў рэальным часе на гэта не расходуюцца.';
+
+  @override
+  String get onDeviceRedoWithCloud => 'Перарабіць у Omi Cloud';
+
+  @override
+  String get onDeviceRedoHint => 'Больш дэталяў і імёны суразмоўцаў. Расходуе гадзіны ў рэальным часе.';
+
+  @override
+  String get onDeviceKeepEverything => 'Захоўваць усё на гэтым тэлефоне';
+
+  @override
+  String get onDeviceKeepEverythingSubtitle => 'Толькі стэнаграмы, без зводак';
+
+  @override
+  String get onDeviceLiveHours => 'Гадзіны ў рэальным часе';
+
+  @override
+  String onDeviceLiveHoursUsed(String used, String limit) {
+    return 'Выкарыстана $used з $limit гадз.';
+  }
+
+  @override
+  String onDeviceResets(String date) {
+    return 'Абнаўленне $date';
+  }
+
+  @override
+  String get onDeviceGetMoreLiveHours => 'Атрымаць больш гадзін';
+
+  @override
+  String get onDeviceAfterLiveHours => 'Калі гадзіны ў рэальным часе скончацца';
+
+  @override
+  String get onDeviceWhen => 'Калі';
+
+  @override
+  String get onDeviceSummaries => 'Зводкі';
+
+  @override
+  String get onDeviceSummariesOnIphone => 'На гэтым iPhone';
+
+  @override
+  String get onDeviceSummariesCloud => 'Праз Omi Cloud';
+
+  @override
+  String get onDeviceSaveLiveHours => 'Транскрыбаваць на гэтым тэлефоне, каб эканоміць гадзіны ў рэальным часе';
+
+  @override
+  String get onDeviceSaveLiveHoursSubtitle =>
+      'Гадзіны ў рэальным часе застануцца для выпадкаў, калі патрэбныя імёны суразмоўцаў і дакладнасць воблака.';
+
+  @override
+  String get onDeviceOnThisPhone => 'На гэтым тэлефоне';
+
+  @override
+  String get onDeviceAudioWaiting => 'Аўдыя ў чарзе на тэлефоне';
+
+  @override
+  String get onDeviceRemoveModel => 'Выдаліць маўленчую мадэль';
+
+  @override
+  String get onDeviceRemoveModelTitle => 'Выдаліць маўленчую мадэль?';
+
+  @override
+  String get onDeviceRemoveModelMessage =>
+      'Запісы будуць чакаць на гэтым тэлефоне, пакуль вы зноў не спампуеце мадэль або не вернуцца гадзіны ў рэальным часе.';
+
+  @override
+  String get onDeviceRemove => 'Выдаліць';
+
+  @override
+  String get onDeviceFinishSetupTitle => 'Завяршыце наладжванне, каб убачыць стэнаграмы';
+
+  @override
+  String get onDeviceFinishSetupBody =>
+      'Вы выкарысталі гадзіны ў рэальным часе на гэты месяц. Omi працягвае запіс і захоўвае аўдыя на вашым тэлефоне. Спампуйце маўленчую мадэль, і яна ўсё дагоніць.';
+
+  @override
+  String onDeviceDownloadSize(String size) {
+    return 'Спампоўка $size';
+  }
+
+  @override
+  String get onDeviceUnsupportedBody =>
+      'Гэты тэлефон пакуль не можа запускаць маўленчую мадэль. Аўдыя застаецца захаваным, пакуль не вернуцца гадзіны ў рэальным часе або пакуль вы не палепшыце тарыф.';
+
+  @override
+  String get onDeviceEntrySubtitle => 'Калі гадзіны ў рэальным часе скончацца, транскрыбаваць на гэтым тэлефоне';
 }

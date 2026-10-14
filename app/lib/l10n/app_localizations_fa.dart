@@ -13211,4 +13211,292 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String get connectAnAgentSubtitle => 'یک پرامپت راه‌اندازی برای Claude، ChatGPT، Codex یا هر ایجنتی بگیرید';
+
+  @override
+  String get onDeviceAtCapTitle => 'رونویسی زندهٔ این ماه را مصرف کرده‌اید';
+
+  @override
+  String get onDeviceAtCapBody => 'Omi همچنان در حال ضبط است. انتخاب کنید بقیهٔ این ماه چطور رونویسی شود.';
+
+  @override
+  String onDeviceLiveHoursReturn(String date) {
+    return 'ساعت‌های زنده در $date برمی‌گردند.';
+  }
+
+  @override
+  String get onDeviceTranscribeOnPhone => 'رونویسی روی همین گوشی';
+
+  @override
+  String get onDeviceIncluded => 'شامل';
+
+  @override
+  String get onDeviceOptionChargingBody =>
+      'هنگام شارژ گوشی اجرا می‌شود، پس تقریباً باتری مصرف نمی‌کند. رونوشت‌ها پس از وصل‌کردن شارژر نمایش داده می‌شوند.';
+
+  @override
+  String get onDeviceUpgradeBody => 'ساعت‌های زندهٔ بیشتر در این ماه، همراه با نام گویندگان و دقت ابری.';
+
+  @override
+  String get onDeviceAtCapFooter => 'در هر صورت چیزی از دست نمی‌رود. می‌توانید این را در تنظیمات › رونویسی تغییر دهید.';
+
+  @override
+  String onDeviceStepOf(int step, int total) {
+    return 'مرحلهٔ $step از $total';
+  }
+
+  @override
+  String get onDeviceSetupBody =>
+      'Omi یک بار مدل گفتار را دانلود می‌کند. پس از آن، ضبط‌های شما همین‌جا به متن تبدیل می‌شوند، بدون مصرف ساعت‌های زنده.';
+
+  @override
+  String get onDeviceSpeechModel => 'مدل گفتار';
+
+  @override
+  String onDeviceMegabytes(String size) {
+    return '$size MB';
+  }
+
+  @override
+  String onDeviceDownloadingWifi(int percent) {
+    return 'در حال دانلود با Wi-Fi · $percent%';
+  }
+
+  @override
+  String onDeviceDownloadingPercent(int percent) {
+    return 'در حال دانلود · $percent%';
+  }
+
+  @override
+  String onDeviceTimeLeft(String time) {
+    return 'حدود $time باقی مانده';
+  }
+
+  @override
+  String get onDeviceWaitingForWifi => 'در انتظار Wi-Fi';
+
+  @override
+  String get onDeviceDownloadFailed => 'دانلود کامل نشد';
+
+  @override
+  String get onDeviceModelNotDownloaded => 'دانلود نشده';
+
+  @override
+  String onDeviceModelInstalled(String size) {
+    return 'نصب‌شده · $size';
+  }
+
+  @override
+  String get onDeviceModelUnsupported => 'هنوز روی این گوشی در دسترس نیست';
+
+  @override
+  String get onDeviceSetupKeepRecording => 'در حین دانلود به ضبط ادامه دهید. هیچ چیز منتظر آن نمی‌ماند.';
+
+  @override
+  String get onDeviceSetupAudioStays => 'صدا تا زمان رونویسی روی گوشی شما می‌ماند.';
+
+  @override
+  String get onDeviceWifiOnly => 'دانلود فقط با Wi-Fi';
+
+  @override
+  String get onDeviceDownloadModel => 'دانلود مدل گفتار';
+
+  @override
+  String get onDeviceScheduleTitle => 'زمان رونویسی';
+
+  @override
+  String get onDeviceScheduleHeadline => 'Omi چه زمانی رونویسی کند؟';
+
+  @override
+  String get onDeviceScheduleBody =>
+      'رونویسی دسته‌ای در مصرف باتری صرفه‌جویی می‌کند. هر زمان بخواهید می‌توانید این را تغییر دهید.';
+
+  @override
+  String get onDeviceScheduleCharging => 'هنگام شارژ';
+
+  @override
+  String get onDeviceScheduleChargingBody => 'رونوشت‌ها پس از وصل‌کردن شارژر، معمولاً در طول شب، نمایش داده می‌شوند.';
+
+  @override
+  String get onDeviceBatteryAlmostNone => 'باتری: تقریباً هیچ';
+
+  @override
+  String get onDeviceScheduleHours => 'هر چند ساعت یک بار';
+
+  @override
+  String get onDeviceScheduleHoursBody =>
+      'با باتری در نوبت‌های کوتاه عقب‌ماندگی را جبران می‌کند، پس رونوشت‌ها به‌ندرت بیش از چند ساعت عقب می‌مانند.';
+
+  @override
+  String onDeviceBatteryPerDay(int percent) {
+    return 'باتری: حدود $percent% در روز';
+  }
+
+  @override
+  String get onDeviceScheduleLive => 'همزمان با صحبت';
+
+  @override
+  String get onDeviceScheduleLiveBody => 'متن ظرف چند ثانیه نمایش داده می‌شود، مانند رونویسی زنده.';
+
+  @override
+  String onDeviceBatteryPerHour(int percent) {
+    return 'باتری: حدود $percent% به ازای هر ساعت گفت‌وگو';
+  }
+
+  @override
+  String onDeviceQueueWaiting(String duration) {
+    return '$duration در انتظار رونویسی';
+  }
+
+  @override
+  String get onDeviceQueueChargingBody => 'پس از وصل‌کردن گوشی به شارژر آماده می‌شوند. ضبط به‌طور عادی ادامه دارد.';
+
+  @override
+  String get onDeviceQueueHoursBody => 'Omi هر چند ساعت یک بار عقب‌ماندگی را جبران می‌کند. ضبط به‌طور عادی ادامه دارد.';
+
+  @override
+  String get onDeviceQueueLowBatteryBody => 'به‌دلیل کم بودن باتری در انتظار شارژر است. ضبط به‌طور عادی ادامه دارد.';
+
+  @override
+  String get onDeviceTranscribeNow => 'رونویسی همین حالا';
+
+  @override
+  String get onDeviceUsesBattery => 'باتری مصرف می‌کند';
+
+  @override
+  String get onDeviceTranscribing => 'در حال رونویسی…';
+
+  @override
+  String get onDeviceWaitingForCharger => 'در انتظار شارژر';
+
+  @override
+  String get onDeviceWaitingToTranscribe => 'در انتظار رونویسی';
+
+  @override
+  String get onDeviceWaitingForSetup => 'ذخیره شد، در انتظار راه‌اندازی';
+
+  @override
+  String get onDeviceTranscribedOnIphone => 'رونویسی‌شده روی همین iPhone';
+
+  @override
+  String get onDeviceTranscribedOnPhone => 'رونویسی‌شده روی همین گوشی';
+
+  @override
+  String get onDeviceTranscribedSummarizedOnIphone => 'رونویسی و خلاصه‌شده روی همین iPhone';
+
+  @override
+  String get onDeviceSummarizedByCloud => 'خلاصه‌شده توسط Omi Cloud';
+
+  @override
+  String get onDeviceWhyPhoneTitle => 'چرا این کار روی گوشی شما انجام شد';
+
+  @override
+  String get onDeviceWhyLiveHoursUsed =>
+      'ساعت‌های زندهٔ این ماه را مصرف کرده‌اید، پس Omi این گفت‌وگو را روی همین گوشی رونویسی کرد.';
+
+  @override
+  String get onDeviceWhySavingLiveHours => 'شما رونویسی روی همین گوشی را برای صرفه‌جویی در ساعت‌های زنده انتخاب کردید.';
+
+  @override
+  String get onDeviceWhySummaryOnPhone => 'خلاصه هم روی همین iPhone نوشته شد. هیچ چیز از دستگاه خارج نشد.';
+
+  @override
+  String get onDeviceWhyNoSummary => 'همه چیز را روی همین گوشی نگه می‌دارید، پس خلاصه‌ای وجود ندارد.';
+
+  @override
+  String get onDeviceWhyCloudTitle => 'چرا Omi Cloud این خلاصه را نوشت';
+
+  @override
+  String get onDeviceWhyCloudIphone =>
+      'این iPhone به‌تنهایی نمی‌تواند خلاصه بنویسد (برای این کار iPhone 15 Pro یا جدیدتر لازم است). رونوشت روی گوشی شما ساخته شد و فقط متن آن برای خلاصه‌سازی به Omi ارسال شد. این کار از ساعت‌های زندهٔ شما کم نمی‌کند.';
+
+  @override
+  String get onDeviceWhyCloudPhone =>
+      'این گوشی به‌تنهایی نمی‌تواند خلاصه بنویسد. رونوشت روی گوشی شما ساخته شد و فقط متن آن برای خلاصه‌سازی به Omi ارسال شد. این کار از ساعت‌های زندهٔ شما کم نمی‌کند.';
+
+  @override
+  String get onDeviceRedoWithCloud => 'انجام دوباره با Omi Cloud';
+
+  @override
+  String get onDeviceRedoHint => 'جزئیات بیشتر و نام گویندگان. از ساعت‌های زنده استفاده می‌کند.';
+
+  @override
+  String get onDeviceKeepEverything => 'نگه‌داشتن همه چیز روی همین گوشی';
+
+  @override
+  String get onDeviceKeepEverythingSubtitle => 'فقط رونوشت، بدون خلاصه';
+
+  @override
+  String get onDeviceLiveHours => 'ساعت‌های زنده';
+
+  @override
+  String onDeviceLiveHoursUsed(String used, String limit) {
+    return '$used از $limit ساعت مصرف شده';
+  }
+
+  @override
+  String onDeviceResets(String date) {
+    return 'تمدید در $date';
+  }
+
+  @override
+  String get onDeviceGetMoreLiveHours => 'دریافت ساعت‌های زندهٔ بیشتر';
+
+  @override
+  String get onDeviceAfterLiveHours => 'پس از تمام شدن ساعت‌های زنده';
+
+  @override
+  String get onDeviceWhen => 'زمان';
+
+  @override
+  String get onDeviceSummaries => 'خلاصه‌ها';
+
+  @override
+  String get onDeviceSummariesOnIphone => 'روی همین iPhone';
+
+  @override
+  String get onDeviceSummariesCloud => 'توسط Omi Cloud';
+
+  @override
+  String get onDeviceSaveLiveHours => 'رونویسی روی همین گوشی برای صرفه‌جویی در ساعت‌های زنده';
+
+  @override
+  String get onDeviceSaveLiveHoursSubtitle => 'ساعت‌های زنده برای زمانی می‌مانند که نام گویندگان و دقت ابری می‌خواهید.';
+
+  @override
+  String get onDeviceOnThisPhone => 'روی همین گوشی';
+
+  @override
+  String get onDeviceAudioWaiting => 'صدای در انتظار روی گوشی';
+
+  @override
+  String get onDeviceRemoveModel => 'حذف مدل گفتار';
+
+  @override
+  String get onDeviceRemoveModelTitle => 'مدل گفتار حذف شود؟';
+
+  @override
+  String get onDeviceRemoveModelMessage =>
+      'ضبط‌ها روی همین گوشی منتظر می‌مانند تا دوباره آن را دانلود کنید یا ساعت‌های زنده برگردند.';
+
+  @override
+  String get onDeviceRemove => 'حذف';
+
+  @override
+  String get onDeviceFinishSetupTitle => 'برای دیدن رونوشت‌ها راه‌اندازی را تمام کنید';
+
+  @override
+  String get onDeviceFinishSetupBody =>
+      'ساعت‌های زندهٔ این ماه را مصرف کرده‌اید. Omi همچنان ضبط می‌کند و صدا را روی گوشی شما ذخیره می‌کند. مدل گفتار را دانلود کنید تا عقب‌ماندگی جبران شود.';
+
+  @override
+  String onDeviceDownloadSize(String size) {
+    return 'دانلود $size';
+  }
+
+  @override
+  String get onDeviceUnsupportedBody =>
+      'این گوشی هنوز نمی‌تواند مدل گفتار را اجرا کند. صدا ذخیره می‌ماند تا ساعت‌های زنده برگردند یا اشتراک خود را ارتقا دهید.';
+
+  @override
+  String get onDeviceEntrySubtitle => 'وقتی ساعت‌های زنده تمام شد، روی همین گوشی رونویسی شود';
 }

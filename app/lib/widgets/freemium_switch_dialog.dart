@@ -2,13 +2,20 @@ import 'package:flutter/material.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:provider/provider.dart';
 
+import 'package:omi/pages/on_device/on_device_at_cap_sheet.dart';
+import 'package:omi/pages/on_device/on_device_queue_banner.dart';
+import 'package:omi/pages/on_device/on_device_settings_page.dart';
+import 'package:omi/pages/on_device/on_device_setup_page.dart';
 import 'package:omi/pages/paywall/paywall_router.dart';
 import 'package:omi/pages/settings/widgets/plans_sheet.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/usage_provider.dart';
 import 'package:omi/services/capture/freemium_threshold_tracker.dart';
+import 'package:omi/services/experiments/on_device_overflow_gate.dart';
 import 'package:omi/services/freemium_transcription_service.dart';
+import 'package:omi/services/on_device/on_device_transcription_controller.dart';
 import 'package:omi/ui/ui.dart';
+import 'package:omi/utils/other/temp.dart';
 
 /// Prompt id of the plans sheet offered when the Plus meter runs low.
 const String kFreemiumPlansPromptId = 'freemium-plans';
@@ -53,6 +60,8 @@ class FreemiumSwitchHandler {
       // Still relevant when it is finally shown (the plan may have changed meanwhile).
       canShowNow: () => _eligible(context, captureProvider),
       show: (promptContext) async {
+        if (await _offerOnDevice(promptContext)) return;
+        if (!promptContext.mounted) return;
         if (await PaywallRouter.openVariant(promptContext, source: 'freemium_switch')) return;
         if (!promptContext.mounted) return;
         final plan = promptContext.read<UsageProvider>().subscription?.subscription.plan.wireName ?? 'unknown';
@@ -67,6 +76,29 @@ class FreemiumSwitchHandler {
         );
       },
     );
+  }
+
+  /// With the on-device flag on and live hours used up, offers transcribing on this phone before
+  /// the plans sheet. Returns true when it handled the prompt.
+  Future<bool> _offerOnDevice(BuildContext context) async {
+    if (!context.read<UsageProvider>().isOutOfCredits || !await OnDeviceOverflowGate.read()) return false;
+    if (!context.mounted) return false;
+    final controller = OnDeviceTranscriptionController.instance;
+    await controller.ensureLoaded();
+    if (!context.mounted) return false;
+    final choice =
+        await showOnDeviceAtCapSheet(context, liveHoursReturnOn: OnDeviceLiveHours.nextReset(DateTime.now()));
+    if (!context.mounted || choice == null) return true;
+    switch (choice) {
+      case OnDeviceAtCapChoice.transcribeOnPhone:
+        await controller.updateSettings(controller.settings.copyWith(enabled: true));
+        if (context.mounted && !controller.model.status.isInstalled) {
+          await routeToPage(context, const OnDeviceSetupPage());
+        }
+      case OnDeviceAtCapChoice.upgrade:
+        openOnDeviceUpgrade(context);
+    }
+    return true;
   }
 
   /// Legacy method name for backward compatibility

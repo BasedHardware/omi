@@ -13245,4 +13245,294 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get connectAnAgentSubtitle => 'Iegūstiet iestatīšanas uzvedni Claude, ChatGPT, Codex vai jebkuram aģentam';
+
+  @override
+  String get onDeviceAtCapTitle => 'Šī mēneša tiešraides transkripcija ir izlietota';
+
+  @override
+  String get onDeviceAtCapBody => 'Omi joprojām ieraksta. Izvēlieties, kā transkribēt atlikušo mēneša daļu.';
+
+  @override
+  String onDeviceLiveHoursReturn(String date) {
+    return 'Tiešraides stundas atgriezīsies $date.';
+  }
+
+  @override
+  String get onDeviceTranscribeOnPhone => 'Transkribēt šajā tālrunī';
+
+  @override
+  String get onDeviceIncluded => 'Iekļauts';
+
+  @override
+  String get onDeviceOptionChargingBody =>
+      'Darbojas, kamēr tālrunis lādējas, tāpēc gandrīz netērē akumulatoru. Transkripcijas parādās pēc lādētāja pievienošanas.';
+
+  @override
+  String get onDeviceUpgradeBody => 'Vairāk tiešraides stundu šomēnes, ar nosauktiem runātājiem un mākoņa precizitāti.';
+
+  @override
+  String get onDeviceAtCapFooter => 'Nekas netiek zaudēts. To var mainīt sadaļā Iestatījumi › Transkripcija.';
+
+  @override
+  String onDeviceStepOf(int step, int total) {
+    return '$step. darbība no $total';
+  }
+
+  @override
+  String get onDeviceSetupBody =>
+      'Omi vienreiz lejupielādē runas modeli. Pēc tam jūsu ieraksti tiek pārvērsti tekstā tepat, neizmantojot tiešraides stundas.';
+
+  @override
+  String get onDeviceSpeechModel => 'Runas modelis';
+
+  @override
+  String onDeviceMegabytes(String size) {
+    return '$size MB';
+  }
+
+  @override
+  String onDeviceDownloadingWifi(int percent) {
+    return 'Lejupielādē, izmantojot Wi-Fi · $percent%';
+  }
+
+  @override
+  String onDeviceDownloadingPercent(int percent) {
+    return 'Lejupielādē · $percent%';
+  }
+
+  @override
+  String onDeviceTimeLeft(String time) {
+    return 'Atlicis aptuveni $time';
+  }
+
+  @override
+  String get onDeviceWaitingForWifi => 'Gaida Wi-Fi';
+
+  @override
+  String get onDeviceDownloadFailed => 'Lejupielāde netika pabeigta';
+
+  @override
+  String get onDeviceModelNotDownloaded => 'Nav lejupielādēts';
+
+  @override
+  String onDeviceModelInstalled(String size) {
+    return 'Instalēts · $size';
+  }
+
+  @override
+  String get onDeviceModelUnsupported => 'Šajā tālrunī vēl nav pieejams';
+
+  @override
+  String get onDeviceSetupKeepRecording => 'Turpiniet ierakstīt, kamēr notiek lejupielāde. Nekas uz to negaida.';
+
+  @override
+  String get onDeviceSetupAudioStays => 'Audio paliek jūsu tālrunī, līdz tas tiek transkribēts.';
+
+  @override
+  String get onDeviceWifiOnly => 'Lejupielādēt tikai ar Wi-Fi';
+
+  @override
+  String get onDeviceDownloadModel => 'Lejupielādēt runas modeli';
+
+  @override
+  String get onDeviceScheduleTitle => 'Kad transkribēt';
+
+  @override
+  String get onDeviceScheduleHeadline => 'Kad Omi jātranskribē?';
+
+  @override
+  String get onDeviceScheduleBody => 'Transkribēšana partijās taupa akumulatoru. To var mainīt jebkurā laikā.';
+
+  @override
+  String get onDeviceScheduleCharging => 'Lādēšanas laikā';
+
+  @override
+  String get onDeviceScheduleChargingBody => 'Transkripcijas parādās pēc lādētāja pievienošanas, parasti naktī.';
+
+  @override
+  String get onDeviceBatteryAlmostNone => 'Akumulators: gandrīz netiek tērēts';
+
+  @override
+  String get onDeviceScheduleHours => 'Ik pēc dažām stundām';
+
+  @override
+  String get onDeviceScheduleHoursBody =>
+      'Īsos posmos panāk nokavēto, izmantojot akumulatoru, tāpēc transkripcijas reti kavējas vairāk par dažām stundām.';
+
+  @override
+  String onDeviceBatteryPerDay(int percent) {
+    return 'Akumulators: aptuveni $percent% dienā';
+  }
+
+  @override
+  String get onDeviceScheduleLive => 'Runājot';
+
+  @override
+  String get onDeviceScheduleLiveBody => 'Teksts parādās dažu sekunžu laikā, kā tiešraides transkripcijā.';
+
+  @override
+  String onDeviceBatteryPerHour(int percent) {
+    return 'Akumulators: aptuveni $percent% sarunas stundā';
+  }
+
+  @override
+  String onDeviceQueueWaiting(String duration) {
+    return '$duration gaida transkribēšanu';
+  }
+
+  @override
+  String get onDeviceQueueChargingBody =>
+      'Tie būs gatavi pēc tālruņa pievienošanas lādētājam. Ierakstīšana turpinās kā parasti.';
+
+  @override
+  String get onDeviceQueueHoursBody => 'Omi panāk nokavēto ik pēc dažām stundām. Ierakstīšana turpinās kā parasti.';
+
+  @override
+  String get onDeviceQueueLowBatteryBody =>
+      'Gaida lādētāju, jo akumulatora līmenis ir zems. Ierakstīšana turpinās kā parasti.';
+
+  @override
+  String get onDeviceTranscribeNow => 'Transkribēt tagad';
+
+  @override
+  String get onDeviceUsesBattery => 'Tērē akumulatoru';
+
+  @override
+  String get onDeviceTranscribing => 'Transkribē…';
+
+  @override
+  String get onDeviceWaitingForCharger => 'Gaida lādētāju';
+
+  @override
+  String get onDeviceWaitingToTranscribe => 'Gaida transkribēšanu';
+
+  @override
+  String get onDeviceWaitingForSetup => 'Saglabāts, gaida iestatīšanu';
+
+  @override
+  String get onDeviceTranscribedOnIphone => 'Transkribēts šajā iPhone';
+
+  @override
+  String get onDeviceTranscribedOnPhone => 'Transkribēts šajā tālrunī';
+
+  @override
+  String get onDeviceTranscribedSummarizedOnIphone => 'Transkribēts un apkopots šajā iPhone';
+
+  @override
+  String get onDeviceSummarizedByCloud => 'Apkopoja Omi Cloud';
+
+  @override
+  String get onDeviceWhyPhoneTitle => 'Kāpēc tas tika veikts jūsu tālrunī';
+
+  @override
+  String get onDeviceWhyLiveHoursUsed =>
+      'Šī mēneša tiešraides stundas ir izlietotas, tāpēc Omi transkribēja šo sarunu šajā tālrunī.';
+
+  @override
+  String get onDeviceWhySavingLiveHours => 'Jūs izvēlējāties transkribēt šajā tālrunī, lai taupītu tiešraides stundas.';
+
+  @override
+  String get onDeviceWhySummaryOnPhone => 'Arī kopsavilkums tika uzrakstīts šajā iPhone. Nekas neatstāja ierīci.';
+
+  @override
+  String get onDeviceWhyNoSummary => 'Jūs visu glabājat šajā tālrunī, tāpēc kopsavilkuma nav.';
+
+  @override
+  String get onDeviceWhyCloudTitle => 'Kāpēc šo kopsavilkumu uzrakstīja Omi Cloud';
+
+  @override
+  String get onDeviceWhyCloudIphone =>
+      'Šis iPhone pats nevar izveidot kopsavilkumu (tam nepieciešams iPhone 15 Pro vai jaunāks). Transkripcija tika izveidota jūsu tālrunī, un uz Omi kopsavilkumam tika nosūtīts tikai tās teksts. Tiešraides stundas netiek izmantotas.';
+
+  @override
+  String get onDeviceWhyCloudPhone =>
+      'Šis tālrunis pats nevar izveidot kopsavilkumu. Transkripcija tika izveidota jūsu tālrunī, un uz Omi kopsavilkumam tika nosūtīts tikai tās teksts. Tiešraides stundas netiek izmantotas.';
+
+  @override
+  String get onDeviceRedoWithCloud => 'Pārtaisīt ar Omi Cloud';
+
+  @override
+  String get onDeviceRedoHint => 'Vairāk detaļu un nosaukti runātāji. Izmanto tiešraides stundas.';
+
+  @override
+  String get onDeviceKeepEverything => 'Glabāt visu šajā tālrunī';
+
+  @override
+  String get onDeviceKeepEverythingSubtitle => 'Tikai transkripcijas, bez kopsavilkumiem';
+
+  @override
+  String get onDeviceLiveHours => 'Tiešraides stundas';
+
+  @override
+  String onDeviceLiveHoursUsed(String used, String limit) {
+    return 'Izmantotas $used no $limit stundām';
+  }
+
+  @override
+  String onDeviceResets(String date) {
+    return 'Atjaunojas $date';
+  }
+
+  @override
+  String get onDeviceGetMoreLiveHours => 'Iegūt vairāk tiešraides stundu';
+
+  @override
+  String get onDeviceAfterLiveHours => 'Kad tiešraides stundas beigušās';
+
+  @override
+  String get onDeviceWhen => 'Kad';
+
+  @override
+  String get onDeviceSummaries => 'Kopsavilkumi';
+
+  @override
+  String get onDeviceSummariesOnIphone => 'Šajā iPhone';
+
+  @override
+  String get onDeviceSummariesCloud => 'Ar Omi Cloud';
+
+  @override
+  String get onDeviceSaveLiveHours => 'Transkribēt šajā tālrunī, lai taupītu tiešraides stundas';
+
+  @override
+  String get onDeviceSaveLiveHoursSubtitle =>
+      'Tiešraides stundas paliek brīžiem, kad vēlaties nosauktus runātājus un mākoņa precizitāti.';
+
+  @override
+  String get onDeviceOnThisPhone => 'Šajā tālrunī';
+
+  @override
+  String get onDeviceAudioWaiting => 'Audio, kas gaida tālrunī';
+
+  @override
+  String get onDeviceRemoveModel => 'Noņemt runas modeli';
+
+  @override
+  String get onDeviceRemoveModelTitle => 'Noņemt runas modeli?';
+
+  @override
+  String get onDeviceRemoveModelMessage =>
+      'Ieraksti gaidīs šajā tālrunī, līdz to atkal lejupielādēsiet vai atgriezīsies tiešraides stundas.';
+
+  @override
+  String get onDeviceRemove => 'Noņemt';
+
+  @override
+  String get onDeviceFinishSetupTitle => 'Pabeidziet iestatīšanu, lai redzētu transkripcijas';
+
+  @override
+  String get onDeviceFinishSetupBody =>
+      'Šī mēneša tiešraides stundas ir izlietotas. Omi joprojām ieraksta un saglabā audio jūsu tālrunī. Lejupielādējiet runas modeli, un tas panāks nokavēto.';
+
+  @override
+  String onDeviceDownloadSize(String size) {
+    return 'Lejupielāde: $size';
+  }
+
+  @override
+  String get onDeviceUnsupportedBody =>
+      'Šis tālrunis vēl nevar darbināt runas modeli. Audio paliek saglabāts, līdz atgriežas tiešraides stundas vai jūs jaunināt plānu.';
+
+  @override
+  String get onDeviceEntrySubtitle => 'Kad tiešraides stundas beigušās, transkribēt šajā tālrunī';
 }

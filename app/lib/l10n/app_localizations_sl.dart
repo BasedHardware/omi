@@ -13247,4 +13247,294 @@ class AppLocalizationsSl extends AppLocalizations {
   @override
   String get connectAnAgentSubtitle =>
       'Pridobite poziv za nastavitev za Claude, ChatGPT, Codex ali katerega koli agenta';
+
+  @override
+  String get onDeviceAtCapTitle => 'Porabili ste ta mesec prepisovanje v živo';
+
+  @override
+  String get onDeviceAtCapBody => 'Omi še vedno snema. Izberite, kako bo prepisan preostanek meseca.';
+
+  @override
+  String onDeviceLiveHoursReturn(String date) {
+    return 'Ure v živo se vrnejo $date.';
+  }
+
+  @override
+  String get onDeviceTranscribeOnPhone => 'Prepiši na tem telefonu';
+
+  @override
+  String get onDeviceIncluded => 'Vključeno';
+
+  @override
+  String get onDeviceOptionChargingBody =>
+      'Teče med polnjenjem telefona, zato skoraj ne porablja baterije. Prepisi se pokažejo, ko telefon priključite.';
+
+  @override
+  String get onDeviceUpgradeBody => 'Več ur v živo ta mesec, z imenovanimi govorci in natančnostjo oblaka.';
+
+  @override
+  String get onDeviceAtCapFooter => 'Nič se ne izgubi. To lahko spremenite v Nastavitve › Transkripcija.';
+
+  @override
+  String onDeviceStepOf(int step, int total) {
+    return 'Korak $step od $total';
+  }
+
+  @override
+  String get onDeviceSetupBody =>
+      'Omi enkrat prenese govorni model. Nato se vaši posnetki pretvorijo v besedilo kar tukaj, brez porabe ur v živo.';
+
+  @override
+  String get onDeviceSpeechModel => 'Govorni model';
+
+  @override
+  String onDeviceMegabytes(String size) {
+    return '$size MB';
+  }
+
+  @override
+  String onDeviceDownloadingWifi(int percent) {
+    return 'Prenašanje prek Wi-Fi · $percent %';
+  }
+
+  @override
+  String onDeviceDownloadingPercent(int percent) {
+    return 'Prenašanje · $percent %';
+  }
+
+  @override
+  String onDeviceTimeLeft(String time) {
+    return 'Še približno $time';
+  }
+
+  @override
+  String get onDeviceWaitingForWifi => 'Čakanje na Wi-Fi';
+
+  @override
+  String get onDeviceDownloadFailed => 'Prenos ni bil dokončan';
+
+  @override
+  String get onDeviceModelNotDownloaded => 'Ni preneseno';
+
+  @override
+  String onDeviceModelInstalled(String size) {
+    return 'Nameščeno · $size';
+  }
+
+  @override
+  String get onDeviceModelUnsupported => 'Na tem telefonu še ni na voljo';
+
+  @override
+  String get onDeviceSetupKeepRecording => 'Med prenosom lahko še naprej snemate. Nič ne čaka na to.';
+
+  @override
+  String get onDeviceSetupAudioStays => 'Zvok ostane na vašem telefonu, dokler ni prepisan.';
+
+  @override
+  String get onDeviceWifiOnly => 'Prenašaj samo prek Wi-Fi';
+
+  @override
+  String get onDeviceDownloadModel => 'Prenesi govorni model';
+
+  @override
+  String get onDeviceScheduleTitle => 'Kdaj prepisovati';
+
+  @override
+  String get onDeviceScheduleHeadline => 'Kdaj naj Omi prepisuje?';
+
+  @override
+  String get onDeviceScheduleBody => 'Prepisovanje v paketih varčuje z baterijo. To lahko kadar koli spremenite.';
+
+  @override
+  String get onDeviceScheduleCharging => 'Med polnjenjem';
+
+  @override
+  String get onDeviceScheduleChargingBody => 'Prepisi se pokažejo, ko telefon priključite, običajno čez noč.';
+
+  @override
+  String get onDeviceBatteryAlmostNone => 'Baterija: skoraj nič';
+
+  @override
+  String get onDeviceScheduleHours => 'Vsakih nekaj ur';
+
+  @override
+  String get onDeviceScheduleHoursBody =>
+      'Na bateriji dohiteva v kratkih sunkih, zato prepisi redko zamujajo več kot nekaj ur.';
+
+  @override
+  String onDeviceBatteryPerDay(int percent) {
+    return 'Baterija: približno $percent % na dan';
+  }
+
+  @override
+  String get onDeviceScheduleLive => 'Med pogovorom';
+
+  @override
+  String get onDeviceScheduleLiveBody => 'Besedilo se pojavi v nekaj sekundah, kot pri prepisovanju v živo.';
+
+  @override
+  String onDeviceBatteryPerHour(int percent) {
+    return 'Baterija: približno $percent % na uro pogovora';
+  }
+
+  @override
+  String onDeviceQueueWaiting(String duration) {
+    return '$duration čaka na prepis';
+  }
+
+  @override
+  String get onDeviceQueueChargingBody =>
+      'Pripravljeni bodo, ko telefon priključite na polnilnik. Snemanje poteka normalno.';
+
+  @override
+  String get onDeviceQueueHoursBody => 'Omi dohiteva vsakih nekaj ur. Snemanje poteka normalno.';
+
+  @override
+  String get onDeviceQueueLowBatteryBody =>
+      'Čakanje na polnilnik, ker je baterija skoraj prazna. Snemanje poteka normalno.';
+
+  @override
+  String get onDeviceTranscribeNow => 'Prepiši zdaj';
+
+  @override
+  String get onDeviceUsesBattery => 'Porablja baterijo';
+
+  @override
+  String get onDeviceTranscribing => 'Prepisovanje…';
+
+  @override
+  String get onDeviceWaitingForCharger => 'Čakanje na polnilnik';
+
+  @override
+  String get onDeviceWaitingToTranscribe => 'Čaka na prepis';
+
+  @override
+  String get onDeviceWaitingForSetup => 'Shranjeno, čaka na nastavitev';
+
+  @override
+  String get onDeviceTranscribedOnIphone => 'Prepisano na tem iPhonu';
+
+  @override
+  String get onDeviceTranscribedOnPhone => 'Prepisano na tem telefonu';
+
+  @override
+  String get onDeviceTranscribedSummarizedOnIphone => 'Prepisano in povzeto na tem iPhonu';
+
+  @override
+  String get onDeviceSummarizedByCloud => 'Povzel Omi Cloud';
+
+  @override
+  String get onDeviceWhyPhoneTitle => 'Zakaj je bilo to narejeno na vašem telefonu';
+
+  @override
+  String get onDeviceWhyLiveHoursUsed =>
+      'Porabili ste ure v živo za ta mesec, zato je Omi ta pogovor prepisal na tem telefonu.';
+
+  @override
+  String get onDeviceWhySavingLiveHours => 'Izbrali ste prepisovanje na tem telefonu, da prihranite ure v živo.';
+
+  @override
+  String get onDeviceWhySummaryOnPhone => 'Tudi povzetek je bil napisan na tem iPhonu. Nič ni zapustilo naprave.';
+
+  @override
+  String get onDeviceWhyNoSummary => 'Vse hranite na tem telefonu, zato povzetka ni.';
+
+  @override
+  String get onDeviceWhyCloudTitle => 'Zakaj je ta povzetek napisal Omi Cloud';
+
+  @override
+  String get onDeviceWhyCloudIphone =>
+      'Ta iPhone ne zmore sam povzemati (za to potrebujete iPhone 15 Pro ali novejšega). Prepis je bil narejen na vašem telefonu, v Omi pa je bilo za povzetek poslano samo njegovo besedilo. Ure v živo se ne porabijo.';
+
+  @override
+  String get onDeviceWhyCloudPhone =>
+      'Ta telefon ne zmore sam povzemati. Prepis je bil narejen na vašem telefonu, v Omi pa je bilo za povzetek poslano samo njegovo besedilo. Ure v živo se ne porabijo.';
+
+  @override
+  String get onDeviceRedoWithCloud => 'Ponovi z Omi Cloud';
+
+  @override
+  String get onDeviceRedoHint => 'Več podrobnosti in imenovani govorci. Porabi ure v živo.';
+
+  @override
+  String get onDeviceKeepEverything => 'Vse obdrži na tem telefonu';
+
+  @override
+  String get onDeviceKeepEverythingSubtitle => 'Samo prepisi, brez povzetkov';
+
+  @override
+  String get onDeviceLiveHours => 'Ure v živo';
+
+  @override
+  String onDeviceLiveHoursUsed(String used, String limit) {
+    return 'Porabljenih $used od $limit ur';
+  }
+
+  @override
+  String onDeviceResets(String date) {
+    return 'Ponastavitev $date';
+  }
+
+  @override
+  String get onDeviceGetMoreLiveHours => 'Več ur v živo';
+
+  @override
+  String get onDeviceAfterLiveHours => 'Ko zmanjka ur v živo';
+
+  @override
+  String get onDeviceWhen => 'Kdaj';
+
+  @override
+  String get onDeviceSummaries => 'Povzetki';
+
+  @override
+  String get onDeviceSummariesOnIphone => 'Na tem iPhonu';
+
+  @override
+  String get onDeviceSummariesCloud => 'Prek Omi Cloud';
+
+  @override
+  String get onDeviceSaveLiveHours => 'Prepisuj na tem telefonu in prihrani ure v živo';
+
+  @override
+  String get onDeviceSaveLiveHoursSubtitle =>
+      'Ure v živo ostanejo za takrat, ko želite imenovane govorce in natančnost oblaka.';
+
+  @override
+  String get onDeviceOnThisPhone => 'Na tem telefonu';
+
+  @override
+  String get onDeviceAudioWaiting => 'Zvok, ki čaka na telefonu';
+
+  @override
+  String get onDeviceRemoveModel => 'Odstrani govorni model';
+
+  @override
+  String get onDeviceRemoveModelTitle => 'Odstranim govorni model?';
+
+  @override
+  String get onDeviceRemoveModelMessage =>
+      'Posnetki bodo čakali na tem telefonu, dokler modela znova ne prenesete ali se ure v živo ne vrnejo.';
+
+  @override
+  String get onDeviceRemove => 'Odstrani';
+
+  @override
+  String get onDeviceFinishSetupTitle => 'Dokončajte nastavitev za ogled prepisov';
+
+  @override
+  String get onDeviceFinishSetupBody =>
+      'Porabili ste ure v živo za ta mesec. Omi še vedno snema in shranjuje zvok na telefon. Prenesite govorni model in bo dohitel zaostanek.';
+
+  @override
+  String onDeviceDownloadSize(String size) {
+    return 'Prenos $size';
+  }
+
+  @override
+  String get onDeviceUnsupportedBody =>
+      'Ta telefon govornega modela še ne more poganjati. Zvok ostane shranjen, dokler se ure v živo ne vrnejo ali ne nadgradite.';
+
+  @override
+  String get onDeviceEntrySubtitle => 'Ko zmanjka ur v živo, prepisuj na tem telefonu';
 }

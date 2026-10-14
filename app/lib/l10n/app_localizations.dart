@@ -23540,6 +23540,510 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Get a setup prompt for Claude, ChatGPT, Codex, or any agent'**
   String get connectAnAgentSubtitle;
+
+  /// Title of the sheet shown when the monthly live transcription hours run out
+  ///
+  /// In en, this message translates to:
+  /// **'You\'ve used this month\'s live transcription'**
+  String get onDeviceAtCapTitle;
+
+  /// Body of the live-hours-used sheet
+  ///
+  /// In en, this message translates to:
+  /// **'Omi is still recording. Choose how the rest of this month gets transcribed.'**
+  String get onDeviceAtCapBody;
+
+  /// Sentence saying when monthly live transcription hours reset; date is a formatted date like 'Nov 1'
+  ///
+  /// In en, this message translates to:
+  /// **'Live hours come back {date}.'**
+  String onDeviceLiveHoursReturn(String date);
+
+  /// Option and setting: turn recordings into text on the phone itself instead of in the cloud
+  ///
+  /// In en, this message translates to:
+  /// **'Transcribe on this phone'**
+  String get onDeviceTranscribeOnPhone;
+
+  /// Small badge: this option costs nothing extra
+  ///
+  /// In en, this message translates to:
+  /// **'Included'**
+  String get onDeviceIncluded;
+
+  /// Explains the on-phone transcription option
+  ///
+  /// In en, this message translates to:
+  /// **'Runs while your phone charges, so it barely touches the battery. Transcripts show up after you plug in.'**
+  String get onDeviceOptionChargingBody;
+
+  /// Explains what upgrading the plan gives
+  ///
+  /// In en, this message translates to:
+  /// **'More live hours this month, with named speakers and cloud accuracy.'**
+  String get onDeviceUpgradeBody;
+
+  /// Footer under the live-hours-used sheet; 'Settings › Transcription' is a menu path
+  ///
+  /// In en, this message translates to:
+  /// **'Nothing is lost either way. You can change this in Settings › Transcription.'**
+  String get onDeviceAtCapFooter;
+
+  /// Progress label in a two-step setup
+  ///
+  /// In en, this message translates to:
+  /// **'Step {step} of {total}'**
+  String onDeviceStepOf(int step, int total);
+
+  /// Explains on-device transcription setup
+  ///
+  /// In en, this message translates to:
+  /// **'Omi downloads a speech model once. After that, your recordings are turned into text right here, without using your live hours.'**
+  String get onDeviceSetupBody;
+
+  /// Label for the downloadable on-device speech recognition model
+  ///
+  /// In en, this message translates to:
+  /// **'Speech model'**
+  String get onDeviceSpeechModel;
+
+  /// A file size in megabytes
+  ///
+  /// In en, this message translates to:
+  /// **'{size} MB'**
+  String onDeviceMegabytes(String size);
+
+  /// Model download progress on Wi-Fi
+  ///
+  /// In en, this message translates to:
+  /// **'Downloading on Wi-Fi · {percent}%'**
+  String onDeviceDownloadingWifi(int percent);
+
+  /// Model download progress
+  ///
+  /// In en, this message translates to:
+  /// **'Downloading · {percent}%'**
+  String onDeviceDownloadingPercent(int percent);
+
+  /// Estimated time remaining for a download; time is a short duration like '4m'
+  ///
+  /// In en, this message translates to:
+  /// **'About {time} left'**
+  String onDeviceTimeLeft(String time);
+
+  /// Download status: paused until the phone joins Wi-Fi
+  ///
+  /// In en, this message translates to:
+  /// **'Waiting for Wi-Fi'**
+  String get onDeviceWaitingForWifi;
+
+  /// Download status after a failure
+  ///
+  /// In en, this message translates to:
+  /// **'Download didn\'t finish'**
+  String get onDeviceDownloadFailed;
+
+  /// Status of a speech model that is not on the phone
+  ///
+  /// In en, this message translates to:
+  /// **'Not downloaded'**
+  String get onDeviceModelNotDownloaded;
+
+  /// Status of a speech model on the phone with its size
+  ///
+  /// In en, this message translates to:
+  /// **'Installed · {size}'**
+  String onDeviceModelInstalled(String size);
+
+  /// Status when this phone cannot run the speech model
+  ///
+  /// In en, this message translates to:
+  /// **'Not available on this phone yet'**
+  String get onDeviceModelUnsupported;
+
+  /// Reassurance during model download
+  ///
+  /// In en, this message translates to:
+  /// **'Keep recording while it downloads. Nothing waits on this.'**
+  String get onDeviceSetupKeepRecording;
+
+  /// Privacy note during setup
+  ///
+  /// In en, this message translates to:
+  /// **'Audio stays on your phone until it\'s transcribed.'**
+  String get onDeviceSetupAudioStays;
+
+  /// Setting: only download the model on Wi-Fi
+  ///
+  /// In en, this message translates to:
+  /// **'Download on Wi-Fi only'**
+  String get onDeviceWifiOnly;
+
+  /// Button that downloads the speech model
+  ///
+  /// In en, this message translates to:
+  /// **'Download Speech Model'**
+  String get onDeviceDownloadModel;
+
+  /// Screen title: choose when recordings are transcribed on the phone
+  ///
+  /// In en, this message translates to:
+  /// **'When to Transcribe'**
+  String get onDeviceScheduleTitle;
+
+  /// Heading of the schedule screen
+  ///
+  /// In en, this message translates to:
+  /// **'When should Omi transcribe?'**
+  String get onDeviceScheduleHeadline;
+
+  /// Explains the schedule choice
+  ///
+  /// In en, this message translates to:
+  /// **'Transcribing in batches saves battery. You can change this anytime.'**
+  String get onDeviceScheduleBody;
+
+  /// Schedule option: transcribe only when the phone is charging
+  ///
+  /// In en, this message translates to:
+  /// **'While charging'**
+  String get onDeviceScheduleCharging;
+
+  /// Explains the while-charging option
+  ///
+  /// In en, this message translates to:
+  /// **'Transcripts appear after you plug in, usually overnight.'**
+  String get onDeviceScheduleChargingBody;
+
+  /// Battery cost of the while-charging option
+  ///
+  /// In en, this message translates to:
+  /// **'Battery: almost none'**
+  String get onDeviceBatteryAlmostNone;
+
+  /// Schedule option: transcribe in bursts every few hours
+  ///
+  /// In en, this message translates to:
+  /// **'Every few hours'**
+  String get onDeviceScheduleHours;
+
+  /// Explains the every-few-hours option
+  ///
+  /// In en, this message translates to:
+  /// **'Catches up in short bursts on battery, so transcripts are rarely more than a few hours behind.'**
+  String get onDeviceScheduleHoursBody;
+
+  /// Battery cost per day
+  ///
+  /// In en, this message translates to:
+  /// **'Battery: about {percent}% a day'**
+  String onDeviceBatteryPerDay(int percent);
+
+  /// Schedule option: transcribe continuously while recording
+  ///
+  /// In en, this message translates to:
+  /// **'As you talk'**
+  String get onDeviceScheduleLive;
+
+  /// Explains the as-you-talk option
+  ///
+  /// In en, this message translates to:
+  /// **'Text appears within seconds, like live transcription.'**
+  String get onDeviceScheduleLiveBody;
+
+  /// Battery cost per hour of recorded conversation
+  ///
+  /// In en, this message translates to:
+  /// **'Battery: about {percent}% an hour of conversation'**
+  String onDeviceBatteryPerHour(int percent);
+
+  /// Amount of recorded audio not yet transcribed; duration is a short duration like '3h 20m'
+  ///
+  /// In en, this message translates to:
+  /// **'{duration} waiting to transcribe'**
+  String onDeviceQueueWaiting(String duration);
+
+  /// Banner text: waiting recordings get transcribed when the phone charges
+  ///
+  /// In en, this message translates to:
+  /// **'They\'ll be ready after you plug in your phone. Recording continues as normal.'**
+  String get onDeviceQueueChargingBody;
+
+  /// Banner text for the every-few-hours schedule
+  ///
+  /// In en, this message translates to:
+  /// **'Omi catches up every few hours. Recording continues as normal.'**
+  String get onDeviceQueueHoursBody;
+
+  /// Banner text when the phone battery is too low
+  ///
+  /// In en, this message translates to:
+  /// **'Waiting for a charger because the battery is low. Recording continues as normal.'**
+  String get onDeviceQueueLowBatteryBody;
+
+  /// Button: transcribe waiting recordings right away
+  ///
+  /// In en, this message translates to:
+  /// **'Transcribe Now'**
+  String get onDeviceTranscribeNow;
+
+  /// Hint next to the Transcribe Now button
+  ///
+  /// In en, this message translates to:
+  /// **'Uses battery'**
+  String get onDeviceUsesBattery;
+
+  /// Status while the phone is transcribing
+  ///
+  /// In en, this message translates to:
+  /// **'Transcribing…'**
+  String get onDeviceTranscribing;
+
+  /// Status chip on a recording waiting for the phone to charge
+  ///
+  /// In en, this message translates to:
+  /// **'Waiting for charger'**
+  String get onDeviceWaitingForCharger;
+
+  /// Status chip / setting row for recordings not yet transcribed
+  ///
+  /// In en, this message translates to:
+  /// **'Waiting to transcribe'**
+  String get onDeviceWaitingToTranscribe;
+
+  /// Status chip: recording saved, speech model not downloaded yet
+  ///
+  /// In en, this message translates to:
+  /// **'Saved, waiting for setup'**
+  String get onDeviceWaitingForSetup;
+
+  /// Provenance label: the transcript was made on the iPhone
+  ///
+  /// In en, this message translates to:
+  /// **'Transcribed on this iPhone'**
+  String get onDeviceTranscribedOnIphone;
+
+  /// Provenance label: the transcript was made on the phone
+  ///
+  /// In en, this message translates to:
+  /// **'Transcribed on this phone'**
+  String get onDeviceTranscribedOnPhone;
+
+  /// Provenance label: transcript and summary were made on the iPhone
+  ///
+  /// In en, this message translates to:
+  /// **'Transcribed and summarized on this iPhone'**
+  String get onDeviceTranscribedSummarizedOnIphone;
+
+  /// Provenance label: the summary was written by Omi's cloud service
+  ///
+  /// In en, this message translates to:
+  /// **'Summarized by Omi Cloud'**
+  String get onDeviceSummarizedByCloud;
+
+  /// Heading of an explanation box
+  ///
+  /// In en, this message translates to:
+  /// **'Why this was done on your phone'**
+  String get onDeviceWhyPhoneTitle;
+
+  /// Explanation: on-phone transcription because monthly hours ran out
+  ///
+  /// In en, this message translates to:
+  /// **'You\'ve used this month\'s live hours, so Omi transcribed this conversation on this phone.'**
+  String get onDeviceWhyLiveHoursUsed;
+
+  /// Explanation: on-phone transcription by the user's choice
+  ///
+  /// In en, this message translates to:
+  /// **'You chose to transcribe on this phone to save live hours.'**
+  String get onDeviceWhySavingLiveHours;
+
+  /// Explanation: summary made on the iPhone
+  ///
+  /// In en, this message translates to:
+  /// **'The summary was written on this iPhone too. Nothing left the device.'**
+  String get onDeviceWhySummaryOnPhone;
+
+  /// Explanation: no summary because the user keeps everything local
+  ///
+  /// In en, this message translates to:
+  /// **'You keep everything on this phone, so there\'s no summary.'**
+  String get onDeviceWhyNoSummary;
+
+  /// Heading of an explanation box
+  ///
+  /// In en, this message translates to:
+  /// **'Why Omi Cloud wrote this summary'**
+  String get onDeviceWhyCloudTitle;
+
+  /// Explanation: cloud summary on an older iPhone
+  ///
+  /// In en, this message translates to:
+  /// **'This iPhone can\'t summarize on its own (that needs an iPhone 15 Pro or later). The transcript was made on your phone, and only its text was sent to Omi to summarize. It doesn\'t use your live hours.'**
+  String get onDeviceWhyCloudIphone;
+
+  /// Explanation: cloud summary on a phone without an on-device model
+  ///
+  /// In en, this message translates to:
+  /// **'This phone can\'t summarize on its own. The transcript was made on your phone, and only its text was sent to Omi to summarize. It doesn\'t use your live hours.'**
+  String get onDeviceWhyCloudPhone;
+
+  /// Button: transcribe and summarize this conversation again in Omi's cloud
+  ///
+  /// In en, this message translates to:
+  /// **'Redo with Omi Cloud'**
+  String get onDeviceRedoWithCloud;
+
+  /// Hint under the Redo with Omi Cloud button
+  ///
+  /// In en, this message translates to:
+  /// **'More detail and named speakers. Uses live hours.'**
+  String get onDeviceRedoHint;
+
+  /// Setting: never send anything to the cloud
+  ///
+  /// In en, this message translates to:
+  /// **'Keep everything on this phone'**
+  String get onDeviceKeepEverything;
+
+  /// Subtitle of the keep-everything setting
+  ///
+  /// In en, this message translates to:
+  /// **'Transcripts only, no summaries'**
+  String get onDeviceKeepEverythingSubtitle;
+
+  /// Monthly hours of live cloud transcription in the user's plan
+  ///
+  /// In en, this message translates to:
+  /// **'Live hours'**
+  String get onDeviceLiveHours;
+
+  /// Live hours used this month
+  ///
+  /// In en, this message translates to:
+  /// **'{used} of {limit} hours used'**
+  String onDeviceLiveHoursUsed(String used, String limit);
+
+  /// When the monthly allowance resets; date is like 'Nov 1'
+  ///
+  /// In en, this message translates to:
+  /// **'Resets {date}'**
+  String onDeviceResets(String date);
+
+  /// Button/row: upgrade the plan for more live hours
+  ///
+  /// In en, this message translates to:
+  /// **'Get More Live Hours'**
+  String get onDeviceGetMoreLiveHours;
+
+  /// Settings section header
+  ///
+  /// In en, this message translates to:
+  /// **'After live hours run out'**
+  String get onDeviceAfterLiveHours;
+
+  /// Settings row: when transcription runs
+  ///
+  /// In en, this message translates to:
+  /// **'When'**
+  String get onDeviceWhen;
+
+  /// Settings row: where summaries are made
+  ///
+  /// In en, this message translates to:
+  /// **'Summaries'**
+  String get onDeviceSummaries;
+
+  /// Value: summaries are made on the iPhone
+  ///
+  /// In en, this message translates to:
+  /// **'On this iPhone'**
+  String get onDeviceSummariesOnIphone;
+
+  /// Value: summaries are made by Omi's cloud
+  ///
+  /// In en, this message translates to:
+  /// **'By Omi Cloud'**
+  String get onDeviceSummariesCloud;
+
+  /// Setting for paid users: use on-phone transcription even before hours run out
+  ///
+  /// In en, this message translates to:
+  /// **'Transcribe on this phone to save live hours'**
+  String get onDeviceSaveLiveHours;
+
+  /// Subtitle of the save-live-hours setting
+  ///
+  /// In en, this message translates to:
+  /// **'Live hours stay for when you want named speakers and cloud accuracy.'**
+  String get onDeviceSaveLiveHoursSubtitle;
+
+  /// Settings section header about storage on the phone
+  ///
+  /// In en, this message translates to:
+  /// **'On this phone'**
+  String get onDeviceOnThisPhone;
+
+  /// Settings row: storage used by recordings not yet transcribed
+  ///
+  /// In en, this message translates to:
+  /// **'Audio waiting on phone'**
+  String get onDeviceAudioWaiting;
+
+  /// Destructive action that deletes the downloaded speech model
+  ///
+  /// In en, this message translates to:
+  /// **'Remove Speech Model'**
+  String get onDeviceRemoveModel;
+
+  /// Confirmation dialog title
+  ///
+  /// In en, this message translates to:
+  /// **'Remove Speech Model?'**
+  String get onDeviceRemoveModelTitle;
+
+  /// Confirmation dialog message for removing the speech model
+  ///
+  /// In en, this message translates to:
+  /// **'Recordings will wait on this phone until you download it again or live hours come back.'**
+  String get onDeviceRemoveModelMessage;
+
+  /// Confirm button that removes the speech model
+  ///
+  /// In en, this message translates to:
+  /// **'Remove'**
+  String get onDeviceRemove;
+
+  /// Banner title when recordings are waiting for the speech model
+  ///
+  /// In en, this message translates to:
+  /// **'Finish setup to see your transcripts'**
+  String get onDeviceFinishSetupTitle;
+
+  /// Banner body when recordings are waiting for the speech model
+  ///
+  /// In en, this message translates to:
+  /// **'You\'ve used this month\'s live hours. Omi is still recording and saving audio on your phone. Download the speech model and it will catch up.'**
+  String get onDeviceFinishSetupBody;
+
+  /// Download size, e.g. '600 MB download'
+  ///
+  /// In en, this message translates to:
+  /// **'{size} download'**
+  String onDeviceDownloadSize(String size);
+
+  /// Banner body when the phone cannot run the speech model
+  ///
+  /// In en, this message translates to:
+  /// **'This phone can\'t run the speech model yet. Audio stays saved until live hours come back or you upgrade.'**
+  String get onDeviceUnsupportedBody;
+
+  /// Subtitle of the settings entry for on-device transcription
+  ///
+  /// In en, this message translates to:
+  /// **'When live hours run out, transcribe on this phone'**
+  String get onDeviceEntrySubtitle;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {
