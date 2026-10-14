@@ -289,7 +289,7 @@ location_mod.async_get_google_maps_city = AsyncMock(return_value=None)
 
 retrieval_mod = _stub_module("utils.retrieval")
 if not hasattr(retrieval_mod, "__path__"):
-    retrieval_mod.__path__ = []
+    retrieval_mod.__path__ = [str(BACKEND_DIR / "utils" / "retrieval")]
 
 # utils.retrieval.safety is import-light (typing/os/time/logging only) and its full public surface
 # is shared with test_chat_input_guard.py via the same sys.modules entry, so a partial hand-rolled

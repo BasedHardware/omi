@@ -4110,5 +4110,10 @@
     "syncDetailsForSupport": "Destek için",
     "syncDetailsAudioFiles": "Ses dosyaları",
     "syncDetailsServerJobs": "Sunucu işleri (biten / toplam)",
-    "syncDetailsCopy": "Destek için ayrıntıları kopyala"
+    "syncDetailsCopy": "Destek için ayrıntıları kopyala",
+    "chatAppsChannelPlanRequired": "Operator ve Architect planlarında kullanılabilir",
+    "chatAppsAtCapacity": "{app} kapasitesi dolu",
+    "chatAppsJoinWaitlist": "Bekleme listesine katıl",
+    "chatAppsOnWaitlist": "Bekleme listesindesin",
+    "chatAppsWaitlistJoined": "Bekleme listesindesin. Yer açıldığında haber vereceğiz."
 }

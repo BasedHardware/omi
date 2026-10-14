@@ -4075,5 +4075,10 @@
     "syncDetailsForSupport": "Pentru asistență",
     "syncDetailsAudioFiles": "Fișiere audio",
     "syncDetailsServerJobs": "Joburi pe server (finalizate / total)",
-    "syncDetailsCopy": "Copiază detaliile pentru asistență"
+    "syncDetailsCopy": "Copiază detaliile pentru asistență",
+    "chatAppsChannelPlanRequired": "Disponibil cu Operator și Architect",
+    "chatAppsAtCapacity": "{app} este plin",
+    "chatAppsJoinWaitlist": "Intră pe lista de așteptare",
+    "chatAppsOnWaitlist": "Ești pe lista de așteptare",
+    "chatAppsWaitlistJoined": "Ești pe lista de așteptare. Te anunțăm când se eliberează un loc."
 }

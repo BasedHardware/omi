@@ -13365,4 +13365,21 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String get syncDetailsCopy => 'ஆதரவுக்காக விவரங்களை நகலெடுக்கவும்';
+
+  @override
+  String get chatAppsChannelPlanRequired => 'Operator மற்றும் Architect இல் கிடைக்கும்';
+
+  @override
+  String chatAppsAtCapacity(String app) {
+    return '$app நிரம்பியுள்ளது';
+  }
+
+  @override
+  String get chatAppsJoinWaitlist => 'காத்திருப்புப் பட்டியலில் சேர்';
+
+  @override
+  String get chatAppsOnWaitlist => 'நீங்கள் காத்திருப்புப் பட்டியலில் உள்ளீர்கள்';
+
+  @override
+  String get chatAppsWaitlistJoined => 'நீங்கள் காத்திருப்புப் பட்டியலில் உள்ளீர்கள். இடம் கிடைத்ததும் தெரிவிப்போம்.';
 }

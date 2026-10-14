@@ -13269,4 +13269,21 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get syncDetailsCopy => 'Kopeeri üksikasjad klienditoele';
+
+  @override
+  String get chatAppsChannelPlanRequired => 'Saadaval paketiga Operator ja Architect';
+
+  @override
+  String chatAppsAtCapacity(String app) {
+    return '$app on täis';
+  }
+
+  @override
+  String get chatAppsJoinWaitlist => 'Liitu ootenimekirjaga';
+
+  @override
+  String get chatAppsOnWaitlist => 'Oled ootenimekirjas';
+
+  @override
+  String get chatAppsWaitlistJoined => 'Oled ootenimekirjas. Anname teada, kui koht vabaneb.';
 }

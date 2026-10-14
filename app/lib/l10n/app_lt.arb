@@ -4075,5 +4075,10 @@
     "syncDetailsForSupport": "Palaikymo komandai",
     "syncDetailsAudioFiles": "Garso failai",
     "syncDetailsServerJobs": "Serverio užduotys (atlikta / iš viso)",
-    "syncDetailsCopy": "Kopijuoti informaciją palaikymo komandai"
+    "syncDetailsCopy": "Kopijuoti informaciją palaikymo komandai",
+    "chatAppsChannelPlanRequired": "Prieinama su Operator ir Architect",
+    "chatAppsAtCapacity": "{app} užpildytas",
+    "chatAppsJoinWaitlist": "Prisijungti prie laukiančiųjų sąrašo",
+    "chatAppsOnWaitlist": "Esate laukiančiųjų sąraše",
+    "chatAppsWaitlistJoined": "Esate laukiančiųjų sąraše. Pranešime, kai atsiras vietos."
 }

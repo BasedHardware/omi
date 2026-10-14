@@ -283,8 +283,8 @@ LISTEN_ONLY_ALLOWED: dict[str, frozenset[str]] = {
     | _DEMAND_LISTEN_ONLY,
 }
 
-# Pusher owns the process-local final-pass worker; backend-listen dispatches
-# finalization and must not widen this batch-only David experiment. Validate
+# Pusher owns the process-local shadow worker; sync/backfill also runs the
+# authoritative final pass from stage B. Backend-listen must stay excluded. Validate
 # exact literals below as well as names, rather than exempting arbitrary values.
 PROD_FINAL_PASS_SHADOW_VALUES = {
     "HOSTED_DIARIZATION_API_URL": ("http://172.16.160.20/diarizer-batch", None),
@@ -292,8 +292,8 @@ PROD_FINAL_PASS_SHADOW_VALUES = {
     "TRANSCRIPTION_FINAL_PASS_BACKEND": ("pyannote", None),
     "TRANSCRIPTION_FINAL_PASS_UID_ALLOWLIST": ("vi7SA9ckQCe4ccobWNxlbdcNdC23", None),
     "TRANSCRIPTION_FINAL_PASS_PERCENT": ("0", None),
-    "TRANSCRIPTION_FINAL_PASS_AUTHORITATIVE": ("false", None),
-    "TRANSCRIPTION_FINAL_PASS_SYNC_ENABLED": ("false", None),
+    "TRANSCRIPTION_FINAL_PASS_AUTHORITATIVE": ("true", None),
+    "TRANSCRIPTION_FINAL_PASS_SYNC_ENABLED": ("true", None),
 }
 
 PUSHER_ONLY_ALLOWED: dict[str, frozenset[str]] = {
@@ -531,7 +531,9 @@ def validate_preflight(root: Path = ROOT) -> list[str]:
                 ),
                 None,
             )
-            if selected is not None:
+            if selected is None:
+                errors.append("[prod] shadow scope must match a complete reviewed stage")
+            else:
                 prod_scope = {name: (value, prod_scope[name][1]) for name, value in selected.items()}
         for name, (expected_pusher, expected_listen) in (DEV_SHADOW_VALUES if env == "dev" else prod_scope).items():
             actual_pusher = pusher_env[name].value if name in pusher_env else None

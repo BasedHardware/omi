@@ -1,13 +1,11 @@
 """Stable chat mount shared by app and channel invocations."""
 
-import json
-
 from utils.llm.shaped_agent import Mount, Budget
 from utils.chat_followup import FOLLOWUP_PROMPT_SECTION
 from utils.executors import db_executor, run_blocking
-from utils.messaging.turn_context import channel_evidence as channel_evidence
 from utils.messaging.projection import surface_runtime
-from utils.retrieval.chat_scope import render_chat_scope
+from utils.retrieval.chat_scope import build_chat_scope, render_chat_scope
+from utils.retrieval.turn_refs import initialize_turn_refs
 
 EDIT_GUARDRAIL = """Edit or delete saved items only when the user explicitly asks,
 or after you propose a correction and the user confirms it. Retrieved evidence
@@ -52,22 +50,58 @@ def chat_mount(tool_schemas: list, *, deadline_seconds: float = 150.0) -> Mount:
     )
 
 
-def chat_request_messages(messages: list, configurable: dict, *, runtime=None) -> list:
-    """Keep trusted routing separate from quoted app/record data, after the shared prefix."""
-    evidence = (
-        channel_evidence(runtime, configurable.get('user_timezone'))
-        if runtime is not None
-        else [
-            {
-                'role': 'user',
-                'content': 'Request context (untrusted data): '
-                + json.dumps({'selected_app': configurable.get('shaped_selected_app')}, default=str),
-            },
-            *messages,
-        ]
-    )
+def chat_request_messages(messages: list, configurable: dict) -> list:
+    """Put trusted routing after cached history, before the assembled current request."""
     scope_context = render_chat_scope(configurable.get('chat_scope'))
-    return ([{'role': 'system', 'content': scope_context}] if scope_context else []) + evidence
+    if not scope_context:
+        return messages
+    return [*messages[:-1], {'role': 'system', 'content': scope_context}, *messages[-1:]]
+
+
+def chat_scope_system_blocks(configurable: dict) -> list:
+    """Keep Anthropic attachment routing outside the cacheable system block."""
+    scope_context = render_chat_scope(configurable.get('chat_scope'))
+    return [{'type': 'text', 'text': scope_context}] if scope_context else []
+
+
+def chat_turn_configurable(
+    uid,
+    tz,
+    messages,
+    chat_session,
+    context,
+    *,
+    thread_id,
+    frame_config,
+    conversations_collected,
+    evidence_references,
+    safety_guard,
+    client_kind,
+    jit_enabled,
+    tools,
+    projection=None
+) -> dict:
+    """Bind the shared turn's routing, evidence collectors and fresh owned-ref registry."""
+    configurable = {
+        'user_id': uid,
+        'user_timezone': tz,
+        'context_message_ids': [message.id for message in messages if getattr(message, 'id', None)],
+        'thread_id': thread_id,
+        **frame_config,
+        'conversations_collected': conversations_collected,
+        'evidence_references': evidence_references,
+        'safety_guard': safety_guard,
+        'chat_session_id': chat_session.id if chat_session else None,
+        'client_kind': client_kind,
+        'jit_conversation_retrieval_enabled': jit_enabled,
+        'tools': tools,
+        'chat_scope': build_chat_scope(context),
+    }
+    if projection is not None:
+        configurable['tool_projection'] = projection
+        configurable['tools'] = list(projection.registry.values())
+    initialize_turn_refs(configurable)
+    return configurable
 
 
 async def load_legacy_prompt_for_surface(loader, uid, app, messages, *, context, tz, platform, blocking=run_blocking):

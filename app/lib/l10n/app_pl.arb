@@ -4110,5 +4110,10 @@
     "syncDetailsForSupport": "Dla pomocy technicznej",
     "syncDetailsAudioFiles": "Pliki audio",
     "syncDetailsServerJobs": "Zadania serwera (gotowe / razem)",
-    "syncDetailsCopy": "Skopiuj szczegóły dla pomocy technicznej"
+    "syncDetailsCopy": "Skopiuj szczegóły dla pomocy technicznej",
+    "chatAppsChannelPlanRequired": "Dostępne w planach Operator i Architect",
+    "chatAppsAtCapacity": "{app} jest pełny",
+    "chatAppsJoinWaitlist": "Dołącz do listy oczekujących",
+    "chatAppsOnWaitlist": "Jesteś na liście oczekujących",
+    "chatAppsWaitlistJoined": "Jesteś na liście oczekujących. Damy znać, gdy zwolni się miejsce."
 }

@@ -13311,4 +13311,21 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get syncDetailsCopy => 'Details kopiëren voor support';
+
+  @override
+  String get chatAppsChannelPlanRequired => 'Beschikbaar met Operator en Architect';
+
+  @override
+  String chatAppsAtCapacity(String app) {
+    return '$app zit vol';
+  }
+
+  @override
+  String get chatAppsJoinWaitlist => 'Op de wachtlijst';
+
+  @override
+  String get chatAppsOnWaitlist => 'Je staat op de wachtlijst';
+
+  @override
+  String get chatAppsWaitlistJoined => 'Je staat op de wachtlijst. We laten het je weten zodra er plek is.';
 }

@@ -4075,5 +4075,10 @@
     "syncDetailsForSupport": "Tukea varten",
     "syncDetailsAudioFiles": "Äänitiedostot",
     "syncDetailsServerJobs": "Palvelintyöt (valmis / yhteensä)",
-    "syncDetailsCopy": "Kopioi tiedot tukea varten"
+    "syncDetailsCopy": "Kopioi tiedot tukea varten",
+    "chatAppsChannelPlanRequired": "Saatavilla Operator- ja Architect-tilauksissa",
+    "chatAppsAtCapacity": "{app} on täynnä",
+    "chatAppsJoinWaitlist": "Liity jonotuslistalle",
+    "chatAppsOnWaitlist": "Olet jonotuslistalla",
+    "chatAppsWaitlistJoined": "Olet jonotuslistalla. Kerromme, kun tilaa vapautuu."
 }

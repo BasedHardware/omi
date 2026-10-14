@@ -446,6 +446,8 @@ def _run_chat_turn(uid, surface, session, message, reply_sink, *, principal, opt
                     'kind': 'conversation',
                     'id': memory['id'],
                     'title': memory.get('structured', {}).get('title', 'Conversation'),
+                    # The answer cited these by number, so they link even when prose paraphrases the title.
+                    'cited': True,
                 }
                 for memory in memories
                 if memory.get('id')

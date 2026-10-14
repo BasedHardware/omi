@@ -13289,4 +13289,21 @@ class AppLocalizationsUr extends AppLocalizations {
 
   @override
   String get syncDetailsCopy => 'سپورٹ کے لیے تفصیلات کاپی کریں';
+
+  @override
+  String get chatAppsChannelPlanRequired => 'Operator اور Architect پر دستیاب';
+
+  @override
+  String chatAppsAtCapacity(String app) {
+    return '$app کی گنجائش پوری ہو گئی ہے';
+  }
+
+  @override
+  String get chatAppsJoinWaitlist => 'ویٹ لسٹ میں شامل ہوں';
+
+  @override
+  String get chatAppsOnWaitlist => 'آپ ویٹ لسٹ میں ہیں';
+
+  @override
+  String get chatAppsWaitlistJoined => 'آپ ویٹ لسٹ میں ہیں۔ جگہ ملنے پر ہم آپ کو بتائیں گے۔';
 }

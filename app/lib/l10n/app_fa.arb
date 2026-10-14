@@ -11501,5 +11501,10 @@
     "syncDetailsForSupport": "برای پشتیبانی",
     "syncDetailsAudioFiles": "فایل‌های صوتی",
     "syncDetailsServerJobs": "کارهای سرور (انجام‌شده / کل)",
-    "syncDetailsCopy": "کپی جزئیات برای پشتیبانی"
+    "syncDetailsCopy": "کپی جزئیات برای پشتیبانی",
+    "chatAppsChannelPlanRequired": "در Operator و Architect در دسترس است",
+    "chatAppsAtCapacity": "ظرفیت {app} تکمیل است",
+    "chatAppsJoinWaitlist": "پیوستن به فهرست انتظار",
+    "chatAppsOnWaitlist": "شما در فهرست انتظار هستید",
+    "chatAppsWaitlistJoined": "شما در فهرست انتظار هستید. وقتی جا باز شود خبرتان می‌کنیم."
 }

@@ -13288,4 +13288,21 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get syncDetailsCopy => 'Destek için ayrıntıları kopyala';
+
+  @override
+  String get chatAppsChannelPlanRequired => 'Operator ve Architect planlarında kullanılabilir';
+
+  @override
+  String chatAppsAtCapacity(String app) {
+    return '$app kapasitesi dolu';
+  }
+
+  @override
+  String get chatAppsJoinWaitlist => 'Bekleme listesine katıl';
+
+  @override
+  String get chatAppsOnWaitlist => 'Bekleme listesindesin';
+
+  @override
+  String get chatAppsWaitlistJoined => 'Bekleme listesindesin. Yer açıldığında haber vereceğiz.';
 }

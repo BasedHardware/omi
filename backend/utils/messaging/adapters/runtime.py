@@ -10,7 +10,9 @@ logger = logging.getLogger(__name__)
 
 
 def configured_adapters():
-    if os.getenv('OMI_MESSAGING_CHANNELS', 'off') != 'on':
+    from config.messaging import channel_enabled
+
+    if not any(channel_enabled(c) for c in ('telegram', 'imessage')):
         return ()
     from utils.messaging.adapters.telegram import TelegramAdapter
     from utils.messaging.adapters.linq import IMessageAdapter, LinqProvider
@@ -26,6 +28,7 @@ def configured_adapters():
                 os.environ['TELEGRAM_BOT_TOKEN'],
                 os.environ['TELEGRAM_WEBHOOK_SECRET'],
                 streaming=streaming,
+                shared_pacing=os.getenv('OMI_TELEGRAM_SHARED_PACING', 'on') == 'on',
             )
         )
     if os.getenv('OMI_IMESSAGE_ENABLED', 'off') == 'on':
@@ -57,6 +60,7 @@ async def recover_pending(gateways, stop, *, interval=30):
         for gateway in gateways:
             try:
                 await gateway.drain(limit=100)
+                await gateway.expired_notices()
             except Exception as error:
                 logger.warning(
                     'Messaging recovery paused provider=%s error_type=%s',
