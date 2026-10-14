@@ -277,6 +277,31 @@ class RegistryFixture(unittest.TestCase):
         )
         self.assertEqual(self.errors(), [])
 
+    def test_prereg_tracked_at_head_counts_in_sparse_checkout(self) -> None:
+        # Cone-mode sparse checkouts do not materialise out-of-cone paths: a
+        # prereg doc committed at HEAD but absent from the working tree is
+        # still valid evidence and must not fail the registry check.
+        self.write("docs/prereg/example.md", "# prereg\n")
+        self.write(
+            "config/feature-flags.yaml", self.yaml([flag(lifecycle="experiment", prereg="docs/prereg/example.md")])
+        )
+        env = {key: value for key, value in os.environ.items() if not key.startswith("GIT_")}
+        commit_env_identity = [
+            "-c", "user.email=flags@example.test", "-c", "user.name=Flag Tests",
+        ]
+        subprocess.run(["git", "-C", str(self.root), *commit_env_identity, "add", "-A"], check=True, env=env)
+        subprocess.run(
+            ["git", "-C", str(self.root), *commit_env_identity, "commit", "-qm", "fixture"], check=True, env=env
+        )
+        (self.root / "docs/prereg/example.md").unlink()
+        self.assertEqual(self.errors(), [])
+        # A path in neither the working tree nor HEAD still fails closed.
+        self.write(
+            "config/feature-flags.yaml",
+            self.yaml([flag(lifecycle="experiment", prereg="docs/prereg/never-committed.md")]),
+        )
+        self.assertIn("prereg file does not exist", "\n".join(self.errors()))
+
     def test_running_experiments_table_links_prereg_and_marks_overdue(self) -> None:
         running = flag(lifecycle="experiment", prereg="docs/prereg/example.md", review_by="2026-10-15")
         killed = flag(

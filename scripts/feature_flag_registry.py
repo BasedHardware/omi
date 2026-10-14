@@ -12,7 +12,7 @@ from typing import Any
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / ".github/scripts"))
-from run_checks import _parse_yaml_subset
+from run_checks import _parse_yaml_subset, head_tree_paths
 
 KINDS = {"env", "posthog", "bundle", "server_capability", "build_define", "firestore", "hardcoded"}
 LIFECYCLES = {"experiment", "rollout", "ops_kill", "config_switch"}
@@ -102,7 +102,15 @@ def validate_registry(registry: dict[str, list[dict[str, Any]]], *, root: Path =
                     elif not resolved.is_relative_to(resolved_root):
                         errors.append(f"{label}: prereg escapes the repository root: {prereg}")
                     elif not resolved.is_file():
-                        errors.append(f"{label}: prereg file does not exist: {prereg}")
+                        # Cone-mode sparse checkouts do not materialise
+                        # out-of-cone paths, so a prereg doc that is real at
+                        # HEAD is valid evidence; absent from disk AND HEAD is
+                        # still an error. None means "not a git repo" (tests
+                        # validate against plain directories): disk only.
+                        tracked = head_tree_paths(resolved_root)
+                        relative = resolved.relative_to(resolved_root).as_posix()
+                        if tracked is None or relative not in tracked:
+                            errors.append(f"{label}: prereg file does not exist: {prereg}")
                 elif "prereg" in entry:
                     errors.append(f"{label}: prereg must be a nonempty repo-relative path")
                 elif entry.get("lifecycle") == "experiment" and entry.get("decision") != "kill":
