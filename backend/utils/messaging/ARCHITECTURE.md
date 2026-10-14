@@ -9,7 +9,7 @@ provider or database IO. See `backend/docs/messaging-channels.md` for Stage A an
   artifacts, capabilities, principals and provider-neutral protocols.
 - `access.py`, `identity.py`: existing entitlement/cohort admission and stable identity keys.
 - `gateway.py`: durable admission, leases, media preparation, commands, shared turns,
-  typing lifecycle, append-only history, and fenced deferred replies.
+  typing lifecycle, bounded awareness history, and fenced deferred replies.
 - `outbound.py`, `delivery_context.py`: one reply policy and per-sink sequencing,
   retry guards, rendering metadata, artifacts and surface actions.
 - `projection.py`: one catalog projection for advertisement and execution; channels
@@ -28,6 +28,7 @@ provider or database IO. See `backend/docs/messaging-channels.md` for Stage A an
 - `adapters/transport.py`: bounded, redacted provider IO and retry semantics.
 - `adapters/media.py`: Omi's existing chat file store and prerecorded STT bridge.
 - `adapters/delivery.py`: content-free provider receipts and atomic send/receive guard.
+- `metrics.py`, `pacing.py`, `maintenance.py`: content-free instrumentation, shared Redis Telegram scheduling and bounded hourly retention.
 - `adapters/runtime.py`: explicit opt-in registration and pending-only recovery.
 
 Storage authority remains `database/messaging.py`, task codecs/inverses remain in

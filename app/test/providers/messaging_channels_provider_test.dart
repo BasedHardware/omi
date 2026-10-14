@@ -163,12 +163,24 @@ void main() {
       expect(off.showEntry, isFalse);
 
       backend.links = [linkJson(id: linkIdTelegram, channel: 'telegram')];
-      await off.load();
+      await off.refreshLinks();
       expect(off.showEntry, isTrue, reason: 'Disconnect stays reachable');
 
       final on = FakeMessagingBackend().provider();
       await on.load();
       expect(on.showEntry, isTrue);
+    });
+
+    test('repeated entry loads are cached; explicit refresh sees a newly linked account', () async {
+      final backend = FakeMessagingBackend();
+      final provider = backend.provider();
+      await provider.load();
+      await provider.load();
+      expect(backend.count('GET', 'v1/messaging/links'), 1);
+      backend.links = [linkJson(id: linkIdTelegram, channel: 'telegram')];
+      await provider.refreshLinks();
+      expect(backend.count('GET', 'v1/messaging/links'), 2);
+      expect(provider.links, hasLength(1));
     });
 
     test(

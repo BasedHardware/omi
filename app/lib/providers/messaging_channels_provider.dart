@@ -117,6 +117,7 @@ class MessagingChannelsProvider extends ChangeNotifier {
   bool _loadingLinks = false;
   ApiProblem? _linksProblem;
   Future<void>? _loadInFlight;
+  DateTime? _lastLoad;
 
   ChatAppsConfig get config => _config;
   bool get configLoaded => _configLoaded;
@@ -154,13 +155,20 @@ class MessagingChannelsProvider extends ChangeNotifier {
   }
 
   /// Reads the gate and the links. Concurrent callers share one load.
-  Future<void> load() => _loadInFlight ??= _load().whenComplete(() => _loadInFlight = null);
+  Future<void> load() {
+    final last = _lastLoad;
+    if (last != null && DateTime.now().difference(last) < const Duration(seconds: 60)) {
+      return Future.value();
+    }
+    return _loadInFlight ??= _load().whenComplete(() => _loadInFlight = null);
+  }
 
   Future<void> _load() async {
     final configFuture = _readConfig();
     await refreshLinks();
     _config = await configFuture;
     _configLoaded = true;
+    _lastLoad = DateTime.now();
     notifyListeners();
   }
 
@@ -278,6 +286,7 @@ class MessagingChannelsProvider extends ChangeNotifier {
     if (config != null) {
       _config = config;
       _configLoaded = true;
+      _lastLoad = DateTime.now();
     }
     if (links != null) {
       _links = links;

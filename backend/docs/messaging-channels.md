@@ -86,7 +86,7 @@ but carry a FIFO settlement marker so new messages can proceed.
 Inbox claims transactionally retire running heads older than five minutes (measured
 from `started_at`, or `created_at` for pre-migration rows). They retain encrypted
 reconciliation evidence and gain `fifo_settled_at`; they never replay a possibly sent
-reply. Pending rows older than thirty minutes are retired with content-free tombstones.
+reply. Pending rows older than thirty minutes become `expired`; recovery claims a one-time resend notice within the provider reply window, then removes their payload.
 A new wake claims the identity's oldest eligible pending row, and each worker drains
 the following rows in order after success or settled failure. Fresh running heads
 remain exclusive. The periodic recovery loop handles lost wakes.
@@ -103,7 +103,7 @@ head age; `omi_messaging_queue_events_total{reason}` counts `non_head`, `head_re
 `stale_running`, `stale_pending`, and `stale_lease` decisions (transaction retries may
 count a decision more than once).
 
-No data migration or queue reset is required. Old rows/leases use `created_at`; existing
+Launch requires a one-time content-free inbox metadata backfill before collection-group recovery; see the launch runbook. No queue reset is required. Old rows/leases use `created_at`; existing
 settlement markers remain respected. Recovery requires a pending wake or periodic drain.
 Review stale-running evidence before any manual replay; accepted external delivery is
 not inferred from inbox status. Already admitted external requests or synchronous tool
@@ -130,7 +130,7 @@ re-entry; recovery must reconcile a reply event whose external delivery was inte
 | `channel_identities/{identity_id}/inbox/{dedup_id}` | Encrypted normalized payload, created_at, pending/running/done. Done removes the payload. |
 | `users/{uid}/chat_sessions/{surface_hash}` | Existing session fields plus surface, channel, channel_link_id, link_generation; reserved plugin_id `__channel__` keeps default app histories separate. |
 | `users/{uid}/messages/{id}` | Existing chat fields plus surface, channel_link_id, data_usage=`user_serving_only`; channel text is encrypted using existing per-user encryption. |
-| `users/{uid}/chat_sessions/{id}/channel_events/{sequence}` | Encrypted append-only model events: id, kind, at, role, content. Digests and re-entry evidence are hidden from message listing. |
+| `users/{uid}/chat_sessions/{id}/channel_events/{sequence}` | Encrypted bounded awareness tail: id, kind, at, role, content; numeric sequence plus separate deterministic content-free fences. Digests and re-entry evidence are hidden from message listing. |
 | `users/{uid}/channel_turn_leases/{surface_hash}` | token and created_at; fail-closed serialization. |
 
 Both proof types are authenticated-app minted, ten-minute, high-entropy, audience-bound
@@ -161,8 +161,7 @@ session. Account deletion calls `MessagingStore.delete_account` in
 and the user tree. It removes reverse indexes and pending proof records; recursive user
 wipe removes mirrors, session events and leases. Deletion markers block further channel
 admission. External provider retention/deletion is an adapter-specific Stage B obligation.
-Unconsumed expired proofs and anonymous inbox tombstones need a bounded TTL janitor before
-public rollout; this foundation does not deploy a Firestore TTL policy.
+The opt-in hourly messaging-maintenance chart bounds cleanup of expired proofs, unknown identities, completed inbox markers and waitlists; it sends nothing.
 
 ## Cross-surface continuity and cache behavior
 
@@ -181,10 +180,15 @@ append-only event log; the default mobile history-window contract is unchanged w
 `search_chat_history` searches across history, returning the newest 20 matches.
 These paginated scans are not a new full-text index; large accounts may need an index.
 
-A surface event log has a 500 KB ceiling. Exhaustion fails closed and requires an explicit
-new session; silently truncating/re-summarizing the cached prefix is forbidden. Long-lived
-session epoch rollover and a full-history search index are extension points before wide
-rollout. No historical messages are rewritten or migrated.
+Surface events provide fences, digest watermarks and awareness; authoritative model
+chat messages remain in the shared chat database. Awareness reads at most forty events.
+New events store a numeric sequence, encrypted payload and deterministic hashed fence ID;
+pruning keeps forty events without deleting replay fences. Legacy events receive a
+one-time fence/sequence migration before pruning, so old reentries cannot replay. Large
+awareness content is clipped; authoritative messages are preserved. The former 500 KB
+hard failure is removed. `/new` or `new chat` rotates the surface session pointer under
+its lease, preserving owner-scoped older history and creating a fresh message session.
+
 
 ## Tool and workspace compatibility
 
@@ -306,3 +310,13 @@ Open Graph metadata and `web/` are unchanged.
 
 Provider contracts: [Linq sending messages](https://docs.linqapp.com/channel/imessage/guides/messaging/sending-messages/)
 and [rich link previews](https://docs.linqapp.com/channel/imessage/guides/messaging/rich-link-previews/).
+
+## Paid messaging launch policy
+
+`OMI_MESSAGING_CHANNEL_POLICY` overrides legacy uid admission per channel. Telegram's
+`cohort:"*"` admits all valid paid plans; iMessage defaults to Operator/Architect and
+180 distinct linked users. Cohorts, plans and seat caps are configurable. Atomic link
+redemption and per-user member records own seat accounting; unlink/deletion release the
+last member link. Legacy env-only deployments behave as before. Optional cached remote
+channel switches, shared Redis Telegram pacing, typed waitlist errors, retention jobs
+and metric/alert deployment steps are in the [runbook](runbooks/messaging-channels.md#paid-launch-preparation-and-seat-operations).
