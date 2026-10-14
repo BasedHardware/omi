@@ -4,7 +4,10 @@ class ScanningRippleWidget extends StatefulWidget {
   final bool isScanning;
   final double size;
 
-  const ScanningRippleWidget({super.key, required this.isScanning, this.size = 300});
+  /// Ring colour; white by default (the dark pairing page). Light screens pass the text colour.
+  final Color color;
+
+  const ScanningRippleWidget({super.key, required this.isScanning, this.size = 300, this.color = Colors.white});
 
   @override
   State<ScanningRippleWidget> createState() => _ScanningRippleWidgetState();
@@ -44,7 +47,7 @@ class _ScanningRippleWidgetState extends State<ScanningRippleWidget> with Single
         builder: (context, child) {
           return CustomPaint(
             size: Size(widget.size, widget.size),
-            painter: _RipplePainter(progress: _controller.value, color: Colors.white),
+            painter: _RipplePainter(progress: _controller.value, color: widget.color),
           );
         },
       ),
