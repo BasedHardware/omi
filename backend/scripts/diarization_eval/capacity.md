@@ -35,18 +35,20 @@ Enable `podMonitoring`, configure a custom-metrics adapter for
 The metric counts running plus admitted waiting/upload work. Use scale-up delay
 0s and scale-down stabilization 900s, with gradual scale-down. Alert on rejection,
 failure, queue saturation and p95 end-to-record latency. Raise
-`backendConfig.timeoutSeconds` to 900 before ingress-backed long requests.
+`gateway.timeoutSeconds` to 900 for batch requests through the shared Gateway.
 Chart defaults preserve one replica, disabled HPA/metrics discovery and 30s timeout.
 
 The same additive image contains separate embedding/v1 and batch entrypoints.
-Production installation now requires a dedicated tainted L4 pool, in-cluster
-Prometheus scrape/adapter mapping, a separate internal ingress reachable from
-Cloud Run, and the registered model-free built-image import/decode probe.
-The opt-in batch overlay starts at **one replica for David-only shadow**. Raise
-the floor to six/max eighteen only after cohort qualification. Exact lead-only
-commands, metric checks, separate cohort env bindings and rollback are in
-[`batch_install.md`](batch_install.md). No infrastructure or flag is applied by
-these prerequisites.
+The current ≤5% production ramp uses the dedicated tainted **T4**
+`diarizer-batch-pool` and the shared internal Gateway `/diarizer-batch` route.
+This L4 receipt is historical capacity evidence, not a T4 throughput qualification
+or an instruction to recreate that pool. Verify Prometheus scrape/adapter mapping,
+Cloud Run/GKE Gateway reachability and the model-free image import/decode probe.
+The opt-in overlay starts at one replica for David-only shadow. Do not apply the
+full-fleet six-L4 floor to this bounded T4 ramp. Exact lead-only installation and
+rollback are in [`batch_install.md`](batch_install.md); A–D stages and T4 planning
+arithmetic are in [the cohort runbook](../../docs/diarizer-batch-cohort.md).
+No infrastructure or flag is applied by these prerequisites.
 Lead-local raw receipts and scripts live in
 `/Volumes/Ephemeral/scratch/pyannote-final-pass-2026-10-13/`. The dev benchmark
 added no node after GCE capacity rejection; it used existing capacity. Cleanup
