@@ -6818,18 +6818,6 @@
     "@downloadingFromSdCard": {
         "description": "Progress label when downloading from SD card"
     },
-    "processingProgress": "{current}/{total} ಪ್ರಕ್ರಿಯೆಗೊಳಿಸಲಾಗುತ್ತಿದೆ",
-    "@processingProgress": {
-        "description": "Progress label showing current/total items",
-        "placeholders": {
-            "current": {
-                "type": "int"
-            },
-            "total": {
-                "type": "int"
-            }
-        }
-    },
     "conversationsCreated": "{count} ಸಂಭಾಷಣೆಗಳನ್ನು ರಚಿಸಲಾಯಿತು",
     "@conversationsCreated": {
         "description": "Success message showing number of conversations created",
@@ -10359,10 +10347,8 @@
     "syncStatusConversationCreated": "ಸಂಭಾಷಣೆ ರಚಿಸಲಾಗಿದೆ",
     "syncCardUploadingTitle": "Omi ಗೆ ಅಪ್‌ಲೋಡ್ ಮಾಡಲಾಗುತ್ತಿದೆ",
     "syncCardDownloadingTitle": "ನಿಮ್ಮ ಸಾಧನದಿಂದ ಡೌನ್‌ಲೋಡ್ ಆಗುತ್ತಿದೆ",
-    "syncCardProgressOf": "{total} ರಲ್ಲಿ {current}",
     "syncStatusOnDevice": "ನಿಮ್ಮ ಸಾಧನದಲ್ಲಿ",
     "syncStatusDownloadingFromDevice": "ನಿಮ್ಮ ಸಾಧನದಿಂದ ಡೌನ್‌ಲೋಡ್ ಆಗುತ್ತಿದೆ",
-    "newestFirst": "ಹೊಸದು ಮೊದಲು",
     "noSyncedRecordingsYet": "ಇನ್ನೂ ಸಿಂಕ್ ಆದ ರೆಕಾರ್ಡಿಂಗ್‌ಗಳಿಲ್ಲ",
     "morePaymentMethodsComingSoon": "ಶೀಘ್ರದಲ್ಲೇ ಹೆಚ್ಚಿನ ಪಾವತಿ ವಿಧಾನಗಳು",
     "@morePaymentMethodsComingSoon": {
@@ -11157,7 +11143,6 @@
     "autoRemoveSyncedCopiesTitle": "ಸಿಂಕ್ ಆದ ಪ್ರತಿಗಳನ್ನು ಸ್ವಯಂಚಾಲಿತವಾಗಿ ತೆಗೆದುಹಾಕಿ",
     "autoRemoveSyncedCopiesDays": "ಸಿಂಕ್ ಆದ ಪ್ರತಿಗಳು {days} ದಿನಗಳ ನಂತರ ಅಳಿಸಲ್ಪಡುತ್ತವೆ",
     "autoRemoveSyncedCopiesDescription": "ಸಿಂಕ್ ಆದ {days} ದಿನಗಳ ನಂತರ ಸ್ಥಳೀಯ ಪ್ರತಿಗಳನ್ನು ಅಳಿಸುತ್ತದೆ. ಕ್ಲೌಡ್ ಪ್ರತಿಗಳನ್ನು ಇರಿಸಲಾಗುತ್ತದೆ.",
-    "localCopiesSection": "ಸ್ಥಳೀಯ ಪ್ರತಿಗಳು",
     "speakerLabelLinesLabeled": "{count, plural, =1{1 ಸಾಲಿಗೆ ಲೇಬಲ್ ಹಾಕಲಾಗಿದೆ} other{{count} ಸಾಲುಗಳಿಗೆ ಲೇಬಲ್ ಹಾಕಲಾಗಿದೆ}}",
     "speakerLabelVoiceStatus": "{state, select, learned{ಧ್ವನಿಯನ್ನು ಕಲಿತಿದೆ} pending{ಧ್ವನಿಯನ್ನು ಕಲಿಯಲಾಗುತ್ತಿದೆ…} disabled{ಧ್ವನಿ ಉಳಿಸುವಿಕೆ ಆಫ್ ಆಗಿದೆ} other{ಧ್ವನಿಯನ್ನು ಇನ್ನೂ ಕಲಿತಿಲ್ಲ}}",
     "speakerLabelVoiceDetail": "{state, select, learned{Omi ಮುಂದಿನ ಬಾರಿ {name} ಅವರನ್ನು ಗುರುತಿಸುತ್ತದೆ.} pending{ಇದಕ್ಕೆ ಕೆಲವು ಸೆಕೆಂಡುಗಳು ಬೇಕು.} disabled{Omi {name} ಅವರನ್ನು ಗುರುತಿಸಲು ಸೆಟ್ಟಿಂಗ್‌ಗಳಲ್ಲಿ ಧ್ವನಿ ಉಳಿಸುವಿಕೆಯನ್ನು ಆನ್ ಮಾಡಿ.} other{Omi ಗೆ {name} ಅವರ ಇನ್ನಷ್ಟು ಸ್ಪಷ್ಟ ಮಾತು ಬೇಕು, ಮತ್ತು ಅದು ಪ್ರಯತ್ನಿಸುತ್ತಲೇ ಇರುತ್ತದೆ.}}",
@@ -11495,5 +11480,26 @@
     "paywallOutlineHeadline": "ಇನ್ನು ಮುಂದೆ ಒಂದು ಪದವನ್ನೂ ತಪ್ಪಿಸಿಕೊಳ್ಳಬೇಡಿ.",
     "paywallCancelAnytime": "ಯಾವಾಗ ಬೇಕಾದರೂ ರದ್ದುಗೊಳಿಸಿ.",
     "connectAnAgent": "ಏಜೆಂಟ್ ಅನ್ನು ಸಂಪರ್ಕಿಸಿ",
-    "connectAnAgentSubtitle": "Claude, ChatGPT, Codex ಅಥವಾ ಯಾವುದೇ ಏಜೆಂಟ್‌ಗಾಗಿ ಸೆಟಪ್ ಪ್ರಾಂಪ್ಟ್ ಪಡೆಯಿರಿ"
+    "connectAnAgentSubtitle": "Claude, ChatGPT, Codex ಅಥವಾ ಯಾವುದೇ ಏಜೆಂಟ್‌ಗಾಗಿ ಸೆಟಪ್ ಪ್ರಾಂಪ್ಟ್ ಪಡೆಯಿರಿ",
+    "syncCardSyncingAmount": "{amount} ಆಡಿಯೊ ಸಿಂಕ್ ಆಗುತ್ತಿದೆ",
+    "syncCardSyncingTitle": "ನಿಮ್ಮ ರೆಕಾರ್ಡಿಂಗ್‌ಗಳು ಸಿಂಕ್ ಆಗುತ್ತಿವೆ",
+    "syncStepDownloadingAmount": "ನಿಮ್ಮ Omi ನಿಂದ ಡೌನ್‌ಲೋಡ್ · {done} / {total}",
+    "syncStepUploadingAmount": "ಅಪ್‌ಲೋಡ್ · {done} / {total}",
+    "syncCardTranscribingAmount": "{amount} ಅನ್ನು ಸಂಭಾಷಣೆಗಳಾಗಿ ಪರಿವರ್ತಿಸಲಾಗುತ್ತಿದೆ",
+    "syncCardTranscribedOf": "{done} / {total} ಪೂರ್ಣ · ನೀವು ಈ ಪರದೆಯಿಂದ ಹೊರಡಬಹುದು",
+    "syncCardReadyAmount": "{amount} ಸಿಂಕ್‌ಗೆ ಸಿದ್ಧ",
+    "syncStepLabelDownload": "Omi → ಫೋನ್",
+    "syncStepLabelUpload": "ಅಪ್‌ಲೋಡ್",
+    "syncStepLabelTranscribe": "ಲಿಪ್ಯಂತರ",
+    "syncDetailsTitle": "ಸಿಂಕ್ ವಿವರಗಳು",
+    "syncDetailsRightNow": "ಈಗ",
+    "syncDetailsYourOmi": "ನಿಮ್ಮ Omi",
+    "syncDetailsTransferSpeed": "ವರ್ಗಾವಣೆ ವೇಗ",
+    "syncDetailsWaitingOnOmi": "Omi ನಲ್ಲಿ ಕಾಯುತ್ತಿದೆ",
+    "syncDetailsWaitingOnPhone": "ಈ ಫೋನ್‌ನಲ್ಲಿ ಕಾಯುತ್ತಿದೆ",
+    "syncDetailsTranscribing": "Omi ನಲ್ಲಿ ಲಿಪ್ಯಂತರವಾಗುತ್ತಿದೆ",
+    "syncDetailsForSupport": "ಬೆಂಬಲಕ್ಕಾಗಿ",
+    "syncDetailsAudioFiles": "ಆಡಿಯೊ ಫೈಲ್‌ಗಳು",
+    "syncDetailsServerJobs": "ಸರ್ವರ್ ಜಾಬ್‌ಗಳು (ಪೂರ್ಣ / ಒಟ್ಟು)",
+    "syncDetailsCopy": "ಬೆಂಬಲಕ್ಕಾಗಿ ವಿವರಗಳನ್ನು ನಕಲಿಸಿ"
 }

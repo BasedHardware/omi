@@ -6818,18 +6818,6 @@
     "@downloadingFromSdCard": {
         "description": "Progress label when downloading from SD card"
     },
-    "processingProgress": "Обработка {current}/{total}",
-    "@processingProgress": {
-        "description": "Progress label showing current/total items",
-        "placeholders": {
-            "current": {
-                "type": "int"
-            },
-            "total": {
-                "type": "int"
-            }
-        }
-    },
     "conversationsCreated": "{count} разговори создадени",
     "@conversationsCreated": {
         "description": "Success message showing number of conversations created",
@@ -10359,10 +10347,8 @@
     "syncStatusConversationCreated": "Разговорот е создаден",
     "syncCardUploadingTitle": "Се прикачува на Omi",
     "syncCardDownloadingTitle": "Се презема од вашиот уред",
-    "syncCardProgressOf": "{current} од {total}",
     "syncStatusOnDevice": "На вашиот уред",
     "syncStatusDownloadingFromDevice": "Се презема од вашиот уред",
-    "newestFirst": "Прво најнови",
     "noSyncedRecordingsYet": "Сè уште нема синхронизирани записи",
     "morePaymentMethodsComingSoon": "Наскоро повеќе начини на плаќање",
     "@morePaymentMethodsComingSoon": {
@@ -11157,7 +11143,6 @@
     "autoRemoveSyncedCopiesTitle": "Автоматски отстранувај синхронизирани копии",
     "autoRemoveSyncedCopiesDays": "Синхронизираните копии се бришат по {days} дена",
     "autoRemoveSyncedCopiesDescription": "Ги брише локалните копии {days} дена по синхронизацијата. Облачните копии се задржуваат.",
-    "localCopiesSection": "Локални копии",
     "speakerLabelLinesLabeled": "{count, plural, =1{Означена е 1 линија} other{Означени се {count} линии}}",
     "speakerLabelVoiceStatus": "{state, select, learned{Гласот е научен} pending{Се учи гласот…} disabled{Зачувувањето на глас е исклучено} other{Гласот сѐ уште не е научен}}",
     "speakerLabelVoiceDetail": "{state, select, learned{Omi ќе препознае {name} следниот пат.} pending{Ова трае неколку секунди.} disabled{Вклучете го зачувувањето на гласови во Поставки за Omi да може да препознава {name}.} other{На Omi му треба појасен говор од {name} и ќе продолжи да се обидува.}}",
@@ -11495,5 +11480,26 @@
     "paywallOutlineHeadline": "Никогаш повеќе не пропуштајте ниту збор.",
     "paywallCancelAnytime": "Откажете во секое време.",
     "connectAnAgent": "Поврзете агент",
-    "connectAnAgentSubtitle": "Добијте упатство за поставување за Claude, ChatGPT, Codex или кој било агент"
+    "connectAnAgentSubtitle": "Добијте упатство за поставување за Claude, ChatGPT, Codex или кој било агент",
+    "syncCardSyncingAmount": "Синхронизирање на {amount} аудио",
+    "syncCardSyncingTitle": "Синхронизирање на снимките",
+    "syncStepDownloadingAmount": "Преземање од Omi · {done} од {total}",
+    "syncStepUploadingAmount": "Подигање · {done} од {total}",
+    "syncCardTranscribingAmount": "Претворање на {amount} во разговори",
+    "syncCardTranscribedOf": "Завршено {done} од {total} · можете да го напуштите екранот",
+    "syncCardReadyAmount": "{amount} подготвени за синхронизација",
+    "syncStepLabelDownload": "Omi → телефон",
+    "syncStepLabelUpload": "Подигање",
+    "syncStepLabelTranscribe": "Транскрипција",
+    "syncDetailsTitle": "Детали за синхронизацијата",
+    "syncDetailsRightNow": "Моментално",
+    "syncDetailsYourOmi": "Вашиот Omi",
+    "syncDetailsTransferSpeed": "Брзина на пренос",
+    "syncDetailsWaitingOnOmi": "Чека на Omi",
+    "syncDetailsWaitingOnPhone": "Чека на овој телефон",
+    "syncDetailsTranscribing": "Се транскрибира на Omi",
+    "syncDetailsForSupport": "За поддршка",
+    "syncDetailsAudioFiles": "Аудио датотеки",
+    "syncDetailsServerJobs": "Задачи на серверот (завршени / вкупно)",
+    "syncDetailsCopy": "Копирај ги деталите за поддршка"
 }
