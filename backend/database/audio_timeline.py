@@ -129,7 +129,15 @@ def group_chunks_by_coverage(
             this_start = spans[index]
             split = prev_end is not None and this_start is not None and abs(this_start[0] - prev_end[1]) > tolerance
         if not split and groups:
-            split = chunk['timestamp'] - groups[-1][-1]['timestamp'] > gap_threshold
+            # chunk['timestamp'] raises KeyError on a chunk with no timestamp
+            # (and TypeError on a non-numeric one) — read both sides defensively
+            # so a malformed chunk falls back to merging, not crashing.
+            try:
+                this_ts = float(chunk['timestamp'])
+                prev_ts = float(groups[-1][-1]['timestamp'])
+                split = (this_ts - prev_ts) > gap_threshold
+            except (KeyError, TypeError, ValueError):
+                split = False
         if split or not groups:
             groups.append([chunk])
         else:
