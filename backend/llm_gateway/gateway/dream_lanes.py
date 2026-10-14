@@ -9,11 +9,11 @@ from copy import deepcopy
 
 def dream_lane_items(desktop_lanes, desktop_artifacts):
     lanes, artifacts = [], []
-    for stage in ('triage', 'reasoning'):
+    for stage in ('triage', 'reasoning', 'verify'):
         lane = deepcopy(desktop_lanes[0])
         route = deepcopy(desktop_artifacts[0])
         reserved = (
-            stage == 'reasoning'
+            stage in {'reasoning', 'verify'}
             and route['provider_options'].get('reserved_capacity_only') is True
             and route['fallbacks'] == [{'provider': 'openai', 'model': 'gpt-6-luna'}]
             and 'reserved_capacity_unavailable' in route['fallback_policy']['fallback_on']
@@ -24,7 +24,7 @@ def dream_lane_items(desktop_lanes, desktop_artifacts):
             'text_input': True,
             'streaming': False,
             'structured_output': 'json_schema',
-            'tools': False,
+            'tools': stage == 'reasoning',
             'translation': False,
         }
         lane.update(lane_id=lane_id, active_route=route_id, last_known_good=route_id, capabilities=capabilities)
@@ -33,12 +33,12 @@ def dream_lane_items(desktop_lanes, desktop_artifacts):
             route_artifact_id=route_id,
             capabilities=capabilities,
             # Reasoning shares the full-context model deadline; triage stays cheap.
-            timeouts={'request_ms': 480000 if stage == 'reasoning' else 60000},
+            timeouts={'request_ms': 480000 if stage == 'reasoning' else 120000 if stage == 'verify' else 60000},
             retry={'max_attempts': 1},
         )
         route['evidence'] = {
-            'benchmark_snapshot': 'dream.shadow.v1',
-            'eval_report': 'backend.tests.unit.test_dream_agent',
+            'benchmark_snapshot': 'dream.harness.v2',
+            'eval_report': 'backend.tests.unit.test_dream_harness',
             'benchmark_source': 'omi_eval',
             'dev_only': False,
         }
