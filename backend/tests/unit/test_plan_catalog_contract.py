@@ -284,3 +284,16 @@ def test_catalog_cli_errors_do_not_log_supplied_values(capsys):
     output = capsys.readouterr().err
     assert '1 issue(s)' in output
     assert 'private-value' not in output
+
+
+def test_catalog_cli_keeps_structural_labels_without_echoing_values(capsys):
+    plan_catalog_compiler._print_errors(
+        [
+            'missing legacy entitlement key allocations: private-token',
+            'binding private-token requires nonempty price_id',
+        ]
+    )
+    output = capsys.readouterr().err
+    assert 'missing legacy entitlement key allocations' in output
+    assert 'nonempty price_id' in output
+    assert 'private-token' not in output

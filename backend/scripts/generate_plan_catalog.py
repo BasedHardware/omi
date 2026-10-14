@@ -960,6 +960,21 @@ def load_catalog_from_git(ref: str) -> Mapping[str, Any] | None:
     return value
 
 
+def _safe_error_category(error: str) -> str:
+    # Return fixed labels only: validation messages may contain private values.
+    if 'missing legacy entitlement key allocations' in error:
+        return 'missing legacy entitlement key allocations'
+    if 'nonempty price_id' in error:
+        return 'Stripe binding requires a nonempty price_id'
+    if 'missing keys' in error or 'unknown keys' in error:
+        return 'catalog schema keys are invalid'
+    if 'decision' in error:
+        return 'catalog decision reference is invalid'
+    if 'allocation' in error or 'limit' in error:
+        return 'catalog allocation or limit is invalid'
+    return 'catalog contract is invalid'
+
+
 def _print_errors(errors: Iterable[str]) -> int:
     values = list(errors)
     if not values:
@@ -971,6 +986,8 @@ def _print_errors(errors: Iterable[str]) -> int:
         f'plan catalog validation failed: {len(values)} issue(s); inspect validate_catalog() diagnostics locally',
         file=sys.stderr,
     )
+    for category in sorted({_safe_error_category(error) for error in values}):
+        print(f'- {category}', file=sys.stderr)
     return 1
 
 
