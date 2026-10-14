@@ -105,7 +105,14 @@ def recording_hours(plan_id: str) -> int:
     if units is None:
         return 0
     raw = Decimal(units) * _share() / _units_per_hour()
-    return floor_to_nice(raw)
+    return _capacity_hours(plan_id, raw)
+
+
+def _capacity_hours(plan_id: str, raw: Decimal) -> int:
+    # Keep a supported promise boundary visible when nice rounding would hide it.
+    threshold = {'plus': 240, 'operator': 720, 'architect': 1440}.get(plan_id)
+    nice = floor_to_nice(raw)
+    return max(nice, threshold) if threshold is not None and raw >= threshold else nice
 
 
 def per_day_count(monthly_hours: int) -> int:
@@ -136,12 +143,8 @@ def hours_line(plan_id: str, locale: str | None = None) -> str:
     hours = recording_hours(plan_id)
     bands = copy_for(locale)['hours_bands']
     threshold = {'plus': 240, 'operator': 720, 'architect': 1440}.get(plan_id)
-    if threshold is not None:
-        raw = Decimal(budget_units_for(plan_id) or 0) * _share() / _units_per_hour()
-        if raw >= threshold:
-            # Preserve the capacity threshold when floor_to_nice would round 720 down to 700.
-            hours = max(hours, threshold)
-            return bands[plan_id].format(hours=f'{hours:,}')
+    if threshold is not None and hours >= threshold:
+        return bands[plan_id].format(hours=f'{hours:,}')
     return template.format(hours=f'{hours:,}', per_day=per_day_count(hours))
 
 
@@ -163,7 +166,7 @@ def recording_hours_left(plan_id: str, percent: float) -> int:
     if units is None:
         return 0
     remaining_units = Decimal(units) * fraction
-    return floor_to_nice(remaining_units * _share() / _units_per_hour())
+    return _capacity_hours(plan_id, remaining_units * _share() / _units_per_hour())
 
 
 def bullets(plan_id: str, trigger: str | None, locale: str | None = None) -> list[str]:
@@ -413,7 +416,9 @@ def yearly_switch_label(
 
 
 def _wire_percent(percent: float) -> int:
-    return int(Decimal(str(percent)).quantize(Decimal('1'), rounding=ROUND_HALF_UP))
+    rounded = int(Decimal(str(percent)).quantize(Decimal('1'), rounding=ROUND_HALF_UP))
+    # Never promote an unexhausted budget into the cap/Architect surface by rounding.
+    return min(rounded, 99) if percent < 100 else rounded
 
 
 def present_usage(

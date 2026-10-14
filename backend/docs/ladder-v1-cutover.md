@@ -150,3 +150,8 @@ Below these thresholds, the existing per-day copy remains. This is presentation 
 not a new independent live budget or a completeness claim about the usage ledger.
 
 Cheap fallback chat model/cap at the shared budget remains OPEN for David's ruling.
+
+Supported capacity thresholds survive nice rounding: if actual capacity supports
+720 hours, the headline and remaining-hours meter both show 720 rather than rounding
+the meter down to 700. Display-percent rounding never promotes a sub-100% budget
+into the exhausted/Architect surface.

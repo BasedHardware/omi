@@ -941,3 +941,35 @@ def test_efficiency_hours_bands(monkeypatch):
     assert 'Enough to wear it 24/7' in hours_line('operator')
     assert '24/7 on more than one device' in hours_line('architect')
     assert rates.recording_units_per_hour('live') == 130
+
+
+def test_capacity_rounding_preserves_supported_band_and_meter(monkeypatch):
+    import config.rate_card as rates
+
+    card = rates.recording_rate_card()
+    card['recording']['units_per_recorded_hour']['batch'] = '50'
+    monkeypatch.setattr(rates, 'recording_rate_card', lambda: card)
+    assert recording_hours('operator') == 720
+    assert recording_hours_left('operator', 0) == 720
+    assert 'About 720 hours' in hours_line('operator')
+    assert 'Enough to wear it 24/7' in hours_line('operator')
+    card['recording']['units_per_recorded_hour']['batch'] = '110'
+    assert recording_hours('architect') == 1440
+    assert recording_hours_left('architect', 0) == 1440
+    assert '24/7 on more than one device' in hours_line('architect')
+
+
+def test_percent_rounding_never_offers_architect_before_cap():
+    rows, recognized = ladder_catalog()
+    sheet = sheet_for(
+        'operator',
+        price_id='price_operator_month',
+        trigger='usage_budget',
+        percent=99.9,
+        rows=rows,
+        recognized=recognized,
+        bindings=list(rows),
+    )
+    assert sheet.usage.percent == 99
+    assert all(tier.plan_id != 'architect' for tier in sheet.tiers)
+    assert sheet.header != "You've used all of this month's usage"
