@@ -36,12 +36,14 @@ def store_oauth_tokens(
     refresh_token: str,
     expires_at: float,
     api_base: Optional[str] = None,
+    keep_existing_api_key: bool = True,
 ) -> cfg.Profile:
     """Persist OAuth tokens to the named profile and return the updated Profile."""
     config = cfg.load()
     profile = config.get_profile(profile_name)
     profile.auth_method = "oauth"
-    profile.api_key = None
+    if not keep_existing_api_key:
+        profile.api_key = None
     profile.id_token = id_token
     profile.refresh_token = refresh_token
     profile.id_token_expires_at = expires_at
@@ -86,6 +88,26 @@ def store_oauth_session_with_dev_key(
         profile.api_base = api_base
     config.set_profile(profile)
     config.active_profile = profile_name
+    cfg.save(config)
+    return profile
+
+
+def update_oauth_tokens(
+    profile_name: str,
+    *,
+    id_token: str,
+    refresh_token: str,
+    expires_at: float,
+) -> cfg.Profile:
+    """Update OAuth tokens after a refresh round-trip with rotation, preserving any dev API key."""
+    config = cfg.load()
+    profile = config.get_profile(profile_name)
+    if profile.auth_method != "oauth":
+        raise RuntimeError(f"Profile '{profile_name}' is not configured for OAuth")
+    profile.id_token = id_token
+    profile.refresh_token = refresh_token
+    profile.id_token_expires_at = expires_at
+    config.set_profile(profile)
     cfg.save(config)
     return profile
 
