@@ -567,8 +567,11 @@ final class ConversationRepository {
     let removedVisibleRow = conversations.contains { $0.id == id }
     conversations.removeAll { $0.id == id }
     pendingMutations.removeValue(forKey: id)
-    if removedVisibleRow, let count {
-      self.count = max(0, count - 1)
+    if removedVisibleRow {
+      if let count {
+        self.count = max(0, count - 1)
+      }
+      nextPageOffset = max(0, nextPageOffset - 1)
     }
     emit(.server)
   }
@@ -770,8 +773,11 @@ final class ConversationRepository {
     guard matchesCurrentQuery(conversation) else {
       let removedVisibleRow = conversations.contains { $0.id == conversation.id }
       conversations.removeAll { $0.id == conversation.id }
-      if removedVisibleRow, let count {
-        self.count = max(0, count - 1)
+      if removedVisibleRow {
+        if let count {
+          self.count = max(0, count - 1)
+        }
+        nextPageOffset = max(0, nextPageOffset - 1)
       }
       return
     }
