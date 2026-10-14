@@ -42,6 +42,31 @@ import logging
 logger = logging.getLogger(__name__)
 
 
+def _safe_message_conversations(items) -> list:
+    """Convert memory members to MessageConversation without raising.
+
+    The graph callback hands back dicts, partially-filled docs, or live
+    objects; ``MessageConversation(**m)`` throws TypeError on a non-mapping
+    and ValidationError on a doc missing structured/created_at. These run
+    AFTER add_message — a throw orphans the persisted id while a fresh
+    in-memory id desyncs the client from the stored document — so bad
+    members skip rather than crash the write.
+    """
+    out = []
+    for m in items:
+        try:
+            if isinstance(m, dict):
+                out.append(MessageConversation.model_validate(m))
+            else:
+                # a Conversation-like object — coerce through its dump
+                out.append(
+                    MessageConversation.model_validate(m.model_dump() if hasattr(m, 'model_dump') else vars(m))
+                )
+        except Exception:
+            continue
+    return out
+
+
 def _log_skipped_message(record, exc) -> None:
     logger.warning(
         'Skipping malformed chat message %s: %s',
@@ -340,7 +365,9 @@ def process_voice_message_segment(
         memories_id=memories_id,
     )
     chat_db.add_message(uid, ai_message.model_dump())
-    ai_message.memories = memories if len(memories) < 5 else memories[:5]
+    # Same defensive conversion as process_message — raw members can be dicts
+    # or live objects; assigning them untyped breaks model_dump() serialization.
+    ai_message.memories = _safe_message_conversations(memories[:5])
     if app_id:
         record_app_usage(uid, app_id, UsageHistoryType.chat_message_sent, message_id=ai_message.id)
 
@@ -533,7 +560,11 @@ async def process_voice_message_segment_stream(
             await run_blocking(db_executor, chat_db.add_message_to_chat_session, uid, chat_session.id, ai_message.id)
 
         await run_blocking(db_executor, chat_db.add_message, uid, ai_message.model_dump())
-        ai_message.memories = [MessageConversation(**m) for m in (memories if len(memories) < 5 else memories[:5])]
+        # Convert memories defensively — a non-mapping member or a doc missing
+        # structured/created_at must not raise here: add_message already
+        # persisted this id, and a throw abandons the write while a fresh
+        # in-memory id desyncs the client from the stored document.
+        ai_message.memories = _safe_message_conversations(memories[:5])
 
         if app_id:
             await run_blocking(

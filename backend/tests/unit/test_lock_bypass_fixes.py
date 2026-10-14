@@ -1048,7 +1048,7 @@ class TestUsersLockEnforcement:
 
     def test_followup_question_rejects_locked(self):
         """L2: delete_person_endpoint must raise 402 for locked conversations."""
-        from routers.users import delete_person_endpoint
+        from routers.users import delete_followup_question_endpoint
         from fastapi import HTTPException
 
         with patch(
@@ -1056,19 +1056,19 @@ class TestUsersLockEnforcement:
             return_value=_make_conversation(locked=True),
         ):
             with pytest.raises(HTTPException) as exc_info:
-                delete_person_endpoint(memory_id="conv-1", uid="test-uid")
+                delete_followup_question_endpoint(memory_id="conv-1", uid="test-uid")
             assert exc_info.value.status_code == 402
 
     def test_followup_question_allows_unlocked(self):
         """delete_person_endpoint should proceed for unlocked conversations."""
-        from routers.users import delete_person_endpoint
+        from routers.users import delete_followup_question_endpoint
 
         with patch(
             "routers.users.get_conversation",
             return_value=_make_conversation(locked=False),
         ):
             with patch("routers.users.followup_question_prompt", return_value="test result"):
-                result = delete_person_endpoint(memory_id="conv-1", uid="test-uid")
+                result = delete_followup_question_endpoint(memory_id="conv-1", uid="test-uid")
         assert result["result"] == "test result"
 
     def test_daily_summary_excludes_locked(self):
