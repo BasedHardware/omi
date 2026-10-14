@@ -261,6 +261,12 @@ flags:
   - {"key":"MEETING_NOTES_EPISODE_SELECTION_EFFORT","aliases":[],"kind":"env","lifecycle":"experiment","surfaces":["backend"],"summary":"Optional selector effort, default low; writer effort is independent","fail":"closed","owner":"dazheng","created":"2026-10-05","review_by":"2026-11-05","decision":"pending","prereg":"backend/utils/conversations/EPISODE_EVIDENCE.md"}
   - {"key":"MEETING_NOTES_EPISODE_SELECTION_TIMEOUT_SECONDS","aliases":[],"kind":"env","lifecycle":"experiment","surfaces":["backend"],"summary":"Optional selection pass timeout, default 30 seconds, bounded 1-30; fallback keeps writing","fail":"closed","owner":"dazheng","created":"2026-10-05","review_by":"2026-11-05","decision":"pending","prereg":"backend/utils/conversations/EPISODE_EVIDENCE.md"}
   - {"key":"MEETING_NOTES_EPISODE_THINKING_MAX_INPUT_BYTES","aliases":[],"kind":"env","lifecycle":"experiment","surfaces":["backend"],"summary":"Optional high/xhigh byte ceiling, default disabled (0); long transcript guard stays active","fail":"closed","owner":"dazheng","created":"2026-10-05","review_by":"2026-11-05","decision":"pending","prereg":"backend/utils/conversations/EPISODE_EVIDENCE.md"}
+  - {"key":"MOBILE_STANDARD_BATCH_ENABLED","aliases":[],"kind":"env","lifecycle":"rollout","surfaces":["backend","mobile"],"summary":"Authorize hidden mobile Standard pendant capture to batch via existing WAL sync","fail":"closed","owner":"dazheng","created":"2026-10-14","review_by":"2026-11-14","decision":"pending","notes":"Default off. Deploy raw archival on backend-sync before enabling listen capability. First ramp at most 5 percent for at least 12 hours. Off revokes new batching; pending WALs still archive and process."}
+  - {"key":"MOBILE_STANDARD_BATCH_PERCENT","aliases":[],"kind":"env","lifecycle":"rollout","surfaces":["backend"],"summary":"Stable UID percentage for mobile Standard batch, default zero","fail":"closed","owner":"dazheng","created":"2026-10-14","review_by":"2026-11-14","decision":"pending"}
+  - {"key":"MOBILE_STANDARD_BATCH_UIDS","aliases":[],"kind":"env","lifecycle":"rollout","surfaces":["backend"],"summary":"Comma-separated UID allowlist for mobile Standard batch, default empty","fail":"closed","owner":"dazheng","created":"2026-10-14","review_by":"2026-11-14","decision":"pending"}
+
+
+
 ignore:
   - {"key":"DD_TRACE_ENABLED","reason":"Datadog telemetry instrumentation switch, not a product behavior flag"}
   - {"key":"DD_LOGS_ENABLED","reason":"Datadog telemetry log routing switch, not a product behavior flag"}

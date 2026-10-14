@@ -197,7 +197,8 @@ def delete_all_user_storage_objects(uid: str) -> int:
         (
             private_cloud_sync_bucket,
             tuple(
-                f'{prefix}/{uid}/' for prefix in ('chunks', 'audio', 'merged', PLAYBACK_ARTIFACT_PREFIX, 'diagnostics')
+                f'{prefix}/{uid}/'
+                for prefix in ('chunks', 'audio', 'merged', PLAYBACK_ARTIFACT_PREFIX, 'diagnostics', 'raw-mobile-batch')
             ),
         ),
         (syncing_local_bucket, (f'syncing/{uid}/',)),
@@ -2047,3 +2048,28 @@ def screen_frame_object_paths(uid: str, conversation_id: str, frame_id: str) -> 
         _screen_frame_blob_path(uid, conversation_id, frame_id),
         _screen_frame_thumbnail_blob_path(uid, conversation_id, frame_id),
     ]
+
+
+def archive_mobile_batch_raw_files(uid: str, paths: List[str]) -> None:
+    """Retain original length-prefixed pendant Opus, including all silence.
+
+    This is an upload acceptance prerequisite, not best-effort playback.
+    Content-addressing makes retries idempotent. No application TTL; account
+    deletion owns the prefix. Enhanced protection encrypts the unchanged bytes.
+    Ordinary legacy sync uploads remain unchanged.
+    """
+    selected = [p for p in paths if Path(p).name.startswith('audio_omimobilebatch')]
+    if not selected:
+        return
+    bucket = _get_storage_client().bucket(private_cloud_sync_bucket)
+    protection = users_db.get_data_protection_level(uid)
+    for path in selected:
+        raw = Path(path).read_bytes()
+        digest = hashlib.sha256(raw).hexdigest()
+        encrypted = protection == 'enhanced'
+        payload = encryption.encrypt_audio_chunk(raw, uid) if encrypted else raw
+        suffix = '.enc' if encrypted else ''
+        blob = bucket.blob(f'raw-mobile-batch/{uid}/{digest}/{Path(path).name}{suffix}')
+        blob.metadata = {'sha256': digest, 'format': 'omi-wal-uint32le-opus-v1'}
+        with owner_storage_write_gate(uid, bucket):
+            blob.upload_from_string(payload, content_type='application/octet-stream')

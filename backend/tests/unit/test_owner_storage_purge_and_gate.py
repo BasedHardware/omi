@@ -45,6 +45,7 @@ def test_owner_prefix_purge_removes_private_and_non_private_uid_objects(monkeypa
         'private': _Bucket(
             {
                 f'chunks/{uid}/conv/a.opus',
+                f'raw-mobile-batch/{uid}/digest/audio.bin',
                 f'audio/{uid}/conv/a.wav',
                 f'merged/{uid}/conv/a.wav',
                 f'playback/{uid}/conv/a.mp3',
@@ -62,7 +63,7 @@ def test_owner_prefix_purge_removes_private_and_non_private_uid_objects(monkeypa
 
     deleted = storage_mod.delete_all_user_storage_objects(uid)
 
-    assert deleted == 7
+    assert deleted == 8
     assert buckets['speech'].names == {'other/speech.wav'}
     assert buckets['private'].names == {'chunks/other/keep.opus'}
     assert buckets['sync'].names == {'syncing/other/job/input.bin'}
