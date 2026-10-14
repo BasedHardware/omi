@@ -9,6 +9,7 @@ import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/pages/home/firmware_update.dart';
 import 'package:omi/pages/home/omiglass_ota_update.dart';
 import 'package:omi/providers/device_provider.dart';
+import 'package:omi/ui/ui.dart';
 
 class _FakeHttpOverrides extends HttpOverrides {
   @override
