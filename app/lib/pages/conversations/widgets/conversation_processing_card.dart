@@ -32,7 +32,11 @@ import 'package:omi/utils/sync/offline_sync_amounts.dart';
 /// The copy is the Offline Sync status card's, reused key for key, so Home and
 /// the settings page can never disagree about what a sync is doing.
 class ConversationProcessingCard extends StatefulWidget {
-  const ConversationProcessingCard({super.key, this.syncProvider, this.multiFileSync});
+  const ConversationProcessingCard({
+    super.key,
+    this.syncProvider,
+    this.multiFileSync,
+  });
 
   /// Injectable for tests and the visual audit; defaults to the app provider.
   final SyncProvider? syncProvider;
@@ -76,7 +80,9 @@ class _ConversationProcessingCardState extends State<ConversationProcessingCard>
   /// own forever.
   bool _shouldShow(SyncProvider p) {
     if (p.uploadedWals.isNotEmpty || p.syncState.isProcessing) return true;
-    return p.allWals.any((w) => w.status == WalStatus.miss && _isForwardMoving(w.syncDisplayState));
+    return p.allWals.any(
+      (w) => w.status == WalStatus.miss && _isForwardMoving(w.syncDisplayState),
+    );
   }
 
   @override
@@ -96,11 +102,18 @@ class _ConversationProcessingCardState extends State<ConversationProcessingCard>
                 // support there is no Offline Sync screen to open, only the
                 // explanation of why (device_settings' _openOfflineSync).
                 if (!context.read<DeviceProvider>().isDeviceStorageSupport) {
-                  showOmiAlert(context, title: context.l10n.v2Undetected, message: context.l10n.v2UndetectedMessage);
+                  showOmiAlert(
+                    context,
+                    title: context.l10n.v2Undetected,
+                    message: context.l10n.v2UndetectedMessage,
+                  );
                   return;
                 }
                 final multi = widget.multiFileSync ?? SharedPreferencesUtil().deviceSupportsMultiFileSync;
-                routeToPage(context, multi ? const AutoSyncPage() : const SyncPage());
+                routeToPage(
+                  context,
+                  multi ? const AutoSyncPage() : const SyncPage(),
+                );
               },
               child: Container(
                 key: const Key('conversation_processing_card'),
@@ -109,7 +122,9 @@ class _ConversationProcessingCardState extends State<ConversationProcessingCard>
                 padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
                 decoration: BoxDecoration(
                   color: OmiColors.surface1,
-                  borderRadius: const BorderRadius.all(Radius.circular(OmiRadius.md)),
+                  borderRadius: const BorderRadius.all(
+                    Radius.circular(OmiRadius.md),
+                  ),
                 ),
                 child: _buildContent(context, p),
               ),
@@ -146,7 +161,12 @@ class _ConversationProcessingCardState extends State<ConversationProcessingCard>
       barStep = step.barStep;
       final known = step.totalSeconds > 0;
       if (step.step == SyncStep.download) {
-        subtitle = known ? l.syncStepDownloadingAmount(dur(step.doneSeconds), dur(step.totalSeconds)) : null;
+        subtitle = known
+            ? l.syncStepDownloadingAmount(
+                dur(step.doneSeconds),
+                dur(step.totalSeconds),
+              )
+            : null;
         // The device reports a byte fraction before any audio is countable.
         barFraction = s.progress > 0 ? s.progress : null;
       } else if (s.phase == SyncPhase.waitingForInternet) {
@@ -154,7 +174,12 @@ class _ConversationProcessingCardState extends State<ConversationProcessingCard>
         titleColor = Colors.orangeAccent;
         barFraction = known ? step.fraction : 0;
       } else {
-        subtitle = known ? l.syncStepUploadingAmount(dur(step.doneSeconds), dur(step.totalSeconds)) : null;
+        subtitle = known
+            ? l.syncStepUploadingAmount(
+                dur(step.doneSeconds),
+                dur(step.totalSeconds),
+              )
+            : null;
         barFraction = known && step.doneSeconds > 0 ? step.fraction : null;
       }
       // Live-capture uploads run before the device drain: the bar stays on the device step.
@@ -176,7 +201,9 @@ class _ConversationProcessingCardState extends State<ConversationProcessingCard>
       // merely waiting, as on the Offline Sync page; the page owns the detail.
       final attentionWals = p.allWals.where((w) => _needsAttention(w.syncDisplayState)).toList();
       if (attentionWals.isNotEmpty) {
-        title = l.syncCardNeedsAttention(groupRecordingBlocks(attentionWals).length);
+        title = l.syncCardNeedsAttention(
+          groupRecordingBlocks(attentionWals).length,
+        );
         titleColor = Colors.orangeAccent;
       } else {
         final readyWals = p.allWals.where((w) => w.status == WalStatus.miss && walIsSyncable(w)).toList();
@@ -194,7 +221,10 @@ class _ConversationProcessingCardState extends State<ConversationProcessingCard>
         Row(
           crossAxisAlignment: CrossAxisAlignment.center,
           children: [
-            if (spinner) ...[const OmiSpinner(size: OmiSpinnerSize.small), const SizedBox(width: 10)],
+            if (spinner) ...[
+              const OmiSpinner(size: OmiSpinnerSize.small),
+              const SizedBox(width: 10),
+            ],
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -202,7 +232,14 @@ class _ConversationProcessingCardState extends State<ConversationProcessingCard>
                 children: [
                   Text(
                     title,
-                    style: TextStyle(color: titleColor, fontSize: 15, fontWeight: FontWeight.w500, height: 1.25),
+                    // The Offline Sync status card's exact title style; the ratchet allow lives on
+                    // the fontSize line itself.
+                    style: TextStyle(
+                      color: titleColor,
+                      fontSize: 15, // omi-ux-allow: font-size-literal -- mirrors auto_sync_page's status-card title
+                      fontWeight: FontWeight.w500,
+                      height: 1.25,
+                    ),
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                   ),
@@ -210,7 +247,9 @@ class _ConversationProcessingCardState extends State<ConversationProcessingCard>
                     const SizedBox(height: 3),
                     Text(
                       subtitle,
-                      style: OmiType.footnote.copyWith(color: OmiColors.textTertiary),
+                      style: OmiType.footnote.copyWith(
+                        color: OmiColors.textTertiary,
+                      ),
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                     ),
@@ -219,7 +258,11 @@ class _ConversationProcessingCardState extends State<ConversationProcessingCard>
               ),
             ),
             const SizedBox(width: 10),
-            FaIcon(FontAwesomeIcons.chevronRight, color: OmiColors.textTertiary, size: 12),
+            FaIcon(
+              FontAwesomeIcons.chevronRight,
+              color: OmiColors.textTertiary,
+              size: 12,
+            ),
           ],
         ),
         if (barStep != null) ...[
