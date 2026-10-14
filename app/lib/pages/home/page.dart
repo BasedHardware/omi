@@ -68,6 +68,7 @@ import 'package:omi/widgets/calendar_date_picker_sheet.dart';
 import 'package:omi/widgets/header_circle_button.dart';
 import 'package:omi/pages/onboarding/interactive_device_onboarding/interactive_device_onboarding_wrapper.dart';
 import 'package:omi/services/sockets/listen_client_state.dart';
+import 'package:omi/pages/home/paywall_reask_prompt.dart';
 import 'package:omi/ui/ui.dart';
 import 'home_deep_links.dart';
 import 'home_navigation.dart';
@@ -371,6 +372,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
 
       // Reload convos
       if (mounted) {
+        unawaited(queuePaywallReask(context));
         Provider.of<ConversationProvider>(context, listen: false).refreshConversations();
         final captureProvider = Provider.of<CaptureProvider>(context, listen: false);
         captureProvider.setMetricsAppActive(true);
@@ -566,6 +568,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
             );
           },
         );
+
+        unawaited(queuePaywallReask(context));
 
         // Register callback for device connection to check firmware announcements and device onboarding
         deviceProvider.onDeviceConnected = (BtDevice device) {

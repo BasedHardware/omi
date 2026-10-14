@@ -7,6 +7,7 @@ import 'package:omi/pages/paywall/paywall_router.dart';
 import 'package:omi/pages/settings/widgets/standalone_plans_sheet.dart';
 import 'package:omi/providers/usage_provider.dart';
 import 'package:omi/services/experiments/paywall_experiment.dart';
+import 'package:omi/services/experiments/paywall_reask.dart';
 import 'package:omi/services/superwall_pilot.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
 
@@ -37,6 +38,7 @@ Future<void> openUpgradePaywall(
     final user = FirebaseAuth.instance.currentUser;
     if (user != null && !user.isAnonymous) {
       logOpen();
+      PaywallReask.noteShown();
       if (await SuperwallPilot.instance.showPlacement(placement, user.uid)) return;
       if (!context.mounted) return;
     }

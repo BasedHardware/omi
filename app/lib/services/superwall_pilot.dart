@@ -92,6 +92,9 @@ class SuperwallPilot {
   /// replayed). Superwall only: no plans-sheet fallback, so nothing changes when the pilot is off.
   static const deviceSetupCompletePlacement = 'device_setup_complete';
 
+  /// The paywall re-ask on app open for free users (`PaywallReask`, flag `paywall-reask`).
+  static const appOpenReaskPlacement = 'app_open_reask';
+
   /// Shows [placement] for the current user and completes once the paywall closes. Returns false
   /// when nothing was shown (pilot off, no paywall for this user, or an error), so the caller can
   /// fall back to the plans sheet.
