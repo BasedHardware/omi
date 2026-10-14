@@ -6865,18 +6865,6 @@
     "@downloadingFromSdCard": {
         "description": "Progress label when downloading from SD card"
     },
-    "processingProgress": "Processing {current}/{total}",
-    "@processingProgress": {
-        "description": "Progress label showing current/total items",
-        "placeholders": {
-            "current": {
-                "type": "int"
-            },
-            "total": {
-                "type": "int"
-            }
-        }
-    },
     "conversationsCreated": "{count} conversations created",
     "@conversationsCreated": {
         "description": "Success message showing number of conversations created",
@@ -10819,18 +10807,6 @@
             }
         }
     },
-    "syncCardProgressOf": "{current} of {total}",
-    "@syncCardProgressOf": {
-        "description": "Top status card: secondary progress line under the phase title.",
-        "placeholders": {
-            "current": {
-                "type": "int"
-            },
-            "total": {
-                "type": "int"
-            }
-        }
-    },
     "syncStatusOnDevice": "On your device",
     "@syncStatusOnDevice": {
         "description": "Row subtitle for a recording still on the Omi device (SD-card or flash page) that has not been downloaded to the phone yet."
@@ -10838,10 +10814,6 @@
     "syncStatusDownloadingFromDevice": "Downloading from your device",
     "@syncStatusDownloadingFromDevice": {
         "description": "Row subtitle for a recording currently being transferred from the Omi device to the phone."
-    },
-    "newestFirst": "Newest first",
-    "@newestFirst": {
-        "description": "Subtle sort-order indicator next to the recordings list header so the user knows the newest items are at the top."
     },
     "noSyncedRecordingsYet": "No synced recordings yet",
     "@noSyncedRecordingsYet": {
@@ -14311,7 +14283,6 @@
     "autoRemoveSyncedCopiesTitle": "Auto-Remove Synced Copies",
     "autoRemoveSyncedCopiesDays": "Synced copies deleted after {days} days",
     "autoRemoveSyncedCopiesDescription": "Deletes local copies {days} days after sync. Cloud copies are kept.",
-    "localCopiesSection": "Local Copies",
     "@autoRemoveSyncedCopiesTitle": {
         "description": "Settings row title: automatically remove synced phone-local recording copies"
     },
@@ -14332,9 +14303,6 @@
                 "example": "30"
             }
         }
-    },
-    "@localCopiesSection": {
-        "description": "Section header above the auto-remove synced copies setting"
     },
     "speakerLabelLinesLabeled": "{count, plural, =1{Labeled 1 line} other{Labeled {count} lines}}",
     "@speakerLabelLinesLabeled": {
@@ -14737,6 +14705,10 @@
                 "type": "String"
             }
         }
+    },
+    "reviewSpellingContext": "Conversation context",
+    "@reviewSpellingContext": {
+        "description": "Heading above the speech around a spelling question in Review."
     },
     "reviewQuestionSpelling": "How is this spelled?",
     "@reviewQuestionSpelling": {
@@ -16007,5 +15979,144 @@
     "pairingLocationPermission": "Allow location access for Omi in Settings so this phone can find your device, then try again.",
     "pairingNotFoundOrDropped": "Couldn't reach your Omi. Make sure it's charged, close to your phone, and its light is blinking, then try again.",
     "pairingBondRecovery": "Forget Omi in your phone’s Bluetooth settings, then try pairing again.",
-    "pairingHowTo": "How to pair"
+    "pairingHowTo": "How to pair",
+    "paywallOutlineHeadline": "Never miss a word again.",
+    "@paywallOutlineHeadline": {
+        "description": "Headline of the Outline paywall variant (mobile paywall A/B test)"
+    },
+    "paywallCancelAnytime": "Cancel anytime.",
+    "@paywallCancelAnytime": {
+        "description": "Caption under the upgrade button on the Outline paywall variant"
+    },
+    "connectAnAgent": "Connect an Agent",
+    "@connectAnAgent": {
+        "description": "Settings row that opens the web developer home, where users get copy-paste setup prompts and keys for AI agents (Claude, ChatGPT, Codex, ...)"
+    },
+    "connectAnAgentSubtitle": "Get a setup prompt for Claude, ChatGPT, Codex, or any agent",
+    "@connectAnAgentSubtitle": {
+        "description": "Subtitle of the Connect an Agent settings row"
+    },
+    "syncCardSyncingAmount": "Syncing {amount} of audio",
+    "@syncCardSyncingAmount": {
+        "description": "Offline Sync status card title while a sync runs; amount is a compact audio length like 18m.",
+        "placeholders": {
+            "amount": {
+                "type": "String"
+            }
+        }
+    },
+    "syncCardSyncingTitle": "Syncing your recordings",
+    "@syncCardSyncingTitle": {
+        "description": "Offline Sync status card title while a sync runs and the amount of audio is not known yet."
+    },
+    "syncStepDownloadingAmount": "Downloading from your Omi · {done} of {total}",
+    "@syncStepDownloadingAmount": {
+        "description": "Offline Sync status card subtitle: audio moved from the Omi device to the phone so far, as compact lengths.",
+        "placeholders": {
+            "done": {
+                "type": "String"
+            },
+            "total": {
+                "type": "String"
+            }
+        }
+    },
+    "syncStepUploadingAmount": "Uploading · {done} of {total}",
+    "@syncStepUploadingAmount": {
+        "description": "Offline Sync status card subtitle: audio uploaded from the phone to Omi so far, as compact lengths.",
+        "placeholders": {
+            "done": {
+                "type": "String"
+            },
+            "total": {
+                "type": "String"
+            }
+        }
+    },
+    "syncCardTranscribingAmount": "Turning {amount} into conversations",
+    "@syncCardTranscribingAmount": {
+        "description": "Offline Sync status card title while the server transcribes uploaded audio; amount is a compact audio length.",
+        "placeholders": {
+            "amount": {
+                "type": "String"
+            }
+        }
+    },
+    "syncCardTranscribedOf": "{done} of {total} done · you can leave this screen",
+    "@syncCardTranscribedOf": {
+        "description": "Offline Sync status card subtitle while the server transcribes: compact audio lengths done and total.",
+        "placeholders": {
+            "done": {
+                "type": "String"
+            },
+            "total": {
+                "type": "String"
+            }
+        }
+    },
+    "syncCardReadyAmount": "{amount} ready to sync",
+    "@syncCardReadyAmount": {
+        "description": "Offline Sync status card title when recordings wait for a manual sync; amount is a compact audio length.",
+        "placeholders": {
+            "amount": {
+                "type": "String"
+            }
+        }
+    },
+    "syncStepLabelDownload": "Omi → phone",
+    "@syncStepLabelDownload": {
+        "description": "Tiny label under the first of three Offline Sync progress segments: moving audio from the Omi device to the phone."
+    },
+    "syncStepLabelUpload": "Upload",
+    "@syncStepLabelUpload": {
+        "description": "Tiny label under the second of three Offline Sync progress segments: uploading to Omi."
+    },
+    "syncStepLabelTranscribe": "Transcribe",
+    "@syncStepLabelTranscribe": {
+        "description": "Tiny label under the third of three Offline Sync progress segments: server transcription."
+    },
+    "syncDetailsTitle": "Sync details",
+    "@syncDetailsTitle": {
+        "description": "Title of the Offline Sync diagnostics sheet and the link on the status card that opens it."
+    },
+    "syncDetailsRightNow": "Right now",
+    "@syncDetailsRightNow": {
+        "description": "Section header in Sync details: where unsynced audio is at this moment."
+    },
+    "syncDetailsYourOmi": "Your Omi",
+    "@syncDetailsYourOmi": {
+        "description": "Sync details row label for the Omi device; the value is Connected or Disconnected."
+    },
+    "syncDetailsTransferSpeed": "Transfer speed",
+    "@syncDetailsTransferSpeed": {
+        "description": "Sync details row label for the Bluetooth transfer speed, e.g. 50 KB/s."
+    },
+    "syncDetailsWaitingOnOmi": "Waiting on your Omi",
+    "@syncDetailsWaitingOnOmi": {
+        "description": "Sync details row label: audio still stored on the Omi device."
+    },
+    "syncDetailsWaitingOnPhone": "Waiting on this phone",
+    "@syncDetailsWaitingOnPhone": {
+        "description": "Sync details row label: audio on the phone that has not been uploaded yet."
+    },
+    "syncDetailsTranscribing": "Transcribing on Omi",
+    "@syncDetailsTranscribing": {
+        "description": "Sync details row label: audio uploaded and still being transcribed by Omi."
+    },
+    "syncDetailsForSupport": "For support",
+    "@syncDetailsForSupport": {
+        "description": "Sync details section header for raw technical counts meant for customer support."
+    },
+    "syncDetailsAudioFiles": "Audio files",
+    "@syncDetailsAudioFiles": {
+        "description": "Sync details row label: number of raw audio files the app holds."
+    },
+    "syncDetailsServerJobs": "Server jobs (done / total)",
+    "@syncDetailsServerJobs": {
+        "description": "Sync details row label: server processing jobs, shown as done / total."
+    },
+    "syncDetailsCopy": "Copy details for support",
+    "@syncDetailsCopy": {
+        "description": "Sync details button that copies the diagnostics text to the clipboard."
+    }
 }

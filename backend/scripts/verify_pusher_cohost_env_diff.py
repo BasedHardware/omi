@@ -25,6 +25,7 @@ Stdlib-only. Runs in pre-push/CI and in the pusher deploy workflows::
 from __future__ import annotations
 
 import argparse
+import json
 import re
 import sys
 from dataclasses import dataclass
@@ -74,6 +75,16 @@ _TRANSLATION_LISTEN_ONLY = frozenset(
 # The API domain and the Review routes run on backend-listen. Pusher's
 # pusher/main.py entrypoint does not mount routers/review.py.
 _REVIEW_SURFACE_LISTEN_ONLY = frozenset({'REVIEW_SURFACE_MODE'})
+# Demand policy owns /v4/listen provider handovers and client_state presence.
+# Pusher only receives the adopted transcript/audio; it never selects this lane.
+_DEMAND_LISTEN_ONLY = frozenset(
+    {
+        'STT_LIVE_DEMAND_ENABLED',
+        'STT_LIVE_DEMAND_PERCENT',
+        'STT_LIVE_DEMAND_UID_ALLOWLIST',
+        'STT_LIVE_DEMAND_MIN_DWELL_SECONDS',
+    }
+)
 LISTEN_ONLY_ALLOWED: dict[str, frozenset[str]] = {
     "dev": frozenset(
         {
@@ -168,7 +179,8 @@ LISTEN_ONLY_ALLOWED: dict[str, frozenset[str]] = {
         }
     )
     | _TRANSLATION_LISTEN_ONLY
-    | _REVIEW_SURFACE_LISTEN_ONLY,
+    | _REVIEW_SURFACE_LISTEN_ONLY
+    | _DEMAND_LISTEN_ONLY,
     "prod": frozenset(
         {
             # Managed listen-only STT rollout; pusher is not a live audio receiver.
@@ -267,7 +279,21 @@ LISTEN_ONLY_ALLOWED: dict[str, frozenset[str]] = {
         }
     )
     | _TRANSLATION_LISTEN_ONLY
-    | _REVIEW_SURFACE_LISTEN_ONLY,
+    | _REVIEW_SURFACE_LISTEN_ONLY
+    | _DEMAND_LISTEN_ONLY,
+}
+
+# Pusher owns the process-local final-pass worker; backend-listen dispatches
+# finalization and must not widen this batch-only David experiment. Validate
+# exact literals below as well as names, rather than exempting arbitrary values.
+PROD_FINAL_PASS_SHADOW_VALUES = {
+    "HOSTED_DIARIZATION_API_URL": ("http://172.16.160.20/diarizer-batch", None),
+    "TRANSCRIPTION_FINAL_PASS_DIARIZER": ("pyannote_shadow", None),
+    "TRANSCRIPTION_FINAL_PASS_BACKEND": ("pyannote", None),
+    "TRANSCRIPTION_FINAL_PASS_UID_ALLOWLIST": ("vi7SA9ckQCe4ccobWNxlbdcNdC23", None),
+    "TRANSCRIPTION_FINAL_PASS_PERCENT": ("0", None),
+    "TRANSCRIPTION_FINAL_PASS_AUTHORITATIVE": ("false", None),
+    "TRANSCRIPTION_FINAL_PASS_SYNC_ENABLED": ("false", None),
 }
 
 PUSHER_ONLY_ALLOWED: dict[str, frozenset[str]] = {
@@ -281,6 +307,8 @@ PUSHER_ONLY_ALLOWED: dict[str, frozenset[str]] = {
         {
             "DEEPGRAM_API_KEY",
             "DEEPGRAM_SELF_HOSTED_URL",
+            # Late identity retries are scheduled only by prod pusher audio drain.
+            "OWNER_IDENTITY_RETRY_COALESCE_ENABLED",
             "REDIS_DB_HOST",
             "TYPESENSE_HOST",
             # Process-local final-pass shadow is admitted only on the prod pusher.
@@ -290,7 +318,8 @@ PUSHER_ONLY_ALLOWED: dict[str, frozenset[str]] = {
             "TRANSCRIPTION_SHADOW_PERCENT",
             "TRANSCRIPTION_SHADOW_DAILY_AUDIO_HOURS",
         }
-    ),
+    )
+    | frozenset(PROD_FINAL_PASS_SHADOW_VALUES),
 }
 
 # Shared keys whose *literal* values are allowed to differ. Name-only diffs
@@ -490,9 +519,21 @@ def validate_preflight(root: Path = ROOT) -> list[str]:
 
         allowed_value_diff = SHARED_VALUE_DIFF_ALLOWED[env]
         shared = set(pusher_env) & set(listen_env)
-        for name, (expected_pusher, expected_listen) in (
-            DEV_SHADOW_VALUES if env == "dev" else PROD_SHADOW_VALUES
-        ).items():
+        # Accept only a complete reviewed stage, never independently widened flags.
+        prod_scope = {**PROD_SHADOW_VALUES, **PROD_FINAL_PASS_SHADOW_VALUES}
+        if env == "prod":
+            stages = json.loads((root / "config/diarization-cohort-stages.json").read_text())
+            selected = next(
+                (
+                    values
+                    for values in stages.values()
+                    if all(name in pusher_env and pusher_env[name].value == value for name, value in values.items())
+                ),
+                None,
+            )
+            if selected is not None:
+                prod_scope = {name: (value, prod_scope[name][1]) for name, value in selected.items()}
+        for name, (expected_pusher, expected_listen) in (DEV_SHADOW_VALUES if env == "dev" else prod_scope).items():
             actual_pusher = pusher_env[name].value if name in pusher_env else None
             actual_listen = listen_env[name].value if name in listen_env else None
             if (actual_pusher, actual_listen) != (expected_pusher, expected_listen):

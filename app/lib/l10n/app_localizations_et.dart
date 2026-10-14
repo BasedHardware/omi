@@ -5642,11 +5642,6 @@ class AppLocalizationsEt extends AppLocalizations {
   String get downloadingFromSdCard => 'Allalaadimine SD-kaardilt';
 
   @override
-  String processingProgress(int current, int total) {
-    return 'Töötlemine $current/$total';
-  }
-
-  @override
   String conversationsCreated(int count) {
     return '$count vestlust loodud';
   }
@@ -9084,18 +9079,10 @@ class AppLocalizationsEt extends AppLocalizations {
   }
 
   @override
-  String syncCardProgressOf(int current, int total) {
-    return '$current / $total';
-  }
-
-  @override
   String get syncStatusOnDevice => 'Sinu seadmes';
 
   @override
   String get syncStatusDownloadingFromDevice => 'Allalaadimine sinu seadmest';
-
-  @override
-  String get newestFirst => 'Uusimad esmalt';
 
   @override
   String get noSyncedRecordingsYet => 'Sünkroonitud salvestisi pole veel';
@@ -11989,9 +11976,6 @@ class AppLocalizationsEt extends AppLocalizations {
   }
 
   @override
-  String get localCopiesSection => 'Kohalikud koopiad';
-
-  @override
   String speakerLabelLinesLabeled(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,
@@ -12309,6 +12293,9 @@ class AppLocalizationsEt extends AppLocalizations {
   String reviewQuestionSamePerson(String name) {
     return 'Sama inimene mis „$name“?';
   }
+
+  @override
+  String get reviewSpellingContext => 'Vestluse kontekst';
 
   @override
   String get reviewQuestionSpelling => 'Kuidas seda kirjutatakse?';
@@ -13247,4 +13234,91 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get pairingHowTo => 'How to pair';
+
+  @override
+  String get paywallOutlineHeadline => 'Ära jäta enam ühtegi sõna vahele.';
+
+  @override
+  String get paywallCancelAnytime => 'Tühista igal ajal.';
+
+  @override
+  String get connectAnAgent => 'Ühenda agent';
+
+  @override
+  String get connectAnAgentSubtitle => 'Hangi seadistusjuhis Claude\'i, ChatGPT, Codexi või mõne muu agendi jaoks';
+
+  @override
+  String syncCardSyncingAmount(String amount) {
+    return 'Sünkroonin $amount heli';
+  }
+
+  @override
+  String get syncCardSyncingTitle => 'Sünkroonin sinu salvestusi';
+
+  @override
+  String syncStepDownloadingAmount(String done, String total) {
+    return 'Laadin alla sinu Omist · $done / $total';
+  }
+
+  @override
+  String syncStepUploadingAmount(String done, String total) {
+    return 'Üleslaadimine · $done / $total';
+  }
+
+  @override
+  String syncCardTranscribingAmount(String amount) {
+    return 'Muudan $amount vestlusteks';
+  }
+
+  @override
+  String syncCardTranscribedOf(String done, String total) {
+    return '$done / $total valmis · võid selle ekraani sulgeda';
+  }
+
+  @override
+  String syncCardReadyAmount(String amount) {
+    return '$amount on sünkroonimiseks valmis';
+  }
+
+  @override
+  String get syncStepLabelDownload => 'Omi → telefon';
+
+  @override
+  String get syncStepLabelUpload => 'Üleslaadimine';
+
+  @override
+  String get syncStepLabelTranscribe => 'Transkriptsioon';
+
+  @override
+  String get syncDetailsTitle => 'Sünkroonimise üksikasjad';
+
+  @override
+  String get syncDetailsRightNow => 'Praegu';
+
+  @override
+  String get syncDetailsYourOmi => 'Sinu Omi';
+
+  @override
+  String get syncDetailsTransferSpeed => 'Edastuskiirus';
+
+  @override
+  String get syncDetailsWaitingOnOmi => 'Ootab sinu Omit';
+
+  @override
+  String get syncDetailsWaitingOnPhone => 'Ootab selles telefonis';
+
+  @override
+  String get syncDetailsTranscribing => 'Omi transkribeerib';
+
+  @override
+  String get syncDetailsForSupport => 'Klienditoele';
+
+  @override
+  String get syncDetailsAudioFiles => 'Helifailid';
+
+  @override
+  String get syncDetailsServerJobs => 'Serveri tööd (valmis / kokku)';
+
+  @override
+  String get syncDetailsCopy => 'Kopeeri üksikasjad klienditoele';
 }

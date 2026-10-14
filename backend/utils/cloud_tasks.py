@@ -15,6 +15,7 @@ import json
 import logging
 import hashlib
 import os
+import time
 import uuid
 from typing import Any, Dict, Iterable, NamedTuple, Optional
 
@@ -359,17 +360,38 @@ def enqueue_audio_merge_job(payload: Dict[str, Any]) -> None:
     and isn't swallowed by the named-task tombstone. 'amc-' cannot collide with
     per-part names (audio_file ids are UUIDv4).
     """
-    if payload.get('schema_version') == 2:
-        task_id = f"amc-{payload['conversation_id']}-{payload['fingerprint']}"
-    else:
-        task_id = f"am-{payload['conversation_id']}-{payload['audio_file_id']}"
     handler_url = _audio_merge_handler_url()
     enqueue_named_task(
         os.getenv('AUDIO_MERGE_TASKS_QUEUE', ''),
         handler_url,
-        task_id,
+        _audio_merge_task_id(payload),
         payload,
         audience=handler_url,
+    )
+
+
+def _audio_merge_task_id(payload: Dict[str, Any]) -> str:
+    if payload.get('schema_version') == 2:
+        return f"amc-{payload['conversation_id']}-{payload['fingerprint']}"
+    return f"am-{payload['conversation_id']}-{payload['audio_file_id']}"
+
+
+def enqueue_audio_merge_job_deferred(payload: Dict[str, Any], delay_seconds: int) -> None:
+    """Re-enqueue a merge task that ran into a destructive-operation fence.
+
+    The ``-dd{n}`` suffix (n = ``payload['destructive_deferrals']``) escapes the
+    original name's tombstone, and ``schedule_at`` places the new task after the
+    gate has cleared. Gate holds last seconds to a few minutes.
+    """
+    deferral = int(payload['destructive_deferrals'])
+    handler_url = _audio_merge_handler_url()
+    enqueue_named_task(
+        os.getenv('AUDIO_MERGE_TASKS_QUEUE', ''),
+        handler_url,
+        f'{_audio_merge_task_id(payload)}-dd{deferral}',
+        payload,
+        audience=handler_url,
+        schedule_at=int(time.time()) + delay_seconds,
     )
 
 

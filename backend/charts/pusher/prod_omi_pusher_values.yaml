@@ -115,6 +115,9 @@ envFrom:
 runtimeConfigMapName: prod-omi-backend-config
 
 env:
+  # Bounded, process-local late identity repair coalescing; rollback with false.
+  - name: OWNER_IDENTITY_RETRY_COALESCE_ENABLED
+    value: "true"
   - name: DREAM_AGENT_MODE
     value: 'on'
   - name: DREAM_AGENT_UID_ALLOWLIST
@@ -262,6 +265,21 @@ env:
     value: "25"
   - name: BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED
     value: "false"
+  # Activate only after isolated batch install, metric and VPC route qualification.
+  - name: HOSTED_DIARIZATION_API_URL
+    value: "http://172.16.160.20/diarizer-batch"
+  - name: TRANSCRIPTION_FINAL_PASS_DIARIZER
+    value: "pyannote_shadow"
+  - name: TRANSCRIPTION_FINAL_PASS_BACKEND
+    value: "pyannote"
+  - name: TRANSCRIPTION_FINAL_PASS_UID_ALLOWLIST
+    value: "vi7SA9ckQCe4ccobWNxlbdcNdC23"
+  - name: TRANSCRIPTION_FINAL_PASS_PERCENT
+    value: "0"
+  - name: TRANSCRIPTION_FINAL_PASS_AUTHORITATIVE
+    value: "false"
+  - name: TRANSCRIPTION_FINAL_PASS_SYNC_ENABLED
+    value: "false"
   # Phase-1 final-pass shadow runs only for the owner UID on this pusher.
   - name: TRANSCRIPTION_SHADOW_ENABLED
     value: "true"
@@ -308,7 +326,7 @@ env:
         name: prod-omi-backend-secrets
         key: GROQ_API_KEY
   - name: HOSTED_SPEAKER_EMBEDDING_API_URL
-    value: "http://diarizer.omi.me:80"
+    value: "http://172.16.160.20/diarizer"
   - name: PINECONE_API_KEY
     valueFrom:
       secretKeyRef:

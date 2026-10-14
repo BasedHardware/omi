@@ -2,6 +2,9 @@ import 'package:omi/services/onboarding_sync_runtime.dart';
 import 'package:omi/env/physical_qualification.dart';
 import 'dart:async';
 import 'package:omi/services/proactivity/proactivity_runtime.dart';
+import 'package:omi/services/telemetry/client_telemetry.dart';
+import 'package:omi/services/telemetry/client_telemetry_flags.dart';
+import 'package:omi/services/telemetry/client_telemetry_transport.dart';
 import 'dart:ui';
 
 import 'package:flutter/foundation.dart';
@@ -550,8 +553,13 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
     },
   );
   late final MobilePerformanceTelemetry _performanceTelemetry = MobilePerformanceTelemetry(
-    emit: (name, properties) => PlatformManager.instance.analytics.track(name, properties: properties),
+    emit: (name, properties) {
+      DebugLogManager.logEvent('mobile_render_diagnostic', {
+        for (final entry in properties.entries) entry.key: entry.value,
+      });
+    },
     identityEpoch: () => AnalyticsManager.identityEpoch,
+    diagnosticsEnabled: () => SharedPreferencesUtil().devLogsToFileEnabled,
   );
 
   @override
@@ -564,6 +572,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
       _performanceTelemetry.attach();
       unawaited(_phoneBatteryTelemetry.start());
       PlatformManager.instance.analytics.recordTelemetryHealth();
+      if (ClientTelemetryFlags.migrationEnabled) installClientTelemetryTransport();
     }
     if (SharedPreferencesUtil().devLogsToFileEnabled) {
       DebugLogManager.setEnabled(true);
@@ -622,6 +631,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
       unawaited(_refreshAccountCutoverThenWakeUploads());
     } else if (state == AppLifecycleState.paused) {
       OnboardingSyncRuntime.setActive(false);
+      ClientTelemetry.instance.onBackground();
       if (!PhysicalQualification.enabled) {
         _appSessionTelemetry.recordBackgrounded();
         _performanceTelemetry.setForeground(false);
@@ -629,6 +639,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
       SyncReconciler.instance.onBackground();
       _onAppPaused();
     } else if (state == AppLifecycleState.detached) {
+      ClientTelemetry.instance.onBackground();
       _deinit();
     }
   }
@@ -678,9 +689,10 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
               (previous?..setConversationProvider(conversation)) ?? LocalRecordingsProvider(),
         ),
         ChangeNotifierProxyProvider2<CaptureProvider, LocalRecordingsProvider, DeviceProvider>(
-          create: (context) => DeviceProvider(),
+          create: (context) => DeviceProvider()..nativeLink.bindAppLifecycle(),
           update: (BuildContext context, captureProvider, localRecordings, DeviceProvider? previous) =>
-              (previous?..setProviders(captureProvider, localRecordings)) ?? DeviceProvider(),
+              (previous?..setProviders(captureProvider, localRecordings)) ??
+              (DeviceProvider()..nativeLink.bindAppLifecycle()),
         ),
         ChangeNotifierProxyProvider<DeviceProvider, OnboardingProvider>(
           create: (context) => OnboardingProvider(),

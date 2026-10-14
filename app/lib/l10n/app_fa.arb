@@ -6818,18 +6818,6 @@
     "@downloadingFromSdCard": {
         "description": "Progress label when downloading from SD card"
     },
-    "processingProgress": "پردازش {current}/{total}",
-    "@processingProgress": {
-        "description": "Progress label showing current/total items",
-        "placeholders": {
-            "current": {
-                "type": "int"
-            },
-            "total": {
-                "type": "int"
-            }
-        }
-    },
     "conversationsCreated": "{count} مکالمه ایجاد شد",
     "@conversationsCreated": {
         "description": "Success message showing number of conversations created",
@@ -10359,10 +10347,8 @@
     "syncStatusConversationCreated": "مکالمه ایجاد شد",
     "syncCardUploadingTitle": "در حال بارگذاری در Omi",
     "syncCardDownloadingTitle": "در حال دانلود از دستگاه شما",
-    "syncCardProgressOf": "{current} از {total}",
     "syncStatusOnDevice": "روی دستگاه شما",
     "syncStatusDownloadingFromDevice": "در حال دانلود از دستگاه شما",
-    "newestFirst": "ابتدا جدیدترین‌ها",
     "noSyncedRecordingsYet": "هنوز ضبط همگام‌سازی‌شده‌ای وجود ندارد",
     "morePaymentMethodsComingSoon": "روش‌های پرداخت بیشتر به‌زودی",
     "@morePaymentMethodsComingSoon": {
@@ -11157,7 +11143,6 @@
     "autoRemoveSyncedCopiesTitle": "حذف خودکار نسخه‌های همگام‌شده",
     "autoRemoveSyncedCopiesDays": "نسخه‌های همگام‌شده پس از {days} روز حذف می‌شوند",
     "autoRemoveSyncedCopiesDescription": "نسخه‌های محلی را {days} روز پس از همگام‌سازی حذف می‌کند. نسخه‌های ابری حفظ می‌شوند.",
-    "localCopiesSection": "نسخه‌های محلی",
     "speakerLabelLinesLabeled": "{count, plural, =1{1 خط برچسب خورد} other{{count} خط برچسب خورد}}",
     "speakerLabelVoiceStatus": "{state, select, learned{صدا یاد گرفته شد} pending{در حال یادگیری صدا…} disabled{ذخیره صدا خاموش است} other{صدا هنوز یاد گرفته نشده}}",
     "speakerLabelVoiceDetail": "{state, select, learned{Omi دفعه بعد {name} را تشخیص می‌دهد.} pending{این کار چند ثانیه طول می‌کشد.} disabled{ذخیره صداها را در تنظیمات روشن کنید تا Omi بتواند {name} را تشخیص دهد.} other{Omi به گفتار واضح‌تری از {name} نیاز دارد و به تلاش ادامه می‌دهد.}}",
@@ -11243,6 +11228,7 @@
     "reviewRemaining": "{count} مانده",
     "reviewQuestionSpeaker": "این را چه کسی گفت؟",
     "reviewQuestionSamePerson": "همان شخصِ «{name}» است؟",
+    "reviewSpellingContext": "زمینهٔ گفتگو",
     "reviewQuestionSpelling": "این چطور نوشته می‌شود؟",
     "reviewPlayClip": "پخش کلیپ",
     "reviewStopClip": "توقف کلیپ",
@@ -11507,5 +11493,30 @@
     "pairingLocationPermission": "Allow location access for Omi in Settings so this phone can find your device, then try again.",
     "pairingNotFoundOrDropped": "Couldn't reach your Omi. Make sure it's charged, close to your phone, and its light is blinking, then try again.",
     "pairingBondRecovery": "Forget Omi in your phone’s Bluetooth settings, then try pairing again.",
-    "pairingHowTo": "How to pair"
+    "pairingHowTo": "How to pair",
+    "paywallOutlineHeadline": "دیگر هیچ کلمه‌ای را از دست ندهید.",
+    "paywallCancelAnytime": "هر زمان که بخواهید لغو کنید.",
+    "connectAnAgent": "اتصال یک ایجنت",
+    "connectAnAgentSubtitle": "یک پرامپت راه‌اندازی برای Claude، ChatGPT، Codex یا هر ایجنتی بگیرید",
+    "syncCardSyncingAmount": "همگام‌سازی {amount} صدا",
+    "syncCardSyncingTitle": "همگام‌سازی ضبط‌های شما",
+    "syncStepDownloadingAmount": "دریافت از Omi · {done} / {total}",
+    "syncStepUploadingAmount": "آپلود · {done} / {total}",
+    "syncCardTranscribingAmount": "تبدیل {amount} به گفتگو",
+    "syncCardTranscribedOf": "{done} / {total} انجام شد · می‌توانید از این صفحه خارج شوید",
+    "syncCardReadyAmount": "{amount} آماده همگام‌سازی",
+    "syncStepLabelDownload": "Omi → گوشی",
+    "syncStepLabelUpload": "آپلود",
+    "syncStepLabelTranscribe": "رونویسی",
+    "syncDetailsTitle": "جزئیات همگام‌سازی",
+    "syncDetailsRightNow": "همین حالا",
+    "syncDetailsYourOmi": "Omi شما",
+    "syncDetailsTransferSpeed": "سرعت انتقال",
+    "syncDetailsWaitingOnOmi": "در انتظار Omi",
+    "syncDetailsWaitingOnPhone": "در انتظار این گوشی",
+    "syncDetailsTranscribing": "در حال رونویسی در Omi",
+    "syncDetailsForSupport": "برای پشتیبانی",
+    "syncDetailsAudioFiles": "فایل‌های صوتی",
+    "syncDetailsServerJobs": "کارهای سرور (انجام‌شده / کل)",
+    "syncDetailsCopy": "کپی جزئیات برای پشتیبانی"
 }

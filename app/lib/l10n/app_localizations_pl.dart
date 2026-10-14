@@ -5656,11 +5656,6 @@ class AppLocalizationsPl extends AppLocalizations {
   String get downloadingFromSdCard => 'Pobieranie z karty SD';
 
   @override
-  String processingProgress(int current, int total) {
-    return 'Przetwarzanie $current/$total';
-  }
-
-  @override
   String conversationsCreated(int count) {
     return 'Utworzono $count rozmów';
   }
@@ -9114,18 +9109,10 @@ class AppLocalizationsPl extends AppLocalizations {
   }
 
   @override
-  String syncCardProgressOf(int current, int total) {
-    return '$current z $total';
-  }
-
-  @override
   String get syncStatusOnDevice => 'Na Twoim urządzeniu';
 
   @override
   String get syncStatusDownloadingFromDevice => 'Pobieranie z Twojego urządzenia';
-
-  @override
-  String get newestFirst => 'Najpierw najnowsze';
 
   @override
   String get noSyncedRecordingsYet => 'Brak zsynchronizowanych nagrań';
@@ -12033,9 +12020,6 @@ class AppLocalizationsPl extends AppLocalizations {
   }
 
   @override
-  String get localCopiesSection => 'Kopie lokalne';
-
-  @override
   String speakerLabelLinesLabeled(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,
@@ -12352,6 +12336,9 @@ class AppLocalizationsPl extends AppLocalizations {
   String reviewQuestionSamePerson(String name) {
     return 'Ta sama osoba co „$name”?';
   }
+
+  @override
+  String get reviewSpellingContext => 'Kontekst rozmowy';
 
   @override
   String get reviewQuestionSpelling => 'Jak to się pisze?';
@@ -13292,4 +13279,91 @@ class AppLocalizationsPl extends AppLocalizations {
 
   @override
   String get pairingHowTo => 'How to pair';
+
+  @override
+  String get paywallOutlineHeadline => 'Nigdy więcej nie przegap ani słowa.';
+
+  @override
+  String get paywallCancelAnytime => 'Anuluj w dowolnym momencie.';
+
+  @override
+  String get connectAnAgent => 'Połącz agenta';
+
+  @override
+  String get connectAnAgentSubtitle => 'Pobierz prompt konfiguracji dla Claude, ChatGPT, Codex lub dowolnego agenta';
+
+  @override
+  String syncCardSyncingAmount(String amount) {
+    return 'Synchronizowanie $amount dźwięku';
+  }
+
+  @override
+  String get syncCardSyncingTitle => 'Synchronizacja nagrań';
+
+  @override
+  String syncStepDownloadingAmount(String done, String total) {
+    return 'Pobieranie z Omi · $done z $total';
+  }
+
+  @override
+  String syncStepUploadingAmount(String done, String total) {
+    return 'Przesyłanie · $done z $total';
+  }
+
+  @override
+  String syncCardTranscribingAmount(String amount) {
+    return 'Zamiana $amount na rozmowy';
+  }
+
+  @override
+  String syncCardTranscribedOf(String done, String total) {
+    return 'Gotowe: $done z $total · możesz opuścić ten ekran';
+  }
+
+  @override
+  String syncCardReadyAmount(String amount) {
+    return '$amount gotowe do synchronizacji';
+  }
+
+  @override
+  String get syncStepLabelDownload => 'Omi → telefon';
+
+  @override
+  String get syncStepLabelUpload => 'Wysyłanie';
+
+  @override
+  String get syncStepLabelTranscribe => 'Transkrypcja';
+
+  @override
+  String get syncDetailsTitle => 'Szczegóły synchronizacji';
+
+  @override
+  String get syncDetailsRightNow => 'Teraz';
+
+  @override
+  String get syncDetailsYourOmi => 'Twoje Omi';
+
+  @override
+  String get syncDetailsTransferSpeed => 'Prędkość transferu';
+
+  @override
+  String get syncDetailsWaitingOnOmi => 'Czeka na Omi';
+
+  @override
+  String get syncDetailsWaitingOnPhone => 'Czeka na tym telefonie';
+
+  @override
+  String get syncDetailsTranscribing => 'Transkrypcja w Omi';
+
+  @override
+  String get syncDetailsForSupport => 'Dla pomocy technicznej';
+
+  @override
+  String get syncDetailsAudioFiles => 'Pliki audio';
+
+  @override
+  String get syncDetailsServerJobs => 'Zadania serwera (gotowe / razem)';
+
+  @override
+  String get syncDetailsCopy => 'Skopiuj szczegóły dla pomocy technicznej';
 }

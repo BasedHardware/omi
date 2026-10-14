@@ -28,19 +28,19 @@ app = FastAPI(lifespan=lifespan)
 
 @app.post('/v1/diarization')
 def diarization(file: UploadFile = File(...)) -> List[Dict[str, Any]]:
-    logger.info('diarization')
+    logger.debug('diarization')
     return diarization_endpoint(file)
 
 
 @app.post('/v1/embedding')
 def embedding(file: UploadFile = File(...)) -> List[float]:
-    logger.info('embedding')
+    logger.debug('embedding')
     return embedding_endpoint(file)
 
 
 @app.post('/v2/embedding')
 def embedding_v2(file: UploadFile = File(...)) -> List[float]:
-    logger.info('embedding v2')
+    logger.debug('embedding v2')
     return embedding_endpoint_v2(file)
 
 

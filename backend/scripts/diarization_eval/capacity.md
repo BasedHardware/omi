@@ -35,31 +35,20 @@ Enable `podMonitoring`, configure a custom-metrics adapter for
 The metric counts running plus admitted waiting/upload work. Use scale-up delay
 0s and scale-down stabilization 900s, with gradual scale-down. Alert on rejection,
 failure, queue saturation and p95 end-to-record latency. Raise
-`backendConfig.timeoutSeconds` to 900 before ingress-backed long requests.
+`gateway.timeoutSeconds` to 900 for batch requests through the shared Gateway.
 Chart defaults preserve one replica, disabled HPA/metrics discovery and 30s timeout.
 
-The same additive image contains two registered entrypoints. The default
-`main:app` eagerly warms both embedding models and the existing v1 pipeline
-in FastAPI startup, before Uvicorn opens its socket. A model-load exception
-aborts startup. Its legacy routes take no batch lock and keep their existing
-concurrency. `batch_main:app` requires `DIARIZATION_V2_ENABLED=true` and eagerly
-warms only WeSpeaker v2 and the pinned community-1 batch pipeline. It exposes
-no embedding routes. Never select this entrypoint on the embedding release.
-
-For a **new**, lead-owned `prod-omi-diarizer-batch` Helm release, layer
-`backend/charts/diarizer/prod_omi_diarizer_batch_values.yaml` over
-`prod_omi_diarizer_values.yaml` with an immutable image tag. The overlay selects
-the batch entrypoint, dedicated GPU pods, the six/eighteen HPA recommendation
-and opt-in metrics discovery. It requires the GMP CRD/custom-metrics adapter.
-`/v2/diarization` is routed through the internal ClusterIP
-`http://prod-omi-diarizer-batch:8080/v2/diarization`, not the existing embedding
-ingress: adding it there would land on the embedding GPU. Set
-`HOSTED_DIARIZATION_API_URL=http://prod-omi-diarizer-batch:8080` in the separate
-cohort flag PR; verify backend/pusher service-DNS reachability first. If an
-external ingress is required, provision a separate batch host with its own
-900s BackendConfig before enablement. No release or infrastructure is applied
-by this PR.
-
+The same additive image contains separate embedding/v1 and batch entrypoints.
+The current ≤5% production ramp uses the dedicated tainted **T4**
+`diarizer-batch-pool` and the shared internal Gateway `/diarizer-batch` route.
+This L4 receipt is historical capacity evidence, not a T4 throughput qualification
+or an instruction to recreate that pool. Verify Prometheus scrape/adapter mapping,
+Cloud Run/GKE Gateway reachability and the model-free image import/decode probe.
+The opt-in overlay starts at one replica for David-only shadow. Do not apply the
+full-fleet six-L4 floor to this bounded T4 ramp. Exact lead-only installation and
+rollback are in [`batch_install.md`](batch_install.md); A–D stages and T4 planning
+arithmetic are in [the cohort runbook](../../docs/diarizer-batch-cohort.md).
+No infrastructure or flag is applied by these prerequisites.
 Lead-local raw receipts and scripts live in
 `/Volumes/Ephemeral/scratch/pyannote-final-pass-2026-10-13/`. The dev benchmark
 added no node after GCE capacity rejection; it used existing capacity. Cleanup

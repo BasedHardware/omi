@@ -66,6 +66,7 @@ from utils.observability.owner_identity_retry import (
     resolver_trace,
 )
 from utils.observability.fallback import record_fallback
+from utils.llm.known_spellings import reuse_people_for_spellings
 from utils.other.audio_chunks import (
     AudioChunkReadSession,
     chunk_end_upper_bound,
@@ -216,6 +217,7 @@ def load_voiceprints_for_resolution(uid: str, *, allow_audio_repair: bool = True
         return prints
     try:
         people = users_db.get_people(uid)
+        reuse_people_for_spellings(uid, people)
     except Exception as error:
         logger.warning(
             'event=speaker_resolution_person_profiles outcome=failed exception_type=%s', type(error).__name__

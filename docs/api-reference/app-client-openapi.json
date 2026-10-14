@@ -30089,11 +30089,119 @@
         "title": "SpellingAnswer",
         "type": "object"
       },
+      "SpellingContext": {
+        "properties": {
+          "conversation_date": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Conversation Date"
+          },
+          "conversation_title": {
+            "title": "Conversation Title",
+            "type": "string"
+          },
+          "main_index": {
+            "maximum": 2.0,
+            "minimum": 0.0,
+            "title": "Main Index",
+            "type": "integer"
+          },
+          "quote_end": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Exclusive UTF-16 offset in the main segment.",
+            "title": "Quote End"
+          },
+          "quote_start": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Inclusive UTF-16 offset in the main segment.",
+            "title": "Quote Start"
+          },
+          "segments": {
+            "items": {
+              "$ref": "#/components/schemas/SpellingContextSegment"
+            },
+            "maxItems": 3,
+            "minItems": 1,
+            "title": "Segments",
+            "type": "array"
+          }
+        },
+        "required": [
+          "conversation_title",
+          "segments",
+          "main_index"
+        ],
+        "title": "SpellingContext",
+        "type": "object"
+      },
+      "SpellingContextSegment": {
+        "properties": {
+          "is_user": {
+            "default": false,
+            "title": "Is User",
+            "type": "boolean"
+          },
+          "speaker_label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Speaker Label"
+          },
+          "text": {
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "text"
+        ],
+        "title": "SpellingContextSegment",
+        "type": "object"
+      },
       "SpellingItem": {
         "properties": {
           "allow_custom": {
             "title": "Allow Custom",
             "type": "boolean"
+          },
+          "context": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SpellingContext"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Server-computed surrounding speech for this question."
           },
           "options": {
             "items": {

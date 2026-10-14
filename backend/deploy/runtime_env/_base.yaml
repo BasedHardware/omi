@@ -105,6 +105,18 @@ environment_shared:
         STT_RESILIENT_RECONNECT:
           value: 'false'
           category: rollout
+        STT_LIVE_DEMAND_ENABLED:
+          value: 'false'
+          category: rollout
+        STT_LIVE_DEMAND_PERCENT:
+          value: '0'
+          category: rollout
+        STT_LIVE_DEMAND_UID_ALLOWLIST:
+          value: ''
+          category: rollout
+        STT_LIVE_DEMAND_MIN_DWELL_SECONDS:
+          value: '15'
+          category: rollout
         STT_FAILOVER_RECOVERY_ENABLED:
           value: 'false'
           category: rollout

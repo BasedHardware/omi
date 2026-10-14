@@ -49,11 +49,16 @@ class UsagePage extends StatefulWidget {
   final DateTime? debugNow;
   @visibleForTesting
   final int? debugTooltipIndex;
+
+  /// Skip the paywall experiment and open the plans sheet itself: the web variant's fallback
+  /// path, so a dead page never loops back into itself.
+  final bool forceNativePaywall;
   const UsagePage({
     super.key,
     this.showUpgradeDialog = false,
     this.paywallSource = 'usage_page',
     this.upgradePlacement = SuperwallPilot.usageUpgradePlacement,
+    this.forceNativePaywall = false,
     this.debugSkipFetch = false,
     this.debugNow,
     this.debugTooltipIndex,
@@ -543,6 +548,7 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin, Wi
       source: source,
       trackOpen: trackOpen,
       freeUser: usage.subscription?.subscription.plan.isPaid == false,
+      forceNative: widget.forceNativePaywall,
     );
   }
 

@@ -6818,18 +6818,6 @@
     "@downloadingFromSdCard": {
         "description": "Progress label when downloading from SD card"
     },
-    "processingProgress": "עיבוד {current}/{total}",
-    "@processingProgress": {
-        "description": "Progress label showing current/total items",
-        "placeholders": {
-            "current": {
-                "type": "int"
-            },
-            "total": {
-                "type": "int"
-            }
-        }
-    },
     "conversationsCreated": "{count} שיחות שנוצרו",
     "@conversationsCreated": {
         "description": "Success message showing number of conversations created",
@@ -10359,10 +10347,8 @@
     "syncStatusConversationCreated": "השיחה נוצרה",
     "syncCardUploadingTitle": "מעלה ל-Omi",
     "syncCardDownloadingTitle": "מוריד מהמכשיר שלך",
-    "syncCardProgressOf": "{current} מתוך {total}",
     "syncStatusOnDevice": "במכשיר שלך",
     "syncStatusDownloadingFromDevice": "מוריד מהמכשיר שלך",
-    "newestFirst": "החדשות ביותר תחילה",
     "noSyncedRecordingsYet": "אין עדיין הקלטות מסונכרנות",
     "morePaymentMethodsComingSoon": "אמצעי תשלום נוספים בקרוב",
     "@morePaymentMethodsComingSoon": {
@@ -11157,7 +11143,6 @@
     "autoRemoveSyncedCopiesTitle": "הסרה אוטומטית של עותקים מסונכרנים",
     "autoRemoveSyncedCopiesDays": "עותקים מסונכרנים נמחקים לאחר {days} ימים",
     "autoRemoveSyncedCopiesDescription": "מוחק עותקים מקומיים {days} ימים לאחר הסנכרון. עותקי הענן נשמרים.",
-    "localCopiesSection": "עותקים מקומיים",
     "speakerLabelLinesLabeled": "{count, plural, =1{סומנה שורה אחת} other{סומנו {count} שורות}}",
     "speakerLabelVoiceStatus": "{state, select, learned{הקול נלמד} pending{לומד את הקול…} disabled{שמירת קול כבויה} other{הקול עדיין לא נלמד}}",
     "speakerLabelVoiceDetail": "{state, select, learned{Omi יזהה את {name} בפעם הבאה.} pending{זה לוקח כמה שניות.} disabled{הפעילו שמירת קולות בהגדרות כדי ש-Omi יוכל לזהות את {name}.} other{Omi צריך עוד דיבור ברור של {name} וימשיך לנסות.}}",
@@ -11243,6 +11228,7 @@
     "reviewRemaining": "נשארו {count}",
     "reviewQuestionSpeaker": "מי אמר את זה?",
     "reviewQuestionSamePerson": "אותו אדם כמו “{name}”?",
+    "reviewSpellingContext": "הקשר השיחה",
     "reviewQuestionSpelling": "איך זה נכתב?",
     "reviewPlayClip": "הפעל קטע",
     "reviewStopClip": "עצור קטע",
@@ -11507,5 +11493,30 @@
     "pairingLocationPermission": "Allow location access for Omi in Settings so this phone can find your device, then try again.",
     "pairingNotFoundOrDropped": "Couldn't reach your Omi. Make sure it's charged, close to your phone, and its light is blinking, then try again.",
     "pairingBondRecovery": "Forget Omi in your phone’s Bluetooth settings, then try pairing again.",
-    "pairingHowTo": "How to pair"
+    "pairingHowTo": "How to pair",
+    "paywallOutlineHeadline": "אל תפספסו אף מילה יותר.",
+    "paywallCancelAnytime": "ניתן לבטל בכל עת.",
+    "connectAnAgent": "חיבור סוכן",
+    "connectAnAgentSubtitle": "קבלו הנחיית הגדרה עבור Claude, ‏ChatGPT, ‏Codex או כל סוכן",
+    "syncCardSyncingAmount": "מסנכרן {amount} של אודיו",
+    "syncCardSyncingTitle": "מסנכרן את ההקלטות שלך",
+    "syncStepDownloadingAmount": "מוריד מה-Omi שלך · {done} מתוך {total}",
+    "syncStepUploadingAmount": "מעלה · {done} מתוך {total}",
+    "syncCardTranscribingAmount": "הופך {amount} לשיחות",
+    "syncCardTranscribedOf": "{done} מתוך {total} הושלמו · אפשר לצאת ממסך זה",
+    "syncCardReadyAmount": "{amount} מוכנים לסנכרון",
+    "syncStepLabelDownload": "Omi → טלפון",
+    "syncStepLabelUpload": "העלאה",
+    "syncStepLabelTranscribe": "תמלול",
+    "syncDetailsTitle": "פרטי הסנכרון",
+    "syncDetailsRightNow": "כרגע",
+    "syncDetailsYourOmi": "ה-Omi שלך",
+    "syncDetailsTransferSpeed": "מהירות העברה",
+    "syncDetailsWaitingOnOmi": "ממתין ל-Omi שלך",
+    "syncDetailsWaitingOnPhone": "ממתין בטלפון זה",
+    "syncDetailsTranscribing": "מתמלל ב-Omi",
+    "syncDetailsForSupport": "לתמיכה",
+    "syncDetailsAudioFiles": "קובצי אודיו",
+    "syncDetailsServerJobs": "משימות שרת (הושלמו / סך הכול)",
+    "syncDetailsCopy": "העתקת פרטים לתמיכה"
 }

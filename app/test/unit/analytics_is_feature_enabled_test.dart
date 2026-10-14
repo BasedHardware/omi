@@ -43,6 +43,15 @@ class _FlagAdapter implements AnalyticsAdapter, AnalyticsIdentityAdapter, Analyt
     return completer.future;
   }
 
+  final variantReads = <Completer<String?>>[];
+
+  @override
+  Future<String?> getFeatureFlagVariant(String key) {
+    final completer = Completer<String?>();
+    variantReads.add(completer);
+    return completer.future;
+  }
+
   @override
   void track({required String eventName, Map<String, Object>? properties}) {}
 
@@ -209,5 +218,22 @@ void main() {
     adapter.flagReads.single.completeError(StateError('sdk unavailable'));
 
     expect(await read, isFalse);
+  });
+
+  test('an experiment exposure is sent once per identity and arm, and again for a new identity', () async {
+    final adapter = _FlagAdapter();
+    AnalyticsManager.configure(adapter);
+    await AnalyticsManager.init();
+    expect(AnalyticsManager().recordFeatureFlagExposure('paywall-variant', 'control'), isFalse,
+        reason: 'nothing to attribute to before an identity settles');
+
+    await settleIdentity(adapter, 'user-a');
+    expect(AnalyticsManager().recordFeatureFlagExposure('paywall-variant', 'control'), isTrue);
+    expect(AnalyticsManager().recordFeatureFlagExposure('paywall-variant', 'control'), isFalse);
+    expect(AnalyticsManager().recordFeatureFlagExposure('paywall-variant', 'outline'), isTrue);
+
+    await settleIdentity(adapter, 'user-b');
+    expect(AnalyticsManager().recordFeatureFlagExposure('paywall-variant', 'control'), isTrue,
+        reason: 'a different account is exposed in its own right');
   });
 }

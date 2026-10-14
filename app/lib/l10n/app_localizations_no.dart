@@ -5645,11 +5645,6 @@ class AppLocalizationsNo extends AppLocalizations {
   String get downloadingFromSdCard => 'Laster ned fra SD-kort';
 
   @override
-  String processingProgress(int current, int total) {
-    return 'Behandler $current/$total';
-  }
-
-  @override
   String conversationsCreated(int count) {
     return '$count samtaler opprettet';
   }
@@ -9088,18 +9083,10 @@ class AppLocalizationsNo extends AppLocalizations {
   }
 
   @override
-  String syncCardProgressOf(int current, int total) {
-    return '$current av $total';
-  }
-
-  @override
   String get syncStatusOnDevice => 'På enheten din';
 
   @override
   String get syncStatusDownloadingFromDevice => 'Laster ned fra enheten din';
-
-  @override
-  String get newestFirst => 'Nyeste først';
 
   @override
   String get noSyncedRecordingsYet => 'Ingen synkroniserte opptak ennå';
@@ -11998,9 +11985,6 @@ class AppLocalizationsNo extends AppLocalizations {
   }
 
   @override
-  String get localCopiesSection => 'Lokale kopier';
-
-  @override
   String speakerLabelLinesLabeled(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,
@@ -12318,6 +12302,9 @@ class AppLocalizationsNo extends AppLocalizations {
   String reviewQuestionSamePerson(String name) {
     return 'Samme person som «$name»?';
   }
+
+  @override
+  String get reviewSpellingContext => 'Samtalekontekst';
 
   @override
   String get reviewQuestionSpelling => 'Hvordan staves dette?';
@@ -13254,4 +13241,92 @@ class AppLocalizationsNo extends AppLocalizations {
 
   @override
   String get pairingHowTo => 'How to pair';
+
+  @override
+  String get paywallOutlineHeadline => 'Gå aldri glipp av et ord igjen.';
+
+  @override
+  String get paywallCancelAnytime => 'Avbryt når som helst.';
+
+  @override
+  String get connectAnAgent => 'Koble til en agent';
+
+  @override
+  String get connectAnAgentSubtitle =>
+      'Få en oppsettsprompt for Claude, ChatGPT, Codex eller en hvilken som helst agent';
+
+  @override
+  String syncCardSyncingAmount(String amount) {
+    return 'Synkroniserer $amount lyd';
+  }
+
+  @override
+  String get syncCardSyncingTitle => 'Synkroniserer opptakene dine';
+
+  @override
+  String syncStepDownloadingAmount(String done, String total) {
+    return 'Laster ned fra Omi · $done av $total';
+  }
+
+  @override
+  String syncStepUploadingAmount(String done, String total) {
+    return 'Laster opp · $done av $total';
+  }
+
+  @override
+  String syncCardTranscribingAmount(String amount) {
+    return 'Gjør $amount om til samtaler';
+  }
+
+  @override
+  String syncCardTranscribedOf(String done, String total) {
+    return '$done av $total ferdig · du kan forlate denne skjermen';
+  }
+
+  @override
+  String syncCardReadyAmount(String amount) {
+    return '$amount klar til synkronisering';
+  }
+
+  @override
+  String get syncStepLabelDownload => 'Omi → telefon';
+
+  @override
+  String get syncStepLabelUpload => 'Opplasting';
+
+  @override
+  String get syncStepLabelTranscribe => 'Transkriber';
+
+  @override
+  String get syncDetailsTitle => 'Synkroniseringsdetaljer';
+
+  @override
+  String get syncDetailsRightNow => 'Akkurat nå';
+
+  @override
+  String get syncDetailsYourOmi => 'Din Omi';
+
+  @override
+  String get syncDetailsTransferSpeed => 'Overføringshastighet';
+
+  @override
+  String get syncDetailsWaitingOnOmi => 'Venter på Omi';
+
+  @override
+  String get syncDetailsWaitingOnPhone => 'Venter på denne telefonen';
+
+  @override
+  String get syncDetailsTranscribing => 'Transkriberer på Omi';
+
+  @override
+  String get syncDetailsForSupport => 'Til kundestøtte';
+
+  @override
+  String get syncDetailsAudioFiles => 'Lydfiler';
+
+  @override
+  String get syncDetailsServerJobs => 'Serverjobber (ferdig / totalt)';
+
+  @override
+  String get syncDetailsCopy => 'Kopier detaljer til kundestøtte';
 }

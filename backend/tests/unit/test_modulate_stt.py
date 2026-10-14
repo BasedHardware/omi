@@ -1482,7 +1482,7 @@ class TestPrerecordedProviderFactory(unittest.TestCase):
         self.assertEqual(provider._normalize_lang('pt-BR'), 'pt')
         self.assertEqual(provider._normalize_lang('en_US'), 'en')
         self.assertEqual(provider._normalize_lang('zh-CN'), 'zh')
-        self.assertEqual(provider._normalize_lang(None), 'en')
+        self.assertEqual(provider._normalize_lang(None), 'multi')
 
 
 if __name__ == '__main__':

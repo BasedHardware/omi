@@ -5675,11 +5675,6 @@ class AppLocalizationsHu extends AppLocalizations {
   String get downloadingFromSdCard => 'Letöltés az SD kártyáról';
 
   @override
-  String processingProgress(int current, int total) {
-    return 'Feldolgozás $current/$total';
-  }
-
-  @override
   String conversationsCreated(int count) {
     return '$count beszélgetés létrehozva';
   }
@@ -9128,18 +9123,10 @@ class AppLocalizationsHu extends AppLocalizations {
   }
 
   @override
-  String syncCardProgressOf(int current, int total) {
-    return '$current / $total';
-  }
-
-  @override
   String get syncStatusOnDevice => 'Az eszközödön';
 
   @override
   String get syncStatusDownloadingFromDevice => 'Letöltés az eszközödről';
-
-  @override
-  String get newestFirst => 'Legújabbak elöl';
 
   @override
   String get noSyncedRecordingsYet => 'Még nincsenek szinkronizált felvételek';
@@ -12044,9 +12031,6 @@ class AppLocalizationsHu extends AppLocalizations {
   }
 
   @override
-  String get localCopiesSection => 'Helyi másolatok';
-
-  @override
   String speakerLabelLinesLabeled(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,
@@ -12364,6 +12348,9 @@ class AppLocalizationsHu extends AppLocalizations {
   String reviewQuestionSamePerson(String name) {
     return 'Ugyanaz a személy, mint „$name”?';
   }
+
+  @override
+  String get reviewSpellingContext => 'A beszélgetés kontextusa';
 
   @override
   String get reviewQuestionSpelling => 'Hogyan írják ezt?';
@@ -13305,4 +13292,91 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get pairingHowTo => 'How to pair';
+
+  @override
+  String get paywallOutlineHeadline => 'Soha többé ne maradj le egyetlen szóról sem.';
+
+  @override
+  String get paywallCancelAnytime => 'Bármikor lemondható.';
+
+  @override
+  String get connectAnAgent => 'Ügynök csatlakoztatása';
+
+  @override
+  String get connectAnAgentSubtitle => 'Beállítási prompt Claude-hoz, ChatGPT-hez, Codexhez vagy bármely ügynökhöz';
+
+  @override
+  String syncCardSyncingAmount(String amount) {
+    return '$amount hang szinkronizálása';
+  }
+
+  @override
+  String get syncCardSyncingTitle => 'Felvételek szinkronizálása';
+
+  @override
+  String syncStepDownloadingAmount(String done, String total) {
+    return 'Letöltés az Omiról · $done / $total';
+  }
+
+  @override
+  String syncStepUploadingAmount(String done, String total) {
+    return 'Feltöltés · $done / $total';
+  }
+
+  @override
+  String syncCardTranscribingAmount(String amount) {
+    return '$amount átalakítása beszélgetésekké';
+  }
+
+  @override
+  String syncCardTranscribedOf(String done, String total) {
+    return '$done / $total kész · elhagyhatod ezt a képernyőt';
+  }
+
+  @override
+  String syncCardReadyAmount(String amount) {
+    return '$amount készen áll a szinkronizálásra';
+  }
+
+  @override
+  String get syncStepLabelDownload => 'Omi → telefon';
+
+  @override
+  String get syncStepLabelUpload => 'Feltöltés';
+
+  @override
+  String get syncStepLabelTranscribe => 'Átirat';
+
+  @override
+  String get syncDetailsTitle => 'Szinkronizálás részletei';
+
+  @override
+  String get syncDetailsRightNow => 'Jelenleg';
+
+  @override
+  String get syncDetailsYourOmi => 'Az Omid';
+
+  @override
+  String get syncDetailsTransferSpeed => 'Átviteli sebesség';
+
+  @override
+  String get syncDetailsWaitingOnOmi => 'Az Omira vár';
+
+  @override
+  String get syncDetailsWaitingOnPhone => 'Ezen a telefonon vár';
+
+  @override
+  String get syncDetailsTranscribing => 'Átírás az Omin';
+
+  @override
+  String get syncDetailsForSupport => 'Az ügyfélszolgálatnak';
+
+  @override
+  String get syncDetailsAudioFiles => 'Hangfájlok';
+
+  @override
+  String get syncDetailsServerJobs => 'Szerverfeladatok (kész / összes)';
+
+  @override
+  String get syncDetailsCopy => 'Részletek másolása az ügyfélszolgálatnak';
 }

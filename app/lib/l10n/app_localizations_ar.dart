@@ -5604,11 +5604,6 @@ class AppLocalizationsAr extends AppLocalizations {
   String get downloadingFromSdCard => 'جارٍ التنزيل من بطاقة SD';
 
   @override
-  String processingProgress(int current, int total) {
-    return 'جارٍ المعالجة $current/$total';
-  }
-
-  @override
   String conversationsCreated(int count) {
     return 'تم إنشاء $count محادثة';
   }
@@ -9035,18 +9030,10 @@ class AppLocalizationsAr extends AppLocalizations {
   }
 
   @override
-  String syncCardProgressOf(int current, int total) {
-    return '$current من $total';
-  }
-
-  @override
   String get syncStatusOnDevice => 'على جهازك';
 
   @override
   String get syncStatusDownloadingFromDevice => 'جارٍ التنزيل من جهازك';
-
-  @override
-  String get newestFirst => 'الأحدث أولاً';
 
   @override
   String get noSyncedRecordingsYet => 'لا توجد تسجيلات متزامنة بعد';
@@ -11927,9 +11914,6 @@ class AppLocalizationsAr extends AppLocalizations {
   }
 
   @override
-  String get localCopiesSection => 'النسخ المحلية';
-
-  @override
   String speakerLabelLinesLabeled(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,
@@ -12246,6 +12230,9 @@ class AppLocalizationsAr extends AppLocalizations {
   String reviewQuestionSamePerson(String name) {
     return 'هل هو نفس الشخص “$name”؟';
   }
+
+  @override
+  String get reviewSpellingContext => 'سياق المحادثة';
 
   @override
   String get reviewQuestionSpelling => 'كيف تُكتب هذه؟';
@@ -13178,4 +13165,91 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get pairingHowTo => 'How to pair';
+
+  @override
+  String get paywallOutlineHeadline => 'لا تفوّت كلمة واحدة بعد الآن.';
+
+  @override
+  String get paywallCancelAnytime => 'يمكنك الإلغاء في أي وقت.';
+
+  @override
+  String get connectAnAgent => 'ربط وكيل';
+
+  @override
+  String get connectAnAgentSubtitle => 'احصل على موجّه إعداد لـ Claude أو ChatGPT أو Codex أو أي وكيل';
+
+  @override
+  String syncCardSyncingAmount(String amount) {
+    return 'مزامنة $amount من الصوت';
+  }
+
+  @override
+  String get syncCardSyncingTitle => 'مزامنة تسجيلاتك';
+
+  @override
+  String syncStepDownloadingAmount(String done, String total) {
+    return 'التنزيل من Omi · $done من $total';
+  }
+
+  @override
+  String syncStepUploadingAmount(String done, String total) {
+    return 'الرفع · $done من $total';
+  }
+
+  @override
+  String syncCardTranscribingAmount(String amount) {
+    return 'تحويل $amount إلى محادثات';
+  }
+
+  @override
+  String syncCardTranscribedOf(String done, String total) {
+    return 'اكتمل $done من $total · يمكنك مغادرة هذه الشاشة';
+  }
+
+  @override
+  String syncCardReadyAmount(String amount) {
+    return '$amount جاهزة للمزامنة';
+  }
+
+  @override
+  String get syncStepLabelDownload => 'Omi → الهاتف';
+
+  @override
+  String get syncStepLabelUpload => 'رفع';
+
+  @override
+  String get syncStepLabelTranscribe => 'نسخ';
+
+  @override
+  String get syncDetailsTitle => 'تفاصيل المزامنة';
+
+  @override
+  String get syncDetailsRightNow => 'الآن';
+
+  @override
+  String get syncDetailsYourOmi => 'جهاز Omi الخاص بك';
+
+  @override
+  String get syncDetailsTransferSpeed => 'سرعة النقل';
+
+  @override
+  String get syncDetailsWaitingOnOmi => 'في انتظار Omi';
+
+  @override
+  String get syncDetailsWaitingOnPhone => 'في انتظار هذا الهاتف';
+
+  @override
+  String get syncDetailsTranscribing => 'جارٍ النسخ في Omi';
+
+  @override
+  String get syncDetailsForSupport => 'للدعم';
+
+  @override
+  String get syncDetailsAudioFiles => 'ملفات صوتية';
+
+  @override
+  String get syncDetailsServerJobs => 'مهام الخادم (المكتملة / الإجمالي)';
+
+  @override
+  String get syncDetailsCopy => 'نسخ التفاصيل للدعم';
 }

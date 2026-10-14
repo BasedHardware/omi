@@ -10,7 +10,7 @@
     "interval": "month",
     "legacy": false,
     "cancel_at_period_end": false,
-    "line": "You're on Architect · $199.00/mo · renews Nov 1",
+    "line": "You're on Architect · $199/mo · renews Nov 1",
     "legacy_note": null
   },
   "usage": {
@@ -26,34 +26,6 @@
     ]
   },
   "tiers": [
-    {
-      "tier_id": "basic:ladder_v1",
-      "plan_id": "basic",
-      "name": "Free",
-      "recommended": false,
-      "is_current": false,
-      "hours_line": "About 15 hours of recording a month",
-      "bullets": [
-        "Transcripts, summaries and memories of your conversations",
-        "Ask Omi anything about your day",
-        "100 MCP requests a day"
-      ],
-      "action": "none",
-      "cta_label": null,
-      "blocked_line": null,
-      "compact": false,
-      "prices": [
-        {
-          "price_id": null,
-          "interval": "month",
-          "amount_minor": 0,
-          "currency": "usd",
-          "headline": "$0.00/month",
-          "subline": null,
-          "renewal_line": null
-        }
-      ]
-    },
     {
       "tier_id": "plus:ladder_v1",
       "plan_id": "plus",
@@ -148,11 +120,11 @@
           "interval": "year",
           "amount_minor": 199000,
           "currency": "usd",
-          "headline": "$165.83/month",
-          "subline": "$1990.00 billed yearly · 2 months free",
+          "headline": "$199/month",
+          "subline": "$1,990 billed yearly · 2 months free",
           "renewal_line": "Renews yearly until you cancel. Cancel anytime in settings.",
           "months_free": 2,
-          "cta_label": "Switch to yearly · save $398.00"
+          "cta_label": "Switch to yearly · save $398"
         }
       ]
     }

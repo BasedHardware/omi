@@ -5675,11 +5675,6 @@ class AppLocalizationsCa extends AppLocalizations {
   String get downloadingFromSdCard => 'Descarregant de la targeta SD';
 
   @override
-  String processingProgress(int current, int total) {
-    return 'Processant $current/$total';
-  }
-
-  @override
   String conversationsCreated(int count) {
     return '$count converses creades';
   }
@@ -9140,18 +9135,10 @@ class AppLocalizationsCa extends AppLocalizations {
   }
 
   @override
-  String syncCardProgressOf(int current, int total) {
-    return '$current de $total';
-  }
-
-  @override
   String get syncStatusOnDevice => 'Al teu dispositiu';
 
   @override
   String get syncStatusDownloadingFromDevice => 'S\'està baixant del teu dispositiu';
-
-  @override
-  String get newestFirst => 'Més recents primer';
 
   @override
   String get noSyncedRecordingsYet => 'Encara no hi ha enregistraments sincronitzats';
@@ -12061,9 +12048,6 @@ class AppLocalizationsCa extends AppLocalizations {
   }
 
   @override
-  String get localCopiesSection => 'Còpies locals';
-
-  @override
   String speakerLabelLinesLabeled(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,
@@ -12381,6 +12365,9 @@ class AppLocalizationsCa extends AppLocalizations {
   String reviewQuestionSamePerson(String name) {
     return 'És la mateixa persona que «$name»?';
   }
+
+  @override
+  String get reviewSpellingContext => 'Context de la conversa';
 
   @override
   String get reviewQuestionSpelling => 'Com s’escriu això?';
@@ -13321,4 +13308,92 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get pairingHowTo => 'How to pair';
+
+  @override
+  String get paywallOutlineHeadline => 'No et perdis mai més ni una paraula.';
+
+  @override
+  String get paywallCancelAnytime => 'Cancel·la quan vulguis.';
+
+  @override
+  String get connectAnAgent => 'Connecta un agent';
+
+  @override
+  String get connectAnAgentSubtitle =>
+      'Obtén una indicació de configuració per a Claude, ChatGPT, Codex o qualsevol agent';
+
+  @override
+  String syncCardSyncingAmount(String amount) {
+    return 'Sincronitzant $amount d\'àudio';
+  }
+
+  @override
+  String get syncCardSyncingTitle => 'Sincronitzant les teves gravacions';
+
+  @override
+  String syncStepDownloadingAmount(String done, String total) {
+    return 'Baixant des de l\'Omi · $done de $total';
+  }
+
+  @override
+  String syncStepUploadingAmount(String done, String total) {
+    return 'Pujant · $done de $total';
+  }
+
+  @override
+  String syncCardTranscribingAmount(String amount) {
+    return 'Convertint $amount en converses';
+  }
+
+  @override
+  String syncCardTranscribedOf(String done, String total) {
+    return '$done de $total fet · pots sortir d\'aquesta pantalla';
+  }
+
+  @override
+  String syncCardReadyAmount(String amount) {
+    return '$amount a punt per sincronitzar';
+  }
+
+  @override
+  String get syncStepLabelDownload => 'Omi → mòbil';
+
+  @override
+  String get syncStepLabelUpload => 'Pujada';
+
+  @override
+  String get syncStepLabelTranscribe => 'Transcripció';
+
+  @override
+  String get syncDetailsTitle => 'Detalls de la sincronització';
+
+  @override
+  String get syncDetailsRightNow => 'Ara mateix';
+
+  @override
+  String get syncDetailsYourOmi => 'El teu Omi';
+
+  @override
+  String get syncDetailsTransferSpeed => 'Velocitat de transferència';
+
+  @override
+  String get syncDetailsWaitingOnOmi => 'Esperant l\'Omi';
+
+  @override
+  String get syncDetailsWaitingOnPhone => 'Esperant aquest mòbil';
+
+  @override
+  String get syncDetailsTranscribing => 'Transcrivint a Omi';
+
+  @override
+  String get syncDetailsForSupport => 'Per a assistència';
+
+  @override
+  String get syncDetailsAudioFiles => 'Fitxers d\'àudio';
+
+  @override
+  String get syncDetailsServerJobs => 'Tasques del servidor (fetes / total)';
+
+  @override
+  String get syncDetailsCopy => 'Copia els detalls per a assistència';
 }

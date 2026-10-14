@@ -176,11 +176,11 @@ overlay:
         HOSTED_PARAKEET_API_URL:
           value: http://parakeet.omi.me
         HOSTED_SPEAKER_EMBEDDING_API_URL:
-          value: http://diarizer.omi.me:80
+          value: http://172.16.160.20/diarizer
         OMI_FIRESTORE_DATA_PLANE_PROJECT:
           value: based-hardware
         HOSTED_TRANSLATION_API_URL:
-          value: http://nllb.omi.me
+          value: http://172.16.160.20/nllb
         MEMORY_BELIEF_MODEL_ENABLED:
           value: 'false'
         MEMORY_BELIEF_AUTOMATION_PAUSED:
@@ -285,6 +285,7 @@ overlay:
           category: rollout
     pusher:
       env:
+        <<: &batch_cohort {"HOSTED_DIARIZATION_API_URL": {"value": "http://172.16.160.20/diarizer-batch", "category": "service_discovery"}, "TRANSCRIPTION_FINAL_PASS_DIARIZER": {"value": "pyannote_shadow", "category": "rollout"}, "TRANSCRIPTION_FINAL_PASS_BACKEND": {"value": "pyannote", "category": "rollout"}, "TRANSCRIPTION_FINAL_PASS_UID_ALLOWLIST": {"value": "vi7SA9ckQCe4ccobWNxlbdcNdC23", "category": "rollout"}, "TRANSCRIPTION_FINAL_PASS_PERCENT": {"value": "0", "category": "rollout"}, "TRANSCRIPTION_FINAL_PASS_AUTHORITATIVE": {"value": "false", "category": "rollout"}, "TRANSCRIPTION_FINAL_PASS_SYNC_ENABLED": {"value": "false", "category": "rollout"}, "TRANSCRIPTION_SHADOW_ENABLED": {"value": "true", "category": "rollout"}, "TRANSCRIPTION_SHADOW_KILL_SWITCH": {"value": "false", "category": "rollout"}, "TRANSCRIPTION_SHADOW_UID_ALLOWLIST": {"value": "vi7SA9ckQCe4ccobWNxlbdcNdC23", "category": "rollout"}, "TRANSCRIPTION_SHADOW_PERCENT": {"value": "0", "category": "rollout"}, "TRANSCRIPTION_SHADOW_DAILY_AUDIO_HOURS": {"value": "1", "category": "rollout"}}
         DREAM_AGENT_MODE: {value: 'on', category: rollout}
         DREAM_AGENT_UID_ALLOWLIST: {value: '9OqYLlKJv4hmeYpIhwJcHBR975i2,vi7SA9ckQCe4ccobWNxlbdcNdC23', category: rollout}
         CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE: {value: 'shadow', category: rollout}
@@ -337,21 +338,6 @@ overlay:
         SONIOX_WIRE_LEDGER: {value: 'true', category: rollout}
         SONIOX_ORDERED_FINALIZE: {value: 'false', category: rollout}
         CAPTURE_EVIDENCE_V1_DARK_WRITE: {value: 'true', category: rollout}
-        TRANSCRIPTION_SHADOW_ENABLED:
-          value: 'true'
-          category: rollout
-        TRANSCRIPTION_SHADOW_KILL_SWITCH:
-          value: 'false'
-          category: rollout
-        TRANSCRIPTION_SHADOW_UID_ALLOWLIST:
-          value: vi7SA9ckQCe4ccobWNxlbdcNdC23
-          category: rollout
-        TRANSCRIPTION_SHADOW_PERCENT:
-          value: '0'
-          category: rollout
-        TRANSCRIPTION_SHADOW_DAILY_AUDIO_HOURS:
-          value: '1'
-          category: rollout
         OMI_CUSTOMER_DATA_PROJECT:
           value: based-hardware
         FREE_TIER_LOCAL_PROCESSING:
@@ -374,7 +360,7 @@ overlay:
         BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED:
           value: 'false'
         HOSTED_SPEAKER_EMBEDDING_API_URL:
-          value: http://diarizer.omi.me:80
+          value: http://172.16.160.20/diarizer
         CONVERSATION_RELEVANCE_JEV_SHADOW_PERCENT:
           value: '100'
           category: rollout
@@ -543,6 +529,7 @@ overlay:
             secret: SCREEN_FRAME_SIGNING_SECRET
             version: latest
         env:
+          <<: *batch_cohort
           # David-only channel launch; recovery runs inside this backend process.
           OMI_MESSAGING_CHANNELS: {value: 'on', category: rollout}
           OMI_MESSAGING_CHANNELS_UIDS: {value: 'vi7SA9ckQCe4ccobWNxlbdcNdC23', category: rollout}
@@ -638,7 +625,7 @@ overlay:
           HOSTED_PARAKEET_API_URL:
             value: http://parakeet.omi.me
           HOSTED_SPEAKER_EMBEDDING_API_URL:
-            value: http://diarizer.omi.me:80
+            value: http://172.16.160.20/diarizer
           MEMORY_BELIEF_MODEL_ENABLED:
             value: 'false'
           MEMORY_BELIEF_AUTOMATION_PAUSED:
@@ -764,6 +751,7 @@ overlay:
         - BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH
         - BASIC_TIER_MEMORIES_CREATED_LIMIT_PER_MONTH
         env:
+          <<: *batch_cohort
           OMI_SHAPED_AGENT_MODE:
             value: 'on'
             category: rollout
@@ -775,13 +763,13 @@ overlay:
           DREAM_AGENT_CONTEXT_MODE: {value: full, category: rollout}
           DREAM_AGENT_FULL_CONTEXT_UIDS: {value: 'vi7SA9ckQCe4ccobWNxlbdcNdC23', category: rollout}
           DREAM_AGENT_FULL_SAMPLES: {value: '3', category: rollout}
-          # Spelling fixes go to Review until auto-apply requires supporting context (scheduled passes run here).
+          # Bounded spelling stays in Review; the full-context owner adds grounded/unanimous spelling automation.
           DREAM_AGENT_AUTO_APPLY_KINDS: {value: 'title,overview,vocabulary', category: rollout}
           # 2026-10-09: hourly dogfood + manual runs; reserve room for both users and canary.
           DREAM_AGENT_PASSES_PER_DAY: {value: '24', category: rollout}
           DREAM_AGENT_MANUAL_RUNS_PER_DAY: {value: '20', category: rollout}
-          # Reserved-capacity accounting-only budget intent: 24 per-user hourly K=3 passes (~$200 settled) plus ~$26 reservation headroom.
-          DREAM_AGENT_DAILY_USD: {value: '250', category: rollout}
+          # Reserved-capacity accounting only: ~$12.1/pass x 24 hourly K=3 passes plus one ~$26 reservation of headroom.
+          DREAM_AGENT_DAILY_USD: {value: '320', category: rollout}
           DREAM_AGENT_CANARY_UID: {value: 'dream-canary-prod-01', category: rollout}
           CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE: {value: 'shadow', category: rollout}
           SYNC_PHASE_METRICS_EXPORT_ENABLED: {value: 'true', category: telemetry}
@@ -836,7 +824,7 @@ overlay:
           HOSTED_PARAKEET_API_URL:
             value: http://parakeet.omi.me
           HOSTED_SPEAKER_EMBEDDING_API_URL:
-            value: http://diarizer.omi.me:80
+            value: http://172.16.160.20/diarizer
           MEMORY_BELIEF_MODEL_ENABLED:
             value: 'false'
           MEMORY_BELIEF_AUTOMATION_PAUSED:
@@ -1002,7 +990,7 @@ overlay:
           HOSTED_PARAKEET_API_URL:
             value: http://parakeet.omi.me
           HOSTED_SPEAKER_EMBEDDING_API_URL:
-            value: http://diarizer.omi.me:80
+            value: http://172.16.160.20/diarizer
           MEMORY_BELIEF_MODEL_ENABLED:
             value: 'false'
           MEMORY_BELIEF_AUTOMATION_PAUSED:
@@ -1151,7 +1139,7 @@ overlay:
           HOSTED_PARAKEET_API_URL:
             value: http://parakeet.omi.me
           HOSTED_SPEAKER_EMBEDDING_API_URL:
-            value: http://diarizer.omi.me:80
+            value: http://172.16.160.20/diarizer
           MEMORY_BELIEF_MODEL_ENABLED:
             value: 'false'
           MEMORY_BELIEF_AUTOMATION_PAUSED:

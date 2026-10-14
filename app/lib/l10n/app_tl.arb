@@ -6818,18 +6818,6 @@
     "@downloadingFromSdCard": {
         "description": "Progress label when downloading from SD card"
     },
-    "processingProgress": "Pinoproseso ang {current}/{total}",
-    "@processingProgress": {
-        "description": "Progress label showing current/total items",
-        "placeholders": {
-            "current": {
-                "type": "int"
-            },
-            "total": {
-                "type": "int"
-            }
-        }
-    },
     "conversationsCreated": "{count} mga pag-usap na nabuo",
     "@conversationsCreated": {
         "description": "Success message showing number of conversations created",
@@ -10359,10 +10347,8 @@
     "syncStatusConversationCreated": "Nagawa ang usapan",
     "syncCardUploadingTitle": "Ina-upload sa Omi",
     "syncCardDownloadingTitle": "Dina-download mula sa iyong device",
-    "syncCardProgressOf": "{current} ng {total}",
     "syncStatusOnDevice": "Nasa iyong device",
     "syncStatusDownloadingFromDevice": "Dina-download mula sa iyong device",
-    "newestFirst": "Pinakabago muna",
     "noSyncedRecordingsYet": "Wala pang naka-sync na recording",
     "morePaymentMethodsComingSoon": "Mas maraming paraan ng pagbabayad na malapit nang dumating",
     "@morePaymentMethodsComingSoon": {
@@ -11157,7 +11143,6 @@
     "autoRemoveSyncedCopiesTitle": "Awtomatikong Tanggalin ang mga Naka-sync na Kopya",
     "autoRemoveSyncedCopiesDays": "Binubura ang mga naka-sync na kopya pagkatapos ng {days} araw",
     "autoRemoveSyncedCopiesDescription": "Binubura ang mga lokal na kopya {days} araw pagkatapos mag-sync. Pinapanatili ang mga kopya sa cloud.",
-    "localCopiesSection": "Mga Lokal na Kopya",
     "speakerLabelLinesLabeled": "{count, plural, =1{Nilagyan ng label ang 1 linya} other{Nilagyan ng label ang {count} linya}}",
     "speakerLabelVoiceStatus": "{state, select, learned{Natutunan na ang boses} pending{Tinututunan ang boses…} disabled{Naka-off ang pag-save ng boses} other{Hindi pa natutunan ang boses}}",
     "speakerLabelVoiceDetail": "{state, select, learned{Makikilala ni Omi si {name} sa susunod.} pending{Tatagal ito ng ilang segundo.} disabled{I-on ang pag-save ng mga boses sa Settings para makilala ni Omi si {name}.} other{Kailangan ni Omi ng mas malinaw na pananalita mula kay {name} at patuloy itong susubok.}}",
@@ -11243,6 +11228,7 @@
     "reviewRemaining": "{count} na lang",
     "reviewQuestionSpeaker": "Sino ang nagsabi nito?",
     "reviewQuestionSamePerson": "Siya rin ba si “{name}”?",
+    "reviewSpellingContext": "Konteksto ng pag-uusap",
     "reviewQuestionSpelling": "Paano ito ibabaybay?",
     "reviewPlayClip": "I-play ang clip",
     "reviewStopClip": "Ihinto ang clip",
@@ -11507,5 +11493,30 @@
     "pairingLocationPermission": "Allow location access for Omi in Settings so this phone can find your device, then try again.",
     "pairingNotFoundOrDropped": "Couldn't reach your Omi. Make sure it's charged, close to your phone, and its light is blinking, then try again.",
     "pairingBondRecovery": "Forget Omi in your phone’s Bluetooth settings, then try pairing again.",
-    "pairingHowTo": "How to pair"
+    "pairingHowTo": "How to pair",
+    "paywallOutlineHeadline": "Huwag nang palampasin ang kahit isang salita.",
+    "paywallCancelAnytime": "Kanselahin anumang oras.",
+    "connectAnAgent": "Ikonekta ang isang Agent",
+    "connectAnAgentSubtitle": "Kumuha ng setup prompt para sa Claude, ChatGPT, Codex, o anumang agent",
+    "syncCardSyncingAmount": "Sini-sync ang {amount} ng audio",
+    "syncCardSyncingTitle": "Sini-sync ang mga recording mo",
+    "syncStepDownloadingAmount": "Dina-download mula sa Omi mo · {done} sa {total}",
+    "syncStepUploadingAmount": "Ina-upload · {done} sa {total}",
+    "syncCardTranscribingAmount": "Ginagawang mga usapan ang {amount}",
+    "syncCardTranscribedOf": "{done} sa {total} tapos na · puwede mong iwan ang screen na ito",
+    "syncCardReadyAmount": "{amount} handa nang i-sync",
+    "syncStepLabelDownload": "Omi → phone",
+    "syncStepLabelUpload": "Upload",
+    "syncStepLabelTranscribe": "Transcribe",
+    "syncDetailsTitle": "Mga detalye ng sync",
+    "syncDetailsRightNow": "Ngayon",
+    "syncDetailsYourOmi": "Ang Omi mo",
+    "syncDetailsTransferSpeed": "Bilis ng paglipat",
+    "syncDetailsWaitingOnOmi": "Naghihintay sa Omi mo",
+    "syncDetailsWaitingOnPhone": "Naghihintay sa phone na ito",
+    "syncDetailsTranscribing": "Tina-transcribe sa Omi",
+    "syncDetailsForSupport": "Para sa support",
+    "syncDetailsAudioFiles": "Mga audio file",
+    "syncDetailsServerJobs": "Mga server job (tapos / kabuuan)",
+    "syncDetailsCopy": "Kopyahin ang mga detalye para sa support"
 }

@@ -6,6 +6,7 @@ import 'package:omi/pages/home/widgets/home_tab_switcher.dart';
 import 'package:omi/backend/http/api/action_items.dart';
 import 'package:omi/services/onboarding_sync_runtime.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import 'package:firebase_auth/firebase_auth.dart';
@@ -31,6 +32,10 @@ import 'package:omi/pages/onboarding/permissions/permissions_checker.dart';
 import 'package:omi/pages/onboarding/permissions/permissions_widget.dart';
 import 'package:omi/pages/onboarding/primary_language/primary_language_widget.dart';
 import 'package:omi/pages/onboarding/complete_screen.dart';
+import 'package:omi/pages/onboarding/web_onboarding_page.dart';
+import 'package:omi/pages/paywall/paywall_router.dart';
+import 'package:omi/services/experiments/onboarding_webview_gate.dart';
+import 'package:omi/services/experiments/paywall_experiment.dart';
 import 'package:omi/pages/onboarding/setup_page.dart';
 import 'package:omi/pages/onboarding/speech_profile_widget.dart';
 import 'package:omi/pages/onboarding/guided_voice_controller.dart';
@@ -43,6 +48,8 @@ import 'package:omi/services/auth_service.dart';
 import 'package:omi/services/experiments/onboarding_activation_flow.dart';
 import 'package:omi/services/experiments/onboarding_setup_rating_prompt.dart';
 import 'package:omi/utils/analytics/intercom.dart';
+import 'package:omi/utils/analytics/registry/events.g.dart';
+import 'package:omi/utils/analytics/registry/typed_events.dart';
 import 'package:omi/utils/analytics/product_telemetry.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/other/temp.dart';
@@ -58,6 +65,10 @@ class OnboardingWrapper extends StatefulWidget {
   const OnboardingWrapper({super.key, this.forceAuthPage = false});
 
   final bool forceAuthPage;
+
+  /// Debug builds with `--dart-define=OMI_ONBOARDING_RERUN=1` walk onboarding again on a
+  /// signed-in account; startup routing honours it so the reader lands in the wrapper.
+  static bool get rerunForTesting => _OnboardingWrapperState._rerunForTesting;
 
   @override
   State<OnboardingWrapper> createState() => _OnboardingWrapperState();
@@ -87,6 +98,12 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
   /// work well enough yet). The page stays in the TabController so indices are stable; nothing
   /// navigates to it while this is false.
   static const bool kKnowledgeGraphStepEnabled = false;
+
+  /// Debug-build override to walk first-run onboarding again on a signed-in account (for
+  /// exercising onboarding variants): `--dart-define=OMI_ONBOARDING_RERUN=1`. `kDebugMode`
+  /// excludes every store build.
+  static const _debugRerun = String.fromEnvironment('OMI_ONBOARDING_RERUN');
+  static bool get _rerunForTesting => kDebugMode && _debugRerun == '1';
 
   static const List<int> kProgressSteps = [
     kNamePage,
@@ -179,11 +196,11 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
           // once before any AI processing begins.
           if (!SharedPreferencesUtil().aiConsentGiven) {
             _controller!.animateTo(kAiConsentPage);
-          } else if (SharedPreferencesUtil().onboardingCompleted) {
+          } else if (SharedPreferencesUtil().onboardingCompleted && !_rerunForTesting) {
             await _routeWithPermissionsCheck(context);
           } else {
             _startDeviceSearch();
-            _controller!.animateTo(_resumeStep());
+            _enterSteps();
           }
         }
       }
@@ -235,6 +252,35 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
     unawaited(context.read<OnboardingProvider>().startQuietDeviceScan());
   }
 
+  /// The paywall experiment's end-of-onboarding placement: only arms whose payload asks for it,
+  /// never control, never when subscription UI is hidden (the router checks that), and never when
+  /// the activation already offered a plan.
+  Future<void> _maybeShowOnboardingPaywall() async {
+    if (SuperwallPilot.instance.offeredDuringOnboarding) return;
+    final config = await PaywallExperiment.resolve();
+    if (!mounted || config.isControl || !config.onboardingPaywall) return;
+    await PaywallRouter.openVariant(context, source: 'onboarding', config: config);
+  }
+
+  /// Enters the steps after sign-in and consent: the web onboarding page when its flag names one,
+  /// otherwise the native step the reader left off at. A page that falls back lands on that same
+  /// native step.
+  Future<void> _enterSteps() async {
+    final url = await OnboardingWebviewGate.resolve();
+    if (!mounted) return;
+    if (url != null) {
+      const TypedEvents().emit(const OnboardingWebviewShown());
+      final result = await routeToPage(context, WebOnboardingPage(url: url));
+      if (!mounted) return;
+      if (result == WebOnboardingResult.completed) {
+        const TypedEvents().emit(const OnboardingWebviewCompleted());
+        await _completeOnboarding();
+        return;
+      }
+    }
+    _controller!.animateTo(_resumeStep());
+  }
+
   /// Leaving "Connect your Omi". A device connected here skips the post-onboarding device
   /// tutorial (it stays in device settings).
   OnboardingDeviceChoice? _deviceChoice;
@@ -244,6 +290,9 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
     SuperwallPilot.instance.offeredDuringOnboarding = true;
     unawaited(context.read<UsageProvider>().fetchSubscription());
     if (await SuperwallPilot.instance.showPlacementAndWait(SuperwallPilot.deviceSetupCompletePlacement)) return;
+    if (!mounted) return;
+    // The paywall experiment's arm when the reader is in one; control keeps the onboarding sheet.
+    if (await PaywallRouter.openVariant(context, source: 'onboarding')) return;
     if (!mounted) return;
     await showOmiSheet<void>(context: context, padding: EdgeInsets.zero, builder: (_) => const OnboardingPlansSheet());
   }
@@ -268,6 +317,8 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
     _completeOnboardingTelemetry();
     PlatformManager.instance.analytics.onboardingCompleted();
     PaintingBinding.instance.imageCache.clear();
+    await _maybeShowOnboardingPaywall();
+    if (!mounted) return true;
     routeToPage(context, const HomePageWrapper(), replace: true);
     return true;
   }
@@ -541,7 +592,7 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
             await _routeWithPermissionsCheck(context);
           } else {
             _startDeviceSearch();
-            _controller!.animateTo(_resumeStep());
+            _enterSteps();
           }
         },
       ),
@@ -557,7 +608,7 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
             await _routeWithPermissionsCheck(context);
           } else {
             _startDeviceSearch();
-            _controller!.animateTo(_resumeStep());
+            _enterSteps();
           }
         },
         onUseDifferentAccount: _useDifferentAccount,

@@ -72,7 +72,17 @@ def main(argv=None) -> int:
         )
         price_plans = {price: plan.value for price, plan in RECOGNIZED_STRIPE_PRICE_PLAN_TYPES.items()}
         if args.price_map:
-            price_plans.update(json.loads(args.price_map.read_text()))
+            supplied = json.loads(args.price_map.read_text())
+            if not isinstance(supplied, dict):
+                raise ValueError('price map must be an object of price ids')
+            collisions = sorted(price_id for price_id in supplied if price_id in price_plans)
+            if collisions:
+                print(
+                    'billing reconciliation failed: price map collides with catalog price ids',
+                    file=sys.stderr,
+                )
+                return 2
+            price_plans.update(supplied)
         report = reconcile(subscriptions, users, price_plans, as_of=args.as_of)
         from utils.observability.billing_reconciliation import record_report, export_metrics
 

@@ -5559,11 +5559,6 @@ class AppLocalizationsJa extends AppLocalizations {
   String get downloadingFromSdCard => 'SDカードからダウンロード中';
 
   @override
-  String processingProgress(int current, int total) {
-    return '処理中 $current/$total';
-  }
-
-  @override
   String conversationsCreated(int count) {
     return '$count件の会話を作成しました';
   }
@@ -8959,18 +8954,10 @@ class AppLocalizationsJa extends AppLocalizations {
   }
 
   @override
-  String syncCardProgressOf(int current, int total) {
-    return '$total件中$current件';
-  }
-
-  @override
   String get syncStatusOnDevice => 'デバイス上';
 
   @override
   String get syncStatusDownloadingFromDevice => 'デバイスからダウンロード中';
-
-  @override
-  String get newestFirst => '新しい順';
 
   @override
   String get noSyncedRecordingsYet => '同期済みの録音はまだありません';
@@ -11820,9 +11807,6 @@ class AppLocalizationsJa extends AppLocalizations {
   }
 
   @override
-  String get localCopiesSection => 'ローカルコピー';
-
-  @override
   String speakerLabelLinesLabeled(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,
@@ -12137,6 +12121,9 @@ class AppLocalizationsJa extends AppLocalizations {
   String reviewQuestionSamePerson(String name) {
     return '「$name」と同じ人ですか？';
   }
+
+  @override
+  String get reviewSpellingContext => '会話の文脈';
 
   @override
   String get reviewQuestionSpelling => 'この綴りは？';
@@ -13063,4 +13050,91 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get pairingHowTo => 'How to pair';
+
+  @override
+  String get paywallOutlineHeadline => 'もう一言も聞き逃さない。';
+
+  @override
+  String get paywallCancelAnytime => 'いつでもキャンセルできます。';
+
+  @override
+  String get connectAnAgent => 'エージェントを接続';
+
+  @override
+  String get connectAnAgentSubtitle => 'Claude、ChatGPT、Codex などのエージェント用セットアップ用プロンプトを取得';
+
+  @override
+  String syncCardSyncingAmount(String amount) {
+    return '$amountの音声を同期中';
+  }
+
+  @override
+  String get syncCardSyncingTitle => '録音を同期中';
+
+  @override
+  String syncStepDownloadingAmount(String done, String total) {
+    return 'Omiからダウンロード中 · $done / $total';
+  }
+
+  @override
+  String syncStepUploadingAmount(String done, String total) {
+    return 'アップロード中 · $done / $total';
+  }
+
+  @override
+  String syncCardTranscribingAmount(String amount) {
+    return '$amountを会話に変換中';
+  }
+
+  @override
+  String syncCardTranscribedOf(String done, String total) {
+    return '$done / $total 完了 · この画面を閉じても大丈夫です';
+  }
+
+  @override
+  String syncCardReadyAmount(String amount) {
+    return '$amountを同期できます';
+  }
+
+  @override
+  String get syncStepLabelDownload => 'Omi → スマホ';
+
+  @override
+  String get syncStepLabelUpload => 'アップロード';
+
+  @override
+  String get syncStepLabelTranscribe => '文字起こし';
+
+  @override
+  String get syncDetailsTitle => '同期の詳細';
+
+  @override
+  String get syncDetailsRightNow => '現在';
+
+  @override
+  String get syncDetailsYourOmi => 'お使いのOmi';
+
+  @override
+  String get syncDetailsTransferSpeed => '転送速度';
+
+  @override
+  String get syncDetailsWaitingOnOmi => 'Omi側で待機中';
+
+  @override
+  String get syncDetailsWaitingOnPhone => 'このスマホで待機中';
+
+  @override
+  String get syncDetailsTranscribing => 'Omiで文字起こし中';
+
+  @override
+  String get syncDetailsForSupport => 'サポート用';
+
+  @override
+  String get syncDetailsAudioFiles => '音声ファイル';
+
+  @override
+  String get syncDetailsServerJobs => 'サーバージョブ (完了 / 合計)';
+
+  @override
+  String get syncDetailsCopy => 'サポート用に詳細をコピー';
 }

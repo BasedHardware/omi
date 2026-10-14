@@ -6818,18 +6818,6 @@
     "@downloadingFromSdCard": {
         "description": "Progress label when downloading from SD card"
     },
-    "processingProgress": "प्रक्रिया करत आहे {current}/{total}",
-    "@processingProgress": {
-        "description": "Progress label showing current/total items",
-        "placeholders": {
-            "current": {
-                "type": "int"
-            },
-            "total": {
-                "type": "int"
-            }
-        }
-    },
     "conversationsCreated": "{count} संभाषणे तयार केली",
     "@conversationsCreated": {
         "description": "Success message showing number of conversations created",
@@ -10359,10 +10347,8 @@
     "syncStatusConversationCreated": "संभाषण तयार झाले",
     "syncCardUploadingTitle": "Omi वर अपलोड होत आहे",
     "syncCardDownloadingTitle": "तुमच्या डिव्हाइसवरून डाउनलोड होत आहे",
-    "syncCardProgressOf": "{total} पैकी {current}",
     "syncStatusOnDevice": "तुमच्या डिव्हाइसवर",
     "syncStatusDownloadingFromDevice": "तुमच्या डिव्हाइसवरून डाउनलोड होत आहे",
-    "newestFirst": "नवीन आधी",
     "noSyncedRecordingsYet": "अद्याप कोणतीही सिंक केलेली रेकॉर्डिंग नाही",
     "morePaymentMethodsComingSoon": "लवकरच आणखी पेमेंट पद्धती",
     "@morePaymentMethodsComingSoon": {
@@ -11157,7 +11143,6 @@
     "autoRemoveSyncedCopiesTitle": "सिंक केलेल्या प्रती आपोआप काढा",
     "autoRemoveSyncedCopiesDays": "सिंक केलेल्या प्रती {days} दिवसांनंतर हटवल्या जातात",
     "autoRemoveSyncedCopiesDescription": "सिंकनंतर {days} दिवसांनी स्थानिक प्रती हटवते. क्लाउड प्रती ठेवल्या जातात.",
-    "localCopiesSection": "स्थानिक प्रती",
     "speakerLabelLinesLabeled": "{count, plural, =1{1 ओळीला लेबल लावले} other{{count} ओळींना लेबल लावले}}",
     "speakerLabelVoiceStatus": "{state, select, learned{आवाज शिकला} pending{आवाज शिकत आहे…} disabled{आवाज जतन करणे बंद आहे} other{आवाज अजून शिकलेला नाही}}",
     "speakerLabelVoiceDetail": "{state, select, learned{Omi पुढच्या वेळी {name} यांना ओळखेल.} pending{यास काही सेकंद लागतात.} disabled{Omi ला {name} यांना ओळखता यावे म्हणून सेटिंग्जमध्ये आवाज जतन करणे चालू करा.} other{Omi ला {name} यांचे आणखी स्पष्ट बोलणे हवे आहे आणि तो प्रयत्न करत राहील.}}",
@@ -11243,6 +11228,7 @@
     "reviewRemaining": "{count} बाकी",
     "reviewQuestionSpeaker": "हे कोण म्हणाले?",
     "reviewQuestionSamePerson": "“{name}” हीच व्यक्ती आहे का?",
+    "reviewSpellingContext": "संभाषणाचा संदर्भ",
     "reviewQuestionSpelling": "हे कसे लिहितात?",
     "reviewPlayClip": "क्लिप प्ले करा",
     "reviewStopClip": "क्लिप थांबवा",
@@ -11507,5 +11493,30 @@
     "pairingLocationPermission": "Allow location access for Omi in Settings so this phone can find your device, then try again.",
     "pairingNotFoundOrDropped": "Couldn't reach your Omi. Make sure it's charged, close to your phone, and its light is blinking, then try again.",
     "pairingBondRecovery": "Forget Omi in your phone’s Bluetooth settings, then try pairing again.",
-    "pairingHowTo": "How to pair"
+    "pairingHowTo": "How to pair",
+    "paywallOutlineHeadline": "आता एकही शब्द चुकवू नका.",
+    "paywallCancelAnytime": "कधीही रद्द करा.",
+    "connectAnAgent": "एजंट कनेक्ट करा",
+    "connectAnAgentSubtitle": "Claude, ChatGPT, Codex किंवा कोणत्याही एजंटसाठी सेटअप प्रॉम्प्ट मिळवा",
+    "syncCardSyncingAmount": "{amount} ऑडिओ सिंक होत आहे",
+    "syncCardSyncingTitle": "तुमची रेकॉर्डिंग सिंक होत आहेत",
+    "syncStepDownloadingAmount": "तुमच्या Omi मधून डाउनलोड · {done} / {total}",
+    "syncStepUploadingAmount": "अपलोड · {done} / {total}",
+    "syncCardTranscribingAmount": "{amount} चे संभाषणांमध्ये रूपांतर होत आहे",
+    "syncCardTranscribedOf": "{done} / {total} पूर्ण · तुम्ही ही स्क्रीन सोडू शकता",
+    "syncCardReadyAmount": "{amount} सिंकसाठी तयार",
+    "syncStepLabelDownload": "Omi → फोन",
+    "syncStepLabelUpload": "अपलोड",
+    "syncStepLabelTranscribe": "ट्रान्सक्रिप्शन",
+    "syncDetailsTitle": "सिंक तपशील",
+    "syncDetailsRightNow": "आत्ता",
+    "syncDetailsYourOmi": "तुमचा Omi",
+    "syncDetailsTransferSpeed": "ट्रान्सफर गती",
+    "syncDetailsWaitingOnOmi": "Omi वर प्रतीक्षेत",
+    "syncDetailsWaitingOnPhone": "या फोनवर प्रतीक्षेत",
+    "syncDetailsTranscribing": "Omi वर ट्रान्सक्राइब होत आहे",
+    "syncDetailsForSupport": "सपोर्टसाठी",
+    "syncDetailsAudioFiles": "ऑडिओ फाइल्स",
+    "syncDetailsServerJobs": "सर्व्हर जॉब्स (पूर्ण / एकूण)",
+    "syncDetailsCopy": "सपोर्टसाठी तपशील कॉपी करा"
 }

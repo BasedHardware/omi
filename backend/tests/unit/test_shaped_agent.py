@@ -44,6 +44,7 @@ def isolated_imports():
 @pytest.fixture(autouse=True)
 def flag_off(monkeypatch):
     monkeypatch.delenv(shaped.FLAG, raising=False)
+    monkeypatch.setattr(pc, 'conversation_known_spellings', lambda *_: '')
 
 
 @pytest.mark.parametrize(
@@ -495,6 +496,35 @@ def test_notes_transport_is_owned_per_worker_loop(monkeypatch):
     assert loops[0] is not loops[1]
     assert len(transports) == 2 and all(transport.is_closed for transport in transports)
     assert cached.root_async_client is original_client and not original_client.is_closed()
+
+
+def test_notes_transport_isolates_anthropic_byok_lane():
+    """BYOK fallback to Anthropic must not 500 before the notes call.
+
+    Prod: get_llm records from=openai to=anthropic reason=byok, then
+    isolated_notes_model raised TypeError because the model was ChatAnthropic.
+    _get_structured mapped that to HTTP 500.
+    """
+    cached = ChatAnthropic(model='claude-sonnet-4-6', api_key='fake', timeout=60, max_retries=0)
+    seen = []
+
+    async def call():
+        async with shaped_notes_transport.isolated_notes_model(cached) as model:
+            assert model is not cached
+            assert isinstance(model, ChatAnthropic)
+            assert '_async_client' not in cached.__dict__
+            transport = model._async_client._client
+            assert isinstance(transport, httpx.AsyncClient)
+            assert not transport.is_closed
+            seen.append(transport)
+            return transport
+
+    first = asyncio.run(call())
+    second = asyncio.run(call())
+    assert first is not second
+    assert first.is_closed and second.is_closed
+    assert '_async_client' not in cached.__dict__
+    assert seen[0] is first and seen[1] is second
 
 
 def test_anthropic_only_byok_notes_preserve_transport_and_omit_cache_hints(monkeypatch):

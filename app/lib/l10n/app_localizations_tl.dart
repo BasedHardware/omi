@@ -5692,11 +5692,6 @@ class AppLocalizationsTl extends AppLocalizations {
   String get downloadingFromSdCard => 'Dine-download mula sa SD Card';
 
   @override
-  String processingProgress(int current, int total) {
-    return 'Pinoproseso ang $current/$total';
-  }
-
-  @override
   String conversationsCreated(int count) {
     return '$count mga pag-usap na nabuo';
   }
@@ -9171,18 +9166,10 @@ class AppLocalizationsTl extends AppLocalizations {
   }
 
   @override
-  String syncCardProgressOf(int current, int total) {
-    return '$current ng $total';
-  }
-
-  @override
   String get syncStatusOnDevice => 'Nasa iyong device';
 
   @override
   String get syncStatusDownloadingFromDevice => 'Dina-download mula sa iyong device';
-
-  @override
-  String get newestFirst => 'Pinakabago muna';
 
   @override
   String get noSyncedRecordingsYet => 'Wala pang naka-sync na recording';
@@ -12096,9 +12083,6 @@ class AppLocalizationsTl extends AppLocalizations {
   }
 
   @override
-  String get localCopiesSection => 'Mga Lokal na Kopya';
-
-  @override
   String speakerLabelLinesLabeled(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,
@@ -12416,6 +12400,9 @@ class AppLocalizationsTl extends AppLocalizations {
   String reviewQuestionSamePerson(String name) {
     return 'Siya rin ba si “$name”?';
   }
+
+  @override
+  String get reviewSpellingContext => 'Konteksto ng pag-uusap';
 
   @override
   String get reviewQuestionSpelling => 'Paano ito ibabaybay?';
@@ -13358,4 +13345,91 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get pairingHowTo => 'How to pair';
+
+  @override
+  String get paywallOutlineHeadline => 'Huwag nang palampasin ang kahit isang salita.';
+
+  @override
+  String get paywallCancelAnytime => 'Kanselahin anumang oras.';
+
+  @override
+  String get connectAnAgent => 'Ikonekta ang isang Agent';
+
+  @override
+  String get connectAnAgentSubtitle => 'Kumuha ng setup prompt para sa Claude, ChatGPT, Codex, o anumang agent';
+
+  @override
+  String syncCardSyncingAmount(String amount) {
+    return 'Sini-sync ang $amount ng audio';
+  }
+
+  @override
+  String get syncCardSyncingTitle => 'Sini-sync ang mga recording mo';
+
+  @override
+  String syncStepDownloadingAmount(String done, String total) {
+    return 'Dina-download mula sa Omi mo · $done sa $total';
+  }
+
+  @override
+  String syncStepUploadingAmount(String done, String total) {
+    return 'Ina-upload · $done sa $total';
+  }
+
+  @override
+  String syncCardTranscribingAmount(String amount) {
+    return 'Ginagawang mga usapan ang $amount';
+  }
+
+  @override
+  String syncCardTranscribedOf(String done, String total) {
+    return '$done sa $total tapos na · puwede mong iwan ang screen na ito';
+  }
+
+  @override
+  String syncCardReadyAmount(String amount) {
+    return '$amount handa nang i-sync';
+  }
+
+  @override
+  String get syncStepLabelDownload => 'Omi → phone';
+
+  @override
+  String get syncStepLabelUpload => 'Upload';
+
+  @override
+  String get syncStepLabelTranscribe => 'Transcribe';
+
+  @override
+  String get syncDetailsTitle => 'Mga detalye ng sync';
+
+  @override
+  String get syncDetailsRightNow => 'Ngayon';
+
+  @override
+  String get syncDetailsYourOmi => 'Ang Omi mo';
+
+  @override
+  String get syncDetailsTransferSpeed => 'Bilis ng paglipat';
+
+  @override
+  String get syncDetailsWaitingOnOmi => 'Naghihintay sa Omi mo';
+
+  @override
+  String get syncDetailsWaitingOnPhone => 'Naghihintay sa phone na ito';
+
+  @override
+  String get syncDetailsTranscribing => 'Tina-transcribe sa Omi';
+
+  @override
+  String get syncDetailsForSupport => 'Para sa support';
+
+  @override
+  String get syncDetailsAudioFiles => 'Mga audio file';
+
+  @override
+  String get syncDetailsServerJobs => 'Mga server job (tapos / kabuuan)';
+
+  @override
+  String get syncDetailsCopy => 'Kopyahin ang mga detalye para sa support';
 }

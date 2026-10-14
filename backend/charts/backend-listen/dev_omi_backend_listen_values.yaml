@@ -308,11 +308,11 @@ env:
   - name: BUCKET_TEMPORAL_SYNC_LOCAL
     value: "syncing-local-development"
   - name: HOSTED_VAD_API_URL
-    value: "http://vad.omiapi.com:80/v1/vad"
+    value: "http://172.16.48.49/vad/v1/vad"
   - name: HOSTED_SPEAKER_EMBEDDING_API_URL
-    value: "http://diarizer.omiapi.com:80"
+    value: "http://172.16.48.49/diarizer"
   - name: HOSTED_TRANSLATION_API_URL
-    value: "http://nllb.omiapi.com"
+    value: "http://172.16.48.49/nllb"
   - name: TRANSLATION_SERVICE_MODELS
     value: "nllb,gemini"
   - name: TRANSLATION_DEMAND_SHADOW_ENABLED
@@ -370,6 +370,14 @@ env:
     value: "false"
   - name: STT_RESILIENT_RECONNECT
     value: "false"
+  - name: STT_LIVE_DEMAND_ENABLED
+    value: "false"
+  - name: STT_LIVE_DEMAND_PERCENT
+    value: "0"
+  - name: STT_LIVE_DEMAND_UID_ALLOWLIST
+    value: ""
+  - name: STT_LIVE_DEMAND_MIN_DWELL_SECONDS
+    value: "15"
   - name: STT_FAILOVER_RECOVERY_ENABLED
     value: "false"
   - name: STT_ROUTING_MODE

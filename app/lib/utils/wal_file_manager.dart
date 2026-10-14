@@ -7,6 +7,7 @@ import 'package:pool/pool.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/services/wals.dart';
+import 'package:omi/services/wals/mobile_batch_buffer.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/startup/boot_journal.dart';
 
@@ -31,9 +32,9 @@ class WalFileManager {
       await init();
     }
 
-    if (_walFile == null || !await _walFile!.exists()) return await _loadFromBackup();
-    final loaded = await _loadIndex(_walFile!);
-    return loaded ?? await _loadFromBackup();
+    final loaded = _walFile != null && await _walFile!.exists() ? await _loadIndex(_walFile!) : null;
+    final indexed = loaded ?? await _loadFromBackup();
+    return MobileBatchBuffer.recover(_walFile!.parent, indexed);
   }
 
   /// Null means the index is unusable; a partially valid index retains every

@@ -5643,11 +5643,6 @@ class AppLocalizationsSk extends AppLocalizations {
   String get downloadingFromSdCard => 'Sťahovanie z SD karty';
 
   @override
-  String processingProgress(int current, int total) {
-    return 'Processing $current/$total';
-  }
-
-  @override
   String conversationsCreated(int count) {
     return 'Vytvorených $count konverzácií';
   }
@@ -9082,18 +9077,10 @@ class AppLocalizationsSk extends AppLocalizations {
   }
 
   @override
-  String syncCardProgressOf(int current, int total) {
-    return '$current z $total';
-  }
-
-  @override
   String get syncStatusOnDevice => 'Vo vašom zariadení';
 
   @override
   String get syncStatusDownloadingFromDevice => 'Sťahovanie z vášho zariadenia';
-
-  @override
-  String get newestFirst => 'Najnovšie ako prvé';
 
   @override
   String get noSyncedRecordingsYet => 'Zatiaľ žiadne synchronizované nahrávky';
@@ -11991,9 +11978,6 @@ class AppLocalizationsSk extends AppLocalizations {
   }
 
   @override
-  String get localCopiesSection => 'Lokálne kópie';
-
-  @override
   String speakerLabelLinesLabeled(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,
@@ -12310,6 +12294,9 @@ class AppLocalizationsSk extends AppLocalizations {
   String reviewQuestionSamePerson(String name) {
     return 'Je to ten istý človek ako „$name“?';
   }
+
+  @override
+  String get reviewSpellingContext => 'Kontext konverzácie';
 
   @override
   String get reviewQuestionSpelling => 'Ako sa to píše?';
@@ -13248,4 +13235,91 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get pairingHowTo => 'How to pair';
+
+  @override
+  String get paywallOutlineHeadline => 'Už vám neunikne ani slovo.';
+
+  @override
+  String get paywallCancelAnytime => 'Zrušte kedykoľvek.';
+
+  @override
+  String get connectAnAgent => 'Pripojiť agenta';
+
+  @override
+  String get connectAnAgentSubtitle => 'Získajte pokyny na nastavenie pre Claude, ChatGPT, Codex alebo iného agenta';
+
+  @override
+  String syncCardSyncingAmount(String amount) {
+    return 'Synchronizácia $amount zvuku';
+  }
+
+  @override
+  String get syncCardSyncingTitle => 'Synchronizácia nahrávok';
+
+  @override
+  String syncStepDownloadingAmount(String done, String total) {
+    return 'Sťahovanie z Omi · $done z $total';
+  }
+
+  @override
+  String syncStepUploadingAmount(String done, String total) {
+    return 'Nahrávanie · $done z $total';
+  }
+
+  @override
+  String syncCardTranscribingAmount(String amount) {
+    return 'Premena $amount na konverzácie';
+  }
+
+  @override
+  String syncCardTranscribedOf(String done, String total) {
+    return 'Hotovo $done z $total · túto obrazovku môžete opustiť';
+  }
+
+  @override
+  String syncCardReadyAmount(String amount) {
+    return '$amount pripravené na synchronizáciu';
+  }
+
+  @override
+  String get syncStepLabelDownload => 'Omi → telefón';
+
+  @override
+  String get syncStepLabelUpload => 'Nahrávanie';
+
+  @override
+  String get syncStepLabelTranscribe => 'Prepis';
+
+  @override
+  String get syncDetailsTitle => 'Podrobnosti synchronizácie';
+
+  @override
+  String get syncDetailsRightNow => 'Práve teraz';
+
+  @override
+  String get syncDetailsYourOmi => 'Váš Omi';
+
+  @override
+  String get syncDetailsTransferSpeed => 'Rýchlosť prenosu';
+
+  @override
+  String get syncDetailsWaitingOnOmi => 'Čaká na Omi';
+
+  @override
+  String get syncDetailsWaitingOnPhone => 'Čaká v tomto telefóne';
+
+  @override
+  String get syncDetailsTranscribing => 'Prepisuje sa v Omi';
+
+  @override
+  String get syncDetailsForSupport => 'Pre podporu';
+
+  @override
+  String get syncDetailsAudioFiles => 'Zvukové súbory';
+
+  @override
+  String get syncDetailsServerJobs => 'Úlohy servera (hotovo / spolu)';
+
+  @override
+  String get syncDetailsCopy => 'Kopírovať podrobnosti pre podporu';
 }

@@ -87,6 +87,7 @@
       },
       "blocked_line": "Resubscribe first to change plans",
       "prices": {
+        "headline_free": "$0",
         "headline_month": "{amount}/month",
         "headline_year": "{amount}/month",
         "subline_year": "{amount} billed yearly · {free}",
