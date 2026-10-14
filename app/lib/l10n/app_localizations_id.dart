@@ -8585,6 +8585,295 @@ class AppLocalizationsId extends AppLocalizations {
       'Merekam offline — transkrip akan menyusul saat Anda kembali online.';
 
   @override
+  String get onDeviceAtCapTitle => 'Transkripsi langsung bulan ini sudah habis';
+
+  @override
+  String get onDeviceAtCapBody => 'Omi masih merekam. Pilih cara mentranskripsi sisa bulan ini.';
+
+  @override
+  String onDeviceLiveHoursReturn(String date) {
+    return 'Jam langsung kembali pada $date.';
+  }
+
+  @override
+  String get onDeviceTranscribeOnPhone => 'Transkripsi di ponsel ini';
+
+  @override
+  String get onDeviceIncluded => 'Termasuk';
+
+  @override
+  String get onDeviceOptionChargingBody =>
+      'Berjalan saat ponsel diisi daya, jadi hampir tidak memakai baterai. Transkrip muncul setelah Anda mengisi daya.';
+
+  @override
+  String get onDeviceUpgradeBody => 'Upgrade ke Pro untuk pemisahan pembicara dan akurasi lebih tinggi';
+
+  @override
+  String get onDeviceAtCapFooter => 'Tidak ada yang hilang. Anda dapat mengubahnya di Pengaturan › Transkripsi.';
+
+  @override
+  String onDeviceStepOf(int step, int total) {
+    return 'Langkah $step dari $total';
+  }
+
+  @override
+  String get onDeviceSetupBody =>
+      'Omi mengunduh model suara satu kali. Setelah itu, rekaman Anda diubah menjadi teks langsung di sini, tanpa memakai jam langsung.';
+
+  @override
+  String get onDeviceSpeechModel => 'Model suara';
+
+  @override
+  String onDeviceMegabytes(String size) {
+    return '$size MB';
+  }
+
+  @override
+  String onDeviceDownloadingWifi(int percent) {
+    return 'Mengunduh lewat Wi-Fi · $percent%';
+  }
+
+  @override
+  String onDeviceDownloadingPercent(int percent) {
+    return 'Mengunduh · $percent%';
+  }
+
+  @override
+  String onDeviceTimeLeft(String time) {
+    return 'Sekitar $time lagi';
+  }
+
+  @override
+  String get onDeviceWaitingForWifi => 'Menunggu Wi-Fi';
+
+  @override
+  String get onDeviceDownloadFailed => 'Unduhan tidak selesai';
+
+  @override
+  String get onDeviceModelNotDownloaded => 'Belum diunduh';
+
+  @override
+  String onDeviceModelInstalled(String size) {
+    return 'Terpasang · $size';
+  }
+
+  @override
+  String get onDeviceModelUnsupported => 'Belum tersedia di ponsel ini';
+
+  @override
+  String get onDeviceSetupKeepRecording => 'Tetap merekam selama pengunduhan. Tidak ada yang perlu menunggu.';
+
+  @override
+  String get onDeviceSetupAudioStays => 'Audio tetap di ponsel Anda sampai ditranskripsi.';
+
+  @override
+  String get onDeviceWifiOnly => 'Unduh hanya lewat Wi-Fi';
+
+  @override
+  String get onDeviceDownloadModel => 'Unduh Model Suara';
+
+  @override
+  String get onDeviceScheduleTitle => 'Waktu Transkripsi';
+
+  @override
+  String get onDeviceScheduleHeadline => 'Kapan Omi sebaiknya mentranskripsi?';
+
+  @override
+  String get onDeviceScheduleBody => 'Transkripsi bertahap menghemat baterai. Anda dapat mengubahnya kapan saja.';
+
+  @override
+  String get onDeviceScheduleCharging => 'Saat mengisi daya';
+
+  @override
+  String get onDeviceScheduleChargingBody => 'Transkrip muncul setelah Anda mengisi daya, biasanya semalaman.';
+
+  @override
+  String get onDeviceBatteryAlmostNone => 'Baterai: hampir tidak ada';
+
+  @override
+  String get onDeviceScheduleHours => 'Setiap beberapa jam';
+
+  @override
+  String get onDeviceScheduleHoursBody =>
+      'Menyusul dalam sesi singkat saat memakai baterai, jadi transkrip jarang tertinggal lebih dari beberapa jam.';
+
+  @override
+  String onDeviceBatteryPerDay(int percent) {
+    return 'Baterai: sekitar $percent% per hari';
+  }
+
+  @override
+  String get onDeviceScheduleLive => 'Saat Anda berbicara';
+
+  @override
+  String get onDeviceScheduleLiveBody => 'Mentranskripsikan secara berkala saat Omi terbuka.';
+
+  @override
+  String onDeviceBatteryPerHour(int percent) {
+    return 'Baterai: sekitar $percent% per jam percakapan';
+  }
+
+  @override
+  String onDeviceQueueWaiting(String duration) {
+    return '$duration menunggu ditranskripsi';
+  }
+
+  @override
+  String get onDeviceQueueChargingBody =>
+      'Akan siap setelah Anda mengisi daya ponsel. Perekaman berlanjut seperti biasa.';
+
+  @override
+  String get onDeviceQueueHoursBody => 'Omi menyusul setiap beberapa jam. Perekaman berlanjut seperti biasa.';
+
+  @override
+  String get onDeviceQueueLowBatteryBody =>
+      'Menunggu pengisi daya karena baterai lemah. Perekaman berlanjut seperti biasa.';
+
+  @override
+  String get onDeviceTranscribeNow => 'Transkripsi Sekarang';
+
+  @override
+  String get onDeviceUsesBattery => 'Memakai baterai';
+
+  @override
+  String get onDeviceTranscribing => 'Mentranskripsi…';
+
+  @override
+  String get onDeviceWaitingForCharger => 'Menunggu pengisi daya';
+
+  @override
+  String get onDeviceWaitingToTranscribe => 'Menunggu ditranskripsi';
+
+  @override
+  String get onDeviceWaitingForSetup => 'Tersimpan, menunggu penyiapan';
+
+  @override
+  String get onDeviceTranscribedOnIphone => 'Ditranskripsi di iPhone ini';
+
+  @override
+  String get onDeviceTranscribedOnPhone => 'Ditranskripsi di ponsel ini';
+
+  @override
+  String get onDeviceTranscribedSummarizedOnIphone => 'Ditranskripsi dan diringkas di iPhone ini';
+
+  @override
+  String get onDeviceSummarizedByCloud => 'Diringkas oleh Omi Cloud';
+
+  @override
+  String get onDeviceWhyPhoneTitle => 'Mengapa ini dilakukan di ponsel Anda';
+
+  @override
+  String get onDeviceWhyLiveHoursUsed =>
+      'Jam langsung bulan ini sudah habis, jadi Omi mentranskripsi percakapan ini di ponsel ini.';
+
+  @override
+  String get onDeviceWhySavingLiveHours => 'Anda memilih mentranskripsi di ponsel ini untuk menghemat jam langsung.';
+
+  @override
+  String get onDeviceWhySummaryOnPhone => 'Ringkasan juga dibuat di iPhone ini.';
+
+  @override
+  String get onDeviceWhyNoSummary => 'Anda menyimpan semuanya di ponsel ini, jadi tidak ada ringkasan.';
+
+  @override
+  String get onDeviceWhyCloudTitle => 'Mengapa Omi Cloud membuat ringkasan ini';
+
+  @override
+  String get onDeviceWhyCloudIphone =>
+      'iPhone ini tidak dapat meringkas sendiri (perlu iPhone 15 Pro atau yang lebih baru). Transkrip dibuat di ponsel Anda, dan hanya teksnya yang dikirim ke Omi untuk diringkas. Ini tidak memakai jam langsung Anda.';
+
+  @override
+  String get onDeviceWhyCloudPhone =>
+      'Ponsel ini tidak dapat meringkas sendiri. Transkrip dibuat di ponsel Anda, dan hanya teksnya yang dikirim ke Omi untuk diringkas. Ini tidak memakai jam langsung Anda.';
+
+  @override
+  String get onDeviceRedoWithCloud => 'Ulangi dengan Omi Cloud';
+
+  @override
+  String get onDeviceRedoHint => 'Upgrade ke Pro untuk pemisahan pembicara dan akurasi lebih tinggi';
+
+  @override
+  String get onDeviceKeepEverything => 'Simpan semuanya di ponsel ini';
+
+  @override
+  String get onDeviceKeepEverythingSubtitle => 'Hanya transkrip, tanpa ringkasan';
+
+  @override
+  String get onDeviceLiveHours => 'Jam langsung';
+
+  @override
+  String onDeviceLiveHoursUsed(String used, String limit) {
+    return '$used dari $limit jam terpakai';
+  }
+
+  @override
+  String onDeviceResets(String date) {
+    return 'Direset $date';
+  }
+
+  @override
+  String get onDeviceGetMoreLiveHours => 'Dapatkan Lebih Banyak Jam Langsung';
+
+  @override
+  String get onDeviceAfterLiveHours => 'Setelah jam langsung habis';
+
+  @override
+  String get onDeviceWhen => 'Kapan';
+
+  @override
+  String get onDeviceSummaries => 'Ringkasan';
+
+  @override
+  String get onDeviceSummariesOnIphone => 'Di iPhone ini';
+
+  @override
+  String get onDeviceSummariesCloud => 'Oleh Omi Cloud';
+
+  @override
+  String get onDeviceSaveLiveHours => 'Transkripsi di ponsel ini untuk menghemat jam langsung';
+
+  @override
+  String get onDeviceSaveLiveHoursSubtitle => 'Upgrade ke Pro untuk pemisahan pembicara dan akurasi lebih tinggi';
+
+  @override
+  String get onDeviceOnThisPhone => 'Di ponsel ini';
+
+  @override
+  String get onDeviceAudioWaiting => 'Audio menunggu di ponsel';
+
+  @override
+  String get onDeviceRemoveModel => 'Hapus Model Suara';
+
+  @override
+  String get onDeviceRemoveModelTitle => 'Hapus model suara?';
+
+  @override
+  String get onDeviceRemoveModelMessage =>
+      'Rekaman akan menunggu di ponsel ini sampai Anda mengunduhnya lagi atau jam langsung kembali.';
+
+  @override
+  String get onDeviceRemove => 'Hapus';
+
+  @override
+  String get onDeviceFinishSetupTitle => 'Selesaikan penyiapan untuk melihat transkrip';
+
+  @override
+  String get onDeviceFinishSetupBody =>
+      'Jam langsung bulan ini sudah habis. Omi masih merekam dan menyimpan audio di ponsel Anda. Unduh model suara dan Omi akan menyusul.';
+
+  @override
+  String onDeviceDownloadSize(String size) {
+    return 'Unduhan $size';
+  }
+
+  @override
+  String get onDeviceUnsupportedBody =>
+      'Ponsel ini belum dapat menjalankan model suara. Audio tetap tersimpan sampai jam langsung kembali atau Anda meningkatkan paket.';
+
+  @override
+  String get onDeviceEntrySubtitle => 'Saat jam langsung habis, transkripsi di ponsel ini';
+
+  @override
   String get transcriptionUnavailableRecordingSaved =>
       'Transkripsi tidak tersedia — perekaman berlanjut dan audio Anda tersimpan.';
 
@@ -13287,291 +13576,19 @@ class AppLocalizationsId extends AppLocalizations {
   String get syncDetailsCopy => 'Salin detail untuk dukungan';
 
   @override
-  String get onDeviceAtCapTitle => 'Transkripsi langsung bulan ini sudah habis';
+  String get chatAppsChannelPlanRequired => 'Tersedia di Operator dan Architect';
 
   @override
-  String get onDeviceAtCapBody => 'Omi masih merekam. Pilih cara mentranskripsi sisa bulan ini.';
-
-  @override
-  String onDeviceLiveHoursReturn(String date) {
-    return 'Jam langsung kembali pada $date.';
+  String chatAppsAtCapacity(String app) {
+    return '$app sudah penuh';
   }
 
   @override
-  String get onDeviceTranscribeOnPhone => 'Transkripsi di ponsel ini';
+  String get chatAppsJoinWaitlist => 'Gabung daftar tunggu';
 
   @override
-  String get onDeviceIncluded => 'Termasuk';
+  String get chatAppsOnWaitlist => 'Anda ada di daftar tunggu';
 
   @override
-  String get onDeviceOptionChargingBody =>
-      'Berjalan saat ponsel diisi daya, jadi hampir tidak memakai baterai. Transkrip muncul setelah Anda mengisi daya.';
-
-  @override
-  String get onDeviceUpgradeBody => 'Upgrade ke Pro untuk pemisahan pembicara dan akurasi lebih tinggi';
-
-  @override
-  String get onDeviceAtCapFooter => 'Tidak ada yang hilang. Anda dapat mengubahnya di Pengaturan › Transkripsi.';
-
-  @override
-  String onDeviceStepOf(int step, int total) {
-    return 'Langkah $step dari $total';
-  }
-
-  @override
-  String get onDeviceSetupBody =>
-      'Omi mengunduh model suara satu kali. Setelah itu, rekaman Anda diubah menjadi teks langsung di sini, tanpa memakai jam langsung.';
-
-  @override
-  String get onDeviceSpeechModel => 'Model suara';
-
-  @override
-  String onDeviceMegabytes(String size) {
-    return '$size MB';
-  }
-
-  @override
-  String onDeviceDownloadingWifi(int percent) {
-    return 'Mengunduh lewat Wi-Fi · $percent%';
-  }
-
-  @override
-  String onDeviceDownloadingPercent(int percent) {
-    return 'Mengunduh · $percent%';
-  }
-
-  @override
-  String onDeviceTimeLeft(String time) {
-    return 'Sekitar $time lagi';
-  }
-
-  @override
-  String get onDeviceWaitingForWifi => 'Menunggu Wi-Fi';
-
-  @override
-  String get onDeviceDownloadFailed => 'Unduhan tidak selesai';
-
-  @override
-  String get onDeviceModelNotDownloaded => 'Belum diunduh';
-
-  @override
-  String onDeviceModelInstalled(String size) {
-    return 'Terpasang · $size';
-  }
-
-  @override
-  String get onDeviceModelUnsupported => 'Belum tersedia di ponsel ini';
-
-  @override
-  String get onDeviceSetupKeepRecording => 'Tetap merekam selama pengunduhan. Tidak ada yang perlu menunggu.';
-
-  @override
-  String get onDeviceSetupAudioStays => 'Audio tetap di ponsel Anda sampai ditranskripsi.';
-
-  @override
-  String get onDeviceWifiOnly => 'Unduh hanya lewat Wi-Fi';
-
-  @override
-  String get onDeviceDownloadModel => 'Unduh Model Suara';
-
-  @override
-  String get onDeviceScheduleTitle => 'Waktu Transkripsi';
-
-  @override
-  String get onDeviceScheduleHeadline => 'Kapan Omi sebaiknya mentranskripsi?';
-
-  @override
-  String get onDeviceScheduleBody => 'Transkripsi bertahap menghemat baterai. Anda dapat mengubahnya kapan saja.';
-
-  @override
-  String get onDeviceScheduleCharging => 'Saat mengisi daya';
-
-  @override
-  String get onDeviceScheduleChargingBody => 'Transkrip muncul setelah Anda mengisi daya, biasanya semalaman.';
-
-  @override
-  String get onDeviceBatteryAlmostNone => 'Baterai: hampir tidak ada';
-
-  @override
-  String get onDeviceScheduleHours => 'Setiap beberapa jam';
-
-  @override
-  String get onDeviceScheduleHoursBody =>
-      'Menyusul dalam sesi singkat saat memakai baterai, jadi transkrip jarang tertinggal lebih dari beberapa jam.';
-
-  @override
-  String onDeviceBatteryPerDay(int percent) {
-    return 'Baterai: sekitar $percent% per hari';
-  }
-
-  @override
-  String get onDeviceScheduleLive => 'Saat Anda berbicara';
-
-  @override
-  String get onDeviceScheduleLiveBody => 'Mentranskripsikan secara berkala saat Omi terbuka.';
-
-  @override
-  String onDeviceBatteryPerHour(int percent) {
-    return 'Baterai: sekitar $percent% per jam percakapan';
-  }
-
-  @override
-  String onDeviceQueueWaiting(String duration) {
-    return '$duration menunggu ditranskripsi';
-  }
-
-  @override
-  String get onDeviceQueueChargingBody =>
-      'Akan siap setelah Anda mengisi daya ponsel. Perekaman berlanjut seperti biasa.';
-
-  @override
-  String get onDeviceQueueHoursBody => 'Omi menyusul setiap beberapa jam. Perekaman berlanjut seperti biasa.';
-
-  @override
-  String get onDeviceQueueLowBatteryBody =>
-      'Menunggu pengisi daya karena baterai lemah. Perekaman berlanjut seperti biasa.';
-
-  @override
-  String get onDeviceTranscribeNow => 'Transkripsi Sekarang';
-
-  @override
-  String get onDeviceUsesBattery => 'Memakai baterai';
-
-  @override
-  String get onDeviceTranscribing => 'Mentranskripsi…';
-
-  @override
-  String get onDeviceWaitingForCharger => 'Menunggu pengisi daya';
-
-  @override
-  String get onDeviceWaitingToTranscribe => 'Menunggu ditranskripsi';
-
-  @override
-  String get onDeviceWaitingForSetup => 'Tersimpan, menunggu penyiapan';
-
-  @override
-  String get onDeviceTranscribedOnIphone => 'Ditranskripsi di iPhone ini';
-
-  @override
-  String get onDeviceTranscribedOnPhone => 'Ditranskripsi di ponsel ini';
-
-  @override
-  String get onDeviceTranscribedSummarizedOnIphone => 'Ditranskripsi dan diringkas di iPhone ini';
-
-  @override
-  String get onDeviceSummarizedByCloud => 'Diringkas oleh Omi Cloud';
-
-  @override
-  String get onDeviceWhyPhoneTitle => 'Mengapa ini dilakukan di ponsel Anda';
-
-  @override
-  String get onDeviceWhyLiveHoursUsed =>
-      'Jam langsung bulan ini sudah habis, jadi Omi mentranskripsi percakapan ini di ponsel ini.';
-
-  @override
-  String get onDeviceWhySavingLiveHours => 'Anda memilih mentranskripsi di ponsel ini untuk menghemat jam langsung.';
-
-  @override
-  String get onDeviceWhySummaryOnPhone => 'Ringkasan juga dibuat di iPhone ini.';
-
-  @override
-  String get onDeviceWhyNoSummary => 'Anda menyimpan semuanya di ponsel ini, jadi tidak ada ringkasan.';
-
-  @override
-  String get onDeviceWhyCloudTitle => 'Mengapa Omi Cloud membuat ringkasan ini';
-
-  @override
-  String get onDeviceWhyCloudIphone =>
-      'iPhone ini tidak dapat meringkas sendiri (perlu iPhone 15 Pro atau yang lebih baru). Transkrip dibuat di ponsel Anda, dan hanya teksnya yang dikirim ke Omi untuk diringkas. Ini tidak memakai jam langsung Anda.';
-
-  @override
-  String get onDeviceWhyCloudPhone =>
-      'Ponsel ini tidak dapat meringkas sendiri. Transkrip dibuat di ponsel Anda, dan hanya teksnya yang dikirim ke Omi untuk diringkas. Ini tidak memakai jam langsung Anda.';
-
-  @override
-  String get onDeviceRedoWithCloud => 'Ulangi dengan Omi Cloud';
-
-  @override
-  String get onDeviceRedoHint => 'Upgrade ke Pro untuk pemisahan pembicara dan akurasi lebih tinggi';
-
-  @override
-  String get onDeviceKeepEverything => 'Simpan semuanya di ponsel ini';
-
-  @override
-  String get onDeviceKeepEverythingSubtitle => 'Hanya transkrip, tanpa ringkasan';
-
-  @override
-  String get onDeviceLiveHours => 'Jam langsung';
-
-  @override
-  String onDeviceLiveHoursUsed(String used, String limit) {
-    return '$used dari $limit jam terpakai';
-  }
-
-  @override
-  String onDeviceResets(String date) {
-    return 'Direset $date';
-  }
-
-  @override
-  String get onDeviceGetMoreLiveHours => 'Dapatkan Lebih Banyak Jam Langsung';
-
-  @override
-  String get onDeviceAfterLiveHours => 'Setelah jam langsung habis';
-
-  @override
-  String get onDeviceWhen => 'Kapan';
-
-  @override
-  String get onDeviceSummaries => 'Ringkasan';
-
-  @override
-  String get onDeviceSummariesOnIphone => 'Di iPhone ini';
-
-  @override
-  String get onDeviceSummariesCloud => 'Oleh Omi Cloud';
-
-  @override
-  String get onDeviceSaveLiveHours => 'Transkripsi di ponsel ini untuk menghemat jam langsung';
-
-  @override
-  String get onDeviceSaveLiveHoursSubtitle => 'Upgrade ke Pro untuk pemisahan pembicara dan akurasi lebih tinggi';
-
-  @override
-  String get onDeviceOnThisPhone => 'Di ponsel ini';
-
-  @override
-  String get onDeviceAudioWaiting => 'Audio menunggu di ponsel';
-
-  @override
-  String get onDeviceRemoveModel => 'Hapus Model Suara';
-
-  @override
-  String get onDeviceRemoveModelTitle => 'Hapus model suara?';
-
-  @override
-  String get onDeviceRemoveModelMessage =>
-      'Rekaman akan menunggu di ponsel ini sampai Anda mengunduhnya lagi atau jam langsung kembali.';
-
-  @override
-  String get onDeviceRemove => 'Hapus';
-
-  @override
-  String get onDeviceFinishSetupTitle => 'Selesaikan penyiapan untuk melihat transkrip';
-
-  @override
-  String get onDeviceFinishSetupBody =>
-      'Jam langsung bulan ini sudah habis. Omi masih merekam dan menyimpan audio di ponsel Anda. Unduh model suara dan Omi akan menyusul.';
-
-  @override
-  String onDeviceDownloadSize(String size) {
-    return 'Unduhan $size';
-  }
-
-  @override
-  String get onDeviceUnsupportedBody =>
-      'Ponsel ini belum dapat menjalankan model suara. Audio tetap tersimpan sampai jam langsung kembali atau Anda meningkatkan paket.';
-
-  @override
-  String get onDeviceEntrySubtitle => 'Saat jam langsung habis, transkripsi di ponsel ini';
+  String get chatAppsWaitlistJoined => 'Anda ada di daftar tunggu. Kami akan memberi tahu saat ada tempat.';
 }

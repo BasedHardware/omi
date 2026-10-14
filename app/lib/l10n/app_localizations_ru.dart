@@ -8611,6 +8611,296 @@ class AppLocalizationsRu extends AppLocalizations {
       'Запись офлайн — расшифровка догонит, когда вы снова будете в сети.';
 
   @override
+  String get onDeviceAtCapTitle => 'Онлайн-расшифровка на этот месяц израсходована';
+
+  @override
+  String get onDeviceAtCapBody => 'Omi продолжает запись. Выберите, как расшифровывать записи до конца месяца.';
+
+  @override
+  String onDeviceLiveHoursReturn(String date) {
+    return 'Онлайн-часы вернутся $date.';
+  }
+
+  @override
+  String get onDeviceTranscribeOnPhone => 'Расшифровывать на этом телефоне';
+
+  @override
+  String get onDeviceIncluded => 'Включено';
+
+  @override
+  String get onDeviceOptionChargingBody =>
+      'Работает, пока телефон заряжается, поэтому почти не расходует батарею. Расшифровки появятся после подключения зарядки.';
+
+  @override
+  String get onDeviceUpgradeBody => 'Перейдите на Pro для разделения говорящих и большей точности';
+
+  @override
+  String get onDeviceAtCapFooter =>
+      'В любом случае ничего не потеряется. Это можно изменить в разделе Настройки › Расшифровка.';
+
+  @override
+  String onDeviceStepOf(int step, int total) {
+    return 'Шаг $step из $total';
+  }
+
+  @override
+  String get onDeviceSetupBody =>
+      'Omi один раз загружает речевую модель. После этого записи превращаются в текст прямо здесь, не расходуя онлайн-часы.';
+
+  @override
+  String get onDeviceSpeechModel => 'Речевая модель';
+
+  @override
+  String onDeviceMegabytes(String size) {
+    return '$size МБ';
+  }
+
+  @override
+  String onDeviceDownloadingWifi(int percent) {
+    return 'Загрузка по Wi-Fi · $percent%';
+  }
+
+  @override
+  String onDeviceDownloadingPercent(int percent) {
+    return 'Загрузка · $percent%';
+  }
+
+  @override
+  String onDeviceTimeLeft(String time) {
+    return 'Осталось около $time';
+  }
+
+  @override
+  String get onDeviceWaitingForWifi => 'Ожидание Wi-Fi';
+
+  @override
+  String get onDeviceDownloadFailed => 'Загрузка не завершена';
+
+  @override
+  String get onDeviceModelNotDownloaded => 'Не загружена';
+
+  @override
+  String onDeviceModelInstalled(String size) {
+    return 'Установлена · $size';
+  }
+
+  @override
+  String get onDeviceModelUnsupported => 'Пока недоступна на этом телефоне';
+
+  @override
+  String get onDeviceSetupKeepRecording => 'Продолжайте запись во время загрузки. Ничего не ждёт её завершения.';
+
+  @override
+  String get onDeviceSetupAudioStays => 'Аудио хранится на телефоне, пока не будет расшифровано.';
+
+  @override
+  String get onDeviceWifiOnly => 'Загружать только по Wi-Fi';
+
+  @override
+  String get onDeviceDownloadModel => 'Загрузить речевую модель';
+
+  @override
+  String get onDeviceScheduleTitle => 'Когда расшифровывать';
+
+  @override
+  String get onDeviceScheduleHeadline => 'Когда Omi должен расшифровывать?';
+
+  @override
+  String get onDeviceScheduleBody => 'Расшифровка пакетами экономит батарею. Это можно изменить в любой момент.';
+
+  @override
+  String get onDeviceScheduleCharging => 'Во время зарядки';
+
+  @override
+  String get onDeviceScheduleChargingBody => 'Расшифровки появляются после подключения зарядки, обычно ночью.';
+
+  @override
+  String get onDeviceBatteryAlmostNone => 'Батарея: почти не расходуется';
+
+  @override
+  String get onDeviceScheduleHours => 'Каждые несколько часов';
+
+  @override
+  String get onDeviceScheduleHoursBody =>
+      'Наверстывает короткими сеансами от батареи, поэтому расшифровки редко отстают больше чем на несколько часов.';
+
+  @override
+  String onDeviceBatteryPerDay(int percent) {
+    return 'Батарея: около $percent% в день';
+  }
+
+  @override
+  String get onDeviceScheduleLive => 'Во время разговора';
+
+  @override
+  String get onDeviceScheduleLiveBody => 'Регулярно расшифровывает, пока Omi открыт.';
+
+  @override
+  String onDeviceBatteryPerHour(int percent) {
+    return 'Батарея: около $percent% за час разговора';
+  }
+
+  @override
+  String onDeviceQueueWaiting(String duration) {
+    return 'Ожидает расшифровки: $duration';
+  }
+
+  @override
+  String get onDeviceQueueChargingBody =>
+      'Они будут готовы, когда вы поставите телефон на зарядку. Запись продолжается как обычно.';
+
+  @override
+  String get onDeviceQueueHoursBody => 'Omi наверстывает каждые несколько часов. Запись продолжается как обычно.';
+
+  @override
+  String get onDeviceQueueLowBatteryBody =>
+      'Ожидание зарядки из-за низкого заряда батареи. Запись продолжается как обычно.';
+
+  @override
+  String get onDeviceTranscribeNow => 'Расшифровать сейчас';
+
+  @override
+  String get onDeviceUsesBattery => 'Расходует батарею';
+
+  @override
+  String get onDeviceTranscribing => 'Расшифровка…';
+
+  @override
+  String get onDeviceWaitingForCharger => 'Ожидание зарядки';
+
+  @override
+  String get onDeviceWaitingToTranscribe => 'Ожидает расшифровки';
+
+  @override
+  String get onDeviceWaitingForSetup => 'Сохранено, ожидает настройки';
+
+  @override
+  String get onDeviceTranscribedOnIphone => 'Расшифровано на этом iPhone';
+
+  @override
+  String get onDeviceTranscribedOnPhone => 'Расшифровано на этом телефоне';
+
+  @override
+  String get onDeviceTranscribedSummarizedOnIphone => 'Расшифровка и резюме созданы на этом iPhone';
+
+  @override
+  String get onDeviceSummarizedByCloud => 'Резюме создано Omi Cloud';
+
+  @override
+  String get onDeviceWhyPhoneTitle => 'Почему это сделано на телефоне';
+
+  @override
+  String get onDeviceWhyLiveHoursUsed =>
+      'Онлайн-часы этого месяца израсходованы, поэтому Omi расшифровал этот разговор на этом телефоне.';
+
+  @override
+  String get onDeviceWhySavingLiveHours => 'Вы выбрали расшифровку на этом телефоне, чтобы сэкономить онлайн-часы.';
+
+  @override
+  String get onDeviceWhySummaryOnPhone => 'Резюме тоже создано на этом iPhone.';
+
+  @override
+  String get onDeviceWhyNoSummary => 'Вы храните всё на этом телефоне, поэтому резюме нет.';
+
+  @override
+  String get onDeviceWhyCloudTitle => 'Почему резюме создал Omi Cloud';
+
+  @override
+  String get onDeviceWhyCloudIphone =>
+      'Этот iPhone не может сам создавать резюме (для этого нужен iPhone 15 Pro или новее). Расшифровка сделана на вашем телефоне, и в Omi для резюме отправлен только её текст. Онлайн-часы при этом не расходуются.';
+
+  @override
+  String get onDeviceWhyCloudPhone =>
+      'Этот телефон не может сам создавать резюме. Расшифровка сделана на вашем телефоне, и в Omi для резюме отправлен только её текст. Онлайн-часы при этом не расходуются.';
+
+  @override
+  String get onDeviceRedoWithCloud => 'Переделать в Omi Cloud';
+
+  @override
+  String get onDeviceRedoHint => 'Перейдите на Pro для разделения говорящих и большей точности';
+
+  @override
+  String get onDeviceKeepEverything => 'Хранить всё на этом телефоне';
+
+  @override
+  String get onDeviceKeepEverythingSubtitle => 'Только расшифровки, без резюме';
+
+  @override
+  String get onDeviceLiveHours => 'Онлайн-часы';
+
+  @override
+  String onDeviceLiveHoursUsed(String used, String limit) {
+    return 'Использовано $used из $limit ч';
+  }
+
+  @override
+  String onDeviceResets(String date) {
+    return 'Обновится $date';
+  }
+
+  @override
+  String get onDeviceGetMoreLiveHours => 'Получить больше онлайн-часов';
+
+  @override
+  String get onDeviceAfterLiveHours => 'Когда онлайн-часы закончатся';
+
+  @override
+  String get onDeviceWhen => 'Когда';
+
+  @override
+  String get onDeviceSummaries => 'Резюме';
+
+  @override
+  String get onDeviceSummariesOnIphone => 'На этом iPhone';
+
+  @override
+  String get onDeviceSummariesCloud => 'В Omi Cloud';
+
+  @override
+  String get onDeviceSaveLiveHours => 'Расшифровывать на этом телефоне, чтобы экономить онлайн-часы';
+
+  @override
+  String get onDeviceSaveLiveHoursSubtitle => 'Перейдите на Pro для разделения говорящих и большей точности';
+
+  @override
+  String get onDeviceOnThisPhone => 'На этом телефоне';
+
+  @override
+  String get onDeviceAudioWaiting => 'Аудио в очереди на телефоне';
+
+  @override
+  String get onDeviceRemoveModel => 'Удалить речевую модель';
+
+  @override
+  String get onDeviceRemoveModelTitle => 'Удалить речевую модель?';
+
+  @override
+  String get onDeviceRemoveModelMessage =>
+      'Записи будут ждать на этом телефоне, пока вы снова её не загрузите или не вернутся онлайн-часы.';
+
+  @override
+  String get onDeviceRemove => 'Удалить';
+
+  @override
+  String get onDeviceFinishSetupTitle => 'Завершите настройку, чтобы увидеть расшифровки';
+
+  @override
+  String get onDeviceFinishSetupBody =>
+      'Онлайн-часы этого месяца израсходованы. Omi продолжает запись и сохраняет аудио на телефоне. Загрузите речевую модель, и она всё наверстает.';
+
+  @override
+  String onDeviceDownloadSize(String size) {
+    return 'Загрузка $size';
+  }
+
+  @override
+  String get onDeviceUnsupportedBody =>
+      'Этот телефон пока не может запустить речевую модель. Аудио сохранится, пока не вернутся онлайн-часы или вы не перейдёте на другой план.';
+
+  @override
+  String get onDeviceEntrySubtitle => 'Когда онлайн-часы закончатся, расшифровывать на этом телефоне';
+
+  @override
   String get transcriptionUnavailableRecordingSaved =>
       'Расшифровка недоступна — запись продолжается, аудио сохраняется.';
 
@@ -13323,292 +13613,19 @@ class AppLocalizationsRu extends AppLocalizations {
   String get syncDetailsCopy => 'Скопировать данные для поддержки';
 
   @override
-  String get onDeviceAtCapTitle => 'Онлайн-расшифровка на этот месяц израсходована';
+  String get chatAppsChannelPlanRequired => 'Доступно в Operator и Architect';
 
   @override
-  String get onDeviceAtCapBody => 'Omi продолжает запись. Выберите, как расшифровывать записи до конца месяца.';
-
-  @override
-  String onDeviceLiveHoursReturn(String date) {
-    return 'Онлайн-часы вернутся $date.';
+  String chatAppsAtCapacity(String app) {
+    return '$app заполнен';
   }
 
   @override
-  String get onDeviceTranscribeOnPhone => 'Расшифровывать на этом телефоне';
+  String get chatAppsJoinWaitlist => 'Встать в лист ожидания';
 
   @override
-  String get onDeviceIncluded => 'Включено';
+  String get chatAppsOnWaitlist => 'Вы в листе ожидания';
 
   @override
-  String get onDeviceOptionChargingBody =>
-      'Работает, пока телефон заряжается, поэтому почти не расходует батарею. Расшифровки появятся после подключения зарядки.';
-
-  @override
-  String get onDeviceUpgradeBody => 'Перейдите на Pro для разделения говорящих и большей точности';
-
-  @override
-  String get onDeviceAtCapFooter =>
-      'В любом случае ничего не потеряется. Это можно изменить в разделе Настройки › Расшифровка.';
-
-  @override
-  String onDeviceStepOf(int step, int total) {
-    return 'Шаг $step из $total';
-  }
-
-  @override
-  String get onDeviceSetupBody =>
-      'Omi один раз загружает речевую модель. После этого записи превращаются в текст прямо здесь, не расходуя онлайн-часы.';
-
-  @override
-  String get onDeviceSpeechModel => 'Речевая модель';
-
-  @override
-  String onDeviceMegabytes(String size) {
-    return '$size МБ';
-  }
-
-  @override
-  String onDeviceDownloadingWifi(int percent) {
-    return 'Загрузка по Wi-Fi · $percent%';
-  }
-
-  @override
-  String onDeviceDownloadingPercent(int percent) {
-    return 'Загрузка · $percent%';
-  }
-
-  @override
-  String onDeviceTimeLeft(String time) {
-    return 'Осталось около $time';
-  }
-
-  @override
-  String get onDeviceWaitingForWifi => 'Ожидание Wi-Fi';
-
-  @override
-  String get onDeviceDownloadFailed => 'Загрузка не завершена';
-
-  @override
-  String get onDeviceModelNotDownloaded => 'Не загружена';
-
-  @override
-  String onDeviceModelInstalled(String size) {
-    return 'Установлена · $size';
-  }
-
-  @override
-  String get onDeviceModelUnsupported => 'Пока недоступна на этом телефоне';
-
-  @override
-  String get onDeviceSetupKeepRecording => 'Продолжайте запись во время загрузки. Ничего не ждёт её завершения.';
-
-  @override
-  String get onDeviceSetupAudioStays => 'Аудио хранится на телефоне, пока не будет расшифровано.';
-
-  @override
-  String get onDeviceWifiOnly => 'Загружать только по Wi-Fi';
-
-  @override
-  String get onDeviceDownloadModel => 'Загрузить речевую модель';
-
-  @override
-  String get onDeviceScheduleTitle => 'Когда расшифровывать';
-
-  @override
-  String get onDeviceScheduleHeadline => 'Когда Omi должен расшифровывать?';
-
-  @override
-  String get onDeviceScheduleBody => 'Расшифровка пакетами экономит батарею. Это можно изменить в любой момент.';
-
-  @override
-  String get onDeviceScheduleCharging => 'Во время зарядки';
-
-  @override
-  String get onDeviceScheduleChargingBody => 'Расшифровки появляются после подключения зарядки, обычно ночью.';
-
-  @override
-  String get onDeviceBatteryAlmostNone => 'Батарея: почти не расходуется';
-
-  @override
-  String get onDeviceScheduleHours => 'Каждые несколько часов';
-
-  @override
-  String get onDeviceScheduleHoursBody =>
-      'Наверстывает короткими сеансами от батареи, поэтому расшифровки редко отстают больше чем на несколько часов.';
-
-  @override
-  String onDeviceBatteryPerDay(int percent) {
-    return 'Батарея: около $percent% в день';
-  }
-
-  @override
-  String get onDeviceScheduleLive => 'Во время разговора';
-
-  @override
-  String get onDeviceScheduleLiveBody => 'Регулярно расшифровывает, пока Omi открыт.';
-
-  @override
-  String onDeviceBatteryPerHour(int percent) {
-    return 'Батарея: около $percent% за час разговора';
-  }
-
-  @override
-  String onDeviceQueueWaiting(String duration) {
-    return 'Ожидает расшифровки: $duration';
-  }
-
-  @override
-  String get onDeviceQueueChargingBody =>
-      'Они будут готовы, когда вы поставите телефон на зарядку. Запись продолжается как обычно.';
-
-  @override
-  String get onDeviceQueueHoursBody => 'Omi наверстывает каждые несколько часов. Запись продолжается как обычно.';
-
-  @override
-  String get onDeviceQueueLowBatteryBody =>
-      'Ожидание зарядки из-за низкого заряда батареи. Запись продолжается как обычно.';
-
-  @override
-  String get onDeviceTranscribeNow => 'Расшифровать сейчас';
-
-  @override
-  String get onDeviceUsesBattery => 'Расходует батарею';
-
-  @override
-  String get onDeviceTranscribing => 'Расшифровка…';
-
-  @override
-  String get onDeviceWaitingForCharger => 'Ожидание зарядки';
-
-  @override
-  String get onDeviceWaitingToTranscribe => 'Ожидает расшифровки';
-
-  @override
-  String get onDeviceWaitingForSetup => 'Сохранено, ожидает настройки';
-
-  @override
-  String get onDeviceTranscribedOnIphone => 'Расшифровано на этом iPhone';
-
-  @override
-  String get onDeviceTranscribedOnPhone => 'Расшифровано на этом телефоне';
-
-  @override
-  String get onDeviceTranscribedSummarizedOnIphone => 'Расшифровка и резюме созданы на этом iPhone';
-
-  @override
-  String get onDeviceSummarizedByCloud => 'Резюме создано Omi Cloud';
-
-  @override
-  String get onDeviceWhyPhoneTitle => 'Почему это сделано на телефоне';
-
-  @override
-  String get onDeviceWhyLiveHoursUsed =>
-      'Онлайн-часы этого месяца израсходованы, поэтому Omi расшифровал этот разговор на этом телефоне.';
-
-  @override
-  String get onDeviceWhySavingLiveHours => 'Вы выбрали расшифровку на этом телефоне, чтобы сэкономить онлайн-часы.';
-
-  @override
-  String get onDeviceWhySummaryOnPhone => 'Резюме тоже создано на этом iPhone.';
-
-  @override
-  String get onDeviceWhyNoSummary => 'Вы храните всё на этом телефоне, поэтому резюме нет.';
-
-  @override
-  String get onDeviceWhyCloudTitle => 'Почему резюме создал Omi Cloud';
-
-  @override
-  String get onDeviceWhyCloudIphone =>
-      'Этот iPhone не может сам создавать резюме (для этого нужен iPhone 15 Pro или новее). Расшифровка сделана на вашем телефоне, и в Omi для резюме отправлен только её текст. Онлайн-часы при этом не расходуются.';
-
-  @override
-  String get onDeviceWhyCloudPhone =>
-      'Этот телефон не может сам создавать резюме. Расшифровка сделана на вашем телефоне, и в Omi для резюме отправлен только её текст. Онлайн-часы при этом не расходуются.';
-
-  @override
-  String get onDeviceRedoWithCloud => 'Переделать в Omi Cloud';
-
-  @override
-  String get onDeviceRedoHint => 'Перейдите на Pro для разделения говорящих и большей точности';
-
-  @override
-  String get onDeviceKeepEverything => 'Хранить всё на этом телефоне';
-
-  @override
-  String get onDeviceKeepEverythingSubtitle => 'Только расшифровки, без резюме';
-
-  @override
-  String get onDeviceLiveHours => 'Онлайн-часы';
-
-  @override
-  String onDeviceLiveHoursUsed(String used, String limit) {
-    return 'Использовано $used из $limit ч';
-  }
-
-  @override
-  String onDeviceResets(String date) {
-    return 'Обновится $date';
-  }
-
-  @override
-  String get onDeviceGetMoreLiveHours => 'Получить больше онлайн-часов';
-
-  @override
-  String get onDeviceAfterLiveHours => 'Когда онлайн-часы закончатся';
-
-  @override
-  String get onDeviceWhen => 'Когда';
-
-  @override
-  String get onDeviceSummaries => 'Резюме';
-
-  @override
-  String get onDeviceSummariesOnIphone => 'На этом iPhone';
-
-  @override
-  String get onDeviceSummariesCloud => 'В Omi Cloud';
-
-  @override
-  String get onDeviceSaveLiveHours => 'Расшифровывать на этом телефоне, чтобы экономить онлайн-часы';
-
-  @override
-  String get onDeviceSaveLiveHoursSubtitle => 'Перейдите на Pro для разделения говорящих и большей точности';
-
-  @override
-  String get onDeviceOnThisPhone => 'На этом телефоне';
-
-  @override
-  String get onDeviceAudioWaiting => 'Аудио в очереди на телефоне';
-
-  @override
-  String get onDeviceRemoveModel => 'Удалить речевую модель';
-
-  @override
-  String get onDeviceRemoveModelTitle => 'Удалить речевую модель?';
-
-  @override
-  String get onDeviceRemoveModelMessage =>
-      'Записи будут ждать на этом телефоне, пока вы снова её не загрузите или не вернутся онлайн-часы.';
-
-  @override
-  String get onDeviceRemove => 'Удалить';
-
-  @override
-  String get onDeviceFinishSetupTitle => 'Завершите настройку, чтобы увидеть расшифровки';
-
-  @override
-  String get onDeviceFinishSetupBody =>
-      'Онлайн-часы этого месяца израсходованы. Omi продолжает запись и сохраняет аудио на телефоне. Загрузите речевую модель, и она всё наверстает.';
-
-  @override
-  String onDeviceDownloadSize(String size) {
-    return 'Загрузка $size';
-  }
-
-  @override
-  String get onDeviceUnsupportedBody =>
-      'Этот телефон пока не может запустить речевую модель. Аудио сохранится, пока не вернутся онлайн-часы или вы не перейдёте на другой план.';
-
-  @override
-  String get onDeviceEntrySubtitle => 'Когда онлайн-часы закончатся, расшифровывать на этом телефоне';
+  String get chatAppsWaitlistJoined => 'Вы в листе ожидания. Мы сообщим, когда появится место.';
 }

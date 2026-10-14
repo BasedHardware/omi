@@ -8579,6 +8579,296 @@ class AppLocalizationsNo extends AppLocalizations {
       'Tar opp frakoblet — transkripsjonen tar igjen når du er på nett igjen.';
 
   @override
+  String get onDeviceAtCapTitle => 'Du har brukt opp månedens live-transkribering';
+
+  @override
+  String get onDeviceAtCapBody => 'Omi tar fortsatt opp. Velg hvordan resten av måneden skal transkriberes.';
+
+  @override
+  String onDeviceLiveHoursReturn(String date) {
+    return 'Live-timene kommer tilbake $date.';
+  }
+
+  @override
+  String get onDeviceTranscribeOnPhone => 'Transkriber på denne telefonen';
+
+  @override
+  String get onDeviceIncluded => 'Inkludert';
+
+  @override
+  String get onDeviceOptionChargingBody =>
+      'Kjører mens telefonen lades, så det bruker nesten ikke batteri. Transkripsjonene dukker opp etter at du kobler til laderen.';
+
+  @override
+  String get onDeviceUpgradeBody => 'Oppgrader til Pro for å skille talere og få høyere nøyaktighet';
+
+  @override
+  String get onDeviceAtCapFooter => 'Ingenting går tapt uansett. Du kan endre dette i Innstillinger › Transkripsjon.';
+
+  @override
+  String onDeviceStepOf(int step, int total) {
+    return 'Trinn $step av $total';
+  }
+
+  @override
+  String get onDeviceSetupBody =>
+      'Omi laster ned en talemodell én gang. Deretter blir opptakene dine gjort om til tekst rett her, uten å bruke live-timer.';
+
+  @override
+  String get onDeviceSpeechModel => 'Talemodell';
+
+  @override
+  String onDeviceMegabytes(String size) {
+    return '$size MB';
+  }
+
+  @override
+  String onDeviceDownloadingWifi(int percent) {
+    return 'Laster ned via Wi-Fi · $percent%';
+  }
+
+  @override
+  String onDeviceDownloadingPercent(int percent) {
+    return 'Laster ned · $percent%';
+  }
+
+  @override
+  String onDeviceTimeLeft(String time) {
+    return 'Omtrent $time igjen';
+  }
+
+  @override
+  String get onDeviceWaitingForWifi => 'Venter på Wi-Fi';
+
+  @override
+  String get onDeviceDownloadFailed => 'Nedlastingen ble ikke fullført';
+
+  @override
+  String get onDeviceModelNotDownloaded => 'Ikke lastet ned';
+
+  @override
+  String onDeviceModelInstalled(String size) {
+    return 'Installert · $size';
+  }
+
+  @override
+  String get onDeviceModelUnsupported => 'Ikke tilgjengelig på denne telefonen ennå';
+
+  @override
+  String get onDeviceSetupKeepRecording => 'Fortsett å ta opp mens den lastes ned. Ingenting venter på dette.';
+
+  @override
+  String get onDeviceSetupAudioStays => 'Lyden blir værende på telefonen til den er transkribert.';
+
+  @override
+  String get onDeviceWifiOnly => 'Last ned bare via Wi-Fi';
+
+  @override
+  String get onDeviceDownloadModel => 'Last ned talemodell';
+
+  @override
+  String get onDeviceScheduleTitle => 'Når skal det transkriberes';
+
+  @override
+  String get onDeviceScheduleHeadline => 'Når skal Omi transkribere?';
+
+  @override
+  String get onDeviceScheduleBody => 'Transkribering i omganger sparer batteri. Du kan endre dette når som helst.';
+
+  @override
+  String get onDeviceScheduleCharging => 'Under lading';
+
+  @override
+  String get onDeviceScheduleChargingBody =>
+      'Transkripsjonene dukker opp etter at du kobler til laderen, vanligvis i løpet av natten.';
+
+  @override
+  String get onDeviceBatteryAlmostNone => 'Batteri: nesten ingenting';
+
+  @override
+  String get onDeviceScheduleHours => 'Med noen timers mellomrom';
+
+  @override
+  String get onDeviceScheduleHoursBody =>
+      'Tar igjen etterslepet i korte økter på batteri, så transkripsjonene ligger sjelden mer enn noen timer etter.';
+
+  @override
+  String onDeviceBatteryPerDay(int percent) {
+    return 'Batteri: omtrent $percent% per dag';
+  }
+
+  @override
+  String get onDeviceScheduleLive => 'Mens du snakker';
+
+  @override
+  String get onDeviceScheduleLiveBody => 'Transkriberer jevnlig mens Omi er åpen.';
+
+  @override
+  String onDeviceBatteryPerHour(int percent) {
+    return 'Batteri: omtrent $percent% per time samtale';
+  }
+
+  @override
+  String onDeviceQueueWaiting(String duration) {
+    return '$duration venter på transkribering';
+  }
+
+  @override
+  String get onDeviceQueueChargingBody =>
+      'De blir klare etter at du setter telefonen til lading. Opptaket fortsetter som normalt.';
+
+  @override
+  String get onDeviceQueueHoursBody =>
+      'Omi tar igjen etterslepet med noen timers mellomrom. Opptaket fortsetter som normalt.';
+
+  @override
+  String get onDeviceQueueLowBatteryBody => 'Venter på lader fordi batteriet er lavt. Opptaket fortsetter som normalt.';
+
+  @override
+  String get onDeviceTranscribeNow => 'Transkriber nå';
+
+  @override
+  String get onDeviceUsesBattery => 'Bruker batteri';
+
+  @override
+  String get onDeviceTranscribing => 'Transkriberer…';
+
+  @override
+  String get onDeviceWaitingForCharger => 'Venter på lader';
+
+  @override
+  String get onDeviceWaitingToTranscribe => 'Venter på transkribering';
+
+  @override
+  String get onDeviceWaitingForSetup => 'Lagret, venter på oppsett';
+
+  @override
+  String get onDeviceTranscribedOnIphone => 'Transkribert på denne iPhonen';
+
+  @override
+  String get onDeviceTranscribedOnPhone => 'Transkribert på denne telefonen';
+
+  @override
+  String get onDeviceTranscribedSummarizedOnIphone => 'Transkribert og oppsummert på denne iPhonen';
+
+  @override
+  String get onDeviceSummarizedByCloud => 'Oppsummert av Omi Cloud';
+
+  @override
+  String get onDeviceWhyPhoneTitle => 'Hvorfor dette ble gjort på telefonen din';
+
+  @override
+  String get onDeviceWhyLiveHoursUsed =>
+      'Du har brukt opp månedens live-timer, så Omi transkriberte denne samtalen på denne telefonen.';
+
+  @override
+  String get onDeviceWhySavingLiveHours => 'Du valgte å transkribere på denne telefonen for å spare live-timer.';
+
+  @override
+  String get onDeviceWhySummaryOnPhone => 'Sammendraget ble også skrevet på denne iPhonen.';
+
+  @override
+  String get onDeviceWhyNoSummary => 'Du beholder alt på denne telefonen, så det finnes ikke noe sammendrag.';
+
+  @override
+  String get onDeviceWhyCloudTitle => 'Hvorfor Omi Cloud skrev dette sammendraget';
+
+  @override
+  String get onDeviceWhyCloudIphone =>
+      'Denne iPhonen kan ikke lage sammendrag selv (det krever iPhone 15 Pro eller nyere). Transkripsjonen ble laget på telefonen din, og bare teksten ble sendt til Omi for å oppsummeres. Det bruker ikke live-timene dine.';
+
+  @override
+  String get onDeviceWhyCloudPhone =>
+      'Denne telefonen kan ikke lage sammendrag selv. Transkripsjonen ble laget på telefonen din, og bare teksten ble sendt til Omi for å oppsummeres. Det bruker ikke live-timene dine.';
+
+  @override
+  String get onDeviceRedoWithCloud => 'Gjør på nytt med Omi Cloud';
+
+  @override
+  String get onDeviceRedoHint => 'Oppgrader til Pro for å skille talere og få høyere nøyaktighet';
+
+  @override
+  String get onDeviceKeepEverything => 'Behold alt på denne telefonen';
+
+  @override
+  String get onDeviceKeepEverythingSubtitle => 'Bare transkripsjoner, ingen sammendrag';
+
+  @override
+  String get onDeviceLiveHours => 'Live-timer';
+
+  @override
+  String onDeviceLiveHoursUsed(String used, String limit) {
+    return '$used av $limit timer brukt';
+  }
+
+  @override
+  String onDeviceResets(String date) {
+    return 'Tilbakestilles $date';
+  }
+
+  @override
+  String get onDeviceGetMoreLiveHours => 'Få flere live-timer';
+
+  @override
+  String get onDeviceAfterLiveHours => 'Når live-timene er brukt opp';
+
+  @override
+  String get onDeviceWhen => 'Når';
+
+  @override
+  String get onDeviceSummaries => 'Sammendrag';
+
+  @override
+  String get onDeviceSummariesOnIphone => 'På denne iPhonen';
+
+  @override
+  String get onDeviceSummariesCloud => 'Av Omi Cloud';
+
+  @override
+  String get onDeviceSaveLiveHours => 'Transkriber på denne telefonen for å spare live-timer';
+
+  @override
+  String get onDeviceSaveLiveHoursSubtitle => 'Oppgrader til Pro for å skille talere og få høyere nøyaktighet';
+
+  @override
+  String get onDeviceOnThisPhone => 'På denne telefonen';
+
+  @override
+  String get onDeviceAudioWaiting => 'Lyd som venter på telefonen';
+
+  @override
+  String get onDeviceRemoveModel => 'Fjern talemodell';
+
+  @override
+  String get onDeviceRemoveModelTitle => 'Fjerne talemodellen?';
+
+  @override
+  String get onDeviceRemoveModelMessage =>
+      'Opptakene venter på denne telefonen til du laster den ned igjen eller live-timene kommer tilbake.';
+
+  @override
+  String get onDeviceRemove => 'Fjern';
+
+  @override
+  String get onDeviceFinishSetupTitle => 'Fullfør oppsettet for å se transkripsjonene dine';
+
+  @override
+  String get onDeviceFinishSetupBody =>
+      'Du har brukt opp månedens live-timer. Omi tar fortsatt opp og lagrer lyd på telefonen din. Last ned talemodellen, så tar den igjen etterslepet.';
+
+  @override
+  String onDeviceDownloadSize(String size) {
+    return '$size nedlasting';
+  }
+
+  @override
+  String get onDeviceUnsupportedBody =>
+      'Denne telefonen kan ikke kjøre talemodellen ennå. Lyden forblir lagret til live-timene kommer tilbake eller du oppgraderer.';
+
+  @override
+  String get onDeviceEntrySubtitle => 'Når live-timene er brukt opp, transkriber på denne telefonen';
+
+  @override
   String get transcriptionUnavailableRecordingSaved =>
       'Transkripsjon er ikke tilgjengelig — opptaket fortsetter og lyden din lagres.';
 
@@ -13279,292 +13569,19 @@ class AppLocalizationsNo extends AppLocalizations {
   String get syncDetailsCopy => 'Kopier detaljer til kundestøtte';
 
   @override
-  String get onDeviceAtCapTitle => 'Du har brukt opp månedens live-transkribering';
+  String get chatAppsChannelPlanRequired => 'Tilgjengelig med Operator og Architect';
 
   @override
-  String get onDeviceAtCapBody => 'Omi tar fortsatt opp. Velg hvordan resten av måneden skal transkriberes.';
-
-  @override
-  String onDeviceLiveHoursReturn(String date) {
-    return 'Live-timene kommer tilbake $date.';
+  String chatAppsAtCapacity(String app) {
+    return '$app er fullt';
   }
 
   @override
-  String get onDeviceTranscribeOnPhone => 'Transkriber på denne telefonen';
+  String get chatAppsJoinWaitlist => 'Sett meg på ventelisten';
 
   @override
-  String get onDeviceIncluded => 'Inkludert';
+  String get chatAppsOnWaitlist => 'Du står på ventelisten';
 
   @override
-  String get onDeviceOptionChargingBody =>
-      'Kjører mens telefonen lades, så det bruker nesten ikke batteri. Transkripsjonene dukker opp etter at du kobler til laderen.';
-
-  @override
-  String get onDeviceUpgradeBody => 'Oppgrader til Pro for å skille talere og få høyere nøyaktighet';
-
-  @override
-  String get onDeviceAtCapFooter => 'Ingenting går tapt uansett. Du kan endre dette i Innstillinger › Transkripsjon.';
-
-  @override
-  String onDeviceStepOf(int step, int total) {
-    return 'Trinn $step av $total';
-  }
-
-  @override
-  String get onDeviceSetupBody =>
-      'Omi laster ned en talemodell én gang. Deretter blir opptakene dine gjort om til tekst rett her, uten å bruke live-timer.';
-
-  @override
-  String get onDeviceSpeechModel => 'Talemodell';
-
-  @override
-  String onDeviceMegabytes(String size) {
-    return '$size MB';
-  }
-
-  @override
-  String onDeviceDownloadingWifi(int percent) {
-    return 'Laster ned via Wi-Fi · $percent%';
-  }
-
-  @override
-  String onDeviceDownloadingPercent(int percent) {
-    return 'Laster ned · $percent%';
-  }
-
-  @override
-  String onDeviceTimeLeft(String time) {
-    return 'Omtrent $time igjen';
-  }
-
-  @override
-  String get onDeviceWaitingForWifi => 'Venter på Wi-Fi';
-
-  @override
-  String get onDeviceDownloadFailed => 'Nedlastingen ble ikke fullført';
-
-  @override
-  String get onDeviceModelNotDownloaded => 'Ikke lastet ned';
-
-  @override
-  String onDeviceModelInstalled(String size) {
-    return 'Installert · $size';
-  }
-
-  @override
-  String get onDeviceModelUnsupported => 'Ikke tilgjengelig på denne telefonen ennå';
-
-  @override
-  String get onDeviceSetupKeepRecording => 'Fortsett å ta opp mens den lastes ned. Ingenting venter på dette.';
-
-  @override
-  String get onDeviceSetupAudioStays => 'Lyden blir værende på telefonen til den er transkribert.';
-
-  @override
-  String get onDeviceWifiOnly => 'Last ned bare via Wi-Fi';
-
-  @override
-  String get onDeviceDownloadModel => 'Last ned talemodell';
-
-  @override
-  String get onDeviceScheduleTitle => 'Når skal det transkriberes';
-
-  @override
-  String get onDeviceScheduleHeadline => 'Når skal Omi transkribere?';
-
-  @override
-  String get onDeviceScheduleBody => 'Transkribering i omganger sparer batteri. Du kan endre dette når som helst.';
-
-  @override
-  String get onDeviceScheduleCharging => 'Under lading';
-
-  @override
-  String get onDeviceScheduleChargingBody =>
-      'Transkripsjonene dukker opp etter at du kobler til laderen, vanligvis i løpet av natten.';
-
-  @override
-  String get onDeviceBatteryAlmostNone => 'Batteri: nesten ingenting';
-
-  @override
-  String get onDeviceScheduleHours => 'Med noen timers mellomrom';
-
-  @override
-  String get onDeviceScheduleHoursBody =>
-      'Tar igjen etterslepet i korte økter på batteri, så transkripsjonene ligger sjelden mer enn noen timer etter.';
-
-  @override
-  String onDeviceBatteryPerDay(int percent) {
-    return 'Batteri: omtrent $percent% per dag';
-  }
-
-  @override
-  String get onDeviceScheduleLive => 'Mens du snakker';
-
-  @override
-  String get onDeviceScheduleLiveBody => 'Transkriberer jevnlig mens Omi er åpen.';
-
-  @override
-  String onDeviceBatteryPerHour(int percent) {
-    return 'Batteri: omtrent $percent% per time samtale';
-  }
-
-  @override
-  String onDeviceQueueWaiting(String duration) {
-    return '$duration venter på transkribering';
-  }
-
-  @override
-  String get onDeviceQueueChargingBody =>
-      'De blir klare etter at du setter telefonen til lading. Opptaket fortsetter som normalt.';
-
-  @override
-  String get onDeviceQueueHoursBody =>
-      'Omi tar igjen etterslepet med noen timers mellomrom. Opptaket fortsetter som normalt.';
-
-  @override
-  String get onDeviceQueueLowBatteryBody => 'Venter på lader fordi batteriet er lavt. Opptaket fortsetter som normalt.';
-
-  @override
-  String get onDeviceTranscribeNow => 'Transkriber nå';
-
-  @override
-  String get onDeviceUsesBattery => 'Bruker batteri';
-
-  @override
-  String get onDeviceTranscribing => 'Transkriberer…';
-
-  @override
-  String get onDeviceWaitingForCharger => 'Venter på lader';
-
-  @override
-  String get onDeviceWaitingToTranscribe => 'Venter på transkribering';
-
-  @override
-  String get onDeviceWaitingForSetup => 'Lagret, venter på oppsett';
-
-  @override
-  String get onDeviceTranscribedOnIphone => 'Transkribert på denne iPhonen';
-
-  @override
-  String get onDeviceTranscribedOnPhone => 'Transkribert på denne telefonen';
-
-  @override
-  String get onDeviceTranscribedSummarizedOnIphone => 'Transkribert og oppsummert på denne iPhonen';
-
-  @override
-  String get onDeviceSummarizedByCloud => 'Oppsummert av Omi Cloud';
-
-  @override
-  String get onDeviceWhyPhoneTitle => 'Hvorfor dette ble gjort på telefonen din';
-
-  @override
-  String get onDeviceWhyLiveHoursUsed =>
-      'Du har brukt opp månedens live-timer, så Omi transkriberte denne samtalen på denne telefonen.';
-
-  @override
-  String get onDeviceWhySavingLiveHours => 'Du valgte å transkribere på denne telefonen for å spare live-timer.';
-
-  @override
-  String get onDeviceWhySummaryOnPhone => 'Sammendraget ble også skrevet på denne iPhonen.';
-
-  @override
-  String get onDeviceWhyNoSummary => 'Du beholder alt på denne telefonen, så det finnes ikke noe sammendrag.';
-
-  @override
-  String get onDeviceWhyCloudTitle => 'Hvorfor Omi Cloud skrev dette sammendraget';
-
-  @override
-  String get onDeviceWhyCloudIphone =>
-      'Denne iPhonen kan ikke lage sammendrag selv (det krever iPhone 15 Pro eller nyere). Transkripsjonen ble laget på telefonen din, og bare teksten ble sendt til Omi for å oppsummeres. Det bruker ikke live-timene dine.';
-
-  @override
-  String get onDeviceWhyCloudPhone =>
-      'Denne telefonen kan ikke lage sammendrag selv. Transkripsjonen ble laget på telefonen din, og bare teksten ble sendt til Omi for å oppsummeres. Det bruker ikke live-timene dine.';
-
-  @override
-  String get onDeviceRedoWithCloud => 'Gjør på nytt med Omi Cloud';
-
-  @override
-  String get onDeviceRedoHint => 'Oppgrader til Pro for å skille talere og få høyere nøyaktighet';
-
-  @override
-  String get onDeviceKeepEverything => 'Behold alt på denne telefonen';
-
-  @override
-  String get onDeviceKeepEverythingSubtitle => 'Bare transkripsjoner, ingen sammendrag';
-
-  @override
-  String get onDeviceLiveHours => 'Live-timer';
-
-  @override
-  String onDeviceLiveHoursUsed(String used, String limit) {
-    return '$used av $limit timer brukt';
-  }
-
-  @override
-  String onDeviceResets(String date) {
-    return 'Tilbakestilles $date';
-  }
-
-  @override
-  String get onDeviceGetMoreLiveHours => 'Få flere live-timer';
-
-  @override
-  String get onDeviceAfterLiveHours => 'Når live-timene er brukt opp';
-
-  @override
-  String get onDeviceWhen => 'Når';
-
-  @override
-  String get onDeviceSummaries => 'Sammendrag';
-
-  @override
-  String get onDeviceSummariesOnIphone => 'På denne iPhonen';
-
-  @override
-  String get onDeviceSummariesCloud => 'Av Omi Cloud';
-
-  @override
-  String get onDeviceSaveLiveHours => 'Transkriber på denne telefonen for å spare live-timer';
-
-  @override
-  String get onDeviceSaveLiveHoursSubtitle => 'Oppgrader til Pro for å skille talere og få høyere nøyaktighet';
-
-  @override
-  String get onDeviceOnThisPhone => 'På denne telefonen';
-
-  @override
-  String get onDeviceAudioWaiting => 'Lyd som venter på telefonen';
-
-  @override
-  String get onDeviceRemoveModel => 'Fjern talemodell';
-
-  @override
-  String get onDeviceRemoveModelTitle => 'Fjerne talemodellen?';
-
-  @override
-  String get onDeviceRemoveModelMessage =>
-      'Opptakene venter på denne telefonen til du laster den ned igjen eller live-timene kommer tilbake.';
-
-  @override
-  String get onDeviceRemove => 'Fjern';
-
-  @override
-  String get onDeviceFinishSetupTitle => 'Fullfør oppsettet for å se transkripsjonene dine';
-
-  @override
-  String get onDeviceFinishSetupBody =>
-      'Du har brukt opp månedens live-timer. Omi tar fortsatt opp og lagrer lyd på telefonen din. Last ned talemodellen, så tar den igjen etterslepet.';
-
-  @override
-  String onDeviceDownloadSize(String size) {
-    return '$size nedlasting';
-  }
-
-  @override
-  String get onDeviceUnsupportedBody =>
-      'Denne telefonen kan ikke kjøre talemodellen ennå. Lyden forblir lagret til live-timene kommer tilbake eller du oppgraderer.';
-
-  @override
-  String get onDeviceEntrySubtitle => 'Når live-timene er brukt opp, transkriber på denne telefonen';
+  String get chatAppsWaitlistJoined => 'Du står på ventelisten. Vi gir beskjed når det er plass.';
 }

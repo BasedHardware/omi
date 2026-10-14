@@ -8593,6 +8593,297 @@ class AppLocalizationsTr extends AppLocalizations {
       'Çevrimdışı kaydediliyor — tekrar çevrimiçi olduğunuzda transkript güncellenecek.';
 
   @override
+  String get onDeviceAtCapTitle => 'Bu ayın canlı transkripsiyonunu kullandınız';
+
+  @override
+  String get onDeviceAtCapBody =>
+      'Omi kayda devam ediyor. Ayın geri kalanının nasıl yazıya dökülmesini istediğinizi seçin.';
+
+  @override
+  String onDeviceLiveHoursReturn(String date) {
+    return 'Canlı saatler $date tarihinde yenilenir.';
+  }
+
+  @override
+  String get onDeviceTranscribeOnPhone => 'Bu telefonda yazıya dök';
+
+  @override
+  String get onDeviceIncluded => 'Dahil';
+
+  @override
+  String get onDeviceOptionChargingBody =>
+      'Telefonunuz şarj olurken çalışır, bu yüzden pili neredeyse hiç kullanmaz. Transkriptler şarja taktıktan sonra görünür.';
+
+  @override
+  String get onDeviceUpgradeBody => 'Konuşmacı ayrımı ve daha yüksek doğruluk için Pro\'ya yükseltin';
+
+  @override
+  String get onDeviceAtCapFooter =>
+      'Her iki durumda da hiçbir şey kaybolmaz. Bunu Ayarlar › Transkripsiyon bölümünden değiştirebilirsiniz.';
+
+  @override
+  String onDeviceStepOf(int step, int total) {
+    return 'Adım $step/$total';
+  }
+
+  @override
+  String get onDeviceSetupBody =>
+      'Omi bir konuşma modelini bir kez indirir. Ardından kayıtlarınız canlı saatlerinizi kullanmadan doğrudan burada metne dönüştürülür.';
+
+  @override
+  String get onDeviceSpeechModel => 'Konuşma modeli';
+
+  @override
+  String onDeviceMegabytes(String size) {
+    return '$size MB';
+  }
+
+  @override
+  String onDeviceDownloadingWifi(int percent) {
+    return 'Wi-Fi üzerinden indiriliyor · %$percent';
+  }
+
+  @override
+  String onDeviceDownloadingPercent(int percent) {
+    return 'İndiriliyor · %$percent';
+  }
+
+  @override
+  String onDeviceTimeLeft(String time) {
+    return 'Yaklaşık $time kaldı';
+  }
+
+  @override
+  String get onDeviceWaitingForWifi => 'Wi-Fi bekleniyor';
+
+  @override
+  String get onDeviceDownloadFailed => 'İndirme tamamlanmadı';
+
+  @override
+  String get onDeviceModelNotDownloaded => 'İndirilmedi';
+
+  @override
+  String onDeviceModelInstalled(String size) {
+    return 'Yüklü · $size';
+  }
+
+  @override
+  String get onDeviceModelUnsupported => 'Bu telefonda henüz kullanılamıyor';
+
+  @override
+  String get onDeviceSetupKeepRecording => 'İndirilirken kayda devam edin. Hiçbir şey bunu beklemez.';
+
+  @override
+  String get onDeviceSetupAudioStays => 'Ses, yazıya dökülene kadar telefonunuzda kalır.';
+
+  @override
+  String get onDeviceWifiOnly => 'Yalnızca Wi-Fi ile indir';
+
+  @override
+  String get onDeviceDownloadModel => 'Konuşma Modelini İndir';
+
+  @override
+  String get onDeviceScheduleTitle => 'Ne Zaman Yazıya Dökülsün';
+
+  @override
+  String get onDeviceScheduleHeadline => 'Omi ne zaman yazıya döksün?';
+
+  @override
+  String get onDeviceScheduleBody =>
+      'Toplu halde yazıya dökmek pil tasarrufu sağlar. Bunu istediğiniz zaman değiştirebilirsiniz.';
+
+  @override
+  String get onDeviceScheduleCharging => 'Şarj olurken';
+
+  @override
+  String get onDeviceScheduleChargingBody => 'Transkriptler şarja taktıktan sonra, genellikle gece boyunca görünür.';
+
+  @override
+  String get onDeviceBatteryAlmostNone => 'Pil: neredeyse hiç';
+
+  @override
+  String get onDeviceScheduleHours => 'Birkaç saatte bir';
+
+  @override
+  String get onDeviceScheduleHoursBody =>
+      'Pildeyken kısa aralıklarla yetişir, bu yüzden transkriptler nadiren birkaç saatten fazla geride kalır.';
+
+  @override
+  String onDeviceBatteryPerDay(int percent) {
+    return 'Pil: günde yaklaşık %$percent';
+  }
+
+  @override
+  String get onDeviceScheduleLive => 'Siz konuşurken';
+
+  @override
+  String get onDeviceScheduleLiveBody => 'Omi açıkken düzenli olarak yazıya döker.';
+
+  @override
+  String onDeviceBatteryPerHour(int percent) {
+    return 'Pil: konuşmanın saati başına yaklaşık %$percent';
+  }
+
+  @override
+  String onDeviceQueueWaiting(String duration) {
+    return '$duration yazıya dökülmeyi bekliyor';
+  }
+
+  @override
+  String get onDeviceQueueChargingBody =>
+      'Telefonunuzu şarja taktıktan sonra hazır olacaklar. Kayıt normal şekilde devam ediyor.';
+
+  @override
+  String get onDeviceQueueHoursBody => 'Omi birkaç saatte bir yetişir. Kayıt normal şekilde devam ediyor.';
+
+  @override
+  String get onDeviceQueueLowBatteryBody => 'Pil düşük olduğu için şarj bekleniyor. Kayıt normal şekilde devam ediyor.';
+
+  @override
+  String get onDeviceTranscribeNow => 'Şimdi Yazıya Dök';
+
+  @override
+  String get onDeviceUsesBattery => 'Pil kullanır';
+
+  @override
+  String get onDeviceTranscribing => 'Yazıya dökülüyor…';
+
+  @override
+  String get onDeviceWaitingForCharger => 'Şarj bekleniyor';
+
+  @override
+  String get onDeviceWaitingToTranscribe => 'Yazıya dökülmeyi bekliyor';
+
+  @override
+  String get onDeviceWaitingForSetup => 'Kaydedildi, kurulum bekleniyor';
+
+  @override
+  String get onDeviceTranscribedOnIphone => 'Bu iPhone\'da yazıya döküldü';
+
+  @override
+  String get onDeviceTranscribedOnPhone => 'Bu telefonda yazıya döküldü';
+
+  @override
+  String get onDeviceTranscribedSummarizedOnIphone => 'Bu iPhone\'da yazıya döküldü ve özetlendi';
+
+  @override
+  String get onDeviceSummarizedByCloud => 'Omi Cloud tarafından özetlendi';
+
+  @override
+  String get onDeviceWhyPhoneTitle => 'Bu neden telefonunuzda yapıldı';
+
+  @override
+  String get onDeviceWhyLiveHoursUsed =>
+      'Bu ayın canlı saatlerini kullandınız, bu yüzden Omi bu konuşmayı bu telefonda yazıya döktü.';
+
+  @override
+  String get onDeviceWhySavingLiveHours => 'Canlı saatlerden tasarruf etmek için bu telefonda yazıya dökmeyi seçtiniz.';
+
+  @override
+  String get onDeviceWhySummaryOnPhone => 'Özet de bu iPhone\'da yazıldı.';
+
+  @override
+  String get onDeviceWhyNoSummary => 'Her şeyi bu telefonda tutuyorsunuz, bu yüzden özet yok.';
+
+  @override
+  String get onDeviceWhyCloudTitle => 'Bu özeti neden Omi Cloud yazdı';
+
+  @override
+  String get onDeviceWhyCloudIphone =>
+      'Bu iPhone kendi başına özetleyemez (bunun için iPhone 15 Pro veya daha yenisi gerekir). Transkript telefonunuzda oluşturuldu ve özetlenmesi için Omi\'ye yalnızca metni gönderildi. Canlı saatlerinizi kullanmaz.';
+
+  @override
+  String get onDeviceWhyCloudPhone =>
+      'Bu telefon kendi başına özetleyemez. Transkript telefonunuzda oluşturuldu ve özetlenmesi için Omi\'ye yalnızca metni gönderildi. Canlı saatlerinizi kullanmaz.';
+
+  @override
+  String get onDeviceRedoWithCloud => 'Omi Cloud ile Yeniden Yap';
+
+  @override
+  String get onDeviceRedoHint => 'Konuşmacı ayrımı ve daha yüksek doğruluk için Pro\'ya yükseltin';
+
+  @override
+  String get onDeviceKeepEverything => 'Her şeyi bu telefonda tut';
+
+  @override
+  String get onDeviceKeepEverythingSubtitle => 'Yalnızca transkriptler, özet yok';
+
+  @override
+  String get onDeviceLiveHours => 'Canlı saatler';
+
+  @override
+  String onDeviceLiveHoursUsed(String used, String limit) {
+    return '$used/$limit saat kullanıldı';
+  }
+
+  @override
+  String onDeviceResets(String date) {
+    return '$date tarihinde sıfırlanır';
+  }
+
+  @override
+  String get onDeviceGetMoreLiveHours => 'Daha Fazla Canlı Saat Al';
+
+  @override
+  String get onDeviceAfterLiveHours => 'Canlı saatler bittikten sonra';
+
+  @override
+  String get onDeviceWhen => 'Ne zaman';
+
+  @override
+  String get onDeviceSummaries => 'Özetler';
+
+  @override
+  String get onDeviceSummariesOnIphone => 'Bu iPhone\'da';
+
+  @override
+  String get onDeviceSummariesCloud => 'Omi Cloud ile';
+
+  @override
+  String get onDeviceSaveLiveHours => 'Canlı saatlerden tasarruf için bu telefonda yazıya dök';
+
+  @override
+  String get onDeviceSaveLiveHoursSubtitle => 'Konuşmacı ayrımı ve daha yüksek doğruluk için Pro\'ya yükseltin';
+
+  @override
+  String get onDeviceOnThisPhone => 'Bu telefonda';
+
+  @override
+  String get onDeviceAudioWaiting => 'Telefonda bekleyen ses';
+
+  @override
+  String get onDeviceRemoveModel => 'Konuşma Modelini Kaldır';
+
+  @override
+  String get onDeviceRemoveModelTitle => 'Konuşma modeli kaldırılsın mı?';
+
+  @override
+  String get onDeviceRemoveModelMessage =>
+      'Kayıtlar, modeli yeniden indirene veya canlı saatler yenilenene kadar bu telefonda bekler.';
+
+  @override
+  String get onDeviceRemove => 'Kaldır';
+
+  @override
+  String get onDeviceFinishSetupTitle => 'Transkriptlerinizi görmek için kurulumu tamamlayın';
+
+  @override
+  String get onDeviceFinishSetupBody =>
+      'Bu ayın canlı saatlerini kullandınız. Omi hâlâ kayıt yapıyor ve sesi telefonunuza kaydediyor. Konuşma modelini indirin, birikenleri yetiştirsin.';
+
+  @override
+  String onDeviceDownloadSize(String size) {
+    return '$size indirme';
+  }
+
+  @override
+  String get onDeviceUnsupportedBody =>
+      'Bu telefon henüz konuşma modelini çalıştıramıyor. Ses, canlı saatler yenilenene veya planınızı yükseltene kadar kayıtlı kalır.';
+
+  @override
+  String get onDeviceEntrySubtitle => 'Canlı saatler bitince bu telefonda yazıya dök';
+
+  @override
   String get transcriptionUnavailableRecordingSaved =>
       'Transkripsiyon kullanılamıyor — kayıt devam ediyor ve sesiniz kaydediliyor.';
 
@@ -13290,293 +13581,19 @@ class AppLocalizationsTr extends AppLocalizations {
   String get syncDetailsCopy => 'Destek için ayrıntıları kopyala';
 
   @override
-  String get onDeviceAtCapTitle => 'Bu ayın canlı transkripsiyonunu kullandınız';
+  String get chatAppsChannelPlanRequired => 'Operator ve Architect planlarında kullanılabilir';
 
   @override
-  String get onDeviceAtCapBody =>
-      'Omi kayda devam ediyor. Ayın geri kalanının nasıl yazıya dökülmesini istediğinizi seçin.';
-
-  @override
-  String onDeviceLiveHoursReturn(String date) {
-    return 'Canlı saatler $date tarihinde yenilenir.';
+  String chatAppsAtCapacity(String app) {
+    return '$app kapasitesi dolu';
   }
 
   @override
-  String get onDeviceTranscribeOnPhone => 'Bu telefonda yazıya dök';
+  String get chatAppsJoinWaitlist => 'Bekleme listesine katıl';
 
   @override
-  String get onDeviceIncluded => 'Dahil';
+  String get chatAppsOnWaitlist => 'Bekleme listesindesin';
 
   @override
-  String get onDeviceOptionChargingBody =>
-      'Telefonunuz şarj olurken çalışır, bu yüzden pili neredeyse hiç kullanmaz. Transkriptler şarja taktıktan sonra görünür.';
-
-  @override
-  String get onDeviceUpgradeBody => 'Konuşmacı ayrımı ve daha yüksek doğruluk için Pro\'ya yükseltin';
-
-  @override
-  String get onDeviceAtCapFooter =>
-      'Her iki durumda da hiçbir şey kaybolmaz. Bunu Ayarlar › Transkripsiyon bölümünden değiştirebilirsiniz.';
-
-  @override
-  String onDeviceStepOf(int step, int total) {
-    return 'Adım $step/$total';
-  }
-
-  @override
-  String get onDeviceSetupBody =>
-      'Omi bir konuşma modelini bir kez indirir. Ardından kayıtlarınız canlı saatlerinizi kullanmadan doğrudan burada metne dönüştürülür.';
-
-  @override
-  String get onDeviceSpeechModel => 'Konuşma modeli';
-
-  @override
-  String onDeviceMegabytes(String size) {
-    return '$size MB';
-  }
-
-  @override
-  String onDeviceDownloadingWifi(int percent) {
-    return 'Wi-Fi üzerinden indiriliyor · %$percent';
-  }
-
-  @override
-  String onDeviceDownloadingPercent(int percent) {
-    return 'İndiriliyor · %$percent';
-  }
-
-  @override
-  String onDeviceTimeLeft(String time) {
-    return 'Yaklaşık $time kaldı';
-  }
-
-  @override
-  String get onDeviceWaitingForWifi => 'Wi-Fi bekleniyor';
-
-  @override
-  String get onDeviceDownloadFailed => 'İndirme tamamlanmadı';
-
-  @override
-  String get onDeviceModelNotDownloaded => 'İndirilmedi';
-
-  @override
-  String onDeviceModelInstalled(String size) {
-    return 'Yüklü · $size';
-  }
-
-  @override
-  String get onDeviceModelUnsupported => 'Bu telefonda henüz kullanılamıyor';
-
-  @override
-  String get onDeviceSetupKeepRecording => 'İndirilirken kayda devam edin. Hiçbir şey bunu beklemez.';
-
-  @override
-  String get onDeviceSetupAudioStays => 'Ses, yazıya dökülene kadar telefonunuzda kalır.';
-
-  @override
-  String get onDeviceWifiOnly => 'Yalnızca Wi-Fi ile indir';
-
-  @override
-  String get onDeviceDownloadModel => 'Konuşma Modelini İndir';
-
-  @override
-  String get onDeviceScheduleTitle => 'Ne Zaman Yazıya Dökülsün';
-
-  @override
-  String get onDeviceScheduleHeadline => 'Omi ne zaman yazıya döksün?';
-
-  @override
-  String get onDeviceScheduleBody =>
-      'Toplu halde yazıya dökmek pil tasarrufu sağlar. Bunu istediğiniz zaman değiştirebilirsiniz.';
-
-  @override
-  String get onDeviceScheduleCharging => 'Şarj olurken';
-
-  @override
-  String get onDeviceScheduleChargingBody => 'Transkriptler şarja taktıktan sonra, genellikle gece boyunca görünür.';
-
-  @override
-  String get onDeviceBatteryAlmostNone => 'Pil: neredeyse hiç';
-
-  @override
-  String get onDeviceScheduleHours => 'Birkaç saatte bir';
-
-  @override
-  String get onDeviceScheduleHoursBody =>
-      'Pildeyken kısa aralıklarla yetişir, bu yüzden transkriptler nadiren birkaç saatten fazla geride kalır.';
-
-  @override
-  String onDeviceBatteryPerDay(int percent) {
-    return 'Pil: günde yaklaşık %$percent';
-  }
-
-  @override
-  String get onDeviceScheduleLive => 'Siz konuşurken';
-
-  @override
-  String get onDeviceScheduleLiveBody => 'Omi açıkken düzenli olarak yazıya döker.';
-
-  @override
-  String onDeviceBatteryPerHour(int percent) {
-    return 'Pil: konuşmanın saati başına yaklaşık %$percent';
-  }
-
-  @override
-  String onDeviceQueueWaiting(String duration) {
-    return '$duration yazıya dökülmeyi bekliyor';
-  }
-
-  @override
-  String get onDeviceQueueChargingBody =>
-      'Telefonunuzu şarja taktıktan sonra hazır olacaklar. Kayıt normal şekilde devam ediyor.';
-
-  @override
-  String get onDeviceQueueHoursBody => 'Omi birkaç saatte bir yetişir. Kayıt normal şekilde devam ediyor.';
-
-  @override
-  String get onDeviceQueueLowBatteryBody => 'Pil düşük olduğu için şarj bekleniyor. Kayıt normal şekilde devam ediyor.';
-
-  @override
-  String get onDeviceTranscribeNow => 'Şimdi Yazıya Dök';
-
-  @override
-  String get onDeviceUsesBattery => 'Pil kullanır';
-
-  @override
-  String get onDeviceTranscribing => 'Yazıya dökülüyor…';
-
-  @override
-  String get onDeviceWaitingForCharger => 'Şarj bekleniyor';
-
-  @override
-  String get onDeviceWaitingToTranscribe => 'Yazıya dökülmeyi bekliyor';
-
-  @override
-  String get onDeviceWaitingForSetup => 'Kaydedildi, kurulum bekleniyor';
-
-  @override
-  String get onDeviceTranscribedOnIphone => 'Bu iPhone\'da yazıya döküldü';
-
-  @override
-  String get onDeviceTranscribedOnPhone => 'Bu telefonda yazıya döküldü';
-
-  @override
-  String get onDeviceTranscribedSummarizedOnIphone => 'Bu iPhone\'da yazıya döküldü ve özetlendi';
-
-  @override
-  String get onDeviceSummarizedByCloud => 'Omi Cloud tarafından özetlendi';
-
-  @override
-  String get onDeviceWhyPhoneTitle => 'Bu neden telefonunuzda yapıldı';
-
-  @override
-  String get onDeviceWhyLiveHoursUsed =>
-      'Bu ayın canlı saatlerini kullandınız, bu yüzden Omi bu konuşmayı bu telefonda yazıya döktü.';
-
-  @override
-  String get onDeviceWhySavingLiveHours => 'Canlı saatlerden tasarruf etmek için bu telefonda yazıya dökmeyi seçtiniz.';
-
-  @override
-  String get onDeviceWhySummaryOnPhone => 'Özet de bu iPhone\'da yazıldı.';
-
-  @override
-  String get onDeviceWhyNoSummary => 'Her şeyi bu telefonda tutuyorsunuz, bu yüzden özet yok.';
-
-  @override
-  String get onDeviceWhyCloudTitle => 'Bu özeti neden Omi Cloud yazdı';
-
-  @override
-  String get onDeviceWhyCloudIphone =>
-      'Bu iPhone kendi başına özetleyemez (bunun için iPhone 15 Pro veya daha yenisi gerekir). Transkript telefonunuzda oluşturuldu ve özetlenmesi için Omi\'ye yalnızca metni gönderildi. Canlı saatlerinizi kullanmaz.';
-
-  @override
-  String get onDeviceWhyCloudPhone =>
-      'Bu telefon kendi başına özetleyemez. Transkript telefonunuzda oluşturuldu ve özetlenmesi için Omi\'ye yalnızca metni gönderildi. Canlı saatlerinizi kullanmaz.';
-
-  @override
-  String get onDeviceRedoWithCloud => 'Omi Cloud ile Yeniden Yap';
-
-  @override
-  String get onDeviceRedoHint => 'Konuşmacı ayrımı ve daha yüksek doğruluk için Pro\'ya yükseltin';
-
-  @override
-  String get onDeviceKeepEverything => 'Her şeyi bu telefonda tut';
-
-  @override
-  String get onDeviceKeepEverythingSubtitle => 'Yalnızca transkriptler, özet yok';
-
-  @override
-  String get onDeviceLiveHours => 'Canlı saatler';
-
-  @override
-  String onDeviceLiveHoursUsed(String used, String limit) {
-    return '$used/$limit saat kullanıldı';
-  }
-
-  @override
-  String onDeviceResets(String date) {
-    return '$date tarihinde sıfırlanır';
-  }
-
-  @override
-  String get onDeviceGetMoreLiveHours => 'Daha Fazla Canlı Saat Al';
-
-  @override
-  String get onDeviceAfterLiveHours => 'Canlı saatler bittikten sonra';
-
-  @override
-  String get onDeviceWhen => 'Ne zaman';
-
-  @override
-  String get onDeviceSummaries => 'Özetler';
-
-  @override
-  String get onDeviceSummariesOnIphone => 'Bu iPhone\'da';
-
-  @override
-  String get onDeviceSummariesCloud => 'Omi Cloud ile';
-
-  @override
-  String get onDeviceSaveLiveHours => 'Canlı saatlerden tasarruf için bu telefonda yazıya dök';
-
-  @override
-  String get onDeviceSaveLiveHoursSubtitle => 'Konuşmacı ayrımı ve daha yüksek doğruluk için Pro\'ya yükseltin';
-
-  @override
-  String get onDeviceOnThisPhone => 'Bu telefonda';
-
-  @override
-  String get onDeviceAudioWaiting => 'Telefonda bekleyen ses';
-
-  @override
-  String get onDeviceRemoveModel => 'Konuşma Modelini Kaldır';
-
-  @override
-  String get onDeviceRemoveModelTitle => 'Konuşma modeli kaldırılsın mı?';
-
-  @override
-  String get onDeviceRemoveModelMessage =>
-      'Kayıtlar, modeli yeniden indirene veya canlı saatler yenilenene kadar bu telefonda bekler.';
-
-  @override
-  String get onDeviceRemove => 'Kaldır';
-
-  @override
-  String get onDeviceFinishSetupTitle => 'Transkriptlerinizi görmek için kurulumu tamamlayın';
-
-  @override
-  String get onDeviceFinishSetupBody =>
-      'Bu ayın canlı saatlerini kullandınız. Omi hâlâ kayıt yapıyor ve sesi telefonunuza kaydediyor. Konuşma modelini indirin, birikenleri yetiştirsin.';
-
-  @override
-  String onDeviceDownloadSize(String size) {
-    return '$size indirme';
-  }
-
-  @override
-  String get onDeviceUnsupportedBody =>
-      'Bu telefon henüz konuşma modelini çalıştıramıyor. Ses, canlı saatler yenilenene veya planınızı yükseltene kadar kayıtlı kalır.';
-
-  @override
-  String get onDeviceEntrySubtitle => 'Canlı saatler bitince bu telefonda yazıya dök';
+  String get chatAppsWaitlistJoined => 'Bekleme listesindesin. Yer açıldığında haber vereceğiz.';
 }

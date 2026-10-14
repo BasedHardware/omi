@@ -30,7 +30,7 @@ from utils.messaging.adapters import rendering
     ],
 )
 def test_every_raw_citation_is_removed(marker):
-    assert rendering.source_phrases('See ' + marker + '.') == 'See .'
+    assert rendering.source_phrases('See ' + marker + '.') == 'See.'
     assert marker not in ''.join(rendering.telegram('See ' + marker))
     assert marker not in rendering.plain('See ' + marker)
 
@@ -75,7 +75,7 @@ def test_render_failure_has_observable_plain_fallback(monkeypatch):
     events = []
     monkeypatch.setattr(rendering, 'render_markdown', lambda *args, **kwargs: (_ for _ in ()).throw(ValueError()))
     monkeypatch.setattr(rendering, 'record_fallback', lambda **kwargs: events.append(kwargs))
-    assert rendering.telegram('a < b & c [#9]') == ('a &lt; b &amp; c ',)
+    assert rendering.telegram('a < b & c [#9]') == ('a &lt; b &amp; c',)
     assert events[0]['outcome'] == 'degraded'
 
 
@@ -282,3 +282,51 @@ def test_list_cap_and_reply_order():
 def test_list_requires_valid_items(items):
     with pytest.raises(ValueError):
         rendering.item_list_link(items)
+
+
+@pytest.mark.parametrize(
+    'raw, expected',
+    [
+        ('transition details [3]. You', 'transition details. You'),
+        ('its pinout [1][2] .', 'its pinout .'),
+        ('approval【4】, then', 'approval, then'),
+        ('came up.[5][4]', 'came up.'),
+        ('line one [1]\nline two', 'line one\nline two'),
+    ],
+)
+def test_citation_strip_leaves_no_space_before_punctuation(raw, expected):
+    assert rendering.strip_citations(raw) == expected
+    assert rendering.source_phrases(raw) == expected
+
+
+def test_resolved_app_citations_leave_no_space_before_punctuation():
+    from utils.chat_citations import resolve_conversation_citations
+
+    text, cited = resolve_conversation_citations('Board resolutions [2]. Dinner plans [1].', [{'id': 'a'}, {'id': 'b'}])
+    assert text == 'Board resolutions. Dinner plans.'
+    assert [item['id'] for item in cited] == ['b', 'a']
+
+
+def test_cited_conversations_link_even_when_prose_paraphrases_titles():
+    response = {
+        'text': 'Yesterday you handled stockholder consent and dinner plans.',
+        'content_blocks': [
+            {'type': 'itemLink', 'kind': 'task', 'id': 'uncited-task', 'title': 'Fix the robot'},
+            {'type': 'itemLink', 'kind': 'conversation', 'id': 'c2', 'title': 'dTRINITY board consent', 'cited': True},
+            {'type': 'itemLink', 'kind': 'conversation', 'id': 'c1', 'title': 'Lunch in Saigon', 'cited': True},
+        ],
+    }
+    items = rendering.linked_items(response)
+    # Cited items keep citation order; an uncited tool result still needs a prose mention.
+    assert [item['id'] for item in items] == ['c2', 'c1']
+
+
+def test_cited_items_precede_mentioned_items():
+    response = {
+        'text': 'Fix the robot is still open; you also signed the consent.',
+        'content_blocks': [
+            {'type': 'itemLink', 'kind': 'task', 'id': 't1', 'title': 'Fix the robot'},
+            {'type': 'itemLink', 'kind': 'conversation', 'id': 'c1', 'title': 'Board consent call', 'cited': True},
+        ],
+    }
+    assert [item['id'] for item in rendering.linked_items(response)] == ['c1', 't1']

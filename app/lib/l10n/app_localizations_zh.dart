@@ -8450,6 +8450,285 @@ class AppLocalizationsZh extends AppLocalizations {
   String get recordingOfflineTranscriptWillCatchUp => '离线录音中 — 恢复联网后文字记录会自动补上。';
 
   @override
+  String get onDeviceAtCapTitle => '本月的实时转录时长已用完';
+
+  @override
+  String get onDeviceAtCapBody => 'Omi 仍在录音。请选择本月剩余时间的转录方式。';
+
+  @override
+  String onDeviceLiveHoursReturn(String date) {
+    return '实时时长将于 $date 恢复。';
+  }
+
+  @override
+  String get onDeviceTranscribeOnPhone => '在本机转录';
+
+  @override
+  String get onDeviceIncluded => '已包含';
+
+  @override
+  String get onDeviceOptionChargingBody => '在手机充电时运行，几乎不耗电。接上充电器后即可看到文字记录。';
+
+  @override
+  String get onDeviceUpgradeBody => '升级到 Pro，获得说话人分离和更高准确度';
+
+  @override
+  String get onDeviceAtCapFooter => '无论选哪种都不会丢失内容。你可以在 设置 › 转录 中更改。';
+
+  @override
+  String onDeviceStepOf(int step, int total) {
+    return '第 $step 步，共 $total 步';
+  }
+
+  @override
+  String get onDeviceSetupBody => 'Omi 只需下载一次语音模型。之后，你的录音会直接在本机转为文字，不占用实时时长。';
+
+  @override
+  String get onDeviceSpeechModel => '语音模型';
+
+  @override
+  String onDeviceMegabytes(String size) {
+    return '$size MB';
+  }
+
+  @override
+  String onDeviceDownloadingWifi(int percent) {
+    return '正在通过 Wi-Fi 下载 · $percent%';
+  }
+
+  @override
+  String onDeviceDownloadingPercent(int percent) {
+    return '正在下载 · $percent%';
+  }
+
+  @override
+  String onDeviceTimeLeft(String time) {
+    return '约剩 $time';
+  }
+
+  @override
+  String get onDeviceWaitingForWifi => '正在等待 Wi-Fi';
+
+  @override
+  String get onDeviceDownloadFailed => '下载未完成';
+
+  @override
+  String get onDeviceModelNotDownloaded => '未下载';
+
+  @override
+  String onDeviceModelInstalled(String size) {
+    return '已安装 · $size';
+  }
+
+  @override
+  String get onDeviceModelUnsupported => '本机暂不支持';
+
+  @override
+  String get onDeviceSetupKeepRecording => '下载期间可继续录音，不会耽误任何事情。';
+
+  @override
+  String get onDeviceSetupAudioStays => '音频会保留在你的手机上，直到转录完成。';
+
+  @override
+  String get onDeviceWifiOnly => '仅通过 Wi-Fi 下载';
+
+  @override
+  String get onDeviceDownloadModel => '下载语音模型';
+
+  @override
+  String get onDeviceScheduleTitle => '转录时间';
+
+  @override
+  String get onDeviceScheduleHeadline => 'Omi 应在何时转录？';
+
+  @override
+  String get onDeviceScheduleBody => '分批转录更省电。你可以随时更改。';
+
+  @override
+  String get onDeviceScheduleCharging => '充电时';
+
+  @override
+  String get onDeviceScheduleChargingBody => '接上充电器后显示文字记录，通常在夜间完成。';
+
+  @override
+  String get onDeviceBatteryAlmostNone => '电量：几乎不耗电';
+
+  @override
+  String get onDeviceScheduleHours => '每隔几小时';
+
+  @override
+  String get onDeviceScheduleHoursBody => '使用电池时分小段补齐，文字记录很少会延迟超过几小时。';
+
+  @override
+  String onDeviceBatteryPerDay(int percent) {
+    return '电量：每天约 $percent%';
+  }
+
+  @override
+  String get onDeviceScheduleLive => '边说边转';
+
+  @override
+  String get onDeviceScheduleLiveBody => 'Omi打开时定期转录。';
+
+  @override
+  String onDeviceBatteryPerHour(int percent) {
+    return '电量：每小时对话约 $percent%';
+  }
+
+  @override
+  String onDeviceQueueWaiting(String duration) {
+    return '$duration 等待转录';
+  }
+
+  @override
+  String get onDeviceQueueChargingBody => '手机接上充电器后即可完成。录音照常进行。';
+
+  @override
+  String get onDeviceQueueHoursBody => 'Omi 每隔几小时补齐一次。录音照常进行。';
+
+  @override
+  String get onDeviceQueueLowBatteryBody => '电量不足，正在等待充电。录音照常进行。';
+
+  @override
+  String get onDeviceTranscribeNow => '立即转录';
+
+  @override
+  String get onDeviceUsesBattery => '会耗电';
+
+  @override
+  String get onDeviceTranscribing => '正在转录…';
+
+  @override
+  String get onDeviceWaitingForCharger => '等待充电';
+
+  @override
+  String get onDeviceWaitingToTranscribe => '等待转录';
+
+  @override
+  String get onDeviceWaitingForSetup => '已保存，等待设置';
+
+  @override
+  String get onDeviceTranscribedOnIphone => '已在本 iPhone 上转录';
+
+  @override
+  String get onDeviceTranscribedOnPhone => '已在本机转录';
+
+  @override
+  String get onDeviceTranscribedSummarizedOnIphone => '已在本 iPhone 上转录并生成摘要';
+
+  @override
+  String get onDeviceSummarizedByCloud => '由 Omi Cloud 生成摘要';
+
+  @override
+  String get onDeviceWhyPhoneTitle => '为什么在你的手机上处理';
+
+  @override
+  String get onDeviceWhyLiveHoursUsed => '你本月的实时时长已用完，因此 Omi 在本机转录了这段对话。';
+
+  @override
+  String get onDeviceWhySavingLiveHours => '你选择了在本机转录以节省实时时长。';
+
+  @override
+  String get onDeviceWhySummaryOnPhone => '摘要也是在本 iPhone 上生成的，所有内容都未离开设备。';
+
+  @override
+  String get onDeviceWhyNoSummary => '你选择将所有内容保留在本机，因此没有摘要。';
+
+  @override
+  String get onDeviceWhyCloudTitle => '为什么由 Omi Cloud 生成此摘要';
+
+  @override
+  String get onDeviceWhyCloudIphone =>
+      '这台 iPhone 无法自行生成摘要（需要 iPhone 15 Pro 或更新机型）。文字记录在你的手机上生成，仅将其文本发送给 Omi 生成摘要。不占用你的实时时长。';
+
+  @override
+  String get onDeviceWhyCloudPhone => '这部手机无法自行生成摘要。文字记录在你的手机上生成，仅将其文本发送给 Omi 生成摘要。不占用你的实时时长。';
+
+  @override
+  String get onDeviceRedoWithCloud => '用 Omi Cloud 重新处理';
+
+  @override
+  String get onDeviceRedoHint => '升级到 Pro，获得说话人分离和更高准确度';
+
+  @override
+  String get onDeviceKeepEverything => '所有内容保留在本机';
+
+  @override
+  String get onDeviceKeepEverythingSubtitle => '仅文字记录，不生成摘要';
+
+  @override
+  String get onDeviceLiveHours => '实时时长';
+
+  @override
+  String onDeviceLiveHoursUsed(String used, String limit) {
+    return '已用 $used/$limit 小时';
+  }
+
+  @override
+  String onDeviceResets(String date) {
+    return '$date 重置';
+  }
+
+  @override
+  String get onDeviceGetMoreLiveHours => '获取更多实时时长';
+
+  @override
+  String get onDeviceAfterLiveHours => '实时时长用完后';
+
+  @override
+  String get onDeviceWhen => '时间';
+
+  @override
+  String get onDeviceSummaries => '摘要';
+
+  @override
+  String get onDeviceSummariesOnIphone => '在本 iPhone 上';
+
+  @override
+  String get onDeviceSummariesCloud => '由 Omi Cloud 生成';
+
+  @override
+  String get onDeviceSaveLiveHours => '在本机转录以节省实时时长';
+
+  @override
+  String get onDeviceSaveLiveHoursSubtitle => '升级到 Pro，获得说话人分离和更高准确度';
+
+  @override
+  String get onDeviceOnThisPhone => '本机';
+
+  @override
+  String get onDeviceAudioWaiting => '手机上待处理的音频';
+
+  @override
+  String get onDeviceRemoveModel => '移除语音模型';
+
+  @override
+  String get onDeviceRemoveModelTitle => '要移除语音模型吗？';
+
+  @override
+  String get onDeviceRemoveModelMessage => '录音将保留在本机等待，直到你重新下载模型或实时时长恢复。';
+
+  @override
+  String get onDeviceRemove => '移除';
+
+  @override
+  String get onDeviceFinishSetupTitle => '完成设置即可查看文字记录';
+
+  @override
+  String get onDeviceFinishSetupBody => '你本月的实时时长已用完。Omi 仍在录音并将音频保存在你的手机上。下载语音模型后即可补齐转录。';
+
+  @override
+  String onDeviceDownloadSize(String size) {
+    return '需下载 $size';
+  }
+
+  @override
+  String get onDeviceUnsupportedBody => '本机暂时无法运行语音模型。音频会一直保存，直到实时时长恢复或你升级套餐。';
+
+  @override
+  String get onDeviceEntrySubtitle => '实时时长用完后，在本机转录';
+
+  @override
   String get transcriptionUnavailableRecordingSaved => '转录不可用 — 录音仍在继续，你的音频已保存。';
 
   @override
@@ -13072,281 +13351,19 @@ class AppLocalizationsZh extends AppLocalizations {
   String get syncDetailsCopy => '复制详情以供支持团队使用';
 
   @override
-  String get onDeviceAtCapTitle => '本月的实时转录时长已用完';
+  String get chatAppsChannelPlanRequired => 'Operator 和 Architect 套餐可用';
 
   @override
-  String get onDeviceAtCapBody => 'Omi 仍在录音。请选择本月剩余时间的转录方式。';
-
-  @override
-  String onDeviceLiveHoursReturn(String date) {
-    return '实时时长将于 $date 恢复。';
+  String chatAppsAtCapacity(String app) {
+    return '$app 名额已满';
   }
 
   @override
-  String get onDeviceTranscribeOnPhone => '在本机转录';
+  String get chatAppsJoinWaitlist => '加入候补名单';
 
   @override
-  String get onDeviceIncluded => '已包含';
+  String get chatAppsOnWaitlist => '你已在候补名单中';
 
   @override
-  String get onDeviceOptionChargingBody => '在手机充电时运行，几乎不耗电。接上充电器后即可看到文字记录。';
-
-  @override
-  String get onDeviceUpgradeBody => '升级到 Pro，获得说话人分离和更高准确度';
-
-  @override
-  String get onDeviceAtCapFooter => '无论选哪种都不会丢失内容。你可以在 设置 › 转录 中更改。';
-
-  @override
-  String onDeviceStepOf(int step, int total) {
-    return '第 $step 步，共 $total 步';
-  }
-
-  @override
-  String get onDeviceSetupBody => 'Omi 只需下载一次语音模型。之后，你的录音会直接在本机转为文字，不占用实时时长。';
-
-  @override
-  String get onDeviceSpeechModel => '语音模型';
-
-  @override
-  String onDeviceMegabytes(String size) {
-    return '$size MB';
-  }
-
-  @override
-  String onDeviceDownloadingWifi(int percent) {
-    return '正在通过 Wi-Fi 下载 · $percent%';
-  }
-
-  @override
-  String onDeviceDownloadingPercent(int percent) {
-    return '正在下载 · $percent%';
-  }
-
-  @override
-  String onDeviceTimeLeft(String time) {
-    return '约剩 $time';
-  }
-
-  @override
-  String get onDeviceWaitingForWifi => '正在等待 Wi-Fi';
-
-  @override
-  String get onDeviceDownloadFailed => '下载未完成';
-
-  @override
-  String get onDeviceModelNotDownloaded => '未下载';
-
-  @override
-  String onDeviceModelInstalled(String size) {
-    return '已安装 · $size';
-  }
-
-  @override
-  String get onDeviceModelUnsupported => '本机暂不支持';
-
-  @override
-  String get onDeviceSetupKeepRecording => '下载期间可继续录音，不会耽误任何事情。';
-
-  @override
-  String get onDeviceSetupAudioStays => '音频会保留在你的手机上，直到转录完成。';
-
-  @override
-  String get onDeviceWifiOnly => '仅通过 Wi-Fi 下载';
-
-  @override
-  String get onDeviceDownloadModel => '下载语音模型';
-
-  @override
-  String get onDeviceScheduleTitle => '转录时间';
-
-  @override
-  String get onDeviceScheduleHeadline => 'Omi 应在何时转录？';
-
-  @override
-  String get onDeviceScheduleBody => '分批转录更省电。你可以随时更改。';
-
-  @override
-  String get onDeviceScheduleCharging => '充电时';
-
-  @override
-  String get onDeviceScheduleChargingBody => '接上充电器后显示文字记录，通常在夜间完成。';
-
-  @override
-  String get onDeviceBatteryAlmostNone => '电量：几乎不耗电';
-
-  @override
-  String get onDeviceScheduleHours => '每隔几小时';
-
-  @override
-  String get onDeviceScheduleHoursBody => '使用电池时分小段补齐，文字记录很少会延迟超过几小时。';
-
-  @override
-  String onDeviceBatteryPerDay(int percent) {
-    return '电量：每天约 $percent%';
-  }
-
-  @override
-  String get onDeviceScheduleLive => '边说边转';
-
-  @override
-  String get onDeviceScheduleLiveBody => 'Omi打开时定期转录。';
-
-  @override
-  String onDeviceBatteryPerHour(int percent) {
-    return '电量：每小时对话约 $percent%';
-  }
-
-  @override
-  String onDeviceQueueWaiting(String duration) {
-    return '$duration 等待转录';
-  }
-
-  @override
-  String get onDeviceQueueChargingBody => '手机接上充电器后即可完成。录音照常进行。';
-
-  @override
-  String get onDeviceQueueHoursBody => 'Omi 每隔几小时补齐一次。录音照常进行。';
-
-  @override
-  String get onDeviceQueueLowBatteryBody => '电量不足，正在等待充电。录音照常进行。';
-
-  @override
-  String get onDeviceTranscribeNow => '立即转录';
-
-  @override
-  String get onDeviceUsesBattery => '会耗电';
-
-  @override
-  String get onDeviceTranscribing => '正在转录…';
-
-  @override
-  String get onDeviceWaitingForCharger => '等待充电';
-
-  @override
-  String get onDeviceWaitingToTranscribe => '等待转录';
-
-  @override
-  String get onDeviceWaitingForSetup => '已保存，等待设置';
-
-  @override
-  String get onDeviceTranscribedOnIphone => '已在本 iPhone 上转录';
-
-  @override
-  String get onDeviceTranscribedOnPhone => '已在本机转录';
-
-  @override
-  String get onDeviceTranscribedSummarizedOnIphone => '已在本 iPhone 上转录并生成摘要';
-
-  @override
-  String get onDeviceSummarizedByCloud => '由 Omi Cloud 生成摘要';
-
-  @override
-  String get onDeviceWhyPhoneTitle => '为什么在你的手机上处理';
-
-  @override
-  String get onDeviceWhyLiveHoursUsed => '你本月的实时时长已用完，因此 Omi 在本机转录了这段对话。';
-
-  @override
-  String get onDeviceWhySavingLiveHours => '你选择了在本机转录以节省实时时长。';
-
-  @override
-  String get onDeviceWhySummaryOnPhone => '摘要也是在本 iPhone 上生成的，所有内容都未离开设备。';
-
-  @override
-  String get onDeviceWhyNoSummary => '你选择将所有内容保留在本机，因此没有摘要。';
-
-  @override
-  String get onDeviceWhyCloudTitle => '为什么由 Omi Cloud 生成此摘要';
-
-  @override
-  String get onDeviceWhyCloudIphone =>
-      '这台 iPhone 无法自行生成摘要（需要 iPhone 15 Pro 或更新机型）。文字记录在你的手机上生成，仅将其文本发送给 Omi 生成摘要。不占用你的实时时长。';
-
-  @override
-  String get onDeviceWhyCloudPhone => '这部手机无法自行生成摘要。文字记录在你的手机上生成，仅将其文本发送给 Omi 生成摘要。不占用你的实时时长。';
-
-  @override
-  String get onDeviceRedoWithCloud => '用 Omi Cloud 重新处理';
-
-  @override
-  String get onDeviceRedoHint => '升级到 Pro，获得说话人分离和更高准确度';
-
-  @override
-  String get onDeviceKeepEverything => '所有内容保留在本机';
-
-  @override
-  String get onDeviceKeepEverythingSubtitle => '仅文字记录，不生成摘要';
-
-  @override
-  String get onDeviceLiveHours => '实时时长';
-
-  @override
-  String onDeviceLiveHoursUsed(String used, String limit) {
-    return '已用 $used/$limit 小时';
-  }
-
-  @override
-  String onDeviceResets(String date) {
-    return '$date 重置';
-  }
-
-  @override
-  String get onDeviceGetMoreLiveHours => '获取更多实时时长';
-
-  @override
-  String get onDeviceAfterLiveHours => '实时时长用完后';
-
-  @override
-  String get onDeviceWhen => '时间';
-
-  @override
-  String get onDeviceSummaries => '摘要';
-
-  @override
-  String get onDeviceSummariesOnIphone => '在本 iPhone 上';
-
-  @override
-  String get onDeviceSummariesCloud => '由 Omi Cloud 生成';
-
-  @override
-  String get onDeviceSaveLiveHours => '在本机转录以节省实时时长';
-
-  @override
-  String get onDeviceSaveLiveHoursSubtitle => '升级到 Pro，获得说话人分离和更高准确度';
-
-  @override
-  String get onDeviceOnThisPhone => '本机';
-
-  @override
-  String get onDeviceAudioWaiting => '手机上待处理的音频';
-
-  @override
-  String get onDeviceRemoveModel => '移除语音模型';
-
-  @override
-  String get onDeviceRemoveModelTitle => '要移除语音模型吗？';
-
-  @override
-  String get onDeviceRemoveModelMessage => '录音将保留在本机等待，直到你重新下载模型或实时时长恢复。';
-
-  @override
-  String get onDeviceRemove => '移除';
-
-  @override
-  String get onDeviceFinishSetupTitle => '完成设置即可查看文字记录';
-
-  @override
-  String get onDeviceFinishSetupBody => '你本月的实时时长已用完。Omi 仍在录音并将音频保存在你的手机上。下载语音模型后即可补齐转录。';
-
-  @override
-  String onDeviceDownloadSize(String size) {
-    return '需下载 $size';
-  }
-
-  @override
-  String get onDeviceUnsupportedBody => '本机暂时无法运行语音模型。音频会一直保存，直到实时时长恢复或你升级套餐。';
-
-  @override
-  String get onDeviceEntrySubtitle => '实时时长用完后，在本机转录';
+  String get chatAppsWaitlistJoined => '你已在候补名单中。有名额时我们会通知你。';
 }

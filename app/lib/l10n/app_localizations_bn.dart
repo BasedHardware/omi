@@ -8589,6 +8589,295 @@ class AppLocalizationsBn extends AppLocalizations {
       'অফলাইনে রেকর্ড হচ্ছে — আপনি আবার অনলাইনে এলে ট্রান্সক্রিপ্ট আপডেট হবে।';
 
   @override
+  String get onDeviceAtCapTitle => 'এই মাসের লাইভ ট্রান্সক্রিপশন শেষ হয়ে গেছে';
+
+  @override
+  String get onDeviceAtCapBody => 'Omi এখনও রেকর্ড করছে। মাসের বাকি অংশ কীভাবে ট্রান্সক্রাইব হবে তা বেছে নিন।';
+
+  @override
+  String onDeviceLiveHoursReturn(String date) {
+    return 'লাইভ ঘণ্টা আবার পাবেন $date তারিখে।';
+  }
+
+  @override
+  String get onDeviceTranscribeOnPhone => 'এই ফোনেই ট্রান্সক্রাইব করুন';
+
+  @override
+  String get onDeviceIncluded => 'অন্তর্ভুক্ত';
+
+  @override
+  String get onDeviceOptionChargingBody =>
+      'ফোন চার্জ হওয়ার সময় চলে, তাই ব্যাটারি প্রায় খরচ হয় না। চার্জে লাগানোর পর ট্রান্সক্রিপ্ট দেখা যাবে।';
+
+  @override
+  String get onDeviceUpgradeBody => 'বক্তা পৃথকীকরণ ও আরও নির্ভুলতার জন্য Pro-তে আপগ্রেড করুন';
+
+  @override
+  String get onDeviceAtCapFooter =>
+      'যেটাই বাছুন, কিছুই হারাবে না। আপনি এটি সেটিংস › ট্রান্সক্রিপশন থেকে পরিবর্তন করতে পারবেন।';
+
+  @override
+  String onDeviceStepOf(int step, int total) {
+    return 'ধাপ $step/$total';
+  }
+
+  @override
+  String get onDeviceSetupBody =>
+      'Omi একবার একটি স্পিচ মডেল ডাউনলোড করে। এরপর আপনার রেকর্ডিং এখানেই টেক্সটে রূপান্তরিত হয়, লাইভ ঘণ্টা খরচ না করে।';
+
+  @override
+  String get onDeviceSpeechModel => 'স্পিচ মডেল';
+
+  @override
+  String onDeviceMegabytes(String size) {
+    return '$size MB';
+  }
+
+  @override
+  String onDeviceDownloadingWifi(int percent) {
+    return 'Wi-Fi-তে ডাউনলোড হচ্ছে · $percent%';
+  }
+
+  @override
+  String onDeviceDownloadingPercent(int percent) {
+    return 'ডাউনলোড হচ্ছে · $percent%';
+  }
+
+  @override
+  String onDeviceTimeLeft(String time) {
+    return 'প্রায় $time বাকি';
+  }
+
+  @override
+  String get onDeviceWaitingForWifi => 'Wi-Fi-এর অপেক্ষায়';
+
+  @override
+  String get onDeviceDownloadFailed => 'ডাউনলোড শেষ হয়নি';
+
+  @override
+  String get onDeviceModelNotDownloaded => 'ডাউনলোড করা হয়নি';
+
+  @override
+  String onDeviceModelInstalled(String size) {
+    return 'ইনস্টল করা · $size';
+  }
+
+  @override
+  String get onDeviceModelUnsupported => 'এই ফোনে এখনও উপলব্ধ নয়';
+
+  @override
+  String get onDeviceSetupKeepRecording => 'ডাউনলোডের সময়ও রেকর্ডিং চালিয়ে যান। কিছুই এর জন্য অপেক্ষা করে না।';
+
+  @override
+  String get onDeviceSetupAudioStays => 'ট্রান্সক্রাইব না হওয়া পর্যন্ত অডিও আপনার ফোনেই থাকে।';
+
+  @override
+  String get onDeviceWifiOnly => 'শুধু Wi-Fi-তে ডাউনলোড করুন';
+
+  @override
+  String get onDeviceDownloadModel => 'স্পিচ মডেল ডাউনলোড করুন';
+
+  @override
+  String get onDeviceScheduleTitle => 'কখন ট্রান্সক্রাইব হবে';
+
+  @override
+  String get onDeviceScheduleHeadline => 'Omi কখন ট্রান্সক্রাইব করবে?';
+
+  @override
+  String get onDeviceScheduleBody =>
+      'ব্যাচে ট্রান্সক্রাইব করলে ব্যাটারি বাঁচে। আপনি যেকোনো সময় এটি পরিবর্তন করতে পারবেন।';
+
+  @override
+  String get onDeviceScheduleCharging => 'চার্জ হওয়ার সময়';
+
+  @override
+  String get onDeviceScheduleChargingBody => 'চার্জে লাগানোর পর ট্রান্সক্রিপ্ট দেখা যায়, সাধারণত রাতের মধ্যে।';
+
+  @override
+  String get onDeviceBatteryAlmostNone => 'ব্যাটারি: প্রায় কিছুই না';
+
+  @override
+  String get onDeviceScheduleHours => 'কয়েক ঘণ্টা পরপর';
+
+  @override
+  String get onDeviceScheduleHoursBody =>
+      'ব্যাটারিতে ছোট ছোট ধাপে কাজ এগিয়ে নেয়, তাই ট্রান্সক্রিপ্ট কদাচিৎ কয়েক ঘণ্টার বেশি পিছিয়ে থাকে।';
+
+  @override
+  String onDeviceBatteryPerDay(int percent) {
+    return 'ব্যাটারি: দিনে প্রায় $percent%';
+  }
+
+  @override
+  String get onDeviceScheduleLive => 'কথা বলার সময়';
+
+  @override
+  String get onDeviceScheduleLiveBody => 'Omi খোলা থাকলে নিয়মিত প্রতিলিপি তৈরি করে।';
+
+  @override
+  String onDeviceBatteryPerHour(int percent) {
+    return 'ব্যাটারি: প্রতি ঘণ্টা কথোপকথনে প্রায় $percent%';
+  }
+
+  @override
+  String onDeviceQueueWaiting(String duration) {
+    return '$duration ট্রান্সক্রিপশনের অপেক্ষায়';
+  }
+
+  @override
+  String get onDeviceQueueChargingBody => 'ফোন চার্জে লাগালেই এগুলো তৈরি হয়ে যাবে। রেকর্ডিং স্বাভাবিকভাবে চলছে।';
+
+  @override
+  String get onDeviceQueueHoursBody => 'Omi কয়েক ঘণ্টা পরপর কাজ এগিয়ে নেয়। রেকর্ডিং স্বাভাবিকভাবে চলছে।';
+
+  @override
+  String get onDeviceQueueLowBatteryBody => 'ব্যাটারি কম থাকায় চার্জারের অপেক্ষায় আছে। রেকর্ডিং স্বাভাবিকভাবে চলছে।';
+
+  @override
+  String get onDeviceTranscribeNow => 'এখনই ট্রান্সক্রাইব করুন';
+
+  @override
+  String get onDeviceUsesBattery => 'ব্যাটারি খরচ হয়';
+
+  @override
+  String get onDeviceTranscribing => 'ট্রান্সক্রাইব হচ্ছে…';
+
+  @override
+  String get onDeviceWaitingForCharger => 'চার্জারের অপেক্ষায়';
+
+  @override
+  String get onDeviceWaitingToTranscribe => 'ট্রান্সক্রিপশনের অপেক্ষায়';
+
+  @override
+  String get onDeviceWaitingForSetup => 'সংরক্ষিত, সেটআপের অপেক্ষায়';
+
+  @override
+  String get onDeviceTranscribedOnIphone => 'এই iPhone-এ ট্রান্সক্রাইব করা';
+
+  @override
+  String get onDeviceTranscribedOnPhone => 'এই ফোনে ট্রান্সক্রাইব করা';
+
+  @override
+  String get onDeviceTranscribedSummarizedOnIphone => 'এই iPhone-এ ট্রান্সক্রাইব ও সারসংক্ষেপ করা';
+
+  @override
+  String get onDeviceSummarizedByCloud => 'Omi Cloud-এর সারসংক্ষেপ';
+
+  @override
+  String get onDeviceWhyPhoneTitle => 'কেন এটি আপনার ফোনে করা হয়েছে';
+
+  @override
+  String get onDeviceWhyLiveHoursUsed =>
+      'আপনি এই মাসের লাইভ ঘণ্টা শেষ করে ফেলেছেন, তাই Omi এই কথোপকথনটি এই ফোনেই ট্রান্সক্রাইব করেছে।';
+
+  @override
+  String get onDeviceWhySavingLiveHours => 'লাইভ ঘণ্টা বাঁচাতে আপনি এই ফোনে ট্রান্সক্রাইব করা বেছে নিয়েছেন।';
+
+  @override
+  String get onDeviceWhySummaryOnPhone => 'সারসংক্ষেপও এই iPhone-এ লেখা হয়েছে।';
+
+  @override
+  String get onDeviceWhyNoSummary => 'আপনি সবকিছু এই ফোনেই রাখেন, তাই কোনো সারসংক্ষেপ নেই।';
+
+  @override
+  String get onDeviceWhyCloudTitle => 'কেন Omi Cloud এই সারসংক্ষেপ লিখেছে';
+
+  @override
+  String get onDeviceWhyCloudIphone =>
+      'এই iPhone নিজে সারসংক্ষেপ করতে পারে না (এর জন্য iPhone 15 Pro বা নতুন মডেল দরকার)। ট্রান্সক্রিপ্টটি আপনার ফোনে তৈরি হয়েছে, এবং সারসংক্ষেপের জন্য শুধু এর টেক্সট Omi-তে পাঠানো হয়েছে। এতে আপনার লাইভ ঘণ্টা খরচ হয় না।';
+
+  @override
+  String get onDeviceWhyCloudPhone =>
+      'এই ফোন নিজে সারসংক্ষেপ করতে পারে না। ট্রান্সক্রিপ্টটি আপনার ফোনে তৈরি হয়েছে, এবং সারসংক্ষেপের জন্য শুধু এর টেক্সট Omi-তে পাঠানো হয়েছে। এতে আপনার লাইভ ঘণ্টা খরচ হয় না।';
+
+  @override
+  String get onDeviceRedoWithCloud => 'Omi Cloud দিয়ে আবার করুন';
+
+  @override
+  String get onDeviceRedoHint => 'বক্তা পৃথকীকরণ ও আরও নির্ভুলতার জন্য Pro-তে আপগ্রেড করুন';
+
+  @override
+  String get onDeviceKeepEverything => 'সবকিছু এই ফোনেই রাখুন';
+
+  @override
+  String get onDeviceKeepEverythingSubtitle => 'শুধু ট্রান্সক্রিপ্ট, সারসংক্ষেপ নয়';
+
+  @override
+  String get onDeviceLiveHours => 'লাইভ ঘণ্টা';
+
+  @override
+  String onDeviceLiveHoursUsed(String used, String limit) {
+    return '$used/$limit ঘণ্টা ব্যবহৃত';
+  }
+
+  @override
+  String onDeviceResets(String date) {
+    return '$date তারিখে রিসেট হবে';
+  }
+
+  @override
+  String get onDeviceGetMoreLiveHours => 'আরও লাইভ ঘণ্টা নিন';
+
+  @override
+  String get onDeviceAfterLiveHours => 'লাইভ ঘণ্টা শেষ হলে';
+
+  @override
+  String get onDeviceWhen => 'কখন';
+
+  @override
+  String get onDeviceSummaries => 'সারসংক্ষেপ';
+
+  @override
+  String get onDeviceSummariesOnIphone => 'এই iPhone-এ';
+
+  @override
+  String get onDeviceSummariesCloud => 'Omi Cloud দিয়ে';
+
+  @override
+  String get onDeviceSaveLiveHours => 'লাইভ ঘণ্টা বাঁচাতে এই ফোনে ট্রান্সক্রাইব করুন';
+
+  @override
+  String get onDeviceSaveLiveHoursSubtitle => 'বক্তা পৃথকীকরণ ও আরও নির্ভুলতার জন্য Pro-তে আপগ্রেড করুন';
+
+  @override
+  String get onDeviceOnThisPhone => 'এই ফোনে';
+
+  @override
+  String get onDeviceAudioWaiting => 'ফোনে অপেক্ষমাণ অডিও';
+
+  @override
+  String get onDeviceRemoveModel => 'স্পিচ মডেল সরান';
+
+  @override
+  String get onDeviceRemoveModelTitle => 'স্পিচ মডেল সরাবেন?';
+
+  @override
+  String get onDeviceRemoveModelMessage =>
+      'আবার ডাউনলোড না করা বা লাইভ ঘণ্টা ফিরে না আসা পর্যন্ত রেকর্ডিংগুলো এই ফোনে অপেক্ষা করবে।';
+
+  @override
+  String get onDeviceRemove => 'সরান';
+
+  @override
+  String get onDeviceFinishSetupTitle => 'ট্রান্সক্রিপ্ট দেখতে সেটআপ শেষ করুন';
+
+  @override
+  String get onDeviceFinishSetupBody =>
+      'আপনি এই মাসের লাইভ ঘণ্টা শেষ করে ফেলেছেন। Omi এখনও রেকর্ড করছে এবং আপনার ফোনে অডিও সংরক্ষণ করছে। স্পিচ মডেল ডাউনলোড করুন, বাকি কাজ এটি সেরে নেবে।';
+
+  @override
+  String onDeviceDownloadSize(String size) {
+    return '$size ডাউনলোড';
+  }
+
+  @override
+  String get onDeviceUnsupportedBody =>
+      'এই ফোন এখনও স্পিচ মডেল চালাতে পারে না। লাইভ ঘণ্টা ফিরে আসা বা আপগ্রেড করা পর্যন্ত অডিও সংরক্ষিত থাকবে।';
+
+  @override
+  String get onDeviceEntrySubtitle => 'লাইভ ঘণ্টা শেষ হলে এই ফোনে ট্রান্সক্রাইব করুন';
+
+  @override
   String get transcriptionUnavailableRecordingSaved =>
       'ট্রান্সক্রিপশন উপলব্ধ নেই — রেকর্ডিং চলছে এবং আপনার অডিও সংরক্ষিত হচ্ছে।';
 
@@ -13274,291 +13563,19 @@ class AppLocalizationsBn extends AppLocalizations {
   String get syncDetailsCopy => 'সাপোর্টের জন্য বিবরণ কপি করুন';
 
   @override
-  String get onDeviceAtCapTitle => 'এই মাসের লাইভ ট্রান্সক্রিপশন শেষ হয়ে গেছে';
+  String get chatAppsChannelPlanRequired => 'Operator এবং Architect-এ উপলব্ধ';
 
   @override
-  String get onDeviceAtCapBody => 'Omi এখনও রেকর্ড করছে। মাসের বাকি অংশ কীভাবে ট্রান্সক্রাইব হবে তা বেছে নিন।';
-
-  @override
-  String onDeviceLiveHoursReturn(String date) {
-    return 'লাইভ ঘণ্টা আবার পাবেন $date তারিখে।';
+  String chatAppsAtCapacity(String app) {
+    return '$app পূর্ণ হয়ে গেছে';
   }
 
   @override
-  String get onDeviceTranscribeOnPhone => 'এই ফোনেই ট্রান্সক্রাইব করুন';
+  String get chatAppsJoinWaitlist => 'অপেক্ষা তালিকায় যোগ দিন';
 
   @override
-  String get onDeviceIncluded => 'অন্তর্ভুক্ত';
+  String get chatAppsOnWaitlist => 'আপনি অপেক্ষা তালিকায় আছেন';
 
   @override
-  String get onDeviceOptionChargingBody =>
-      'ফোন চার্জ হওয়ার সময় চলে, তাই ব্যাটারি প্রায় খরচ হয় না। চার্জে লাগানোর পর ট্রান্সক্রিপ্ট দেখা যাবে।';
-
-  @override
-  String get onDeviceUpgradeBody => 'বক্তা পৃথকীকরণ ও আরও নির্ভুলতার জন্য Pro-তে আপগ্রেড করুন';
-
-  @override
-  String get onDeviceAtCapFooter =>
-      'যেটাই বাছুন, কিছুই হারাবে না। আপনি এটি সেটিংস › ট্রান্সক্রিপশন থেকে পরিবর্তন করতে পারবেন।';
-
-  @override
-  String onDeviceStepOf(int step, int total) {
-    return 'ধাপ $step/$total';
-  }
-
-  @override
-  String get onDeviceSetupBody =>
-      'Omi একবার একটি স্পিচ মডেল ডাউনলোড করে। এরপর আপনার রেকর্ডিং এখানেই টেক্সটে রূপান্তরিত হয়, লাইভ ঘণ্টা খরচ না করে।';
-
-  @override
-  String get onDeviceSpeechModel => 'স্পিচ মডেল';
-
-  @override
-  String onDeviceMegabytes(String size) {
-    return '$size MB';
-  }
-
-  @override
-  String onDeviceDownloadingWifi(int percent) {
-    return 'Wi-Fi-তে ডাউনলোড হচ্ছে · $percent%';
-  }
-
-  @override
-  String onDeviceDownloadingPercent(int percent) {
-    return 'ডাউনলোড হচ্ছে · $percent%';
-  }
-
-  @override
-  String onDeviceTimeLeft(String time) {
-    return 'প্রায় $time বাকি';
-  }
-
-  @override
-  String get onDeviceWaitingForWifi => 'Wi-Fi-এর অপেক্ষায়';
-
-  @override
-  String get onDeviceDownloadFailed => 'ডাউনলোড শেষ হয়নি';
-
-  @override
-  String get onDeviceModelNotDownloaded => 'ডাউনলোড করা হয়নি';
-
-  @override
-  String onDeviceModelInstalled(String size) {
-    return 'ইনস্টল করা · $size';
-  }
-
-  @override
-  String get onDeviceModelUnsupported => 'এই ফোনে এখনও উপলব্ধ নয়';
-
-  @override
-  String get onDeviceSetupKeepRecording => 'ডাউনলোডের সময়ও রেকর্ডিং চালিয়ে যান। কিছুই এর জন্য অপেক্ষা করে না।';
-
-  @override
-  String get onDeviceSetupAudioStays => 'ট্রান্সক্রাইব না হওয়া পর্যন্ত অডিও আপনার ফোনেই থাকে।';
-
-  @override
-  String get onDeviceWifiOnly => 'শুধু Wi-Fi-তে ডাউনলোড করুন';
-
-  @override
-  String get onDeviceDownloadModel => 'স্পিচ মডেল ডাউনলোড করুন';
-
-  @override
-  String get onDeviceScheduleTitle => 'কখন ট্রান্সক্রাইব হবে';
-
-  @override
-  String get onDeviceScheduleHeadline => 'Omi কখন ট্রান্সক্রাইব করবে?';
-
-  @override
-  String get onDeviceScheduleBody =>
-      'ব্যাচে ট্রান্সক্রাইব করলে ব্যাটারি বাঁচে। আপনি যেকোনো সময় এটি পরিবর্তন করতে পারবেন।';
-
-  @override
-  String get onDeviceScheduleCharging => 'চার্জ হওয়ার সময়';
-
-  @override
-  String get onDeviceScheduleChargingBody => 'চার্জে লাগানোর পর ট্রান্সক্রিপ্ট দেখা যায়, সাধারণত রাতের মধ্যে।';
-
-  @override
-  String get onDeviceBatteryAlmostNone => 'ব্যাটারি: প্রায় কিছুই না';
-
-  @override
-  String get onDeviceScheduleHours => 'কয়েক ঘণ্টা পরপর';
-
-  @override
-  String get onDeviceScheduleHoursBody =>
-      'ব্যাটারিতে ছোট ছোট ধাপে কাজ এগিয়ে নেয়, তাই ট্রান্সক্রিপ্ট কদাচিৎ কয়েক ঘণ্টার বেশি পিছিয়ে থাকে।';
-
-  @override
-  String onDeviceBatteryPerDay(int percent) {
-    return 'ব্যাটারি: দিনে প্রায় $percent%';
-  }
-
-  @override
-  String get onDeviceScheduleLive => 'কথা বলার সময়';
-
-  @override
-  String get onDeviceScheduleLiveBody => 'Omi খোলা থাকলে নিয়মিত প্রতিলিপি তৈরি করে।';
-
-  @override
-  String onDeviceBatteryPerHour(int percent) {
-    return 'ব্যাটারি: প্রতি ঘণ্টা কথোপকথনে প্রায় $percent%';
-  }
-
-  @override
-  String onDeviceQueueWaiting(String duration) {
-    return '$duration ট্রান্সক্রিপশনের অপেক্ষায়';
-  }
-
-  @override
-  String get onDeviceQueueChargingBody => 'ফোন চার্জে লাগালেই এগুলো তৈরি হয়ে যাবে। রেকর্ডিং স্বাভাবিকভাবে চলছে।';
-
-  @override
-  String get onDeviceQueueHoursBody => 'Omi কয়েক ঘণ্টা পরপর কাজ এগিয়ে নেয়। রেকর্ডিং স্বাভাবিকভাবে চলছে।';
-
-  @override
-  String get onDeviceQueueLowBatteryBody => 'ব্যাটারি কম থাকায় চার্জারের অপেক্ষায় আছে। রেকর্ডিং স্বাভাবিকভাবে চলছে।';
-
-  @override
-  String get onDeviceTranscribeNow => 'এখনই ট্রান্সক্রাইব করুন';
-
-  @override
-  String get onDeviceUsesBattery => 'ব্যাটারি খরচ হয়';
-
-  @override
-  String get onDeviceTranscribing => 'ট্রান্সক্রাইব হচ্ছে…';
-
-  @override
-  String get onDeviceWaitingForCharger => 'চার্জারের অপেক্ষায়';
-
-  @override
-  String get onDeviceWaitingToTranscribe => 'ট্রান্সক্রিপশনের অপেক্ষায়';
-
-  @override
-  String get onDeviceWaitingForSetup => 'সংরক্ষিত, সেটআপের অপেক্ষায়';
-
-  @override
-  String get onDeviceTranscribedOnIphone => 'এই iPhone-এ ট্রান্সক্রাইব করা';
-
-  @override
-  String get onDeviceTranscribedOnPhone => 'এই ফোনে ট্রান্সক্রাইব করা';
-
-  @override
-  String get onDeviceTranscribedSummarizedOnIphone => 'এই iPhone-এ ট্রান্সক্রাইব ও সারসংক্ষেপ করা';
-
-  @override
-  String get onDeviceSummarizedByCloud => 'Omi Cloud-এর সারসংক্ষেপ';
-
-  @override
-  String get onDeviceWhyPhoneTitle => 'কেন এটি আপনার ফোনে করা হয়েছে';
-
-  @override
-  String get onDeviceWhyLiveHoursUsed =>
-      'আপনি এই মাসের লাইভ ঘণ্টা শেষ করে ফেলেছেন, তাই Omi এই কথোপকথনটি এই ফোনেই ট্রান্সক্রাইব করেছে।';
-
-  @override
-  String get onDeviceWhySavingLiveHours => 'লাইভ ঘণ্টা বাঁচাতে আপনি এই ফোনে ট্রান্সক্রাইব করা বেছে নিয়েছেন।';
-
-  @override
-  String get onDeviceWhySummaryOnPhone => 'সারসংক্ষেপও এই iPhone-এ লেখা হয়েছে।';
-
-  @override
-  String get onDeviceWhyNoSummary => 'আপনি সবকিছু এই ফোনেই রাখেন, তাই কোনো সারসংক্ষেপ নেই।';
-
-  @override
-  String get onDeviceWhyCloudTitle => 'কেন Omi Cloud এই সারসংক্ষেপ লিখেছে';
-
-  @override
-  String get onDeviceWhyCloudIphone =>
-      'এই iPhone নিজে সারসংক্ষেপ করতে পারে না (এর জন্য iPhone 15 Pro বা নতুন মডেল দরকার)। ট্রান্সক্রিপ্টটি আপনার ফোনে তৈরি হয়েছে, এবং সারসংক্ষেপের জন্য শুধু এর টেক্সট Omi-তে পাঠানো হয়েছে। এতে আপনার লাইভ ঘণ্টা খরচ হয় না।';
-
-  @override
-  String get onDeviceWhyCloudPhone =>
-      'এই ফোন নিজে সারসংক্ষেপ করতে পারে না। ট্রান্সক্রিপ্টটি আপনার ফোনে তৈরি হয়েছে, এবং সারসংক্ষেপের জন্য শুধু এর টেক্সট Omi-তে পাঠানো হয়েছে। এতে আপনার লাইভ ঘণ্টা খরচ হয় না।';
-
-  @override
-  String get onDeviceRedoWithCloud => 'Omi Cloud দিয়ে আবার করুন';
-
-  @override
-  String get onDeviceRedoHint => 'বক্তা পৃথকীকরণ ও আরও নির্ভুলতার জন্য Pro-তে আপগ্রেড করুন';
-
-  @override
-  String get onDeviceKeepEverything => 'সবকিছু এই ফোনেই রাখুন';
-
-  @override
-  String get onDeviceKeepEverythingSubtitle => 'শুধু ট্রান্সক্রিপ্ট, সারসংক্ষেপ নয়';
-
-  @override
-  String get onDeviceLiveHours => 'লাইভ ঘণ্টা';
-
-  @override
-  String onDeviceLiveHoursUsed(String used, String limit) {
-    return '$used/$limit ঘণ্টা ব্যবহৃত';
-  }
-
-  @override
-  String onDeviceResets(String date) {
-    return '$date তারিখে রিসেট হবে';
-  }
-
-  @override
-  String get onDeviceGetMoreLiveHours => 'আরও লাইভ ঘণ্টা নিন';
-
-  @override
-  String get onDeviceAfterLiveHours => 'লাইভ ঘণ্টা শেষ হলে';
-
-  @override
-  String get onDeviceWhen => 'কখন';
-
-  @override
-  String get onDeviceSummaries => 'সারসংক্ষেপ';
-
-  @override
-  String get onDeviceSummariesOnIphone => 'এই iPhone-এ';
-
-  @override
-  String get onDeviceSummariesCloud => 'Omi Cloud দিয়ে';
-
-  @override
-  String get onDeviceSaveLiveHours => 'লাইভ ঘণ্টা বাঁচাতে এই ফোনে ট্রান্সক্রাইব করুন';
-
-  @override
-  String get onDeviceSaveLiveHoursSubtitle => 'বক্তা পৃথকীকরণ ও আরও নির্ভুলতার জন্য Pro-তে আপগ্রেড করুন';
-
-  @override
-  String get onDeviceOnThisPhone => 'এই ফোনে';
-
-  @override
-  String get onDeviceAudioWaiting => 'ফোনে অপেক্ষমাণ অডিও';
-
-  @override
-  String get onDeviceRemoveModel => 'স্পিচ মডেল সরান';
-
-  @override
-  String get onDeviceRemoveModelTitle => 'স্পিচ মডেল সরাবেন?';
-
-  @override
-  String get onDeviceRemoveModelMessage =>
-      'আবার ডাউনলোড না করা বা লাইভ ঘণ্টা ফিরে না আসা পর্যন্ত রেকর্ডিংগুলো এই ফোনে অপেক্ষা করবে।';
-
-  @override
-  String get onDeviceRemove => 'সরান';
-
-  @override
-  String get onDeviceFinishSetupTitle => 'ট্রান্সক্রিপ্ট দেখতে সেটআপ শেষ করুন';
-
-  @override
-  String get onDeviceFinishSetupBody =>
-      'আপনি এই মাসের লাইভ ঘণ্টা শেষ করে ফেলেছেন। Omi এখনও রেকর্ড করছে এবং আপনার ফোনে অডিও সংরক্ষণ করছে। স্পিচ মডেল ডাউনলোড করুন, বাকি কাজ এটি সেরে নেবে।';
-
-  @override
-  String onDeviceDownloadSize(String size) {
-    return '$size ডাউনলোড';
-  }
-
-  @override
-  String get onDeviceUnsupportedBody =>
-      'এই ফোন এখনও স্পিচ মডেল চালাতে পারে না। লাইভ ঘণ্টা ফিরে আসা বা আপগ্রেড করা পর্যন্ত অডিও সংরক্ষিত থাকবে।';
-
-  @override
-  String get onDeviceEntrySubtitle => 'লাইভ ঘণ্টা শেষ হলে এই ফোনে ট্রান্সক্রাইব করুন';
+  String get chatAppsWaitlistJoined => 'আপনি অপেক্ষা তালিকায় আছেন। জায়গা খালি হলে আমরা জানাব।';
 }

@@ -8460,6 +8460,287 @@ class AppLocalizationsKo extends AppLocalizations {
   String get recordingOfflineTranscriptWillCatchUp => '오프라인으로 녹음 중 — 다시 온라인이 되면 대화 기록이 따라잡습니다.';
 
   @override
+  String get onDeviceAtCapTitle => '이번 달 실시간 음성 변환을 모두 사용했어요';
+
+  @override
+  String get onDeviceAtCapBody => 'Omi는 계속 녹음 중이에요. 이번 달 남은 기간의 변환 방식을 선택하세요.';
+
+  @override
+  String onDeviceLiveHoursReturn(String date) {
+    return '실시간 시간은 $date에 다시 충전돼요.';
+  }
+
+  @override
+  String get onDeviceTranscribeOnPhone => '이 휴대폰에서 변환';
+
+  @override
+  String get onDeviceIncluded => '포함';
+
+  @override
+  String get onDeviceOptionChargingBody => '휴대폰이 충전되는 동안 실행되므로 배터리를 거의 사용하지 않아요. 충전기를 연결하면 텍스트가 표시돼요.';
+
+  @override
+  String get onDeviceUpgradeBody => '화자 분리와 더 높은 정확도를 위해 Pro로 업그레이드하세요';
+
+  @override
+  String get onDeviceAtCapFooter => '어느 쪽을 선택해도 잃는 건 없어요. 설정 › 음성 변환에서 변경할 수 있어요.';
+
+  @override
+  String onDeviceStepOf(int step, int total) {
+    return '$step/$total단계';
+  }
+
+  @override
+  String get onDeviceSetupBody => 'Omi가 음성 모델을 한 번만 다운로드해요. 그 후에는 실시간 시간을 쓰지 않고 이 기기에서 바로 녹음을 텍스트로 변환해요.';
+
+  @override
+  String get onDeviceSpeechModel => '음성 모델';
+
+  @override
+  String onDeviceMegabytes(String size) {
+    return '${size}MB';
+  }
+
+  @override
+  String onDeviceDownloadingWifi(int percent) {
+    return 'Wi-Fi로 다운로드 중 · $percent%';
+  }
+
+  @override
+  String onDeviceDownloadingPercent(int percent) {
+    return '다운로드 중 · $percent%';
+  }
+
+  @override
+  String onDeviceTimeLeft(String time) {
+    return '약 $time 남음';
+  }
+
+  @override
+  String get onDeviceWaitingForWifi => 'Wi-Fi 연결 대기 중';
+
+  @override
+  String get onDeviceDownloadFailed => '다운로드가 완료되지 않았어요';
+
+  @override
+  String get onDeviceModelNotDownloaded => '다운로드되지 않음';
+
+  @override
+  String onDeviceModelInstalled(String size) {
+    return '설치됨 · $size';
+  }
+
+  @override
+  String get onDeviceModelUnsupported => '이 휴대폰에서는 아직 사용할 수 없어요';
+
+  @override
+  String get onDeviceSetupKeepRecording => '다운로드 중에도 계속 녹음하세요. 기다릴 필요가 없어요.';
+
+  @override
+  String get onDeviceSetupAudioStays => '오디오는 변환될 때까지 휴대폰에 보관돼요.';
+
+  @override
+  String get onDeviceWifiOnly => 'Wi-Fi에서만 다운로드';
+
+  @override
+  String get onDeviceDownloadModel => '음성 모델 다운로드';
+
+  @override
+  String get onDeviceScheduleTitle => '변환 시점';
+
+  @override
+  String get onDeviceScheduleHeadline => 'Omi가 언제 변환할까요?';
+
+  @override
+  String get onDeviceScheduleBody => '모아서 변환하면 배터리를 아낄 수 있어요. 언제든지 변경할 수 있어요.';
+
+  @override
+  String get onDeviceScheduleCharging => '충전 중';
+
+  @override
+  String get onDeviceScheduleChargingBody => '충전기를 연결하면 텍스트가 표시돼요. 보통 밤사이에 처리돼요.';
+
+  @override
+  String get onDeviceBatteryAlmostNone => '배터리: 거의 사용 안 함';
+
+  @override
+  String get onDeviceScheduleHours => '몇 시간마다';
+
+  @override
+  String get onDeviceScheduleHoursBody => '배터리로 짧게 나눠 처리하므로 변환이 몇 시간 이상 밀리는 경우는 드물어요.';
+
+  @override
+  String onDeviceBatteryPerDay(int percent) {
+    return '배터리: 하루 약 $percent%';
+  }
+
+  @override
+  String get onDeviceScheduleLive => '말하는 동안';
+
+  @override
+  String get onDeviceScheduleLiveBody => 'Omi가 열려 있는 동안 주기적으로 전사합니다.';
+
+  @override
+  String onDeviceBatteryPerHour(int percent) {
+    return '배터리: 대화 1시간당 약 $percent%';
+  }
+
+  @override
+  String onDeviceQueueWaiting(String duration) {
+    return '$duration 분량이 변환 대기 중';
+  }
+
+  @override
+  String get onDeviceQueueChargingBody => '휴대폰을 충전기에 연결하면 준비돼요. 녹음은 평소처럼 계속돼요.';
+
+  @override
+  String get onDeviceQueueHoursBody => 'Omi가 몇 시간마다 밀린 분량을 처리해요. 녹음은 평소처럼 계속돼요.';
+
+  @override
+  String get onDeviceQueueLowBatteryBody => '배터리가 부족해 충전기 연결을 기다리고 있어요. 녹음은 평소처럼 계속돼요.';
+
+  @override
+  String get onDeviceTranscribeNow => '지금 변환';
+
+  @override
+  String get onDeviceUsesBattery => '배터리 사용';
+
+  @override
+  String get onDeviceTranscribing => '변환 중…';
+
+  @override
+  String get onDeviceWaitingForCharger => '충전 대기 중';
+
+  @override
+  String get onDeviceWaitingToTranscribe => '변환 대기 중';
+
+  @override
+  String get onDeviceWaitingForSetup => '저장됨, 설정 대기 중';
+
+  @override
+  String get onDeviceTranscribedOnIphone => '이 iPhone에서 변환됨';
+
+  @override
+  String get onDeviceTranscribedOnPhone => '이 휴대폰에서 변환됨';
+
+  @override
+  String get onDeviceTranscribedSummarizedOnIphone => '이 iPhone에서 변환 및 요약됨';
+
+  @override
+  String get onDeviceSummarizedByCloud => 'Omi Cloud에서 요약됨';
+
+  @override
+  String get onDeviceWhyPhoneTitle => '휴대폰에서 처리된 이유';
+
+  @override
+  String get onDeviceWhyLiveHoursUsed => '이번 달 실시간 시간을 모두 사용해서 Omi가 이 대화를 이 휴대폰에서 변환했어요.';
+
+  @override
+  String get onDeviceWhySavingLiveHours => '실시간 시간을 아끼기 위해 이 휴대폰에서 변환하도록 선택하셨어요.';
+
+  @override
+  String get onDeviceWhySummaryOnPhone => '요약도 이 iPhone에서 작성됐어요.';
+
+  @override
+  String get onDeviceWhyNoSummary => '모든 것을 이 휴대폰에만 보관하도록 설정해서 요약이 없어요.';
+
+  @override
+  String get onDeviceWhyCloudTitle => 'Omi Cloud가 이 요약을 작성한 이유';
+
+  @override
+  String get onDeviceWhyCloudIphone =>
+      '이 iPhone은 자체적으로 요약할 수 없어요(iPhone 15 Pro 이상 필요). 변환은 휴대폰에서 이루어졌고, 요약을 위해 텍스트만 Omi로 전송됐어요. 실시간 시간은 사용하지 않아요.';
+
+  @override
+  String get onDeviceWhyCloudPhone =>
+      '이 휴대폰은 자체적으로 요약할 수 없어요. 변환은 휴대폰에서 이루어졌고, 요약을 위해 텍스트만 Omi로 전송됐어요. 실시간 시간은 사용하지 않아요.';
+
+  @override
+  String get onDeviceRedoWithCloud => 'Omi Cloud로 다시 하기';
+
+  @override
+  String get onDeviceRedoHint => '화자 분리와 더 높은 정확도를 위해 Pro로 업그레이드하세요';
+
+  @override
+  String get onDeviceKeepEverything => '모두 이 휴대폰에 보관';
+
+  @override
+  String get onDeviceKeepEverythingSubtitle => '텍스트만, 요약 없음';
+
+  @override
+  String get onDeviceLiveHours => '실시간 시간';
+
+  @override
+  String onDeviceLiveHoursUsed(String used, String limit) {
+    return '$used/$limit시간 사용';
+  }
+
+  @override
+  String onDeviceResets(String date) {
+    return '$date에 초기화';
+  }
+
+  @override
+  String get onDeviceGetMoreLiveHours => '실시간 시간 더 받기';
+
+  @override
+  String get onDeviceAfterLiveHours => '실시간 시간을 다 쓴 후';
+
+  @override
+  String get onDeviceWhen => '시점';
+
+  @override
+  String get onDeviceSummaries => '요약';
+
+  @override
+  String get onDeviceSummariesOnIphone => '이 iPhone에서';
+
+  @override
+  String get onDeviceSummariesCloud => 'Omi Cloud에서';
+
+  @override
+  String get onDeviceSaveLiveHours => '실시간 시간을 아끼려면 이 휴대폰에서 변환';
+
+  @override
+  String get onDeviceSaveLiveHoursSubtitle => '화자 분리와 더 높은 정확도를 위해 Pro로 업그레이드하세요';
+
+  @override
+  String get onDeviceOnThisPhone => '이 휴대폰';
+
+  @override
+  String get onDeviceAudioWaiting => '휴대폰에서 대기 중인 오디오';
+
+  @override
+  String get onDeviceRemoveModel => '음성 모델 삭제';
+
+  @override
+  String get onDeviceRemoveModelTitle => '음성 모델을 삭제할까요?';
+
+  @override
+  String get onDeviceRemoveModelMessage => '다시 다운로드하거나 실시간 시간이 충전될 때까지 녹음은 이 휴대폰에서 대기해요.';
+
+  @override
+  String get onDeviceRemove => '삭제';
+
+  @override
+  String get onDeviceFinishSetupTitle => '설정을 완료하고 텍스트를 확인하세요';
+
+  @override
+  String get onDeviceFinishSetupBody =>
+      '이번 달 실시간 시간을 모두 사용했어요. Omi는 계속 녹음하고 오디오를 휴대폰에 저장하고 있어요. 음성 모델을 다운로드하면 밀린 분량을 처리해요.';
+
+  @override
+  String onDeviceDownloadSize(String size) {
+    return '$size 다운로드';
+  }
+
+  @override
+  String get onDeviceUnsupportedBody => '이 휴대폰은 아직 음성 모델을 실행할 수 없어요. 실시간 시간이 충전되거나 업그레이드할 때까지 오디오는 저장돼요.';
+
+  @override
+  String get onDeviceEntrySubtitle => '실시간 시간을 다 쓰면 이 휴대폰에서 변환';
+
+  @override
   String get transcriptionUnavailableRecordingSaved => '텍스트 변환을 사용할 수 없습니다 — 녹음은 계속되며 오디오는 저장됩니다.';
 
   @override
@@ -13096,283 +13377,19 @@ class AppLocalizationsKo extends AppLocalizations {
   String get syncDetailsCopy => '지원팀용 상세 정보 복사';
 
   @override
-  String get onDeviceAtCapTitle => '이번 달 실시간 음성 변환을 모두 사용했어요';
+  String get chatAppsChannelPlanRequired => 'Operator 및 Architect에서 사용 가능';
 
   @override
-  String get onDeviceAtCapBody => 'Omi는 계속 녹음 중이에요. 이번 달 남은 기간의 변환 방식을 선택하세요.';
-
-  @override
-  String onDeviceLiveHoursReturn(String date) {
-    return '실시간 시간은 $date에 다시 충전돼요.';
+  String chatAppsAtCapacity(String app) {
+    return '$app 정원이 찼습니다';
   }
 
   @override
-  String get onDeviceTranscribeOnPhone => '이 휴대폰에서 변환';
+  String get chatAppsJoinWaitlist => '대기자 명단 등록';
 
   @override
-  String get onDeviceIncluded => '포함';
+  String get chatAppsOnWaitlist => '대기자 명단에 등록되었습니다';
 
   @override
-  String get onDeviceOptionChargingBody => '휴대폰이 충전되는 동안 실행되므로 배터리를 거의 사용하지 않아요. 충전기를 연결하면 텍스트가 표시돼요.';
-
-  @override
-  String get onDeviceUpgradeBody => '화자 분리와 더 높은 정확도를 위해 Pro로 업그레이드하세요';
-
-  @override
-  String get onDeviceAtCapFooter => '어느 쪽을 선택해도 잃는 건 없어요. 설정 › 음성 변환에서 변경할 수 있어요.';
-
-  @override
-  String onDeviceStepOf(int step, int total) {
-    return '$step/$total단계';
-  }
-
-  @override
-  String get onDeviceSetupBody => 'Omi가 음성 모델을 한 번만 다운로드해요. 그 후에는 실시간 시간을 쓰지 않고 이 기기에서 바로 녹음을 텍스트로 변환해요.';
-
-  @override
-  String get onDeviceSpeechModel => '음성 모델';
-
-  @override
-  String onDeviceMegabytes(String size) {
-    return '${size}MB';
-  }
-
-  @override
-  String onDeviceDownloadingWifi(int percent) {
-    return 'Wi-Fi로 다운로드 중 · $percent%';
-  }
-
-  @override
-  String onDeviceDownloadingPercent(int percent) {
-    return '다운로드 중 · $percent%';
-  }
-
-  @override
-  String onDeviceTimeLeft(String time) {
-    return '약 $time 남음';
-  }
-
-  @override
-  String get onDeviceWaitingForWifi => 'Wi-Fi 연결 대기 중';
-
-  @override
-  String get onDeviceDownloadFailed => '다운로드가 완료되지 않았어요';
-
-  @override
-  String get onDeviceModelNotDownloaded => '다운로드되지 않음';
-
-  @override
-  String onDeviceModelInstalled(String size) {
-    return '설치됨 · $size';
-  }
-
-  @override
-  String get onDeviceModelUnsupported => '이 휴대폰에서는 아직 사용할 수 없어요';
-
-  @override
-  String get onDeviceSetupKeepRecording => '다운로드 중에도 계속 녹음하세요. 기다릴 필요가 없어요.';
-
-  @override
-  String get onDeviceSetupAudioStays => '오디오는 변환될 때까지 휴대폰에 보관돼요.';
-
-  @override
-  String get onDeviceWifiOnly => 'Wi-Fi에서만 다운로드';
-
-  @override
-  String get onDeviceDownloadModel => '음성 모델 다운로드';
-
-  @override
-  String get onDeviceScheduleTitle => '변환 시점';
-
-  @override
-  String get onDeviceScheduleHeadline => 'Omi가 언제 변환할까요?';
-
-  @override
-  String get onDeviceScheduleBody => '모아서 변환하면 배터리를 아낄 수 있어요. 언제든지 변경할 수 있어요.';
-
-  @override
-  String get onDeviceScheduleCharging => '충전 중';
-
-  @override
-  String get onDeviceScheduleChargingBody => '충전기를 연결하면 텍스트가 표시돼요. 보통 밤사이에 처리돼요.';
-
-  @override
-  String get onDeviceBatteryAlmostNone => '배터리: 거의 사용 안 함';
-
-  @override
-  String get onDeviceScheduleHours => '몇 시간마다';
-
-  @override
-  String get onDeviceScheduleHoursBody => '배터리로 짧게 나눠 처리하므로 변환이 몇 시간 이상 밀리는 경우는 드물어요.';
-
-  @override
-  String onDeviceBatteryPerDay(int percent) {
-    return '배터리: 하루 약 $percent%';
-  }
-
-  @override
-  String get onDeviceScheduleLive => '말하는 동안';
-
-  @override
-  String get onDeviceScheduleLiveBody => 'Omi가 열려 있는 동안 주기적으로 전사합니다.';
-
-  @override
-  String onDeviceBatteryPerHour(int percent) {
-    return '배터리: 대화 1시간당 약 $percent%';
-  }
-
-  @override
-  String onDeviceQueueWaiting(String duration) {
-    return '$duration 분량이 변환 대기 중';
-  }
-
-  @override
-  String get onDeviceQueueChargingBody => '휴대폰을 충전기에 연결하면 준비돼요. 녹음은 평소처럼 계속돼요.';
-
-  @override
-  String get onDeviceQueueHoursBody => 'Omi가 몇 시간마다 밀린 분량을 처리해요. 녹음은 평소처럼 계속돼요.';
-
-  @override
-  String get onDeviceQueueLowBatteryBody => '배터리가 부족해 충전기 연결을 기다리고 있어요. 녹음은 평소처럼 계속돼요.';
-
-  @override
-  String get onDeviceTranscribeNow => '지금 변환';
-
-  @override
-  String get onDeviceUsesBattery => '배터리 사용';
-
-  @override
-  String get onDeviceTranscribing => '변환 중…';
-
-  @override
-  String get onDeviceWaitingForCharger => '충전 대기 중';
-
-  @override
-  String get onDeviceWaitingToTranscribe => '변환 대기 중';
-
-  @override
-  String get onDeviceWaitingForSetup => '저장됨, 설정 대기 중';
-
-  @override
-  String get onDeviceTranscribedOnIphone => '이 iPhone에서 변환됨';
-
-  @override
-  String get onDeviceTranscribedOnPhone => '이 휴대폰에서 변환됨';
-
-  @override
-  String get onDeviceTranscribedSummarizedOnIphone => '이 iPhone에서 변환 및 요약됨';
-
-  @override
-  String get onDeviceSummarizedByCloud => 'Omi Cloud에서 요약됨';
-
-  @override
-  String get onDeviceWhyPhoneTitle => '휴대폰에서 처리된 이유';
-
-  @override
-  String get onDeviceWhyLiveHoursUsed => '이번 달 실시간 시간을 모두 사용해서 Omi가 이 대화를 이 휴대폰에서 변환했어요.';
-
-  @override
-  String get onDeviceWhySavingLiveHours => '실시간 시간을 아끼기 위해 이 휴대폰에서 변환하도록 선택하셨어요.';
-
-  @override
-  String get onDeviceWhySummaryOnPhone => '요약도 이 iPhone에서 작성됐어요.';
-
-  @override
-  String get onDeviceWhyNoSummary => '모든 것을 이 휴대폰에만 보관하도록 설정해서 요약이 없어요.';
-
-  @override
-  String get onDeviceWhyCloudTitle => 'Omi Cloud가 이 요약을 작성한 이유';
-
-  @override
-  String get onDeviceWhyCloudIphone =>
-      '이 iPhone은 자체적으로 요약할 수 없어요(iPhone 15 Pro 이상 필요). 변환은 휴대폰에서 이루어졌고, 요약을 위해 텍스트만 Omi로 전송됐어요. 실시간 시간은 사용하지 않아요.';
-
-  @override
-  String get onDeviceWhyCloudPhone =>
-      '이 휴대폰은 자체적으로 요약할 수 없어요. 변환은 휴대폰에서 이루어졌고, 요약을 위해 텍스트만 Omi로 전송됐어요. 실시간 시간은 사용하지 않아요.';
-
-  @override
-  String get onDeviceRedoWithCloud => 'Omi Cloud로 다시 하기';
-
-  @override
-  String get onDeviceRedoHint => '화자 분리와 더 높은 정확도를 위해 Pro로 업그레이드하세요';
-
-  @override
-  String get onDeviceKeepEverything => '모두 이 휴대폰에 보관';
-
-  @override
-  String get onDeviceKeepEverythingSubtitle => '텍스트만, 요약 없음';
-
-  @override
-  String get onDeviceLiveHours => '실시간 시간';
-
-  @override
-  String onDeviceLiveHoursUsed(String used, String limit) {
-    return '$used/$limit시간 사용';
-  }
-
-  @override
-  String onDeviceResets(String date) {
-    return '$date에 초기화';
-  }
-
-  @override
-  String get onDeviceGetMoreLiveHours => '실시간 시간 더 받기';
-
-  @override
-  String get onDeviceAfterLiveHours => '실시간 시간을 다 쓴 후';
-
-  @override
-  String get onDeviceWhen => '시점';
-
-  @override
-  String get onDeviceSummaries => '요약';
-
-  @override
-  String get onDeviceSummariesOnIphone => '이 iPhone에서';
-
-  @override
-  String get onDeviceSummariesCloud => 'Omi Cloud에서';
-
-  @override
-  String get onDeviceSaveLiveHours => '실시간 시간을 아끼려면 이 휴대폰에서 변환';
-
-  @override
-  String get onDeviceSaveLiveHoursSubtitle => '화자 분리와 더 높은 정확도를 위해 Pro로 업그레이드하세요';
-
-  @override
-  String get onDeviceOnThisPhone => '이 휴대폰';
-
-  @override
-  String get onDeviceAudioWaiting => '휴대폰에서 대기 중인 오디오';
-
-  @override
-  String get onDeviceRemoveModel => '음성 모델 삭제';
-
-  @override
-  String get onDeviceRemoveModelTitle => '음성 모델을 삭제할까요?';
-
-  @override
-  String get onDeviceRemoveModelMessage => '다시 다운로드하거나 실시간 시간이 충전될 때까지 녹음은 이 휴대폰에서 대기해요.';
-
-  @override
-  String get onDeviceRemove => '삭제';
-
-  @override
-  String get onDeviceFinishSetupTitle => '설정을 완료하고 텍스트를 확인하세요';
-
-  @override
-  String get onDeviceFinishSetupBody =>
-      '이번 달 실시간 시간을 모두 사용했어요. Omi는 계속 녹음하고 오디오를 휴대폰에 저장하고 있어요. 음성 모델을 다운로드하면 밀린 분량을 처리해요.';
-
-  @override
-  String onDeviceDownloadSize(String size) {
-    return '$size 다운로드';
-  }
-
-  @override
-  String get onDeviceUnsupportedBody => '이 휴대폰은 아직 음성 모델을 실행할 수 없어요. 실시간 시간이 충전되거나 업그레이드할 때까지 오디오는 저장돼요.';
-
-  @override
-  String get onDeviceEntrySubtitle => '실시간 시간을 다 쓰면 이 휴대폰에서 변환';
+  String get chatAppsWaitlistJoined => '대기자 명단에 등록되었습니다. 자리가 나면 알려 드릴게요.';
 }

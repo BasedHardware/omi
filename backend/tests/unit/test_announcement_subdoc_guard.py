@@ -7,7 +7,17 @@ over documents with no per-item try/except, so one malformed sub-document 500s t
 from_dict now drops a malformed targeting/display sub-model and keeps the announcement.
 """
 
+import pytest
 from models.announcement import Announcement, TriggerType
+
+
+@pytest.fixture(scope='module')
+def announcement_modules():
+    # SDK/router import belongs to fixture setup, outside the operation CPU budget.
+    import database.announcements as ann_db
+    import routers.announcements as ann_router
+
+    return ann_db, ann_router
 
 
 def test_malformed_targeting_is_dropped_but_the_announcement_is_kept():
@@ -43,12 +53,12 @@ def test_missing_targeting_and_display_are_none():
     assert ann.display is None
 
 
-def test_general_and_pending_announcements_handle_naive_datetimes_and_doc_id_fallback():
+def test_general_and_pending_announcements_handle_naive_datetimes_and_doc_id_fallback(announcement_modules):
     from datetime import datetime, timezone
     from types import SimpleNamespace
     from unittest.mock import MagicMock, patch
-    import database.announcements as ann_db
-    import routers.announcements as ann_router
+
+    ann_db, ann_router = announcement_modules
 
     docs = [
         SimpleNamespace(

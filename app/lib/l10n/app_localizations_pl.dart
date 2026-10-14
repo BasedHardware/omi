@@ -8600,6 +8600,296 @@ class AppLocalizationsPl extends AppLocalizations {
       'Nagrywanie offline — transkrypcja nadrobi zaległości, gdy wrócisz do sieci.';
 
   @override
+  String get onDeviceAtCapTitle => 'Wykorzystano transkrypcję na żywo w tym miesiącu';
+
+  @override
+  String get onDeviceAtCapBody => 'Omi nadal nagrywa. Wybierz, jak transkrybować resztę miesiąca.';
+
+  @override
+  String onDeviceLiveHoursReturn(String date) {
+    return 'Godziny na żywo wrócą $date.';
+  }
+
+  @override
+  String get onDeviceTranscribeOnPhone => 'Transkrybuj na tym telefonie';
+
+  @override
+  String get onDeviceIncluded => 'W cenie';
+
+  @override
+  String get onDeviceOptionChargingBody =>
+      'Działa podczas ładowania telefonu, więc prawie nie zużywa baterii. Transkrypcje pojawią się po podłączeniu ładowarki.';
+
+  @override
+  String get onDeviceUpgradeBody => 'Przejdź na Pro, aby rozróżniać mówców i uzyskać większą dokładność';
+
+  @override
+  String get onDeviceAtCapFooter =>
+      'Tak czy inaczej nic nie przepadnie. Możesz to zmienić w Ustawienia › Transkrypcja.';
+
+  @override
+  String onDeviceStepOf(int step, int total) {
+    return 'Krok $step z $total';
+  }
+
+  @override
+  String get onDeviceSetupBody =>
+      'Omi jednorazowo pobiera model mowy. Potem nagrania są zamieniane na tekst tutaj, bez zużywania godzin na żywo.';
+
+  @override
+  String get onDeviceSpeechModel => 'Model mowy';
+
+  @override
+  String onDeviceMegabytes(String size) {
+    return '$size MB';
+  }
+
+  @override
+  String onDeviceDownloadingWifi(int percent) {
+    return 'Pobieranie przez Wi-Fi · $percent%';
+  }
+
+  @override
+  String onDeviceDownloadingPercent(int percent) {
+    return 'Pobieranie · $percent%';
+  }
+
+  @override
+  String onDeviceTimeLeft(String time) {
+    return 'Pozostało około $time';
+  }
+
+  @override
+  String get onDeviceWaitingForWifi => 'Oczekiwanie na Wi-Fi';
+
+  @override
+  String get onDeviceDownloadFailed => 'Pobieranie nie zostało ukończone';
+
+  @override
+  String get onDeviceModelNotDownloaded => 'Nie pobrano';
+
+  @override
+  String onDeviceModelInstalled(String size) {
+    return 'Zainstalowano · $size';
+  }
+
+  @override
+  String get onDeviceModelUnsupported => 'Jeszcze niedostępne na tym telefonie';
+
+  @override
+  String get onDeviceSetupKeepRecording => 'Nagrywaj dalej podczas pobierania. Nic na to nie czeka.';
+
+  @override
+  String get onDeviceSetupAudioStays => 'Dźwięk pozostaje na telefonie do czasu transkrypcji.';
+
+  @override
+  String get onDeviceWifiOnly => 'Pobieraj tylko przez Wi-Fi';
+
+  @override
+  String get onDeviceDownloadModel => 'Pobierz model mowy';
+
+  @override
+  String get onDeviceScheduleTitle => 'Kiedy transkrybować';
+
+  @override
+  String get onDeviceScheduleHeadline => 'Kiedy Omi ma transkrybować?';
+
+  @override
+  String get onDeviceScheduleBody => 'Transkrypcja partiami oszczędza baterię. Możesz to zmienić w dowolnym momencie.';
+
+  @override
+  String get onDeviceScheduleCharging => 'Podczas ładowania';
+
+  @override
+  String get onDeviceScheduleChargingBody => 'Transkrypcje pojawiają się po podłączeniu ładowarki, zwykle w nocy.';
+
+  @override
+  String get onDeviceBatteryAlmostNone => 'Bateria: prawie nic';
+
+  @override
+  String get onDeviceScheduleHours => 'Co kilka godzin';
+
+  @override
+  String get onDeviceScheduleHoursBody =>
+      'Nadrabia zaległości w krótkich seriach na baterii, więc transkrypcje rzadko opóźniają się o więcej niż kilka godzin.';
+
+  @override
+  String onDeviceBatteryPerDay(int percent) {
+    return 'Bateria: około $percent% dziennie';
+  }
+
+  @override
+  String get onDeviceScheduleLive => 'Podczas mówienia';
+
+  @override
+  String get onDeviceScheduleLiveBody => 'Regularnie transkrybuje, gdy Omi jest otwarte.';
+
+  @override
+  String onDeviceBatteryPerHour(int percent) {
+    return 'Bateria: około $percent% na godzinę rozmowy';
+  }
+
+  @override
+  String onDeviceQueueWaiting(String duration) {
+    return '$duration czeka na transkrypcję';
+  }
+
+  @override
+  String get onDeviceQueueChargingBody =>
+      'Będą gotowe po podłączeniu telefonu do ładowarki. Nagrywanie trwa normalnie.';
+
+  @override
+  String get onDeviceQueueHoursBody => 'Omi nadrabia zaległości co kilka godzin. Nagrywanie trwa normalnie.';
+
+  @override
+  String get onDeviceQueueLowBatteryBody =>
+      'Oczekiwanie na ładowarkę z powodu niskiego poziomu baterii. Nagrywanie trwa normalnie.';
+
+  @override
+  String get onDeviceTranscribeNow => 'Transkrybuj teraz';
+
+  @override
+  String get onDeviceUsesBattery => 'Zużywa baterię';
+
+  @override
+  String get onDeviceTranscribing => 'Transkrybowanie…';
+
+  @override
+  String get onDeviceWaitingForCharger => 'Czeka na ładowarkę';
+
+  @override
+  String get onDeviceWaitingToTranscribe => 'Czeka na transkrypcję';
+
+  @override
+  String get onDeviceWaitingForSetup => 'Zapisano, czeka na konfigurację';
+
+  @override
+  String get onDeviceTranscribedOnIphone => 'Transkrybowano na tym iPhonie';
+
+  @override
+  String get onDeviceTranscribedOnPhone => 'Transkrybowano na tym telefonie';
+
+  @override
+  String get onDeviceTranscribedSummarizedOnIphone => 'Transkrybowano i podsumowano na tym iPhonie';
+
+  @override
+  String get onDeviceSummarizedByCloud => 'Podsumowane przez Omi Cloud';
+
+  @override
+  String get onDeviceWhyPhoneTitle => 'Dlaczego zrobiono to na telefonie';
+
+  @override
+  String get onDeviceWhyLiveHoursUsed =>
+      'Wykorzystano godziny na żywo w tym miesiącu, więc Omi przetranskrybowało tę rozmowę na tym telefonie.';
+
+  @override
+  String get onDeviceWhySavingLiveHours => 'Wybrano transkrypcję na tym telefonie, aby oszczędzać godziny na żywo.';
+
+  @override
+  String get onDeviceWhySummaryOnPhone => 'Podsumowanie również powstało na tym iPhonie.';
+
+  @override
+  String get onDeviceWhyNoSummary => 'Przechowujesz wszystko na tym telefonie, więc nie ma podsumowania.';
+
+  @override
+  String get onDeviceWhyCloudTitle => 'Dlaczego Omi Cloud napisało to podsumowanie';
+
+  @override
+  String get onDeviceWhyCloudIphone =>
+      'Ten iPhone nie potrafi sam tworzyć podsumowań (wymaga to iPhone 15 Pro lub nowszego). Transkrypcja powstała na Twoim telefonie, a do Omi wysłano tylko jej tekst w celu podsumowania. Nie zużywa to godzin na żywo.';
+
+  @override
+  String get onDeviceWhyCloudPhone =>
+      'Ten telefon nie potrafi sam tworzyć podsumowań. Transkrypcja powstała na Twoim telefonie, a do Omi wysłano tylko jej tekst w celu podsumowania. Nie zużywa to godzin na żywo.';
+
+  @override
+  String get onDeviceRedoWithCloud => 'Powtórz z Omi Cloud';
+
+  @override
+  String get onDeviceRedoHint => 'Przejdź na Pro, aby rozróżniać mówców i uzyskać większą dokładność';
+
+  @override
+  String get onDeviceKeepEverything => 'Przechowuj wszystko na tym telefonie';
+
+  @override
+  String get onDeviceKeepEverythingSubtitle => 'Tylko transkrypcje, bez podsumowań';
+
+  @override
+  String get onDeviceLiveHours => 'Godziny na żywo';
+
+  @override
+  String onDeviceLiveHoursUsed(String used, String limit) {
+    return 'Wykorzystano $used z $limit godz.';
+  }
+
+  @override
+  String onDeviceResets(String date) {
+    return 'Odnowienie $date';
+  }
+
+  @override
+  String get onDeviceGetMoreLiveHours => 'Zdobądź więcej godzin na żywo';
+
+  @override
+  String get onDeviceAfterLiveHours => 'Po wykorzystaniu godzin na żywo';
+
+  @override
+  String get onDeviceWhen => 'Kiedy';
+
+  @override
+  String get onDeviceSummaries => 'Podsumowania';
+
+  @override
+  String get onDeviceSummariesOnIphone => 'Na tym iPhonie';
+
+  @override
+  String get onDeviceSummariesCloud => 'Przez Omi Cloud';
+
+  @override
+  String get onDeviceSaveLiveHours => 'Transkrybuj na tym telefonie, aby oszczędzać godziny na żywo';
+
+  @override
+  String get onDeviceSaveLiveHoursSubtitle => 'Przejdź na Pro, aby rozróżniać mówców i uzyskać większą dokładność';
+
+  @override
+  String get onDeviceOnThisPhone => 'Na tym telefonie';
+
+  @override
+  String get onDeviceAudioWaiting => 'Dźwięk czekający na telefonie';
+
+  @override
+  String get onDeviceRemoveModel => 'Usuń model mowy';
+
+  @override
+  String get onDeviceRemoveModelTitle => 'Usunąć model mowy?';
+
+  @override
+  String get onDeviceRemoveModelMessage =>
+      'Nagrania będą czekać na tym telefonie, aż pobierzesz go ponownie lub wrócą godziny na żywo.';
+
+  @override
+  String get onDeviceRemove => 'Usuń';
+
+  @override
+  String get onDeviceFinishSetupTitle => 'Dokończ konfigurację, aby zobaczyć transkrypcje';
+
+  @override
+  String get onDeviceFinishSetupBody =>
+      'Wykorzystano godziny na żywo w tym miesiącu. Omi nadal nagrywa i zapisuje dźwięk na telefonie. Pobierz model mowy, a nadrobi zaległości.';
+
+  @override
+  String onDeviceDownloadSize(String size) {
+    return 'Do pobrania: $size';
+  }
+
+  @override
+  String get onDeviceUnsupportedBody =>
+      'Ten telefon nie może jeszcze uruchomić modelu mowy. Dźwięk pozostaje zapisany, aż wrócą godziny na żywo lub zmienisz plan na wyższy.';
+
+  @override
+  String get onDeviceEntrySubtitle => 'Gdy skończą się godziny na żywo, transkrybuj na tym telefonie';
+
+  @override
   String get transcriptionUnavailableRecordingSaved =>
       'Transkrypcja jest niedostępna — nagrywanie trwa, a dźwięk jest zapisywany.';
 
@@ -13316,292 +13606,19 @@ class AppLocalizationsPl extends AppLocalizations {
   String get syncDetailsCopy => 'Skopiuj szczegóły dla pomocy technicznej';
 
   @override
-  String get onDeviceAtCapTitle => 'Wykorzystano transkrypcję na żywo w tym miesiącu';
+  String get chatAppsChannelPlanRequired => 'Dostępne w planach Operator i Architect';
 
   @override
-  String get onDeviceAtCapBody => 'Omi nadal nagrywa. Wybierz, jak transkrybować resztę miesiąca.';
-
-  @override
-  String onDeviceLiveHoursReturn(String date) {
-    return 'Godziny na żywo wrócą $date.';
+  String chatAppsAtCapacity(String app) {
+    return '$app jest pełny';
   }
 
   @override
-  String get onDeviceTranscribeOnPhone => 'Transkrybuj na tym telefonie';
+  String get chatAppsJoinWaitlist => 'Dołącz do listy oczekujących';
 
   @override
-  String get onDeviceIncluded => 'W cenie';
+  String get chatAppsOnWaitlist => 'Jesteś na liście oczekujących';
 
   @override
-  String get onDeviceOptionChargingBody =>
-      'Działa podczas ładowania telefonu, więc prawie nie zużywa baterii. Transkrypcje pojawią się po podłączeniu ładowarki.';
-
-  @override
-  String get onDeviceUpgradeBody => 'Przejdź na Pro, aby rozróżniać mówców i uzyskać większą dokładność';
-
-  @override
-  String get onDeviceAtCapFooter =>
-      'Tak czy inaczej nic nie przepadnie. Możesz to zmienić w Ustawienia › Transkrypcja.';
-
-  @override
-  String onDeviceStepOf(int step, int total) {
-    return 'Krok $step z $total';
-  }
-
-  @override
-  String get onDeviceSetupBody =>
-      'Omi jednorazowo pobiera model mowy. Potem nagrania są zamieniane na tekst tutaj, bez zużywania godzin na żywo.';
-
-  @override
-  String get onDeviceSpeechModel => 'Model mowy';
-
-  @override
-  String onDeviceMegabytes(String size) {
-    return '$size MB';
-  }
-
-  @override
-  String onDeviceDownloadingWifi(int percent) {
-    return 'Pobieranie przez Wi-Fi · $percent%';
-  }
-
-  @override
-  String onDeviceDownloadingPercent(int percent) {
-    return 'Pobieranie · $percent%';
-  }
-
-  @override
-  String onDeviceTimeLeft(String time) {
-    return 'Pozostało około $time';
-  }
-
-  @override
-  String get onDeviceWaitingForWifi => 'Oczekiwanie na Wi-Fi';
-
-  @override
-  String get onDeviceDownloadFailed => 'Pobieranie nie zostało ukończone';
-
-  @override
-  String get onDeviceModelNotDownloaded => 'Nie pobrano';
-
-  @override
-  String onDeviceModelInstalled(String size) {
-    return 'Zainstalowano · $size';
-  }
-
-  @override
-  String get onDeviceModelUnsupported => 'Jeszcze niedostępne na tym telefonie';
-
-  @override
-  String get onDeviceSetupKeepRecording => 'Nagrywaj dalej podczas pobierania. Nic na to nie czeka.';
-
-  @override
-  String get onDeviceSetupAudioStays => 'Dźwięk pozostaje na telefonie do czasu transkrypcji.';
-
-  @override
-  String get onDeviceWifiOnly => 'Pobieraj tylko przez Wi-Fi';
-
-  @override
-  String get onDeviceDownloadModel => 'Pobierz model mowy';
-
-  @override
-  String get onDeviceScheduleTitle => 'Kiedy transkrybować';
-
-  @override
-  String get onDeviceScheduleHeadline => 'Kiedy Omi ma transkrybować?';
-
-  @override
-  String get onDeviceScheduleBody => 'Transkrypcja partiami oszczędza baterię. Możesz to zmienić w dowolnym momencie.';
-
-  @override
-  String get onDeviceScheduleCharging => 'Podczas ładowania';
-
-  @override
-  String get onDeviceScheduleChargingBody => 'Transkrypcje pojawiają się po podłączeniu ładowarki, zwykle w nocy.';
-
-  @override
-  String get onDeviceBatteryAlmostNone => 'Bateria: prawie nic';
-
-  @override
-  String get onDeviceScheduleHours => 'Co kilka godzin';
-
-  @override
-  String get onDeviceScheduleHoursBody =>
-      'Nadrabia zaległości w krótkich seriach na baterii, więc transkrypcje rzadko opóźniają się o więcej niż kilka godzin.';
-
-  @override
-  String onDeviceBatteryPerDay(int percent) {
-    return 'Bateria: około $percent% dziennie';
-  }
-
-  @override
-  String get onDeviceScheduleLive => 'Podczas mówienia';
-
-  @override
-  String get onDeviceScheduleLiveBody => 'Regularnie transkrybuje, gdy Omi jest otwarte.';
-
-  @override
-  String onDeviceBatteryPerHour(int percent) {
-    return 'Bateria: około $percent% na godzinę rozmowy';
-  }
-
-  @override
-  String onDeviceQueueWaiting(String duration) {
-    return '$duration czeka na transkrypcję';
-  }
-
-  @override
-  String get onDeviceQueueChargingBody =>
-      'Będą gotowe po podłączeniu telefonu do ładowarki. Nagrywanie trwa normalnie.';
-
-  @override
-  String get onDeviceQueueHoursBody => 'Omi nadrabia zaległości co kilka godzin. Nagrywanie trwa normalnie.';
-
-  @override
-  String get onDeviceQueueLowBatteryBody =>
-      'Oczekiwanie na ładowarkę z powodu niskiego poziomu baterii. Nagrywanie trwa normalnie.';
-
-  @override
-  String get onDeviceTranscribeNow => 'Transkrybuj teraz';
-
-  @override
-  String get onDeviceUsesBattery => 'Zużywa baterię';
-
-  @override
-  String get onDeviceTranscribing => 'Transkrybowanie…';
-
-  @override
-  String get onDeviceWaitingForCharger => 'Czeka na ładowarkę';
-
-  @override
-  String get onDeviceWaitingToTranscribe => 'Czeka na transkrypcję';
-
-  @override
-  String get onDeviceWaitingForSetup => 'Zapisano, czeka na konfigurację';
-
-  @override
-  String get onDeviceTranscribedOnIphone => 'Transkrybowano na tym iPhonie';
-
-  @override
-  String get onDeviceTranscribedOnPhone => 'Transkrybowano na tym telefonie';
-
-  @override
-  String get onDeviceTranscribedSummarizedOnIphone => 'Transkrybowano i podsumowano na tym iPhonie';
-
-  @override
-  String get onDeviceSummarizedByCloud => 'Podsumowane przez Omi Cloud';
-
-  @override
-  String get onDeviceWhyPhoneTitle => 'Dlaczego zrobiono to na telefonie';
-
-  @override
-  String get onDeviceWhyLiveHoursUsed =>
-      'Wykorzystano godziny na żywo w tym miesiącu, więc Omi przetranskrybowało tę rozmowę na tym telefonie.';
-
-  @override
-  String get onDeviceWhySavingLiveHours => 'Wybrano transkrypcję na tym telefonie, aby oszczędzać godziny na żywo.';
-
-  @override
-  String get onDeviceWhySummaryOnPhone => 'Podsumowanie również powstało na tym iPhonie.';
-
-  @override
-  String get onDeviceWhyNoSummary => 'Przechowujesz wszystko na tym telefonie, więc nie ma podsumowania.';
-
-  @override
-  String get onDeviceWhyCloudTitle => 'Dlaczego Omi Cloud napisało to podsumowanie';
-
-  @override
-  String get onDeviceWhyCloudIphone =>
-      'Ten iPhone nie potrafi sam tworzyć podsumowań (wymaga to iPhone 15 Pro lub nowszego). Transkrypcja powstała na Twoim telefonie, a do Omi wysłano tylko jej tekst w celu podsumowania. Nie zużywa to godzin na żywo.';
-
-  @override
-  String get onDeviceWhyCloudPhone =>
-      'Ten telefon nie potrafi sam tworzyć podsumowań. Transkrypcja powstała na Twoim telefonie, a do Omi wysłano tylko jej tekst w celu podsumowania. Nie zużywa to godzin na żywo.';
-
-  @override
-  String get onDeviceRedoWithCloud => 'Powtórz z Omi Cloud';
-
-  @override
-  String get onDeviceRedoHint => 'Przejdź na Pro, aby rozróżniać mówców i uzyskać większą dokładność';
-
-  @override
-  String get onDeviceKeepEverything => 'Przechowuj wszystko na tym telefonie';
-
-  @override
-  String get onDeviceKeepEverythingSubtitle => 'Tylko transkrypcje, bez podsumowań';
-
-  @override
-  String get onDeviceLiveHours => 'Godziny na żywo';
-
-  @override
-  String onDeviceLiveHoursUsed(String used, String limit) {
-    return 'Wykorzystano $used z $limit godz.';
-  }
-
-  @override
-  String onDeviceResets(String date) {
-    return 'Odnowienie $date';
-  }
-
-  @override
-  String get onDeviceGetMoreLiveHours => 'Zdobądź więcej godzin na żywo';
-
-  @override
-  String get onDeviceAfterLiveHours => 'Po wykorzystaniu godzin na żywo';
-
-  @override
-  String get onDeviceWhen => 'Kiedy';
-
-  @override
-  String get onDeviceSummaries => 'Podsumowania';
-
-  @override
-  String get onDeviceSummariesOnIphone => 'Na tym iPhonie';
-
-  @override
-  String get onDeviceSummariesCloud => 'Przez Omi Cloud';
-
-  @override
-  String get onDeviceSaveLiveHours => 'Transkrybuj na tym telefonie, aby oszczędzać godziny na żywo';
-
-  @override
-  String get onDeviceSaveLiveHoursSubtitle => 'Przejdź na Pro, aby rozróżniać mówców i uzyskać większą dokładność';
-
-  @override
-  String get onDeviceOnThisPhone => 'Na tym telefonie';
-
-  @override
-  String get onDeviceAudioWaiting => 'Dźwięk czekający na telefonie';
-
-  @override
-  String get onDeviceRemoveModel => 'Usuń model mowy';
-
-  @override
-  String get onDeviceRemoveModelTitle => 'Usunąć model mowy?';
-
-  @override
-  String get onDeviceRemoveModelMessage =>
-      'Nagrania będą czekać na tym telefonie, aż pobierzesz go ponownie lub wrócą godziny na żywo.';
-
-  @override
-  String get onDeviceRemove => 'Usuń';
-
-  @override
-  String get onDeviceFinishSetupTitle => 'Dokończ konfigurację, aby zobaczyć transkrypcje';
-
-  @override
-  String get onDeviceFinishSetupBody =>
-      'Wykorzystano godziny na żywo w tym miesiącu. Omi nadal nagrywa i zapisuje dźwięk na telefonie. Pobierz model mowy, a nadrobi zaległości.';
-
-  @override
-  String onDeviceDownloadSize(String size) {
-    return 'Do pobrania: $size';
-  }
-
-  @override
-  String get onDeviceUnsupportedBody =>
-      'Ten telefon nie może jeszcze uruchomić modelu mowy. Dźwięk pozostaje zapisany, aż wrócą godziny na żywo lub zmienisz plan na wyższy.';
-
-  @override
-  String get onDeviceEntrySubtitle => 'Gdy skończą się godziny na żywo, transkrybuj na tym telefonie';
+  String get chatAppsWaitlistJoined => 'Jesteś na liście oczekujących. Damy znać, gdy zwolni się miejsce.';
 }

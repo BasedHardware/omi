@@ -24,12 +24,21 @@ class TelegramAdapter(BaseAdapter):
     provider = 'telegram'
     typing_interval = 4
 
-    def __init__(self, token, webhook_secret, *, streaming: Literal['draft', 'edit', 'none'] = 'draft', **kwargs):
+    def __init__(
+        self,
+        token,
+        webhook_secret,
+        *,
+        streaming: Literal['draft', 'edit', 'none'] = 'draft',
+        shared_pacing=False,
+        **kwargs
+    ):
         super().__init__(**kwargs)
         if not token or not re.fullmatch(r'[A-Za-z0-9_-]{1,256}', webhook_secret):
             raise ValueError('Telegram configuration missing')
         self._token, self._secret = token, webhook_secret
         self._previews = {}
+        self.shared_pacing = shared_pacing
         self.capabilities = ChannelCapabilities(
             streaming=streaming,
             typing=True,
@@ -74,7 +83,8 @@ class TelegramAdapter(BaseAdapter):
         if command == '/start' and ' ' in text:
             proof = text.split(' ', 1)[1].strip()
             if not re.fullmatch(r'[A-Za-z0-9_-]{16,128}', proof):
-                raise ValueError('Invalid link token')
+                proof = None
+                command = 'link_help'
         stamp = None if callback else item.get('date')
         if stamp is not None and (not isinstance(stamp, int) or isinstance(stamp, bool)):
             raise ValueError('Invalid Telegram message time')
@@ -119,9 +129,14 @@ class TelegramAdapter(BaseAdapter):
                 command=(
                     'help'
                     if command in ('/help', '/start') and not proof
-                    else ('undo' if command in ('undo', '/undo') else None)
+                    else (
+                        'new'
+                        if command == '/new'
+                        else 'link_help' if command == 'link_help' else 'undo' if command in ('undo', '/undo') else None
+                    )
                 ),
                 attachments=tuple(attachments),
+                forwarded=bool(item.get('forward_origin')) and not bool(callback),
                 callback_id=str(callback['id']) if callback else None,
                 undo_receipt_id=receipt_id,
                 display_name=sender.get('username') if isinstance(sender.get('username'), str) else None,
@@ -144,6 +159,16 @@ class TelegramAdapter(BaseAdapter):
             else:
                 body.pop('reply_parameters', None)
 
+        async def pace_attempt():
+            if self.shared_pacing:
+                from utils.messaging.pacing import pace
+
+                if await pace(self._token, str(body.get('chat_id', '')), self.sleep):
+                    return
+            await self.pace('__global__', 1 / 30)
+            if self.shared_pacing and body.get('chat_id'):
+                await self.pace(str(body['chat_id']))
+
         try:
             return await request_json(
                 self.transport,
@@ -152,6 +177,7 @@ class TelegramAdapter(BaseAdapter):
                 idempotent=idempotent,
                 sleep=self.sleep,
                 before_request=prepare_thread,
+                before_attempt=pace_attempt,
                 **kwargs
             )
         except ProviderError as exc:
@@ -193,8 +219,8 @@ class TelegramAdapter(BaseAdapter):
         )
 
     async def send(self, message, *, text=None, artifact=None, draft=False):
-        await self.pace(message.external_chat_id)
-        await self.pace('__global__', 1 / 30)
+        if not self.shared_pacing:
+            await self.pace(message.external_chat_id)
         body = {'chat_id': message.external_chat_id}
         reply_to = await self.reply_target(message)
         if reply_to and not draft:
@@ -248,13 +274,6 @@ class TelegramAdapter(BaseAdapter):
 
     def item_buttons(self, items):
         return item_buttons(items)
-
-    def buttons(self, suggestions):
-        rows = []
-        for suggestion in suggestions[:3]:
-            if isinstance(suggestion, str) and len(('ask:' + suggestion).encode()) <= 64:
-                rows.append([{'text': suggestion, 'callback_data': 'ask:' + suggestion}])
-        return {'inline_keyboard': rows} if rows else None
 
     def receipt_buttons(self, receipt):
         if receipt.reversible:

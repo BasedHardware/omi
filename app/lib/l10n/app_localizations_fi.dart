@@ -8583,6 +8583,295 @@ class AppLocalizationsFi extends AppLocalizations {
       'Tallennetaan offline-tilassa — litterointi päivittyy, kun olet taas verkossa.';
 
   @override
+  String get onDeviceAtCapTitle => 'Tämän kuun live-litterointi on käytetty';
+
+  @override
+  String get onDeviceAtCapBody => 'Omi tallentaa edelleen. Valitse, miten loppukuun tallenteet litteroidaan.';
+
+  @override
+  String onDeviceLiveHoursReturn(String date) {
+    return 'Live-tunnit palautuvat $date.';
+  }
+
+  @override
+  String get onDeviceTranscribeOnPhone => 'Litteroi tällä puhelimella';
+
+  @override
+  String get onDeviceIncluded => 'Sisältyy';
+
+  @override
+  String get onDeviceOptionChargingBody =>
+      'Toimii puhelimen latautuessa, joten akkua kuluu tuskin lainkaan. Litteroinnit näkyvät, kun kytket laturin.';
+
+  @override
+  String get onDeviceUpgradeBody => 'Päivitä Pro-versioon puhujien erottelua ja parempaa tarkkuutta varten';
+
+  @override
+  String get onDeviceAtCapFooter =>
+      'Mitään ei menetetä kummassakaan tapauksessa. Voit muuttaa tätä kohdassa Asetukset › Litterointi.';
+
+  @override
+  String onDeviceStepOf(int step, int total) {
+    return 'Vaihe $step/$total';
+  }
+
+  @override
+  String get onDeviceSetupBody =>
+      'Omi lataa puhemallin kerran. Sen jälkeen tallenteesi muutetaan tekstiksi suoraan täällä käyttämättä live-tuntejasi.';
+
+  @override
+  String get onDeviceSpeechModel => 'Puhemalli';
+
+  @override
+  String onDeviceMegabytes(String size) {
+    return '$size Mt';
+  }
+
+  @override
+  String onDeviceDownloadingWifi(int percent) {
+    return 'Ladataan Wi-Fi-yhteydellä · $percent %';
+  }
+
+  @override
+  String onDeviceDownloadingPercent(int percent) {
+    return 'Ladataan · $percent %';
+  }
+
+  @override
+  String onDeviceTimeLeft(String time) {
+    return 'Noin $time jäljellä';
+  }
+
+  @override
+  String get onDeviceWaitingForWifi => 'Odotetaan Wi-Fi-yhteyttä';
+
+  @override
+  String get onDeviceDownloadFailed => 'Lataus ei valmistunut';
+
+  @override
+  String get onDeviceModelNotDownloaded => 'Ei ladattu';
+
+  @override
+  String onDeviceModelInstalled(String size) {
+    return 'Asennettu · $size';
+  }
+
+  @override
+  String get onDeviceModelUnsupported => 'Ei vielä saatavilla tälle puhelimelle';
+
+  @override
+  String get onDeviceSetupKeepRecording => 'Voit jatkaa tallentamista latauksen aikana. Mikään ei odota tätä.';
+
+  @override
+  String get onDeviceSetupAudioStays => 'Ääni pysyy puhelimessasi, kunnes se on litteroitu.';
+
+  @override
+  String get onDeviceWifiOnly => 'Lataa vain Wi-Fi-yhteydellä';
+
+  @override
+  String get onDeviceDownloadModel => 'Lataa puhemalli';
+
+  @override
+  String get onDeviceScheduleTitle => 'Litterointiajankohta';
+
+  @override
+  String get onDeviceScheduleHeadline => 'Milloin Omin pitäisi litteroida?';
+
+  @override
+  String get onDeviceScheduleBody => 'Litterointi erissä säästää akkua. Voit muuttaa tätä milloin tahansa.';
+
+  @override
+  String get onDeviceScheduleCharging => 'Latauksen aikana';
+
+  @override
+  String get onDeviceScheduleChargingBody => 'Litteroinnit näkyvät, kun kytket laturin, yleensä yön aikana.';
+
+  @override
+  String get onDeviceBatteryAlmostNone => 'Akku: lähes ei lainkaan';
+
+  @override
+  String get onDeviceScheduleHours => 'Muutaman tunnin välein';
+
+  @override
+  String get onDeviceScheduleHoursBody =>
+      'Kuroo eroa kiinni lyhyinä jaksoina akkuvirralla, joten litteroinnit ovat harvoin muutamaa tuntia enempää jäljessä.';
+
+  @override
+  String onDeviceBatteryPerDay(int percent) {
+    return 'Akku: noin $percent % päivässä';
+  }
+
+  @override
+  String get onDeviceScheduleLive => 'Puhuessasi';
+
+  @override
+  String get onDeviceScheduleLiveBody => 'Litteroi säännöllisesti, kun Omi on avoinna.';
+
+  @override
+  String onDeviceBatteryPerHour(int percent) {
+    return 'Akku: noin $percent % keskustelutuntia kohden';
+  }
+
+  @override
+  String onDeviceQueueWaiting(String duration) {
+    return '$duration odottaa litterointia';
+  }
+
+  @override
+  String get onDeviceQueueChargingBody =>
+      'Ne ovat valmiina, kun kytket puhelimen laturiin. Tallennus jatkuu normaalisti.';
+
+  @override
+  String get onDeviceQueueHoursBody => 'Omi kuroo eroa kiinni muutaman tunnin välein. Tallennus jatkuu normaalisti.';
+
+  @override
+  String get onDeviceQueueLowBatteryBody => 'Odotetaan laturia, koska akku on vähissä. Tallennus jatkuu normaalisti.';
+
+  @override
+  String get onDeviceTranscribeNow => 'Litteroi nyt';
+
+  @override
+  String get onDeviceUsesBattery => 'Kuluttaa akkua';
+
+  @override
+  String get onDeviceTranscribing => 'Litteroidaan…';
+
+  @override
+  String get onDeviceWaitingForCharger => 'Odotetaan laturia';
+
+  @override
+  String get onDeviceWaitingToTranscribe => 'Odottaa litterointia';
+
+  @override
+  String get onDeviceWaitingForSetup => 'Tallennettu, odottaa käyttöönottoa';
+
+  @override
+  String get onDeviceTranscribedOnIphone => 'Litteroitu tällä iPhonella';
+
+  @override
+  String get onDeviceTranscribedOnPhone => 'Litteroitu tällä puhelimella';
+
+  @override
+  String get onDeviceTranscribedSummarizedOnIphone => 'Litteroitu ja tiivistetty tällä iPhonella';
+
+  @override
+  String get onDeviceSummarizedByCloud => 'Yhteenvedon teki Omi Cloud';
+
+  @override
+  String get onDeviceWhyPhoneTitle => 'Miksi tämä tehtiin puhelimellasi';
+
+  @override
+  String get onDeviceWhyLiveHoursUsed =>
+      'Olet käyttänyt tämän kuun live-tunnit, joten Omi litteroi tämän keskustelun tällä puhelimella.';
+
+  @override
+  String get onDeviceWhySavingLiveHours => 'Valitsit litteroinnin tällä puhelimella säästääksesi live-tunteja.';
+
+  @override
+  String get onDeviceWhySummaryOnPhone => 'Myös yhteenveto tehtiin tällä iPhonella.';
+
+  @override
+  String get onDeviceWhyNoSummary => 'Pidät kaiken tällä puhelimella, joten yhteenvetoa ei ole.';
+
+  @override
+  String get onDeviceWhyCloudTitle => 'Miksi Omi Cloud teki tämän yhteenvedon';
+
+  @override
+  String get onDeviceWhyCloudIphone =>
+      'Tämä iPhone ei pysty tekemään yhteenvetoja itse (se vaatii iPhone 15 Pron tai uudemman). Litterointi tehtiin puhelimellasi, ja vain sen teksti lähetettiin Omille yhteenvetoa varten. Se ei kuluta live-tuntejasi.';
+
+  @override
+  String get onDeviceWhyCloudPhone =>
+      'Tämä puhelin ei pysty tekemään yhteenvetoja itse. Litterointi tehtiin puhelimellasi, ja vain sen teksti lähetettiin Omille yhteenvetoa varten. Se ei kuluta live-tuntejasi.';
+
+  @override
+  String get onDeviceRedoWithCloud => 'Tee uudelleen Omi Cloudissa';
+
+  @override
+  String get onDeviceRedoHint => 'Päivitä Pro-versioon puhujien erottelua ja parempaa tarkkuutta varten';
+
+  @override
+  String get onDeviceKeepEverything => 'Pidä kaikki tällä puhelimella';
+
+  @override
+  String get onDeviceKeepEverythingSubtitle => 'Vain litteroinnit, ei yhteenvetoja';
+
+  @override
+  String get onDeviceLiveHours => 'Live-tunnit';
+
+  @override
+  String onDeviceLiveHoursUsed(String used, String limit) {
+    return '$used/$limit tuntia käytetty';
+  }
+
+  @override
+  String onDeviceResets(String date) {
+    return 'Nollautuu $date';
+  }
+
+  @override
+  String get onDeviceGetMoreLiveHours => 'Hanki lisää live-tunteja';
+
+  @override
+  String get onDeviceAfterLiveHours => 'Kun live-tunnit loppuvat';
+
+  @override
+  String get onDeviceWhen => 'Milloin';
+
+  @override
+  String get onDeviceSummaries => 'Yhteenvedot';
+
+  @override
+  String get onDeviceSummariesOnIphone => 'Tällä iPhonella';
+
+  @override
+  String get onDeviceSummariesCloud => 'Omi Cloudissa';
+
+  @override
+  String get onDeviceSaveLiveHours => 'Litteroi tällä puhelimella säästääksesi live-tunteja';
+
+  @override
+  String get onDeviceSaveLiveHoursSubtitle => 'Päivitä Pro-versioon puhujien erottelua ja parempaa tarkkuutta varten';
+
+  @override
+  String get onDeviceOnThisPhone => 'Tällä puhelimella';
+
+  @override
+  String get onDeviceAudioWaiting => 'Puhelimessa odottava ääni';
+
+  @override
+  String get onDeviceRemoveModel => 'Poista puhemalli';
+
+  @override
+  String get onDeviceRemoveModelTitle => 'Poistetaanko puhemalli?';
+
+  @override
+  String get onDeviceRemoveModelMessage =>
+      'Tallenteet odottavat tällä puhelimella, kunnes lataat mallin uudelleen tai live-tunnit palautuvat.';
+
+  @override
+  String get onDeviceRemove => 'Poista';
+
+  @override
+  String get onDeviceFinishSetupTitle => 'Viimeistele käyttöönotto nähdäksesi litteroinnit';
+
+  @override
+  String get onDeviceFinishSetupBody =>
+      'Olet käyttänyt tämän kuun live-tunnit. Omi tallentaa edelleen ja säilyttää äänen puhelimessasi. Lataa puhemalli, niin litteroinnit saadaan ajan tasalle.';
+
+  @override
+  String onDeviceDownloadSize(String size) {
+    return '$size ladattavaa';
+  }
+
+  @override
+  String get onDeviceUnsupportedBody =>
+      'Tämä puhelin ei vielä pysty käyttämään puhemallia. Ääni säilyy tallessa, kunnes live-tunnit palautuvat tai päivität tilauksesi.';
+
+  @override
+  String get onDeviceEntrySubtitle => 'Kun live-tunnit loppuvat, litteroi tällä puhelimella';
+
+  @override
   String get transcriptionUnavailableRecordingSaved =>
       'Litterointi ei ole käytettävissä — tallennus jatkuu ja äänesi tallennetaan.';
 
@@ -13282,291 +13571,19 @@ class AppLocalizationsFi extends AppLocalizations {
   String get syncDetailsCopy => 'Kopioi tiedot tukea varten';
 
   @override
-  String get onDeviceAtCapTitle => 'Tämän kuun live-litterointi on käytetty';
+  String get chatAppsChannelPlanRequired => 'Saatavilla Operator- ja Architect-tilauksissa';
 
   @override
-  String get onDeviceAtCapBody => 'Omi tallentaa edelleen. Valitse, miten loppukuun tallenteet litteroidaan.';
-
-  @override
-  String onDeviceLiveHoursReturn(String date) {
-    return 'Live-tunnit palautuvat $date.';
+  String chatAppsAtCapacity(String app) {
+    return '$app on täynnä';
   }
 
   @override
-  String get onDeviceTranscribeOnPhone => 'Litteroi tällä puhelimella';
+  String get chatAppsJoinWaitlist => 'Liity jonotuslistalle';
 
   @override
-  String get onDeviceIncluded => 'Sisältyy';
+  String get chatAppsOnWaitlist => 'Olet jonotuslistalla';
 
   @override
-  String get onDeviceOptionChargingBody =>
-      'Toimii puhelimen latautuessa, joten akkua kuluu tuskin lainkaan. Litteroinnit näkyvät, kun kytket laturin.';
-
-  @override
-  String get onDeviceUpgradeBody => 'Päivitä Pro-versioon puhujien erottelua ja parempaa tarkkuutta varten';
-
-  @override
-  String get onDeviceAtCapFooter =>
-      'Mitään ei menetetä kummassakaan tapauksessa. Voit muuttaa tätä kohdassa Asetukset › Litterointi.';
-
-  @override
-  String onDeviceStepOf(int step, int total) {
-    return 'Vaihe $step/$total';
-  }
-
-  @override
-  String get onDeviceSetupBody =>
-      'Omi lataa puhemallin kerran. Sen jälkeen tallenteesi muutetaan tekstiksi suoraan täällä käyttämättä live-tuntejasi.';
-
-  @override
-  String get onDeviceSpeechModel => 'Puhemalli';
-
-  @override
-  String onDeviceMegabytes(String size) {
-    return '$size Mt';
-  }
-
-  @override
-  String onDeviceDownloadingWifi(int percent) {
-    return 'Ladataan Wi-Fi-yhteydellä · $percent %';
-  }
-
-  @override
-  String onDeviceDownloadingPercent(int percent) {
-    return 'Ladataan · $percent %';
-  }
-
-  @override
-  String onDeviceTimeLeft(String time) {
-    return 'Noin $time jäljellä';
-  }
-
-  @override
-  String get onDeviceWaitingForWifi => 'Odotetaan Wi-Fi-yhteyttä';
-
-  @override
-  String get onDeviceDownloadFailed => 'Lataus ei valmistunut';
-
-  @override
-  String get onDeviceModelNotDownloaded => 'Ei ladattu';
-
-  @override
-  String onDeviceModelInstalled(String size) {
-    return 'Asennettu · $size';
-  }
-
-  @override
-  String get onDeviceModelUnsupported => 'Ei vielä saatavilla tälle puhelimelle';
-
-  @override
-  String get onDeviceSetupKeepRecording => 'Voit jatkaa tallentamista latauksen aikana. Mikään ei odota tätä.';
-
-  @override
-  String get onDeviceSetupAudioStays => 'Ääni pysyy puhelimessasi, kunnes se on litteroitu.';
-
-  @override
-  String get onDeviceWifiOnly => 'Lataa vain Wi-Fi-yhteydellä';
-
-  @override
-  String get onDeviceDownloadModel => 'Lataa puhemalli';
-
-  @override
-  String get onDeviceScheduleTitle => 'Litterointiajankohta';
-
-  @override
-  String get onDeviceScheduleHeadline => 'Milloin Omin pitäisi litteroida?';
-
-  @override
-  String get onDeviceScheduleBody => 'Litterointi erissä säästää akkua. Voit muuttaa tätä milloin tahansa.';
-
-  @override
-  String get onDeviceScheduleCharging => 'Latauksen aikana';
-
-  @override
-  String get onDeviceScheduleChargingBody => 'Litteroinnit näkyvät, kun kytket laturin, yleensä yön aikana.';
-
-  @override
-  String get onDeviceBatteryAlmostNone => 'Akku: lähes ei lainkaan';
-
-  @override
-  String get onDeviceScheduleHours => 'Muutaman tunnin välein';
-
-  @override
-  String get onDeviceScheduleHoursBody =>
-      'Kuroo eroa kiinni lyhyinä jaksoina akkuvirralla, joten litteroinnit ovat harvoin muutamaa tuntia enempää jäljessä.';
-
-  @override
-  String onDeviceBatteryPerDay(int percent) {
-    return 'Akku: noin $percent % päivässä';
-  }
-
-  @override
-  String get onDeviceScheduleLive => 'Puhuessasi';
-
-  @override
-  String get onDeviceScheduleLiveBody => 'Litteroi säännöllisesti, kun Omi on avoinna.';
-
-  @override
-  String onDeviceBatteryPerHour(int percent) {
-    return 'Akku: noin $percent % keskustelutuntia kohden';
-  }
-
-  @override
-  String onDeviceQueueWaiting(String duration) {
-    return '$duration odottaa litterointia';
-  }
-
-  @override
-  String get onDeviceQueueChargingBody =>
-      'Ne ovat valmiina, kun kytket puhelimen laturiin. Tallennus jatkuu normaalisti.';
-
-  @override
-  String get onDeviceQueueHoursBody => 'Omi kuroo eroa kiinni muutaman tunnin välein. Tallennus jatkuu normaalisti.';
-
-  @override
-  String get onDeviceQueueLowBatteryBody => 'Odotetaan laturia, koska akku on vähissä. Tallennus jatkuu normaalisti.';
-
-  @override
-  String get onDeviceTranscribeNow => 'Litteroi nyt';
-
-  @override
-  String get onDeviceUsesBattery => 'Kuluttaa akkua';
-
-  @override
-  String get onDeviceTranscribing => 'Litteroidaan…';
-
-  @override
-  String get onDeviceWaitingForCharger => 'Odotetaan laturia';
-
-  @override
-  String get onDeviceWaitingToTranscribe => 'Odottaa litterointia';
-
-  @override
-  String get onDeviceWaitingForSetup => 'Tallennettu, odottaa käyttöönottoa';
-
-  @override
-  String get onDeviceTranscribedOnIphone => 'Litteroitu tällä iPhonella';
-
-  @override
-  String get onDeviceTranscribedOnPhone => 'Litteroitu tällä puhelimella';
-
-  @override
-  String get onDeviceTranscribedSummarizedOnIphone => 'Litteroitu ja tiivistetty tällä iPhonella';
-
-  @override
-  String get onDeviceSummarizedByCloud => 'Yhteenvedon teki Omi Cloud';
-
-  @override
-  String get onDeviceWhyPhoneTitle => 'Miksi tämä tehtiin puhelimellasi';
-
-  @override
-  String get onDeviceWhyLiveHoursUsed =>
-      'Olet käyttänyt tämän kuun live-tunnit, joten Omi litteroi tämän keskustelun tällä puhelimella.';
-
-  @override
-  String get onDeviceWhySavingLiveHours => 'Valitsit litteroinnin tällä puhelimella säästääksesi live-tunteja.';
-
-  @override
-  String get onDeviceWhySummaryOnPhone => 'Myös yhteenveto tehtiin tällä iPhonella.';
-
-  @override
-  String get onDeviceWhyNoSummary => 'Pidät kaiken tällä puhelimella, joten yhteenvetoa ei ole.';
-
-  @override
-  String get onDeviceWhyCloudTitle => 'Miksi Omi Cloud teki tämän yhteenvedon';
-
-  @override
-  String get onDeviceWhyCloudIphone =>
-      'Tämä iPhone ei pysty tekemään yhteenvetoja itse (se vaatii iPhone 15 Pron tai uudemman). Litterointi tehtiin puhelimellasi, ja vain sen teksti lähetettiin Omille yhteenvetoa varten. Se ei kuluta live-tuntejasi.';
-
-  @override
-  String get onDeviceWhyCloudPhone =>
-      'Tämä puhelin ei pysty tekemään yhteenvetoja itse. Litterointi tehtiin puhelimellasi, ja vain sen teksti lähetettiin Omille yhteenvetoa varten. Se ei kuluta live-tuntejasi.';
-
-  @override
-  String get onDeviceRedoWithCloud => 'Tee uudelleen Omi Cloudissa';
-
-  @override
-  String get onDeviceRedoHint => 'Päivitä Pro-versioon puhujien erottelua ja parempaa tarkkuutta varten';
-
-  @override
-  String get onDeviceKeepEverything => 'Pidä kaikki tällä puhelimella';
-
-  @override
-  String get onDeviceKeepEverythingSubtitle => 'Vain litteroinnit, ei yhteenvetoja';
-
-  @override
-  String get onDeviceLiveHours => 'Live-tunnit';
-
-  @override
-  String onDeviceLiveHoursUsed(String used, String limit) {
-    return '$used/$limit tuntia käytetty';
-  }
-
-  @override
-  String onDeviceResets(String date) {
-    return 'Nollautuu $date';
-  }
-
-  @override
-  String get onDeviceGetMoreLiveHours => 'Hanki lisää live-tunteja';
-
-  @override
-  String get onDeviceAfterLiveHours => 'Kun live-tunnit loppuvat';
-
-  @override
-  String get onDeviceWhen => 'Milloin';
-
-  @override
-  String get onDeviceSummaries => 'Yhteenvedot';
-
-  @override
-  String get onDeviceSummariesOnIphone => 'Tällä iPhonella';
-
-  @override
-  String get onDeviceSummariesCloud => 'Omi Cloudissa';
-
-  @override
-  String get onDeviceSaveLiveHours => 'Litteroi tällä puhelimella säästääksesi live-tunteja';
-
-  @override
-  String get onDeviceSaveLiveHoursSubtitle => 'Päivitä Pro-versioon puhujien erottelua ja parempaa tarkkuutta varten';
-
-  @override
-  String get onDeviceOnThisPhone => 'Tällä puhelimella';
-
-  @override
-  String get onDeviceAudioWaiting => 'Puhelimessa odottava ääni';
-
-  @override
-  String get onDeviceRemoveModel => 'Poista puhemalli';
-
-  @override
-  String get onDeviceRemoveModelTitle => 'Poistetaanko puhemalli?';
-
-  @override
-  String get onDeviceRemoveModelMessage =>
-      'Tallenteet odottavat tällä puhelimella, kunnes lataat mallin uudelleen tai live-tunnit palautuvat.';
-
-  @override
-  String get onDeviceRemove => 'Poista';
-
-  @override
-  String get onDeviceFinishSetupTitle => 'Viimeistele käyttöönotto nähdäksesi litteroinnit';
-
-  @override
-  String get onDeviceFinishSetupBody =>
-      'Olet käyttänyt tämän kuun live-tunnit. Omi tallentaa edelleen ja säilyttää äänen puhelimessasi. Lataa puhemalli, niin litteroinnit saadaan ajan tasalle.';
-
-  @override
-  String onDeviceDownloadSize(String size) {
-    return '$size ladattavaa';
-  }
-
-  @override
-  String get onDeviceUnsupportedBody =>
-      'Tämä puhelin ei vielä pysty käyttämään puhemallia. Ääni säilyy tallessa, kunnes live-tunnit palautuvat tai päivität tilauksesi.';
-
-  @override
-  String get onDeviceEntrySubtitle => 'Kun live-tunnit loppuvat, litteroi tällä puhelimella';
+  String get chatAppsWaitlistJoined => 'Olet jonotuslistalla. Kerromme, kun tilaa vapautuu.';
 }

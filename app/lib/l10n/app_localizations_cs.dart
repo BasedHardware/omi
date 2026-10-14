@@ -8579,6 +8579,295 @@ class AppLocalizationsCs extends AppLocalizations {
   String get recordingOfflineTranscriptWillCatchUp => 'Nahrává se offline — přepis se doplní, až budete znovu online.';
 
   @override
+  String get onDeviceAtCapTitle => 'Živý přepis na tento měsíc je vyčerpán';
+
+  @override
+  String get onDeviceAtCapBody => 'Omi stále nahrává. Vyberte, jak se bude přepisovat zbytek měsíce.';
+
+  @override
+  String onDeviceLiveHoursReturn(String date) {
+    return 'Hodiny živého přepisu se obnoví $date.';
+  }
+
+  @override
+  String get onDeviceTranscribeOnPhone => 'Přepisovat v tomto telefonu';
+
+  @override
+  String get onDeviceIncluded => 'V ceně';
+
+  @override
+  String get onDeviceOptionChargingBody =>
+      'Běží, když se telefon nabíjí, takže baterii téměř nezatěžuje. Přepisy se objeví po připojení k nabíječce.';
+
+  @override
+  String get onDeviceUpgradeBody => 'Přejděte na Pro pro rozlišení mluvčích a vyšší přesnost';
+
+  @override
+  String get onDeviceAtCapFooter => 'V obou případech se nic neztratí. Změnit to můžete v Nastavení › Přepis.';
+
+  @override
+  String onDeviceStepOf(int step, int total) {
+    return 'Krok $step z $total';
+  }
+
+  @override
+  String get onDeviceSetupBody =>
+      'Omi jednou stáhne řečový model. Poté se vaše nahrávky převedou na text přímo zde, bez čerpání hodin živého přepisu.';
+
+  @override
+  String get onDeviceSpeechModel => 'Řečový model';
+
+  @override
+  String onDeviceMegabytes(String size) {
+    return '$size MB';
+  }
+
+  @override
+  String onDeviceDownloadingWifi(int percent) {
+    return 'Stahování přes Wi-Fi · $percent %';
+  }
+
+  @override
+  String onDeviceDownloadingPercent(int percent) {
+    return 'Stahování · $percent %';
+  }
+
+  @override
+  String onDeviceTimeLeft(String time) {
+    return 'Zbývá asi $time';
+  }
+
+  @override
+  String get onDeviceWaitingForWifi => 'Čeká se na Wi-Fi';
+
+  @override
+  String get onDeviceDownloadFailed => 'Stahování nebylo dokončeno';
+
+  @override
+  String get onDeviceModelNotDownloaded => 'Nestaženo';
+
+  @override
+  String onDeviceModelInstalled(String size) {
+    return 'Nainstalováno · $size';
+  }
+
+  @override
+  String get onDeviceModelUnsupported => 'V tomto telefonu zatím není k dispozici';
+
+  @override
+  String get onDeviceSetupKeepRecording => 'Během stahování klidně nahrávejte dál. Nic na to nečeká.';
+
+  @override
+  String get onDeviceSetupAudioStays => 'Zvuk zůstane ve vašem telefonu, dokud nebude přepsán.';
+
+  @override
+  String get onDeviceWifiOnly => 'Stahovat jen přes Wi-Fi';
+
+  @override
+  String get onDeviceDownloadModel => 'Stáhnout řečový model';
+
+  @override
+  String get onDeviceScheduleTitle => 'Kdy přepisovat';
+
+  @override
+  String get onDeviceScheduleHeadline => 'Kdy má Omi přepisovat?';
+
+  @override
+  String get onDeviceScheduleBody => 'Přepisování po dávkách šetří baterii. Můžete to kdykoli změnit.';
+
+  @override
+  String get onDeviceScheduleCharging => 'Při nabíjení';
+
+  @override
+  String get onDeviceScheduleChargingBody => 'Přepisy se objeví po připojení k nabíječce, obvykle přes noc.';
+
+  @override
+  String get onDeviceBatteryAlmostNone => 'Baterie: téměř žádná spotřeba';
+
+  @override
+  String get onDeviceScheduleHours => 'Každých pár hodin';
+
+  @override
+  String get onDeviceScheduleHoursBody =>
+      'Dohání v krátkých dávkách na baterii, takže přepisy jen zřídka zaostávají o víc než pár hodin.';
+
+  @override
+  String onDeviceBatteryPerDay(int percent) {
+    return 'Baterie: asi $percent % denně';
+  }
+
+  @override
+  String get onDeviceScheduleLive => 'Během mluvení';
+
+  @override
+  String get onDeviceScheduleLiveBody => 'Pravidelně přepisuje, když je Omi otevřené.';
+
+  @override
+  String onDeviceBatteryPerHour(int percent) {
+    return 'Baterie: asi $percent % za hodinu konverzace';
+  }
+
+  @override
+  String onDeviceQueueWaiting(String duration) {
+    return '$duration čeká na přepis';
+  }
+
+  @override
+  String get onDeviceQueueChargingBody =>
+      'Budou hotové po připojení telefonu k nabíječce. Nahrávání pokračuje normálně.';
+
+  @override
+  String get onDeviceQueueHoursBody => 'Omi vše dožene každých pár hodin. Nahrávání pokračuje normálně.';
+
+  @override
+  String get onDeviceQueueLowBatteryBody => 'Kvůli slabé baterii se čeká na nabíječku. Nahrávání pokračuje normálně.';
+
+  @override
+  String get onDeviceTranscribeNow => 'Přepsat nyní';
+
+  @override
+  String get onDeviceUsesBattery => 'Spotřebovává baterii';
+
+  @override
+  String get onDeviceTranscribing => 'Přepisuje se…';
+
+  @override
+  String get onDeviceWaitingForCharger => 'Čeká na nabíječku';
+
+  @override
+  String get onDeviceWaitingToTranscribe => 'Čeká na přepis';
+
+  @override
+  String get onDeviceWaitingForSetup => 'Uloženo, čeká na nastavení';
+
+  @override
+  String get onDeviceTranscribedOnIphone => 'Přepsáno v tomto iPhonu';
+
+  @override
+  String get onDeviceTranscribedOnPhone => 'Přepsáno v tomto telefonu';
+
+  @override
+  String get onDeviceTranscribedSummarizedOnIphone => 'Přepsáno a shrnuto v tomto iPhonu';
+
+  @override
+  String get onDeviceSummarizedByCloud => 'Shrnuto službou Omi Cloud';
+
+  @override
+  String get onDeviceWhyPhoneTitle => 'Proč to proběhlo ve vašem telefonu';
+
+  @override
+  String get onDeviceWhyLiveHoursUsed =>
+      'Vyčerpali jste hodiny živého přepisu na tento měsíc, a tak Omi přepsalo tuto konverzaci v tomto telefonu.';
+
+  @override
+  String get onDeviceWhySavingLiveHours =>
+      'Zvolili jste přepis v tomto telefonu, abyste ušetřili hodiny živého přepisu.';
+
+  @override
+  String get onDeviceWhySummaryOnPhone => 'Souhrn byl také vytvořen v tomto iPhonu.';
+
+  @override
+  String get onDeviceWhyNoSummary => 'Vše uchováváte v tomto telefonu, proto souhrn není k dispozici.';
+
+  @override
+  String get onDeviceWhyCloudTitle => 'Proč tento souhrn vytvořil Omi Cloud';
+
+  @override
+  String get onDeviceWhyCloudIphone =>
+      'Tento iPhone neumí shrnovat sám (vyžaduje to iPhone 15 Pro nebo novější). Přepis vznikl ve vašem telefonu a ke shrnutí byl do Omi odeslán pouze jeho text. Hodiny živého přepisu se tím nečerpají.';
+
+  @override
+  String get onDeviceWhyCloudPhone =>
+      'Tento telefon neumí shrnovat sám. Přepis vznikl ve vašem telefonu a ke shrnutí byl do Omi odeslán pouze jeho text. Hodiny živého přepisu se tím nečerpají.';
+
+  @override
+  String get onDeviceRedoWithCloud => 'Zpracovat znovu v Omi Cloud';
+
+  @override
+  String get onDeviceRedoHint => 'Přejděte na Pro pro rozlišení mluvčích a vyšší přesnost';
+
+  @override
+  String get onDeviceKeepEverything => 'Uchovávat vše v tomto telefonu';
+
+  @override
+  String get onDeviceKeepEverythingSubtitle => 'Jen přepisy, bez souhrnů';
+
+  @override
+  String get onDeviceLiveHours => 'Hodiny živého přepisu';
+
+  @override
+  String onDeviceLiveHoursUsed(String used, String limit) {
+    return 'Využito $used z $limit hodin';
+  }
+
+  @override
+  String onDeviceResets(String date) {
+    return 'Obnoví se $date';
+  }
+
+  @override
+  String get onDeviceGetMoreLiveHours => 'Získat více hodin';
+
+  @override
+  String get onDeviceAfterLiveHours => 'Po vyčerpání hodin živého přepisu';
+
+  @override
+  String get onDeviceWhen => 'Kdy';
+
+  @override
+  String get onDeviceSummaries => 'Souhrny';
+
+  @override
+  String get onDeviceSummariesOnIphone => 'V tomto iPhonu';
+
+  @override
+  String get onDeviceSummariesCloud => 'Pomocí Omi Cloud';
+
+  @override
+  String get onDeviceSaveLiveHours => 'Přepisovat v tomto telefonu a šetřit hodiny živého přepisu';
+
+  @override
+  String get onDeviceSaveLiveHoursSubtitle => 'Přejděte na Pro pro rozlišení mluvčích a vyšší přesnost';
+
+  @override
+  String get onDeviceOnThisPhone => 'V tomto telefonu';
+
+  @override
+  String get onDeviceAudioWaiting => 'Zvuk čekající v telefonu';
+
+  @override
+  String get onDeviceRemoveModel => 'Odstranit řečový model';
+
+  @override
+  String get onDeviceRemoveModelTitle => 'Odstranit řečový model?';
+
+  @override
+  String get onDeviceRemoveModelMessage =>
+      'Nahrávky budou v tomto telefonu čekat, dokud model znovu nestáhnete nebo se neobnoví hodiny živého přepisu.';
+
+  @override
+  String get onDeviceRemove => 'Odstranit';
+
+  @override
+  String get onDeviceFinishSetupTitle => 'Dokončete nastavení a uvidíte své přepisy';
+
+  @override
+  String get onDeviceFinishSetupBody =>
+      'Vyčerpali jste hodiny živého přepisu na tento měsíc. Omi stále nahrává a ukládá zvuk do vašeho telefonu. Stáhněte řečový model a vše se dožene.';
+
+  @override
+  String onDeviceDownloadSize(String size) {
+    return 'Ke stažení $size';
+  }
+
+  @override
+  String get onDeviceUnsupportedBody =>
+      'Tento telefon zatím nedokáže spustit řečový model. Zvuk zůstane uložen, dokud se neobnoví hodiny živého přepisu nebo nepřejdete na vyšší tarif.';
+
+  @override
+  String get onDeviceEntrySubtitle => 'Po vyčerpání hodin živého přepisu přepisovat v tomto telefonu';
+
+  @override
   String get transcriptionUnavailableRecordingSaved =>
       'Přepis není k dispozici — nahrávání pokračuje a váš zvuk se ukládá.';
 
@@ -13279,291 +13568,19 @@ class AppLocalizationsCs extends AppLocalizations {
   String get syncDetailsCopy => 'Zkopírovat podrobnosti pro podporu';
 
   @override
-  String get onDeviceAtCapTitle => 'Živý přepis na tento měsíc je vyčerpán';
+  String get chatAppsChannelPlanRequired => 'K dispozici v Operator a Architect';
 
   @override
-  String get onDeviceAtCapBody => 'Omi stále nahrává. Vyberte, jak se bude přepisovat zbytek měsíce.';
-
-  @override
-  String onDeviceLiveHoursReturn(String date) {
-    return 'Hodiny živého přepisu se obnoví $date.';
+  String chatAppsAtCapacity(String app) {
+    return '$app je plně obsazen';
   }
 
   @override
-  String get onDeviceTranscribeOnPhone => 'Přepisovat v tomto telefonu';
+  String get chatAppsJoinWaitlist => 'Připojit se k čekací listině';
 
   @override
-  String get onDeviceIncluded => 'V ceně';
+  String get chatAppsOnWaitlist => 'Jste na čekací listině';
 
   @override
-  String get onDeviceOptionChargingBody =>
-      'Běží, když se telefon nabíjí, takže baterii téměř nezatěžuje. Přepisy se objeví po připojení k nabíječce.';
-
-  @override
-  String get onDeviceUpgradeBody => 'Přejděte na Pro pro rozlišení mluvčích a vyšší přesnost';
-
-  @override
-  String get onDeviceAtCapFooter => 'V obou případech se nic neztratí. Změnit to můžete v Nastavení › Přepis.';
-
-  @override
-  String onDeviceStepOf(int step, int total) {
-    return 'Krok $step z $total';
-  }
-
-  @override
-  String get onDeviceSetupBody =>
-      'Omi jednou stáhne řečový model. Poté se vaše nahrávky převedou na text přímo zde, bez čerpání hodin živého přepisu.';
-
-  @override
-  String get onDeviceSpeechModel => 'Řečový model';
-
-  @override
-  String onDeviceMegabytes(String size) {
-    return '$size MB';
-  }
-
-  @override
-  String onDeviceDownloadingWifi(int percent) {
-    return 'Stahování přes Wi-Fi · $percent %';
-  }
-
-  @override
-  String onDeviceDownloadingPercent(int percent) {
-    return 'Stahování · $percent %';
-  }
-
-  @override
-  String onDeviceTimeLeft(String time) {
-    return 'Zbývá asi $time';
-  }
-
-  @override
-  String get onDeviceWaitingForWifi => 'Čeká se na Wi-Fi';
-
-  @override
-  String get onDeviceDownloadFailed => 'Stahování nebylo dokončeno';
-
-  @override
-  String get onDeviceModelNotDownloaded => 'Nestaženo';
-
-  @override
-  String onDeviceModelInstalled(String size) {
-    return 'Nainstalováno · $size';
-  }
-
-  @override
-  String get onDeviceModelUnsupported => 'V tomto telefonu zatím není k dispozici';
-
-  @override
-  String get onDeviceSetupKeepRecording => 'Během stahování klidně nahrávejte dál. Nic na to nečeká.';
-
-  @override
-  String get onDeviceSetupAudioStays => 'Zvuk zůstane ve vašem telefonu, dokud nebude přepsán.';
-
-  @override
-  String get onDeviceWifiOnly => 'Stahovat jen přes Wi-Fi';
-
-  @override
-  String get onDeviceDownloadModel => 'Stáhnout řečový model';
-
-  @override
-  String get onDeviceScheduleTitle => 'Kdy přepisovat';
-
-  @override
-  String get onDeviceScheduleHeadline => 'Kdy má Omi přepisovat?';
-
-  @override
-  String get onDeviceScheduleBody => 'Přepisování po dávkách šetří baterii. Můžete to kdykoli změnit.';
-
-  @override
-  String get onDeviceScheduleCharging => 'Při nabíjení';
-
-  @override
-  String get onDeviceScheduleChargingBody => 'Přepisy se objeví po připojení k nabíječce, obvykle přes noc.';
-
-  @override
-  String get onDeviceBatteryAlmostNone => 'Baterie: téměř žádná spotřeba';
-
-  @override
-  String get onDeviceScheduleHours => 'Každých pár hodin';
-
-  @override
-  String get onDeviceScheduleHoursBody =>
-      'Dohání v krátkých dávkách na baterii, takže přepisy jen zřídka zaostávají o víc než pár hodin.';
-
-  @override
-  String onDeviceBatteryPerDay(int percent) {
-    return 'Baterie: asi $percent % denně';
-  }
-
-  @override
-  String get onDeviceScheduleLive => 'Během mluvení';
-
-  @override
-  String get onDeviceScheduleLiveBody => 'Pravidelně přepisuje, když je Omi otevřené.';
-
-  @override
-  String onDeviceBatteryPerHour(int percent) {
-    return 'Baterie: asi $percent % za hodinu konverzace';
-  }
-
-  @override
-  String onDeviceQueueWaiting(String duration) {
-    return '$duration čeká na přepis';
-  }
-
-  @override
-  String get onDeviceQueueChargingBody =>
-      'Budou hotové po připojení telefonu k nabíječce. Nahrávání pokračuje normálně.';
-
-  @override
-  String get onDeviceQueueHoursBody => 'Omi vše dožene každých pár hodin. Nahrávání pokračuje normálně.';
-
-  @override
-  String get onDeviceQueueLowBatteryBody => 'Kvůli slabé baterii se čeká na nabíječku. Nahrávání pokračuje normálně.';
-
-  @override
-  String get onDeviceTranscribeNow => 'Přepsat nyní';
-
-  @override
-  String get onDeviceUsesBattery => 'Spotřebovává baterii';
-
-  @override
-  String get onDeviceTranscribing => 'Přepisuje se…';
-
-  @override
-  String get onDeviceWaitingForCharger => 'Čeká na nabíječku';
-
-  @override
-  String get onDeviceWaitingToTranscribe => 'Čeká na přepis';
-
-  @override
-  String get onDeviceWaitingForSetup => 'Uloženo, čeká na nastavení';
-
-  @override
-  String get onDeviceTranscribedOnIphone => 'Přepsáno v tomto iPhonu';
-
-  @override
-  String get onDeviceTranscribedOnPhone => 'Přepsáno v tomto telefonu';
-
-  @override
-  String get onDeviceTranscribedSummarizedOnIphone => 'Přepsáno a shrnuto v tomto iPhonu';
-
-  @override
-  String get onDeviceSummarizedByCloud => 'Shrnuto službou Omi Cloud';
-
-  @override
-  String get onDeviceWhyPhoneTitle => 'Proč to proběhlo ve vašem telefonu';
-
-  @override
-  String get onDeviceWhyLiveHoursUsed =>
-      'Vyčerpali jste hodiny živého přepisu na tento měsíc, a tak Omi přepsalo tuto konverzaci v tomto telefonu.';
-
-  @override
-  String get onDeviceWhySavingLiveHours =>
-      'Zvolili jste přepis v tomto telefonu, abyste ušetřili hodiny živého přepisu.';
-
-  @override
-  String get onDeviceWhySummaryOnPhone => 'Souhrn byl také vytvořen v tomto iPhonu.';
-
-  @override
-  String get onDeviceWhyNoSummary => 'Vše uchováváte v tomto telefonu, proto souhrn není k dispozici.';
-
-  @override
-  String get onDeviceWhyCloudTitle => 'Proč tento souhrn vytvořil Omi Cloud';
-
-  @override
-  String get onDeviceWhyCloudIphone =>
-      'Tento iPhone neumí shrnovat sám (vyžaduje to iPhone 15 Pro nebo novější). Přepis vznikl ve vašem telefonu a ke shrnutí byl do Omi odeslán pouze jeho text. Hodiny živého přepisu se tím nečerpají.';
-
-  @override
-  String get onDeviceWhyCloudPhone =>
-      'Tento telefon neumí shrnovat sám. Přepis vznikl ve vašem telefonu a ke shrnutí byl do Omi odeslán pouze jeho text. Hodiny živého přepisu se tím nečerpají.';
-
-  @override
-  String get onDeviceRedoWithCloud => 'Zpracovat znovu v Omi Cloud';
-
-  @override
-  String get onDeviceRedoHint => 'Přejděte na Pro pro rozlišení mluvčích a vyšší přesnost';
-
-  @override
-  String get onDeviceKeepEverything => 'Uchovávat vše v tomto telefonu';
-
-  @override
-  String get onDeviceKeepEverythingSubtitle => 'Jen přepisy, bez souhrnů';
-
-  @override
-  String get onDeviceLiveHours => 'Hodiny živého přepisu';
-
-  @override
-  String onDeviceLiveHoursUsed(String used, String limit) {
-    return 'Využito $used z $limit hodin';
-  }
-
-  @override
-  String onDeviceResets(String date) {
-    return 'Obnoví se $date';
-  }
-
-  @override
-  String get onDeviceGetMoreLiveHours => 'Získat více hodin';
-
-  @override
-  String get onDeviceAfterLiveHours => 'Po vyčerpání hodin živého přepisu';
-
-  @override
-  String get onDeviceWhen => 'Kdy';
-
-  @override
-  String get onDeviceSummaries => 'Souhrny';
-
-  @override
-  String get onDeviceSummariesOnIphone => 'V tomto iPhonu';
-
-  @override
-  String get onDeviceSummariesCloud => 'Pomocí Omi Cloud';
-
-  @override
-  String get onDeviceSaveLiveHours => 'Přepisovat v tomto telefonu a šetřit hodiny živého přepisu';
-
-  @override
-  String get onDeviceSaveLiveHoursSubtitle => 'Přejděte na Pro pro rozlišení mluvčích a vyšší přesnost';
-
-  @override
-  String get onDeviceOnThisPhone => 'V tomto telefonu';
-
-  @override
-  String get onDeviceAudioWaiting => 'Zvuk čekající v telefonu';
-
-  @override
-  String get onDeviceRemoveModel => 'Odstranit řečový model';
-
-  @override
-  String get onDeviceRemoveModelTitle => 'Odstranit řečový model?';
-
-  @override
-  String get onDeviceRemoveModelMessage =>
-      'Nahrávky budou v tomto telefonu čekat, dokud model znovu nestáhnete nebo se neobnoví hodiny živého přepisu.';
-
-  @override
-  String get onDeviceRemove => 'Odstranit';
-
-  @override
-  String get onDeviceFinishSetupTitle => 'Dokončete nastavení a uvidíte své přepisy';
-
-  @override
-  String get onDeviceFinishSetupBody =>
-      'Vyčerpali jste hodiny živého přepisu na tento měsíc. Omi stále nahrává a ukládá zvuk do vašeho telefonu. Stáhněte řečový model a vše se dožene.';
-
-  @override
-  String onDeviceDownloadSize(String size) {
-    return 'Ke stažení $size';
-  }
-
-  @override
-  String get onDeviceUnsupportedBody =>
-      'Tento telefon zatím nedokáže spustit řečový model. Zvuk zůstane uložen, dokud se neobnoví hodiny živého přepisu nebo nepřejdete na vyšší tarif.';
-
-  @override
-  String get onDeviceEntrySubtitle => 'Po vyčerpání hodin živého přepisu přepisovat v tomto telefonu';
+  String get chatAppsWaitlistJoined => 'Jste na čekací listině. Dáme vám vědět, až bude místo.';
 }

@@ -8657,6 +8657,302 @@ class AppLocalizationsTl extends AppLocalizations {
       'Nagre-record offline — hahabol ang transcript kapag online ka na ulit.';
 
   @override
+  String get onDeviceAtCapTitle => 'Nagamit mo na ang live transcription ngayong buwan';
+
+  @override
+  String get onDeviceAtCapBody =>
+      'Nagre-record pa rin ang Omi. Piliin kung paano ita-transcribe ang natitirang bahagi ng buwan.';
+
+  @override
+  String onDeviceLiveHoursReturn(String date) {
+    return 'Babalik ang live hours sa $date.';
+  }
+
+  @override
+  String get onDeviceTranscribeOnPhone => 'I-transcribe sa phone na ito';
+
+  @override
+  String get onDeviceIncluded => 'Kasama';
+
+  @override
+  String get onDeviceOptionChargingBody =>
+      'Tumatakbo habang nagcha-charge ang phone mo, kaya halos hindi nito nagagalaw ang baterya. Lalabas ang mga transcript pagkatapos mong mag-charge.';
+
+  @override
+  String get onDeviceUpgradeBody =>
+      'Mag-upgrade sa Pro para sa paghihiwalay ng mga nagsasalita at mas mataas na katumpakan';
+
+  @override
+  String get onDeviceAtCapFooter =>
+      'Walang mawawala alinman ang piliin mo. Mababago mo ito sa Mga Setting › Transcription.';
+
+  @override
+  String onDeviceStepOf(int step, int total) {
+    return 'Hakbang $step sa $total';
+  }
+
+  @override
+  String get onDeviceSetupBody =>
+      'Isang beses lang ida-download ng Omi ang speech model. Pagkatapos noon, gagawing text ang mga recording mo dito mismo, nang hindi gumagamit ng live hours.';
+
+  @override
+  String get onDeviceSpeechModel => 'Speech model';
+
+  @override
+  String onDeviceMegabytes(String size) {
+    return '$size MB';
+  }
+
+  @override
+  String onDeviceDownloadingWifi(int percent) {
+    return 'Nagda-download sa Wi-Fi · $percent%';
+  }
+
+  @override
+  String onDeviceDownloadingPercent(int percent) {
+    return 'Nagda-download · $percent%';
+  }
+
+  @override
+  String onDeviceTimeLeft(String time) {
+    return 'Mga $time pa';
+  }
+
+  @override
+  String get onDeviceWaitingForWifi => 'Naghihintay ng Wi-Fi';
+
+  @override
+  String get onDeviceDownloadFailed => 'Hindi natapos ang download';
+
+  @override
+  String get onDeviceModelNotDownloaded => 'Hindi pa na-download';
+
+  @override
+  String onDeviceModelInstalled(String size) {
+    return 'Naka-install · $size';
+  }
+
+  @override
+  String get onDeviceModelUnsupported => 'Hindi pa available sa phone na ito';
+
+  @override
+  String get onDeviceSetupKeepRecording => 'Patuloy na mag-record habang nagda-download. Walang naghihintay dito.';
+
+  @override
+  String get onDeviceSetupAudioStays => 'Mananatili ang audio sa phone mo hanggang ma-transcribe ito.';
+
+  @override
+  String get onDeviceWifiOnly => 'Mag-download lang sa Wi-Fi';
+
+  @override
+  String get onDeviceDownloadModel => 'I-download ang Speech Model';
+
+  @override
+  String get onDeviceScheduleTitle => 'Kailan Ita-transcribe';
+
+  @override
+  String get onDeviceScheduleHeadline => 'Kailan dapat mag-transcribe ang Omi?';
+
+  @override
+  String get onDeviceScheduleBody =>
+      'Nakakatipid sa baterya ang pag-transcribe nang paisa-isang batch. Mababago mo ito anumang oras.';
+
+  @override
+  String get onDeviceScheduleCharging => 'Habang nagcha-charge';
+
+  @override
+  String get onDeviceScheduleChargingBody =>
+      'Lalabas ang mga transcript pagkatapos mong mag-charge, kadalasan magdamag.';
+
+  @override
+  String get onDeviceBatteryAlmostNone => 'Baterya: halos wala';
+
+  @override
+  String get onDeviceScheduleHours => 'Bawat ilang oras';
+
+  @override
+  String get onDeviceScheduleHoursBody =>
+      'Humahabol nang paunti-unti habang naka-baterya, kaya bihirang mahuli ang mga transcript nang higit sa ilang oras.';
+
+  @override
+  String onDeviceBatteryPerDay(int percent) {
+    return 'Baterya: mga $percent% bawat araw';
+  }
+
+  @override
+  String get onDeviceScheduleLive => 'Habang nagsasalita ka';
+
+  @override
+  String get onDeviceScheduleLiveBody => 'Regular na nagtatranscribe habang bukas ang Omi.';
+
+  @override
+  String onDeviceBatteryPerHour(int percent) {
+    return 'Baterya: mga $percent% bawat oras ng usapan';
+  }
+
+  @override
+  String onDeviceQueueWaiting(String duration) {
+    return '$duration na naghihintay ma-transcribe';
+  }
+
+  @override
+  String get onDeviceQueueChargingBody =>
+      'Magiging handa ang mga ito pagkatapos mong i-charge ang phone mo. Tuloy ang pagre-record gaya ng dati.';
+
+  @override
+  String get onDeviceQueueHoursBody => 'Humahabol ang Omi bawat ilang oras. Tuloy ang pagre-record gaya ng dati.';
+
+  @override
+  String get onDeviceQueueLowBatteryBody =>
+      'Naghihintay ng charger dahil mahina na ang baterya. Tuloy ang pagre-record gaya ng dati.';
+
+  @override
+  String get onDeviceTranscribeNow => 'I-transcribe Ngayon';
+
+  @override
+  String get onDeviceUsesBattery => 'Gumagamit ng baterya';
+
+  @override
+  String get onDeviceTranscribing => 'Nagta-transcribe…';
+
+  @override
+  String get onDeviceWaitingForCharger => 'Naghihintay ng charger';
+
+  @override
+  String get onDeviceWaitingToTranscribe => 'Naghihintay ma-transcribe';
+
+  @override
+  String get onDeviceWaitingForSetup => 'Na-save, naghihintay ng setup';
+
+  @override
+  String get onDeviceTranscribedOnIphone => 'Na-transcribe sa iPhone na ito';
+
+  @override
+  String get onDeviceTranscribedOnPhone => 'Na-transcribe sa phone na ito';
+
+  @override
+  String get onDeviceTranscribedSummarizedOnIphone => 'Na-transcribe at na-buod sa iPhone na ito';
+
+  @override
+  String get onDeviceSummarizedByCloud => 'Binuod ng Omi Cloud';
+
+  @override
+  String get onDeviceWhyPhoneTitle => 'Bakit ito ginawa sa phone mo';
+
+  @override
+  String get onDeviceWhyLiveHoursUsed =>
+      'Nagamit mo na ang live hours ngayong buwan, kaya na-transcribe ng Omi ang usapang ito sa phone na ito.';
+
+  @override
+  String get onDeviceWhySavingLiveHours => 'Pinili mong mag-transcribe sa phone na ito para makatipid ng live hours.';
+
+  @override
+  String get onDeviceWhySummaryOnPhone => 'Sa iPhone na ito rin isinulat ang buod.';
+
+  @override
+  String get onDeviceWhyNoSummary => 'Itinatago mo ang lahat sa phone na ito, kaya walang buod.';
+
+  @override
+  String get onDeviceWhyCloudTitle => 'Bakit Omi Cloud ang sumulat ng buod na ito';
+
+  @override
+  String get onDeviceWhyCloudIphone =>
+      'Hindi kayang mag-buod ng iPhone na ito nang mag-isa (kailangan nito ng iPhone 15 Pro o mas bago). Ginawa ang transcript sa phone mo, at ang text lang nito ang ipinadala sa Omi para ibuod. Hindi nito ginagamit ang live hours mo.';
+
+  @override
+  String get onDeviceWhyCloudPhone =>
+      'Hindi kayang mag-buod ng phone na ito nang mag-isa. Ginawa ang transcript sa phone mo, at ang text lang nito ang ipinadala sa Omi para ibuod. Hindi nito ginagamit ang live hours mo.';
+
+  @override
+  String get onDeviceRedoWithCloud => 'Ulitin gamit ang Omi Cloud';
+
+  @override
+  String get onDeviceRedoHint =>
+      'Mag-upgrade sa Pro para sa paghihiwalay ng mga nagsasalita at mas mataas na katumpakan';
+
+  @override
+  String get onDeviceKeepEverything => 'Itago ang lahat sa phone na ito';
+
+  @override
+  String get onDeviceKeepEverythingSubtitle => 'Mga transcript lang, walang buod';
+
+  @override
+  String get onDeviceLiveHours => 'Live hours';
+
+  @override
+  String onDeviceLiveHoursUsed(String used, String limit) {
+    return '$used sa $limit oras ang nagamit';
+  }
+
+  @override
+  String onDeviceResets(String date) {
+    return 'Magre-reset sa $date';
+  }
+
+  @override
+  String get onDeviceGetMoreLiveHours => 'Kumuha ng Mas Maraming Live Hours';
+
+  @override
+  String get onDeviceAfterLiveHours => 'Kapag naubos ang live hours';
+
+  @override
+  String get onDeviceWhen => 'Kailan';
+
+  @override
+  String get onDeviceSummaries => 'Mga buod';
+
+  @override
+  String get onDeviceSummariesOnIphone => 'Sa iPhone na ito';
+
+  @override
+  String get onDeviceSummariesCloud => 'Sa Omi Cloud';
+
+  @override
+  String get onDeviceSaveLiveHours => 'Mag-transcribe sa phone na ito para makatipid ng live hours';
+
+  @override
+  String get onDeviceSaveLiveHoursSubtitle =>
+      'Mag-upgrade sa Pro para sa paghihiwalay ng mga nagsasalita at mas mataas na katumpakan';
+
+  @override
+  String get onDeviceOnThisPhone => 'Sa phone na ito';
+
+  @override
+  String get onDeviceAudioWaiting => 'Audio na naghihintay sa phone';
+
+  @override
+  String get onDeviceRemoveModel => 'Alisin ang Speech Model';
+
+  @override
+  String get onDeviceRemoveModelTitle => 'Alisin ang Speech Model?';
+
+  @override
+  String get onDeviceRemoveModelMessage =>
+      'Maghihintay ang mga recording sa phone na ito hanggang i-download mo ulit ito o bumalik ang live hours.';
+
+  @override
+  String get onDeviceRemove => 'Alisin';
+
+  @override
+  String get onDeviceFinishSetupTitle => 'Tapusin ang setup para makita ang mga transcript mo';
+
+  @override
+  String get onDeviceFinishSetupBody =>
+      'Nagamit mo na ang live hours ngayong buwan. Nagre-record pa rin ang Omi at nagse-save ng audio sa phone mo. I-download ang speech model at hahabol ito.';
+
+  @override
+  String onDeviceDownloadSize(String size) {
+    return '$size na download';
+  }
+
+  @override
+  String get onDeviceUnsupportedBody =>
+      'Hindi pa kayang patakbuhin ng phone na ito ang speech model. Mananatiling naka-save ang audio hanggang bumalik ang live hours o mag-upgrade ka.';
+
+  @override
+  String get onDeviceEntrySubtitle => 'Kapag naubos ang live hours, mag-transcribe sa phone na ito';
+
+  @override
   String get transcriptionUnavailableRecordingSaved =>
       'Hindi available ang transcription — tuloy ang pagre-record at naka-save ang iyong audio.';
 
@@ -13382,298 +13678,19 @@ class AppLocalizationsTl extends AppLocalizations {
   String get syncDetailsCopy => 'Kopyahin ang mga detalye para sa support';
 
   @override
-  String get onDeviceAtCapTitle => 'Nagamit mo na ang live transcription ngayong buwan';
+  String get chatAppsChannelPlanRequired => 'Available sa Operator at Architect';
 
   @override
-  String get onDeviceAtCapBody =>
-      'Nagre-record pa rin ang Omi. Piliin kung paano ita-transcribe ang natitirang bahagi ng buwan.';
-
-  @override
-  String onDeviceLiveHoursReturn(String date) {
-    return 'Babalik ang live hours sa $date.';
+  String chatAppsAtCapacity(String app) {
+    return 'Puno na ang $app';
   }
 
   @override
-  String get onDeviceTranscribeOnPhone => 'I-transcribe sa phone na ito';
+  String get chatAppsJoinWaitlist => 'Sumali sa waitlist';
 
   @override
-  String get onDeviceIncluded => 'Kasama';
+  String get chatAppsOnWaitlist => 'Nasa waitlist ka na';
 
   @override
-  String get onDeviceOptionChargingBody =>
-      'Tumatakbo habang nagcha-charge ang phone mo, kaya halos hindi nito nagagalaw ang baterya. Lalabas ang mga transcript pagkatapos mong mag-charge.';
-
-  @override
-  String get onDeviceUpgradeBody =>
-      'Mag-upgrade sa Pro para sa paghihiwalay ng mga nagsasalita at mas mataas na katumpakan';
-
-  @override
-  String get onDeviceAtCapFooter =>
-      'Walang mawawala alinman ang piliin mo. Mababago mo ito sa Mga Setting › Transcription.';
-
-  @override
-  String onDeviceStepOf(int step, int total) {
-    return 'Hakbang $step sa $total';
-  }
-
-  @override
-  String get onDeviceSetupBody =>
-      'Isang beses lang ida-download ng Omi ang speech model. Pagkatapos noon, gagawing text ang mga recording mo dito mismo, nang hindi gumagamit ng live hours.';
-
-  @override
-  String get onDeviceSpeechModel => 'Speech model';
-
-  @override
-  String onDeviceMegabytes(String size) {
-    return '$size MB';
-  }
-
-  @override
-  String onDeviceDownloadingWifi(int percent) {
-    return 'Nagda-download sa Wi-Fi · $percent%';
-  }
-
-  @override
-  String onDeviceDownloadingPercent(int percent) {
-    return 'Nagda-download · $percent%';
-  }
-
-  @override
-  String onDeviceTimeLeft(String time) {
-    return 'Mga $time pa';
-  }
-
-  @override
-  String get onDeviceWaitingForWifi => 'Naghihintay ng Wi-Fi';
-
-  @override
-  String get onDeviceDownloadFailed => 'Hindi natapos ang download';
-
-  @override
-  String get onDeviceModelNotDownloaded => 'Hindi pa na-download';
-
-  @override
-  String onDeviceModelInstalled(String size) {
-    return 'Naka-install · $size';
-  }
-
-  @override
-  String get onDeviceModelUnsupported => 'Hindi pa available sa phone na ito';
-
-  @override
-  String get onDeviceSetupKeepRecording => 'Patuloy na mag-record habang nagda-download. Walang naghihintay dito.';
-
-  @override
-  String get onDeviceSetupAudioStays => 'Mananatili ang audio sa phone mo hanggang ma-transcribe ito.';
-
-  @override
-  String get onDeviceWifiOnly => 'Mag-download lang sa Wi-Fi';
-
-  @override
-  String get onDeviceDownloadModel => 'I-download ang Speech Model';
-
-  @override
-  String get onDeviceScheduleTitle => 'Kailan Ita-transcribe';
-
-  @override
-  String get onDeviceScheduleHeadline => 'Kailan dapat mag-transcribe ang Omi?';
-
-  @override
-  String get onDeviceScheduleBody =>
-      'Nakakatipid sa baterya ang pag-transcribe nang paisa-isang batch. Mababago mo ito anumang oras.';
-
-  @override
-  String get onDeviceScheduleCharging => 'Habang nagcha-charge';
-
-  @override
-  String get onDeviceScheduleChargingBody =>
-      'Lalabas ang mga transcript pagkatapos mong mag-charge, kadalasan magdamag.';
-
-  @override
-  String get onDeviceBatteryAlmostNone => 'Baterya: halos wala';
-
-  @override
-  String get onDeviceScheduleHours => 'Bawat ilang oras';
-
-  @override
-  String get onDeviceScheduleHoursBody =>
-      'Humahabol nang paunti-unti habang naka-baterya, kaya bihirang mahuli ang mga transcript nang higit sa ilang oras.';
-
-  @override
-  String onDeviceBatteryPerDay(int percent) {
-    return 'Baterya: mga $percent% bawat araw';
-  }
-
-  @override
-  String get onDeviceScheduleLive => 'Habang nagsasalita ka';
-
-  @override
-  String get onDeviceScheduleLiveBody => 'Regular na nagtatranscribe habang bukas ang Omi.';
-
-  @override
-  String onDeviceBatteryPerHour(int percent) {
-    return 'Baterya: mga $percent% bawat oras ng usapan';
-  }
-
-  @override
-  String onDeviceQueueWaiting(String duration) {
-    return '$duration na naghihintay ma-transcribe';
-  }
-
-  @override
-  String get onDeviceQueueChargingBody =>
-      'Magiging handa ang mga ito pagkatapos mong i-charge ang phone mo. Tuloy ang pagre-record gaya ng dati.';
-
-  @override
-  String get onDeviceQueueHoursBody => 'Humahabol ang Omi bawat ilang oras. Tuloy ang pagre-record gaya ng dati.';
-
-  @override
-  String get onDeviceQueueLowBatteryBody =>
-      'Naghihintay ng charger dahil mahina na ang baterya. Tuloy ang pagre-record gaya ng dati.';
-
-  @override
-  String get onDeviceTranscribeNow => 'I-transcribe Ngayon';
-
-  @override
-  String get onDeviceUsesBattery => 'Gumagamit ng baterya';
-
-  @override
-  String get onDeviceTranscribing => 'Nagta-transcribe…';
-
-  @override
-  String get onDeviceWaitingForCharger => 'Naghihintay ng charger';
-
-  @override
-  String get onDeviceWaitingToTranscribe => 'Naghihintay ma-transcribe';
-
-  @override
-  String get onDeviceWaitingForSetup => 'Na-save, naghihintay ng setup';
-
-  @override
-  String get onDeviceTranscribedOnIphone => 'Na-transcribe sa iPhone na ito';
-
-  @override
-  String get onDeviceTranscribedOnPhone => 'Na-transcribe sa phone na ito';
-
-  @override
-  String get onDeviceTranscribedSummarizedOnIphone => 'Na-transcribe at na-buod sa iPhone na ito';
-
-  @override
-  String get onDeviceSummarizedByCloud => 'Binuod ng Omi Cloud';
-
-  @override
-  String get onDeviceWhyPhoneTitle => 'Bakit ito ginawa sa phone mo';
-
-  @override
-  String get onDeviceWhyLiveHoursUsed =>
-      'Nagamit mo na ang live hours ngayong buwan, kaya na-transcribe ng Omi ang usapang ito sa phone na ito.';
-
-  @override
-  String get onDeviceWhySavingLiveHours => 'Pinili mong mag-transcribe sa phone na ito para makatipid ng live hours.';
-
-  @override
-  String get onDeviceWhySummaryOnPhone => 'Sa iPhone na ito rin isinulat ang buod.';
-
-  @override
-  String get onDeviceWhyNoSummary => 'Itinatago mo ang lahat sa phone na ito, kaya walang buod.';
-
-  @override
-  String get onDeviceWhyCloudTitle => 'Bakit Omi Cloud ang sumulat ng buod na ito';
-
-  @override
-  String get onDeviceWhyCloudIphone =>
-      'Hindi kayang mag-buod ng iPhone na ito nang mag-isa (kailangan nito ng iPhone 15 Pro o mas bago). Ginawa ang transcript sa phone mo, at ang text lang nito ang ipinadala sa Omi para ibuod. Hindi nito ginagamit ang live hours mo.';
-
-  @override
-  String get onDeviceWhyCloudPhone =>
-      'Hindi kayang mag-buod ng phone na ito nang mag-isa. Ginawa ang transcript sa phone mo, at ang text lang nito ang ipinadala sa Omi para ibuod. Hindi nito ginagamit ang live hours mo.';
-
-  @override
-  String get onDeviceRedoWithCloud => 'Ulitin gamit ang Omi Cloud';
-
-  @override
-  String get onDeviceRedoHint =>
-      'Mag-upgrade sa Pro para sa paghihiwalay ng mga nagsasalita at mas mataas na katumpakan';
-
-  @override
-  String get onDeviceKeepEverything => 'Itago ang lahat sa phone na ito';
-
-  @override
-  String get onDeviceKeepEverythingSubtitle => 'Mga transcript lang, walang buod';
-
-  @override
-  String get onDeviceLiveHours => 'Live hours';
-
-  @override
-  String onDeviceLiveHoursUsed(String used, String limit) {
-    return '$used sa $limit oras ang nagamit';
-  }
-
-  @override
-  String onDeviceResets(String date) {
-    return 'Magre-reset sa $date';
-  }
-
-  @override
-  String get onDeviceGetMoreLiveHours => 'Kumuha ng Mas Maraming Live Hours';
-
-  @override
-  String get onDeviceAfterLiveHours => 'Kapag naubos ang live hours';
-
-  @override
-  String get onDeviceWhen => 'Kailan';
-
-  @override
-  String get onDeviceSummaries => 'Mga buod';
-
-  @override
-  String get onDeviceSummariesOnIphone => 'Sa iPhone na ito';
-
-  @override
-  String get onDeviceSummariesCloud => 'Sa Omi Cloud';
-
-  @override
-  String get onDeviceSaveLiveHours => 'Mag-transcribe sa phone na ito para makatipid ng live hours';
-
-  @override
-  String get onDeviceSaveLiveHoursSubtitle =>
-      'Mag-upgrade sa Pro para sa paghihiwalay ng mga nagsasalita at mas mataas na katumpakan';
-
-  @override
-  String get onDeviceOnThisPhone => 'Sa phone na ito';
-
-  @override
-  String get onDeviceAudioWaiting => 'Audio na naghihintay sa phone';
-
-  @override
-  String get onDeviceRemoveModel => 'Alisin ang Speech Model';
-
-  @override
-  String get onDeviceRemoveModelTitle => 'Alisin ang Speech Model?';
-
-  @override
-  String get onDeviceRemoveModelMessage =>
-      'Maghihintay ang mga recording sa phone na ito hanggang i-download mo ulit ito o bumalik ang live hours.';
-
-  @override
-  String get onDeviceRemove => 'Alisin';
-
-  @override
-  String get onDeviceFinishSetupTitle => 'Tapusin ang setup para makita ang mga transcript mo';
-
-  @override
-  String get onDeviceFinishSetupBody =>
-      'Nagamit mo na ang live hours ngayong buwan. Nagre-record pa rin ang Omi at nagse-save ng audio sa phone mo. I-download ang speech model at hahabol ito.';
-
-  @override
-  String onDeviceDownloadSize(String size) {
-    return '$size na download';
-  }
-
-  @override
-  String get onDeviceUnsupportedBody =>
-      'Hindi pa kayang patakbuhin ng phone na ito ang speech model. Mananatiling naka-save ang audio hanggang bumalik ang live hours o mag-upgrade ka.';
-
-  @override
-  String get onDeviceEntrySubtitle => 'Kapag naubos ang live hours, mag-transcribe sa phone na ito';
+  String get chatAppsWaitlistJoined => 'Nasa waitlist ka na. Sasabihan ka namin kapag may puwesto na.';
 }
