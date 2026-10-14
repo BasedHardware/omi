@@ -34,6 +34,8 @@ SWIFT_HARDCODED = re.compile(
 DART_DEFINITION = re.compile(r"\bExperimentDefinition(?:<[^>]+>)?\s*\(\s*key\s*:\s*['\"]([^'\"\n]+)['\"]")
 DART_MASTER = re.compile(r"\benabledFlag\s*=\s*['\"]([^'\"\n]+)['\"]")
 BUILD_DEFINE = re.compile(r"\b(?:import\.meta\.env\.VITE_ENABLE_|process\.env\.NEXT_PUBLIC_ENABLE_)([A-Z0-9_]+)")
+# PostHog keys on TypeScript clients: `static readonly enabledFlag = 'web-…'`.
+TS_POSTHOG_FLAG = re.compile(r"\b(?:enabledFlag|killSwitchFlag)\s*=\s*['\"]([^'\"\n]+)['\"]")
 CHART_KEY = re.compile(r"^\s*-\s*name:\s*['\"]?([A-Z][A-Z0-9_]+)")
 MANIFEST_KEY = re.compile(r"^\s*([A-Z][A-Z0-9_]+):(?:\s|$)")
 
@@ -280,7 +282,7 @@ def extract_code_reads(root: Path, known: set[str]) -> list[Read]:
             patterns = (
                 (SWIFT_FLAG, SWIFT_LITERAL, SWIFT_HEADER)
                 if path.endswith(".swift")
-                else (DART_DEFINITION, DART_MASTER) if path.endswith(".dart") else (BUILD_DEFINE,)
+                else (DART_DEFINITION, DART_MASTER) if path.endswith(".dart") else (BUILD_DEFINE, TS_POSTHOG_FLAG)
             )
             for pattern in patterns:
                 for match in pattern.finditer(text):

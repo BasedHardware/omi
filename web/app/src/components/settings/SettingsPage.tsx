@@ -4,6 +4,8 @@ import { useState, useEffect, useRef } from 'react';
 import { useRouter, useSearchParams } from '@tschk/moonshine-next/navigation';
 import Image from '@tschk/moonshine-next/image';
 import Link from '@tschk/moonshine-next/link';
+import { PlanStorefrontGate } from '@/lib/planStorefrontGate';
+import { BudgetUpsellBanner, StorefrontPanel } from './storefront/StorefrontHost';
 import {
   Shield,
   LogOut,
@@ -853,6 +855,15 @@ function UsageSectionContent({
   const [showCancelConfirm, setShowCancelConfirm] = useState(false);
   const [isCanceling, setIsCanceling] = useState(false);
   const [showUpgradeOptions, setShowUpgradeOptions] = useState(false);
+  const [storefrontEnabled, setStorefrontEnabled] = useState(false);
+
+  useEffect(() => {
+    let live = true;
+    void PlanStorefrontGate.sheetEnabled().then((on) => live && setStorefrontEnabled(on));
+    return () => {
+      live = false;
+    };
+  }, []);
 
   // Set initial selected price when plans load, and keep it in sync when the
   // subscription's current price changes (e.g. after a plan change or
@@ -1047,7 +1058,21 @@ function UsageSectionContent({
       {activeTab === 'plan' ? (
         /* PLAN TAB - Unknown plans remain neutral; known plans choose Basic vs paid. */
         <div className="space-y-6">
-          {isUnknownPlan ? (
+          {storefrontEnabled ? (
+            /* Ladder-v1 plans payload; the backend owns every plan string. */
+            <>
+              <BudgetUpsellBanner
+                showMeter={false}
+                livePlanId={subscription?.plan}
+                onSubscriptionUpdate={onSubscriptionUpdate}
+              />
+              <StorefrontPanel
+                source="web_plans"
+                livePlanId={subscription?.plan}
+                onSubscriptionUpdate={onSubscriptionUpdate}
+              />
+            </>
+          ) : isUnknownPlan ? (
             <UnknownPlanCard />
           ) : !isUnlimited ? (
             /* BASIC PLAN VIEW */
