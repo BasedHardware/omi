@@ -7,8 +7,6 @@ from fastapi import HTTPException
 
 from config import ladder_v1 as policy
 from config.plan_catalog import ENTITLEMENT_VERSIONS
-from database import users as users_db, usage_units
-from database.ladder_v1 import reserve_daily_request
 from utils.observability.fallback import record_fallback
 
 _UNRESOLVED = object()
@@ -16,6 +14,8 @@ _UNRESOLVED = object()
 
 def account(uid: str, subscription: Any = _UNRESOLVED, *, firestore_client: Any = None):
     if subscription is _UNRESOLVED:
+        from database import users as users_db
+
         subscription = users_db.get_user_valid_subscription(uid, firestore_client=firestore_client, provision=False)
     return policy.entitlements(subscription)
 
@@ -24,6 +24,8 @@ def usage_snapshot(uid: str, subscription: Any = _UNRESOLVED, *, firestore_clien
     entitlement = account(uid, subscription, firestore_client=firestore_client)
     if entitlement is None:
         return None
+    from database import usage_units
+
     now = datetime.now(timezone.utc)
     snapshot = usage_units.get_usage_units(uid, now, firestore_client=firestore_client, entitlements=entitlement)
     reset = datetime(now.year + (now.month == 12), now.month % 12 + 1, 1, tzinfo=timezone.utc)
@@ -85,6 +87,8 @@ def enforce_daily_cap(uid: str) -> dict | None:
         return None
     cap = ENTITLEMENT_VERSIONS['ladder_v1']['mcp_daily_caps'][entitlement['plan_id']]
     try:
+        from database.ladder_v1 import reserve_daily_request
+
         result = reserve_daily_request(uid, cap)
     except Exception:
         record_fallback(

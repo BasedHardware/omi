@@ -90,8 +90,15 @@ def test_legacy_price_bypasses_new_mechanics(monkeypatch):
     assert catalog.resolve_price_entitlements(price) == catalog.get_entitlement_version('plus', 'legacy')
 
 
+@pytest.fixture
+def daily_module():
+    from database import ladder_v1 as daily_db
+
+    return daily_db
+
+
 @pytest.mark.parametrize('plan,cap', [('basic', 100), ('plus', 500), ('operator', 5000), ('architect', 5000)])
-def test_daily_cap_policy_and_error(monkeypatch, plan, cap):
+def test_daily_cap_policy_and_error(monkeypatch, plan, cap, daily_module):
     monkeypatch.setenv('LADDER_V1_MCP_DAILY_CAPS_ENABLED', 'true')
     monkeypatch.setattr(ladder, 'account', lambda *a: {'plan_id': plan})
 
@@ -99,7 +106,7 @@ def test_daily_cap_policy_and_error(monkeypatch, plan, cap):
         assert actual_cap == cap
         return {'allowed': False, 'used': cap, 'limit': cap, 'reset_at': 4102444800, 'state': 'cap'}
 
-    monkeypatch.setattr(ladder, 'reserve_daily_request', reserve)
+    monkeypatch.setattr(daily_module, 'reserve_daily_request', reserve)
     with pytest.raises(HTTPException) as error:
         ladder.enforce_daily_cap('u')
     assert error.value.detail['trigger'] == 'mcp_daily_cap'
@@ -347,3 +354,27 @@ def test_bound_intervals_support_reactivation_and_never_match_month_to_year(bind
         assert price_ids_match_plan_and_interval(year, year)
         assert not price_ids_match_plan_and_interval(month, year)
         assert not price_ids_match_plan_and_interval(year, month)
+
+
+def test_flag_off_cold_import_never_resolves_database(monkeypatch):
+    from types import ModuleType
+    from testing.import_isolation import load_module_fresh, stub_modules
+
+    for key in (
+        'LADDER_V1_BUDGET_ENFORCEMENT_ENABLED',
+        'LADDER_V1_PRO_GATES_ENABLED',
+        'LADDER_V1_MCP_DAILY_CAPS_ENABLED',
+    ):
+        monkeypatch.delenv(key, raising=False)
+    database = ModuleType('database')
+    database.__path__ = []
+
+    def forbidden(name):
+        raise AssertionError(f'flag-off database resolution: {name}')
+
+    database.__getattr__ = forbidden
+    with stub_modules({'database': database}):
+        cold = load_module_fresh('utils.ladder_v1', str(Path(__file__).parents[2] / 'utils/ladder_v1.py'))
+        assert cold.budget_snapshot('u') is None
+        assert cold.feature_allowed('u', 'screen_context') is None
+        assert cold.enforce_daily_cap('u') is None

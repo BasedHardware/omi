@@ -18,7 +18,6 @@ import database.screen_activity as screen_activity_db
 import database.vector_db as vector_db
 import database.notifications as notification_db
 from database._client import db as firestore_db
-from utils import ladder_v1
 from utils.llm.clients import gemini_embed_query
 import logging
 
@@ -528,8 +527,13 @@ def _env_flag_enabled(name: str, *, default: bool) -> bool:
 
 def _screen_vectors_disabled(uid: str) -> bool:
     """Server-owned account opt-out; absent configuration preserves existing accounts."""
-    if ladder_v1.feature_allowed(uid, 'screen_context') is False:
-        return True
+    from config.ladder_v1 import enabled
+
+    if enabled('LADDER_V1_PRO_GATES_ENABLED'):
+        from utils import ladder_v1
+
+        if ladder_v1.feature_allowed(uid, 'screen_context') is False:
+            return True
     tokens = _parse_csv_tokens(os.getenv('SCREEN_ACTIVITY_VECTORS_DISABLED_UIDS'))
     return uid in tokens or '*' in tokens
 

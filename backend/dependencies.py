@@ -16,6 +16,7 @@ from utils.api_key_families import (
 )
 from utils.executors import ExecutorSaturatedError, critical_executor, db_executor, run_blocking
 from utils.ladder_v1 import enforce_daily_cap, enforce_budget
+from config import ladder_v1 as ladder_policy
 from utils.log_sanitizer import sanitize
 from utils.observability.api_keys import record_api_key_repairs
 from utils.memory.product_authorization import ProductAuthorizationContext
@@ -727,8 +728,11 @@ async def get_developer_memory_default_memory_batch_write_context(
 
 
 async def _enforce_ladder_api(uid: str, response: Response | None) -> None:
-    await run_blocking(db_executor, enforce_budget, uid)
-    daily = await run_blocking(db_executor, enforce_daily_cap, uid)
+    if ladder_policy.budget_enforcement_enabled():
+        await run_blocking(db_executor, enforce_budget, uid)
+    daily = None
+    if ladder_policy.mcp_daily_caps_enabled():
+        daily = await run_blocking(db_executor, enforce_daily_cap, uid)
     if daily is not None and response is not None:
         response.headers['X-Omi-Usage-State'] = daily['state']
         response.headers['X-Omi-Usage-Reset-At'] = str(daily['reset_at'])
