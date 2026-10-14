@@ -1,9 +1,7 @@
 # Cleanup capabilities in Dream
 
-Owner decision: 2026-10-14. This is the first implementation step: inventory and
-full-owner memory hygiene. No job, flag, cohort, or schedule is changed here.
-Schedules below are **checked-in declarations**, not a live infrastructure audit.
-An absent declaration does not establish that a manually created job is dead.
+Owner decision: 2026-10-14. Dream v2 replaces retrospective cleanup judgment in
+this one PR. Schedules below are checked-in declarations, not a live audit.
 No production data or production account endpoint was consulted.
 
 ## Inventory
@@ -16,15 +14,15 @@ workflows; manual deployment and runtime state have not been verified.
 
 | Name / entrypoint | Decision and writes | Dev / prod scheduling; workflow | Gates | Verdict |
 | --- | --- | --- | --- | --- |
-| Memory maintenance: `modal/memory_maintenance_job.py` → `utils/memory/canonical_short_term_maintenance_cron.py` → `utils/memory/canonical_consolidation.py` | Model routes pending facts: promote, replace/merge duplicates, keep both, review, reject, quarantine. Writes canonical memory status/tier, promotion/evidence/lineage, graph assertions, control/operation commits, cursors and projection/vector outboxes. Ledger-mode users are skipped by the compatibility consolidation loop. | Dev `memory-maintenance-hourly`, hourly enabled. No prod schedule. `.github/workflows/gcp_memory_maintenance_job.yml` manual deploy and `gcp_memory_maintenance_job_auto_dev.yml` main auto-dev; manual workflow reconciles Scheduler only for dev. | `MEMORY_ENABLED`; `MEMORY_CANONICAL_MAINTENANCE_ENABLED`; `MEMORY_CANONICAL_MAINTENANCE_FLEX`; writer admission, per-run cost and UID inventory limits. | **FOLD** semantic consolidation; keep deterministic processing receipts, TTL and projection delivery. Do not delete or schedule in prod. |
-| Canonical required processing / expiry / outbox: `utils/memory/short_term_promotion.py`, `utils/memory/canonical_short_term_maintenance_cron.py` | Normalizes processing state, expiry/retention transitions, dispatches owed required work and delivers committed projection intents. Also persists recurrence signals. | Same maintenance host; dev hourly only in manifest. | Maintenance admission, source/account generations, Flex and delivery bounds. | **KEEP** required intake completion, retention and delivery primitives; **FOLD** background orchestration when the maintenance host is retired. Separately hosted responsibilities must survive retirement of the semantic planner. |
-| Daily memory sweep: `modal/daily_memory_sweep_job.py` → `utils/memory/daily_memory_sweep.py` | Completed-day/onboarding evidence produces reusable facts, slot replacements, standing triggers, daily summaries and folder assignments. Writes ledger tails/supersedes, source-stage receipts, model-call receipts, daily cursors and assignment counters. | Dev `daily-memory-sweep-hourly`, hourly enabled; per-owner timezone/local-day and stagger admission. No prod schedule. `.github/workflows/gcp_daily_memory_sweep_job.yml`, `gcp_daily_memory_sweep_job_auto_dev.yml`; QA workflows are separate. | `MEMORY_DAILY_MEMORY_SWEEP_ENABLED`, `...KILL_SWITCH`, `...MODEL_ENABLED`, `...MODEL_NAME`, `...MAX_MODEL_CANDIDATES`, `...MAX_MODEL_COST_USD`, `...COHORT_ENABLED`, `...COHORT_FLAG`, `...COHORT_TIMEOUT_SECONDS`, `...TIMEZONE_RECONCILIATION_ENABLED`, `...STAGGER_SECONDS`; JIT cohort authority. | **FOLD** retrospective semantic judgment. Daily summaries, standing triggers and filing are separate parity requirements; this PR does not replace them. |
+| Memory maintenance: `modal/memory_maintenance_job.py` → `utils/memory/canonical_short_term_maintenance_cron.py` → `utils/memory/canonical_consolidation.py` | Retired semantic planner/candidate retrieval/retries/cooldown; retrospective merge/retire/supersede now uses Dream verification and journal. The surviving host normalizes/completes explicit required intake, applies TTL, drains canonical outboxes for every selected account, and delivers already-enqueued recurrence receipts. | Dev `memory-maintenance-hourly`, hourly enabled. No prod schedule. `.github/workflows/gcp_memory_maintenance_job.yml` manual deploy and `gcp_memory_maintenance_job_auto_dev.yml` main auto-dev; manual workflow reconciles Scheduler only for dev. | `MEMORY_ENABLED`; retained `MEMORY_CANONICAL_MAINTENANCE_ENABLED`; required-intake Flex capability, writer/generation fences and bounded rotating inventory. Semantic consolidation and selector flags are removed. | **FOLD / RETIRED** semantic consolidation. **KEEP** mixed host for intake, retention and delivery; do not add a prod schedule. |
+| Canonical required processing / expiry / outbox: `utils/memory/short_term_promotion.py`, `utils/memory/canonical_short_term_maintenance_cron.py` | Normalizes processing state, expiry/retention transitions, dispatches owed required work and delivers committed projection intents. Delivers already-enqueued recurrence signals; no new semantic discovery. | Same maintenance host; dev hourly only in manifest. | Maintenance admission, source/account generations, Flex and delivery bounds. | **KEEP** required intake, retention and owed delivery. Host remains scheduled in dev; obsolete semantic orchestration is removed in this PR. |
+| Daily memory sweep: `modal/daily_memory_sweep_job.py` → `utils/memory/daily_memory_sweep.py` | Completed-day/onboarding evidence produces reusable facts, slot replacements, standing triggers, daily summaries and folder assignments. Writes ledger tails/supersedes, source-stage receipts, model-call receipts, daily cursors and assignment counters. | Dev `daily-memory-sweep-hourly`, hourly enabled; per-owner timezone/local-day and stagger admission. No prod schedule. `.github/workflows/gcp_daily_memory_sweep_job.yml`, `gcp_daily_memory_sweep_job_auto_dev.yml`; QA workflows are separate. | `MEMORY_DAILY_MEMORY_SWEEP_ENABLED`, `...KILL_SWITCH`, `...MODEL_ENABLED`, `...MODEL_NAME`, `...MAX_MODEL_CANDIDATES`, `...MAX_MODEL_COST_USD`, `...COHORT_ENABLED`, `...COHORT_FLAG`, `...COHORT_TIMEOUT_SECONDS`, `...TIMEZONE_RECONCILIATION_ENABLED`, `...STAGGER_SECONDS`; JIT cohort authority. | **KEEP** new-fact formation, standing triggers, daily summaries, filing and their timezone/receipt authority. Dream owns retrospective cleanup of the resulting facts; the specified edit kinds do not replace this intake pipeline. |
 | Sweep stage/model invocation expiry: `utils/memory/daily_memory_sweep.py:cleanup_expired_daily_memory_sweep_stages`, `database/memory_apply_store.py:cleanup_expired_memory_deletion_receipts`; `scripts/jit_qa_sweep_repair.py` | Deterministic payload retention, content-free invocation fences and operator-attested retry repair. Deletes expired staging payloads / expiry-qualified deletion receipts; records bounded repair authority. | Sweep host / explicit operator CLI, not an independent schedule. | Receipt TTL, invocation state, worker-terminated/no-dispatch attestations, account generation. | **KEEP** retention, billing/retry safety and deterministic operator authority. |
 | Knowledge ledger cutover: `modal/knowledge_ledger_drain_job.py` → `utils/memory/knowledge_ledger_drain.py` | Inventories compatibility accounts, migrates rows, publishes fenced ledger-writer transition and prompt projection. Writes migration receipts/cursors and canonical rows. | Dev `knowledge-ledger-drain-hourly`, hourly enabled; deployed with daily sweep workflows. No prod schedule. | `KNOWLEDGE_LEDGER_DRAIN_ENABLED`, `KNOWLEDGE_LEDGER_DRAIN_UID_ALLOWLIST`; writer transition/source/account fences. | **KEEP** deterministic schema migration; Dream cannot grant itself writer authority. |
-| Untitled recovery: `modal/conversation_selfheal_job.py` → `services/conversation_selfheal.py`; `scripts/repair_recovery_dead_letter_untitled.py` | Bounded stale in-progress scan verifies content/jobs, admits SERVER_RECOVERY finalization, terminalizes content-free/protected rows, verifies output and optionally nudges capture wedges. Explicit repair CLI updates qualified dead-letter rows without reprocessing. Writes durable finalization jobs, conversation status/title, CAS scan/verification cursor and notification cooldowns. | No dev/prod schedule or deploy workflow in inspected tree. `docs/omi-core-selfheal-dashboard.md` describes manually provisioning a 15-minute trigger; code is shipped in backend image. Repair CLI is manual. | `SELFHEAL_MODE=off|detect|nudge|heal`, `SELFHEAL_DRY_RUN`, `SELFHEAL_UID_ALLOWLIST`; stale/revision/content/ownership fences. | **FOLD** background title/overview repair and recovery admission/verification into Dream capabilities, retaining the existing deterministic finalization writer and its fences. Title-at-terminal intake prevention and capture-liveness detection stay with their current paths; a Dream title edit cannot satisfy a stranded pipeline's owed work. |
+| Untitled recovery: `modal/conversation_selfheal_job.py` → `services/conversation_selfheal.py`; `scripts/repair_recovery_dead_letter_untitled.py` | Bounded stale in-progress scan verifies content/jobs, admits SERVER_RECOVERY finalization, terminalizes content-free/protected rows, verifies output and optionally nudges capture wedges. Explicit repair CLI updates qualified dead-letter rows without reprocessing. Writes durable finalization jobs, conversation status/title, CAS scan/verification cursor and notification cooldowns. | No dev/prod schedule or deploy workflow in inspected tree. `docs/omi-core-selfheal-dashboard.md` describes manually provisioning a 15-minute trigger; code is shipped in backend image. Repair CLI is manual. | `SELFHEAL_MODE=off|detect|nudge|heal`, `SELFHEAL_DRY_RUN`, `SELFHEAL_UID_ALLOWLIST`; stale/revision/content/ownership fences. | **KEEP** stranded-pipeline recovery and deterministic terminalization. Dream title/overview repairs cover completed records; they cannot satisfy owed finalization. No independently scheduled completed-record semantic repair job was found. |
 | Terminal title prevention: `database/conversation_terminal_title.py`, `utils/conversations/finalizer.py`, `database/conversation_finalization_jobs.py` | Guarantees a kept terminal row gets a deterministic title and cannot be orphaned from its finalization job. Writes terminal conversation fields/receipt. | Request/finalization path, no cron. | Lifecycle/revision/ownership/source fences. | **KEEP** ingest-time prevention. |
-| People duplicate cleanup: `utils/dream_tools.py:apply_edit(merge_people)`, `database/review_changes.py:merge_review_entities` | Evidenced duplicate identity merge retains redirect and reversible people/node labels/aliases, with ledger and Review journal. | Dream prod hourly sweep (and manual runs); no separate cleanup cron found. | Dream/Review switches, owner eligibility, suppression, current source fences. | **FOLD** already a Dream capability, Review-only. No retirement of explicit user tools. |
-| False people / speaker attribution: `routers/mcp.py:dismiss_person`, `utils/mcp_server/handlers/other.py`, `database/users.py:dismiss_person`; `database/person_aliases.py` | Explicit user dismissal soft-hides a false profile, with associated read/export visibility rules. Speaker teaching paths update assignments and voice samples. No autonomous people/speaker sweep found. | User API/MCP calls, no schedule. | `people.cleanup` MCP scope; authentication and speaker-teaching ownership/generation fences. | **FOLD** future autonomous false-profile judgment; **KEEP** user-authorized cleanup and ingest-time teaching. Needs a reversible Dream status kind; merge_people alone cannot dismiss a false profile. |
+| People duplicate cleanup: `utils/agent_capabilities/tools.py:apply_verified_edit(merge_people)`, `database/review_changes.py:merge_review_entities` | Evidenced duplicate identity merge retains redirect and reversible people/node labels/aliases, with ledger and Review journal. | Dream prod hourly sweep (and manual runs); no separate cleanup cron found. | Dream/Review switches, owner eligibility, suppression, current source fences. | **FOLD** verified automatic merge; protected voice/manual/pinned identities remain fenced. No retirement of explicit user tools. |
+| False people / speaker attribution: `routers/mcp.py:dismiss_person`, `utils/mcp_server/handlers/other.py`, `database/users.py:dismiss_person`; `database/person_aliases.py` | Explicit user dismissal soft-hides a false profile, with associated read/export visibility rules. Speaker teaching paths update assignments and voice samples. No autonomous people/speaker sweep found. | User API/MCP calls, no schedule. | `people.cleanup` MCP scope; authentication and speaker-teaching ownership/generation fences. | **FOLD** reversible verified `dismiss_person`; **KEEP** user-authorized cleanup and ingest-time teaching. Automatic dismissal soft-hides with a journal and exact Undo; explicit speaker teaching stays protected. |
 | Action-item refresh preservation: `utils/conversations/action_item_refresh.py` → `database/action_item_refresh.py` / `action_item_refresh_policy.py` | Reprocessing/merge reconciles tasks by stable identity, preserves completion/user edits, carries donor completion, atomically claims delivery. Writes action items and conversation refresh receipts; refreshes vectors and emits integrations. | Conversation processing and smart-merge refresh, no separate cron. | `ACTION_ITEM_REFRESH_PRESERVE_ENABLED` plus generation/revision/identity fences. | **KEEP** ingest-time prevention and delivery. |
 | Action-item dedupe / stale-task cleanup: `utils/conversations/notes_task_context.py`, `database/vector_db.py:find_similar_action_items`, `database/staged_tasks.py`; Dream `close_task` / `retire_task` | Similar-task lookup prevents duplicate creation at ingest/promote. Dream retrospectively closes completed/obsolete tasks through the reversible journal. | Intake and user task calls; Dream prod hourly / manual. No task-dedupe cron found. | Task workflow control/generations, similarity/evidence bounds, Dream/Review policy. | **FOLD** retrospective duplicate/stale judgment; **KEEP** ingest-time dedupe. Duplicate tasks need semantic merge/retirement parity, not deletion. |
 | Candidate integration retry: `utils/task_intelligence/candidate_integration_sweeper.py`, `routers/candidate_integration_sweep.py` | Retries already accepted task integration delivery; updates integration receipts/attempts. | Prod `candidate-integration-sweep`, every 15 min; intentionally no dev declaration because dev shares data plane. | Delivery state, claim leases, account generations, integration auth. | **KEEP** deterministic delivery of user-approved work. |
@@ -39,64 +37,48 @@ workflows; manual deployment and runtime state have not been verified.
 | Vector/graph projection repair: `scripts/vector_repair_outbox_worker_entrypoint.py`, memory outbox delivery, `scripts/backfill_*vectors.py`, `scripts/firestore_read_reconcile.py` | Reconciles indexes/projections from canonical source; writes indexes, delivery receipts and infrastructure artifacts. | Explicit worker/operator paths; Firestore reconciliation workflow has a schedule. No semantic cleanup cron. | Current source/control watermark, leases, deployment/query readiness, explicit operator bounds. | **KEEP** deterministic projection/infrastructure repair. |
 | Remaining operator backfills / reconciliation: `scripts/backfill_*.py`, `scripts/repair_memory_state_head.py`, `scripts/billing_reconcile.py`, `scripts/finops/`, storage lifecycle workflow | Bounded migration/repair of source metadata, schema, billing/state-head/index/retention contracts; no open-ended autonomous memory judgment. | Operator CLI or named infrastructure/billing workflows; not Dream's schedule. | Explicit operator flags, generation/source checks and domain-specific authority. | **KEEP** migrations, billing and deterministic repair. |
 
-## Retirement parity by capability
+## Retirement and preserved authorities
 
-| FOLD capability | Dream edit kinds needed | Parity evidence required before retirement |
-| --- | --- | --- |
-| Canonical semantic consolidation | Existing `memory`, `merge_memories`; new `retire_memory`, `supersede_memory`; separately preserve pending-fact promote/review/quarantine routing | Run a synthetic corpus through both planners: near duplicates, garbage, another speaker's fact, contradiction, location/preference changes, compatible time-scoped history, subject/privacy mismatch, disputed evidence and age-only facts. Compare current/default reads, historical reads, canonical statuses/lineage, exact Undo, and projection/vector delivery. Account for pending/TTL/required-processing/outbox responsibilities before retiring the host. This PR does not establish total consolidation parity. |
-| Daily sweep retrospective synthesis | `memory`/fact append, `supersede_memory`, `merge_memories`, `retire_memory`; additional typed daily-summary, standing-trigger and folder-assignment capabilities | Same completed local day, onboarding evidence and standing-profile slots must produce equivalent active facts, triggers, summaries and filing with timezone changes, restart/retry receipts, authority ordering and cost/attention caps. No duplicate paid call or missing local day. Existing daily-sweep emulator checks stay authoritative until parity exists. |
-| Untitled/self-heal repair | `title`, `overview`; new fenced `recover_conversation` / orphan-terminalization capabilities delegating to existing lifecycle writers, with verification/cursor parity | Synthetic stale/dead-letter/empty/protected/multilingual rows: useful title/overview, exact Undo, no overwrite of user or rich summaries. Prove actual finalization recovery and unchanged audio/transcript ownership before retiring anything beyond semantic title repair. |
-| People/speaker cleanup | `merge_people`; additional reversible `retire_person` and authorized speaker-assignment correction kind | Duplicate versus merely similar people, false detections, primary-user/third-party distinctions, retained aliases/redirects, voice/sample/assignment fences, hidden profile read/export behavior and exact Undo. Explicit user cleanup/teaching APIs remain. |
-| Task retrospective dedupe / stale cleanup | `close_task`, `retire_task`; a typed merge capability if preserving distinct task metadata requires it | Duplicates versus recurring tasks, completed/open pairs, user-edited descriptions/dates, integration identities, independent evidence newer than task changes, exact Undo and no duplicate integration delivery. Ingest dedupe and refresh preservation remain. |
+`canonical_consolidation.py` no longer contains a model planner, candidate search,
+semantic batch output, semantic attempt/quarantine state, or semantic watermark.
+The maintenance host's dreaming state, 20-hour cooldown, overflow policy and
+duplicate Dream drain are removed. `MEMORY_CANONICAL_CONSOLIDATION_ENABLED`, its
+batch/candidate tuning reads, and `MEMORY_CANONICAL_MAINTENANCE_FLEX` disappear from
+runtime bindings and the feature registry. Old stored control fields/receipts are
+retained as history; nothing silently migrates or rewrites them.
 
-## What this PR adds
+No Scheduler entry becomes dead: `memory-maintenance-hourly` still owns required
+intake, retention and outboxes; the daily sweep owns new-fact formation; independent
+frame retention and delivery jobs remain. No `.github` workflow becomes dead.
+`gcp_memory_maintenance_job.yml` and `gcp_memory_maintenance_job_auto_dev.yml` still
+deploy the surviving host. No workflow file is edited in this PR.
 
-Only `context_mode(uid) == full` can authorize automatic memory hygiene. It
-requires `DREAM_AGENT_CONTEXT_MODE=full` and membership in
-`DREAM_AGENT_FULL_CONTEXT_UIDS`, in addition to ordinary Dream eligibility and
-`DREAM_AGENT_MODE=on`. Full passes include up to 100 current/default-visible
-memories from the authoritative shared read path, newest first, rehydrated through
-Dream's scoped reads. Each whole snapshot must fit the existing token/window
-budget; oversized rows are skipped. IDs, provenance, time scope and speaker
-labels remain visible to the planner. Diagnostics contain counts only.
+## Dream policy
 
-`merge_memories`, `retire_memory`, and `supersede_memory` auto-apply only when
-all returned samples agree and at least two samples returned. One returned
-sample or a majority of three offers a value-ranked Review proposal instead.
-Undo-rate demotion applies independently to each kind; demoted unanimous edits
-also go to Review. Values 1–2 do not consume user attention. The same daily
-three-question budget, per-pass edit cap, live lease, suppression and kill switch
-apply. Existing full-owner spelling automation remains intact. Ordinary `memory`
-corrections and person/task/vocabulary proposals remain Review-only.
+One shared shaped-agent session hunts with six bounded tools. Two independent
+reserved-lane verifier responses must both agree before an eligible, non-demoted
+kind applies. Split or demoted proposals use ranked Review attention; both
+disagree drops the edit. Low-value questions never consume attention. The
+kill switch, lease, source/generation fences, suppression and journal/Undo apply
+to every autonomous mutation. The former sampled-majority and context modes are
+deleted. All-user rollout is configured by `DREAM_AGENT_ELIGIBILITY=all` in prod.
 
-Retirement mirrors canonical ledger close semantics: `status=superseded` and
-`valid_to`, with no replacement pointer. Supersession closes the old row and
-sets `superseded_by` to either an existing newer same-subject/slot/private fact or
-a new time-scoped agent fact tail. It never hard-deletes a memory. The canonical
-commit, projection/vector intents and encrypted Review journal are atomic.
-Undo restores each existing row's exact prior snapshot and graph assertion;
-a newly created tail stays closed history. Redo reuses the recorded replacement.
-Changed source/account generations, deletion gates, newer rows or changed graph
-assertions conflict instead of overwriting later work. The 30-day Review Undo
-window and durable suppression key apply.
+Automatic kinds are spelling, title, overview, vocabulary, merge/retire/supersede
+memory, dismiss/merge people, merge/retire tasks, duplicate-conversation hiding
+with link, and language correction. No kind hard-deletes source records. Captured
+speech remains immutable; spelling uses an encrypted correction overlay.
 
-Counts-only `omi_dream_memory_edit_total{kind,disposition}` reports proposed,
-auto_applied and suggested counts for memory/merge/retire/supersede. Labels are
-fixed kinds/dispositions; no text, IDs or references are metric labels.
+## Parity checks
 
-The bounded `Plan`/`Edit` schema, bounded instructions and retrieval branch stay
-unchanged. The additive `agent_proposal.memory_hygiene` field carries the two new kinds; the
-existing `edit` field stays unchanged for released clients. Regenerate the
-app-client OpenAPI and Review DTOs. Current client generic agent proposals show
-the reason and affected memory labels. No model content filters or handwritten
-regex judgment rules are added.
+The retained disposition tests cover canonical head/item/graph/outbox atomicity,
+source generation and idempotent retry. Required-intake tests cover valid receipts,
+ordinary-observation fairness, bounded capture/id query/cursor wrapping, failures
+and concurrent cursor protection. Maintenance tests cover prior privacy outboxes
+before malformed rows, newly committed delivery, all-account delivery and resource
+deferral without skipping a UID. Existing daily-sweep, finalization, task-refresh,
+smart-merge and compliance tests remain authoritative for their own pipelines.
 
-## Verification limits
-
-Hermetic tests exercise the production Dream runner, canonical commit/outbox
-writer and Review journal using synthetic records and the strict Firestore
-transaction fixture. They establish local behavior, not a deployed result or
-real model quality. Live Scheduler/Cloud Run state, owner data, model precision,
-projection workers and rendered device Review/Undo are not verified in this
-step. Consolidation and daily sweep remain present and dev-scheduled; no
-production maintenance schedule is added or enabled.
+Dream's synthetic replay and cleanup tests cover retrospective judgments and
+reversals. Local evidence does not establish deployed Scheduler state, real model
+accuracy or provider billing. See [Dream architecture](dream-agent.md) for budgets,
+operator dry-run, canary, metrics and rollback.

@@ -138,7 +138,9 @@ BODY_DIGEST = {
     'database.firestore_query_types.FirestoreQuerySpec.build': '2c26a157a8e87be2bcfef668e3bd5cdc0a9c0d96e0b56bada98c30741c8be01a',
     'database.sync_backfill_sequencer._pending_for_uid': '0215df28fdc7128cc68bf0abf087e4f98854698851b22821008460b68b699ea9',
     'database.workstreams.import_task_goal_links': 'd0c7c57d032067c3d72829663dd6f249073e6438ec7adac966b617fe3eaf1c56',
-    'database.smart_merge.absorb_conversation': '811401edfa2d83ca8201f5275840c7f948580e6c6bd859bc9e6c7e879dbdbc22',
+    # Re-reviewed: public size guard rename and correction-parent rejection add
+    # no query. The terminal streams still belong to the two driven callees.
+    'database.smart_merge.absorb_conversation': 'fc5e7e64436af99e10e92c08c4e0ecf763d1d9ff2865c756c79f3a4952771fef',
     'database.client_telemetry.recent_owner_ids': '65fe8200d7ad9418b793ccb0fa53a172b2576a80bba644caa3b36cdb53b74510',
     'database.client_telemetry_ops.purge_expired_observations': '8526c30b11ad8548356a136220232a607937bc464628c0eb5326e0a2e928897f',
 }

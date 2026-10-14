@@ -292,6 +292,10 @@ def absorb_conversation(
             return AbsorbResult('rejected', 'conversation_not_eligible')
         if not survivor_raw or survivor_raw.get('deleted'):
             return AbsorbResult('rejected', 'survivor_changed')
+        # Corrections own captured segment anchors. Intake must not absorb or
+        # re-key either side underneath an encrypted correction receipt.
+        if survivor_raw.get('has_transcript_corrections') or donor_raw.get('has_transcript_corrections'):
+            return AbsorbResult('rejected', 'conversation_not_eligible')
         if int((survivor_raw.get(SMART_MERGE_FIELD) or {}).get('revision') or 0) != expected_revision:
             return AbsorbResult('rejected', 'survivor_changed')
         flatten = smart_merge_flatten_enabled()

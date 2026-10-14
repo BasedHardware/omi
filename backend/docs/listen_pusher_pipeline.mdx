@@ -941,6 +941,15 @@ any error keeps both. Every answered pair stores a server-only
 For a merge verdict, the decision is persisted before the absorb transaction
 so a retry reuses the same score.
 
+The absorb transaction also refuses either parent when
+`has_transcript_corrections` is set. User and agent corrections live in an
+encrypted overlay anchored to captured segments; folding their source rows would
+invalidate those anchors and Undo receipts. The live-parent check runs before
+planning or writing inside the transaction, including when a correction races a
+previously computed merge verdict. Both captures and their original speech stay
+intact. Dream's duplicate-capture correction uses a reversible hide-with-link
+instead of this ingest absorb path.
+
 One more deterministic gate never reaches Jev: a discarded capture of the same
 source and `client_device_id` whose `started_at`/`finished_at` interval
 intersects the open gap — survivor `finished_at` to the donor's
