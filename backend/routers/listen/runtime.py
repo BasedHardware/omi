@@ -558,12 +558,23 @@ class ListenSessionRuntime:
             learned_sessions=learned_sessions,
         )
         self.language_observations = LiveLanguageObservations(self.language_profile)
+        from config.live_demand import language_qualified, resolve_live_demand
+
+        demand_vendor_start = (
+            resolve_live_demand().admits(request.uid)
+            and language_qualified(self)
+            and self.recovery_enabled
+            and managed_chain_enabled(self)
+            and not request.onboarding_mode
+            and request.source != 'phone_call'
+        )
         self.stt_service, self.stt_language, self.stt_model = get_stt_service_for_language(
             self.language,
             multi_lang_enabled=self.multi_lang_enabled,
             preferred_service=request.stt_service,
             language_profile=self.language_profile,
-            **window_selection_kwargs(self, request.uid),
+            exclude=frozenset({'parakeet'}) if demand_vendor_start else frozenset(),
+            **(window_selection_kwargs(self, request.uid) if not demand_vendor_start else {}),
         )
         # The provider the serving policy chose, captured before `_create_stt_socket`
         # can walk the fallback chain. Only the *selected* value is safe to hold onto:
@@ -686,6 +697,7 @@ class ListenSessionRuntime:
 
     async def _heartbeat(self) -> None:
         while self.state.active:
+            self.receiver.lane_meter.flush()
             if self.request.websocket.client_state != WebSocketState.CONNECTED:
                 self.state.active = False
                 break
@@ -1001,6 +1013,8 @@ class ListenSessionRuntime:
             current_routing_cohort.set(self._routing_cohort)
             if not await self.receiver.initialize_stt():
                 return
+            if self.receiver.live_demand is not None:
+                self.spawn(self.receiver.live_demand.run(), name='live_demand_routing')
             record_listen_session_accepted(source=self.request.source, platform=self.client_device_context.platform)
             if not self.use_custom_stt:
                 self._no_audio_observation = ListenNoAudioObservation()
@@ -1158,6 +1172,10 @@ class ListenSessionRuntime:
             except Exception as error:
                 logger.error('Translation flush failed type=%s', type(error).__name__)
         self.state.active = False
+        self.receiver.lane_meter.close()
+        if self.receiver.live_demand is not None:
+            self.receiver.live_demand.close()
+            await self.receiver.live_demand.publish()
         try:
             self.receiver.finish()
         except Exception as error:

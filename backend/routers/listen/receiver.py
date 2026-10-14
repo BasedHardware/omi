@@ -245,6 +245,10 @@ class ListenReceiver(ReplayFilterMixin):
     def __init__(self, host: Any, channel_configs: List[ChannelConfig], channel_id_to_index: Dict[int, int]):
         self.soniox_idle_budget = SonioxIdleBudget()
         self.host = host
+        from routers.listen.lane_meter import LiveLaneMeter
+
+        self.lane_meter = LiveLaneMeter()
+        self.live_demand = None
         self.translation_demand = TranslationDemand()
         self._translation_expiry_task: asyncio.Task[Any] | None = None
         self.channel_configs = channel_configs
@@ -1184,6 +1188,12 @@ class ListenReceiver(ReplayFilterMixin):
         return track_live_stt_socket(wrapped, self.host.stt_service.value)
 
     def _record_selected_epoch(self, epoch: Optional[ProviderEpochTranslator], socket: Any) -> None:
+        demand = getattr(self, 'live_demand', None)
+        meter = getattr(self, 'lane_meter', None)
+        if meter is not None:
+            meter.transition(
+                self._serving_provider(), reason=demand.policy.reason if demand and demand.eligible else 'baseline'
+            )
         if epoch is None:
             return
         if getattr(socket, 'manages_vad', False):
@@ -1206,6 +1216,13 @@ class ListenReceiver(ReplayFilterMixin):
         ).inc()
 
     async def initialize_stt(self) -> bool:
+        from routers.listen.demand_routing import attach_live_demand
+
+        self.live_demand = attach_live_demand(self)
+        if self.live_demand is not None:
+            await self.live_demand.publish()
+            if self.live_demand.eligible:
+                self._window_replay_started = True
         request = self.host.request
         if self.host.use_custom_stt:
             return True
@@ -1236,6 +1253,7 @@ class ListenReceiver(ReplayFilterMixin):
                         )
                         return False
                     self.stt_sockets_multi[index] = track_live_stt_socket(socket, self.host.stt_service.value)
+                    self.lane_meter.transition(self._serving_provider())
                     record_live_connection(self.host, self._serving_provider())
                 return True
             if not managed_chain_enabled(self.host) and should_initialize_vad_gate(
@@ -1280,6 +1298,7 @@ class ListenReceiver(ReplayFilterMixin):
             # next provider without re-deriving the callbacks or the gate.
             self._stt_rebuild = (self._build_stt_callbacks, request.sample_rate)
             self.host.spawn(self._monitor_stt_death(), name='stt_death_monitor')
+
             return True
         except ProviderChainUnavailable as error:
             await self._drain_stt_sockets()
@@ -1300,6 +1319,11 @@ class ListenReceiver(ReplayFilterMixin):
                 platform=self.host.client_device_context.platform,
             )
             return False
+
+    async def _switch_live_demand(self, lane: str) -> bool:
+        from routers.listen.demand_switch import switch_live_demand
+
+        return await switch_live_demand(self, lane)
 
     async def _failover_stt_socket(self) -> bool:
         """Serialize monitor/send-path failover so only one replacement is adopted."""
@@ -2049,6 +2073,8 @@ class ListenReceiver(ReplayFilterMixin):
         elif kind == 'speaker_assigned':
             await self._handle_speaker_assigned(payload)
         elif kind == 'client_state':
+            if self.live_demand is not None:
+                self.live_demand.observe(payload)
             if not self.host.state.realtime_demand.observe(payload):
                 logger.debug('Ignored malformed or over-budget client_state')
             config = resolve_ondemand_config()

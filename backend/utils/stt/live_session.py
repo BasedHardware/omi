@@ -85,7 +85,13 @@ class LiveChainSession:
         return {'event': 'managed_live_vad_metrics', **self.get_metrics()}
 
     async def connect(
-        self, sample_rate: int, epoch: Any = None, *, same_provider: bool = False, replay_start_sample: int = 0
+        self,
+        sample_rate: int,
+        epoch: Any = None,
+        *,
+        same_provider: bool = False,
+        replay_start_sample: int = 0,
+        demand_lane: str | None = None,
     ) -> STTSocket:
         host = self.receiver.host
         constructed: list[LiveLegSocket] = []
@@ -94,12 +100,23 @@ class LiveChainSession:
         models = [m.strip() for m in st.stt_service_models]
         keywords: list[str] = await keyterms(uid, host.vocabulary[:100] if host.vocabulary else [])
         dg_model = st.deepgram_fallback_model(language)
+        demand = getattr(self.receiver, 'live_demand', None)
+        if demand is not None and not demand.eligible:
+            demand = None
+        if demand is not None:
+            self.no_text_rescue.enabled = False
         window_eligible = (
-            window_allocation(uid)
+            (demand.window_permitted if demand is not None else window_allocation(uid))
             and window_language_supported(host.language, language)
             and bool(os.getenv('HOSTED_PARAKEET_API_URL'))
         )
-        rnnt_eligible = st.parakeet_is_configured_fallback(language)
+        if demand is not None and not window_eligible:
+            models = [model for model in models if model not in {'parakeet', 'parakeet-window'}]
+        if demand_lane == 'parakeet':
+            models = ['parakeet-window']
+        elif demand_lane == 'vendor':
+            models = [model for model in models if model not in {'parakeet', 'parakeet-window'}]
+        rnnt_eligible = demand is None and st.parakeet_is_configured_fallback(language)
         parakeet_models = ([host.stt_model] if host.stt_service == st.STTService.parakeet else []) + models
         parakeet_token = next(
             (
@@ -350,7 +367,26 @@ class LiveChainSession:
                 for service, callback in callbacks.items()
             }
             models = ['parakeet-window']
-        primary = callbacks.get(host.stt_service)
+        primary_service = host.stt_service
+        if demand_lane is not None:
+            from config.stt_provider_policy import provider_for_model_token
+
+            service = next(
+                (
+                    st.STTService(provider_for_model_token(model))
+                    for model in models
+                    if provider_for_model_token(model) in {'parakeet', 'soniox', 'modulate', 'deepgram'}
+                ),
+                None,
+            )
+            if service is None:
+                raise st.ParakeetConnectionError('config_incomplete')
+            primary_service = service
+            callbacks = {
+                key: value if (key == st.STTService.parakeet) == (demand_lane == 'parakeet') else None
+                for key, value in callbacks.items()
+            }
+        primary = callbacks.get(primary_service)
         primary_missing = primary is None
         if primary_missing:
 
@@ -387,6 +423,20 @@ class LiveChainSession:
                     record_managed_leg_handoff(socket)
                 finally:
                     connecting_target.reset(token)
+            elif demand_lane is not None:
+                from utils.stt.live_chain import connect_configured_chain
+
+                socket, actual = await connect_configured_chain(
+                    primary_service=primary_service,
+                    connect_primary=primary,
+                    callbacks=callbacks,
+                    failed=set(),
+                    models=models,
+                    routing_models=engine_models,
+                    routing_language=host.language,
+                    routing_uid=uid if demand_lane == 'vendor' else None,
+                    optional_handover=True,
+                )
             else:
                 socket, actual = await st.connect_stt_socket_with_fallback(
                     primary_service=host.stt_service,
