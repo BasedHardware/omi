@@ -6,6 +6,49 @@ description: "Sequence diagrams and finalization policy for the /v4/listen WebSo
 
 # Listen + Pusher Pipeline — Sequence Diagrams
 
+## Demand-driven live provider lane
+
+The `/v4/listen` runtime owns the dark-by-default live-demand policy. Existing
+`client_state {foreground, transcript_visible}` reports affect provider selection
+only for allocated, declared-English single-language sessions. Unknown, malformed,
+mixed or unreported state requires the vendor path; any active real-time app,
+developer webhook, or admitted v2 mentor consumer does too.
+
+With `STT_LIVE_DEMAND_ENABLED=true`, every listen socket registers authenticated,
+stage-scoped Redis presence, including sockets outside the routing cohort. The
+server generates the socket identity; payloads cannot supply another user's
+identity. Hidden state remains valid while the socket heartbeats. Stale/missing
+presence and dependency failures require a vendor. Deploy presence globally at
+zero allocation and drain older pods/sockets before admitting a canary.
+
+`STT_LIVE_DEMAND_PERCENT` and comma-separated `STT_LIVE_DEMAND_UID_ALLOWLIST`
+select the cohort. `STT_LIVE_DEMAND_MIN_DWELL_SECONDS` defaults to 15: stable
+hidden demand admits the existing Parakeet window leg, while visible/unknown
+or consumer demand returns to vendors immediately. Existing window allocation,
+capacity, pressure and recovery controls remain authoritative. Non-English,
+multi-language, BYOK, custom, multi-channel, onboarding and phone-call routes
+retain their existing selection.
+
+A replacement connects while the old leg serves. Before retiring that leg,
+listen rechecks shared demand and consumers, snapshots unanswered capture, and
+fences old callbacks. New audio enters the existing ordered replay/live-tail
+pump. Refused or dead cheap candidates keep the healthy vendor and pin the
+session to vendors; a dead previous leg belongs to ordinary transport recovery.
+The demand coordinator is a supervised lifetime task, so its failure cannot
+leave an adopted cheap lane without future visibility reconciliation.
+
+Pusher continues receiving the adopted transcript/audio and running its existing
+fanout; it does not select this demand lane or need these four env variables.
+Listen exposes `omi_listen_live_lane_seconds_total{lane,reason}` and
+`omi_listen_live_lane_switches_total{from_lane,to_lane,reason}`. Shared
+`omi_fallback_total{component="stt_live_session"}` records provider and gate
+failure causes. These session-wall seconds complement actual paid-audio meters.
+
+Rollout, lease/capacity details, test acceptance and rollback belong to the
+[demand-driven live STT runbook](./operational/demand-driven-live-stt.md). The
+lead starts at at most 5% and waits at least 12 hours before any expansion.
+
+
 The standalone `POST /v1/stt/transcribe` Parakeet proxy uses the shared
 managed-transcription allowance before calling the provider. It probes the
 uploaded media duration and rejects a file that exceeds the remaining allowance;
