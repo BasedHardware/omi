@@ -356,7 +356,7 @@ def control_path(uid: str, kind: str, conversation_id: str) -> str:
 def conversation_chain(bucket: Any, uid: str, conversation_id: str) -> list[str]:
     chain: list[str] = []
     current = conversation_id
-    for _ in range(32):
+    while True:
         if current in chain:
             raise ValueError('canonical conversation link cycle')
         chain.append(current)
@@ -367,7 +367,6 @@ def conversation_chain(bucket: Any, uid: str, conversation_id: str) -> list[str]
         if row['owner'] != uid or row['source'] != current:
             raise ValueError('canonical conversation link owner mismatch')
         current = row['target']
-    raise ValueError('canonical conversation link depth exceeded')
 
 
 def assert_capture_allowed(bucket: Any, uid: str, ranges: list[dict[str, Any]]) -> None:
