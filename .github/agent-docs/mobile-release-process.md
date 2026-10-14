@@ -99,6 +99,22 @@ review submission via `GET /v1/reviewSubmissions/{id}/items?include=appStoreVers
 completed submissions. Nothing here releases without the store's own approval;
 the gate's evidence audit always runs first.
 
+Audited-candidate pins: the operator release gate audits a specific
+platform/version/build before dispatching. Those identifiers travel with the
+dispatch as optional `pin_ios` / `pin_android` workflow inputs
+(`TRAIN_PIN_IOS` / `TRAIN_PIN_ANDROID`, `X.Y.Z/build`) and the train fails
+closed — no submission, no rollout start — when the store's newest candidate
+no longer matches the audited build. The self-driving posture removed the old
+human queue's final interception point; the pin is its replacement.
+
+Gate receipts: every advancing Android action (starting or hopping a staged
+rollout) stamps the gate date into the Play release name
+(`1.0.554 (gate 2026-10-15)`). A same-day retry of a train whose other
+platform failed reads the receipt and holds position instead of hopping twice
+in one gate window (the summary runs both platforms before exiting nonzero,
+so retries are the normal failure mode). Receipts live in server-side Play
+state; they survive ephemeral build machines and need no repo-side storage.
+
 iOS (App Store Connect, versions are read per state because the unfiltered
 listing only returns live versions):
 
@@ -114,15 +130,17 @@ listing only returns live versions):
   canceled=true`, i.e. `app-store-connect review-submissions cancel`), wait for
   `DEVELOPER_REJECTED`, then submit the candidate. A pending version newer than
   every TestFlight build, or two pending versions, stops the train.
-- Submission: `builds submit-to-app-store --release-type MANUAL
-  --no-phased-release` with `--app-store-version-localizations` carrying the
-  derived iOS notes for every locale of the live version (a bare `--whats-new`
-  covers only the primary locale and Apple rejects the submission). The run
-  ends only after the new version reads `WAITING_FOR_REVIEW`. Under the
-  self-driving posture the submission carries `--release-type AFTER_APPROVAL
-  --phased-release` instead (`RELEASE_TYPE` / `PHASED_RELEASE` constants), so
-  the version releases on Apple's approval and rolls out over 7 days; pausing
-  the phased rollout in App Store Connect is the post-release brake.
+- Submission: `builds submit-to-app-store` with
+  `--app-store-version-localizations` carrying the derived iOS notes for
+  every locale of the live version (a bare `--whats-new` covers only the
+  primary locale and Apple rejects the submission). The run ends only after
+  the new version reads `WAITING_FOR_REVIEW`. Under the self-driving posture
+  the submission carries `--release-type AFTER_APPROVAL --phased-release`
+  (`RELEASE_TYPE` / `PHASED_RELEASE` constants), so the version releases on
+  Apple's approval and rolls out over 7 days; pausing the phased rollout in
+  App Store Connect is the post-release brake. (Historical MANUAL shape: a
+  `PENDING_DEVELOPER_RELEASE` version waited for a human console press; that
+  posture is now only the rollback, see `RELEASE_TYPE`.)
 
 Android (Google Play): candidate = highest version code on the `internal` and
 `alpha` tracks whose release name version is newer than the live `production`
