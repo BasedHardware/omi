@@ -863,6 +863,9 @@ def _delete_conversation_and_related_data(
             conversations_db.delete_conversation(uid, conversation_id)
     except Exception as e:
         logger.error(f"Error deleting conversation {conversation_id}: {e}")
+        # Source deletion must finish before reporting merge success.
+        # Let the worker preserve the merged target and withhold success.
+        raise
 
 
 def _cleanup_merged_target_after_failure(uid: str, merged_conversation_id: str) -> bool:
