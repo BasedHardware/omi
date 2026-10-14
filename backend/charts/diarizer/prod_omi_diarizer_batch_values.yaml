@@ -4,21 +4,14 @@
 fullnameOverride: prod-omi-diarizer-batch
 command: [uvicorn, "batch_main:app", "--host", "0.0.0.0", "--port", "8080", "--loop", uvloop]
 replicaCount: 1
-# A separate internal HTTP LB is required for Cloud Run callers; ClusterIP
-# service DNS is usable only inside GKE. Reserve this IP before installation.
+# New batch release uses the shared Gateway; it has no legacy callers to retain.
 ingress:
+  enabled: false
+gateway:
   enabled: true
-  annotations:
-    kubernetes.io/ingress.class: "gce-internal"
-    kubernetes.io/ingress.regional-static-ip-name: "prod-diarizer-batch-ilb-ip-address"
-    kubernetes.io/ingress.allow-http: "true"
-  hosts:
-    - host: diarizer-batch.omi.me
-      paths:
-        - path: /v2/diarization
-          pathType: Prefix
-        - path: /health
-          pathType: Prefix
+  name: prod-omi-internal-gateway
+  pathPrefix: /diarizer-batch
+  timeoutSeconds: 900
 # Replace the inherited embedding affinity entirely. Both label and taint
 # isolate batch capacity from existing embedding and other GPU workloads.
 affinity: null

@@ -801,6 +801,27 @@
         "FC-daily-memory-sweep-fence: common admission binds one invocation per owner/window/generation before dispatch",
         "claim-bound skip consumes the existing attestation without authorizing another dispatch"
       ]
+    },
+    {
+      "id": "shared_internal_model_gateway",
+      "risk": "high",
+      "sources": [
+        "backend/charts/internal-gateway/**",
+        "backend/charts/diarizer/**",
+        "backend/charts/parakeet/**",
+        "backend/charts/vad/**",
+        "backend/charts/nllb-translation/**"
+      ],
+      "tests": [
+        "tests/unit/test_internal_gateway_helm.py",
+        "tests/unit/test_diarizer_batch_prereqs.py"
+      ],
+      "checks": [],
+      "invariants": [
+        "Gateway routes and policies target distinct Services while legacy Ingress, Service and BackendConfig resources remain unchanged",
+        "dev and prod use named regional internal addresses, disjoint path prefixes and native health checks",
+        "batch diarization has no Ingress and preserves its isolated capacity and 900 second timeout"
+      ]
     }
   ]
 }
