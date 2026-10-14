@@ -74,6 +74,16 @@ _TRANSLATION_LISTEN_ONLY = frozenset(
 # The API domain and the Review routes run on backend-listen. Pusher's
 # pusher/main.py entrypoint does not mount routers/review.py.
 _REVIEW_SURFACE_LISTEN_ONLY = frozenset({'REVIEW_SURFACE_MODE'})
+# Demand policy owns /v4/listen provider handovers and client_state presence.
+# Pusher only receives the adopted transcript/audio; it never selects this lane.
+_DEMAND_LISTEN_ONLY = frozenset(
+    {
+        'STT_LIVE_DEMAND_ENABLED',
+        'STT_LIVE_DEMAND_PERCENT',
+        'STT_LIVE_DEMAND_UID_ALLOWLIST',
+        'STT_LIVE_DEMAND_MIN_DWELL_SECONDS',
+    }
+)
 LISTEN_ONLY_ALLOWED: dict[str, frozenset[str]] = {
     "dev": frozenset(
         {
@@ -168,7 +178,8 @@ LISTEN_ONLY_ALLOWED: dict[str, frozenset[str]] = {
         }
     )
     | _TRANSLATION_LISTEN_ONLY
-    | _REVIEW_SURFACE_LISTEN_ONLY,
+    | _REVIEW_SURFACE_LISTEN_ONLY
+    | _DEMAND_LISTEN_ONLY,
     "prod": frozenset(
         {
             # Managed listen-only STT rollout; pusher is not a live audio receiver.
@@ -267,7 +278,8 @@ LISTEN_ONLY_ALLOWED: dict[str, frozenset[str]] = {
         }
     )
     | _TRANSLATION_LISTEN_ONLY
-    | _REVIEW_SURFACE_LISTEN_ONLY,
+    | _REVIEW_SURFACE_LISTEN_ONLY
+    | _DEMAND_LISTEN_ONLY,
 }
 
 PUSHER_ONLY_ALLOWED: dict[str, frozenset[str]] = {
