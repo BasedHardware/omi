@@ -267,6 +267,8 @@ async def prepare_media(adapter, message, uid, session, guard):
     from dataclasses import replace
     from database import chat
 
+    if len(message.attachments) + len(message.media) > 10:
+        raise MediaPreparationError('media_count', 'Please send up to 10 attachments at once.')
     artifacts = list(message.media)
     text = message.text
     for attachment in message.attachments:

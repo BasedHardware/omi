@@ -365,7 +365,7 @@ and metric/alert deployment steps are in the [runbook](runbooks/messaging-channe
 | DOCX / XLSX / PPTX | Existing supported uploader → explicitly advertised/tested | Existing supported uploader → explicitly advertised/tested |
 | Location / venue | Empty turn → bounded text evidence | Unknown part → text evidence when supplied as location |
 | Contact / vCard | Omitted/rejected → bounded text evidence | vCard rejected → bounded text evidence |
-| Sticker / GIF / emoji-only | Empty/model turn → lightweight acknowledgement | Unsupported/model turn → lightweight acknowledgement |
+| Sticker / GIF / emoji-only | Empty/model turn → lightweight acknowledgement | Unsupported/model turn → GIF/emoji/tagged-sticker acknowledgement; unmarked Linq stickers remain images |
 | Quoted replies | No quote context → bounded quote evidence | No quote context → bounded same-session accepted-event resolution |
 | Reactions / polls / dice / games / payments / services | Empty/model turn → silently ignored | Non-message events ignored; unknown parts → explicit ignore or supported-format reply |
 | Unsupported attachment | Generic worker apology → one specific supported-format reply | Generic worker apology → one specific supported-format reply |

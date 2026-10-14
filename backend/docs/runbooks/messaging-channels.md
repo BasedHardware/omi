@@ -490,7 +490,8 @@ provider delivery, or PostHog state. No production reads or writes were performe
 
 ## Inbound media contract and acceptance
 
-Each attachment is limited to **20,000,000 bytes** (20 MB decimal). Audio and video
+Each turn accepts up to **10 attachments**; each attachment is limited to
+**20,000,000 bytes** (20 MB decimal). Audio and video
 are limited to **600 seconds** (10 minutes), checked both against provider metadata
 and actual decoded PCM. FFmpeg has a 30-second decode deadline, one decoder/filter
 thread, an explicit container allowlist (no playlists), and bounds output to cap+1
@@ -517,8 +518,12 @@ worker apology. Delivery failures retain the normal reconciliation evidence.
 HEIC/HEIF is converted to oriented RGB JPEG before the existing owned file uploader.
 Images sent as Telegram documents use the image path. FileChatTool already supports
 PDF/text/CSV and DOCX/XLSX/PPTX. Locations and contact cards become bounded untrusted
-text evidence; contacts are never automatically saved. Sticker/GIF/emoji-only turns
-get a lightweight “Got it 🙂” without an LLM. Reactions, polls, dice, games, payments,
+text evidence; contacts are never automatically saved. Telegram stickers and
+animations, GIFs, emoji-only messages and optional Linq sticker hints get a lightweight “Got it 🙂” without an LLM. Linq documents incoming inline stickers
+as ordinary media and exposes no sticker discriminator in `MediaPartResponse`;
+unmarked sticker images follow the photo path. They cannot be distinguished safely
+from photos with that payload alone. The optional sticker-hint test is defensive
+coverage, not a claim that Linq currently supplies that field. Reactions, polls, dice, games, payments,
 service messages and unknown non-content events are ignored. Unsupported Linq parts
 or file attachments receive one specific supported-format reply.
 

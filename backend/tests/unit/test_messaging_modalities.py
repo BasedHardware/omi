@@ -640,3 +640,82 @@ def test_telegram_contact_vcard_email_and_structured_fallback(adapter):
             adapter, text='', contact={'first_name': 'Name', 'phone_number': '+123', 'vcard': 'not a card'}
         )[0]
         assert '+123' in inbound_evidence(malformed) and 'Name' in malformed.text
+
+
+def test_ten_requested_photos_reach_file_model_in_sync_and_stream(monkeypatch):
+    from utils.other import chat_file
+    from database import chat
+
+    ids = ['file-' + str(i) for i in range(10)]
+    rows = [
+        dict(
+            id=i,
+            name=i + '.jpg',
+            mime_type='image/jpeg',
+            openai_file_id=i,
+            created_at=datetime.now(timezone.utc),
+            thumbnail='',
+        )
+        for i in ids
+    ]
+
+    def fetch(uid, *, files_id, limit):
+        assert uid == 'u' and files_id == ids
+        return rows[:limit]  # Honor the production query's bound, unlike an unconditional fake.
+
+    monkeypatch.setattr(chat, 'get_chat_files_desc', fetch)
+    tool = object.__new__(chat_file.FileChatTool)
+    tool.uid = 'u'
+
+    def ask(question, files):
+        assert {f.id for f in files} == set(ids)
+        return 'all ten'
+
+    monkeypatch.setattr(tool, '_ask_files', ask)
+    assert tool.process_chat_with_file('photos?', ids) == 'all ten'
+
+    async def ask_stream(question, files, callback):
+        assert {f.id for f in files} == set(ids)
+        return 'all ten'
+
+    monkeypatch.setattr(tool, '_ask_files_stream', ask_stream)
+
+    async def run():
+        from utils.retrieval.agentic import AsyncStreamingCallback
+
+        result = await tool.process_chat_with_file_stream('photos?', ids, callback=AsyncStreamingCallback())
+        assert result == 'all ten'
+
+    asyncio.run(run())
+
+
+def test_unmarked_linq_sticker_media_preserves_photo_handling(adapter):
+    if adapter.channel == 'imessage':
+        message = parsed(
+            adapter,
+            parts=[
+                {
+                    'type': 'media',
+                    'id': 'file',
+                    'url': 'https://cdn.linqapp.com/test',
+                    'filename': 'image.png',
+                    'mime_type': 'image/png',
+                    'size_bytes': 100,
+                    'reactions': [],
+                }
+            ],
+        )[0]
+        assert message.command is None and message.attachments[0].mime_type == 'image/png'
+
+
+def test_too_many_attachments_refuses_before_download(adapter):
+    message = parsed(adapter, 'photo')[0]
+    message = replace(message, attachments=message.attachments * 11)
+
+    async def guard():
+        pass
+
+    with pytest.raises(MediaPreparationError) as failed:
+        asyncio.run(adapter.prepare(message, 'u', {'id': 'session'}, guard))
+    assert failed.value.reply == 'Please send up to 10 attachments at once.'
+    assert not adapter.transport.downloads
