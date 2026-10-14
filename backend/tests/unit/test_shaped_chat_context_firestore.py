@@ -30,6 +30,7 @@ def store():
             {
                 'id': str(i),
                 'chat_session_id': 's',
+                'plugin_id': None,
                 'text': 'message ' + str(i),
                 'sender': 'human' if i % 2 == 0 else 'ai',
                 'created_at': datetime(2026, 10, 14, tzinfo=timezone.utc) + timedelta(seconds=i),
@@ -64,6 +65,7 @@ def test_reporting_invalidates_summary_and_fences_old_writer(store, monkeypatch)
     old = store.load('u', 's')
     monkeypatch.setattr(chat_db, 'db', store.messaging.db)
     assert chat_db.report_message('u', '1') == {'message': 'Message reported'}
+    assert 'shaped_context' not in store.messaging.user('u').collection('chat_sessions').document('s').get().to_dict()
     fresh = store.load('u', 's')
     assert 'summary' not in fresh and fresh['generation'] == 1
     with pytest.raises(PermissionError, match='changed'):
@@ -147,3 +149,39 @@ def test_new_channel_session_does_not_copy_derived_context(store):
     assert 'shaped_context' not in fresh and 'shaped_context_revision' not in fresh
     assert ref.get().to_dict()['shaped_context'] == 'encrypted-old-summary'
     assert ref.get().to_dict()['current_session_id'] == fresh['id']
+
+
+@pytest.mark.parametrize('mutation', ['clear', 'batch_delete', 'journal'])
+def test_history_mutations_erase_summary_in_the_atomic_write(store, monkeypatch, mutation):
+    state = store.load('u', 's')
+    store.save('u', 's', dict(state, summary='Private old fact'), 0)
+    stale = store.load('u', 's')
+    monkeypatch.setattr(chat_db, 'db', store.messaging.db)
+    if mutation == 'clear':
+        assert chat_db.delete_messages('u', session_id='s') == 25
+    elif mutation == 'batch_delete':
+        chat_db.batch_delete_messages(store.messaging.user('u'), chat_session_id='s')
+    else:
+        store.messaging.user('u').collection('messages').document('1').update(
+            {
+                'message_source': 'desktop_chat',
+                'journal_revision': 1,
+                'metadata': None,
+                'app_id': None,
+                'plugin_id': None,
+            }
+        )
+        result = chat_db.save_message(
+            'u',
+            text='Revised fact',
+            sender='ai',
+            session_id='s',
+            client_message_id='1',
+            journal_revision=2,
+            firestore_client=store.messaging.db,
+        )
+        assert result['updated'] is True
+    row = store.messaging.user('u').collection('chat_sessions').document('s').get().to_dict()
+    assert 'shaped_context' not in row and row['shaped_context_revision'] > stale['revision']
+    with pytest.raises(PermissionError, match='changed'):
+        store.save('u', 's', stale, stale['revision'])

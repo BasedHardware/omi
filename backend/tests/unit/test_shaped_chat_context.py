@@ -11,7 +11,7 @@ from langchain_core.messages import AIMessage
 from langchain_core.outputs import ChatGeneration, LLMResult
 
 from database.chat_history_window import cache_aligned_history_limit
-from utils.messaging.context import assemble, prepare, SUMMARY_CHARS, DIGEST_CHARS
+from utils.messaging.context import assemble, prepare, refresh, SUMMARY_CHARS, DIGEST_CHARS
 from utils.messaging.projection import SurfaceRuntime
 from utils.messaging.contracts import Principal
 from utils.messaging import context as context_module
@@ -68,8 +68,9 @@ def test_same_epoch_prefix_is_byte_identical_with_clock_digest_scope_changes(sur
     )
     assert json.dumps(one[:-1], sort_keys=True).encode() == json.dumps(two[: len(one) - 1], sort_keys=True).encode()
     assert 'Earlier in this chat' in str(one[0])
+    assert str(one).count('prompt_cache_breakpoint') == 1
+    assert str(two).count('prompt_cache_breakpoint') == 1
     for part in one[:-1]:
-        assert 'prompt_cache_breakpoint' in str(part)
         assert (
             'Request context' not in str(part)
             and 'request clock' not in str(part)
@@ -122,14 +123,14 @@ def test_summary_only_changes_when_window_start_jumps_and_preserves_dropped_span
         return 'Compact continuity'
 
     async def run():
-        first = await prepare('u', 's', [str(i) for i in range(13)], store=store, summary=summary)
-        second = await prepare('u', 's', [str(i) for i in range(15)], store=store, summary=summary)
+        first = await refresh('u', 's', [str(i) for i in range(13)], store=store, summary=summary)
+        second = await refresh('u', 's', [str(i) for i in range(15)], store=store, summary=summary)
         assert first == second and not requests
-        jumped = await prepare('u', 's', [str(i) for i in range(8, 19)], store=store, summary=summary)
-        assert jumped['summary'] == 'Compact continuity'
+        jumped = await refresh('u', 's', [str(i) for i in range(8, 19)], store=store, summary=summary)
+        assert store.state['summary'] == 'Compact continuity'
         assert len(requests) == 1
         assert all('message ' + str(i) in requests[0] for i in range(8))
-        await prepare('u', 's', [str(i) for i in range(8, 21)], store=store, summary=summary)
+        await refresh('u', 's', [str(i) for i in range(8, 21)], store=store, summary=summary)
         assert len(requests) == 1
 
     asyncio.run(run())
@@ -140,10 +141,10 @@ def test_summary_failure_does_not_advance_cursor(monkeypatch):
     store = StateStore()
 
     async def invalid(*args):
-        return 'x' * (SUMMARY_CHARS + 1)
+        return ''
 
     with pytest.raises(ValueError):
-        asyncio.run(prepare('u', 's', ['8'], store=store, summary=invalid))
+        asyncio.run(refresh('u', 's', ['8'], store=store, summary=invalid))
     assert store.state == {'generation': 0, 'revision': 0} and not store.saves
 
 
@@ -166,7 +167,7 @@ def test_long_bootstrap_retries_after_last_completed_page(monkeypatch):
         return 'First page continuity'
 
     with pytest.raises(TimeoutError):
-        asyncio.run(prepare('u', 's', ['8'], store=store, summary=failing))
+        asyncio.run(refresh('u', 's', ['8'], store=store, summary=failing))
     assert store.state['cursor'] == {'id': '3'} and 'anchor' not in store.state
     assert len(store.saves) == 1
 
@@ -175,8 +176,8 @@ def test_long_bootstrap_retries_after_last_completed_page(monkeypatch):
         assert 'message 0' not in text
         return 'All earlier continuity'
 
-    result = asyncio.run(prepare('u', 's', ['8'], store=store, summary=retry))
-    assert result['summary'] == 'All earlier continuity'
+    result = asyncio.run(refresh('u', 's', ['8'], store=store, summary=retry))
+    assert store.state['summary'] == 'All earlier continuity'
     assert store.state['anchor'] == '8' and store.state['cursor'] == {'id': '7'}
 
 
@@ -186,7 +187,7 @@ def test_activity_is_bounded_and_not_an_event_log_append(monkeypatch):
     store = StateStore()
     result = asyncio.run(prepare('u', 's', ['0'], store=store))
     assert len(result['digest']) <= DIGEST_CHARS
-    assert 'digest' in store.state and 'summary' in store.state
+    assert store.state == {'generation': 0, 'revision': 0}
     assert not hasattr(store, 'append_event')
 
 
@@ -222,8 +223,7 @@ def test_ttl_only_accepts_verified_supported_contract(monkeypatch):
     monkeypatch.delenv('OMI_CHAT_PROMPT_CACHE_TTL', raising=False)
     assert chat_cache_options() == {'mode': 'explicit', 'ttl': '30m'}
     monkeypatch.setenv('OMI_CHAT_PROMPT_CACHE_TTL', '24h')
-    with pytest.raises(ValueError):
-        chat_cache_options()
+    assert chat_cache_options() is None
 
 
 @pytest.fixture(scope='module')
@@ -342,3 +342,5 @@ def test_real_shaped_runner_preserves_system_and_stable_history(monkeypatch, cha
     assert 'Request context' not in str(captures[0][:-1])
     assert 'Request context' in str(captures[0][-1])
     assert 'prompt_cache_breakpoint' in str(captures[0][1:-1])
+    assert str(captures[0]).count('prompt_cache_breakpoint') == 2
+    assert str(captures[1]).count('prompt_cache_breakpoint') == 2

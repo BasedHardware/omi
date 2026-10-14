@@ -207,17 +207,25 @@ def test_action_bubbles_only_have_scoped_undo_and_shared_block_data():
 def test_first_digest_reads_at_most_twenty_rows(monkeypatch):
     from utils.messaging import history
 
-    reads = []
+    from unittest.mock import MagicMock
+    from types import SimpleNamespace
 
-    def rows(uid, batch_size):
-        assert batch_size == 20
-        for i in range(10000):
-            reads.append(i)
-            yield {'id': str(i), 'created_at': datetime.now(timezone.utc)}
-
-    monkeypatch.setattr(history.chat_db, 'iter_all_messages', rows)
+    client = MagicMock()
+    query = client.collection.return_value.document.return_value.collection.return_value.order_by.return_value
+    query.limit.return_value.stream.return_value = [
+        SimpleNamespace(
+            to_dict=lambda i=i: {
+                'id': str(i),
+                'created_at': datetime.now(timezone.utc),
+                'sender': 'human',
+                'text': 'recent',
+            }
+        )
+        for i in range(20)
+    ]
+    monkeypatch.setattr(history.chat_db, 'db', client)
     assert len(history.recent_activity('test')) == 20
-    assert len(reads) == 20
+    query.limit.assert_called_once_with(20)
 
 
 def test_reminder_tool_runs_from_channel_projection_and_emits_task_receipt(monkeypatch):
@@ -572,21 +580,19 @@ def test_repeated_linq_text_undo_gets_acknowledgement(monkeypatch):
     assert replies == ['Already undone.']
 
 
-def test_bootstrap_cap_counts_only_other_surface_rows(monkeypatch):
+def test_digest_does_not_scan_past_twenty_current_session_candidates(monkeypatch):
     from utils.messaging import history
+    from unittest.mock import MagicMock
+    from types import SimpleNamespace
 
-    def rows(uid, batch_size):
-        for i in range(40):
-            yield {
-                'id': str(i),
-                'created_at': datetime.now(timezone.utc),
-                'chat_session_id': 'current' if i < 20 else 'app',
-            }
-
-    monkeypatch.setattr(history.chat_db, 'iter_all_messages', rows)
-    result = history.recent_activity('test', exclude_session='current')
-    assert len(result) == 20
-    assert all(row['chat_session_id'] == 'app' for row in result)
+    client = MagicMock()
+    query = client.collection.return_value.document.return_value.collection.return_value.order_by.return_value
+    query.limit.return_value.stream.return_value = [
+        SimpleNamespace(to_dict=lambda: {'chat_session_id': 'current'}) for _ in range(20)
+    ]
+    monkeypatch.setattr(history.chat_db, 'db', client)
+    assert history.recent_activity('test', exclude_session='current') == []
+    query.limit.assert_called_once_with(20)
 
 
 def test_backlog_release_preserves_fifo_and_original_message_clock(monkeypatch):

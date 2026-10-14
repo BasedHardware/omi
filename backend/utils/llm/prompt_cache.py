@@ -234,5 +234,12 @@ def chat_cache_options():
 
     ttl = os.getenv('OMI_CHAT_PROMPT_CACHE_TTL', '30m')
     if ttl != '30m':
-        raise ValueError('Chat prompt cache supports only 30m retention')
+        import logging
+        from utils.observability.fallback import record_fallback
+
+        logging.getLogger(__name__).warning('Unsupported chat cache TTL; explicit caching disabled')
+        record_fallback(
+            component='other', from_mode='explicit_cache', to_mode='none', reason='other', outcome='degraded'
+        )
+        return None
     return {'mode': 'explicit', 'ttl': ttl}

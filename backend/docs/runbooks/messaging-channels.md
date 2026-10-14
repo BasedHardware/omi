@@ -381,24 +381,52 @@ stopped and external effects are reconciled.
 
 ## Shaped context and cache operations
 
-Deploy the generated `chat_context_summary_source` messages index (session id,
-created_at, document name ascending) and wait for readiness before enabling the new
-source reader. No historical data rewrite or new scheduled job is required. Session
-`shaped_context` is encrypted; `shaped_context_revision` and user
-`chat_context_generation` fence concurrent preparation and history mutations.
-Unlink/account wipe removes session state. `/new` starts with an empty summary.
+The backend can be deployed while the new indexes build: optional context fails
+open to the existing plain cache-aligned window. Foreground optional reads are
+bounded at 150 ms total, with at most 75 ms for digest IO. Summarization only runs
+after the turn in tracked background tasks, at most two per process and 60 seconds
+per job. Failed/missing indexes, model errors, CAS conflicts and timeouts are logged
+by error type and record degraded fallback; they do not fail the answer.
 
-Keep `OMI_CHAT_PROMPT_CACHE_TTL=30m` or unset. GPT-5.6 and the current gateway do not
-support longer explicit TTLs. Verify actual hit rates using daily `llm_usage` surface
-buckets and `chat_agent_turns` children, or the
-`omi_chat_agent_tokens_total{surface,kind}` counters. Input includes cached tokens;
-use cache_read/input for the observed token hit ratio. Zero reported write tokens on
-non-gateway transports means unavailable or zero, not a measured provider write.
+Deployment order:
 
-Cold existing chats rebuild earlier history in bounded pages/model chunks. This can
-increase first-turn latency; do not infer lost continuity from a timeout. Original
-history stays searchable. Only fully summarized source pages advance the checkpoint. A timeout or failed
-page resumes from the last completed page, so retry neither repeats the whole cold
-bootstrap nor silently skips dropped history. Summaries are compact and lossy; retrieve exact
-facts through `search_chat_history`. Cache expiration and epoch changes cause legitimate
-misses. Local synthetic prefix tests establish eligibility, not a production hit rate.
+1. Apply the generated indexes. `chat_context_summary_source` (messages collection:
+   session id, created_at, document name ascending) must be READY for successful
+   background summaries. It is not required for app sends or a config flip.
+2. Before enabling channel adapters or expanding `OMI_MESSAGING_CHANNEL_POLICY`, wait
+   for `messaging_inbox_fifo` (inbox collection), `messaging_pending_recovery` and
+   `messaging_expired_notices` (inbox collection group). With these still building,
+   a current admitted reply can work, but queued heads/recovery can stall.
+3. With admissions disabled, run the documented `--prepare-launch` reconciliation
+   for existing inbox metadata and linked-user capacity. Then enable the policy,
+   including iMessage seat cap; an initialized counter is required before cap admission.
+4. Before enabling the maintenance Helm job, wait for `messaging_done_retention`
+   (inbox group), `messaging_unknown_retention` (identities collection) and the
+   `messaging_waitlist_expiry` expires_at field index. The messaging recovery indexes
+   above also serve expiry notices. Install the job only after these are READY.
+
+No new config means legacy admission/cohort/seat behavior stays in force. Existing
+shaped app turns keep the same plain 10–17-message window; optional summaries/digest
+can degrade safely while indexes build. There is no index-dependent app send gate,
+summary model call before streaming or new admission requirement. Optional reads
+may add up to 150 ms; this is a bounded degradation, not identical provider bytes.
+
+Session `shaped_context` is encrypted. History report/clear/delete/journal edits remove
+it in the same atomic write and bump generation/revision. CAS and active-link/account
+fences prevent stale background writers from restoring removed data. Unlink/account
+wipe removes session state; `/new` copies no summary. Original messages stay searchable.
+Only fully summarized source pages advance the checkpoint, so later jobs resume after
+timeout without skipping a partially summarized page. Summaries remain lossy.
+
+Keep `OMI_CHAT_PROMPT_CACHE_TTL=30m` or unset. Unsupported values log and omit explicit
+cache options/breakpoints rather than fail turns. Verify token hit rates using daily
+`llm_usage` surface buckets, `chat_agent_turns` children and
+`omi_chat_agent_tokens_total{surface,kind}`. Cache_read/input is the observed ratio;
+unreported cache-write fields on other transports are recorded as zero. Local
+synthetic prefix tests establish eligibility, not deployed hit rate.
+
+Redis pacing errors record fallback and use local global/chat pacing for that API
+attempt. Shared pacing remains preferred; Telegram 429 retry_after remains the
+cross-instance authority during outages. Deliberate full-backlog 429 stays a typed
+admission refusal rather than being treated as a Redis outage. Streaming `none`
+reduces preview traffic while preserving final replies.

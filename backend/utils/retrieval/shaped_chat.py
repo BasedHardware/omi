@@ -6,7 +6,7 @@ from dataclasses import replace
 from typing import Optional
 
 from utils.messaging.projection import surface_runtime
-from utils.messaging.context import prepare as prepare_context, assemble
+from utils.messaging.context import prepare as prepare_context, assemble, schedule_refresh, degraded
 from utils.llm.shaped_agent import Turn
 from utils.llm.prompt_cache import chat_cache_options, model_supports_explicit_cache
 
@@ -37,16 +37,18 @@ async def run_shaped_chat_stream(
         mount = replace(mount, skills=(*mount.skills, runtime.skill))
     model = a.get_llm('chat_agent', streaming=True, stream_usage=True)
     cache_enabled = a.gpt56_explicit_cache_enabled() and model_supports_explicit_cache(model)
-    context = (
-        await prepare_context(
-            configurable['user_id'],
-            configurable.get('chat_session_id'),
-            configurable.get('context_message_ids', ()),
-            guard=runtime.guard if runtime is not None else None,
-        )
-        if not shadow
-        else {'summary': '', 'digest': ''}
-    )
+    options = chat_cache_options() if cache_enabled else None
+    cache_enabled = cache_enabled and options is not None
+    context = {'summary': '', 'digest': ''}
+    if not shadow:
+        try:
+            context = await prepare_context(
+                configurable['user_id'],
+                configurable.get('chat_session_id'),
+                configurable.get('context_message_ids', ()),
+            )
+        except Exception as error:
+            degraded(error)
     evidence = assemble(
         messages,
         runtime=runtime,
@@ -70,7 +72,7 @@ async def run_shaped_chat_stream(
     try:
         params = {'tools': list(mount.tools), 'tool_choice': 'auto', 'max_completion_tokens': 8192}
         if cache_enabled:
-            params['extra_body'] = {'prompt_cache_options': chat_cache_options()}
+            params['extra_body'] = {'prompt_cache_options': options}
         model = model.bind(**params)
 
         async def model_turn(shape, history):
@@ -145,3 +147,9 @@ async def run_shaped_chat_stream(
         return f'provider_{type(error).__name__}'
     finally:
         a.reset_usage_context(usage_token)
+        if not shadow:
+            schedule_refresh(
+                configurable['user_id'],
+                configurable.get('chat_session_id'),
+                configurable.get('context_message_ids', ()),
+            )

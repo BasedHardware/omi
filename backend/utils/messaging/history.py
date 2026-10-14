@@ -5,11 +5,11 @@ from datetime import datetime, timezone
 
 from langchain_core.tools import StructuredTool
 from database import chat as chat_db
+from database.chat_context_reads import get_recent_activity as recent_activity
 from utils.executors import db_executor, run_blocking
 from utils.llm.clients import get_llm
 from utils.llm.shaped_agent import Mount, Budget, Turn, run_loop
 from utils.llm.usage_tracker import track_usage, Features
-from utils.llm.clients import num_tokens_from_string
 
 
 async def summarize(uid, text):
@@ -26,22 +26,6 @@ async def summarize(uid, text):
 
     result = await run_loop(mount, [{'role': 'user', 'content': text}], model_turn)
     return result.value
-
-
-def recent_activity(uid, since="", exclude_session=None):
-    # The iterator is newest-first and paginated. Never silently drop older activity.
-    rows = []
-    for row in chat_db.iter_all_messages(uid, batch_size=20 if not since else 100):
-        if since and row["created_at"].isoformat() <= since:
-            break
-        if exclude_session is not None and row.get('chat_session_id') == exclude_session:
-            continue
-        rows.append(row)
-        # Bootstrap awareness is recent context, not a lifetime history import.
-        # Older facts remain available through memory and history tools.
-        if len(rows) >= 20:
-            break
-    return sorted(rows, key=lambda r: (r['created_at'], r['id']))
 
 
 def history_tool(uid):

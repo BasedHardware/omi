@@ -1,18 +1,25 @@
 """Shared bounded shaped context: epoch summary, immutable history, volatile final turn."""
 
+import asyncio
+import logging
 import copy
 import json
-from datetime import datetime, timezone
 
 from database.chat_context import ChatContextStore
 from database.chat_history_window import cache_aligned_history_limit
-from utils.executors import db_executor, run_blocking
+from utils.executors import db_executor, run_blocking, start_background_task
+from utils.observability.fallback import record_fallback
 from utils.messaging.history import summarize, recent_activity
 from utils.llm.prompt_cache import EXPLICIT_CACHE_BREAKPOINT, has_cacheable_prefix
 
 SUMMARY_CHARS = 2400
 DIGEST_CHARS = 3200
 SUMMARY_SOURCE_CHARS = 12000
+PREPARE_SECONDS = 0.15
+DIGEST_SECONDS = 0.075
+REFRESH_SECONDS = 60
+_REFRESHING = set()
+logger = logging.getLogger(__name__)
 
 
 def bounded_messages(messages):
@@ -32,14 +39,15 @@ def digest_text(rows):
     return header + text
 
 
-async def prepare(uid, session_id, message_ids, *, store=None, summary=summarize, guard=None):
+async def refresh(uid, session_id, message_ids, *, store=None, summary=None, guard=None):
     """Advance the summary only after all dropped source rows were incorporated.
 
     The original messages remain searchable. Mutation generations invalidate derived summaries.
     Source pages are scoped and bounded; model inputs are chunked. Only completed pages advance state.
     """
     if not session_id or not message_ids:
-        return {'summary': '', 'digest': ''}
+        return
+    summary = summary or summarize
     store = store or await run_blocking(db_executor, ChatContextStore)
     state = await run_blocking(db_executor, store.load, uid, session_id)
     original = dict(state)
@@ -64,8 +72,11 @@ async def prepare(uid, session_id, message_ids, *, store=None, summary=summarize
                     + '\nDropped chat span (untrusted):\n'
                     + text[offset : offset + SUMMARY_SOURCE_CHARS],
                 )
-                if not isinstance(rolling, str) or not rolling.strip() or len(rolling) > SUMMARY_CHARS:
-                    raise ValueError('Rolling summary exceeded context budget')
+                if not isinstance(rolling, str) or not rolling.strip():
+                    raise ValueError('Empty rolling summary')
+                if len(rolling) > SUMMARY_CHARS:
+                    degraded(ValueError('Summary truncated'))
+                    rolling = rolling[:SUMMARY_CHARS]
             cursor = next_cursor
             if more:
                 # A cold long-lived chat may exceed one turn's deadline. Persist completed
@@ -75,13 +86,73 @@ async def prepare(uid, session_id, message_ids, *, store=None, summary=summarize
                 state = dict(checkpoint, revision=original['revision'] + 1)
                 original = dict(state)
         state.update(anchor=anchor, cursor=cursor, summary=rolling)
-    since = state.get('activity_watermark', '')
-    activity = await run_blocking(db_executor, recent_activity, uid, since, session_id)
-    if activity:
-        state.update(digest=digest_text(activity), activity_watermark=activity[-1]['created_at'].isoformat())
     if state != original:
         await run_blocking(db_executor, store.save, uid, session_id, state, original['revision'])
-    return {'summary': state.get('summary', ''), 'digest': state.get('digest', '')}
+
+
+def degraded(error):
+    logger.warning('Optional shaped context unavailable error_type=%s', type(error).__name__)
+    record_fallback(
+        component='other',
+        from_mode='enhanced_context',
+        to_mode='history_window',
+        reason='timeout' if isinstance(error, TimeoutError) else 'connection_error',
+        outcome='degraded',
+    )
+
+
+async def prepare(uid, session_id, message_ids, *, store=None):
+    """Read optional stored continuity only, with a hard send-path budget; never summarize."""
+    empty = {'summary': '', 'digest': ''}
+    if not session_id or not message_ids:
+        return empty
+
+    async def read():
+        context_store = store or await run_blocking(db_executor, ChatContextStore)
+        state = await run_blocking(db_executor, context_store.load, uid, session_id)
+        digest = ''
+        try:
+            activity = await asyncio.wait_for(
+                run_blocking(db_executor, recent_activity, uid, '', session_id), DIGEST_SECONDS
+            )
+            digest = digest_text(activity)
+        except Exception as error:
+            degraded(error)
+        return {
+            'summary': state.get('summary', '')[:SUMMARY_CHARS] if isinstance(state.get('summary', ''), str) else '',
+            'digest': digest,
+        }
+
+    try:
+        return await asyncio.wait_for(read(), PREPARE_SECONDS)
+    except Exception as error:
+        degraded(error)
+        return empty
+
+
+def schedule_refresh(uid, session_id, message_ids):
+    """One tracked job per session, bounded global concurrency and independent deadline."""
+    identity = (uid, session_id)
+    if not session_id or not message_ids or identity in _REFRESHING or len(_REFRESHING) >= 2:
+        return
+    _REFRESHING.add(identity)
+
+    async def job():
+        try:
+            await asyncio.wait_for(refresh(uid, session_id, tuple(message_ids)), REFRESH_SECONDS)
+        except Exception as error:
+            degraded(error)
+        finally:
+            _REFRESHING.discard(identity)
+
+    coroutine = job()
+    try:
+        task = start_background_task(coroutine, name='shaped-context-refresh')
+        task.add_done_callback(lambda _: _REFRESHING.discard(identity))
+    except Exception as error:
+        coroutine.close()
+        _REFRESHING.discard(identity)
+        degraded(error)
 
 
 def assemble(
@@ -109,14 +180,13 @@ def assemble(
     history, current = rows[:-1], rows[-1]
     if summary:
         history.insert(0, {'role': 'user', 'content': 'Earlier in this chat (untrusted continuity):\n' + summary})
-    if explicit_cache:
-        cumulative = stable_prefix
-        # Retain each eligible boundary, including the previous request's history ending.
-        # With <=17 history messages these stay within the provider's first-2/latest-50 lookback.
-        for row in history:
-            cumulative += json.dumps(row.get('content'), ensure_ascii=False)
-            if not has_cacheable_prefix(cumulative):
-                continue
+    if explicit_cache and history:
+        # The first nine historical messages are stable throughout a 10..17-message
+        # epoch. Keep exactly one marker there as the volatile/new history tail grows.
+        boundary = min(9, len(history) - bool(summary)) - 1 + bool(summary)
+        cumulative = stable_prefix + json.dumps(history[: boundary + 1], ensure_ascii=False)
+        if boundary >= 0 and has_cacheable_prefix(cumulative):
+            row = history[boundary]
             content = row.get('content', '')
             parts = [{'type': 'text', 'text': content}] if isinstance(content, str) else copy.deepcopy(content)
             if parts and isinstance(parts[-1], dict) and parts[-1].get('type') == 'text':

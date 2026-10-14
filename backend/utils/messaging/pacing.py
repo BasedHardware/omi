@@ -29,7 +29,25 @@ def reserve(bot, chat):
 
 
 async def pace(bot, chat, sleep):
-    # Fail closed if Redis is unavailable: local limits are insufficient across instances.
-    delay = await run_blocking(db_executor, reserve, bot, chat)
+    """Return False on Redis outage so the adapter applies its local limiter."""
+    from utils.messaging.adapters.transport import ProviderError
+    from utils.observability.fallback import record_fallback
+    import logging
+
+    try:
+        delay = await run_blocking(db_executor, reserve, bot, chat)
+    except ProviderError:
+        raise  # Deliberate backlog admission, not a Redis outage.
+    except Exception as error:
+        logging.getLogger(__name__).warning('Shared pacing unavailable error_type=%s', type(error).__name__)
+        record_fallback(
+            component='other',
+            from_mode='redis_ratelimit',
+            to_mode='local',
+            reason='connection_error',
+            outcome='degraded',
+        )
+        return False
     if delay:
         await sleep(delay)
+    return True

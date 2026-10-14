@@ -34,6 +34,7 @@ from utils.other.portability_read import (
 from ._client import db, get_firestore_client
 from .helpers import prepare_for_read, prepare_for_write, set_data_protection_level
 from database.read_boundary import parse_snapshot_or_none
+from database.chat_context_mutations import invalidate_sessions, invalidation_fields
 from database.firestore_transaction_retry import run_with_transaction_contention_retry
 
 logger = logging.getLogger(__name__)
@@ -603,7 +604,10 @@ def report_message(uid: str, msg_doc_id: str) -> Dict[str, str]:
     user_ref = db.collection('users').document(uid)
     message_ref = user_ref.collection('messages').document(msg_doc_id)
     try:
+        snapshot = message_ref.get()
+        session_id = _typed_doc(snapshot).get('chat_session_id') or _typed_doc(snapshot).get('session_id')
         batch = db.batch()
+        invalidate_sessions(batch, user_ref, [session_id])
         batch.update(message_ref, {'reported': True})
         batch.update(user_ref, {'chat_context_generation': firestore.Increment(1)})
         batch.commit()
@@ -642,6 +646,7 @@ def update_message_rating(uid: str, message_id: str, rating: Optional[int]) -> O
 def batch_delete_messages(
     parent_doc_ref: Any, batch_size: int = 450, app_id: Optional[str] = None, chat_session_id: Optional[str] = None
 ) -> None:
+    batch_size = min(batch_size, 200)  # Messages + distinct session clears + generation fit one batch.
     messages_ref = parent_doc_ref.collection('messages')
     messages_ref = messages_ref.where(filter=FieldFilter('plugin_id', '==', app_id))
     if chat_session_id:
@@ -657,6 +662,11 @@ def batch_delete_messages(
             break
 
         batch = db.batch()
+        invalidate_sessions(
+            batch,
+            parent_doc_ref,
+            [_typed_doc(doc).get('chat_session_id') or _typed_doc(doc).get('session_id') for doc in docs_list],
+        )
         batch.update(parent_doc_ref, {'chat_context_generation': firestore.Increment(1)})
         for doc in docs_list:
             batch.delete(doc.reference)
@@ -1314,6 +1324,12 @@ def _apply_existing_message_revision(
         }
         if content_blocks is not None:
             patch['content_blocks'] = content_blocks
+        invalidate_sessions(
+            write_transaction,
+            message_ref.parent.parent,
+            [existing.get('chat_session_id') or existing.get('session_id')],
+            transaction=write_transaction,
+        )
         write_transaction.update(message_ref, patch)
         write_transaction.update(message_ref.parent.parent, {'chat_context_generation': firestore.Increment(1)})
         existing.update(patch)
@@ -1477,7 +1493,7 @@ def delete_messages(uid: str, app_id: Optional[str] = None, session_id: Optional
                 continue
             session_data = _typed_doc(session_snapshot)
             stored_count = session_data.get('message_count')
-            updates: Dict[str, Any] = {}
+            updates: Dict[str, Any] = invalidation_fields()
             if isinstance(session_data.get('message_ids'), list):
                 updates['message_ids'] = firestore.ArrayRemove(deleted_message_ids_by_session[message_session_id])
             if isinstance(stored_count, int) and stored_count > 0:

@@ -43,3 +43,28 @@ def get_cache_aligned_messages(
         app_id=app_id,
         chat_session_id=chat_session_id,
     )
+
+
+def get_recent_activity(uid, since="", exclude_session=None):
+    from database import chat as chat_db
+
+    # A recent sample, never a paginated scan. Single-session users read at most
+    # twenty metadata candidates and decrypt zero active-session messages.
+    query = (
+        chat_db.db.collection('users')
+        .document(uid)
+        .collection('messages')
+        .order_by('created_at', direction='DESCENDING')
+        .limit(20)
+    )
+    rows = []
+    for document in query.stream(timeout=0.075):
+        row = document.to_dict() or {}
+        if exclude_session is not None and row.get('chat_session_id') == exclude_session:
+            continue
+        if row.get('reported') is True or chat_db.is_automatic_chat_message(row):
+            continue
+        if since and row['created_at'].isoformat() <= since:
+            continue
+        rows.append(chat_db.decrypt_message_payload(row, uid))
+    return sorted(rows, key=lambda r: (r['created_at'], r['id']))

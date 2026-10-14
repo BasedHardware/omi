@@ -163,9 +163,11 @@ class TelegramAdapter(BaseAdapter):
             if self.shared_pacing:
                 from utils.messaging.pacing import pace
 
-                await pace(self._token, str(body.get('chat_id', '')), self.sleep)
-            else:
-                await self.pace('__global__', 1 / 30)
+                if await pace(self._token, str(body.get('chat_id', '')), self.sleep):
+                    return
+            await self.pace('__global__', 1 / 30)
+            if self.shared_pacing and body.get('chat_id'):
+                await self.pace(str(body['chat_id']))
 
         try:
             return await request_json(

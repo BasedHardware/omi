@@ -417,7 +417,7 @@ def test_history_search_uses_the_closed_over_owner(monkeypatch):
     assert seen == ['owner']
 
 
-def test_history_scans_beyond_first_page_and_stops_at_watermark(monkeypatch):
+def test_explicit_history_search_scans_beyond_first_page(monkeypatch):
     from datetime import timedelta
 
     now = datetime.now(timezone.utc)
@@ -426,7 +426,6 @@ def test_history_scans_beyond_first_page_and_stops_at_watermark(monkeypatch):
         for i in range(160)
     ]
     monkeypatch.setattr(history.chat_db, 'iter_all_messages', lambda uid, batch_size: iter(rows))
-    assert len(history.recent_activity('u', rows[150]['created_at'].isoformat())) == 20
     assert history.search_history('u', 'needle')[0]['id'] == '140'
 
 

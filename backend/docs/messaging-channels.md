@@ -181,23 +181,31 @@ When the window advances, owner/session-scoped source pages feed a cheap `chat_g
 rolling summary, capped at 2,400 characters. The encrypted summary lives on the session
 and appears immediately after the system prefix. Original messages remain reachable via
 `search_chat_history`; summarization is lossy, so exact details should be retrieved.
-A cold existing session may need multiple bounded summary calls before its first answer.
-Reported, cleared and revised messages increment a generation in the same write;
+Summaries refresh in a tracked background task after the turn, with a 60-second
+budget and at most two concurrent sessions per process. The answer uses stored
+continuity (or none); missing indexes and model/Firestore/CAS errors only degrade
+optional context and never gate streaming. Send-path optional reads have a combined
+150 ms deadline. Over-long model summaries are truncated; empty summaries leave
+the source checkpoint unchanged.
+Reported, cleared and revised messages erase affected session summary ciphertext
+and increment a generation in the same atomic write;
 derived summaries rebuild from surviving source rows. CAS revisions and link/deletion
 checks prevent stale writes from resurrecting removed sessions.
 
-Current activity elsewhere is sampled from at most twenty messages and capped at 3,200
-characters. It is retained as encrypted volatile session state, not appended to permanent
-events. Activity, app request scope and the original channel request clock appear only
+Current activity elsewhere inspects at most twenty newest message candidates and
+is capped at 3,200 characters. Active-session rows are skipped before decryption;
+there is no paginated digest scan. Digest IO has a 75 ms deadline and failures omit
+the digest. It is request-local, not appended to permanent events. Activity, app request scope and the original channel request clock appear only
 inside the final user message. The app's existing current datetime stays there too.
 
-GPT-5.6 explicit caching marks the system block and eligible stable history boundaries.
-Previously marked history endpoints remain marked as the tail grows, enabling reads
-across turns within an epoch. Prefixes below the 1,024-token minimum are not expected to
+GPT-5.6 explicit caching uses at most two breakpoints: the system block and one
+at the end of the epoch-stable history prefix (the first nine historical messages,
+after any summary). That endpoint stays fixed as the tail grows. Prefixes below the 1,024-token minimum are not expected to
 hit. The provider examines its first two and latest fifty explicit boundaries and can
 write at most four caches per call; the bounded history stays within that lookback.
 `OMI_CHAT_PROMPT_CACHE_TTL` defaults to `30m`; the current gateway/provider supports only
-that value. Other resolved models omit these GPT-5.6 options.
+that value. Unsupported TTL values log and disable explicit cache options and
+breakpoints for the turn. Other resolved models omit these GPT-5.6 options.
 
 Surface events remain an encrypted forty-event audit/awareness tail with numeric sequences
 and separate deterministic content-free fences. Pruning does not remove replay fences.
