@@ -4666,8 +4666,11 @@ in [the Gateway caller runbook](internal-gateway-callers.md).
 
 `AUDIO_CANONICAL_PACKING_ENABLED=true` plus `BUCKET_CANONICAL_AUDIO` routes new
 mobile as-captured Opus to a separate regional canonical archive. Pusher also
-archives its supplied PCM16 capture bytes there; existing playback objects remain
-available. No existing objects are packed. Owner/day tar shards carry stored-byte
+archives its supplied PCM16 capture bytes there after committing playback. Both
+intakes retain their existing primary writes first; optional canonical errors
+are logged and metered without failing those writes. Mobile keeps writing its
+`raw-mobile-batch/` object during rollout. Successful bucket policy reads are
+cached for five minutes per client and bucket. No existing objects are packed. Owner/day tar shards carry stored-byte
 SHA-256, source generations, formats, provenance and conversation ranges. Source
 erasure requires hash verification and embedded-manifest round-trip; durable
 owner intents resume partial cleanup. Account wipe sweeps sources, packs and
@@ -4679,7 +4682,10 @@ bucket policies or deploy a scheduler.
 Canonical conversation erasure has a durable owner-scoped deletion marker.
 Intake checks it before and after source/receipt publication, cleans racing
 uploads, and packing rejects marked captures. Manual merges preserve canonical
-bytes and publish transitive source→survivor links; later survivor deletion
-resolves those links. Shared cache/merge cleanup never implies privacy erasure.
+bytes, retarget packed and unpacked conversation ranges to the survivor, and
+publish transitive source→survivor links for late retries. Manifest rewrites are
+durable and verified; later survivor deletion re-lists sources, indexes and packs
+before releasing the owner gate. Only the explicit privacy endpoint and account
+wipe erase canonical audio. Shared cache/merge cleanup never implies privacy erasure.
 PCM ranges include sample counts, full tail duration and plaintext byte ranges;
 enhanced encryption envelopes use a **big-endian** uint32 length prefix.

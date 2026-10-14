@@ -68,6 +68,15 @@ def archive_capture(
         raise ValueError('canonical capture exceeds bounded intake size')
     assert_capture_allowed(bucket, uid, conversation_ranges)
     key = _sha(_json([identity, format, conversation_ranges]))
+    # Keep retry identity stable while retargeting late donor captures to the survivor.
+    conversation_ranges = [
+        (
+            {**row, 'conversation_id': conversation_chain(bucket, uid, row['conversation_id'])[-1]}
+            if row.get('conversation_id')
+            else row
+        )
+        for row in conversation_ranges
+    ]
     # Day is derived from capture provenance, never retry/packing time.
     day = str(provenance['capture_day'])
     datetime.strptime(day, '%Y-%m-%d')
@@ -325,6 +334,25 @@ def delete_conversation(bucket: Any, uid: str, conversation_id: str) -> None:
         if affected(json.loads(blob.metadata['capture'])):
             blob.delete(if_generation_match=int(blob.generation))
 
+    # Strongly consistent re-list while the caller still holds the owner gate.
+    # Never acknowledge erasure when publication/cleanup left related bytes behind.
+    for blob in bucket.list_blobs(prefix=owner_prefix(SOURCE_PREFIX, uid)):
+        if affected(json.loads(blob.metadata['capture'])):
+            raise RuntimeError('canonical erasure left an affected source')
+    indexed_packs = set()
+    for index in bucket.list_blobs(prefix=owner_prefix(INDEX_PREFIX, uid)):
+        relative = index.name.removeprefix(owner_prefix(INDEX_PREFIX, uid))
+        if relative.split('/', 1)[0] in {'captures', 'deletions', 'links'}:
+            continue
+        manifest = json.loads(index.download_as_bytes(if_generation_match=int(index.generation)))
+        _validate_owner(manifest, uid)
+        if manifest['state'] != 'complete' or any(affected(e) for e in manifest['entries']):
+            raise RuntimeError('canonical erasure left an affected manifest')
+        verify_pack(bucket.blob(manifest['pack']).download_as_bytes(), manifest)
+        indexed_packs.add(manifest['pack'])
+    if any(b.name not in indexed_packs for b in bucket.list_blobs(prefix=owner_prefix(PACK_PREFIX, uid))):
+        raise RuntimeError('canonical erasure found an unindexed pack')
+
 
 def _finish_rewrite(bucket: Any, index: Any, manifest: dict[str, Any], data: bytes | None = None) -> None:
     pack = bucket.blob(manifest['pack'])
@@ -395,6 +423,62 @@ def link_conversations(bucket: Any, uid: str, sources: list[str], target: str) -
         blob.upload_from_string(
             _json({'owner': uid, 'source': source, 'target': target}), if_generation_match=generation
         )
+
+    # Resume even when the link was already published by an interrupted merge.
+    # Rewrite the embedded manifest too, keeping every stored audio byte intact.
+    for index in bucket.list_blobs(prefix=owner_prefix(INDEX_PREFIX, uid)):
+        relative = index.name.removeprefix(owner_prefix(INDEX_PREFIX, uid))
+        if relative.split('/', 1)[0] in {'captures', 'deletions', 'links'}:
+            continue
+        manifest = json.loads(index.download_as_bytes(if_generation_match=int(index.generation)))
+        _validate_owner(manifest, uid)
+        _finish(bucket, index, manifest)
+        index.reload()
+        manifest = json.loads(index.download_as_bytes(if_generation_match=int(index.generation)))
+        entries = json.loads(_json(manifest['entries']))
+        for entry in entries:
+            entry['conversation_ranges'] = _retarget_ranges(bucket, uid, entry['conversation_ranges'])
+        if entries == manifest['entries']:
+            continue
+        pack = bucket.blob(manifest['pack'])
+        pack.reload()
+        old = pack.download_as_bytes(if_generation_match=int(pack.generation))
+        verify_pack(old, manifest)
+        with tarfile.open(fileobj=io.BytesIO(old), mode='r:') as archive:
+            payloads = []
+            for entry in entries:
+                member = archive.extractfile(entry['member'])
+                if member is None:
+                    raise ValueError('missing merge member')
+                payloads.append(member.read())
+        data = _tar(entries, payloads)
+        replacement = {
+            **manifest,
+            'entries': entries,
+            'sha256': _sha(data),
+            'state': 'rewriting',
+            'previous_sha256': manifest['sha256'],
+        }
+        index.upload_from_string(_json(replacement), if_generation_match=int(index.generation))
+        _finish_rewrite(bucket, index, replacement, data)
+    for blob in bucket.list_blobs(prefix=owner_prefix(SOURCE_PREFIX, uid)):
+        capture = json.loads(blob.metadata['capture'])
+        ranges = _retarget_ranges(bucket, uid, capture['conversation_ranges'])
+        if ranges != capture['conversation_ranges']:
+            capture['conversation_ranges'] = ranges
+            blob.metadata = {**blob.metadata, 'capture': _json(capture).decode()}
+            blob.patch(if_generation_match=int(blob.generation))
+
+
+def _retarget_ranges(bucket: Any, uid: str, ranges: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    return [
+        (
+            {**row, 'conversation_id': conversation_chain(bucket, uid, row['conversation_id'])[-1]}
+            if row.get('conversation_id')
+            else row
+        )
+        for row in ranges
+    ]
 
 
 def pcm_capture_ranges(

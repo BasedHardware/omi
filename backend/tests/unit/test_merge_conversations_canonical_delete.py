@@ -275,8 +275,8 @@ def test_merge_failure_aborts_target_cleanup_when_canonical_retraction_fails():
     delete_conversation.assert_not_called()
 
 
-@pytest.mark.parametrize('merged_into,erasure', [('merged', False), (None, True)])
-def test_bridge_ancestor_cleanup_uses_the_requested_canonical_intent(merged_into, erasure):
+@pytest.mark.parametrize('merged_into', ['merged', None])
+def test_bridge_ancestor_cleanup_never_implies_canonical_erasure(merged_into):
     merge_mod = sys.modules['utils.conversations.merge_conversations']
     with patch.object(
         merge_mod.conversations_db, 'get_conversation', return_value={'sync_merged_from': ['donor']}
@@ -286,9 +286,7 @@ def test_bridge_ancestor_cleanup_uses_the_requested_canonical_intent(merged_into
         merge_mod, 'record_survivor_deleted'
     ):
         merge_mod.delete_conversation_with_sync_sources('u', 'source', merged_into=merged_into)
-    cleanup.assert_called_once_with(
-        'u', 'donor', purge_sync_sources=False, delete_canonical=erasure, merged_into=merged_into
-    )
+    cleanup.assert_called_once_with('u', 'donor', purge_sync_sources=False, merged_into=merged_into)
 
 
 def test_canonical_link_failure_aborts_source_deletion():

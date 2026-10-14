@@ -740,7 +740,6 @@ def delete_conversation_with_sync_sources(uid: str, conversation_id: str, *, mer
                 uid,
                 source_id,
                 purge_sync_sources=False,
-                delete_canonical=not bool(merged_into),
                 merged_into=merged_into,
             )
     conversations_db.delete_conversation(uid, conversation_id)
@@ -768,7 +767,6 @@ def _delete_conversation_and_related_data(
     retain_capture: bool = False,
     purge_sync_sources: bool = True,
     merged_into: Optional[str] = None,
-    delete_canonical: bool = False,
 ) -> None:
     """
     Delete a conversation and all its generated/related data.
@@ -855,12 +853,10 @@ def _delete_conversation_and_related_data(
         # Delete audio chunks from GCS
         if merged_into:
             delete_conversation_audio_files(uid, conversation_id, merged_into=merged_into)
-        elif delete_canonical:
-            delete_conversation_audio_files(uid, conversation_id, delete_canonical=True)
         else:
             delete_conversation_audio_files(uid, conversation_id)
     except Exception as e:
-        if merged_into or delete_canonical:
+        if merged_into:
             raise
         logger.error(f"Error deleting audio files for {conversation_id}: {e}")
 
@@ -881,7 +877,7 @@ def _delete_conversation_and_related_data(
         else:
             conversations_db.delete_conversation(uid, conversation_id)
     except Exception as e:
-        if merged_into or delete_canonical:
+        if merged_into:
             raise
         logger.error(f"Error deleting conversation {conversation_id}: {e}")
 

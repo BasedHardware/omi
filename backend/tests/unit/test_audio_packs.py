@@ -70,6 +70,10 @@ class Blob:
         self.bucket.objects[self.name] = {'data': data, 'metadata': deepcopy(self.metadata), 'gen': self.generation}
         self.size = len(data)
 
+    def patch(self, if_generation_match=None):
+        self._check(if_generation_match)
+        self.bucket.objects[self.name]['metadata'] = deepcopy(self.metadata)
+
     def delete(self, if_generation_match=None):
         if not self.exists():
             raise NotFound('missing')
@@ -227,7 +231,11 @@ def test_merged_capture_survives_and_can_be_erased_via_survivor(bucket):
     old_bytes = bucket.blob(before['pack']).download_as_bytes()
     packs.link_conversations(bucket, 'alice', ['one'], 'merged')
     packs.link_conversations(bucket, 'alice', ['merged'], 'merged-again')
-    assert bucket.blob(before['pack']).download_as_bytes() == old_bytes
+    after = manifests(bucket)[0]
+    assert after['entries'][0]['conversation_ranges'][0]['conversation_id'] == 'merged-again'
+    assert after['entries'][0]['sha256'] == before['entries'][0]['sha256']
+    packs.verify_pack(bucket.blob(before['pack']).download_as_bytes(), after)
+    assert bucket.blob(before['pack']).download_as_bytes() != old_bytes
     packs.delete_conversation(bucket, 'alice', 'merged-again')
     assert manifests(bucket)[0]['entries'] == []
     with pytest.raises(ValueError, match='blocked'):
@@ -304,3 +312,50 @@ def test_competing_merge_cannot_orphan_the_first_survivor(bucket):
     with pytest.raises(ValueError, match='another merge'):
         packs.link_conversations(bucket, 'alice', ['one'], 'second')
     assert packs.conversation_chain(bucket, 'alice', 'one') == ['one', 'first']
+
+
+def test_merge_retargets_unpacked_and_late_capture_without_erasing_bytes(bucket):
+    source = capture(bucket)
+    packs.link_conversations(bucket, 'alice', ['one'], 'merged')
+    blob = bucket.get_blob(source)
+    assert blob.download_as_bytes() == b'encoded-opus'
+    assert json.loads(blob.metadata['capture'])['conversation_ranges'][0]['conversation_id'] == 'merged'
+    late = capture(bucket, data=b'late', conv='one')
+    assert (
+        json.loads(bucket.get_blob(late).metadata['capture'])['conversation_ranges'][0]['conversation_id'] == 'merged'
+    )
+    packs.pack_owner_day(bucket, 'alice', '2020-10-14')
+    assert {e['conversation_ranges'][0]['conversation_id'] for e in manifests(bucket)[0]['entries']} == {'merged'}
+
+
+def test_merge_retarget_resumes_interrupted_manifest_publication(bucket):
+    capture(bucket)
+    packs.pack_owner_day(bucket, 'alice', '2020-10-14')
+    bucket.fail_verified = True
+    with pytest.raises(RuntimeError, match='publication'):
+        packs.link_conversations(bucket, 'alice', ['one'], 'merged')
+    packs.link_conversations(bucket, 'alice', ['one'], 'merged')
+    result = manifests(bucket)[0]
+    assert result['state'] == 'complete'
+    assert result['entries'][0]['conversation_ranges'][0]['conversation_id'] == 'merged'
+    packs.verify_pack(bucket.blob(result['pack']).download_as_bytes(), result)
+
+
+def test_privacy_erasure_relists_and_refuses_remaining_source(bucket, monkeypatch):
+    capture(bucket)
+    original = Blob.delete
+
+    def incomplete_delete(blob, **kwargs):
+        if blob.name.startswith(packs.SOURCE_PREFIX):
+            return
+        original(blob, **kwargs)
+
+    monkeypatch.setattr(Blob, 'delete', incomplete_delete)
+    with pytest.raises(RuntimeError, match='affected source'):
+        packs.delete_conversation(bucket, 'alice', 'one')
+
+
+def test_privacy_erasure_refuses_unindexed_pack(bucket):
+    bucket.blob(packs.owner_prefix(packs.PACK_PREFIX, 'alice') + 'orphan.tar').upload_from_string(b'unknown')
+    with pytest.raises(RuntimeError, match='unindexed pack'):
+        packs.delete_conversation(bucket, 'alice', 'one')
