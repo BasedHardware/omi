@@ -38,12 +38,26 @@ abstract final class OnboardingWebviewGate {
 
   /// The page to render, or null for native onboarding. [readFlag] and [readPayload] default to
   /// the analytics manager's flag reads and are injectable for tests.
+  ///
+  /// Right after sign-in the analytics identity is still settling and the SDK's cached flags belong
+  /// to the anonymous id, where a per-user rollout never matches; so this waits (at most
+  /// [identityWait]) for the identity, re-fetches flags for it, and only then reads.
   static Future<Uri?> resolve({
     Future<bool> Function(String key)? readFlag,
     Future<Object?> Function(String key)? readPayload,
+    String? Function()? settledIdentity,
+    Future<void> Function()? reload,
+    Duration identityWait = const Duration(seconds: 3),
   }) async {
     if (debugOverrideActive) return parse(enabled: true, payload: {'url': _debugUrl});
     try {
+      final identity = settledIdentity ?? () => AnalyticsManager().settledDistinctId;
+      final deadline = DateTime.now().add(identityWait);
+      while (identity() == null && DateTime.now().isBefore(deadline)) {
+        await Future<void>.delayed(const Duration(milliseconds: 100));
+      }
+      if (identity() == null) return null;
+      await (reload ?? AnalyticsManager().reloadFeatureFlags)();
       final enabled = await (readFlag ?? AnalyticsManager().isFeatureEnabled)(enabledFlag);
       if (!enabled) return null;
       final payload = await (readPayload ?? AnalyticsManager().getFeatureFlagPayload)(enabledFlag);

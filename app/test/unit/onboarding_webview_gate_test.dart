@@ -26,6 +26,8 @@ void main() {
   test('flag off -> native, without reading the payload', () async {
     var payloadReads = 0;
     final url = await OnboardingWebviewGate.resolve(
+      settledIdentity: () => 'u',
+      reload: () async {},
       readFlag: (_) async => false,
       readPayload: (_) async {
         payloadReads++;
@@ -39,6 +41,8 @@ void main() {
   test('flag on -> the payload URL', () async {
     final keys = <String>[];
     final url = await OnboardingWebviewGate.resolve(
+      settledIdentity: () => 'u',
+      reload: () async {},
       readFlag: (key) async {
         keys.add(key);
         return true;
@@ -50,6 +54,41 @@ void main() {
   });
 
   test('flag read error -> native (fail closed)', () async {
-    expect(await OnboardingWebviewGate.resolve(readFlag: (_) => Future.error(StateError('no sdk'))), isNull);
+    expect(
+        await OnboardingWebviewGate.resolve(
+            settledIdentity: () => 'u', reload: () async {}, readFlag: (_) => Future.error(StateError('no sdk'))),
+        isNull);
+  });
+
+  test('waits for the identity to settle and reloads flags before the first read', () async {
+    final order = <String>[];
+    var polls = 0;
+    final url = await OnboardingWebviewGate.resolve(
+      settledIdentity: () => ++polls < 4 ? null : 'u',
+      reload: () async => order.add('reload'),
+      readFlag: (_) async {
+        order.add('read');
+        return true;
+      },
+      readPayload: (_) async => {'url': 'https://x.example/onboarding'},
+    );
+    expect(url, Uri.parse('https://x.example/onboarding'));
+    expect(order, ['reload', 'read']);
+    expect(polls, greaterThanOrEqualTo(4));
+  });
+
+  test('no identity within the wait -> native, without reading anything', () async {
+    var reads = 0;
+    final url = await OnboardingWebviewGate.resolve(
+      settledIdentity: () => null,
+      identityWait: const Duration(milliseconds: 200),
+      reload: () async => reads++,
+      readFlag: (_) async {
+        reads++;
+        return true;
+      },
+    );
+    expect(url, isNull);
+    expect(reads, 0);
   });
 }
