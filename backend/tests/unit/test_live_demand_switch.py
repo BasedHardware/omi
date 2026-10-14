@@ -288,3 +288,32 @@ async def test_live_capture_during_healthy_switch_does_not_wait_on_prefix(monkey
         await asyncio.gather(switching, return_exceptions=True)
         actual.stt_socket.finish()
         await stop(raws)
+
+
+@pytest.mark.asyncio
+async def test_default_hidden_dwell_fits_quiet_capture_replay_budget(monkeypatch):
+    from config.live_demand import resolve_live_demand
+    from tests.unit.fixtures.replay_clock import VirtualClock
+    from utils.stt import recovery_state, replay_delivery, resilient_stream
+
+    actual, _, raws, _, _ = await demand_receiver(monkeypatch)
+    timer = VirtualClock()
+    monkeypatch.setattr(replay_delivery, 'clock', lambda: timer.now)
+    monkeypatch.setattr(replay_delivery, 'sleep', timer.sleep)
+    monkeypatch.setattr(recovery_state, 'clock', lambda: timer.now)
+    monkeypatch.setattr(resilient_stream, 'clock', lambda: timer.now)
+    monkeypatch.setattr(replay_delivery, 'REPLAY_PREFIX_SECONDS', 20.0)
+    monkeypatch.delenv('STT_LIVE_DEMAND_MIN_DWELL_SECONDS', raising=False)
+    dwell = resolve_live_demand().dwell_seconds
+    assert dwell < replay_delivery.REPLAY_PREFIX_SECONDS
+    # No emitted vendor anchor: all pre-dwell capture remains replay-owned.
+    actual._window_replay_audio.append(b'\x00\x00' * int(dwell * 16000), 0)
+    old = actual.stt_socket
+    try:
+        assert await actual._switch_live_demand('parakeet')
+        assert old.retired_for_replay
+        assert actual.host.stt_model == 'parakeet-window'
+        assert not actual.live_demand.policy.fallback
+    finally:
+        actual.stt_socket.finish()
+        await stop(raws)

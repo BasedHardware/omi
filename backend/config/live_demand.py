@@ -13,7 +13,7 @@ class LiveDemandConfig:
     enabled: bool = False
     percent: float = 0
     uids: frozenset[str] = frozenset()
-    dwell_seconds: float = 30
+    dwell_seconds: float = 15
 
     def admits(self, uid: str) -> bool:
         if not self.enabled or not uid:
@@ -25,7 +25,7 @@ class LiveDemandConfig:
 def resolve_live_demand() -> LiveDemandConfig:
     try:
         percent = float(os.getenv('STT_LIVE_DEMAND_PERCENT', '0'))
-        dwell = float(os.getenv('STT_LIVE_DEMAND_MIN_DWELL_SECONDS', '30'))
+        dwell = float(os.getenv('STT_LIVE_DEMAND_MIN_DWELL_SECONDS', '15'))
         if not math.isfinite(percent) or not 0 <= percent <= 100 or not math.isfinite(dwell) or not 5 <= dwell <= 300:
             return LiveDemandConfig()
         return LiveDemandConfig(

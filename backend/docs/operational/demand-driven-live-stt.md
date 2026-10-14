@@ -1,18 +1,20 @@
 # Demand-driven live STT (phase 4)
 
 This listen-only gate starts every eligible session on the existing vendor tail.
-After 30 seconds of stable hidden demand, capture moves to the existing Parakeet
+After 15 seconds of stable hidden demand, capture moves to the existing Parakeet
 window leg. A visible/unknown report, shared visible session, real-time consumer,
 or rollback returns it to the vendor. Vendor return is immediate; cheap
 re-admission waits the minimum dwell, so tab flips cannot repeatedly admit cheap
-legs. No admission thresholds change (including the two-request / 35% GPU gates).
+legs. The default dwell fits inside the existing 20-second replay-prefix budget
+even for quiet capture with no emitted sentence anchor. No admission thresholds
+change (including the two-request / 35% GPU gates).
 
 | Environment variable | Default |
 | --- | --- |
 | `STT_LIVE_DEMAND_ENABLED` | `false` |
 | `STT_LIVE_DEMAND_PERCENT` | `0` |
 | `STT_LIVE_DEMAND_UID_ALLOWLIST` | empty, comma-separated authenticated UIDs |
-| `STT_LIVE_DEMAND_MIN_DWELL_SECONDS` | `30`, valid range 5–300 |
+| `STT_LIVE_DEMAND_MIN_DWELL_SECONDS` | `15`, valid range 5–300 |
 
 The global enable is required for either allocation or allowlisting. Invalid
 settings disable admission. `STT_FAILOVER_RECOVERY_ENABLED=true` is also required;

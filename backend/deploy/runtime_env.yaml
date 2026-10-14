@@ -104,7 +104,7 @@ environments:
           STT_LIVE_DEMAND_ENABLED: {value: 'false', category: rollout}
           STT_LIVE_DEMAND_PERCENT: {value: '0', category: rollout}
           STT_LIVE_DEMAND_UID_ALLOWLIST: {value: '', category: rollout}
-          STT_LIVE_DEMAND_MIN_DWELL_SECONDS: {value: '30', category: rollout}
+          STT_LIVE_DEMAND_MIN_DWELL_SECONDS: {value: '15', category: rollout}
           STT_FAILOVER_RECOVERY_ENABLED: {value: 'false', category: rollout}
           STT_ROUTING_MODE: {value: shadow, category: rollout}
           STT_ROUTING_REDIS_TIMEOUT_SECONDS: {value: '0.075', category: rollout}
@@ -1795,7 +1795,7 @@ environments:
           STT_LIVE_DEMAND_ENABLED: {value: 'false', category: rollout}
           STT_LIVE_DEMAND_PERCENT: {value: '0', category: rollout}
           STT_LIVE_DEMAND_UID_ALLOWLIST: {value: '', category: rollout}
-          STT_LIVE_DEMAND_MIN_DWELL_SECONDS: {value: '30', category: rollout}
+          STT_LIVE_DEMAND_MIN_DWELL_SECONDS: {value: '15', category: rollout}
           STT_FAILOVER_RECOVERY_ENABLED: {value: 'true', category: rollout}
           STT_ROUTING_MODE: {value: 'on', category: rollout}
           STT_ROUTING_REDIS_TIMEOUT_SECONDS: {value: '0.075', category: rollout}

@@ -115,7 +115,7 @@ environment_shared:
           value: ''
           category: rollout
         STT_LIVE_DEMAND_MIN_DWELL_SECONDS:
-          value: '30'
+          value: '15'
           category: rollout
         STT_FAILOVER_RECOVERY_ENABLED:
           value: 'false'
