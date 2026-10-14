@@ -102,21 +102,21 @@ def spelling_grounding_rejection(edit, records, vocabulary=()):
 def spelling_question(edit, *, now=None, full=False):
     key = hashlib.sha256((edit.target + '\0' + edit.before + '\0' + edit.after).encode()).hexdigest()
     model = FullReviewItem if full else DreamReviewItem
-    item = model(
-        item_id='spelling:' + key,
-        kind='spelling',
-        title='Which spelling is correct?',
-        quote=edit.before,
-        source_ref=edit.target,
-        created_at=now or datetime.now(timezone.utc),
-        spelling=SpellingItem(term_id=key, options=[edit.before, edit.after], allow_custom=True),
-        **(
-            {'value': getattr(edit, 'value', None) or 1, 'why_it_matters': 'Clarifies future use of this name or term.'}
-            if full
-            else {}
-        ),
-    )
-    item._agreement, item._samples = edit.agreement, edit.samples
+    payload = {
+        'item_id': 'spelling:' + key,
+        'kind': 'spelling',
+        'title': 'Which spelling is correct?',
+        'quote': edit.before,
+        'source_ref': edit.target,
+        'created_at': now or datetime.now(timezone.utc),
+        'spelling': SpellingItem(term_id=key, options=[edit.before, edit.after], allow_custom=True),
+    }
+    if full:
+        payload.update(
+            value=getattr(edit, 'value', None) or 1, why_it_matters='Clarifies future use of this name or term.'
+        )
+    item = model.model_validate(payload)
+    item.set_agreement(edit.agreement, edit.samples)
     return item
 
 

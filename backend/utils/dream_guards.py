@@ -7,7 +7,7 @@ from pathlib import Path
 import re
 import unicodedata
 
-from models.dream_agent import Plan
+from models.dream_agent import Plan, FullPlan
 from models.dream_refs import base_ref, has_ref, cited_value
 
 # Code-configurable threshold; no rollout/environment switch changes admission.
@@ -212,7 +212,7 @@ def feedback_rejection(feedback, *, full=False):
     return None
 
 
-def filter_plan(plan: Plan, records, *, usage_sink=None, targets=None):
+def filter_plan(plan: Plan | FullPlan, records, *, usage_sink=None, targets=None):
     """Drop unsafe proposals before any report persistence; diagnostics contain counts only."""
     rejected = Counter()
     full = getattr(records, 'context_mode', 'bounded') == 'full'

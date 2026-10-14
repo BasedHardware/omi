@@ -18,6 +18,9 @@ class ConsensusItem(BaseModel):
     def samples(self):
         return self._samples
 
+    def set_agreement(self, agreement: int, samples: int) -> None:
+        self._agreement, self._samples = agreement, samples
+
 
 class Strict(ConsensusItem):
     model_config = ConfigDict(extra='forbid')

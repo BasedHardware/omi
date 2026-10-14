@@ -55,10 +55,12 @@ async def offer_questions(uid, run_id, records, items, question_edits, remaining
         if attention <= 0:
             if edit is not None:
                 deferred.add(base_ref(edit.target))
-                outcome['status'] = 'suggestion_cap'
+                if outcome is not None:
+                    outcome['status'] = 'suggestion_cap'
             continue
         if edit is not None and remaining <= 0:
-            outcome['status'] = 'edit_cap'
+            if outcome is not None:
+                outcome['status'] = 'edit_cap'
             continue
         try:
             if edit is not None:

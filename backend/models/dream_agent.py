@@ -86,7 +86,11 @@ class FullReviewItem(DreamReviewItem):
     why_it_matters: str = Field(min_length=1, max_length=200, description='Short, generic explanation of future value.')
 
 
-class FullPlan(Plan):
+class FullPlan(Strict):
     # Keep the bounded planner and released Review proposal schema unchanged.
     edits: list[FullEdit] = Field(default_factory=list, max_length=50)
     questions: list[FullReviewItem] = Field(default_factory=list, max_length=3)
+    vocabulary: list[Term] = Field(default_factory=list, max_length=100)
+    frames: list[FrameQuestion] = Field(default_factory=list, max_length=3)
+    feedback: list[Feedback] = Field(default_factory=list, max_length=10)
+    slow_tasks: list[SlowTask] = Field(default_factory=list, max_length=3)

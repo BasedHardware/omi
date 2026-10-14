@@ -25,7 +25,7 @@ from config.dream_agent import (
 )
 from database import dream_scheduler, dream_store, dream_feedback, review_changes, review_store
 from database.dream_dirty import dream_writing
-from models.dream_agent import Triage, Plan
+from models.dream_agent import Triage, Plan, FullPlan, DreamReviewItem
 from models.dream_refs import base_ref, has_ref, cited_value
 from utils import dream_capacity, dream_reads, dream_tools, dream_transport, dream_guards
 from utils.dream_consensus import majority, unanimous_spelling, plan_dump, item_dump
@@ -130,7 +130,7 @@ async def plan_pass(uid, records, caps, *, turn=None, usage_sink=None, vocabular
             result = await run_loop(remaining_mount, messages, sample_turn)
             if result.reason != 'stopped':
                 raise ValueError('dream_reasoning_budget')
-            if not isinstance(result.value, Plan):
+            if not isinstance(result.value, (Plan, FullPlan)):
                 raise ValueError('dream_sample_plan')
             sink['returned'] = True
             return result.value
@@ -178,7 +178,7 @@ async def plan_pass(uid, records, caps, *, turn=None, usage_sink=None, vocabular
                     for sink in sample_usage:
                         counts.update(sink.get(field, {}))
                     usage_sink[field] = dict(counts)
-        plans = [result for result in results if isinstance(result, Plan)]
+        plans = [result for result in results if isinstance(result, (Plan, FullPlan))]
         if usage_sink is not None:
             usage_sink['samples_returned'] = len(plans)
             usage_sink['samples_failed'] = caps.samples - len(plans)
@@ -304,6 +304,7 @@ async def dry_run(uid, records, *, targets=None, caps=None, turn=None, vocabular
         plan = plan.model_copy(update={'feedback': dream_guards.cap_feedback(accepted, usage_sink=sink)})
     full = caps.context_mode == 'full'
     proposed = plan_dump(plan, full=full)
+    questions: list[DreamReviewItem] = list(plan.questions)
     for edit, row in zip(plan.edits, proposed['edits']):
         reason = spelling_grounding_rejection(edit, evidence, vocabulary or [])
         if full and unanimous_spelling(edit) and reason == 'ungrounded_spelling':
@@ -315,11 +316,11 @@ async def dry_run(uid, records, *, targets=None, caps=None, turn=None, vocabular
             if not dream_guards.verbatim_quote(edit.before, cited_value(edit.target, evidence)):
                 sink['rejected']['invalid_question_evidence'] = sink['rejected'].get('invalid_question_evidence', 0) + 1
             elif full:
-                plan.questions.append(spelling_question(edit, full=True))
+                questions.append(spelling_question(edit, full=True))
             elif len(proposed['questions']) < 3:
                 proposed['questions'].append(spelling_question(edit).model_dump(mode='python'))
     if full:
-        proposed['questions'] = [item_dump(item) for item in rank_questions(plan.questions, usage_sink=sink)[:3]]
+        proposed['questions'] = [item_dump(item) for item in rank_questions(questions, usage_sink=sink)[:3]]
     result = {
         'plan': proposed,
         'guard_decisions': sink.get('rejected', {}),

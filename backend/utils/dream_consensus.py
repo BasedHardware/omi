@@ -50,7 +50,7 @@ def majority(plans, *, usage_sink=None):
         for key, item in candidates.items():
             if votes[key] >= threshold:
                 item = item.model_copy(deep=True)
-                item._agreement, item._samples = votes[key], len(plans)
+                item.set_agreement(votes[key], len(plans))
                 survivors.append(item)
         if field == 'questions':
             if model is FullPlan:
