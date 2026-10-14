@@ -13,6 +13,8 @@ import types
 import unittest
 from unittest.mock import MagicMock, patch
 
+from utils.retrieval.turn_refs import register_record_ref  # noqa: F401 - real pure module before package stubs
+
 BACKEND_DIR = Path(__file__).resolve().parent.parent.parent
 
 os.environ.setdefault(
