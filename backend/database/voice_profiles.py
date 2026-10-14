@@ -236,7 +236,7 @@ def ignored_voice_keys(state: Dict[str, Any]) -> set:
     return {ignored_voice_key(entry['conversation_id'], entry['speaker_id']) for entry in ignored_voices(state)}
 
 
-def _newer_positive_decision(
+def _newer_superseding_decision(
     client: Any,
     transaction: Any,
     uid: str,
@@ -244,11 +244,14 @@ def _newer_positive_decision(
     speaker_id: int,
     generation: Optional[int],
 ) -> bool:
-    """True when a newer whole-voice positive assignment already won the receipt.
+    """True when a newer whole-voice decision already superseded this exclusion.
 
-    Mirrors ``manual_rejected_speakers`` semantics: a speaker-scoped positive
-    or a non-``segment_only`` segment positive unseats a rejection; a
-    ``segment_only`` (range) entry does not.
+    Mirrors ``manual_rejected_speakers`` semantics: a speaker-scoped decision
+    or a non-``segment_only`` segment decision at a newer generation unseats
+    the exclusion — a positive assignment, and equally a different rejection
+    kind (``not_me`` / ``not_person`` / an unnamed card answer), because the
+    ignored-voice marker exists only for ``not_a_person``. A ``segment_only``
+    (range) entry does not unseat a whole-voice decision.
     """
     if generation is None:
         return False
@@ -275,10 +278,7 @@ def _newer_positive_decision(
         for entry in (receipt.get('segments') or {}).values()
         if isinstance(entry, dict) and entry.get('speaker_id') == speaker_id
     )
-    return any(
-        not entry.get('rejection') and not entry.get('segment_only') and entry.get('generation', 0) > generation
-        for entry in entries
-    )
+    return any(not entry.get('segment_only') and entry.get('generation', 0) > generation for entry in entries)
 
 
 def record_ignored_voice(
@@ -296,10 +296,11 @@ def record_ignored_voice(
 
     @firestore.transactional
     def record(transaction: Any) -> None:
-        if _newer_positive_decision(client, transaction, uid, conversation_id, speaker_id, assignment_generation):
-            # A newer positive assignment already replaced this exclusion;
-            # recording the stale-generation marker would re-ignore a voice the
-            # user reassigned while this request was in flight.
+        if _newer_superseding_decision(client, transaction, uid, conversation_id, speaker_id, assignment_generation):
+            # A newer decision (positive assignment, or a non-not_a_person
+            # rejection like not_me) already replaced this exclusion; recording
+            # the stale-generation marker would re-ignore a voice the user
+            # reassigned while this request was in flight.
             return
         snapshot = ref.get(transaction=transaction)
         state = snapshot.to_dict() or {}

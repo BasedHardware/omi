@@ -139,6 +139,99 @@ def test_bulk_not_a_person_is_resolved_persisted_reversible_and_never_teaches():
     learning.assert_not_called()
 
 
+def test_not_me_assignment_retires_a_prior_media_exclusion_marker():
+    """The supported is_user=false answer must retire a stale exclusion marker.
+
+    That path commits a whole-voice not_me rejection (person_id and is_user are
+    both false), which the old `elif person_id or is_user` guard skipped — the
+    not_a_person marker stayed in Settings and kept suppressing the voice
+    despite the newer receipt.
+    """
+    raw = {
+        'id': 'conversation',
+        'transcript_segments': [
+            {'id': 's1', 'speaker_id': 4, 'is_user': True, 'person_id': None, 'start': 0, 'end': 2, 'text': 'TV'},
+        ],
+    }
+    cleared = Mock()
+    ignored = Mock()
+    namespace = dict(
+        Optional=Optional,
+        List=list,
+        Sequence=list,
+        Mapping=dict,
+        Any=object,
+        datetime=__import__('datetime').datetime,
+        timezone=__import__('datetime').timezone,
+        Depends=Depends,
+        HTTPException=HTTPException,
+        BackgroundTasks=BackgroundTasks,
+        BulkAssignSegmentsRequest=BulkAssignSegmentsRequest,
+        TranscriptSegment=TranscriptSegment,
+        auth=SimpleNamespace(get_current_user_uid=lambda: 'u'),
+        deserialize_conversation=lambda raw: SimpleNamespace(
+            transcript_segments=[TranscriptSegment(**s) for s in raw['transcript_segments']]
+        ),
+        _drop_display_projection=Mock(),
+        _emit_speaker_identity_confirmed=Mock(),
+        _speaker_assignment=lambda segment: str(segment.person_id),
+        voice_profiles_db=SimpleNamespace(record_ignored_voice=ignored, clear_ignored_voices=cleared),
+        record_exclusion_markers=lambda uid, cid, raw, resolved, **kwargs: record_exclusion_markers(
+            uid, cid, raw, resolved, voice_profiles=SimpleNamespace(record_ignored_voice=ignored), **kwargs
+        ),
+        retire_exclusion_markers=lambda uid, cid, raw, resolved, **kwargs: retire_exclusion_markers(
+            uid, cid, raw, resolved, voice_profiles=SimpleNamespace(clear_ignored_voices=cleared), **kwargs
+        ),
+        manual_rejected_speakers=manual_rejected_speakers,
+        teaching_segment_ids=lambda segments, resolved: resolved,
+        delete_speech_profile_blob=Mock(),
+        run_authorized_person_learning=Mock(),
+        run_authorized_owner_learning=Mock(),
+    )
+
+    def assign(uid, conversation_id, **kwargs):
+        before = list(raw['transcript_segments'])
+        segments, receipt, resolved, _previous = manual_assignment(raw, **kwargs)
+        raw.update(transcript_segments=segments, manual_speaker_assignments=receipt)
+        return raw, resolved, [], before
+
+    namespace['conversations_db'] = SimpleNamespace(assign_conversation_speaker=assign)
+    load_functions(
+        BACKEND / 'utils/speaker_assignment_teaching.py',
+        {'commit_manual_assignment', 'schedule_assignment_teaching'},
+        namespace,
+    )
+    namespace.update(
+        HTTPException=HTTPException,
+        BackgroundTasks=BackgroundTasks,
+        BulkAssignSegmentsRequest=BulkAssignSegmentsRequest,
+        TranscriptSegment=TranscriptSegment,
+        Depends=Depends,
+        auth=SimpleNamespace(get_current_user_uid=lambda: 'u'),
+        deserialize_conversation=lambda raw: SimpleNamespace(
+            transcript_segments=[TranscriptSegment(**s) for s in raw['transcript_segments']]
+        ),
+        _drop_display_projection=Mock(),
+        _emit_speaker_identity_confirmed=Mock(),
+        _speaker_assignment=lambda segment: str(segment.person_id),
+    )
+    load_functions(BACKEND / 'routers/conversations.py', {'_assign_manual_speaker', 'assign_segments_bulk'}, namespace)
+    # Exclude the media speaker first (generation 1, marker recorded).
+    excluded = BulkAssignSegmentsRequest(segment_ids=['s1'], assign_type='not_a_person')
+    namespace['assign_segments_bulk']('conversation', excluded, BackgroundTasks(), uid='u')
+    assert ignored.call_count == 1
+    cleared.assert_not_called()
+    # Then the user answers the owner question with "not me": the marker must
+    # retire with the newer whole-voice not_me rejection.
+    not_me = BulkAssignSegmentsRequest(segment_ids=['s1'], assign_type='is_user', value='false')
+    namespace['assign_segments_bulk']('conversation', not_me, BackgroundTasks(), uid='u')
+    assert ignored.call_count == 1  # no new marker recorded by the not_me answer
+    cleared.assert_called_once()
+    args, kwargs = cleared.call_args
+    assert args[:3] == ('u', 'conversation', [4])
+    assert kwargs['assignment_generation'] == 2
+
+
 def test_range_reassignment_keeps_a_winning_whole_voice_rejection_restorable():
     """A range-only positive entry (segment_only) does not unseat the whole-voice
     not_a_person rejection, so it must not clear the ignored-voice marker."""

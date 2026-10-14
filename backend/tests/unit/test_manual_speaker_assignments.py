@@ -724,3 +724,46 @@ def test_socket_rejection_clears_speaker_wide_inference_map(world):
         assert receiver.host.state.speaker_map_dirty
 
     asyncio.run(exercise())
+
+
+def test_socket_rejection_clears_per_segment_assignments(world):
+    """A winning whole-voice rejection must drop per-segment person mappings.
+
+    A segment that already carries a segment_assignments entry but is absent
+    from the socket payload (e.g. it arrived while the exclusion PATCH was in
+    flight) keeps its stale mapping otherwise, and
+    process_speaker_assigned_segments prefers segment_assignments over
+    speaker_to_person — later persistence would relabel that segment despite
+    the winning rejection.
+    """
+    import asyncio
+    from types import SimpleNamespace
+    from unittest.mock import AsyncMock
+    from routers.listen.receiver import ListenReceiver
+
+    async def exercise():
+        matcher = _matcher_with_manual_mapping()
+        # s0 belongs to speaker 4 but is NOT in the payload below: its
+        # pre-existing per-segment mapping must still retire with the voice.
+        matcher.segment_assignments = {'s0': 'old', 'unrelated': 'keep'}
+        receiver = object.__new__(ListenReceiver)
+
+        receiver.host = SimpleNamespace(
+            state=SimpleNamespace(current_conversation_id='c', speaker_map_dirty=False),
+            speakers=matcher,
+            transcripts=SimpleNamespace(cache=SimpleNamespace(get=AsyncMock(return_value=read(world)))),
+            private_cloud_sync_enabled=True,
+            send_speaker_sample_request=AsyncMock(),
+            spawn=lambda coro, **kwargs: asyncio.ensure_future(coro),
+        )
+        db.assign_conversation_speaker('u', 'c', speaker_id=4, rejection={'kind': 'not_a_person', 'person_id': None})
+        receiver.host.transcripts.cache.get.return_value = read(world)
+
+        await receiver._handle_speaker_assigned(dict(person_id=None, segment_ids=['s1'], assign_type='not_a_person'))
+
+        # Every by_id segment owned by the rejected speaker loses its mapping;
+        # segments of other speakers keep theirs.
+        assert 's0' not in matcher.segment_assignments
+        assert 'unrelated' in matcher.segment_assignments
+
+    asyncio.run(exercise())

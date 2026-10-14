@@ -142,6 +142,36 @@ def test_stale_generation_marker_is_not_recorded_after_a_newer_positive():
     assert 'c3:2' in db.ignored_voice_keys(store.rows[STATE])
 
 
+def test_stale_generation_marker_is_not_recorded_after_a_newer_not_me():
+    store = StrictFirestore()
+    path = ('users', 'u', 'conversations', 'c1')
+    # The supported is_user=false answer commits a whole-voice not_me rejection
+    # at generation 3; a delayed generation-1 exclusion write must not recreate
+    # its marker — the ignored-voice list would suppress and list a voice whose
+    # winning decision is no longer not_a_person.
+    store.rows[path] = {
+        'manual_speaker_assignments': {
+            'generation': 3,
+            'speakers': {'1': {'generation': 3, 'person_id': None, 'is_user': False, 'rejection': {'kind': 'not_me'}}},
+        }
+    }
+    db.record_ignored_voice('u', 'c1', 1, NOW, assignment_generation=1, firestore_client=store)
+    assert db.ignored_voice_keys(store.rows.get(STATE) or {'ignored_voices': {}}) == set()
+    # A newer whole-voice not_a_person at a newer generation is the exclusion
+    # itself re-confirmed: the older in-flight write stays fenced, but a fresh
+    # record at the newest generation stands.
+    store.rows[path] = {
+        'manual_speaker_assignments': {
+            'generation': 4,
+            'speakers': {
+                '1': {'generation': 4, 'person_id': None, 'is_user': False, 'rejection': {'kind': 'not_a_person'}}
+            },
+        }
+    }
+    db.record_ignored_voice('u', 'c1', 1, NOW, assignment_generation=4, firestore_client=store)
+    assert db.ignored_voice_keys(store.rows[STATE]) == {'c1:1'}
+
+
 def test_delayed_clear_cannot_remove_a_newer_decisions_marker():
     store = StrictFirestore()
     # Generation 3 positive committed, then a generation 4 re-exclusion

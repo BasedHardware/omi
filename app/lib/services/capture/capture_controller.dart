@@ -3502,12 +3502,45 @@ class CaptureController extends ChangeNotifier
     // exclusion acknowledgement may carry the old manual label, so its install
     // must not retire that exclusion even though it lands later.
     final requestEpoch = ++_snapshotEpoch;
-    final convos = await getConversations(statuses: [ConversationStatus.in_progress], limit: 1);
+    final result = inProgressConversationFetchForTesting != null
+        ? await inProgressConversationFetchForTesting!()
+        : await getConversationsResult(statuses: [ConversationStatus.in_progress], limit: 1);
+    // A failed fetch is not an authoritative "no active conversation": the
+    // lossy wrapper used to convert transport/auth failure into an empty list,
+    // and installing null then cleared the live transcript, photos,
+    // suggestions and exclusions mid-capture. Skip the install instead and
+    // leave the current state standing.
+    if (!result.ok) return;
     // The request may have straddled a stop/replace: installing a snapshot
     // that landed after the session ended would mutate a later session's
     // state, so the caller's session guard decides.
     if (stillCurrent != null && !stillCurrent()) return;
-    applyInProgressConversation(convos.isNotEmpty ? convos.first : null, requestEpoch: requestEpoch);
+    applyInProgressConversation(result.items.isNotEmpty ? result.items.first : null, requestEpoch: requestEpoch);
+  }
+
+  /// Hermetic test seam for the in-progress snapshot fetch
+  /// ([getConversationsResult]): lets capture tests model authoritative
+  /// snapshots and transport failures without the non-injectable
+  /// [makeApiCall] singleton. Null in production.
+  @visibleForTesting
+  static Future<({List<ServerConversation> items, bool ok, bool truncated})> Function()?
+      inProgressConversationFetchForTesting;
+
+  /// Settings > Ignored Voices restoration signal for a live capture.
+  ///
+  /// Restoring a voice removes the ignored-voice marker and the rejection
+  /// receipt server-side but intentionally writes no positive label, so no
+  /// later snapshot can satisfy the manual-positive retirement condition in
+  /// [applyInProgressConversation] — without this signal the local exclusion
+  /// would keep blanking the voice and suppressing its suggestions until the
+  /// conversation changes. Retire the local exclusion for this conversation so
+  /// the voice is undecided again (unlabeled, eligible for prompts).
+  void onIgnoredVoiceRestored(String conversationId, int speakerId) {
+    if (_conversation?.id != conversationId) return;
+    if (_excludedSpeakers.remove(speakerId)) {
+      _excludedAtEpoch.remove(speakerId);
+      notifyListeners();
+    }
   }
 
   /// Install an acknowledged server snapshot. Shared by REST refresh and

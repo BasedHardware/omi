@@ -567,4 +567,146 @@ void main() {
     // The queued follow-up ran: the second conflict was not discarded.
     expect(loads, 2);
   });
+
+  test('a failed reconcile fetch preserves the capture state instead of installing null', () async {
+    // Regression: the reconcile used the lossy getConversations wrapper,
+    // which converts a transport/auth failure into an empty list, so a failed
+    // refresh installed null mid-capture and cleared the transcript, photos,
+    // suggestions and exclusions as if the server had authoritatively
+    // reported no active conversation.
+    late final CaptureController controller;
+    controller = CaptureController(
+      externalActions: _Actions(),
+      bleListeners: _Ble(),
+      connectivity: CaptureConnectivityBoundary(
+        initiallyConnected: true,
+        changes: const Stream.empty(),
+        isConnected: () => true,
+      ),
+      excludeSpeaker: (id, ids) async => true,
+    );
+    addTearDown(() async {
+      CaptureController.inProgressConversationFetchForTesting = null;
+      CaptureController.exclusionReconcileDelay = const Duration(milliseconds: 300);
+      controller.dispose();
+      await controller.lifetime.close();
+    });
+    CaptureController.exclusionReconcileDelay = Duration.zero;
+    controller.applyInProgressConversation(
+      ServerConversation(
+        id: 'c',
+        createdAt: DateTime(2026),
+        structured: Structured('TV', 'TV'),
+        transcriptSegments: [_segment('s1')],
+      ),
+    );
+    expect(await controller.assignSpeakerToConversation(4, '', '', ['s1'], notAPerson: true), isTrue);
+    final suggestion = SpeakerLabelSuggestionEvent(speakerId: 4, personId: '', personName: 'Sam', segmentId: 's1');
+
+    // The authoritative fetch fails: the fetch result reports ok == false.
+    CaptureController.inProgressConversationFetchForTesting =
+        () async => (items: <ServerConversation>[], ok: false, truncated: false);
+    controller.onSegmentReceived([
+      _segment('s1')
+        ..isUser = false
+        ..personId = 'p1'
+        ..speakerLabelSource = 'manual',
+    ]);
+    await Future<void>.delayed(Duration.zero);
+    await Future<void>.delayed(Duration.zero);
+
+    // The failed refresh must not install null: the transcript and exclusion
+    // state all survive untouched (installing null clears segments to []).
+    expect(controller.segments.map((s) => s.id), ['s1']);
+    expect(controller.segments.every((s) => !s.isUser && s.personId == null), isTrue);
+    controller.onMessageEventReceived(suggestion);
+    expect(controller.suggestionsBySegmentId, isEmpty); // exclusion still suppresses
+
+    // A successful fetch still installs the authoritative snapshot: the newer
+    // manual positive retires the exclusion. s2 stays unlabeled (speaker 4,
+    // undecided), so a suggestion for it is eligible again.
+    CaptureController.inProgressConversationFetchForTesting = () async => (
+          items: [
+            ServerConversation(
+              id: 'c',
+              createdAt: DateTime(2026),
+              structured: Structured('TV', 'TV'),
+              transcriptSegments: [
+                _segment('s1')
+                  ..isUser = false
+                  ..personId = 'p1'
+                  ..speakerLabelSource = 'manual',
+                _segment('s2')..isUser = false,
+              ],
+            ),
+          ],
+          ok: true,
+          truncated: false,
+        );
+    controller.onSegmentReceived([
+      _segment('s1')
+        ..isUser = false
+        ..personId = 'p1'
+        ..speakerLabelSource = 'manual',
+    ]);
+    await Future<void>.delayed(Duration.zero);
+    await Future<void>.delayed(Duration.zero);
+    final updated = controller.segments.firstWhere((s) => s.id == 's1');
+    expect(updated.personId, 'p1');
+    expect(updated.speakerLabelSource, 'manual');
+    // The retired exclusion no longer blanks speaker 4's unlabeled segment.
+    final unlabeled = controller.segments.firstWhere((s) => s.id == 's2');
+    expect(unlabeled.isUser, isFalse);
+    expect(unlabeled.personId, isNull);
+    final eligible = SpeakerLabelSuggestionEvent(speakerId: 4, personId: '', personName: 'Sam', segmentId: 's2');
+    controller.onMessageEventReceived(eligible);
+    expect(controller.suggestionsBySegmentId, isNotEmpty);
+  });
+
+  test('a Settings restoration retires the local exclusion for the live conversation', () async {
+    // Regression: restoring a voice from Settings removes the ignored-voice
+    // marker and the rejection receipt but intentionally writes no positive
+    // label, so no later snapshot can satisfy the manual-positive retirement
+    // condition — the capture state needs the explicit restoration signal.
+    final controller = CaptureController(
+      externalActions: _Actions(),
+      bleListeners: _Ble(),
+      connectivity: CaptureConnectivityBoundary(
+        initiallyConnected: true,
+        changes: const Stream.empty(),
+        isConnected: () => true,
+      ),
+      excludeSpeaker: (id, ids) async => true,
+    );
+    addTearDown(() async {
+      controller.dispose();
+      await controller.lifetime.close();
+    });
+    controller.applyInProgressConversation(
+      ServerConversation(
+        id: 'c',
+        createdAt: DateTime(2026),
+        structured: Structured('TV', 'TV'),
+        transcriptSegments: [_segment('s1')],
+      ),
+    );
+    expect(await controller.assignSpeakerToConversation(4, '', '', ['s1'], notAPerson: true), isTrue);
+    final suggestion = SpeakerLabelSuggestionEvent(speakerId: 4, personId: '', personName: 'Sam', segmentId: 's1');
+    controller.onMessageEventReceived(suggestion);
+    expect(controller.suggestionsBySegmentId, isEmpty);
+
+    // A restoration for a different conversation must not touch this capture.
+    controller.onIgnoredVoiceRestored('other', 4);
+    expect(controller.suggestionsBySegmentId, isEmpty);
+
+    // The same conversation's restoration retires the exclusion: suggestions
+    // for the voice are eligible again.
+    controller.onIgnoredVoiceRestored('c', 4);
+    controller.onMessageEventReceived(suggestion);
+    expect(controller.suggestionsBySegmentId, isNotEmpty);
+
+    // The restored voice's segments stay unlabeled (restoration writes no
+    // label); a later snapshot re-installs normally.
+    expect(controller.segments.every((s) => !s.isUser && s.personId == null), isTrue);
+  });
 }

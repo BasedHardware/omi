@@ -2102,6 +2102,16 @@ class ListenReceiver(ReplayFilterMixin):
             # a conversation boundary. The shared path also clears candidates
             # and pending suggestions, mirroring the reject-route cleanup.
             self.host.speakers.retire_excluded_voice(rejected)
+            # Per-segment mappings for the rejected speaker retire too: a
+            # segment with an existing entry that this payload does not
+            # mention (e.g. one that arrived while the exclusion PATCH was in
+            # flight) would keep its stale person mapping, and
+            # process_speaker_assigned_segments prefers segment_assignments
+            # over speaker_to_person — later persistence would relabel that
+            # segment despite the winning whole-voice rejection.
+            for sid, segment in by_id.items():
+                if segment.get('speaker_id') == rejected:
+                    self.host.speakers.segment_assignments.pop(sid, None)
             self.host.speakers.segment_identity_status = {
                 sid: status
                 for sid, status in self.host.speakers.segment_identity_status.items()

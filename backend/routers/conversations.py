@@ -1600,11 +1600,16 @@ def _assign_manual_speaker(
         # route and tag-prompt answers write, so the voice shows under
         # Settings > Ignored Voices and can be restored from there.
         record_exclusion_markers(uid, resolved_conversation_id, raw, resolved, speaker_id=speaker_id)
-    elif person_id or is_user:
-        # A later person/user assignment replaces the exclusion (reversible by
-        # design), so the ignored-voice marker must not outlive that decision.
-        # Range-only entries (segment_only) do not unseat a whole-voice
-        # rejection, so those assignments must keep the marker restorable.
+    else:
+        # Every other committed decision must reconcile the ignored-voice
+        # marker, not only person/user positives: the supported
+        # assign_type=is_user&value=false path commits a whole-voice not_me
+        # rejection that supersedes an earlier media exclusion (person_id and
+        # is_user are both false there, which the old `elif` skipped). The
+        # shared helper distinguishes rejection kinds itself — range-only
+        # (segment_only) entries keep the marker restorable and a
+        # still-winning not_a_person keeps it — so route every non-exclusion
+        # assignment through it.
         retire_exclusion_markers(uid, resolved_conversation_id, raw, resolved, speaker_id=speaker_id)
     _drop_display_projection(conversation)
     _emit_speaker_identity_confirmed(
