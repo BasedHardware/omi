@@ -206,6 +206,29 @@ void main() {
     ]);
   });
 
+  test('file limit is rechecked after a recording-origin handoff', () async {
+    final tiny = MobileBatchBuffer(directory: directory, maxFiles: 1, publish: (wal) async => published.add(wal));
+    await tiny.initialize();
+    expect(tiny.append([1], uid: uid, codec: BleAudioCodec.opus, now: clock, recordingSessionId: 'first'), true);
+    expect(tiny.append([2], uid: uid, codec: BleAudioCodec.opus, now: clock, recordingSessionId: 'second'), false);
+    await tiny.close();
+    expect(published.single.recordingSessionId, 'first');
+    expect(readFrames(File('${directory.path}/${published.single.filePath}')), [
+      [1]
+    ]);
+  });
+
+  test('retained torn originals consume the batch admission budget', () async {
+    final original = File('${directory.path}/audio_omimobilebatchretained.bin.torn');
+    await original.writeAsBytes(List.filled(8, 7));
+    final tiny = MobileBatchBuffer(directory: directory, maxBytes: 8, publish: (wal) async => published.add(wal));
+    await tiny.initialize();
+    expect(tiny.append([1], uid: uid, codec: BleAudioCodec.opus, now: clock), false);
+    await tiny.close();
+    expect(await original.readAsBytes(), List.filled(8, 7));
+    expect(published, isEmpty);
+  });
+
   test('restart recovers writes missing from shared WAL index and never duplicates indexed files', () async {
     await enable();
     expect(route(1), true);

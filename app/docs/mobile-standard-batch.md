@@ -59,8 +59,8 @@ Restart's existing WAL loader discovers unindexed journals, reconstructs lengths
 from original bytes and retains torn tails before repair. Indexed files retain
 job/retry state and never get a second WAL identity. UID partitioning is unchanged.
 
-The lane stops admission at 256MiB or 4,096 files across account buckets, or when
-free space is unknown/below the existing 512MiB reserve. Pending audio is never
+The lane stops admission at 256MiB (including retained torn originals) or 4,096
+files across account buckets, or when free space is unknown/below the existing 512MiB reserve. Pending audio is never
 evicted. New packets return to existing live/safety-WAL capture. Existing global
 WAL reserve policy remains the last storage guard. Native capture when the Flutter
 engine is absent keeps the existing capture/recovery route; this does not introduce

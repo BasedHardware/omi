@@ -13,11 +13,13 @@ import 'package:omi/services/wals/wal_frame_encoder.dart';
 /// A sidecar precedes the first write; restart scans it even if the WAL index
 /// update was interrupted. Sealed files use the normal sync/retry/job pipeline.
 class MobileBatchBuffer {
-  MobileBatchBuffer({required this.directory, required this.publish, this.maxBytes = 256 * 1024 * 1024});
+  MobileBatchBuffer(
+      {required this.directory, required this.publish, this.maxBytes = 256 * 1024 * 1024, this.maxFiles = 4096});
 
   final Directory directory;
   final Future<void> Function(Wal) publish;
   final int maxBytes;
+  final int maxFiles;
   RandomAccessFile? _writer;
   Wal? _wal;
   File? _journal;
@@ -29,8 +31,8 @@ class MobileBatchBuffer {
 
   Future<void> initialize() async {
     await directory.create(recursive: true);
-    _files = directory.listSync().whereType<File>().where((f) => _isBatchAudio(f.path)).length;
-    _bytes = directory.listSync().whereType<File>().where((f) => _isBatchAudio(f.path)).fold<int>(
+    _files = directory.listSync().whereType<File>().where((f) => _isRetainedBatchAudio(f.path)).length;
+    _bytes = directory.listSync().whereType<File>().where((f) => _isRetainedBatchAudio(f.path)).fold<int>(
           0,
           (sum, f) => sum + f.lengthSync(),
         );
@@ -47,7 +49,7 @@ class MobileBatchBuffer {
     String? recordingSessionId,
   }) {
     if (failed ||
-        (_writer == null && _files >= 4096) ||
+        (_writer == null && _files >= maxFiles) ||
         uid.isEmpty ||
         !codec.isOpusSupported() ||
         _bytes + payload.length + 4 > maxBytes) {
@@ -60,6 +62,8 @@ class MobileBatchBuffer {
         seal();
       }
       if (_writer == null) {
+        // A codec/origin change can seal an existing writer above.
+        if (_files >= maxFiles) return false;
         final token = const Uuid().v4().replaceAll('-', '');
         final start = now.microsecondsSinceEpoch / 1000000;
         final name = 'audio_omimobilebatch${token}_${codec}_16000_1_fs${codec.getFrameSize()}_$start.bin';
@@ -146,6 +150,10 @@ class MobileBatchBuffer {
 
   Future<void> get pending => _pending;
   bool get hasFrames => _writer != null;
+
+  // Torn originals are kept for recovery/export and share the same budget.
+  static bool _isRetainedBatchAudio(String path) =>
+      _isBatchAudio(path) || (path.endsWith('.torn') && _isBatchAudio(path.substring(0, path.length - 5)));
 
   static bool _isBatchAudio(String path) =>
       path.split('/').last.startsWith('audio_omimobilebatch') && path.endsWith('.bin');
