@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
 import 'package:omi/models/sync_state.dart';
@@ -82,11 +81,10 @@ class SyncDetailsSheet extends StatelessWidget {
           OmiButton(
             label: l.syncDetailsCopy,
             expand: true,
-            onPressed: () async {
-              final text = [...rightNow, ...forSupport].map((e) => '${e.$1}: ${e.$2}').join('\n');
-              await Clipboard.setData(ClipboardData(text: text));
-              if (context.mounted) OmiFeedback.confirm(context, l.copied);
-            },
+            onPressed: () => OmiClipboard.copy(
+              context,
+              [...rightNow, ...forSupport].map((e) => '${e.$1}: ${e.$2}').join('\n'),
+            ),
           ),
           const SizedBox(height: OmiSpacing.sm),
           OmiButton.secondary(label: l.howSyncingWorks, expand: true, onPressed: onHowSyncingWorks),

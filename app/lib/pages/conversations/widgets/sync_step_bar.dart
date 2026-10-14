@@ -30,7 +30,7 @@ class SyncStepBar extends StatelessWidget {
               : fraction?.clamp(0.0, 1.0);
       return Expanded(
         child: ClipRRect(
-          borderRadius: BorderRadius.circular(3),
+          borderRadius: BorderRadius.circular(OmiRadius.sm),
           child: LinearProgressIndicator(
             value: value,
             minHeight: 6,

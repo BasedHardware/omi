@@ -277,7 +277,7 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
             SyncStepBar(step: barStep, fraction: barFraction),
           ],
           const SizedBox(height: 6),
-          const Divider(height: 1, color: Color(0xFF2C2C2E)),
+          Divider(height: 1, color: OmiColors.border),
           InkWell(
             onTap: () => showSyncDetailsSheet(context, onHowSyncingWorks: () => _showInfoSheet(context)),
             child: Padding(
