@@ -882,9 +882,71 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
     notifyListeners();
   }
 
+  String _boundDetailProjection = '##null';
+
+  /// Cheap change fingerprint for the detail projection. Encoding whole
+  /// ServerConversation/App graphs on every provider notification serialized
+  /// every transcript segment and app result on the UI isolate; instead
+  /// compare the fields the detail route can actually render differently.
+  /// Heavy conversation fields (transcript, photos, appResults) are final and
+  /// replaced wholesale, so their container identity covers them.
+  String _detailFingerprint(ServerConversation? selected, List<App> apps) {
+    final catalog = apps.map((app) {
+      return [
+        app.id,
+        app.name,
+        app.description,
+        app.getImageUrl(),
+        app.status,
+        app.enabled,
+        app.deleted,
+        app.disabled,
+        app.isPaid,
+        app.installs,
+        app.ratingAvg,
+        app.userReview?.score,
+        app.userReview?.updatedAt?.millisecondsSinceEpoch,
+      ].join('~');
+    }).join('|');
+    final conversation = selected == null
+        ? 'null'
+        : [
+            identityHashCode(selected),
+            selected.id,
+            selected.status.name,
+            selected.discarded,
+            selected.starred,
+            selected.folderId,
+            selected.visibility.name,
+            selected.isLocked,
+            _speakerConversationDeleted(selected.id),
+            // Structured mutates in place (title/overview edits); include the
+            // fields the detail header renders.
+            selected.structured.title,
+            selected.structured.overview,
+            selected.structured.emoji,
+            // In-place mutation of app results (e.g. a summary edit) must
+            // still notify without re-encoding their content.
+            selected.appResults.length,
+            // In-place speaker-identity edits (applySpeakerPromptIdentities)
+            // mutate transcript segments without touching any field above;
+            // fold the provider's revision so they still notify.
+            conversationProvider?.speakerIdentityRevision ?? 0,
+          ].join('~');
+    return '$catalog##$conversation';
+  }
+
   void setProviders(AppProvider provider, ConversationProvider conversationProvider) {
     this.conversationProvider = conversationProvider;
     appProvider = provider;
+    // Avoid catalog/transcript work until a route consumes detail.
+    if (!hasListeners) return;
+    // Models mutate in place; identity equality alone would miss real edits,
+    // but full toJson re-encoding is too expensive for every notification.
+    final selected = conversationOrNull;
+    final projection = _detailFingerprint(selected, appsList);
+    if (projection == _boundDetailProjection) return;
+    _boundDetailProjection = projection;
     notifyListeners();
   }
 
@@ -1096,7 +1158,7 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
       notifyListeners();
       return true;
     } catch (err, stacktrace) {
-      print(err);
+      Logger.debug('Conversation reprocess failed: $err');
       var conversationReporting = PlatformManager.instance.analytics.getConversationEventProperties(conversation);
       await PlatformManager.instance.crashReporter.reportCrash(
         err,

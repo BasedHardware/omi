@@ -29,6 +29,11 @@ class SharedPreferencesUtil {
   static SharedPreferences? _preferences;
   static FlutterSecureStorage? _secureStorage;
 
+  // Provider catalog snapshots are valid until persistence or account identity
+  // changes. Track raw writes too, rather than only the typed appsList setter.
+  static int _appsListRevision = 0;
+  int get appsListRevision => _appsListRevision;
+
   /// In-memory cache so [authToken] stays a sync getter (call sites are sync).
   static String _authTokenCache = '';
 
@@ -87,6 +92,7 @@ class SharedPreferencesUtil {
 
   static Future<void> init({FlutterSecureStorage? secureStorage, bool? mirrorNativeAuthToken}) async {
     _preferences = await SharedPreferences.getInstance();
+    _appsListRevision++;
     final hadStoredAppearance = _preferences!.containsKey(appearanceModeKey);
     if (!PhysicalQualification.enabled) await _quarantineBootSettings();
     await _migrateAppearanceDefault(hadStoredAppearance: hadStoredAppearance);
@@ -1493,7 +1499,10 @@ class SharedPreferencesUtil {
       ? _preferences?.getStringList(key) ?? defaultValue
       : _readOrDefault(key, defaultValue);
 
-  Future<bool> saveString(String key, String value) async => await _preferences?.setString(key, value) ?? false;
+  Future<bool> saveString(String key, String value) async {
+    if (key == 'uid') _appsListRevision++;
+    return await _preferences?.setString(key, value) ?? false;
+  }
 
   Future<bool> saveInt(String key, int value) async => await _preferences?.setInt(key, value) ?? false;
 
@@ -1501,14 +1510,20 @@ class SharedPreferencesUtil {
 
   Future<bool> saveDouble(String key, double value) async => await _preferences?.setDouble(key, value) ?? false;
 
-  Future<bool> saveStringList(String key, List<String> value) async =>
-      await _preferences?.setStringList(key, value) ?? false;
+  Future<bool> saveStringList(String key, List<String> value) async {
+    if (key == 'appsList') _appsListRevision++;
+    return await _preferences?.setStringList(key, value) ?? false;
+  }
 
-  Future<bool> remove(String key) async => await _preferences?.remove(key) ?? false;
+  Future<bool> remove(String key) async {
+    if (key == 'appsList' || key == 'uid') _appsListRevision++;
+    return await _preferences?.remove(key) ?? false;
+  }
 
   Future<bool> clear() async {
     _authTokenCache = '';
     await _deleteSecureAuthToken();
+    _appsListRevision++;
     return await _preferences?.clear() ?? false;
   }
 }

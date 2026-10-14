@@ -133,6 +133,17 @@ class ConversationProvider extends ChangeNotifier {
   int _sessionGeneration = 0;
   int _conversationFetchRevision = 0;
   int _conversationLoadingRevision = 0;
+
+  /// Bumped whenever transcript speaker identities are edited in place
+  /// (applySpeakerPromptIdentities). The in-place segment mutations change no
+  /// conversation container identity, so downstream cheap change
+  /// fingerprints (conversation detail's projection comparator) fold this in
+  /// to notice them without re-encoding the transcript.
+  int _speakerIdentityRevision = 0;
+
+  /// Revision of the last in-place speaker-identity edit; see
+  /// [_speakerIdentityRevision].
+  int get speakerIdentityRevision => _speakerIdentityRevision;
   static const int _maxInitialFetchRetries = 4;
   // After the fast backoff budget is spent we keep retrying on a slow fixed
   // interval rather than giving up — otherwise a prolonged outage latches the
@@ -1451,6 +1462,7 @@ class ConversationProvider extends ChangeNotifier {
         identity.id: identity
     };
     final rows = [...conversations, ...searchedConversations, ...groupedConversations.values.expand((group) => group)];
+    var applied = false;
     for (final row in rows) {
       if (row.id != result.conversationId) continue;
       for (final segment in row.transcriptSegments) {
@@ -1459,8 +1471,12 @@ class ConversationProvider extends ChangeNotifier {
         segment.isUser = identity.isUser;
         segment.personId = identity.personId;
         segment.speakerLabelSource = 'manual';
+        applied = true;
       }
     }
+    // In-place segment edits change no container identity: bump the revision
+    // so cheap downstream fingerprints (conversation detail) still notify.
+    if (applied) _speakerIdentityRevision++;
     notifyListeners();
   }
 

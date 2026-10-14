@@ -343,6 +343,7 @@ class CaptureController extends ChangeNotifier
         _wedgeMonitorOverride = captureWedgeMonitor,
         _calendarGapMonitor = calendarGapMonitor,
         _preferences = preferences ?? SharedPreferencesUtil() {
+    _boundExternalProjection = (outOfCredits, topConversationId);
     _isConnected = _connectivity.initiallyConnected;
     lifetime.listen(_connectivity.changes, onConnectionStateChanged);
     final ble = _bleListeners ?? const BleBridgeCaptureListeners();
@@ -611,8 +612,14 @@ class CaptureController extends ChangeNotifier
     _phoneMic.probeStallAfterForeground();
   }
 
+  late (bool, String?) _boundExternalProjection;
+
   void updateExternalActions(CaptureExternalActions? actions) {
     externalActions = actions ?? const NoopCaptureExternalActions();
+    // Adapters read mutable providers: compare with previously published values.
+    final projection = (outOfCredits, topConversationId);
+    if (projection == _boundExternalProjection) return;
+    _boundExternalProjection = projection;
     notifyListeners();
   }
 
