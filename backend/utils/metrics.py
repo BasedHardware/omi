@@ -1178,6 +1178,22 @@ OMI_LISTEN_AUDIO_DECODE_FAILURES_TOTAL = Counter(
     'Undecodable /v4/listen audio frames by bounded declared codec and client platform',
     ['codec', 'client_platform'],
 )
+# Publish every bounded child at zero (alert doctrine: a scraped zero before the
+# first failure makes family absence unambiguously a source failure). The label
+# vocabularies mirror _record_decode_failure in routers/listen/receiver.py.
+for _codec in ('opus', 'opus_fs320', 'aac', 'lc3', 'pcm8', 'other'):
+    for _decode_platform in (
+        'android',
+        'desktop',
+        'ios',
+        'linux',
+        'macos',
+        'mobile',
+        'web',
+        'windows',
+        'unknown',
+    ):
+        OMI_LISTEN_AUDIO_DECODE_FAILURES_TOTAL.labels(codec=_codec, client_platform=_decode_platform)
 
 OMI_LISTEN_UNKNOWN_CHANNEL_PREFIX_TOTAL = Counter(
     'omi_listen_unknown_channel_prefix_total',
