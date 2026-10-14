@@ -170,6 +170,8 @@ def _transcript_writer_violations(tree: ast.Module, relative_path: str) -> list[
         'upsert_conversation_with_lifecycle': '_reapply_current_manual_assignments',
         'persist_processing_result_with_lifecycle': '_reapply_current_manual_assignments',
         'update_conversation_segments': 'apply_manual_assignments',
+        # Revision-fenced final-pass replacement remaps and reapplies current receipts.
+        'promote_final_pass_if_current': 'apply_manual_assignments',
         'assign_conversation_speaker': 'manual_assignment',
         # These rewrite current transactional content rather than caller snapshots.
         'update_conversation_segment_text': 'prepare_conversation_for_read',

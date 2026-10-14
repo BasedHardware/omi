@@ -5,14 +5,21 @@ import copy
 import difflib
 import json
 from pathlib import Path
+from typing import Any
 
 import yaml
 
-NLLB_RULE = {
+NLLB_RULE: dict[str, Any] = {
     'name': {'as': 'nllb_active_requests_total'},
     'seriesQuery': 'nllb_active_requests{namespace!=""}',
     'metricsQuery': 'sum(nllb_active_requests{<<.LabelMatchers>>})',
     'resources': {'overrides': {'namespace': {'resource': 'namespace'}}},
+}
+DIARIZER_BATCH_RULE: dict[str, Any] = {
+    'seriesQuery': 'omi_diarization_v2_queue_depth{namespace="prod-omi-backend",pod!="",job="diarizer-batch-metrics"}',
+    'resources': {'overrides': {'namespace': {'resource': 'namespace'}, 'pod': {'resource': 'pod'}}},
+    'name': {'as': 'omi_diarization_v2_queue_depth'},
+    'metricsQuery': 'max(omi_diarization_v2_queue_depth{<<.LabelMatchers>>,job="diarizer-batch-metrics"}) by (<<.GroupBy>>)',
 }
 API_SERVICES = {'v1beta1.custom.metrics.k8s.io', 'v1beta1.external.metrics.k8s.io'}
 
@@ -52,6 +59,11 @@ def expected_config(live):
         raise ValueError('Unexpected live NLLB rule: reconcile and review first')
     if not nllb:
         expected['externalRules'].append(copy.deepcopy(NLLB_RULE))
+    batch = [rule for rule in expected['rules'] if rule['name']['as'] == DIARIZER_BATCH_RULE['name']['as']]
+    if batch and batch != [DIARIZER_BATCH_RULE]:
+        raise ValueError('Unexpected live batch queue rule: reconcile and review first')
+    if not batch:
+        expected['rules'].append(copy.deepcopy(DIARIZER_BATCH_RULE))
     return normalized_config(expected)
 
 

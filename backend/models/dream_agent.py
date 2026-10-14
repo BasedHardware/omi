@@ -2,10 +2,14 @@
 
 from typing import Literal
 
-from pydantic import Field
+from datetime import datetime, timezone
+import json
+from uuid import uuid5, NAMESPACE_URL
+
+from pydantic import Field, model_validator
 
 from models.review import ReviewQuestionPayload
-from models.dream_edit import Edit, Term, Strict
+from models.dream_edit import Edit, FullEdit, Term, Strict, ConsensusItem, QUESTION_VALUE_DESCRIPTION
 
 
 class Cluster(Strict):
@@ -39,9 +43,28 @@ class SlowTask(Strict):
     evidence: list[str] = Field(min_length=1, max_length=10)
 
 
-class DreamReviewItem(ReviewQuestionPayload):
+class DreamReviewItem(ReviewQuestionPayload, ConsensusItem):
+    item_id: str = Field(default='', description='Assigned by the server; model values are ignored.')
+    created_at: datetime = Field(
+        default_factory=lambda: datetime.now(timezone.utc),
+        description='Assigned by the server at creation; model values are ignored.',
+    )
+
+    @model_validator(mode='before')
+    @classmethod
+    def server_identity(cls, value):
+        if isinstance(value, dict):
+            identity = json.dumps([value.get('kind'), value.get('source_ref'), value.get('quote')], ensure_ascii=False)
+            return {
+                **value,
+                'item_id': str(value.get('kind', 'question')) + ':' + str(uuid5(NAMESPACE_URL, identity)),
+                'created_at': datetime.now(timezone.utc),
+            }
+        return value
+
     source_ref: str = Field(
-        min_length=1, description='Supplied record ref containing the exact quote that motivates this question.'
+        min_length=1,
+        description='Supplied record ref containing the exact quote; optional #segment-id or #start-seconds restricts the quote to that transcript segment.',
     )
     quote: str = Field(
         min_length=1,
@@ -52,6 +75,21 @@ class DreamReviewItem(ReviewQuestionPayload):
 class Plan(Strict):
     edits: list[Edit] = Field(default_factory=list, max_length=50)
     questions: list[DreamReviewItem] = Field(default_factory=list, max_length=3)
+    vocabulary: list[Term] = Field(default_factory=list, max_length=100)
+    frames: list[FrameQuestion] = Field(default_factory=list, max_length=3)
+    feedback: list[Feedback] = Field(default_factory=list, max_length=10)
+    slow_tasks: list[SlowTask] = Field(default_factory=list, max_length=3)
+
+
+class FullReviewItem(DreamReviewItem):
+    value: int = Field(ge=1, le=5, description=QUESTION_VALUE_DESCRIPTION)
+    why_it_matters: str = Field(min_length=1, max_length=200, description='Short, generic explanation of future value.')
+
+
+class FullPlan(Strict):
+    # Keep the bounded planner and released Review proposal schema unchanged.
+    edits: list[FullEdit] = Field(default_factory=list, max_length=50)
+    questions: list[FullReviewItem] = Field(default_factory=list, max_length=3)
     vocabulary: list[Term] = Field(default_factory=list, max_length=100)
     frames: list[FrameQuestion] = Field(default_factory=list, max_length=3)
     feedback: list[Feedback] = Field(default_factory=list, max_length=10)

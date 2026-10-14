@@ -2,6 +2,27 @@
   "unreleased": [],
   "releases": [
     {
+      "version": "0.12.484",
+      "date": "2026-10-14",
+      "changes": [
+        "Added Connect an Agent in Settings → Advanced and the connect sheets, opening copy-paste setup prompts and MCP and API keys on the web, and renamed the bring-your-own model keys section to Model Provider Keys"
+      ]
+    },
+    {
+      "version": "0.12.483",
+      "date": "2026-10-13",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.12.482",
+      "date": "2026-10-13",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
       "version": "0.12.481",
       "date": "2026-10-13",
       "changes": [

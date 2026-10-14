@@ -246,6 +246,7 @@ def _run_speaker_browse(monkeypatch: pytest.MonkeyPatch, capture: HelperCapture)
 
 def _run_developer_list(monkeypatch: pytest.MonkeyPatch, capture: HelperCapture) -> None:
     auth = SimpleNamespace(uid='u1')
+    _stub(monkeypatch, developer_router, 'check_conversation_transcript_read_limit', lambda *args, **kwargs: None)
     for categories in (None, 'personal', 'personal,technology'):
         for folder in _FOLDER:
             for starred in _STARRED:
@@ -258,7 +259,7 @@ def _run_developer_list(monkeypatch: pytest.MonkeyPatch, capture: HelperCapture)
                         categories=categories,
                         limit=25,
                         offset=0,
-                        include_transcript=False,
+                        include_transcript=True,
                         folder_id=folder,
                         starred=starred,
                         uid=auth,
@@ -556,9 +557,9 @@ WITNESSES: dict[str, CallerWitness] = {
             _run_speaker_browse_recipe,
         ),
         CallerWitness(
-            'routers/developer.py:get_conversations:database.conversations.get_conversations',
-            'database.conversations.get_conversations',
-            'database.conversations.get_conversations',
+            'routers/developer.py:get_conversations:database.conversations.get_conversations_without_photos',
+            'database.conversations.get_conversations_without_photos',
+            'database.conversations.get_conversations_without_photos',
             ('developer-list',),
             1,
             _run_developer_list,

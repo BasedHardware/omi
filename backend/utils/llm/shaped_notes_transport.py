@@ -1,13 +1,25 @@
 """Own the async transport used by notes' short-lived worker event loop."""
 
 from contextlib import asynccontextmanager
-from typing import Any, AsyncIterator
+from typing import TYPE_CHECKING, Any, AsyncIterator
 
 import anthropic
 import httpx
-from langchain_anthropic import ChatAnthropic
 from langchain_core.language_models import BaseChatModel
 from langchain_openai import ChatOpenAI
+
+if TYPE_CHECKING:
+    from langchain_anthropic import ChatAnthropic
+else:
+    try:
+        from langchain_anthropic import ChatAnthropic
+    except ImportError:
+        # Unit tests path-load this module after replacing langchain_core in
+        # sys.modules. langchain_anthropic then fails importing langchain_core
+        # submodules those stubs do not provide. A placeholder keeps this module
+        # importable; real Anthropic models only exist when the import succeeds.
+        class ChatAnthropic:  # noqa: D101
+            pass
 
 
 def _anthropic_client_params(model: ChatAnthropic) -> dict[str, Any]:
@@ -56,21 +68,17 @@ async def isolated_notes_model(model: BaseChatModel) -> AsyncIterator[BaseChatMo
     clone the OpenAI client. Anthropic BYOK is a ``ChatAnthropic`` and needs
     the same loop-local client, or conversation notes die as HTTP 500.
     """
-    if isinstance(model, ChatOpenAI):
-        async with httpx.AsyncClient() as transport:
-            client = model.root_async_client.with_options(http_client=transport)
-            yield model.model_copy(
-                update={
-                    'http_async_client': transport,
-                    'root_async_client': client,
-                    'async_client': client.chat.completions,
-                }
-            )
-        return
-
-    if isinstance(model, ChatAnthropic):
-        async with httpx.AsyncClient() as transport:
+    if not isinstance(model, (ChatOpenAI, ChatAnthropic)):
+        raise TypeError('Shaped notes requires an OpenAI-compatible or Anthropic notes lane')
+    async with httpx.AsyncClient() as transport:
+        if isinstance(model, ChatAnthropic):
             yield _isolated_anthropic(model, transport)
-        return
-
-    raise TypeError('Shaped notes requires the configured OpenAI-compatible notes lane')
+            return
+        client = model.root_async_client.with_options(http_client=transport)
+        yield model.model_copy(
+            update={
+                'http_async_client': transport,
+                'root_async_client': client,
+                'async_client': client.chat.completions,
+            }
+        )

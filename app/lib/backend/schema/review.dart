@@ -222,17 +222,72 @@ class SamePersonItem {
   }
 }
 
+class SpellingContextSegment {
+  const SpellingContextSegment({required this.text, this.speakerLabel, this.isUser = false});
+  final String text;
+  final String? speakerLabel;
+  final bool isUser;
+
+  static SpellingContextSegment fromJson(Map<String, dynamic> json) => SpellingContextSegment(
+        text: _str(json['text']) ?? '',
+        speakerLabel: _str(json['speaker_label']),
+        isUser: json['is_user'] == true,
+      );
+}
+
+class SpellingContext {
+  const SpellingContext({
+    required this.conversationTitle,
+    required this.segments,
+    required this.mainIndex,
+    this.conversationDate,
+    this.quoteStart,
+    this.quoteEnd,
+  });
+  final String conversationTitle;
+  final DateTime? conversationDate;
+  final List<SpellingContextSegment> segments;
+  final int mainIndex;
+
+  /// UTF-16 code-unit offsets in the main segment, matching Dart String indexes.
+  final int? quoteStart;
+  final int? quoteEnd;
+
+  SpellingContextSegment get main => segments[mainIndex];
+
+  static SpellingContext? fromJson(Map<String, dynamic>? json) {
+    if (json == null) return null;
+    final segments = _maps(json['segments']).map(SpellingContextSegment.fromJson).toList(growable: false);
+    final mainIndex = json['main_index'];
+    if (mainIndex is! int || mainIndex < 0 || mainIndex >= segments.length || segments.length > 3) return null;
+    return SpellingContext(
+      conversationTitle: _str(json['conversation_title']) ?? '',
+      conversationDate: _date(json['conversation_date']),
+      segments: segments,
+      mainIndex: mainIndex,
+      quoteStart: json['quote_start'] is int ? json['quote_start'] as int : null,
+      quoteEnd: json['quote_end'] is int ? json['quote_end'] as int : null,
+    );
+  }
+}
+
 class SpellingItem {
-  const SpellingItem({required this.termId, required this.options, this.allowCustom = true});
+  const SpellingItem({required this.termId, required this.options, this.allowCustom = true, this.context});
   final String termId;
   final List<String> options;
   final bool allowCustom;
+  final SpellingContext? context;
 
   static SpellingItem? fromJson(Map<String, dynamic>? json) {
     final id = _str(json?['term_id']);
     final options = _strings(json?['options']);
     if (id == null || options.isEmpty) return null;
-    return SpellingItem(termId: id, options: options, allowCustom: json?['allow_custom'] != false);
+    return SpellingItem(
+      termId: id,
+      options: options,
+      allowCustom: json?['allow_custom'] != false,
+      context: SpellingContext.fromJson(_map(json?['context'])),
+    );
   }
 }
 

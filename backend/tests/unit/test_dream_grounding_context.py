@@ -60,6 +60,8 @@ def test_attention_deferral_does_not_restore_a_full_queue_settlement_scan(monkey
         'watermark': dream_store.EPOCH,
         'dirty_dropped': 0,
         'dirty_dropped_reported': 0,
+        'reservation_usd': 0.24,
+        'spend_scope': 'user',
     }
     db = DreamFirestore()
     db.rows[('dream_users', uid)] = {'lease': lease, 'score': 1}
@@ -110,7 +112,8 @@ def test_paused_ref_is_excluded_from_retrieval_without_hydration(monkeypatch):
         return []
 
     monkeypatch.setattr(dream_reads, 'context_candidates', candidates)
-    rows, consumed = dream_reads.read_changes(uid, {'started_at': now}, Caps())
+    # This retrieval test has no history store; cleanup has its own seeded tests.
+    rows, consumed = dream_reads.read_changes(uid, {'started_at': now, 'cleanup_selected': False}, Caps())
     assert rows.targets == {'conversations/healthy'} and len(consumed) == 1
     assert reads == ['conversations/healthy']
     assert 'conversations/paused' in excluded

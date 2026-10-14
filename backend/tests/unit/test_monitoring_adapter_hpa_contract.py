@@ -8,7 +8,7 @@ from pathlib import Path
 import pytest
 import yaml
 
-from scripts.diff_prod_adapter import API_SERVICES, NLLB_RULE, compare, expected_config
+from scripts.diff_prod_adapter import API_SERVICES, NLLB_RULE, DIARIZER_BATCH_RULE, compare, expected_config
 from scripts import select_backend_unit_tests as selector
 
 CHARTS = Path(__file__).resolve().parents[2] / 'charts'
@@ -211,3 +211,24 @@ def test_diff_rejects_unexpected_live_nllb_query():
     config['externalRules'].append(dict(NLLB_RULE, metricsQuery='vector(0)'))
     with pytest.raises(ValueError, match='Unexpected live NLLB'):
         expected_config(config)
+
+
+def test_diff_allows_only_exact_batch_queue_rule_addition():
+    rendered, cm, deployment, apis = _comparison_inputs()
+    live = yaml.safe_load(cm['data']['config.yaml'])
+    live['rules'].remove(DIARIZER_BATCH_RULE)
+    cm['data']['config.yaml'] = yaml.safe_dump(live)
+    assert compare(rendered, cm, deployment, apis)[1] == []
+
+
+@pytest.mark.parametrize('change', ['query', 'duplicate'])
+def test_diff_rejects_unreviewed_live_batch_queue_rule(change):
+    _, cm, _, _ = _comparison_inputs()
+    live = yaml.safe_load(cm['data']['config.yaml'])
+    rule = next(r for r in live['rules'] if r['name']['as'] == DIARIZER_BATCH_RULE['name']['as'])
+    if change == 'query':
+        rule['metricsQuery'] = 'sum(omi_diarization_v2_queue_depth)'
+    else:
+        live['rules'].append(copy.deepcopy(rule))
+    with pytest.raises(ValueError, match='Unexpected live batch queue rule'):
+        expected_config(live)

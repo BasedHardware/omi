@@ -41,6 +41,7 @@ import 'package:omi/services/capture/freemium_threshold_tracker.dart';
 import 'package:omi/services/capture/stt_mode_resolver.dart';
 import 'package:omi/services/capture/recording_lifecycle_telemetry.dart';
 import 'package:omi/backend/http/shared.dart' show accountDeletionWebSocketCloseCode;
+import 'package:omi/services/telemetry/client_telemetry.dart';
 import 'package:omi/services/capture/capture_seams.dart';
 import 'package:omi/services/capture/capture_session_owner.dart';
 import 'package:omi/services/capture/capture_wedge_monitor.dart';
@@ -962,6 +963,24 @@ class CaptureController extends ChangeNotifier
 
   /// Completes when the last Process Now request has an answer.
   Future<void>? _processInFlight;
+  Future<CreateConversationResponse?>? _lastProcessRequest;
+  bool _firstCaptureProcess = false;
+
+  /// Finish through the coordinator and return that exact Process Now response.
+  /// Used by onboarding to avoid attributing an unrelated list refresh to this capture.
+  Future<CreateConversationResponse?> finishCaptureWithResult() async {
+    _lastProcessRequest = null;
+    _firstCaptureProcess = true;
+    try {
+      await finishCapture();
+      final request = _lastProcessRequest;
+      if (request == null) throw StateError('capture did not request live processing');
+      return await request;
+    } finally {
+      _firstCaptureProcess = false;
+    }
+  }
+
   // Force-processing requests share one optimistic row; only the newest may remove it.
   int _processingPlaceholderOwner = 0;
 
@@ -3508,6 +3527,13 @@ class CaptureController extends ChangeNotifier
       final segmentArrivals = _closingSegmentArrivals.remove(event.memory.id) ?? const <String, int>{};
       event.memory.isNew = true;
       externalActions.removeProcessingConversation(OptimisticProcessingPlaceholder.id);
+      try {
+        ClientTelemetry.instance.noteProcessingRowLeft(
+          id: event.memory.id,
+          lifecycleOk: true,
+          lifecycleStatus: event.memory.status.name,
+        );
+      } catch (_) {}
       externalActions.removeProcessingConversation(event.memory.id);
       _processConversationCreated(event.memory, event.messages.cast<ServerMessage>());
       _autoSyncFallbackTimer?.cancel();
@@ -3626,6 +3652,7 @@ class CaptureController extends ChangeNotifier
     _clearSessionLocation();
 
     _resetStateVariables();
+    final confirmedProcessing = _firstCaptureProcess;
     final Future<InProgressProcessOutcome> request;
     if (_processInProgressOutcomeOverride != null) {
       request = _processInProgressOutcomeOverride!();
@@ -3638,6 +3665,9 @@ class CaptureController extends ChangeNotifier
       );
     } else {
       request = processInProgressConversationOutcome();
+    }
+    if (confirmedProcessing) {
+      _lastProcessRequest = request.then((outcome) => outcome.response);
     }
     _processInFlight = request.then((_) {}, onError: (_) {});
     request.then<void>((outcome) async {
@@ -3656,6 +3686,9 @@ class CaptureController extends ChangeNotifier
         _autoSyncSessionWals();
       }
     }).catchError((Object error, StackTrace stack) {
+      if (confirmedProcessing && placeholderOwner == _processingPlaceholderOwner) {
+        externalActions.removeProcessingConversation(OptimisticProcessingPlaceholder.id);
+      }
       Logger.debug('Process Now result handling failed: ${error.runtimeType}');
       return _reportDetachedCaptureError('capture_process_now', error, stack);
     });
@@ -4279,9 +4312,9 @@ class CaptureController extends ChangeNotifier
         setNativeWriterGate: _nativeWriterGate.setGate,
         finalizeWal: () => _wal.getSyncs().phone.finalizeCurrentSession(),
         rollSession: (identity) async => _rollCaptureSession(identity),
-        mintRecordingId: (sessionKey, telemetrySource) {
+        mintRecordingId: (sessionKey, telemetrySource, requestOrigin) {
           _recordingTelemetry.complete(reason: 'session_roll');
-          return _recordingTelemetry.prepare(source: telemetrySource);
+          return _recordingTelemetry.prepare(source: telemetrySource, requestOrigin: requestOrigin);
         },
         checkPhonePermission: () async {
           final granted = await _requestMicrophonePermission();

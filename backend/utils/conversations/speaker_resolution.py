@@ -15,6 +15,8 @@ on capture's ids and ``speaker_resolution`` says whether those ids can be counte
 
 from __future__ import annotations
 
+from config.transcription_final_pass import authoritative_for
+
 import bisect
 from collections.abc import Sequence
 import json
@@ -952,7 +954,10 @@ def resolve_speakers_for_processing(
                     'event=conversation_speaker_resolution outcome=manual_receipt_failed exception_type=%s',
                     type(error).__name__,
                 )
-        if resolution_enabled():
+        final_record = authoritative_for(uid) and all(
+            (segment.speaker_id_scope or '').startswith('final:') for segment in conversation.transcript_segments
+        )
+        if resolution_enabled() and not final_record:
             _resolve(
                 uid,
                 conversation,

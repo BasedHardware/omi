@@ -96,7 +96,9 @@ def test_canary_full_loop_real_serialization_and_transport_shadow_in_on(store, c
     assert doc['mode'] == 'shadow' and doc['tokens'] == 100
     assert doc['records_read'] == 1 and doc['records_queued_after'] == 0
     assert 'review_encrypted_v1' in doc['source']
-    assert db.rows[('dream_spend', doc['created_at'].date().isoformat())]['reserved_usd'] == pytest.approx(0.16)
+    assert db.rows[('dream_users', UID, 'spend', doc['created_at'].date().isoformat())][
+        'reserved_usd'
+    ] == pytest.approx(0.001)
     assert not eligible(UID, db.rows[('users', UID)])
     assert not dream_store.mark_dirty(UID, [('conversations', 'other')])
     assert UID not in caplog.text and 'Qorbi' not in caplog.text

@@ -1,5 +1,7 @@
 import 'package:omi/services/onboarding_sync_runtime.dart';
+import 'onboarding_step_telemetry.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import 'package:firebase_auth/firebase_auth.dart';
@@ -18,6 +20,10 @@ import 'package:omi/pages/onboarding/permissions/permissions_checker.dart';
 import 'package:omi/pages/onboarding/permissions/permissions_widget.dart';
 import 'package:omi/pages/onboarding/primary_language/primary_language_widget.dart';
 import 'package:omi/pages/onboarding/complete_screen.dart';
+import 'package:omi/pages/onboarding/web_onboarding_page.dart';
+import 'package:omi/pages/paywall/paywall_router.dart';
+import 'package:omi/services/experiments/onboarding_webview_gate.dart';
+import 'package:omi/services/experiments/paywall_experiment.dart';
 import 'package:omi/pages/onboarding/setup_page.dart';
 import 'package:omi/pages/onboarding/speech_profile_widget.dart';
 import 'package:omi/pages/onboarding/guided_voice_controller.dart';
@@ -28,6 +34,8 @@ import 'package:omi/providers/usage_provider.dart';
 import 'package:omi/services/auth_service.dart';
 import 'package:omi/services/experiments/onboarding_setup_rating_prompt.dart';
 import 'package:omi/utils/analytics/intercom.dart';
+import 'package:omi/utils/analytics/registry/events.g.dart';
+import 'package:omi/utils/analytics/registry/typed_events.dart';
 import 'package:omi/utils/analytics/product_telemetry.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/other/temp.dart';
@@ -57,6 +65,13 @@ class OnboardingWrapper extends StatefulWidget {
         knowledgeGraphStepEnabled: knowledgeGraphStepEnabled,
       );
 
+  @visibleForTesting
+  static int resumeStepForTesting(int saved) => _OnboardingWrapperState.resolveResumeStep(saved);
+
+  /// Debug builds with `--dart-define=OMI_ONBOARDING_RERUN=1` walk onboarding again on a
+  /// signed-in account; startup routing honours it so the reader lands in the wrapper.
+  static bool get rerunForTesting => _OnboardingWrapperState._rerunForTesting;
+
   @override
   State<OnboardingWrapper> createState() => _OnboardingWrapperState();
 }
@@ -72,7 +87,7 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
   static const int kSpeechProfilePage = 6; // Guided voice introduction
   static const int kKnowledgeGraphPage = 7; // Memory graph preview
   static const int kSetupPage = 8; // "Setting up your Omi" + rating pre-prompt; flag-gated, else skipped
-  static const int kCompletePage = 9; // "You're all set" completion screen
+  static const int kCompletePage = 9; // Capture choice; keep persisted index stable.
   static const int kPageCount = 10;
 
   /// The steps the progress dots count, in order. Auth, consent and the completion screen are not
@@ -81,6 +96,12 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
   /// work well enough yet). The page stays in the TabController so indices are stable; nothing
   /// navigates to it while this is false.
   static const bool kKnowledgeGraphStepEnabled = false;
+
+  /// Debug-build override to walk first-run onboarding again on a signed-in account (for
+  /// exercising onboarding variants): `--dart-define=OMI_ONBOARDING_RERUN=1`. `kDebugMode`
+  /// excludes every store build.
+  static const _debugRerun = String.fromEnvironment('OMI_ONBOARDING_RERUN');
+  static bool get _rerunForTesting => kDebugMode && _debugRerun == '1';
 
   static const List<int> kProgressSteps = [
     kNamePage,
@@ -101,6 +122,14 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
   bool? _setupPageEnabledResolved;
   ProductAttempt? _onboardingAttempt;
   bool _finishing = false;
+  late final _stepTelemetry = MobileOnboardingStepTelemetry(
+    emit: const TypedEvents().emit,
+    platform: () => switch (Theme.of(context).platform) {
+      TargetPlatform.iOS => OnboardingStepCompletedPlatform.ios,
+      TargetPlatform.android => OnboardingStepCompletedPlatform.android,
+      _ => OnboardingStepCompletedPlatform.other,
+    },
+  );
   GuidedVoiceController? _voiceController;
 
   GuidedVoiceController _getVoiceController() {
@@ -120,10 +149,15 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
         surface: ProductSurface.onboarding,
       );
     }
+    final signedIn = !widget.forceAuthPage && AuthService.instance.isSignedIn();
+    final initialIndex =
+        signedIn ? (!SharedPreferencesUtil().aiConsentGiven ? kAiConsentPage : _resumeStep()) : kAuthPage;
+    _stepTelemetry.seed(initialIndex);
     // Auth, AiConsent, Name, Lang, FoundOmi, Permissions, SpeechProfile, KnowledgeGraph, Setup, Complete
-    _controller = TabController(length: kPageCount, vsync: this);
+    _controller = TabController(length: kPageCount, initialIndex: initialIndex, vsync: this);
     _controller!.addListener(() {
       if (!mounted) return;
+      _stepTelemetry.enter(_controller!.index);
       setState(() {});
       _rememberStep(_controller!.index);
       // Update background image when page changes
@@ -148,6 +182,7 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
       end: 1.0,
     ).animate(CurvedAnimation(parent: _backgroundAnimationController, curve: Curves.easeInOut));
 
+    _currentBackgroundImage = _getBackgroundImageForIndex(initialIndex) ?? _currentBackgroundImage;
     // Start initial animations
     _backgroundAnimationController.forward();
     WidgetsBinding.instance.addPostFrameCallback((_) async {
@@ -167,10 +202,10 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
           // once before any AI processing begins.
           if (!SharedPreferencesUtil().aiConsentGiven) {
             _controller!.animateTo(kAiConsentPage);
-          } else if (SharedPreferencesUtil().onboardingCompleted) {
+          } else if (SharedPreferencesUtil().onboardingCompleted && !_rerunForTesting) {
             await _routeWithPermissionsCheck(context);
           } else {
-            _controller!.animateTo(_resumeStep());
+            _enterSteps();
           }
         }
       }
@@ -193,6 +228,7 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
   }
 
   Future<void> _routeWithPermissionsCheck(BuildContext context) async {
+    _stepTelemetry.exit();
     if (!SharedPreferencesUtil().permissionsCompleted) {
       final granted = await arePermissionsGranted();
       if (!granted) {
@@ -206,6 +242,57 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
     if (context.mounted) {
       routeToPage(context, const HomePageWrapper(), replace: true);
     }
+  }
+
+  /// Marks first-run onboarding complete and routes home. Shared by the native completion screen
+  /// and the web onboarding page, so only the wrapper ever owns completion.
+  Future<void> _finishOnboarding() async {
+    if (_finishing) return;
+    _finishing = true;
+    final saved = await OnboardingSyncRuntime.enqueue(completed: true);
+    _finishing = false;
+    if (!mounted || !context.mounted) return;
+    if (!saved) {
+      OmiFeedback.error(context, context.l10n.somethingWentWrong);
+      return;
+    }
+    SharedPreferencesUtil().onboardingCompleted = true;
+    SharedPreferencesUtil().permissionsCompleted = true;
+    SharedPreferencesUtil().remove(_resumeKey);
+    _stepTelemetry.exit();
+    _completeOnboardingTelemetry();
+    PlatformManager.instance.analytics.onboardingCompleted();
+    PaintingBinding.instance.imageCache.clear();
+    await _maybeShowOnboardingPaywall();
+    if (!mounted) return;
+    routeToPage(context, const HomePageWrapper(), replace: true);
+  }
+
+  /// The experiment's end-of-onboarding placement: only arms whose payload asks for it, never
+  /// control, and never when subscription UI is hidden (the router checks that).
+  Future<void> _maybeShowOnboardingPaywall() async {
+    final config = await PaywallExperiment.resolve();
+    if (!mounted || config.isControl || !config.onboardingPaywall) return;
+    await PaywallRouter.openVariant(context, source: 'onboarding', config: config);
+  }
+
+  /// Enters the steps after sign-in and consent: the web onboarding page when its flag names one,
+  /// otherwise the native step the reader left off at. A page that falls back lands on that same
+  /// native step.
+  Future<void> _enterSteps() async {
+    final url = await OnboardingWebviewGate.resolve();
+    if (!mounted) return;
+    if (url != null) {
+      const TypedEvents().emit(const OnboardingWebviewShown());
+      final result = await routeToPage(context, WebOnboardingPage(url: url));
+      if (!mounted) return;
+      if (result == WebOnboardingResult.completed) {
+        const TypedEvents().emit(const OnboardingWebviewCompleted());
+        await _finishOnboarding();
+        return;
+      }
+    }
+    _controller!.animateTo(_resumeStep());
   }
 
   void _goNext() {
@@ -265,7 +352,11 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
   /// or Name.
   int _resumeStep() {
     final saved = SharedPreferencesUtil().getInt(_resumeKey, defaultValue: kNamePage);
-    if (!_isResumableStep(saved)) return kNamePage;
+    return resolveResumeStep(saved);
+  }
+
+  static int resolveResumeStep(int saved) {
+    if (!isResumableStepForTesting(saved)) return kNamePage;
     if (!kKnowledgeGraphStepEnabled && saved == kKnowledgeGraphPage) {
       return stepAfterKnowledgeGraph(setupPageEnabled: false);
     }
@@ -332,6 +423,8 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
     // Never leave while the introduction is saving; its own PopScope blocks too.
     if (_controller!.index == kSpeechProfilePage && _speechStepBusy) return;
     OmiHaptics.selection();
+    _stepTelemetry.skipped = false;
+    _stepTelemetry.exitReason = OnboardingStepCompletedExitReason.back;
     _controller!.animateTo(previous);
   }
 
@@ -461,7 +554,7 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
           } else if (SharedPreferencesUtil().onboardingCompleted) {
             await _routeWithPermissionsCheck(context);
           } else {
-            _controller!.animateTo(_resumeStep());
+            _enterSteps();
           }
         },
       ),
@@ -476,7 +569,7 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
           if (SharedPreferencesUtil().onboardingCompleted) {
             await _routeWithPermissionsCheck(context);
           } else {
-            _controller!.animateTo(_resumeStep());
+            _enterSteps();
           }
         },
         onUseDifferentAccount: _useDifferentAccount,
@@ -529,6 +622,7 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
               },
               onSkip: () {
                 PlatformManager.instance.analytics.speechProfileSkipped();
+                _stepTelemetry.skipped = true;
                 _leaveSpeechProfile();
               },
             ),
@@ -541,24 +635,8 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
         },
       ),
       OnboardingCompleteScreen(
-        onComplete: () async {
-          if (_finishing) return;
-          _finishing = true;
-          final saved = await OnboardingSyncRuntime.enqueue(completed: true);
-          _finishing = false;
-          if (!mounted || !context.mounted) return;
-          if (!saved) {
-            OmiFeedback.error(context, context.l10n.somethingWentWrong);
-            return;
-          }
-          SharedPreferencesUtil().onboardingCompleted = true;
-          SharedPreferencesUtil().permissionsCompleted = true;
-          SharedPreferencesUtil().remove(_resumeKey);
-          _completeOnboardingTelemetry();
-          PlatformManager.instance.analytics.onboardingCompleted();
-          PaintingBinding.instance.imageCache.clear();
-          routeToPage(context, const HomePageWrapper(), replace: true);
-        },
+        onSkipped: () => _stepTelemetry.skipped = true,
+        onComplete: _finishOnboarding,
       ),
     ];
 

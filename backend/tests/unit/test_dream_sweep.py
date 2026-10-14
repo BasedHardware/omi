@@ -203,7 +203,7 @@ def test_unset_salt_shadow_persists_complete_report_without_user_effects(store, 
         ('dream_users', UID),
         ('dream_users', UID, 'dirty', 'fixture'),
         ('dream_users', UID, 'reviews', dream_history.review_id('conversations/c1')),
-        ('dream_spend', datetime.now(timezone.utc).date().isoformat()),
+        ('dream_users', UID, 'spend', datetime.now(timezone.utc).date().isoformat()),
         ('users', UID, 'dream_runs', result['run_id']),
     }
 
@@ -288,7 +288,7 @@ def test_prod_scheduler_and_writer_env_contract():
     )
     assert dream['target']['oidc'] == sequencer['target']['oidc']
     assert dream['retry'] == sequencer['retry']
-    assert dream['attempt_deadline'] == '720s'
+    assert dream['attempt_deadline'] == '1740s'
     assert FULL_DRAIN_SECONDS + 30 < int(dream['attempt_deadline'][:-1])
     assert (
         dream_agent.PASS_TIMEOUT_SECONDS + dream_agent.FINISH_MARGIN_SECONDS
@@ -318,6 +318,9 @@ def test_prod_scheduler_and_writer_env_contract():
                 'DREAM_AGENT_DAILY_USD',
                 'DREAM_AGENT_CANARY_UID',
                 'DREAM_AGENT_AUTO_APPLY_KINDS',
+                'DREAM_AGENT_CONTEXT_MODE',
+                'DREAM_AGENT_FULL_CONTEXT_UIDS',
+                'DREAM_AGENT_FULL_SAMPLES',
             }
             for key in service['env']
         )
@@ -326,7 +329,15 @@ def test_prod_scheduler_and_writer_env_contract():
         kinds = prod['cloud_run']['services'][name]['env']['DREAM_AGENT_AUTO_APPLY_KINDS']['value']
         assert set(kinds.split(',')) == {'title', 'overview', 'vocabulary'}
     services = prod['cloud_run']['services']
-    # The sweep host and the report host present the same daily allowance; no other host declares one.
+    full_keys = {'DREAM_AGENT_CONTEXT_MODE', 'DREAM_AGENT_FULL_CONTEXT_UIDS', 'DREAM_AGENT_FULL_SAMPLES'}
+    full_env = services['backend-sync']['env']
+    assert full_env['DREAM_AGENT_CONTEXT_MODE']['value'] == 'full'
+    assert full_env['DREAM_AGENT_FULL_CONTEXT_UIDS']['value'] == allowlist.split(',')[1]
+    assert full_env['DREAM_AGENT_FULL_SAMPLES']['value'] == '3'
+    assert all(
+        not full_keys.intersection(service['env']) for service in writers if service is not services['backend-sync']
+    )
+    # The sweep host has full-mode accounting headroom; the report host keeps its bounded-mode allowance.
     dogfood_caps = {
         'DREAM_AGENT_PASSES_PER_DAY': '24',
         'DREAM_AGENT_MANUAL_RUNS_PER_DAY': '20',
@@ -334,7 +345,9 @@ def test_prod_scheduler_and_writer_env_contract():
     }
     for name in ('backend-sync', 'backend'):
         for key, value in dogfood_caps.items():
-            assert services[name]['env'][key]['value'] == value
+            assert services[name]['env'][key]['value'] == (
+                '320' if name == 'backend-sync' and key == 'DREAM_AGENT_DAILY_USD' else value
+            )
         assert services[name]['secrets']['DREAM_AGENT_FEEDBACK_SALT'] == {
             'secret': 'DREAM_AGENT_FEEDBACK_SALT',
             'version': 'latest',

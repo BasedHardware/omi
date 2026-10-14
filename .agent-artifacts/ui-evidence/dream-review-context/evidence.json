@@ -1,0 +1,19 @@
+{
+  "version": 1,
+  "images": [
+    {
+      "file": "001-mobile-ios-spelling-card.png",
+      "platform": "mobile-ios",
+      "description": "Review spelling card with a one-line speech snippet; synthetic offline iPhone simulator fixture.",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "002-mobile-ios-spelling-context.png",
+      "platform": "mobile-ios",
+      "description": "Opened spelling sheet with title, localized date, speaker labels, neighboring speech and the exact UL quote highlighted above the options.",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    }
+  ]
+}

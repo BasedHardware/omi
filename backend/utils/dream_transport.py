@@ -8,7 +8,7 @@ from typing import get_args, TypedDict
 
 from pydantic import ValidationError
 
-from models.dream_agent import Plan, Triage
+from models.dream_agent import Plan, FullPlan, Triage
 from config.dream_agent import (
     context_mode,
     FULL_CONTEXT_WINDOW,
@@ -94,7 +94,7 @@ def _truncate_arrays(value, schema, root):
 def _diagnostic_fields():
     # Static model metadata only; never retain response values or exception data.
     fields = set()
-    for model in (Plan, Triage):
+    for model in (Plan, FullPlan, Triage):
         schema = model.model_json_schema()
         for node in [schema, *schema.get('$defs', {}).values()]:
             fields.update(node.get('properties', {}))
@@ -126,7 +126,7 @@ def parse_response(model, content, *, usage_sink=None):
     """Preserve strict top-level shape while isolating malformed list items."""
     schema = model.model_json_schema()
     bounded = _truncate_arrays(content, schema, schema)
-    if model not in (Plan, Triage):
+    if model not in (Plan, FullPlan, Triage):
         return model.model_validate_json(json.dumps(bounded))
     # Validate object/list types and extras before dropping anything. Empty lists
     # preserve the exact top-level schema; item validation follows independently.
@@ -251,7 +251,10 @@ async def _model_attempt(uid, lane, mount, messages, *, usage_sink=None, complet
                 **(
                     {
                         'reasoning_effort': 'high',
-                        'google': {'thinking_config': {'thinking_budget': min(FULL_THINKING_TOKENS, completion // 2)}},
+                        'google': {
+                            'thinking_config': {'thinking_budget': min(FULL_THINKING_TOKENS, completion // 2)},
+                            'dream_reserved_only': True,
+                        },
                     }
                     if full
                     else {}

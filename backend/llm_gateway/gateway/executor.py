@@ -122,6 +122,21 @@ async def execute_chat_completion(
     if current_attempt() is not None:
         max_provider_attempts = 1
     serving_route = _select_serving_route(resolved_route)
+    google = resolved_route.validated_request.forwarded_params.get('google')
+    if (
+        serving_route.lane_id == 'omi:auto:dream-reasoning'
+        and isinstance(google, Mapping)
+        and google.get('dream_reserved_only') is True
+    ):
+        if (
+            serving_route.primary.provider != 'gemini'
+            or serving_route.provider_options.get('reserved_capacity_only') is not True
+        ):
+            raise GatewayProviderFailureError(
+                'Dream reserved capacity unavailable', failure_class=FailureClass.RESERVED_CAPACITY_UNAVAILABLE
+            )
+        # Full samples cannot spend on Luna recovery or a different serving route.
+        max_provider_attempts = 1
     serving_is_lkg = selected_route_is_lkg(resolved_route)
     _validate_credential_mode(serving_route, credential_context)
     deadline_monotonic = monotonic() + serving_route.timeouts.request_ms / 1000.0

@@ -360,6 +360,8 @@ def resolve_mcp_conversation_search_ids(
     """Search summary vectors; transcript snippets are rebuilt after hydration."""
     limit = max(1, min(int(limit or 10), 250))
     shared_vector: Optional[List[float]] = embed_query(query) if embed_query is not None else None
+    if embed_query is not None and not shared_vector:
+        return []
     vector_kw: Dict[str, Any] = {"query_vector": shared_vector} if shared_vector is not None else {}
     return query_vectors(query, uid, starts_at=starts_at, ends_at=ends_at, k=limit, **vector_kw) or []
 

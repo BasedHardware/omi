@@ -10,6 +10,7 @@ import 'package:omi/pages/settings/settings_drawer.dart';
 import 'package:omi/providers/app_provider.dart';
 import 'package:omi/providers/home_provider.dart';
 import 'package:omi/providers/user_provider.dart';
+import 'package:omi/providers/usage_provider.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
 
@@ -23,6 +24,7 @@ Widget _buildHarness() {
       ChangeNotifierProvider<AppProvider>.value(value: AppProvider()),
       ChangeNotifierProvider<HomeProvider>.value(value: HomeProvider()),
       ChangeNotifierProvider<UserProvider>.value(value: UserProvider()),
+      ChangeNotifierProvider<UsageProvider>.value(value: UsageProvider()),
     ],
     child: const MaterialApp(
       localizationsDelegates: [

@@ -9,7 +9,7 @@ import pytest
 from pydantic import ValidationError
 
 from config.dream_agent import Caps, FULL_CONTEXT_WINDOW
-from models.dream_agent import DreamReviewItem, Edit, Plan
+from models.dream_agent import DreamReviewItem, Edit, Plan, FullPlan
 from utils import dream_agent, dream_guards, dream_metrics, dream_prompt, dream_transport, dream_tools
 from utils.dream_context import EvidenceRecords
 
@@ -20,6 +20,7 @@ REF = 'memory_items/synthetic'
 @pytest.fixture
 def full(monkeypatch):
     monkeypatch.setenv('DREAM_AGENT_CONTEXT_MODE', 'full')
+    monkeypatch.setenv('DREAM_AGENT_FULL_SAMPLES', '1')
     monkeypatch.setenv('DREAM_AGENT_FULL_CONTEXT_UIDS', UID)
     return Caps().for_uid(UID)
 
@@ -160,7 +161,7 @@ async def test_full_response_retries_once_with_accounted_usage_and_same_context(
     client.post.side_effect = [first, response('{}')]
     sink = {'tokens': 0}
     plan, tokens = await dream_agent.plan_pass(UID, {REF: {'content': 'Synthetic text'}}, full, usage_sink=sink)
-    assert plan == Plan() and tokens == sink['tokens'] == 100
+    assert plan == FullPlan() and tokens == sink['tokens'] == 100
     assert sink['response_retries'] == 1 and sink['usage_unknown'] is False
     assert client.post.await_count == 2
     requests = [call.kwargs['json'] for call in client.post.call_args_list]
@@ -232,7 +233,7 @@ async def test_valid_json_with_invalid_items_is_not_retried(full, client):
     )
     sink = {'tokens': 0}
     plan, tokens = await dream_agent.plan_pass(UID, {REF: {'content': 'Borza'}}, full, usage_sink=sink)
-    assert plan == Plan() and tokens == 50 and client.post.await_count == 1
+    assert plan == FullPlan() and tokens == 50 and client.post.await_count == 1
     assert sink.get('response_retries', 0) == 0 and sink['rejected'] == {'invalid_edit': 1}
 
 

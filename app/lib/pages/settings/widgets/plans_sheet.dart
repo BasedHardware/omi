@@ -10,6 +10,11 @@ import 'package:omi/backend/preferences.dart';
 import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/pages/settings/widgets/cancel_subscription_sheet.dart';
 import 'package:omi/models/subscription.dart';
+import 'package:omi/models/plan_storefront.dart';
+import 'package:omi/backend/http/api_result.dart';
+import 'package:omi/backend/http/plan_storefront_api.dart';
+import 'package:omi/pages/settings/widgets/plans/storefront_plans_content.dart';
+import 'package:omi/services/experiments/plan_storefront_gate.dart';
 import 'package:omi/pages/settings/transcription_settings_page.dart';
 import 'package:omi/pages/settings/widgets/plans/plan_cards.dart';
 import 'package:omi/pages/settings/widgets/plans/plan_display_name.dart';
@@ -26,6 +31,13 @@ import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/pages/settings/payment_webview_page.dart';
 
+/// The old sheet keeps "Plans & Billing". "Plans" is only the storefront title, and only while its flag is on.
+Future<String> plansSheetTitle(BuildContext context, {Future<bool> Function()? sheetEnabled}) async {
+  final enabled = await (sheetEnabled ?? PlanStorefrontGate.sheetEnabled)();
+  if (!context.mounted) return '';
+  return enabled ? context.l10n.paywallPlans : context.l10n.plansAndBilling;
+}
+
 /// Plan picker, upgrade/downgrade and payment management.
 ///
 /// Content for a bottom sheet: present it with `showOmiSheet(context: context, padding:
@@ -40,6 +52,12 @@ class PlansSheet extends StatefulWidget {
 
   /// Closed paywall `source` for the surface that opened this sheet.
   final String analyticsSource;
+  final String storefrontTrigger;
+  final PlanStorefront? initialStorefront;
+  @visibleForTesting
+  final Future<bool> Function()? readStorefrontGate;
+  @visibleForTesting
+  final PlanStorefrontApi? storefrontApi;
 
   const PlansSheet({
     super.key,
@@ -49,6 +67,10 @@ class PlansSheet extends StatefulWidget {
     required this.arrowAnimation,
     this.onCancelSubscription,
     this.analyticsSource = 'usage_page',
+    this.storefrontTrigger = '',
+    this.initialStorefront,
+    this.readStorefrontGate,
+    this.storefrontApi,
   });
 
   @override
@@ -56,6 +78,12 @@ class PlansSheet extends StatefulWidget {
 }
 
 class _PlansSheetState extends State<PlansSheet> {
+  bool _storefrontGateResolved = false;
+  bool _storefrontEnabled = false;
+  bool _storefrontLoading = false;
+  bool _storefrontFailed = false;
+  PlanStorefront? _storefront;
+
   String selectedPlan = 'yearly'; // 'yearly' or 'monthly'  (billing period)
   String? selectedTierId; // 'unlimited', 'operator', 'architect'
   bool _isUpgrading = false;
@@ -64,6 +92,68 @@ class _PlansSheetState extends State<PlansSheet> {
   final _promoCodeController = TextEditingController();
   String? _promoCodeError;
   bool _showPromoCodeField = false;
+
+  Future<void> _initializeStorefront() async {
+    final enabled = await (widget.readStorefrontGate ?? PlanStorefrontGate.sheetEnabled)();
+    if (!mounted) return;
+    setState(() {
+      _storefrontGateResolved = true;
+      _storefrontEnabled = enabled;
+      _storefront = enabled ? widget.initialStorefront : null;
+      _storefrontLoading = enabled && _storefront == null;
+    });
+    if (!enabled) return;
+    if (_storefront == null) await _loadStorefront();
+  }
+
+  Future<void> _loadStorefront() async {
+    if (!mounted || !context.read<UsageProvider>().showSubscriptionUI) return;
+    setState(() {
+      _storefrontLoading = true;
+      _storefrontFailed = false;
+      _storefront = null;
+    });
+    final result = await (widget.storefrontApi ?? PlanStorefrontApi())
+        .load(source: widget.analyticsSource, trigger: widget.storefrontTrigger, locale: context.l10n.localeName);
+    if (!mounted) return;
+    setState(() {
+      _storefrontLoading = false;
+      _storefrontFailed = result is! ApiSuccess<PlanStorefront>;
+      _storefront = result is ApiSuccess<PlanStorefront> ? result.data : null;
+    });
+  }
+
+  StorefrontCheckoutDecision _storefrontDecision(StorefrontTier tier, StorefrontPrice price) {
+    final sub = context.read<UsageProvider>().subscription?.subscription;
+    return storefrontCheckoutDecision(
+      _storefront?.current,
+      sub?.plan,
+      tier,
+      price,
+      usageLegacy: _storefront?.usage?.kind == 'transcription',
+      cancelScheduled: (sub?.cancelAtPeriodEnd ?? false) || (_storefront?.current?.cancelAtPeriodEnd ?? false),
+      showSubscriptionUi: _storefront?.showSubscriptionUi ?? false,
+    );
+  }
+
+  Future<void> _selectStorefrontPrice(StorefrontTier tier, StorefrontPrice price) async {
+    if (_isUpgrading || !context.read<UsageProvider>().showSubscriptionUI) return;
+    if (_storefrontDecision(tier, price) == StorefrontCheckoutDecision.refuse) return;
+    setState(() => _isUpgrading = true);
+    selectedTierId = tier.planId;
+    selectedPlan = price.interval == 'year' ? 'yearly' : 'monthly';
+    try {
+      await _handleUpgradeWithSelectedPlan(storefrontPrice: price, releaseUpgradingLock: false);
+    } finally {
+      if (mounted) {
+        try {
+          await _loadStorefront();
+        } finally {
+          if (mounted) setState(() => _isUpgrading = false);
+        }
+      }
+    }
+  }
 
   Future<void> _loadAvailablePlans() async {
     final provider = context.read<UsageProvider>();
@@ -221,11 +311,31 @@ class _PlansSheetState extends State<PlansSheet> {
     await _handleSwitchToFreePlan();
   }
 
-  Future<void> _handleUpgradeWithSelectedPlan() async {
+  Future<void> _handleUpgradeWithSelectedPlan({
+    StorefrontPrice? storefrontPrice,
+    bool releaseUpgradingLock = true,
+  }) async {
     final bool isYearly = selectedPlan == 'yearly';
 
     // Get the price ID from the available plans
     final usageProvider = context.read<UsageProvider>();
+    final livePlan = usageProvider.subscription?.subscription.plan;
+    // The old Continue path is visible until the flag resolves. unlimited plans
+    // are not desktop-entitled, so the existing cross-tier hide does not cover them.
+    if (storefrontPrice == null &&
+        !_storefrontGateResolved &&
+        (livePlan == PlanType.unlimited || livePlan == PlanType.unlimitedV2 || livePlan?.isUnknown == true)) {
+      return;
+    }
+    StorefrontCheckoutDecision? storefrontDecision;
+    if (storefrontPrice != null) {
+      final tier = _storefront?.tiers.where((item) => item.planId == selectedTierId).firstOrNull;
+      final decision = tier == null ? StorefrontCheckoutDecision.refuse : _storefrontDecision(tier, storefrontPrice);
+      if (tier == null || decision == StorefrontCheckoutDecision.refuse) {
+        return;
+      }
+      storefrontDecision = decision;
+    }
     final availablePlans = usageProvider.availablePlans;
     if (availablePlans == null) {
       OmiFeedback.error(context, context.l10n.couldNotLoadPlans);
@@ -247,10 +357,19 @@ class _PlansSheetState extends State<PlansSheet> {
     }
 
     final priceId = selectedPlanData['id'] as String;
+    // A presentation payload cannot silently redirect checkout to a different price.
+    if (storefrontPrice != null &&
+        (storefrontPrice.id != priceId ||
+            storefrontPrice.interval != selectedPlanData['interval'] ||
+            storefrontPrice.amountMinor != selectedPlanData['unit_amount'])) {
+      OmiFeedback.error(context, context.l10n.selectedPlanNotAvailable);
+      return;
+    }
 
     // Check if user is upgrading from monthly to annual
     final provider = context.read<UsageProvider>();
     final currentSub = provider.subscription?.subscription;
+    // Pending cancellation rejects every price except the one already on the subscription.
     if (currentSub?.cancelAtPeriodEnd == true && priceId != currentSub?.currentPriceId) {
       return;
     }
@@ -309,10 +428,22 @@ class _PlansSheetState extends State<PlansSheet> {
       source: widget.analyticsSource,
     );
 
-    await _handleUpgrade(priceId, targetPlan: tierId ?? 'unknown', billingInterval: isYearly ? 'year' : 'month');
+    await _handleUpgrade(
+      priceId,
+      targetPlan: tierId ?? 'unknown',
+      billingInterval: isYearly ? 'year' : 'month',
+      releaseUpgradingLock: releaseUpgradingLock,
+      storefrontDecision: storefrontDecision,
+    );
   }
 
-  Future<void> _handleUpgrade(String priceId, {required String targetPlan, required String billingInterval}) async {
+  Future<void> _handleUpgrade(
+    String priceId, {
+    required String targetPlan,
+    required String billingInterval,
+    bool releaseUpgradingLock = true,
+    StorefrontCheckoutDecision? storefrontDecision,
+  }) async {
     final provider = context.read<UsageProvider>();
     final l10n = context.l10n;
 
@@ -355,8 +486,14 @@ class _PlansSheetState extends State<PlansSheet> {
     try {
       Map<String, dynamic>? result;
 
-      // If user already has a paid plan and it's not canceled
-      if (currentSub.plan.isPaid && currentSub.status == SubscriptionStatus.active && !currentSub.cancelAtPeriodEnd) {
+      // Resubscribe reactivates through checkout. The sheet payload can already
+      // say cancel_at_period_end while UsageProvider is still false; upgrade
+      // returns 409 for every price in that state, including the current one.
+      final resubscribe = storefrontDecision == StorefrontCheckoutDecision.resubscribe;
+      if (currentSub.plan.isPaid &&
+          currentSub.status == SubscriptionStatus.active &&
+          !currentSub.cancelAtPeriodEnd &&
+          !resubscribe) {
         result = await provider.upgradeUserSubscription(
           priceId: priceId,
           promotionCode: promoCode.isNotEmpty ? promoCode : null,
@@ -425,7 +562,7 @@ class _PlansSheetState extends State<PlansSheet> {
       if (mounted) OmiFeedback.error(context, l10n.anErrorOccurredTryAgain);
     } finally {
       _loadAvailablePlans();
-      if (mounted) setState(() => _isUpgrading = false);
+      if (releaseUpgradingLock && mounted) setState(() => _isUpgrading = false);
     }
   }
 
@@ -454,6 +591,7 @@ class _PlansSheetState extends State<PlansSheet> {
   void initState() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _loadAvailablePlans();
+      _initializeStorefront();
     });
     super.initState();
   }
@@ -499,11 +637,25 @@ class _PlansSheetState extends State<PlansSheet> {
       builder: (context, provider, child) {
         // Pop on build if the server-driven visibility flag is off, in case any
         // caller bypassed the call-site check.
-        if (!provider.showSubscriptionUI) {
+        if (!provider.showSubscriptionUI || (_storefrontEnabled && _storefront?.showSubscriptionUi == false)) {
           WidgetsBinding.instance.addPostFrameCallback((_) {
             if (Navigator.of(context).canPop()) Navigator.of(context).pop();
           });
           return const SizedBox.shrink();
+        }
+
+        if (_storefrontEnabled) {
+          return StorefrontPlansContent(
+            storefront: _storefront,
+            loading: _storefrontLoading,
+            failed: _storefrontFailed,
+            busy: _isUpgrading,
+            livePlan: provider.subscription?.subscription.plan,
+            cancelScheduled: provider.subscription?.subscription.cancelAtPeriodEnd ?? false,
+            onRetry: _loadStorefront,
+            onSelect: _selectStorefrontPrice,
+            onManage: _openPaymentPortal,
+          );
         }
 
         final l10n = context.l10n;

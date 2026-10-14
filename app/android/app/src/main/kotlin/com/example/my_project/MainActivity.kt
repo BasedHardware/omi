@@ -199,6 +199,7 @@ class MainActivity: FlutterActivity() {
         super.onResume()
         OmiBleManager.isAppForeground = true
         OmiBleForegroundService.instance?.recordPermissionStates()
+        OmiBleForegroundService.instance?.onAppForegrounded()
     }
 
     override fun onPause() {

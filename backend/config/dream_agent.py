@@ -14,11 +14,17 @@ SUGGESTIONS_PER_DAY = 3
 # The reserved Dream models have a 1M input window. Keep completion headroom
 # inside that window too, even when an operator requests a larger budget.
 FULL_CONTEXT_WINDOW = 1048576
-FULL_PASS_SECONDS = 600
+# K=3 sequential 480s calls, one 120s cooldown and 60s effect headroom.
+# Extra retries/samples use survivors when this request-wide deadline cannot fit them.
+FULL_PASS_SECONDS = 1620
 FULL_MODEL_SECONDS = 480
 FULL_COMPLETION_TOKENS = 32768
 FULL_THINKING_TOKENS = 16384
 FULL_DRAIN_SECONDS = FULL_PASS_SECONDS + 60
+PASS_TIMEOUT_SECONDS = 180
+FINISH_MARGIN_SECONDS = 30
+DRAIN_TIMEOUT_SECONDS = PASS_TIMEOUT_SECONDS + FINISH_MARGIN_SECONDS + 30
+LEASE_RECLAIM_MARGIN_SECONDS = 60
 
 
 def context_mode(uid: str) -> str:
@@ -36,7 +42,7 @@ def full_context_enabled() -> bool:
     )
 
 
-def auto_apply_kinds() -> frozenset[str]:
+def auto_apply_kinds(uid: str | None = None) -> frozenset[str]:
     """An override may narrow safe automation; risky operations always require Review."""
     value = os.getenv('DREAM_AGENT_AUTO_APPLY_KINDS')
     if value is None:
@@ -49,7 +55,8 @@ def auto_apply_kinds() -> frozenset[str]:
 
         POLICY_WARNINGS.inc(len(ignored))
         logging.getLogger(__name__).warning('Dream auto-apply policy ignored kinds count=%d', len(ignored))
-    return frozenset(requested & AUTO)
+    effective = frozenset(requested & AUTO)
+    return effective | {'spelling'} if uid is not None and context_mode(uid) == 'full' else effective
 
 
 def apply_policy(kind: str, automatic: frozenset[str]) -> str:
@@ -134,6 +141,7 @@ class Caps:
     manual_runs: int = 3
     completion_tokens: int = 4096
     context_mode: str = 'bounded'
+    samples: int = 1
 
     def for_uid(self, uid):
         if context_mode(uid) != 'full':
@@ -142,7 +150,15 @@ class Caps:
             128, min(FULL_COMPLETION_TOKENS, int(number('DREAM_AGENT_FULL_COMPLETION_TOKENS', FULL_COMPLETION_TOKENS)))
         )
         inputs = max(0, min(FULL_CONTEXT_WINDOW - completion, int(number('DREAM_AGENT_FULL_CONTEXT_TOKENS', 400000))))
-        return replace(self, context_mode='full', tokens=inputs + completion, completion_tokens=completion, edits=25)
+        samples = max(1, min(8, int(number('DREAM_AGENT_FULL_SAMPLES', 3))))
+        return replace(
+            self,
+            context_mode='full',
+            tokens=inputs + completion,
+            completion_tokens=completion,
+            edits=25,
+            samples=samples,
+        )
 
     @classmethod
     def from_env(cls):
@@ -161,7 +177,7 @@ class Caps:
     @property
     def reservation_usd(self) -> float:
         # Full mode may repeat its request once after truncated/invalid JSON.
-        return self.tokens * (2 if self.context_mode == 'full' else 1) * self.max_usd_per_token
+        return self.tokens * (2 * self.samples if self.context_mode == 'full' else 1) * self.max_usd_per_token
 
 
 def backfill_share() -> float:

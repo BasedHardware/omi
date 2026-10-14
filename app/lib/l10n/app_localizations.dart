@@ -22023,6 +22023,12 @@ abstract class AppLocalizations {
   /// **'Same person as “{name}”?'**
   String reviewQuestionSamePerson(String name);
 
+  /// Heading above the speech around a spelling question in Review.
+  ///
+  /// In en, this message translates to:
+  /// **'Conversation context'**
+  String get reviewSpellingContext;
+
   /// Question card: confirm the spelling of a name or term
   ///
   /// In en, this message translates to:
@@ -23228,6 +23234,312 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'{count, plural, =0{No Items} =1{1 Item} other{{count} Items}}'**
   String itemLinkListTitle(int count);
+
+  /// Backend recommended tier badge; highlights a recommendation without preselecting checkout.
+  ///
+  /// In en, this message translates to:
+  /// **'Recommended'**
+  String get paywallRecommended;
+
+  /// Empty state when the plans list has no tiers.
+  ///
+  /// In en, this message translates to:
+  /// **'Plans aren\'t available right now. Try again in a minute.'**
+  String get paywallNoPlans;
+
+  /// Collapsed section that reveals the rest of the plan ladder.
+  ///
+  /// In en, this message translates to:
+  /// **'See all plans'**
+  String get paywallOtherPlans;
+
+  /// Primary button on the usage banner.
+  ///
+  /// In en, this message translates to:
+  /// **'See plans'**
+  String get paywallComparePlans;
+
+  /// Badge on the tier card for the plan the person already has.
+  ///
+  /// In en, this message translates to:
+  /// **'Your plan'**
+  String get paywallYourPlan;
+
+  /// Secondary button on the usage banner.
+  ///
+  /// In en, this message translates to:
+  /// **'Not now'**
+  String get paywallNotNow;
+
+  /// Retry button when the plans sheet fails to load.
+  ///
+  /// In en, this message translates to:
+  /// **'Try again'**
+  String get paywallTryAgain;
+
+  /// Button that opens billing management.
+  ///
+  /// In en, this message translates to:
+  /// **'Manage billing'**
+  String get paywallManageBilling;
+
+  /// Plans sheet error copy. The retry button is separate.
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn\'t load plans. Check your connection and try again.'**
+  String get paywallLoadError;
+
+  /// Title of the new plans sheet. The previous sheet keeps Plans & Billing.
+  ///
+  /// In en, this message translates to:
+  /// **'Plans'**
+  String get paywallPlans;
+
+  /// No description provided for @firstCaptureTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'How will you capture?'**
+  String get firstCaptureTitle;
+
+  /// No description provided for @firstCaptureDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'Choose how you want to capture your first conversation.'**
+  String get firstCaptureDescription;
+
+  /// No description provided for @firstCaptureOmi.
+  ///
+  /// In en, this message translates to:
+  /// **'I Have an Omi'**
+  String get firstCaptureOmi;
+
+  /// No description provided for @firstCapturePhone.
+  ///
+  /// In en, this message translates to:
+  /// **'This Phone'**
+  String get firstCapturePhone;
+
+  /// No description provided for @firstCaptureWatch.
+  ///
+  /// In en, this message translates to:
+  /// **'Apple Watch'**
+  String get firstCaptureWatch;
+
+  /// No description provided for @firstCaptureSkip.
+  ///
+  /// In en, this message translates to:
+  /// **'Skip for Now'**
+  String get firstCaptureSkip;
+
+  /// No description provided for @firstCapturePrompt.
+  ///
+  /// In en, this message translates to:
+  /// **'Tell Omi what you\'re working on today, or what\'s on your mind. Talk for about 30 seconds.'**
+  String get firstCapturePrompt;
+
+  /// No description provided for @firstCaptureKeepGoing.
+  ///
+  /// In en, this message translates to:
+  /// **'Keep going… 30 seconds is ideal.'**
+  String get firstCaptureKeepGoing;
+
+  /// No description provided for @firstCaptureReady.
+  ///
+  /// In en, this message translates to:
+  /// **'You can finish now, or keep talking.'**
+  String get firstCaptureReady;
+
+  /// No description provided for @firstCaptureStart.
+  ///
+  /// In en, this message translates to:
+  /// **'Start Recording'**
+  String get firstCaptureStart;
+
+  /// No description provided for @firstCaptureFinish.
+  ///
+  /// In en, this message translates to:
+  /// **'Finish Recording'**
+  String get firstCaptureFinish;
+
+  /// No description provided for @firstCaptureListening.
+  ///
+  /// In en, this message translates to:
+  /// **'Listening… your words will appear here.'**
+  String get firstCaptureListening;
+
+  /// No description provided for @firstCaptureProcessing.
+  ///
+  /// In en, this message translates to:
+  /// **'Creating your first conversation…'**
+  String get firstCaptureProcessing;
+
+  /// No description provided for @firstCaptureResult.
+  ///
+  /// In en, this message translates to:
+  /// **'Your first conversation'**
+  String get firstCaptureResult;
+
+  /// No description provided for @firstCaptureEmpty.
+  ///
+  /// In en, this message translates to:
+  /// **'I didn\'t catch enough speech, try again with a few sentences'**
+  String get firstCaptureEmpty;
+
+  /// No description provided for @watchCaptureTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Record from your Apple Watch'**
+  String get watchCaptureTitle;
+
+  /// No description provided for @watchCaptureOpen.
+  ///
+  /// In en, this message translates to:
+  /// **'Open Omi on your Apple Watch.'**
+  String get watchCaptureOpen;
+
+  /// No description provided for @watchCaptureRecord.
+  ///
+  /// In en, this message translates to:
+  /// **'Tap Record. Allow microphone access if asked.'**
+  String get watchCaptureRecord;
+
+  /// No description provided for @watchCaptureSync.
+  ///
+  /// In en, this message translates to:
+  /// **'Your recording syncs to Omi on this phone.'**
+  String get watchCaptureSync;
+
+  /// No description provided for @pairingBluetoothOff.
+  ///
+  /// In en, this message translates to:
+  /// **'Turn on Bluetooth on your phone, then try again.'**
+  String get pairingBluetoothOff;
+
+  /// No description provided for @pairingBluetoothPermission.
+  ///
+  /// In en, this message translates to:
+  /// **'Allow Bluetooth access for Omi in Settings, then try again.'**
+  String get pairingBluetoothPermission;
+
+  /// No description provided for @pairingNearbyPermission.
+  ///
+  /// In en, this message translates to:
+  /// **'Allow Nearby devices access for Omi in Settings, then try again.'**
+  String get pairingNearbyPermission;
+
+  /// No description provided for @pairingLocationPermission.
+  ///
+  /// In en, this message translates to:
+  /// **'Allow location access for Omi in Settings so this phone can find your device, then try again.'**
+  String get pairingLocationPermission;
+
+  /// No description provided for @pairingNotFoundOrDropped.
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn\'t reach your Omi. Make sure it\'s charged, close to your phone, and its light is blinking, then try again.'**
+  String get pairingNotFoundOrDropped;
+
+  /// No description provided for @pairingBondRecovery.
+  ///
+  /// In en, this message translates to:
+  /// **'Forget Omi in your phone’s Bluetooth settings, then try pairing again.'**
+  String get pairingBondRecovery;
+
+  /// No description provided for @pairingHowTo.
+  ///
+  /// In en, this message translates to:
+  /// **'How to pair'**
+  String get pairingHowTo;
+
+  /// No description provided for @firstCaptureWatchInstructions.
+  ///
+  /// In en, this message translates to:
+  /// **'Open Omi on your Apple Watch and tap Record. Allow microphone access if asked. Your capture will sync to Omi on this phone.'**
+  String get firstCaptureWatchInstructions;
+
+  /// No description provided for @firstCaptureWatchInstall.
+  ///
+  /// In en, this message translates to:
+  /// **'In the Watch app on your iPhone, install Omi on your Apple Watch. Then open Omi on your watch and tap Record.'**
+  String get firstCaptureWatchInstall;
+
+  /// No description provided for @firstCaptureWatchPair.
+  ///
+  /// In en, this message translates to:
+  /// **'Pair your Apple Watch with this iPhone using the Watch app, then install and open Omi on your watch.'**
+  String get firstCaptureWatchPair;
+
+  /// No description provided for @firstCaptureUnavailable.
+  ///
+  /// In en, this message translates to:
+  /// **'Recording could not start. Check microphone access and your connection, then try again.'**
+  String get firstCaptureUnavailable;
+
+  /// No description provided for @firstCaptureDelayed.
+  ///
+  /// In en, this message translates to:
+  /// **'Your recording is taking longer to process. You can check your conversations on Home or try again.'**
+  String get firstCaptureDelayed;
+
+  /// No description provided for @firstCaptureEmptyTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Let\'s try that again'**
+  String get firstCaptureEmptyTitle;
+
+  /// No description provided for @firstCaptureShortTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Finish This Recording?'**
+  String get firstCaptureShortTitle;
+
+  /// No description provided for @firstCaptureShortWarning.
+  ///
+  /// In en, this message translates to:
+  /// **'A few more sentences help Omi understand you. About 30 seconds is ideal.'**
+  String get firstCaptureShortWarning;
+
+  /// No description provided for @firstCaptureCancelTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Leave This Recording?'**
+  String get firstCaptureCancelTitle;
+
+  /// No description provided for @firstCaptureCancelWarning.
+  ///
+  /// In en, this message translates to:
+  /// **'Going back stops this recording. Keep talking to give Omi a few more sentences.'**
+  String get firstCaptureCancelWarning;
+
+  /// No description provided for @firstCaptureSiriTip.
+  ///
+  /// In en, this message translates to:
+  /// **'Tip: Enable Omi in Shortcuts → Siri.'**
+  String get firstCaptureSiriTip;
+
+  /// Headline of the Outline paywall variant (mobile paywall A/B test)
+  ///
+  /// In en, this message translates to:
+  /// **'Never miss a word again.'**
+  String get paywallOutlineHeadline;
+
+  /// Caption under the upgrade button on the Outline paywall variant
+  ///
+  /// In en, this message translates to:
+  /// **'Cancel anytime.'**
+  String get paywallCancelAnytime;
+
+  /// Settings row that opens the web developer home, where users get copy-paste setup prompts and keys for AI agents (Claude, ChatGPT, Codex, ...)
+  ///
+  /// In en, this message translates to:
+  /// **'Connect an Agent'**
+  String get connectAnAgent;
+
+  /// Subtitle of the Connect an Agent settings row
+  ///
+  /// In en, this message translates to:
+  /// **'Get a setup prompt for Claude, ChatGPT, Codex, or any agent'**
+  String get connectAnAgentSubtitle;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

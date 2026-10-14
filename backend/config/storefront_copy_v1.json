@@ -1,0 +1,108 @@
+{
+  "schema_version": 1,
+  "default_locale": "en",
+  "recording": {
+    "units_per_recorded_hour": 130,
+    "recording_share": 0.85,
+    "free_hours": 15,
+    "note": "units_per_recorded_hour is provisional (~$0.13 fully loaded: transcription $1.83 per 1,000 wall-clock minutes + ~19% extraction) from evidence/2026-10-12-unit-economics-and-usage.md §1/§3. Replace with shadow-ledger p50 (#21369)."
+  },
+  "budget_units_note": "Plan-catalog usage budgets in units per month (Plus 16360, Pro 44090, Architect 189463). plan_catalog.json has no usage-units allocation; this rate card is what the hours formula reads until the catalog exposes one. Free hours are fixed.",
+  "budget_units": {
+    "plus": 16360,
+    "operator": 44090,
+    "architect": 189463
+  },
+  "plan_names": {
+    "unlimited": "Neo",
+    "unlimited_v2": "Unlimited"
+  },
+  "locales": {
+    "en": {
+      "headers": {
+        "default": "Choose your plan",
+        "budget_80": "You've used 80% of this month's usage",
+        "budget_100": "You've used all of this month's usage",
+        "proactive_agent": "Reminders and follow-ups come with Pro",
+        "screen_context": "Screen help comes with Pro",
+        "mcp_daily_cap": "You've used today's {n} MCP requests",
+        "legacy": "Your plan",
+        "cancel_scheduled": "Your {plan} plan ends {date}"
+      },
+      "current": {
+        "free": "You're on Free",
+        "paid": "You're on {plan} · {price}/{period} · renews {date}",
+        "cancel": "You're on {plan} · {price}/{period}",
+        "cancel_ends": "You're on {plan} · ends {date}",
+        "paid_no_date": "You're on {plan} · {price}/{period}",
+        "name_only": "You're on {plan}",
+        "legacy_note": "We don't sell this plan anymore, but yours stays exactly as it is."
+      },
+      "hours_lines": {
+        "basic": "About {hours} hours of recording a month",
+        "plus": "About {hours} hours of recording a month, around {per_day} hours a day",
+        "operator": "About {hours} hours of recording a month, enough to wear it all day",
+        "architect": "About {hours} hours of recording a month, for all-day use on more than one device"
+      },
+      "per_day": {
+        "under_6_one": "about {n} hour a day",
+        "under_6": "about {n} hours a day",
+        "all_day": "enough to wear it all day",
+        "multi_device": "for wearing it all day, every day, on more than one device"
+      },
+      "bullets": {
+        "basic": [
+          "Transcripts, summaries and memories of your conversations",
+          "Ask Omi anything about your day",
+          "100 MCP requests a day"
+        ],
+        "plus": [
+          "Everything in Free, with much more room",
+          "Use Omi on your Mac as well as your phone",
+          "500 MCP requests a day"
+        ],
+        "operator": [
+          "Omi reminds you of things you said you'd do",
+          "On your Mac, Omi can see what you're working on and help with it",
+          "5,000 MCP requests a day"
+        ],
+        "architect": [
+          "Everything in Pro, with over 4 times the usage",
+          "At least 5,000 MCP requests a day"
+        ]
+      },
+      "bullet_focus": {
+        "mcp_marker": "MCP requests",
+        "proactive_agent": "Omi reminds you of things you said you'd do",
+        "screen_context": "On your Mac, Omi can see what you're working on and help with it"
+      },
+      "cta": {
+        "get_plus": "Get Plus",
+        "get_pro": "Get Pro",
+        "get_architect": "Get Architect",
+        "upgrade_pro": "Upgrade to Pro",
+        "upgrade_architect": "Upgrade to Architect",
+        "resubscribe": "Resubscribe",
+        "switch_yearly": "Switch to yearly · save {saving}"
+      },
+      "blocked_line": "Resubscribe first to change plans",
+      "prices": {
+        "headline_free": "$0",
+        "headline_month": "{amount}/month",
+        "headline_year": "{amount}/month",
+        "subline_year": "{amount} billed yearly · {free}",
+        "subline_year_no_free": "{amount} billed yearly",
+        "months_free_one": "1 month free",
+        "months_free_many": "{n} months free",
+        "renewal_month": "Renews monthly until you cancel. Cancel anytime in settings.",
+        "renewal_year": "Renews yearly until you cancel. Cancel anytime in settings.",
+        "toggle": "Yearly · {free}"
+      },
+      "meter": {
+        "line": "{percent}% used · about {hours} hours of recording left · {reset}",
+        "nudge_80": "You've used 80% of this month's usage · {reset}"
+      },
+      "pro_gates": ["proactive_agent", "screen_context"]
+    }
+  }
+}
