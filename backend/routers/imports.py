@@ -21,6 +21,7 @@ import database.import_quotas as import_quotas_db
 from models.import_job import ImportJobResponse, ImportJobStatus, ImportSourceType
 from utils.other import endpoints as auth
 from utils.imports.limitless import create_import_job, process_limitless_import
+from utils.imports.upload_names import safe_upload_basename
 from utils.imports.transcript_files import (
     TRANSCRIPT_ORIGINS,
     UPLOAD_EXTENSIONS,
@@ -87,8 +88,8 @@ async def import_limitless_data(
     # temp directory via '..' or an absolute path ('../../tmp/x.zip', '/etc/x.zip',
     # 'C:\..\x.zip'). The job id is still the unique prefix, so the name only adds
     # a human-readable hint.
-    safe_name = os.path.basename(file.filename.replace('\\', '/'))
-    if not safe_name.lower().endswith('.zip'):
+    safe_name = safe_upload_basename(file.filename)
+    if safe_name is None or not safe_name.lower().endswith('.zip'):
         raise HTTPException(status_code=400, detail="File must be a ZIP archive")
 
     # Create import job
@@ -156,8 +157,8 @@ async def import_transcript_files(
     if not re.fullmatch(r'[A-Za-z0-9_-]{1,16}', language):
         language = 'en'
     # A file or origin we will not import must not spend a monthly upload slot.
-    filename = os.path.basename((file.filename or '').replace('\\', '/'))
-    if not filename.lower().endswith(UPLOAD_EXTENSIONS):
+    filename = safe_upload_basename(file.filename)
+    if filename is None or not filename.lower().endswith(UPLOAD_EXTENSIONS):
         raise HTTPException(status_code=400, detail="Upload a .zip, .srt, .vtt or .txt file")
     if origin not in TRANSCRIPT_ORIGINS:
         raise HTTPException(status_code=400, detail=f"origin must be one of: {', '.join(sorted(TRANSCRIPT_ORIGINS))}")
@@ -289,9 +290,10 @@ def get_import_jobs(
     Returns:
         List of import jobs ordered by creation date (newest first)
     """
-    # Clamp pagination so a negative value cannot reach Firestore (which raises -> HTTP 500) and an
-    # oversized limit cannot stream the whole collection.
-    limit = max(1, min(limit, 1000))
+    # Clamp pagination with the db layer's bound so a negative value cannot reach
+    # Firestore (which raises -> HTTP 500) and an oversized limit cannot stream
+    # the whole collection — one constant, no silent 200-vs-1000 divergence.
+    limit = max(1, min(limit, import_jobs_db._MAX_IMPORT_JOBS_LIMIT))
     jobs = import_jobs_db.get_import_jobs(uid, limit=limit)
 
     # Build each response individually so one malformed/legacy job (missing id, or a status value not in
@@ -318,13 +320,23 @@ def get_import_jobs(
     return result
 
 
+def _validated_job_id(job_id: str) -> str:
+    """Path-param guard shared by the job endpoints: a malformed id is a client
+    error (400) here, rather than a 500 from the db-layer validator — and it
+    never reaches ``document()``."""
+    try:
+        return import_jobs_db._validate_job_id(job_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail='invalid job_id')
+
+
 @router.get(
     '/v1/import/jobs/{job_id}',
     response_model=ImportJobResponse,
     tags=['import'],
 )
 def get_import_job_status(
-    job_id: str,
+    job_id: str = Depends(_validated_job_id),
     uid: str = Depends(auth.get_current_user_uid),
 ):
     """
@@ -365,7 +377,7 @@ def get_import_job_status(
 
 
 @router.post('/v1/import/jobs/{job_id}/cancel', response_model=ImportJobResponse, tags=['import'])
-def cancel_import_job(job_id: str, uid: str = Depends(auth.get_current_user_uid)):
+def cancel_import_job(job_id: str = Depends(_validated_job_id), uid: str = Depends(auth.get_current_user_uid)):
     """Cancel a pending or processing import job."""
     job = import_jobs_db.get_import_job(job_id)
     if not job:
@@ -395,7 +407,7 @@ class DeleteImportJobResponse(BaseModel):
 
 
 @router.delete('/v1/import/jobs/{job_id}', response_model=DeleteImportJobResponse, tags=['import'])
-def delete_import_job(job_id: str, uid: str = Depends(auth.get_current_user_uid)):
+def delete_import_job(job_id: str = Depends(_validated_job_id), uid: str = Depends(auth.get_current_user_uid)):
     """Delete a finished (completed, failed, or cancelled) import job."""
     job = import_jobs_db.get_import_job(job_id)
     if not job:

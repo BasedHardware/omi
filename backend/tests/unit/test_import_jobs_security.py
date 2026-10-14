@@ -2,13 +2,13 @@
 upload path reduces a user filename to a safe basename.
 
 database/import_jobs imports google.cloud.firestore at module load, so these tests
-import the module under the same stub finder used elsewhere. The filename check is
-a pure string operation mirrored here so the traversal contract stays pinned.
+import the module under the same stub finder used elsewhere. The filename check
+imports the real safe_upload_basename helper the routers call — not a mirror —
+so the traversal contract is pinned to production logic.
 """
 
 import os
 import sys
-import types
 from unittest.mock import MagicMock
 
 os.environ.setdefault('OPENAI_API_KEY', 'sk-test-not-real')
@@ -24,11 +24,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..'))
 import pytest
 
 from database import import_jobs  # noqa: E402
-
-
-def _sanitize(filename):
-    """Mirror of the basename reduction applied to uploaded zip filenames."""
-    return os.path.basename(filename.replace('\\', '/'))
+from utils.imports.upload_names import safe_upload_basename  # noqa: E402
 
 
 class TestValidateJobId:
@@ -46,14 +42,14 @@ class TestFilenameSanitize:
     @pytest.mark.parametrize('raw', ['../../tmp/evil.zip', '..\\..\\evil.zip', '/etc/passwd.zip',
                                      'a/b/c/d.zip', 'C:\\..\\win.zip'])
     def test_strips_to_basename(self, raw):
-        safe = _sanitize(raw)
+        safe = safe_upload_basename(raw)
+        assert safe == 'evil.zip' or safe == 'passwd.zip' or safe == 'd.zip' or safe == 'win.zip'
         assert '/' not in safe and '\\' not in safe and safe != '..'
-        assert safe == os.path.basename(raw.replace('\\', '/'))
 
-    @pytest.mark.parametrize('raw', ['../../evil.zip', '..\\x.zip', '..', '../.zip'])
-    def test_traversal_names_yield_safe_or_rejected(self, raw):
-        safe = _sanitize(raw)
-        # After basename, a bare '..' or a name without the .zip suffix must be rejected.
-        if not safe.lower().endswith('.zip') or safe == '..':
-            pytest.skip('would be rejected by the .zip guard')
-        assert '..' not in safe.split('.zip')[0] or safe.endswith('.zip')
+    @pytest.mark.parametrize('raw', [None, '', '..', '.', 'a/../../..', 'x\x00.zip'])
+    def test_rejects_unusable(self, raw):
+        assert safe_upload_basename(raw) is None
+
+    def test_keeps_plain_names(self):
+        assert safe_upload_basename('export.zip') == 'export.zip'
+        assert safe_upload_basename('my file 2.zip') == 'my file 2.zip'
