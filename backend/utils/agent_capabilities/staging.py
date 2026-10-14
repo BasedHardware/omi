@@ -45,8 +45,9 @@ def question_key(question):
     return 'dream:question:' + review_store.fingerprint([question.kind, question.source_ref, question.quote])
 
 
-async def stage(uid, operation: HarnessEdit | Term | HarnessQuestion, records, *, authority,
-                value=3, why_it_matters=''):
+async def stage(
+    uid, operation: HarnessEdit | Term | HarnessQuestion, records, *, authority, value=3, why_it_matters=''
+):
     if authority not in {'user', 'dream'}:
         raise ValueError('agent_invalid_authority')
     refs = references(operation)
@@ -72,7 +73,7 @@ async def stage(uid, operation: HarnessEdit | Term | HarnessQuestion, records, *
                 person.entity_id not in entities for person in (operation.same_person.left, operation.same_person.right)
             ):
                 raise ValueError('dream_unknown_person')
-        key = question_key(operation)
+        key = await run_blocking(db_executor, question_key, operation)
         value, why_it_matters = operation.value, operation.why_it_matters
     else:
         rejection = vocabulary_rejection(operation)
@@ -97,11 +98,12 @@ async def stage(uid, operation: HarnessEdit | Term | HarnessQuestion, records, *
             lambda: review_store.user(uid).collection('dream_vocabulary').document('current').get().to_dict(),
         )
         fences[path] = raw
-        existing = (review_store.decode_doc(uid, raw) or {}).get('source', [])
+        decoded = await run_blocking(db_executor, review_store.decode_doc, uid, raw)
+        existing = (decoded or {}).get('source', [])
         if len(existing) >= 500:
             raise ValueError('dream_vocabulary_cap')
     return Staged(
-        id=review_store.safe_id(key),
+        id=await run_blocking(db_executor, review_store.safe_id, key),
         key=key,
         operation=operation,
         kind=operation.kind if not isinstance(operation, Term) else 'vocabulary',
