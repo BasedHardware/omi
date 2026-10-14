@@ -201,6 +201,7 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
           // account on a fresh install — sees the consent screen at least
           // once before any AI processing begins.
           if (!SharedPreferencesUtil().aiConsentGiven) {
+            OnboardingWebviewGate.warm();
             _controller!.animateTo(kAiConsentPage);
           } else if (SharedPreferencesUtil().onboardingCompleted && !_rerunForTesting) {
             await _routeWithPermissionsCheck(context);
@@ -550,6 +551,7 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
           // state so a returning user signing in on a fresh install still
           // sees the consent screen before any AI processing begins.
           if (!SharedPreferencesUtil().aiConsentGiven) {
+            OnboardingWebviewGate.warm();
             _controller!.animateTo(kAiConsentPage);
           } else if (SharedPreferencesUtil().onboardingCompleted) {
             await _routeWithPermissionsCheck(context);

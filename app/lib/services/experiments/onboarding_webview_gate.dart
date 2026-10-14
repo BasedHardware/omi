@@ -42,12 +42,57 @@ abstract final class OnboardingWebviewGate {
   /// Right after sign-in the analytics identity is still settling and the SDK's cached flags belong
   /// to the anonymous id, where a per-user rollout never matches; so this waits (at most
   /// [identityWait]) for the identity, re-fetches flags for it, and only then reads.
+  static Future<Uri?>? _warmed;
+
+  /// Starts resolving early (while the reader is still on the consent screen) with a long identity
+  /// wait, so [resolve] at the tap usually finds the answer ready instead of starting the clock.
+  static void warm({
+    Future<bool> Function(String key)? readFlag,
+    Future<Object?> Function(String key)? readPayload,
+    String? Function()? settledIdentity,
+    Future<void> Function()? reload,
+    Duration identityWait = const Duration(seconds: 20),
+  }) {
+    _warmed ??= _resolve(
+      readFlag: readFlag,
+      readPayload: readPayload,
+      settledIdentity: settledIdentity,
+      reload: reload,
+      identityWait: identityWait,
+    );
+  }
+
+  @visibleForTesting
+  static void resetForTesting() => _warmed = null;
+
   static Future<Uri?> resolve({
     Future<bool> Function(String key)? readFlag,
     Future<Object?> Function(String key)? readPayload,
     String? Function()? settledIdentity,
     Future<void> Function()? reload,
     Duration identityWait = const Duration(seconds: 3),
+  }) async {
+    final warmed = _warmed;
+    if (warmed != null) {
+      _warmed = null;
+      // Give a warm-up that is still waiting the same bounded patience as a cold read.
+      return warmed.timeout(identityWait + const Duration(seconds: 2), onTimeout: () => null);
+    }
+    return _resolve(
+      readFlag: readFlag,
+      readPayload: readPayload,
+      settledIdentity: settledIdentity,
+      reload: reload,
+      identityWait: identityWait,
+    );
+  }
+
+  static Future<Uri?> _resolve({
+    Future<bool> Function(String key)? readFlag,
+    Future<Object?> Function(String key)? readPayload,
+    String? Function()? settledIdentity,
+    Future<void> Function()? reload,
+    required Duration identityWait,
   }) async {
     if (debugOverrideActive) return parse(enabled: true, payload: {'url': _debugUrl});
     try {

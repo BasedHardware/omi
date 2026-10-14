@@ -6,6 +6,8 @@ import 'package:omi/services/experiments/onboarding_webview_gate.dart';
 // the native onboarding exactly as before.
 
 void main() {
+  setUp(OnboardingWebviewGate.resetForTesting);
+
   test('flag key is the registered PostHog key', () {
     expect(OnboardingWebviewGate.enabledFlag, 'onboarding-webview');
     expect(OnboardingWebviewGate.debugOverrideActive, isFalse);
@@ -90,5 +92,24 @@ void main() {
     );
     expect(url, isNull);
     expect(reads, 0);
+  });
+
+  test('a warm-up started on the consent screen answers the tap without restarting the wait', () async {
+    var polls = 0;
+    var reads = 0;
+    OnboardingWebviewGate.warm(
+      settledIdentity: () => ++polls < 6 ? null : 'u',
+      reload: () async {},
+      readFlag: (_) async {
+        reads++;
+        return true;
+      },
+      readPayload: (_) async => {'url': 'https://x.example/onboarding'},
+    );
+    final url = await OnboardingWebviewGate.resolve(settledIdentity: () => null, identityWait: Duration.zero);
+    expect(url, Uri.parse('https://x.example/onboarding'));
+    expect(reads, 1);
+    // The warm-up is consumed: the next resolve is a cold read again.
+    expect(await OnboardingWebviewGate.resolve(settledIdentity: () => null, identityWait: Duration.zero), isNull);
   });
 }
