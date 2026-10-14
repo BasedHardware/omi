@@ -135,10 +135,6 @@ class _FakeQuery:
                     key=lambda d: d.data.get('created_at') or datetime.min.replace(tzinfo=timezone.utc),
                     reverse=True,
                 )
-            elif field == 'completed' and op == 'in' and isinstance(value, (list, tuple, set, frozenset)):
-                docs = [d for d in docs if 'completed' in d.data and d.data.get('completed') in value]
-            elif field == 'conversation_id' and op == '==':
-                docs = [d for d in docs if d.data.get('conversation_id') == value]
         return docs
 
     def count(self):
