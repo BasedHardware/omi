@@ -263,20 +263,26 @@ def _srt_block_cues(lines: Sequence[str], *, keep_label: bool = False) -> Option
     assert timing is not None
     label = lines[0] if keep_label and timing_index == 1 and not lines[0].isdigit() else ''
     labels = [TranscriptCue(text=label)] if label else []
-    if _CUE_SETTINGS_RE.fullmatch(lines[timing_index], timing.end()):
-        body = _plain_cue_text(' '.join(lines[timing_index + 1 :]), _SRT_TAG_RE)
-        start, end = _seconds(timing.group(1)), _seconds(timing.group(2))
-        return labels + ([TranscriptCue(text=body, start=start, end=end)] if body else [])
+    # One cue per timing line, whether its text trails the timing or sits on
+    # the following lines — and whether the block holds one cue or several
+    # without blank-line breaks. A trailing run of cue-settings (no body text)
+    # contributes no text of its own.
     runs: List[tuple[re.Match[str], List[str]]] = []
     for line in lines[timing_index:]:
         line_timing = _CUE_TIMING_RE.match(line)
         if line_timing:
-            runs.append((line_timing, [line[line_timing.end() :].strip()]))
-        else:
+            trailing = line[line_timing.end() :]
+            # cue-settings after the arrow are not body text
+            inline = '' if _CUE_SETTINGS_RE.fullmatch(trailing) else trailing.strip()
+            runs.append((line_timing, [inline]))
+        elif line.strip().isdigit():
+            # a bare sequence-number before the next timing, not body text
+            continue
+        elif runs:
             runs[-1][1].append(line)
     cues: List[TranscriptCue] = labels
     for line_timing, parts in runs:
-        body = _plain_cue_text(' '.join(parts), _SRT_TAG_RE)
+        body = _plain_cue_text(' '.join(p for p in parts if p), _SRT_TAG_RE)
         if body:
             cues.append(
                 TranscriptCue(text=body, start=_seconds(line_timing.group(1)), end=_seconds(line_timing.group(2)))
