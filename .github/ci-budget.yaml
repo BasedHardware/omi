@@ -4896,6 +4896,16 @@
               "default": "false",
               "description": "Read store state and print the plan without submitting or drafting",
               "type": "boolean"
+            },
+            "pin_android": {
+              "default": "",
+              "description": "Audited Android candidate (X.Y.Z/build) from the operator release gate; empty = no pin",
+              "type": "string"
+            },
+            "pin_ios": {
+              "default": "",
+              "description": "Audited iOS candidate (X.Y.Z/build) from the operator release gate; empty = no pin",
+              "type": "string"
             }
           }
         }
