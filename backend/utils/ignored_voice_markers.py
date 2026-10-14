@@ -41,13 +41,25 @@ def record_exclusion_markers(
     log = logger_ or logger
     db = voice_profiles or voice_profiles_db
     resolved_ids = set(resolved)
+    receipt = raw.get('manual_speaker_assignments') or {}
+    generation = receipt.get('generation')
+    # Whole-voice markers are consumed at whole-voice scope (prompt selection,
+    # historical voice matching, Settings > Ignored Voices). Only a winning
+    # whole-voice rejection at this write's generation licenses one: a range
+    # exclusion commits ``segment_only`` entries that deliberately do not
+    # unseat a whole-voice decision, so recording a marker for it would
+    # suppress segments outside the requested range and list the voice as
+    # globally ignored without a matching whole-voice rejection to restore.
+    rejected = manual_rejected_speakers(receipt)
     affected = {
         int(segment['speaker_id'])
         for segment in raw.get('transcript_segments') or []
         if segment.get('id') in resolved_ids and isinstance(segment.get('speaker_id'), int)
     } or ({speaker_id} if speaker_id is not None else set())
-    generation = (raw.get('manual_speaker_assignments') or {}).get('generation')
     for affected_speaker in sorted(affected):
+        decision = rejected.get(affected_speaker)
+        if decision is None or decision.get('generation') != generation:
+            continue
         try:
             db.record_ignored_voice(
                 uid,

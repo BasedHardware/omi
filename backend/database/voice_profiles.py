@@ -8,8 +8,6 @@ from google.cloud import firestore
 from utils.owner_voice_evidence import owner_base
 
 from ._client import get_firestore_client, run_transactional
-from . import conversations
-from .conversations import conversations_collection
 from .speaker_profile_authority import owner_teaching_authorized
 
 SETTINGS_DEFAULTS: Dict[str, bool] = {
@@ -254,6 +252,13 @@ def _newer_positive_decision(
     """
     if generation is None:
         return False
+    # Imported lazily: database.conversations pulls a wide model graph whose
+    # import order must not depend on this module (utils.speaker_identification
+    # imports voice_profiles first, and a module-level import here once broke
+    # test collection with a partially initialized database.conversations).
+    from .conversations import conversations_collection
+    from . import conversations
+
     conversation_ref = (
         client.collection('users').document(uid).collection(conversations_collection).document(conversation_id)
     )
@@ -298,12 +303,36 @@ def record_ignored_voice(
             return
         snapshot = ref.get(transaction=transaction)
         state = snapshot.to_dict() or {}
+        existing = ignored_voices(state).copy()
+        existing_marker = next(
+            (
+                e
+                for e in existing
+                if ignored_voice_key(str(e['conversation_id']), int(e['speaker_id']))
+                == ignored_voice_key(conversation_id, speaker_id)
+            ),
+            None,
+        )
+        if (
+            existing_marker is not None
+            and assignment_generation is not None
+            and isinstance(existing_marker.get('assignment_generation'), int)
+            and existing_marker['assignment_generation'] > assignment_generation
+        ):
+            # A newer exclusion (or a later decision that re-recorded this
+            # marker) already owns the voice. Overwriting it with this older
+            # write's marker would strand the newer exclusion's restore
+            # linkage: Settings restores by matching the marker's generation
+            # against the receipt, and remove would drop only this older
+            # generation's receipt entries while the newer rejection stays
+            # active but can no longer be restored.
+            return
         entry: Dict[str, Any] = {'conversation_id': conversation_id, 'speaker_id': speaker_id, 'ignored_at': now}
         if assignment_generation is not None:
             entry['assignment_generation'] = assignment_generation
         kept = [
             e
-            for e in ignored_voices(state)
+            for e in existing
             if ignored_voice_key(str(e['conversation_id']), int(e['speaker_id']))
             != ignored_voice_key(conversation_id, speaker_id)
         ]
@@ -334,6 +363,11 @@ def remove_ignored_voice(
         marker = ignored.pop(ignored_voice_key(conversation_id, speaker_id), None)
         if marker is None:
             return False
+        # Imported lazily to keep this module's import order independent of the
+        # wide database.conversations graph (see _newer_positive_decision).
+        from .conversations import conversations_collection
+        from . import conversations
+
         conversation_ref = (
             client.collection('users').document(uid).collection(conversations_collection).document(conversation_id)
         )
@@ -376,6 +410,9 @@ def remove_ignored_voice(
                 receipt_changed = True
         if receipt_changed:
             receipt['generation'] = receipt.get('generation', 0) + 1
+            # Imported lazily for the same import-order reason as above.
+            from . import conversations
+
             transaction.update(
                 conversation_ref,
                 conversations.encode_conversation_for_write(

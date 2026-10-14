@@ -49,12 +49,43 @@ def test_no_persisted_receipt_means_nothing_to_retire():
 
 def test_exclusion_records_markers_fenced_by_generation():
     db = Mock()
-    raw = _raw([{'id': 's1', 'speaker_id': 4}], {'generation': 7})
+    raw = _raw(
+        [{'id': 's1', 'speaker_id': 4}],
+        {
+            'generation': 7,
+            'speakers': {'4': {'generation': 7, 'rejection': {'kind': 'not_a_person'}, 'person_id': None}},
+        },
+    )
     markers.record_exclusion_markers('u', 'c1', raw, ['s1'], speaker_id=None, voice_profiles=db)
     assert db.record_ignored_voice.call_count == 1
     args, kwargs = db.record_ignored_voice.call_args
     assert args[:3] == ('u', 'c1', 4)
     assert kwargs['assignment_generation'] == 7
+
+
+def test_range_exclusion_records_no_whole_voice_marker():
+    db = Mock()
+    # assign-speaker with start/end commits segment_only entries that do not
+    # unseat a whole-voice decision, so no whole-voice marker may be recorded:
+    # it would suppress segments outside the range and list the voice globally
+    # ignored without a matching whole-voice rejection to restore.
+    raw = _raw(
+        [{'id': 's1', 'speaker_id': 4}],
+        {
+            'generation': 5,
+            'segments': {
+                's1': {
+                    'generation': 5,
+                    'segment_only': True,
+                    'speaker_id': 4,
+                    'rejection': {'kind': 'not_a_person'},
+                    'person_id': None,
+                }
+            },
+        },
+    )
+    markers.record_exclusion_markers('u', 'c1', raw, ['s1'], speaker_id=4, voice_profiles=db)
+    db.record_ignored_voice.assert_not_called()
 
 
 def test_marker_persistence_failure_emits_shared_fallback_telemetry(monkeypatch):
@@ -64,7 +95,13 @@ def test_marker_persistence_failure_emits_shared_fallback_telemetry(monkeypatch)
     def boom(*args, **kwargs):
         raise RuntimeError('state store unavailable')
 
-    raw = _raw([{'id': 's1', 'speaker_id': 4}], {'generation': 3})
+    raw = _raw(
+        [{'id': 's1', 'speaker_id': 4}],
+        {
+            'generation': 3,
+            'speakers': {'4': {'generation': 3, 'rejection': {'kind': 'not_a_person'}, 'person_id': None}},
+        },
+    )
     # Record path: fail-open but visible in the fallback metrics.
     markers.record_exclusion_markers(
         'u', 'c1', raw, ['s1'], speaker_id=None, voice_profiles=SimpleNamespace(record_ignored_voice=boom)

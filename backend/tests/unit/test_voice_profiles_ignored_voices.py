@@ -157,3 +157,48 @@ def test_delayed_clear_cannot_remove_a_newer_decisions_marker():
     # A legacy marker without a generation fence stays clearable by any positive.
     db.record_ignored_voice('u', 'c2', 2, NOW, firestore_client=store)
     assert db.clear_ignored_voices('u', 'c2', [2], assignment_generation=9, firestore_client=store) == 1
+
+
+def test_delayed_older_exclusion_cannot_overwrite_a_newer_exclusions_marker():
+    store = StrictFirestore()
+    path = ('users', 'u', 'conversations', 'c1')
+    # Two exclusions for the same voice commit at generations N=1 and N+1=2;
+    # the generation-2 write records its marker first. The delayed generation-1
+    # request must not overwrite it: restoring from Settings matches the
+    # marker's generation against the receipt, so a generation-1 marker would
+    # drop only generation-1 entries while the generation-2 rejection stays
+    # active but can no longer be restored.
+    store.rows[path] = {
+        'manual_speaker_assignments': {
+            'generation': 2,
+            'speakers': {
+                '1': {'generation': 2, 'person_id': None, 'is_user': False, 'rejection': {'kind': 'not_a_person'}}
+            },
+        }
+    }
+    db.record_ignored_voice('u', 'c1', 1, NOW, assignment_generation=2, firestore_client=store)
+    db.record_ignored_voice('u', 'c1', 1, NOW + timedelta(minutes=1), assignment_generation=1, firestore_client=store)
+    markers = db.ignored_voices(store.rows[STATE])
+    assert len(markers) == 1
+    assert markers[0]['assignment_generation'] == 2
+
+
+def test_importing_speaker_identification_first_does_not_break_collection():
+    # The generation fence reads the receipt through database.conversations,
+    # which must stay a lazy import: utils.speaker_identification imports
+    # voice_profiles at module level, and a module-level conversations import
+    # here once produced a partially initialized package that failed CI test
+    # collection (ImportError: cannot import name 'conversations_collection').
+    import subprocess
+    import sys
+
+    probe = 'import utils.speaker_identification; import database.voice_profiles; print("ok")'
+    result = subprocess.run(
+        [sys.executable, '-c', probe],
+        cwd=__file__.rsplit('/tests/', 1)[0],
+        capture_output=True,
+        text=True,
+        timeout=120,
+    )
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.strip() == 'ok'

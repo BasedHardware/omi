@@ -209,7 +209,9 @@ void main() {
     expect(controller.suggestionsBySegmentId, isNotEmpty);
   });
   test('a newer manual positive label from the server retires the local exclusion', () async {
-    final controller = CaptureController(
+    var reconcileSnapshots = <ServerConversation>[];
+    late final CaptureController controller;
+    controller = CaptureController(
       externalActions: _Actions(),
       bleListeners: _Ble(),
       connectivity: CaptureConnectivityBoundary(
@@ -218,11 +220,21 @@ void main() {
         isConnected: () => true,
       ),
       excludeSpeaker: (id, ids) async => true,
+      inProgressConversationLoader: () async {
+        // The authoritative snapshot decides: no queued snapshot means the
+        // persisted receipt still projects the exclusion as unlabeled; a
+        // queued snapshot models another surface's manual positive having
+        // won server-side.
+        if (reconcileSnapshots.isEmpty) return;
+        controller.applyInProgressConversation(reconcileSnapshots.removeAt(0));
+      },
     );
     addTearDown(() async {
+      CaptureController.exclusionReconcileDelay = const Duration(milliseconds: 300);
       controller.dispose();
       await controller.lifetime.close();
     });
+    CaptureController.exclusionReconcileDelay = Duration.zero;
     controller.applyInProgressConversation(
       ServerConversation(
         id: 'c',
@@ -234,8 +246,13 @@ void main() {
     expect(await controller.assignSpeakerToConversation(4, '', '', ['s1'], notAPerson: true), isTrue);
     expect(controller.segments.every((s) => !s.isUser && s.personId == null), isTrue);
 
-    // Another client assigns the speaker while this capture stays active: the
-    // persisted manual positive label arrives on the incremental socket path.
+    // A manual positive label arrives on the incremental socket path. The
+    // socket carries no assignment generation, so the label alone must not
+    // retire the exclusion: a stale pre-exclusion label would otherwise
+    // resurrect the old identity and re-enable suggestions the backend still
+    // rejects. Keep the exclusion; the reconcile refresh finds the persisted
+    // receipt still excluding the voice (no queued snapshot) and changes
+    // nothing.
     controller.onSegmentReceived([
       _segment('s2')
         ..isUser = false
@@ -243,11 +260,45 @@ void main() {
         ..speakerLabelSource = 'manual',
     ]);
     await Future<void>.delayed(Duration.zero);
+    await Future<void>.delayed(Duration.zero);
 
-    // The newer manual positive survives: the local exclusion no longer blanks it.
+    // The exclusion still owns the voice: the stale label is blanked and the
+    // suggestion stays suppressed.
+    final conflicted = controller.segments.firstWhere((s) => s.id == 's2');
+    expect(conflicted.isUser, isFalse);
+    expect(conflicted.personId, isNull);
+    final suppressedSuggestion =
+        SpeakerLabelSuggestionEvent(speakerId: 4, personId: '', personName: 'Sam', segmentId: 's1');
+    controller.onMessageEventReceived(suppressedSuggestion);
+    expect(controller.suggestionsBySegmentId, isEmpty);
+
+    // Another manual-positive flush arrives; this time the authoritative
+    // snapshot carries the newer persisted manual positive, so the exclusion
+    // retires and the label survives.
+    reconcileSnapshots.add(
+      ServerConversation(
+        id: 'c',
+        createdAt: DateTime(2026),
+        structured: Structured('TV', 'TV'),
+        transcriptSegments: [
+          _segment('s1')..isUser = false,
+          _segment('s2')
+            ..isUser = false
+            ..personId = 'p9'
+            ..speakerLabelSource = 'manual',
+        ],
+      ),
+    );
+    controller.onSegmentReceived([
+      _segment('s2')
+        ..isUser = false
+        ..personId = 'p9'
+        ..speakerLabelSource = 'manual',
+    ]);
+    await Future<void>.delayed(Duration.zero);
+    await Future<void>.delayed(Duration.zero);
     final updated = controller.segments.firstWhere((s) => s.id == 's2');
     expect(updated.personId, 'p9');
-    expect(updated.isUser, isFalse);
     expect(updated.speakerLabelSource, 'manual');
 
     // The retired exclusion no longer suppresses suggestions for the speaker.
@@ -255,8 +306,8 @@ void main() {
     controller.onMessageEventReceived(suggestion);
     expect(controller.suggestionsBySegmentId, isNotEmpty);
 
-    // An automatic label must not retire a fresh exclusion: only explicit
-    // manual positives are newer authoritative decisions.
+    // An automatic label must not retire a fresh exclusion, and never reaches
+    // the reconcile path: only a manual positive can query the snapshot.
     expect(await controller.assignSpeakerToConversation(4, '', '', ['s1'], notAPerson: true), isTrue);
     controller.onSegmentReceived([
       _segment('s2')
@@ -264,6 +315,7 @@ void main() {
         ..personId = 'p8'
         ..speakerLabelSource = 'auto',
     ]);
+    await Future<void>.delayed(Duration.zero);
     await Future<void>.delayed(Duration.zero);
     final autoLabeled = controller.segments.firstWhere((s) => s.id == 's2');
     expect(autoLabeled.isUser, isFalse);
