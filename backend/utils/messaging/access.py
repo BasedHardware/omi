@@ -59,3 +59,11 @@ def require_access(uid, channel='telegram'):
     plan = getattr(subscription.plan, 'value', subscription.plan)
     if plans is not None and plan not in plans:
         raise AccessDenied('channel_plan', 'Operator or Architect plan required for iMessage')
+
+
+def require_app_access(uid):
+    """App awareness is enabled when at least one channel admits this user."""
+    try:
+        require_access(uid, 'telegram')
+    except PermissionError:
+        require_access(uid, 'imessage')

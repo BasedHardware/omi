@@ -128,9 +128,11 @@ re-entry; recovery must reconcile a reply event whose external delivery was inte
 | `channel_link_proofs/{sha256(proof)}` | uid, audience, kind, expires_at. Raw proof never persisted. |
 | `users/{uid}/channel_link_proofs/{proof_id}` | Cleanup inventory for pending proofs. |
 | `channel_identities/{identity_id}/inbox/{dedup_id}` | Encrypted normalized payload, created_at, pending/running/done. Done removes the payload. |
-| `users/{uid}/chat_sessions/{surface_hash}` | Existing session fields plus surface, channel, channel_link_id, link_generation; reserved plugin_id `__channel__` keeps default app histories separate. |
+| `users/{uid}/chat_sessions/{surface_hash}` | Existing session fields plus surface, channel, channel_link_id, link_generation, current_session_id for rotated sessions; reserved plugin_id `__channel__` keeps default app histories separate. |
 | `users/{uid}/messages/{id}` | Existing chat fields plus surface, channel_link_id, data_usage=`user_serving_only`; channel text is encrypted using existing per-user encryption. |
 | `users/{uid}/chat_sessions/{id}/channel_events/{sequence}` | Encrypted bounded awareness tail: id, kind, at, role, content; numeric sequence plus separate deterministic content-free fences. Digests and re-entry evidence are hidden from message listing. |
+| `channel_capacity/{channel}` / `members/{uid}` | Initialized count of distinct linked users and each member's linked identity IDs; transactional seat admission and release. |
+| `users/{uid}/channel_waitlist/{channel}` | Content-free waitlist with updated_at and expires_at; no proactive notification. |
 | `users/{uid}/channel_turn_leases/{surface_hash}` | token and created_at; fail-closed serialization. |
 
 Both proof types are authenticated-app minted, ten-minute, high-entropy, audience-bound
@@ -269,8 +271,7 @@ Generic `Open in Omi` navigation is removed; iMessage attaches item-specific nav
 
 Each distinct fresh user message is a separate FIFO turn, including trivial pings;
 this implementation does not coalesce questions or fold pings. Duplicate provider
-messages are deduplicated, and pendings over thirty minutes old are retired without
-answering. Admission atomically writes the encrypted inbox row and a content-free
+messages are deduplicated, and pendings over thirty minutes old are retired with one guarded resend-notice attempt. Admission atomically writes the encrypted inbox row and a content-free
 per-chat newest-inbound pointer. Late older webhooks and duplicates cannot move the
 pointer backward; Telegram message IDs break ties in its one-second provider clock
 (other equal-clock arrivals use admission order). Callback clicks do not become

@@ -2,7 +2,7 @@
 
 from database.messaging import MessagingStore
 from utils.executors import db_executor, run_blocking
-from utils.messaging.access import require_access
+from utils.messaging.access import require_app_access as require_access
 from utils.messaging.history import append_digest, history_tool
 from utils.messaging.projection import SurfaceRuntime
 

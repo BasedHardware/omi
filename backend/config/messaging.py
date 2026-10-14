@@ -32,7 +32,9 @@ def channel_policy(channel):
         return {'enabled': False, 'cohort': []}
 
 
-def cohort_enabled(uid, channel='telegram'):
+def cohort_enabled(uid, channel=None):
+    if channel is None:
+        return any(cohort_enabled(uid, name) for name in ('telegram', 'imessage'))
     policy = channel_policy(channel)
     return policy['enabled'] and (policy['cohort'] == '*' or uid in policy['cohort'])
 

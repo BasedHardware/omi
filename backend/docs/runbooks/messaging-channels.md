@@ -187,7 +187,8 @@ never paste credentials, handles or message bodies into incident notes.
 
 ## Kill switch
 
-1. Set `OMI_MESSAGING_CHANNELS=off` and roll the backend. Admission and new
+1. Use the fast channel kill switch below, or disable each JSON policy entry and
+   roll the backend. In legacy env-only mode, set `OMI_MESSAGING_CHANNELS=off`. Admission and new
    adapter registration stop. Listing, unlink, and disconnect stay available.
 2. Turn PostHog `mobile-chat-apps` off. The Integrations entry remains if a
    link already exists, so disconnect still works.

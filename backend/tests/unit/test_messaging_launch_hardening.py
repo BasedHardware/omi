@@ -169,6 +169,9 @@ def test_linked_channel_uses_chat_send_limit(monkeypatch):
     incoming = message(adapter)
     store.consume(store.mint('u', adapter.channel, adapter.provider, 'token')['proof'], incoming)
     called = []
+    from utils.messaging.metrics import TURNS
+
+    before = TURNS.labels(adapter.channel, 'completed')._value.get()
 
     def limit(uid):
         called.append(uid)
@@ -183,6 +186,7 @@ def test_linked_channel_uses_chat_send_limit(monkeypatch):
     )
     assert asyncio.run(gateway.process(store.enqueue(incoming)))
     assert called == ['u'] and 'wait' in adapter.sent[0]['text']
+    assert TURNS.labels(adapter.channel, 'completed')._value.get() == before + 1
     assert not store.leases
 
 
@@ -257,6 +261,10 @@ def test_429_wait_and_pacing_each_attempt():
     import httpx
 
     calls, sleeps = [], []
+    from utils.messaging.metrics import HTTP
+
+    before_429 = HTTP.labels('telegram', '429')._value.get()
+    before_200 = HTTP.labels('telegram', '200')._value.get()
 
     class Transport:
         async def request(self, *a, **kw):
@@ -274,6 +282,8 @@ def test_429_wait_and_pacing_each_attempt():
 
     asyncio.run(request_json(Transport(), 'POST', 'https://api.telegram.org/test', sleep=wait, before_attempt=pace))
     assert calls == ['pace', 'request', 'pace', 'request'] and sleeps == [7]
+    assert HTTP.labels('telegram', '429')._value.get() == before_429 + 1
+    assert HTTP.labels('telegram', '200')._value.get() == before_200 + 1
 
 
 @pytest.fixture
@@ -521,3 +531,34 @@ def test_mint_capacity_error_is_typed_waitlist(monkeypatch):
         )
     assert response.status_code == 409
     assert response.json()['detail'] == {'reason': 'seat_cap', 'message': 'iMessage is full — join the waitlist'}
+
+
+@pytest.mark.parametrize('prepare', [False, True])
+def test_maintenance_entrypoint_runs_without_provider_construction(monkeypatch, prepare):
+    import sys
+    from utils.messaging import maintenance
+
+    calls = []
+    monkeypatch.setattr(sys, 'argv', ['maintenance'] + (['--prepare-launch'] if prepare else []))
+    monkeypatch.setenv('OMI_MESSAGING_RETENTION_DAYS', '30')
+    monkeypatch.setattr(
+        maintenance,
+        'MessagingStore',
+        lambda: SimpleNamespace(
+            cleanup=lambda **kw: calls.append(('cleanup', kw)) or {},
+            prepare_launch=lambda: calls.append(('prepare', {})) or {},
+        ),
+    )
+    maintenance.main()
+    assert calls == [('prepare', {})] if prepare else calls == [('cleanup', {'retention_days': 30})]
+
+
+def test_imessage_only_policy_still_admits_app_awareness(monkeypatch):
+    monkeypatch.setenv('OMI_MESSAGING_CHANNEL_POLICY', json.dumps({'imessage': {'enabled': True, 'cohort': ['u']}}))
+    monkeypatch.delenv('OMI_MESSAGING_KILL_SWITCH_DOC', raising=False)
+    monkeypatch.setattr(access, 'get_user_deletion_wipe_status', lambda uid: None)
+    monkeypatch.setattr(access, 'get_user_valid_subscription', lambda *a, **kw: SimpleNamespace(plan='operator'))
+    assert cohort_enabled('u') and not cohort_enabled('u', 'telegram')
+    access.require_app_access('u')
+    with pytest.raises(PermissionError):
+        access.require_app_access('outside')
