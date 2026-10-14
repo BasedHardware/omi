@@ -135,6 +135,16 @@ rules:
         overrides:
           namespace: { resource: "namespace" }
   custom:
+    # Direct pod scrape below owns namespace/pod labels; do not aggregate the
+    # batch queue into one global value or silently fall back to zero.
+    - seriesQuery: 'omi_diarization_v2_queue_depth{namespace="prod-omi-backend",pod!="",job="diarizer-batch-metrics"}'
+      resources:
+        overrides:
+          namespace: { resource: namespace }
+          pod: { resource: pod }
+      name:
+        as: omi_diarization_v2_queue_depth
+      metricsQuery: 'max(omi_diarization_v2_queue_depth{<<.LabelMatchers>>,job="diarizer-batch-metrics"}) by (<<.GroupBy>>)'
     - metricsQuery: sum(parakeet_active_streams{<<.LabelMatchers>>}) by (<<.GroupBy>>)
       name:
         as: parakeet_active_streams

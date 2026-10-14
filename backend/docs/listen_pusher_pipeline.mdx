@@ -4455,7 +4455,10 @@ and pusher with all cutover flags off, then a separately reviewed cohort flag PR
 The default embedding/v1 app eagerly warms its models before TCP readiness and
 keeps concurrent legacy routes without the batch lock. The batch app warms its
 models before listening; failures abort startup. `/v2/diarization` uses the batch
-ClusterIP, not the embedding ingress. See `scripts/diarization_eval/capacity.md`
+separate internal ingress (`diarizer-batch.omi.me`), not the embedding ingress.
+Cloud Run cannot use ClusterIP DNS. The batch release has a dedicated tainted
+L4 pool, a one-pod David-only floor, and a direct per-pod Prometheus queue scrape
+and adapter rule. Exact install/metric/cohort gates: `scripts/diarization_eval/batch_install.md`. See `scripts/diarization_eval/capacity.md`
 for routing and the opt-in release overlay; verify caller reachability before
 cohort enablement.
 Rollback: disable authoritative/sync flags first, set mode to `legacy`, then restore

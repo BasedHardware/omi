@@ -121,6 +121,29 @@ prometheus:
               # Match the already-expanded production PVC and StatefulSet claim.
               storage: 100Gi
     additionalScrapeConfigs:
+      # HPA adapter reads THIS Prometheus, not GMP. Scrape each batch pod once
+      # and carry the Kubernetes resource labels expected by custom.metrics.
+      - job_name: diarizer-batch-metrics
+        scrape_interval: 15s
+        metrics_path: /metrics
+        kubernetes_sd_configs:
+          - role: pod
+            namespaces:
+              names: [prod-omi-backend]
+        relabel_configs:
+          - source_labels: [__meta_kubernetes_pod_label_app_kubernetes_io_instance]
+            regex: prod-omi-diarizer-batch
+            action: keep
+          - source_labels: [__meta_kubernetes_pod_container_port_name]
+            regex: http
+            action: keep
+          - source_labels: [__meta_kubernetes_pod_phase]
+            regex: Running
+            action: keep
+          - source_labels: [__meta_kubernetes_namespace]
+            target_label: namespace
+          - source_labels: [__meta_kubernetes_pod_name]
+            target_label: pod
       # Additional scrape configs for Deepgram Engine metrics
       - job_name: "dg_engine_metrics"
         scrape_interval: "2s"
