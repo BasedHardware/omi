@@ -13,6 +13,8 @@ POLICY_WARNINGS = Counter('omi_dream_policy_warning_total', 'Ignored auto-apply 
 
 TOKENS = Counter('omi_dream_tokens_total', 'Observed dream model tokens')
 RESPONSE_RETRIES = Counter('omi_dream_response_retries_total', 'Dream malformed/truncated JSON response retries')
+DECISIONS = Counter('omi_dream_decision_total', 'Full-mode Dream decisions', ['decision'])
+DECISION_COUNTS = ('auto_applied_unanimous', 'suggested_majority', 'questions_offered', 'questions_dropped_low_value')
 CANARY = Counter('omi_dream_canary_total', 'Dream synthetic loop outcomes', ['status', 'stage'])
 
 REJECTED = Counter('omi_dream_rejected_total', 'Dream deterministic proposal rejections', ['reason'])
@@ -146,6 +148,9 @@ def record_pass(report):
     TOKENS.inc(max(0, int(report.get('tokens', 0))))
     retries = max(0, int(report.get('response_retries', 0)))
     RESPONSE_RETRIES.inc(retries)
+    if report.get('context_mode') == 'full':
+        for decision in DECISION_COUNTS:
+            DECISIONS.labels(decision).inc(max(0, int(report.get(decision, 0))))
 
     for reason, count in report.get('rejected', {}).items():
         if reason in REJECTION_REASONS:
@@ -211,6 +216,11 @@ def record_pass(report):
         json.dumps(diagnostics['input_content_counts'], sort_keys=True),
         json.dumps(diagnostics['context_budget_counts'], sort_keys=True),
     )
+    if report.get('context_mode') == 'full':
+        logger.info(
+            'Dream decisions=%s',
+            json.dumps({key: max(0, int(report.get(key, 0))) for key in DECISION_COUNTS}, sort_keys=True),
+        )
 
 
 def record_reclaimed(age_s, context_mode):

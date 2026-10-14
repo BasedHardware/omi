@@ -72,8 +72,8 @@ def enqueue_review_proposal(
     is_agent = item.kind == 'agent_proposal'
     if item.kind not in {'same_person', 'spelling', 'agent_proposal'} or not evidence_version.strip():
         raise ValueError('Unsupported proposal kind or evidence version')
-    if dream_run_id and item.kind != 'spelling':
-        raise ValueError('Dream atomic question admission requires spelling')
+    if dream_run_id and item.kind not in {'spelling', 'same_person'}:
+        raise ValueError('Dream atomic question admission requires a question')
     if not item.item_id.startswith(f'{item.kind}:') or '/' in item.item_id:
         raise ValueError('item_id must be <kind>:<opaque source id>')
     ref = user(uid).collection('review_proposals').document(safe_id(item.item_id))

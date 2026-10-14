@@ -13300,4 +13300,10 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String get paywallCancelAnytime => 'எப்போது வேண்டுமானாலும் ரத்து செய்யலாம்.';
+
+  @override
+  String get connectAnAgent => 'ஒரு ஏஜென்டை இணைக்கவும்';
+
+  @override
+  String get connectAnAgentSubtitle => 'Claude, ChatGPT, Codex அல்லது எந்த ஏஜென்டுக்கும் அமைவு ப்ராம்ப்டைப் பெறுங்கள்';
 }

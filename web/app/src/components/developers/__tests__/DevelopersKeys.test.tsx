@@ -7,7 +7,6 @@ vi.hoisted(() => {
 
 vi.mock('@tschk/moonshine-next/navigation', () => ({
   useRouter: () => ({ push: vi.fn(), replace: vi.fn() }),
-  useSearchParams: () => new URLSearchParams('section=developer'),
 }));
 vi.mock('@tschk/moonshine-next/link', () => ({
   default: ({ href, children }: { href: string; children: React.ReactNode }) => (
@@ -37,7 +36,7 @@ vi.mock('@/lib/api', async (importOriginal) => ({
   deleteMcpApiKey: vi.fn(),
 }));
 
-import { SettingsPage } from '@/components/settings/SettingsPage';
+import { DevelopersPage } from '@/components/developers/DevelopersPage';
 import {
   getDeveloperApiKeys,
   getMcpApiKeys,
@@ -63,7 +62,7 @@ const key = {
   last_used_at: undefined,
 };
 
-describe('Settings key management', () => {
+describe('Developers key management', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(getDeveloperApiKeys).mockResolvedValue([]);
@@ -71,7 +70,7 @@ describe('Settings key management', () => {
   });
 
   it('shows genuine empty lists', async () => {
-    render(<SettingsPage />);
+    render(<DevelopersPage />);
     expect(await screen.findByText('No API keys created yet')).toBeTruthy();
     expect(screen.getByText('No MCP keys created yet')).toBeTruthy();
   });
@@ -93,7 +92,7 @@ describe('Settings key management', () => {
     'shows a %s list error and retries successfully',
     async (_kind, getKeys, message, empty) => {
       vi.mocked(getKeys).mockRejectedValueOnce(new Error('offline'));
-      render(<SettingsPage />);
+      render(<DevelopersPage />);
       const error = await screen.findByText(message);
       expect(screen.queryByText(empty)).toBeNull();
       fireEvent.click(
@@ -113,7 +112,7 @@ describe('Settings key management', () => {
     async (kind, getKeys, deleteKey) => {
       vi.mocked(getKeys).mockResolvedValue([key]);
       vi.mocked(deleteKey).mockRejectedValue(new Error('offline'));
-      render(<SettingsPage />);
+      render(<DevelopersPage />);
       fireEvent.click(
         await screen.findByRole('button', { name: `Delete ${kind} key My integration` }),
       );
@@ -129,7 +128,7 @@ describe('Settings key management', () => {
 
   it('requires permissions and includes goals in full access and read only', async () => {
     vi.mocked(createDeveloperApiKey).mockResolvedValue({ ...key, key: 'one-time-key' });
-    render(<SettingsPage />);
+    render(<DevelopersPage />);
     await screen.findByText('No API keys created yet');
     fireEvent.click(screen.getAllByRole('button', { name: 'Create Key' })[0]);
     fireEvent.change(screen.getByPlaceholderText('e.g., My App Integration'), {
@@ -165,7 +164,7 @@ describe('Settings key management', () => {
     ['MCP', createMcpApiKey, 'e.g., Claude Code'],
   ] as const)('surfaces %s creation failures', async (kind, createKey, placeholder) => {
     vi.mocked(createKey).mockRejectedValue(new Error('offline'));
-    render(<SettingsPage />);
+    render(<DevelopersPage />);
     await screen.findByText('No API keys created yet');
     fireEvent.click(
       screen.getAllByRole('button', { name: 'Create Key' })[kind === 'API' ? 0 : 1],

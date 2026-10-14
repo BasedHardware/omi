@@ -4056,5 +4056,7 @@
     "firstCaptureCancelWarning": "Going back stops this recording. Keep talking to give Omi a few more sentences.",
     "firstCaptureSiriTip": "Tip: Enable Omi in Shortcuts → Siri.",
     "paywallOutlineHeadline": "Không bao giờ bỏ lỡ một lời nào nữa.",
-    "paywallCancelAnytime": "Hủy bất cứ lúc nào."
+    "paywallCancelAnytime": "Hủy bất cứ lúc nào.",
+    "connectAnAgent": "Kết nối tác nhân",
+    "connectAnAgentSubtitle": "Nhận lời nhắc thiết lập cho Claude, ChatGPT, Codex hoặc bất kỳ tác nhân nào"
 }

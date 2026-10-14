@@ -13197,4 +13197,10 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String get paywallCancelAnytime => 'Opsig når som helst.';
+
+  @override
+  String get connectAnAgent => 'Tilslut en agent';
+
+  @override
+  String get connectAnAgentSubtitle => 'Få en opsætningsprompt til Claude, ChatGPT, Codex eller enhver agent';
 }

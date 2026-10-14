@@ -13241,4 +13241,10 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get paywallCancelAnytime => 'Batalkan pada bila-bila masa.';
+
+  @override
+  String get connectAnAgent => 'Sambungkan Ejen';
+
+  @override
+  String get connectAnAgentSubtitle => 'Dapatkan gesaan persediaan untuk Claude, ChatGPT, Codex atau mana-mana ejen';
 }

@@ -13206,4 +13206,10 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get paywallCancelAnytime => 'Zrušte kedykoľvek.';
+
+  @override
+  String get connectAnAgent => 'Pripojiť agenta';
+
+  @override
+  String get connectAnAgentSubtitle => 'Získajte pokyny na nastavenie pre Claude, ChatGPT, Codex alebo iného agenta';
 }

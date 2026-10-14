@@ -13212,4 +13212,10 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get paywallCancelAnytime => 'Zrušte kdykoli.';
+
+  @override
+  String get connectAnAgent => 'Připojit agenta';
+
+  @override
+  String get connectAnAgentSubtitle => 'Získejte instrukce k nastavení pro Claude, ChatGPT, Codex nebo jiného agenta';
 }

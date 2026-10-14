@@ -23528,6 +23528,18 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Cancel anytime.'**
   String get paywallCancelAnytime;
+
+  /// Settings row that opens the web developer home, where users get copy-paste setup prompts and keys for AI agents (Claude, ChatGPT, Codex, ...)
+  ///
+  /// In en, this message translates to:
+  /// **'Connect an Agent'**
+  String get connectAnAgent;
+
+  /// Subtitle of the Connect an Agent settings row
+  ///
+  /// In en, this message translates to:
+  /// **'Get a setup prompt for Claude, ChatGPT, Codex, or any agent'**
+  String get connectAnAgentSubtitle;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

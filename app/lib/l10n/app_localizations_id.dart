@@ -13220,4 +13220,10 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get paywallCancelAnytime => 'Batalkan kapan saja.';
+
+  @override
+  String get connectAnAgent => 'Hubungkan Agen';
+
+  @override
+  String get connectAnAgentSubtitle => 'Dapatkan prompt penyiapan untuk Claude, ChatGPT, Codex, atau agen apa pun';
 }

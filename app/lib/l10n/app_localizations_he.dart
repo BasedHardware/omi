@@ -13117,4 +13117,10 @@ class AppLocalizationsHe extends AppLocalizations {
 
   @override
   String get paywallCancelAnytime => 'ניתן לבטל בכל עת.';
+
+  @override
+  String get connectAnAgent => 'חיבור סוכן';
+
+  @override
+  String get connectAnAgentSubtitle => 'קבלו הנחיית הגדרה עבור Claude, ‏ChatGPT, ‏Codex או כל סוכן';
 }

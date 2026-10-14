@@ -13271,4 +13271,10 @@ class AppLocalizationsMk extends AppLocalizations {
 
   @override
   String get paywallCancelAnytime => 'Откажете во секое време.';
+
+  @override
+  String get connectAnAgent => 'Поврзете агент';
+
+  @override
+  String get connectAnAgentSubtitle => 'Добијте упатство за поставување за Claude, ChatGPT, Codex или кој било агент';
 }

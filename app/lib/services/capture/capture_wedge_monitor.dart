@@ -6,7 +6,11 @@ import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/services/capture/capture_composition.dart';
 import 'package:omi/services/capture/capture_ingress_health.dart';
 import 'package:omi/services/capture/conversation_source_for_device.dart';
+import 'package:omi/services/telemetry/client_telemetry.dart';
+import 'package:omi/services/telemetry/client_telemetry_schema.dart';
+import 'package:omi/utils/debug_log_manager.dart';
 import 'package:omi/utils/logger.dart';
+import 'package:uuid/uuid.dart';
 
 const String captureRecoveryFeatureFlag = 'mobile-capture-recovery-v1';
 
@@ -21,6 +25,7 @@ class CaptureWedgeEpisode {
   bool retryAttempted = false;
   bool promptVisible = false;
   bool promptShownEmitted = false;
+  String? telemetryOperationId;
 }
 
 typedef CaptureWedgeTrack = void Function(String event, Map<String, Object> properties);
@@ -113,6 +118,20 @@ class CaptureWedgeMonitor extends ChangeNotifier {
           '${health.subscriptionConfirmed}:${health.recoveryOutcome}:${health.recoverySpent}:${health.reconnectSpent}';
       if (_ingressEvents[deviceId] != event) {
         _ingressEvents[deviceId] = event;
+        if (!ClientTelemetrySchema.ingressPhaseMapped(health.phase)) {
+          DebugLogManager.logEvent('capture_ingress_unmapped_phase', {'phase': 'unmapped'});
+        }
+        try {
+          ClientTelemetry.instance.observeIngress(
+            generation: health.generation,
+            phase: health.phase,
+            reason: health.reason,
+            subscriptionConfirmed: health.subscriptionConfirmed,
+            recoveryOutcome: health.recoveryOutcome,
+            recoverySpent: health.recoverySpent,
+            reconnectSpent: health.reconnectSpent,
+          );
+        } catch (_) {}
         _safeTrack('Capture Ingress Health', {
           'phase': health.phase,
           'reason': health.reason,
@@ -510,7 +529,8 @@ class CaptureWedgeMonitor extends ChangeNotifier {
             (trigger == triggerZeroByteStreak || trigger == triggerRapidReconnects))) {
       return;
     }
-    final episode = CaptureWedgeEpisode(deviceId: deviceId, source: source, trigger: trigger, declaredAt: _now());
+    final episode = CaptureWedgeEpisode(deviceId: deviceId, source: source, trigger: trigger, declaredAt: _now())
+      ..telemetryOperationId = const Uuid().v4();
     if (_isTelemetryOnlyTrigger(trigger)) {
       state.telemetryEpisode = episode;
     } else {
@@ -526,6 +546,17 @@ class CaptureWedgeMonitor extends ChangeNotifier {
       'seconds_since_last_ingress_byte': depth.ingress,
       'seconds_since_last_transcript': depth.transcript,
     });
+    final operationId = episode.telemetryOperationId;
+    if (operationId != null) {
+      try {
+        ClientTelemetry.instance.observeWedge(
+          operationId: operationId,
+          phase: 'detected',
+          trigger: trigger,
+          outcome: 'pending',
+        );
+      } catch (_) {}
+    }
     notifyListeners();
     unawaited(_attemptRecovery(episode));
   }
@@ -602,6 +633,18 @@ class CaptureWedgeMonitor extends ChangeNotifier {
     for (final episode in [state.episode, state.telemetryEpisode]) {
       if (episode != null && _now().difference(episode.declaredAt) <= resolveWindow) {
         _safeTrack('Capture Recovery Resolved', {'source': episode.source, 'trigger': episode.trigger});
+        final operationId = episode.telemetryOperationId;
+        if (operationId != null) {
+          try {
+            ClientTelemetry.instance.observeWedge(
+              operationId: operationId,
+              phase: 'resolved',
+              trigger: episode.trigger,
+              outcome: 'recovered',
+              latencyMs: _now().difference(episode.declaredAt).inMilliseconds,
+            );
+          } catch (_) {}
+        }
       }
     }
     state.episode = null;

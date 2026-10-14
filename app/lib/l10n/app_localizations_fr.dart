@@ -13313,4 +13313,11 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get paywallCancelAnytime => 'Annulez à tout moment.';
+
+  @override
+  String get connectAnAgent => 'Connecter un agent';
+
+  @override
+  String get connectAnAgentSubtitle =>
+      'Obtenez une invite de configuration pour Claude, ChatGPT, Codex ou tout autre agent';
 }

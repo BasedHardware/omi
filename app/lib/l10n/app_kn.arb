@@ -11493,5 +11493,7 @@
     "firstCaptureCancelWarning": "Going back stops this recording. Keep talking to give Omi a few more sentences.",
     "firstCaptureSiriTip": "Tip: Enable Omi in Shortcuts → Siri.",
     "paywallOutlineHeadline": "ಇನ್ನು ಮುಂದೆ ಒಂದು ಪದವನ್ನೂ ತಪ್ಪಿಸಿಕೊಳ್ಳಬೇಡಿ.",
-    "paywallCancelAnytime": "ಯಾವಾಗ ಬೇಕಾದರೂ ರದ್ದುಗೊಳಿಸಿ."
+    "paywallCancelAnytime": "ಯಾವಾಗ ಬೇಕಾದರೂ ರದ್ದುಗೊಳಿಸಿ.",
+    "connectAnAgent": "ಏಜೆಂಟ್ ಅನ್ನು ಸಂಪರ್ಕಿಸಿ",
+    "connectAnAgentSubtitle": "Claude, ChatGPT, Codex ಅಥವಾ ಯಾವುದೇ ಏಜೆಂಟ್‌ಗಾಗಿ ಸೆಟಪ್ ಪ್ರಾಂಪ್ಟ್ ಪಡೆಯಿರಿ"
 }

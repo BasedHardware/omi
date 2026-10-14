@@ -25,6 +25,7 @@ import 'package:omi/services/devices/connectors/omi_connection.dart';
 import 'package:omi/services/bridges/ble_bridge.dart';
 import 'package:omi/services/notifications.dart';
 import 'package:omi/services/services.dart';
+import 'package:omi/services/telemetry/client_telemetry.dart';
 import 'package:omi/services/battery_widget_service.dart';
 import 'package:omi/services/wals/wal_syncs.dart';
 import 'package:omi/services/wals/recording_transfer_coordinator.dart';
@@ -38,6 +39,7 @@ import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/other/debouncer.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:omi/widgets/confirmation_dialog.dart';
+import 'package:uuid/uuid.dart';
 import 'package:omi/ui/feedback/omi_dialogs.dart';
 
 typedef BleDiagnosticsLoader = Future<BleDeviceDiagnostics> Function(String deviceId);
@@ -77,6 +79,7 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
   }
 
   DateTime? _deviceSessionStartedAt;
+  String? _deviceSessionOperationId;
   final BleDiagnosticsLoader _bleDiagnosticsLoader;
   final FindDeviceRunner _findDeviceRunner;
   final Future<DeviceConnection?> Function(String) _chargingConnectionLoader;
@@ -286,6 +289,7 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     final generation = _sessionGeneration;
     final endedDevice = device == null ? (pairedDevice ?? connectedDevice) : null;
     final sessionStartedAt = _deviceSessionStartedAt;
+    final sessionOperationId = _deviceSessionOperationId;
     final now = DateTime.now();
     final capture = captureProvider;
     final liveCaptureDevice = capture?.recordingDevice;
@@ -305,9 +309,11 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
       _firmwareUpdateDeviceId = device.id;
       _firmwareUpdateCheckSessionGuard.start(device.id);
       _deviceSessionStartedAt = now;
+      _deviceSessionOperationId = const Uuid().v4();
     } else if (device == null) {
       _firmwareUpdateCheckSessionGuard.invalidate();
       _deviceSessionStartedAt = null;
+      _deviceSessionOperationId = null;
     }
     await getDeviceInfo();
     if (!_isCurrent(generation)) return;
@@ -346,14 +352,26 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
         // Native diagnostics are best-effort; local timing still makes the event useful.
       }
       if (!_isCurrent(generation)) return;
+      final sessionDuration = disconnect != null && disconnect.connectionDurationMs > 0
+          ? Duration(milliseconds: disconnect.connectionDurationMs)
+          : now.difference(sessionStartedAt);
       PlatformManager.instance.analytics.deviceSessionEnded(
         device: endedDevice,
-        duration: disconnect != null && disconnect.connectionDurationMs > 0
-            ? Duration(milliseconds: disconnect.connectionDurationMs)
-            : now.difference(sessionStartedAt),
+        duration: sessionDuration,
         reason: disconnect?.reason,
         hciReasonCode: disconnect?.reasonCode,
       );
+      try {
+        ClientTelemetry.instance.observeDeviceSession(
+          operationId: sessionOperationId ?? const Uuid().v4(),
+          analyticsVendor: endedDevice.type.analyticsVendor,
+          duration: sessionDuration,
+          reason: disconnect?.reason,
+          hciReasonCode: disconnect?.reasonCode,
+          intentional: endedSessionWasIntentional,
+          recoveryOutcome: endedSessionWasIntentional ? 'none' : 'unknown',
+        );
+      } catch (_) {}
     }
     if (!_isCurrent(generation)) return;
     Logger.debug('setConnectedDevice: $device');

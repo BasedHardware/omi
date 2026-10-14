@@ -1034,6 +1034,7 @@ extension PostHogManager {
   }
 
   func suggestionAssistantGateOutcome(_ outcome: SuggestionAssistantTelemetry.GateOutcome) {
+    guard outcome.emitsAnalytics else { return }
     track(
       SuggestionAssistantTelemetry.gateOutcomeEventName,
       properties: SuggestionAssistantTelemetry.gateOutcomePayload(outcome)

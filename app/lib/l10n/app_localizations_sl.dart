@@ -13240,4 +13240,11 @@ class AppLocalizationsSl extends AppLocalizations {
 
   @override
   String get paywallCancelAnytime => 'Prekličite kadar koli.';
+
+  @override
+  String get connectAnAgent => 'Poveži agenta';
+
+  @override
+  String get connectAnAgentSubtitle =>
+      'Pridobite poziv za nastavitev za Claude, ChatGPT, Codex ali katerega koli agenta';
 }

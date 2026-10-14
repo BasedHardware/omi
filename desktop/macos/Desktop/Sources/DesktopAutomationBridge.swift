@@ -3926,6 +3926,73 @@ final class DesktopAutomationActionRegistry {
       ]
     }
 
+    register(
+      name: "client_telemetry_flag_snapshot",
+      effects: [],
+      summary: "Return the client telemetry migration/retirement flag state (e2e flow: client-telemetry-shadow)"
+    ) { _ in
+      [
+        "transport_shadow_enabled": ClientTelemetryFlags.transportShadowEnabled ? "true" : "false",
+        "posthog_retirement_enabled": ClientTelemetryFlags.postHogRetirementEnabled ? "true" : "false",
+        "retires_infrastructure_posthog": ClientTelemetryFlags.retiresInfrastructurePostHog ? "true" : "false",
+      ]
+    }
+
+    register(
+      name: "client_telemetry_shadow_probe",
+      effects: [.localState],
+      summary:
+        "Enqueue one shadow observation, reload the store from disk, and prove the wire payload stays owner-free (e2e flow: client-telemetry-shadow)",
+      params: ["owner_id", "population"]
+    ) { params in
+      let ownerID = params["owner_id"] ?? "e2e-telemetry-owner"
+      let population = params["population"] ?? "physical_shortcut"
+      let directory = FileManager.default.temporaryDirectory
+        .appendingPathComponent("e2e-client-telemetry", isDirectory: true)
+      let limits = ClientTelemetryLimits.production
+      let now = Date()
+      let operationID = UUID()
+      let observation = ClientTelemetryObservation(
+        eventID: UUID(),
+        occurredAt: now,
+        platform: "macos",
+        channel: "e2e",
+        family: "voice_turn",
+        attributes: [
+          "operation_id": .string(operationID.uuidString.lowercased()),
+          "phase": .string("terminal"),
+          "population": .string(population),
+          "route": .string("hub"),
+          "intent": .string("hold"),
+          "outcome": .string("success"),
+          "latency_ms": .int(1200),
+        ],
+        ownerID: ownerID,
+        enqueuedAt: now,
+        attemptCount: 0
+      )
+      let store = ClientTelemetryStore(directory: directory, limits: limits)
+      // Enqueue through the same validation path the transport uses.
+      let enqueueOK = store.enqueue(observation, now: now)
+      let pendingAfterEnqueue = store.observations(ownerID: ownerID)
+      // Reload from disk through a second store instance (restart semantics).
+      let reloadedStore = ClientTelemetryStore(directory: directory, limits: limits)
+      let pendingAfterReload = reloadedStore.observations(ownerID: ownerID)
+      let reloadedAttempts = pendingAfterReload.first?.attemptCount
+      // Build the wire body exactly as the transport does and assert it is owner-free.
+      var wireContainsOwnerID = false
+      if let body = ClientTelemetryCodec.batchData(batchID: UUID(), observations: pendingAfterReload) {
+        wireContainsOwnerID = String(data: body, encoding: .utf8)?.contains(ownerID) == true
+      }
+      return [
+        "enqueued": enqueueOK ? "true" : "false",
+        "pending_count": "\(pendingAfterEnqueue.count)",
+        "reloaded_pending_count": "\(pendingAfterReload.count)",
+        "wire_contains_owner_id": wireContainsOwnerID ? "true" : "false",
+        "attempt_count_after_reload": "\(reloadedAttempts ?? -1)",
+      ]
+    }
+
     registerNotificationActions()
     registerRatingPromptActions()
     registerGlassTransparencyActions()

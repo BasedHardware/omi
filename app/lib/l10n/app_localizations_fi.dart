@@ -13215,4 +13215,10 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get paywallCancelAnytime => 'Peruuta milloin tahansa.';
+
+  @override
+  String get connectAnAgent => 'Yhdistä agentti';
+
+  @override
+  String get connectAnAgentSubtitle => 'Hae asetuskehote Claudelle, ChatGPT:lle, Codexille tai mille tahansa agentille';
 }

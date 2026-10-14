@@ -13309,4 +13309,10 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get paywallCancelAnytime => 'Jederzeit kündbar.';
+
+  @override
+  String get connectAnAgent => 'Agent verbinden';
+
+  @override
+  String get connectAnAgentSubtitle => 'Einrichtungs-Prompt für Claude, ChatGPT, Codex oder jeden Agenten holen';
 }

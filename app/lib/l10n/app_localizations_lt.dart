@@ -13234,4 +13234,10 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get paywallCancelAnytime => 'Atšaukite bet kada.';
+
+  @override
+  String get connectAnAgent => 'Prijungti agentą';
+
+  @override
+  String get connectAnAgentSubtitle => 'Gaukite sąrankos užklausą Claude, ChatGPT, Codex ar bet kuriam agentui';
 }
