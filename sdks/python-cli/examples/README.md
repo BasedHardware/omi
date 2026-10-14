@@ -41,6 +41,7 @@
 * [`conversations_xlsx.md`](conversations_xlsx.md) — convert a conversation-list
   JSON export to an Excel workbook with datetime cells, duration and filters.
 * [`conversations_sqlite.md`](conversations_sqlite.md) — import conversation-list
+* [`conversations_tsv.md`](conversations_tsv.md) — Convert an Omi conversation export to TSV (one row per transcript segment).
   JSON exports into a SQLite database for SQL queries and multi-page merges.
 * [`memories_markdown.md`](memories_markdown.md) — export memories, facts, and learnings to structured Markdown notes for Obsidian & Notion.
 * [`conversations_atom.md`](conversations_atom.md) — publish conversation-list
