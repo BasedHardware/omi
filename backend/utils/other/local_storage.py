@@ -81,8 +81,9 @@ class LocalBlob:
             raise NotFound(f'Local storage blob not found: {self.bucket.name}/{self.name}')
 
     def upload_from_filename(self, filename: str, *_args, **_kwargs) -> None:
+        source = owned_scratch_path(filename, include_harness=True)
         self.path.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copyfile(filename, self.path)
+        shutil.copyfile(source, self.path)
 
     def download_to_filename(self, filename: str, *_args, **_kwargs) -> None:
         if not self.exists():

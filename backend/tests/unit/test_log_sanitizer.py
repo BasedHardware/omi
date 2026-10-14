@@ -154,13 +154,13 @@ class TestSanitizeEmails:
 
     def test_simple_email(self):
         result = sanitize("john@example.com")
-        assert "example.com" in result
+        assert result == "j***n@example.com"
         assert "john" not in result
         assert "***" in result
 
     def test_email_in_log_message(self):
         result = sanitize("Found contact: John Doe -> john.doe@gmail.com")
-        assert "gmail.com" in result
+        assert result == "Found contact: John Doe -> j***e@gmail.com"
         assert "john.doe" not in result
 
     def test_short_local_part(self):
@@ -169,13 +169,12 @@ class TestSanitizeEmails:
 
     def test_email_with_digits(self):
         result = sanitize("user123@company.org")
-        assert "company.org" in result
+        assert result == "u***3@company.org"
         assert "***" in result
 
     def test_multiple_emails(self):
         result = sanitize("from alice@a.com to bob@b.com")
-        assert "a.com" in result
-        assert "b.com" in result
+        assert result == "from a***e@a.com to b***b@b.com"
         assert "alice" not in result
         assert "bob" not in result
 
@@ -219,7 +218,7 @@ class TestSanitizePii:
 
     def test_email_via_pii(self):
         result = sanitize_pii("john.doe@gmail.com")
-        assert "gmail.com" in result
+        assert result == "j***e@gmail.com"
         assert "john.doe" not in result
 
     def test_none(self):
@@ -246,7 +245,7 @@ class TestSanitizePii:
         assert "John" not in result
         assert "Doe" not in result
         assert "john" not in result
-        assert "example.com" in result  # domain preserved
+        assert result == "*** *** j***n@example.com"  # domain preserved
 
     def test_single_char_email(self):
         """Single char local part -> ***@domain."""
