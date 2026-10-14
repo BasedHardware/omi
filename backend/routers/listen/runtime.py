@@ -558,7 +558,7 @@ class ListenSessionRuntime:
             learned_sessions=learned_sessions,
         )
         self.language_observations = LiveLanguageObservations(self.language_profile)
-        from config.live_demand import language_qualified, resolve_live_demand
+        from config.live_demand import DemandSelection, language_qualified, resolve_live_demand
 
         demand_vendor_start = (
             resolve_live_demand().admits(request.uid)
@@ -569,14 +569,14 @@ class ListenSessionRuntime:
             and request.source != 'phone_call'
         )
         window_kwargs: WindowSelection = {} if demand_vendor_start else window_selection_kwargs(self, request.uid)
-        if demand_vendor_start:
-            window_kwargs['exclude'] = frozenset({'parakeet'})
+        demand_kwargs: DemandSelection = {'exclude': frozenset({'parakeet'})} if demand_vendor_start else {}
         self.stt_service, self.stt_language, self.stt_model = get_stt_service_for_language(
             self.language,
             multi_lang_enabled=self.multi_lang_enabled,
             preferred_service=request.stt_service,
             language_profile=self.language_profile,
             **window_kwargs,
+            **demand_kwargs,
         )
         # The provider the serving policy chose, captured before `_create_stt_socket`
         # can walk the fallback chain. Only the *selected* value is safe to hold onto:

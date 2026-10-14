@@ -37,7 +37,6 @@ def managed_chain_enabled(host: object) -> bool:
 
 class WindowSelection(TypedDict, total=False):
     window_uid: str
-    exclude: frozenset[str]
 
 
 def window_selection_kwargs(host: object, uid: str) -> WindowSelection:

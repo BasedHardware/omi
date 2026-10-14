@@ -4,8 +4,13 @@ import hashlib
 import math
 import os
 from dataclasses import dataclass
+from typing import TypedDict
 
 from config.stt_provider_policy import normalized_stt_language
+
+
+class DemandSelection(TypedDict, total=False):
+    exclude: frozenset[str]
 
 
 @dataclass(frozen=True)
