@@ -8,7 +8,7 @@ from types import SimpleNamespace
 import pytest
 
 from utils import executors
-from utils.conversations import speaker_identity_retry as retry, speaker_identity_queue as queue
+from utils.conversations import speaker_identity_retry as retry, speaker_resolution as stage
 from utils.observability.owner_identity_retry import OWNER_IDENTITY_RETRY
 
 
@@ -19,8 +19,8 @@ def count(stage, reason):
 @pytest.fixture(autouse=True)
 def isolated(monkeypatch):
     monkeypatch.setenv('OWNER_IDENTITY_RETRY_COALESCE_ENABLED', 'true')
-    monkeypatch.setattr(queue, '_cohorts', {})
-    monkeypatch.setattr(queue, 'time', SimpleNamespace(monotonic=lambda: 0))
+    monkeypatch.setattr(retry, '_cohorts', {})
+    monkeypatch.setattr(retry, 'time', SimpleNamespace(monotonic=lambda: 0))
     monkeypatch.setattr(retry, '_slots', threading.BoundedSemaphore(2))
     monkeypatch.setattr(retry, '_waiting_slots', threading.BoundedSemaphore(2))
     monkeypatch.setattr(retry, '_active', set())
@@ -54,7 +54,7 @@ async def test_new_ids_merge_one_uid_worker_without_repeating_reads(monkeypatch)
     assert retry.schedule_completed_identity_retries('u', ['a', 'b', 'c'])
     futures[1].set_result(retry.RetryRound((), 2))
     await settle()
-    assert not queue._cohorts
+    assert not retry._cohorts
     assert retry._slots.acquire(blocking=False) and retry._slots.acquire(blocking=False)
 
 
@@ -63,16 +63,16 @@ async def test_queue_uid_candidate_and_lifetime_pass_caps(monkeypatch):
     monkeypatch.setattr(retry, 'submit_with_context', lambda *a: pytest.fail('waiting worker'))
     assert retry._slots.acquire(blocking=False) and retry._slots.acquire(blocking=False)
     before = count('skipped', 'scan_limit'), count('skipped', 'queue_limit')
-    for i in range(queue.MAX_QUEUED_UIDS):
+    for i in range(retry.MAX_QUEUED_UIDS):
         assert retry.schedule_completed_identity_retries(str(i), [f'c{n:03}' for n in range(130)])
         assert not retry.schedule_completed_identity_retries(str(i), ['new'])
     assert not retry.schedule_completed_identity_retries('overflow', ['a'])
-    assert len(queue._cohorts) == 16
-    assert sum(len(c.seen) for c in queue._cohorts.values()) == 16 * 128
+    assert len(retry._cohorts) == 16
+    assert sum(len(c.seen) for c in retry._cohorts.values()) == 16 * 128
     assert count('skipped', 'scan_limit') - before[0] == 16 * 3
     assert count('skipped', 'queue_limit') - before[1] == 1
     await settle()
-    assert not queue._cohorts
+    assert not retry._cohorts
 
 
 async def test_merged_work_shares_eight_pass_budget(monkeypatch):
@@ -95,7 +95,7 @@ async def test_merged_work_shares_eight_pass_budget(monkeypatch):
     before = count('skipped', 'pass_limit')
     futures[1].set_result(retry.RetryRound((), 1))
     await settle()
-    assert len(futures) == 2 and not queue._cohorts
+    assert len(futures) == 2 and not retry._cohorts
     assert count('skipped', 'pass_limit') == before + 1
 
 
@@ -107,7 +107,7 @@ async def test_cancel_before_start_accounts_once_and_releases_metadata(monkeypat
     task = (executors._background_tasks - existing).pop()
     task.cancel()
     await settle()
-    assert not queue._cohorts
+    assert not retry._cohorts
     assert count('skipped', 'cancelled') == before + 2
     assert retry._slots.acquire(blocking=False) and retry._slots.acquire(blocking=False)
 
@@ -123,13 +123,13 @@ async def test_cancel_running_worker_retains_slot_uid_then_counts_only_unfinishe
     assert retry.schedule_completed_identity_retries('u', ['queued'])
     task.cancel()
     await settle()
-    assert len(queue._cohorts) == 1 and not f.cancelled()
+    assert len(retry._cohorts) == 1 and not f.cancelled()
     assert retry._slots.acquire(blocking=False)
     assert not retry._slots.acquire(blocking=False)
     retry._slots.release()
     f.set_result(retry.RetryRound(('processing',), 1))
     await settle()
-    assert not queue._cohorts
+    assert not retry._cohorts
     assert count('skipped', 'cancelled') == before + 2
     assert retry._slots.acquire(blocking=False) and retry._slots.acquire(blocking=False)
 
@@ -138,11 +138,11 @@ async def test_submission_error_accounts_and_releases(monkeypatch):
     def fail(*args, **kwargs):
         raise RuntimeError('synthetic')
 
-    monkeypatch.setattr(queue, 'start_background_task', fail)
+    monkeypatch.setattr(retry, 'start_background_task', fail)
     before = count('skipped', 'submission_error')
     with pytest.raises(RuntimeError):
         retry.schedule_completed_identity_retries('u', ['a'])
-    assert not queue._cohorts and count('skipped', 'submission_error') == before + 1
+    assert not retry._cohorts and count('skipped', 'submission_error') == before + 1
 
 
 @pytest.mark.parametrize('value', [None, 'false', 'invalid'])
@@ -158,13 +158,11 @@ async def test_flag_off_uses_exact_legacy_two_batches_two_waiters(monkeypatch, v
     assert retry.schedule_completed_identity_retries('u', ['c'])
     assert retry.schedule_completed_identity_retries('u', ['d'])
     assert not retry.schedule_completed_identity_retries('u', ['e'])
-    assert not queue._cohorts
+    assert not retry._cohorts
     assert len(retry._active) == len(retry._waiting) == 2
 
 
 async def test_coalesced_admission_reads_fresh_revision_and_policy(monkeypatch):
-    from utils.conversations import speaker_resolution as stage
-
     f = Future()
     calls, repairs = [], []
     row = dict(id='queued', status='completed', private_cloud_sync_enabled=True, updated_at='old')
@@ -189,11 +187,11 @@ async def test_coalesced_admission_reads_fresh_revision_and_policy(monkeypatch):
     row['updated_at'] = 'fresh'
     f.set_result(retry.RetryRound((), 1))
     await settle()
-    assert repairs == ['fresh'] and not queue._cohorts
+    assert repairs == ['fresh'] and not retry._cohorts
     row['deleted'] = True
     assert retry.schedule_completed_identity_retries('u', ['queued'])
     await settle()
-    assert repairs == ['fresh'] and not queue._cohorts
+    assert repairs == ['fresh'] and not retry._cohorts
 
 
 async def test_cancel_during_completion_sleep_counts_pending_once(monkeypatch):
@@ -209,25 +207,25 @@ async def test_cancel_during_completion_sleep_counts_pending_once(monkeypatch):
     assert retry.schedule_completed_identity_retries('u', ['b'])
     task.cancel()
     await settle()
-    assert not queue._cohorts and count('skipped', 'cancelled') == before + 2
+    assert not retry._cohorts and count('skipped', 'cancelled') == before + 2
     assert retry._slots.acquire(blocking=False) and retry._slots.acquire(blocking=False)
 
 
 async def test_new_submissions_do_not_extend_admission_deadline(monkeypatch):
     clock = [0]
-    monkeypatch.setattr(queue, 'time', SimpleNamespace(monotonic=lambda: clock[0]))
+    monkeypatch.setattr(retry, 'time', SimpleNamespace(monotonic=lambda: clock[0]))
     assert retry._slots.acquire(blocking=False) and retry._slots.acquire(blocking=False)
     before = count('skipped', 'queue_expired')
     assert retry.schedule_completed_identity_retries('u', ['a'])
     clock[0] = sum(retry.ADMISSION_RECHECK_DELAYS) + 1
     assert retry.schedule_completed_identity_retries('u', ['b'])
     await settle()
-    assert not queue._cohorts and count('skipped', 'queue_expired') == before + 2
+    assert not retry._cohorts and count('skipped', 'queue_expired') == before + 2
 
 
 async def test_coalesced_pending_cannot_reset_completion_deadline(monkeypatch):
     clock = [0]
-    monkeypatch.setattr(queue, 'time', SimpleNamespace(monotonic=lambda: clock[0]))
+    monkeypatch.setattr(retry, 'time', SimpleNamespace(monotonic=lambda: clock[0]))
     monkeypatch.setattr(retry, 'COMPLETION_RECHECK_DELAYS', (5,))
     f = Future()
     monkeypatch.setattr(retry, 'submit_with_context', lambda *a: f)
@@ -238,7 +236,7 @@ async def test_coalesced_pending_cannot_reset_completion_deadline(monkeypatch):
     clock[0] = 6
     f.set_result(retry.RetryRound((), 1))
     await settle()
-    assert not queue._cohorts and count('skipped', 'queue_expired') == before + 1
+    assert not retry._cohorts and count('skipped', 'queue_expired') == before + 1
 
 
 async def test_two_workers_and_queued_uid_recover_without_extra_thread(monkeypatch):
@@ -252,7 +250,7 @@ async def test_two_workers_and_queued_uid_recover_without_extra_thread(monkeypat
         await wake.wait()
 
     monkeypatch.setattr(
-        queue, 'asyncio', SimpleNamespace(sleep=pause, shield=asyncio.shield, wrap_future=asyncio.wrap_future)
+        retry, 'asyncio', SimpleNamespace(sleep=pause, shield=asyncio.shield, wrap_future=asyncio.wrap_future)
     )
 
     def submit(*args):
@@ -274,7 +272,7 @@ async def test_two_workers_and_queued_uid_recover_without_extra_thread(monkeypat
     for f in futures[1:]:
         f.set_result(retry.RetryRound((), 1))
     await settle()
-    assert not queue._cohorts
+    assert not retry._cohorts
     assert retry._slots.acquire(blocking=False) and retry._slots.acquire(blocking=False)
 
 
@@ -286,5 +284,5 @@ async def test_worker_submission_failure_releases_acquired_slot(monkeypatch):
     before = count('skipped', 'submission_error')
     assert retry.schedule_completed_identity_retries('u', ['a', 'b'])
     await settle()
-    assert not queue._cohorts and count('skipped', 'submission_error') == before + 2
+    assert not retry._cohorts and count('skipped', 'submission_error') == before + 2
     assert retry._slots.acquire(blocking=False) and retry._slots.acquire(blocking=False)

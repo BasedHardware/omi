@@ -8,7 +8,6 @@
   ],
   "evidence_prs": [],
   "scope_hints": [
-    "backend/utils/conversations/speaker_identity_queue.py",
     "backend/utils/conversations/speaker_identity_retry.py"
   ],
   "status": "open"

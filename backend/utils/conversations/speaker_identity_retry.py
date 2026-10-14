@@ -5,9 +5,10 @@ import logging
 import os
 import threading
 import time
-from dataclasses import dataclass
+from concurrent.futures import Future
+from dataclasses import dataclass, field
 from functools import partial
-from typing import Iterable
+from typing import Iterable, Optional
 
 from utils.conversations import speaker_resolution
 from utils.executors import storage_executor, start_background_task, submit_with_context
@@ -73,9 +74,7 @@ def schedule_completed_identity_retries(uid: str, conversation_ids: Iterable[str
     Overlapping submissions coalesce across both active and waiting work.
     """
     if os.getenv('OWNER_IDENTITY_RETRY_COALESCE_ENABLED', 'false').lower() == 'true':
-        from utils.conversations.speaker_identity_queue import schedule
-
-        return schedule(uid, conversation_ids)
+        return _schedule_coalesced(uid, conversation_ids)
     known = sorted(set(conversation_ids))
     with _active_lock:
         known = [cid for cid in known if (uid, cid) not in _active and (uid, cid) not in _waiting]
@@ -212,3 +211,148 @@ def _start_batch(uid: str, candidates: tuple[str, ...]) -> None:
         current[0].add_done_callback(lambda _: release())
         raise
     task.add_done_callback(lambda _: current[0].add_done_callback(lambda _: release()))
+
+
+MAX_QUEUED_UIDS = 16
+_coalescing_lock = threading.Lock()
+
+
+@dataclass
+class _RetryCohort:
+    pending: set[str] = field(default_factory=set)
+    seen: set[str] = field(default_factory=set)
+    deadline: float = 0
+    acquired: bool = False
+    initial_count: int = 0
+    current: Optional[Future] = None
+    unresolved: tuple[str, ...] = ()
+
+
+_cohorts: dict[str, _RetryCohort] = {}
+
+
+def _schedule_coalesced(uid: str, conversation_ids: Iterable[str]) -> bool:
+    known = sorted(set(conversation_ids))
+    with _coalescing_lock:
+        cohort = _cohorts.get(uid)
+        known = [cid for cid in known if cohort is None or cid not in cohort.seen]
+        if not known:
+            return True
+        record_retry('late', 'entry', 'candidate', len(known))
+        if cohort is None and len(_cohorts) >= MAX_QUEUED_UIDS:
+            record_retry('late', 'skipped', 'queue_limit', len(known))
+            return False
+        created = cohort is None
+        if cohort is None:
+            cohort = _RetryCohort(deadline=time.monotonic() + sum(ADMISSION_RECHECK_DELAYS))
+            _cohorts[uid] = cohort
+        room = MAX_LATE_IDENTITY_CANDIDATES - len(cohort.seen)
+        candidates = known[:room]
+        cohort.seen.update(candidates)
+        cohort.pending.update(candidates)
+        if created:
+            cohort.initial_count = len(candidates)
+    if len(known) > len(candidates):
+        record_retry('late', 'skipped', 'scan_limit', len(known) - len(candidates))
+    if not created:
+        record_retry('late', 'deferred', 'coalesced', len(candidates))
+        return bool(candidates)
+    coro = _run_cohort(uid, cohort)
+    try:
+        task = start_background_task(coro, name='speaker_identity_coalesced')
+    except Exception:
+        coro.close()
+        _release_cohort(uid, cohort, 'submission_error')
+        raise
+
+    # Runs even for cancellation before the coroutine starts. A running worker
+    # retains both UID ownership and its slot until its shielded Future finishes.
+    def finished(task):
+        reason = 'cancelled' if task.cancelled() else 'submission_error'
+        if cohort.current is not None and not cohort.current.done():
+            cohort.current.add_done_callback(lambda _: _release_cohort(uid, cohort, reason))
+        else:
+            _release_cohort(uid, cohort, reason)
+
+    task.add_done_callback(finished)
+    return True
+
+
+def _release_cohort(uid: str, cohort: _RetryCohort, reason: str) -> None:
+    with _coalescing_lock:
+        if _cohorts.get(uid) is not cohort:
+            return
+        unresolved = cohort.unresolved
+        if cohort.current is not None:
+            try:
+                unresolved = cohort.current.result().pending
+            except Exception:
+                pass
+        dropped = len(cohort.pending | set(unresolved))
+        del _cohorts[uid]
+        if cohort.acquired:
+            _slots.release()
+    if dropped:
+        record_retry('late', 'skipped', reason, dropped)
+
+
+async def _run_cohort(uid: str, cohort: _RetryCohort) -> None:
+    for delay in (0, *ADMISSION_RECHECK_DELAYS):
+        remaining = cohort.deadline - time.monotonic()
+        if remaining < 0:
+            break
+        if delay:
+            await asyncio.sleep(min(delay, remaining))
+        if time.monotonic() <= cohort.deadline and _slots.acquire(blocking=False):
+            cohort.acquired = True
+            break
+        if not delay:
+            record_retry('late', 'deferred', 'slot_limit', cohort.initial_count)
+    if not cohort.acquired:
+        _release_cohort(uid, cohort, 'queue_expired')
+        return
+
+    remaining_passes = MAX_LATE_IDENTITY_PASSES
+    completion_deadline = time.monotonic() + sum(COMPLETION_RECHECK_DELAYS)
+    while True:
+        with _coalescing_lock:
+            if not cohort.pending:
+                # Remove atomically with the empty check: a concurrent submit
+                # either joined this cohort or creates the next one.
+                _cohorts.pop(uid)
+                _slots.release()
+                return
+            candidates = tuple(sorted(cohort.pending))
+            cohort.pending.clear()
+        if not remaining_passes or time.monotonic() > completion_deadline:
+            cohort.unresolved = candidates
+            _release_cohort(uid, cohort, 'pass_limit' if not remaining_passes else 'queue_expired')
+            return
+        cohort.unresolved = candidates
+        for delay in (0, *COMPLETION_RECHECK_DELAYS):
+            if delay:
+                left = completion_deadline - time.monotonic()
+                if left < 0:
+                    break
+                await asyncio.sleep(min(delay, left))
+                if time.monotonic() > completion_deadline:
+                    break
+            cohort.current = submit_with_context(
+                storage_executor,
+                partial(_retry_batch, remaining_passes=remaining_passes),
+                uid,
+                cohort.unresolved,
+            )
+            result = await asyncio.shield(asyncio.wrap_future(cohort.current))
+            cohort.current = None
+            cohort.unresolved = result.pending
+            remaining_passes -= result.attempted
+            if not result.pending:
+                break
+            if not remaining_passes:
+                break
+        if cohort.unresolved:
+            record_retry(
+                'late', 'skipped', 'pass_limit' if not remaining_passes else 'not_completed', len(cohort.unresolved)
+            )
+            cohort.unresolved = ()
