@@ -8,6 +8,8 @@ from typing import Any, Optional
 from utils.messaging.projection import surface_runtime
 from utils.llm.shaped_agent import Turn
 from utils.llm.prompt_cache import chat_cache_options, model_supports_explicit_cache
+from utils.retrieval.chat_mount import chat_request_messages
+from utils.retrieval.turn_refs import initialize_turn_refs
 
 logger = logging.getLogger(__name__)
 
@@ -31,6 +33,8 @@ async def run_shaped_chat_stream(
     from utils.retrieval import agentic as a
     from utils.messaging.context import prepare as prepare_context, assemble, schedule_refresh, degraded
 
+    if 'turn_refs' not in configurable:
+        initialize_turn_refs(configurable)
     mount = a.chat_mount(tool_schemas, deadline_seconds=a.AGENT_STREAM_MAX_DURATION_SECONDS)
     runtime = surface_runtime.get()
     if runtime is not None:
@@ -54,7 +58,6 @@ async def run_shaped_chat_stream(
         runtime=runtime,
         timezone_name=configurable.get('user_timezone'),
         request_context={
-            'chat_scope': configurable.get('chat_scope'),
             'selected_app': configurable.get('shaped_selected_app'),
         },
         summary=context['summary'],
@@ -62,6 +65,7 @@ async def run_shaped_chat_stream(
         explicit_cache=cache_enabled,
         stable_prefix=mount.prefix() + json.dumps(list(mount.tools), default=str),
     )
+    evidence = chat_request_messages(evidence, configurable)
     surface = runtime.channel if runtime is not None and runtime.channel else 'app'
     usage_token = a.set_usage_context(
         configurable['user_id'],

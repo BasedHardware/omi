@@ -324,7 +324,7 @@ async def test_agentic_stream_runner_sees_overlay_history_tools_and_scope(capabi
     assert roles_and_texts[1][0] == "assistant" and "noted" in roles_and_texts[1][1]
     assert roles_and_texts[2][0] == "user" and "who are you" in roles_and_texts[2][1]
 
-    assert captured["configurable"]["chat_scope"] == {"conversation_id": "conv-1"}
+    assert captured["configurable"]["chat_scope"] == {"conversation_id": "conv-1", "title": "Weekly review"}
     assert captured["configurable"]["chat_session_id"] == "session-1"
 
     assert callback_data["answer"] == "hi"

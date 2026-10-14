@@ -11,4 +11,11 @@ cd "$ROOT"
 # shellcheck source=dev-harness/_resolve_python.sh
 source scripts/dev-harness/_resolve_python.sh
 PYTHON_BIN="$(dev_harness_python)"
+# A bare below-floor fallback name (macOS Xcode CLT python3 3.9) would die at
+# import inside the check scripts with a bare TypeError; name the fix instead.
+if ! dev_harness_python_floor_ok "$PYTHON_BIN"; then
+  echo "FAIL: resolved interpreter '$PYTHON_BIN' is below the 3.10 floor the pre-push check scripts require." >&2
+  dev_harness_python_floor_advisory >&2
+  exit 1
+fi
 exec "$PYTHON_BIN" .github/scripts/pr_preflight.py "$@"
