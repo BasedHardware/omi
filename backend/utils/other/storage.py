@@ -218,7 +218,11 @@ def delete_all_user_storage_objects(uid: str) -> int:
     for bucket_name, prefixes in configured:
         if not bucket_name:
             continue
-        bucket = _get_storage_client().bucket(bucket_name)
+        bucket = (
+            _canonical_audio_bucket()
+            if bucket_name == os.getenv('BUCKET_CANONICAL_AUDIO')
+            else _get_storage_client().bucket(bucket_name)
+        )
         for prefix in prefixes:
             key = (bucket_name, prefix)
             if key in seen_buckets:
@@ -986,7 +990,7 @@ def delete_conversation_audio_files(uid: str, conversation_id: str) -> None:
     canonical_name = os.getenv('BUCKET_CANONICAL_AUDIO')
     if canonical_name:
         with destructive_operation_gate(uid, kind='audio_conversation_deletion'):
-            audio_packs.delete_conversation(_get_storage_client().bucket(canonical_name), uid, conversation_id)
+            audio_packs.delete_conversation(_canonical_audio_bucket(), uid, conversation_id)
 
     # Delete chunks
     chunks_prefix = f'chunks/{uid}/{conversation_id}/'
@@ -2156,4 +2160,10 @@ def _canonical_audio_bucket() -> Any:
         raise RuntimeError('packing requires a new BUCKET_CANONICAL_AUDIO bucket')
     if name == private_cloud_sync_bucket:
         raise RuntimeError('canonical archive must not use an existing bucket')
-    return _get_storage_client().bucket(name)
+    bucket = _get_storage_client().bucket(name)
+    bucket.reload()
+    if bucket.location.lower() != 'us-central1' or bucket.versioning_enabled:
+        raise RuntimeError('canonical archive requires regional location and versioning off')
+    if bucket.soft_delete_policy.retention_duration_seconds not in (None, 0):
+        raise RuntimeError('canonical archive requires soft delete off')
+    return bucket

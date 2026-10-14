@@ -1,4 +1,5 @@
 from contextlib import contextmanager
+from types import SimpleNamespace
 from unittest.mock import MagicMock
 
 import pytest
@@ -22,6 +23,12 @@ class _Blob:
 class _Bucket:
     def __init__(self, names):
         self.names = set(names)
+        self.location = "us-central1"
+        self.versioning_enabled = False
+        self.soft_delete_policy = SimpleNamespace(retention_duration_seconds=0)
+
+    def reload(self):
+        pass
 
     def blob(self, name):
         return _Blob(self, name)
@@ -209,3 +216,16 @@ def test_new_mobile_capture_routes_unchanged_bytes_to_canonical_bucket(monkeypat
     assert metadata['provenance']['capture_day'] == '2020-09-13'
     assert metadata['provenance']['capture_start'] == 1600000000
     assert metadata['identity'].startswith(path.name)
+
+
+def test_canonical_bucket_rejects_retained_generations(monkeypatch):
+    bucket = _Bucket(set())
+    monkeypatch.setenv('BUCKET_CANONICAL_AUDIO', 'canonical')
+    monkeypatch.setattr(storage_mod, '_get_storage_client', lambda: _Client({'canonical': bucket}))
+    bucket.versioning_enabled = True
+    with pytest.raises(RuntimeError, match='versioning off'):
+        storage_mod._canonical_audio_bucket()
+    bucket.versioning_enabled = False
+    bucket.soft_delete_policy.retention_duration_seconds = 604800
+    with pytest.raises(RuntimeError, match='soft delete off'):
+        storage_mod._canonical_audio_bucket()
