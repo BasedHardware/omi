@@ -181,3 +181,19 @@ def test_metric_patch_min_over_max_raises_validation_error():
 
     with pytest.raises(goals_db.GoalValidationError):
         goals_db.update_goal("u1", "goal_1", {"min_value": 30}, firestore_client=client)
+
+
+def test_patch_goal_maps_validation_error_to_422():
+    """#21197 — PATCH /v1/goals/{id} must answer 422 when the db raises
+    GoalValidationError (a metric patch contradicting stored range), not a 500."""
+    from models.goal import GoalUpdate
+
+    with patch.object(
+        goals_router.goals_db,
+        "update_goal",
+        side_effect=goals_db.GoalValidationError('metric min must not exceed max'),
+    ):
+        with pytest.raises(HTTPException) as exc_info:
+            goals_router.update_goal("goal_1", GoalUpdate(min_value=30), uid="u1")
+    assert exc_info.value.status_code == 422
+    assert 'min' in (exc_info.value.detail or '')
