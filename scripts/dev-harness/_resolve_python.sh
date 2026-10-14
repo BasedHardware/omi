@@ -27,12 +27,17 @@ dev_harness_python_floor_ok() {
 # without installing anything: the PATH name first, then the uv-managed
 # toolchain — the same runtime `make lane-backend` / `make lane-bootstrap`
 # provision.
+# Strict pinned-range probe for the backend runtime: the backend pylock
+# declares `>=3.11,<3.12` and mobile_doctor rejects any other version, so a
+# 3.10 or 3.12+ interpreter is as unusable for the backend venv as a 3.9 one.
+dev_harness_venv_python_is_pinned_311() {
+  [ -n "$1" ] || return 1
+  "$1" -c 'import sys; raise SystemExit(0 if (3, 11) <= sys.version_info[:2] < (3, 12) else 1)' >/dev/null 2>&1
+}
+
 dev_harness_backend_pinned_python() {
-  # Strict 3.11 predicate: the backend pylock declares `>=3.11,<3.12`, so a
-  # 3.12+ interpreter is as unusable for the backend venv as a 3.10 one.
-  local pinned_check='import sys; raise SystemExit(0 if (3, 11) <= sys.version_info[:2] < (3, 12) else 1)'
   if command -v python3.11 >/dev/null 2>&1 \
-    && python3.11 -c "$pinned_check" >/dev/null 2>&1; then
+    && dev_harness_venv_python_is_pinned_311 python3.11; then
     printf '%s\n' python3.11
     return 0
   fi
@@ -45,7 +50,7 @@ dev_harness_backend_pinned_python() {
   if command -v cygpath >/dev/null 2>&1; then
     candidate="$(cygpath -u "$candidate" 2>/dev/null || printf '%s' "$candidate")"
   fi
-  if [ -x "$candidate" ] && "$candidate" -c "$pinned_check" >/dev/null 2>&1; then
+  if [ -x "$candidate" ] && dev_harness_venv_python_is_pinned_311 "$candidate"; then
     printf '%s\n' "$candidate"
     return 0
   fi

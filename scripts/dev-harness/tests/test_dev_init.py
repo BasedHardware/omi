@@ -198,87 +198,20 @@ def test_dev_init_next_steps_cover_mobile_and_desktop(tmp_path: Path) -> None:
     assert "make dev-desktop" in result.stdout, result.stdout
 
 
-def test_dev_init_creates_the_venv_even_with_a_floor_qualified_fallback(
-    tmp_path: Path,
-) -> None:
-    """A floor-qualified versioned interpreter must not skip venv creation.
-
-    dev-init used to create backend/.venv only when the resolver returned the
-    literal `python3`; on a host with python3.12 on PATH but no venv, it ran
-    `pip install -r requirements.txt` against the global interpreter instead
-    (externally-managed Homebrew Pythons reject that; others get polluted).
-    Creation now keys on the venv's absence, and the requirements install must
-    run through the freshly created venv (Codex P1).
-    """
-    repo = _fixture_repo(tmp_path)
-    (repo / "backend/.venv/bin/python").unlink()
-    log = tmp_path / "python-calls.log"
-    stub_bin = tmp_path / "devinit-stub-bin"
-    stub_bin.mkdir()
-    stub = stub_bin / "python3"
-    stub.write_text(
-        "#!/usr/bin/env bash\n"
-        "# Fake bootstrap interpreter: `-m venv <dir>` materializes a stub venv\n"
-        "# whose python logs its invocations and reports the venv as its\n"
-        "# sys.prefix; every other call is logged too.\n"
-        f'LOG="{log}"\n'
-        'if [ "${1:-}" = "-m" ] && [ "${2:-}" = "venv" ]; then\n'
-        '  target="$3"\n'
-        '  mkdir -p "$target/bin"\n'
-        "  cat > \"$target/bin/python\" <<'INNER'\n"
-        "#!/usr/bin/env bash\n"
-        f'LOG="{log}"\n'
-        'if [ "${1:-}" = "-c" ] && [ "${2:-}" = "import sys; print(sys.prefix)" ]; then\n'
-        '  d="$(cd "$(dirname "$0")/.." && pwd -P)"\n'
-        '  printf \'%s\\n\' "$d"\n'
-        '  exit 0\n'
-        "fi\n"
-        f'printf \'VENV %s\\n\' "$*" >> "{log}"\n'
-        "exit 0\n"
-        "INNER\n"
-        '  chmod +x "$target/bin/python"\n'
-        "  exit 0\n"
-        "fi\n"
-        f'printf \'%s\\n\' "$*" >> "{log}"\n'
-        "exit 0\n",
-        encoding="utf-8",
-    )
-    stub.chmod(stub.stat().st_mode | stat.S_IXUSR)
-
-    env = _clean_env()
-    env["PATH"] = os.pathsep.join((str(stub_bin), "/usr/bin", "/bin"))
-    env["DEVINIT_LOG"] = str(log)
-    result = subprocess.run(
-        [_bash(), "scripts/dev-harness/dev-init.sh"],
-        cwd=repo,
-        env=env,
-        text=True,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.STDOUT,
-        timeout=120,
-        check=False,
-    )
-
-    assert result.returncode == 0, result.stdout
-    assert (repo / "backend/.venv/bin/python").is_file(), result.stdout
-    assert "Created backend/.venv" in result.stdout, result.stdout
-    calls = log.read_text(encoding="utf-8").splitlines()
-    # The requirements install (and its pip probe) must have run through the
-    # freshly created venv interpreter — the P1 contract — never a bare/global
-    # interpreter.
-    assert any(line.startswith("VENV -m pip --version") for line in calls), calls
-    assert any(line.startswith("VENV -m pip install") for line in calls), calls
-
-
-def _write_logging_bootstrap_stub(directory: Path, name: str, log: Path, *, floor_ok: bool) -> None:
+def _write_logging_bootstrap_stub(directory: Path, name: str, log: Path, *, pinned_ok: bool) -> None:
     """A fake interpreter whose probes are scripted and whose `venv` subcommand
     materializes a stub venv whose python logs its invocations and reports the
-    venv as its sys.prefix (the membership contract dev-init checks)."""
+    venv as its sys.prefix (the membership contract dev-init checks).
+
+    `pinned_ok` scripts the version predicate: dev-init's bootstrap probe is
+    the strict >=3.11,<3.12 pin, so a stub that fails it (a real 3.12 or 3.9)
+    must not be selected as the pinned backend runtime.
+    """
     stub = directory / name
     stub.write_text(
         "#!/usr/bin/env bash\n"
         f'LOG="{log}"\n'
-        f'FLOOR_OK="{1 if floor_ok else 0}"\n'
+        f'PINNED_OK="{1 if pinned_ok else 0}"\n'
         'if [ "${1:-}" = "-m" ] && [ "${2:-}" = "venv" ]; then\n'
         '  target="$3"\n'
         '  mkdir -p "$target/bin"\n'
@@ -287,8 +220,8 @@ def _write_logging_bootstrap_stub(directory: Path, name: str, log: Path, *, floo
         f'LOG="{log}"\n'
         'if [ "${1:-}" = "-c" ] && [ "${2:-}" = "import sys; print(sys.prefix)" ]; then\n'
         '  d="$(cd "$(dirname "$0")/.." && pwd -P)"\n'
-        '  printf \'%s\\n\' "$d"\n'
-        '  exit 0\n'
+        "  printf '%s\\n' \"$d\"\n"
+        "  exit 0\n"
         "fi\n"
         f'printf \'VENV %s\\n\' "$*" >> "{log}"\n'
         "exit 0\n"
@@ -298,7 +231,7 @@ def _write_logging_bootstrap_stub(directory: Path, name: str, log: Path, *, floo
         "  exit 0\n"
         "fi\n"
         'case "$2" in\n'
-        "  *version_info*) exit $((1 - FLOOR_OK)) ;;\n"
+        "  *version_info*) exit $((1 - PINNED_OK)) ;;\n"
         "  *) exit 0 ;;\n"
         "esac\n"
         f'printf \'%s %s\\n\' "{name}" "$*" >> "{log}"\n'
@@ -308,23 +241,79 @@ def _write_logging_bootstrap_stub(directory: Path, name: str, log: Path, *, floo
     stub.chmod(stub.stat().st_mode | stat.S_IXUSR)
 
 
-def test_dev_init_bootstraps_the_venv_with_a_floor_qualified_interpreter(
-    tmp_path: Path,
-) -> None:
-    """The bootstrap interpreter is the resolver's floor-qualified pick.
+def test_dev_init_refuses_to_bootstrap_without_a_pinned_311(tmp_path: Path) -> None:
+    """No discoverable or provisionable 3.11 means refusal — not a fallback.
 
-    With python3.12 (floor-qualified) ahead of a 3.9 `python3` on PATH, the
-    created venv must come from python3.12 — creating it from the 3.9 host
-    interpreter would produce a below-floor venv that the resolver then
-    rejects (Oracle follow-up on the Codex P1).
+    dev-init provisions the backend requirements install, and the backend
+    pylock is `>=3.11,<3.12` (mobile_doctor rejects any other version), so a
+    3.12/3.14 floor pick must not silently create a backend-incompatible venv
+    (Codex P1 + Oracle review). With only a floor-qualified python3.12 and a
+    3.9 python3 on PATH and no uv, dev-init must exit 1 with install guidance.
     """
     repo = _fixture_repo(tmp_path)
     (repo / "backend/.venv/bin/python").unlink()
     log = tmp_path / "bootstrap-calls.log"
     stub_bin = tmp_path / "bootstrap-stub-bin"
     stub_bin.mkdir()
-    _write_logging_bootstrap_stub(stub_bin, "python3.12", log, floor_ok=True)
-    _write_logging_bootstrap_stub(stub_bin, "python3", log, floor_ok=False)
+    _write_logging_bootstrap_stub(stub_bin, "python3.12", log, pinned_ok=False)
+    _write_logging_bootstrap_stub(stub_bin, "python3", log, pinned_ok=False)
+
+    env = _clean_env()
+    env["PATH"] = os.pathsep.join((str(stub_bin), "/usr/bin", "/bin"))
+    result = subprocess.run(
+        [_bash(), "scripts/dev-harness/dev-init.sh"],
+        cwd=repo,
+        env=env,
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        timeout=120,
+        check=False,
+    )
+
+    assert result.returncode == 1, result.stdout
+    assert "no Python 3.11 could be provisioned" in result.stdout, result.stdout
+    assert "uv python install 3.11" in result.stdout, result.stdout
+    calls = log.read_text(encoding="utf-8").splitlines() if log.exists() else []
+    # No venv may be created from a backend-incompatible interpreter.
+    assert not any(line.startswith("python3.12 -m venv") for line in calls), calls
+    assert not any(line.startswith("python3 -m venv") for line in calls), calls
+    assert not (repo / "backend/.venv/bin/python").exists(), result.stdout
+
+
+def test_dev_installs_311_via_uv_when_not_on_path(tmp_path: Path) -> None:
+    """Without a PATH python3.11, dev-init provisions it through uv.
+
+    `uv python install 3.11` is exactly what `make lane-backend` does, so a
+    uv-present host without a discoverable 3.11 must end up with the pinned
+    runtime rather than a refusal (Codex P1 + Oracle review).
+    """
+    repo = _fixture_repo(tmp_path)
+    (repo / "backend/.venv/bin/python").unlink()
+    log = tmp_path / "uv-calls.log"
+    stub_bin = tmp_path / "uv-stub-bin"
+    stub_bin.mkdir()
+    # Only a floor-qualified python3.12 (not the pin) on PATH…
+    _write_logging_bootstrap_stub(stub_bin, "python3.12", log, pinned_ok=False)
+    # …and a pinned-runtime template that `uv python install 3.11` "installs"
+    # onto PATH (a venv-creating, membership-reporting, pin-passing stub).
+    template = tmp_path / "pinned-template"
+    _write_logging_bootstrap_stub(tmp_path, "pinned-template", log, pinned_ok=True)
+    # …and a uv whose `python install 3.11` materializes python3.11 on PATH.
+    uv = stub_bin / "uv"
+    uv.write_text(
+        "#!/usr/bin/env bash\n"
+        f'LOG="{log}"\n'
+        'if [ "${1:-}" = "python" ] && [ "${2:-}" = "install" ] && [ "${3:-}" = "3.11" ]; then\n'
+        f'  printf \'%s %s\\n\' "uv" "$*" >> "{log}"\n'
+        f'  cp "{template}" "$(dirname "$0")/python3.11"\n'
+        '  chmod +x "$(dirname "$0")/python3.11"\n'
+        "  exit 0\n"
+        "fi\n"
+        "exit 1\n",
+        encoding="utf-8",
+    )
+    uv.chmod(uv.stat().st_mode | stat.S_IXUSR)
 
     env = _clean_env()
     env["PATH"] = os.pathsep.join((str(stub_bin), "/usr/bin", "/bin"))
@@ -340,10 +329,10 @@ def test_dev_init_bootstraps_the_venv_with_a_floor_qualified_interpreter(
     )
 
     assert result.returncode == 0, result.stdout
-    assert "Created backend/.venv (with python3.12)" in result.stdout, result.stdout
+    assert "uv-provisioned repo-pinned backend runtime" in result.stdout, result.stdout
+    assert "Created backend/.venv (with python3.11)" in result.stdout, result.stdout
     calls = log.read_text(encoding="utf-8").splitlines()
-    assert any(line.startswith("python3.12 -m venv backend/.venv") for line in calls), calls
-    assert any(line.startswith("VENV -m pip install") for line in calls), calls
+    assert any(line.startswith("uv python install 3.11") for line in calls), calls
 
 
 def test_dev_init_refuses_to_install_outside_the_venv(tmp_path: Path) -> None:
@@ -451,10 +440,10 @@ def test_dev_init_bootstraps_the_pinned_311_when_discoverable(tmp_path: Path) ->
     stub_bin = tmp_path / "pinned-stub-bin"
     stub_bin.mkdir()
 
-    # A venv-creating, membership-reporting python3.11 (floor OK)…
-    _write_logging_bootstrap_stub(stub_bin, "python3.11", log, floor_ok=True)
+    # A venv-creating, membership-reporting python3.11 (pin OK)…
+    _write_logging_bootstrap_stub(stub_bin, "python3.11", log, pinned_ok=True)
     # …and a floor-qualified python3.12 that must NOT be preferred over it.
-    _write_logging_bootstrap_stub(stub_bin, "python3.12", log, floor_ok=True)
+    _write_logging_bootstrap_stub(stub_bin, "python3.12", log, pinned_ok=False)
 
     env = _clean_env()
     env["PATH"] = os.pathsep.join((str(stub_bin), "/usr/bin", "/bin"))
@@ -514,7 +503,7 @@ def test_dev_init_refuses_an_existing_below_floor_venv(tmp_path: Path) -> None:
     )
 
     assert result.returncode == 1, result.stdout
-    assert "below the 3.10 floor" in result.stdout, result.stdout
+    assert "not the pinned Python 3.11 runtime" in result.stdout, result.stdout
     assert "make lane-bootstrap" in result.stdout, result.stdout
     assert "refusing to install requirements into it" in result.stdout, result.stdout
 

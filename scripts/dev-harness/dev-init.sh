@@ -15,61 +15,49 @@ else
   echo "Keeping existing $secrets_file (not overwritten)"
 fi
 
-# Bootstrap the venv with the resolver's pick BEFORE it exists: with no venv,
-# dev_harness_python returns a floor-qualified interpreter when one exists
-# (python3.12/Homebrew prefix), so the created venv satisfies the 3.10 floor.
-# Creation keys on the venv's absence (a floor-qualified fallback on a fresh
-# checkout must not skip it — Codex P1), and the install below runs only
-# through the venv, never a global interpreter (Codex/Oracle follow-up: a
-# 3.9-only host must not have its requirements installed globally either).
-# Prefer the repo-pinned 3.11 backend runtime when it is discoverable — the
-# backend pylock declares `>=3.11,<3.12` and mobile_doctor rejects a non-3.11
-# backend venv — falling back to the pre-push floor pick only when no 3.11
-# is discoverable, with an explicit advisory (Codex P1).
+# Bootstrap the venv with the repo-pinned 3.11 backend runtime BEFORE it
+# exists. The backend pylock declares `>=3.11,<3.12` and mobile_doctor
+# rejects a non-3.11 backend venv, so dev-init refuses rather than provision
+# a backend-incompatible environment (Codex P1 + Oracle review). Discovery:
+# PATH python3.11, then uv-managed 3.11; provisioning context may install the
+# pinned runtime with `uv python install 3.11` — exactly what
+# `make lane-backend` does. Pre-push keeps its own broader 3.10 floor; this
+# is the backend requirements install, which serves the backend, not the gate.
 VENV_PREEXISTED=0
 if [ -x "backend/.venv/bin/python" ] || [ -x "backend/.venv/Scripts/python.exe" ]; then
   VENV_PREEXISTED=1
 fi
 if [ "$VENV_PREEXISTED" -eq 0 ]; then
-  BOOTSTRAP_PY=""
   if ! BOOTSTRAP_PY="$(dev_harness_backend_pinned_python)"; then
-    # Provisioning context (unlike the pre-push gate) may install the pinned
-    # runtime: `uv python install 3.11` is exactly what `make lane-backend`
-    # does. Only when even that is impossible (no uv, install failed) fall
-    # back to the floor pick — loudly.
-    if command -v uv >/dev/null 2>&1 && uv python install 3.11 >/dev/null 2>&1 \
+    if command -v uv >/dev/null 2>&1 \
+      && uv python install 3.11 >/dev/null 2>&1 \
       && BOOTSTRAP_PY="$(dev_harness_backend_pinned_python)"; then
       echo "Using uv-provisioned repo-pinned backend runtime: $BOOTSTRAP_PY"
     else
-      BOOTSTRAP_PY="$(dev_harness_python)"
-      echo "dev-init: no pinned Python 3.11 available; bootstrapping with the floor pick $BOOTSTRAP_PY" >&2
-      echo "dev-init: the backend pylock is >=3.11,<3.12 — run 'make lane-backend' to upgrade this venv to 3.11." >&2
+      echo "dev-init: no Python 3.11 could be provisioned for backend/.venv." >&2
+      echo "The backend pylock requires >=3.11,<3.12 (mobile_doctor rejects any other version)." >&2
+      echo "Fix: install Python 3.11 (e.g. 'brew install python@3.11' or 'uv python install 3.11'), then re-run dev-init." >&2
+      exit 1
     fi
   else
     echo "Using the repo-pinned backend runtime: $BOOTSTRAP_PY"
-  fi
-  # A bare-3.9 bootstrap would create a venv every later resolver call
-  # rejects; stop here with the documented guidance instead (Codex P2).
-  if ! dev_harness_python_floor_ok "$BOOTSTRAP_PY"; then
-    dev_harness_python_floor_advisory
-    exit 1
   fi
   "$BOOTSTRAP_PY" -m venv backend/.venv
   echo "Created backend/.venv (with $BOOTSTRAP_PY)"
 fi
 
-# A pre-existing venv BELOW THE FLOOR must not receive this install: the
-# resolver ignores it, so dev-init would report success while dev-harness/
-# pre-push refuses the environment it just provisioned (Codex P1). An
-# import-INCOMPLETE venv (floor OK, missing cheap-gate packages) is the
-# recoverable shape of an interrupted first run — dev-init itself must be
-# able to complete it, so only a below-floor venv refuses here.
+# An existing venv must hold the pinned backend runtime before it receives
+# the backend requirements install (Codex P1 + Oracle review): 3.11 — with
+# complete or interrupted/incomplete packages — is the only acceptable state
+# and dev-init completes the install; any other version (3.9/3.10 below the
+# floor, or 3.12+ above the pin) is backend-incompatible and refused with the
+# recreate guidance — mobile_doctor and the pylock reject it anyway, so
+# installing into it would only fake success.
 if [ "$VENV_PREEXISTED" -eq 1 ]; then
-  if dev_harness_canonical_python >/dev/null 2>&1; then
-    :
-  elif ! dev_harness_python_floor_ok "$PWD/backend/.venv/bin/python" \
-    && ! dev_harness_python_floor_ok "$PWD/backend/.venv/Scripts/python.exe"; then
-    echo "dev-init: the existing backend/.venv is below the 3.10 floor the dev harness requires; refusing to install requirements into it." >&2
+  VENV_PY_BIN="$PWD/backend/.venv/bin/python"
+  [ -x "$VENV_PY_BIN" ] || VENV_PY_BIN="$PWD/backend/.venv/Scripts/python.exe"
+  if ! dev_harness_venv_python_is_pinned_311 "$VENV_PY_BIN"; then
+    echo "dev-init: the existing backend/.venv is not the pinned Python 3.11 runtime the backend requires; refusing to install requirements into it." >&2
     echo "Run: make lane-bootstrap (Python 3.11 venv), or recreate it: rm -rf backend/.venv && dev-init." >&2
     exit 1
   fi
