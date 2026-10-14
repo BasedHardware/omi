@@ -454,6 +454,97 @@ void main() {
     });
   });
 
+  test('a generic admission racing a fresh reconcile is dropped when pairing moves on', () {
+    fakeAsync((async) {
+      pairPendant();
+      linkUp = true;
+      nativeReplaysReady = true;
+      final provider = DeviceProvider();
+      // DeviceConnection.connect emits connected before awaiting ping and
+      // getDeviceInfo, so the transport's own connected event queues the
+      // generic admission while the reconcile is still forming the link.
+      // Block that admission inside ensureConnection behind DeviceService's
+      // mutex on a slow native link check.
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMessageHandler('dev.flutter.pigeon.omi_pigeon.BleHostApi.isPeripheralConnected', (_) async {
+        await Future<void>.delayed(const Duration(seconds: 2));
+        return BleHostApi.pigeonChannelCodec.encodeMessage(<Object?>[true]);
+      });
+      final reconciler = NativeLinkReconciler(provider, nativeLinkProbe: (_) async => true);
+
+      reconciler.reconcile();
+      async.elapse(const Duration(milliseconds: 50));
+      // The transport's connected event has queued the generic admission; it
+      // runs while the link is still forming, and the persisted pairing moves
+      // on before it passes its checks.
+      SharedPreferencesUtil().btDeviceSet(BtDevice(
+        id: 'OTHER-PENDANT',
+        name: 'Omi',
+        type: DeviceType.omi,
+        rssi: -60,
+        locator: DeviceLocator.bluetooth(deviceId: 'OTHER-PENDANT'),
+      ));
+      async.elapse(const Duration(seconds: 15));
+
+      expect(provider.isConnected, isFalse,
+          reason: 'the racing generic admission must not publish the retired pairing');
+      expect(SharedPreferencesUtil().btDevice.id, 'OTHER-PENDANT');
+      reconciler.dispose();
+      provider.dispose();
+      async.flushTimers();
+    });
+  });
+
+  test('a pairing persisted during device setup does not get the retired device published over it', () {
+    fakeAsync((async) {
+      pairPendant();
+      linkUp = true;
+      nativeReplaysReady = true;
+      final service = ServiceManager.instance().device;
+      service.ensureConnection(_deviceId, force: true);
+      async.elapse(const Duration(seconds: 5));
+      expect(service.connectionFor(_deviceId)?.status, DeviceConnectionState.connected);
+
+      final provider = DeviceProvider();
+      // Every step of device setup that touches the link re-checks it via
+      // ensureConnection -> isConnected. Park the *second* such check (the
+      // one after admission) and drift the persisted pairing while it is
+      // parked — exactly the window the Ray-Ban input picker creates when it
+      // persists a new microphone before awaiting its own connection.
+      var linkChecks = 0;
+      final linkCheckBlocked = Completer<void>();
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMessageHandler('dev.flutter.pigeon.omi_pigeon.BleHostApi.isPeripheralConnected', (message) async {
+        linkChecks++;
+        if (linkChecks == 2) {
+          await linkCheckBlocked.future;
+        }
+        return BleHostApi.pigeonChannelCodec.encodeMessage(<Object?>[true]);
+      });
+      final reconciler = NativeLinkReconciler(provider, nativeLinkProbe: (_) async => true);
+
+      reconciler.reconcile();
+      async.elapse(const Duration(seconds: 5));
+      // Device setup is parked mid-setup; the persisted pairing moves on
+      // inside the window.
+      SharedPreferencesUtil().btDeviceSet(BtDevice(
+        id: 'OTHER-PENDANT',
+        name: 'Omi',
+        type: DeviceType.omi,
+        rssi: -60,
+        locator: DeviceLocator.bluetooth(deviceId: 'OTHER-PENDANT'),
+      ));
+      linkCheckBlocked.complete();
+      async.elapse(const Duration(seconds: 20));
+
+      expect(SharedPreferencesUtil().btDevice.id, 'OTHER-PENDANT',
+          reason: 'device setup must not publish the retired pairing over the newer choice');
+      reconciler.dispose();
+      provider.dispose();
+      async.flushTimers();
+    });
+  });
+
   test('a provider-only disconnect lets the resume reconcile re-admit the live link', () {
     fakeAsync((async) {
       pairPendant();

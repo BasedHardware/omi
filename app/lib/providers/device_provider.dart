@@ -147,6 +147,14 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
   int _admittedConnectGeneration = -1;
   late final NativeLinkReconciler nativeLink = NativeLinkReconciler(this);
   (DeviceConnection, int)? _admittedLink;
+  // When a resume reconcile arms a readoption, admissions for that device are
+  // constrained to the pairing the reconcile probed: the persisted pairing
+  // must still name that device when an admission or its async continuation
+  // runs, or a pairing persisted in the windows between (an input picker
+  // seeding another microphone) is silently overwritten. Armed before the
+  // link starts forming, so the constraint holds for whichever connected
+  // event queues the admission.
+  String? _readoptExpectedPair;
 
   DeviceProvider({
     BleDiagnosticsLoader? bleDiagnosticsLoader,
@@ -207,6 +215,7 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
   void clearUserData() {
     _sessionGeneration++;
     _admittedLink = null;
+    _readoptExpectedPair = null;
     _deviceHealthTimer?.cancel();
     _deviceHealthTimer = null;
     _admittedConnectGeneration = -1;
@@ -391,14 +400,14 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     if (connectedDevice != null) {
       if (pairedDevice?.firmwareRevision != null && pairedDevice?.firmwareRevision != 'Unknown') {
         if (!_isCurrent(generation)) return;
-        SharedPreferencesUtil().btDevice = pairedDevice!;
+        _persistPairedDevice();
         return;
       }
       var connection = await ServiceManager.instance().device.ensureConnection(connectedDevice!.id);
       if (!_isCurrent(generation)) return;
       pairedDevice = await connectedDevice?.getDeviceInfo(connection);
       if (!_isCurrent(generation)) return;
-      SharedPreferencesUtil().btDevice = pairedDevice!;
+      _persistPairedDevice();
     } else {
       if (!_isCurrent(generation)) return;
       if (SharedPreferencesUtil().btDevice.id.isEmpty) {
@@ -410,6 +419,23 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     if (!_isCurrent(generation)) return;
     notifyListeners();
   }
+
+  /// Publishes the paired device to preferences unless a readoption armed a
+  /// pairing constraint and the persisted pairing has since moved on: the
+  /// armed publication belongs to the probe-time pairing, and writing here
+  /// would silently overwrite the newer choice (an input picker's selection).
+  void _persistPairedDevice() {
+    if (_readoptPairMovedOn(pairedDevice!.id)) {
+      Logger.debug('Skipping paired-device persist: pairing moved on from $_readoptExpectedPair');
+      return;
+    }
+    SharedPreferencesUtil().btDevice = pairedDevice!;
+  }
+
+  /// True when a readoption armed a pairing constraint for [deviceId] and the
+  /// persisted pairing no longer names it.
+  bool _readoptPairMovedOn(String deviceId) =>
+      _readoptExpectedPair == deviceId && SharedPreferencesUtil().btDevice.id != deviceId;
 
   /// Hardware find-device LED. Not account publication; left unfenced.
   Future<bool> findDevice() {
@@ -955,6 +981,14 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
       Logger.debug('Discarding device setup continuation from a stale connection session');
       return;
     }
+    // A readoption's authorization is only as fresh as its last check: device
+    // setup awaits BLE work, and a pairing persisted during that window (an
+    // input picker seeding another microphone) must not get battery, capture,
+    // and WAL side effects started for the retired pairing.
+    if (_readoptPairMovedOn(device.id)) {
+      Logger.debug('Discarding device setup continuation of ${device.id}: pairing moved on during setup');
+      return;
+    }
 
     final normalizedDevice = pairedDevice ?? device;
     if (captureProvider != null) {
@@ -968,6 +1002,10 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     // Read initial battery level
     int currentLevel = await _retrieveBatteryLevel(device.id);
     if (!_isCurrent(generation)) return;
+    if (_readoptPairMovedOn(device.id)) {
+      Logger.debug('Discarding readoption of ${device.id}: pairing moved on before side effects');
+      return;
+    }
     if (currentLevel != -1) {
       batteryLevel = currentLevel;
       BatteryWidgetService().updateBatteryInfo(
@@ -993,6 +1031,10 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
 
     await getDeviceInfo();
     if (!_isCurrent(generation)) return;
+    if (_readoptPairMovedOn(device.id)) {
+      Logger.debug('Discarding readoption of ${device.id}: pairing moved on before final publication');
+      return;
+    }
     SharedPreferencesUtil().deviceName = device.name;
 
     // getDeviceInfo() may have reclassified the discovery object — an Omi-typed
@@ -1189,7 +1231,7 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     // admission waited on DeviceService: pairing may have moved on (an input
     // picker persisting a different microphone) and publishing the old device
     // would overwrite that choice in preferences and start its side effects.
-    if (requirePersistedPair && SharedPreferencesUtil().btDevice.id != deviceId) {
+    if ((requirePersistedPair || _readoptExpectedPair == deviceId) && SharedPreferencesUtil().btDevice.id != deviceId) {
       Logger.debug('Discarding readoption of $deviceId: pairing moved on before admission');
       return;
     }
@@ -1452,17 +1494,27 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
 
   /// Readopts a service link native already holds while the mirror shows the
   /// persisted pairing disconnected. The reconciler authorizes this at probe
-  /// time, but admission still queues behind the connect debouncer: pairing or
-  /// the mirror can move on in that window, so [_handleDeviceConnected]
-  /// revalidates the persisted pairing before publishing.
+  /// time — and arms the pairing constraint before the link forms — so every
+  /// admission for this device revalidates the persisted pairing at admission
+  /// and through the publication continuation.
   void readoptServiceLink(String deviceId) {
     if (_isDisposed) return;
+    _readoptExpectedPair = deviceId;
     final generation = _sessionGeneration;
     _disconnectDebouncer.cancel();
     _connectDebouncer.run(() {
       if (!_isCurrent(generation)) return;
       _handleDeviceConnected(deviceId, generation, requirePersistedPair: true);
     });
+  }
+
+  /// Arms the readoption pairing constraint for [deviceId] before the link
+  /// starts forming: whichever connected event queues the admission — the
+  /// transport's own event or the reconciler's — it must still match the
+  /// persisted pairing when it and its continuation run.
+  void armReadoptPairConstraint(String deviceId) {
+    if (_isDisposed) return;
+    _readoptExpectedPair = deviceId;
   }
 
   @override

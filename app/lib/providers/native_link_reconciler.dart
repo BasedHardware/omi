@@ -60,11 +60,15 @@ class NativeLinkReconciler {
       return;
     }
     // Otherwise native replays device-ready into a fresh transport. Its
-    // connected event queues an unguarded admission through the generic path;
-    // queue the guarded readoption in its place — the debounced action is
-    // single-slot, and this runs as the next microtask after the transport's
-    // event, well inside its 100 ms window — so a pairing that moved on while
-    // the link was forming is never published.
+    // connected event queues an admission through the generic path, which can
+    // start running before this reconcile finishes (DeviceConnection.connect
+    // emits connected before awaiting ping/getDeviceInfo). Arm the pairing
+    // constraint on the provider *before* the link starts forming so every
+    // admission for this device — whichever event queued it — revalidates the
+    // probe-time pairing, and keep it armed through publication: a pairing
+    // persisted while the link was forming (an input picker seeding another
+    // microphone) is never published over.
+    _provider.armReadoptPairConstraint(deviceId);
     final connection = await deviceService.ensureConnection(deviceId, force: true);
     if (connection?.status == DeviceConnectionState.connected) {
       _provider.readoptServiceLink(deviceId);
