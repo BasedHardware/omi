@@ -5665,11 +5665,6 @@ class AppLocalizationsBg extends AppLocalizations {
   String get downloadingFromSdCard => 'Изтегляне от SD карта';
 
   @override
-  String processingProgress(int current, int total) {
-    return 'Обработка $current/$total';
-  }
-
-  @override
   String conversationsCreated(int count) {
     return '$count създадени разговори';
   }
@@ -9125,18 +9120,10 @@ class AppLocalizationsBg extends AppLocalizations {
   }
 
   @override
-  String syncCardProgressOf(int current, int total) {
-    return '$current от $total';
-  }
-
-  @override
   String get syncStatusOnDevice => 'На вашето устройство';
 
   @override
   String get syncStatusDownloadingFromDevice => 'Изтегляне от вашето устройство';
-
-  @override
-  String get newestFirst => 'Първо най-новите';
 
   @override
   String get noSyncedRecordingsYet => 'Все още няма синхронизирани записи';
@@ -12042,9 +12029,6 @@ class AppLocalizationsBg extends AppLocalizations {
   }
 
   @override
-  String get localCopiesSection => 'Локални копия';
-
-  @override
   String speakerLabelLinesLabeled(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,
@@ -13266,6 +13250,81 @@ class AppLocalizationsBg extends AppLocalizations {
   String get connectAnAgentSubtitle => 'Вземете подкана за настройка за Claude, ChatGPT, Codex или друг агент';
 
   @override
+  String syncCardSyncingAmount(String amount) {
+    return 'Синхронизиране на $amount аудио';
+  }
+
+  @override
+  String get syncCardSyncingTitle => 'Синхронизиране на записите';
+
+  @override
+  String syncStepDownloadingAmount(String done, String total) {
+    return 'Изтегляне от Omi · $done от $total';
+  }
+
+  @override
+  String syncStepUploadingAmount(String done, String total) {
+    return 'Качване · $done от $total';
+  }
+
+  @override
+  String syncCardTranscribingAmount(String amount) {
+    return 'Превръщане на $amount в разговори';
+  }
+
+  @override
+  String syncCardTranscribedOf(String done, String total) {
+    return 'Готово $done от $total · можете да напуснете екрана';
+  }
+
+  @override
+  String syncCardReadyAmount(String amount) {
+    return '$amount готови за синхронизиране';
+  }
+
+  @override
+  String get syncStepLabelDownload => 'Omi → телефон';
+
+  @override
+  String get syncStepLabelUpload => 'Качване';
+
+  @override
+  String get syncStepLabelTranscribe => 'Транскрипция';
+
+  @override
+  String get syncDetailsTitle => 'Подробности за синхронизацията';
+
+  @override
+  String get syncDetailsRightNow => 'В момента';
+
+  @override
+  String get syncDetailsYourOmi => 'Вашият Omi';
+
+  @override
+  String get syncDetailsTransferSpeed => 'Скорост на прехвърляне';
+
+  @override
+  String get syncDetailsWaitingOnOmi => 'Чака на Omi';
+
+  @override
+  String get syncDetailsWaitingOnPhone => 'Чака на този телефон';
+
+  @override
+  String get syncDetailsTranscribing => 'Транскрибира се в Omi';
+
+  @override
+  String get syncDetailsForSupport => 'За поддръжката';
+
+  @override
+  String get syncDetailsAudioFiles => 'Аудиофайлове';
+
+  @override
+  String get syncDetailsServerJobs => 'Задачи на сървъра (готови / общо)';
+
+  @override
+  String get syncDetailsCopy => 'Копиране на данните за поддръжката';
+
+  @override
   String get onDeviceAtCapTitle => 'Изчерпахте транскрипцията на живо за този месец';
 
   @override
@@ -13528,33 +13587,4 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String get onDeviceRemoveModel => 'Премахни гласовия модел';
-
-  @override
-  String get onDeviceRemoveModelTitle => 'Премахване на гласовия модел?';
-
-  @override
-  String get onDeviceRemoveModelMessage =>
-      'Записите ще чакат на този телефон, докато не го изтеглите отново или часовете на живо не се възстановят.';
-
-  @override
-  String get onDeviceRemove => 'Премахни';
-
-  @override
-  String get onDeviceFinishSetupTitle => 'Завършете настройката, за да видите транскриптите си';
-
-  @override
-  String get onDeviceFinishSetupBody =>
-      'Изчерпахте часовете на живо за този месец. Omi продължава да записва и пази аудиото на телефона ви. Изтеглете гласовия модел и той ще навакса.';
-
-  @override
-  String onDeviceDownloadSize(String size) {
-    return 'Изтегляне: $size';
-  }
-
-  @override
-  String get onDeviceUnsupportedBody =>
-      'Този телефон все още не може да изпълнява гласовия модел. Аудиото остава запазено, докато часовете на живо не се възстановят или не надградите плана си.';
-
-  @override
-  String get onDeviceEntrySubtitle => 'Когато часовете на живо свършат, транскрибиране на този телефон';
 }

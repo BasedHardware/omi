@@ -5693,11 +5693,6 @@ class AppLocalizationsTl extends AppLocalizations {
   String get downloadingFromSdCard => 'Dine-download mula sa SD Card';
 
   @override
-  String processingProgress(int current, int total) {
-    return 'Pinoproseso ang $current/$total';
-  }
-
-  @override
   String conversationsCreated(int count) {
     return '$count mga pag-usap na nabuo';
   }
@@ -9172,18 +9167,10 @@ class AppLocalizationsTl extends AppLocalizations {
   }
 
   @override
-  String syncCardProgressOf(int current, int total) {
-    return '$current ng $total';
-  }
-
-  @override
   String get syncStatusOnDevice => 'Nasa iyong device';
 
   @override
   String get syncStatusDownloadingFromDevice => 'Dina-download mula sa iyong device';
-
-  @override
-  String get newestFirst => 'Pinakabago muna';
 
   @override
   String get noSyncedRecordingsYet => 'Wala pang naka-sync na recording';
@@ -12097,9 +12084,6 @@ class AppLocalizationsTl extends AppLocalizations {
   }
 
   @override
-  String get localCopiesSection => 'Mga Lokal na Kopya';
-
-  @override
   String speakerLabelLinesLabeled(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,
@@ -13323,6 +13307,81 @@ class AppLocalizationsTl extends AppLocalizations {
   String get connectAnAgentSubtitle => 'Kumuha ng setup prompt para sa Claude, ChatGPT, Codex, o anumang agent';
 
   @override
+  String syncCardSyncingAmount(String amount) {
+    return 'Sini-sync ang $amount ng audio';
+  }
+
+  @override
+  String get syncCardSyncingTitle => 'Sini-sync ang mga recording mo';
+
+  @override
+  String syncStepDownloadingAmount(String done, String total) {
+    return 'Dina-download mula sa Omi mo · $done sa $total';
+  }
+
+  @override
+  String syncStepUploadingAmount(String done, String total) {
+    return 'Ina-upload · $done sa $total';
+  }
+
+  @override
+  String syncCardTranscribingAmount(String amount) {
+    return 'Ginagawang mga usapan ang $amount';
+  }
+
+  @override
+  String syncCardTranscribedOf(String done, String total) {
+    return '$done sa $total tapos na · puwede mong iwan ang screen na ito';
+  }
+
+  @override
+  String syncCardReadyAmount(String amount) {
+    return '$amount handa nang i-sync';
+  }
+
+  @override
+  String get syncStepLabelDownload => 'Omi → phone';
+
+  @override
+  String get syncStepLabelUpload => 'Upload';
+
+  @override
+  String get syncStepLabelTranscribe => 'Transcribe';
+
+  @override
+  String get syncDetailsTitle => 'Mga detalye ng sync';
+
+  @override
+  String get syncDetailsRightNow => 'Ngayon';
+
+  @override
+  String get syncDetailsYourOmi => 'Ang Omi mo';
+
+  @override
+  String get syncDetailsTransferSpeed => 'Bilis ng paglipat';
+
+  @override
+  String get syncDetailsWaitingOnOmi => 'Naghihintay sa Omi mo';
+
+  @override
+  String get syncDetailsWaitingOnPhone => 'Naghihintay sa phone na ito';
+
+  @override
+  String get syncDetailsTranscribing => 'Tina-transcribe sa Omi';
+
+  @override
+  String get syncDetailsForSupport => 'Para sa support';
+
+  @override
+  String get syncDetailsAudioFiles => 'Mga audio file';
+
+  @override
+  String get syncDetailsServerJobs => 'Mga server job (tapos / kabuuan)';
+
+  @override
+  String get syncDetailsCopy => 'Kopyahin ang mga detalye para sa support';
+
+  @override
   String get onDeviceAtCapTitle => 'Nagamit mo na ang live transcription ngayong buwan';
 
   @override
@@ -13587,33 +13646,4 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get onDeviceRemoveModel => 'Alisin ang Speech Model';
-
-  @override
-  String get onDeviceRemoveModelTitle => 'Alisin ang Speech Model?';
-
-  @override
-  String get onDeviceRemoveModelMessage =>
-      'Maghihintay ang mga recording sa phone na ito hanggang i-download mo ulit ito o bumalik ang live hours.';
-
-  @override
-  String get onDeviceRemove => 'Alisin';
-
-  @override
-  String get onDeviceFinishSetupTitle => 'Tapusin ang setup para makita ang mga transcript mo';
-
-  @override
-  String get onDeviceFinishSetupBody =>
-      'Nagamit mo na ang live hours ngayong buwan. Nagre-record pa rin ang Omi at nagse-save ng audio sa phone mo. I-download ang speech model at hahabol ito.';
-
-  @override
-  String onDeviceDownloadSize(String size) {
-    return '$size na download';
-  }
-
-  @override
-  String get onDeviceUnsupportedBody =>
-      'Hindi pa kayang patakbuhin ng phone na ito ang speech model. Mananatiling naka-save ang audio hanggang bumalik ang live hours o mag-upgrade ka.';
-
-  @override
-  String get onDeviceEntrySubtitle => 'Kapag naubos ang live hours, mag-transcribe sa phone na ito';
 }

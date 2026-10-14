@@ -5648,11 +5648,6 @@ class AppLocalizationsSv extends AppLocalizations {
   String get downloadingFromSdCard => 'Laddar ned från SD-kort';
 
   @override
-  String processingProgress(int current, int total) {
-    return 'Behandlar $current/$total';
-  }
-
-  @override
   String conversationsCreated(int count) {
     return '$count konversationer skapade';
   }
@@ -9094,18 +9089,10 @@ class AppLocalizationsSv extends AppLocalizations {
   }
 
   @override
-  String syncCardProgressOf(int current, int total) {
-    return '$current av $total';
-  }
-
-  @override
   String get syncStatusOnDevice => 'På din enhet';
 
   @override
   String get syncStatusDownloadingFromDevice => 'Laddar ned från din enhet';
-
-  @override
-  String get newestFirst => 'Nyaste först';
 
   @override
   String get noSyncedRecordingsYet => 'Inga synkroniserade inspelningar än';
@@ -12002,9 +11989,6 @@ class AppLocalizationsSv extends AppLocalizations {
   }
 
   @override
-  String get localCopiesSection => 'Lokala kopior';
-
-  @override
   String speakerLabelLinesLabeled(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,
@@ -13223,6 +13207,81 @@ class AppLocalizationsSv extends AppLocalizations {
   String get connectAnAgentSubtitle => 'Hämta en installationsprompt för Claude, ChatGPT, Codex eller valfri agent';
 
   @override
+  String syncCardSyncingAmount(String amount) {
+    return 'Synkroniserar $amount ljud';
+  }
+
+  @override
+  String get syncCardSyncingTitle => 'Synkroniserar dina inspelningar';
+
+  @override
+  String syncStepDownloadingAmount(String done, String total) {
+    return 'Hämtar från din Omi · $done av $total';
+  }
+
+  @override
+  String syncStepUploadingAmount(String done, String total) {
+    return 'Laddar upp · $done av $total';
+  }
+
+  @override
+  String syncCardTranscribingAmount(String amount) {
+    return 'Gör om $amount till konversationer';
+  }
+
+  @override
+  String syncCardTranscribedOf(String done, String total) {
+    return '$done av $total klart · du kan lämna den här skärmen';
+  }
+
+  @override
+  String syncCardReadyAmount(String amount) {
+    return '$amount redo att synkronisera';
+  }
+
+  @override
+  String get syncStepLabelDownload => 'Omi → telefon';
+
+  @override
+  String get syncStepLabelUpload => 'Uppladdning';
+
+  @override
+  String get syncStepLabelTranscribe => 'Transkribera';
+
+  @override
+  String get syncDetailsTitle => 'Synkroniseringsinfo';
+
+  @override
+  String get syncDetailsRightNow => 'Just nu';
+
+  @override
+  String get syncDetailsYourOmi => 'Din Omi';
+
+  @override
+  String get syncDetailsTransferSpeed => 'Överföringshastighet';
+
+  @override
+  String get syncDetailsWaitingOnOmi => 'Väntar på din Omi';
+
+  @override
+  String get syncDetailsWaitingOnPhone => 'Väntar på den här telefonen';
+
+  @override
+  String get syncDetailsTranscribing => 'Transkriberas på Omi';
+
+  @override
+  String get syncDetailsForSupport => 'För support';
+
+  @override
+  String get syncDetailsAudioFiles => 'Ljudfiler';
+
+  @override
+  String get syncDetailsServerJobs => 'Serverjobb (klara / totalt)';
+
+  @override
+  String get syncDetailsCopy => 'Kopiera information för support';
+
+  @override
   String get onDeviceAtCapTitle => 'Du har använt månadens livetranskribering';
 
   @override
@@ -13484,33 +13543,4 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get onDeviceRemoveModel => 'Ta bort talmodell';
-
-  @override
-  String get onDeviceRemoveModelTitle => 'Ta bort talmodellen?';
-
-  @override
-  String get onDeviceRemoveModelMessage =>
-      'Inspelningarna väntar på den här telefonen tills du laddar ner den igen eller livetimmarna kommer tillbaka.';
-
-  @override
-  String get onDeviceRemove => 'Ta bort';
-
-  @override
-  String get onDeviceFinishSetupTitle => 'Slutför konfigurationen för att se dina transkriptioner';
-
-  @override
-  String get onDeviceFinishSetupBody =>
-      'Du har använt månadens livetimmar. Omi spelar fortfarande in och sparar ljud på telefonen. Ladda ner talmodellen så kommer den ikapp.';
-
-  @override
-  String onDeviceDownloadSize(String size) {
-    return '$size att ladda ner';
-  }
-
-  @override
-  String get onDeviceUnsupportedBody =>
-      'Den här telefonen kan inte köra talmodellen än. Ljudet förblir sparat tills livetimmarna kommer tillbaka eller du uppgraderar.';
-
-  @override
-  String get onDeviceEntrySubtitle => 'Transkribera på den här telefonen när livetimmarna tar slut';
 }

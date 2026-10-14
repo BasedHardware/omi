@@ -5647,11 +5647,6 @@ class AppLocalizationsFi extends AppLocalizations {
   String get downloadingFromSdCard => 'Ladataan SD-kortilta';
 
   @override
-  String processingProgress(int current, int total) {
-    return 'Käsitellään $current/$total';
-  }
-
-  @override
   String conversationsCreated(int count) {
     return '$count keskustelua luotu';
   }
@@ -9092,18 +9087,10 @@ class AppLocalizationsFi extends AppLocalizations {
   }
 
   @override
-  String syncCardProgressOf(int current, int total) {
-    return '$current / $total';
-  }
-
-  @override
   String get syncStatusOnDevice => 'Laitteellasi';
 
   @override
   String get syncStatusDownloadingFromDevice => 'Ladataan laitteeltasi';
-
-  @override
-  String get newestFirst => 'Uusimmat ensin';
 
   @override
   String get noSyncedRecordingsYet => 'Ei vielä synkronoituja nauhoituksia';
@@ -12001,9 +11988,6 @@ class AppLocalizationsFi extends AppLocalizations {
   }
 
   @override
-  String get localCopiesSection => 'Paikalliset kopiot';
-
-  @override
   String speakerLabelLinesLabeled(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,
@@ -13223,6 +13207,81 @@ class AppLocalizationsFi extends AppLocalizations {
   String get connectAnAgentSubtitle => 'Hae asetuskehote Claudelle, ChatGPT:lle, Codexille tai mille tahansa agentille';
 
   @override
+  String syncCardSyncingAmount(String amount) {
+    return 'Synkronoidaan $amount ääntä';
+  }
+
+  @override
+  String get syncCardSyncingTitle => 'Synkronoidaan tallenteita';
+
+  @override
+  String syncStepDownloadingAmount(String done, String total) {
+    return 'Ladataan Omista · $done / $total';
+  }
+
+  @override
+  String syncStepUploadingAmount(String done, String total) {
+    return 'Lähetetään · $done / $total';
+  }
+
+  @override
+  String syncCardTranscribingAmount(String amount) {
+    return 'Muutetaan $amount keskusteluiksi';
+  }
+
+  @override
+  String syncCardTranscribedOf(String done, String total) {
+    return '$done / $total valmis · voit poistua tästä näkymästä';
+  }
+
+  @override
+  String syncCardReadyAmount(String amount) {
+    return '$amount valmiina synkronoitavaksi';
+  }
+
+  @override
+  String get syncStepLabelDownload => 'Omi → puhelin';
+
+  @override
+  String get syncStepLabelUpload => 'Lähetys';
+
+  @override
+  String get syncStepLabelTranscribe => 'Litterointi';
+
+  @override
+  String get syncDetailsTitle => 'Synkronoinnin tiedot';
+
+  @override
+  String get syncDetailsRightNow => 'Juuri nyt';
+
+  @override
+  String get syncDetailsYourOmi => 'Omi-laitteesi';
+
+  @override
+  String get syncDetailsTransferSpeed => 'Siirtonopeus';
+
+  @override
+  String get syncDetailsWaitingOnOmi => 'Odottaa Omia';
+
+  @override
+  String get syncDetailsWaitingOnPhone => 'Odottaa tässä puhelimessa';
+
+  @override
+  String get syncDetailsTranscribing => 'Litteroidaan Omissa';
+
+  @override
+  String get syncDetailsForSupport => 'Tukea varten';
+
+  @override
+  String get syncDetailsAudioFiles => 'Äänitiedostot';
+
+  @override
+  String get syncDetailsServerJobs => 'Palvelintyöt (valmis / yhteensä)';
+
+  @override
+  String get syncDetailsCopy => 'Kopioi tiedot tukea varten';
+
+  @override
   String get onDeviceAtCapTitle => 'Tämän kuun live-litterointi on käytetty';
 
   @override
@@ -13482,33 +13541,4 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get onDeviceRemoveModel => 'Poista puhemalli';
-
-  @override
-  String get onDeviceRemoveModelTitle => 'Poistetaanko puhemalli?';
-
-  @override
-  String get onDeviceRemoveModelMessage =>
-      'Tallenteet odottavat tällä puhelimella, kunnes lataat mallin uudelleen tai live-tunnit palautuvat.';
-
-  @override
-  String get onDeviceRemove => 'Poista';
-
-  @override
-  String get onDeviceFinishSetupTitle => 'Viimeistele käyttöönotto nähdäksesi litteroinnit';
-
-  @override
-  String get onDeviceFinishSetupBody =>
-      'Olet käyttänyt tämän kuun live-tunnit. Omi tallentaa edelleen ja säilyttää äänen puhelimessasi. Lataa puhemalli, niin litteroinnit saadaan ajan tasalle.';
-
-  @override
-  String onDeviceDownloadSize(String size) {
-    return '$size ladattavaa';
-  }
-
-  @override
-  String get onDeviceUnsupportedBody =>
-      'Tämä puhelin ei vielä pysty käyttämään puhemallia. Ääni säilyy tallessa, kunnes live-tunnit palautuvat tai päivität tilauksesi.';
-
-  @override
-  String get onDeviceEntrySubtitle => 'Kun live-tunnit loppuvat, litteroi tällä puhelimella';
 }

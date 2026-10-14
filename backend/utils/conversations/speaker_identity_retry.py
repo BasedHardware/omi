@@ -226,6 +226,7 @@ class _RetryCohort:
     initial_count: int = 0
     current: Optional[Future] = None
     unresolved: tuple[str, ...] = ()
+    carried: tuple[str, ...] = ()
     wake: asyncio.Event = field(default_factory=asyncio.Event)
     loop: Optional[asyncio.AbstractEventLoop] = None
 
@@ -238,10 +239,18 @@ def _schedule_coalesced(uid: str, conversation_ids: Iterable[str]) -> bool:
     with _coalescing_lock:
         cohort = _cohorts.get(uid)
         fresh = [cid for cid in known if cohort is None or cid not in cohort.seen]
-        if len(fresh) < len(known):
-            # Count suppressed submissions, including prior transient failures;
-            # retain seen IDs so resubmits cannot reset the cohort scan budget.
-            record_retry('late', 'skipped', 'cohort_seen', len(known) - len(fresh))
+        if cohort is not None:
+            in_flight = cohort.pending | set(cohort.unresolved) | set(cohort.carried)
+            duplicates = set(known) - set(fresh)
+            pending_duplicates = len(duplicates & in_flight)
+            terminal_duplicates = len(duplicates - in_flight)
+            if pending_duplicates:
+                # Still-owned IDs coalesce rather than drop; no entry or skip.
+                record_retry('late', 'deferred', 'in_flight', pending_duplicates)
+            if terminal_duplicates:
+                # A suppressed terminal resubmission is its own accounted entry.
+                record_retry('late', 'entry', 'candidate', terminal_duplicates)
+                record_retry('late', 'skipped', 'cohort_seen', terminal_duplicates)
         known = fresh
         if not known:
             return True
@@ -299,7 +308,7 @@ def _release_cohort(uid: str, cohort: _RetryCohort, reason: str) -> None:
                 unresolved = cohort.current.result().pending
             except Exception:
                 pass
-        dropped = len(cohort.pending | set(unresolved))
+        dropped = len(cohort.pending | set(unresolved) | set(cohort.carried))
         _retire_cohort_locked(uid, cohort)
     if dropped:
         record_retry('late', 'skipped', reason, dropped)
@@ -376,6 +385,37 @@ async def _wait_for_coalesced_pending(cohort: _RetryCohort, seconds: float) -> N
             return
 
 
+async def _run_arrivals_before_recheck(
+    uid: str, cohort: _RetryCohort, *, recheck_at: float, remaining_passes: int
+) -> int:
+    """Arrival wakes run fresh IDs only; the scheduled old-row recheck stays due."""
+    while remaining_passes:
+        left = recheck_at - time.monotonic()
+        if left <= 0:
+            break
+        await _wait_for_coalesced_pending(cohort, left)
+        with _coalescing_lock:
+            if time.monotonic() >= recheck_at or not cohort.pending:
+                break
+            candidates = tuple(sorted(cohort.pending))
+            cohort.pending.clear()
+            cohort.wake.clear()
+            # Cancellation while this worker runs must also retain/account the
+            # older processing IDs that are waiting for their scheduled recheck.
+            cohort.carried = cohort.unresolved
+            cohort.unresolved = candidates
+        cohort.current = submit_with_context(
+            storage_executor, partial(_retry_batch, remaining_passes=remaining_passes), uid, candidates
+        )
+        result = await asyncio.shield(asyncio.wrap_future(cohort.current))
+        with _coalescing_lock:
+            cohort.unresolved = tuple(sorted(set(cohort.carried) | set(result.pending)))
+            cohort.carried = ()
+            cohort.current = None
+        remaining_passes -= result.attempted
+    return remaining_passes
+
+
 async def _run_cohort(uid: str, cohort: _RetryCohort) -> None:
     if not await _admit_cohort(cohort):
         _release_cohort(uid, cohort, 'queue_expired')
@@ -393,6 +433,7 @@ async def _run_cohort(uid: str, cohort: _RetryCohort) -> None:
             candidates = tuple(sorted(cohort.pending))
             cohort.pending.clear()
             cohort.wake.clear()
+            cohort.unresolved = candidates
         if not remaining_passes or time.monotonic() > completion_deadline:
             cohort.unresolved = candidates
             _release_cohort(uid, cohort, 'pass_limit' if not remaining_passes else 'queue_expired')
@@ -403,8 +444,13 @@ async def _run_cohort(uid: str, cohort: _RetryCohort) -> None:
                 left = completion_deadline - time.monotonic()
                 if left < 0:
                     break
-                await _wait_for_coalesced_pending(cohort, min(delay, left))
-                if time.monotonic() > completion_deadline:
+                remaining_passes = await _run_arrivals_before_recheck(
+                    uid,
+                    cohort,
+                    recheck_at=min(time.monotonic() + delay, completion_deadline),
+                    remaining_passes=remaining_passes,
+                )
+                if not remaining_passes or time.monotonic() > completion_deadline:
                     break
             with _coalescing_lock:
                 # Fresh arrivals join this round while older rows still wait

@@ -6818,18 +6818,6 @@
     "@downloadingFromSdCard": {
         "description": "Progress label when downloading from SD card"
     },
-    "processingProgress": "প্রক্রিয়া করা হচ্ছে {current}/{total}",
-    "@processingProgress": {
-        "description": "Progress label showing current/total items",
-        "placeholders": {
-            "current": {
-                "type": "int"
-            },
-            "total": {
-                "type": "int"
-            }
-        }
-    },
     "conversationsCreated": "{count} কথোপকথন তৈরি করা হয়েছে",
     "@conversationsCreated": {
         "description": "Success message showing number of conversations created",
@@ -10359,10 +10347,8 @@
     "syncStatusConversationCreated": "কথোপকথন তৈরি হয়েছে",
     "syncCardUploadingTitle": "Omi-তে আপলোড হচ্ছে",
     "syncCardDownloadingTitle": "আপনার ডিভাইস থেকে ডাউনলোড হচ্ছে",
-    "syncCardProgressOf": "{total}-এর মধ্যে {current}",
     "syncStatusOnDevice": "আপনার ডিভাইসে",
     "syncStatusDownloadingFromDevice": "আপনার ডিভাইস থেকে ডাউনলোড হচ্ছে",
-    "newestFirst": "নতুনগুলি আগে",
     "noSyncedRecordingsYet": "এখনও কোনো সিঙ্ক করা রেকর্ডিং নেই",
     "morePaymentMethodsComingSoon": "শীঘ্রই আরও পেমেন্ট পদ্ধতি আসছে",
     "@morePaymentMethodsComingSoon": {
@@ -11157,7 +11143,6 @@
     "autoRemoveSyncedCopiesTitle": "সিঙ্ক করা কপি স্বয়ংক্রিয়ভাবে সরান",
     "autoRemoveSyncedCopiesDays": "{days} দিন পরে সিঙ্ক করা কপি মুছে যায়",
     "autoRemoveSyncedCopiesDescription": "সিঙ্কের {days} দিন পরে লোকাল কপি মুছে যায়। ক্লাউড কপি রাখা হয়।",
-    "localCopiesSection": "লোকাল কপি",
     "speakerLabelLinesLabeled": "{count, plural, =1{1টি লাইন লেবেল করা হয়েছে} other{{count}টি লাইন লেবেল করা হয়েছে}}",
     "speakerLabelVoiceStatus": "{state, select, learned{ভয়েস শেখা হয়েছে} pending{ভয়েস শেখা হচ্ছে…} disabled{ভয়েস সংরক্ষণ বন্ধ আছে} other{ভয়েস এখনও শেখা হয়নি}}",
     "speakerLabelVoiceDetail": "{state, select, learned{Omi পরের বার {name}-কে চিনতে পারবে।} pending{এতে কয়েক সেকেন্ড লাগবে।} disabled{Omi যাতে {name}-কে চিনতে পারে, সেজন্য সেটিংসে ভয়েস সংরক্ষণ চালু করুন।} other{Omi-র {name}-এর আরও স্পষ্ট কথা দরকার এবং সে চেষ্টা চালিয়ে যাবে।}}",
@@ -11496,6 +11481,27 @@
     "paywallCancelAnytime": "যেকোনো সময় বাতিল করুন।",
     "connectAnAgent": "একটি এজেন্ট সংযুক্ত করুন",
     "connectAnAgentSubtitle": "Claude, ChatGPT, Codex বা যেকোনো এজেন্টের জন্য সেটআপ প্রম্পট নিন",
+    "syncCardSyncingAmount": "{amount} অডিও সিঙ্ক হচ্ছে",
+    "syncCardSyncingTitle": "আপনার রেকর্ডিং সিঙ্ক হচ্ছে",
+    "syncStepDownloadingAmount": "Omi থেকে ডাউনলোড · {done} / {total}",
+    "syncStepUploadingAmount": "আপলোড · {done} / {total}",
+    "syncCardTranscribingAmount": "{amount} কথোপকথনে রূপান্তর হচ্ছে",
+    "syncCardTranscribedOf": "{done} / {total} সম্পন্ন · আপনি এই স্ক্রিন ছেড়ে যেতে পারেন",
+    "syncCardReadyAmount": "{amount} সিঙ্কের জন্য প্রস্তুত",
+    "syncStepLabelDownload": "Omi → ফোন",
+    "syncStepLabelUpload": "আপলোড",
+    "syncStepLabelTranscribe": "ট্রান্সক্রাইব",
+    "syncDetailsTitle": "সিঙ্কের বিবরণ",
+    "syncDetailsRightNow": "এই মুহূর্তে",
+    "syncDetailsYourOmi": "আপনার Omi",
+    "syncDetailsTransferSpeed": "ট্রান্সফার গতি",
+    "syncDetailsWaitingOnOmi": "Omi-তে অপেক্ষমাণ",
+    "syncDetailsWaitingOnPhone": "এই ফোনে অপেক্ষমাণ",
+    "syncDetailsTranscribing": "Omi-তে ট্রান্সক্রাইব হচ্ছে",
+    "syncDetailsForSupport": "সাপোর্টের জন্য",
+    "syncDetailsAudioFiles": "অডিও ফাইল",
+    "syncDetailsServerJobs": "সার্ভার জব (সম্পন্ন / মোট)",
+    "syncDetailsCopy": "সাপোর্টের জন্য বিবরণ কপি করুন",
     "onDeviceAtCapTitle": "এই মাসের লাইভ ট্রান্সক্রিপশন শেষ হয়ে গেছে",
     "onDeviceAtCapBody": "Omi এখনও রেকর্ড করছে। মাসের বাকি অংশ কীভাবে ট্রান্সক্রাইব হবে তা বেছে নিন।",
     "onDeviceLiveHoursReturn": "লাইভ ঘণ্টা আবার পাবেন {date} তারিখে।",

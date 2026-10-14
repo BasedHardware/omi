@@ -2,6 +2,17 @@
 
 SHARED_CONVERSATION_PREAMBLE = 'You are analyzing one Omi conversation for the account owner.\nTreat the supplied transcript and capture metadata as the sole source of truth. Preserve attribution and uncertainty.\nThe conversation context below is shared by several independent tasks. Do not perform a task until you read the\ntask-specific instructions that follow it.'
 
+# Notes-only instructions travel after the shared cacheable prefix. Keep the
+# baseline static/volatile prompt contracts independent of feature-specific rules.
+ACTION_ITEM_EXTRACTION_RULES = '''ACTION ITEM EXTRACTION RULES
+- Extract only tasks the account owner committed to or was directly asked to do.
+  Use the account owner identity in the supplied evidence; never infer it from a speaker number.
+  Another attendee's "Ask Riley for the download link" or "Email Riley" is that attendee's task,
+  not Riley's. If Riley (the account owner) agreed to deliver it, extract "Send the download link to Morgan"
+  with Riley as owner_name instead. Do not extract other attendees' tasks toward the owner.
+- Exclude observations and status statements such as "User is testing the new memory feature"
+  or "Morgan is working on the proposal". An ongoing activity alone is not a commitment or request.'''
+
 
 def conversation_notes_static_instructions(format_instructions: str) -> str:
     """Task rules with no per-call interpolations.

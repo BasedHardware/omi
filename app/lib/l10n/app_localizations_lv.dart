@@ -5656,11 +5656,6 @@ class AppLocalizationsLv extends AppLocalizations {
   String get downloadingFromSdCard => 'Lejupielāde no SD kartes';
 
   @override
-  String processingProgress(int current, int total) {
-    return 'Apstrādā $current/$total';
-  }
-
-  @override
   String conversationsCreated(int count) {
     return 'Izveidotas $count sarunas';
   }
@@ -9113,18 +9108,10 @@ class AppLocalizationsLv extends AppLocalizations {
   }
 
   @override
-  String syncCardProgressOf(int current, int total) {
-    return '$current no $total';
-  }
-
-  @override
   String get syncStatusOnDevice => 'Jūsu ierīcē';
 
   @override
   String get syncStatusDownloadingFromDevice => 'Lejupielāde no jūsu ierīces';
-
-  @override
-  String get newestFirst => 'Vispirms jaunākie';
 
   @override
   String get noSyncedRecordingsYet => 'Vēl nav sinhronizētu ierakstu';
@@ -12025,9 +12012,6 @@ class AppLocalizationsLv extends AppLocalizations {
   }
 
   @override
-  String get localCopiesSection => 'Vietējās kopijas';
-
-  @override
   String speakerLabelLinesLabeled(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,
@@ -13247,6 +13231,81 @@ class AppLocalizationsLv extends AppLocalizations {
   String get connectAnAgentSubtitle => 'Iegūstiet iestatīšanas uzvedni Claude, ChatGPT, Codex vai jebkuram aģentam';
 
   @override
+  String syncCardSyncingAmount(String amount) {
+    return 'Sinhronizē $amount audio';
+  }
+
+  @override
+  String get syncCardSyncingTitle => 'Sinhronizē jūsu ierakstus';
+
+  @override
+  String syncStepDownloadingAmount(String done, String total) {
+    return 'Lejupielāde no Omi · $done no $total';
+  }
+
+  @override
+  String syncStepUploadingAmount(String done, String total) {
+    return 'Augšupielāde · $done no $total';
+  }
+
+  @override
+  String syncCardTranscribingAmount(String amount) {
+    return '$amount pārvēršana sarunās';
+  }
+
+  @override
+  String syncCardTranscribedOf(String done, String total) {
+    return 'Gatavs $done no $total · varat atstāt šo ekrānu';
+  }
+
+  @override
+  String syncCardReadyAmount(String amount) {
+    return '$amount gatavs sinhronizācijai';
+  }
+
+  @override
+  String get syncStepLabelDownload => 'Omi → tālrunis';
+
+  @override
+  String get syncStepLabelUpload => 'Augšupielāde';
+
+  @override
+  String get syncStepLabelTranscribe => 'Atšifrēšana';
+
+  @override
+  String get syncDetailsTitle => 'Sinhronizācijas informācija';
+
+  @override
+  String get syncDetailsRightNow => 'Pašlaik';
+
+  @override
+  String get syncDetailsYourOmi => 'Jūsu Omi';
+
+  @override
+  String get syncDetailsTransferSpeed => 'Pārsūtīšanas ātrums';
+
+  @override
+  String get syncDetailsWaitingOnOmi => 'Gaida Omi';
+
+  @override
+  String get syncDetailsWaitingOnPhone => 'Gaida šajā tālrunī';
+
+  @override
+  String get syncDetailsTranscribing => 'Atšifrē Omi';
+
+  @override
+  String get syncDetailsForSupport => 'Atbalstam';
+
+  @override
+  String get syncDetailsAudioFiles => 'Audio faili';
+
+  @override
+  String get syncDetailsServerJobs => 'Servera uzdevumi (pabeigti / kopā)';
+
+  @override
+  String get syncDetailsCopy => 'Kopēt informāciju atbalstam';
+
+  @override
   String get onDeviceAtCapTitle => 'Šī mēneša tiešraides transkripcija ir izlietota';
 
   @override
@@ -13506,33 +13565,4 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get onDeviceRemoveModel => 'Noņemt runas modeli';
-
-  @override
-  String get onDeviceRemoveModelTitle => 'Noņemt runas modeli?';
-
-  @override
-  String get onDeviceRemoveModelMessage =>
-      'Ieraksti gaidīs šajā tālrunī, līdz to atkal lejupielādēsiet vai atgriezīsies tiešraides stundas.';
-
-  @override
-  String get onDeviceRemove => 'Noņemt';
-
-  @override
-  String get onDeviceFinishSetupTitle => 'Pabeidziet iestatīšanu, lai redzētu transkripcijas';
-
-  @override
-  String get onDeviceFinishSetupBody =>
-      'Šī mēneša tiešraides stundas ir izlietotas. Omi joprojām ieraksta un saglabā audio jūsu tālrunī. Lejupielādējiet runas modeli, un tas panāks nokavēto.';
-
-  @override
-  String onDeviceDownloadSize(String size) {
-    return 'Lejupielāde: $size';
-  }
-
-  @override
-  String get onDeviceUnsupportedBody =>
-      'Šis tālrunis vēl nevar darbināt runas modeli. Audio paliek saglabāts, līdz atgriežas tiešraides stundas vai jūs jaunināt plānu.';
-
-  @override
-  String get onDeviceEntrySubtitle => 'Kad tiešraides stundas beigušās, transkribēt šajā tālrunī';
 }

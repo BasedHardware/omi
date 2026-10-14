@@ -2350,6 +2350,7 @@ _add(
     DriverEntry(
         'database.person_aliases.list_people',
         base={'uid': UID},
+        domains={'limit': [None, 200]},
         neutrals={
             'include_dismissed': (False, 'post-read visibility filter; does not alter the Firestore query shape')
         },

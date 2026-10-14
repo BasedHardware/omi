@@ -5655,11 +5655,6 @@ class AppLocalizationsVi extends AppLocalizations {
   String get downloadingFromSdCard => 'Đang tải xuống từ Thẻ SD';
 
   @override
-  String processingProgress(int current, int total) {
-    return 'Đang xử lý $current/$total';
-  }
-
-  @override
   String conversationsCreated(int count) {
     return 'Đã tạo $count cuộc trò chuyện';
   }
@@ -9092,18 +9087,10 @@ class AppLocalizationsVi extends AppLocalizations {
   }
 
   @override
-  String syncCardProgressOf(int current, int total) {
-    return '$current trên $total';
-  }
-
-  @override
   String get syncStatusOnDevice => 'Trên thiết bị của bạn';
 
   @override
   String get syncStatusDownloadingFromDevice => 'Đang tải xuống từ thiết bị của bạn';
-
-  @override
-  String get newestFirst => 'Mới nhất trước';
 
   @override
   String get noSyncedRecordingsYet => 'Chưa có bản ghi nào được đồng bộ';
@@ -11996,9 +11983,6 @@ class AppLocalizationsVi extends AppLocalizations {
   }
 
   @override
-  String get localCopiesSection => 'Bản sao cục bộ';
-
-  @override
   String speakerLabelLinesLabeled(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,
@@ -13216,6 +13200,81 @@ class AppLocalizationsVi extends AppLocalizations {
   String get connectAnAgentSubtitle => 'Nhận lời nhắc thiết lập cho Claude, ChatGPT, Codex hoặc bất kỳ tác nhân nào';
 
   @override
+  String syncCardSyncingAmount(String amount) {
+    return 'Đang đồng bộ $amount âm thanh';
+  }
+
+  @override
+  String get syncCardSyncingTitle => 'Đang đồng bộ bản ghi của bạn';
+
+  @override
+  String syncStepDownloadingAmount(String done, String total) {
+    return 'Đang tải từ Omi của bạn · $done / $total';
+  }
+
+  @override
+  String syncStepUploadingAmount(String done, String total) {
+    return 'Đang tải lên · $done / $total';
+  }
+
+  @override
+  String syncCardTranscribingAmount(String amount) {
+    return 'Đang biến $amount thành cuộc trò chuyện';
+  }
+
+  @override
+  String syncCardTranscribedOf(String done, String total) {
+    return 'Xong $done / $total · bạn có thể rời màn hình này';
+  }
+
+  @override
+  String syncCardReadyAmount(String amount) {
+    return '$amount sẵn sàng đồng bộ';
+  }
+
+  @override
+  String get syncStepLabelDownload => 'Omi → điện thoại';
+
+  @override
+  String get syncStepLabelUpload => 'Tải lên';
+
+  @override
+  String get syncStepLabelTranscribe => 'Phiên âm';
+
+  @override
+  String get syncDetailsTitle => 'Chi tiết đồng bộ';
+
+  @override
+  String get syncDetailsRightNow => 'Ngay lúc này';
+
+  @override
+  String get syncDetailsYourOmi => 'Omi của bạn';
+
+  @override
+  String get syncDetailsTransferSpeed => 'Tốc độ truyền';
+
+  @override
+  String get syncDetailsWaitingOnOmi => 'Đang chờ trên Omi';
+
+  @override
+  String get syncDetailsWaitingOnPhone => 'Đang chờ trên điện thoại này';
+
+  @override
+  String get syncDetailsTranscribing => 'Đang phiên âm trên Omi';
+
+  @override
+  String get syncDetailsForSupport => 'Dành cho hỗ trợ';
+
+  @override
+  String get syncDetailsAudioFiles => 'Tệp âm thanh';
+
+  @override
+  String get syncDetailsServerJobs => 'Tác vụ máy chủ (xong / tổng)';
+
+  @override
+  String get syncDetailsCopy => 'Sao chép chi tiết cho bộ phận hỗ trợ';
+
+  @override
   String get onDeviceAtCapTitle => 'Bạn đã dùng hết phiên âm trực tiếp của tháng này';
 
   @override
@@ -13475,33 +13534,4 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get onDeviceRemoveModel => 'Xóa mô hình giọng nói';
-
-  @override
-  String get onDeviceRemoveModelTitle => 'Xóa mô hình giọng nói?';
-
-  @override
-  String get onDeviceRemoveModelMessage =>
-      'Bản ghi âm sẽ chờ trên điện thoại này cho đến khi bạn tải lại hoặc có lại giờ trực tiếp.';
-
-  @override
-  String get onDeviceRemove => 'Xóa';
-
-  @override
-  String get onDeviceFinishSetupTitle => 'Hoàn tất thiết lập để xem bản ghi';
-
-  @override
-  String get onDeviceFinishSetupBody =>
-      'Bạn đã dùng hết giờ trực tiếp của tháng này. Omi vẫn đang ghi âm và lưu âm thanh trên điện thoại của bạn. Hãy tải mô hình giọng nói để xử lý bù.';
-
-  @override
-  String onDeviceDownloadSize(String size) {
-    return 'Tải xuống $size';
-  }
-
-  @override
-  String get onDeviceUnsupportedBody =>
-      'Điện thoại này chưa chạy được mô hình giọng nói. Âm thanh vẫn được lưu cho đến khi có lại giờ trực tiếp hoặc bạn nâng cấp.';
-
-  @override
-  String get onDeviceEntrySubtitle => 'Khi hết giờ trực tiếp, phiên âm trên điện thoại này';
 }

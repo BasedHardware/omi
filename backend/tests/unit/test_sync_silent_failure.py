@@ -18,6 +18,7 @@ import pytest
 from pydantic import BaseModel
 
 from models.transcript_segment import SpeakerIdentityStatus
+from utils import dream_vocabulary  # noqa: F401 - retain shared keyterms before legacy database stubs
 
 
 def _read_text(path):
@@ -869,6 +870,7 @@ class TestProcessSegmentReal:
         sys.modules['utils.cloud_tasks'].is_cloud_tasks_dispatch_enabled = MagicMock(return_value=False)
         sys.modules['utils.cloud_tasks'].is_audio_merge_dispatch_enabled = MagicMock(return_value=False)
         sys.modules['utils.cloud_tasks'].enqueue_audio_merge_job = MagicMock()
+        sys.modules['utils.cloud_tasks'].enqueue_audio_merge_job_deferred = MagicMock()
         sys.modules['utils.cloud_tasks'].verify_audio_merge_cloud_tasks_oidc = MagicMock()
         sys.modules['utils.cloud_tasks'].verify_cloud_tasks_oidc = MagicMock()
         sys.modules['database.sync_ledger'].add_processed_sync_segment_id = MagicMock(return_value=True)

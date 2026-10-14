@@ -6818,18 +6818,6 @@
     "@downloadingFromSdCard": {
         "description": "Progress label when downloading from SD card"
     },
-    "processingProgress": "செயலாக்குகிறது {current}/{total}",
-    "@processingProgress": {
-        "description": "Progress label showing current/total items",
-        "placeholders": {
-            "current": {
-                "type": "int"
-            },
-            "total": {
-                "type": "int"
-            }
-        }
-    },
     "conversationsCreated": "{count} உரையாடல்கள் உருவாக்கப்பட்டன",
     "@conversationsCreated": {
         "description": "Success message showing number of conversations created",
@@ -10359,10 +10347,8 @@
     "syncStatusConversationCreated": "உரையாடல் உருவாக்கப்பட்டது",
     "syncCardUploadingTitle": "Omi-க்கு பதிவேற்றப்படுகிறது",
     "syncCardDownloadingTitle": "உங்கள் சாதனத்திலிருந்து பதிவிறக்கப்படுகிறது",
-    "syncCardProgressOf": "{total}-இல் {current}",
     "syncStatusOnDevice": "உங்கள் சாதனத்தில்",
     "syncStatusDownloadingFromDevice": "உங்கள் சாதனத்திலிருந்து பதிவிறக்கப்படுகிறது",
-    "newestFirst": "புதியவை முதலில்",
     "noSyncedRecordingsYet": "ஒத்திசைக்கப்பட்ட பதிவுகள் இன்னும் இல்லை",
     "morePaymentMethodsComingSoon": "மேலும் கட்டண முறைகள் விரைவில்",
     "@morePaymentMethodsComingSoon": {
@@ -11157,7 +11143,6 @@
     "autoRemoveSyncedCopiesTitle": "ஒத்திசைக்கப்பட்ட நகல்களை தானாக அகற்று",
     "autoRemoveSyncedCopiesDays": "ஒத்திசைக்கப்பட்ட நகல்கள் {days} நாட்களுக்குப் பிறகு நீக்கப்படும்",
     "autoRemoveSyncedCopiesDescription": "ஒத்திசைத்த {days} நாட்களுக்குப் பிறகு உள்ளூர் நகல்களை நீக்கும். கிளவுட் நகல்கள் வைக்கப்படும்.",
-    "localCopiesSection": "உள்ளூர் நகல்கள்",
     "speakerLabelLinesLabeled": "{count, plural, =1{1 வரிக்கு லேபிளிடப்பட்டது} other{{count} வரிகளுக்கு லேபிளிடப்பட்டது}}",
     "speakerLabelVoiceStatus": "{state, select, learned{குரல் கற்றுக்கொள்ளப்பட்டது} pending{குரலைக் கற்றுக்கொள்கிறது…} disabled{குரல் சேமிப்பு முடக்கப்பட்டுள்ளது} other{குரல் இன்னும் கற்றுக்கொள்ளப்படவில்லை}}",
     "speakerLabelVoiceDetail": "{state, select, learned{அடுத்த முறை Omi {name} அவர்களை அடையாளம் காணும்.} pending{இதற்கு சில விநாடிகள் ஆகும்.} disabled{Omi {name} அவர்களை அடையாளம் காண, அமைப்புகளில் குரல் சேமிப்பை இயக்கவும்.} other{Omi-க்கு {name} அவர்களின் இன்னும் தெளிவான பேச்சு தேவை; அது தொடர்ந்து முயற்சிக்கும்.}}",
@@ -11496,6 +11481,27 @@
     "paywallCancelAnytime": "எப்போது வேண்டுமானாலும் ரத்து செய்யலாம்.",
     "connectAnAgent": "ஒரு ஏஜென்டை இணைக்கவும்",
     "connectAnAgentSubtitle": "Claude, ChatGPT, Codex அல்லது எந்த ஏஜென்டுக்கும் அமைவு ப்ராம்ப்டைப் பெறுங்கள்",
+    "syncCardSyncingAmount": "{amount} ஆடியோ ஒத்திசைக்கப்படுகிறது",
+    "syncCardSyncingTitle": "உங்கள் பதிவுகள் ஒத்திசைக்கப்படுகின்றன",
+    "syncStepDownloadingAmount": "உங்கள் Omi இலிருந்து பதிவிறக்கம் · {done} / {total}",
+    "syncStepUploadingAmount": "பதிவேற்றம் · {done} / {total}",
+    "syncCardTranscribingAmount": "{amount} உரையாடல்களாக மாற்றப்படுகிறது",
+    "syncCardTranscribedOf": "{done} / {total} முடிந்தது · இந்தத் திரையிலிருந்து வெளியேறலாம்",
+    "syncCardReadyAmount": "{amount} ஒத்திசைக்கத் தயார்",
+    "syncStepLabelDownload": "Omi → ஃபோன்",
+    "syncStepLabelUpload": "பதிவேற்றம்",
+    "syncStepLabelTranscribe": "எழுத்தாக்கம்",
+    "syncDetailsTitle": "ஒத்திசைவு விவரங்கள்",
+    "syncDetailsRightNow": "இப்போது",
+    "syncDetailsYourOmi": "உங்கள் Omi",
+    "syncDetailsTransferSpeed": "பரிமாற்ற வேகம்",
+    "syncDetailsWaitingOnOmi": "Omi இல் காத்திருக்கிறது",
+    "syncDetailsWaitingOnPhone": "இந்த ஃபோனில் காத்திருக்கிறது",
+    "syncDetailsTranscribing": "Omi இல் எழுத்தாக்கம் நடக்கிறது",
+    "syncDetailsForSupport": "ஆதரவுக்காக",
+    "syncDetailsAudioFiles": "ஆடியோ கோப்புகள்",
+    "syncDetailsServerJobs": "சர்வர் பணிகள் (முடிந்தவை / மொத்தம்)",
+    "syncDetailsCopy": "ஆதரவுக்காக விவரங்களை நகலெடுக்கவும்",
     "onDeviceAtCapTitle": "இந்த மாதத்தின் நேரலை உரையாக்கத்தைப் பயன்படுத்திவிட்டீர்கள்",
     "onDeviceAtCapBody": "Omi இன்னும் பதிவுசெய்கிறது. இந்த மாதத்தின் மீதியை எப்படி உரையாக்குவது என்று தேர்வுசெய்யவும்.",
     "onDeviceLiveHoursReturn": "நேரலை மணிநேரங்கள் {date} அன்று மீண்டும் கிடைக்கும்.",

@@ -5658,11 +5658,6 @@ class AppLocalizationsNl extends AppLocalizations {
   String get downloadingFromSdCard => 'Downloaden van SD-kaart';
 
   @override
-  String processingProgress(int current, int total) {
-    return 'Verwerken $current/$total';
-  }
-
-  @override
   String conversationsCreated(int count) {
     return '$count gesprekken aangemaakt';
   }
@@ -9112,18 +9107,10 @@ class AppLocalizationsNl extends AppLocalizations {
   }
 
   @override
-  String syncCardProgressOf(int current, int total) {
-    return '$current van $total';
-  }
-
-  @override
   String get syncStatusOnDevice => 'Op je apparaat';
 
   @override
   String get syncStatusDownloadingFromDevice => 'Downloaden van je apparaat';
-
-  @override
-  String get newestFirst => 'Nieuwste eerst';
 
   @override
   String get noSyncedRecordingsYet => 'Nog geen gesynchroniseerde opnames';
@@ -12031,9 +12018,6 @@ class AppLocalizationsNl extends AppLocalizations {
   }
 
   @override
-  String get localCopiesSection => 'Lokale kopieën';
-
-  @override
   String speakerLabelLinesLabeled(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,
@@ -13254,6 +13238,81 @@ class AppLocalizationsNl extends AppLocalizations {
   String get connectAnAgentSubtitle => 'Krijg een installatieprompt voor Claude, ChatGPT, Codex of elke andere agent';
 
   @override
+  String syncCardSyncingAmount(String amount) {
+    return '$amount audio synchroniseren';
+  }
+
+  @override
+  String get syncCardSyncingTitle => 'Opnamen synchroniseren';
+
+  @override
+  String syncStepDownloadingAmount(String done, String total) {
+    return 'Downloaden van je Omi · $done van $total';
+  }
+
+  @override
+  String syncStepUploadingAmount(String done, String total) {
+    return 'Uploaden · $done van $total';
+  }
+
+  @override
+  String syncCardTranscribingAmount(String amount) {
+    return '$amount omzetten in gesprekken';
+  }
+
+  @override
+  String syncCardTranscribedOf(String done, String total) {
+    return '$done van $total klaar · je kunt dit scherm verlaten';
+  }
+
+  @override
+  String syncCardReadyAmount(String amount) {
+    return '$amount klaar om te synchroniseren';
+  }
+
+  @override
+  String get syncStepLabelDownload => 'Omi → telefoon';
+
+  @override
+  String get syncStepLabelUpload => 'Uploaden';
+
+  @override
+  String get syncStepLabelTranscribe => 'Transcriberen';
+
+  @override
+  String get syncDetailsTitle => 'Synchronisatiedetails';
+
+  @override
+  String get syncDetailsRightNow => 'Op dit moment';
+
+  @override
+  String get syncDetailsYourOmi => 'Je Omi';
+
+  @override
+  String get syncDetailsTransferSpeed => 'Overdrachtssnelheid';
+
+  @override
+  String get syncDetailsWaitingOnOmi => 'Wacht op je Omi';
+
+  @override
+  String get syncDetailsWaitingOnPhone => 'Wacht op deze telefoon';
+
+  @override
+  String get syncDetailsTranscribing => 'Transcriberen op Omi';
+
+  @override
+  String get syncDetailsForSupport => 'Voor support';
+
+  @override
+  String get syncDetailsAudioFiles => 'Audiobestanden';
+
+  @override
+  String get syncDetailsServerJobs => 'Serverjobs (klaar / totaal)';
+
+  @override
+  String get syncDetailsCopy => 'Details kopiëren voor support';
+
+  @override
   String get onDeviceAtCapTitle => 'Je live-transcriptie van deze maand is op';
 
   @override
@@ -13516,33 +13575,4 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get onDeviceRemoveModel => 'Spraakmodel verwijderen';
-
-  @override
-  String get onDeviceRemoveModelTitle => 'Spraakmodel verwijderen?';
-
-  @override
-  String get onDeviceRemoveModelMessage =>
-      'Opnames wachten op deze telefoon tot je het opnieuw downloadt of je live-uren terugkomen.';
-
-  @override
-  String get onDeviceRemove => 'Verwijderen';
-
-  @override
-  String get onDeviceFinishSetupTitle => 'Rond de installatie af om je transcripties te zien';
-
-  @override
-  String get onDeviceFinishSetupBody =>
-      'Je hebt de live-uren van deze maand opgebruikt. Omi neemt nog steeds op en slaat audio op je telefoon op. Download het spraakmodel en het werkt de achterstand weg.';
-
-  @override
-  String onDeviceDownloadSize(String size) {
-    return 'Download van $size';
-  }
-
-  @override
-  String get onDeviceUnsupportedBody =>
-      'Deze telefoon kan het spraakmodel nog niet draaien. Audio blijft bewaard tot je live-uren terugkomen of je upgradet.';
-
-  @override
-  String get onDeviceEntrySubtitle => 'Als de live-uren op zijn, transcriberen op deze telefoon';
 }

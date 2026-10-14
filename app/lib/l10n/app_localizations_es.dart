@@ -5650,11 +5650,6 @@ class AppLocalizationsEs extends AppLocalizations {
   String get downloadingFromSdCard => 'Descargando desde tarjeta SD';
 
   @override
-  String processingProgress(int current, int total) {
-    return 'Procesando $current/$total';
-  }
-
-  @override
   String conversationsCreated(int count) {
     return '$count conversaciones creadas';
   }
@@ -9117,18 +9112,10 @@ class AppLocalizationsEs extends AppLocalizations {
   }
 
   @override
-  String syncCardProgressOf(int current, int total) {
-    return '$current de $total';
-  }
-
-  @override
   String get syncStatusOnDevice => 'En tu dispositivo';
 
   @override
   String get syncStatusDownloadingFromDevice => 'Descargando desde tu dispositivo';
-
-  @override
-  String get newestFirst => 'Más recientes primero';
 
   @override
   String get noSyncedRecordingsYet => 'Aún no hay grabaciones sincronizadas';
@@ -12034,9 +12021,6 @@ class AppLocalizationsEs extends AppLocalizations {
   }
 
   @override
-  String get localCopiesSection => 'Copias locales';
-
-  @override
   String speakerLabelLinesLabeled(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,
@@ -13258,6 +13242,81 @@ class AppLocalizationsEs extends AppLocalizations {
       'Obtén una instrucción de configuración para Claude, ChatGPT, Codex o cualquier agente';
 
   @override
+  String syncCardSyncingAmount(String amount) {
+    return 'Sincronizando $amount de audio';
+  }
+
+  @override
+  String get syncCardSyncingTitle => 'Sincronizando tus grabaciones';
+
+  @override
+  String syncStepDownloadingAmount(String done, String total) {
+    return 'Descargando desde tu Omi · $done de $total';
+  }
+
+  @override
+  String syncStepUploadingAmount(String done, String total) {
+    return 'Subiendo · $done de $total';
+  }
+
+  @override
+  String syncCardTranscribingAmount(String amount) {
+    return 'Convirtiendo $amount en conversaciones';
+  }
+
+  @override
+  String syncCardTranscribedOf(String done, String total) {
+    return '$done de $total listo · puedes salir de esta pantalla';
+  }
+
+  @override
+  String syncCardReadyAmount(String amount) {
+    return '$amount listos para sincronizar';
+  }
+
+  @override
+  String get syncStepLabelDownload => 'Omi → teléfono';
+
+  @override
+  String get syncStepLabelUpload => 'Subida';
+
+  @override
+  String get syncStepLabelTranscribe => 'Transcribir';
+
+  @override
+  String get syncDetailsTitle => 'Detalles de sincronización';
+
+  @override
+  String get syncDetailsRightNow => 'Ahora mismo';
+
+  @override
+  String get syncDetailsYourOmi => 'Tu Omi';
+
+  @override
+  String get syncDetailsTransferSpeed => 'Velocidad de transferencia';
+
+  @override
+  String get syncDetailsWaitingOnOmi => 'Esperando a tu Omi';
+
+  @override
+  String get syncDetailsWaitingOnPhone => 'Esperando a este teléfono';
+
+  @override
+  String get syncDetailsTranscribing => 'Transcribiendo en Omi';
+
+  @override
+  String get syncDetailsForSupport => 'Para soporte';
+
+  @override
+  String get syncDetailsAudioFiles => 'Archivos de audio';
+
+  @override
+  String get syncDetailsServerJobs => 'Tareas del servidor (hechas / total)';
+
+  @override
+  String get syncDetailsCopy => 'Copiar detalles para soporte';
+
+  @override
   String get onDeviceAtCapTitle => 'Has usado la transcripción en vivo de este mes';
 
   @override
@@ -13520,33 +13579,4 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get onDeviceRemoveModel => 'Eliminar modelo de voz';
-
-  @override
-  String get onDeviceRemoveModelTitle => '¿Eliminar el modelo de voz?';
-
-  @override
-  String get onDeviceRemoveModelMessage =>
-      'Las grabaciones esperarán en este teléfono hasta que lo vuelvas a descargar o vuelvan las horas en vivo.';
-
-  @override
-  String get onDeviceRemove => 'Eliminar';
-
-  @override
-  String get onDeviceFinishSetupTitle => 'Termina la configuración para ver tus transcripciones';
-
-  @override
-  String get onDeviceFinishSetupBody =>
-      'Has usado las horas en vivo de este mes. Omi sigue grabando y guardando el audio en tu teléfono. Descarga el modelo de voz y se pondrá al día.';
-
-  @override
-  String onDeviceDownloadSize(String size) {
-    return 'Descarga de $size';
-  }
-
-  @override
-  String get onDeviceUnsupportedBody =>
-      'Este teléfono aún no puede ejecutar el modelo de voz. El audio queda guardado hasta que vuelvan las horas en vivo o mejores tu plan.';
-
-  @override
-  String get onDeviceEntrySubtitle => 'Cuando se acaben las horas en vivo, transcribe en este teléfono';
 }

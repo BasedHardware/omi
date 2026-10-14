@@ -91,10 +91,13 @@ Expected direction: fewer repeated submissions competing for slots, more
 eligible/committed attempts if metadata admission was limiting. There is no
 measured multiplicative effect. A 2× recovery scenario gives 4,266 eligible and
 4,236 commits per 12h; demand-only ceiling at unchanged mix is about 6,988 and
-6,939. These are planning scenarios, not rollout promises. Fresh merged IDs wake completion waits and join the next inner round even while
-older candidates remain processing. Slot releases wake the oldest waiter with
+6,939. These are planning scenarios, not rollout promises. Fresh merged IDs wake
+completion waits for arrival-only worker rounds; older processing IDs keep their
+scheduled rechecks. Arrival wakes consume no completion recheck slot and cannot
+reset the deadline or eight-pass budget. Slot releases wake the oldest waiter with
 FIFO admission; polling remains the fallback. Suppressed resubmissions, including
-previous transient exits, emit `skipped/cohort_seen` without resetting budgets.
+previous transient exits, emit a matching entry and `skipped/cohort_seen` without
+resetting budgets. In-flight duplicates emit `deferred/in_flight`, not skips.
 
 Canary readout: `skipped/queue_limit`, `skipped/queue_expired`, `skipped/cancelled`,
 `deferred/coalesced`, `eligible/candidate` and `cas_committed/done`, plus

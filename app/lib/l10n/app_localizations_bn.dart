@@ -5652,11 +5652,6 @@ class AppLocalizationsBn extends AppLocalizations {
   String get downloadingFromSdCard => 'SD কার্ড থেকে ডাউনলোড করা হচ্ছে';
 
   @override
-  String processingProgress(int current, int total) {
-    return 'প্রক্রিয়া করা হচ্ছে $current/$total';
-  }
-
-  @override
   String conversationsCreated(int count) {
     return '$count কথোপকথন তৈরি করা হয়েছে';
   }
@@ -9097,18 +9092,10 @@ class AppLocalizationsBn extends AppLocalizations {
   }
 
   @override
-  String syncCardProgressOf(int current, int total) {
-    return '$total-এর মধ্যে $current';
-  }
-
-  @override
   String get syncStatusOnDevice => 'আপনার ডিভাইসে';
 
   @override
   String get syncStatusDownloadingFromDevice => 'আপনার ডিভাইস থেকে ডাউনলোড হচ্ছে';
-
-  @override
-  String get newestFirst => 'নতুনগুলি আগে';
 
   @override
   String get noSyncedRecordingsYet => 'এখনও কোনো সিঙ্ক করা রেকর্ডিং নেই';
@@ -11995,9 +11982,6 @@ class AppLocalizationsBn extends AppLocalizations {
   }
 
   @override
-  String get localCopiesSection => 'লোকাল কপি';
-
-  @override
   String speakerLabelLinesLabeled(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,
@@ -13215,6 +13199,81 @@ class AppLocalizationsBn extends AppLocalizations {
   String get connectAnAgentSubtitle => 'Claude, ChatGPT, Codex বা যেকোনো এজেন্টের জন্য সেটআপ প্রম্পট নিন';
 
   @override
+  String syncCardSyncingAmount(String amount) {
+    return '$amount অডিও সিঙ্ক হচ্ছে';
+  }
+
+  @override
+  String get syncCardSyncingTitle => 'আপনার রেকর্ডিং সিঙ্ক হচ্ছে';
+
+  @override
+  String syncStepDownloadingAmount(String done, String total) {
+    return 'Omi থেকে ডাউনলোড · $done / $total';
+  }
+
+  @override
+  String syncStepUploadingAmount(String done, String total) {
+    return 'আপলোড · $done / $total';
+  }
+
+  @override
+  String syncCardTranscribingAmount(String amount) {
+    return '$amount কথোপকথনে রূপান্তর হচ্ছে';
+  }
+
+  @override
+  String syncCardTranscribedOf(String done, String total) {
+    return '$done / $total সম্পন্ন · আপনি এই স্ক্রিন ছেড়ে যেতে পারেন';
+  }
+
+  @override
+  String syncCardReadyAmount(String amount) {
+    return '$amount সিঙ্কের জন্য প্রস্তুত';
+  }
+
+  @override
+  String get syncStepLabelDownload => 'Omi → ফোন';
+
+  @override
+  String get syncStepLabelUpload => 'আপলোড';
+
+  @override
+  String get syncStepLabelTranscribe => 'ট্রান্সক্রাইব';
+
+  @override
+  String get syncDetailsTitle => 'সিঙ্কের বিবরণ';
+
+  @override
+  String get syncDetailsRightNow => 'এই মুহূর্তে';
+
+  @override
+  String get syncDetailsYourOmi => 'আপনার Omi';
+
+  @override
+  String get syncDetailsTransferSpeed => 'ট্রান্সফার গতি';
+
+  @override
+  String get syncDetailsWaitingOnOmi => 'Omi-তে অপেক্ষমাণ';
+
+  @override
+  String get syncDetailsWaitingOnPhone => 'এই ফোনে অপেক্ষমাণ';
+
+  @override
+  String get syncDetailsTranscribing => 'Omi-তে ট্রান্সক্রাইব হচ্ছে';
+
+  @override
+  String get syncDetailsForSupport => 'সাপোর্টের জন্য';
+
+  @override
+  String get syncDetailsAudioFiles => 'অডিও ফাইল';
+
+  @override
+  String get syncDetailsServerJobs => 'সার্ভার জব (সম্পন্ন / মোট)';
+
+  @override
+  String get syncDetailsCopy => 'সাপোর্টের জন্য বিবরণ কপি করুন';
+
+  @override
   String get onDeviceAtCapTitle => 'এই মাসের লাইভ ট্রান্সক্রিপশন শেষ হয়ে গেছে';
 
   @override
@@ -13474,33 +13533,4 @@ class AppLocalizationsBn extends AppLocalizations {
 
   @override
   String get onDeviceRemoveModel => 'স্পিচ মডেল সরান';
-
-  @override
-  String get onDeviceRemoveModelTitle => 'স্পিচ মডেল সরাবেন?';
-
-  @override
-  String get onDeviceRemoveModelMessage =>
-      'আবার ডাউনলোড না করা বা লাইভ ঘণ্টা ফিরে না আসা পর্যন্ত রেকর্ডিংগুলো এই ফোনে অপেক্ষা করবে।';
-
-  @override
-  String get onDeviceRemove => 'সরান';
-
-  @override
-  String get onDeviceFinishSetupTitle => 'ট্রান্সক্রিপ্ট দেখতে সেটআপ শেষ করুন';
-
-  @override
-  String get onDeviceFinishSetupBody =>
-      'আপনি এই মাসের লাইভ ঘণ্টা শেষ করে ফেলেছেন। Omi এখনও রেকর্ড করছে এবং আপনার ফোনে অডিও সংরক্ষণ করছে। স্পিচ মডেল ডাউনলোড করুন, বাকি কাজ এটি সেরে নেবে।';
-
-  @override
-  String onDeviceDownloadSize(String size) {
-    return '$size ডাউনলোড';
-  }
-
-  @override
-  String get onDeviceUnsupportedBody =>
-      'এই ফোন এখনও স্পিচ মডেল চালাতে পারে না। লাইভ ঘণ্টা ফিরে আসা বা আপগ্রেড করা পর্যন্ত অডিও সংরক্ষিত থাকবে।';
-
-  @override
-  String get onDeviceEntrySubtitle => 'লাইভ ঘণ্টা শেষ হলে এই ফোনে ট্রান্সক্রাইব করুন';
 }

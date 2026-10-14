@@ -5644,11 +5644,6 @@ class AppLocalizationsEn extends AppLocalizations {
   String get downloadingFromSdCard => 'Downloading from SD Card';
 
   @override
-  String processingProgress(int current, int total) {
-    return 'Processing $current/$total';
-  }
-
-  @override
   String conversationsCreated(int count) {
     return '$count conversations created';
   }
@@ -9085,18 +9080,10 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
-  String syncCardProgressOf(int current, int total) {
-    return '$current of $total';
-  }
-
-  @override
   String get syncStatusOnDevice => 'On your device';
 
   @override
   String get syncStatusDownloadingFromDevice => 'Downloading from your device';
-
-  @override
-  String get newestFirst => 'Newest first';
 
   @override
   String get noSyncedRecordingsYet => 'No synced recordings yet';
@@ -11984,9 +11971,6 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
-  String get localCopiesSection => 'Local Copies';
-
-  @override
   String speakerLabelLinesLabeled(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,
@@ -13203,6 +13187,81 @@ class AppLocalizationsEn extends AppLocalizations {
   String get connectAnAgentSubtitle => 'Get a setup prompt for Claude, ChatGPT, Codex, or any agent';
 
   @override
+  String syncCardSyncingAmount(String amount) {
+    return 'Syncing $amount of audio';
+  }
+
+  @override
+  String get syncCardSyncingTitle => 'Syncing your recordings';
+
+  @override
+  String syncStepDownloadingAmount(String done, String total) {
+    return 'Downloading from your Omi · $done of $total';
+  }
+
+  @override
+  String syncStepUploadingAmount(String done, String total) {
+    return 'Uploading · $done of $total';
+  }
+
+  @override
+  String syncCardTranscribingAmount(String amount) {
+    return 'Turning $amount into conversations';
+  }
+
+  @override
+  String syncCardTranscribedOf(String done, String total) {
+    return '$done of $total done · you can leave this screen';
+  }
+
+  @override
+  String syncCardReadyAmount(String amount) {
+    return '$amount ready to sync';
+  }
+
+  @override
+  String get syncStepLabelDownload => 'Omi → phone';
+
+  @override
+  String get syncStepLabelUpload => 'Upload';
+
+  @override
+  String get syncStepLabelTranscribe => 'Transcribe';
+
+  @override
+  String get syncDetailsTitle => 'Sync details';
+
+  @override
+  String get syncDetailsRightNow => 'Right now';
+
+  @override
+  String get syncDetailsYourOmi => 'Your Omi';
+
+  @override
+  String get syncDetailsTransferSpeed => 'Transfer speed';
+
+  @override
+  String get syncDetailsWaitingOnOmi => 'Waiting on your Omi';
+
+  @override
+  String get syncDetailsWaitingOnPhone => 'Waiting on this phone';
+
+  @override
+  String get syncDetailsTranscribing => 'Transcribing on Omi';
+
+  @override
+  String get syncDetailsForSupport => 'For support';
+
+  @override
+  String get syncDetailsAudioFiles => 'Audio files';
+
+  @override
+  String get syncDetailsServerJobs => 'Server jobs (done / total)';
+
+  @override
+  String get syncDetailsCopy => 'Copy details for support';
+
+  @override
   String get onDeviceAtCapTitle => 'You\'ve used this month\'s live transcription';
 
   @override
@@ -13461,33 +13520,4 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get onDeviceRemoveModel => 'Remove Speech Model';
-
-  @override
-  String get onDeviceRemoveModelTitle => 'Remove Speech Model?';
-
-  @override
-  String get onDeviceRemoveModelMessage =>
-      'Recordings will wait on this phone until you download it again or live hours come back.';
-
-  @override
-  String get onDeviceRemove => 'Remove';
-
-  @override
-  String get onDeviceFinishSetupTitle => 'Finish setup to see your transcripts';
-
-  @override
-  String get onDeviceFinishSetupBody =>
-      'You\'ve used this month\'s live hours. Omi is still recording and saving audio on your phone. Download the speech model and it will catch up.';
-
-  @override
-  String onDeviceDownloadSize(String size) {
-    return '$size download';
-  }
-
-  @override
-  String get onDeviceUnsupportedBody =>
-      'This phone can\'t run the speech model yet. Audio stays saved until live hours come back or you upgrade.';
-
-  @override
-  String get onDeviceEntrySubtitle => 'When live hours run out, transcribe on this phone';
 }

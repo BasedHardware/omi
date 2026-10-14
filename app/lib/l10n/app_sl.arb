@@ -6818,18 +6818,6 @@
     "@downloadingFromSdCard": {
         "description": "Progress label when downloading from SD card"
     },
-    "processingProgress": "Obdelava {current}/{total}",
-    "@processingProgress": {
-        "description": "Progress label showing current/total items",
-        "placeholders": {
-            "current": {
-                "type": "int"
-            },
-            "total": {
-                "type": "int"
-            }
-        }
-    },
     "conversationsCreated": "{count} pogovorov ustvarjeno",
     "@conversationsCreated": {
         "description": "Success message showing number of conversations created",
@@ -10359,10 +10347,8 @@
     "syncStatusConversationCreated": "Pogovor ustvarjen",
     "syncCardUploadingTitle": "Nalaganje v Omi",
     "syncCardDownloadingTitle": "Prenašanje iz vaše naprave",
-    "syncCardProgressOf": "{current} od {total}",
     "syncStatusOnDevice": "V vaši napravi",
     "syncStatusDownloadingFromDevice": "Prenašanje iz vaše naprave",
-    "newestFirst": "Najprej najnovejši",
     "noSyncedRecordingsYet": "Sinhroniziranih posnetkov še ni",
     "morePaymentMethodsComingSoon": "Kmalu več načinov plačila",
     "@morePaymentMethodsComingSoon": {
@@ -11157,7 +11143,6 @@
     "autoRemoveSyncedCopiesTitle": "Samodejno odstrani sinhronizirane kopije",
     "autoRemoveSyncedCopiesDays": "Sinhronizirane kopije se izbrišejo po {days} dneh",
     "autoRemoveSyncedCopiesDescription": "Izbriše lokalne kopije {days} dni po sinhronizaciji. Oblačne kopije ostanejo ohranjene.",
-    "localCopiesSection": "Lokalne kopije",
     "speakerLabelLinesLabeled": "{count, plural, =1{Označena 1 vrstica} other{Označene vrstice: {count}}}",
     "speakerLabelVoiceStatus": "{state, select, learned{Glas je naučen} pending{Učenje glasu…} disabled{Shranjevanje glasu je izklopljeno} other{Glas še ni naučen}}",
     "speakerLabelVoiceDetail": "{state, select, learned{Omi bo osebo {name} prepoznal prihodnjič.} pending{To traja nekaj sekund.} disabled{V nastavitvah vklopite shranjevanje glasov, da bo Omi lahko prepoznal osebo {name}.} other{Omi potrebuje več jasnega govora osebe {name} in bo poskušal še naprej.}}",
@@ -11496,6 +11481,27 @@
     "paywallCancelAnytime": "Prekličite kadar koli.",
     "connectAnAgent": "Poveži agenta",
     "connectAnAgentSubtitle": "Pridobite poziv za nastavitev za Claude, ChatGPT, Codex ali katerega koli agenta",
+    "syncCardSyncingAmount": "Sinhronizacija {amount} zvoka",
+    "syncCardSyncingTitle": "Sinhronizacija posnetkov",
+    "syncStepDownloadingAmount": "Prenos iz naprave Omi · {done} od {total}",
+    "syncStepUploadingAmount": "Nalaganje · {done} od {total}",
+    "syncCardTranscribingAmount": "Pretvarjanje {amount} v pogovore",
+    "syncCardTranscribedOf": "Končano {done} od {total} · lahko zapustite ta zaslon",
+    "syncCardReadyAmount": "{amount} pripravljeno za sinhronizacijo",
+    "syncStepLabelDownload": "Omi → telefon",
+    "syncStepLabelUpload": "Nalaganje",
+    "syncStepLabelTranscribe": "Prepis",
+    "syncDetailsTitle": "Podrobnosti sinhronizacije",
+    "syncDetailsRightNow": "Trenutno",
+    "syncDetailsYourOmi": "Vaš Omi",
+    "syncDetailsTransferSpeed": "Hitrost prenosa",
+    "syncDetailsWaitingOnOmi": "Čaka na Omi",
+    "syncDetailsWaitingOnPhone": "Čaka na tem telefonu",
+    "syncDetailsTranscribing": "Prepisovanje v Omi",
+    "syncDetailsForSupport": "Za podporo",
+    "syncDetailsAudioFiles": "Zvočne datoteke",
+    "syncDetailsServerJobs": "Opravila strežnika (končana / skupaj)",
+    "syncDetailsCopy": "Kopiraj podrobnosti za podporo",
     "onDeviceAtCapTitle": "Porabili ste ta mesec prepisovanje v živo",
     "onDeviceAtCapBody": "Omi še vedno snema. Izberite, kako bo prepisan preostanek meseca.",
     "onDeviceLiveHoursReturn": "Ure v živo se vrnejo {date}.",

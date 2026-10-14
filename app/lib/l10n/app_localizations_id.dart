@@ -5654,11 +5654,6 @@ class AppLocalizationsId extends AppLocalizations {
   String get downloadingFromSdCard => 'Mengunduh dari Kartu SD';
 
   @override
-  String processingProgress(int current, int total) {
-    return 'Memproses $current/$total';
-  }
-
-  @override
   String conversationsCreated(int count) {
     return '$count percakapan dibuat';
   }
@@ -9092,18 +9087,10 @@ class AppLocalizationsId extends AppLocalizations {
   }
 
   @override
-  String syncCardProgressOf(int current, int total) {
-    return '$current dari $total';
-  }
-
-  @override
   String get syncStatusOnDevice => 'Di perangkat Anda';
 
   @override
   String get syncStatusDownloadingFromDevice => 'Mengunduh dari perangkat Anda';
-
-  @override
-  String get newestFirst => 'Terbaru lebih dulu';
 
   @override
   String get noSyncedRecordingsYet => 'Belum ada rekaman yang tersinkronisasi';
@@ -12003,9 +11990,6 @@ class AppLocalizationsId extends AppLocalizations {
   }
 
   @override
-  String get localCopiesSection => 'Salinan Lokal';
-
-  @override
   String speakerLabelLinesLabeled(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,
@@ -13228,6 +13212,81 @@ class AppLocalizationsId extends AppLocalizations {
   String get connectAnAgentSubtitle => 'Dapatkan prompt penyiapan untuk Claude, ChatGPT, Codex, atau agen apa pun';
 
   @override
+  String syncCardSyncingAmount(String amount) {
+    return 'Menyinkronkan $amount audio';
+  }
+
+  @override
+  String get syncCardSyncingTitle => 'Menyinkronkan rekaman Anda';
+
+  @override
+  String syncStepDownloadingAmount(String done, String total) {
+    return 'Mengunduh dari Omi Anda · $done dari $total';
+  }
+
+  @override
+  String syncStepUploadingAmount(String done, String total) {
+    return 'Mengunggah · $done dari $total';
+  }
+
+  @override
+  String syncCardTranscribingAmount(String amount) {
+    return 'Mengubah $amount menjadi percakapan';
+  }
+
+  @override
+  String syncCardTranscribedOf(String done, String total) {
+    return '$done dari $total selesai · Anda boleh meninggalkan layar ini';
+  }
+
+  @override
+  String syncCardReadyAmount(String amount) {
+    return '$amount siap disinkronkan';
+  }
+
+  @override
+  String get syncStepLabelDownload => 'Omi → ponsel';
+
+  @override
+  String get syncStepLabelUpload => 'Unggah';
+
+  @override
+  String get syncStepLabelTranscribe => 'Transkripsi';
+
+  @override
+  String get syncDetailsTitle => 'Detail sinkronisasi';
+
+  @override
+  String get syncDetailsRightNow => 'Saat ini';
+
+  @override
+  String get syncDetailsYourOmi => 'Omi Anda';
+
+  @override
+  String get syncDetailsTransferSpeed => 'Kecepatan transfer';
+
+  @override
+  String get syncDetailsWaitingOnOmi => 'Menunggu Omi Anda';
+
+  @override
+  String get syncDetailsWaitingOnPhone => 'Menunggu ponsel ini';
+
+  @override
+  String get syncDetailsTranscribing => 'Mentranskripsi di Omi';
+
+  @override
+  String get syncDetailsForSupport => 'Untuk dukungan';
+
+  @override
+  String get syncDetailsAudioFiles => 'File audio';
+
+  @override
+  String get syncDetailsServerJobs => 'Tugas server (selesai / total)';
+
+  @override
+  String get syncDetailsCopy => 'Salin detail untuk dukungan';
+
+  @override
   String get onDeviceAtCapTitle => 'Transkripsi langsung bulan ini sudah habis';
 
   @override
@@ -13487,33 +13546,4 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get onDeviceRemoveModel => 'Hapus Model Suara';
-
-  @override
-  String get onDeviceRemoveModelTitle => 'Hapus model suara?';
-
-  @override
-  String get onDeviceRemoveModelMessage =>
-      'Rekaman akan menunggu di ponsel ini sampai Anda mengunduhnya lagi atau jam langsung kembali.';
-
-  @override
-  String get onDeviceRemove => 'Hapus';
-
-  @override
-  String get onDeviceFinishSetupTitle => 'Selesaikan penyiapan untuk melihat transkrip';
-
-  @override
-  String get onDeviceFinishSetupBody =>
-      'Jam langsung bulan ini sudah habis. Omi masih merekam dan menyimpan audio di ponsel Anda. Unduh model suara dan Omi akan menyusul.';
-
-  @override
-  String onDeviceDownloadSize(String size) {
-    return 'Unduhan $size';
-  }
-
-  @override
-  String get onDeviceUnsupportedBody =>
-      'Ponsel ini belum dapat menjalankan model suara. Audio tetap tersimpan sampai jam langsung kembali atau Anda meningkatkan paket.';
-
-  @override
-  String get onDeviceEntrySubtitle => 'Saat jam langsung habis, transkripsi di ponsel ini';
 }

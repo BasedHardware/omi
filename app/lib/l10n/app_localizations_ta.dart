@@ -5691,11 +5691,6 @@ class AppLocalizationsTa extends AppLocalizations {
   String get downloadingFromSdCard => 'SD கார்டிலிருந்து பதிவிறக்குகிறது';
 
   @override
-  String processingProgress(int current, int total) {
-    return 'செயலாக்குகிறது $current/$total';
-  }
-
-  @override
   String conversationsCreated(int count) {
     return '$count உரையாடல்கள் உருவாக்கப்பட்டன';
   }
@@ -9161,18 +9156,10 @@ class AppLocalizationsTa extends AppLocalizations {
   }
 
   @override
-  String syncCardProgressOf(int current, int total) {
-    return '$total-இல் $current';
-  }
-
-  @override
   String get syncStatusOnDevice => 'உங்கள் சாதனத்தில்';
 
   @override
   String get syncStatusDownloadingFromDevice => 'உங்கள் சாதனத்திலிருந்து பதிவிறக்கப்படுகிறது';
-
-  @override
-  String get newestFirst => 'புதியவை முதலில்';
 
   @override
   String get noSyncedRecordingsYet => 'ஒத்திசைக்கப்பட்ட பதிவுகள் இன்னும் இல்லை';
@@ -12081,9 +12068,6 @@ class AppLocalizationsTa extends AppLocalizations {
   }
 
   @override
-  String get localCopiesSection => 'உள்ளூர் நகல்கள்';
-
-  @override
   String speakerLabelLinesLabeled(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,
@@ -13308,6 +13292,81 @@ class AppLocalizationsTa extends AppLocalizations {
   String get connectAnAgentSubtitle => 'Claude, ChatGPT, Codex அல்லது எந்த ஏஜென்டுக்கும் அமைவு ப்ராம்ப்டைப் பெறுங்கள்';
 
   @override
+  String syncCardSyncingAmount(String amount) {
+    return '$amount ஆடியோ ஒத்திசைக்கப்படுகிறது';
+  }
+
+  @override
+  String get syncCardSyncingTitle => 'உங்கள் பதிவுகள் ஒத்திசைக்கப்படுகின்றன';
+
+  @override
+  String syncStepDownloadingAmount(String done, String total) {
+    return 'உங்கள் Omi இலிருந்து பதிவிறக்கம் · $done / $total';
+  }
+
+  @override
+  String syncStepUploadingAmount(String done, String total) {
+    return 'பதிவேற்றம் · $done / $total';
+  }
+
+  @override
+  String syncCardTranscribingAmount(String amount) {
+    return '$amount உரையாடல்களாக மாற்றப்படுகிறது';
+  }
+
+  @override
+  String syncCardTranscribedOf(String done, String total) {
+    return '$done / $total முடிந்தது · இந்தத் திரையிலிருந்து வெளியேறலாம்';
+  }
+
+  @override
+  String syncCardReadyAmount(String amount) {
+    return '$amount ஒத்திசைக்கத் தயார்';
+  }
+
+  @override
+  String get syncStepLabelDownload => 'Omi → ஃபோன்';
+
+  @override
+  String get syncStepLabelUpload => 'பதிவேற்றம்';
+
+  @override
+  String get syncStepLabelTranscribe => 'எழுத்தாக்கம்';
+
+  @override
+  String get syncDetailsTitle => 'ஒத்திசைவு விவரங்கள்';
+
+  @override
+  String get syncDetailsRightNow => 'இப்போது';
+
+  @override
+  String get syncDetailsYourOmi => 'உங்கள் Omi';
+
+  @override
+  String get syncDetailsTransferSpeed => 'பரிமாற்ற வேகம்';
+
+  @override
+  String get syncDetailsWaitingOnOmi => 'Omi இல் காத்திருக்கிறது';
+
+  @override
+  String get syncDetailsWaitingOnPhone => 'இந்த ஃபோனில் காத்திருக்கிறது';
+
+  @override
+  String get syncDetailsTranscribing => 'Omi இல் எழுத்தாக்கம் நடக்கிறது';
+
+  @override
+  String get syncDetailsForSupport => 'ஆதரவுக்காக';
+
+  @override
+  String get syncDetailsAudioFiles => 'ஆடியோ கோப்புகள்';
+
+  @override
+  String get syncDetailsServerJobs => 'சர்வர் பணிகள் (முடிந்தவை / மொத்தம்)';
+
+  @override
+  String get syncDetailsCopy => 'ஆதரவுக்காக விவரங்களை நகலெடுக்கவும்';
+
+  @override
   String get onDeviceAtCapTitle => 'இந்த மாதத்தின் நேரலை உரையாக்கத்தைப் பயன்படுத்திவிட்டீர்கள்';
 
   @override
@@ -13570,33 +13629,4 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String get onDeviceRemoveModel => 'பேச்சு மாதிரியை அகற்று';
-
-  @override
-  String get onDeviceRemoveModelTitle => 'பேச்சு மாதிரியை அகற்றவா?';
-
-  @override
-  String get onDeviceRemoveModelMessage =>
-      'நீங்கள் மீண்டும் பதிவிறக்கும் வரை அல்லது நேரலை மணிநேரங்கள் திரும்பக் கிடைக்கும் வரை பதிவுகள் இந்த ஃபோனில் காத்திருக்கும்.';
-
-  @override
-  String get onDeviceRemove => 'அகற்று';
-
-  @override
-  String get onDeviceFinishSetupTitle => 'உரைப்பதிவுகளைப் பார்க்க அமைப்பை முடிக்கவும்';
-
-  @override
-  String get onDeviceFinishSetupBody =>
-      'இந்த மாதத்தின் நேரலை மணிநேரங்களைப் பயன்படுத்திவிட்டீர்கள். Omi இன்னும் பதிவுசெய்து உங்கள் ஃபோனில் ஆடியோவைச் சேமிக்கிறது. பேச்சு மாதிரியைப் பதிவிறக்கினால் அது ஈடுசெய்யும்.';
-
-  @override
-  String onDeviceDownloadSize(String size) {
-    return '$size பதிவிறக்கம்';
-  }
-
-  @override
-  String get onDeviceUnsupportedBody =>
-      'இந்த ஃபோனில் இன்னும் பேச்சு மாதிரியை இயக்க முடியாது. நேரலை மணிநேரங்கள் திரும்பக் கிடைக்கும் வரை அல்லது நீங்கள் மேம்படுத்தும் வரை ஆடியோ சேமிக்கப்பட்டிருக்கும்.';
-
-  @override
-  String get onDeviceEntrySubtitle => 'நேரலை மணிநேரங்கள் தீர்ந்ததும், இந்த ஃபோனில் உரையாக்கு';
 }

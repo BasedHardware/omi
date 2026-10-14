@@ -5646,11 +5646,6 @@ class AppLocalizationsLt extends AppLocalizations {
   String get downloadingFromSdCard => 'Atsisiunčiama iš SD kortelės';
 
   @override
-  String processingProgress(int current, int total) {
-    return 'Apdorojama $current/$total';
-  }
-
-  @override
   String conversationsCreated(int count) {
     return 'Sukurta pokalbių: $count';
   }
@@ -9103,18 +9098,10 @@ class AppLocalizationsLt extends AppLocalizations {
   }
 
   @override
-  String syncCardProgressOf(int current, int total) {
-    return '$current iš $total';
-  }
-
-  @override
   String get syncStatusOnDevice => 'Jūsų įrenginyje';
 
   @override
   String get syncStatusDownloadingFromDevice => 'Atsisiunčiama iš jūsų įrenginio';
-
-  @override
-  String get newestFirst => 'Pirma naujausi';
 
   @override
   String get noSyncedRecordingsYet => 'Sinchronizuotų įrašų dar nėra';
@@ -12019,9 +12006,6 @@ class AppLocalizationsLt extends AppLocalizations {
   }
 
   @override
-  String get localCopiesSection => 'Vietinės kopijos';
-
-  @override
   String speakerLabelLinesLabeled(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,
@@ -13242,6 +13226,81 @@ class AppLocalizationsLt extends AppLocalizations {
   String get connectAnAgentSubtitle => 'Gaukite sąrankos užklausą Claude, ChatGPT, Codex ar bet kuriam agentui';
 
   @override
+  String syncCardSyncingAmount(String amount) {
+    return 'Sinchronizuojama $amount garso įrašų';
+  }
+
+  @override
+  String get syncCardSyncingTitle => 'Sinchronizuojami jūsų įrašai';
+
+  @override
+  String syncStepDownloadingAmount(String done, String total) {
+    return 'Atsisiunčiama iš Omi · $done iš $total';
+  }
+
+  @override
+  String syncStepUploadingAmount(String done, String total) {
+    return 'Įkeliama · $done iš $total';
+  }
+
+  @override
+  String syncCardTranscribingAmount(String amount) {
+    return '$amount paverčiama pokalbiais';
+  }
+
+  @override
+  String syncCardTranscribedOf(String done, String total) {
+    return 'Atlikta $done iš $total · galite palikti šį ekraną';
+  }
+
+  @override
+  String syncCardReadyAmount(String amount) {
+    return '$amount paruošta sinchronizuoti';
+  }
+
+  @override
+  String get syncStepLabelDownload => 'Omi → telefonas';
+
+  @override
+  String get syncStepLabelUpload => 'Įkėlimas';
+
+  @override
+  String get syncStepLabelTranscribe => 'Transkribavimas';
+
+  @override
+  String get syncDetailsTitle => 'Sinchronizavimo informacija';
+
+  @override
+  String get syncDetailsRightNow => 'Šiuo metu';
+
+  @override
+  String get syncDetailsYourOmi => 'Jūsų Omi';
+
+  @override
+  String get syncDetailsTransferSpeed => 'Perdavimo sparta';
+
+  @override
+  String get syncDetailsWaitingOnOmi => 'Laukia Omi';
+
+  @override
+  String get syncDetailsWaitingOnPhone => 'Laukia šiame telefone';
+
+  @override
+  String get syncDetailsTranscribing => 'Transkribuojama Omi';
+
+  @override
+  String get syncDetailsForSupport => 'Palaikymo komandai';
+
+  @override
+  String get syncDetailsAudioFiles => 'Garso failai';
+
+  @override
+  String get syncDetailsServerJobs => 'Serverio užduotys (atlikta / iš viso)';
+
+  @override
+  String get syncDetailsCopy => 'Kopijuoti informaciją palaikymo komandai';
+
+  @override
   String get onDeviceAtCapTitle => 'Šio mėnesio tiesioginę transkripciją išnaudojote';
 
   @override
@@ -13502,33 +13561,4 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get onDeviceRemoveModel => 'Pašalinti kalbos modelį';
-
-  @override
-  String get onDeviceRemoveModelTitle => 'Pašalinti kalbos modelį?';
-
-  @override
-  String get onDeviceRemoveModelMessage =>
-      'Įrašai lauks šiame telefone, kol vėl jį atsisiųsite arba grįš tiesioginės valandos.';
-
-  @override
-  String get onDeviceRemove => 'Pašalinti';
-
-  @override
-  String get onDeviceFinishSetupTitle => 'Užbaikite sąranką, kad matytumėte transkripcijas';
-
-  @override
-  String get onDeviceFinishSetupBody =>
-      'Išnaudojote šio mėnesio tiesiogines valandas. Omi vis dar įrašinėja ir saugo garsą jūsų telefone. Atsisiųskite kalbos modelį ir jis viską pasivys.';
-
-  @override
-  String onDeviceDownloadSize(String size) {
-    return 'Atsisiuntimas: $size';
-  }
-
-  @override
-  String get onDeviceUnsupportedBody =>
-      'Šis telefonas dar negali paleisti kalbos modelio. Garsas lieka išsaugotas, kol grįš tiesioginės valandos arba atnaujinsite planą.';
-
-  @override
-  String get onDeviceEntrySubtitle => 'Kai baigiasi tiesioginės valandos, transkribuoti šiame telefone';
 }

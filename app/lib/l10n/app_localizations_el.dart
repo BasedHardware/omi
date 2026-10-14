@@ -5688,11 +5688,6 @@ class AppLocalizationsEl extends AppLocalizations {
   String get downloadingFromSdCard => 'Λήψη από κάρτα SD';
 
   @override
-  String processingProgress(int current, int total) {
-    return 'Επεξεργασία $current/$total';
-  }
-
-  @override
   String conversationsCreated(int count) {
     return '$count συνομιλίες δημιουργήθηκαν';
   }
@@ -9153,18 +9148,10 @@ class AppLocalizationsEl extends AppLocalizations {
   }
 
   @override
-  String syncCardProgressOf(int current, int total) {
-    return '$current από $total';
-  }
-
-  @override
   String get syncStatusOnDevice => 'Στη συσκευή σας';
 
   @override
   String get syncStatusDownloadingFromDevice => 'Λήψη από τη συσκευή σας';
-
-  @override
-  String get newestFirst => 'Νεότερες πρώτα';
 
   @override
   String get noSyncedRecordingsYet => 'Δεν υπάρχουν ακόμα συγχρονισμένες εγγραφές';
@@ -12076,9 +12063,6 @@ class AppLocalizationsEl extends AppLocalizations {
   }
 
   @override
-  String get localCopiesSection => 'Τοπικά αντίγραφα';
-
-  @override
   String speakerLabelLinesLabeled(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,
@@ -13301,6 +13285,81 @@ class AppLocalizationsEl extends AppLocalizations {
   String get connectAnAgentSubtitle => 'Λάβετε οδηγίες ρύθμισης για Claude, ChatGPT, Codex ή οποιονδήποτε πράκτορα';
 
   @override
+  String syncCardSyncingAmount(String amount) {
+    return 'Συγχρονισμός $amount ήχου';
+  }
+
+  @override
+  String get syncCardSyncingTitle => 'Συγχρονισμός των ηχογραφήσεών σας';
+
+  @override
+  String syncStepDownloadingAmount(String done, String total) {
+    return 'Λήψη από το Omi σας · $done από $total';
+  }
+
+  @override
+  String syncStepUploadingAmount(String done, String total) {
+    return 'Μεταφόρτωση · $done από $total';
+  }
+
+  @override
+  String syncCardTranscribingAmount(String amount) {
+    return 'Μετατροπή $amount σε συζητήσεις';
+  }
+
+  @override
+  String syncCardTranscribedOf(String done, String total) {
+    return 'Ολοκληρώθηκαν $done από $total · μπορείτε να φύγετε από αυτήν την οθόνη';
+  }
+
+  @override
+  String syncCardReadyAmount(String amount) {
+    return '$amount έτοιμα για συγχρονισμό';
+  }
+
+  @override
+  String get syncStepLabelDownload => 'Omi → τηλέφωνο';
+
+  @override
+  String get syncStepLabelUpload => 'Μεταφόρτωση';
+
+  @override
+  String get syncStepLabelTranscribe => 'Απομαγνητοφώνηση';
+
+  @override
+  String get syncDetailsTitle => 'Λεπτομέρειες συγχρονισμού';
+
+  @override
+  String get syncDetailsRightNow => 'Αυτή τη στιγμή';
+
+  @override
+  String get syncDetailsYourOmi => 'Το Omi σας';
+
+  @override
+  String get syncDetailsTransferSpeed => 'Ταχύτητα μεταφοράς';
+
+  @override
+  String get syncDetailsWaitingOnOmi => 'Αναμονή για το Omi σας';
+
+  @override
+  String get syncDetailsWaitingOnPhone => 'Αναμονή για αυτό το τηλέφωνο';
+
+  @override
+  String get syncDetailsTranscribing => 'Απομαγνητοφώνηση στο Omi';
+
+  @override
+  String get syncDetailsForSupport => 'Για την υποστήριξη';
+
+  @override
+  String get syncDetailsAudioFiles => 'Αρχεία ήχου';
+
+  @override
+  String get syncDetailsServerJobs => 'Εργασίες διακομιστή (ολοκληρωμένες / σύνολο)';
+
+  @override
+  String get syncDetailsCopy => 'Αντιγραφή λεπτομερειών για υποστήριξη';
+
+  @override
   String get onDeviceAtCapTitle => 'Εξαντλήσατε τη ζωντανή μεταγραφή αυτού του μήνα';
 
   @override
@@ -13567,33 +13626,4 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get onDeviceRemoveModel => 'Αφαίρεση μοντέλου ομιλίας';
-
-  @override
-  String get onDeviceRemoveModelTitle => 'Αφαίρεση μοντέλου ομιλίας;';
-
-  @override
-  String get onDeviceRemoveModelMessage =>
-      'Οι ηχογραφήσεις θα περιμένουν σε αυτό το τηλέφωνο μέχρι να το κατεβάσετε ξανά ή να επιστρέψουν οι ζωντανές ώρες.';
-
-  @override
-  String get onDeviceRemove => 'Αφαίρεση';
-
-  @override
-  String get onDeviceFinishSetupTitle => 'Ολοκληρώστε τη ρύθμιση για να δείτε τις μεταγραφές σας';
-
-  @override
-  String get onDeviceFinishSetupBody =>
-      'Εξαντλήσατε τις ζωντανές ώρες αυτού του μήνα. Το Omi συνεχίζει να ηχογραφεί και να αποθηκεύει ήχο στο τηλέφωνό σας. Κατεβάστε το μοντέλο ομιλίας και θα καλύψει την καθυστέρηση.';
-
-  @override
-  String onDeviceDownloadSize(String size) {
-    return 'Λήψη $size';
-  }
-
-  @override
-  String get onDeviceUnsupportedBody =>
-      'Αυτό το τηλέφωνο δεν μπορεί ακόμη να εκτελέσει το μοντέλο ομιλίας. Ο ήχος παραμένει αποθηκευμένος μέχρι να επιστρέψουν οι ζωντανές ώρες ή να αναβαθμίσετε.';
-
-  @override
-  String get onDeviceEntrySubtitle => 'Όταν εξαντληθούν οι ζωντανές ώρες, μεταγραφή σε αυτό το τηλέφωνο';
 }

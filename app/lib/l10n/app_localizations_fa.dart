@@ -5644,11 +5644,6 @@ class AppLocalizationsFa extends AppLocalizations {
   String get downloadingFromSdCard => 'دانلود از کارت SD';
 
   @override
-  String processingProgress(int current, int total) {
-    return 'پردازش $current/$total';
-  }
-
-  @override
   String conversationsCreated(int count) {
     return '$count مکالمه ایجاد شد';
   }
@@ -9089,18 +9084,10 @@ class AppLocalizationsFa extends AppLocalizations {
   }
 
   @override
-  String syncCardProgressOf(int current, int total) {
-    return '$current از $total';
-  }
-
-  @override
   String get syncStatusOnDevice => 'روی دستگاه شما';
 
   @override
   String get syncStatusDownloadingFromDevice => 'در حال دانلود از دستگاه شما';
-
-  @override
-  String get newestFirst => 'ابتدا جدیدترین‌ها';
 
   @override
   String get noSyncedRecordingsYet => 'هنوز ضبط همگام‌سازی‌شده‌ای وجود ندارد';
@@ -11993,9 +11980,6 @@ class AppLocalizationsFa extends AppLocalizations {
   }
 
   @override
-  String get localCopiesSection => 'نسخه‌های محلی';
-
-  @override
   String speakerLabelLinesLabeled(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,
@@ -13213,6 +13197,81 @@ class AppLocalizationsFa extends AppLocalizations {
   String get connectAnAgentSubtitle => 'یک پرامپت راه‌اندازی برای Claude، ChatGPT، Codex یا هر ایجنتی بگیرید';
 
   @override
+  String syncCardSyncingAmount(String amount) {
+    return 'همگام‌سازی $amount صدا';
+  }
+
+  @override
+  String get syncCardSyncingTitle => 'همگام‌سازی ضبط‌های شما';
+
+  @override
+  String syncStepDownloadingAmount(String done, String total) {
+    return 'دریافت از Omi · $done / $total';
+  }
+
+  @override
+  String syncStepUploadingAmount(String done, String total) {
+    return 'آپلود · $done / $total';
+  }
+
+  @override
+  String syncCardTranscribingAmount(String amount) {
+    return 'تبدیل $amount به گفتگو';
+  }
+
+  @override
+  String syncCardTranscribedOf(String done, String total) {
+    return '$done / $total انجام شد · می‌توانید از این صفحه خارج شوید';
+  }
+
+  @override
+  String syncCardReadyAmount(String amount) {
+    return '$amount آماده همگام‌سازی';
+  }
+
+  @override
+  String get syncStepLabelDownload => 'Omi → گوشی';
+
+  @override
+  String get syncStepLabelUpload => 'آپلود';
+
+  @override
+  String get syncStepLabelTranscribe => 'رونویسی';
+
+  @override
+  String get syncDetailsTitle => 'جزئیات همگام‌سازی';
+
+  @override
+  String get syncDetailsRightNow => 'همین حالا';
+
+  @override
+  String get syncDetailsYourOmi => 'Omi شما';
+
+  @override
+  String get syncDetailsTransferSpeed => 'سرعت انتقال';
+
+  @override
+  String get syncDetailsWaitingOnOmi => 'در انتظار Omi';
+
+  @override
+  String get syncDetailsWaitingOnPhone => 'در انتظار این گوشی';
+
+  @override
+  String get syncDetailsTranscribing => 'در حال رونویسی در Omi';
+
+  @override
+  String get syncDetailsForSupport => 'برای پشتیبانی';
+
+  @override
+  String get syncDetailsAudioFiles => 'فایل‌های صوتی';
+
+  @override
+  String get syncDetailsServerJobs => 'کارهای سرور (انجام‌شده / کل)';
+
+  @override
+  String get syncDetailsCopy => 'کپی جزئیات برای پشتیبانی';
+
+  @override
   String get onDeviceAtCapTitle => 'رونویسی زندهٔ این ماه را مصرف کرده‌اید';
 
   @override
@@ -13470,33 +13529,4 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String get onDeviceRemoveModel => 'حذف مدل گفتار';
-
-  @override
-  String get onDeviceRemoveModelTitle => 'مدل گفتار حذف شود؟';
-
-  @override
-  String get onDeviceRemoveModelMessage =>
-      'ضبط‌ها روی همین گوشی منتظر می‌مانند تا دوباره آن را دانلود کنید یا ساعت‌های زنده برگردند.';
-
-  @override
-  String get onDeviceRemove => 'حذف';
-
-  @override
-  String get onDeviceFinishSetupTitle => 'برای دیدن رونوشت‌ها راه‌اندازی را تمام کنید';
-
-  @override
-  String get onDeviceFinishSetupBody =>
-      'ساعت‌های زندهٔ این ماه را مصرف کرده‌اید. Omi همچنان ضبط می‌کند و صدا را روی گوشی شما ذخیره می‌کند. مدل گفتار را دانلود کنید تا عقب‌ماندگی جبران شود.';
-
-  @override
-  String onDeviceDownloadSize(String size) {
-    return 'دانلود $size';
-  }
-
-  @override
-  String get onDeviceUnsupportedBody =>
-      'این گوشی هنوز نمی‌تواند مدل گفتار را اجرا کند. صدا ذخیره می‌ماند تا ساعت‌های زنده برگردند یا اشتراک خود را ارتقا دهید.';
-
-  @override
-  String get onDeviceEntrySubtitle => 'وقتی ساعت‌های زنده تمام شد، روی همین گوشی رونویسی شود';
 }

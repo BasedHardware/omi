@@ -53,9 +53,47 @@ GPT-5.6-family or Luna. Unrelated STT keys do not disable OpenAI cache opt-out.
 
 Production backend-listen and pusher set `DREAM_AGENT_MODE=on` (owner dogfood since 2026-10-11) with the same David-only `DREAM_AGENT_UID_ALLOWLIST`; existing conversation/memory/task post-write hooks signal the hourly backend-sync sweep.
 Shadow writes only admission state and encrypted reports, preserving finalization, user records, questions and vocabulary. See [the dream runbook](runbooks/dream-agent.md).
-Dream vocabulary is optional capture context: `DREAM_AGENT_VOCABULARY_STT=true` combines encrypted per-user vocabulary spellings with existing live keyterms;
+Dream vocabulary is optional capture context: `DREAM_AGENT_VOCABULARY_STT=true` combines encrypted per-user vocabulary spellings with existing live and offline-sync keyterms;
 Soniox also retains its `SONIOX_CONTEXT_TERMS` gate. Read failure uses existing terms with fallback telemetry.
 Vocabulary and STT gate defaults remain off.
+
+Conversation processing adds a shared **Known spellings** block from Dream vocabulary
+(including aliases) and trustworthy active People names. `CONVERSATION_KNOWN_SPELLINGS` defaults
+to `true`; set it to `false` to disable the block and its reads. The block is capped
+at 60 canonical entries and 1,500 characters, including grounding instructions:
+use a spelling only when the transcript clearly refers to it, never invent a
+reference or infer attendance/identity. Summary, action-item, app-summary and
+transcript-memory prompts share it; each source is read at most once within a
+processing run, with a fresh scope for a separately deferred extraction. Read
+failures retain available context and emit fallback telemetry. No extra LLM call
+is made. Spellings are per-user context after the shared cache breakpoint, never
+part of the shared prefix bytes or cache eligibility. Shaped notes carry them as
+a separate per-user field alongside their capture evidence.
+
+People names require a nonempty stored speech sample, a positive `label_evidence`
+counter (`manual_labels`, `card_confirms`, `card_picks`, or `auto_confirmed`, all
+authored by user assignments/answers), or retained aliases from the explicit
+rename transaction. Creation has no origin marker, so timestamps and derived
+confidence alone do not qualify a name, including a multiword name. Single-token
+filler/common words and demonyms, letterless names, and dismissed people are
+excluded even when evidence exists. Unconfirmed CJK fragments therefore cannot
+enter the block; confirmed names in any script can. Old People aliases are not
+rendered, because an old filler alias could cause the model to invent a reference.
+Dream vocabulary and its aliases retain their own authority.
+
+The speaker-resolution step seeds the spelling cache from its already-read full
+People list. If that step did not read People, spelling hints use one collection
+query capped at 200 documents, without voice-learning projection transactions.
+Filtering the already-read list may scan past junk entries without additional
+Firestore reads, retaining at most 60 names. Both paths retain the per-run cache;
+an empty reused list does not trigger a second query.
+
+Modulate batch language is selected by utterance word totals, breaking ties by
+total duration. Utterances under three words do not vote when any longer utterance
+exists. Missing detection uses the requested language or `multi`, including empty
+results. Sync retains its existing chunk-merge language behavior: persisted
+`TranscriptSegment` records have no per-segment language for a conversation-wide
+weighted recomputation.
 
 The live calendar stamp includes the meeting title (an empty string when absent)
 so it is a valid `CalendarMeetingContext` for finalization and summarization even
@@ -1561,12 +1599,33 @@ degraded telemetry and skips that reminder step without failing the committed
 extraction or blocking vector/export continuation. This is not a durable
 reminder retry; transport and offline-device delivery remain best effort.
 
+Before initial task writes, automatic refreshes and desktop candidate capture,
+`utils/conversations/action_item_extraction.py` rejects named owners only when
+their first name differs from the account profile (NFKC/casefolded, with
+possessives and punctuation stripped). User/me aliases remain admitted. Surname
+differences and surname initials stay kept because STT can mangle them. Empty or
+unknown ownership, including an unavailable profile name, stays compatible.
+A conservative English post-filter drops clear third-person ongoing-status
+sentences. Both rejection reasons increment `omi_action_item_extraction_dropped_total`
+and emit bounded count logs without names or task text. The notes task-specific user
+suffix receives the account profile identity. Universal ownership/status instructions
+live in the notes-only mount after the shared baseline, independent of episode/title flags;
+shared conversation context and baseline static/volatile prompt bytes stay unchanged.
+It asks for only the owner's commitments/direct requests;
+another attendee asking/emailing the owner is that attendee's task, while the owner's
+agreement to deliver becomes a verb-led Send task. Observations are excluded.
+
 Automatic `SMART_MERGE` and `SYNC_UPDATE` refreshes with prior tasks use
 `utils/conversations/action_item_refresh.py`: existing documents (including Apple
 links, completion, edited descriptions/dates, folders, manual assignments and
-provenance) are untouched, even when extraction omits them. Only missing exact
-normalized identities are appended. Repeated identical descriptions pair by
-occurrence, within this conversation only; segment-anchor shadow pairs never act.
+provenance) are untouched, even when extraction omits them. Exact duplicates and
+conservative near-duplicates are skipped, including matches against completed or
+deleted rows and earlier additions in the same refresh. Token-set Jaccard similarity
+must be at least 0.8 after filler removal and a small verb synonym map; substitutions
+are refused and extra content is limited to final/latest/updated/revised modifiers.
+Numbers, codes, negation and directional/time qualifiers stay distinct. No model or
+embedding call is added. Matching remains scoped to one conversation;
+segment-anchor shadow pairs never act. Accepted rewordings become receipt aliases.
 A bounded conversation receipt (`action_item_refresh`, generation + hashed keys
 and task ids) retains aliases after edits and suppresses recreation after hard
 deletion. Soft-deleted rows also suppress recreation. **Hard deletions and original
@@ -1575,10 +1634,12 @@ tombstone would close that historical gap, but is outside this change.
 
 Before smart-merge or sync-bridge donor cleanup, an atomic transaction transfers donor task ids
 to the survivor without delivery. Exact matches are annotated with
-`refresh_duplicate_of`; both live rows remain visible because equal descriptions
-cannot prove their completion, edits, folders or external links are interchangeable.
-Only a user-deleted survivor target (soft deletion or missing receipt target) suppresses
-a matching donor. Donor provenance and user/external fields stay on their own rows.
+`refresh_duplicate_of`; ordinary unedited generated duplicates are soft-hidden,
+keeping the survivor ID. Completion transfers atomically to an active survivor
+only when their current descriptions match exactly. Manual, edited, curated or
+externally linked donor rows stay visible; timestamps or receipt aliases indicating
+possible edits are protected, as are historical rows without usable timestamps.
+Donor provenance and user/external fields stay on their own rows.
 Pending donor delivery markers are retired atomically on transfer, so survivor refresh
 cannot export or reschedule them. Donor deletion receipts transfer too. Existing
 duplicate external objects are not deleted or reconciled.
@@ -4304,7 +4365,9 @@ including its bounded completion rechecks. A processing row is unfinished, not
 an immediate terminal `skipped/not_completed`; that terminal is emitted once
 only when the recheck ceiling is exhausted or the row cannot reach completion.
 Rechecks do not increment `entry`, and legacy coalesced active submissions emit nothing. The optional UID queue counts
-suppressed resubmissions separately as `skipped/cohort_seen` without another entry.
+in-flight duplicates as `deferred/in_flight` without another entry or skip.
+Suppressed terminal resubmissions emit a matching `entry/candidate` and
+`skipped/cohort_seen`, preserving skipped/entry accounting.
 Another batch after completion may count the same conversation again. These
 are attempts, not unique conversations or evidence of owner speech.
 The counter cannot reconstruct historical failures or identify an account.
@@ -4315,7 +4378,7 @@ The funnel `(stage,reason)` pairs are closed:
 | --- | --- | --- |
 | entry | candidate | Known deduplicated candidates, before slot/scan admission; first passes at resolver entry. |
 | eligible | candidate | Late snapshot passed existing retry eligibility and ID check; first pass has a nonempty conversation model. |
-| deferred | slot_limit, coalesced | Candidates retained in legacy admission waiters or merged into a UID cohort; retained pending IDs read no snapshot or audio. |
+| deferred | slot_limit, coalesced, in_flight | Candidates retained in legacy admission waiters or merged into a UID cohort; retained pending IDs read no snapshot or audio. |
 | skipped | slot_limit, queue_limit, queue_expired, cancelled, cohort_seen, scan_limit, pass_limit, missing, not_completed, deleted, discarded, locked, channel_source, private_cloud_disabled, missing_revision, already_resolved_owner, id_mismatch, empty_transcript, manual_receipt_unavailable, read_error, processing_error, submission_error | One terminal skip; capacity reasons mean the candidate was not scanned, not that its audio was ineligible. |
 | cas_refused | missing, account_deleting, deleted, discarded, locked, not_completed, revision_changed | Late-only terminal verdict from the actual transaction snapshot, emitted after the outer transaction returns. |
 | cas_committed | done | Late-only terminal commit, including canonical identity no-op; transaction callback retries do not increment. |
@@ -4324,7 +4387,7 @@ Admission deferral uses the same closed retry funnel: `pass=late,stage=deferred,
 counts retained candidates. Full waiting capacity, expiry and cancellation
 before admission emit
 `stage=skipped,reason=slot_limit`; coalesced duplicates add no entry. This adds
-one bounded stage/reason pair; with optional coalescing there are 66 pairs, at most 132 series across both passes;
+one bounded stage/reason pair; with optional coalescing there are 67 pairs, at most 134 series across both passes;
 UID and conversation IDs remain outside Prometheus labels. Deferred admission
 counts are not commits or owner additions. Terminal waiters remove their keys
 under the admission lock before recording the skip; later callbacks release only
@@ -4339,15 +4402,17 @@ UID cohorts retain IDs, each with one active batch, at most 128 distinct IDs
 (including already scanned IDs for dedupe) and eight eligible attempts across
 all merged submissions. Workers still share the existing two process slots.
 New IDs for a retained UID merge into its pending set (`deferred/coalesced`);
-duplicates in the cohort add no entry but emit `skipped/cohort_seen`. This counts
-suppressed resubmissions, including IDs that previously exited with read_error,
-processing_error or not_completed, rather than a terminal verdict on the original
-candidate. Dedupe retains the candidate/read ceilings; it does not silently imply recovery. New UIDs beyond the cap emit
+duplicates still pending or owned by a worker emit `deferred/in_flight`, with no
+entry or skip. Duplicates that have exited the worker (including read_error,
+processing_error or not_completed) emit one matching entry and `skipped/cohort_seen`.
+Dedupe retains the candidate/read ceilings; it does not silently imply recovery. New UIDs beyond the cap emit
 `skipped/queue_limit`. Admission expires after 230 seconds; completion rechecks
 share a separate 230-second deadline across merged batches. New submissions
 extend neither deadline nor the candidate/pass budgets. New pending IDs wake
-completion waits and join each inner worker round while older rows remain
-processing. Slot release (including worker-thread cleanup) wakes the oldest
+completion waits and run fresh-ID-only rounds while older processing IDs retain
+their scheduled recheck. Arrival wakes consume no completion recheck slot and
+borrow no additional pass budget; each older row still has at most five timed
+rechecks within the original deadline. Slot release (including worker-thread cleanup) wakes the oldest
 waiting cohort; every admission checks FIFO arrival order. The original poll
 intervals remain a fallback if a release signal is missed. Expired queued IDs emit
 `skipped/queue_expired`; cancellation emits `skipped/cancelled` for pending IDs

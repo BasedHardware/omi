@@ -5654,11 +5654,6 @@ class AppLocalizationsUr extends AppLocalizations {
   String get downloadingFromSdCard => 'SD کارڈ سے ڈاؤن لوڈ کیا جا رہا ہے';
 
   @override
-  String processingProgress(int current, int total) {
-    return 'پروسیس کیا جا رہا ہے $current/$total';
-  }
-
-  @override
   String conversationsCreated(int count) {
     return '$count بات چیت بنائی گئی';
   }
@@ -9107,18 +9102,10 @@ class AppLocalizationsUr extends AppLocalizations {
   }
 
   @override
-  String syncCardProgressOf(int current, int total) {
-    return '$total میں سے $current';
-  }
-
-  @override
   String get syncStatusOnDevice => 'آپ کی ڈیوائس پر';
 
   @override
   String get syncStatusDownloadingFromDevice => 'آپ کی ڈیوائس سے ڈاؤن لوڈ ہو رہا ہے';
-
-  @override
-  String get newestFirst => 'پہلے نئی ترین';
 
   @override
   String get noSyncedRecordingsYet => 'ابھی تک کوئی سنک شدہ ریکارڈنگ نہیں';
@@ -12011,9 +11998,6 @@ class AppLocalizationsUr extends AppLocalizations {
   }
 
   @override
-  String get localCopiesSection => 'مقامی کاپیاں';
-
-  @override
   String speakerLabelLinesLabeled(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,
@@ -13232,6 +13216,81 @@ class AppLocalizationsUr extends AppLocalizations {
   String get connectAnAgentSubtitle => 'Claude، ChatGPT، Codex یا کسی بھی ایجنٹ کے لیے سیٹ اپ پرامپٹ حاصل کریں';
 
   @override
+  String syncCardSyncingAmount(String amount) {
+    return '$amount آڈیو سنک ہو رہا ہے';
+  }
+
+  @override
+  String get syncCardSyncingTitle => 'آپ کی ریکارڈنگز سنک ہو رہی ہیں';
+
+  @override
+  String syncStepDownloadingAmount(String done, String total) {
+    return 'آپ کے Omi سے ڈاؤن لوڈ · $done / $total';
+  }
+
+  @override
+  String syncStepUploadingAmount(String done, String total) {
+    return 'اپ لوڈ · $done / $total';
+  }
+
+  @override
+  String syncCardTranscribingAmount(String amount) {
+    return '$amount کو گفتگو میں تبدیل کیا جا رہا ہے';
+  }
+
+  @override
+  String syncCardTranscribedOf(String done, String total) {
+    return '$done / $total مکمل · آپ اس اسکرین سے باہر جا سکتے ہیں';
+  }
+
+  @override
+  String syncCardReadyAmount(String amount) {
+    return '$amount سنک کے لیے تیار';
+  }
+
+  @override
+  String get syncStepLabelDownload => 'Omi → فون';
+
+  @override
+  String get syncStepLabelUpload => 'اپ لوڈ';
+
+  @override
+  String get syncStepLabelTranscribe => 'ٹرانسکرپشن';
+
+  @override
+  String get syncDetailsTitle => 'سنک کی تفصیلات';
+
+  @override
+  String get syncDetailsRightNow => 'ابھی';
+
+  @override
+  String get syncDetailsYourOmi => 'آپ کا Omi';
+
+  @override
+  String get syncDetailsTransferSpeed => 'منتقلی کی رفتار';
+
+  @override
+  String get syncDetailsWaitingOnOmi => 'Omi پر منتظر';
+
+  @override
+  String get syncDetailsWaitingOnPhone => 'اس فون پر منتظر';
+
+  @override
+  String get syncDetailsTranscribing => 'Omi پر ٹرانسکرائب ہو رہا ہے';
+
+  @override
+  String get syncDetailsForSupport => 'سپورٹ کے لیے';
+
+  @override
+  String get syncDetailsAudioFiles => 'آڈیو فائلیں';
+
+  @override
+  String get syncDetailsServerJobs => 'سرور جابز (مکمل / کل)';
+
+  @override
+  String get syncDetailsCopy => 'سپورٹ کے لیے تفصیلات کاپی کریں';
+
+  @override
   String get onDeviceAtCapTitle => 'آپ اس ماہ کی لائیو ٹرانسکرپشن استعمال کر چکے ہیں';
 
   @override
@@ -13492,33 +13551,4 @@ class AppLocalizationsUr extends AppLocalizations {
 
   @override
   String get onDeviceRemoveModel => 'اسپیچ ماڈل ہٹائیں';
-
-  @override
-  String get onDeviceRemoveModelTitle => 'اسپیچ ماڈل ہٹائیں؟';
-
-  @override
-  String get onDeviceRemoveModelMessage =>
-      'جب تک آپ اسے دوبارہ ڈاؤن لوڈ نہ کریں یا لائیو گھنٹے واپس نہ آئیں، ریکارڈنگز اسی فون پر انتظار کریں گی۔';
-
-  @override
-  String get onDeviceRemove => 'ہٹائیں';
-
-  @override
-  String get onDeviceFinishSetupTitle => 'اپنے ٹرانسکرپٹس دیکھنے کے لیے سیٹ اپ مکمل کریں';
-
-  @override
-  String get onDeviceFinishSetupBody =>
-      'آپ اس ماہ کے لائیو گھنٹے استعمال کر چکے ہیں۔ Omi اب بھی ریکارڈ کر رہا ہے اور آڈیو آپ کے فون پر محفوظ کر رہا ہے۔ اسپیچ ماڈل ڈاؤن لوڈ کریں اور یہ باقی کام مکمل کر لے گا۔';
-
-  @override
-  String onDeviceDownloadSize(String size) {
-    return '$size ڈاؤن لوڈ';
-  }
-
-  @override
-  String get onDeviceUnsupportedBody =>
-      'یہ فون ابھی اسپیچ ماڈل نہیں چلا سکتا۔ لائیو گھنٹے واپس آنے یا آپ کے اپ گریڈ کرنے تک آڈیو محفوظ رہے گی۔';
-
-  @override
-  String get onDeviceEntrySubtitle => 'لائیو گھنٹے ختم ہونے پر اسی فون پر ٹرانسکرائب کریں';
 }

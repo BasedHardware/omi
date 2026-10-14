@@ -5603,11 +5603,6 @@ class AppLocalizationsHe extends AppLocalizations {
   String get downloadingFromSdCard => 'הורדה מכרטיס SD';
 
   @override
-  String processingProgress(int current, int total) {
-    return 'עיבוד $current/$total';
-  }
-
-  @override
   String conversationsCreated(int count) {
     return '$count שיחות שנוצרו';
   }
@@ -9024,18 +9019,10 @@ class AppLocalizationsHe extends AppLocalizations {
   }
 
   @override
-  String syncCardProgressOf(int current, int total) {
-    return '$current מתוך $total';
-  }
-
-  @override
   String get syncStatusOnDevice => 'במכשיר שלך';
 
   @override
   String get syncStatusDownloadingFromDevice => 'מוריד מהמכשיר שלך';
-
-  @override
-  String get newestFirst => 'החדשות ביותר תחילה';
 
   @override
   String get noSyncedRecordingsYet => 'אין עדיין הקלטות מסונכרנות';
@@ -11908,9 +11895,6 @@ class AppLocalizationsHe extends AppLocalizations {
   }
 
   @override
-  String get localCopiesSection => 'עותקים מקומיים';
-
-  @override
   String speakerLabelLinesLabeled(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,
@@ -13125,6 +13109,81 @@ class AppLocalizationsHe extends AppLocalizations {
   String get connectAnAgentSubtitle => 'קבלו הנחיית הגדרה עבור Claude, ‏ChatGPT, ‏Codex או כל סוכן';
 
   @override
+  String syncCardSyncingAmount(String amount) {
+    return 'מסנכרן $amount של אודיו';
+  }
+
+  @override
+  String get syncCardSyncingTitle => 'מסנכרן את ההקלטות שלך';
+
+  @override
+  String syncStepDownloadingAmount(String done, String total) {
+    return 'מוריד מה-Omi שלך · $done מתוך $total';
+  }
+
+  @override
+  String syncStepUploadingAmount(String done, String total) {
+    return 'מעלה · $done מתוך $total';
+  }
+
+  @override
+  String syncCardTranscribingAmount(String amount) {
+    return 'הופך $amount לשיחות';
+  }
+
+  @override
+  String syncCardTranscribedOf(String done, String total) {
+    return '$done מתוך $total הושלמו · אפשר לצאת ממסך זה';
+  }
+
+  @override
+  String syncCardReadyAmount(String amount) {
+    return '$amount מוכנים לסנכרון';
+  }
+
+  @override
+  String get syncStepLabelDownload => 'Omi → טלפון';
+
+  @override
+  String get syncStepLabelUpload => 'העלאה';
+
+  @override
+  String get syncStepLabelTranscribe => 'תמלול';
+
+  @override
+  String get syncDetailsTitle => 'פרטי הסנכרון';
+
+  @override
+  String get syncDetailsRightNow => 'כרגע';
+
+  @override
+  String get syncDetailsYourOmi => 'ה-Omi שלך';
+
+  @override
+  String get syncDetailsTransferSpeed => 'מהירות העברה';
+
+  @override
+  String get syncDetailsWaitingOnOmi => 'ממתין ל-Omi שלך';
+
+  @override
+  String get syncDetailsWaitingOnPhone => 'ממתין בטלפון זה';
+
+  @override
+  String get syncDetailsTranscribing => 'מתמלל ב-Omi';
+
+  @override
+  String get syncDetailsForSupport => 'לתמיכה';
+
+  @override
+  String get syncDetailsAudioFiles => 'קובצי אודיו';
+
+  @override
+  String get syncDetailsServerJobs => 'משימות שרת (הושלמו / סך הכול)';
+
+  @override
+  String get syncDetailsCopy => 'העתקת פרטים לתמיכה';
+
+  @override
   String get onDeviceAtCapTitle => 'ניצלת את התמלול החי של החודש';
 
   @override
@@ -13380,32 +13439,4 @@ class AppLocalizationsHe extends AppLocalizations {
 
   @override
   String get onDeviceRemoveModel => 'הסרת מודל הדיבור';
-
-  @override
-  String get onDeviceRemoveModelTitle => 'להסיר את מודל הדיבור?';
-
-  @override
-  String get onDeviceRemoveModelMessage => 'ההקלטות ימתינו בטלפון הזה עד שתוריד אותו שוב או שהשעות החיות יחזרו.';
-
-  @override
-  String get onDeviceRemove => 'הסרה';
-
-  @override
-  String get onDeviceFinishSetupTitle => 'סיים את ההגדרה כדי לראות את התמלולים';
-
-  @override
-  String get onDeviceFinishSetupBody =>
-      'ניצלת את השעות החיות של החודש. Omi עדיין מקליט ושומר את האודיו בטלפון שלך. הורד את מודל הדיבור והוא ישלים את הפער.';
-
-  @override
-  String onDeviceDownloadSize(String size) {
-    return 'הורדה של $size';
-  }
-
-  @override
-  String get onDeviceUnsupportedBody =>
-      'הטלפון הזה עדיין לא יכול להריץ את מודל הדיבור. האודיו נשאר שמור עד שהשעות החיות יחזרו או שתשדרג.';
-
-  @override
-  String get onDeviceEntrySubtitle => 'כשהשעות החיות נגמרות, לתמלל בטלפון הזה';
 }

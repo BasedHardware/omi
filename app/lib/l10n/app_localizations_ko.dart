@@ -5560,11 +5560,6 @@ class AppLocalizationsKo extends AppLocalizations {
   String get downloadingFromSdCard => 'SD 카드에서 다운로드 중';
 
   @override
-  String processingProgress(int current, int total) {
-    return '처리 중 $current/$total';
-  }
-
-  @override
   String conversationsCreated(int count) {
     return '$count개의 대화가 생성됨';
   }
@@ -8961,18 +8956,10 @@ class AppLocalizationsKo extends AppLocalizations {
   }
 
   @override
-  String syncCardProgressOf(int current, int total) {
-    return '$total개 중 $current개';
-  }
-
-  @override
   String get syncStatusOnDevice => '기기에 있음';
 
   @override
   String get syncStatusDownloadingFromDevice => '기기에서 다운로드 중';
-
-  @override
-  String get newestFirst => '최신순';
 
   @override
   String get noSyncedRecordingsYet => '아직 동기화된 녹음이 없습니다';
@@ -11824,9 +11811,6 @@ class AppLocalizationsKo extends AppLocalizations {
   }
 
   @override
-  String get localCopiesSection => '로컬 사본';
-
-  @override
   String speakerLabelLinesLabeled(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,
@@ -13037,6 +13021,81 @@ class AppLocalizationsKo extends AppLocalizations {
   String get connectAnAgentSubtitle => 'Claude, ChatGPT, Codex 등 모든 에이전트용 설정 프롬프트 받기';
 
   @override
+  String syncCardSyncingAmount(String amount) {
+    return '$amount 분량의 오디오 동기화 중';
+  }
+
+  @override
+  String get syncCardSyncingTitle => '녹음 동기화 중';
+
+  @override
+  String syncStepDownloadingAmount(String done, String total) {
+    return 'Omi에서 다운로드 중 · $done / $total';
+  }
+
+  @override
+  String syncStepUploadingAmount(String done, String total) {
+    return '업로드 중 · $done / $total';
+  }
+
+  @override
+  String syncCardTranscribingAmount(String amount) {
+    return '$amount을(를) 대화로 변환 중';
+  }
+
+  @override
+  String syncCardTranscribedOf(String done, String total) {
+    return '$done / $total 완료 · 이 화면을 나가도 됩니다';
+  }
+
+  @override
+  String syncCardReadyAmount(String amount) {
+    return '$amount 동기화 준비됨';
+  }
+
+  @override
+  String get syncStepLabelDownload => 'Omi → 휴대폰';
+
+  @override
+  String get syncStepLabelUpload => '업로드';
+
+  @override
+  String get syncStepLabelTranscribe => '텍스트 변환';
+
+  @override
+  String get syncDetailsTitle => '동기화 상세 정보';
+
+  @override
+  String get syncDetailsRightNow => '현재';
+
+  @override
+  String get syncDetailsYourOmi => '내 Omi';
+
+  @override
+  String get syncDetailsTransferSpeed => '전송 속도';
+
+  @override
+  String get syncDetailsWaitingOnOmi => 'Omi에서 대기 중';
+
+  @override
+  String get syncDetailsWaitingOnPhone => '이 휴대폰에서 대기 중';
+
+  @override
+  String get syncDetailsTranscribing => 'Omi에서 텍스트 변환 중';
+
+  @override
+  String get syncDetailsForSupport => '지원팀용';
+
+  @override
+  String get syncDetailsAudioFiles => '오디오 파일';
+
+  @override
+  String get syncDetailsServerJobs => '서버 작업 (완료 / 전체)';
+
+  @override
+  String get syncDetailsCopy => '지원팀용 상세 정보 복사';
+
+  @override
   String get onDeviceAtCapTitle => '이번 달 실시간 음성 변환을 모두 사용했어요';
 
   @override
@@ -13289,31 +13348,4 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get onDeviceRemoveModel => '음성 모델 삭제';
-
-  @override
-  String get onDeviceRemoveModelTitle => '음성 모델을 삭제할까요?';
-
-  @override
-  String get onDeviceRemoveModelMessage => '다시 다운로드하거나 실시간 시간이 충전될 때까지 녹음은 이 휴대폰에서 대기해요.';
-
-  @override
-  String get onDeviceRemove => '삭제';
-
-  @override
-  String get onDeviceFinishSetupTitle => '설정을 완료하고 텍스트를 확인하세요';
-
-  @override
-  String get onDeviceFinishSetupBody =>
-      '이번 달 실시간 시간을 모두 사용했어요. Omi는 계속 녹음하고 오디오를 휴대폰에 저장하고 있어요. 음성 모델을 다운로드하면 밀린 분량을 처리해요.';
-
-  @override
-  String onDeviceDownloadSize(String size) {
-    return '$size 다운로드';
-  }
-
-  @override
-  String get onDeviceUnsupportedBody => '이 휴대폰은 아직 음성 모델을 실행할 수 없어요. 실시간 시간이 충전되거나 업그레이드할 때까지 오디오는 저장돼요.';
-
-  @override
-  String get onDeviceEntrySubtitle => '실시간 시간을 다 쓰면 이 휴대폰에서 변환';
 }

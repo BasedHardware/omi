@@ -5661,11 +5661,6 @@ class AppLocalizationsBe extends AppLocalizations {
   String get downloadingFromSdCard => 'Загрузка з SD картка';
 
   @override
-  String processingProgress(int current, int total) {
-    return 'Апрацаванне $current/$total';
-  }
-
-  @override
   String conversationsCreated(int count) {
     return '$count разговор(аў) стварана';
   }
@@ -9119,18 +9114,10 @@ class AppLocalizationsBe extends AppLocalizations {
   }
 
   @override
-  String syncCardProgressOf(int current, int total) {
-    return '$current з $total';
-  }
-
-  @override
   String get syncStatusOnDevice => 'На вашым прыборы';
 
   @override
   String get syncStatusDownloadingFromDevice => 'Загрузка з вашага прыбора';
-
-  @override
-  String get newestFirst => 'Спачатку новыя';
 
   @override
   String get noSyncedRecordingsYet => 'Пакуль няма сінхранізаваных запісаў';
@@ -12030,9 +12017,6 @@ class AppLocalizationsBe extends AppLocalizations {
   }
 
   @override
-  String get localCopiesSection => 'Лакальныя копіі';
-
-  @override
   String speakerLabelLinesLabeled(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,
@@ -13253,6 +13237,81 @@ class AppLocalizationsBe extends AppLocalizations {
   String get connectAnAgentSubtitle => 'Атрымайце падказку для наладкі Claude, ChatGPT, Codex або любога агента';
 
   @override
+  String syncCardSyncingAmount(String amount) {
+    return 'Сінхранізацыя $amount аўдыё';
+  }
+
+  @override
+  String get syncCardSyncingTitle => 'Сінхранізацыя запісаў';
+
+  @override
+  String syncStepDownloadingAmount(String done, String total) {
+    return 'Спампоўка з Omi · $done з $total';
+  }
+
+  @override
+  String syncStepUploadingAmount(String done, String total) {
+    return 'Загрузка на сервер · $done з $total';
+  }
+
+  @override
+  String syncCardTranscribingAmount(String amount) {
+    return 'Ператварэнне $amount у размовы';
+  }
+
+  @override
+  String syncCardTranscribedOf(String done, String total) {
+    return 'Гатова $done з $total · можна пакінуць гэты экран';
+  }
+
+  @override
+  String syncCardReadyAmount(String amount) {
+    return '$amount гатова да сінхранізацыі';
+  }
+
+  @override
+  String get syncStepLabelDownload => 'Omi → тэлефон';
+
+  @override
+  String get syncStepLabelUpload => 'Загрузка';
+
+  @override
+  String get syncStepLabelTranscribe => 'Расшыфроўка';
+
+  @override
+  String get syncDetailsTitle => 'Дэталі сінхранізацыі';
+
+  @override
+  String get syncDetailsRightNow => 'Цяпер';
+
+  @override
+  String get syncDetailsYourOmi => 'Ваш Omi';
+
+  @override
+  String get syncDetailsTransferSpeed => 'Хуткасць перадачы';
+
+  @override
+  String get syncDetailsWaitingOnOmi => 'Чакае на Omi';
+
+  @override
+  String get syncDetailsWaitingOnPhone => 'Чакае на гэтым тэлефоне';
+
+  @override
+  String get syncDetailsTranscribing => 'Расшыфроўваецца ў Omi';
+
+  @override
+  String get syncDetailsForSupport => 'Для падтрымкі';
+
+  @override
+  String get syncDetailsAudioFiles => 'Аўдыяфайлы';
+
+  @override
+  String get syncDetailsServerJobs => 'Заданні сервера (гатова / усяго)';
+
+  @override
+  String get syncDetailsCopy => 'Скапіяваць дэталі для падтрымкі';
+
+  @override
   String get onDeviceAtCapTitle => 'Вы выкарысталі транскрыпцыю ў рэальным часе на гэты месяц';
 
   @override
@@ -13515,33 +13574,4 @@ class AppLocalizationsBe extends AppLocalizations {
 
   @override
   String get onDeviceRemoveModel => 'Выдаліць маўленчую мадэль';
-
-  @override
-  String get onDeviceRemoveModelTitle => 'Выдаліць маўленчую мадэль?';
-
-  @override
-  String get onDeviceRemoveModelMessage =>
-      'Запісы будуць чакаць на гэтым тэлефоне, пакуль вы зноў не спампуеце мадэль або не вернуцца гадзіны ў рэальным часе.';
-
-  @override
-  String get onDeviceRemove => 'Выдаліць';
-
-  @override
-  String get onDeviceFinishSetupTitle => 'Завяршыце наладжванне, каб убачыць стэнаграмы';
-
-  @override
-  String get onDeviceFinishSetupBody =>
-      'Вы выкарысталі гадзіны ў рэальным часе на гэты месяц. Omi працягвае запіс і захоўвае аўдыя на вашым тэлефоне. Спампуйце маўленчую мадэль, і яна ўсё дагоніць.';
-
-  @override
-  String onDeviceDownloadSize(String size) {
-    return 'Спампоўка $size';
-  }
-
-  @override
-  String get onDeviceUnsupportedBody =>
-      'Гэты тэлефон пакуль не можа запускаць маўленчую мадэль. Аўдыя застаецца захаваным, пакуль не вернуцца гадзіны ў рэальным часе або пакуль вы не палепшыце тарыф.';
-
-  @override
-  String get onDeviceEntrySubtitle => 'Калі гадзіны ў рэальным часе скончацца, транскрыбаваць на гэтым тэлефоне';
 }

@@ -5659,11 +5659,6 @@ class AppLocalizationsRu extends AppLocalizations {
   String get downloadingFromSdCard => 'Загрузка с SD-карты';
 
   @override
-  String processingProgress(int current, int total) {
-    return 'Обработка $current/$total';
-  }
-
-  @override
   String conversationsCreated(int count) {
     return 'Создано разговоров: $count';
   }
@@ -9125,18 +9120,10 @@ class AppLocalizationsRu extends AppLocalizations {
   }
 
   @override
-  String syncCardProgressOf(int current, int total) {
-    return '$current из $total';
-  }
-
-  @override
   String get syncStatusOnDevice => 'На вашем устройстве';
 
   @override
   String get syncStatusDownloadingFromDevice => 'Загрузка с вашего устройства';
-
-  @override
-  String get newestFirst => 'Сначала новые';
 
   @override
   String get noSyncedRecordingsYet => 'Пока нет синхронизированных записей';
@@ -12040,9 +12027,6 @@ class AppLocalizationsRu extends AppLocalizations {
   }
 
   @override
-  String get localCopiesSection => 'Локальные копии';
-
-  @override
   String speakerLabelLinesLabeled(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,
@@ -13264,6 +13248,81 @@ class AppLocalizationsRu extends AppLocalizations {
   String get connectAnAgentSubtitle => 'Получите промпт настройки для Claude, ChatGPT, Codex или любого агента';
 
   @override
+  String syncCardSyncingAmount(String amount) {
+    return 'Синхронизация $amount аудио';
+  }
+
+  @override
+  String get syncCardSyncingTitle => 'Синхронизация записей';
+
+  @override
+  String syncStepDownloadingAmount(String done, String total) {
+    return 'Загрузка с Omi · $done из $total';
+  }
+
+  @override
+  String syncStepUploadingAmount(String done, String total) {
+    return 'Загрузка на сервер · $done из $total';
+  }
+
+  @override
+  String syncCardTranscribingAmount(String amount) {
+    return 'Преобразование $amount в разговоры';
+  }
+
+  @override
+  String syncCardTranscribedOf(String done, String total) {
+    return 'Готово $done из $total · можно покинуть этот экран';
+  }
+
+  @override
+  String syncCardReadyAmount(String amount) {
+    return '$amount готово к синхронизации';
+  }
+
+  @override
+  String get syncStepLabelDownload => 'Omi → телефон';
+
+  @override
+  String get syncStepLabelUpload => 'Загрузка';
+
+  @override
+  String get syncStepLabelTranscribe => 'Расшифровка';
+
+  @override
+  String get syncDetailsTitle => 'Сведения о синхронизации';
+
+  @override
+  String get syncDetailsRightNow => 'Сейчас';
+
+  @override
+  String get syncDetailsYourOmi => 'Ваш Omi';
+
+  @override
+  String get syncDetailsTransferSpeed => 'Скорость передачи';
+
+  @override
+  String get syncDetailsWaitingOnOmi => 'Ожидает на Omi';
+
+  @override
+  String get syncDetailsWaitingOnPhone => 'Ожидает на этом телефоне';
+
+  @override
+  String get syncDetailsTranscribing => 'Расшифровывается в Omi';
+
+  @override
+  String get syncDetailsForSupport => 'Для поддержки';
+
+  @override
+  String get syncDetailsAudioFiles => 'Аудиофайлы';
+
+  @override
+  String get syncDetailsServerJobs => 'Задачи сервера (выполнено / всего)';
+
+  @override
+  String get syncDetailsCopy => 'Скопировать данные для поддержки';
+
+  @override
   String get onDeviceAtCapTitle => 'Онлайн-расшифровка на этот месяц израсходована';
 
   @override
@@ -13524,33 +13583,4 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get onDeviceRemoveModel => 'Удалить речевую модель';
-
-  @override
-  String get onDeviceRemoveModelTitle => 'Удалить речевую модель?';
-
-  @override
-  String get onDeviceRemoveModelMessage =>
-      'Записи будут ждать на этом телефоне, пока вы снова её не загрузите или не вернутся онлайн-часы.';
-
-  @override
-  String get onDeviceRemove => 'Удалить';
-
-  @override
-  String get onDeviceFinishSetupTitle => 'Завершите настройку, чтобы увидеть расшифровки';
-
-  @override
-  String get onDeviceFinishSetupBody =>
-      'Онлайн-часы этого месяца израсходованы. Omi продолжает запись и сохраняет аудио на телефоне. Загрузите речевую модель, и она всё наверстает.';
-
-  @override
-  String onDeviceDownloadSize(String size) {
-    return 'Загрузка $size';
-  }
-
-  @override
-  String get onDeviceUnsupportedBody =>
-      'Этот телефон пока не может запустить речевую модель. Аудио сохранится, пока не вернутся онлайн-часы или вы не перейдёте на другой план.';
-
-  @override
-  String get onDeviceEntrySubtitle => 'Когда онлайн-часы закончатся, расшифровывать на этом телефоне';
 }

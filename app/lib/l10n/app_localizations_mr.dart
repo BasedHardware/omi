@@ -5655,11 +5655,6 @@ class AppLocalizationsMr extends AppLocalizations {
   String get downloadingFromSdCard => 'SD कार्डमधून डाउनलोड करत आहे';
 
   @override
-  String processingProgress(int current, int total) {
-    return 'प्रक्रिया करत आहे $current/$total';
-  }
-
-  @override
   String conversationsCreated(int count) {
     return '$count संभाषणे तयार केली';
   }
@@ -9102,18 +9097,10 @@ class AppLocalizationsMr extends AppLocalizations {
   }
 
   @override
-  String syncCardProgressOf(int current, int total) {
-    return '$total पैकी $current';
-  }
-
-  @override
   String get syncStatusOnDevice => 'तुमच्या डिव्हाइसवर';
 
   @override
   String get syncStatusDownloadingFromDevice => 'तुमच्या डिव्हाइसवरून डाउनलोड होत आहे';
-
-  @override
-  String get newestFirst => 'नवीन आधी';
 
   @override
   String get noSyncedRecordingsYet => 'अद्याप कोणतीही सिंक केलेली रेकॉर्डिंग नाही';
@@ -12006,9 +11993,6 @@ class AppLocalizationsMr extends AppLocalizations {
   }
 
   @override
-  String get localCopiesSection => 'स्थानिक प्रती';
-
-  @override
   String speakerLabelLinesLabeled(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,
@@ -13224,6 +13208,81 @@ class AppLocalizationsMr extends AppLocalizations {
   String get connectAnAgentSubtitle => 'Claude, ChatGPT, Codex किंवा कोणत्याही एजंटसाठी सेटअप प्रॉम्प्ट मिळवा';
 
   @override
+  String syncCardSyncingAmount(String amount) {
+    return '$amount ऑडिओ सिंक होत आहे';
+  }
+
+  @override
+  String get syncCardSyncingTitle => 'तुमची रेकॉर्डिंग सिंक होत आहेत';
+
+  @override
+  String syncStepDownloadingAmount(String done, String total) {
+    return 'तुमच्या Omi मधून डाउनलोड · $done / $total';
+  }
+
+  @override
+  String syncStepUploadingAmount(String done, String total) {
+    return 'अपलोड · $done / $total';
+  }
+
+  @override
+  String syncCardTranscribingAmount(String amount) {
+    return '$amount चे संभाषणांमध्ये रूपांतर होत आहे';
+  }
+
+  @override
+  String syncCardTranscribedOf(String done, String total) {
+    return '$done / $total पूर्ण · तुम्ही ही स्क्रीन सोडू शकता';
+  }
+
+  @override
+  String syncCardReadyAmount(String amount) {
+    return '$amount सिंकसाठी तयार';
+  }
+
+  @override
+  String get syncStepLabelDownload => 'Omi → फोन';
+
+  @override
+  String get syncStepLabelUpload => 'अपलोड';
+
+  @override
+  String get syncStepLabelTranscribe => 'ट्रान्सक्रिप्शन';
+
+  @override
+  String get syncDetailsTitle => 'सिंक तपशील';
+
+  @override
+  String get syncDetailsRightNow => 'आत्ता';
+
+  @override
+  String get syncDetailsYourOmi => 'तुमचा Omi';
+
+  @override
+  String get syncDetailsTransferSpeed => 'ट्रान्सफर गती';
+
+  @override
+  String get syncDetailsWaitingOnOmi => 'Omi वर प्रतीक्षेत';
+
+  @override
+  String get syncDetailsWaitingOnPhone => 'या फोनवर प्रतीक्षेत';
+
+  @override
+  String get syncDetailsTranscribing => 'Omi वर ट्रान्सक्राइब होत आहे';
+
+  @override
+  String get syncDetailsForSupport => 'सपोर्टसाठी';
+
+  @override
+  String get syncDetailsAudioFiles => 'ऑडिओ फाइल्स';
+
+  @override
+  String get syncDetailsServerJobs => 'सर्व्हर जॉब्स (पूर्ण / एकूण)';
+
+  @override
+  String get syncDetailsCopy => 'सपोर्टसाठी तपशील कॉपी करा';
+
+  @override
   String get onDeviceAtCapTitle => 'तुम्ही या महिन्याचे लाइव्ह ट्रान्सक्रिप्शन वापरले आहे';
 
   @override
@@ -13485,33 +13544,4 @@ class AppLocalizationsMr extends AppLocalizations {
 
   @override
   String get onDeviceRemoveModel => 'स्पीच मॉडेल काढा';
-
-  @override
-  String get onDeviceRemoveModelTitle => 'स्पीच मॉडेल काढायचे?';
-
-  @override
-  String get onDeviceRemoveModelMessage =>
-      'तुम्ही ते पुन्हा डाउनलोड करेपर्यंत किंवा लाइव्ह तास परत येईपर्यंत रेकॉर्डिंग्ज या फोनवर प्रतीक्षेत राहतील.';
-
-  @override
-  String get onDeviceRemove => 'काढा';
-
-  @override
-  String get onDeviceFinishSetupTitle => 'तुमचे ट्रान्सक्रिप्ट पाहण्यासाठी सेटअप पूर्ण करा';
-
-  @override
-  String get onDeviceFinishSetupBody =>
-      'तुम्ही या महिन्याचे लाइव्ह तास वापरले आहेत. Omi अजूनही रेकॉर्ड करत आहे आणि ऑडिओ तुमच्या फोनवर सेव्ह करत आहे. स्पीच मॉडेल डाउनलोड करा, म्हणजे ते बाकी काम पूर्ण करेल.';
-
-  @override
-  String onDeviceDownloadSize(String size) {
-    return '$size डाउनलोड';
-  }
-
-  @override
-  String get onDeviceUnsupportedBody =>
-      'हा फोन अद्याप स्पीच मॉडेल चालवू शकत नाही. लाइव्ह तास परत येईपर्यंत किंवा तुम्ही अपग्रेड करेपर्यंत ऑडिओ सेव्ह राहतो.';
-
-  @override
-  String get onDeviceEntrySubtitle => 'लाइव्ह तास संपल्यावर या फोनवर ट्रान्सक्राइब करा';
 }

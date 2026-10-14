@@ -5639,11 +5639,6 @@ class AppLocalizationsCs extends AppLocalizations {
   String get downloadingFromSdCard => 'Stahování z SD karty';
 
   @override
-  String processingProgress(int current, int total) {
-    return 'Zpracovávání $current/$total';
-  }
-
-  @override
   String conversationsCreated(int count) {
     return 'Vytvořeno $count konverzací';
   }
@@ -9092,18 +9087,10 @@ class AppLocalizationsCs extends AppLocalizations {
   }
 
   @override
-  String syncCardProgressOf(int current, int total) {
-    return '$current z $total';
-  }
-
-  @override
   String get syncStatusOnDevice => 'Ve vašem zařízení';
 
   @override
   String get syncStatusDownloadingFromDevice => 'Stahování z vašeho zařízení';
-
-  @override
-  String get newestFirst => 'Nejnovější první';
 
   @override
   String get noSyncedRecordingsYet => 'Zatím žádné synchronizované nahrávky';
@@ -11999,9 +11986,6 @@ class AppLocalizationsCs extends AppLocalizations {
   }
 
   @override
-  String get localCopiesSection => 'Místní kopie';
-
-  @override
   String speakerLabelLinesLabeled(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,
@@ -13220,6 +13204,81 @@ class AppLocalizationsCs extends AppLocalizations {
   String get connectAnAgentSubtitle => 'Získejte instrukce k nastavení pro Claude, ChatGPT, Codex nebo jiného agenta';
 
   @override
+  String syncCardSyncingAmount(String amount) {
+    return 'Synchronizace $amount zvuku';
+  }
+
+  @override
+  String get syncCardSyncingTitle => 'Synchronizace nahrávek';
+
+  @override
+  String syncStepDownloadingAmount(String done, String total) {
+    return 'Stahování z Omi · $done z $total';
+  }
+
+  @override
+  String syncStepUploadingAmount(String done, String total) {
+    return 'Nahrávání · $done z $total';
+  }
+
+  @override
+  String syncCardTranscribingAmount(String amount) {
+    return 'Převod $amount na konverzace';
+  }
+
+  @override
+  String syncCardTranscribedOf(String done, String total) {
+    return 'Hotovo $done z $total · tuto obrazovku můžete opustit';
+  }
+
+  @override
+  String syncCardReadyAmount(String amount) {
+    return '$amount připraveno k synchronizaci';
+  }
+
+  @override
+  String get syncStepLabelDownload => 'Omi → telefon';
+
+  @override
+  String get syncStepLabelUpload => 'Nahrání';
+
+  @override
+  String get syncStepLabelTranscribe => 'Přepis';
+
+  @override
+  String get syncDetailsTitle => 'Podrobnosti synchronizace';
+
+  @override
+  String get syncDetailsRightNow => 'Právě teď';
+
+  @override
+  String get syncDetailsYourOmi => 'Váš Omi';
+
+  @override
+  String get syncDetailsTransferSpeed => 'Rychlost přenosu';
+
+  @override
+  String get syncDetailsWaitingOnOmi => 'Čeká na Omi';
+
+  @override
+  String get syncDetailsWaitingOnPhone => 'Čeká v tomto telefonu';
+
+  @override
+  String get syncDetailsTranscribing => 'Přepisuje se v Omi';
+
+  @override
+  String get syncDetailsForSupport => 'Pro podporu';
+
+  @override
+  String get syncDetailsAudioFiles => 'Zvukové soubory';
+
+  @override
+  String get syncDetailsServerJobs => 'Úlohy serveru (hotovo / celkem)';
+
+  @override
+  String get syncDetailsCopy => 'Zkopírovat podrobnosti pro podporu';
+
+  @override
   String get onDeviceAtCapTitle => 'Živý přepis na tento měsíc je vyčerpán';
 
   @override
@@ -13480,33 +13539,4 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get onDeviceRemoveModel => 'Odstranit řečový model';
-
-  @override
-  String get onDeviceRemoveModelTitle => 'Odstranit řečový model?';
-
-  @override
-  String get onDeviceRemoveModelMessage =>
-      'Nahrávky budou v tomto telefonu čekat, dokud model znovu nestáhnete nebo se neobnoví hodiny živého přepisu.';
-
-  @override
-  String get onDeviceRemove => 'Odstranit';
-
-  @override
-  String get onDeviceFinishSetupTitle => 'Dokončete nastavení a uvidíte své přepisy';
-
-  @override
-  String get onDeviceFinishSetupBody =>
-      'Vyčerpali jste hodiny živého přepisu na tento měsíc. Omi stále nahrává a ukládá zvuk do vašeho telefonu. Stáhněte řečový model a vše se dožene.';
-
-  @override
-  String onDeviceDownloadSize(String size) {
-    return 'Ke stažení $size';
-  }
-
-  @override
-  String get onDeviceUnsupportedBody =>
-      'Tento telefon zatím nedokáže spustit řečový model. Zvuk zůstane uložen, dokud se neobnoví hodiny živého přepisu nebo nepřejdete na vyšší tarif.';
-
-  @override
-  String get onDeviceEntrySubtitle => 'Po vyčerpání hodin živého přepisu přepisovat v tomto telefonu';
 }

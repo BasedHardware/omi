@@ -4,7 +4,7 @@ from threading import Lock
 from typing import Any
 
 import os
-from google.api_core.exceptions import InvalidArgument
+from google.api_core.exceptions import Aborted, InvalidArgument
 from google.cloud import firestore
 
 from database.document_ids import document_id_from_seed
@@ -303,8 +303,15 @@ _EXPIRED_TRANSACTION_MARKER = "transaction has expired"
 
 
 def is_expired_transaction_error(error: BaseException) -> bool:
-    """True for the Firestore 400 that retires a transaction id mid-flight."""
-    return isinstance(error, InvalidArgument) and _EXPIRED_TRANSACTION_MARKER in str(error).lower()
+    """True when Firestore has retired the transaction id mid-flight.
+
+    A commit reports that as ``InvalidArgument`` 400. A streaming read
+    (``BatchGetDocuments`` / ``RunQuery``) reports the same retirement as
+    ``Aborted`` 409, raised from ``google.api_core.grpc_helpers``. The SDK
+    retries ``Aborted`` only when ``_commit`` raises it, and that retry reuses
+    the dead id, so the read-path ``Aborted`` has to be recognized here.
+    """
+    return isinstance(error, (InvalidArgument, Aborted)) and _EXPIRED_TRANSACTION_MARKER in str(error).lower()
 
 
 _DOCUMENT_SIZE_LIMIT_MARKER = "exceeds the maximum allowed size"
@@ -419,16 +426,17 @@ def run_transactional(client: Any, transactional_callable: Any, *args: Any, atte
     """Run a ``@firestore.transactional`` callable, restarting it on an expired transaction.
 
     ``_Transactional.__call__`` retries contention by replaying the *same* transaction id,
-    which is exactly what cannot work once Firestore has retired that id: the commit comes
-    back ``400 The referenced transaction has expired or is no longer valid`` and nothing
-    was written. The SDK treats that as fatal, so recovery requires a brand-new transaction
-    and belongs to this boundary rather than to every caller — callers that own a live
-    WebSocket session have no way to distinguish it from a real write failure.
+    which is exactly what cannot work once Firestore has retired that id. The commit comes
+    back ``400 The referenced transaction has expired or is no longer valid``; a streaming
+    read comes back ``409`` ``Aborted`` with the same message, and the SDK does not retry
+    that read. Nothing was written. Recovery requires a brand-new transaction and belongs
+    to this boundary rather than to every caller — callers that own a live WebSocket
+    session have no way to distinguish it from a real write failure.
     """
     for attempt in range(1, max(1, attempts) + 1):
         try:
             return transactional_callable(client.transaction(), *args, **kwargs)
-        except InvalidArgument as error:
+        except (InvalidArgument, Aborted) as error:
             if attempt >= attempts or not is_expired_transaction_error(error):
                 raise
             logger.warning('Firestore transaction expired, restarting attempt=%d/%d', attempt, attempts)
