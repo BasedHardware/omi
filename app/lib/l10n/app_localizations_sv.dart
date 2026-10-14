@@ -13212,4 +13212,10 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get paywallCancelAnytime => 'Avsluta när som helst.';
+
+  @override
+  String get connectAnAgent => 'Anslut en agent';
+
+  @override
+  String get connectAnAgentSubtitle => 'Hämta en installationsprompt för Claude, ChatGPT, Codex eller valfri agent';
 }

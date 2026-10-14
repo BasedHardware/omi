@@ -13312,4 +13312,10 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get paywallCancelAnytime => 'Kanselahin anumang oras.';
+
+  @override
+  String get connectAnAgent => 'Ikonekta ang isang Agent';
+
+  @override
+  String get connectAnAgentSubtitle => 'Kumuha ng setup prompt para sa Claude, ChatGPT, Codex, o anumang agent';
 }

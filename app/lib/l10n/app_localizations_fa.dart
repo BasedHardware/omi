@@ -13202,4 +13202,10 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String get paywallCancelAnytime => 'هر زمان که بخواهید لغو کنید.';
+
+  @override
+  String get connectAnAgent => 'اتصال یک ایجنت';
+
+  @override
+  String get connectAnAgentSubtitle => 'یک پرامپت راه‌اندازی برای Claude، ChatGPT، Codex یا هر ایجنتی بگیرید';
 }

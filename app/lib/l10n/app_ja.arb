@@ -4055,5 +4055,7 @@
     "firstCaptureCancelWarning": "Going back stops this recording. Keep talking to give Omi a few more sentences.",
     "firstCaptureSiriTip": "Tip: Enable Omi in Shortcuts → Siri.",
     "paywallOutlineHeadline": "もう一言も聞き逃さない。",
-    "paywallCancelAnytime": "いつでもキャンセルできます。"
+    "paywallCancelAnytime": "いつでもキャンセルできます。",
+    "connectAnAgent": "エージェントを接続",
+    "connectAnAgentSubtitle": "Claude、ChatGPT、Codex などのエージェント用セットアップ用プロンプトを取得"
 }

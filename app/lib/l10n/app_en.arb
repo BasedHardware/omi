@@ -15857,5 +15857,13 @@
     "paywallCancelAnytime": "Cancel anytime.",
     "@paywallCancelAnytime": {
         "description": "Caption under the upgrade button on the Outline paywall variant"
+    },
+    "connectAnAgent": "Connect an Agent",
+    "@connectAnAgent": {
+        "description": "Settings row that opens the web developer home, where users get copy-paste setup prompts and keys for AI agents (Claude, ChatGPT, Codex, ...)"
+    },
+    "connectAnAgentSubtitle": "Get a setup prompt for Claude, ChatGPT, Codex, or any agent",
+    "@connectAnAgentSubtitle": {
+        "description": "Subtitle of the Connect an Agent settings row"
     }
 }

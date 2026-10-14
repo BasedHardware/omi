@@ -4055,5 +4055,7 @@
     "firstCaptureCancelWarning": "Going back stops this recording. Keep talking to give Omi a few more sentences.",
     "firstCaptureSiriTip": "Tip: Enable Omi in Shortcuts → Siri.",
     "paywallOutlineHeadline": "Mis nooit meer een woord.",
-    "paywallCancelAnytime": "Opzeggen kan altijd."
+    "paywallCancelAnytime": "Opzeggen kan altijd.",
+    "connectAnAgent": "Een agent koppelen",
+    "connectAnAgentSubtitle": "Krijg een installatieprompt voor Claude, ChatGPT, Codex of elke andere agent"
 }

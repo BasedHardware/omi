@@ -13141,4 +13141,10 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get paywallCancelAnytime => 'ยกเลิกได้ทุกเมื่อ';
+
+  @override
+  String get connectAnAgent => 'เชื่อมต่อเอเจนต์';
+
+  @override
+  String get connectAnAgentSubtitle => 'รับพรอมต์การตั้งค่าสำหรับ Claude, ChatGPT, Codex หรือเอเจนต์ใดก็ได้';
 }

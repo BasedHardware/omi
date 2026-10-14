@@ -13290,4 +13290,10 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get paywallCancelAnytime => 'Ακύρωση ανά πάσα στιγμή.';
+
+  @override
+  String get connectAnAgent => 'Σύνδεση πράκτορα';
+
+  @override
+  String get connectAnAgentSubtitle => 'Λάβετε οδηγίες ρύθμισης για Claude, ChatGPT, Codex ή οποιονδήποτε πράκτορα';
 }

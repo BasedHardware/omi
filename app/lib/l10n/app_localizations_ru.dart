@@ -13253,4 +13253,10 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get paywallCancelAnytime => 'Отмена в любой момент.';
+
+  @override
+  String get connectAnAgent => 'Подключить агента';
+
+  @override
+  String get connectAnAgentSubtitle => 'Получите промпт настройки для Claude, ChatGPT, Codex или любого агента';
 }
