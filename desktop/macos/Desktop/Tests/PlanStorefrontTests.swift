@@ -187,20 +187,42 @@ final class StorefrontPlansRenderTests: XCTestCase {
     .frame(width: width)
     .background(Color(nsColor: .windowBackgroundColor))
     .environment(\.colorScheme, .dark)
-    .shellConfirmation(
-      isPresented: .constant(name == "plus_yearly_confirmation"),
-      title: data.tiers.first(where: \.isCurrent)?.prices.first?.ctaLabel ?? "Plans",
-      message: data.tiers.first(where: \.isCurrent)?.prices.first?.confirmLines.joined(separator: "\n") ?? "",
-      confirmTitle: data.tiers.first(where: \.isCurrent)?.prices.first?.ctaLabel ?? "Switch to yearly",
-      isDestructive: false, onConfirm: {})
 
     var png: Data?
     let dark = try XCTUnwrap(NSAppearance(named: .darkAqua))
     dark.performAsCurrentDrawingAppearance {
-      let renderer = ImageRenderer(content: view)
-      renderer.scale = 2
-      if let image = renderer.cgImage {
-        png = NSBitmapImageRep(cgImage: image).representation(using: .png, properties: [:])
+      if name == "plus_yearly_confirmation" {
+        // The shared shell contains AppKit material; ImageRenderer cannot capture it.
+        // Cache the real hosting view in a hidden test-owned window instead.
+        let composed =
+          view
+          .shellConfirmation(
+            isPresented: .constant(name == "plus_yearly_confirmation"),
+            title: data.tiers.first(where: \.isCurrent)?.prices.first?.ctaLabel ?? "Plans",
+            message: data.tiers.first(where: \.isCurrent)?.prices.first?.confirmLines.joined(separator: "\n") ?? "",
+            confirmTitle: data.tiers.first(where: \.isCurrent)?.prices.first?.ctaLabel ?? "Switch to yearly",
+            isDestructive: false, onConfirm: {})
+        let hosting = NSHostingView(rootView: composed)
+        let height = max(hosting.fittingSize.height, 700)
+        let window = NSWindow(
+          contentRect: NSRect(x: -10000, y: -10000, width: width, height: height), styleMask: .borderless,
+          backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false
+        window.appearance = dark
+        window.contentView = hosting
+        hosting.frame = NSRect(x: 0, y: 0, width: width, height: height)
+        hosting.layoutSubtreeIfNeeded()
+        if let rep = hosting.bitmapImageRepForCachingDisplay(in: hosting.bounds) {
+          hosting.cacheDisplay(in: hosting.bounds, to: rep)
+          png = rep.representation(using: .png, properties: [:])
+        }
+        window.close()
+      } else {
+        let renderer = ImageRenderer(content: view)
+        renderer.scale = 2
+        if let image = renderer.cgImage {
+          png = NSBitmapImageRep(cgImage: image).representation(using: .png, properties: [:])
+        }
       }
     }
     let data = try XCTUnwrap(png, name)

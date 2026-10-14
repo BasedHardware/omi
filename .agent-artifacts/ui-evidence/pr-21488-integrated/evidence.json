@@ -39,7 +39,7 @@
     {
       "file": "006-desktop-macos-yearly-confirmation.png",
       "platform": "desktop-macos",
-      "description": "Shared shell confirmation over actual SwiftUI plans view using backend annual lines and CTA",
+      "description": "Shared shell confirmation captured through a real NSHostingView in a hidden test-owned window; backend annual lines and CTA",
       "captured_by": "agent",
       "source": "visual-audit"
     }
