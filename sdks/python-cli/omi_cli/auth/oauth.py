@@ -42,6 +42,7 @@ from omi_cli.auth.store import (
     store_oauth_session_with_dev_key,
     store_oauth_tokens,
     update_oauth_id_token,
+    update_oauth_tokens,
 )
 from omi_cli.config import Profile
 from omi_cli.errors import AuthError, UsageError
@@ -246,15 +247,15 @@ def refresh_id_token(profile_name: str) -> str:
 
     expires_at = time.time() + expires_in - _REFRESH_MARGIN_SECONDS
 
-    # If Firebase rotated the refresh token, persist the new one too. Otherwise
-    # we just bump the ID token + expiry in place.
+    # If Firebase rotated the refresh token, persist the new one too via the
+    # dedicated updater so any developer API key on a dual-credential profile
+    # is preserved across rotation. Otherwise we just bump the ID token + expiry.
     if new_refresh_token and new_refresh_token != profile.refresh_token:
-        store_oauth_tokens(
+        update_oauth_tokens(
             profile_name,
             id_token=new_id_token,
             refresh_token=new_refresh_token,
             expires_at=expires_at,
-            api_base=profile.api_base,
         )
     else:
         update_oauth_id_token(
