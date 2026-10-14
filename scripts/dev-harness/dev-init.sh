@@ -29,26 +29,28 @@ if [ ! -x "backend/.venv/bin/python" ] && [ ! -x "backend/.venv/Scripts/python.e
 fi
 
 PYTHON_BIN="$(dev_harness_python)"
-# Full physical comparison on both sides: -P resolves any symlinked checkout
-# path, and the venv python is resolved through its own symlink (a symlinked
-# python points into the interpreter framework tree, never at a foreign
-# script), so only THIS repo's actual backend/.venv interpreter passes.
-RESOLVED_PY="$(cd "$(dirname "$PYTHON_BIN")" && pwd -P)/$(basename "$PYTHON_BIN")"
-RESOLVED_PY="$(cd "$(dirname "$RESOLVED_PY")" && pwd -P)/$(basename "$RESOLVED_PY")"
-CANONICAL_PY="$PWD/backend/.venv/bin/python"
-if [ "$RESOLVED_PY" != "$CANONICAL_PY" ]; then
-  # Symlink-tolerant final check: a venv python may be (or resolve through) a
-  # symlink; accept only if it lives inside THIS repo's backend/.venv realpath.
-  CANONICAL_DIR="$(cd "$PWD/backend/.venv" 2>/dev/null && pwd -P)" || CANONICAL_DIR=""
-  case "$RESOLVED_PY" in
-    "$CANONICAL_DIR"/*) ;;
-    *)
-      echo "dev-init: resolved interpreter '$PYTHON_BIN' is not this repo's backend/.venv/bin/python; refusing to install requirements outside the venv." >&2
-      echo "The venv is missing or below the 3.10 floor. Run: make lane-bootstrap (Python 3.11 venv)," >&2
-      echo "or install Python >= 3.10 and re-run dev-init." >&2
-      exit 1
-      ;;
-  esac
+# The unspoofable membership check: the resolved interpreter must REPORT this
+# repo's venv as its sys.prefix. A path/symlink comparison can be bypassed
+# (backend/.venv/bin/python may be a symlink to a foreign interpreter), but a
+# foreign interpreter reports its own prefix, never this venv's realpath; a
+# real venv python — itself a symlink to the base interpreter — reports the
+# venv. Both sides are compared as physical paths.
+CANONICAL_PREFIX="$(cd "$PWD/backend/.venv" 2>/dev/null && pwd -P)" || CANONICAL_PREFIX=""
+if [ -z "$CANONICAL_PREFIX" ]; then
+  echo "dev-init: backend/.venv is missing; refusing to install requirements outside the venv." >&2
+  echo "Run: make lane-bootstrap (Python 3.11 venv), or install Python >= 3.10 and re-run dev-init." >&2
+  exit 1
+fi
+INTERPRETER_PREFIX="$("$PYTHON_BIN" -c 'import sys; print(sys.prefix)' 2>/dev/null)" || INTERPRETER_PREFIX=""
+INTERPRETER_PREFIX_PHYS=""
+if [ -n "$INTERPRETER_PREFIX" ] && [ -d "$INTERPRETER_PREFIX" ]; then
+  INTERPRETER_PREFIX_PHYS="$(cd "$INTERPRETER_PREFIX" && pwd -P)" || INTERPRETER_PREFIX_PHYS=""
+fi
+if [ "$INTERPRETER_PREFIX_PHYS" != "$CANONICAL_PREFIX" ]; then
+  echo "dev-init: resolved interpreter '$PYTHON_BIN' does not belong to this repo's backend/.venv (sys.prefix '$INTERPRETER_PREFIX'); refusing to install requirements outside the venv." >&2
+  echo "The venv is missing or below the 3.10 floor. Run: make lane-bootstrap (Python 3.11 venv)," >&2
+  echo "or install Python >= 3.10 and re-run dev-init." >&2
+  exit 1
 fi
 if ! "$PYTHON_BIN" -m pip --version >/dev/null; then
   echo "${PYTHON_BIN%/bin/python} is incomplete; recreate it with: python3 -m venv backend/.venv" >&2

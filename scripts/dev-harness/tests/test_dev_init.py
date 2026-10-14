@@ -67,8 +67,19 @@ def _fixture_repo(root: Path) -> Path:
     (repo / "backend/.env.local-dev.template").write_text("OMI_FIXTURE=1\n", encoding="utf-8")
     (repo / "backend/requirements.txt").write_text("", encoding="utf-8")
     # Stand in for the backend venv so the dependency install is a no-op and the
-    # test exercises the hook step without touching the network.
-    _write_executable(repo / "backend/.venv/bin/python", "#!/usr/bin/env bash\nexit 0\n")
+    # test exercises the hook step without touching the network. The stub
+    # reports this venv as its sys.prefix — the membership contract dev-init
+    # checks before installing.
+    _write_executable(
+        repo / "backend/.venv/bin/python",
+        "#!/usr/bin/env bash\n"
+        'if [ "${1:-}" = "-c" ] && [ "${2:-}" = "import sys; print(sys.prefix)" ]; then\n'
+        '  d="$(cd "$(dirname "$0")/.." && pwd -P)"\n'
+        '  printf \'%s\\n\' "$d"\n'
+        '  exit 0\n'
+        "fi\n"
+        "exit 0\n",
+    )
 
     _git("-C", str(repo), "add", "-A")
     _git(
@@ -208,14 +219,21 @@ def test_dev_init_creates_the_venv_even_with_a_floor_qualified_fallback(
     stub.write_text(
         "#!/usr/bin/env bash\n"
         "# Fake bootstrap interpreter: `-m venv <dir>` materializes a stub venv\n"
-        "# whose python logs its invocations; every other call is logged too.\n"
+        "# whose python logs its invocations and reports the venv as its\n"
+        "# sys.prefix; every other call is logged too.\n"
         f'LOG="{log}"\n'
         'if [ "${1:-}" = "-m" ] && [ "${2:-}" = "venv" ]; then\n'
         '  target="$3"\n'
         '  mkdir -p "$target/bin"\n'
         "  cat > \"$target/bin/python\" <<'INNER'\n"
         "#!/usr/bin/env bash\n"
-        f'printf \'VENV %s\\n\' \"$*\" >> "{log}"\n'
+        f'LOG="{log}"\n'
+        'if [ "${1:-}" = "-c" ] && [ "${2:-}" = "import sys; print(sys.prefix)" ]; then\n'
+        '  d="$(cd "$(dirname "$0")/.." && pwd -P)"\n'
+        '  printf \'%s\\n\' "$d"\n'
+        '  exit 0\n'
+        "fi\n"
+        f'printf \'VENV %s\\n\' "$*" >> "{log}"\n'
         "exit 0\n"
         "INNER\n"
         '  chmod +x "$target/bin/python"\n'
@@ -254,7 +272,8 @@ def test_dev_init_creates_the_venv_even_with_a_floor_qualified_fallback(
 
 def _write_logging_bootstrap_stub(directory: Path, name: str, log: Path, *, floor_ok: bool) -> None:
     """A fake interpreter whose probes are scripted and whose `venv` subcommand
-    materializes a stub venv whose python logs its invocations."""
+    materializes a stub venv whose python logs its invocations and reports the
+    venv as its sys.prefix (the membership contract dev-init checks)."""
     stub = directory / name
     stub.write_text(
         "#!/usr/bin/env bash\n"
@@ -265,6 +284,12 @@ def _write_logging_bootstrap_stub(directory: Path, name: str, log: Path, *, floo
         '  mkdir -p "$target/bin"\n'
         "  cat > \"$target/bin/python\" <<'INNER'\n"
         "#!/usr/bin/env bash\n"
+        f'LOG="{log}"\n'
+        'if [ "${1:-}" = "-c" ] && [ "${2:-}" = "import sys; print(sys.prefix)" ]; then\n'
+        '  d="$(cd "$(dirname "$0")/.." && pwd -P)"\n'
+        '  printf \'%s\\n\' "$d"\n'
+        '  exit 0\n'
+        "fi\n"
         f'printf \'VENV %s\\n\' "$*" >> "{log}"\n'
         "exit 0\n"
         "INNER\n"
