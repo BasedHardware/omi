@@ -2,7 +2,7 @@
 
 from typing import Any, Mapping, Optional, List
 from datetime import datetime
-from google.cloud.firestore_v1.base_query import FieldFilter
+from google.cloud.firestore_v1 import FieldFilter
 
 
 def matches_list_predicates(
