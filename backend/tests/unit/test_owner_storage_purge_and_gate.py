@@ -200,21 +200,21 @@ def test_account_wipe_removes_packs_intents_and_receipts_with_flag_off(monkeypat
 def test_new_mobile_capture_routes_unchanged_bytes_to_canonical_bucket(monkeypatch, tmp_path):
     monkeypatch.setenv('AUDIO_CANONICAL_PACKING_ENABLED', 'true')
     canonical = _Bucket(set())
-    monkeypatch.setattr(storage_mod, '_canonical_audio_bucket', lambda: canonical)
+    monkeypatch.setattr(storage_mod, 'get_canonical_audio_bucket', lambda: canonical)
     monkeypatch.setattr(storage_mod, '_get_storage_client', lambda: _Client({'private': _Bucket(set())}))
     monkeypatch.setattr(storage_mod, 'private_cloud_sync_bucket', 'private')
     monkeypatch.setattr(storage_mod.users_db, 'get_data_protection_level', lambda uid: 'standard')
     archive = MagicMock()
     monkeypatch.setattr(storage_mod.audio_packs, 'archive_capture', archive)
-    path = tmp_path / 'audio_omimobilebatch001_opus_16000_1_fs160_1600000000.bin'
+    path = tmp_path / 'audio_omimobilebatch001_opus_16000_1_fs160_1726185600.bin'
     raw = b'\x03\x00\x00\x00abc\x03\x00\x00\x00\xf8\xff\xfe'
     path.write_bytes(raw)
     storage_mod.archive_mobile_batch_raw_files('uid1', [str(path)])
     assert archive.call_args.args == (canonical, 'uid1', raw)
     metadata = archive.call_args.kwargs
     assert metadata['format'] == 'omi-wal-uint32le-opus-v1'
-    assert metadata['provenance']['capture_day'] == '2020-09-13'
-    assert metadata['provenance']['capture_start'] == 1600000000
+    assert metadata['provenance']['capture_day'] == '2024-09-13'
+    assert metadata['provenance']['capture_start'] == 1726185600
     assert metadata['identity'].startswith(path.name)
 
 
@@ -224,8 +224,8 @@ def test_canonical_bucket_rejects_retained_generations(monkeypatch):
     monkeypatch.setattr(storage_mod, '_get_storage_client', lambda: _Client({'canonical': bucket}))
     bucket.versioning_enabled = True
     with pytest.raises(RuntimeError, match='versioning off'):
-        storage_mod._canonical_audio_bucket()
+        storage_mod.get_canonical_audio_bucket()
     bucket.versioning_enabled = False
     bucket.soft_delete_policy.retention_duration_seconds = 604800
     with pytest.raises(RuntimeError, match='soft delete off'):
-        storage_mod._canonical_audio_bucket()
+        storage_mod.get_canonical_audio_bucket()

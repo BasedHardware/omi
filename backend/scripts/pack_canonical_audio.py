@@ -4,7 +4,7 @@ import argparse
 
 from database.legal_holds import destructive_operation_gate, external_write_fence
 from utils.other.audio_packs import enabled, pack_owner_day
-from utils.other.storage import _canonical_audio_bucket
+from utils.other.storage import get_canonical_audio_bucket
 
 
 def main() -> None:
@@ -18,7 +18,7 @@ def main() -> None:
     with external_write_fence(args.owner):
         pass
     with destructive_operation_gate(args.owner, kind='canonical_audio_packing'):
-        count = pack_owner_day(_canonical_audio_bucket(), args.owner, args.day)
+        count = pack_owner_day(get_canonical_audio_bucket(), args.owner, args.day)
     print(f'new shards: {count}')
 
 

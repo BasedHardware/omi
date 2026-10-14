@@ -4,12 +4,13 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from typing import Any
 
 RELEASE = '20261015-v1'
 ROOT = Path(__file__).resolve().parents[1] / 'deploy' / 'storage-lifecycle'
 
 
-def validate(document: dict, *, canonical: bool) -> list[str]:
+def validate(document: dict[str, Any], *, canonical: bool) -> list[str]:
     errors = []
     for key, value in {
         'release': RELEASE,

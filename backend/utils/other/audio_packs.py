@@ -49,8 +49,8 @@ def archive_capture(
     payload: bytes,
     *,
     format: str,
-    provenance: dict,
-    conversation_ranges: list[dict],
+    provenance: dict[str, Any],
+    conversation_ranges: list[dict[str, Any]],
     identity: str,
 ) -> str | None:
     """Writer is gated by owner_storage_write_gate at the storage boundary.
@@ -95,13 +95,13 @@ def archive_capture(
     return path
 
 
-def _read(bucket: Any, entry: dict) -> bytes:
+def _read(bucket: Any, entry: dict[str, Any]) -> bytes:
     return bucket.blob(entry['source'], generation=int(entry['generation'])).download_as_bytes(
         if_generation_match=int(entry['generation'])
     )
 
 
-def _tar(entries: list[dict], payloads: list[bytes]) -> bytes:
+def _tar(entries: list[dict[str, Any]], payloads: list[bytes]) -> bytes:
     out = io.BytesIO()
     with tarfile.open(fileobj=out, mode='w', format=tarfile.USTAR_FORMAT) as archive:
         for entry, data in zip(entries, payloads, strict=True):
@@ -116,7 +116,7 @@ def _tar(entries: list[dict], payloads: list[bytes]) -> bytes:
     return out.getvalue()
 
 
-def verify_pack(data: bytes, manifest: dict) -> None:
+def verify_pack(data: bytes, manifest: dict[str, Any]) -> None:
     if _sha(data) != manifest['sha256']:
         raise ValueError('pack hash mismatch')
     with tarfile.open(fileobj=io.BytesIO(data), mode='r:') as archive:
@@ -135,7 +135,7 @@ def verify_pack(data: bytes, manifest: dict) -> None:
             raise ValueError('manifest round-trip mismatch')
 
 
-def _delete_sources(bucket: Any, manifest: dict) -> None:
+def _delete_sources(bucket: Any, manifest: dict[str, Any]) -> None:
     for entry in manifest['entries']:
         try:
             bucket.blob(entry['source'], generation=int(entry['generation'])).delete(
@@ -145,7 +145,7 @@ def _delete_sources(bucket: Any, manifest: dict) -> None:
             pass
 
 
-def _finish(bucket: Any, index: Any, manifest: dict) -> None:
+def _finish(bucket: Any, index: Any, manifest: dict[str, Any]) -> None:
     if manifest['state'] == 'complete':
         return
     if manifest['state'] == 'rewriting':
@@ -189,7 +189,7 @@ def pack_owner_day(bucket: Any, uid: str, day: str) -> int:
         _validate_owner(manifest, uid)
         _finish(bucket, index, manifest)
         claimed.update(e['source'] for e in manifest['entries'])
-    entries: list[dict] = []
+    entries: list[dict[str, Any]] = []
     payloads: list[bytes] = []
     size = 0
 
@@ -233,7 +233,7 @@ def pack_owner_day(bucket: Any, uid: str, day: str) -> int:
     return count
 
 
-def _validate_owner(manifest: dict, uid: str) -> None:
+def _validate_owner(manifest: dict[str, Any], uid: str) -> None:
     if manifest['owner'] != uid or not manifest['pack'].startswith(owner_prefix(PACK_PREFIX, uid)):
         raise ValueError('cross-owner pack')
     if any(not e['source'].startswith(owner_prefix(SOURCE_PREFIX, uid)) for e in manifest['entries']):
@@ -248,7 +248,7 @@ def delete_conversation(bucket: Any, uid: str, conversation_id: str) -> None:
     Canonical buckets must have versioning and soft deletion disabled.
     """
 
-    def affected(entry: dict) -> bool:
+    def affected(entry: dict[str, Any]) -> bool:
         return any(r.get('conversation_id') == conversation_id for r in entry['conversation_ranges'])
 
     for index in bucket.list_blobs(prefix=owner_prefix(INDEX_PREFIX, uid)):
@@ -269,7 +269,7 @@ def delete_conversation(bucket: Any, uid: str, conversation_id: str) -> None:
         # retry either generation matches, and deletion can finish publication.
         keep = [e for e in manifest['entries'] if not affected(e)]
         with tarfile.open(fileobj=io.BytesIO(old), mode='r:') as archive:
-            payloads = []
+            payloads: list[bytes] = []
             for entry in keep:
                 member = archive.extractfile(entry['member'])
                 if member is None:
@@ -290,14 +290,14 @@ def delete_conversation(bucket: Any, uid: str, conversation_id: str) -> None:
             blob.delete(if_generation_match=int(blob.generation))
 
 
-def _finish_rewrite(bucket: Any, index: Any, manifest: dict, data: bytes | None = None) -> None:
+def _finish_rewrite(bucket: Any, index: Any, manifest: dict[str, Any], data: bytes | None = None) -> None:
     pack = bucket.blob(manifest['pack'])
     pack.reload()
     current = pack.download_as_bytes(if_generation_match=int(pack.generation))
     if _sha(current) == manifest['previous_sha256']:
         if data is None:
             with tarfile.open(fileobj=io.BytesIO(current), mode='r:') as archive:
-                payloads = []
+                payloads: list[bytes] = []
                 for entry in manifest['entries']:
                     member = archive.extractfile(entry['member'])
                     if member is None:

@@ -219,7 +219,7 @@ def delete_all_user_storage_objects(uid: str) -> int:
         if not bucket_name:
             continue
         bucket = (
-            _canonical_audio_bucket()
+            get_canonical_audio_bucket()
             if bucket_name == os.getenv('BUCKET_CANONICAL_AUDIO')
             else _get_storage_client().bucket(bucket_name)
         )
@@ -737,7 +737,7 @@ def upload_audio_chunks_batch(
         raw = b''.join(c['data'] for c in sorted(chunks, key=lambda c: c['timestamp']))
         protection = data_protection_level or users_db.get_data_protection_level(uid)
         encrypted = protection == 'enhanced'
-        canonical = _canonical_audio_bucket()
+        canonical = get_canonical_audio_bucket()
         with owner_storage_write_gate(uid, canonical):
             audio_packs.archive_capture(
                 canonical,
@@ -990,7 +990,7 @@ def delete_conversation_audio_files(uid: str, conversation_id: str) -> None:
     canonical_name = os.getenv('BUCKET_CANONICAL_AUDIO')
     if canonical_name:
         with destructive_operation_gate(uid, kind='audio_conversation_deletion'):
-            audio_packs.delete_conversation(_canonical_audio_bucket(), uid, conversation_id)
+            audio_packs.delete_conversation(get_canonical_audio_bucket(), uid, conversation_id)
 
     # Delete chunks
     chunks_prefix = f'chunks/{uid}/{conversation_id}/'
@@ -2125,7 +2125,7 @@ def archive_mobile_batch_raw_files(uid: str, paths: List[str]) -> None:
         payload = encryption.encrypt_audio_chunk(raw, uid) if encrypted else raw
         suffix = '.enc' if encrypted else ''
         if audio_packs.enabled():
-            canonical = _canonical_audio_bucket()
+            canonical = get_canonical_audio_bucket()
             with owner_storage_write_gate(uid, canonical):
                 audio_packs.archive_capture(
                     canonical,
@@ -2154,7 +2154,7 @@ def archive_mobile_batch_raw_files(uid: str, paths: List[str]) -> None:
             blob.upload_from_string(payload, content_type='application/octet-stream')
 
 
-def _canonical_audio_bucket() -> Any:
+def get_canonical_audio_bucket() -> Any:
     name = (os.getenv('BUCKET_CANONICAL_AUDIO') or '').strip()
     if not name:
         raise RuntimeError('packing requires a new BUCKET_CANONICAL_AUDIO bucket')
