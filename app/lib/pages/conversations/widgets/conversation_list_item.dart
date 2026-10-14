@@ -427,7 +427,7 @@ class _ConversationListItemState extends State<ConversationListItem> {
     if (!widget.conversation.isLocked || widget.inLockedRun) return content;
     return OmiLockedPreview(
       status: context.l10n.statusPending,
-      label: context.l10n.paywallComparePlans,
+      label: context.l10n.viewUsage,
       onPressed: onTap,
       child: content,
     );
@@ -867,7 +867,7 @@ class LockedConversationRun extends StatelessWidget {
         // Each row keeps its own long-press menu, swipe-to-delete and selection handling.
         interactive: true,
         status: context.l10n.statusPending,
-        label: context.l10n.paywallComparePlans,
+        label: context.l10n.viewUsage,
         onPressed: () => _openUsage(context),
         child: Column(
           mainAxisSize: MainAxisSize.min,

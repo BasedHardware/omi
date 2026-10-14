@@ -914,13 +914,17 @@ function UsageSectionContent({
     ? planDisplayName(planIdentity)
     : 'Plan unavailable';
   const isCancelingSubscription = subscription?.cancel_at_period_end;
+  // `Paywall Opened` is an impression of the plan choices actually being
+  // visible. Basic users reach them through "See plans", paid users see the
+  // grid on mount; unknown-plan users never see choices here.
   const plansImpressionRecorded = useRef(false);
   useEffect(() => {
-    if (subscription && !plansImpressionRecorded.current) {
-      plansImpressionRecorded.current = true;
-      trackPaywallOpened('usage_page', subscription.plan);
-    }
-  }, [subscription]);
+    if (!subscription || plansImpressionRecorded.current) return;
+    if (isUnknownPlan) return;
+    if (!isPaid && !showUpgradeOptions) return;
+    plansImpressionRecorded.current = true;
+    trackPaywallOpened('usage_page', subscription.plan);
+  }, [subscription, isPaid, isUnknownPlan, showUpgradeOptions]);
 
   // Sort pricing options: monthly first, then annual
   const sortedOptions = cachedPlans
