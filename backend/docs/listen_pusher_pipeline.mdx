@@ -4578,3 +4578,13 @@ cohort enablement.
 Rollback: disable authoritative/sync flags first, set mode to `legacy`, then restore
 previous backend and diarizer image digests if needed. No stored-history reversal
 is automatic. Shared scorer instructions: `scripts/diarization_eval/README.md`.
+
+### Shared Gateway caller routes
+
+NLLB, VAD and every speaker-embedding host (including Parakeet fallback) use
+the environment-specific shared Gateway paths. Parakeet STT retains its legacy
+hostname. Dev uses `172.16.48.49`; prod uses `172.16.160.20`. Qualify Gateway
+programming and caller reachability before deploying.
+
+Caller deploy order, route requirements and independent rollback are documented
+in [the Gateway caller runbook](internal-gateway-callers.md).
