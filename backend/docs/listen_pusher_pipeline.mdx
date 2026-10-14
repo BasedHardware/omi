@@ -53,9 +53,27 @@ GPT-5.6-family or Luna. Unrelated STT keys do not disable OpenAI cache opt-out.
 
 Production backend-listen and pusher set `DREAM_AGENT_MODE=on` (owner dogfood since 2026-10-11) with the same David-only `DREAM_AGENT_UID_ALLOWLIST`; existing conversation/memory/task post-write hooks signal the hourly backend-sync sweep.
 Shadow writes only admission state and encrypted reports, preserving finalization, user records, questions and vocabulary. See [the dream runbook](runbooks/dream-agent.md).
-Dream vocabulary is optional capture context: `DREAM_AGENT_VOCABULARY_STT=true` combines encrypted per-user vocabulary spellings with existing live keyterms;
+Dream vocabulary is optional capture context: `DREAM_AGENT_VOCABULARY_STT=true` combines encrypted per-user vocabulary spellings with existing live and offline-sync keyterms;
 Soniox also retains its `SONIOX_CONTEXT_TERMS` gate. Read failure uses existing terms with fallback telemetry.
 Vocabulary and STT gate defaults remain off.
+
+Conversation processing adds a shared **Known spellings** block from Dream vocabulary
+(including aliases) and active People names. `CONVERSATION_KNOWN_SPELLINGS` defaults
+to `true`; set it to `false` to disable the block and its reads. The block is capped
+at 60 canonical entries and 1,500 characters, including grounding instructions:
+use a spelling only when the transcript clearly refers to it, never invent a
+reference or infer attendance/identity. Summary, action-item, app-summary and
+transcript-memory prompts share it; each source is read at most once within a
+processing run, with a fresh scope for a separately deferred extraction. Read
+failures retain available context and emit fallback telemetry. No extra LLM call
+is made.
+
+Modulate batch language is selected by utterance word totals, breaking ties by
+total duration. Utterances under three words do not vote when any longer utterance
+exists. Missing detection uses the requested language or `multi`, including empty
+results. Sync retains its existing chunk-merge language behavior: persisted
+`TranscriptSegment` records have no per-segment language for a conversation-wide
+weighted recomputation.
 
 The live calendar stamp includes the meeting title (an empty string when absent)
 so it is a valid `CalendarMeetingContext` for finalization and summarization even

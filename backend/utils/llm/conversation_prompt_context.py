@@ -199,6 +199,7 @@ def build_conversation_prompt_prefix(
     roster: Optional[MeetingRoster] = None,
     desktop_meeting_capture: bool = False,
     uid: Optional[str] = None,
+    known_spellings: str = '',
 ) -> ConversationPromptPrefix:
     """Render the shared context prefix for conversation-wide LLM tasks.
 
@@ -285,6 +286,8 @@ def build_conversation_prompt_prefix(
         metadata_lines.extend(f'spk {key} {name}' if name else f'spk {key} ?' for key, name in speaker_names.items())
 
     context_parts = ['CONVERSATION METADATA\n' + '\n'.join(metadata_lines), f'FULL TRANSCRIPT\n{transcript.strip()}']
+    if known_spellings:
+        context_parts.append(known_spellings)
     photo_descriptions = ConversationPhoto.photos_as_string(photos, include_timestamps=True) if photos else ''
     if photo_descriptions and photo_descriptions != 'None':
         context_parts.append(f'CAPTURED PHOTO DESCRIPTIONS\n{photo_descriptions}')
@@ -326,6 +329,8 @@ def build_conversation_prompt_prefix(
                 source_context['participants'] = [participant.model_dump(mode='json') for participant in participants]
                 evidence[key] = source_context
         shaped_context = json.dumps(evidence, ensure_ascii=False) + f'\nFULL TRANSCRIPT\n{transcript.strip()}'
+        if known_spellings:
+            shaped_context += f'\n\n{known_spellings}'
 
     source_ids = frozenset(segment_id for segment_id in (transcript_segment_ids or ()) if segment_id)
     # Rich meeting notes name people through their roster rules instead.
