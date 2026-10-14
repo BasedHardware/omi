@@ -76,7 +76,7 @@ def with_memory_env(payload: str) -> str:
         {"name": "DESKTOP_UPDATE_RECONCILE_SAMPLE_RATE", "value": "0.01"},
         {"name": "OMI_ENV_STAGE", "value": "dev"},
         {"name": "HOSTED_PARAKEET_API_URL", "value": "http://parakeet.omiapi.com"},
-        {"name": "HOSTED_SPEAKER_EMBEDDING_API_URL", "value": "http://diarizer.omiapi.com:80"},
+        {"name": "HOSTED_SPEAKER_EMBEDDING_API_URL", "value": "http://172.16.48.49/diarizer"},
         {"name": "OMI_LLM_GATEWAY_FEATURE_MODE", "value": "gateway"},
         {"name": "OMI_LLM_CHAT_AGENT_ROUTE", "value": "gateway"},
         {"name": "PUBLIC_SHARED_CONVERSATION_CHAT_MODE", "value": "gateway"},
@@ -3177,27 +3177,25 @@ def test_transcription_shadow_dev_scope_matches_generated_manifest_and_charts():
 
 
 def test_transcription_shadow_prod_scope_matches_generated_manifest_overlay_and_chart():
-    controls = {
-        'TRANSCRIPTION_SHADOW_ENABLED': 'true',
-        'TRANSCRIPTION_SHADOW_KILL_SWITCH': 'false',
-        'TRANSCRIPTION_SHADOW_UID_ALLOWLIST': 'vi7SA9ckQCe4ccobWNxlbdcNdC23',
-        'TRANSCRIPTION_SHADOW_PERCENT': '0',
-        'TRANSCRIPTION_SHADOW_DAILY_AUDIO_HOURS': '1',
-    }
+    stages = json.loads((ROOT.parent / 'config/diarization-cohort-stages.json').read_text())
+    controls = stages['A']
     validator = load_validator()
     manifest = validator._load_yaml(validator.DEFAULT_MANIFEST)
     prod = validator._get_env_config(manifest, 'prod')
     overlay = validator._load_yaml(ROOT / 'deploy/runtime_env/prod.overlay.yaml')['overlay']
     for source in (prod, overlay):
         pusher = source['gke']['pusher']['env']
-        assert {key: pusher[key]['value'] for key in controls} == controls
+        selected = {key: pusher[key]['value'] for key in controls}
+        assert selected in stages.values()
         for scope, env in _manifest_env_blocks(source):
-            if scope != 'gke/pusher':
+            if scope in ('gke/pusher', 'cloud_run/backend', 'cloud_run/backend-sync'):
+                assert {key: env[key]['value'] for key in controls} == selected, scope
+            else:
                 assert all(key not in env for key in controls), scope
 
     pusher_chart = ROOT / 'charts/pusher/prod_omi_pusher_values.yaml'
     pusher_entries = parse_env_entries(pusher_chart.read_text(encoding='utf-8'))
-    assert {key: pusher_entries[key].value for key in controls} == controls
+    assert {key: pusher_entries[key].value for key in controls} == selected
     listen_chart = ROOT / 'charts/backend-listen/prod_omi_backend_listen_values.yaml'
     listen_entries = parse_env_entries(listen_chart.read_text(encoding='utf-8'))
     assert all(key not in listen_entries for key in controls)

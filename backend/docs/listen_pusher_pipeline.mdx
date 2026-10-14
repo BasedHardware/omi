@@ -4519,6 +4519,10 @@ retention contract. No new client capability is advertised by this foundation.
 
 ### Flagged shared batch diarization
 
+Production stage A binds David-only shadow on backend, backend-sync and pusher
+through the shared Gateway `/diarizer-batch` prefix. Exact env stages, caps,
+acceptance gates and rollback: [batch cohort ramp](diarizer-batch-cohort.md).
+
 `TRANSCRIPTION_FINAL_PASS_DIARIZER=legacy` preserves the current shadow and sync
 paths. `pyannote_shadow` admits only `TRANSCRIPTION_FINAL_PASS_UID_ALLOWLIST` or
 `TRANSCRIPTION_FINAL_PASS_PERCENT`. `TRANSCRIPTION_FINAL_PASS_BACKEND` selects
@@ -4564,13 +4568,23 @@ Deploy the additive diarizer image first, then a separate batch Helm release
 and pusher with all cutover flags off, then a separately reviewed cohort flag PR.
 The default embedding/v1 app eagerly warms its models before TCP readiness and
 keeps concurrent legacy routes without the batch lock. The batch app warms its
-models before listening; failures abort startup. `/v2/diarization` uses the batch
-separate internal ingress (`diarizer-batch.omi.me`), not the embedding ingress.
-Cloud Run cannot use ClusterIP DNS. The batch release has a dedicated tainted
-L4 pool, a one-pod David-only floor, and a direct per-pod Prometheus queue scrape
-and adapter rule. Exact install/metric/cohort gates: `scripts/diarization_eval/batch_install.md`. See `scripts/diarization_eval/capacity.md`
+models before listening; failures abort startup. `/v2/diarization` is reached
+only through the shared internal Gateway `/diarizer-batch` prefix. Cloud Run
+cannot use ClusterIP DNS. Production batch runs on the dedicated tainted T4
+`diarizer-batch-pool`, with a one-pod David-only floor; qualify the direct per-pod
+Prometheus queue scrape and adapter rule before ramping. Exact install/metric/cohort gates: `scripts/diarization_eval/batch_install.md`. See `scripts/diarization_eval/capacity.md`
 for routing and the opt-in release overlay; verify caller reachability before
 cohort enablement.
 Rollback: disable authoritative/sync flags first, set mode to `legacy`, then restore
 previous backend and diarizer image digests if needed. No stored-history reversal
 is automatic. Shared scorer instructions: `scripts/diarization_eval/README.md`.
+
+### Shared Gateway caller routes
+
+NLLB, VAD and every speaker-embedding host (including Parakeet fallback) use
+the environment-specific shared Gateway paths. Parakeet STT retains its legacy
+hostname. Dev uses `172.16.48.49`; prod uses `172.16.160.20`. Qualify Gateway
+programming and caller reachability before deploying.
+
+Caller deploy order, route requirements and independent rollback are documented
+in [the Gateway caller runbook](internal-gateway-callers.md).
