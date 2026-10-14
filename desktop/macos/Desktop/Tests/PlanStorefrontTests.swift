@@ -186,7 +186,8 @@ final class StorefrontPlansRenderTests: XCTestCase {
     .environment(\.colorScheme, .dark)
 
     var png: Data?
-    NSAppearance(named: .darkAqua)!.performAsCurrentDrawingAppearance {
+    let dark = try XCTUnwrap(NSAppearance(named: .darkAqua))
+    dark.performAsCurrentDrawingAppearance {
       let renderer = ImageRenderer(content: view)
       renderer.scale = 2
       if let image = renderer.cgImage {
