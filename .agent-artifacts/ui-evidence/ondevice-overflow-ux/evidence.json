@@ -1,0 +1,117 @@
+{
+  "version": 1,
+  "images": [
+    {
+      "file": "001-mobile-ios-at-cap-sheet.png",
+      "platform": "mobile-ios",
+      "description": "At-cap choice sheet: Transcribe on this phone (Included) or Upgrade to Pro",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "002-mobile-ios-setup-not-downloaded.png",
+      "platform": "mobile-ios",
+      "description": "Setup step 1: speech model not downloaded, Download Speech Model, Wi-Fi only",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "003-mobile-ios-setup-downloading.png",
+      "platform": "mobile-ios",
+      "description": "Setup step 1: downloading on Wi-Fi at 62% with time left and Cancel",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "004-mobile-ios-setup-installed.png",
+      "platform": "mobile-ios",
+      "description": "Setup step 1: model installed",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "005-mobile-ios-schedule.png",
+      "platform": "mobile-ios",
+      "description": "Setup step 2: While charging (Recommended), Every few hours, As you talk with battery cost",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "006-mobile-ios-conversations-waiting.png",
+      "platform": "mobile-ios",
+      "description": "Conversations: waiting banner with Transcribe Now, Waiting for charger chips, provenance chips",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "007-mobile-ios-conversations-transcribing.png",
+      "platform": "mobile-ios",
+      "description": "Conversations: a run in progress, Transcribing chips",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "008-mobile-ios-summary-on-iphone.png",
+      "platform": "mobile-ios",
+      "description": "Summary transcribed and summarized on this iPhone, why box, Redo with Omi Cloud",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "009-mobile-ios-summary-by-omi-cloud.png",
+      "platform": "mobile-ios",
+      "description": "Summary by Omi Cloud on an older iPhone, why box, Keep everything on this phone",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "010-mobile-ios-settings-top.png",
+      "platform": "mobile-ios",
+      "description": "On-Device Transcription settings: live-hours meter and after-hours options",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "011-mobile-ios-settings-on-this-phone.png",
+      "platform": "mobile-ios",
+      "description": "On-Device Transcription settings: model, waiting audio, Remove Speech Model",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "012-mobile-ios-conversations-unsupported.png",
+      "platform": "mobile-ios",
+      "description": "iPhone without an on-device model yet, at cap: audio stays saved, Get More Live Hours",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "013-mobile-ios-conversations-waiting-light.png",
+      "platform": "mobile-ios",
+      "description": "Conversations waiting banner and chips in light appearance",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "014-mobile-android-finish-setup.png",
+      "platform": "mobile-android",
+      "description": "Android at cap without a model: finish setup banner, Saved, waiting for setup chip",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "015-mobile-android-finish-setup-downloading.png",
+      "platform": "mobile-android",
+      "description": "Android finish setup banner while the model downloads",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "016-mobile-android-summary-by-omi-cloud.png",
+      "platform": "mobile-android",
+      "description": "Android summary by Omi Cloud with provenance and keep-everything switch",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    }
+  ]
+}
