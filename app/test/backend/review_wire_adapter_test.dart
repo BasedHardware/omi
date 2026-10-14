@@ -3,6 +3,60 @@ import 'package:omi/backend/schema/gen/review_wire.g.dart' as wire;
 import 'package:omi/backend/schema/review.dart';
 
 void main() {
+  test('verified applied changes preserve before after context through Undo state copies', () {
+    final change = ReviewChange.fromGenerated(wire.GeneratedReviewChange.fromJson({
+      'change_id': 'synthetic-verified',
+      'kind': 'other',
+      'edit_kind': 'spelling',
+      'title': 'Spelling',
+      'before': 'Qorby',
+      'after': 'Qorbee',
+      'created_at': '2026-10-14T12:00:00Z',
+      'context': {
+        'conversation_title': 'Synthetic workshop',
+        'main_index': 0,
+        'segments': [
+          {'text': 'Qorby joined the workshop.', 'is_user': true},
+        ],
+      },
+    }));
+    final undone = change.copyWith(undone: true);
+    expect(undone.editKind, 'spelling');
+    expect(undone.before, 'Qorby');
+    expect(undone.after, 'Qorbee');
+    expect(undone.context!.main.text, 'Qorby joined the workshop.');
+  });
+
+  test('additive harness proposals decode new cleanup kinds without changing the old edit arm', () {
+    final page = ReviewItemsResponse.fromGeneratedV2(wire.GeneratedReviewItemsResponseV2.fromJson({
+      'items': [
+        {
+          'item_id': 'agent_proposal:synthetic-harness',
+          'kind': 'agent_proposal',
+          'title': 'Synthetic duplicate tasks',
+          'created_at': '2026-10-14T12:00:00Z',
+          'agent_proposal': {
+            'target_label': 'Draft the invented outline.',
+            'other_label': 'Prepare the invented outline.',
+            'harness_edit': {
+              'kind': 'merge_tasks',
+              'target': 'action_items/synthetic-one',
+              'other': 'action_items/synthetic-two',
+              'reason': 'Synthetic duplicate obligation.',
+              'evidence': ['conversations/synthetic-source'],
+              'value': 4,
+            },
+          },
+        },
+      ],
+      'remaining_today': 2,
+    }));
+    final proposal = page.items.single.agentProposal!;
+    expect(proposal.editKind, 'merge_tasks');
+    expect(proposal.before, 'Draft the invented outline.');
+    expect(proposal.after, 'Prepare the invented outline.');
+  });
+
   test('generated change page retains pagination and reversible UI state', () {
     final page = ReviewChangesPage.fromGenerated(
       wire.GeneratedReviewChangesResponse.fromJson({

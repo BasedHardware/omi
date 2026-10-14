@@ -6,6 +6,7 @@ from typing import Literal, Optional
 from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, model_validator, model_serializer
 
 from models.dream_edit import Edit, MemoryHygieneEdit, Term
+from models.dream_harness_edit import HarnessEdit
 
 EntityType = Literal['person', 'organization', 'project']
 ReviewKind = Literal['speaker', 'task', 'same_person', 'spelling']
@@ -103,6 +104,7 @@ class AgentProposalItem(BaseModel):
     other_label: Optional[str] = None
     edit: Optional[Edit] = None
     memory_hygiene: Optional[MemoryHygieneEdit] = None
+    harness_edit: Optional[HarnessEdit] = None
     vocabulary: Optional[Term] = None
 
     @model_serializer(mode='wrap')
@@ -110,11 +112,13 @@ class AgentProposalItem(BaseModel):
         data = handler(self)
         if self.memory_hygiene is None:
             data.pop('memory_hygiene', None)
+        if self.harness_edit is None:
+            data.pop('harness_edit', None)
         return data
 
     @model_validator(mode='after')
     def single_operation(self):
-        if (self.edit is not None) + (self.memory_hygiene is not None) + (self.vocabulary is not None) != 1:
+        if sum(item is not None for item in (self.edit, self.memory_hygiene, self.harness_edit, self.vocabulary)) != 1:
             raise ValueError('Exactly one agent operation is required')
         return self
 
@@ -274,6 +278,10 @@ class ReviewChange(BaseModel):
     title: str
     reason: Optional[str] = None
     snippet: Optional[str] = None
+    edit_kind: Optional[str] = Field(default=None, max_length=64)
+    before: Optional[str] = Field(default=None, max_length=4000)
+    after: Optional[str] = Field(default=None, max_length=4000)
+    context: Optional[SpellingContext] = None
     refs: list[ChangeRef] = Field(default_factory=list)
     created_at: datetime
     undone: bool = False

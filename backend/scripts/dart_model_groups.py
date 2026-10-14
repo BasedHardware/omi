@@ -51,6 +51,7 @@ SCHEMA_GROUPS = {
             'SpellingItem',
             'Edit',
             'MemoryHygieneEdit',
+            'HarnessEdit',
             'Term',
             'AgentProposalItem',
             'AgentProposalAnswer',

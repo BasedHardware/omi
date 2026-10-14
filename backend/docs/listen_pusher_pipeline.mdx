@@ -723,6 +723,16 @@ side effect. Completed fanout replays do not repeat the write.
 
 ## Duplicate captures across devices
 
+Dream's verified `merge_conversations` cleanup is separate from ingest merging.
+It requires completed, uncurated captures with overlapping time and matching
+speech. The journal atomically adds `dream_duplicate_of` to the redundant row;
+current/default visibility hides that row without changing lifecycle status,
+moving segments, or deleting either recording's audio. Review preserves the two
+labels and surrounding speech. Exact row and account-generation fences protect
+Undo/Redo, which removes/restores the link. A later user edit conflicts. Existing
+capture ownership, finalization, relevance discard and compliance remain with
+their current writers.
+
 An Omi device paired to the phone app and the macOS app in the same room open
 two independent `/v4/listen` streams, and each stream owns its own
 conversation — cross-source sockets never share one, because the two captures

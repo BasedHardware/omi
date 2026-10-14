@@ -196,6 +196,7 @@ export interface AgentProposalAnswer {
 
 export interface AgentProposalItem {
   edit?: Edit | null;
+  harness_edit?: HarnessEdit | null;
   memory_hygiene?: MemoryHygieneEdit | null;
   other_label?: string | null;
   target_label?: string;
@@ -2838,6 +2839,18 @@ export interface HTTPValidationError {
   detail?: Array<ValidationError>;
 }
 
+export interface HarnessEdit {
+  after?: string;
+  before?: string;
+  evidence: Array<string>;
+  kind: "spelling" | "title" | "overview" | "memory" | "entity_summary" | "close_task" | "merge_memories" | "retire_memory" | "supersede_memory" | "dismiss_person" | "merge_people" | "merge_tasks" | "retire_task" | "merge_conversations" | "set_language";
+  other?: string;
+  reason: string;
+  target: string;
+  value?: number;
+  why_it_matters?: string;
+}
+
 export interface HasSpeechProfileResponse {
   has_profile: boolean;
 }
@@ -4295,8 +4308,12 @@ export interface ReviewAppRequest {
 }
 
 export interface ReviewChange {
+  after?: string | null;
+  before?: string | null;
   change_id: string;
+  context?: SpellingContext | null;
   created_at: string;
+  edit_kind?: string | null;
   kind: "rename" | "merge_memories" | "update_person" | "label_speaker" | "title_conversation" | "close_task" | "other";
   reason?: string | null;
   refs?: Array<ChangeRef>;
@@ -6425,6 +6442,7 @@ export interface OmiApiSchemas {
   "GoalUpdate": GoalUpdate;
   "GoogleCalendarEvent": GoogleCalendarEvent;
   "HTTPValidationError": HTTPValidationError;
+  "HarnessEdit": HarnessEdit;
   "HasSpeechProfileResponse": HasSpeechProfileResponse;
   "IgnoredVoice": IgnoredVoice;
   "IgnoredVoicesResponse": IgnoredVoicesResponse;
