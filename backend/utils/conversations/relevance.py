@@ -31,7 +31,7 @@ from utils.observability.fallback import record_fallback
 RELEVANCE_DECISION_FIELD = 'relevance_decision'
 
 
-DecidedBy = Literal['policy', 'user', 'rule', 'model', 'jev', 'override']
+DecidedBy = Literal['policy', 'user', 'rule', 'model', 'jev', 'override', 'deterministic']
 
 # Jev discards only when P(discard) = 1 - P(worth keeping) is above this.
 # Re-measured 2026-10-05 on the owner's labels (EXP-004): tuned on 55 decided
@@ -170,7 +170,8 @@ def decide_relevance(
 ) -> RelevanceDecision:
     """Decide keep/discard. Thunks run only when their tier is reached.
 
-    Paid arms share the plan gate, then run in order: Jev (when supplied),
+    Withheld models keep the ambiguous middle without attempting any paid arm.
+    Attempted paid arms run in order: Jev (when supplied),
     legacy nano, deterministic tie-break. A None answer, error callback or
     model exception advances the chain. The final arm uses only lexicon evidence,
     never duration or raw length to discard. Photos and trusted wake words
@@ -215,7 +216,7 @@ def decide_relevance(
     def model_decision(decision: RelevanceDecision) -> RelevanceDecision:
         return replace(decision, model_tier_reached=True, arm=arm if record_arm or arm != 'nano' else None)
 
-    if arm == 'keep_all' and model_discards is None:
+    if model_discards is None:
         return keep('policy', 'model_withheld')
 
     if arm == 'keep_all':
@@ -284,7 +285,9 @@ def decide_relevance(
         # These inputs skipped the rule tier because transcript evidence cannot
         # judge them. Do not reintroduce transcript-only discards on failure.
         verdict = 'keep' if has_photos or trusted_wake_word else deterministic_tiebreak(texts)
-        return discard_unless_calendar('rule', reason) if verdict == 'discard' else keep('rule', reason)
+        return (
+            discard_unless_calendar('deterministic', reason) if verdict == 'discard' else keep('deterministic', reason)
+        )
 
     arms: list[DecisionArm] = []
     if jev_discard_probability is not None:

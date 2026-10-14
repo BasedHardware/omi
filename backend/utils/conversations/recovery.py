@@ -38,6 +38,21 @@ def _field(structured: Any, name: str) -> Any:
     return getattr(structured, name, None)
 
 
+_RECOVERY_SKIP_RULES = frozenset({'empty_transcript', 'filler_only', 'mic_check', 'no_content_words'})
+
+
+def recovery_rule_discard(decision: Any) -> bool:
+    """Only the original content-free rule ids may skip paid recovery notes.
+
+    Deterministic outage decisions and future rule ids are not admission proof.
+    """
+    return (
+        _field(decision, 'verdict') == 'discard'
+        and _field(decision, 'decided_by') == 'rule'
+        and _field(decision, 'reason') in _RECOVERY_SKIP_RULES
+    )
+
+
 def structured_is_rich(structured: Any) -> bool:
     """Whether the structured payload holds model-enriched content.
 

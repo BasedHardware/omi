@@ -114,3 +114,10 @@ def test_tiebreak_preserves_measured_protections(texts, seconds, expected):
     from utils.conversations.relevance_rules import deterministic_tiebreak
 
     assert deterministic_tiebreak(texts) == (expected or 'keep')
+
+
+@pytest.mark.parametrize('text', ['明天下午三点开会。', 'はい、明日。', '회의는 내일입니다.'])
+def test_cjk_only_tiebreak_never_discards_unknown_content(text):
+    from utils.conversations.relevance_rules import deterministic_tiebreak
+
+    assert deterministic_tiebreak([text]) == 'keep'

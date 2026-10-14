@@ -159,7 +159,11 @@ def test_model_failure_keeps_and_says_so():
 
     decision, _, calendar = _decide(model=failing)
 
-    assert (decision.verdict, decision.decided_by, decision.reason) == ('keep', 'rule', 'model_fallback_deterministic')
+    assert (decision.verdict, decision.decided_by, decision.reason) == (
+        'keep',
+        'deterministic',
+        'model_fallback_deterministic',
+    )
     calendar.assert_not_called()
 
 
@@ -199,7 +203,7 @@ def test_withheld_model_keeps_what_the_rules_cannot_settle():
         model_discards=None,
         calendar_retains=MagicMock(return_value=False),
     )
-    assert (decision.verdict, decision.decided_by, decision.reason) == ('keep', 'rule', 'model_fallback_deterministic')
+    assert (decision.verdict, decision.decided_by, decision.reason) == ('keep', 'policy', 'model_withheld')
 
     filler = decide_relevance(
         trigger=ProcessingTrigger.CAPTURE_END,

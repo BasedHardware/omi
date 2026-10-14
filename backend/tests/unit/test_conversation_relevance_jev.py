@@ -122,7 +122,7 @@ def test_a_plan_that_withholds_the_model_also_withholds_jev():
     )
 
     jev.assert_not_called()
-    assert (decision.decided_by, decision.reason) == ('rule', 'model_fallback_deterministic')
+    assert (decision.decided_by, decision.reason) == ('policy', 'model_withheld')
 
 
 def test_jev_is_a_bounded_metric_label(monkeypatch):
@@ -216,7 +216,7 @@ def test_oct14_shape_benchmark(oct14_shape):
     for texts, expected in oct14_shape:
         decision, _, _ = _decide(jev=lambda: None, model=_failed_model, texts=texts)
         assert decision.verdict == expected, texts
-        assert decision.decided_by == 'rule'
+        assert decision.decided_by == ('rule' if len(texts) == 120 else 'deterministic')
         if len(texts) == 7 or expected == 'keep':
             assert decision.reason == 'jev_fallback_deterministic'
 
@@ -237,7 +237,7 @@ def test_failed_model_advances_to_deterministic(with_jev, raises, monkeypatch):
     decision, _, _ = _decide(jev=(lambda: None) if with_jev else None, model=model, texts=['yeah, I think so.'] * 7)
     assert (decision.verdict, decision.decided_by, decision.reason) == (
         'discard',
-        'rule',
+        'deterministic',
         'jev_fallback_deterministic' if with_jev else 'model_fallback_deterministic',
     )
     assert transitions.call_count == (2 if with_jev else 1)
@@ -309,7 +309,11 @@ def test_deterministic_fallback_preserves_calendar():
     calendar.assert_called_once()
 
 
-def test_withheld_models_use_deterministic_without_paid_calls():
+def test_withheld_models_keep_ambiguous_band_without_paid_calls(monkeypatch):
+    from utils.conversations import relevance
+
+    transitions = MagicMock()
+    monkeypatch.setattr(relevance, 'record_fallback', transitions)
     jev = MagicMock()
     decision = decide_relevance(
         trigger=TRIGGER,
@@ -323,14 +327,16 @@ def test_withheld_models_use_deterministic_without_paid_calls():
         calendar_retains=lambda: False,
         jev_discard_probability=jev,
     )
-    assert (decision.verdict, decision.reason) == ('discard', 'model_fallback_deterministic')
+    assert (decision.verdict, decision.decided_by, decision.reason) == ('keep', 'policy', 'model_withheld')
+    assert not decision.model_tier_reached
     jev.assert_not_called()
+    transitions.assert_not_called()
 
 
 def test_degraded_reasons_are_metric_labels(monkeypatch):
     counter = MagicMock()
     monkeypatch.setattr(metrics, 'CONVERSATION_RELEVANCE_DECISION_TOTAL', counter)
-    for arm, reason in [('model', 'jev_fallback_model'), ('rule', 'jev_fallback_deterministic')]:
+    for arm, reason in [('model', 'jev_fallback_model'), ('deterministic', 'jev_fallback_deterministic')]:
         metrics.record_conversation_relevance(trigger='capture_end', verdict='discard', decided_by=arm, reason=reason)
         counter.labels.assert_called_with(trigger='capture_end', verdict='discard', decided_by=arm, reason=reason)
 

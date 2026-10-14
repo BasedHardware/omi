@@ -75,6 +75,7 @@ from utils.conversations.processing_trigger import PROCESSING_MODES, ProcessingT
 from utils.conversations.recovery import (
     RecoveryStructureUnavailableError,
     recovery_minimum_terminal_enabled,
+    recovery_rule_discard,
     structured_is_rich,
     verified_recovery_discard,
 )
@@ -511,7 +512,7 @@ def _get_structured(
                     uid, main_conv.started_at, main_conv.finished_at
                 ),
             )
-            if ordinary.discard and ordinary.decided_by == 'rule':
+            if recovery_rule_discard(ordinary):
                 logger.info('selfheal recovery skipped paid notes reason=ordinary_rule_discard')
                 if relevance_observer is not None:
                     relevance_observer(

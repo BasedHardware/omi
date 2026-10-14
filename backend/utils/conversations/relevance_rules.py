@@ -291,7 +291,7 @@ def deterministic_tiebreak(texts: Sequence[str]) -> Verdict:
         return verdict
     latin, foreign, cjk = _tokenise(texts)
     joined = ' '.join(_normalise(t) for t in texts)
-    if not latin or foreign or cjk or any(ch.isdigit() for ch in joined) or _has_mid_sentence_capital(texts):
+    if (not latin) or foreign or cjk or any(ch.isdigit() for ch in joined) or _has_mid_sentence_capital(texts):
         return 'keep'
     filler_ratio = sum(_is_filler(t) for t in latin) / len(latin)
     content_density = sum(not _is_filler(t) and t not in FUNCTION_WORDS for t in latin) / len(latin)
