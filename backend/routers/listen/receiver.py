@@ -1552,6 +1552,12 @@ class ListenReceiver(ReplayFilterMixin):
         if not self.host.state.active or self.host.state.stt_terminal_failure:
             return False
 
+        demand = getattr(self, 'live_demand', None)
+        if demand is not None and demand.eligible and self.host.stt_model == 'parakeet-window':
+            demand.policy.fallback = True
+            demand.policy.window_permitted = False
+            demand.policy.reason = 'fallback'
+            demand.meter()
         sample_rate = rebuild[1]
         while True:
             if self.recovery.episode_expired():

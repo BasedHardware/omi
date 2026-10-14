@@ -9,7 +9,6 @@ from config.live_demand import language_qualified, resolve_live_demand
 from utils.stt.live_rollout import managed_chain_enabled
 from utils.stt.demand_consumers import realtime_consumer_active
 from utils.stt.demand_presence import update_presence
-from utils.stt.live_metrics import DEMAND_SWITCHES
 
 
 class DemandPolicy:
@@ -151,7 +150,6 @@ class LiveDemandRouting:
                 current = 'parakeet' if host.stt_model == 'parakeet-window' else 'vendor'
                 if self.policy.ready(current, desired, resolve_live_demand().dwell_seconds):
                     if await self.receiver._switch_live_demand(desired):
-                        DEMAND_SWITCHES.labels(from_lane=current, to_lane=desired, reason=self.policy.reason).inc()
                         self.policy.switched()
                         self._served_window = desired == 'parakeet'
                 if await host.wait(1):

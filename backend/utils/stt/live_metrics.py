@@ -10,7 +10,9 @@ DEMAND_LANE_SECONDS = Counter(
     'omi_listen_live_lane_seconds_total', 'Listen wall time on the actual serving lane', ['lane', 'reason']
 )
 DEMAND_SWITCHES = Counter(
-    'omi_listen_live_lane_switches_total', 'Adopted demand handovers', ['from_lane', 'to_lane', 'reason']
+    'omi_listen_live_lane_switches_total',
+    'Adopted listen lane changes, including demand handovers and fallbacks',
+    ['from_lane', 'to_lane', 'reason'],
 )
 
 PAID_SPILLOVER_ADMISSIONS = Counter(

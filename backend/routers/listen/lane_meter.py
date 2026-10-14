@@ -3,7 +3,7 @@
 import time
 from typing import Callable
 
-from utils.stt.live_metrics import DEMAND_LANE_SECONDS
+from utils.stt.live_metrics import DEMAND_LANE_SECONDS, DEMAND_SWITCHES
 
 
 class LiveLaneMeter:
@@ -22,9 +22,12 @@ class LiveLaneMeter:
             self.reason = reason
 
     def transition(self, provider: str, *, reason: str = 'baseline') -> None:
+        lane = 'parakeet' if provider == 'parakeet' else 'vendor'
+        if self.since is not None and self.lane != lane:
+            DEMAND_SWITCHES.labels(from_lane=self.lane, to_lane=lane, reason=reason).inc()
         self.flush(reason=reason)
         self.since = self.clock()
-        self.lane = 'parakeet' if provider == 'parakeet' else 'vendor'
+        self.lane = lane
 
     def close(self) -> None:
         self.flush()

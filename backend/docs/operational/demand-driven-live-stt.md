@@ -52,7 +52,7 @@ Listen counters:
 - `omi_listen_live_lane_seconds_total{lane,reason}`: wall seconds on the adopted
   lane, including `baseline` flag-off sessions. This is session time, not billed
   VAD audio time; pair it with existing vendor audio counters for the cost receipt.
-- `omi_listen_live_lane_switches_total{from_lane,to_lane,reason}`: adopted policy switches.
+- `omi_listen_live_lane_switches_total{from_lane,to_lane,reason}`: adopted lane changes, including fallback.
 - `omi_fallback_total{component="stt_live_session",reason,outcome}`: admission,
   candidate or replay failures, plus existing window recovery causes. Existing
   window admission/POST metrics distinguish capacity, pressure and degradation.

@@ -189,3 +189,16 @@ async def test_demand_rechecked_before_retiring_vendor(monkeypatch, late_demand)
     finally:
         actual.stt_socket.finish()
         await stop(raws)
+
+
+@pytest.mark.asyncio
+async def test_window_allocation_kill_retains_vendor(monkeypatch):
+    actual, _, raws, _, _ = await demand_receiver(monkeypatch)
+    old = actual.stt_socket
+    monkeypatch.setenv('PARAKEET_WINDOW_ALLOCATION_PERCENT', '0')
+    try:
+        assert not await actual._switch_live_demand('parakeet')
+        assert actual.stt_socket is old and not old.retired_for_replay
+    finally:
+        actual.stt_socket.finish()
+        await stop(raws)

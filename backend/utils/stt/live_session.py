@@ -106,7 +106,8 @@ class LiveChainSession:
         if demand is not None:
             self.no_text_rescue.enabled = False
         window_eligible = (
-            (demand.window_permitted if demand is not None else window_allocation(uid))
+            window_allocation(uid)
+            and (demand.window_permitted if demand is not None else True)
             and window_language_supported(host.language, language)
             and bool(os.getenv('HOSTED_PARAKEET_API_URL'))
         )
