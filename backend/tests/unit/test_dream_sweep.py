@@ -346,7 +346,7 @@ def test_prod_scheduler_and_writer_env_contract():
     for name in ('backend-sync', 'backend'):
         for key, value in dogfood_caps.items():
             assert services[name]['env'][key]['value'] == (
-                '250' if name == 'backend-sync' and key == 'DREAM_AGENT_DAILY_USD' else value
+                '320' if name == 'backend-sync' and key == 'DREAM_AGENT_DAILY_USD' else value
             )
         assert services[name]['secrets']['DREAM_AGENT_FEEDBACK_SALT'] == {
             'secret': 'DREAM_AGENT_FEEDBACK_SALT',

@@ -1,5 +1,32 @@
 # Dream agent phase 1
 
+## Consensus automation and valuable Review (rung 2a)
+
+Only the full-context owner gets the full planner schema: Review questions require
+`value` (1–5) and a short generic `why_it_matters`; spelling edits may supply
+`value` for a possible Review question. The bounded planner schema and behavior
+stay unchanged. Consensus assigns server-only `agreement` and `samples` to every
+survivor; these counts are included in the full-mode private pass report.
+
+A spelling edit agreed by every returned sample, with at least two returned,
+may apply without independent-record grounding. The full-context UID gains
+`spelling` in its effective auto kinds even when the service override omits it.
+Grounded spelling retains its existing automatic path. Majority-only ungrounded
+spelling becomes a Review question; a single survivor cannot authorize the new
+automatic path. Titles and overviews keep their existing policy.
+
+The consensus path still validates current evidence, fences all cited snapshots,
+and uses the existing segment-scoped journal writer and Undo. Suppression, per-pass
+edit limits, the kill switch, and kind demotion after the configured Undo rate
+remain authoritative. Demotion is applied after the full-owner policy expansion.
+
+Surviving direct questions and spelling questions compete in one descending
+`(agreement, value)` order. Values 1–2, including unscored spelling questions,
+never spend attention. New offers atomically share the existing three-question
+UTC-day allowance; duplicates and suppression do not spend it. Counts-only
+metrics report `auto_applied_unanimous`, `suggested_majority`, `questions_offered`,
+and `questions_dropped_low_value`.
+
 ## Opt-in full context (rung 1)
 
 `DREAM_AGENT_CONTEXT_MODE=bounded` is the default. `full` applies only to the
@@ -32,14 +59,14 @@ See [the provider model
 limits](https://cloud.google.com/vertex-ai/generative-ai/docs/models/gemini/2-5-flash).
 The existing reservation/USD accounting reserves the combined input/completion budget plus one
 malformed-response retry **for every sample**: `2 * K * (400000 + 32768)`. At K=3 this reserves 2596608
-tokens, or $25.96608 at the existing $0.00001/token upper-bound rate. The prod `backend-sync` cap is $250,
-intended to cover 24 hourly passes at roughly $8.2 settled usage (~$200) plus one ~$26 reservation of
+tokens, or $25.96608 at the existing $0.00001/token upper-bound rate. The prod `backend-sync` cap is $320,
+intended to cover 24 hourly passes at roughly $12.1 settled usage (~$290.4) plus one ~$26 reservation of
 headroom. Admission and settlement now use `dream_users/<uid>/spend/<UTC date>`. The ledger is shared only by
 that user's scheduled/manual passes and service hosts; another user or the synthetic canary cannot exhaust it.
 Finishing a pass atomically replaces its reservation with actual aggregate tokens times the accounting rate
 captured at admission, including every sample and retry. Known billable failures settle too; an unknown or
 missing usage outcome keeps the full reservation. At 820000 tokens per full pass, 24 passes settle to $196.80;
-the final admission needs $214.56608 including its temporary reservation, below $250. Settlement uses the
+the final admission needs $214.56608 including its temporary reservation, below $320. Settlement uses the
 admission UTC day across midnight and tracks the current charge on a retained lease so repeated recovery
 cannot deduct a reservation twice. New user ledgers do not import the historical shared total. A pre-change
 in-flight lease remains attached to `dream_spend/<day>`; without its captured accounting rate it retains the
