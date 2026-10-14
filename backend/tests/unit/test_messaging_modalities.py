@@ -540,3 +540,103 @@ def test_delivered_media_refusal_is_not_followed_by_generic_apology(adapter, mon
     gateway = Gateway(adapter, store=store, admission=lambda *a: None, rate_limit=lambda *a: None)
     asyncio.run(gateway.process(path))
     assert sent == [VOICE_REPLY] and not store.leases
+
+
+def test_media_preparation_bounds_concurrent_download_buffers(adapter, monkeypatch):
+    from utils.messaging.adapters import base
+
+    message = parsed(adapter, 'photo')[0]
+
+    async def run():
+        ready, release = asyncio.Event(), asyncio.Event()
+        active = peak = 0
+
+        async def prepare(*args):
+            nonlocal active, peak
+            active += 1
+            peak = max(peak, active)
+            if active == 8:
+                ready.set()
+            await release.wait()
+            active -= 1
+            return message
+
+        monkeypatch.setattr(base, 'prepare_media', prepare)
+
+        async def guard():
+            pass
+
+        jobs = [asyncio.create_task(adapter.prepare(message, 'u', {'id': 'session'}, guard)) for _ in range(9)]
+        await asyncio.wait_for(ready.wait(), 2)
+        assert active == 8
+        release.set()
+        await asyncio.gather(*jobs)
+        assert peak == 8
+
+    asyncio.run(run())
+
+
+@pytest.mark.parametrize(
+    'filename,mime', [('photo.bin', 'image/jpeg'), ('photo', 'image/jpeg'), ('iphone.heic', 'image/heic')]
+)
+def test_real_upload_path_normalizes_image_document_names(monkeypatch, filename, mime):
+    from database import chat
+    from utils.other import chat_file, storage
+
+    uploads, rows = [], []
+
+    def create(*, file, purpose):
+        name, stream = file
+        with Image.open(stream) as image:
+            assert image.format == 'JPEG'
+        assert purpose == 'vision' and Path(name).suffix in ('.jpg', '.jpeg')
+        uploads.append(name)
+        return SimpleNamespace(id='uploaded-file', filename=name)
+
+    monkeypatch.setattr(chat_file.openai, 'files', SimpleNamespace(create=create))
+    monkeypatch.setattr(storage, 'upload_multi_chat_files', lambda paths, uid: {})
+    monkeypatch.setattr(chat, 'add_multi_files', lambda uid, files: rows.extend(files))
+    if mime == 'image/heic':
+        data = (FIXTURES / 'audio' / 'photo.heic').read_bytes()
+    else:
+        output = BytesIO()
+        Image.new('RGB', (16, 12), (220, 100, 30)).save(output, 'JPEG')
+        data = output.getvalue()
+    artifact = ChatMediaStore().ingest('u', InboundAttachment('file', filename, mime), data)
+    assert len(uploads) == len(rows) == 1 and artifact.mime_type == 'image/jpeg'
+    assert rows[0]['name'] == artifact.name and rows[0]['size'] == artifact.size
+
+
+def test_contact_embedded_photo_does_not_hide_later_fields_or_enter_context():
+    card = (
+        b'BEGIN:VCARD\nFN:Name\nPHOTO;ENCODING=b:'
+        + b'x' * 1_000_000
+        + b'\nTEL:+123\nEMAIL:name@example.test\nEND:VCARD'
+    )
+    text = contact_text(card)
+    assert len(text) < 300 and '+123' in text and 'name@example.test' in text
+    assert 'PHOTO' not in text
+
+
+def test_unreadable_contact_is_a_specific_typed_refusal():
+    with pytest.raises(MediaPreparationError) as failed:
+        contact_text(b'not a card')
+    assert 'contact card' in failed.value.reply and 'Sorry' not in failed.value.reply
+
+
+def test_telegram_contact_vcard_email_and_structured_fallback(adapter):
+    if adapter.channel == 'telegram':
+        message = parsed(
+            adapter,
+            text='',
+            contact={
+                'first_name': 'Name',
+                'phone_number': '+123',
+                'vcard': 'BEGIN:VCARD\nEMAIL:name@example.test\nEND:VCARD',
+            },
+        )[0]
+        assert 'name@example.test' in inbound_evidence(message)
+        malformed = parsed(
+            adapter, text='', contact={'first_name': 'Name', 'phone_number': '+123', 'vcard': 'not a card'}
+        )[0]
+        assert '+123' in inbound_evidence(malformed) and 'Name' in malformed.text

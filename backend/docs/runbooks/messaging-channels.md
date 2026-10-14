@@ -494,8 +494,9 @@ Each attachment is limited to **20,000,000 bytes** (20 MB decimal). Audio and vi
 are limited to **600 seconds** (10 minutes), checked both against provider metadata
 and actual decoded PCM. FFmpeg has a 30-second decode deadline, one decoder/filter
 thread, an explicit container allowlist (no playlists), and bounds output to cap+1
-before reading it. The shared STT semaphore admits at most eight decodes/transcriptions
-per event loop. No provider/model work occurs on the webhook request path.
+before reading it. A loop-owned media semaphore admits at most eight attachment preparations
+(including downloads and image ingestion) per serving process, bounding retained
+buffers as users overlap. The shared STT semaphore also bounds audio work. No provider/model work occurs on the webhook request path.
 
 Audio MIME types or common filename extensions route to audio extraction, including
 Telegram `voice`, `audio`, `video`, `video_note`, audio documents and Linq `media`.

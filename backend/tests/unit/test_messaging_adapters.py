@@ -773,7 +773,8 @@ def test_media_prepare_stt_and_searchable_file_ids(adapter, monkeypatch):
 
     async def download(attachment):
         if attachment.voice:
-            return (FIXTURES / 'audio' / 'voice.ogg').read_bytes()
+            filename = 'voice.m4a' if adapter.provider == 'linq' else 'voice.ogg'
+            return (FIXTURES / 'audio' / filename).read_bytes()
         return b'fixture file'
 
     monkeypatch.setattr(adapter, 'download', download)

@@ -435,6 +435,9 @@ class Gateway:
                             try:
                                 message = await self.adapter.prepare(message, uid, session, guard)
                             except MediaPreparationError as error:
+                                from utils.messaging.metrics import FAILURES
+
+                                FAILURES.labels(message.channel, error.reason).inc()
                                 logging.getLogger(__name__).info(
                                     'Messaging media refused provider=%s reason=%s', self.adapter.provider, error.reason
                                 )
