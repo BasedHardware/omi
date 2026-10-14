@@ -274,7 +274,8 @@ def ios_build_version_id(asc: Callable[..., object], build_id: str) -> str | Non
 
 
 def fetch_ios_state(asc: Callable[..., object]) -> IOSState:
-    live_version = newest_version(v.version for v in ios_versions_in_state(asc, LIVE_STATE))
+    live_versions = ios_versions_in_state(asc, LIVE_STATE)
+    live_version = newest_version(v.version for v in live_versions)
     if live_version is None:
         raise TrainError("App Store Connect reports no live (READY_FOR_SALE) iOS version")
     in_flight = tuple(v for state in IN_FLIGHT_STATES for v in ios_versions_in_state(asc, state))
@@ -282,6 +283,35 @@ def fetch_ios_state(asc: Callable[..., object]) -> IOSState:
     candidate = ios_candidate(asc, live_version)
     candidate_version_id = ios_build_version_id(asc, candidate.build_id) if candidate and pending else None
     return IOSState(live_version, in_flight, pending, candidate, candidate_version_id)
+
+
+def ios_phased_release_paused(live_version_id: str) -> bool:
+    """Whether the live version's phased rollout is PAUSED (the operator brake).
+
+    Reads GET /v1/appStoreVersions/{id}/appStoreVersionPhasedRelease over the
+    same REST+JWT surface as the replace-path lookup. A 404 means the live
+    version has no phased release at all (released before this posture or
+    fully finished), which is not a pause. Any other lookup failure fails
+    closed: a brake this train cannot read is a brake it must respect.
+    """
+    token = _asc_rest_token()
+    url = (
+        "https://api.appstoreconnect.apple.com/v1/appStoreVersions/"
+        f"{live_version_id}/appStoreVersionPhasedRelease"
+    )
+    request = urllib.request.Request(url, headers={"Authorization": f"Bearer {token}"})
+    try:
+        with urllib.request.urlopen(request, timeout=60) as response:
+            payload = json.load(response)
+    except urllib.error.HTTPError as exc:
+        if exc.code == 404:
+            return False
+        raise TrainError(f"App Store Connect phased-release lookup failed for {live_version_id}: HTTP {exc.code}") from exc
+    except (urllib.error.URLError, ValueError) as exc:
+        raise TrainError(f"App Store Connect phased-release lookup failed for {live_version_id}: {exc}") from exc
+    if not isinstance(payload, dict) or not isinstance(payload.get("data"), dict):
+        raise TrainError(f"App Store Connect phased-release lookup returned an invalid resource for {live_version_id}")
+    return str(_attributes(payload["data"]).get("phasedReleaseState")) == "PAUSED"
 
 
 def ios_live_locales(asc: Callable[..., object], live_version_id: str) -> list[str]:
@@ -462,9 +492,18 @@ def run_ios(*, dry_run: bool, release_date: str, asc: Callable[..., object] = as
     if plan.submit is None:
         return f"ios={plan.action} ({plan.reason})"
     candidate = plan.submit
+    live = next(v for v in ios_versions_in_state(asc, LIVE_STATE) if v.version == state.live_version)
+    if PHASED_RELEASE and ios_phased_release_paused(live.id):
+        # The operator paused the live version's phased rollout in App Store
+        # Connect — the documented post-release brake. Hold the whole iOS
+        # train while the brake is on: submitting the candidate now would
+        # release it on approval regardless of the pause.
+        return (
+            f"ios=hold (live {state.live_version} phased rollout is PAUSED — the operator brake; "
+            f"resume it in App Store Connect to continue)"
+        )
     release_path = ensure_release_notes(candidate.version, release_date, write=not dry_run)
     notes = promote.require_notes(release_path, candidate.version, "ios") if release_path.is_file() else "<collected at run time>"
-    live = next(v for v in ios_versions_in_state(asc, LIVE_STATE) if v.version == state.live_version)
     locales = ios_live_locales(asc, live.id)
     if dry_run:
         log(f"DRY RUN: would submit build {candidate.build_number} ({candidate.version}) with notes for {len(locales)} locales")

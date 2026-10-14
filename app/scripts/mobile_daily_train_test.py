@@ -180,7 +180,9 @@ class RunIOSTests(unittest.TestCase):
 
     def test_dry_run_reads_everything_and_mutates_nothing(self):
         asc = FakeASC(live_responses())
-        with patch.object(promote.subprocess, "run") as run:
+        with patch.object(train, "ios_phased_release_paused", return_value=False), patch.object(
+            promote.subprocess, "run"
+        ) as run:
             summary = train.run_ios(dry_run=True, release_date="2026-10-06", asc=asc)
         self.assertIn("dry-run:submit 1.0.554 (1334)", summary)
         self.assertEqual(asc.mutations(), [])
@@ -193,6 +195,85 @@ class RunIOSTests(unittest.TestCase):
         self.assertTrue(summary.startswith("ios=hold"))
         run.assert_not_called()
         self.assertEqual(asc.mutations(), [])
+
+    def test_paused_phased_release_holds_the_train(self):
+        asc = FakeASC(live_responses())
+        with patch.object(train, "_asc_rest_token", return_value="faketoken"), patch.object(
+            train, "ios_phased_release_paused", return_value=True
+        ) as paused, patch.object(promote.subprocess, "run") as run:
+            summary = train.run_ios(dry_run=False, release_date="2026-10-06", asc=asc)
+        self.assertTrue(summary.startswith("ios=hold"))
+        self.assertIn("PAUSED", summary)
+        paused.assert_called_once()
+        run.assert_not_called()
+        self.assertEqual(asc.mutations(), [])
+
+    def test_unpaused_phased_release_still_submits(self):
+        asc = FakeASC(
+            live_responses(
+                extra={
+                    ("builds", "app-store-version"): {"id": "new-version", "attributes": {"appStoreState": "WAITING_FOR_REVIEW"}},
+                    ("app-store-versions", "get"): {"id": "new-version", "attributes": {"appStoreState": "WAITING_FOR_REVIEW"}},
+                }
+            )
+        )
+
+        def fake_run(command, **kwargs):
+            return Mock(returncode=0)
+
+        with patch.object(train, "_asc_rest_token", return_value="faketoken"), patch.object(
+            train, "ios_phased_release_paused", return_value=False
+        ), patch.object(promote.subprocess, "run", side_effect=fake_run), patch.object(train.time, "sleep"), patch.object(
+            promote, "require_notes", return_value="- New thing"
+        ):
+            summary = train.run_ios(dry_run=False, release_date="2026-10-06", asc=asc)
+        self.assertTrue(summary.startswith("ios=submit"))
+
+    def test_phased_release_lookup_reads_the_rest_resource(self):
+        def rest_lookup(url, timeout=60):
+            class Response:
+                def __enter__(self):
+                    return self
+
+                def __exit__(self, *exc):
+                    return False
+
+                def read(self):
+                    return json.dumps(
+                        {"data": {"type": "appStoreVersionPhasedReleases", "id": "pr1", "attributes": {"phasedReleaseState": "PAUSED"}}}
+                    ).encode()
+
+            return Response()
+
+        with patch.object(train.urllib.request, "urlopen", side_effect=rest_lookup), patch.object(
+            train, "_asc_rest_token", return_value="faketoken"
+        ):
+            self.assertTrue(train.ios_phased_release_paused("live-version-id"))
+
+    def test_phased_release_absent_404_is_not_a_pause(self):
+        import email.message
+        import urllib.error as urlerror
+
+        def rest_lookup(url, timeout=60):
+            raise urlerror.HTTPError(url, 404, "Not Found", email.message.Message(), None)
+
+        with patch.object(train.urllib.request, "urlopen", side_effect=rest_lookup), patch.object(
+            train, "_asc_rest_token", return_value="faketoken"
+        ):
+            self.assertFalse(train.ios_phased_release_paused("live-version-id"))
+
+    def test_phased_release_lookup_failure_fails_closed(self):
+        import email.message
+        import urllib.error as urlerror
+
+        def rest_lookup(url, timeout=60):
+            raise urlerror.HTTPError(url, 500, "Server Error", email.message.Message(), None)
+
+        with patch.object(train.urllib.request, "urlopen", side_effect=rest_lookup), patch.object(
+            train, "_asc_rest_token", return_value="faketoken"
+        ):
+            with self.assertRaisesRegex(train.TrainError, "phased-release lookup failed"):
+                train.ios_phased_release_paused("live-version-id")
 
     def test_submit_uses_manual_release_and_every_live_locale(self):
         version_states = iter(["PREPARE_FOR_SUBMISSION", "WAITING_FOR_REVIEW"])
@@ -212,7 +293,9 @@ class RunIOSTests(unittest.TestCase):
             captured["localizations"] = json.loads(Path(path).read_text())
             return Mock(returncode=0)
 
-        with patch.object(promote.subprocess, "run", side_effect=fake_run), patch.object(train.time, "sleep"), patch.object(
+        with patch.object(train, "ios_phased_release_paused", return_value=False), patch.object(
+            promote.subprocess, "run", side_effect=fake_run
+        ), patch.object(train.time, "sleep"), patch.object(
             promote, "require_notes", return_value="- New thing"
         ):
             summary = train.run_ios(dry_run=False, release_date="2026-10-06", asc=asc)
@@ -311,7 +394,9 @@ class RunIOSTests(unittest.TestCase):
                 order.append("cancel")
             return original_call(*args)
 
-        with patch.object(train.urllib.request, "urlopen", side_effect=rest_items), patch.object(
+        with patch.object(train, "ios_phased_release_paused", return_value=False), patch.object(
+            train.urllib.request, "urlopen", side_effect=rest_items
+        ), patch.object(
             train, "_asc_rest_token", return_value="faketoken"
         ), patch.object(promote.subprocess, "run", side_effect=fake_run), patch.object(train.time, "sleep"):
             summary = train.run_ios(dry_run=False, release_date="2026-10-06", asc=recording_call)
