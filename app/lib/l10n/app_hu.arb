@@ -4171,5 +4171,10 @@
     "syncDetailsForSupport": "Az ügyfélszolgálatnak",
     "syncDetailsAudioFiles": "Hangfájlok",
     "syncDetailsServerJobs": "Szerverfeladatok (kész / összes)",
-    "syncDetailsCopy": "Részletek másolása az ügyfélszolgálatnak"
+    "syncDetailsCopy": "Részletek másolása az ügyfélszolgálatnak",
+    "chatAppsChannelPlanRequired": "Elérhető az Operator és Architect csomagban",
+    "chatAppsAtCapacity": "A(z) {app} megtelt",
+    "chatAppsJoinWaitlist": "Feliratkozás a várólistára",
+    "chatAppsOnWaitlist": "Fent vagy a várólistán",
+    "chatAppsWaitlistJoined": "Fent vagy a várólistán. Szólunk, ha lesz hely."
 }

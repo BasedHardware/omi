@@ -51,6 +51,7 @@ class SurfaceRuntime:
     turn_id: str | None = None
     request_at: datetime | None = None
     withhold_private_memories: bool = False
+    channel: str | None = None
 
 
 surface_runtime: ContextVar[SurfaceRuntime | None] = ContextVar('messaging_surface', default=None)

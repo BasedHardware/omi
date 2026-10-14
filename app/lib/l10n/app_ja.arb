@@ -4075,5 +4075,10 @@
     "syncDetailsForSupport": "サポート用",
     "syncDetailsAudioFiles": "音声ファイル",
     "syncDetailsServerJobs": "サーバージョブ (完了 / 合計)",
-    "syncDetailsCopy": "サポート用に詳細をコピー"
+    "syncDetailsCopy": "サポート用に詳細をコピー",
+    "chatAppsChannelPlanRequired": "OperatorとArchitectで利用できます",
+    "chatAppsAtCapacity": "{app}は定員に達しています",
+    "chatAppsJoinWaitlist": "ウェイトリストに登録",
+    "chatAppsOnWaitlist": "ウェイトリストに登録済みです",
+    "chatAppsWaitlistJoined": "ウェイトリストに登録しました。空きが出たらお知らせします。"
 }

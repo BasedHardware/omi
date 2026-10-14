@@ -11501,5 +11501,10 @@
     "syncDetailsForSupport": "לתמיכה",
     "syncDetailsAudioFiles": "קובצי אודיו",
     "syncDetailsServerJobs": "משימות שרת (הושלמו / סך הכול)",
-    "syncDetailsCopy": "העתקת פרטים לתמיכה"
+    "syncDetailsCopy": "העתקת פרטים לתמיכה",
+    "chatAppsChannelPlanRequired": "זמין ב-Operator וב-Architect",
+    "chatAppsAtCapacity": "{app} מלא כרגע",
+    "chatAppsJoinWaitlist": "הצטרפות לרשימת ההמתנה",
+    "chatAppsOnWaitlist": "את/ה ברשימת ההמתנה",
+    "chatAppsWaitlistJoined": "את/ה ברשימת ההמתנה. נעדכן כשיתפנה מקום."
 }

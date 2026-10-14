@@ -71,7 +71,7 @@ class ConversationListItem extends StatefulWidget {
   /// (the Home preview), so selection mode can never start without a way to act on it or leave.
   final bool allowSelection;
 
-  /// Drawn inside a [LockedConversationRun]: the run blurs the card under its one upgrade action,
+  /// Drawn inside a [LockedConversationRun]: the run blurs the card under its one usage action,
   /// so the row draws no padding or lock of its own but keeps its gestures (open, long-press menu,
   /// swipe-to-delete, selection).
   final bool inLockedRun;
@@ -97,23 +97,23 @@ class _ConversationListItemState extends State<ConversationListItem> {
   bool _reprocessing = false;
 
   int _visualSignature(ServerConversation conversation) => Object.hash(
-        conversation.structured.title,
-        conversation.structured.emoji,
-        conversation.structured.category,
-        conversation.status,
-        conversation.discarded,
-        conversation.starred,
-        conversation.folderId,
-        conversation.visibility,
-        conversation.startedAt,
-        conversation.finishedAt,
-        conversation.photos.length,
-        conversation.transcriptSegments.length,
-        conversation.captureGroup?.id,
-        conversation.captureGroup?.revision,
-        conversation.summaryRetryable,
-        conversation.isLocked,
-      );
+    conversation.structured.title,
+    conversation.structured.emoji,
+    conversation.structured.category,
+    conversation.status,
+    conversation.discarded,
+    conversation.starred,
+    conversation.folderId,
+    conversation.visibility,
+    conversation.startedAt,
+    conversation.finishedAt,
+    conversation.photos.length,
+    conversation.transcriptSegments.length,
+    conversation.captureGroup?.id,
+    conversation.captureGroup?.revision,
+    conversation.summaryRetryable,
+    conversation.isLocked,
+  );
 
   @override
   void dispose() {
@@ -176,11 +176,7 @@ class _ConversationListItemState extends State<ConversationListItem> {
   Future<void> _open(BuildContext context, ConversationProvider provider) async {
     if (widget.conversation.isLocked) {
       if (!context.read<UsageProvider>().showSubscriptionUI) return;
-      PlatformManager.instance.analytics.paywallOpened(
-        'locked_conversation',
-        currentPlan: context.read<UsageProvider>().subscription?.subscription.plan.wireName ?? 'unknown',
-      );
-      routeToPage(context, const UsagePage(showUpgradeDialog: true, paywallSource: 'locked_conversation'));
+      routeToPage(context, const UsagePage());
       return;
     }
     HapticFeedback.selectionClick();
@@ -250,15 +246,15 @@ class _ConversationListItemState extends State<ConversationListItem> {
   }
 
   static ConversationActionAction _rowActionAnalytics(ConversationRowAction action, bool starred) => switch (action) {
-        ConversationRowAction.open => ConversationActionAction.open,
-        ConversationRowAction.star => starred ? ConversationActionAction.unstar : ConversationActionAction.star,
-        ConversationRowAction.move => ConversationActionAction.moveFolder,
-        ConversationRowAction.share => ConversationActionAction.share,
-        ConversationRowAction.recordings => ConversationActionAction.recordingsOpen,
-        ConversationRowAction.separate => ConversationActionAction.separate,
-        ConversationRowAction.select => ConversationActionAction.select,
-        ConversationRowAction.delete => ConversationActionAction.delete,
-      };
+    ConversationRowAction.open => ConversationActionAction.open,
+    ConversationRowAction.star => starred ? ConversationActionAction.unstar : ConversationActionAction.star,
+    ConversationRowAction.move => ConversationActionAction.moveFolder,
+    ConversationRowAction.share => ConversationActionAction.share,
+    ConversationRowAction.recordings => ConversationActionAction.recordingsOpen,
+    ConversationRowAction.separate => ConversationActionAction.separate,
+    ConversationRowAction.select => ConversationActionAction.select,
+    ConversationRowAction.delete => ConversationActionAction.delete,
+  };
 
   /// Long-press: the row's one context menu (hub audit #7). Multi-select is one of its entries.
   Future<void> _showActions(BuildContext context, ConversationProvider provider) async {
@@ -314,102 +310,105 @@ class _ConversationListItemState extends State<ConversationListItem> {
     }
 
     return RepaintBoundary(
-      child: Selector<ConversationProvider,
-          ({int visualSignature, bool isSelectionMode, bool isSelected, bool isMerging, bool isEligible})>(
-        selector: (context, provider) => (
-          // ServerConversation is mutable. Select the visible primitive fields
-          // instead of object identity so star/title/status updates are not lost.
-          visualSignature: _visualSignature(widget.conversation),
-          isSelectionMode: provider.isSelectionModeActive,
-          isSelected: provider.isConversationSelected(widget.conversation.id),
-          isMerging: provider.isConversationMerging(widget.conversation.id),
-          isEligible: provider.isConversationEligibleForMerge(widget.conversation.id),
-        ),
-        builder: (context, rowState, child) {
-          final provider = context.read<ConversationProvider>();
-          final isSelectionMode = rowState.isSelectionMode;
-          final isSelected = rowState.isSelected;
-          final isMerging = rowState.isMerging;
-          final isEligible = rowState.isEligible;
+      child:
+          Selector<
+            ConversationProvider,
+            ({int visualSignature, bool isSelectionMode, bool isSelected, bool isMerging, bool isEligible})
+          >(
+            selector: (context, provider) => (
+              // ServerConversation is mutable. Select the visible primitive fields
+              // instead of object identity so star/title/status updates are not lost.
+              visualSignature: _visualSignature(widget.conversation),
+              isSelectionMode: provider.isSelectionModeActive,
+              isSelected: provider.isConversationSelected(widget.conversation.id),
+              isMerging: provider.isConversationMerging(widget.conversation.id),
+              isEligible: provider.isConversationEligibleForMerge(widget.conversation.id),
+            ),
+            builder: (context, rowState, child) {
+              final provider = context.read<ConversationProvider>();
+              final isSelectionMode = rowState.isSelectionMode;
+              final isSelected = rowState.isSelected;
+              final isMerging = rowState.isMerging;
+              final isEligible = rowState.isEligible;
 
-          Future<void> onTap() async {
-            // If in selection mode, toggle selection only if eligible
-            if (isSelectionMode) {
-              if (!isEligible) {
-                // Show feedback that this conversation cannot be selected
-                HapticFeedback.lightImpact();
-                OmiFeedback.info(context, context.l10n.conversationCannotBeMerged);
-                return;
+              Future<void> onTap() async {
+                // If in selection mode, toggle selection only if eligible
+                if (isSelectionMode) {
+                  if (!isEligible) {
+                    // Show feedback that this conversation cannot be selected
+                    HapticFeedback.lightImpact();
+                    OmiFeedback.info(context, context.l10n.conversationCannotBeMerged);
+                    return;
+                  }
+                  HapticFeedback.selectionClick();
+                  provider.toggleConversationSelection(widget.conversation.id);
+                  return;
+                }
+                await _open(context, provider);
               }
-              HapticFeedback.selectionClick();
-              provider.toggleConversationSelection(widget.conversation.id);
-              return;
-            }
-            await _open(context, provider);
-          }
 
-          return GestureDetector(
-            onTap: onTap,
-            onLongPress: isSelectionMode || isMerging ? null : () => _showActions(context, provider),
-            child: Stack(
-              children: [
-                Padding(
-                  padding: _cardPadding,
-                  child: AnimatedOpacity(
-                    duration: const Duration(milliseconds: 200),
-                    opacity: (isSelectionMode && !isEligible) ? 0.6 : 1.0,
-                    child: Semantics(
-                      selected: isSelectionMode ? isSelected : null,
-                      child: _SwipeDeleteRow(
-                        enabled: !isSelectionMode && !isMerging,
-                        // One delete path (D5): confirm unless opted out, then Undo. The confirm
-                        // pops from the row's delete button.
-                        confirm: (anchor) async {
-                          HapticFeedback.mediumImpact();
-                          trackConversationAction(
-                            ConversationActionAction.delete,
-                            ConversationActionSurface.rowSwipe,
-                          );
-                          return confirmConversationDelete(context, anchor: anchor);
-                        },
-                        onDeleted: () {
-                          final conversation = widget.conversation;
-                          PlatformManager.instance.analytics.conversationSwipedToDelete(conversation);
-                          unawaited(deleteConversationsWithUndo(context, [conversation]));
-                        },
-                        child: AnimatedContainer(
-                          key: const ValueKey('conversation_card'),
-                          duration: const Duration(milliseconds: 200),
-                          width: double.maxFinite,
-                          decoration: BoxDecoration(
-                            color: isSelected
-                                ? OmiColors.surface3
-                                : (isSelectionMode && !isEligible)
+              return GestureDetector(
+                onTap: onTap,
+                onLongPress: isSelectionMode || isMerging ? null : () => _showActions(context, provider),
+                child: Stack(
+                  children: [
+                    Padding(
+                      padding: _cardPadding,
+                      child: AnimatedOpacity(
+                        duration: const Duration(milliseconds: 200),
+                        opacity: (isSelectionMode && !isEligible) ? 0.6 : 1.0,
+                        child: Semantics(
+                          selected: isSelectionMode ? isSelected : null,
+                          child: _SwipeDeleteRow(
+                            enabled: !isSelectionMode && !isMerging,
+                            // One delete path (D5): confirm unless opted out, then Undo. The confirm
+                            // pops from the row's delete button.
+                            confirm: (anchor) async {
+                              HapticFeedback.mediumImpact();
+                              trackConversationAction(
+                                ConversationActionAction.delete,
+                                ConversationActionSurface.rowSwipe,
+                              );
+                              return confirmConversationDelete(context, anchor: anchor);
+                            },
+                            onDeleted: () {
+                              final conversation = widget.conversation;
+                              PlatformManager.instance.analytics.conversationSwipedToDelete(conversation);
+                              unawaited(deleteConversationsWithUndo(context, [conversation]));
+                            },
+                            child: AnimatedContainer(
+                              key: const ValueKey('conversation_card'),
+                              duration: const Duration(milliseconds: 200),
+                              width: double.maxFinite,
+                              decoration: BoxDecoration(
+                                color: isSelected
+                                    ? OmiColors.surface3
+                                    : (isSelectionMode && !isEligible)
                                     ? OmiColors.surface2
                                     : OmiColors.surface1,
-                            borderRadius: OmiRadius.xlAll,
-                            border: isSelected
-                                ? Border.all(color: OmiColors.accent, width: 2)
-                                : (isSelectionMode && !isEligible)
+                                borderRadius: OmiRadius.xlAll,
+                                border: isSelected
+                                    ? Border.all(color: OmiColors.accent, width: 2)
+                                    : (isSelectionMode && !isEligible)
                                     ? Border.all(color: OmiColors.border, width: 1)
                                     : null,
+                              ),
+                              child: ClipRRect(borderRadius: OmiRadius.xlAll, child: _buildCardContent(context, onTap)),
+                            ),
                           ),
-                          child: ClipRRect(borderRadius: OmiRadius.xlAll, child: _buildCardContent(context, onTap)),
                         ),
                       ),
                     ),
-                  ),
+                    // Merging overlay covering the full card
+                    if (isMerging)
+                      Positioned.fill(
+                        child: Padding(padding: _cardPadding, child: _buildMergingOverlay()),
+                      ),
+                  ],
                 ),
-                // Merging overlay covering the full card
-                if (isMerging)
-                  Positioned.fill(
-                    child: Padding(padding: _cardPadding, child: _buildMergingOverlay()),
-                  ),
-              ],
-            ),
-          );
-        },
-      ),
+              );
+            },
+          ),
     );
   }
 
@@ -429,7 +428,12 @@ class _ConversationListItemState extends State<ConversationListItem> {
     );
     // A run frosts its rows together under one action.
     if (!widget.conversation.isLocked || widget.inLockedRun) return content;
-    return OmiLockedPreview(label: context.l10n.upgradeToUnlimited, onPressed: onTap, child: content);
+    return OmiLockedPreview(
+      status: context.l10n.statusPending,
+      label: context.l10n.viewUsage,
+      onPressed: onTap,
+      child: content,
+    );
   }
 
   /// Time and length, with the New badge beside them (hub audit #16) and the star.
@@ -838,7 +842,7 @@ class _MergingIndicatorState extends State<MergingIndicator> with SingleTickerPr
 }
 
 /// Two or more locked rows in a row on the free plan: one frosted card holding all of them, with a
-/// single "Upgrade to Unlimited" instead of one per row. A lone locked row stays a
+/// single usage action instead of one per row. A lone locked row stays a
 /// [ConversationListItem] with its own [OmiLockedPreview].
 class LockedConversationRun extends StatelessWidget {
   const LockedConversationRun({super.key, required this.conversations, required this.date});
@@ -846,7 +850,7 @@ class LockedConversationRun extends StatelessWidget {
   final List<ServerConversation> conversations;
   final DateTime date;
 
-  Future<void> _upgrade(BuildContext context) async {
+  Future<void> _openUsage(BuildContext context) async {
     // Same as a lone locked row's action: while merging, a locked row can't be picked.
     if (context.read<ConversationProvider>().isSelectionModeActive) {
       HapticFeedback.lightImpact();
@@ -854,11 +858,7 @@ class LockedConversationRun extends StatelessWidget {
       return;
     }
     if (!context.read<UsageProvider>().showSubscriptionUI) return;
-    PlatformManager.instance.analytics.paywallOpened(
-      'locked_conversation',
-      currentPlan: context.read<UsageProvider>().subscription?.subscription.plan.wireName ?? 'unknown',
-    );
-    routeToPage(context, const UsagePage(showUpgradeDialog: true, paywallSource: 'locked_conversation'));
+    routeToPage(context, const UsagePage());
   }
 
   @override
@@ -869,8 +869,9 @@ class LockedConversationRun extends StatelessWidget {
         key: const Key('locked_conversation_run'),
         // Each row keeps its own long-press menu, swipe-to-delete and selection handling.
         interactive: true,
-        label: context.l10n.upgradeToUnlimited,
-        onPressed: () => _upgrade(context),
+        status: context.l10n.statusPending,
+        label: context.l10n.viewUsage,
+        onPressed: () => _openUsage(context),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [

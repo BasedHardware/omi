@@ -560,7 +560,7 @@ _add(
 )
 _add(
     DriverEntry(
-        'database.chat.get_cache_aligned_messages',
+        'database.chat_context_reads.get_cache_aligned_messages',
         base={'uid': UID},
         domains={'app_id': [None, 'app-1'], 'chat_session_id': [None, 'sess-1']},
     )
@@ -2675,6 +2675,11 @@ def _messaging_identity(client, combo, trial):
     client.documents['channel_identities/link'] = {'uid': UID, 'active': True}
 
 
+def _messaging_session(client, combo, trial):
+    client.documents['users/' + UID + '/chat_sessions/session'] = {'channel_events_migrated': True}
+    client.documents['users/' + UID] = {'name': 'synthetic'}
+
+
 def _messaging_claim(client, combo, trial):
     client.documents['channel_identities/link/inbox/job'] = {'status': 'pending', 'created_at': T0, 'payload': '{}'}
 
@@ -2693,6 +2698,12 @@ _messaging_store = MessagingStore()
 for method, base, setup in (
     ('links', {'uid': UID}, None),
     ('events', {'uid': UID, 'session_id': 'session'}, None),
+    ('migrate_event_fences', {'uid': UID, 'session_id': 'session'}, None),
+    (
+        'append_event',
+        {'uid': UID, 'session_id': 'session', 'event': {'id': 'new', 'at': '', 'content': 'synthetic'}},
+        _messaging_session,
+    ),
     ('pending', {'message': SimpleNamespace(channel='loopback', provider='fake', external_user_id='external')}, None),
     ('unlink', {'uid': UID, 'link_id': 'link'}, _messaging_identity),
     ('delete_account', {'uid': UID}, None),
@@ -2702,6 +2713,7 @@ for method, base, setup in (
             'database.messaging.MessagingStore.' + method,
             base={'self': _messaging_store, **base},
             setup=setup,
+            domains={'limit': [1, 40]} if method == 'events' else {},
             patchers=(_messaging_cleanup, _messaging_decryption),
         )
     )
@@ -2722,6 +2734,30 @@ _add(
         'database.messaging.MessagingStore.pending_jobs',
         base={'self': _messaging_store, 'channel': 'loopback', 'provider': 'fake'},
         domains={'limit': [1, 100]},
+    )
+)
+
+_add(
+    DriverEntry(
+        'database.messaging.MessagingStore.claim_expired',
+        base={'self': _messaging_store, 'channel': 'telegram', 'provider': 'telegram'},
+        domains={'limit': [1, 20]},
+    )
+)
+_add(
+    DriverEntry(
+        'database.messaging.MessagingStore.prepare_launch',
+        base={'self': _messaging_store},
+        neutrals={'now': _NOW},
+        patchers=(lambda client: unittest.mock.patch('config.messaging.channel_enabled', lambda channel: False),),
+    )
+)
+_add(
+    DriverEntry(
+        'database.messaging.MessagingStore.cleanup',
+        base={'self': _messaging_store},
+        neutrals={'now': _NOW},
+        domains={'limit': [1, 100], 'retention_days': [7, 30]},
     )
 )
 
@@ -2755,5 +2791,34 @@ _add(
             'database.memories.unlock_all_memories',
         ),
         reason='Shared batch mechanics and bounded projection exercised by upgrade/reset unlock drivers',
+    )
+)
+
+
+from database.chat_context import ChatContextStore
+
+_context_store = ChatContextStore(messaging=_messaging_store)
+
+
+def _context_boundary(client, combo, trial):
+    client.documents['users/' + UID] = {'name': 'synthetic'}
+    client.documents['users/' + UID + '/chat_sessions/session'] = {'id': 'session'}
+    client.documents['users/' + UID + '/messages/boundary'] = {'chat_session_id': 'session', 'created_at': T0}
+
+
+_add(
+    DriverEntry(
+        'database.chat_context.ChatContextStore.source_page',
+        base={'self': _context_store, 'uid': UID, 'session_id': 'session', 'before_id': 'boundary'},
+        domains={'limit': [1, 40], 'cursor': [None, {'id': 'previous', 'at': T0.isoformat()}]},
+        setup=_context_boundary,
+    )
+)
+
+_add(
+    DriverEntry(
+        'database.chat_context_reads.get_recent_activity',
+        base={'uid': UID},
+        domains={'since': ['', T0.isoformat()], 'exclude_session': [None, 'session']},
     )
 )

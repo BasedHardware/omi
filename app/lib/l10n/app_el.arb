@@ -4075,5 +4075,10 @@
     "syncDetailsForSupport": "Για την υποστήριξη",
     "syncDetailsAudioFiles": "Αρχεία ήχου",
     "syncDetailsServerJobs": "Εργασίες διακομιστή (ολοκληρωμένες / σύνολο)",
-    "syncDetailsCopy": "Αντιγραφή λεπτομερειών για υποστήριξη"
+    "syncDetailsCopy": "Αντιγραφή λεπτομερειών για υποστήριξη",
+    "chatAppsChannelPlanRequired": "Διαθέσιμο στα Operator και Architect",
+    "chatAppsAtCapacity": "Το {app} είναι πλήρες",
+    "chatAppsJoinWaitlist": "Εγγραφή στη λίστα αναμονής",
+    "chatAppsOnWaitlist": "Είστε στη λίστα αναμονής",
+    "chatAppsWaitlistJoined": "Είστε στη λίστα αναμονής. Θα σας ενημερώσουμε όταν υπάρξει θέση."
 }

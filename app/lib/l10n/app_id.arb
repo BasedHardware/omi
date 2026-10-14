@@ -4110,5 +4110,10 @@
     "syncDetailsForSupport": "Untuk dukungan",
     "syncDetailsAudioFiles": "File audio",
     "syncDetailsServerJobs": "Tugas server (selesai / total)",
-    "syncDetailsCopy": "Salin detail untuk dukungan"
+    "syncDetailsCopy": "Salin detail untuk dukungan",
+    "chatAppsChannelPlanRequired": "Tersedia di Operator dan Architect",
+    "chatAppsAtCapacity": "{app} sudah penuh",
+    "chatAppsJoinWaitlist": "Gabung daftar tunggu",
+    "chatAppsOnWaitlist": "Anda ada di daftar tunggu",
+    "chatAppsWaitlistJoined": "Anda ada di daftar tunggu. Kami akan memberi tahu saat ada tempat."
 }

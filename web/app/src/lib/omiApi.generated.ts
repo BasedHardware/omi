@@ -1072,6 +1072,12 @@ export interface ChangeRef {
   type: "person" | "organization" | "project" | "conversation" | "memory" | "task";
 }
 
+export interface ChannelAvailability {
+  available: boolean;
+  reason?: string | null;
+  waitlisted?: boolean;
+}
+
 export interface ChannelLink {
   channel: string;
   display_handle?: string | null;
@@ -1104,6 +1110,7 @@ export interface ChannelLinkRequest {
 }
 
 export interface ChannelLinksResponse {
+  availability?: Record<string, ChannelAvailability>;
   links: Array<ChannelLink>;
 }
 
@@ -6190,6 +6197,7 @@ export interface OmiApiSchemas {
   "CaptureLinkSpec": CaptureLinkSpec;
   "CategoryEnum": CategoryEnum;
   "ChangeRef": ChangeRef;
+  "ChannelAvailability": ChannelAvailability;
   "ChannelLink": ChannelLink;
   "ChannelLinkProof": ChannelLinkProof;
   "ChannelLinkReceipt": ChannelLinkReceipt;

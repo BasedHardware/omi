@@ -13,7 +13,7 @@ from models.other import Person
 from models.client_processing import PROJECTION_FAMILY_FIELDS
 from models.conversation import Conversation
 from models.note_claims import current_note_claims
-from models.transcript_segment import strip_grouping_internal_fields
+from models.transcript_segment import TranscriptSegment, strip_grouping_internal_fields
 from utils.conversations.summary_selection import select_primary_summary
 
 logger = logging.getLogger(__name__)
@@ -240,6 +240,8 @@ def conversations_to_string(
     people: Optional[List[Person]] = None,
     user_name: Optional[str] = None,
     tz: Optional[str] = None,
+    include_refs: bool = False,
+    index_start: int = 1,
 ) -> str:
     """Format a sequence of Conversation objects into a human-readable string.
 
@@ -258,8 +260,9 @@ def conversations_to_string(
             _as_utc(conversation.created_at).astimezone(display_tz).strftime("%d %b %Y at %H:%M") + f" {tz_label}"
         )
         conversation_str = (
-            f"Conversation #{i + 1}\n"
-            f"{formatted_date} ({str(conversation.structured.category.value).capitalize()})\n"
+            f"Conversation #{i + index_start}\n"
+            + (f"ref: conversations/{conversation.id}\n" if include_refs else '')
+            + f"{formatted_date} ({str(conversation.structured.category.value).capitalize()})\n"
         )
 
         # Add started_at and finished_at if available
@@ -282,7 +285,11 @@ def conversations_to_string(
         if people_map:
             conv_person_ids = set(conversation.get_person_ids())
             if conv_person_ids:
-                attendees_names = [people_map[pid].name for pid in conv_person_ids if pid in people_map]
+                attendees_names = [
+                    people_map[pid].name + (f' (ref: people/{pid})' if include_refs else '')
+                    for pid in sorted(conv_person_ids)
+                    if pid in people_map
+                ]
                 if attendees_names:
                     attendees = ", ".join(attendees_names)
                     conversation_str += f"Attendees: {attendees}\n"
@@ -298,7 +305,20 @@ def conversations_to_string(
                 conversation_str += f"- {event.title} ({event.start} - {event.duration} minutes)\n"
 
         if use_transcript:
-            conversation_str += f"\nTranscript:\n{conversation.get_transcript(include_timestamps=include_timestamps, people=people, user_name=user_name)}\n"  # type: ignore[reportArgumentType]  # conversation.py reverted to main; people/user_name may be Optional
+            if include_refs:
+                show_timestamps = include_timestamps and TranscriptSegment.can_display_seconds(
+                    conversation.transcript_segments
+                )
+                transcript = '\n\n'.join(
+                    f'#{segment.id} '
+                    + TranscriptSegment.segments_as_string(
+                        [segment], include_timestamps=show_timestamps, people=people, user_name=user_name
+                    )
+                    for segment in conversation.transcript_segments
+                )
+            else:
+                transcript = conversation.get_transcript(include_timestamps=include_timestamps, people=people, user_name=user_name)  # type: ignore[reportArgumentType]
+            conversation_str += f"\nTranscript:\n{transcript}\n"
             # photos
             photo_descriptions = conversation.get_photos_descriptions(include_timestamps=include_timestamps)
             if photo_descriptions != 'None':

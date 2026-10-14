@@ -25,17 +25,17 @@ class ChannelLink {
   });
 
   factory ChannelLink.fromGenerated(wire.GeneratedChannelLink link) => ChannelLink(
-        id: link.id,
-        channelId: link.channel,
-        provider: link.provider,
-        externalId: link.externalId,
-        linkedAt: link.linkedAt,
-        visibleInApp: link.visibleInApp,
-        voiceNotes: link.voiceNotes,
-        keepPrivateMemoriesInApp: link.keepPrivateMemoriesInApp,
-        insights: link.insights,
-        displayHandle: link.displayHandle,
-      );
+    id: link.id,
+    channelId: link.channel,
+    provider: link.provider,
+    externalId: link.externalId,
+    linkedAt: link.linkedAt,
+    visibleInApp: link.visibleInApp,
+    voiceNotes: link.voiceNotes,
+    keepPrivateMemoriesInApp: link.keepPrivateMemoriesInApp,
+    insights: link.insights,
+    displayHandle: link.displayHandle,
+  );
 
   final String id;
   final String channelId;
@@ -69,24 +69,85 @@ class ChannelLink {
     return id;
   }
 
-  ChannelLink copyWith({
-    bool? visibleInApp,
-    bool? voiceNotes,
-    bool? keepPrivateMemoriesInApp,
-  }) =>
-      ChannelLink(
-        id: id,
-        channelId: channelId,
-        provider: provider,
-        externalId: externalId,
-        linkedAt: linkedAt,
-        visibleInApp: visibleInApp ?? this.visibleInApp,
-        voiceNotes: voiceNotes ?? this.voiceNotes,
-        keepPrivateMemoriesInApp: keepPrivateMemoriesInApp ?? this.keepPrivateMemoriesInApp,
-        insights: insights,
-        displayHandle: displayHandle,
-      );
+  ChannelLink copyWith({bool? visibleInApp, bool? voiceNotes, bool? keepPrivateMemoriesInApp}) => ChannelLink(
+    id: id,
+    channelId: channelId,
+    provider: provider,
+    externalId: externalId,
+    linkedAt: linkedAt,
+    visibleInApp: visibleInApp ?? this.visibleInApp,
+    voiceNotes: voiceNotes ?? this.voiceNotes,
+    keepPrivateMemoriesInApp: keepPrivateMemoriesInApp ?? this.keepPrivateMemoriesInApp,
+    insights: insights,
+    displayHandle: displayHandle,
+  );
 }
+
+/// What the Chat apps page offers for a channel the account has not linked, from the backend's
+/// `availability` map.
+enum ChannelAccess {
+  /// Connect as usual.
+  open,
+
+  /// Needs any paid plan: the Pro lock.
+  paidPlan,
+
+  /// Needs a specific plan (iMessage: Operator or Architect).
+  channelPlan,
+
+  /// Every seat is taken; the account can join the waitlist.
+  seatCap,
+
+  /// Every seat is taken and the account is already on the waitlist.
+  waitlisted,
+
+  /// Off, the account is being deleted, or the backend could not tell: shown as coming soon.
+  unavailable,
+}
+
+/// One channel's entry in `GET /v1/messaging/links` `availability`. Content-free.
+@immutable
+class ChannelAvailability {
+  const ChannelAvailability({required this.available, this.reason, this.waitlisted = false});
+
+  /// Reads one `availability` value; null when it is not an object with a boolean `available`.
+  static ChannelAvailability? fromJson(Object? row) {
+    if (row is! Map) return null;
+    final available = row['available'];
+    if (available is! bool) return null;
+    final reason = row['reason'];
+    return ChannelAvailability(
+      available: available,
+      reason: reason is String ? reason : null,
+      waitlisted: row['waitlisted'] == true,
+    );
+  }
+
+  static const seatCapReason = 'seat_cap';
+
+  /// After a 409 on minting: the backend has put the account on the waitlist.
+  static const joinedWaitlist = ChannelAvailability(available: false, reason: seatCapReason, waitlisted: true);
+
+  final bool available;
+
+  /// channel_disabled | account_deletion | paid_plan | channel_plan | seat_cap | unavailable.
+  final String? reason;
+  final bool waitlisted;
+
+  ChannelAccess get access {
+    if (available) return ChannelAccess.open;
+    return switch (reason) {
+      'paid_plan' => ChannelAccess.paidPlan,
+      'channel_plan' => ChannelAccess.channelPlan,
+      seatCapReason => waitlisted ? ChannelAccess.waitlisted : ChannelAccess.seatCap,
+      // channel_disabled, account_deletion, unavailable, and any reason this build doesn't know.
+      _ => ChannelAccess.unavailable,
+    };
+  }
+}
+
+/// A 409 from minting means the channel's seats are full; the backend waitlists the account.
+bool isSeatCapProblem(ApiProblem problem) => problem.statusCode == 409;
 
 /// Chat-app links for the signed-in account: the gate, the list, and the actions on it.
 ///
@@ -98,10 +159,10 @@ class MessagingChannelsProvider extends ChangeNotifier {
     Future<ChatAppsConfig> Function()? readConfig,
     bool Function(String key)? readLocalFlag,
     Future<bool> Function(String key, bool value)? writeLocalFlag,
-  })  : _api = api,
-        _readConfig = readConfig ?? ChatAppsGate.read,
-        _readLocalFlag = readLocalFlag ?? ((key) => SharedPreferencesUtil().getBool(key)),
-        _writeLocalFlag = writeLocalFlag ?? ((key, value) => SharedPreferencesUtil().saveBool(key, value));
+  }) : _api = api,
+       _readConfig = readConfig ?? ChatAppsGate.read,
+       _readLocalFlag = readLocalFlag ?? ((key) => SharedPreferencesUtil().getBool(key)),
+       _writeLocalFlag = writeLocalFlag ?? ((key, value) => SharedPreferencesUtil().saveBool(key, value));
 
   final MessagingChannelsApi _api;
   final Future<ChatAppsConfig> Function() _readConfig;
@@ -113,10 +174,12 @@ class MessagingChannelsProvider extends ChangeNotifier {
   ChatAppsConfig _config = ChatAppsConfig.off;
   bool _configLoaded = false;
   List<ChannelLink> _links = const [];
+  Map<ChatChannel, ChannelAvailability> _availability = const {};
   bool _linksLoaded = false;
   bool _loadingLinks = false;
   ApiProblem? _linksProblem;
   Future<void>? _loadInFlight;
+  DateTime? _lastLoad;
 
   ChatAppsConfig get config => _config;
   bool get configLoaded => _configLoaded;
@@ -138,6 +201,10 @@ class MessagingChannelsProvider extends ChangeNotifier {
     return null;
   }
 
+  /// The backend's word on linking [channel], or null when the backend did not send one (older
+  /// backends): the page then decides from the flag payload and the plan as before.
+  ChannelAvailability? availabilityFor(ChatChannel channel) => _availability[channel];
+
   ChannelLink? linkById(String id) {
     for (final link in _links) {
       if (link.id == id) return link;
@@ -154,13 +221,20 @@ class MessagingChannelsProvider extends ChangeNotifier {
   }
 
   /// Reads the gate and the links. Concurrent callers share one load.
-  Future<void> load() => _loadInFlight ??= _load().whenComplete(() => _loadInFlight = null);
+  Future<void> load() {
+    final last = _lastLoad;
+    if (last != null && DateTime.now().difference(last) < const Duration(seconds: 60)) {
+      return Future.value();
+    }
+    return _loadInFlight ??= _load().whenComplete(() => _loadInFlight = null);
+  }
 
   Future<void> _load() async {
     final configFuture = _readConfig();
     await refreshLinks();
     _config = await configFuture;
     _configLoaded = true;
+    _lastLoad = DateTime.now();
     notifyListeners();
   }
 
@@ -172,7 +246,16 @@ class MessagingChannelsProvider extends ChangeNotifier {
     _loadingLinks = false;
     switch (result) {
       case ApiSuccess(:final data):
-        _links = [for (final link in data) ChannelLink.fromGenerated(link)];
+        _links = [for (final link in data.links) ChannelLink.fromGenerated(link)];
+        // Older backends omit `availability`: an empty map keeps the plan-based behavior.
+        _availability = {
+          for (final entry in data.availability.entries)
+            if ((ChatChannel.fromWire(entry.key), ChannelAvailability.fromJson(entry.value)) case (
+              final channel?,
+              final row?,
+            ))
+              channel: row,
+        };
         _linksLoaded = true;
         _linksProblem = null;
         notifyListeners();
@@ -185,21 +268,33 @@ class MessagingChannelsProvider extends ChangeNotifier {
   }
 
   /// Mints a one-time proof for [channel]: `token` for a deep link, `code` for the person to
-  /// text. Fails with `forbidden` outside the cohort or without Pro.
-  Future<ApiResult<wire.GeneratedChannelLinkProof>> mintProof(
-    ChatChannel channel, {
-    required String kind,
-  }) {
+  /// text. Fails with `forbidden` outside the cohort or without Pro, and with a 409 when the
+  /// channel is full; the account is then on the waitlist and [availabilityFor] says so.
+  Future<ApiResult<wire.GeneratedChannelLinkProof>> mintProof(ChatChannel channel, {required String kind}) async {
     final endpoint = _config.endpoint(channel);
-    if (endpoint == null)
-      return Future.value(
-        const ApiFailure(ApiProblem(ApiProblemKind.forbidden)),
-      );
-    return _api.mintProof(
-      channel: channel.wireId,
-      provider: endpoint.provider,
-      kind: kind,
-    );
+    if (endpoint == null) return const ApiFailure(ApiProblem(ApiProblemKind.forbidden));
+    final result = await _api.mintProof(channel: channel.wireId, provider: endpoint.provider, kind: kind);
+    if (result case ApiFailure(:final problem) when isSeatCapProblem(problem)) {
+      _availability = {..._availability, channel: ChannelAvailability.joinedWaitlist};
+      notifyListeners();
+    }
+    return result;
+  }
+
+  /// Joins [channel]'s waitlist. Minting is how: a full channel answers 409 and waitlists the
+  /// account. Succeeds with true when waitlisted, or false when a seat was free after all (the
+  /// channel is then open to connect).
+  Future<ApiResult<bool>> joinWaitlist(ChatChannel channel) async {
+    final result = await mintProof(channel, kind: channel == ChatChannel.imessage ? 'code' : 'token');
+    switch (result) {
+      case ApiSuccess():
+        _availability = {..._availability, channel: const ChannelAvailability(available: true)};
+        notifyListeners();
+        return const ApiSuccess(false);
+      case ApiFailure(:final problem):
+        if (isSeatCapProblem(problem)) return const ApiSuccess(true);
+        return ApiFailure(problem);
+    }
   }
 
   /// Unlinks and forgets the link locally; a 404 means it was already gone.
@@ -221,30 +316,18 @@ class MessagingChannelsProvider extends ChangeNotifier {
   }
 
   /// Applies the switch at once and reverts it if the server refuses.
-  Future<ApiResult<void>> setVisibleInApp(ChannelLink link, bool visible) => _patch(
-        link,
-        visible,
-        (l, value) => l.copyWith(visibleInApp: value),
-        _api.setVisibleInApp,
-      );
+  Future<ApiResult<void>> setVisibleInApp(ChannelLink link, bool visible) =>
+      _patch(link, visible, (l, value) => l.copyWith(visibleInApp: value), _api.setVisibleInApp);
 
-  Future<ApiResult<void>> setVoiceNotes(ChannelLink link, bool enabled) => _patch(
-        link,
-        enabled,
-        (l, value) => l.copyWith(voiceNotes: value),
-        _api.setVoiceNotes,
-      );
+  Future<ApiResult<void>> setVoiceNotes(ChannelLink link, bool enabled) =>
+      _patch(link, enabled, (l, value) => l.copyWith(voiceNotes: value), _api.setVoiceNotes);
 
-  Future<ApiResult<void>> setKeepPrivateMemoriesInApp(
-    ChannelLink link,
-    bool enabled,
-  ) =>
-      _patch(
-        link,
-        enabled,
-        (l, value) => l.copyWith(keepPrivateMemoriesInApp: value),
-        _api.setKeepPrivateMemoriesInApp,
-      );
+  Future<ApiResult<void>> setKeepPrivateMemoriesInApp(ChannelLink link, bool enabled) => _patch(
+    link,
+    enabled,
+    (l, value) => l.copyWith(keepPrivateMemoriesInApp: value),
+    _api.setKeepPrivateMemoriesInApp,
+  );
 
   Future<ApiResult<void>> _patch(
     ChannelLink link,
@@ -274,10 +357,16 @@ class MessagingChannelsProvider extends ChangeNotifier {
   }
 
   @visibleForTesting
-  void debugSet({ChatAppsConfig? config, List<ChannelLink>? links}) {
+  void debugSet({
+    ChatAppsConfig? config,
+    List<ChannelLink>? links,
+    Map<ChatChannel, ChannelAvailability>? availability,
+  }) {
+    if (availability != null) _availability = availability;
     if (config != null) {
       _config = config;
       _configLoaded = true;
+      _lastLoad = DateTime.now();
     }
     if (links != null) {
       _links = links;

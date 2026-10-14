@@ -13327,4 +13327,21 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get syncDetailsCopy => 'Részletek másolása az ügyfélszolgálatnak';
+
+  @override
+  String get chatAppsChannelPlanRequired => 'Elérhető az Operator és Architect csomagban';
+
+  @override
+  String chatAppsAtCapacity(String app) {
+    return 'A(z) $app megtelt';
+  }
+
+  @override
+  String get chatAppsJoinWaitlist => 'Feliratkozás a várólistára';
+
+  @override
+  String get chatAppsOnWaitlist => 'Fent vagy a várólistán';
+
+  @override
+  String get chatAppsWaitlistJoined => 'Fent vagy a várólistán. Szólunk, ha lesz hely.';
 }

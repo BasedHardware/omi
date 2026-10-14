@@ -509,6 +509,15 @@ def with_cloud_run_oauth_secrets(payload: str) -> str:
         payload,
         flags=re.DOTALL,
     )
+    # Keep unrelated Cloud Run failure fixtures complete under the new dark gate.
+    payload = re.sub(
+        r'("backend-sync(?:-backfill)?":\s*\{.*?"env":\s*\[)',
+        r'\1\n        {"name": "SYNC_LEGACY_FRESH_ENABLED", "value": "false"},'
+        r'\n        {"name": "SYNC_LEGACY_FRESH_HOURLY_TOKENS", "value": "60"},'
+        r'\n        {"name": "SYNC_LEGACY_FRESH_BURST_TOKENS", "value": "10"},',
+        payload,
+        flags=re.DOTALL,
+    )
     return with_backend_integration_events_secret(payload)
 
 

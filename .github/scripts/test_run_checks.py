@@ -607,6 +607,17 @@ class RunnerBehaviorTests(unittest.TestCase):
         self.assertIs(command_for_host(node_command, platform_name="nt"), node_command)
         self.assertIs(command_for_host(bash_command, platform_name="posix"), bash_command)
 
+    def test_posix_python3_alias_honors_the_selected_interpreter(self) -> None:
+        """A host whose PATH `python3` is Xcode CLT 3.9 must not run manifest
+        checks under it: the alias follows the interpreter that launched
+        run_checks (the dev harness already floor-probed that one)."""
+
+        command = ["python3", ".github/scripts/check.py"]
+        resolved = command_for_host(command, platform_name="posix", python_executable="/path/python3.14")
+        self.assertEqual(resolved, ["/path/python3.14", ".github/scripts/check.py"])
+        # No explicit interpreter: keep the alias untouched (CI hosts, PATH `python3`).
+        self.assertIs(command_for_host(command, platform_name="posix"), command)
+
     def test_execute_checks_normalizes_the_manifest_command(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -634,7 +645,7 @@ class RunnerBehaviorTests(unittest.TestCase):
                 )
 
             self.assertEqual(result, 0)
-            normalize.assert_called_once_with(["bash", "check.sh"])
+            normalize.assert_called_once_with(["bash", "check.sh"], python_executable=sys.executable)
             run.assert_called_once_with(["git-bash.exe", "check.sh"], cwd=root, check=False)
 
     def test_windows_bash_resolution_uses_the_git_install(self) -> None:

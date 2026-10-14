@@ -4075,5 +4075,10 @@
     "syncDetailsForSupport": "Dành cho hỗ trợ",
     "syncDetailsAudioFiles": "Tệp âm thanh",
     "syncDetailsServerJobs": "Tác vụ máy chủ (xong / tổng)",
-    "syncDetailsCopy": "Sao chép chi tiết cho bộ phận hỗ trợ"
+    "syncDetailsCopy": "Sao chép chi tiết cho bộ phận hỗ trợ",
+    "chatAppsChannelPlanRequired": "Có trên gói Operator và Architect",
+    "chatAppsAtCapacity": "{app} đã hết chỗ",
+    "chatAppsJoinWaitlist": "Tham gia danh sách chờ",
+    "chatAppsOnWaitlist": "Bạn đã có trong danh sách chờ",
+    "chatAppsWaitlistJoined": "Bạn đã có trong danh sách chờ. Chúng tôi sẽ báo khi có chỗ."
 }
