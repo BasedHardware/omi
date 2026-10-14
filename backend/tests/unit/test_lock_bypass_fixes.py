@@ -1047,7 +1047,7 @@ class TestUsersLockEnforcement:
     """L2/L3: Users endpoints must enforce lock."""
 
     def test_followup_question_rejects_locked(self):
-        """L2: delete_person_endpoint must raise 402 for locked conversations."""
+        """L2: delete_followup_question_endpoint must raise 402 for locked conversations."""
         from routers.users import delete_followup_question_endpoint
         from fastapi import HTTPException
 
@@ -1060,7 +1060,7 @@ class TestUsersLockEnforcement:
             assert exc_info.value.status_code == 402
 
     def test_followup_question_allows_unlocked(self):
-        """delete_person_endpoint should proceed for unlocked conversations."""
+        """delete_followup_question_endpoint should proceed for unlocked conversations."""
         from routers.users import delete_followup_question_endpoint
 
         with patch(
