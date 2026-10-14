@@ -40,7 +40,7 @@ async def prepare(uid, session_id, message_ids, *, store=None, summary=summarize
     """
     if not session_id or not message_ids:
         return {'summary': '', 'digest': ''}
-    store = store or ChatContextStore()
+    store = store or await run_blocking(db_executor, ChatContextStore)
     state = await run_blocking(db_executor, store.load, uid, session_id)
     original = dict(state)
     anchor = message_ids[0]
