@@ -165,6 +165,11 @@ class TelegramAdapter(BaseAdapter):
         )
         quoted = item.get('reply_to_message', {})
         quoted_text = quoted.get('text') or quoted.get('caption')
+        if not quoted_text:
+            for kind in ('voice', 'audio', 'photo', 'video', 'video_note', 'document', 'sticker', 'animation'):
+                if quoted.get(kind):
+                    quoted_text = '[voice note]' if kind in ('voice', 'video_note') else '[' + kind + ']'
+                    break
         return (
             ChannelMessage(
                 self.channel,
@@ -196,6 +201,7 @@ class TelegramAdapter(BaseAdapter):
                 ),
                 attachments=tuple(replace_attachment_voice(a) for a in attachments),
                 media_group_id=str(item['media_group_id']) if item.get('media_group_id') else None,
+                quoted_message_id=str(quoted['message_id']) if quoted.get('message_id') else None,
                 quoted_text=quoted_text[:2000] if isinstance(quoted_text, str) else None,
                 forwarded=bool(item.get('forward_origin')) and not bool(callback),
                 callback_id=str(callback['id']) if callback else None,

@@ -751,14 +751,16 @@ def test_revocation_during_429_backoff_blocks_retry(adapter):
 def test_media_prepare_stt_and_searchable_file_ids(adapter, monkeypatch):
     from database import chat
     from utils.messaging.adapters.media import ChatMediaStore
-    from utils.stt import pre_recorded
+    from utils import chat as voice_chat
 
+    monkeypatch.setattr(voice_chat, 'linear16_pcm_is_silent', lambda *a, **k: False)
+    monkeypatch.setattr(voice_chat, 'resolve_voice_message_language', lambda *a: 'en')
     calls = []
     media = ChatMediaStore()
     monkeypatch.setattr(
-        pre_recorded,
+        voice_chat,
         'prerecorded_from_bytes',
-        lambda data, **kwargs: [{'word': 'voice'}, {'punctuated_word': 'transcribed.'}],
+        lambda data, **kwargs: [{'text': 'voice transcribed.', 'timestamp': [0, 0.12], 'speaker': 'SPEAKER_00'}],
     )
 
     def ingest(uid, attachment, data):
@@ -786,7 +788,7 @@ def test_media_prepare_stt_and_searchable_file_ids(adapter, monkeypatch):
     async def run():
         voice = adapter.parse(fixture(adapter.provider, 'voice'))[0]
         result = await adapter.prepare(voice, 'test', {'id': 'surface-session'}, guard)
-        assert 'voice transcribed.' in result.text and not result.attachments
+        assert 'Voice transcribed.' in result.text and not result.attachments
         document = adapter.parse(fixture(adapter.provider, 'document'))[0]
         result = await adapter.prepare(document, 'test', {'id': 'surface-session'}, guard)
         assert result.media[0].file_store_ref == 'owned-file-id'

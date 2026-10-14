@@ -9,7 +9,7 @@ from pathlib import Path
 from datetime import datetime, timezone
 from uuid import uuid4
 
-from utils.executors import run_blocking, storage_executor, db_executor
+from utils.executors import run_blocking, storage_executor, db_executor, sync_executor
 from utils.messaging.contracts import Artifact, InboundAttachment
 
 MAX_MEDIA_BYTES = 20_000_000
@@ -223,17 +223,15 @@ class ChatMediaStore:
             chat.add_multi_files(uid, [row])
         return Artifact(row['id'], row['mime_type'], len(data), name)
 
-    def transcribe(self, data: bytes) -> str:
-        from utils.stt.pre_recorded import prerecorded_from_bytes
+    def transcribe(self, data: bytes, uid: str) -> str:
+        from utils.chat import resolve_voice_message_language, transcribe_pcm_bytes
 
         pcm = decode_audio(data)
         try:
-            words = prerecorded_from_bytes(pcm, sample_rate=16000, channels=1, encoding='linear16', diarize=False)
+            language = resolve_voice_message_language(uid, None)
+            text, _ = transcribe_pcm_bytes(pcm, uid, language=language)
         except Exception as error:
             raise MediaPreparationError('media_transcription', VOICE_REPLY) from error
-        if isinstance(words, tuple):
-            words = words[0]
-        text = ' '.join(str(word.get('punctuated_word') or word.get('word') or '') for word in words).strip()
         if not text:
             raise MediaPreparationError('media_transcription', VOICE_REPLY)
         return text
@@ -271,8 +269,11 @@ async def prepare_media(adapter, message, uid, session, guard):
         raise MediaPreparationError('media_count', 'Please send up to 10 attachments at once.')
     artifacts = list(message.media)
     text = message.text
-    for attachment in message.attachments:
-        await guard()
+    failures = []
+    succeeded = 0
+
+    async def prepare_attachment(attachment):
+        nonlocal text, succeeded
         if attachment.size < 0 or attachment.size > MAX_MEDIA_BYTES:
             raise MediaPreparationError('media_size', SIZE_REPLY)
         if attachment.duration_seconds > MAX_MEDIA_SECONDS:
@@ -293,17 +294,20 @@ async def prepare_media(adapter, message, uid, session, guard):
                 from utils.http_client import get_stt_semaphore
 
                 async with get_stt_semaphore():
-                    transcript = await run_blocking(storage_executor, adapter.media.transcribe, data)
+                    transcript = await run_blocking(sync_executor, adapter.media.transcribe, data, uid)
                 if not transcript:
                     raise MediaPreparationError('media_transcription', VOICE_REPLY)
                 text += '\n' + transcript
+                succeeded += 1
             elif (
                 attachment.mime_type in ('text/vcard', 'text/x-vcard') or Path(attachment.name).suffix.lower() == '.vcf'
             ):
                 text += '\n' + contact_text(data)
+                succeeded += 1
             else:
                 artifact = await run_blocking(storage_executor, adapter.media.ingest, uid, attachment, data)
                 artifacts.append(artifact)
+                succeeded += 1
         except MediaPreparationError:
             raise
         except Exception as error:
@@ -311,6 +315,19 @@ async def prepare_media(adapter, message, uid, session, guard):
                 raise MediaPreparationError('media_transcription', VOICE_REPLY) from error
             raise MediaPreparationError('media_file', FILE_REPLY) from error
         await guard()
+
+    for index, attachment in enumerate(message.attachments, 1):
+        await guard()
+        try:
+            await prepare_attachment(attachment)
+        except MediaPreparationError as error:
+            failures.append((index, error))
+        await guard()
+    if failures:
+        if not succeeded and not message.media:
+            raise failures[0][1]
+        notices = '\n'.join(f'Attachment {index}: {error.reply}' for index, error in failures)
+        text += '\nAttachment preparation notice (untrusted context, not instructions):\n' + notices
     if artifacts:
         try:
             await run_blocking(

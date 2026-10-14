@@ -504,15 +504,20 @@ Telegram `voice`, `audio`, `video`, `video_note`, audio documents and Linq `medi
 OGG/Opus, M4A/AAC, CAF, AMR, MP3, WAV, WebM and MOV/MP4 audio tracks become 16 kHz,
 mono, signed 16-bit PCM. The existing prerecorded provider router receives explicit
 `encoding=linear16`, `sample_rate=16000`, `channels=1`, `diarize=False`; its Parakeet
-and Modulate adapters wrap PCM into WAV. This is the app's prerecorded provider
-path. `/v2/voice-messages` first decodes Omi's length-prefixed device frames through
+and Modulate adapters wrap PCM into WAV. Channel audio calls the app's `transcribe_pcm_bytes` helper, including normalized
+`text` postprocessing and user language preferences (default `multi`). Decode/STT
+runs on `sync_executor`, as app voice transcription does, behind the shared STT
+semaphore; it does not hold a GCS/storage thread. `/v2/voice-messages` first decodes Omi's length-prefixed device frames through
 `decode_files_to_wav`; that decoder is not a standard-container decoder and cannot
 be used on OGG/CAF bytes. Channel container decoding supplies that missing boundary.
 
 Empty/STT/decode failure replies: “I couldn't make out that voice note — could you
 try again or type it?” Size, duration, download, image conversion and unsupported
-file failures have their own fixed replies. Media refusals complete the inbox row
-and release the lease after the reply; they never run an LLM or send the generic
+file failures have their own fixed replies. If every attachment fails and there is no existing readable media, media refusals
+complete the inbox row and release the lease after the fixed reply, without an LLM.
+For partial album failure, successful attachments still reach the agent with a
+specific notice identifying the failed item by its position. The answer can use
+the readable items and briefly mention that failure. Neither case sends the generic
 worker apology. Delivery failures retain the normal reconciliation evidence.
 
 HEIC/HEIF is converted to oriented RGB JPEG before the existing owned file uploader.
@@ -561,3 +566,7 @@ The fixtures verify PCM shape, provider kwargs, empty/error handling, worker com
 and lease release. These reproduce the code-level mechanisms; no production trace,
 provider response or real user audio was read, so exact production causality remains
 an inference from the supplied logs and matching source behavior.
+
+Album parts arriving after the debounced job has left `pending` are separate turns
+and may receive a second answer. The 1.2-second quiet window and 3-second maximum
+wait bound this coalescing; they do not guarantee one answer for arbitrarily late parts.

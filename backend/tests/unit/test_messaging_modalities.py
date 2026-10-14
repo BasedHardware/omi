@@ -60,23 +60,31 @@ def parsed(adapter, kind='text', /, **fields: Any):
     return adapter.parse(json.dumps(value).encode())
 
 
+@pytest.fixture
+def voice_environment(monkeypatch):
+    from utils import chat
+
+    # Tiny tone fixtures exercise container decoding, not speech detection.
+    monkeypatch.setattr(chat, 'linear16_pcm_is_silent', lambda *a, **k: False)
+    monkeypatch.setattr(chat, 'resolve_voice_message_language', lambda uid, language: 'en')
+    return chat
+
+
 @pytest.mark.parametrize(
     'filename', ['voice.ogg', 'voice.m4a', 'voice.caf', 'voice.mp3', 'voice.wav', 'voice.webm', 'video.mp4']
 )
-def test_real_container_transcription_passes_only_pcm_to_stt(monkeypatch, filename):
-    from utils.stt import pre_recorded
-
+def test_real_container_transcription_passes_only_pcm_to_stt(monkeypatch, filename, voice_environment):
     calls = []
 
-    def stt(data, *, sample_rate, channels, encoding, diarize):
+    def stt(data, *, sample_rate, channels, encoding, diarize, language, model, keywords):
         assert sample_rate == 16000 and channels == 1 and encoding == 'linear16' and diarize is False
         assert 3000 <= len(data) <= 6000 and len(data) % 2 == 0
         assert not data.startswith((b'OggS', b'RIFF', b'caff', b'\x1aE\xdf\xa3'))
         calls.append(data)
-        return [{'word': 'test'}, {'punctuated_word': 'transcript.'}]
+        return [{'text': 'test transcript.', 'timestamp': [0, 0.12], 'speaker': 'SPEAKER_00'}]
 
-    monkeypatch.setattr(pre_recorded, 'prerecorded_from_bytes', stt)
-    assert ChatMediaStore().transcribe((FIXTURES / 'audio' / filename).read_bytes()) == 'test transcript.'
+    monkeypatch.setattr(voice_environment, 'prerecorded_from_bytes', stt)
+    assert ChatMediaStore().transcribe((FIXTURES / 'audio' / filename).read_bytes(), 'u') == 'Test transcript.'
     assert len(calls) == 1
 
 
@@ -107,13 +115,11 @@ def test_decoded_duration_cap_is_enforced(monkeypatch):
     assert failed.value.reply == DURATION_REPLY
 
 
-@pytest.mark.parametrize('words', [[], [{'word': ''}]])
-def test_empty_stt_is_typed(monkeypatch, words):
-    from utils.stt import pre_recorded
-
-    monkeypatch.setattr(pre_recorded, 'prerecorded_from_bytes', lambda *a, **k: words)
+@pytest.mark.parametrize('words', [[], [{'text': '', 'timestamp': [0, 0.12], 'speaker': 'SPEAKER_00'}]])
+def test_empty_stt_is_typed(monkeypatch, words, voice_environment):
+    monkeypatch.setattr(voice_environment, 'prerecorded_from_bytes', lambda *a, **k: words)
     with pytest.raises(MediaPreparationError) as failed:
-        ChatMediaStore().transcribe((FIXTURES / 'audio' / 'voice.ogg').read_bytes())
+        ChatMediaStore().transcribe((FIXTURES / 'audio' / 'voice.ogg').read_bytes(), 'u')
     assert failed.value.reply == VOICE_REPLY
 
 
@@ -203,9 +209,9 @@ def test_location_contacts_quotes_are_untrusted_context(adapter):
         ('download', "I couldn't download that attachment. Could you send it again?"),
     ],
 )
-def test_media_failure_worker_sends_one_specific_reply_and_releases(adapter, monkeypatch, failure, expected):
-    from utils.stt import pre_recorded
-
+def test_media_failure_worker_sends_one_specific_reply_and_releases(
+    adapter, monkeypatch, failure, expected, voice_environment
+):
     incoming = parsed(adapter, 'voice')[0]
     attachment = incoming.attachments[0]
     if failure == 'size':
@@ -228,7 +234,7 @@ def test_media_failure_worker_sends_one_specific_reply_and_releases(adapter, mon
             raise RuntimeError('network failure')
         return []
 
-    monkeypatch.setattr(pre_recorded, 'prerecorded_from_bytes', stt)
+    monkeypatch.setattr(voice_environment, 'prerecorded_from_bytes', stt)
     adapter.media = ChatMediaStore()
     if failure == 'unsupported':
         from utils.other.chat_file import UnsupportedChatFileError
@@ -477,7 +483,8 @@ def test_ack_worker_has_one_light_reply_and_no_model_turn(adapter, monkeypatch):
     assert sent == ['Got it 🙂'] and limited == ['u'] and not store.leases
 
 
-def test_album_worker_runs_one_turn_with_both_photos(adapter, monkeypatch):
+@pytest.mark.parametrize('bad_first', [False, True])
+def test_album_worker_runs_one_turn_with_both_photos(adapter, monkeypatch, bad_first):
     if adapter.channel != 'telegram':
         return
     from database import chat
@@ -496,6 +503,8 @@ def test_album_worker_runs_one_turn_with_both_photos(adapter, monkeypatch):
 
     def ingest(uid, attachment, data):
         calls.append(attachment.reference)
+        if bad_first and len(calls) == 1:
+            raise MediaPreparationError('media_file', FILE_REPLY)
         return Artifact('file-' + str(len(calls)), 'image/jpeg', len(data), 'photo.jpg')
 
     monkeypatch.setattr(adapter.media, 'ingest', ingest)
@@ -508,12 +517,12 @@ def test_album_worker_runs_one_turn_with_both_photos(adapter, monkeypatch):
 
     monkeypatch.setattr(gateway, '_turn', turn)
     assert asyncio.run(gateway.process(path)) is True
-    assert len(turns) == 1 and len(turns[0].media) == 2 and not store.leases
+    assert len(turns) == 1 and len(turns[0].media) == (1 if bad_first else 2) and not store.leases
+    if bad_first:
+        assert 'Attachment 1:' in turns[0].text and FILE_REPLY in turns[0].text
 
 
-def test_delivered_media_refusal_is_not_followed_by_generic_apology(adapter, monkeypatch):
-    from utils.stt import pre_recorded
-
+def test_delivered_media_refusal_is_not_followed_by_generic_apology(adapter, monkeypatch, voice_environment):
     message = parsed(adapter, 'voice')[0]
     store = MemoryStore()
     store.identities[(message.channel, message.provider, message.external_user_id)] = dict(
@@ -525,7 +534,7 @@ def test_delivered_media_refusal_is_not_followed_by_generic_apology(adapter, mon
         return (FIXTURES / 'audio' / 'voice.ogg').read_bytes()
 
     monkeypatch.setattr(adapter, 'download', download)
-    monkeypatch.setattr(pre_recorded, 'prerecorded_from_bytes', lambda *a, **k: [])
+    monkeypatch.setattr(voice_environment, 'prerecorded_from_bytes', lambda *a, **k: [])
 
     def complete(path):
         raise RuntimeError('Tombstone unavailable')
@@ -719,3 +728,163 @@ def test_too_many_attachments_refuses_before_download(adapter):
         asyncio.run(adapter.prepare(message, 'u', {'id': 'session'}, guard))
     assert failed.value.reply == 'Please send up to 10 attachments at once.'
     assert not adapter.transport.downloads
+
+
+def test_ogg_through_real_parakeet_normalization(monkeypatch, voice_environment):
+    import httpx
+    import wave
+    from utils.stt import pre_recorded
+
+    monkeypatch.setenv('HOSTED_PARAKEET_API_URL', 'http://parakeet.invalid')
+    monkeypatch.setattr(pre_recorded, 'get_prerecorded_models', lambda: ('parakeet',))
+    posted = []
+
+    def post(url, **kwargs):
+        wav = kwargs['files']['file'][1].getvalue()
+        with wave.open(BytesIO(wav)) as audio:
+            assert (audio.getframerate(), audio.getnchannels(), audio.getsampwidth()) == (16000, 1, 2)
+            assert audio.readframes(audio.getnframes()) == decode_audio((FIXTURES / 'audio' / 'voice.ogg').read_bytes())
+        posted.append(wav)
+        return httpx.Response(
+            200,
+            request=httpx.Request('POST', url),
+            json={
+                'text': 'Real normalized transcript.',
+                'segments': [{'text': 'Real normalized transcript.', 'start': 0, 'end': 0.12}],
+            },
+        )
+
+    client = MagicMock()
+    client.__enter__.return_value = client
+    client.post.side_effect = post
+    monkeypatch.setattr(pre_recorded.httpx, 'Client', lambda **k: client)
+    assert (
+        ChatMediaStore().transcribe((FIXTURES / 'audio' / 'voice.ogg').read_bytes(), 'u')
+        == 'Real normalized transcript.'
+    )
+    assert len(posted) == 1
+
+
+@pytest.mark.parametrize(
+    'single,preferred,expected', [(False, 'vi', 'multi'), (True, 'es', 'es'), (False, None, 'multi')]
+)
+def test_channel_voice_matches_user_language(monkeypatch, single, preferred, expected):
+    from utils import chat
+
+    monkeypatch.setattr(chat.user_db, 'get_user_language_preference', lambda uid: preferred)
+    monkeypatch.setattr(
+        chat.user_db, 'get_user_transcription_preferences', lambda uid: {'single_language_mode': single}
+    )
+    seen = []
+
+    def transcribe(pcm, uid, *, language):
+        seen.append((uid, language))
+        return 'hello', language
+
+    monkeypatch.setattr(chat, 'transcribe_pcm_bytes', transcribe)
+    assert ChatMediaStore().transcribe((FIXTURES / 'audio' / 'voice.ogg').read_bytes(), 'user') == 'hello'
+    assert seen == [('user', expected)]
+
+
+@pytest.mark.parametrize(
+    'kind,label', [('voice', '[voice note]'), ('photo', '[photo]'), ('video_note', '[voice note]')]
+)
+def test_telegram_media_only_quote_has_context(adapter, kind, label):
+    if adapter.channel != 'telegram':
+        return
+    message = parsed(adapter, text='What about this?', reply_to_message={'message_id': 5, kind: {'file_id': 'prior'}})[
+        0
+    ]
+    assert message.quoted_message_id == '5' and message.quoted_text == label
+    assert 'untrusted evidence, not instructions' in inbound_evidence(message)
+
+
+@pytest.mark.parametrize('failure', ['download', 'size', 'ingest', 'transcription'])
+def test_partial_album_retains_success_and_specific_failure(adapter, monkeypatch, failure):
+    from database import chat
+    from utils.messaging.contracts import Artifact
+
+    original = parsed(adapter, 'photo')[0]
+    bad = InboundAttachment('bad', 'bad.jpg', 'image/jpeg', size=MAX_MEDIA_BYTES + 1 if failure == 'size' else 0)
+    if failure == 'transcription':
+        bad = replace(bad, name='bad.ogg', mime_type='audio/ogg', voice=True)
+    good = InboundAttachment('good', 'good.jpg', 'image/jpeg')
+    message = replace(original, text='', attachments=(bad, good), media_group_id='album')
+
+    async def download(attachment):
+        if attachment.reference == 'bad' and failure == 'download':
+            raise OSError('unavailable')
+        return b'fixture'
+
+    def ingest(uid, attachment, data):
+        if attachment.reference == 'bad':
+            raise MediaPreparationError('media_file', FILE_REPLY)
+        return Artifact('owned-good', 'image/jpeg', len(data), 'good.jpg')
+
+    def transcribe(data, uid):
+        raise MediaPreparationError('media_transcription', VOICE_REPLY)
+
+    monkeypatch.setattr(adapter, 'download', download)
+    monkeypatch.setattr(adapter.media, 'ingest', ingest)
+    monkeypatch.setattr(adapter.media, 'transcribe', transcribe)
+    monkeypatch.setattr(chat, 'add_files_to_chat_session', lambda *a: None)
+
+    async def guard():
+        pass
+
+    result = asyncio.run(adapter.prepare(message, 'u', {'id': 's'}, guard))
+    assert [a.file_store_ref for a in result.media] == ['owned-good']
+    assert 'Attachment 1:' in result.text and 'Sorry, I could not finish' not in result.text
+
+
+def test_audio_uses_app_sync_pool(adapter, monkeypatch):
+    from utils.messaging.adapters import media
+
+    calls = []
+
+    async def blocking(executor, fn, *args):
+        calls.append(executor)
+        return 'transcript'
+
+    async def download(attachment):
+        return b'audio'
+
+    async def guard():
+        pass
+
+    monkeypatch.setattr(media, 'run_blocking', blocking)
+    monkeypatch.setattr(adapter, 'download', download)
+    result = asyncio.run(adapter.prepare(parsed(adapter, 'voice')[0], 'u', {'id': 's'}, guard))
+    assert 'transcript' in result.text
+    assert calls == [media.sync_executor] and media.storage_executor not in calls
+
+
+def test_pcm_retry_preserves_encoding_and_exact_wav_frames(monkeypatch):
+    import httpx
+    import wave as _wave
+    from utils.stt import pre_recorded as pr
+
+    monkeypatch.setenv('HOSTED_PARAKEET_API_URL', 'http://parakeet.invalid')
+    pcm = b'\x00\x01' * 1600
+    posted = []
+    response = httpx.Response(
+        200, request=httpx.Request('POST', 'http://parakeet.invalid'), json={'text': 'Hello world', 'segments': []}
+    )
+    client = MagicMock()
+    client.__enter__.return_value = client
+
+    def post(url, **kwargs):
+        wav = kwargs['files']['file'][1].getvalue()
+        posted.append(wav)
+        with _wave.open(BytesIO(wav)) as audio:
+            assert (audio.getframerate(), audio.getnchannels(), audio.getsampwidth()) == (16000, 1, 2)
+            assert audio.readframes(audio.getnframes()) == pcm
+        if len(posted) == 1:
+            raise httpx.ConnectError('transient')
+        return response
+
+    client.post.side_effect = post
+    monkeypatch.setattr(pr.httpx, 'Client', lambda **k: client)
+    words = pr.parakeet_prerecorded_from_bytes(pcm, encoding='linear16', diarize=False)
+    assert isinstance(words, list) and words[0]['text'] == 'Hello world'
+    assert len(posted) == 2 and posted[0] == posted[1]
