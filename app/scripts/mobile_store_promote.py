@@ -329,6 +329,10 @@ def submit_android(
         raise PromotionError("Play release status must be completed, draft, inProgress or halted")
     if user_fraction is not None and status not in ("inProgress", "halted"):
         raise PromotionError("userFraction requires a staged (inProgress) release")
+    if status == "inProgress" and user_fraction is None:
+        # fraction-less inProgress is the HALTED representation, not a writable
+        # release; halting is an explicit Play Console (or halted) operation
+        raise PromotionError("a staged (inProgress) release requires a userFraction")
     release: dict[str, object] = {
         "name": version,
         "versionCodes": [build_number],
