@@ -195,10 +195,12 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
   }
 
   /// The phone is recording without trouble: Home's bottom bar shows it (status, newest words, the
-  /// live transcript on tap, Stop), so no card. It stays for paused, the microphone taken or
+  /// live transcript on tap, Stop), so no card — including the moment it is starting, or the old
+  /// card flashes before the bar takes over. It stays for paused, the microphone taken or
   /// recovering, and transcription that has failed.
   static bool _phoneJustListening(CaptureProvider provider) {
-    return provider.recordingState == RecordingState.record &&
+    return (provider.recordingState == RecordingState.record ||
+            provider.recordingState == RecordingState.initialising) &&
         !provider.isPaused &&
         !provider.isPhoneMicPaused &&
         provider.terminalTranscriptionFailure == null;

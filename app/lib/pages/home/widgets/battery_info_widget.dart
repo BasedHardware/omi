@@ -409,11 +409,13 @@ class _HomeRecordButtonState extends State<HomeRecordButton> {
     final l10n = context.l10n;
     final capture = context.watch<CaptureProvider>();
     final device = context.select<DeviceProvider, BtDevice?>((d) => d.connectedDevice);
-    final phoneRecording = _phoneOwnsCapture(capture);
     final starting = capture.recordingState == RecordingState.initialising;
     // The pendant stands in for "New" only while it is capturing live; connected but idle (or
     // saving for Transcribe Later), the phone is still one tap away and the header shows the device.
     final pendantCapturing = device != null && _pendantHasCapture(capture);
+    // A phone recording that is starting already looks live, so the pill changes the moment it is
+    // tapped instead of after the microphone is up (Home shows no separate card meanwhile).
+    final phoneRecording = _phoneOwnsCapture(capture) || (starting && !pendantCapturing);
     // The options sheet only adds a phone call; with calls hidden there is nothing else to offer.
     final canShowOptions = PhoneCallsFeature.visible && !phoneRecording && !starting;
 
