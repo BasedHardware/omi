@@ -4661,3 +4661,17 @@ programming and caller reachability before deploying.
 
 Caller deploy order, route requirements and independent rollback are documented
 in [the Gateway caller runbook](internal-gateway-callers.md).
+
+### Forward canonical audio archive (default off)
+
+`AUDIO_CANONICAL_PACKING_ENABLED=true` plus `BUCKET_CANONICAL_AUDIO` routes new
+mobile as-captured Opus to a separate regional canonical archive. Pusher also
+archives its supplied PCM16 capture bytes there; existing playback objects remain
+available. No existing objects are packed. Owner/day tar shards carry stored-byte
+SHA-256, source generations, formats, provenance and conversation ranges. Source
+erasure requires hash verification and embedded-manifest round-trip; durable
+owner intents resume partial cleanup. Account wipe sweeps sources, packs and
+indexes even when the flag is off. Linked conversation audio deletion rewrites
+only affected packs. Bucket provisioning, exact lifecycle rules, pricing and
+rollback are in `deploy/storage-lifecycle/FORWARD.md`; this code does not apply
+bucket policies or deploy a scheduler.

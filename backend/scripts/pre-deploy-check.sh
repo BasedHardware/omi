@@ -35,6 +35,7 @@ run_hermetic() {
     echo "ERROR: missing pinned backend test dependencies; run uv pip sync pylock.toml first" >&2
     exit 1
   fi
+  python3 scripts/validate_forward_audio_lifecycle.py
   python3 scripts/validate-backend-runtime-env.py --env dev --check-workflows
   python3 scripts/validate-backend-runtime-env.py --env prod --check-workflows
   python3 scripts/validate_frame_request_bucket_contract.py \

@@ -24,7 +24,9 @@ from database.redis_db import (
     get_cached_signed_url_ttl,
     delete_cached_signed_url,
 )
-from database.legal_holds import external_write_fence
+from database.legal_holds import external_write_fence, destructive_operation_gate
+from utils.other import audio_packs
+from utils.request_validation import parse_sync_filename_timestamp
 from utils import encryption
 from utils.cloud_tasks import enqueue_audio_merge_job, is_audio_merge_dispatch_enabled
 from database.audio_timeline import (
@@ -199,6 +201,13 @@ def delete_all_user_storage_objects(uid: str) -> int:
             tuple(
                 f'{prefix}/{uid}/'
                 for prefix in ('chunks', 'audio', 'merged', PLAYBACK_ARTIFACT_PREFIX, 'diagnostics', 'raw-mobile-batch')
+            ),
+        ),
+        (
+            os.getenv('BUCKET_CANONICAL_AUDIO'),
+            tuple(
+                audio_packs.owner_prefix(p, uid)
+                for p in (audio_packs.SOURCE_PREFIX, audio_packs.PACK_PREFIX, audio_packs.INDEX_PREFIX)
             ),
         ),
         (syncing_local_bucket, (f'syncing/{uid}/',)),
@@ -718,6 +727,38 @@ def upload_audio_chunks_batch(
     if not chunks:
         return []
 
+    if audio_packs.enabled():
+        # Archive the PCM bytes supplied by pusher, before further renditions.
+        # This is today's desktop/pendant server intake, not device Opus.
+        raw = b''.join(c['data'] for c in sorted(chunks, key=lambda c: c['timestamp']))
+        protection = data_protection_level or users_db.get_data_protection_level(uid)
+        encrypted = protection == 'enhanced'
+        canonical = _canonical_audio_bucket()
+        with owner_storage_write_gate(uid, canonical):
+            audio_packs.archive_capture(
+                canonical,
+                uid,
+                encryption.encrypt_audio_chunk(raw, uid) if encrypted else raw,
+                format='encrypted-pcm16le' if encrypted else 'pcm16le',
+                provenance={
+                    'capture_day': datetime.datetime.fromtimestamp(float(chunks[0]['timestamp']), datetime.timezone.utc)
+                    .date()
+                    .isoformat(),
+                    'producer': 'pusher',
+                    'sample_rate': sample_rate,
+                    'encrypted': encrypted,
+                    'plaintext_sha256': hashlib.sha256(raw).hexdigest(),
+                },
+                conversation_ranges=[
+                    {
+                        'conversation_id': conversation_id,
+                        'start': min(c['timestamp'] for c in chunks),
+                        'end': max(c['timestamp'] for c in chunks),
+                    }
+                ],
+                identity=hashlib.sha256(raw).hexdigest(),
+            )
+
     # Sort by timestamp for consistent ordering
     sorted_chunks = sorted(chunks, key=lambda c: c['timestamp'])
 
@@ -936,6 +977,11 @@ def list_audio_chunks(
 def delete_conversation_audio_files(uid: str, conversation_id: str) -> None:
     """Delete all audio files (chunks and merged) for a conversation."""
     bucket = _get_storage_client().bucket(private_cloud_sync_bucket)
+
+    canonical_name = os.getenv('BUCKET_CANONICAL_AUDIO')
+    if canonical_name:
+        with destructive_operation_gate(uid, kind='audio_conversation_deletion'):
+            audio_packs.delete_conversation(_get_storage_client().bucket(canonical_name), uid, conversation_id)
 
     # Delete chunks
     chunks_prefix = f'chunks/{uid}/{conversation_id}/'
@@ -2069,7 +2115,40 @@ def archive_mobile_batch_raw_files(uid: str, paths: List[str]) -> None:
         encrypted = protection == 'enhanced'
         payload = encryption.encrypt_audio_chunk(raw, uid) if encrypted else raw
         suffix = '.enc' if encrypted else ''
+        if audio_packs.enabled():
+            canonical = _canonical_audio_bucket()
+            with owner_storage_write_gate(uid, canonical):
+                audio_packs.archive_capture(
+                    canonical,
+                    uid,
+                    payload,
+                    format='encrypted-omi-wal-uint32le-opus-v1' if encrypted else 'omi-wal-uint32le-opus-v1',
+                    provenance={
+                        'capture_day': datetime.datetime.fromtimestamp(
+                            parse_sync_filename_timestamp(path), datetime.timezone.utc
+                        )
+                        .date()
+                        .isoformat(),
+                        'capture_start': parse_sync_filename_timestamp(path),
+                        'producer': 'raw-mobile-batch',
+                        'filename': Path(path).name,
+                        'encrypted': encrypted,
+                        'plaintext_sha256': digest,
+                    },
+                    conversation_ranges=[],
+                    identity=f'{Path(path).name}:{digest}',
+                )
+            continue
         blob = bucket.blob(f'raw-mobile-batch/{uid}/{digest}/{Path(path).name}{suffix}')
         blob.metadata = {'sha256': digest, 'format': 'omi-wal-uint32le-opus-v1'}
         with owner_storage_write_gate(uid, bucket):
             blob.upload_from_string(payload, content_type='application/octet-stream')
+
+
+def _canonical_audio_bucket() -> Any:
+    name = (os.getenv('BUCKET_CANONICAL_AUDIO') or '').strip()
+    if not name:
+        raise RuntimeError('packing requires a new BUCKET_CANONICAL_AUDIO bucket')
+    if name == private_cloud_sync_bucket:
+        raise RuntimeError('canonical archive must not use an existing bucket')
+    return _get_storage_client().bucket(name)

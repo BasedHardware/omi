@@ -165,3 +165,26 @@ def test_uid_scoped_temporary_sync_upload_is_fenced(monkeypatch):
     with pytest.raises(RuntimeError, match='owns gate'):
         storage_mod.upload_syncing_temporal_file('syncing/uid1/job/input.bin')
     upload.assert_not_called()
+
+
+def test_account_wipe_removes_packs_intents_and_receipts_with_flag_off(monkeypatch):
+    prefixes = (
+        storage_mod.audio_packs.SOURCE_PREFIX,
+        storage_mod.audio_packs.PACK_PREFIX,
+        storage_mod.audio_packs.INDEX_PREFIX,
+    )
+    names = {f'{p}uid1/day/object' for p in prefixes}
+    names.add(f'{storage_mod.audio_packs.INDEX_PREFIX}uid1/captures/receipt.json')
+    other = {f'{p}other/day/object' for p in prefixes}
+    canonical = _Bucket(names | other)
+    monkeypatch.setenv('AUDIO_CANONICAL_PACKING_ENABLED', 'false')
+    monkeypatch.setenv('BUCKET_CANONICAL_AUDIO', 'canonical')
+    monkeypatch.setattr(storage_mod, 'speech_profiles_bucket', None)
+    monkeypatch.setattr(storage_mod, 'private_cloud_sync_bucket', 'private')
+    monkeypatch.setattr(storage_mod, 'syncing_local_bucket', None)
+    monkeypatch.setattr(storage_mod, 'chat_files_bucket', None)
+    monkeypatch.setattr(
+        storage_mod, '_get_storage_client', lambda: _Client({'canonical': canonical, 'private': _Bucket(set())})
+    )
+    assert storage_mod.delete_all_user_storage_objects('uid1') == 4
+    assert canonical.names == other
