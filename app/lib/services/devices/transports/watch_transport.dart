@@ -31,7 +31,7 @@ class WatchTransport extends DeviceTransport {
   Stream<DeviceTransportState> get connectionStateStream => _connectionStateController.stream;
 
   void _updateState(DeviceTransportState newState) {
-    if (_state != newState) {
+    if (_state != newState && !_connectionStateController.isClosed) {
       _state = newState;
       _connectionStateController.add(_state);
     }

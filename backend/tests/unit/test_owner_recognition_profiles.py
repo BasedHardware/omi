@@ -111,17 +111,21 @@ def test_continuous_queue_does_not_starve_overdue_owner_retry(monkeypatch):
         loads.append(kwargs)
         matcher._owner_load_failed = False
 
-    class BusyQueue:
-        count = 0
+    count = 0
+    get_queued = matcher.queue.get
 
-        async def get(self):
-            self.count += 1
-            if self.count > 100:
-                before_idle.append(len(loads))
-                raise asyncio.TimeoutError
-            return {'speaker_id': 1, 'duration': 0.5}
+    async def continuously_queued():
+        nonlocal count
+        count += 1
+        if count > 100:
+            before_idle.append(len(loads))
+            raise asyncio.TimeoutError
+        matcher.queue.put_nowait(
+            {'id': f's{count}', 'speaker_id': 1, 'duration': 0.5, 'abs_start': count, 'abs_end': count + 0.5}
+        )
+        return await get_queued()
 
-    matcher.queue = BusyQueue()
+    monkeypatch.setattr(matcher.queue, 'get', continuously_queued)
     monkeypatch.setattr(matcher, '_load_profiles', load)
     asyncio.run(matcher.load_and_run())
     assert before_idle == [1]

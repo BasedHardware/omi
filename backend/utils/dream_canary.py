@@ -34,10 +34,13 @@ def seed(uid):
                 'discarded': False,
                 'has_photos': False,
                 'data_protection_level': 'enhanced',
-                'structured': {'title': 'Synthetic dream check', 'overview': 'A spelling check for an invented robot.'},
+                'structured': {
+                    'title': 'Synthetic dream check',
+                    'overview': 'Robot Qorbi was incorrectly written as Qorby in the transcript.',
+                },
                 'transcript_segments': [
                     {
-                        'text': 'Robot Qorbi is spelled Qorbi. The notes incorrectly spell it Qorby.',
+                        'text': 'Robot Qorbi is spelled Qorbi. Correct Qorby to Qorbi. Qorby is a misspelling of Qorbi.',
                         'speaker': 'SPEAKER_00',
                         'start': 0,
                         'end': 5,

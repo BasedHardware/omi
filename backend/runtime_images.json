@@ -257,9 +257,14 @@
             "build_context": ".",
             "source_root": "backend/diarizer",
             "workdir": "/app",
-            "entrypoints": ["main"],
-            "image_import_smoke": false,
+            "entrypoints": ["main", "batch_main"],
+            "image_import_smoke": true,
+            "smoke_entrypoints": ["main", "batch_main"],
+            "smoke_prelude": "from pyannote.audio import Model, Pipeline; Model.from_pretrained = Pipeline.from_pretrained = lambda *a, **k: (_ for _ in ()).throw(RuntimeError('model loading is forbidden during import smoke')); from runtime_smoke import run_smoke; run_smoke()",
             "dependency_probe_smoke": true,
+            "dependency_probe_exclusions": {
+                "utils.stt.diarization_turns": "First-party module the Dockerfile copies from backend/utils/stt into /app; the -I probe cannot see /app, so it is not an installed dependency."
+            },
             "pull_request_smoke": false
         },
         {

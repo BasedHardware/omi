@@ -130,7 +130,9 @@ def test_invalid_key_is_unauthorized(boundary, monkeypatch):
     )
     response = TestClient(app).get("/v1/dev/key", headers={"Authorization": "Bearer omi_dev_" + "a" * 32})
     assert response.status_code == 401
-    assert response.json()["detail"] == "Invalid API Key"
+    assert (
+        response.json()["detail"] == "Unknown or revoked Developer API key. Check the full secret or create a new key."
+    )
 
 
 def test_rate_limiter_unavailable_does_not_fetch_metadata(boundary, monkeypatch):

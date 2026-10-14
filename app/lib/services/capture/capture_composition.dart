@@ -20,6 +20,7 @@ import 'package:omi/services/capture/conversation_location_capture.dart';
 import 'package:omi/services/capture/local_segment_store.dart';
 import 'package:omi/services/capture/recording_lifecycle_telemetry.dart';
 import 'package:omi/services/services.dart';
+import 'package:omi/services/telemetry/client_telemetry_flags.dart';
 import 'package:omi/services/devices/connectors/device_connection.dart';
 import 'package:omi/services/wals/recording_transfer_coordinator.dart';
 import 'package:omi/services/wals/wal_interfaces.dart';
@@ -171,7 +172,11 @@ CaptureWedgeMonitor composeCaptureWedgeMonitor() {
   late final CaptureWedgeMonitor monitor;
   monitor = CaptureWedgeMonitor(
     featureGate: () => AnalyticsManager().isFeatureEnabled(captureRecoveryFeatureFlag),
-    track: (event, properties) => PlatformManager.instance.analytics.track(event, properties: properties),
+    track: (event, properties) {
+      final moved = event == 'Capture Ingress Health' || event == 'Capture Wedge Detected';
+      if (moved && ClientTelemetryFlags.posthogRetirementEnabled) return;
+      PlatformManager.instance.analytics.track(event, properties: properties);
+    },
     bleRetry: (deviceId) async {
       final deviceService = ServiceManager.instance().device;
       await deviceService.disconnectDevice(deviceId);

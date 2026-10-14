@@ -53,6 +53,7 @@ import routers.listen.receiver as receiver_module
 import utils.stt.replay_delivery as replay_delivery_module
 import utils.stt.vad_gate as vad_gate_module
 from database import conversations as conversations_db
+from database import live_owner_continuity as continuity_cache
 from routers.listen.contracts import ListenLimits, ListenSessionState
 from routers.listen.receiver import ListenReceiver
 from routers.listen.speakers import SpeakerMatcher
@@ -367,6 +368,8 @@ class FailoverStack:
                 return conversations_db.prepare_conversation_for_read(raw, UID)
             if fn is conversations_db.get_manual_speaker_receipt:
                 return {}
+            if fn is continuity_cache.authority_snapshot:
+                return fn(*args, **kwargs, firestore_client=self.store)
             if fn is conversations_db.update_conversation_finished_at:
                 _uid, conversation_id, finished_at = args
                 self.store.rows[('users', UID, 'conversations', conversation_id)]['finished_at'] = finished_at

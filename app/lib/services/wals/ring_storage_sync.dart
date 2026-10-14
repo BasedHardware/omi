@@ -55,6 +55,7 @@ class RingStorageSyncImpl implements RingStorageSync {
 
   bool _isCancelled = false;
   bool _isSyncing = false;
+  String _syncPhase = 'connection';
   @override
   bool get isSyncing => _isSyncing;
 
@@ -333,6 +334,7 @@ class RingStorageSyncImpl implements RingStorageSync {
       for (final wal in wals) {
         if (_isCancelled) break;
         final complete = await _syncRing(wal, progress: progress);
+        _syncPhase = 'finalize';
         if (!complete) {
           // Leave wal.status as miss so the next sync session retries it.
           // This preserves the "resume from same read_seq" guarantee — pairing
@@ -347,9 +349,13 @@ class RingStorageSyncImpl implements RingStorageSync {
         wal.deviceDownloadFraction = null;
         listener.onWalUpdated();
       }
-    } catch (e) {
+    } catch (e, st) {
       Logger.debug('RingStorageSync.syncAll: error: $e');
-      DebugLogManager.logError(e, null, 'RingStorageSync failed', {'device': _device?.id});
+      DebugLogManager.logError(e, st, 'RingStorageSync failed', {
+        'device': _device?.id,
+        'error': e.toString(),
+        'phase': _syncPhase,
+      });
     } finally {
       _isSyncing = false;
       for (final w in _wals) {
@@ -389,6 +395,7 @@ class RingStorageSyncImpl implements RingStorageSync {
   /// Returns true if the transfer ran to completion (DONE received and acted on).
   Future<bool> _syncRing(Wal wal, {IWalSyncProgressListener? progress}) async {
     if (_device == null) return false;
+    _syncPhase = 'connection';
     final admittedGeneration = _localSync?.sessionGeneration ?? -1;
     final connection = _testConnection ?? await ServiceManager.instance().device.ensureConnection(_device!.id);
     if (connection == null) throw Exception('Device not connected');
@@ -400,6 +407,7 @@ class RingStorageSyncImpl implements RingStorageSync {
     final epoch = connection.ringCustodyEpoch;
     bool stillEpoch() => connection.ringCustodyEpoch == epoch && !_isCancelled;
 
+    _syncPhase = 'list-read';
     await connection.ringCustodyReady;
     if (!stillEpoch()) return false;
 
@@ -728,6 +736,7 @@ class RingStorageSyncImpl implements RingStorageSync {
     }
 
     if (!stillEpoch()) return false;
+    _syncPhase = 'transfer';
     _notifyStream = await connection.getBleStorageBytesListener(
       onStorageBytesReceived: (List<int> value) {
         final snapshot = List<int>.of(value);
@@ -799,6 +808,7 @@ class RingStorageSyncImpl implements RingStorageSync {
     // Wait for any flush still in flight from the streaming phase before
     // draining the tail — otherwise the final flush could race the in-flight
     // one on bytesData and recordTimestamps.
+    _syncPhase = 'finalize';
     final pendingFlush = inFlightFlush;
     if (pendingFlush != null) {
       try {

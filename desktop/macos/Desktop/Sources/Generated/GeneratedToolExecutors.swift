@@ -30,6 +30,7 @@ enum GeneratedSwiftTool: String, CaseIterable {
   case captureScreen = "capture_screen"
   case checkPermissionStatus = "check_permission_status"
   case requestPermission = "request_permission"
+  case getProductKb = "get_product_kb"
   case scanFiles = "scan_files"
   case setUserPreferences = "set_user_preferences"
   case askFollowup = "ask_followup"
@@ -61,8 +62,8 @@ enum GeneratedSwiftToolExecutor: String {
 
 enum GeneratedToolExecutors {
   static let manifestVersion = 1
-  static let manifestDigest = "sha256:e9280d5fb716062fe4cb18c7f44c782bdc181727f92a8bfc2286ba34eeeffbb2"
-  static let chatFirstManifestDigest = "sha256:d8eb59d4795069c5e304be8810cd3d58fc9f1041231a86f2b4451dfd053231df"
+  static let manifestDigest = "sha256:4091ca56341e6b1ad3383255cae1299ad2c283052826bf2c19b70447cdc3200e"
+  static let chatFirstManifestDigest = "sha256:fe76965fa939c00fc301084866afa42c96459d648cf72cace5b5cbde8eaacc4d"
 
   static let aliasToCanonical: [String: GeneratedSwiftTool] = [
     "search_screen_history": .semanticSearch,
@@ -99,6 +100,7 @@ enum GeneratedToolExecutors {
     .captureScreen: .chatToolExecutor,
     .checkPermissionStatus: .chatToolExecutor,
     .requestPermission: .chatToolExecutor,
+    .getProductKb: .chatToolExecutor,
     .scanFiles: .chatToolExecutor,
     .setUserPreferences: .chatToolExecutor,
     .askFollowup: .chatToolExecutor,
@@ -180,6 +182,7 @@ enum GeneratedToolExecutors {
     case captureScreen
     case checkPermissionStatus
     case requestPermission
+    case getProductKb
     case scanFiles
     case setUserPreferences
     case askFollowup
@@ -232,6 +235,7 @@ enum GeneratedToolExecutors {
     case .captureScreen: return .captureScreen
     case .checkPermissionStatus: return .checkPermissionStatus
     case .requestPermission: return .requestPermission
+    case .getProductKb: return .getProductKb
     case .scanFiles: return .scanFiles
     case .setUserPreferences: return .setUserPreferences
     case .askFollowup: return .askFollowup

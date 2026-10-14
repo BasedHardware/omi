@@ -1,7 +1,7 @@
 """Bounded repair orchestration for generated conversation-note presentation."""
 
 import logging
-from typing import Any, Callable, Iterable, Optional
+from typing import Any, Callable, Iterable, Optional, Sequence
 
 from langchain_core.messages import SystemMessage
 
@@ -9,6 +9,8 @@ from models.structured import Structured  # type: ignore[reportAttributeAccessIs
 from utils.llm.meeting_notes_validation import (
     PRESENTATION_CONTRACT_VERSION,
     enforce_structured_presentation_contract,
+    lead_title_with_people,
+    presentable_title_people,
 )
 
 logger = logging.getLogger(__name__)
@@ -52,6 +54,25 @@ def has_note_content(structured: Structured) -> bool:
         or structured.sections
         or structured.action_items
         or structured.events
+    )
+
+
+def enforce_static_conversation_note_presentation(
+    structured: Structured,
+    transcript_segment_ids: Optional[Iterable[object]],
+    *,
+    title_people: Sequence[str] = (),
+) -> None:
+    """Apply presentation repairs within shaped notes' single model-turn budget."""
+    report = enforce_structured_presentation_contract(structured, transcript_segment_ids, safe_fallback=True)
+    structured.title, led = lead_title_with_people(
+        structured.title, presentable_title_people(title_people, transcript_segment_ids)
+    )
+    if led:
+        report.repairs.add('title_people_lead')
+    _record_contract(
+        outcome='static_repair' if report.repairs else 'passed',
+        reasons=sorted(report.repairs | report.violations) or ['ok'],
     )
 
 

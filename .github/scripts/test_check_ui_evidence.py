@@ -98,6 +98,38 @@ class UIEvidenceTests(unittest.TestCase):
         self.commit()
         self.assert_pass(self.run_check(f"![Chat home]({IMAGE})"))
 
+    def test_commit_pinned_url_passes(self) -> None:
+        self.add_ui()
+        self.add_image()
+        self.commit()
+        sha = self.git("rev-parse", "HEAD").stdout.strip()
+        for url in (
+            f"https://raw.githubusercontent.com/BasedHardware/omi/{sha}/{IMAGE}",
+            f"https://raw.githubusercontent.com/some-fork/omi/{sha[:10]}/{IMAGE}",
+            f"https://github.com/BasedHardware/omi/blob/{sha}/{IMAGE}?raw=true",
+            f"https://github.com/BasedHardware/omi/raw/{sha}/{IMAGE}",
+        ):
+            with self.subTest(url=url):
+                self.assert_pass(self.run_check(f"![Chat home]({url})"))
+
+    def test_branch_pinned_or_foreign_url_does_not_count(self) -> None:
+        self.add_ui()
+        self.add_image()
+        self.commit()
+        for url in (
+            f"https://raw.githubusercontent.com/BasedHardware/omi/main/{IMAGE}",
+            f"https://raw.githubusercontent.com/BasedHardware/omi/refs/heads/feat/{IMAGE}",
+            f"https://example.com/abcdef1/{IMAGE}",
+            f"https://github.com/BasedHardware/omi/tree/abcdef1/{IMAGE}",
+        ):
+            with self.subTest(url=url):
+                self.assert_fail(self.run_check(f"![Chat home]({url})"), "no tracked UI screenshot")
+
+    def test_commit_pinned_url_to_untracked_path_fails(self) -> None:
+        self.add_ui()
+        self.commit()
+        self.assert_fail(self.run_check(f"![Missing](https://raw.githubusercontent.com/o/r/abcdef1/{IMAGE})"), "no tracked UI screenshot")
+
     def test_preexisting_tracked_image_passes(self) -> None:
         self.add_image()
         self.commit()

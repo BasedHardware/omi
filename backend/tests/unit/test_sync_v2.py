@@ -9,6 +9,7 @@ v1 remains completely unchanged.
 """
 
 from utils import conversation_continuity  # noqa: F401 - retain pure policy across legacy package stubs
+from utils import dream_vocabulary  # noqa: F401 - retain shared keyterms across legacy package stubs
 from utils import firestore_document_size  # noqa: F401 - retain pure size estimate across legacy package stubs
 from utils import manual_speaker_assignments  # noqa: F401 - retain pure policy across legacy package stubs
 from utils.stt import speaker_identity  # noqa: F401 - retain allocator across legacy package stubs
@@ -1563,6 +1564,9 @@ class TestAsyncCoordinatorBehavioral:
         mock_executors.db_executor = MagicMock()
 
         async def _passthrough_run_blocking(_executor, fn, *args, **kwargs):
+            if getattr(fn, '__name__', '') == '_process_one_segment':
+                # Segment work runs in a worker in production and may run an async keyterm lookup.
+                return await asyncio.to_thread(fn, *args, **kwargs)
             return fn(*args, **kwargs)
 
         mock_executors.run_blocking = _passthrough_run_blocking

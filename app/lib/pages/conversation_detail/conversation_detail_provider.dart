@@ -65,13 +65,183 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
   bool get _savingSpeaker => _pendingSpeakerSaves > 0;
   Future<void> _speakerSaveTail = Future.value();
 
+  /// The open conversation while the reader is labeling speakers in one pass. Its labels still save
+  /// one by one; only the summary regeneration waits for Done (or leaving the page) and runs once.
+  String? _labelingSessionId;
+  final List<_SpeakerLabelUndo> _labelingUndo = [];
+
+  /// Sessions confirmed while a label save was still in flight: regenerate as soon as they drain.
+  final Set<String> _confirmedSpeakerLabelingSessionIds = {};
+
+  /// Sync-donor IDs a bridge retired while the open conversation stayed on screen, mapped to the
+  /// survivor. The page keeps the donor ID, so its page-scoped Done and exit calls resolve here.
+  final Map<String, String> _bridgedConversationIds = {};
+
+  String _bridgedId(String conversationId) {
+    var id = conversationId;
+    final seen = {id};
+    for (var next = _bridgedConversationIds[id]; next != null && seen.add(next); next = _bridgedConversationIds[id]) {
+      id = next;
+    }
+    return id;
+  }
+
   @visibleForTesting
   Set<String> get trackedSpeakerConversationIds => {
         ..._speakerEditGenerationByConversation.keys,
         ..._pendingSpeakerSavesByConversation.keys,
         ..._automaticSpeakerSummaryRefreshIds,
         ..._endedSpeakerLabelingSessionIds,
+        ..._confirmedSpeakerLabelingSessionIds,
       };
+
+  bool get speakerLabelingSessionActive => _labelingSessionId != null && _labelingSessionId == conversationOrNull?.id;
+
+  /// Distinct lines this session relabeled, net of undone actions.
+  int get speakerLabelingSessionLineCount =>
+      !speakerLabelingSessionActive ? 0 : {for (final undo in _labelingUndo) ...undo.changedIds}.length;
+
+  bool get canUndoSpeakerLabel =>
+      speakerLabelingSessionActive && _labelingUndo.isNotEmpty && !loadingReprocessConversation;
+
+  /// Starts a labeling pass on the open conversation; a no-op while one is already running.
+  void beginSpeakerLabelingSession() {
+    final target = conversationOrNull;
+    if (target == null || _labelingSessionId == target.id) return;
+    _labelingSessionId = target.id;
+    _labelingUndo.clear();
+    _endedSpeakerLabelingSessionIds.remove(target.id);
+    _confirmedSpeakerLabelingSessionIds.remove(target.id);
+    _speakerSummaryRefreshTimer?.cancel();
+    _speakerSummaryRefreshTimer = null;
+    notifyListeners();
+  }
+
+  void _endLabelingSession() {
+    _labelingSessionId = null;
+    _labelingUndo.clear();
+  }
+
+  /// Done: ends the pass and regenerates the summary once, now or as soon as in-flight saves land.
+  /// A pass that changed nothing regenerates nothing. With [conversationId], only that
+  /// conversation's pass (a page under another detail page must not end the top one's).
+  void confirmSpeakerLabelingSession({String? conversationId}) {
+    if (!speakerLabelingSessionActive || (conversationId != null && _bridgedId(conversationId) != _labelingSessionId)) {
+      return;
+    }
+    final sessionId = _labelingSessionId!;
+    _endLabelingSession();
+    if ((_pendingSpeakerSavesByConversation[sessionId] ?? 0) != 0) {
+      _confirmedSpeakerLabelingSessionIds.add(sessionId);
+    } else if (_automaticSpeakerSummaryRefreshIds.contains(sessionId) && offerSpeakerSummaryRefresh) {
+      unawaited(reprocessConversation());
+    }
+    notifyListeners();
+  }
+
+  /// The detail page went away mid-pass: auto-confirm through the page-exit path, whose result never
+  /// touches whatever the provider shows next.
+  void leaveSpeakerLabelingSession(String conversationId) {
+    if (speakerLabelingSessionActive && _labelingSessionId == _bridgedId(conversationId)) {
+      _finishSpeakerLabelingSession();
+    }
+  }
+
+  /// Puts back the labels the last action in this pass replaced, and saves them again. Best effort:
+  /// lines whose restore failed roll forward to what the server still has.
+  Future<bool> undoLastSpeakerLabel() {
+    final target = conversationOrNull;
+    if (target == null || !canUndoSpeakerLabel) return Future.value(false);
+    final undo = _labelingUndo.removeLast();
+    final byId = {for (final segment in target.transcriptSegments) segment.id: segment};
+    final restore = {
+      for (final entry in undo.before.entries)
+        if (byId[entry.key] case final segment?) segment: entry.value,
+    };
+    if (restore.isEmpty) {
+      notifyListeners();
+      return Future.value(false);
+    }
+    final current = {
+      for (final segment in restore.keys) segment: (segment.isUser, segment.personId, segment.speakerLabelSource),
+    };
+    final generation = ++_speakerEditGeneration;
+    _speakerEditGenerationByConversation[target.id] = generation;
+    _pendingSpeakerSaves++;
+    _pendingSpeakerSavesByConversation.update(target.id, (count) => count + 1, ifAbsent: () => 1);
+    for (final MapEntry(key: segment, value: original) in restore.entries) {
+      segment.isUser = original.$1;
+      segment.personId = original.$2;
+      segment.speakerLabelSource = original.$3;
+    }
+    conversationProvider?.updateConversation(target);
+    notifyListeners();
+    final pending = _persistSpeakerRestore(target, restore, current, generation, _speakerSaveTail);
+    _speakerSaveTail = pending.then((_) {});
+    _speakerSaveTail.ignore();
+    return pending;
+  }
+
+  Future<bool> _persistSpeakerRestore(
+    ServerConversation target,
+    Map<TranscriptSegment, (bool, String?, String?)> restore,
+    Map<TranscriptSegment, (bool, String?, String?)> current,
+    int generation,
+    Future<void> previousSave,
+  ) async {
+    final landed = <TranscriptSegment>{};
+    try {
+      await previousSave;
+      if (_speakerEditGenerationByConversation[target.id] != generation) return false;
+      // One request per restored label: the lines an action covered may have carried different ones.
+      final groups = <(bool, String?), List<TranscriptSegment>>{};
+      for (final MapEntry(key: segment, value: original) in restore.entries) {
+        groups.putIfAbsent((original.$1, original.$1 ? null : original.$2), () => []).add(segment);
+      }
+      for (final MapEntry(key: (isUser, personId), value: segments) in groups.entries) {
+        final saved = await _assignSpeaker(
+          target.id,
+          [for (final segment in segments) segment.id],
+          isUser: isUser,
+          personId: personId,
+        );
+        if (!saved) {
+          _rollForwardUnsavedRestore(target, restore, current, landed, generation);
+          return false;
+        }
+        landed.addAll(segments);
+      }
+      if (_speakerConversationDeleted(target.id) || target.deleted) {
+        _dropSpeakerRefreshState(target.id);
+      } else if (target.status == ConversationStatus.completed && target.structured.overview.trim().isNotEmpty) {
+        _automaticSpeakerSummaryRefreshIds.add(target.id);
+        if (!_isDisposed && identical(conversationOrNull, target)) _speakerSummaryConversationId = target.id;
+      }
+      if (!_isDisposed && identical(conversationOrNull, target)) notifyListeners();
+      return true;
+    } catch (_) {
+      _rollForwardUnsavedRestore(target, restore, current, landed, generation);
+      return false;
+    } finally {
+      await _finishSpeakerSave(target);
+    }
+  }
+
+  /// A restore that failed part-way: the groups that already saved stay undone, the rest roll
+  /// forward to the labels the server still has, so the transcript matches the server line by line.
+  void _rollForwardUnsavedRestore(
+    ServerConversation target,
+    Map<TranscriptSegment, (bool, String?, String?)> restore,
+    Map<TranscriptSegment, (bool, String?, String?)> current,
+    Set<TranscriptSegment> landed,
+    int generation,
+  ) {
+    final unsaved = [
+      for (final segment in restore.keys)
+        if (!landed.contains(segment)) segment,
+    ];
+    _rollbackSpeakerAssignment(target, unsaved, current, generation, null);
+  }
 
   bool _speakerConversationDeleted(String conversationId) =>
       conversationProvider?.memoriesToDelete.containsKey(conversationId) == true ||
@@ -80,6 +250,7 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
   void _dropSpeakerRefreshState(String conversationId) {
     _automaticSpeakerSummaryRefreshIds.remove(conversationId);
     _endedSpeakerLabelingSessionIds.remove(conversationId);
+    _confirmedSpeakerLabelingSessionIds.remove(conversationId);
     if (_speakerSummaryConversationId == conversationId) _speakerSummaryConversationId = null;
     _pruneSpeakerSessionState(conversationId);
   }
@@ -140,6 +311,16 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
     final changed = selected.any((s) => s.isUser != self || s.personId != person);
     final generation = ++_speakerEditGeneration;
     _speakerEditGenerationByConversation[target.id] = generation;
+    if (changed && _labelingSessionId == target.id) {
+      _labelingUndo.add(_SpeakerLabelUndo(
+        generation: generation,
+        before: {for (final MapEntry(key: segment, value: original) in before.entries) segment.id: original},
+        changedIds: {
+          for (final segment in selected)
+            if (segment.isUser != self || segment.personId != person) segment.id,
+        },
+      ));
+    }
     _pendingSpeakerSaves++;
     _pendingSpeakerSavesByConversation.update(target.id, (count) => count + 1, ifAbsent: () => 1);
     for (final segment in selected) {
@@ -262,7 +443,8 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
       if (!_isDisposed && refreshId != null && refreshId == conversationOrNull?.id) await refreshConversation();
     }
     if (remaining == 0) {
-      _scheduleAutomaticSpeakerSummaryRefresh(target.id);
+      // The refresh above may have moved this conversation's pass onto a bridged survivor.
+      _scheduleAutomaticSpeakerSummaryRefresh(_bridgedId(target.id));
       _pruneSpeakerSessionState(target.id);
     }
   }
@@ -272,12 +454,19 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
       _dropSpeakerRefreshState(conversationId);
       return;
     }
+    final confirmed = _confirmedSpeakerLabelingSessionIds.remove(conversationId);
     if (!_automaticSpeakerSummaryRefreshIds.contains(conversationId)) return;
     if (_endedSpeakerLabelingSessionIds.contains(conversationId) || _isDisposed) {
       _flushEndedSpeakerLabelingSession(conversationId);
       return;
     }
+    // Mid-pass, the pass's end regenerates once; a pause between labels is not the end.
+    if (_labelingSessionId == conversationId) return;
     if (conversationId != conversationOrNull?.id || !offerSpeakerSummaryRefresh) return;
+    if (confirmed && !_savingSpeaker) {
+      unawaited(reprocessConversation());
+      return;
+    }
     _speakerSummaryRefreshTimer?.cancel();
     _speakerSummaryRefreshTimer = Timer(_speakerSummaryQuietPeriod, () {
       _speakerSummaryRefreshTimer = null;
@@ -295,8 +484,10 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
   void _finishSpeakerLabelingSession() {
     _speakerSummaryRefreshTimer?.cancel();
     _speakerSummaryRefreshTimer = null;
+    _endLabelingSession();
     final conversationId = conversationOrNull?.id;
     if (conversationId == null) return;
+    _confirmedSpeakerLabelingSessionIds.remove(conversationId);
     if (_speakerConversationDeleted(conversationId)) {
       _dropSpeakerRefreshState(conversationId);
       return;
@@ -412,8 +603,7 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
           if (data.id == target.id) {
             conversationProvider?.updateConversation(data);
           } else {
-            conversationProvider?.replaceBridgedConversation(target.id, data);
-            selectedDate = conversationLocalDayKey(data.startedAt ?? data.createdAt);
+            _adoptBridgedConversation(target.id, data);
           }
           setCachedConversation(data);
         }
@@ -436,6 +626,8 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
     int generation,
     VoidCallback? onFailed,
   ) {
+    // An action that never saved has nothing to undo.
+    _labelingUndo.removeWhere((undo) => undo.generation == generation);
     if (_isDisposed || generation != _speakerEditGeneration || !identical(conversationOrNull, target)) return;
     for (final segment in selected) {
       final original = before[segment]!;
@@ -850,6 +1042,9 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
     _speakerSummaryRefreshTimer = null;
     final target = conversation;
     _automaticSpeakerSummaryRefreshIds.remove(target.id);
+    _confirmedSpeakerLabelingSessionIds.remove(target.id);
+    // Any regeneration rewrites the summary from every saved label, so it also ends a labeling pass.
+    if (_labelingSessionId == target.id) _endLabelingSession();
     final generation = _speakerEditGeneration;
     final requireSpeakerReceipt = offerSpeakerSummaryRefresh;
     Logger.debug('_reProcessConversation with appId: $appId');
@@ -1084,6 +1279,7 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
   void setCachedConversation(ServerConversation conversation) {
     if (_cachedConversation?.id != conversation.id) {
       _finishSpeakerLabelingSession();
+      _bridgedConversationIds.clear();
     }
     if (_cachedConversationId != conversation.id) {
       detailLoad = ConversationDetailLoad.idle;
@@ -1118,17 +1314,11 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
     if (updatedConversation != null) {
       if (updatedConversation.id != openedId) {
         if (!_syncConversationId.hasMatch(openedId)) return;
-        _cachedConversationId = updatedConversation.id;
-        selectedDate = conversationLocalDayKey(updatedConversation.startedAt ?? updatedConversation.createdAt);
-        if (_speakerSummaryConversationId == openedId) _speakerSummaryConversationId = updatedConversation.id;
-        if (_automaticSpeakerSummaryRefreshIds.remove(openedId)) {
-          _automaticSpeakerSummaryRefreshIds.add(updatedConversation.id);
-        }
-        conversationProvider?.replaceBridgedConversation(openedId, updatedConversation);
+        _adoptBridgedConversation(openedId, updatedConversation);
       } else {
         conversationProvider?.updateConversation(updatedConversation);
+        _cachedConversation = updatedConversation;
       }
-      _cachedConversation = updatedConversation;
     }
     if (detailLoad == ConversationDetailLoad.loading) {
       detailLoad = updatedConversation != null ? ConversationDetailLoad.idle : ConversationDetailLoad.failed;
@@ -1136,6 +1326,28 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
       detailLoad = ConversationDetailLoad.idle;
     }
     notifyListeners();
+  }
+
+  /// The open sync donor was bridged into [survivor]: it becomes the open conversation, and every
+  /// piece of speaker state follows it, so a labeling pass in progress stays open (bar, Undo, Done)
+  /// and its single regeneration targets the survivor.
+  void _adoptBridgedConversation(String donorId, ServerConversation survivor) {
+    final survivorId = survivor.id;
+    _bridgedConversationIds[donorId] = survivorId;
+    _cachedConversationId = survivorId;
+    selectedDate = conversationLocalDayKey(survivor.startedAt ?? survivor.createdAt);
+    if (_speakerSummaryConversationId == donorId) _speakerSummaryConversationId = survivorId;
+    // The undo stack is keyed by segment, not conversation, so it carries over as is.
+    if (_labelingSessionId == donorId) _labelingSessionId = survivorId;
+    for (final ids in [
+      _automaticSpeakerSummaryRefreshIds,
+      _confirmedSpeakerLabelingSessionIds,
+      _endedSpeakerLabelingSessionIds,
+    ]) {
+      if (ids.remove(donorId)) ids.add(survivorId);
+    }
+    conversationProvider?.replaceBridgedConversation(donorId, survivor);
+    _cachedConversation = survivor;
   }
 
   void updateFolderIdLocally(String? newFolderId) {
@@ -1290,4 +1502,13 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
     _isDisposed = true;
     super.dispose();
   }
+}
+
+/// One labeling action in a pass: the labels its lines had before, for Undo.
+class _SpeakerLabelUndo {
+  const _SpeakerLabelUndo({required this.generation, required this.before, required this.changedIds});
+
+  final int generation;
+  final Map<String, (bool, String?, String?)> before;
+  final Set<String> changedIds;
 }

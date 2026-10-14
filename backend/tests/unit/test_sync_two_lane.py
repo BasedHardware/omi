@@ -695,7 +695,24 @@ def test_durable_ledger_replays_completion_and_blocks_recent_duplicate():
     busy = sync_ledger._claim_transaction.to_wrap(_Transaction(), busy_ref, 'new-job', 'backfill', now)
 
     assert completed == {'outcome': 'completed', 'result': completed_result}
-    assert busy == {'outcome': 'busy'}
+    assert busy == {'outcome': 'busy', 'job_id': 'other'}
+
+
+def test_expired_job_can_still_have_a_live_content_owner():
+    # The job result expires at 24h, but the content claim lasts 48h. An
+    # offline client can legitimately get 404 then 409 for the same bytes.
+    from database.sync_jobs import JOB_TTL_SECONDS
+
+    now = datetime.now(timezone.utc)
+    transaction = _Transaction()
+    age_seconds = JOB_TTL_SECONDS + 1
+    assert age_seconds < sync_ledger.CLAIM_STALE_SECONDS
+    owner = _Ref(
+        {'status': 'processing', 'job_id': 'expired-owner', 'updated_at': now - timedelta(seconds=age_seconds)}
+    )
+    claim = sync_ledger._claim_transaction.to_wrap(transaction, owner, 'new-upload', 'fresh', now)
+    assert claim == {'outcome': 'busy', 'job_id': 'expired-owner'}
+    assert transaction.writes == []
 
 
 def test_durable_ledger_side_effect_is_once_only():
@@ -1043,3 +1060,85 @@ def test_durable_processed_segment_is_not_added_twice():
 
     assert added is True
     assert duplicate is False
+
+
+def test_expired_busy_owner_is_taken_over_before_48h(monkeypatch):
+    now = datetime.now(timezone.utc)
+    ref = _Ref(
+        {
+            'status': 'processing',
+            'job_id': 'expired-owner',
+            'updated_at': now - timedelta(hours=25),
+            'ledger_run_token': 'old-run',
+            'ledger_run_epoch': 1,
+            'processed_segment_ids': ['already-done'],
+        }
+    )
+    transaction = _Transaction()
+    client = MagicMock()
+    client.transaction.return_value = transaction
+    monkeypatch.setattr(sync_ledger, '_ledger_ref', lambda *_: ref)
+    monkeypatch.setattr(sync_ledger, '_claim_transaction', sync_ledger._claim_transaction.to_wrap)
+    read_job = MagicMock(return_value=None)
+    monkeypatch.setattr(sync_ledger, 'get_sync_job', read_job)
+    claim = sync_ledger.claim_sync_content('uid', 'content', 'new-job', 'fresh', firestore_client=client)
+    assert claim == {'outcome': 'owned'}
+    read_job.assert_called_once_with('expired-owner')
+    assert len(transaction.writes) == 1
+    updates = transaction.writes[0][1]
+    assert updates['job_id'] == 'new-job'
+    assert updates['ledger_run_token'] == firestore.DELETE_FIELD
+    assert updates['ledger_run_epoch'] == firestore.DELETE_FIELD
+    assert 'processed_segment_ids' not in updates
+
+
+def test_live_busy_owner_is_not_taken_over(monkeypatch):
+    ref = _Ref({'status': 'processing', 'job_id': 'live-owner', 'updated_at': datetime.now(timezone.utc)})
+    transaction = _Transaction()
+    client = MagicMock()
+    client.transaction.return_value = transaction
+    monkeypatch.setattr(sync_ledger, '_ledger_ref', lambda *_: ref)
+    monkeypatch.setattr(sync_ledger, '_claim_transaction', sync_ledger._claim_transaction.to_wrap)
+    monkeypatch.setattr(sync_ledger, 'get_sync_job', lambda _: {'status': 'processing'})
+    assert sync_ledger.claim_sync_content('uid', 'content', 'new-job', 'fresh', firestore_client=client) == {
+        'outcome': 'busy',
+        'job_id': 'live-owner',
+    }
+    assert transaction.writes == []
+
+
+def test_missing_owner_takeover_preserves_concurrent_owner_and_completion():
+    now = datetime.now(timezone.utc)
+    transaction = _Transaction()
+    changed = _Ref({'status': 'processing', 'job_id': 'new-owner', 'updated_at': now})
+    assert sync_ledger._claim_transaction.to_wrap(
+        transaction, changed, 'candidate', 'fresh', now, missing_owner='expired-owner'
+    ) == {'outcome': 'busy', 'job_id': 'new-owner'}
+    result = {
+        'new_conversation_ids': [],
+        'updated_conversation_ids': [],
+        'total_segments': 1,
+        'failed_segments': 0,
+        'errors': [],
+        'outcome': 'success',
+    }
+    completed = _Ref({'status': 'completed', 'job_id': 'expired-owner', 'result': result})
+    assert sync_ledger._claim_transaction.to_wrap(
+        transaction, completed, 'candidate', 'fresh', now, missing_owner='expired-owner'
+    ) == {'outcome': 'completed', 'result': result}
+    assert transaction.writes == []
+
+
+def test_redis_failure_does_not_authorize_owner_takeover(monkeypatch):
+    import pytest
+
+    transaction = _Transaction()
+    client = MagicMock()
+    client.transaction.return_value = transaction
+    ref = _Ref({'status': 'processing', 'job_id': 'owner', 'updated_at': datetime.now(timezone.utc)})
+    monkeypatch.setattr(sync_ledger, '_ledger_ref', lambda *_: ref)
+    monkeypatch.setattr(sync_ledger, '_claim_transaction', sync_ledger._claim_transaction.to_wrap)
+    monkeypatch.setattr(sync_ledger, 'get_sync_job', MagicMock(side_effect=ConnectionError('Redis unavailable')))
+    with pytest.raises(ConnectionError):
+        sync_ledger.claim_sync_content('uid', 'content', 'new-job', 'fresh', firestore_client=client)
+    assert transaction.writes == []

@@ -1,0 +1,3 @@
+{
+  "change": "On-device transcription times each transcript segment from the recording's real length, so 8 kHz recordings are no longer stamped at half their duration"
+}

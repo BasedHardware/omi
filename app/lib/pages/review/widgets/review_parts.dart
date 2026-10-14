@@ -12,6 +12,22 @@ String reviewQuestion(BuildContext context, ReviewItem item) {
     ReviewItemKind.task => item.task!.description,
     ReviewItemKind.samePerson => l10n.reviewQuestionSamePerson(item.samePerson!.right.name),
     ReviewItemKind.spelling => l10n.reviewQuestionSpelling,
+    ReviewItemKind.agentProposal => _proposalQuestion(context, item.agentProposal!),
+  };
+}
+
+String _proposalQuestion(BuildContext context, AgentProposalItem proposal) {
+  final l10n = context.l10n;
+  final target = proposal.targetLabel;
+  final other = proposal.otherLabel ?? '';
+  return switch (proposal.editKind) {
+    'close_task' when target.isNotEmpty => l10n.reviewProposalCloseTask(target),
+    'retire_task' when target.isNotEmpty => l10n.reviewProposalRetireTask(target),
+    'merge_people' when target.isNotEmpty && other.isNotEmpty => l10n.reviewProposalMergePeople(target, other),
+    'merge_memories' => l10n.reviewProposalMergeMemories,
+    'memory' => l10n.reviewProposalMemory,
+    'entity_summary' when target.isNotEmpty => l10n.reviewProposalEntitySummary(target),
+    _ => l10n.reviewProposalGeneric,
   };
 }
 
@@ -20,6 +36,7 @@ IconData reviewKindIcon(ReviewItemKind kind) => switch (kind) {
       ReviewItemKind.task => Icons.task_alt,
       ReviewItemKind.samePerson => Icons.people_outline,
       ReviewItemKind.spelling => Icons.spellcheck,
+      ReviewItemKind.agentProposal => Icons.auto_awesome_outlined,
     };
 
 /// A 40pt circle holding a kind's icon, used where a card has no play button.
@@ -99,8 +116,10 @@ class ReviewAnswerPill extends StatelessWidget {
                 label,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: OmiType.subhead
-                    .copyWith(color: foreground, fontWeight: primary ? FontWeight.w600 : FontWeight.w500),
+                style: OmiType.subhead.copyWith(
+                  color: foreground,
+                  fontWeight: primary ? FontWeight.w600 : FontWeight.w500,
+                ),
               ),
             ),
           ),
@@ -190,7 +209,10 @@ class EntityInitialAvatar extends StatelessWidget {
         shape: type == EntityType.person ? BoxShape.circle : BoxShape.rectangle,
         borderRadius: type == EntityType.person ? null : BorderRadius.circular(size / 4),
       ),
-      child: Text(initial, style: OmiType.footnote.copyWith(fontSize: size * 0.42, fontWeight: FontWeight.w600)),
+      child: Text(
+        initial,
+        style: OmiType.footnote.copyWith(fontSize: size * 0.42, fontWeight: FontWeight.w600),
+      ),
     );
   }
 }
@@ -224,6 +246,76 @@ class ReviewSectionLabel extends StatelessWidget {
           if (trailing != null) trailing!,
         ],
       ),
+    );
+  }
+}
+
+/// The bounded, server-projected speech surrounding a spelling question.
+class ReviewSpellingContext extends StatelessWidget {
+  const ReviewSpellingContext({super.key, required this.context});
+  final SpellingContext context;
+
+  @override
+  Widget build(BuildContext buildContext) {
+    final l10n = buildContext.l10n;
+    final dates = OmiDateFormat.of(buildContext);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Text(l10n.reviewSpellingContext, style: OmiType.footnote.copyWith(color: OmiColors.textSecondary)),
+        const SizedBox(height: OmiSpacing.xxs),
+        Text(
+          [
+            context.conversationTitle.isEmpty ? l10n.untitledConversation : context.conversationTitle,
+            if (context.conversationDate != null) dates.dateTime(context.conversationDate!),
+          ].join(' · '),
+          key: const Key('review_spelling_source'),
+          style: OmiType.subhead.copyWith(color: OmiColors.textSecondary),
+        ),
+        const SizedBox(height: OmiSpacing.sm),
+        Container(
+          key: const Key('review_spelling_context'),
+          padding: const EdgeInsets.all(OmiSpacing.sm),
+          decoration: BoxDecoration(color: OmiColors.surface2, borderRadius: OmiRadius.lgAll),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              for (var i = 0; i < context.segments.length; i++) ...[
+                if (i > 0) const SizedBox(height: OmiSpacing.sm),
+                Text(
+                  SpeakerNames.excerptLabel(
+                    isUser: context.segments[i].isUser,
+                    speakerLabel: context.segments[i].speakerLabel,
+                    l10n: l10n,
+                  ),
+                  style: OmiType.footnote.copyWith(color: OmiColors.textSecondary),
+                ),
+                const SizedBox(height: OmiSpacing.xxs),
+                _speech(context.segments[i], i == context.mainIndex),
+              ],
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _speech(SpellingContextSegment segment, bool main) {
+    final start = context.quoteStart;
+    final end = context.quoteEnd;
+    final highlight = main && start != null && end != null && start >= 0 && end > start && end <= segment.text.length;
+    if (!highlight) return Text(segment.text, style: OmiType.callout);
+    return Text.rich(
+      TextSpan(children: [
+        TextSpan(text: segment.text.substring(0, start)),
+        TextSpan(
+          text: segment.text.substring(start, end),
+          style: TextStyle(fontWeight: FontWeight.w600, backgroundColor: OmiColors.accent.withValues(alpha: 0.14)),
+        ),
+        TextSpan(text: segment.text.substring(end)),
+      ]),
+      key: const Key('review_spelling_highlight'),
+      style: OmiType.callout,
     );
   }
 }

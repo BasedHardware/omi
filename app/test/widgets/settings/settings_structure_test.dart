@@ -4,6 +4,7 @@ import 'package:package_info_plus/package_info_plus.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'package:omi/pages/phone_calls/phone_calls_feature.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/env/env.dart';
 import 'package:omi/models/subscription.dart';
@@ -139,7 +140,9 @@ void main() {
     await tester.pumpAndSettle();
   }
 
-  testWidgets('the sheet is Account, Plan, Referral, the groups, Memories, Goals and Feedback, in order, keyed', (
+  testWidgets(
+      'the sheet is Account, Plan, Referral, the groups, Connect an Agent, Memories, Goals and Feedback, in order, keyed',
+      (
     tester,
   ) async {
     await pumpSheet(tester);
@@ -153,6 +156,7 @@ void main() {
       'settings_group_voice',
       'settings_group_notifications',
       'settings_group_integrations',
+      'settings_row_connect_agent',
       'settings_group_privacy',
       'settings_row_memories',
       'settings_row_goals',
@@ -171,6 +175,7 @@ void main() {
       en.assistantVoiceSettingsTitle,
       en.notificationsAndDisplay,
       en.integrations,
+      en.connectAnAgent,
       en.dataAndPrivacy,
       en.memories,
       en.goals,
@@ -219,6 +224,8 @@ void main() {
       SettingsDestination.profile: 'settings_account',
       SettingsDestination.integrations: 'settings_group_integrations',
       SettingsDestination.developer: 'settings_group_developer',
+      // Connect an Agent joined the sheet (2026-10-14) so agent setup is not buried in Developer.
+      SettingsDestination.connectAgent: 'settings_row_connect_agent',
       SettingsDestination.planAndUsage: 'settings_row_planAndUsage',
       SettingsDestination.referral: 'settings_row_referral',
       SettingsDestination.feedback: 'settings_row_feedback', // where Intercom is supported (the host test is)
@@ -227,14 +234,14 @@ void main() {
       SettingsDestination.memories: 'settings_row_memories',
       SettingsDestination.goals: 'settings_row_goals',
     };
-    const movedOffSheet = [
+    final movedOffSheet = [
       SettingsDestination.notifications,
       SettingsDestination.device, // only while connected; the stub is connected
       SettingsDestination.transcription,
       SettingsDestination.conversationDisplay,
       SettingsDestination.conversationTimeout,
       SettingsDestination.offlineSync,
-      SettingsDestination.phoneCalls,
+      if (PhoneCallsFeature.visible) SettingsDestination.phoneCalls,
       SettingsDestination.dataPrivacy,
       SettingsDestination.exportData,
       SettingsDestination.importData,
@@ -292,6 +299,8 @@ void main() {
       SettingsDestination.notificationsGroup,
       SettingsDestination.privacyGroup,
       SettingsDestination.helpGroup,
+      // Hidden for now (PhoneCallsFeature.visible); the destination stays wired for when it returns.
+      if (!PhoneCallsFeature.visible) SettingsDestination.phoneCalls,
     };
     expect(covered, SettingsDestination.values.toSet(), reason: 'a destination is missing from this walk');
 
@@ -303,7 +312,12 @@ void main() {
 
     // Pages hold what the brief says, in order.
     expect(pageTitles['settings_page_account'], [en.name, en.email, en.userId, en.signOut, en.deleteAccountTitle]);
-    expect(pageTitles['settings_page_device'], [en.deviceSettings, en.offlineSync, en.phoneCalls, en.permissions]);
+    expect(pageTitles['settings_page_device'], [
+      en.deviceSettings,
+      en.offlineSync,
+      if (PhoneCallsFeature.visible) en.phoneCalls,
+      en.permissions,
+    ]);
     expect(pageTitles['settings_page_recording'], [
       en.transcription,
       en.language,

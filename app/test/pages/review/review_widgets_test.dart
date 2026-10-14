@@ -31,6 +31,29 @@ const _speaker = ReviewItem(
   ),
 );
 
+const _proposal = ReviewItem(
+  itemId: 'agent_proposal:p',
+  kind: ReviewItemKind.agentProposal,
+  agentProposal: AgentProposalItem(
+    editKind: 'merge_people',
+    targetLabel: 'Bela K',
+    otherLabel: 'Béla',
+    reason: 'Same company and the same phone number.',
+  ),
+);
+
+const _memoryProposal = ReviewItem(
+  itemId: 'agent_proposal:m',
+  kind: ReviewItemKind.agentProposal,
+  agentProposal: AgentProposalItem(
+    editKind: 'memory',
+    targetLabel: 'Lives in Hanoi',
+    before: 'Lives in Hanoi',
+    after: 'Lives in Ho Chi Minh City',
+    reason: 'Moved in September.',
+  ),
+);
+
 Future<ReviewProvider> _provider(List<ReviewItem> items, List<(String, Map<String, dynamic>)> sent) async {
   final provider = ReviewProvider(
     isEligible: () => true,
@@ -68,6 +91,37 @@ void main() {
     expect(sent.single.$1, 'speaker:p1');
     expect((sent.single.$2['speaker'] as Map)['person_id'], 'bela');
     expect(provider.items, isEmpty);
+  });
+
+  testWidgets('a Dream suggestion card asks the question and applies on Apply', (tester) async {
+    final sent = <(String, Map<String, dynamic>)>[];
+    final provider = await _provider([_proposal], sent);
+    await tester.pumpWidget(_host(provider, const ReviewQuestionCard(item: _proposal)));
+    expect(find.text('Is “Bela K” the same person as “Béla”?'), findsOneWidget);
+    expect(find.text('Dismiss'), findsOneWidget);
+
+    await tester.tap(find.text('Apply'));
+    await tester.pumpAndSettle();
+    expect(sent.single.$1, 'agent_proposal:p');
+    expect(sent.single.$2['agent_proposal'], {'decision': 'accept'});
+    expect(provider.items, isEmpty);
+  });
+
+  testWidgets('the suggestion sheet shows the current and suggested values and the reason', (tester) async {
+    final sent = <(String, Map<String, dynamic>)>[];
+    final provider = await _provider([_memoryProposal], sent);
+    var closed = false;
+    await tester.pumpWidget(_host(provider, ReviewItemDetail(item: _memoryProposal, onDone: () => closed = true)));
+    expect(find.text('CURRENT'), findsOneWidget);
+    expect(find.text('Lives in Hanoi'), findsOneWidget);
+    expect(find.text('SUGGESTED'), findsOneWidget);
+    expect(find.text('Lives in Ho Chi Minh City'), findsOneWidget);
+    expect(find.text('Moved in September.'), findsOneWidget);
+
+    await tester.tap(find.text('Dismiss'));
+    await tester.pumpAndSettle();
+    expect(closed, isTrue);
+    expect(sent.single.$2['agent_proposal'], {'decision': 'dismiss'});
   });
 
   testWidgets('task sheet shows dismiss reasons only after Dismiss', (tester) async {

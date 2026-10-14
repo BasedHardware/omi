@@ -7,6 +7,7 @@ import 'package:http/http.dart' as http;
 import 'package:path/path.dart';
 
 import 'package:omi/backend/http/api_result.dart';
+import 'package:omi/backend/http/api_edge_throttle_telemetry.dart';
 import 'package:omi/backend/http/clock_skew_detector.dart';
 import 'package:omi/backend/http/http_pool_manager.dart';
 import 'package:omi/backend/http/streaming_error.dart';
@@ -186,6 +187,7 @@ Future<Map<String, String>> buildHeaders({
     'X-App-Platform': PlatformManager.instance.platform,
     'X-Device-Id-Hash': PlatformManager.instance.deviceIdHash,
     'X-App-Version': PlatformManager.instance.appVersion,
+    'X-Omi-Plan-Identity': '1',
     'X-App-Build': PlatformManager.instance.appBuild,
     ...fromHeaders,
   };
@@ -256,10 +258,14 @@ bool _isRequiredAuthCheck(String url) {
 
 /// Omi credentials are scoped to Omi-owned product API authorities. Hostname
 /// parsing avoids substring matches such as `api.omi.me.attacker.example`.
+/// A debug hermetic journey may additionally trust its registered loopback
+/// fixture; that registry stays empty for user-configured overrides.
 @visibleForTesting
 bool shouldAttachOmiCredentials(String url) {
   final uri = Uri.tryParse(url);
-  if (uri == null || !{'https', 'wss'}.contains(uri.scheme.toLowerCase())) return false;
+  if (uri == null || uri.host.isEmpty) return false;
+  if (Env.debugTrustedFixtureAuthority(uri)) return true;
+  if (!{'https', 'wss'}.contains(uri.scheme.toLowerCase())) return false;
   return {'api.omi.me', 'api.omiapi.com'}.contains(uri.host.toLowerCase());
 }
 
@@ -658,6 +664,7 @@ Future<http.Response?> makeApiCall({
   Duration? timeout,
   int? retries,
   bool signOutOn401 = true,
+  bool Function()? canSend,
 }) async {
   try {
     return await sendUncaughtApiCall(
@@ -668,6 +675,7 @@ Future<http.Response?> makeApiCall({
       timeout: timeout,
       retries: retries,
       signOutOn401: signOutOn401,
+      canSend: canSend,
     );
   } on AuthTokenUnavailableException catch (e) {
     await _handleAuthUnavailable(e, expireTerminalSession: signOutOn401);
@@ -883,6 +891,7 @@ Future<http.Response> makeMultipartApiCallUnpooled({
     HttpPoolManager.stampRequestTime(request);
 
     var streamedResponse = await client.send(request).timeout(const Duration(minutes: 10));
+    ApiEdgeThrottleTelemetry.instance.observe(request, streamedResponse);
     var response = await http.Response.fromStream(streamedResponse);
 
     if (requireAuthCheck && response.statusCode == 401) {
@@ -902,6 +911,7 @@ Future<http.Response> makeMultipartApiCallUnpooled({
           );
           HttpPoolManager.stampRequestTime(request);
           streamedResponse = await client.send(request).timeout(const Duration(minutes: 10));
+          ApiEdgeThrottleTelemetry.instance.observe(request, streamedResponse);
           return http.Response.fromStream(streamedResponse);
         },
       );

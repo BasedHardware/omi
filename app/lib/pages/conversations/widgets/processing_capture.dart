@@ -17,6 +17,7 @@ import 'package:omi/pages/conversations/capture_state_labels.dart';
 import 'package:omi/pages/processing_conversations/page.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/conversation_provider.dart';
+import 'package:omi/services/telemetry/client_telemetry.dart';
 import 'package:omi/providers/device_provider.dart';
 import 'package:omi/utils/alerts/app_snackbar.dart';
 import 'package:omi/utils/enums.dart';
@@ -742,8 +743,15 @@ class _ProcessingConversationWidgetState extends State<ProcessingConversationWid
         // Fresh attempt — give the new processing pass another full timeout window.
         _processingStartedAt = _now;
         _timedOut = false;
-        provider.addProcessingConversation(updated);
+        provider.addProcessingConversation(updated, freshProcessingAttempt: true);
       } else {
+        try {
+          ClientTelemetry.instance.noteProcessingRowLeft(
+            id: widget.conversation.id,
+            lifecycleOk: true,
+            lifecycleStatus: updated.status.name,
+          );
+        } catch (_) {}
         provider.removeProcessingConversation(widget.conversation.id);
         provider.upsertConversation(updated);
       }

@@ -83,10 +83,10 @@ enum MemoryLayer: String, Codable, CaseIterable, Identifiable {
     switch self {
     case .shortTerm:
       return
-        "Recent observations from your activity. May decay or promote to Long-term when corroborated."
+        "Recent things Omi noticed. They move to Long-term if they keep coming up, or fade if they don't."
     case .longTerm:
       return
-        "Durable facts Omi keeps long-term - stable details about you, your preferences, and your life."
+        "Lasting facts about you, your preferences, and your life."
     case .archive:
       return "Aged-out long-term memories. Hidden by default; search Archive to find them."
     }
@@ -858,7 +858,6 @@ extension APIClient {
 // MARK: - Memories API
 
 extension APIClient {
-  private static let canonicalLifecycleExposedHeader = "X-Omi-Memory-Canonical-Lifecycle-Exposed"
   private static let deviceScopeSupportedHeader = "X-Omi-Memory-Device-Scope-Supported"
   private static let defaultDeleteSupportedHeader = "X-Omi-Memory-Default-Delete-Supported"
   private static let nextCursorHeader = "X-Omi-Memory-Next-Cursor"
@@ -1023,10 +1022,11 @@ extension APIClient {
 
     let memories = try decoder.decode([ServerMemory].self, from: data)
     try validateExpectedOwner(authPolicy)
-    let lifecycleHeader = httpResponse.value(forHTTPHeaderField: Self.canonicalLifecycleExposedHeader)
-    let canonicalLifecycleExposed = lifecycleHeader == "true"
     let deviceScopeHeader = httpResponse.value(forHTTPHeaderField: Self.deviceScopeSupportedHeader)
     let deviceScopeSupported = deviceScopeHeader.map { $0.caseInsensitiveCompare("true") == .orderedSame }
+    // Current and pre-universal servers pair device-scope support with canonical
+    // lifecycle exposure on this route, including for empty and mixed-tier pages.
+    let canonicalLifecycleExposed = deviceScopeSupported == true
     let defaultMemoryDeleteSupported =
       httpResponse.value(forHTTPHeaderField: Self.defaultDeleteSupportedHeader) == "true"
     let nextCursor = httpResponse.value(forHTTPHeaderField: Self.nextCursorHeader)

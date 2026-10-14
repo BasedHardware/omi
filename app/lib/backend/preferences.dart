@@ -999,6 +999,15 @@ class SharedPreferencesUtil {
 
   set showDiscardedMemories(bool value) => saveBool('showDiscardedMemories', value);
 
+  /// `tooShort` or `discardedOnly` while Home should explain a missing conversation.
+  String get homeEmptyExplanation => getString('homeEmptyExplanation');
+
+  set homeEmptyExplanation(String value) => saveString('homeEmptyExplanation', value);
+
+  bool get discardedOnlyExplained => getBool('discardedOnlyExplained');
+
+  set discardedOnlyExplained(bool value) => saveBool('discardedOnlyExplained', value);
+
   // Show short conversations - default is false (hidden)
   bool get showShortConversations => getBool('showShortConversations', defaultValue: false);
 
@@ -1275,6 +1284,11 @@ class SharedPreferencesUtil {
   set speakerLabelLastUsedMs(Map<String, int> value) {
     saveString('speaker_label_last_used_ms', jsonEncode(value));
   }
+
+  /// The one-time "label all speakers, then tap Done" tip has been shown on this install.
+  bool get speakerLabelingTipShown => getBool('speakerLabelingTipShown');
+
+  set speakerLabelingTipShown(bool value) => saveBool('speakerLabelingTipShown', value);
 
   ServerConversation? get modifiedConversationDetails {
     final String conversation = getString('modifiedConversationDetails');

@@ -38,6 +38,7 @@ from tests.support.firestore_conversation_profiles import (
 )
 from tests.support.firestore_review_query_drivers import registry_extension as outside_drivers
 from tests.support.firestore_dream_query_drivers import registry_extension as dream_drivers
+from tests.support.firestore_usage_units_driver import DRIVER as USAGE_UNITS_DRIVER
 from models.announcement import AnnouncementType
 from models.candidate import CandidateStatus
 from models.chat_first import ChatFirstSubject
@@ -138,6 +139,8 @@ BODY_DIGEST = {
     'database.sync_backfill_sequencer._pending_for_uid': '0215df28fdc7128cc68bf0abf087e4f98854698851b22821008460b68b699ea9',
     'database.workstreams.import_task_goal_links': 'd0c7c57d032067c3d72829663dd6f249073e6438ec7adac966b617fe3eaf1c56',
     'database.smart_merge.absorb_conversation': '811401edfa2d83ca8201f5275840c7f948580e6c6bd859bc9e6c7e879dbdbc22',
+    'database.client_telemetry.recent_owner_ids': '65fe8200d7ad9418b793ccb0fa53a172b2576a80bba644caa3b36cdb53b74510',
+    'database.client_telemetry_ops.purge_expired_observations': '8526c30b11ad8548356a136220232a607937bc464628c0eb5326e0a2e928897f',
 }
 
 DRIVERS: dict[str, DriverEntry] = {}
@@ -175,7 +178,6 @@ _add(
         neutrals={'limit': _LIMIT},
     )
 )
-
 _add(
     CoveredByEntry(
         'database.action_items._apply_action_item_date_filters',
@@ -328,7 +330,7 @@ _add(
         neutrals={'replacements': (None, 'optional rename map; not filter-affecting')},
     )
 )
-_add(DriverEntry('database.action_items.unlock_all_action_items', base={'uid': UID}))
+_add(DriverEntry('database.action_items.unlock_all_action_items', base={'uid': UID}, domains={'limit': [None, 100]}))
 
 _add(
     DriverEntry(
@@ -457,6 +459,19 @@ _add(
         'database.candidate_integration_outbox.list_candidate_integration_dispatches',
         base={'uid': UID, 'account_generation': 1},
         neutrals={'limit': _LIMIT},
+    )
+)
+_add(
+    DriverEntry(
+        'database.candidate_integration_outbox.list_candidate_integration_sweep_rows',
+        domains={'status': ['failed', 'pending', 'processing']},
+        neutrals={
+            'limit': _LIMIT,
+            'start_after_path': (
+                None,
+                'document-name cursor is absent on the first page and does not add a filter',
+            ),
+        },
     )
 )
 _add(
@@ -705,6 +720,27 @@ _add(
     )
 )
 _add(DriverEntry('database.conversation_finalization_jobs.get_finalization_job_summary'))
+
+
+def _byok_reclaim_cursor(client, combo, trial):
+    if trial:
+        path = 'conversation_finalization_jobs/reclaim-cursor'
+        client.documents[path] = {'created_at': T0}
+        for status in ('queued', 'leased'):
+            client.documents[f'conversation_recovery_state/byok_reclaim_{status}'] = {
+                'resume_after_path': path,
+                'generation': 1,
+            }
+
+
+_add(
+    DriverEntry(
+        'database.conversation_finalization_jobs.recover_stranded_byok_jobs',
+        neutrals={'limit': _LIMIT},
+        setup=_byok_reclaim_cursor,
+        trials=2,
+    )
+)
 _add(
     DriverEntry(
         'database.conversation_finalization_jobs.get_finalization_replay_candidates', neutrals={'limit': _LIMIT}
@@ -899,7 +935,7 @@ _add(
         ),
     )
 )
-_add(DriverEntry('database.conversations.unlock_all_conversations', base={'uid': UID}))
+_add(DriverEntry('database.conversations.unlock_all_conversations', base={'uid': UID}, domains={'limit': [None, 100]}))
 
 _add(
     DriverEntry(
@@ -1640,7 +1676,7 @@ _add(
         neutrals={'limit': _LIMIT, 'budget': _BUDGET},
     )
 )
-_add(DriverEntry('database.memories.unlock_all_memories', base={'uid': UID}))
+_add(DriverEntry('database.memories.unlock_all_memories', base={'uid': UID}, domains={'limit': [None, 100]}))
 
 _add(
     DriverEntry(
@@ -1817,13 +1853,6 @@ _add(DriverEntry('database.phone_calls.get_phone_numbers', base={'uid': UID}))
 _add(DriverEntry('database.phone_calls.get_primary_phone_number', base={'uid': UID}))
 _add(
     DriverEntry(
-        'database.projection_repair.process_projection_repairs',
-        base={'uid': UID, 'fact_loader': noop, 'repair_func': noop},
-        neutrals={'limit': _LIMIT, 'max_attempts': (3, 'retry bound; not filter-affecting')},
-    )
-)
-_add(
-    DriverEntry(
         'database.recurrence_inbox.list_pending_recurrence_receipts',
         base={'uid': UID, 'account_generation': 1},
         neutrals={'limit': _LIMIT},
@@ -1842,6 +1871,13 @@ _add(
         base={'uid': UID},
         domains={'status': ['pending', 'resolved']},
         neutrals={'limit': _LIMIT},
+    )
+)
+_add(
+    DriverEntry(
+        'database.review_queue.expire_review_conflicts',
+        base={'uid': UID, 'created_before': T0},
+        profiles=(CallerProfile('operator-review-expiration', {'dry_run': [True, False]}, serving=False),),
     )
 )
 _add(
@@ -2294,10 +2330,10 @@ _add(DriverEntry('database.user_usage.get_monthly_history_for_year', base={'uid'
 _add(DriverEntry('database.user_usage.get_monthly_usage_stats', base={'uid': UID, 'date': T0}))
 _add(DriverEntry('database.user_usage.get_monthly_usage_stats_since', base={'uid': UID, 'date': T0, 'start_date': T0}))
 _add(DriverEntry('database.user_usage.get_today_usage_stats', base={'uid': UID, 'start': T0, 'end': T1}))
+_add(USAGE_UNITS_DRIVER)
 _add(DriverEntry('database.user_usage.get_usage_by_plan', base={'uid': UID}, domains={'now': [None, T0]}))
 _add(DriverEntry('database.user_usage.get_yearly_history', base={'uid': UID}))
 _add(DriverEntry('database.user_usage.get_yearly_usage_stats', base={'uid': UID, 'date': T0}))
-
 _add(DriverEntry('database.users.count_people', base={'uid': UID}))
 _add(DriverEntry('database.users.get_all_ratings', domains={'rating_type': ['memory_summary', 'other']}))
 _add(
@@ -2314,6 +2350,7 @@ _add(
     DriverEntry(
         'database.person_aliases.list_people',
         base={'uid': UID},
+        domains={'limit': [None, 200]},
         neutrals={
             'include_dismissed': (False, 'post-read visibility filter; does not alter the Firestore query shape')
         },
@@ -2605,5 +2642,118 @@ _add(
         reason='Builder consumed by its registered serving parent',
         expect_observed=False,
         body_digest=BODY_DIGEST['database.proactivity_producers.task_items_query'],
+    )
+)
+
+_add(
+    SkipEntry(
+        'database.client_telemetry.recent_owner_ids',
+        reason='Ops helper streams the rate-limit collection by document id only '
+        '(no query filters); the ingest path is the registered driver via '
+        'database.client_telemetry.accept_batch.',
+        body_digest='65fe8200d7ad9418b793ccb0fa53a172b2576a80bba644caa3b36cdb53b74510',
+    )
+)
+
+_add(
+    SkipEntry(
+        'database.client_telemetry_ops.purge_expired_observations',
+        reason='Ops retention cleanup streams whole collections and deletes by '
+        'reference (expires_at checked in Python, not as a Firestore filter); '
+        'cron-invoked via the admin purge endpoint, not a serving query path.',
+        body_digest='8526c30b11ad8548356a136220232a607937bc464628c0eb5326e0a2e928897f',
+    )
+)
+
+
+# Messaging FIFO admission owns a declared status/created_at index; remaining queries are scans.
+def _messaging_cleanup(client):
+    return unittest.mock.patch.object(client, 'recursive_delete', lambda ref: None, create=True)
+
+
+def _messaging_identity(client, combo, trial):
+    client.documents['channel_identities/link'] = {'uid': UID, 'active': True}
+
+
+def _messaging_claim(client, combo, trial):
+    client.documents['channel_identities/link/inbox/job'] = {'status': 'pending', 'created_at': T0, 'payload': '{}'}
+
+
+def _messaging_decryption(client):
+    return unittest.mock.patch('utils.encryption.decrypt', lambda value, uid: '{}')
+
+
+def _messaging_visibility(client):
+    return unittest.mock.patch.dict('os.environ', {'OMI_MESSAGING_CHANNELS': 'on', 'OMI_MESSAGING_CHANNELS_UIDS': UID})
+
+
+from database.messaging import MessagingStore
+
+_messaging_store = MessagingStore()
+for method, base, setup in (
+    ('links', {'uid': UID}, None),
+    ('events', {'uid': UID, 'session_id': 'session'}, None),
+    ('pending', {'message': SimpleNamespace(channel='loopback', provider='fake', external_user_id='external')}, None),
+    ('unlink', {'uid': UID, 'link_id': 'link'}, _messaging_identity),
+    ('delete_account', {'uid': UID}, None),
+):
+    _add(
+        DriverEntry(
+            'database.messaging.MessagingStore.' + method,
+            base={'self': _messaging_store, **base},
+            setup=setup,
+            patchers=(_messaging_cleanup, _messaging_decryption),
+        )
+    )
+_add(
+    DriverEntry(
+        'database.messaging.MessagingStore._claim',
+        base={'self': _messaging_store, 'path': 'channel_identities/link/inbox/job'},
+        neutrals={'now': _NOW},
+        domains={'take_head': [False, True]},
+        setup=_messaging_claim,
+        patchers=(_messaging_cleanup, _messaging_decryption),
+    )
+)
+_add(DriverEntry('database.channel_visibility.visible_sessions', base={'uid': UID}, patchers=(_messaging_visibility,)))
+
+_add(
+    DriverEntry(
+        'database.messaging.MessagingStore.pending_jobs',
+        base={'self': _messaging_store, 'channel': 'loopback', 'provider': 'fake'},
+        domains={'limit': [1, 100]},
+    )
+)
+
+
+from utils.messaging.undo import UndoStore
+
+_add(
+    DriverEntry(
+        'utils.messaging.undo.UndoStore.prune_expired',
+        base={'self': UndoStore(_messaging_store), 'uid': UID, 'session': 'session'},
+        domains={'now': [None, T0]},
+    )
+)
+
+
+_add(
+    DriverEntry(
+        'database.chat_receipts.message_receipt_snapshot',
+        base={'user_ref': ref_document(f'users/{UID}'), 'message_id': 'msg-1', 'transaction': ref_transaction()},
+    )
+)
+
+
+_add(DriverEntry('database.locked_content.has_recoverable_locked_content', base={'uid': UID}))
+_add(
+    CoveredByEntry(
+        'database.locked_content.unlock_query_rows',
+        covered_by=(
+            'database.action_items.unlock_all_action_items',
+            'database.conversations.unlock_all_conversations',
+            'database.memories.unlock_all_memories',
+        ),
+        reason='Shared batch mechanics and bounded projection exercised by upgrade/reset unlock drivers',
     )
 )

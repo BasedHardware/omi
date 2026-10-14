@@ -1,3 +1,4 @@
+import 'package:omi/pages/phone_calls/phone_calls_feature.dart';
 import 'package:omi/l10n/app_localizations.dart';
 
 /// Where a Settings row (or a search result for it) takes the reader.
@@ -36,6 +37,9 @@ enum SettingsDestination {
   importData,
   creatorPayouts,
   developer,
+
+  /// Opens the web developer home (agent setup prompts, MCP and Developer API keys).
+  connectAgent,
   feedback,
   helpCenter,
   whatsNew,
@@ -122,7 +126,8 @@ final List<SettingsSearchEntry> settingsSearchEntries = [
     visible: _whenDeviceConnected,
   ),
   SettingsSearchEntry('offlineSync', (l) => l.offlineSync, SettingsDestination.offlineSync, _groups),
-  SettingsSearchEntry('phoneCalls', (l) => l.phoneCalls, SettingsDestination.phoneCalls, _groups),
+  SettingsSearchEntry('phoneCalls', (l) => l.phoneCalls, SettingsDestination.phoneCalls, _groups,
+      visible: (_) => PhoneCallsFeature.visible),
   SettingsSearchEntry('permissions', (l) => l.permissions, SettingsDestination.permissions, _groups),
   SettingsSearchEntry('device', (l) => l.device, SettingsDestination.deviceGroup, _drawer),
 
@@ -218,6 +223,15 @@ final List<SettingsSearchEntry> settingsSearchEntries = [
 
   // Developer Settings (opens the page directly)
   SettingsSearchEntry('developerSettings', (l) => l.developerSettings, SettingsDestination.developer, _drawer),
+
+  // Connect an Agent (opens the web developer home)
+  SettingsSearchEntry(
+    'connectAnAgent',
+    (l) => l.connectAnAgent,
+    SettingsDestination.connectAgent,
+    _drawer,
+    aliases: (l) => [l.mcp, l.mcpServer, l.developerApi, l.claudeCode],
+  ),
 
   // Notifications
   SettingsSearchEntry(

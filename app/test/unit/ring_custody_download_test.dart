@@ -1,10 +1,13 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
+import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/services/devices/connectors/device_connection.dart';
@@ -13,6 +16,7 @@ import 'package:omi/services/wals/pendant_ring_custody.dart';
 import 'package:omi/services/wals/ring_storage_sync.dart';
 import 'package:omi/services/wals/wal.dart';
 import 'package:omi/services/wals/wal_interfaces.dart';
+import 'package:omi/utils/debug_log_manager.dart';
 
 class _Listener implements IWalSyncListener {
   @override
@@ -61,6 +65,7 @@ class _FakeRingDevice implements DeviceConnection {
   _FakeRingDevice({required this.ringInfo, this.caps = 0});
 
   RingInfo ringInfo;
+  Object? ringInfoError;
   final int caps;
   void Function(List<int>)? onBytes;
   final controller = StreamController<List<int>>.broadcast();
@@ -77,6 +82,7 @@ class _FakeRingDevice implements DeviceConnection {
 
   @override
   Future<RingInfo?> getRingInfo() async {
+    if (ringInfoError != null) throw ringInfoError!;
     final after = postAckInfo;
     if (after != null && advances.isNotEmpty) {
       final r = after;
@@ -229,6 +235,44 @@ void main() {
         device: 'devkit-1',
         storageTotalBytes: records * 444,
       );
+
+  test('syncAll persists the failure cause, original stack and phase while returning a response', () async {
+    SharedPreferences.setMockInitialValues({});
+    await SharedPreferencesUtil.init();
+    await DebugLogManager.setEnabled(true);
+    addTearDown(() => DebugLogManager.setEnabled(false));
+    final error = StateError('ring INFO read failed');
+    final card = _FakeRingDevice(ringInfo: _info())..ringInfoError = error;
+    addTearDown(card.controller.close);
+    final wal = ringWal()..deviceDownloadFraction = 0.5;
+    final sync = syncWith(_FakeLocalSync(), card, wal);
+
+    final response = await sync.syncAll();
+
+    // Logging is fire-and-forget in production; wait for the actual persisted record.
+    Map<String, dynamic>? failure;
+    for (var attempt = 0; attempt < 100 && failure == null; attempt++) {
+      final logFiles = await DebugLogManager.listLogFiles();
+      final lines = logFiles.isEmpty ? <String>[] : await logFiles.first.readAsLines();
+      for (final line in lines) {
+        final record = jsonDecode(line) as Map<String, dynamic>;
+        if (record['message'] == 'RingStorageSync failed') failure = record;
+      }
+      if (failure == null) await Future<void>.delayed(const Duration(milliseconds: 20));
+    }
+
+    expect(failure, isNotNull);
+    expect(failure!['level'], 'ERROR');
+    expect(failure['extra'], {'device': 'devkit-1', 'error': error.toString(), 'phase': 'list-read'});
+    expect(failure['stack'], contains('_FakeRingDevice.getRingInfo'));
+    expect(response, isNotNull);
+    expect(response!.newConversationIds, isEmpty);
+    expect(response.updatedConversationIds, isEmpty);
+    expect(sync.isSyncing, isFalse);
+    expect(wal.status, WalStatus.miss);
+    expect(wal.deviceDownloadFraction, isNull);
+    expect(card.advances, isEmpty);
+  });
 
   test('caps-0 legacy flow: durable records then a single anonymous advance after validated DONE', () async {
     final card = _FakeRingDevice(ringInfo: _info());

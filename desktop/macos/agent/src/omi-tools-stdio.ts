@@ -440,6 +440,15 @@ async function handleJsonRpc(
             result: { content: [{ type: "text", text: result }] },
           });
         }
+      } else if (toolName === "get_product_kb") {
+        const result = await requestSwiftTool(toolName, args);
+        if (!isNotification) {
+          send({
+            jsonrpc: "2.0",
+            id,
+            result: { content: [{ type: "text", text: result }] },
+          });
+        }
       } else if (toolManifestEntry(toolName)?.executor.kind === "swiftTool") {
         const entry = toolManifestEntry(toolName)!;
         const result = await requestSwiftTool(entry.executor.executorName ?? entry.name, args);

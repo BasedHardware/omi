@@ -35,35 +35,43 @@ class GeneratedSpeakerTagCandidate {
 }
 
 class GeneratedSpeakerTagPrompt {
+  final int? audioCaptureRun;
   final List<GeneratedSpeakerTagCandidate>? candidates;
   final double clipEnd;
   final double clipStart;
   final String conversationId;
   final DateTime? conversationStartedAt;
   final String conversationTitle;
+  final String? evidenceId;
   final String excerpt;
   final String id;
   final String kind;
   final String origin;
+  final int? receiptGeneration;
   final List<String> segmentIds;
   final int speakerId;
+  final String? speakerIdScope;
   final String? suggestedPersonId;
   final List<String>? suggestedPersonIds;
   final String? suggestedPersonName;
 
   const GeneratedSpeakerTagPrompt({
+    this.audioCaptureRun,
     this.candidates,
     required this.clipEnd,
     required this.clipStart,
     required this.conversationId,
     this.conversationStartedAt,
     this.conversationTitle = "",
+    this.evidenceId,
     this.excerpt = "",
     required this.id,
     required this.kind,
     required this.origin,
+    this.receiptGeneration,
     required this.segmentIds,
     required this.speakerId,
+    this.speakerIdScope,
     this.suggestedPersonId,
     this.suggestedPersonIds,
     this.suggestedPersonName,
@@ -71,18 +79,22 @@ class GeneratedSpeakerTagPrompt {
 
   factory GeneratedSpeakerTagPrompt.fromJson(Map<String, dynamic> json) {
     return GeneratedSpeakerTagPrompt(
+      audioCaptureRun: _readFieldValue<int>(_readField(json, const ["audio_capture_run"]), "audio_capture_run", _readInt, requiredField: false, nullable: true),
       candidates: _readFieldValue<List<GeneratedSpeakerTagCandidate>>(_readField(json, const ["candidates"]), "candidates", (value) => _readObjectList(value, GeneratedSpeakerTagCandidate.fromJson), requiredField: false, nullable: true),
       clipEnd: _required(_readFieldValue<double>(_readField(json, const ["clip_end"]), "clip_end", _readDouble, requiredField: true, nullable: false), "clip_end"),
       clipStart: _required(_readFieldValue<double>(_readField(json, const ["clip_start"]), "clip_start", _readDouble, requiredField: true, nullable: false), "clip_start"),
       conversationId: _required(_readFieldValue<String>(_readField(json, const ["conversation_id"]), "conversation_id", _readString, requiredField: true, nullable: false), "conversation_id"),
       conversationStartedAt: _readFieldValue<DateTime>(_readField(json, const ["conversation_started_at"]), "conversation_started_at", _readDateTime, requiredField: false, nullable: true),
       conversationTitle: _required(_readFieldValue<String>(_readField(json, const ["conversation_title"]), "conversation_title", _readString, requiredField: false, nullable: false, defaultValue: ""), "conversation_title"),
+      evidenceId: _readFieldValue<String>(_readField(json, const ["evidence_id"]), "evidence_id", _readString, requiredField: false, nullable: true),
       excerpt: _required(_readFieldValue<String>(_readField(json, const ["excerpt"]), "excerpt", _readString, requiredField: false, nullable: false, defaultValue: ""), "excerpt"),
       id: _required(_readFieldValue<String>(_readField(json, const ["id"]), "id", _readString, requiredField: true, nullable: false), "id"),
       kind: _required(_readFieldValue<String>(_readField(json, const ["kind"]), "kind", _readString, requiredField: true, nullable: false), "kind"),
       origin: _required(_readFieldValue<String>(_readField(json, const ["origin"]), "origin", _readString, requiredField: true, nullable: false), "origin"),
+      receiptGeneration: _readFieldValue<int>(_readField(json, const ["receipt_generation"]), "receipt_generation", _readInt, requiredField: false, nullable: true),
       segmentIds: _required(_readFieldValue<List<String>>(_readField(json, const ["segment_ids"]), "segment_ids", _readStringList, requiredField: true, nullable: false), "segment_ids"),
       speakerId: _required(_readFieldValue<int>(_readField(json, const ["speaker_id"]), "speaker_id", _readInt, requiredField: true, nullable: false), "speaker_id"),
+      speakerIdScope: _readFieldValue<String>(_readField(json, const ["speaker_id_scope"]), "speaker_id_scope", _readString, requiredField: false, nullable: true),
       suggestedPersonId: _readFieldValue<String>(_readField(json, const ["suggested_person_id"]), "suggested_person_id", _readString, requiredField: false, nullable: true),
       suggestedPersonIds: _readFieldValue<List<String>>(_readField(json, const ["suggested_person_ids"]), "suggested_person_ids", _readStringList, requiredField: false, nullable: true),
       suggestedPersonName: _readFieldValue<String>(_readField(json, const ["suggested_person_name"]), "suggested_person_name", _readString, requiredField: false, nullable: true),
@@ -91,18 +103,22 @@ class GeneratedSpeakerTagPrompt {
 
   Map<String, dynamic> toJson() {
     return {
+      'audio_capture_run': audioCaptureRun,
       'candidates': candidates?.map((value) => value.toJson()).toList(),
       'clip_end': clipEnd,
       'clip_start': clipStart,
       'conversation_id': conversationId,
       'conversation_started_at': conversationStartedAt?.toUtc().toIso8601String(),
       'conversation_title': conversationTitle,
+      'evidence_id': evidenceId,
       'excerpt': excerpt,
       'id': id,
       'kind': kind,
       'origin': origin,
+      'receipt_generation': receiptGeneration,
       'segment_ids': segmentIds,
       'speaker_id': speakerId,
+      'speaker_id_scope': speakerIdScope,
       'suggested_person_id': suggestedPersonId,
       'suggested_person_ids': suggestedPersonIds,
       'suggested_person_name': suggestedPersonName,
@@ -148,20 +164,24 @@ class GeneratedSpeakerTagPromptsResponse {
 
 class GeneratedSpeakerTagPromptsShownRequest {
   final List<String>? promptIds;
+  final bool setShown;
 
   const GeneratedSpeakerTagPromptsShownRequest({
     this.promptIds,
+    this.setShown = true,
   });
 
   factory GeneratedSpeakerTagPromptsShownRequest.fromJson(Map<String, dynamic> json) {
     return GeneratedSpeakerTagPromptsShownRequest(
       promptIds: _readFieldValue<List<String>>(_readField(json, const ["prompt_ids"]), "prompt_ids", _readStringList, requiredField: false, nullable: true),
+      setShown: _required(_readFieldValue<bool>(_readField(json, const ["set_shown"]), "set_shown", _readBool, requiredField: false, nullable: false, defaultValue: true), "set_shown"),
     );
   }
 
   Map<String, dynamic> toJson() {
     return {
       'prompt_ids': promptIds,
+      'set_shown': setShown,
     };
   }
 }
@@ -189,6 +209,7 @@ class GeneratedSpeakerTagPromptsShownResponse {
 class GeneratedSpeakerTagPromptAnswerRequest {
   final String answer;
   final String conversationId;
+  final String? evidenceId;
   final bool firstTime;
   final String kind;
   final String? name;
@@ -202,6 +223,7 @@ class GeneratedSpeakerTagPromptAnswerRequest {
   const GeneratedSpeakerTagPromptAnswerRequest({
     required this.answer,
     required this.conversationId,
+    this.evidenceId,
     this.firstTime = false,
     required this.kind,
     this.name,
@@ -217,6 +239,7 @@ class GeneratedSpeakerTagPromptAnswerRequest {
     return GeneratedSpeakerTagPromptAnswerRequest(
       answer: _required(_readFieldValue<String>(_readField(json, const ["answer"]), "answer", _readString, requiredField: true, nullable: false), "answer"),
       conversationId: _required(_readFieldValue<String>(_readField(json, const ["conversation_id"]), "conversation_id", _readString, requiredField: true, nullable: false), "conversation_id"),
+      evidenceId: _readFieldValue<String>(_readField(json, const ["evidence_id"]), "evidence_id", _readString, requiredField: false, nullable: true),
       firstTime: _required(_readFieldValue<bool>(_readField(json, const ["first_time"]), "first_time", _readBool, requiredField: false, nullable: false, defaultValue: false), "first_time"),
       kind: _required(_readFieldValue<String>(_readField(json, const ["kind"]), "kind", _readString, requiredField: true, nullable: false), "kind"),
       name: _readFieldValue<String>(_readField(json, const ["name"]), "name", _readString, requiredField: false, nullable: true),
@@ -233,6 +256,7 @@ class GeneratedSpeakerTagPromptAnswerRequest {
     return {
       'answer': answer,
       'conversation_id': conversationId,
+      'evidence_id': evidenceId,
       'first_time': firstTime,
       'kind': kind,
       'name': name,
@@ -247,22 +271,28 @@ class GeneratedSpeakerTagPromptAnswerRequest {
 }
 
 class GeneratedSpeakerTagPromptAnswerResponse {
+  final String? conversationId;
   final String? personId;
   final String qualityOutcome;
+  final List<GeneratedSpeakerTagPromptSegmentIdentity>? segmentIdentities;
   final String status;
   final bool voiceSampleQueued;
 
   const GeneratedSpeakerTagPromptAnswerResponse({
+    this.conversationId,
     this.personId,
     required this.qualityOutcome,
+    this.segmentIdentities,
     this.status = "ok",
     this.voiceSampleQueued = false,
   });
 
   factory GeneratedSpeakerTagPromptAnswerResponse.fromJson(Map<String, dynamic> json) {
     return GeneratedSpeakerTagPromptAnswerResponse(
+      conversationId: _readFieldValue<String>(_readField(json, const ["conversation_id"]), "conversation_id", _readString, requiredField: false, nullable: true),
       personId: _readFieldValue<String>(_readField(json, const ["person_id"]), "person_id", _readString, requiredField: false, nullable: true),
       qualityOutcome: _required(_readFieldValue<String>(_readField(json, const ["quality_outcome"]), "quality_outcome", _readString, requiredField: true, nullable: false), "quality_outcome"),
+      segmentIdentities: _readFieldValue<List<GeneratedSpeakerTagPromptSegmentIdentity>>(_readField(json, const ["segment_identities"]), "segment_identities", (value) => _readObjectList(value, GeneratedSpeakerTagPromptSegmentIdentity.fromJson), requiredField: false, nullable: true),
       status: _required(_readFieldValue<String>(_readField(json, const ["status"]), "status", _readString, requiredField: false, nullable: false, defaultValue: "ok"), "status"),
       voiceSampleQueued: _required(_readFieldValue<bool>(_readField(json, const ["voice_sample_queued"]), "voice_sample_queued", _readBool, requiredField: false, nullable: false, defaultValue: false), "voice_sample_queued"),
     );
@@ -270,10 +300,40 @@ class GeneratedSpeakerTagPromptAnswerResponse {
 
   Map<String, dynamic> toJson() {
     return {
+      'conversation_id': conversationId,
       'person_id': personId,
       'quality_outcome': qualityOutcome,
+      'segment_identities': segmentIdentities?.map((value) => value.toJson()).toList(),
       'status': status,
       'voice_sample_queued': voiceSampleQueued,
+    };
+  }
+}
+
+class GeneratedSpeakerTagPromptSegmentIdentity {
+  final String id;
+  final bool isUser;
+  final String? personId;
+
+  const GeneratedSpeakerTagPromptSegmentIdentity({
+    required this.id,
+    required this.isUser,
+    this.personId,
+  });
+
+  factory GeneratedSpeakerTagPromptSegmentIdentity.fromJson(Map<String, dynamic> json) {
+    return GeneratedSpeakerTagPromptSegmentIdentity(
+      id: _required(_readFieldValue<String>(_readField(json, const ["id"]), "id", _readString, requiredField: true, nullable: false), "id"),
+      isUser: _required(_readFieldValue<bool>(_readField(json, const ["is_user"]), "is_user", _readBool, requiredField: true, nullable: false), "is_user"),
+      personId: _readFieldValue<String>(_readField(json, const ["person_id"]), "person_id", _readString, requiredField: false, nullable: true),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'is_user': isUser,
+      'person_id': personId,
     };
   }
 }

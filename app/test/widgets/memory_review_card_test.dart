@@ -141,7 +141,7 @@ void main() {
     await tester.pump();
 
     expect(requested, [true]);
-    expect(find.text("Confirmed. I'll act on this."), findsOneWidget);
+    expect(find.text('Confirmed.'), findsOneWidget);
     expect(find.byKey(const Key('memory_review_accept_mem-1')), findsNothing);
 
     completer.complete(true);
@@ -149,7 +149,7 @@ void main() {
 
     // Settled state is read back from the live memory, not from the tap.
     expect(provider.memories.single.userReview, isTrue);
-    expect(find.text("Confirmed. I'll act on this."), findsOneWidget);
+    expect(find.text('Confirmed.'), findsOneWidget);
   });
 
   testWidgets('rejecting records the negative verdict and dims the row without a layout jump', (tester) async {
@@ -173,7 +173,7 @@ void main() {
 
     expect(requested, [false]);
     expect(provider.memories.single.userReview, isFalse);
-    expect(find.text("Dropped. I'll avoid facts like this."), findsOneWidget);
+    expect(find.text('Removed from your memories.'), findsOneWidget);
     expect(tester.getSize(find.byKey(const Key('memory_review_row_mem-1'))).height, heightBefore);
     final opacity = tester.widget<AnimatedOpacity>(
       find.descendant(of: find.byKey(const Key('memory_review_row_mem-1')), matching: find.byType(AnimatedOpacity)),
@@ -197,7 +197,7 @@ void main() {
 
     expect(provider.memories.single.userReview, isNull);
     expect(find.byKey(const Key('memory_review_error_mem-1')), findsOneWidget);
-    expect(find.text("Dropped. I'll avoid facts like this."), findsNothing);
+    expect(find.text('Removed from your memories.'), findsNothing);
     // The controls come back so the user can try again.
     expect(find.byKey(const Key('memory_review_reject_mem-1')), findsOneWidget);
   });
@@ -210,7 +210,7 @@ void main() {
     await tester.pumpWidget(_harness(provider, [_item('mem-1')]));
     await tester.pump();
 
-    expect(find.text("Confirmed. I'll act on this."), findsOneWidget);
+    expect(find.text('Confirmed.'), findsOneWidget);
     expect(find.byKey(const Key('memory_review_accept_mem-1')), findsNothing);
   });
 
@@ -336,7 +336,7 @@ void main() {
     await provider.loadMemories();
     await tester.pumpAndSettle();
 
-    expect(find.text("Confirmed. I'll act on this."), findsOneWidget);
+    expect(find.text('Confirmed.'), findsOneWidget);
     expect(find.text('Updated.'), findsNothing);
   });
 
@@ -371,7 +371,7 @@ void main() {
     // The verdict reached the server by id even though the row never loaded,
     // and the row says so instead of falling back to tappable controls.
     expect(reviews, {'mem-missing': true});
-    expect(find.text("Confirmed. I'll act on this."), findsOneWidget);
+    expect(find.text('Confirmed.'), findsOneWidget);
   });
 
   testWidgets('a fix on an unresolved row edits by id and records the correction', (tester) async {
@@ -421,7 +421,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.byKey(const Key('memory_review_error_mem-missing')), findsOneWidget);
-    expect(find.text("Dropped. I'll avoid facts like this."), findsNothing);
+    expect(find.text('Removed from your memories.'), findsNothing);
     // The controls come back so the user can try again.
     final reject = tester.widget<InkWell>(find.byKey(const Key('memory_review_reject_mem-missing')));
     expect(reject.onTap, isNotNull);
@@ -462,7 +462,7 @@ void main() {
 
     await tester.tap(find.byKey(const Key('memory_review_accept_mem-missing')));
     await tester.pumpAndSettle();
-    expect(find.text("Confirmed. I'll act on this."), findsOneWidget);
+    expect(find.text('Confirmed.'), findsOneWidget);
 
     // Recreate the State exactly as scrolling away and back does.
     await tester.pumpWidget(const SizedBox.shrink());
@@ -470,7 +470,7 @@ void main() {
     await tester.pumpWidget(_harness(provider, [_item('mem-missing')]));
     await tester.pumpAndSettle();
 
-    expect(find.text("Confirmed. I'll act on this."), findsOneWidget);
+    expect(find.text('Confirmed.'), findsOneWidget);
     expect(find.byKey(const Key('memory_review_accept_mem-missing')), findsNothing);
   });
 

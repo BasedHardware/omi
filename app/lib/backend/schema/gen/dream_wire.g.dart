@@ -24,6 +24,7 @@ class GeneratedDreamReportEdit {
   final int evidenceCount;
   final String kind;
   final String outcome;
+  final String policy;
   final String reason;
   final String targetLabel;
 
@@ -33,6 +34,7 @@ class GeneratedDreamReportEdit {
     required this.evidenceCount,
     required this.kind,
     required this.outcome,
+    this.policy = "suggest",
     required this.reason,
     required this.targetLabel,
   });
@@ -44,6 +46,7 @@ class GeneratedDreamReportEdit {
       evidenceCount: _required(_readFieldValue<int>(_readField(json, const ["evidence_count"]), "evidence_count", _readInt, requiredField: true, nullable: false), "evidence_count"),
       kind: _required(_readFieldValue<String>(_readField(json, const ["kind"]), "kind", _readString, requiredField: true, nullable: false), "kind"),
       outcome: _required(_readFieldValue<String>(_readField(json, const ["outcome"]), "outcome", _readString, requiredField: true, nullable: false), "outcome"),
+      policy: _required(_readFieldValue<String>(_readField(json, const ["policy"]), "policy", _readString, requiredField: false, nullable: false, defaultValue: "suggest"), "policy"),
       reason: _required(_readFieldValue<String>(_readField(json, const ["reason"]), "reason", _readString, requiredField: true, nullable: false), "reason"),
       targetLabel: _required(_readFieldValue<String>(_readField(json, const ["target_label"]), "target_label", _readString, requiredField: true, nullable: false), "target_label"),
     );
@@ -56,6 +59,7 @@ class GeneratedDreamReportEdit {
       'evidence_count': evidenceCount,
       'kind': kind,
       'outcome': outcome,
+      'policy': policy,
       'reason': reason,
       'target_label': targetLabel,
     };
@@ -109,11 +113,13 @@ class GeneratedDreamReportTask {
 class GeneratedDreamReportTerm {
   final List<String> aliases;
   final String kind;
+  final String policy;
   final String spelling;
 
   const GeneratedDreamReportTerm({
     required this.aliases,
     required this.kind,
+    this.policy = "auto",
     required this.spelling,
   });
 
@@ -121,6 +127,7 @@ class GeneratedDreamReportTerm {
     return GeneratedDreamReportTerm(
       aliases: _required(_readFieldValue<List<String>>(_readField(json, const ["aliases"]), "aliases", _readStringList, requiredField: true, nullable: false), "aliases"),
       kind: _required(_readFieldValue<String>(_readField(json, const ["kind"]), "kind", _readString, requiredField: true, nullable: false), "kind"),
+      policy: _required(_readFieldValue<String>(_readField(json, const ["policy"]), "policy", _readString, requiredField: false, nullable: false, defaultValue: "auto"), "policy"),
       spelling: _required(_readFieldValue<String>(_readField(json, const ["spelling"]), "spelling", _readString, requiredField: true, nullable: false), "spelling"),
     );
   }
@@ -129,6 +136,7 @@ class GeneratedDreamReportTerm {
     return {
       'aliases': aliases,
       'kind': kind,
+      'policy': policy,
       'spelling': spelling,
     };
   }

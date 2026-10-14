@@ -8,6 +8,7 @@ from config.dream_agent import Caps, eligible, mode, self_report_enabled
 from database import dream_store, review_store
 from database._client import get_firestore_client
 from models.dream_report import DreamRun, DreamRunsResponse
+from models.dream_refs import base_ref
 from utils import dream_reads
 
 
@@ -26,6 +27,8 @@ def target_label(ref, row):
     structured = row.get('structured') or {}
     if collection == 'conversations':
         label, kind = row.get('user_title') or structured.get('title'), 'Conversation'
+        if not isinstance(label, str) or not label.strip():
+            return 'Untitled conversation'
     elif collection in {'memories', 'memory_items'}:
         label, kind = row.get('content'), 'Memory'
     elif collection == 'people':
@@ -45,7 +48,7 @@ def project_run(uid, run_id, doc):
     outcomes = source.get('outcomes') or []
     records = {}
     for edit in proposed.get('edits', []):
-        ref = edit['target']
+        ref = base_ref(edit['target'])
         if ref in records:
             continue
         try:
@@ -65,12 +68,25 @@ def project_run(uid, run_id, doc):
     edits = []
     for index, edit in enumerate(proposed.get('edits', [])):
         outcome = edit_outcomes[index]['status'] if index < len(edit_outcomes) else 'invalid_evidence'
-        if outcome not in {'shadow', 'applied', 'suppressed', 'suggest_only', 'edit_cap', 'invalid_evidence'}:
+        outcome = {'suggested': 'suggest_only', 'already_suggested': 'suggest_only', 'suggestion_cap': 'edit_cap'}.get(
+            outcome, outcome
+        )
+        if outcome not in {
+            'shadow',
+            'applied',
+            'suppressed',
+            'suggest_only',
+            'edit_cap',
+            'invalid_evidence',
+        }:
             outcome = 'invalid_evidence'
         edits.append(
             {
                 'kind': edit['kind'],
-                'target_label': target_label(edit['target'], records.get(edit['target'])),
+                'policy': edit.get(
+                    'policy', 'auto' if edit['kind'] in {'title', 'overview', 'spelling'} else 'suggest'
+                ),
+                'target_label': target_label(edit['target'], records.get(base_ref(edit['target']))),
                 'before': edit.get('before', ''),
                 'after': edit.get('after', ''),
                 'reason': edit.get('reason', ''),
@@ -101,7 +117,10 @@ def project_run(uid, run_id, doc):
             questions=[{'kind': row['kind'], 'text': row['title']} for row in proposed.get('questions', [])],
             slow_tasks=[{'description': row['description']} for row in proposed.get('slow_tasks', [])],
             vocabulary=[
-                {key: row.get(key, []) for key in ('kind', 'spelling', 'aliases')}
+                {
+                    **{key: row.get(key, []) for key in ('kind', 'spelling', 'aliases')},
+                    'policy': row.get('policy', 'auto'),
+                }
                 for row in proposed.get('vocabulary', [])
             ],
             feedback=[

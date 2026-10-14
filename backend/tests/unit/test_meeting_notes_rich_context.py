@@ -866,6 +866,7 @@ class TestRichFailOpen:
         monkeypatch.setattr(pc, '_proposes_task_candidates', lambda conversation: False)
         monkeypatch.setattr(pc.notification_db, 'get_user_time_zone', lambda uid: 'UTC')
         monkeypatch.setattr(pc.users_db, 'get_user_language_preference', lambda uid: 'en')
+        monkeypatch.setattr(pc, 'conversation_known_spellings', lambda *_: '')
         monkeypatch.setattr(pc, 'track_usage', lambda *a, **k: contextlib.nullcontext())
         monkeypatch.setattr(pc, '_fetch_dedup_candidates_for_query', lambda *a, **k: [])
         monkeypatch.setattr(pc, 'validate_structured_source_segment_ids', lambda *a, **k: None)

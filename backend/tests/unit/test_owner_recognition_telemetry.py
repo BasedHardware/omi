@@ -1,6 +1,7 @@
 """Owner-recognition counters: one finalized conversation, live decisions, rollover."""
 
 import asyncio
+import ast
 import importlib
 import importlib.util
 import json
@@ -16,6 +17,7 @@ import numpy as np
 import pytest
 
 import routers.listen.speakers as speakers_mod
+from routers.listen import speaker_audio
 import utils.conversations.process_conversation as process_conversation_mod
 from models.client_processing import ClientProcessing, ProjectedStructure, ProjectionProvenance
 from models.conversation import Conversation, CreateConversation
@@ -264,7 +266,23 @@ def test_process_conversation_observes_every_successful_persist():
     assert '_observe_owner_recognition_completion(completed)' in report
     fence = body.index('if not persisted:')
     assert body.index('report_persistence(persisted, completed=conversation)') < fence
-    assert 'return conversation' in body[fence : fence + 400]
+    process = next(
+        node
+        for node in ast.parse(text).body
+        if isinstance(node, ast.FunctionDef) and node.name == 'process_conversation'
+    )
+    fence_node = next(
+        node
+        for node in process.body
+        if isinstance(node, ast.If)
+        and isinstance(node.test, ast.UnaryOp)
+        and isinstance(node.test.op, ast.Not)
+        and isinstance(node.test.operand, ast.Name)
+        and node.test.operand.id == 'persisted'
+    )
+    assert isinstance(fence_node.body[-1], ast.Return)
+    assert isinstance(fence_node.body[-1].value, ast.Name)
+    assert fence_node.body[-1].value.id == 'conversation'
     for marker in (
         'report_persistence(\n                persisted,',
         'if plan.mode == \'store_projection\'',
@@ -329,8 +347,8 @@ def _matcher(monkeypatch, embedding):
     monkeypatch.setattr(speakers_mod, 'extract_embedding_from_bytes', lambda _audio, _name: embedding)
     # The decision path still builds a wav. Skip the encoder so the fast-unit
     # budget measures the matcher, not PyAV, under a loaded CI shard.
-    monkeypatch.setattr(speakers_mod.av, 'open', lambda *_args, **_kwargs: _Wav())
-    monkeypatch.setattr(speakers_mod.av, 'AudioFrame', _AudioFrame)
+    monkeypatch.setattr(speaker_audio.av, 'open', lambda *_args, **_kwargs: _Wav())
+    monkeypatch.setattr(speaker_audio.av, 'AudioFrame', _AudioFrame)
     return matcher
 
 

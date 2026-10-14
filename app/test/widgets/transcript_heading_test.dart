@@ -19,7 +19,7 @@ import 'package:omi/providers/people_provider.dart';
 import 'package:omi/ui/ui.dart' show OmiCloseButton, OmiSheetScaffold;
 import 'package:omi/utils/constants.dart';
 
-const _explanation = "Speakers aren't separated across recordings.";
+const _explanation = 'Speaker labels may not match across the recordings in this conversation.';
 const _sheetTitle = 'About Speaker Labels';
 const _sheetBody =
     'Omi could not tell the other voices apart across the recordings. Tap a speaker label to name who is speaking.';

@@ -29,16 +29,15 @@ import {
   Scale,
 } from 'lucide-react';
 import { useAuth } from '@/components/auth/AuthProvider';
-import { useToast } from '@/components/ui/Toast';
 import { cn } from '@/lib/utils';
 import { DEFAULT_PLAN_FEATURES } from '@/lib/planFeatures';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { Toggle } from './SettingsToggle';
 import { Card } from '@/components/settings/SettingsCard';
-import { DeveloperSection } from '@/components/settings/DeveloperSection';
 import {
   SECTION_INFO,
   SIGNED_OUT_DESTINATION,
+  developerRedirectTarget,
   isSettingsSectionId,
   type SettingsSectionId,
 } from '@/lib/settingsSections';
@@ -56,19 +55,6 @@ import {
   getUserSubscription,
   getCustomVocabulary,
   updateCustomVocabulary,
-  getDeveloperWebhook,
-  getDeveloperWebhooksStatus,
-  setDeveloperWebhook,
-  enableDeveloperWebhook,
-  disableDeveloperWebhook,
-  getDeveloperApiKeys,
-  createDeveloperApiKey,
-  deleteDeveloperApiKey,
-  getMcpApiKeys,
-  createMcpApiKey,
-  deleteMcpApiKey,
-  exportAllData,
-  deleteKnowledgeGraph,
   getAvailablePlans,
   createCheckoutSession,
   upgradeSubscription,
@@ -81,9 +67,6 @@ import type {
   DailySummarySettings,
   UserSubscription,
   AllUsageData,
-  DeveloperWebhooks,
-  DeveloperApiKey,
-  McpApiKey,
   UsageHistoryPoint,
   PricingOption,
 } from '@/types/user';
@@ -1603,10 +1586,6 @@ function UsageSectionContent({
 }
 
 // ============================================================================
-// Developer Section
-// ============================================================================
-
-// ============================================================================
 // Account Section
 // ============================================================================
 
@@ -1729,13 +1708,21 @@ export function SettingsPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { user, signOut } = useAuth();
-  const { showToast } = useToast();
-  const [isExporting, setIsExporting] = useState(false);
 
   // Get section from URL, default to 'account'
   const sectionParam = searchParams.get('section');
   const activeSection: SettingsSection =
     sectionParam && isSettingsSectionId(sectionParam) ? sectionParam : 'account';
+
+  // Developer moved to its own destination; old `?section=developer` links
+  // (docs, desktop, mobile, bookmarks) land there with their anchor intact.
+  const developerRedirect = developerRedirectTarget(
+    sectionParam,
+    typeof window === 'undefined' ? '' : window.location.hash,
+  );
+  useEffect(() => {
+    if (developerRedirect) router.replace(developerRedirect);
+  }, [developerRedirect, router]);
 
   // Track which sections have been loaded (using ref to avoid dependency issues)
   const loadedSectionsRef = useRef<Set<SettingsSection>>(new Set());
@@ -1754,11 +1741,6 @@ export function SettingsPage() {
   const [allUsage, setAllUsage] = useState<AllUsageData | null>(null);
   const [subscription, setSubscription] = useState<UserSubscription | null>(null);
   const [cachedPlans, setCachedPlans] = useState<PricingOption[] | null>(null);
-  const [apiKeys, setApiKeys] = useState<DeveloperApiKey[]>([]);
-  const [mcpKeys, setMcpKeys] = useState<McpApiKey[]>([]);
-  const [apiKeysError, setApiKeysError] = useState(false);
-  const [mcpKeysError, setMcpKeysError] = useState(false);
-  const [webhooks, setWebhooks] = useState<DeveloperWebhooks>({});
 
   // Dialog states
   const [showSignOutDialog, setShowSignOutDialog] = useState(false);
@@ -1770,23 +1752,6 @@ export function SettingsPage() {
       clearRetiredExperimentalFeaturesStorage(() => window.localStorage);
     }
   }, []);
-
-  const loadApiKeys = async () => {
-    try {
-      setApiKeys(await getDeveloperApiKeys({ throwOnError: true }));
-      setApiKeysError(false);
-    } catch {
-      setApiKeysError(true);
-    }
-  };
-  const loadMcpKeys = async () => {
-    try {
-      setMcpKeys(await getMcpApiKeys({ throwOnError: true }));
-      setMcpKeysError(false);
-    } catch {
-      setMcpKeysError(true);
-    }
-  };
 
   // Load section data on demand
   useEffect(() => {
@@ -1824,51 +1789,6 @@ export function SettingsPage() {
             if (plansData?.plans) {
               setCachedPlans(plansData.plans);
             }
-            break;
-          case 'developer':
-            // Fetch API keys, MCP keys, webhook status, and individual webhook URLs in parallel
-            // Note: Status API returns boolean fields, URL API returns {url: string}
-            const [
-              ,
-              ,
-              webhookStatus,
-              memoryUrl,
-              transcriptUrl,
-              audioBytesUrl,
-              daySummaryUrl,
-            ] = await Promise.all([
-              loadApiKeys(),
-              loadMcpKeys(),
-              getDeveloperWebhooksStatus().catch(() => ({})),
-              getDeveloperWebhook('memory_created').catch(() => ({ url: '' })),
-              getDeveloperWebhook('realtime_transcript').catch(() => ({ url: '' })),
-              getDeveloperWebhook('audio_bytes').catch(() => ({ url: '' })),
-              getDeveloperWebhook('day_summary').catch(() => ({ url: '' })),
-            ]);
-            // Full MCP key is only returned at creation time; keep secrets in memory for this session only.
-            if (typeof window !== 'undefined') {
-              localStorage.removeItem('omi_mcp_api_key_secrets');
-            }
-            // Combine status (booleans) with URLs
-            const statusMap = webhookStatus as Record<string, boolean>;
-            setWebhooks({
-              memory_created: {
-                url: memoryUrl?.url || '',
-                enabled: statusMap['memory_created'] ?? false,
-              },
-              transcript_received: {
-                url: transcriptUrl?.url || '',
-                enabled: statusMap['realtime_transcript'] ?? false,
-              },
-              audio_bytes: {
-                url: audioBytesUrl?.url || '',
-                enabled: statusMap['audio_bytes'] ?? false,
-              },
-              day_summary: {
-                url: daySummaryUrl?.url || '',
-                enabled: statusMap['day_summary'] ?? false,
-              },
-            });
             break;
           // sections not listed here don't need API calls
         }
@@ -1978,137 +1898,6 @@ export function SettingsPage() {
     }
   };
 
-  const handleCreateApiKey = async (
-    name: string,
-    scopes: string[],
-  ): Promise<DeveloperApiKey | null> => {
-    try {
-      const newKey = await createDeveloperApiKey(name, scopes);
-      setApiKeys((keys) => [...keys, newKey]);
-      // A create after a failed list load must recover the list: clear the
-      // error only when a fresh refresh succeeds, so a still-broken list
-      // keeps its retry affordance instead of hiding the appended key.
-      try {
-        await loadApiKeys();
-      } catch {
-        // loadApiKeys already re-latched the error state.
-      }
-      return newKey;
-    } catch (error) {
-      console.error('Failed to create API key:', error);
-      showToast('Failed to create API key. Please try again.', 'error');
-      return null;
-    }
-  };
-
-  const handleDeleteApiKey = async (keyId: string) => {
-    try {
-      await deleteDeveloperApiKey(keyId);
-      setApiKeys((keys) => keys.filter((k) => k.id !== keyId));
-    } catch (error) {
-      console.error('Failed to delete API key:', error);
-      showToast('Failed to delete API key. Please try again.', 'error');
-    }
-  };
-
-  const handleCreateMcpKey = async (name: string): Promise<McpApiKey | null> => {
-    try {
-      const newKey = await createMcpApiKey(name);
-      setMcpKeys((keys) => [...keys, newKey]);
-      // Same recovery contract as developer keys: a successful create
-      // retries the list and clears its error only on a successful refresh.
-      try {
-        await loadMcpKeys();
-      } catch {
-        // loadMcpKeys already re-latched the error state.
-      }
-      return newKey;
-    } catch (error) {
-      console.error('Failed to create MCP key:', error);
-      showToast('Failed to create MCP key. Please try again.', 'error');
-      return null;
-    }
-  };
-
-  const handleDeleteMcpKey = async (keyId: string) => {
-    try {
-      await deleteMcpApiKey(keyId);
-      setMcpKeys((keys) => keys.filter((k) => k.id !== keyId));
-    } catch (error) {
-      console.error('Failed to delete MCP key:', error);
-      showToast('Failed to delete MCP key. Please try again.', 'error');
-    }
-  };
-
-  const handleExportData = async () => {
-    if (isExporting) return;
-    setIsExporting(true);
-    try {
-      const blob = await exportAllData();
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = 'omi-export.json';
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
-      showToast('Data exported successfully', 'success');
-    } catch (error) {
-      console.error('Failed to export data:', error);
-      showToast('Failed to export data. Please try again.', 'error');
-    } finally {
-      setIsExporting(false);
-    }
-  };
-
-  const handleDeleteKnowledgeGraph = async () => {
-    try {
-      await deleteKnowledgeGraph();
-    } catch (error) {
-      console.error('Failed to delete knowledge graph:', error);
-    }
-  };
-
-  const handleWebhookChange = async (
-    type: string,
-    enabled: boolean,
-    url?: string,
-    delay?: string,
-  ) => {
-    // Convert internal type names to API type names
-    // UI uses 'transcript_received' but API expects 'realtime_transcript'
-    const apiType = type === 'transcript_received' ? 'realtime_transcript' : type;
-    const webhookType = apiType as
-      | 'memory_created'
-      | 'realtime_transcript'
-      | 'audio_bytes'
-      | 'day_summary';
-    try {
-      // For audio_bytes, combine URL and delay if both are provided
-      const webhookUrl = type === 'audio_bytes' && url && delay ? `${url},${delay}` : url;
-      if (webhookUrl) {
-        await setDeveloperWebhook(webhookType, webhookUrl);
-      }
-      if (enabled) {
-        await enableDeveloperWebhook(webhookType);
-      } else {
-        await disableDeveloperWebhook(webhookType);
-      }
-      setWebhooks({
-        ...webhooks,
-        [type]: {
-          enabled,
-          // Mirror what was sent: audio_bytes keeps its interval in the URL, and
-          // storing the bare URL here made the interval field fall back to 5.
-          url: webhookUrl || webhooks[type as keyof DeveloperWebhooks]?.url || '',
-        },
-      });
-    } catch (error) {
-      console.error('Failed to update webhook:', error);
-    }
-  };
-
   const handleSignOut = async () => {
     await signOut();
     router.push(SIGNED_OUT_DESTINATION);
@@ -2170,26 +1959,6 @@ export function SettingsPage() {
             />
           </div>
         );
-      case 'developer':
-        return (
-          <DeveloperSection
-            apiKeys={apiKeys}
-            apiKeysError={apiKeysError}
-            onRetryApiKeys={loadApiKeys}
-            mcpKeysError={mcpKeysError}
-            onRetryMcpKeys={loadMcpKeys}
-            mcpKeys={mcpKeys}
-            webhooks={webhooks}
-            onCreateApiKey={handleCreateApiKey}
-            onDeleteApiKey={handleDeleteApiKey}
-            onCreateMcpKey={handleCreateMcpKey}
-            onDeleteMcpKey={handleDeleteMcpKey}
-            onWebhookChange={handleWebhookChange}
-            onExportData={handleExportData}
-            isExporting={isExporting}
-            onDeleteKnowledgeGraph={handleDeleteKnowledgeGraph}
-          />
-        );
       default:
         return null;
     }
@@ -2211,13 +1980,6 @@ export function SettingsPage() {
           { id: 'actions', label: 'Actions' },
           { id: 'support', label: 'Support' },
         ];
-      case 'developer':
-        return [
-          { id: 'api-keys', label: 'API Keys' },
-          { id: 'mcp', label: 'MCP' },
-          { id: 'webhooks', label: 'Webhooks' },
-          { id: 'data-management', label: 'Data' },
-        ];
       default:
         return [];
     }
@@ -2225,36 +1987,10 @@ export function SettingsPage() {
 
   const quickNavSections = getQuickNavSections();
 
+  if (developerRedirect) return null;
+
   return (
     <div className="flex h-full flex-col">
-      {/* Export in-progress dialog */}
-      {isExporting && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center">
-          <div className="absolute inset-0 bg-black/60" />
-          <div className="relative mx-4 w-full max-w-sm rounded-2xl border border-white/[0.06] bg-bg-secondary p-6 shadow-2xl">
-            <div className="flex flex-col items-center gap-4 text-center">
-              <div className="rounded-full bg-white/[0.08] p-3">
-                <Loader2 className="h-8 w-8 animate-spin text-text-secondary" />
-              </div>
-              <div>
-                <h3 className="text-lg font-semibold text-text-primary">
-                  Exporting Your Data
-                </h3>
-                <p className="mt-2 text-sm text-text-secondary">
-                  This may take a moment depending on the amount of data in your account.
-                </p>
-              </div>
-              <div className="flex items-center gap-2 rounded-xl bg-yellow-500/10 px-4 py-2">
-                <AlertTriangle className="h-4 w-4 flex-shrink-0 text-yellow-400" />
-                <span className="text-xs text-yellow-400">
-                  Please don&apos;t close this tab
-                </span>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
       {/* Page Header */}
       <PageHeader title={sectionInfo.title} icon={Settings} showBackButton />
 

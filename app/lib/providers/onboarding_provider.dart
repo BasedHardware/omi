@@ -16,9 +16,13 @@ import 'package:omi/gen/pigeon_communicator.g.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/providers/base_provider.dart';
 import 'package:omi/providers/device_provider.dart';
+import 'package:omi/pages/onboarding/permissions/onboarding_permission_decision.dart';
+import 'package:omi/services/bridges/ble_bridge.dart';
 import 'package:omi/services/devices.dart';
 import 'package:omi/services/devices/bluetooth_readiness.dart';
+import 'package:omi/services/devices/pairing_failure.dart';
 import 'package:omi/services/notifications.dart';
+import 'package:omi/utils/analytics/registry/events.g.dart';
 import 'package:omi/services/services.dart';
 import 'package:omi/utils/audio/foreground.dart';
 import 'package:omi/utils/logger.dart';
@@ -27,6 +31,14 @@ import 'package:omi/utils/analytics/product_telemetry.dart';
 
 class OnboardingProvider extends BaseProvider with MessageNotifierMixin implements IDeviceServiceSubsciption {
   DeviceProvider? deviceProvider;
+  DeviceConnectFailureShownFailureReason? pairingFailureReason;
+  int pairingFailureVersion = 0;
+
+  void dismissPairingFailure() {
+    pairingFailureReason = null;
+    notifyListeners();
+  }
+
   bool isClicked = false;
   bool isConnected = false;
   int batteryPercentage = -1;
@@ -39,12 +51,21 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin implemen
   Timer? _didNotMakeItTimer;
   Timer? _connectSettleTimer;
   int _scanEpoch = 0;
+  bool _reportNativeScanBlocks = false;
+  final OnboardingPermissionDecisionLog _permissionDecisions = OnboardingPermissionDecisionLog();
+  String? _lastPairingBlockKey;
+  int _osAndroidSdk = 0;
+  int _osIosVersion = 0;
+  bool _osFactsLoaded = false;
+  VoidCallback? _removeScanBlockedListener;
   bool _isDisposed = false;
   bool enableInstructions = false;
   Map<String, BtDevice> foundDevicesMap = {};
 
   OnboardingProvider() {
     _syncSavedDevices();
+    _removeScanBlockedListener = BleBridge.instance.addScanBlockedListener(_onNativeScanBlocked);
+    unawaited(_ensureOsFacts());
   }
 
   List<BtDevice> get visibleDeviceList {
@@ -173,6 +194,12 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin implemen
     try {
       var isAllowed = await NotificationService.instance.requestNotificationPermissions();
       updateNotificationPermission(isAllowed);
+      final status = await Permission.notification.status;
+      _recordOnboardingPermission(
+        permission: OnboardingPermissionResultPermission.notifications,
+        granted: isAllowed,
+        permanentlyDenied: !isAllowed && permissionStatusIsPermanentDenial(status),
+      );
       attempt.complete(
         isAllowed ? ProductOutcome.success : ProductOutcome.failure,
         failure: isAllowed ? ProductFailure.none : ProductFailure.permissionDenied,
@@ -194,6 +221,11 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin implemen
       await FlutterForegroundTask.requestIgnoreBatteryOptimization();
       var isAllowed = await ForegroundUtil().isIgnoringBatteryOptimizations;
       updateBackgroundPermission(isAllowed);
+      _recordOnboardingPermission(
+        permission: OnboardingPermissionResultPermission.backgroundActivity,
+        granted: isAllowed,
+        permanentlyDenied: false,
+      );
       attempt.complete(
         isAllowed ? ProductOutcome.success : ProductOutcome.failure,
         failure: isAllowed ? ProductFailure.none : ProductFailure.permissionDenied,
@@ -214,9 +246,20 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin implemen
       if (await Permission.location.serviceStatus.isDisabled) {
         Logger.debug('Location service is disabled');
         attempt.complete(ProductOutcome.failure, failure: ProductFailure.permissionDenied);
-        return (false, PermissionStatus.permanentlyDenied);
+        _recordOnboardingPermission(
+          permission: OnboardingPermissionResultPermission.location,
+          granted: false,
+          permanentlyDenied: false,
+          servicesDisabled: true,
+        );
+        return (false, PermissionStatus.denied);
       }
       var res = await Permission.locationWhenInUse.request();
+      _recordOnboardingPermission(
+        permission: OnboardingPermissionResultPermission.location,
+        granted: res.isGranted,
+        permanentlyDenied: permissionStatusIsPermanentDenial(res),
+      );
       attempt.complete(
         res.isGranted ? ProductOutcome.success : ProductOutcome.failure,
         failure: res.isGranted ? ProductFailure.none : ProductFailure.permissionDenied,
@@ -269,6 +312,7 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin implemen
   Future<void> handleTap({required BtDevice device, required bool isFromOnboarding, VoidCallback? goNext}) async {
     try {
       if (isClicked) return;
+      pairingFailureReason = null;
       isClicked = true;
 
       connectingToDeviceId = device.id;
@@ -331,13 +375,14 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin implemen
       }
     } catch (e) {
       Logger.debug('Error connecting to device: $e');
-      if (!isSavedDevice(device)) {
-        foundDevicesMap.remove(device.id);
-        deviceList.removeWhere((element) => element.id == device.id);
-      }
       isClicked = false; // Allow clicks again after finishing the operation
       connectingToDeviceId = null; // Reset the connecting device
-      deviceProvider!.setIsConnected(false);
+      deviceProvider?.setIsConnected(false);
+      pairingFailureVersion++;
+      pairingFailureReason =
+          connectFailureReason(e, staleBond: ServiceManager.instance().device.staleBondRecoveryRequired);
+      PlatformManager.instance.analytics.deviceConnectFailed(classifyDeviceConnectError(e));
+      notifyError('DEVICE_CONNECT_FAILED');
       notifyListeners();
     }
 
@@ -364,10 +409,13 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin implemen
 
   Future<void> scanDevices({required VoidCallback onShowDialog, VoidCallback? onShowLocationDialog}) async {
     final epoch = ++_scanEpoch;
+    _reportNativeScanBlocks = true;
     if (SharedPreferencesUtil().btDevice.id.isEmpty) {
       // it means the device has been unpaired
       deviceAlreadyUnpaired();
     }
+    if (_isDisposed || epoch != _scanEpoch) return;
+    await _ensureOsFacts();
     if (_isDisposed || epoch != _scanEpoch) return;
 
     // Subscribe before checking the adapter so a successful enable action can
@@ -379,6 +427,15 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin implemen
       await askForBluetoothPermissions();
       if (_isDisposed || epoch != _scanEpoch) return;
       if (!hasBluetoothPermission) {
+        _emitPairingBlocked(
+          pairingBlockBeforeScan(
+            isAndroid: Platform.isAndroid,
+            androidSdk: _osAndroidSdk,
+            bluetoothGranted: false,
+            locationGranted: hasLocationPermission,
+            adapterOff: false,
+          ),
+        );
         onShowDialog();
         return;
       }
@@ -387,11 +444,14 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin implemen
     // Android 11 and below: location permission required for BLE scanning
     if (PlatformService.isAndroid) {
       final deviceInfo = await DeviceInfoPlugin().androidInfo;
+      _osAndroidSdk = deviceInfo.version.sdkInt;
+      _osFactsLoaded = true;
       if (_isDisposed || epoch != _scanEpoch) return;
       if (deviceInfo.version.sdkInt <= 30) {
         final locationGranted = await Permission.locationWhenInUse.isGranted;
         updateLocationPermission(locationGranted);
         if (!locationGranted) {
+          _emitPairingBlocked(DevicePairingBlockedReason.locationPermissionMissing);
           onShowLocationDialog?.call();
           return;
         }
@@ -399,12 +459,18 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin implemen
     }
 
     if (!await BluetoothReadiness.instance.ensureReady(BluetoothUse.discovery)) {
+      if (_isDisposed || epoch != _scanEpoch) return;
+      _emitPairingBlocked(_pairingBlockForAdapter(BluetoothReadiness.instance.state),
+          adapterState: BluetoothReadiness.instance.state);
       return;
     }
     if (_isDisposed || epoch != _scanEpoch) return;
 
-    _didNotMakeItTimer = Timer(const Duration(seconds: 10), () {
-      if (_isDisposed) return;
+    _didNotMakeItTimer = Timer(const Duration(seconds: deviceScanEmptyAfterSeconds), () {
+      if (_isDisposed || epoch != _scanEpoch) return;
+      if (shouldReportEmptyDeviceScan(deviceCount: deviceList.length)) {
+        PlatformManager.instance.analytics.deviceScanEmpty(afterSeconds: deviceScanEmptyAfterSeconds);
+      }
       enableInstructions = true;
       notifyListeners();
     });
@@ -412,7 +478,79 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin implemen
     await deviceProvider?.initiateConnection("Onboarding");
   }
 
+  void _recordOnboardingPermission({
+    required OnboardingPermissionResultPermission permission,
+    required bool granted,
+    required bool permanentlyDenied,
+    bool servicesDisabled = false,
+  }) {
+    if (!_permissionDecisions.claim(
+      permission: permission,
+      granted: granted,
+      permanentlyDenied: permanentlyDenied,
+      servicesDisabled: servicesDisabled,
+    )) {
+      return;
+    }
+    PlatformManager.instance.analytics.onboardingPermissionResult(
+      permission: permission,
+      granted: granted,
+      permanentlyDenied: permanentlyDenied,
+      servicesDisabled: servicesDisabled,
+    );
+  }
+
+  Future<void> _ensureOsFacts() async {
+    if (_osFactsLoaded) return;
+    try {
+      if (Platform.isAndroid) {
+        _osAndroidSdk = (await DeviceInfoPlugin().androidInfo).version.sdkInt;
+      } else if (Platform.isIOS) {
+        _osIosVersion = iosMajorVersion((await DeviceInfoPlugin().iosInfo).systemVersion);
+      }
+    } catch (error) {
+      Logger.debug('pairing OS facts unavailable: $error');
+    }
+    _osFactsLoaded = true;
+  }
+
+  void _onNativeScanBlocked(String reason) {
+    if (!_reportNativeScanBlocks) return;
+    _emitPairingBlocked(pairingBlockFromNativeScan(reason));
+  }
+
+  DevicePairingBlockedReason? _pairingBlockForAdapter(BluetoothAdapterState state) {
+    return switch (state) {
+      BluetoothAdapterState.unauthorized => pairingBlockBeforeScan(
+          isAndroid: Platform.isAndroid,
+          androidSdk: _osAndroidSdk,
+          bluetoothGranted: hasBluetoothPermission,
+          locationGranted: hasLocationPermission,
+          adapterOff: false,
+        ),
+      BluetoothAdapterState.on => null,
+      _ => DevicePairingBlockedReason.bluetoothOff,
+    };
+  }
+
+  void _emitPairingBlocked(DevicePairingBlockedReason? reason, {BluetoothAdapterState? adapterState}) {
+    if (reason == null) return;
+    final key = '$_scanEpoch|${reason.wireName}';
+    if (_lastPairingBlockKey == key) return;
+    _lastPairingBlockKey = key;
+    pairingFailureVersion++;
+    pairingFailureReason = blockedFailureReason(reason, adapterState: adapterState);
+    notifyListeners();
+    PlatformManager.instance.analytics.devicePairingBlocked(
+      reason: reason,
+      androidSdk: _osAndroidSdk < 0 ? 0 : _osAndroidSdk,
+      iosVersion: _osIosVersion < 0 ? 0 : _osIosVersion,
+    );
+  }
+
   void cancelActiveScan() {
+    _reportNativeScanBlocks = false;
+    pairingFailureReason = null;
     _scanEpoch++;
     _didNotMakeItTimer?.cancel();
     _didNotMakeItTimer = null;
@@ -422,6 +560,8 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin implemen
   @override
   void dispose() {
     _isDisposed = true;
+    _removeScanBlockedListener?.call();
+    _removeScanBlockedListener = null;
     cancelActiveScan();
     _connectSettleTimer?.cancel();
     _connectSettleTimer = null;
@@ -455,7 +595,10 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin implemen
     // Convert the values of the map back to a list
     List<BtDevice> orderedDevices = foundDevicesMap.values.toList();
     deviceList = orderedDevices;
-    if (orderedDevices.isNotEmpty || savedDeviceList.isNotEmpty) {
+    if (visibleDeviceList.isNotEmpty) {
+      if (pairingFailureReason == DeviceConnectFailureShownFailureReason.notFoundOrDropped) {
+        pairingFailureReason = null;
+      }
       notifyListeners();
       _didNotMakeItTimer?.cancel();
     }

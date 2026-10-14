@@ -15,9 +15,12 @@ import 'package:omi/env/env.dart';
 import 'package:omi/env/physical_qualification.dart';
 import 'package:omi/utils/analytics/adapters/posthog_adapter.dart';
 import 'package:omi/utils/analytics/analytics_adapter.dart';
+import 'package:omi/utils/analytics/device_health_telemetry.dart';
 import 'package:omi/utils/analytics/intercom.dart';
+import 'package:omi/services/capture/empty_recording_notice.dart';
 import 'package:omi/utils/analytics/registry/events.g.dart';
 import 'package:omi/utils/analytics/registry/typed_events.dart';
+import 'package:omi/utils/auth/sign_in_failure.dart';
 import 'package:omi/utils/build_provenance.dart';
 import 'package:omi/utils/device.dart';
 import 'package:omi/utils/platform/platform_service.dart';
@@ -25,6 +28,8 @@ import 'package:omi/utils/speech_profile_enroll_events.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:uuid/uuid.dart';
 import 'package:omi/utils/debugging/crashlytics_manager.dart';
+import 'package:omi/services/telemetry/client_telemetry.dart';
+import 'package:omi/services/telemetry/client_telemetry_flags.dart';
 import 'package:omi/utils/analytics/background_checkpoint_store.dart';
 
 enum ProductErrorKind { flutterFramework, uncaughtDart, startup }
@@ -47,6 +52,18 @@ class AnalyticsManager {
   static Timer? _retryTimer;
   static int _droppedEvents = 0;
   static Map<String, Object> _globalEventProperties = {'app_platform': _mobilePlatformName};
+
+  /// Events whose PostHog rows were missing the release build. The value is
+  /// the same `app_build` super-property Device Connected already flushes.
+  static const Set<String> _captureWedgeFamilyEvents = {
+    'Capture Wedge Detected',
+    'Local WAL Stuck',
+    'Recording Start Failed',
+    'Capture Recovery Prompt Shown',
+    'Capture Recovery Actioned',
+    'Capture Recovery Resolved',
+    'Capture Ingress Health',
+  };
   static bool _analyticsReady = false;
   static bool _trackingEnabled = true;
   static int _consentRevision = 0;
@@ -63,12 +80,15 @@ class AnalyticsManager {
 
   static void Function(String? identity, bool enabled)? identityChanged;
   static int get identityEpoch => _identityEpoch;
+  static final ValueNotifier<int> _identityChanges = ValueNotifier(0);
+  static ValueListenable<int> get identityChanges => _identityChanges;
   static bool get identityKnown => _identityKnown;
   static bool get trackingEnabled => _trackingEnabled;
   static final ValueNotifier<bool> _trackingConsent = ValueNotifier(true);
   static ValueListenable<bool> get trackingConsent => _trackingConsent;
   static String? get currentIdentity => _boundIdentity;
   static String get appBuild => _globalEventProperties['app_build']?.toString() ?? 'unknown';
+  static bool get deviceHealthRecordingEnabled => _trackingEnabled && (!_identityKnown || _boundIdentity != null);
   static String get mobilePlatform => _mobilePlatformName;
   static Map<String, Object> get healthSnapshot => {
         'ready': _analyticsReady,
@@ -99,11 +119,20 @@ class AnalyticsManager {
   /// Fence synchronously, before any SDK identify/reset operation is scheduled.
   void bindIdentity(String? identity) {
     if (_identityKnown && _boundIdentity == identity) return;
+    final previousOwner = _identityKnown ? _boundIdentity : null;
     final hadSession = _eventContext.containsKey('app_session_id');
     _identityResetNeeded = _identityResetNeeded || !_identityKnown || _boundIdentity != null;
+    // Preserve a durable epoch across relaunch of the same account so native
+    // session markers survive process death, but retire them on account changes.
+    final savedIdentity = _preferences.getString('device_health_identity');
+    final savedEpoch = _preferences.getInt('device_health_identity_epoch');
+    final sameOnRestart = !_identityKnown && identity != null && savedIdentity == identity && savedEpoch > 0;
+    _identityEpoch = sameOnRestart ? savedEpoch - 1 : (_identityEpoch > savedEpoch ? _identityEpoch : savedEpoch);
     _identityKnown = true;
     _identityEpoch++;
     _boundIdentity = identity;
+    _identityChanges.value = _identityEpoch;
+    ClientTelemetry.instance.onOwnerChanged(previous: previousOwner, next: identity);
     _droppedEvents += _queuedEvents.length;
     _queuedEvents.clear();
     _pendingTimedEvents.clear();
@@ -112,6 +141,9 @@ class AnalyticsManager {
       CrashlyticsManager.instance.setUserAttribute('app_session_id', '');
     } catch (_) {}
     _settledDistinctId = null;
+    unawaited(_preferences.saveString('device_health_identity', identity ?? ''));
+    unawaited(_preferences.saveInt('device_health_identity_epoch', _identityEpoch));
+    unawaited(DeviceHealthTelemetry.syncPolicy(enabled: _trackingEnabled && identity != null, retire: !sameOnRestart));
     _notifyIdentity(null, false);
     unawaited(_settleIdentity());
     if (hadSession && _trackingEnabled) {
@@ -212,6 +244,7 @@ class AnalyticsManager {
         if (consentRevision == _consentRevision) {
           _trackingEnabled = consent.getBool('product_analytics_enabled') ?? _trackingEnabled;
           _trackingConsent.value = _trackingEnabled;
+          if (!_trackingEnabled) await DeviceHealthTelemetry.syncPolicy(enabled: false, retire: true);
         }
         await PlatformService.executeIfSupportedAsync(PlatformService.isAnalyticsSupported, adapter.init);
         if (!identical(_adapter, adapter)) return;
@@ -438,7 +471,9 @@ class AnalyticsManager {
   void optInTracking() {
     _consentRevision++;
     if (!_trackingEnabled) _identityEpoch++;
+    unawaited(_preferences.saveInt('device_health_identity_epoch', _identityEpoch));
     _trackingEnabled = true;
+    unawaited(DeviceHealthTelemetry.syncPolicy(enabled: !_identityKnown || _boundIdentity != null, retire: false));
     _trackingConsent.value = true;
     unawaited(_persistTrackingPreference(true));
     _notifyIdentity(null, false);
@@ -459,6 +494,8 @@ class AnalyticsManager {
     _trackingConsent.value = false;
     unawaited(_persistTrackingPreference(false));
     _identityEpoch++;
+    unawaited(_preferences.saveInt('device_health_identity_epoch', _identityEpoch));
+    unawaited(DeviceHealthTelemetry.syncPolicy(enabled: false, retire: true));
     _queuedEvents.clear();
     _pendingTimedEvents.clear();
     _settledDistinctId = null;
@@ -517,43 +554,43 @@ class AnalyticsManager {
     _setUserPropertiesBatch({'\$name': _preferences.fullName, '\$email': _preferences.email});
   }
 
-  Future<bool> isFeatureEnabled(String key) async {
+  /// One fenced read for every flag value: no adapter, no settled identity, tracking off, or an
+  /// identity switch while the read is in flight all yield null (callers map null to "off").
+  Future<T?> _readFlag<T>(Future<T> Function(AnalyticsFeatureFlagAdapter adapter) read) async {
     final adapter = _adapter;
-    if (adapter == null || !adapter.isInitialized || !_trackingEnabled || _settledDistinctId == null) {
-      return false;
-    }
-    if (adapter is! AnalyticsFeatureFlagAdapter) return false;
+    if (adapter == null || !adapter.isInitialized || !_trackingEnabled || _settledDistinctId == null) return null;
+    if (adapter is! AnalyticsFeatureFlagAdapter) return null;
     final epoch = _identityEpoch;
     final identity = _settledDistinctId;
     try {
-      final enabled = await (adapter as AnalyticsFeatureFlagAdapter).isFeatureEnabled(key).timeout(_initTimeout);
-      if (epoch != _identityEpoch || !identical(identity, _settledDistinctId) || !_trackingEnabled) {
-        return false;
-      }
-      return enabled;
+      final value = await read(adapter as AnalyticsFeatureFlagAdapter).timeout(_initTimeout);
+      if (epoch != _identityEpoch || !identical(identity, _settledDistinctId) || !_trackingEnabled) return null;
+      return value;
     } catch (_) {
-      return false;
+      return null;
     }
   }
 
-  Future<Object?> getFeatureFlagPayload(String key) async {
-    final adapter = _adapter;
-    if (adapter == null ||
-        !adapter.isInitialized ||
-        !_trackingEnabled ||
-        _settledDistinctId == null ||
-        adapter is! AnalyticsFeatureFlagAdapter) {
-      return null;
-    }
-    final epoch = _identityEpoch;
+  Future<bool> isFeatureEnabled(String key) async => await _readFlag((a) => a.isFeatureEnabled(key)) ?? false;
+
+  Future<Object?> getFeatureFlagPayload(String key) => _readFlag<Object?>((a) => a.getFeatureFlagPayload(key));
+
+  /// The multivariate arm for [key]; null when the flag is off, not multivariate, or unresolved.
+  Future<String?> getFeatureFlagVariant(String key) => _readFlag<String?>((a) => a.getFeatureFlagVariant(key));
+
+  String? get settledDistinctId => _settledDistinctId; // null until an identity settles
+
+  final Set<String> _recordedFlagExposures = {};
+
+  /// PostHog Experiments exposure (`$feature_flag_called`), once per identity, flag and arm (the
+  /// SDK's own exposure events are off); also registers `$feature/<key>`. False when nothing was sent.
+  bool recordFeatureFlagExposure(String key, String variant) {
     final identity = _settledDistinctId;
-    try {
-      final payload = await (adapter as AnalyticsFeatureFlagAdapter).getFeatureFlagPayload(key).timeout(_initTimeout);
-      if (epoch != _identityEpoch || !identical(identity, _settledDistinctId) || !_trackingEnabled) return null;
-      return payload;
-    } catch (_) {
-      return null;
-    }
+    if (identity == null || !_trackingEnabled) return false;
+    if (!_recordedFlagExposures.add('$identity:$key:$variant')) return false;
+    _adapter?.registerSuperProperties({'\$feature/$key': variant});
+    track(r'$feature_flag_called', properties: {r'$feature_flag': key, r'$feature_flag_response': variant});
+    return true;
   }
 
   void track(String eventName, {Map<String, dynamic>? properties}) =>
@@ -561,6 +598,7 @@ class AnalyticsManager {
         final adapter = _adapter;
         if (adapter == null || !_trackingEnabled) return;
         final props = <String, Object>{};
+        final ownedKeys = properties?.keys.toSet() ?? <String>{};
         if (properties != null) {
           properties.forEach((k, v) {
             final coerced = _coerceProperty(v);
@@ -572,7 +610,15 @@ class AnalyticsManager {
         if (start != null) {
           props['\$duration'] = DateTime.now().difference(start).inMilliseconds / 1000.0;
         }
-        props.addAll(_eventContext);
+        for (final entry in _eventContext.entries) {
+          if (!ownedKeys.contains(entry.key)) props.putIfAbsent(entry.key, () => entry.value);
+        }
+        // Only positive integer schema versions are valid. Invalid versions
+        // use the default delivery envelope rather than entering the wire.
+        final schemaVersion = props['schema_version'];
+        if (schemaVersion != null && (schemaVersion is! int || schemaVersion < 1)) {
+          props.remove('schema_version');
+        }
         if (eventName == 'Product Journey Outcome' || eventName == 'Product Value') {
           props['experiment_context_verified'] = true;
         }
@@ -580,6 +626,7 @@ class AnalyticsManager {
           _QueuedAnalyticsEvent(
             eventName: eventName,
             properties: props,
+            ownedKeys: ownedKeys,
             eventId: const Uuid().v4(),
             occurredAt: DateTime.now().toUtc(),
             identityEpoch: _identityEpoch,
@@ -640,7 +687,20 @@ class AnalyticsManager {
         final event = _queuedEvents.removeAt(0);
         try {
           if (!_trackingEnabled || event.identityEpoch != _identityEpoch) continue;
-          final properties = {...event.properties, ..._globalEventProperties};
+          final properties = <String, Object>{
+            for (final entry in _globalEventProperties.entries)
+              if (!event.ownedKeys.contains(entry.key)) entry.key: entry.value,
+            ...event.properties,
+          };
+          // Device lifecycle events already carry this value as `app_build`.
+          // Capture-wedge events were emitted without it, so fleet queries on
+          // `build` could not attribute a wedge to a release.
+          final build = _globalEventProperties['app_build'];
+          if (build != null &&
+              _captureWedgeFamilyEvents.contains(event.eventName) &&
+              !event.ownedKeys.contains('build')) {
+            properties.putIfAbsent('build', () => build);
+          }
           if (adapter is AnalyticsDeliveryAdapter) {
             await (adapter as AnalyticsDeliveryAdapter).deliver(
               eventName: event.eventName,
@@ -649,7 +709,7 @@ class AnalyticsManager {
                 'event_id': event.eventId,
                 r'$insert_id': event.eventId,
                 'occurred_at': event.occurredAt.toIso8601String(),
-                'schema_version': 1,
+                'schema_version': properties['schema_version'] ?? 1,
                 'client_app_namespace': _clientAppNamespace,
                 'client_app_profile': Env.profile.name,
               },
@@ -716,6 +776,76 @@ class AnalyticsManager {
   }
 
   void onboardingCompleted() => const TypedEvents().emit(const OnboardingCompleted());
+
+  void onboardingWelcomeShown() => const TypedEvents().emit(const OnboardingWelcomeShown());
+
+  void onboardingGetStartedTapped() => const TypedEvents().emit(const OnboardingGetStartedTapped());
+
+  void signInStarted(String provider) {
+    final value = signInProvider(provider);
+    if (value == null) return;
+    const TypedEvents().emit(SignInStarted(provider: value));
+  }
+
+  void signInFailed(String provider, {Object? error, bool cancelled = false}) {
+    final value = signInFailedProvider(provider);
+    if (value == null) return;
+    const TypedEvents().emit(SignInFailed(
+      provider: value,
+      errorClass: cancelled || error == null ? SignInFailedErrorClass.cancelled : classifySignInFailure(error),
+    ));
+  }
+
+  void onboardingPermissionResult({
+    required OnboardingPermissionResultPermission permission,
+    required bool granted,
+    required bool permanentlyDenied,
+    required bool servicesDisabled,
+  }) =>
+      const TypedEvents().emit(OnboardingPermissionResult(
+        permission: permission,
+        granted: granted,
+        permanentlyDenied: permanentlyDenied,
+        servicesDisabled: servicesDisabled,
+      ));
+
+  void devicePairingBlocked({
+    required DevicePairingBlockedReason reason,
+    required int androidSdk,
+    required int iosVersion,
+  }) =>
+      const TypedEvents().emit(DevicePairingBlocked(
+        reason: reason,
+        androidSdk: androidSdk < 0 ? 0 : androidSdk,
+        iosVersion: iosVersion < 0 ? 0 : iosVersion,
+      ));
+
+  void deviceScanEmpty({required int afterSeconds}) =>
+      const TypedEvents().emit(DeviceScanEmpty(afterSeconds: afterSeconds < 0 ? 0 : afterSeconds));
+
+  void deviceConnectFailed(DeviceConnectFailedErrorClass errorClass) =>
+      const TypedEvents().emit(DeviceConnectFailed(errorClass: errorClass));
+
+  void recordingProducedNoConversation({
+    required RecordingSurface source,
+    required int durationSeconds,
+    required bool transcriptObserved,
+    required EmptyRecordingReason reason,
+  }) =>
+      const TypedEvents().emit(RecordingProducedNoConversation(
+        source: switch (source) {
+          RecordingSurface.phone => RecordingProducedNoConversationSource.phone,
+          RecordingSurface.omi => RecordingProducedNoConversationSource.omi,
+          RecordingSurface.watch => RecordingProducedNoConversationSource.watch,
+        },
+        durationSeconds: durationSeconds < 0 ? 0 : durationSeconds,
+        transcriptObserved: transcriptObserved,
+        reason: switch (reason) {
+          EmptyRecordingReason.emptyDeleted => RecordingProducedNoConversationReason.emptyDeleted,
+          EmptyRecordingReason.discarded => RecordingProducedNoConversationReason.discarded,
+          EmptyRecordingReason.nullResult => RecordingProducedNoConversationReason.nullResult,
+        },
+      ));
 
   void onboardingStepCompleted(String step) => track('Onboarding Step $step Completed');
 
@@ -1056,6 +1186,7 @@ class AnalyticsManager {
   }
 
   void deviceSessionEnded({required BtDevice device, required Duration duration, String? reason, int? hciReasonCode}) {
+    if (ClientTelemetryFlags.posthogRetirementEnabled) return;
     final properties = <String, Object>{
       'duration_seconds': duration.inMilliseconds / Duration.millisecondsPerSecond,
       'reason': _knownDeviceValue(reason ?? ''),
@@ -1658,45 +1789,148 @@ class AnalyticsManager {
   void deletedActionItem(ServerConversation conversation) =>
       track('Deleted Action Item', properties: getConversationEventProperties(conversation));
 
-  void paywallOpened(String source) => track('Paywall Opened', properties: {'source': source});
+  /// [source] is a closed surface id (`chat_quota_exceeded`, `locked_memory`, …).
+  /// [currentPlan] is a catalog tier id. Unknown wires collapse to `unknown`.
+  void paywallOpened(String source, {String currentPlan = 'unknown'}) => const TypedEvents().emit(
+        PaywallOpened(
+          source:
+              _closedEnum(PaywallOpenedSource.values, source, PaywallOpenedSource.unknown, (value) => value.wireName),
+          currentPlan: _closedEnum(
+            PaywallOpenedCurrentPlan.values,
+            _planWire(currentPlan),
+            PaywallOpenedCurrentPlan.unknown,
+            (value) => value.wireName,
+          ),
+        ),
+      );
 
-  void upgradePlanSelected({required String plan, required String source}) =>
-      track('Upgrade Plan Selected', properties: {'plan': plan, 'source': source});
+  /// [plan] is the tier id. [billingInterval] is `month` or `year`, not the
+  /// sheet's yearly/monthly toggle. [source] is the surface that opened the sheet.
+  void upgradePlanSelected({required String plan, required String billingInterval, required String source}) =>
+      const TypedEvents().emit(
+        UpgradePlanSelected(
+          plan: _closedEnum(
+            UpgradePlanSelectedPlan.values,
+            _planWire(plan),
+            UpgradePlanSelectedPlan.unknown,
+            (value) => value.wireName,
+          ),
+          billingInterval: _closedEnum(
+            UpgradePlanSelectedBillingInterval.values,
+            _intervalWire(billingInterval),
+            UpgradePlanSelectedBillingInterval.unknown,
+            (value) => value.wireName,
+          ),
+          source: _closedEnum(
+            UpgradePlanSelectedSource.values,
+            source,
+            UpgradePlanSelectedSource.unknown,
+            (value) => value.wireName,
+          ),
+        ),
+      );
 
   void upgradeSucceeded({required String previousPlan, required String newPlan, required String billingInterval}) {
-    track(
-      'Subscription Plan Changed',
-      properties: {
-        'previous_plan': previousPlan,
-        'new_plan': newPlan,
-        'billing_interval': billingInterval,
-        'change_source': 'mobile_checkout',
-      },
+    const TypedEvents().emit(
+      SubscriptionPlanChanged(
+        previousPlan: _closedEnum(
+          SubscriptionPlanChangedPreviousPlan.values,
+          _planWire(previousPlan),
+          SubscriptionPlanChangedPreviousPlan.unknown,
+          (value) => value.wireName,
+        ),
+        newPlan: _closedEnum(
+          SubscriptionPlanChangedNewPlan.values,
+          _planWire(newPlan),
+          SubscriptionPlanChangedNewPlan.unknown,
+          (value) => value.wireName,
+        ),
+        billingInterval: _closedEnum(
+          SubscriptionPlanChangedBillingInterval.values,
+          _intervalWire(billingInterval),
+          SubscriptionPlanChangedBillingInterval.unknown,
+          (value) => value.wireName,
+        ),
+        changeSource: SubscriptionPlanChangedChangeSource.mobileCheckout,
+      ),
+    );
+    // Released `Upgrade Succeeded` cannot gain properties. Tier and interval
+    // ride the attributed event emitted in the same checkout-success call.
+    const TypedEvents().emit(
+      UpgradeSucceededAttributed(
+        plan: _closedEnum(
+          UpgradeSucceededAttributedPlan.values,
+          _planWire(newPlan),
+          UpgradeSucceededAttributedPlan.unknown,
+          (value) => value.wireName,
+        ),
+        billingInterval: _closedEnum(
+          UpgradeSucceededAttributedBillingInterval.values,
+          _intervalWire(billingInterval),
+          UpgradeSucceededAttributedBillingInterval.unknown,
+          (value) => value.wireName,
+        ),
+      ),
     );
     const TypedEvents().emit(const UpgradeSucceeded());
   }
 
   void upgradeCancelled() => const TypedEvents().emit(const UpgradeCancelled());
 
+  /// Store-update prompt (`upgrade_alert.dart`), not the subscription paywall.
   void upgradeModalDismissed() => const TypedEvents().emit(const UpgradeModalDismissed());
 
+  /// Store-update prompt (`upgrade_alert.dart`), not the subscription paywall.
   void upgradeModalClicked() => const TypedEvents().emit(const UpgradeModalClicked());
 
   void subscriptionCancelFlowStarted() => const TypedEvents().emit(const SubscriptionCancelFlowStarted());
 
-  void subscriptionCancelReasonSelected({required String reason}) =>
-      track('Subscription Cancel Reason Selected', properties: {'reason': reason});
-
-  void subscriptionCancelConfirmed({required String reason, String? details}) => track(
-        'Subscription Cancel Confirmed',
-        properties: {'reason': reason, 'has_details': details?.isNotEmpty == true},
+  void subscriptionCancelReasonSelected({required String reason}) => const TypedEvents().emit(
+        SubscriptionCancelReasonSelected(
+          reason: _closedEnum(
+            SubscriptionCancelReasonSelectedReason.values,
+            _cancelReasonWire(reason),
+            SubscriptionCancelReasonSelectedReason.unknown,
+            (value) => value.wireName,
+          ),
+        ),
       );
 
-  void subscriptionCancelKeptPlan({required int step, String? reason}) =>
-      track('Subscription Cancel Kept Plan', properties: {'step': step, 'reason': reason});
+  void subscriptionCancelConfirmed({required String reason, String? details}) => const TypedEvents().emit(
+        SubscriptionCancelConfirmed(
+          reason: _closedEnum(
+            SubscriptionCancelConfirmedReason.values,
+            _cancelReasonWire(reason),
+            SubscriptionCancelConfirmedReason.unknown,
+            (value) => value.wireName,
+          ),
+          hasDetails: details?.isNotEmpty == true,
+        ),
+      );
 
-  void subscriptionCancelAbandoned({required int step, String? reason}) =>
-      track('Subscription Cancel Abandoned', properties: {'step': step, 'reason': reason});
+  void subscriptionCancelKeptPlan({required int step, String? reason}) => const TypedEvents().emit(
+        SubscriptionCancelKeptPlan(
+          step: step,
+          reason: _closedEnum(
+            SubscriptionCancelKeptPlanReason.values,
+            _cancelReasonWire(reason),
+            SubscriptionCancelKeptPlanReason.unknown,
+            (value) => value.wireName,
+          ),
+        ),
+      );
+
+  void subscriptionCancelAbandoned({required int step, String? reason}) => const TypedEvents().emit(
+        SubscriptionCancelAbandoned(
+          step: step,
+          reason: _closedEnum(
+            SubscriptionCancelAbandonedReason.values,
+            _cancelReasonWire(reason),
+            SubscriptionCancelAbandonedReason.unknown,
+            (value) => value.wireName,
+          ),
+        ),
+      );
 
   void connectFriendClicked() => const TypedEvents().emit(const ConnectFriendClicked());
 
@@ -2835,6 +3069,44 @@ class AnalyticsManager {
   }
 }
 
+T _closedEnum<T>(Iterable<T> values, String? raw, T fallback, String Function(T value) wire) {
+  final normalized = raw?.trim() ?? '';
+  for (final value in values) {
+    if (wire(value) == normalized) return value;
+  }
+  return fallback;
+}
+
+String _planWire(String? raw) {
+  switch (raw?.trim()) {
+    case 'free':
+      return 'basic';
+    case 'pro':
+      return 'unknown';
+    default:
+      return raw?.trim() ?? '';
+  }
+}
+
+String _intervalWire(String? raw) {
+  switch (raw?.trim().toLowerCase()) {
+    case 'month':
+    case 'monthly':
+      return 'month';
+    case 'year':
+    case 'yearly':
+    case 'annual':
+      return 'year';
+    default:
+      return raw?.trim().toLowerCase() ?? '';
+  }
+}
+
+String _cancelReasonWire(String? raw) {
+  final trimmed = raw?.trim() ?? '';
+  return trimmed.isEmpty ? 'none' : trimmed;
+}
+
 class _QueuedAnalyticsEvent {
   const _QueuedAnalyticsEvent({
     required this.eventName,
@@ -2843,7 +3115,9 @@ class _QueuedAnalyticsEvent {
     required this.occurredAt,
     required this.identityEpoch,
     this.attempts = 0,
+    this.ownedKeys = const {},
   });
+  final Set<String> ownedKeys;
   final String eventName;
   final Map<String, Object> properties;
   final String eventId;
@@ -2853,6 +3127,7 @@ class _QueuedAnalyticsEvent {
   _QueuedAnalyticsEvent nextAttempt() => _QueuedAnalyticsEvent(
         eventName: eventName,
         properties: properties,
+        ownedKeys: ownedKeys,
         eventId: eventId,
         occurredAt: occurredAt,
         identityEpoch: identityEpoch,

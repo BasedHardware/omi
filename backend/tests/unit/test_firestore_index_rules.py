@@ -590,7 +590,6 @@ def _generated_manifest():
         ('candidate_integration_outbox', 'status'),
         ('chat_first_proactive_intents', 'delivery_state'),
         ('memory_outbox', 'status'),
-        ('projection_repairs', 'status'),
         ('task_recurrence_inbox', 'status'),
     ],
 )
