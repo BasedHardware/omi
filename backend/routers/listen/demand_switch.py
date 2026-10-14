@@ -120,6 +120,10 @@ async def switch_live_demand(receiver, lane: str) -> bool:
         previous.retire_for_replay()
         receiver._replay_ingesting = True
         receiver.recovery = candidate_recovery
+        # The retired healthy source is owner-closing. Expose the live
+        # candidate to the receive loop's ingestion guard before closing that
+        # source, so capture/disconnect observation never waits on prefix replay.
+        receiver.stt_socket = raw
         host.stt_service, host.stt_language, host.stt_model = selected
         session.generation = selected_generation
         receiver.speaker_provider_epoch = selected_speaker

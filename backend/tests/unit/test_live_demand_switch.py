@@ -244,3 +244,46 @@ async def test_disconnect_during_fresh_demand_check_releases_candidate(monkeypat
     finally:
         actual.stt_socket.finish()
         await stop(raws)
+
+
+@pytest.mark.asyncio
+async def test_live_capture_during_healthy_switch_does_not_wait_on_prefix(monkeypatch):
+    from utils.audio_timeline import CaptureTimeline
+
+    actual, _, raws, _, _ = await demand_receiver(monkeypatch)
+    prefix = b'\x51\x01' * 3200
+    tail = b'\x52\x01' * 480
+    actual.capture_timeline = CaptureTimeline(sample_rate=16000)
+    actual.capture_timeline.accept(prefix, 1000, 1)
+    actual._window_replay_audio.append(prefix, 0)
+    entered, resume = asyncio.Event(), asyncio.Event()
+    pump = actual._pump_replacement
+
+    async def held(raw, *args, **kwargs):
+        if actual.host.stt_service == st.STTService.parakeet:
+            entered.set()
+            await resume.wait()
+        return await pump(raw, *args, **kwargs)
+
+    monkeypatch.setattr(actual, '_pump_replacement', held)
+    switching = asyncio.create_task(actual._switch_live_demand('parakeet'))
+    try:
+        await asyncio.wait_for(entered.wait(), 2)
+        actual.capture_timeline.accept(tail, 1000.2, 1.2)
+        actual._stt_buffer_start_sample = len(prefix) // 2
+        buffer = bytearray(tail)
+        await asyncio.wait_for(actual._flush_stt_buffer(buffer, force=True), 0.5)
+        assert not buffer and not switching.done()
+        resume.set()
+        assert await switching
+        actual.recovery.state = RecoveryState.recovered
+        actual.live_demand.policy.window_permitted = False
+        assert await actual._switch_live_demand('vendor')
+        await until(lambda: raws[-1]._ws.byte_count == len(prefix + tail))
+        assert raws[-1]._ws.pcm == prefix + tail
+    finally:
+        resume.set()
+        switching.cancel()
+        await asyncio.gather(switching, return_exceptions=True)
+        actual.stt_socket.finish()
+        await stop(raws)
