@@ -2,6 +2,7 @@
 
 import asyncio
 import logging
+import os
 import threading
 import time
 from dataclasses import dataclass
@@ -71,6 +72,10 @@ def schedule_completed_identity_retries(uid: str, conversation_ids: Iterable[str
     admitted batch retains the existing 128-candidate and eight-pass ceilings.
     Overlapping submissions coalesce across both active and waiting work.
     """
+    if os.getenv('OWNER_IDENTITY_RETRY_COALESCE_ENABLED', 'false').lower() == 'true':
+        from utils.conversations.speaker_identity_queue import schedule
+
+        return schedule(uid, conversation_ids)
     known = sorted(set(conversation_ids))
     with _active_lock:
         known = [cid for cid in known if (uid, cid) not in _active and (uid, cid) not in _waiting]

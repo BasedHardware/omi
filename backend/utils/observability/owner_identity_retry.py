@@ -13,10 +13,13 @@ PASSES = frozenset({'first', 'late'})
 FUNNEL_REASONS = {
     'entry': frozenset({'candidate'}),
     'eligible': frozenset({'candidate'}),
-    'deferred': frozenset({'slot_limit'}),
+    'deferred': frozenset({'slot_limit', 'coalesced'}),
     'skipped': frozenset(
         {
             'slot_limit',
+            'queue_limit',
+            'queue_expired',
+            'cancelled',
             'scan_limit',
             'pass_limit',
             'missing',

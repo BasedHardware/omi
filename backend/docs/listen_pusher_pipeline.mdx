@@ -4308,14 +4308,14 @@ Another batch after completion may count the same conversation again. These
 are attempts, not unique conversations or evidence of owner speech.
 The counter cannot reconstruct historical failures or identify an account.
 
-The 29 funnel `(stage,reason)` pairs are closed:
+The funnel `(stage,reason)` pairs are closed:
 
 | Stage | Reasons | Meaning |
 | --- | --- | --- |
 | entry | candidate | Known deduplicated candidates, before slot/scan admission; first passes at resolver entry. |
 | eligible | candidate | Late snapshot passed existing retry eligibility and ID check; first pass has a nonempty conversation model. |
-| deferred | slot_limit | Candidates retained in one of two bounded ID-only admission waiters; no snapshot or audio has been read. |
-| skipped | slot_limit, scan_limit, pass_limit, missing, not_completed, deleted, discarded, locked, channel_source, private_cloud_disabled, missing_revision, already_resolved_owner, id_mismatch, empty_transcript, manual_receipt_unavailable, read_error, processing_error, submission_error | One terminal skip; capacity reasons mean the candidate was not scanned, not that its audio was ineligible. |
+| deferred | slot_limit, coalesced | Candidates retained in one of two bounded ID-only admission waiters; no snapshot or audio has been read. |
+| skipped | slot_limit, queue_limit, queue_expired, cancelled, scan_limit, pass_limit, missing, not_completed, deleted, discarded, locked, channel_source, private_cloud_disabled, missing_revision, already_resolved_owner, id_mismatch, empty_transcript, manual_receipt_unavailable, read_error, processing_error, submission_error | One terminal skip; capacity reasons mean the candidate was not scanned, not that its audio was ineligible. |
 | cas_refused | missing, account_deleting, deleted, discarded, locked, not_completed, revision_changed | Late-only terminal verdict from the actual transaction snapshot, emitted after the outer transaction returns. |
 | cas_committed | done | Late-only terminal commit, including canonical identity no-op; transaction callback retries do not increment. |
 
@@ -4323,7 +4323,7 @@ Admission deferral uses the same closed retry funnel: `pass=late,stage=deferred,
 counts retained candidates. Full waiting capacity, expiry and cancellation
 before admission emit
 `stage=skipped,reason=slot_limit`; coalesced duplicates add no entry. This adds
-one bounded stage/reason pair (61 pairs, at most 122 series across both passes);
+one bounded stage/reason pair; with optional coalescing there are 65 pairs, at most 130 series across both passes;
 UID and conversation IDs remain outside Prometheus labels. Deferred admission
 counts are not commits or owner additions. Terminal waiters remove their keys
 under the admission lock before recording the skip; later callbacks release only
@@ -4331,6 +4331,30 @@ their waiting permit and cannot erase a same-turn resubmission. Cancellation,
 including before the waiter starts, records one skip and releases only its
 metadata reservation; handed-off batches add no admission skip. A cancelled active coordinator still
 retains its slot until the storage future finishes.
+
+`OWNER_IDENTITY_RETRY_COALESCE_ENABLED=true` opts into a process-local UID
+queue; unset/false retains the two batches plus two waiters above. At most 16
+UID cohorts retain IDs, each with one active batch, at most 128 distinct IDs
+(including already scanned IDs for dedupe) and eight eligible attempts across
+all merged submissions. Workers still share the existing two process slots.
+New IDs for a retained UID merge into its pending set (`deferred/coalesced`);
+duplicates in the cohort add no entry. New UIDs beyond the cap emit
+`skipped/queue_limit`. Admission expires after 230 seconds; completion rechecks
+share a separate 230-second deadline across merged batches. New submissions
+extend neither deadline nor the candidate/pass budgets. Expired queued IDs emit
+`skipped/queue_expired`; cancellation emits `skipped/cancelled` for pending IDs
+and unfinished worker results, once, retaining UID/slot ownership until the
+shielded storage worker finishes. No transcript/audio is retained by the queue,
+and waiting borrows no executor thread. Overflow, expiry and pod termination
+can still lose work: this queue is bounded, not durable. Roll back by setting the
+flag false and restarting the process; no stored schema changes are involved.
+
+The only scheduler caller is pusher's session-end audio drain after an uploaded
+manifest update. Its False return is not retried. A later upload session can
+submit the same conversation again, but no timer/sweep guarantees that trigger.
+`slot_limit` also includes old admission waiter expiry/cancellation. These
+aggregate attempt counters cannot count distinct missed conversations or prove
+that a skipped conversation was never retried.
 
 `resolver_exit` has exactly 30 primary reasons: `resolved`, `partial`, `disabled`,
 `no_audio`, `all_short`, `no_eligible`, `no_vectors`, `global_manifest_ambiguity`,
