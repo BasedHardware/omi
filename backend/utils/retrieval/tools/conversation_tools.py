@@ -183,13 +183,12 @@ def _render_addressable_conversations(conversations, *, configurable, admitted_i
         size = len(block) + (len('\n\n---------------------\n\n') if blocks else 0)
         if used + size > MAX_RESULT_CHARS:
             if not blocks:
-                # Keep the record header/ref, and disclose the partial content below.
-                blocks.append(block[:MAX_RESULT_CHARS].rsplit('\n', 1)[0])
-                collected.append(conversation_to_citation_card(conversation))
-                register_record_ref(configurable, 'conversations', conversation.id)
-                if admitted_ids is not None:
-                    admitted_ids.add(conversation.id)
-            blocks.append('[Conversation content truncated; narrow the read for more detail.]')
+                blocks.append(
+                    'Error: Conversation exceeds the chat read budget; request fewer transcript segments '
+                    'or omit the transcript.'
+                )
+            else:
+                blocks.append('[Conversation results truncated; narrow the read for more detail.]')
             break
         blocks.append(block)
         used += size

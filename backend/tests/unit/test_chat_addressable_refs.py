@@ -98,6 +98,22 @@ def test_bounded_conversation_cards_only_advertise_visible_records(monkeypatch):
     assert ('conversations', 'read-2') not in cfg['turn_refs'].seen
 
 
+def test_oversized_conversation_does_not_advertise_partial_refs(monkeypatch):
+    cfg = _config()
+    monkeypatch.setattr(conversation_tools, 'MAX_RESULT_CHARS', 500)
+    result = conversation_tools._render_addressable_conversations(
+        [_conversation('read-big', 'x' * 1000)],
+        configurable=cfg,
+        use_transcript=True,
+        people=[Person(id='person-1', name='Example Person')],
+    )
+    assert 'exceeds the chat read budget' in result
+    assert 'ref:' not in result
+    assert cfg['conversations_collected'] == []
+    assert ('conversations', 'read-big') not in cfg['turn_refs'].seen
+    assert ('people', 'person-1') not in cfg['turn_refs'].seen
+
+
 def test_jit_refs_align_and_retain_evidence_contract():
     cfg = _config()
     text = format_active_jit_conversations(
