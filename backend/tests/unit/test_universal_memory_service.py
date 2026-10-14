@@ -131,6 +131,7 @@ def service_mod(monkeypatch):
         yield "test-gate-token"
 
     monkeypatch.setattr(module, "destructive_operation_gate", permitted_gate)
+    monkeypatch.setattr(module, "assert_destructive_gate_still_ours", lambda *_args, **_kwargs: None)
     monkeypatch.setattr(module, "purge_canonical_memory_projections", lambda *_args, **_kwargs: None)
     monkeypatch.setattr(module, "purge_source_replacement_receipts_for_memories", lambda *_args, **_kwargs: [])
     try:
@@ -2581,3 +2582,34 @@ def test_retract_irreversible_callback_still_fires_when_later_suppression_fails(
 
     assert exc_info.value.status_code == 503
     assert events == ["callback", "suppress_failed"]
+
+
+def test_override_batches_abort_takeover_with_409_after_first_commit(service_mod, monkeypatch):
+    commits = []
+
+    class Batch:
+        def set(self, *args, **kwargs):
+            pass
+
+        def commit(self):
+            commits.append("committed")
+
+    db = MagicMock()
+    db.batch.side_effect = Batch
+    service = service_mod.MemoryService(db_client=db)
+
+    def check(*args, **kwargs):
+        if commits:
+            raise service_mod.DestructiveGateTakeover("peer finished")
+
+    monkeypatch.setattr(service_mod, "assert_destructive_gate_still_ours", check)
+
+    @service_mod._legal_hold_gated_deletion
+    def delete_chunks(self, uid):
+        self._write_historical_overrides(uid, ["a", "b"], service_mod.MemoryItemStatus.tombstoned, batch_size=1)
+
+    with pytest.raises(service_mod.HTTPException) as caught:
+        delete_chunks(service, "uid-test")
+    assert caught.value.status_code == 409
+    assert caught.value.headers["Retry-After"] == "2"
+    assert commits == ["committed"]

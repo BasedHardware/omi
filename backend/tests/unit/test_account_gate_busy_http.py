@@ -6,7 +6,7 @@ from types import SimpleNamespace
 import pytest
 from fastapi import HTTPException
 
-from database.legal_holds import DestructiveOperationInProgress, LegalHoldAuthorityUnavailable
+from database.legal_holds import DestructiveGateTakeover, DestructiveOperationInProgress, LegalHoldAuthorityUnavailable
 from models.feedback import MemoryUseFeedback
 from utils.other.account_gate_http import (
     ACCOUNT_GATE_BUSY_DETAIL,
@@ -87,7 +87,9 @@ def test_memory_use_replay_maps_destructive_gate_to_account_gate_busy(monkeypatc
     _assert_gate_busy(caught.value, fence)
 
 
-@pytest.mark.parametrize("error_type", [DestructiveOperationInProgress, LegalHoldAuthorityUnavailable])
+@pytest.mark.parametrize(
+    "error_type", [DestructiveGateTakeover, DestructiveOperationInProgress, LegalHoldAuthorityUnavailable]
+)
 def test_account_gate_cascade_purge_maps_fence_before_generic_failure(monkeypatch, error_type):
     from utils.memory import memory_service
 
@@ -104,7 +106,9 @@ def test_account_gate_cascade_purge_maps_fence_before_generic_failure(monkeypatc
     assert caught.value.__cause__ is fence
 
 
-@pytest.mark.parametrize("error_type", [DestructiveOperationInProgress, LegalHoldAuthorityUnavailable])
+@pytest.mark.parametrize(
+    "error_type", [DestructiveGateTakeover, DestructiveOperationInProgress, LegalHoldAuthorityUnavailable]
+)
 def test_account_gate_deletion_boundary_maps_inner_transaction_fence(monkeypatch, error_type):
     from contextlib import nullcontext
     from utils.memory import memory_service
@@ -121,3 +125,35 @@ def test_account_gate_deletion_boundary_maps_inner_transaction_fence(monkeypatch
     assert caught.value.status_code == 409
     assert caught.value.headers["Retry-After"] == "2"
     assert caught.value.__cause__ is fence
+
+
+def test_adapter_projection_loop_aborts_before_next_memory_on_takeover(monkeypatch):
+    cleaned = []
+
+    def check(*args, **kwargs):
+        if cleaned:
+            raise DestructiveGateTakeover("peer completed")
+
+    monkeypatch.setattr(canonical_adapter, "assert_destructive_gate_still_ours", check)
+    monkeypatch.setattr(
+        canonical_adapter, "_run_immediate_privacy_cleanup", lambda uid, memory_id, **kwargs: cleaned.append(memory_id)
+    )
+    with pytest.raises(DestructiveGateTakeover):
+        canonical_adapter.purge_canonical_memory_projections(
+            "uid", ["a", "b"], db_client=object(), reason="delete", revalidate_gate=True
+        )
+    assert cleaned == ["a"]
+
+
+@pytest.mark.parametrize("loop", ["tombstone", "retraction"])
+def test_adapter_takeover_maps_to_existing_conflict_without_retry(monkeypatch, loop):
+    def check(*args, **kwargs):
+        raise DestructiveGateTakeover("peer completed")
+
+    monkeypatch.setattr(canonical_adapter, "assert_destructive_gate_still_ours", check)
+    if loop == "tombstone":
+        with pytest.raises(canonical_adapter.CanonicalMemoryTombstoneConflict):
+            canonical_adapter._tombstone_memory_items_under_gate("uid", ["a"], db_client=object(), reason="delete")
+    else:
+        with pytest.raises(canonical_adapter.ConversationReplacementConflictError):
+            canonical_adapter._retract_conversation_sourced_memories_under_gate("uid", "conv", db_client=object())

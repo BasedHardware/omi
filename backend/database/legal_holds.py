@@ -54,6 +54,10 @@ class DestructiveOperationInProgress(RuntimeError):
     """Another destructive operation owns the account gate."""
 
 
+class DestructiveGateTakeover(RuntimeError):
+    """The active holder lost its authority and must stop destructive work."""
+
+
 def _document(client: Any, path: str) -> Any:
     collection_name, document_id = path.split("/", 1)
     document = getattr(client, "document", None)
@@ -292,6 +296,30 @@ def finish_destructive_operation(
     )
 
 
+def assert_destructive_gate_still_ours(
+    uid: str,
+    kind: str,
+    *,
+    token: str | None = None,
+    firestore_client: Any | None = None,
+) -> None:
+    """Re-read gate authority immediately before each destructive chunk."""
+    active_token = current_destructive_operation_token(uid, kind=kind) if token is None else token
+    if not uid or not kind.strip() or not active_token.strip():
+        raise LegalHoldAuthorityUnavailable("destructive operation identity is invalid")
+    try:
+        client = account_deletion_firestore_client(firestore_client=firestore_client)
+        gate = _validated_gate(_document(client, f"{LEGAL_HOLD_DELETION_GATES_COLLECTION}/{uid}").get())
+        if gate is None or gate["uid"] != uid:
+            raise LegalHoldAuthorityUnavailable("destructive operation gate is missing or mismatched")
+        if gate["kind"] != kind or gate["token"] != active_token or gate["state"] != "running":
+            raise DestructiveGateTakeover("destructive operation gate was taken over or finished")
+    except (DestructiveGateTakeover, LegalHoldAuthorityUnavailable):
+        raise
+    except Exception as exc:
+        raise LegalHoldAuthorityUnavailable("destructive operation gate authority unavailable") from exc
+
+
 def assert_destructive_operation_transaction(
     transaction: Any,
     client: Any,
@@ -418,11 +446,13 @@ __all__ = [
     "LEGAL_HOLD_SCHEMA_VERSION",
     "LEGAL_HOLD_DELETION_GATE_SCHEMA_VERSION",
     "DestructiveOperationInProgress",
+    "DestructiveGateTakeover",
     "LegalHoldActive",
     "LegalHoldAuthorityUnavailable",
     "acquire_destructive_operation",
     "assert_account_deletion_permitted",
     "assert_destructive_operation_transaction",
+    "assert_destructive_gate_still_ours",
     "assert_no_destructive_operation_transaction",
     "current_destructive_operation_token",
     "destructive_operation_gate",

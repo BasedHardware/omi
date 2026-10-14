@@ -6,7 +6,7 @@ import pytest
 from fastapi import HTTPException
 from pydantic import ValidationError
 
-from database.legal_holds import DestructiveOperationInProgress, LegalHoldAuthorityUnavailable
+from database.legal_holds import DestructiveGateTakeover, DestructiveOperationInProgress, LegalHoldAuthorityUnavailable
 from routers import memories as mem_mod
 
 
@@ -110,7 +110,9 @@ def test_batch_delete_maps_gate_busy_to_409_not_500(monkeypatch):
     service.delete_batch.assert_called_once_with("uid-gate", ["a", "b"])
 
 
-@pytest.mark.parametrize("error_type", [DestructiveOperationInProgress, LegalHoldAuthorityUnavailable])
+@pytest.mark.parametrize(
+    "error_type", [DestructiveGateTakeover, DestructiveOperationInProgress, LegalHoldAuthorityUnavailable]
+)
 @pytest.mark.parametrize("path", ["single", "batch", "all", "default"])
 def test_memory_delete_routes_map_transaction_fence_with_retry_after(monkeypatch, error_type, path):
     from fastapi import FastAPI

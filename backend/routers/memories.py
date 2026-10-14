@@ -11,7 +11,7 @@ from functools import wraps
 from typing import Any, Callable, Dict, List, Literal, Optional, Tuple, cast
 
 import database._client as db_client_module
-from database.legal_holds import DestructiveOperationInProgress, LegalHoldAuthorityUnavailable
+from database.legal_holds import DestructiveGateTakeover, DestructiveOperationInProgress, LegalHoldAuthorityUnavailable
 from utils.executors import db_executor, llm_executor, postprocess_executor, run_blocking, submit_with_context
 from utils.other.account_gate_http import account_gate_busy_http_exception
 
@@ -1085,7 +1085,7 @@ def delete_memories_batch(
     except HTTPException:
         # Preserve service-owned 402/404/413 mappings and observability details.
         raise
-    except (DestructiveOperationInProgress, LegalHoldAuthorityUnavailable) as exc:
+    except (DestructiveGateTakeover, DestructiveOperationInProgress, LegalHoldAuthorityUnavailable) as exc:
         raise account_gate_busy_http_exception() from exc
     except ValueError:
         raise HTTPException(status_code=404, detail='Memory not found')
@@ -1103,7 +1103,7 @@ def delete_memory(
 ):
     try:
         MemoryService(db_client=getattr(db_client_module, 'db', None)).delete(uid, memory_id)
-    except (DestructiveOperationInProgress, LegalHoldAuthorityUnavailable) as exc:
+    except (DestructiveGateTakeover, DestructiveOperationInProgress, LegalHoldAuthorityUnavailable) as exc:
         raise account_gate_busy_http_exception() from exc
     except ValueError:
         raise HTTPException(status_code=404, detail='Memory not found')
@@ -1128,7 +1128,7 @@ def delete_memories(
             service.delete_default(uid)
         else:
             service.delete_all(uid)
-    except (DestructiveOperationInProgress, LegalHoldAuthorityUnavailable) as exc:
+    except (DestructiveGateTakeover, DestructiveOperationInProgress, LegalHoldAuthorityUnavailable) as exc:
         raise account_gate_busy_http_exception() from exc
     record_product_event('memory_deleted', request=http_request)
     return {'status': 'ok'}

@@ -456,3 +456,45 @@ def test_six_hour_takeover_boundary_is_unchanged():
     gate = _gate(kind="account_deletion", started_at=now - timedelta(hours=6))
     assert not legal_holds._gate_blocks(gate, now, kind="explicit_memory_deletion")
     assert legal_holds._gate_blocks(gate, now - timedelta(microseconds=1), kind="explicit_memory_deletion")
+
+
+@pytest.mark.parametrize(
+    "state,token", [("running", "peer"), ("completed", "peer"), ("completed", "token-1"), ("failed", "token-1")]
+)
+def test_revalidation_stops_rotated_or_finished_holder(state, token):
+    client = _FakeClient({"legal_hold_deletion_gates/uid1": _gate(state=state, token=token)})
+    with pytest.raises(legal_holds.DestructiveGateTakeover):
+        legal_holds.assert_destructive_gate_still_ours(
+            "uid1", "explicit_memory_deletion", token="token-1", firestore_client=client
+        )
+
+
+@pytest.mark.parametrize("payload", [None, {}, {"schema_version": "unsupported"}])
+def test_revalidation_missing_or_malformed_gate_fails_closed(payload):
+    client = _FakeClient({"legal_hold_deletion_gates/uid1": payload} if payload is not None else {})
+    with pytest.raises(legal_holds.LegalHoldAuthorityUnavailable):
+        legal_holds.assert_destructive_gate_still_ours(
+            "uid1", "explicit_memory_deletion", token="token-1", firestore_client=client
+        )
+
+
+def test_active_context_revalidation_detects_same_kind_takeover(monkeypatch):
+    client = _FakeClient()
+    now = legal_holds.datetime.now(legal_holds.timezone.utc)
+    monkeypatch.setattr(
+        legal_holds,
+        "_acquire_destructive_operation_transaction",
+        legal_holds._acquire_destructive_operation_transaction.to_wrap,
+    )
+    monkeypatch.setattr(
+        legal_holds,
+        "_finish_destructive_operation_transaction",
+        legal_holds._finish_destructive_operation_transaction.to_wrap,
+    )
+    with legal_holds.destructive_operation_gate("uid1", firestore_client=client):
+        legal_holds.assert_destructive_gate_still_ours("uid1", "explicit_memory_deletion", firestore_client=client)
+        legal_holds.acquire_destructive_operation(
+            "uid1", kind="explicit_memory_deletion", token="peer", firestore_client=client, now=now
+        )
+        with pytest.raises(legal_holds.DestructiveGateTakeover):
+            legal_holds.assert_destructive_gate_still_ours("uid1", "explicit_memory_deletion", firestore_client=client)
