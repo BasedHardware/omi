@@ -13592,4 +13592,33 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get onDeviceRemoveModel => 'Beszédmodell eltávolítása';
+
+  @override
+  String get onDeviceRemoveModelTitle => 'Eltávolítod a beszédmodellt?';
+
+  @override
+  String get onDeviceRemoveModelMessage =>
+      'A felvételek ezen a telefonon várakoznak, amíg újra le nem töltöd, vagy vissza nem térnek az élő órák.';
+
+  @override
+  String get onDeviceRemove => 'Eltávolítás';
+
+  @override
+  String get onDeviceFinishSetupTitle => 'Fejezd be a beállítást az átiratok megtekintéséhez';
+
+  @override
+  String get onDeviceFinishSetupBody =>
+      'Elhasználtad az e havi élő órákat. Az Omi továbbra is rögzít, és a telefonodra menti a hangot. Töltsd le a beszédmodellt, és pótolja a lemaradást.';
+
+  @override
+  String onDeviceDownloadSize(String size) {
+    return '$size letöltés';
+  }
+
+  @override
+  String get onDeviceUnsupportedBody =>
+      'Ez a telefon még nem tudja futtatni a beszédmodellt. A hang mentve marad, amíg vissza nem térnek az élő órák, vagy amíg nem váltasz magasabb csomagra.';
+
+  @override
+  String get onDeviceEntrySubtitle => 'Ha elfogynak az élő órák, átírás ezen a telefonon';
 }

@@ -13541,4 +13541,33 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get onDeviceRemoveModel => 'Poista puhemalli';
+
+  @override
+  String get onDeviceRemoveModelTitle => 'Poistetaanko puhemalli?';
+
+  @override
+  String get onDeviceRemoveModelMessage =>
+      'Tallenteet odottavat tällä puhelimella, kunnes lataat mallin uudelleen tai live-tunnit palautuvat.';
+
+  @override
+  String get onDeviceRemove => 'Poista';
+
+  @override
+  String get onDeviceFinishSetupTitle => 'Viimeistele käyttöönotto nähdäksesi litteroinnit';
+
+  @override
+  String get onDeviceFinishSetupBody =>
+      'Olet käyttänyt tämän kuun live-tunnit. Omi tallentaa edelleen ja säilyttää äänen puhelimessasi. Lataa puhemalli, niin litteroinnit saadaan ajan tasalle.';
+
+  @override
+  String onDeviceDownloadSize(String size) {
+    return '$size ladattavaa';
+  }
+
+  @override
+  String get onDeviceUnsupportedBody =>
+      'Tämä puhelin ei vielä pysty käyttämään puhemallia. Ääni säilyy tallessa, kunnes live-tunnit palautuvat tai päivität tilauksesi.';
+
+  @override
+  String get onDeviceEntrySubtitle => 'Kun live-tunnit loppuvat, litteroi tällä puhelimella';
 }

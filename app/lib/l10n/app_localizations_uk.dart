@@ -13566,4 +13566,33 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get onDeviceRemoveModel => 'Видалити мовну модель';
+
+  @override
+  String get onDeviceRemoveModelTitle => 'Видалити мовну модель?';
+
+  @override
+  String get onDeviceRemoveModelMessage =>
+      'Записи чекатимуть на цьому телефоні, доки ви знову її не завантажите або не поновляться години наживо.';
+
+  @override
+  String get onDeviceRemove => 'Видалити';
+
+  @override
+  String get onDeviceFinishSetupTitle => 'Завершіть налаштування, щоб побачити розшифровки';
+
+  @override
+  String get onDeviceFinishSetupBody =>
+      'Ви використали години наживо за цей місяць. Omi і далі записує та зберігає аудіо на телефоні. Завантажте мовну модель, і вона все надолужить.';
+
+  @override
+  String onDeviceDownloadSize(String size) {
+    return 'Завантаження $size';
+  }
+
+  @override
+  String get onDeviceUnsupportedBody =>
+      'Цей телефон поки не може запускати мовну модель. Аудіо зберігатиметься, доки не поновляться години наживо або ви не оновите план.';
+
+  @override
+  String get onDeviceEntrySubtitle => 'Коли години наживо закінчаться, транскрибувати на цьому телефоні';
 }

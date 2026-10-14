@@ -13629,4 +13629,33 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String get onDeviceRemoveModel => 'பேச்சு மாதிரியை அகற்று';
+
+  @override
+  String get onDeviceRemoveModelTitle => 'பேச்சு மாதிரியை அகற்றவா?';
+
+  @override
+  String get onDeviceRemoveModelMessage =>
+      'நீங்கள் மீண்டும் பதிவிறக்கும் வரை அல்லது நேரலை மணிநேரங்கள் திரும்பக் கிடைக்கும் வரை பதிவுகள் இந்த ஃபோனில் காத்திருக்கும்.';
+
+  @override
+  String get onDeviceRemove => 'அகற்று';
+
+  @override
+  String get onDeviceFinishSetupTitle => 'உரைப்பதிவுகளைப் பார்க்க அமைப்பை முடிக்கவும்';
+
+  @override
+  String get onDeviceFinishSetupBody =>
+      'இந்த மாதத்தின் நேரலை மணிநேரங்களைப் பயன்படுத்திவிட்டீர்கள். Omi இன்னும் பதிவுசெய்து உங்கள் ஃபோனில் ஆடியோவைச் சேமிக்கிறது. பேச்சு மாதிரியைப் பதிவிறக்கினால் அது ஈடுசெய்யும்.';
+
+  @override
+  String onDeviceDownloadSize(String size) {
+    return '$size பதிவிறக்கம்';
+  }
+
+  @override
+  String get onDeviceUnsupportedBody =>
+      'இந்த ஃபோனில் இன்னும் பேச்சு மாதிரியை இயக்க முடியாது. நேரலை மணிநேரங்கள் திரும்பக் கிடைக்கும் வரை அல்லது நீங்கள் மேம்படுத்தும் வரை ஆடியோ சேமிக்கப்பட்டிருக்கும்.';
+
+  @override
+  String get onDeviceEntrySubtitle => 'நேரலை மணிநேரங்கள் தீர்ந்ததும், இந்த ஃபோனில் உரையாக்கு';
 }

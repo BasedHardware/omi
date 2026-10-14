@@ -13543,4 +13543,33 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get onDeviceRemoveModel => 'Ta bort talmodell';
+
+  @override
+  String get onDeviceRemoveModelTitle => 'Ta bort talmodellen?';
+
+  @override
+  String get onDeviceRemoveModelMessage =>
+      'Inspelningarna väntar på den här telefonen tills du laddar ner den igen eller livetimmarna kommer tillbaka.';
+
+  @override
+  String get onDeviceRemove => 'Ta bort';
+
+  @override
+  String get onDeviceFinishSetupTitle => 'Slutför konfigurationen för att se dina transkriptioner';
+
+  @override
+  String get onDeviceFinishSetupBody =>
+      'Du har använt månadens livetimmar. Omi spelar fortfarande in och sparar ljud på telefonen. Ladda ner talmodellen så kommer den ikapp.';
+
+  @override
+  String onDeviceDownloadSize(String size) {
+    return '$size att ladda ner';
+  }
+
+  @override
+  String get onDeviceUnsupportedBody =>
+      'Den här telefonen kan inte köra talmodellen än. Ljudet förblir sparat tills livetimmarna kommer tillbaka eller du uppgraderar.';
+
+  @override
+  String get onDeviceEntrySubtitle => 'Transkribera på den här telefonen när livetimmarna tar slut';
 }

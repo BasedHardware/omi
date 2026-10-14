@@ -13551,4 +13551,33 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get onDeviceRemoveModel => 'Konuşma Modelini Kaldır';
+
+  @override
+  String get onDeviceRemoveModelTitle => 'Konuşma modeli kaldırılsın mı?';
+
+  @override
+  String get onDeviceRemoveModelMessage =>
+      'Kayıtlar, modeli yeniden indirene veya canlı saatler yenilenene kadar bu telefonda bekler.';
+
+  @override
+  String get onDeviceRemove => 'Kaldır';
+
+  @override
+  String get onDeviceFinishSetupTitle => 'Transkriptlerinizi görmek için kurulumu tamamlayın';
+
+  @override
+  String get onDeviceFinishSetupBody =>
+      'Bu ayın canlı saatlerini kullandınız. Omi hâlâ kayıt yapıyor ve sesi telefonunuza kaydediyor. Konuşma modelini indirin, birikenleri yetiştirsin.';
+
+  @override
+  String onDeviceDownloadSize(String size) {
+    return '$size indirme';
+  }
+
+  @override
+  String get onDeviceUnsupportedBody =>
+      'Bu telefon henüz konuşma modelini çalıştıramıyor. Ses, canlı saatler yenilenene veya planınızı yükseltene kadar kayıtlı kalır.';
+
+  @override
+  String get onDeviceEntrySubtitle => 'Canlı saatler bitince bu telefonda yazıya dök';
 }

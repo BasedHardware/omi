@@ -13637,4 +13637,33 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get onDeviceRemoveModel => 'Sprachmodell entfernen';
+
+  @override
+  String get onDeviceRemoveModelTitle => 'Sprachmodell entfernen?';
+
+  @override
+  String get onDeviceRemoveModelMessage =>
+      'Aufnahmen warten auf diesem Telefon, bis Sie es erneut herunterladen oder wieder Live-Stunden verfügbar sind.';
+
+  @override
+  String get onDeviceRemove => 'Entfernen';
+
+  @override
+  String get onDeviceFinishSetupTitle => 'Einrichtung abschließen, um Transkripte zu sehen';
+
+  @override
+  String get onDeviceFinishSetupBody =>
+      'Sie haben die Live-Stunden dieses Monats aufgebraucht. Omi nimmt weiter auf und speichert Audio auf Ihrem Telefon. Laden Sie das Sprachmodell herunter, dann holt es alles nach.';
+
+  @override
+  String onDeviceDownloadSize(String size) {
+    return '$size Download';
+  }
+
+  @override
+  String get onDeviceUnsupportedBody =>
+      'Dieses Telefon kann das Sprachmodell noch nicht ausführen. Das Audio bleibt gespeichert, bis wieder Live-Stunden verfügbar sind oder Sie ein Upgrade durchführen.';
+
+  @override
+  String get onDeviceEntrySubtitle => 'Wenn Live-Stunden aufgebraucht sind, auf diesem Telefon transkribieren';
 }

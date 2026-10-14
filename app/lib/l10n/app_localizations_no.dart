@@ -13538,4 +13538,33 @@ class AppLocalizationsNo extends AppLocalizations {
 
   @override
   String get onDeviceRemoveModel => 'Fjern talemodell';
+
+  @override
+  String get onDeviceRemoveModelTitle => 'Fjerne talemodellen?';
+
+  @override
+  String get onDeviceRemoveModelMessage =>
+      'Opptakene venter på denne telefonen til du laster den ned igjen eller live-timene kommer tilbake.';
+
+  @override
+  String get onDeviceRemove => 'Fjern';
+
+  @override
+  String get onDeviceFinishSetupTitle => 'Fullfør oppsettet for å se transkripsjonene dine';
+
+  @override
+  String get onDeviceFinishSetupBody =>
+      'Du har brukt opp månedens live-timer. Omi tar fortsatt opp og lagrer lyd på telefonen din. Last ned talemodellen, så tar den igjen etterslepet.';
+
+  @override
+  String onDeviceDownloadSize(String size) {
+    return '$size nedlasting';
+  }
+
+  @override
+  String get onDeviceUnsupportedBody =>
+      'Denne telefonen kan ikke kjøre talemodellen ennå. Lyden forblir lagret til live-timene kommer tilbake eller du oppgraderer.';
+
+  @override
+  String get onDeviceEntrySubtitle => 'Når live-timene er brukt opp, transkriber på denne telefonen';
 }

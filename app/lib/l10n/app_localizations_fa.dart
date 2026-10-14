@@ -13529,4 +13529,33 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String get onDeviceRemoveModel => 'حذف مدل گفتار';
+
+  @override
+  String get onDeviceRemoveModelTitle => 'مدل گفتار حذف شود؟';
+
+  @override
+  String get onDeviceRemoveModelMessage =>
+      'ضبط‌ها روی همین گوشی منتظر می‌مانند تا دوباره آن را دانلود کنید یا ساعت‌های زنده برگردند.';
+
+  @override
+  String get onDeviceRemove => 'حذف';
+
+  @override
+  String get onDeviceFinishSetupTitle => 'برای دیدن رونوشت‌ها راه‌اندازی را تمام کنید';
+
+  @override
+  String get onDeviceFinishSetupBody =>
+      'ساعت‌های زندهٔ این ماه را مصرف کرده‌اید. Omi همچنان ضبط می‌کند و صدا را روی گوشی شما ذخیره می‌کند. مدل گفتار را دانلود کنید تا عقب‌ماندگی جبران شود.';
+
+  @override
+  String onDeviceDownloadSize(String size) {
+    return 'دانلود $size';
+  }
+
+  @override
+  String get onDeviceUnsupportedBody =>
+      'این گوشی هنوز نمی‌تواند مدل گفتار را اجرا کند. صدا ذخیره می‌ماند تا ساعت‌های زنده برگردند یا اشتراک خود را ارتقا دهید.';
+
+  @override
+  String get onDeviceEntrySubtitle => 'وقتی ساعت‌های زنده تمام شد، روی همین گوشی رونویسی شود';
 }

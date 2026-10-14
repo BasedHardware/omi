@@ -13561,4 +13561,33 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get onDeviceRemoveModel => 'Pašalinti kalbos modelį';
+
+  @override
+  String get onDeviceRemoveModelTitle => 'Pašalinti kalbos modelį?';
+
+  @override
+  String get onDeviceRemoveModelMessage =>
+      'Įrašai lauks šiame telefone, kol vėl jį atsisiųsite arba grįš tiesioginės valandos.';
+
+  @override
+  String get onDeviceRemove => 'Pašalinti';
+
+  @override
+  String get onDeviceFinishSetupTitle => 'Užbaikite sąranką, kad matytumėte transkripcijas';
+
+  @override
+  String get onDeviceFinishSetupBody =>
+      'Išnaudojote šio mėnesio tiesiogines valandas. Omi vis dar įrašinėja ir saugo garsą jūsų telefone. Atsisiųskite kalbos modelį ir jis viską pasivys.';
+
+  @override
+  String onDeviceDownloadSize(String size) {
+    return 'Atsisiuntimas: $size';
+  }
+
+  @override
+  String get onDeviceUnsupportedBody =>
+      'Šis telefonas dar negali paleisti kalbos modelio. Garsas lieka išsaugotas, kol grįš tiesioginės valandos arba atnaujinsite planą.';
+
+  @override
+  String get onDeviceEntrySubtitle => 'Kai baigiasi tiesioginės valandos, transkribuoti šiame telefone';
 }

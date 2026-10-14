@@ -13575,4 +13575,33 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get onDeviceRemoveModel => 'Spraakmodel verwijderen';
+
+  @override
+  String get onDeviceRemoveModelTitle => 'Spraakmodel verwijderen?';
+
+  @override
+  String get onDeviceRemoveModelMessage =>
+      'Opnames wachten op deze telefoon tot je het opnieuw downloadt of je live-uren terugkomen.';
+
+  @override
+  String get onDeviceRemove => 'Verwijderen';
+
+  @override
+  String get onDeviceFinishSetupTitle => 'Rond de installatie af om je transcripties te zien';
+
+  @override
+  String get onDeviceFinishSetupBody =>
+      'Je hebt de live-uren van deze maand opgebruikt. Omi neemt nog steeds op en slaat audio op je telefoon op. Download het spraakmodel en het werkt de achterstand weg.';
+
+  @override
+  String onDeviceDownloadSize(String size) {
+    return 'Download van $size';
+  }
+
+  @override
+  String get onDeviceUnsupportedBody =>
+      'Deze telefoon kan het spraakmodel nog niet draaien. Audio blijft bewaard tot je live-uren terugkomen of je upgradet.';
+
+  @override
+  String get onDeviceEntrySubtitle => 'Als de live-uren op zijn, transcriberen op deze telefoon';
 }

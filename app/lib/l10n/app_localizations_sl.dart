@@ -13567,4 +13567,33 @@ class AppLocalizationsSl extends AppLocalizations {
 
   @override
   String get onDeviceRemoveModel => 'Odstrani govorni model';
+
+  @override
+  String get onDeviceRemoveModelTitle => 'Odstranim govorni model?';
+
+  @override
+  String get onDeviceRemoveModelMessage =>
+      'Posnetki bodo čakali na tem telefonu, dokler modela znova ne prenesete ali se ure v živo ne vrnejo.';
+
+  @override
+  String get onDeviceRemove => 'Odstrani';
+
+  @override
+  String get onDeviceFinishSetupTitle => 'Dokončajte nastavitev za ogled prepisov';
+
+  @override
+  String get onDeviceFinishSetupBody =>
+      'Porabili ste ure v živo za ta mesec. Omi še vedno snema in shranjuje zvok na telefon. Prenesite govorni model in bo dohitel zaostanek.';
+
+  @override
+  String onDeviceDownloadSize(String size) {
+    return 'Prenos $size';
+  }
+
+  @override
+  String get onDeviceUnsupportedBody =>
+      'Ta telefon govornega modela še ne more poganjati. Zvok ostane shranjen, dokler se ure v živo ne vrnejo ali ne nadgradite.';
+
+  @override
+  String get onDeviceEntrySubtitle => 'Ko zmanjka ur v živo, prepisuj na tem telefonu';
 }

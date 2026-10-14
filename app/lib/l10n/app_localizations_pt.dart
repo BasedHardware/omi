@@ -13562,4 +13562,33 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get onDeviceRemoveModel => 'Remover modelo de fala';
+
+  @override
+  String get onDeviceRemoveModelTitle => 'Remover modelo de fala?';
+
+  @override
+  String get onDeviceRemoveModelMessage =>
+      'As gravações vão aguardar neste telefone até você baixá-lo de novo ou as horas ao vivo voltarem.';
+
+  @override
+  String get onDeviceRemove => 'Remover';
+
+  @override
+  String get onDeviceFinishSetupTitle => 'Conclua a configuração para ver suas transcrições';
+
+  @override
+  String get onDeviceFinishSetupBody =>
+      'Você usou as horas ao vivo deste mês. O Omi continua gravando e salvando o áudio no seu telefone. Baixe o modelo de fala e ele vai colocar tudo em dia.';
+
+  @override
+  String onDeviceDownloadSize(String size) {
+    return 'Download de $size';
+  }
+
+  @override
+  String get onDeviceUnsupportedBody =>
+      'Este telefone ainda não consegue rodar o modelo de fala. O áudio fica salvo até as horas ao vivo voltarem ou você fazer upgrade.';
+
+  @override
+  String get onDeviceEntrySubtitle => 'Quando as horas ao vivo acabarem, transcrever neste telefone';
 }

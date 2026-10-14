@@ -13646,4 +13646,33 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get onDeviceRemoveModel => 'Alisin ang Speech Model';
+
+  @override
+  String get onDeviceRemoveModelTitle => 'Alisin ang Speech Model?';
+
+  @override
+  String get onDeviceRemoveModelMessage =>
+      'Maghihintay ang mga recording sa phone na ito hanggang i-download mo ulit ito o bumalik ang live hours.';
+
+  @override
+  String get onDeviceRemove => 'Alisin';
+
+  @override
+  String get onDeviceFinishSetupTitle => 'Tapusin ang setup para makita ang mga transcript mo';
+
+  @override
+  String get onDeviceFinishSetupBody =>
+      'Nagamit mo na ang live hours ngayong buwan. Nagre-record pa rin ang Omi at nagse-save ng audio sa phone mo. I-download ang speech model at hahabol ito.';
+
+  @override
+  String onDeviceDownloadSize(String size) {
+    return '$size na download';
+  }
+
+  @override
+  String get onDeviceUnsupportedBody =>
+      'Hindi pa kayang patakbuhin ng phone na ito ang speech model. Mananatiling naka-save ang audio hanggang bumalik ang live hours o mag-upgrade ka.';
+
+  @override
+  String get onDeviceEntrySubtitle => 'Kapag naubos ang live hours, mag-transcribe sa phone na ito';
 }

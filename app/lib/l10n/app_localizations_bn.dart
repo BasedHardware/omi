@@ -13533,4 +13533,33 @@ class AppLocalizationsBn extends AppLocalizations {
 
   @override
   String get onDeviceRemoveModel => 'স্পিচ মডেল সরান';
+
+  @override
+  String get onDeviceRemoveModelTitle => 'স্পিচ মডেল সরাবেন?';
+
+  @override
+  String get onDeviceRemoveModelMessage =>
+      'আবার ডাউনলোড না করা বা লাইভ ঘণ্টা ফিরে না আসা পর্যন্ত রেকর্ডিংগুলো এই ফোনে অপেক্ষা করবে।';
+
+  @override
+  String get onDeviceRemove => 'সরান';
+
+  @override
+  String get onDeviceFinishSetupTitle => 'ট্রান্সক্রিপ্ট দেখতে সেটআপ শেষ করুন';
+
+  @override
+  String get onDeviceFinishSetupBody =>
+      'আপনি এই মাসের লাইভ ঘণ্টা শেষ করে ফেলেছেন। Omi এখনও রেকর্ড করছে এবং আপনার ফোনে অডিও সংরক্ষণ করছে। স্পিচ মডেল ডাউনলোড করুন, বাকি কাজ এটি সেরে নেবে।';
+
+  @override
+  String onDeviceDownloadSize(String size) {
+    return '$size ডাউনলোড';
+  }
+
+  @override
+  String get onDeviceUnsupportedBody =>
+      'এই ফোন এখনও স্পিচ মডেল চালাতে পারে না। লাইভ ঘণ্টা ফিরে আসা বা আপগ্রেড করা পর্যন্ত অডিও সংরক্ষিত থাকবে।';
+
+  @override
+  String get onDeviceEntrySubtitle => 'লাইভ ঘণ্টা শেষ হলে এই ফোনে ট্রান্সক্রাইব করুন';
 }

@@ -37,8 +37,9 @@ Future<void> runOnDeviceBackground({required Future<void> Function() initialize}
     await SharedPreferencesUtil.init();
     final prefs = SharedPreferencesUtil();
     final uid = prefs.uid;
-    if (!prefs.getBool('onDeviceOverflowConfigured') || uid.isEmpty || FirebaseAuth.instance.currentUser?.uid != uid)
+    if (!prefs.getBool('onDeviceOverflowConfigured') || uid.isEmpty || FirebaseAuth.instance.currentUser?.uid != uid) {
       return;
+    }
     final sync = LocalWalSyncImpl(_WorkerListener());
     await sync.loadForOnDeviceWorker();
     controller = OnDeviceTranscriptionController(

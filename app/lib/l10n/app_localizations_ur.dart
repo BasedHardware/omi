@@ -13551,4 +13551,33 @@ class AppLocalizationsUr extends AppLocalizations {
 
   @override
   String get onDeviceRemoveModel => 'اسپیچ ماڈل ہٹائیں';
+
+  @override
+  String get onDeviceRemoveModelTitle => 'اسپیچ ماڈل ہٹائیں؟';
+
+  @override
+  String get onDeviceRemoveModelMessage =>
+      'جب تک آپ اسے دوبارہ ڈاؤن لوڈ نہ کریں یا لائیو گھنٹے واپس نہ آئیں، ریکارڈنگز اسی فون پر انتظار کریں گی۔';
+
+  @override
+  String get onDeviceRemove => 'ہٹائیں';
+
+  @override
+  String get onDeviceFinishSetupTitle => 'اپنے ٹرانسکرپٹس دیکھنے کے لیے سیٹ اپ مکمل کریں';
+
+  @override
+  String get onDeviceFinishSetupBody =>
+      'آپ اس ماہ کے لائیو گھنٹے استعمال کر چکے ہیں۔ Omi اب بھی ریکارڈ کر رہا ہے اور آڈیو آپ کے فون پر محفوظ کر رہا ہے۔ اسپیچ ماڈل ڈاؤن لوڈ کریں اور یہ باقی کام مکمل کر لے گا۔';
+
+  @override
+  String onDeviceDownloadSize(String size) {
+    return '$size ڈاؤن لوڈ';
+  }
+
+  @override
+  String get onDeviceUnsupportedBody =>
+      'یہ فون ابھی اسپیچ ماڈل نہیں چلا سکتا۔ لائیو گھنٹے واپس آنے یا آپ کے اپ گریڈ کرنے تک آڈیو محفوظ رہے گی۔';
+
+  @override
+  String get onDeviceEntrySubtitle => 'لائیو گھنٹے ختم ہونے پر اسی فون پر ٹرانسکرائب کریں';
 }

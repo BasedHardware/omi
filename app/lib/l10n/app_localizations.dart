@@ -24098,6 +24098,54 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Remove Speech Model'**
   String get onDeviceRemoveModel;
+
+  /// Confirmation dialog title
+  ///
+  /// In en, this message translates to:
+  /// **'Remove Speech Model?'**
+  String get onDeviceRemoveModelTitle;
+
+  /// Confirmation dialog message for removing the speech model
+  ///
+  /// In en, this message translates to:
+  /// **'Recordings will wait on this phone until you download it again or live hours come back.'**
+  String get onDeviceRemoveModelMessage;
+
+  /// Confirm button that removes the speech model
+  ///
+  /// In en, this message translates to:
+  /// **'Remove'**
+  String get onDeviceRemove;
+
+  /// Banner title when recordings are waiting for the speech model
+  ///
+  /// In en, this message translates to:
+  /// **'Finish setup to see your transcripts'**
+  String get onDeviceFinishSetupTitle;
+
+  /// Banner body when recordings are waiting for the speech model
+  ///
+  /// In en, this message translates to:
+  /// **'You\'ve used this month\'s live hours. Omi is still recording and saving audio on your phone. Download the speech model and it will catch up.'**
+  String get onDeviceFinishSetupBody;
+
+  /// Download size, e.g. '600 MB download'
+  ///
+  /// In en, this message translates to:
+  /// **'{size} download'**
+  String onDeviceDownloadSize(String size);
+
+  /// Banner body when the phone cannot run the speech model
+  ///
+  /// In en, this message translates to:
+  /// **'This phone can\'t run the speech model yet. Audio stays saved until live hours come back or you upgrade.'**
+  String get onDeviceUnsupportedBody;
+
+  /// Subtitle of the settings entry for on-device transcription
+  ///
+  /// In en, this message translates to:
+  /// **'When live hours run out, transcribe on this phone'**
+  String get onDeviceEntrySubtitle;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

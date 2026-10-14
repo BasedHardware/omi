@@ -13323,4 +13323,30 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get onDeviceRemoveModel => '移除语音模型';
+
+  @override
+  String get onDeviceRemoveModelTitle => '要移除语音模型吗？';
+
+  @override
+  String get onDeviceRemoveModelMessage => '录音将保留在本机等待，直到你重新下载模型或实时时长恢复。';
+
+  @override
+  String get onDeviceRemove => '移除';
+
+  @override
+  String get onDeviceFinishSetupTitle => '完成设置即可查看文字记录';
+
+  @override
+  String get onDeviceFinishSetupBody => '你本月的实时时长已用完。Omi 仍在录音并将音频保存在你的手机上。下载语音模型后即可补齐转录。';
+
+  @override
+  String onDeviceDownloadSize(String size) {
+    return '需下载 $size';
+  }
+
+  @override
+  String get onDeviceUnsupportedBody => '本机暂时无法运行语音模型。音频会一直保存，直到实时时长恢复或你升级套餐。';
+
+  @override
+  String get onDeviceEntrySubtitle => '实时时长用完后，在本机转录';
 }

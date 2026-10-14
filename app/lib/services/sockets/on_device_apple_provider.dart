@@ -49,8 +49,9 @@ class OnDeviceAppleProvider implements ISttProvider {
       if (await OnDeviceOverflowGate.read()) {
         final result = await AppleBatchEngine().transcribe(audioData, language: language ?? this.language);
         final duration = pcmWavDurationSeconds(audioData);
-        if (result.text.trim().isEmpty)
+        if (result.text.trim().isEmpty) {
           return SttTranscriptionResult(segments: [], rawText: '', audioEndSeconds: audioOffsetSeconds + duration);
+        }
         return SttTranscriptionResult(rawText: result.text, audioEndSeconds: audioOffsetSeconds + duration, segments: [
           if (result.words.isEmpty)
             SttSegment(

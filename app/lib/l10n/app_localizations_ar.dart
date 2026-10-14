@@ -13460,4 +13460,33 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get onDeviceRemoveModel => 'إزالة نموذج الكلام';
+
+  @override
+  String get onDeviceRemoveModelTitle => 'إزالة نموذج الكلام؟';
+
+  @override
+  String get onDeviceRemoveModelMessage =>
+      'ستنتظر التسجيلات على هذا الهاتف حتى تُنزّله مجددًا أو تعود الساعات المباشرة.';
+
+  @override
+  String get onDeviceRemove => 'إزالة';
+
+  @override
+  String get onDeviceFinishSetupTitle => 'أكمل الإعداد لرؤية نصوصك';
+
+  @override
+  String get onDeviceFinishSetupBody =>
+      'لقد استهلكت الساعات المباشرة لهذا الشهر. لا يزال Omi يسجّل ويحفظ الصوت على هاتفك. نزّل نموذج الكلام وسيلحق بكل ما فات.';
+
+  @override
+  String onDeviceDownloadSize(String size) {
+    return 'تنزيل بحجم $size';
+  }
+
+  @override
+  String get onDeviceUnsupportedBody =>
+      'لا يستطيع هذا الهاتف تشغيل نموذج الكلام بعد. يبقى الصوت محفوظًا حتى تعود الساعات المباشرة أو تقوم بالترقية.';
+
+  @override
+  String get onDeviceEntrySubtitle => 'عند نفاد الساعات المباشرة، انسخ على هذا الهاتف';
 }

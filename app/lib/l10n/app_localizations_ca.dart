@@ -13608,4 +13608,33 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get onDeviceRemoveModel => 'Elimina el model de veu';
+
+  @override
+  String get onDeviceRemoveModelTitle => 'Voleu eliminar el model de veu?';
+
+  @override
+  String get onDeviceRemoveModelMessage =>
+      'Els enregistraments esperaran en aquest telèfon fins que el torneu a baixar o tornin les hores en directe.';
+
+  @override
+  String get onDeviceRemove => 'Elimina';
+
+  @override
+  String get onDeviceFinishSetupTitle => 'Acabeu la configuració per veure les transcripcions';
+
+  @override
+  String get onDeviceFinishSetupBody =>
+      'Heu esgotat les hores en directe d\'aquest mes. Omi continua enregistrant i desant l\'àudio al vostre telèfon. Baixeu el model de veu i es posarà al dia.';
+
+  @override
+  String onDeviceDownloadSize(String size) {
+    return 'Baixada de $size';
+  }
+
+  @override
+  String get onDeviceUnsupportedBody =>
+      'Aquest telèfon encara no pot executar el model de veu. L\'àudio es manté desat fins que tornin les hores en directe o milloreu el pla.';
+
+  @override
+  String get onDeviceEntrySubtitle => 'Quan s\'esgotin les hores en directe, transcriu en aquest telèfon';
 }

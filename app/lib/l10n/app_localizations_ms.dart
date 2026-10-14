@@ -13570,4 +13570,33 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get onDeviceRemoveModel => 'Alih keluar model pertuturan';
+
+  @override
+  String get onDeviceRemoveModelTitle => 'Alih keluar model pertuturan?';
+
+  @override
+  String get onDeviceRemoveModelMessage =>
+      'Rakaman akan menunggu pada telefon ini sehingga anda memuat turunnya semula atau jam langsung kembali.';
+
+  @override
+  String get onDeviceRemove => 'Alih keluar';
+
+  @override
+  String get onDeviceFinishSetupTitle => 'Selesaikan persediaan untuk melihat transkrip anda';
+
+  @override
+  String get onDeviceFinishSetupBody =>
+      'Anda telah menggunakan jam langsung bulan ini. Omi masih merakam dan menyimpan audio pada telefon anda. Muat turun model pertuturan dan ia akan mengejar semua ketinggalan.';
+
+  @override
+  String onDeviceDownloadSize(String size) {
+    return 'Muat turun $size';
+  }
+
+  @override
+  String get onDeviceUnsupportedBody =>
+      'Telefon ini belum dapat menjalankan model pertuturan. Audio kekal disimpan sehingga jam langsung kembali atau anda naik taraf.';
+
+  @override
+  String get onDeviceEntrySubtitle => 'Apabila jam langsung habis, transkripsi pada telefon ini';
 }

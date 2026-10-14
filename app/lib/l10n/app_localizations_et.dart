@@ -13531,4 +13531,33 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get onDeviceRemoveModel => 'Eemalda kõnemudel';
+
+  @override
+  String get onDeviceRemoveModelTitle => 'Kas eemaldada kõnemudel?';
+
+  @override
+  String get onDeviceRemoveModelMessage =>
+      'Salvestised ootavad selles telefonis, kuni laadite mudeli uuesti alla või reaalajas tunnid taastuvad.';
+
+  @override
+  String get onDeviceRemove => 'Eemalda';
+
+  @override
+  String get onDeviceFinishSetupTitle => 'Transkriptsioonide nägemiseks lõpetage seadistamine';
+
+  @override
+  String get onDeviceFinishSetupBody =>
+      'Olete selle kuu reaalajas tunnid ära kasutanud. Omi salvestab endiselt ja hoiab heli teie telefonis. Laadige kõnemudel alla ja see teeb kõik järele.';
+
+  @override
+  String onDeviceDownloadSize(String size) {
+    return 'Allalaadimine $size';
+  }
+
+  @override
+  String get onDeviceUnsupportedBody =>
+      'See telefon ei suuda veel kõnemudelit käitada. Heli jääb salvestatuks, kuni reaalajas tunnid taastuvad või te paketti uuendate.';
+
+  @override
+  String get onDeviceEntrySubtitle => 'Kui reaalajas tunnid saavad otsa, transkribeeri selles telefonis';
 }

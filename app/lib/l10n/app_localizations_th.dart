@@ -13468,4 +13468,33 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get onDeviceRemoveModel => 'ลบโมเดลเสียงพูด';
+
+  @override
+  String get onDeviceRemoveModelTitle => 'ลบโมเดลเสียงพูดไหม';
+
+  @override
+  String get onDeviceRemoveModelMessage =>
+      'การบันทึกจะรออยู่บนโทรศัพท์เครื่องนี้จนกว่าคุณจะดาวน์โหลดอีกครั้งหรือชั่วโมงแบบสดกลับมา';
+
+  @override
+  String get onDeviceRemove => 'ลบ';
+
+  @override
+  String get onDeviceFinishSetupTitle => 'ตั้งค่าให้เสร็จเพื่อดูบันทึกคำพูด';
+
+  @override
+  String get onDeviceFinishSetupBody =>
+      'คุณใช้ชั่วโมงแบบสดของเดือนนี้หมดแล้ว Omi ยังคงบันทึกและเก็บเสียงไว้บนโทรศัพท์ของคุณ ดาวน์โหลดโมเดลเสียงพูดแล้วระบบจะถอดเสียงส่วนที่ค้างให้';
+
+  @override
+  String onDeviceDownloadSize(String size) {
+    return 'ดาวน์โหลด $size';
+  }
+
+  @override
+  String get onDeviceUnsupportedBody =>
+      'โทรศัพท์เครื่องนี้ยังใช้โมเดลเสียงพูดไม่ได้ เสียงจะถูกเก็บไว้จนกว่าชั่วโมงแบบสดจะกลับมาหรือคุณอัปเกรด';
+
+  @override
+  String get onDeviceEntrySubtitle => 'เมื่อชั่วโมงแบบสดหมด ให้ถอดเสียงบนโทรศัพท์เครื่องนี้';
 }

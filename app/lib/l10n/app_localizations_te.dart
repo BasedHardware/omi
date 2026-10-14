@@ -13593,4 +13593,33 @@ class AppLocalizationsTe extends AppLocalizations {
 
   @override
   String get onDeviceRemoveModel => 'స్పీచ్ మోడల్‌ను తీసివేయండి';
+
+  @override
+  String get onDeviceRemoveModelTitle => 'స్పీచ్ మోడల్‌ను తీసివేయాలా?';
+
+  @override
+  String get onDeviceRemoveModelMessage =>
+      'మీరు దాన్ని మళ్లీ డౌన్‌లోడ్ చేసే వరకు లేదా లైవ్ గంటలు తిరిగి వచ్చే వరకు రికార్డింగ్‌లు ఈ ఫోన్‌లో వేచి ఉంటాయి.';
+
+  @override
+  String get onDeviceRemove => 'తీసివేయండి';
+
+  @override
+  String get onDeviceFinishSetupTitle => 'మీ ట్రాన్‌స్క్రిప్ట్‌లను చూడటానికి సెటప్ పూర్తి చేయండి';
+
+  @override
+  String get onDeviceFinishSetupBody =>
+      'మీరు ఈ నెల లైవ్ గంటలను ఉపయోగించేశారు. Omi ఇంకా రికార్డ్ చేస్తూ మీ ఫోన్‌లో ఆడియోను సేవ్ చేస్తోంది. స్పీచ్ మోడల్‌ను డౌన్‌లోడ్ చేయండి, అది మిగిలినవి పూర్తి చేస్తుంది.';
+
+  @override
+  String onDeviceDownloadSize(String size) {
+    return '$size డౌన్‌లోడ్';
+  }
+
+  @override
+  String get onDeviceUnsupportedBody =>
+      'ఈ ఫోన్ ఇంకా స్పీచ్ మోడల్‌ను నడపలేదు. లైవ్ గంటలు తిరిగి వచ్చే వరకు లేదా మీరు అప్‌గ్రేడ్ చేసే వరకు ఆడియో సేవ్ అయి ఉంటుంది.';
+
+  @override
+  String get onDeviceEntrySubtitle => 'లైవ్ గంటలు అయిపోయినప్పుడు, ఈ ఫోన్‌లో ట్రాన్‌స్క్రైబ్ చేయండి';
 }

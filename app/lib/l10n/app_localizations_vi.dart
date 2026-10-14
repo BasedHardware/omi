@@ -13534,4 +13534,33 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get onDeviceRemoveModel => 'Xóa mô hình giọng nói';
+
+  @override
+  String get onDeviceRemoveModelTitle => 'Xóa mô hình giọng nói?';
+
+  @override
+  String get onDeviceRemoveModelMessage =>
+      'Bản ghi âm sẽ chờ trên điện thoại này cho đến khi bạn tải lại hoặc có lại giờ trực tiếp.';
+
+  @override
+  String get onDeviceRemove => 'Xóa';
+
+  @override
+  String get onDeviceFinishSetupTitle => 'Hoàn tất thiết lập để xem bản ghi';
+
+  @override
+  String get onDeviceFinishSetupBody =>
+      'Bạn đã dùng hết giờ trực tiếp của tháng này. Omi vẫn đang ghi âm và lưu âm thanh trên điện thoại của bạn. Hãy tải mô hình giọng nói để xử lý bù.';
+
+  @override
+  String onDeviceDownloadSize(String size) {
+    return 'Tải xuống $size';
+  }
+
+  @override
+  String get onDeviceUnsupportedBody =>
+      'Điện thoại này chưa chạy được mô hình giọng nói. Âm thanh vẫn được lưu cho đến khi có lại giờ trực tiếp hoặc bạn nâng cấp.';
+
+  @override
+  String get onDeviceEntrySubtitle => 'Khi hết giờ trực tiếp, phiên âm trên điện thoại này';
 }

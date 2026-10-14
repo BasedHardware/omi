@@ -13626,4 +13626,33 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get onDeviceRemoveModel => 'Αφαίρεση μοντέλου ομιλίας';
+
+  @override
+  String get onDeviceRemoveModelTitle => 'Αφαίρεση μοντέλου ομιλίας;';
+
+  @override
+  String get onDeviceRemoveModelMessage =>
+      'Οι ηχογραφήσεις θα περιμένουν σε αυτό το τηλέφωνο μέχρι να το κατεβάσετε ξανά ή να επιστρέψουν οι ζωντανές ώρες.';
+
+  @override
+  String get onDeviceRemove => 'Αφαίρεση';
+
+  @override
+  String get onDeviceFinishSetupTitle => 'Ολοκληρώστε τη ρύθμιση για να δείτε τις μεταγραφές σας';
+
+  @override
+  String get onDeviceFinishSetupBody =>
+      'Εξαντλήσατε τις ζωντανές ώρες αυτού του μήνα. Το Omi συνεχίζει να ηχογραφεί και να αποθηκεύει ήχο στο τηλέφωνό σας. Κατεβάστε το μοντέλο ομιλίας και θα καλύψει την καθυστέρηση.';
+
+  @override
+  String onDeviceDownloadSize(String size) {
+    return 'Λήψη $size';
+  }
+
+  @override
+  String get onDeviceUnsupportedBody =>
+      'Αυτό το τηλέφωνο δεν μπορεί ακόμη να εκτελέσει το μοντέλο ομιλίας. Ο ήχος παραμένει αποθηκευμένος μέχρι να επιστρέψουν οι ζωντανές ώρες ή να αναβαθμίσετε.';
+
+  @override
+  String get onDeviceEntrySubtitle => 'Όταν εξαντληθούν οι ζωντανές ώρες, μεταγραφή σε αυτό το τηλέφωνο';
 }

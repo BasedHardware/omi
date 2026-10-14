@@ -13570,4 +13570,33 @@ class AppLocalizationsHr extends AppLocalizations {
 
   @override
   String get onDeviceRemoveModel => 'Ukloni govorni model';
+
+  @override
+  String get onDeviceRemoveModelTitle => 'Ukloniti govorni model?';
+
+  @override
+  String get onDeviceRemoveModelMessage =>
+      'Snimke će čekati na ovom telefonu dok ga ponovno ne preuzmete ili dok se sati uživo ne vrate.';
+
+  @override
+  String get onDeviceRemove => 'Ukloni';
+
+  @override
+  String get onDeviceFinishSetupTitle => 'Dovršite postavljanje da biste vidjeli transkripte';
+
+  @override
+  String get onDeviceFinishSetupBody =>
+      'Iskoristili ste ovomjesečne sate uživo. Omi i dalje snima i sprema zvuk na vaš telefon. Preuzmite govorni model i sve će se sustići.';
+
+  @override
+  String onDeviceDownloadSize(String size) {
+    return 'Preuzimanje od $size';
+  }
+
+  @override
+  String get onDeviceUnsupportedBody =>
+      'Ovaj telefon još ne može pokrenuti govorni model. Zvuk ostaje spremljen dok se sati uživo ne vrate ili dok ne nadogradite paket.';
+
+  @override
+  String get onDeviceEntrySubtitle => 'Kada se sati uživo potroše, transkribiraj na ovom telefonu';
 }

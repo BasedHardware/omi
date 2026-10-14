@@ -13342,4 +13342,30 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get onDeviceRemoveModel => '音声モデルを削除';
+
+  @override
+  String get onDeviceRemoveModelTitle => '音声モデルを削除しますか？';
+
+  @override
+  String get onDeviceRemoveModelMessage => '再ダウンロードするかライブ時間が戻るまで、録音はこのスマホで待機します。';
+
+  @override
+  String get onDeviceRemove => '削除';
+
+  @override
+  String get onDeviceFinishSetupTitle => 'セットアップを完了して文字起こしを表示';
+
+  @override
+  String get onDeviceFinishSetupBody => '今月のライブ時間を使い切りました。Omiは録音を続け、音声をスマホに保存しています。音声モデルをダウンロードすると、たまった分を処理します。';
+
+  @override
+  String onDeviceDownloadSize(String size) {
+    return '$sizeのダウンロード';
+  }
+
+  @override
+  String get onDeviceUnsupportedBody => 'このスマホではまだ音声モデルを実行できません。ライブ時間が戻るかアップグレードするまで、音声は保存されます。';
+
+  @override
+  String get onDeviceEntrySubtitle => 'ライブ時間を使い切ったら、このスマホで文字起こし';
 }

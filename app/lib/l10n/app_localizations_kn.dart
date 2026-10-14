@@ -13581,4 +13581,33 @@ class AppLocalizationsKn extends AppLocalizations {
 
   @override
   String get onDeviceRemoveModel => 'ಸ್ಪೀಚ್ ಮಾದರಿ ತೆಗೆದುಹಾಕಿ';
+
+  @override
+  String get onDeviceRemoveModelTitle => 'ಸ್ಪೀಚ್ ಮಾದರಿಯನ್ನು ತೆಗೆದುಹಾಕಬೇಕೆ?';
+
+  @override
+  String get onDeviceRemoveModelMessage =>
+      'ನೀವು ಅದನ್ನು ಮತ್ತೆ ಡೌನ್‌ಲೋಡ್ ಮಾಡುವವರೆಗೆ ಅಥವಾ ಲೈವ್ ಗಂಟೆಗಳು ಮರಳುವವರೆಗೆ ರೆಕಾರ್ಡಿಂಗ್‌ಗಳು ಈ ಫೋನ್‌ನಲ್ಲಿ ಕಾಯುತ್ತವೆ.';
+
+  @override
+  String get onDeviceRemove => 'ತೆಗೆದುಹಾಕಿ';
+
+  @override
+  String get onDeviceFinishSetupTitle => 'ನಿಮ್ಮ ಪ್ರತಿಲಿಪಿಗಳನ್ನು ನೋಡಲು ಸೆಟಪ್ ಪೂರ್ಣಗೊಳಿಸಿ';
+
+  @override
+  String get onDeviceFinishSetupBody =>
+      'ನೀವು ಈ ತಿಂಗಳ ಲೈವ್ ಗಂಟೆಗಳನ್ನು ಬಳಸಿದ್ದೀರಿ. Omi ಇನ್ನೂ ರೆಕಾರ್ಡ್ ಮಾಡುತ್ತಿದೆ ಮತ್ತು ಆಡಿಯೋವನ್ನು ನಿಮ್ಮ ಫೋನ್‌ನಲ್ಲಿ ಉಳಿಸುತ್ತಿದೆ. ಸ್ಪೀಚ್ ಮಾದರಿಯನ್ನು ಡೌನ್‌ಲೋಡ್ ಮಾಡಿ, ಬಾಕಿ ಕೆಲಸ ಪೂರ್ಣಗೊಳ್ಳುತ್ತದೆ.';
+
+  @override
+  String onDeviceDownloadSize(String size) {
+    return '$size ಡೌನ್‌ಲೋಡ್';
+  }
+
+  @override
+  String get onDeviceUnsupportedBody =>
+      'ಈ ಫೋನ್ ಇನ್ನೂ ಸ್ಪೀಚ್ ಮಾದರಿಯನ್ನು ಚಲಾಯಿಸಲು ಸಾಧ್ಯವಿಲ್ಲ. ಲೈವ್ ಗಂಟೆಗಳು ಮರಳುವವರೆಗೆ ಅಥವಾ ನೀವು ಅಪ್‌ಗ್ರೇಡ್ ಮಾಡುವವರೆಗೆ ಆಡಿಯೋ ಉಳಿಸಲ್ಪಟ್ಟಿರುತ್ತದೆ.';
+
+  @override
+  String get onDeviceEntrySubtitle => 'ಲೈವ್ ಗಂಟೆಗಳು ಮುಗಿದಾಗ, ಈ ಫೋನ್‌ನಲ್ಲಿ ಪ್ರತಿಲೇಖಿಸಿ';
 }

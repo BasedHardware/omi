@@ -13565,4 +13565,33 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get onDeviceRemoveModel => 'Noņemt runas modeli';
+
+  @override
+  String get onDeviceRemoveModelTitle => 'Noņemt runas modeli?';
+
+  @override
+  String get onDeviceRemoveModelMessage =>
+      'Ieraksti gaidīs šajā tālrunī, līdz to atkal lejupielādēsiet vai atgriezīsies tiešraides stundas.';
+
+  @override
+  String get onDeviceRemove => 'Noņemt';
+
+  @override
+  String get onDeviceFinishSetupTitle => 'Pabeidziet iestatīšanu, lai redzētu transkripcijas';
+
+  @override
+  String get onDeviceFinishSetupBody =>
+      'Šī mēneša tiešraides stundas ir izlietotas. Omi joprojām ieraksta un saglabā audio jūsu tālrunī. Lejupielādējiet runas modeli, un tas panāks nokavēto.';
+
+  @override
+  String onDeviceDownloadSize(String size) {
+    return 'Lejupielāde: $size';
+  }
+
+  @override
+  String get onDeviceUnsupportedBody =>
+      'Šis tālrunis vēl nevar darbināt runas modeli. Audio paliek saglabāts, līdz atgriežas tiešraides stundas vai jūs jaunināt plānu.';
+
+  @override
+  String get onDeviceEntrySubtitle => 'Kad tiešraides stundas beigušās, transkribēt šajā tālrunī';
 }

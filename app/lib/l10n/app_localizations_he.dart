@@ -13439,4 +13439,32 @@ class AppLocalizationsHe extends AppLocalizations {
 
   @override
   String get onDeviceRemoveModel => 'הסרת מודל הדיבור';
+
+  @override
+  String get onDeviceRemoveModelTitle => 'להסיר את מודל הדיבור?';
+
+  @override
+  String get onDeviceRemoveModelMessage => 'ההקלטות ימתינו בטלפון הזה עד שתוריד אותו שוב או שהשעות החיות יחזרו.';
+
+  @override
+  String get onDeviceRemove => 'הסרה';
+
+  @override
+  String get onDeviceFinishSetupTitle => 'סיים את ההגדרה כדי לראות את התמלולים';
+
+  @override
+  String get onDeviceFinishSetupBody =>
+      'ניצלת את השעות החיות של החודש. Omi עדיין מקליט ושומר את האודיו בטלפון שלך. הורד את מודל הדיבור והוא ישלים את הפער.';
+
+  @override
+  String onDeviceDownloadSize(String size) {
+    return 'הורדה של $size';
+  }
+
+  @override
+  String get onDeviceUnsupportedBody =>
+      'הטלפון הזה עדיין לא יכול להריץ את מודל הדיבור. האודיו נשאר שמור עד שהשעות החיות יחזרו או שתשדרג.';
+
+  @override
+  String get onDeviceEntrySubtitle => 'כשהשעות החיות נגמרות, לתמלל בטלפון הזה';
 }

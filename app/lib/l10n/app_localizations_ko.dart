@@ -13348,4 +13348,31 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get onDeviceRemoveModel => '음성 모델 삭제';
+
+  @override
+  String get onDeviceRemoveModelTitle => '음성 모델을 삭제할까요?';
+
+  @override
+  String get onDeviceRemoveModelMessage => '다시 다운로드하거나 실시간 시간이 충전될 때까지 녹음은 이 휴대폰에서 대기해요.';
+
+  @override
+  String get onDeviceRemove => '삭제';
+
+  @override
+  String get onDeviceFinishSetupTitle => '설정을 완료하고 텍스트를 확인하세요';
+
+  @override
+  String get onDeviceFinishSetupBody =>
+      '이번 달 실시간 시간을 모두 사용했어요. Omi는 계속 녹음하고 오디오를 휴대폰에 저장하고 있어요. 음성 모델을 다운로드하면 밀린 분량을 처리해요.';
+
+  @override
+  String onDeviceDownloadSize(String size) {
+    return '$size 다운로드';
+  }
+
+  @override
+  String get onDeviceUnsupportedBody => '이 휴대폰은 아직 음성 모델을 실행할 수 없어요. 실시간 시간이 충전되거나 업그레이드할 때까지 오디오는 저장돼요.';
+
+  @override
+  String get onDeviceEntrySubtitle => '실시간 시간을 다 쓰면 이 휴대폰에서 변환';
 }

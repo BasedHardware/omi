@@ -13593,4 +13593,33 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get onDeviceRemoveModel => 'Elimină modelul de vorbire';
+
+  @override
+  String get onDeviceRemoveModelTitle => 'Elimini modelul de vorbire?';
+
+  @override
+  String get onDeviceRemoveModelMessage =>
+      'Înregistrările vor aștepta pe acest telefon până îl descarci din nou sau până revin orele live.';
+
+  @override
+  String get onDeviceRemove => 'Elimină';
+
+  @override
+  String get onDeviceFinishSetupTitle => 'Finalizează configurarea pentru a vedea transcrierile';
+
+  @override
+  String get onDeviceFinishSetupBody =>
+      'Ai folosit orele live din această lună. Omi încă înregistrează și salvează audio pe telefonul tău. Descarcă modelul de vorbire și va recupera totul.';
+
+  @override
+  String onDeviceDownloadSize(String size) {
+    return 'Descărcare de $size';
+  }
+
+  @override
+  String get onDeviceUnsupportedBody =>
+      'Acest telefon nu poate rula încă modelul de vorbire. Audio rămâne salvat până revin orele live sau până faci upgrade.';
+
+  @override
+  String get onDeviceEntrySubtitle => 'Când se termină orele live, transcrie pe acest telefon';
 }

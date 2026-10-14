@@ -95,11 +95,12 @@ class OnDeviceRunner with WidgetsBindingObserver {
         await cancel();
       }
     });
-    if (Platform.isAndroid)
+    if (Platform.isAndroid) {
       await channel.invokeMethod<void>('scheduleBackground', {
         'charging': controller.settings.schedule.storageId == 'while_charging',
         'schedule': controller.settings.schedule.storageId
       });
+    }
     _timer = Timer.periodic(const Duration(seconds: 30), (_) => unawaited(run()));
     if (Platform.isIOS && await channel.invokeMethod<bool>('backgroundReady') == true) return;
     await run();

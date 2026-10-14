@@ -13519,4 +13519,33 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String get onDeviceRemoveModel => 'स्पीच मॉडल हटाएं';
+
+  @override
+  String get onDeviceRemoveModelTitle => 'स्पीच मॉडल हटाएं?';
+
+  @override
+  String get onDeviceRemoveModelMessage =>
+      'जब तक आप इसे फिर से डाउनलोड नहीं करते या लाइव घंटे वापस नहीं आते, रिकॉर्डिंग इसी फ़ोन पर इंतज़ार करेंगी।';
+
+  @override
+  String get onDeviceRemove => 'हटाएं';
+
+  @override
+  String get onDeviceFinishSetupTitle => 'अपने ट्रांसक्रिप्ट देखने के लिए सेटअप पूरा करें';
+
+  @override
+  String get onDeviceFinishSetupBody =>
+      'आपने इस महीने के लाइव घंटे इस्तेमाल कर लिए हैं। Omi अभी भी रिकॉर्ड कर रहा है और ऑडियो आपके फ़ोन पर सेव कर रहा है। स्पीच मॉडल डाउनलोड करें, फिर बाकी काम पूरा हो जाएगा।';
+
+  @override
+  String onDeviceDownloadSize(String size) {
+    return '$size डाउनलोड';
+  }
+
+  @override
+  String get onDeviceUnsupportedBody =>
+      'यह फ़ोन अभी स्पीच मॉडल नहीं चला सकता। लाइव घंटे वापस आने या अपग्रेड करने तक ऑडियो सेव रहेगा।';
+
+  @override
+  String get onDeviceEntrySubtitle => 'लाइव घंटे खत्म होने पर, इसी फ़ोन पर ट्रांसक्राइब करें';
 }

@@ -13587,4 +13587,33 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String get onDeviceRemoveModel => 'Премахни гласовия модел';
+
+  @override
+  String get onDeviceRemoveModelTitle => 'Премахване на гласовия модел?';
+
+  @override
+  String get onDeviceRemoveModelMessage =>
+      'Записите ще чакат на този телефон, докато не го изтеглите отново или часовете на живо не се възстановят.';
+
+  @override
+  String get onDeviceRemove => 'Премахни';
+
+  @override
+  String get onDeviceFinishSetupTitle => 'Завършете настройката, за да видите транскриптите си';
+
+  @override
+  String get onDeviceFinishSetupBody =>
+      'Изчерпахте часовете на живо за този месец. Omi продължава да записва и пази аудиото на телефона ви. Изтеглете гласовия модел и той ще навакса.';
+
+  @override
+  String onDeviceDownloadSize(String size) {
+    return 'Изтегляне: $size';
+  }
+
+  @override
+  String get onDeviceUnsupportedBody =>
+      'Този телефон все още не може да изпълнява гласовия модел. Аудиото остава запазено, докато часовете на живо не се възстановят или не надградите плана си.';
+
+  @override
+  String get onDeviceEntrySubtitle => 'Когато часовете на живо свършат, транскрибиране на този телефон';
 }

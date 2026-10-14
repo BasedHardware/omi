@@ -13533,4 +13533,33 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get onDeviceRemoveModel => 'Odstrániť rečový model';
+
+  @override
+  String get onDeviceRemoveModelTitle => 'Odstrániť rečový model?';
+
+  @override
+  String get onDeviceRemoveModelMessage =>
+      'Nahrávky budú čakať v tomto telefóne, kým ho znova nestiahnete alebo sa neobnovia hodiny živého prepisu.';
+
+  @override
+  String get onDeviceRemove => 'Odstrániť';
+
+  @override
+  String get onDeviceFinishSetupTitle => 'Dokončite nastavenie a uvidíte svoje prepisy';
+
+  @override
+  String get onDeviceFinishSetupBody =>
+      'Vyčerpali ste hodiny živého prepisu na tento mesiac. Omi stále nahráva a ukladá zvuk vo vašom telefóne. Stiahnite rečový model a všetko dobehne.';
+
+  @override
+  String onDeviceDownloadSize(String size) {
+    return 'Na stiahnutie: $size';
+  }
+
+  @override
+  String get onDeviceUnsupportedBody =>
+      'Tento telefón zatiaľ nedokáže spustiť rečový model. Zvuk zostáva uložený, kým sa neobnovia hodiny živého prepisu alebo neprejdete na vyšší plán.';
+
+  @override
+  String get onDeviceEntrySubtitle => 'Keď sa minú hodiny živého prepisu, prepisovať v tomto telefóne';
 }

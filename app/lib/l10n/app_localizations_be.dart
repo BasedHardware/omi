@@ -13574,4 +13574,33 @@ class AppLocalizationsBe extends AppLocalizations {
 
   @override
   String get onDeviceRemoveModel => 'Выдаліць маўленчую мадэль';
+
+  @override
+  String get onDeviceRemoveModelTitle => 'Выдаліць маўленчую мадэль?';
+
+  @override
+  String get onDeviceRemoveModelMessage =>
+      'Запісы будуць чакаць на гэтым тэлефоне, пакуль вы зноў не спампуеце мадэль або не вернуцца гадзіны ў рэальным часе.';
+
+  @override
+  String get onDeviceRemove => 'Выдаліць';
+
+  @override
+  String get onDeviceFinishSetupTitle => 'Завяршыце наладжванне, каб убачыць стэнаграмы';
+
+  @override
+  String get onDeviceFinishSetupBody =>
+      'Вы выкарысталі гадзіны ў рэальным часе на гэты месяц. Omi працягвае запіс і захоўвае аўдыя на вашым тэлефоне. Спампуйце маўленчую мадэль, і яна ўсё дагоніць.';
+
+  @override
+  String onDeviceDownloadSize(String size) {
+    return 'Спампоўка $size';
+  }
+
+  @override
+  String get onDeviceUnsupportedBody =>
+      'Гэты тэлефон пакуль не можа запускаць маўленчую мадэль. Аўдыя застаецца захаваным, пакуль не вернуцца гадзіны ў рэальным часе або пакуль вы не палепшыце тарыф.';
+
+  @override
+  String get onDeviceEntrySubtitle => 'Калі гадзіны ў рэальным часе скончацца, транскрыбаваць на гэтым тэлефоне';
 }

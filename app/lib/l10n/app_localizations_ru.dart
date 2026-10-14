@@ -13583,4 +13583,33 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get onDeviceRemoveModel => 'Удалить речевую модель';
+
+  @override
+  String get onDeviceRemoveModelTitle => 'Удалить речевую модель?';
+
+  @override
+  String get onDeviceRemoveModelMessage =>
+      'Записи будут ждать на этом телефоне, пока вы снова её не загрузите или не вернутся онлайн-часы.';
+
+  @override
+  String get onDeviceRemove => 'Удалить';
+
+  @override
+  String get onDeviceFinishSetupTitle => 'Завершите настройку, чтобы увидеть расшифровки';
+
+  @override
+  String get onDeviceFinishSetupBody =>
+      'Онлайн-часы этого месяца израсходованы. Omi продолжает запись и сохраняет аудио на телефоне. Загрузите речевую модель, и она всё наверстает.';
+
+  @override
+  String onDeviceDownloadSize(String size) {
+    return 'Загрузка $size';
+  }
+
+  @override
+  String get onDeviceUnsupportedBody =>
+      'Этот телефон пока не может запустить речевую модель. Аудио сохранится, пока не вернутся онлайн-часы или вы не перейдёте на другой план.';
+
+  @override
+  String get onDeviceEntrySubtitle => 'Когда онлайн-часы закончатся, расшифровывать на этом телефоне';
 }

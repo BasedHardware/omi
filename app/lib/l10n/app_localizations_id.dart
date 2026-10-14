@@ -13546,4 +13546,33 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get onDeviceRemoveModel => 'Hapus Model Suara';
+
+  @override
+  String get onDeviceRemoveModelTitle => 'Hapus model suara?';
+
+  @override
+  String get onDeviceRemoveModelMessage =>
+      'Rekaman akan menunggu di ponsel ini sampai Anda mengunduhnya lagi atau jam langsung kembali.';
+
+  @override
+  String get onDeviceRemove => 'Hapus';
+
+  @override
+  String get onDeviceFinishSetupTitle => 'Selesaikan penyiapan untuk melihat transkrip';
+
+  @override
+  String get onDeviceFinishSetupBody =>
+      'Jam langsung bulan ini sudah habis. Omi masih merekam dan menyimpan audio di ponsel Anda. Unduh model suara dan Omi akan menyusul.';
+
+  @override
+  String onDeviceDownloadSize(String size) {
+    return 'Unduhan $size';
+  }
+
+  @override
+  String get onDeviceUnsupportedBody =>
+      'Ponsel ini belum dapat menjalankan model suara. Audio tetap tersimpan sampai jam langsung kembali atau Anda meningkatkan paket.';
+
+  @override
+  String get onDeviceEntrySubtitle => 'Saat jam langsung habis, transkripsi di ponsel ini';
 }

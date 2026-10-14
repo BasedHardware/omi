@@ -13539,4 +13539,33 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get onDeviceRemoveModel => 'Odstranit řečový model';
+
+  @override
+  String get onDeviceRemoveModelTitle => 'Odstranit řečový model?';
+
+  @override
+  String get onDeviceRemoveModelMessage =>
+      'Nahrávky budou v tomto telefonu čekat, dokud model znovu nestáhnete nebo se neobnoví hodiny živého přepisu.';
+
+  @override
+  String get onDeviceRemove => 'Odstranit';
+
+  @override
+  String get onDeviceFinishSetupTitle => 'Dokončete nastavení a uvidíte své přepisy';
+
+  @override
+  String get onDeviceFinishSetupBody =>
+      'Vyčerpali jste hodiny živého přepisu na tento měsíc. Omi stále nahrává a ukládá zvuk do vašeho telefonu. Stáhněte řečový model a vše se dožene.';
+
+  @override
+  String onDeviceDownloadSize(String size) {
+    return 'Ke stažení $size';
+  }
+
+  @override
+  String get onDeviceUnsupportedBody =>
+      'Tento telefon zatím nedokáže spustit řečový model. Zvuk zůstane uložen, dokud se neobnoví hodiny živého přepisu nebo nepřejdete na vyšší tarif.';
+
+  @override
+  String get onDeviceEntrySubtitle => 'Po vyčerpání hodin živého přepisu přepisovat v tomto telefonu';
 }
