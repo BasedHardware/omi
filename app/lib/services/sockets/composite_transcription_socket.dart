@@ -1,3 +1,4 @@
+import 'package:omi/services/sockets/local_stt_failure.dart';
 import 'dart:async';
 import 'dart:convert';
 
@@ -135,6 +136,10 @@ class CompositeTranscriptionSocket implements IPureSocket {
       return;
     }
 
+    if (err is LocalSttFailure) {
+      onError(err, trace); // Keep both sockets and capture custody alive for setup recovery.
+      return;
+    }
     CustomSttLogService.instance.error('Composite', '$name socket error: $err');
     DebugLogManager.logError(err, trace, 'composite_socket_child_error', {'child_socket': name});
 

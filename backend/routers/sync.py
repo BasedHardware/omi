@@ -7,6 +7,7 @@ import shutil
 import threading
 import time
 import uuid as _uuid
+from dataclasses import replace
 from datetime import datetime, timedelta, timezone
 from typing import Dict, List, Optional
 
@@ -100,6 +101,7 @@ from utils.metrics import (
     OMI_SYNC_JOB_POLL_REQUESTS_TOTAL,
     OMI_SYNC_JOB_POLL_THROTTLED_TOTAL,
     OMI_SYNC_LANE_JOBS_TOTAL,
+    OMI_SYNC_LANE_ADMISSIONS_TOTAL,
     OMI_SYNC_QUEUE_WAIT_SECONDS,
     OMI_SYNC_RECORDING_AGE_SECONDS,
 )
@@ -167,8 +169,8 @@ from utils.sync.capture_manifest import (
     manifest_claims_match_paths,
     verify_capture_manifest,
 )
-from utils.sync.lanes import SyncLane, classify_sync_lane
-from utils.sync import backfill_cutover, stage as sync_stage, uid_sequencer
+from utils.sync.lanes import CaptureTimeTrust, SyncLane, classify_sync_lane
+from utils.sync import backfill_cutover, legacy_fresh, stage as sync_stage, uid_sequencer
 from utils.sync.provenance import capture_matches_server_conversation as _capture_matches_server_conversation
 
 logger = logging.getLogger(__name__)
@@ -962,7 +964,35 @@ async def sync_local_files_v2(
     lane_decision = classify_sync_lane(
         filenames,
         client_device_id=client_device_context.client_device_id if has_server_capture_proof else None,
+        allow_legacy_fresh=legacy_fresh.enabled(),
     )
+    if lane_decision.reason == 'recent_legacy_capture':
+        lane_decision = await run_blocking(db_executor, legacy_fresh.admit, uid, lane_decision, [f.size for f in files])
+    # Fresh is optional for LEGACY uploads: a live-only refusal must preserve
+    # their existing backfill acceptance. Resolve before recording the final lane.
+    fresh_refused = False
+    retry_after = None
+    if lane_decision.lane == SyncLane.FRESH:
+        hard_restricted, retry_after = await run_blocking(critical_executor, get_hard_restriction_status, uid)
+        refusal_reason = None
+        if hard_restricted:
+            refusal_reason = 'legacy_fresh_hard_restricted'
+        elif await run_blocking(db_executor, is_daily_audio_ceiling_exceeded, uid):
+            logger.info('sync_v2: daily audio ceiling reached uid=%s', uid)
+            refusal_reason = 'legacy_fresh_daily_ceiling'
+            retry_after = retry_after_until_next_utc_day()
+        if refusal_reason:
+            if lane_decision.trust == CaptureTimeTrust.LEGACY:
+                lane_decision = replace(lane_decision, lane=SyncLane.BACKFILL, reason=refusal_reason)
+            else:
+                fresh_refused = True
+
+    try:
+        OMI_SYNC_LANE_ADMISSIONS_TOTAL.labels(
+            lane=lane_decision.lane.value, trust=lane_decision.trust.value, reason=lane_decision.reason
+        ).inc()
+    except Exception:
+        pass
     logger.info(
         'sync_lane_admission uid=%s device_hash=%s platform=%s app_version=%s lane=%s trust=%s age_seconds=%s reason=%s',
         uid,
@@ -999,31 +1029,16 @@ async def sync_local_files_v2(
     except Exception:
         pass
 
-    # Live restrictions apply only to the realtime/fresh domain. Historical
-    # recovery has independent admission and spend caps below.
-    if lane_decision.lane == SyncLane.FRESH:
-        hard_restricted, retry_after = await run_blocking(critical_executor, get_hard_restriction_status, uid)
-        if hard_restricted:
-            return await _fair_use_restriction_response(
-                uid=uid,
-                retry_after=retry_after,
-                client_platform=client_device_context.platform,
-                device_hash=client_device_context.device_hash,
-                app_version=client_device_context.app_version,
-                request_id=x_request_id if isinstance(x_request_id, str) else None,
-                cloud_trace_context=x_cloud_trace_context if isinstance(x_cloud_trace_context, str) else None,
-            )
-        if await run_blocking(db_executor, is_daily_audio_ceiling_exceeded, uid):
-            logger.info('sync_v2: daily audio ceiling reached uid=%s', uid)
-            return await _fair_use_restriction_response(
-                uid=uid,
-                retry_after=retry_after_until_next_utc_day(),
-                client_platform=client_device_context.platform,
-                device_hash=client_device_context.device_hash,
-                app_version=client_device_context.app_version,
-                request_id=x_request_id if isinstance(x_request_id, str) else None,
-                cloud_trace_context=x_cloud_trace_context if isinstance(x_cloud_trace_context, str) else None,
-            )
+    if fresh_refused:
+        return await _fair_use_restriction_response(
+            uid=uid,
+            retry_after=retry_after,
+            client_platform=client_device_context.platform,
+            device_hash=client_device_context.device_hash,
+            app_version=client_device_context.app_version,
+            request_id=x_request_id if isinstance(x_request_id, str) else None,
+            cloud_trace_context=x_cloud_trace_context if isinstance(x_cloud_trace_context, str) else None,
+        )
 
     # A lookup failure must not durably lock: unlike gating the live listen socket, nothing
     # routinely re-checks is_locked later, so a transient blip would paywall it forever (#15232).

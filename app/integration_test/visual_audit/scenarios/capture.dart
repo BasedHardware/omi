@@ -19,6 +19,7 @@ import 'package:omi/pages/home/widgets/home_daily_recaps.dart';
 import 'package:omi/pages/home/widgets/home_tab_switcher.dart';
 import 'package:omi/backend/schema/daily_summary.dart';
 import 'package:omi/providers/capture_provider.dart';
+import 'package:omi/services/sockets/local_stt_failure.dart';
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/backend/schema/structured.dart';
 import 'package:omi/providers/device_provider.dart';
@@ -38,6 +39,8 @@ enum AuditLive { idle, pendant, pendantPaused, phone, phonePaused, phoneAfterPen
 class AuditCaptureProvider extends ChangeNotifier implements CaptureProvider {
   AuditCaptureProvider(this.live);
   final AuditLive live;
+  @override
+  LocalSttFailure? get localSttFailure => null;
 
   @override
   bool get pendantCaptureVerified => true;
