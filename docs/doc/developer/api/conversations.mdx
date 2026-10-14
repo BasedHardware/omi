@@ -978,7 +978,7 @@ inclusive ISO 8601 instants; missing timezone offsets mean UTC. A date-only end
 on this API means midnight, whereas MCP tools include the whole UTC end day.
 For non-overlapping daily API windows use `00:00:00Z` through
 `23:59:59.999999Z`, then start the next day at `00:00:00Z`. Reversed bounds return
-400. Unknown list query parameters return 400; `query` is not a list parameter.
+400. Other unknown list query parameters are ignored and counted in `X-Omi-Ignored-Query-Params`. `query` is not a list parameter and returns 400; use the search route below.
 
 Use `GET /v1/dev/user/conversations/search?query=budget&limit=10` with
 `conversations:read`. Optional `start_date` and `end_date` use the instant rules
