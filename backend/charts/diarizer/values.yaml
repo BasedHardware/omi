@@ -138,3 +138,13 @@ backendConfig:
 
 # Empty keeps the image entrypoint serving concurrent legacy embeddings/v1.
 command: []
+
+# Shared internal Gateway is opt-in; old Service/Ingress remain rollback paths.
+gateway:
+  enabled: false
+  name: ""
+  listenerName: http
+  pathPrefix: /diarizer
+  healthCheckPath: /health
+  timeoutSeconds: 30
+  connectionDrainingSeconds: 0

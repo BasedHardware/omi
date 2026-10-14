@@ -1,13 +1,21 @@
 name: Mobile daily train
 
-# Codemagic schedules live only in its UI, so the daily store train is dispatched from here:
-# one Codemagic `mobile-daily-train` run per day on main. The train queues the newest internal
-# build for a human release (iOS review with MANUAL release, Play production draft); it never
-# releases anything itself. See .github/agent-docs/mobile-release-process.md.
+# Codemagic schedules live only in its UI, so the daily store train is dispatched
+# from here: one Codemagic `mobile-daily-train` run per day on main. The train
+# queues the newest internal build for a human release (iOS review with MANUAL
+# release, Play production draft); it never releases anything itself.
+# See .github/agent-docs/mobile-release-process.md.
+#
+# Dispatch is owned by the operator-side release gate (Hermes cron
+# `Omi mobile daily release gate`, collector
+# ~/.hermes/scripts/omi-mobile-daily-release-check.py): the gate audits the
+# candidate against the live store baseline (PostHog guardrail rates, jank and
+# relaunch proxies, health endpoints, release-notes preflight) and only a green
+# verdict dispatches this workflow. The fixed 14:00 UTC schedule was removed
+# 2026-10-14 so an ungated train can no longer fire on a bad candidate.
+# Manual dispatch (workflow_dispatch, with optional dry_run) remains available.
 
 on:
-  schedule:
-    - cron: '0 14 * * *'
   workflow_dispatch:
     inputs:
       dry_run:

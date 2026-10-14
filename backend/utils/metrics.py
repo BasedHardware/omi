@@ -502,7 +502,7 @@ def record_lazy_desktop_deferral(*, event: str) -> None:
 # Conversation relevance (utils/conversations/relevance.py): one increment per
 # processed conversation. `decided_by="policy"` counts triggers that never
 # assess; a share of them that grows is a path skipping the gate by design,
-# and `reason="model_error"` is the model tier failing open to keep.
+# and degraded reasons identify the cheaper arm that resolved a model failure.
 CONVERSATION_RELEVANCE_LABELS = {
     'trigger': frozenset(
         {
@@ -517,7 +517,7 @@ CONVERSATION_RELEVANCE_LABELS = {
         }
     ),
     'verdict': frozenset({'keep', 'discard'}),
-    'decided_by': frozenset({'policy', 'user', 'rule', 'model', 'jev', 'override'}),
+    'decided_by': frozenset({'policy', 'user', 'rule', 'model', 'jev', 'override', 'deterministic'}),
 }
 
 CONVERSATION_RELEVANCE_DECISION_TOTAL = Counter(
@@ -525,7 +525,7 @@ CONVERSATION_RELEVANCE_DECISION_TOTAL = Counter(
     'omi_conversation_relevance_decision_total',
     (
         'Conversation relevance decisions by processing trigger, verdict, deciding tier, and '
-        'bounded reason (a rule id, model_keep/model_discard/model_error, jev_keep/jev_discard/jev_error, a policy trigger, '
+        'bounded reason (a rule id, model_keep/model_discard, jev_keep/jev_discard, fallback arm reasons, a policy trigger, '
         'restored, or calendar_overlap). Never labeled by uid. Per-pod; sum() across jobs.'
     ),
     ['trigger', 'verdict', 'decided_by', 'reason'],
@@ -672,6 +672,42 @@ MEMORY_OWNER_JEV_TOTAL = Counter(
     'Third-party memory candidates checked by the Jev owner question, by outcome. Never labeled by uid.',
     ['outcome'],
 )
+
+
+# Primary scorer outcomes provide the denominator and failure categories for
+# degraded relevance paths. Keep this separate from shared transition telemetry.
+CONVERSATION_RELEVANCE_SCORER_TOTAL = Counter(
+    'omi_conversation_relevance_scorer_total',
+    'Paid relevance scorer outcomes; failures enter the cheaper decision chain.',
+    ['arm', 'outcome'],
+)
+
+
+CONVERSATION_RELEVANCE_CIRCUIT_TOTAL = Counter(
+    'omi_conversation_relevance_circuit_total',
+    'Primary relevance circuit transitions; open skips all paid decision arms.',
+    ['arm', 'state'],
+)
+
+
+def record_relevance_circuit_state(arm: str, state: str) -> None:
+    try:
+        CONVERSATION_RELEVANCE_CIRCUIT_TOTAL.labels(
+            arm=arm if arm in {'jev', 'model'} else 'other',
+            state=state if state in {'open', 'half_open', 'closed'} else 'other',
+        ).inc()
+    except Exception:
+        pass
+
+
+def record_relevance_scorer_outcome(outcome: str, *, arm: str = 'jev') -> None:
+    try:
+        CONVERSATION_RELEVANCE_SCORER_TOTAL.labels(
+            arm=arm if arm in {'jev', 'model'} else 'other',
+            outcome=outcome if outcome in JEV_DECISION_LABELS['outcome'] | {'unavailable'} else 'other',
+        ).inc()
+    except Exception:
+        pass
 
 
 def record_jev_decision(*, lane: str, outcome: str, latency_seconds: float) -> None:

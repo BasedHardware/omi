@@ -41,13 +41,11 @@ def test_batch_scheduling_and_resources_are_disjoint_from_embedding():
     assert batch['HorizontalPodAutoscaler']['spec']['maxReplicas'] == 18
     assert live['BackendConfig']['spec']['timeoutSec'] == 30
     assert batch['BackendConfig']['spec']['timeoutSec'] == 900
-    ingress = batch['Ingress']
-    assert ingress['spec']['rules'][0]['host'] == 'diarizer-batch.omi.me'
-    assert (
-        ingress['metadata']['annotations']['kubernetes.io/ingress.regional-static-ip-name']
-        == 'prod-diarizer-batch-ilb-ip-address'
-    )
-    assert {p['path'] for p in ingress['spec']['rules'][0]['http']['paths']} == {'/v2/diarization', '/health'}
+    assert 'Ingress' not in batch
+    route = batch['HTTPRoute']
+    assert route['spec']['rules'][0]['matches'][0]['path']['value'] == '/diarizer-batch'
+    assert route['spec']['rules'][0]['backendRefs'][0]['name'] == 'prod-omi-diarizer-batch-gw'
+    assert batch['GCPBackendPolicy']['spec']['default']['timeoutSec'] == 900
 
 
 def test_hpa_metric_has_scrape_resource_labels_and_per_pod_adapter_mapping():

@@ -274,7 +274,7 @@ env:
         name: dev-omi-backend-secrets
         key: FAL_KEY
   - name: HOSTED_SPEAKER_EMBEDDING_API_URL
-    value: "http://diarizer.omiapi.com:80"
+    value: "http://172.16.48.49/diarizer"
   - name: PINECONE_API_KEY
     valueFrom:
       secretKeyRef:

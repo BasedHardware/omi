@@ -8,35 +8,18 @@ The stack is kube-prometheus-stack 75.15.1. No batch queue rule exists live yet.
 
 ## Dedicated capacity
 
-OpenTofu in `infrastructure/opentofu/README.md` owns WIF/IAM/state only and
-explicitly excludes GKE. There is no node-pool IaC owner in this repo. The lead
-must create an isolated L4 pool; do not modify `diarizer-pool`. The observed GKE
-network is `omi-prod-vpc-1`; existing L4 nodes use COS_CONTAINERD, GKE_METADATA,
-and the default node service account. The following mirrors that identity/scopes,
-not a new IAM grant. Quota and zonal L4 availability are lead prerequisites.
+Production batch already runs on the isolated T4 `diarizer-batch-pool`.
+Do not recreate it from the earlier L4 capacity recipe or modify the embedding
+`diarizer-pool`. The batch overlay pins that node-pool label, replaces inherited
+embedding affinity with **null**, and tolerates its dedicated batch/GPU taints.
+The lead verifies current node readiness, accelerator type, quota and capacity
+before upgrading the separate `prod-omi-diarizer-batch` release.
 
-```bash
-gcloud container node-pools create diarizer-batch-pool \
-  --project based-hardware --cluster prod-omi-gke --region us-central1 \
-  --node-locations us-central1-b --machine-type g2-standard-8 \
-  --accelerator type=nvidia-l4,count=1,gpu-driver-version=default \
-  --image-type COS_CONTAINERD --workload-metadata GKE_METADATA \
-  --service-account 208440318997-compute@developer.gserviceaccount.com \
-  --scopes gke-default --num-nodes 1 --enable-autoscaling \
-  --total-min-nodes 1 --total-max-nodes 18 \
-  --node-labels service=diarizer-batch,env=prod \
-  --node-taints omi.ai/diarizer-batch=true:NoSchedule,nvidia.com/gpu=present:NoSchedule \
-  --enable-autorepair --enable-autoupgrade
-```
-
-The batch overlay pins `cloud.google.com/gke-nodepool=diarizer-batch-pool`, replaces
-the inherited embedding affinity with **null** (empty maps merge in Helm), and
-tolerates the dedicated taint. Existing GPU pods do not tolerate that batch taint.
-One replica is the David-only floor, with an HPA ceiling of eighteen. After cohort
-qualification, raise the pool's total minimum and `autoscaling.minReplicas` to six
-in a reviewed values change; preserve max eighteen. Full-rollout provisional sizing
-is 89 GPU-h/day at 45% of 6,300 audio-h/day (range 12–50%), measured on a shared L4
-with a 40% CUDA memory cap. See `capacity.md` for limits of that measurement.
+One replica is the David-only floor. At the supplied T4 RTF .06, the 5% plan's
+~140 multi-speaker audio-h/day requires ~8.4 GPU-h/day; this is planning arithmetic,
+not a new T4 qualification. Do not apply the six-L4 full-rollout floor from the
+historical `capacity.md` receipt to this ≤5% T4 ramp. Queue/latency and ≥12h at 5%
+gate any further expansion; see [cohort stages](../../docs/diarizer-batch-cohort.md).
 
 ## Metric prerequisites
 
@@ -95,24 +78,16 @@ It deploys the standard release; the separate batch install below is manual.
 Use that run's exact image digest, not `latest`, an unmerged branch or the old
 13ae594 image (which does not include the new smoke helper).
 
-Reserve a **new** internal IP; Cloud Run cannot resolve ClusterIP service DNS.
-
-```bash
-gcloud compute addresses create prod-diarizer-batch-ilb-ip-address \
-  --project based-hardware --region us-central1 \
-  --address-type INTERNAL --subnet omi-deepgram-gke-us-central1-prod-vpc-1-subnet-1
-BATCH_IP=$(gcloud compute addresses describe prod-diarizer-batch-ilb-ip-address \
-  --project based-hardware --region us-central1 --format='value(address)')
-```
-
-Create DNS A `diarizer-batch.omi.me` pointing to `$BATCH_IP` in the owning DNS
-provider. Public NS lookup returned `dns1.registrar-servers.com` and
-`dns2.registrar-servers.com`; GCP RO could not list managed zones. Add a DNS-only
-A record with host `diarizer-batch`, value `$BATCH_IP` in the authoritative omi.me
-zone, then verify resolution from both caller routes.
-Keep the existing `diarizer.omi.me` and its reserved IP unchanged. The separate
-internal GCE ingress routes only v2 diarization and health, with its own BackendConfig
-900s timeout. Existing backend/pusher VPC routing must reach the new private IP.
+Use the **shared internal Gateway**, not a batch-only IP, DNS record or Ingress.
+Follow [Gateway prerequisites, installation and route qualification](../../charts/internal-gateway/README.md)
+with the environment-specific context and reserved `${ML_ENV}-ml-gateway-ilb-ip`.
+Prod's reserved address is `172.16.160.20`; reservation alone is not route readiness.
+The batch overlay disables Ingress and enables the `/diarizer-batch` HTTPRoute.
+The Gateway rewrites the prefix to `/`; its backend timeout is 900 seconds.
+Verify the programmed Gateway address and accepted/resolved route, native `/health`,
+synthetic PCM contract and reachability from GKE pusher and actual Cloud Run VPC.
+Do not create a batch hostname or substitute ClusterIP DNS for Cloud Run callers.
+Keep legacy embedding addresses untouched until its separate caller migration.
 
 The chart supports a validated digest, which takes precedence over tag. Pin the
 successful image build's published `sha256:<64 lowercase hex>` digest:
@@ -131,8 +106,8 @@ kubectl --context gke_based-hardware_us-central1_prod-omi-gke get --raw \
   '/apis/custom.metrics.k8s.io/v1beta1/namespaces/prod-omi-backend/pods/*/omi_diarization_v2_queue_depth?labelSelector=app.kubernetes.io%2Finstance%3Dprod-omi-diarizer-batch'
 ```
 
-Before cohort enablement require: one Ready pod on the dedicated pool; the ingress
-address equals the new reservation; adapter values describe that pod with a fresh
+Before cohort enablement require: one Ready pod on the dedicated pool; the programmed
+shared Gateway address equals its reservation; adapter values describe that pod with a fresh
 queue sample (zero idle is valid); HPA has no FailedGetPodsMetric; `/health` resolves
 and responds from both GKE pusher and the actual Cloud Run VPC route. Use health or
 public synthetic audio only for pre-cohort probes, never production user APIs/data.
@@ -140,11 +115,11 @@ No metric visibility or network reachability is claimed before installation.
 
 ## Separate David-only commit
 
-The prerequisite PR changes no backend/pusher enablement. A separate unmerged
-cohort commit binds **backend**, **backend-sync** and **pusher** to:
+The prerequisite chart changes alone do not enable backend/pusher admission.
+The runtime-env cohort commit binds **backend**, **backend-sync** and **pusher** to:
 
 ```text
-HOSTED_DIARIZATION_API_URL=http://diarizer-batch.omi.me:80
+HOSTED_DIARIZATION_API_URL=http://172.16.160.20/diarizer-batch
 TRANSCRIPTION_FINAL_PASS_DIARIZER=pyannote_shadow
 TRANSCRIPTION_FINAL_PASS_BACKEND=pyannote
 TRANSCRIPTION_FINAL_PASS_UID_ALLOWLIST=vi7SA9ckQCe4ccobWNxlbdcNdC23
@@ -162,10 +137,12 @@ in the generated `backend/deploy/runtime_env.yaml` (edit authoritative
 in that manifest and `backend/charts/pusher/prod_omi_pusher_values.yaml`.
 Render/validate through the existing runtime-env tools, then use the owning backend
 and pusher deployment workflows. Do not use ad hoc live env updates. Keep the cohort
-commit out of main until all install/metric/routing gates above pass.
+deployment gated until all install/metric/routing checks above pass. Exact A–D
+stages, observation gates and independent rollback are in the cohort runbook.
 
 Rollback order: disable cohort admission/select legacy first; retain the endpoint
 until in-flight shadow work drains; roll back the batch release digest or uninstall
 that release only. Revert just the new adapter rule/scrape while preserving other
-monitoring rules; remove the new node pool/IP/DNS only after verifying no users.
+monitoring rules. Remove batch capacity only after verifying no users; retain the
+shared Gateway and address while any NLLB, VAD, embedding or other route uses them.
 No embedding node, release, ingress, IP or speaker history is mutated by rollback.
