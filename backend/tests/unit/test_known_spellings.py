@@ -2,6 +2,7 @@
 
 import json
 from contextlib import asynccontextmanager
+from dataclasses import replace
 from datetime import datetime, timezone
 from types import SimpleNamespace
 from unittest.mock import MagicMock
@@ -46,25 +47,50 @@ def llm_modules(monkeypatch):
     return conversation_processing, working_observations, memories
 
 
-def test_default_on_block_reaches_shared_and_shaped_context(sources, monkeypatch):
+@pytest.mark.parametrize('cache_enabled', [False, True])
+def test_default_on_block_follows_unchanged_shared_prefix(sources, monkeypatch, cache_enabled):
     monkeypatch.setattr(context, 'route_for_uid', lambda uid: 'new')
     block = hints.conversation_known_spellings('synthetic-owner')
     result = prefix(block, uid='synthetic-owner')
-    assert 'Known spellings' in result.context
-    assert 'Zev Lark' in result.context and 'Zeff' in result.context and 'Tala Quill' in result.context
-    assert 'only when the transcript clearly refers to them' in result.context
-    assert 'Never invent a reference' in result.context
-    assert 'infer attendance or speaker identity' in result.context
-    assert block in result.shaped_context
-    messages = result.messages(cache_enabled=False)
-    assert messages[1]['content'][0]['text'].count('Known spellings') == 1
+    plain = prefix('', uid='synthetic-owner')
+    assert result.context == plain.context
+    assert result.shaped_context == plain.shaped_context
+    assert result.cache_key == plain.cache_key
+    assert result.cache_eligible == plain.cache_eligible
+    assert 'Zev Lark' in block and 'Zeff' in block and 'Tala Quill' in block
+    assert 'only when the transcript clearly refers to them' in block
+    assert 'Never invent a reference' in block
+    assert 'infer attendance or speaker identity' in block
+    messages = result.messages(cache_enabled=cache_enabled)
+    assert messages[:2] == plain.messages(cache_enabled=cache_enabled)
+    assert messages[2] == {'role': 'system', 'content': block}
+
+
+def test_spelling_changes_preserve_explicit_cache_breakpoint(sources, monkeypatch):
+    monkeypatch.setattr(context, 'has_cacheable_prefix', lambda text: len(text) > 1000)
+    plain = prefix('')
+    assert not prefix('Known spellings\n' + 'Synthetic ' * 150).cache_eligible
+    long = context.build_conversation_prompt_prefix(
+        conversation_id=plain.conversation_id,
+        transcript='Synthetic discussion. ' * 100,
+        started_at=datetime(2026, 10, 1, tzinfo=timezone.utc),
+        timezone_name='UTC',
+        language_code='en',
+    )
+    first = replace(long, known_spellings=hints.conversation_known_spellings('synthetic-owner'))
+    second = replace(long, known_spellings='Known spellings\nSynthetic replacement')
+    baseline = long.messages(cache_enabled=True)
+    assert first.messages(cache_enabled=True)[:2] == second.messages(cache_enabled=True)[:2] == baseline
+    assert baseline[1]['content'][0]['prompt_cache_breakpoint'] == context.EXPLICIT_CACHE_BREAKPOINT
+    assert first.messages(cache_enabled=True)[2] != second.messages(cache_enabled=True)[2]
 
 
 def test_empty_sources_produce_no_block(sources):
     for read in sources:
         read.return_value = []
     result = prefix(hints.conversation_known_spellings('synthetic-owner'))
-    assert 'Known spellings' not in result.context
+    assert result.known_spellings == ''
+    assert len(result.messages(cache_enabled=True)) == 2
 
 
 def test_kill_switch_avoids_even_cached_context_and_all_reads(sources, monkeypatch):
@@ -198,11 +224,13 @@ def test_real_notes_and_memory_callers_receive_the_same_spelling_block(sources, 
         persist_route_outcomes=False,
         strict=True,
     )
-    note_evidence = json.loads(captured['notes'][1]['content'])['capture_evidence']
-    assert note_evidence.count(block) == 1
+    note_context = json.loads(captured['notes'][1]['content'])
+    assert note_context['known_spellings'] == block
+    assert block not in note_context['capture_evidence']
     memory_context = captured['memories'][2]['content'][0]['text']
-    assert memory_context.count(block) == 1
-    assert 'Zev Lark' in note_evidence and 'Zev Lark' in memory_context
+    assert memory_context == shared.context
+    assert block not in memory_context
+    assert captured['memories'][3] == {'role': 'system', 'content': block}
 
 
 def test_external_text_memory_prompt_receives_hints_as_instructions(sources, monkeypatch, llm_modules):

@@ -45,6 +45,8 @@ class ConversationPromptPrefix:
     # key are unchanged; the notes task carries them in its volatile suffix.
     title_people: tuple[str, ...] = ()
     owner_names: tuple[str, ...] = ()
+    # Account vocabulary is volatile context, outside the shared cache boundary.
+    known_spellings: str = ''
 
     @property
     def cache_key(self) -> str:
@@ -58,10 +60,13 @@ class ConversationPromptPrefix:
         context_block: dict[str, Any] = {'type': 'text', 'text': self.context}
         if cache_enabled and self.cache_eligible:
             context_block['prompt_cache_breakpoint'] = EXPLICIT_CACHE_BREAKPOINT
-        return [
+        messages = [
             {'role': 'system', 'content': SHARED_CONVERSATION_PREAMBLE},
             {'role': 'system', 'content': [context_block]},
         ]
+        if self.known_spellings:
+            messages.append({'role': 'system', 'content': self.known_spellings})
+        return messages
 
 
 def _transcript_has_source_content(transcript: str, source_ids: frozenset[str]) -> bool:
@@ -286,8 +291,6 @@ def build_conversation_prompt_prefix(
         metadata_lines.extend(f'spk {key} {name}' if name else f'spk {key} ?' for key, name in speaker_names.items())
 
     context_parts = ['CONVERSATION METADATA\n' + '\n'.join(metadata_lines), f'FULL TRANSCRIPT\n{transcript.strip()}']
-    if known_spellings:
-        context_parts.append(known_spellings)
     photo_descriptions = ConversationPhoto.photos_as_string(photos, include_timestamps=True) if photos else ''
     if photo_descriptions and photo_descriptions != 'None':
         context_parts.append(f'CAPTURED PHOTO DESCRIPTIONS\n{photo_descriptions}')
@@ -329,8 +332,6 @@ def build_conversation_prompt_prefix(
                 source_context['participants'] = [participant.model_dump(mode='json') for participant in participants]
                 evidence[key] = source_context
         shaped_context = json.dumps(evidence, ensure_ascii=False) + f'\nFULL TRANSCRIPT\n{transcript.strip()}'
-        if known_spellings:
-            shaped_context += f'\n\n{known_spellings}'
 
     source_ids = frozenset(segment_id for segment_id in (transcript_segment_ids or ()) if segment_id)
     # Rich meeting notes name people through their roster rules instead.
@@ -344,4 +345,5 @@ def build_conversation_prompt_prefix(
         shaped_context=shaped_context,
         title_people=title_people,
         owner_names=owner_names,
+        known_spellings=known_spellings,
     )

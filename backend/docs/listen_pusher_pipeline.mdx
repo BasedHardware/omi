@@ -66,7 +66,9 @@ reference or infer attendance/identity. Summary, action-item, app-summary and
 transcript-memory prompts share it; each source is read at most once within a
 processing run, with a fresh scope for a separately deferred extraction. Read
 failures retain available context and emit fallback telemetry. No extra LLM call
-is made.
+is made. Spellings are per-user context after the shared cache breakpoint, never
+part of the shared prefix bytes or cache eligibility. Shaped notes carry them as
+a separate per-user field alongside their capture evidence.
 
 People names require a nonempty stored speech sample, a positive `label_evidence`
 counter (`manual_labels`, `card_confirms`, `card_picks`, or `auto_confirmed`, all

@@ -422,6 +422,7 @@ def _get_shaped_conversation_notes(prefix: ConversationPromptPrefix, **kwargs: A
                     'task_intelligence_capture': kwargs['task_intelligence_capture'],
                     'open_tasks': kwargs.get('existing_action_items') or [],
                     'capture_evidence': context,
+                    **({'known_spellings': prefix.known_spellings} if prefix.known_spellings else {}),
                     **({'title_people': title_people_block(prefix)} if not rich_mode else {}),
                 },
                 ensure_ascii=False,
