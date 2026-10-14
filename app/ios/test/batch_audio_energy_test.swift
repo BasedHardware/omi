@@ -239,8 +239,13 @@ struct BatchAudioEnergyTests {
         // Work admitted under revision 1 must be retired after mute revision 2
         // arrives, even though the BLE callback already returned to its caller.
         policy(1, muted: false)
+        // Hold the writer queue so this test deterministically exercises queued
+        // admission across a mute, rather than racing a frame written before it.
+        let pendingAdmission = DispatchSemaphore(value: 0)
+        writer.queue.async { pendingAdmission.wait() }
         enqueue(0x11)
         policy(2, muted: true)
+        pendingAdmission.signal()
         writer.queue.sync {}
         precondition((try? FileManager.default.contentsOfDirectory(at: dir, includingPropertiesForKeys: nil).isEmpty) == true)
         defaults.set(false, forKey: "flutter.batchModeEnabled")
