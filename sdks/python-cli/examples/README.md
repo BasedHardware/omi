@@ -54,6 +54,7 @@
 * [`quickstart.th.md`](quickstart.th.md) — คู่มือเริ่มต้นใช้งาน omi-cli
   ฉบับภาษาไทย (Thai Quickstart).
 * [`quickstart.ja.md`](quickstart.ja.md) — 日本語クイックスタートガイド (Japanese Quickstart).
+* [`quickstart.mr.md`](quickstart.mr.md) — omi-cli मराठी क्विकस्टार्ट मार्गदर्शक (Marathi Quickstart).
 * [`quickstart.id.md`](quickstart.id.md) — panduan mulai cepat omi-cli dalam
   bahasa Indonesia (Indonesian Quickstart).
 * [`quickstart.da.md`](quickstart.da.md) — dansk hurtigstartguide til omi-cli (Danish Quickstart).
