@@ -121,8 +121,14 @@ overlay:
           value: parakeet-window,modulate-velma-2,soniox,dg-nova-3
         STT_RESILIENT_RECONNECT:
           value: 'false'
-        # Presence-only first rollout: keep percent zero and allowlist empty until all old sockets drain.
+        # Deploy the presence-only parent commit first; admit David only after all old sockets drain.
         STT_LIVE_DEMAND_ENABLED: {value: 'true', category: rollout}
+        STT_LIVE_DEMAND_PERCENT: {value: '0', category: rollout}
+        STT_LIVE_DEMAND_UID_ALLOWLIST: {value: 'vi7SA9ckQCe4ccobWNxlbdcNdC23', category: rollout}
+        STT_LIVE_DEMAND_MIN_DWELL_SECONDS: {value: '15', category: rollout}
+        MOBILE_STANDARD_BATCH_ENABLED: {value: 'true', category: rollout}
+        MOBILE_STANDARD_BATCH_PERCENT: {value: '0', category: rollout}
+        MOBILE_STANDARD_BATCH_UIDS: {value: 'vi7SA9ckQCe4ccobWNxlbdcNdC23', category: rollout}
         STT_FAILOVER_RECOVERY_ENABLED:
           value: 'true'
           category: rollout
