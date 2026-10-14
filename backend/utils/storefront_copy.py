@@ -15,6 +15,7 @@ _MONTHS = ('Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct',
 
 # Stripe zero-decimal currencies: unit_amount is already the major unit
 # (500 JPY is ¥500, not ¥5.00). https://docs.stripe.com/currencies#zero-decimal
+# UGX is omitted: Stripe still sends it as two-decimal (500 is 5 UGX), like ISK.
 _ZERO_DECIMAL_CURRENCIES = frozenset(
     {
         'bif',
@@ -27,7 +28,6 @@ _ZERO_DECIMAL_CURRENCIES = frozenset(
         'mga',
         'pyg',
         'rwf',
-        'ugx',
         'vnd',
         'vuv',
         'xaf',

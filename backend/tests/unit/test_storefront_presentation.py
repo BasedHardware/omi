@@ -196,6 +196,8 @@ def test_format_money_groups_whole_dollars_and_respects_zero_decimal_currencies(
     assert format_money(199000, 'jpy') == '199,000 JPY'
     assert format_money(39800, 'eur') == '398 EUR'
     assert format_money(5120, 'kwd') == '5.120 KWD'
+    # Stripe sends UGX as two-decimal even though it displays without decimals.
+    assert format_money(500, 'ugx') == '5 UGX'
     rendered = render_price(
         price_id='price_jpy_year',
         interval='year',
