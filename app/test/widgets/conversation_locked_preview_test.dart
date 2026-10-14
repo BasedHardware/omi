@@ -14,7 +14,7 @@ import 'package:omi/providers/usage_provider.dart';
 import 'package:omi/ui/ui.dart';
 
 const _title = 'Planning the next team meeting';
-const _upgrade = 'Upgrade to Unlimited';
+const _upgrade = 'See plans';
 
 class _Routes extends NavigatorObserver {
   final pushed = <Route<dynamic>>[];
@@ -103,6 +103,9 @@ void main() {
         expect(find.descendant(of: find.byType(ImageFiltered), matching: find.text(_title)), findsOneWidget);
         expect(find.descendant(of: find.byType(ImageFiltered), matching: find.text(_upgrade)), findsNothing);
         expect(find.byType(BackdropFilter), findsNothing);
+        expect(find.text('Pending'), findsOneWidget);
+        expect(find.byIcon(Icons.lock_outline), findsNothing);
+        expect(find.byIcon(Icons.hourglass_empty), findsOneWidget);
         expect(find.bySemanticsLabel(RegExp(_title)), findsNothing);
         expect(find.bySemanticsLabel(_upgrade), findsOneWidget);
 
@@ -139,7 +142,7 @@ void main() {
     expect(find.text(_upgrade), findsNothing);
   });
 
-  testWidgets('the upgrade action keeps the existing paywall destination', (tester) async {
+  testWidgets('the waiting preview opens usage without forcing a paywall', (tester) async {
     final routes = _Routes();
     await pumpRow(tester, observer: routes);
     await tester.tap(find.byKey(const Key('locked_preview_action')));
@@ -147,7 +150,7 @@ void main() {
     final route = routes.pushed.last as MaterialPageRoute;
     final destination = route.builder(tester.element(find.byType(ConversationListItem)));
     expect(destination, isA<UsagePage>());
-    expect((destination as UsagePage).showUpgradeDialog, isTrue);
+    expect((destination as UsagePage).showUpgradeDialog, isFalse);
     // Check navigation without building the network-backed usage screen.
     await tester.pumpWidget(const SizedBox.shrink());
   });
@@ -214,7 +217,9 @@ void main() {
       tester,
       body: LockedConversationRun(conversations: run, date: run.first.createdAt),
     );
-    await tester.longPress(find.text('$_title 1'));
+    final row = tester.getRect(find.byKey(const ValueKey('locked_locked-1')));
+    // The central usage action is interactive; the leading edge still opens this row's menu.
+    await tester.longPressAt(Offset(row.left + 16, row.center.dy));
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('conversation_action_delete')), findsOneWidget);
   });

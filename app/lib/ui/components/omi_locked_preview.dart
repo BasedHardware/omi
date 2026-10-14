@@ -13,11 +13,13 @@ class OmiLockedPreview extends StatelessWidget {
     required this.child,
     required this.label,
     required this.onPressed,
+    this.status,
     this.interactive = false,
   });
 
   final Widget child;
   final String label;
+  final String? status;
   final FutureOr<void> Function() onPressed;
 
   /// Lets gestures reach the obscured [child] (for example a row's long-press menu or swipe). The
@@ -55,12 +57,18 @@ class OmiLockedPreview extends StatelessWidget {
           // Non-positioned so the action can also determine the card's height.
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.md, vertical: OmiSpacing.sm),
-            child: OmiButton.tertiary(
-              key: const Key('locked_preview_action'),
-              label: label,
-              icon: Icons.lock_outline,
-              size: OmiButtonSize.compact,
-              onPressed: onPressed,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (status != null) Text(status!, style: OmiType.subhead),
+                OmiButton.tertiary(
+                  key: const Key('locked_preview_action'),
+                  label: label,
+                  icon: Icons.hourglass_empty,
+                  size: OmiButtonSize.compact,
+                  onPressed: onPressed,
+                ),
+              ],
             ),
           ),
         ],

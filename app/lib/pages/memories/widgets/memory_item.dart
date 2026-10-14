@@ -1,6 +1,5 @@
 import 'dart:ui';
 
-import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:flutter/material.dart';
 
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
@@ -186,12 +185,7 @@ class MemoryItem extends StatelessWidget {
                           showMemoryQuickEditSheet(context, memory, provider, readOnly: true);
                           return;
                         }
-                        PlatformManager.instance.analytics.paywallOpened(
-                          'locked_memory',
-                          currentPlan:
-                              context.read<UsageProvider>().subscription?.subscription.plan.wireName ?? 'unknown',
-                        );
-                        routeToPage(context, const UsagePage(showUpgradeDialog: true, paywallSource: 'locked_memory'));
+                        routeToPage(context, const UsagePage());
                         return;
                       },
                       child: Container(
@@ -201,7 +195,13 @@ class MemoryItem extends StatelessWidget {
                           borderRadius: OmiRadius.smAll,
                         ),
                         child: context.watch<UsageProvider>().showSubscriptionUI
-                            ? Text(context.l10n.upgradeToUnlimited, style: OmiType.headline)
+                            ? Column(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Text(context.l10n.statusPending, style: OmiType.subhead),
+                                  Text(context.l10n.paywallComparePlans, style: OmiType.headline),
+                                ],
+                              )
                             : const SizedBox.shrink(),
                       ),
                     ),
