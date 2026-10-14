@@ -19,23 +19,42 @@ class PostHogAnalyticsAdapter
     this.debug = false,
     http.Client? client,
     Future<String?> Function()? distinctIdReader,
+    DateTime Function()? clock,
   })  : _client = client,
-        _distinctIdReader = distinctIdReader;
+        _distinctIdReader = distinctIdReader,
+        _clock = clock ?? DateTime.now;
 
   final http.Client? _client;
   final Future<String?> Function()? _distinctIdReader;
+  final DateTime Function() _clock;
+
+  /// How long a verified fetch outranks the SDK cache. Long enough for the read that asked for it
+  /// (the onboarding gate reads within milliseconds), short enough that the SDK's own refreshes
+  /// decide every other flag for the rest of the session.
+  static const verifiedFlagsTtl = Duration(seconds: 10);
 
   /// Flags confirmed by a successful fetch for the identity in force at the time; cleared whenever
   /// the identity changes. Reads prefer this over the SDK cache, which the SDK keeps (stale, and
   /// possibly another person's) when its own refresh fails.
-  ({String distinctId, Map<String, Object?> flags, Map<String, Object?> payloads})? _verified;
+  ({String distinctId, Map<String, Object?> flags, Map<String, Object?> payloads, DateTime at})? _verified;
+
+  /// The verified snapshot while it is still fresh; expired ones are dropped so the SDK cache rules.
+  ({String distinctId, Map<String, Object?> flags, Map<String, Object?> payloads, DateTime at})? get _fresh {
+    final verified = _verified;
+    if (verified == null) return null;
+    if (_clock().difference(verified.at) > verifiedFlagsTtl) {
+      _verified = null;
+      return null;
+    }
+    return verified;
+  }
 
   /// Bumped on every identity change; a reload commits its answer only if the generation it started
   /// in is still current, so a slow response for account A cannot land after B took over.
   int _identityGeneration = 0;
 
   @visibleForTesting
-  bool get hasVerifiedFlags => _verified != null;
+  bool get hasVerifiedFlags => _fresh != null;
 
   void _identityChanged() {
     _identityGeneration++;
@@ -155,7 +174,7 @@ class PostHogAnalyticsAdapter
 
   @override
   Future<bool> isFeatureEnabled(String key) {
-    final verified = _verified;
+    final verified = _fresh;
     if (verified != null) {
       final value = verified.flags[key];
       return Future.value(value == true || (value is String && value.isNotEmpty));
@@ -165,7 +184,7 @@ class PostHogAnalyticsAdapter
 
   @override
   Future<String?> getFeatureFlagVariant(String key) async {
-    final verified = _verified;
+    final verified = _fresh;
     if (verified != null) {
       final value = verified.flags[key];
       return value is String && value.isNotEmpty ? value : null;
@@ -181,10 +200,11 @@ class PostHogAnalyticsAdapter
   @override
   Future<bool> reloadFeatureFlags() async {
     final generation = _identityGeneration;
+    final owned = _client == null ? http.Client() : null; // injected clients stay caller-owned
+    final client = _client ?? owned!;
     try {
       final distinctId = await (_distinctIdReader ?? Posthog().getDistinctId)();
       if (distinctId == null || distinctId.isEmpty) return false;
-      final client = _client ?? http.Client();
       final response = await client
           .post(
             Uri.parse('$host/decide/?v=3'),
@@ -202,18 +222,21 @@ class PostHogAnalyticsAdapter
         distinctId: distinctId,
         flags: Map<String, Object?>.from(flags),
         payloads: payloads is Map ? Map<String, Object?>.from(payloads) : const {},
+        at: _clock(),
       );
       // Keep the SDK's cache moving too; its outcome is not what the answer depends on.
       if (_initialized) _background(Posthog().reloadFeatureFlags);
       return true;
     } catch (_) {
       return false;
+    } finally {
+      owned?.close();
     }
   }
 
   @override
   Future<Object?> getFeatureFlagPayload(String key) async {
-    final verified = _verified;
+    final verified = _fresh;
     if (verified != null) {
       if (!await isFeatureEnabled(key)) return null;
       final raw = verified.payloads[key];

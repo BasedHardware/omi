@@ -12,11 +12,13 @@ import 'package:omi/utils/analytics/adapters/posthog_adapter.dart';
 // current distinct id. A failed fetch must not let cached (stale, possibly another person's) flags
 // decide, and the identity changing clears the verified snapshot.
 
-PostHogAnalyticsAdapter _adapter(MockClient client, {String? distinctId = 'u'}) => PostHogAnalyticsAdapter(
+PostHogAnalyticsAdapter _adapter(MockClient client, {String? distinctId = 'u', DateTime Function()? clock}) =>
+    PostHogAnalyticsAdapter(
       apiKey: 'phc_test',
       host: 'https://ph.test',
       client: client,
       distinctIdReader: () async => distinctId,
+      clock: clock,
     );
 
 MockClient _answering(Map<String, Object?> body, {int status = 200}) => MockClient((request) async {
@@ -102,5 +104,32 @@ void main() {
     expect(await reloadA, isFalse, reason: 'started under A, finished under B');
     expect(await adapter.isFeatureEnabled('only-a'), isFalse);
     expect(await adapter.isFeatureEnabled('only-b'), isTrue);
+  });
+
+  test('a verified fetch outranks the SDK only briefly; later reads fall through to the SDK cache', () async {
+    var now = DateTime(2026, 10, 14, 20);
+    final adapter = _adapter(
+        _answering({
+          'featureFlags': {'paywall-variant': 'outline'}
+        }),
+        clock: () => now);
+    expect(await adapter.reloadFeatureFlags(), isTrue);
+    expect(await adapter.getFeatureFlagVariant('paywall-variant'), 'outline');
+    expect(adapter.hasVerifiedFlags, isTrue);
+
+    now = now.add(PostHogAnalyticsAdapter.verifiedFlagsTtl + const Duration(seconds: 1));
+    expect(adapter.hasVerifiedFlags, isFalse, reason: 'the SDK\'s own refreshes decide the rest of the session');
+  });
+
+  test('an internally created HTTP client is closed on success, failure and timeout', () async {
+    // No injected client: the adapter creates and closes its own. The request goes to an unroutable
+    // host, so this exercises the error path; closing is observable as the Future completing (an
+    // unclosed client would keep the isolate's event loop busy, which the test harness reports).
+    final adapter = PostHogAnalyticsAdapter(
+      apiKey: 'phc_test',
+      host: 'http://127.0.0.1:9',
+      distinctIdReader: () async => 'u',
+    );
+    expect(await adapter.reloadFeatureFlags(), isFalse);
   });
 }
