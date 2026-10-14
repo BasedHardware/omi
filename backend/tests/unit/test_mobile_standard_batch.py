@@ -1,4 +1,5 @@
 import hashlib
+import json
 import sys
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
@@ -218,3 +219,52 @@ def test_visibility_resume_keeps_the_existing_live_capture_wall_clock_gap():
     assert anchored
     assert timeline.wall(first) == pytest.approx(1000.0)
     assert timeline.wall(resumed) == pytest.approx(1060.0)
+
+
+@pytest.mark.asyncio
+async def test_mobile_lease_preserves_shared_live_demand_and_visibility_tracking(monkeypatch):
+    from routers.listen import receiver as receiver_module
+    from routers.listen.contracts import ListenSessionState
+    from routers.listen.demand_routing import LiveDemandRouting
+    from routers.listen.receiver import ListenReceiver
+
+    monkeypatch.setattr(
+        receiver_module,
+        'resolve_ondemand_config',
+        lambda: SimpleNamespace(shadow_enabled=False, gate_enabled=False),
+    )
+    receiver = object.__new__(ListenReceiver)
+
+    def close_unstarted_publish(coro, **kwargs):
+        # The real demand observer runs; external presence publishing is outside
+        # this control-message contract and must stay hermetic.
+        coro.close()
+        return SimpleNamespace(done=lambda: True)
+
+    receiver.host = SimpleNamespace(
+        onboarding_handler=None,
+        use_custom_stt=False,
+        state=ListenSessionState(),
+        refresh_mobile_batch_admission=AsyncMock(),
+        asend_event=AsyncMock(),
+        mobile_standard_batch=True,
+        spawn=close_unstarted_publish,
+    )
+    receiver.live_demand = LiveDemandRouting(receiver, eligible=True)
+    for visible in (False, True):
+        await receiver._handle_text(
+            json.dumps(
+                {
+                    'type': 'client_state',
+                    'foreground': True,
+                    'transcript_visible': visible,
+                    'mobile_batch_capability_v1': True,
+                }
+            )
+        )
+        assert receiver.live_demand.policy.state == ('visible' if visible else 'hidden')
+        event = receiver.host.asend_event.call_args.args[0]
+        assert event.status == 'mobile_batch_admission'
+        assert event.mobile_standard_batch is True
+    assert receiver.host.state.realtime_demand.reports == 2
+    assert receiver.host.refresh_mobile_batch_admission.await_count == 2
