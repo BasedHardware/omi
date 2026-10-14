@@ -54,7 +54,7 @@ def memory(key, content, when=NOW):
         subject_scope='primary_user',
         slot='location',
         curation_weight=2,
-        write_reason='direct_user_statement',
+        write_reason='agent_reusable_conclusion',
         intent_backed=True,
     ).model_dump(mode='json') | {'captured_at': when, 'updated_at': when, 'valid_from': when}
 
@@ -215,6 +215,55 @@ def test_schema_rejects_invalid_hygiene(kw):
         )
 
 
+def test_user_authored_facts_require_review_not_auto_apply(hygiene):
+    """A unanimous pass may still not silently close a user-authored fact."""
+    db, _ = hygiene
+    db.rows[('users', UID, 'memory_items', 'old')]['write_reason'] = 'direct_user_statement'
+    operation = edit()
+    report = run([FullPlan(edits=[operation])] * 3)
+    assert report['outcomes'][0]['status'] == 'suggested'
+    assert db.rows[('users', UID, 'memory_items', 'old')]['status'] == 'active'
+    assert len([path for path in db.rows if path[-2] == 'review_proposals']) == 1
+    # A user-accepted proposal still applies: Review is the authority seam.
+    proposal = review_store.decode_doc(
+        UID, next(row for path, row in db.rows.items() if path[-2] == 'review_proposals')
+    )
+    from models.review import AgentProposalItem
+
+    answer = dream_tools.answer_proposal(
+        UID, AgentProposalItem.model_validate(proposal['item']['agent_proposal']), proposal['source'], 'accept'
+    )
+    assert answer and db.rows[('users', UID, 'memory_items', 'old')]['status'] == 'superseded'
+
+
+def test_whitespace_after_with_other_uses_existing_fact(hygiene):
+    """Whitespace-only `after` must behave like an absent replacement."""
+    db, _ = hygiene
+    operation = edit('supersede_memory', other=NREF, after='   ')
+    report = run([FullPlan(edits=[operation])] * 3)
+    assert report['outcomes'][0]['status'] == 'applied'
+    assert db.rows[('users', UID, 'memory_items', 'old')]['superseded_by'] == 'new'
+    tails = [row for path, row in db.rows.items() if path[-2] == 'memory_items' and path[-1] not in {'old', 'new'}]
+    assert tails == []
+
+
+def test_short_term_replacement_tail_gets_fresh_expiry(hygiene):
+    """A new tail from an expired short-term fact must remain valid."""
+    db, _ = hygiene
+    stale = NOW - timedelta(days=4)
+    db.rows[('users', UID, 'memory_items', 'old')]['tier'] = 'short_term'
+    db.rows[('users', UID, 'memory_items', 'old')]['captured_at'] = stale
+    db.rows[('users', UID, 'memory_items', 'old')]['updated_at'] = stale
+    db.rows[('users', UID, 'memory_items', 'old')]['valid_from'] = stale
+    db.rows[('users', UID, 'memory_items', 'old')]['expires_at'] = stale + timedelta(hours=48)
+    operation = edit('supersede_memory', after='Since January, lives in New Toytown.')
+    report = run([FullPlan(edits=[operation])] * 3)
+    assert report['outcomes'][0]['status'] == 'applied'
+    tail = next(row for path, row in db.rows.items() if path[-2] == 'memory_items' and path[-1] not in {'old', 'new'})
+    assert tail['tier'] == 'short_term'
+    assert tail['expires_at'] > tail['captured_at']
+
+
 def test_undo_conflicts_with_later_edit(hygiene):
     db, _ = hygiene
     run([FullPlan(edits=[edit()])] * 3)
@@ -247,7 +296,7 @@ def test_context_includes_active_memories_within_budget(monkeypatch):
     )
     assert 'memory_items/small' in admitted and 'memory_items/huge' not in admitted
     assert fits_full(admitted, caps)
-    assert calls == [{'limit': 100, 'authoritative': True}]
+    assert calls == [{'limit': 100}]
     assert diagnostics['memory_context_counts'] == {'found': 2, 'failed': 0, 'admitted': 1}
 
 

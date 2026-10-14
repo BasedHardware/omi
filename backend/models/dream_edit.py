@@ -128,7 +128,10 @@ class MemoryHygieneEdit(Strict):
     def hygiene_semantics(self):
         if self.kind == 'retire_memory' and (self.other or self.after):
             raise ValueError('Retirement changes status only')
-        if self.kind == 'supersede_memory' and bool(self.other) == bool(self.after.strip()):
+        # Normalize first: a whitespace-only replacement is "no replacement",
+        # exactly like an absent one, for every downstream consumer.
+        self.after = self.after.strip()
+        if self.kind == 'supersede_memory' and bool(self.other) == bool(self.after):
             raise ValueError('Supersede requires exactly one of other or after')
         if not self.reason.strip():
             raise ValueError('Memory hygiene requires a reason')
@@ -176,6 +179,10 @@ class FullEdit(Strict):
     @model_validator(mode='after')
     def full_hygiene(self):
         if self.kind in {'retire_memory', 'supersede_memory'}:
+            # Same normalization as MemoryHygieneEdit: the model, the apply
+            # path and the client DTO must all treat whitespace-only `after`
+            # as an empty replacement.
+            self.after = self.after.strip()
             MemoryHygieneEdit.model_validate(self.model_dump(exclude={'value'}))
         else:
             Edit.model_validate(self.model_dump(exclude={'value'}))

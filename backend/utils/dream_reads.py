@@ -159,7 +159,12 @@ def active_memory_candidates(uid, read, diagnostics):
     # The shared reader already orders newest first, bounds scans, and enforces
     # current/default visibility. Rehydrate through Dream's owner-scoped reader.
     try:
-        rows = MemoryService().read(uid, limit=100, authoritative=True)
+        # The bounded keyset list path (authoritative=False) walks indexed
+        # pages and stops at the limit; the authoritative full-collection
+        # seam materializes every memory_items row before applying the limit,
+        # which would turn each Dream full-context pass into an unbounded
+        # collection scan. Rows are rehydrated per-ref below either way.
+        rows = MemoryService().read(uid, limit=100)
         diagnostics.setdefault('memory_context_counts', {'found': 0, 'failed': 0})['found'] += len(rows)
     except Exception:
         diagnostics.setdefault('memory_context_counts', {'found': 0, 'failed': 0})['failed'] += 1

@@ -21,7 +21,9 @@ from models.product_memory import (
     MemoryItem,
     MemoryItemStatus,
     MemoryKind,
+    MemoryLayer,
     LedgerWriteReason,
+    default_short_term_expiry,
     normalized_memory_content_key,
 )
 from models.review import ReviewChange
@@ -59,9 +61,13 @@ def record_change(uid, change, edit, edit_key, *, expected_records=None):
     marker = store.user(uid).collection('review_do_not_redo').document(store.safe_id(edit_key))
     target_id = edit.target.split('/', 1)[1]
     other_id = edit.other.split('/', 1)[1] if edit.other else None
+    # Validators treat a whitespace-only `after` as empty (exactly-one-of
+    # other/after); the apply path must make the same decision on the same
+    # normalized value or it will try to create a blank replacement tail.
+    replacement_text = edit.after.strip() if edit.after else ''
     new_id = (
         'mem_' + deterministic_contract_id('dream-memory-supersede', {'uid': uid, 'key': edit_key})[:32]
-        if edit.after
+        if replacement_text
         else None
     )
 
@@ -123,38 +129,44 @@ def record_change(uid, change, edit, edit_key, *, expected_records=None):
             if evidence_ref.get(transaction=tx).exists:
                 raise store.ReviewConflict('Replacement evidence identity unavailable')
             # Same ledger fields as an agent fact append; no inherited graph claims.
-            fresh = target.model_copy(
-                update={
-                    'memory_id': new_id,
-                    'content': edit.after,
-                    'evidence': [evidence, *target.evidence],
-                    'normalized_content_key': normalized_memory_content_key(edit.after),
-                    'content_hash': memory_content_hash(
-                        content=edit.after, evidence_ids=[ev.evidence_id for ev in [evidence, *target.evidence]]
-                    ),
-                    'captured_at': now,
-                    'updated_at': now,
-                    'valid_from': now,
-                    'valid_to': None,
-                    'version': 1,
-                    'item_revision': 1,
-                    'superseded_by': None,
-                    'canonical_memory_id': None,
-                    'user_asserted': False,
-                    'write_reason': LedgerWriteReason.agent_reusable_conclusion,
-                    'intent_backed': True,
-                    'body': None,
-                    'predicate': None,
-                    'arguments': {},
-                    'promotion': None,
-                    'graph_ready': False,
-                    'kg_extracted': False,
-                    'graph_assertion_id': None,
-                    'graph_plan_hash': None,
-                    'source_commit_id': None,
-                    'source_commit_sequence': None,
-                }
-            )
+            replacement_fields = {
+                'memory_id': new_id,
+                'content': replacement_text,
+                'evidence': [evidence, *target.evidence],
+                'normalized_content_key': normalized_memory_content_key(replacement_text),
+                'content_hash': memory_content_hash(
+                    content=replacement_text, evidence_ids=[ev.evidence_id for ev in [evidence, *target.evidence]]
+                ),
+                'captured_at': now,
+                'updated_at': now,
+                'valid_from': now,
+                'valid_to': None,
+                'version': 1,
+                'item_revision': 1,
+                'superseded_by': None,
+                'canonical_memory_id': None,
+                'user_asserted': False,
+                'write_reason': LedgerWriteReason.agent_reusable_conclusion,
+                'intent_backed': True,
+                'body': None,
+                'predicate': None,
+                'arguments': {},
+                'promotion': None,
+                'graph_ready': False,
+                'kg_extracted': False,
+                'graph_assertion_id': None,
+                'graph_plan_hash': None,
+                'source_commit_id': None,
+                'source_commit_sequence': None,
+            }
+            if target.tier == MemoryLayer.short_term:
+                # A fresh tail earns a fresh short-term window from its own
+                # capture time. Inheriting the predecessor's expires_at can
+                # invalidate the tail outright once that row is past its TTL
+                # (expires_at <= captured_at) and would otherwise only ever
+                # grant the old row's remaining lifetime.
+                replacement_fields['expires_at'] = default_short_term_expiry(now)
+            fresh = target.model_copy(update=replacement_fields)
             after[new_id] = fresh.model_dump(mode='python')
         after[target_id] = {
             **before[target_id],

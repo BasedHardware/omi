@@ -11,6 +11,18 @@ from utils.dream_consensus import unanimous_spelling, unanimous_memory_hygiene, 
 from utils.dream_grounding import spelling_grounding_rejection, rank_questions
 from utils.executors import db_executor, run_blocking
 
+# Ledger sources that outrank any agent conclusion. A background Dream pass
+# must never silently retire or replace these rows; the user sees them in
+# Review instead. Mirrors _target_authority in the daily sweep.
+_PROTECTED_WRITE_REASONS = frozenset({'direct_user_statement', 'explicit_remember', 'onboarding'})
+
+
+def _target_authority_protected(edit, records) -> bool:
+    if edit.kind not in MEMORY_HYGIENE_KINDS:
+        return False
+    row = records.get(base_ref(edit.target))
+    return bool(row) and str(row.get('write_reason') or '') in _PROTECTED_WRITE_REASONS
+
 
 def edit_decisions(plan, records, vocabulary, automatic, demoted, full, report):
     grounding = {
@@ -38,6 +50,7 @@ def edit_decisions(plan, records, vocabulary, automatic, demoted, full, report):
             if dream_tools.edit_key(edit, records).split(':')[1] in demoted
             or grounding[dream_tools.edit_key(edit, records)]
             or (edit.kind in MEMORY_HYGIENE_KINDS and (not full or not unanimous_memory_hygiene(edit)))
+            or _target_authority_protected(edit, records)
             else apply_policy(edit.kind, automatic)
         )
         for edit in plan.edits

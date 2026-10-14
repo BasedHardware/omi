@@ -69,7 +69,8 @@ class HarnessEdit(Strict):
             raise ValueError('An edit requires a nonblank reason')
         payload = self.model_dump(exclude={'value', 'why_it_matters'})
         if self.kind in {'retire_memory', 'supersede_memory'}:
-            MemoryHygieneEdit.model_validate(payload)
+            self.after = self.after.strip()
+            MemoryHygieneEdit.model_validate({**payload, 'after': self.after})
         elif self.kind in {'merge_tasks', 'merge_conversations'}:
             if not self.other or self.other == self.target or self.after:
                 raise ValueError('A merge needs a distinct other ref and preserves its text')

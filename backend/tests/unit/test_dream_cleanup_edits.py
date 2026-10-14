@@ -173,7 +173,10 @@ def test_cleanup_retains_audio_and_survivor_and_never_hard_deletes(store):
     assert store.rows[path]['audio_files'] == [{'id': 'synthetic-audio'}]
     assert store.rows[path]['dream_duplicate_of'] == 'two'
     assert 'discarded' not in store.rows[path] and store.rows[path]['status'] == 'completed'
-    assert not dream_tools.conversations.is_visible_conversation(store.rows[path], include_discarded=True)
+    # Folded out of product reads, but the preserved capture stays in the
+    # exhaustive export/compliance stream (include_discarded=True).
+    assert not dream_tools.conversations.is_visible_conversation(store.rows[path])
+    assert dream_tools.conversations.is_visible_conversation(store.rows[path], include_discarded=True)
     assert store.rows[('users', UID, 'conversations', 'two')] == survivor
 
 
