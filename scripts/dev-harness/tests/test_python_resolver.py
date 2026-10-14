@@ -383,6 +383,34 @@ def test_resolver_probes_homebrew_prefix_when_path_is_stripped(
     _assert_floor_qualified_or_documented_fallback(resolved)
 
 
+def test_resolver_skips_below_floor_venv_that_can_import_cheap_gates(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A 3.9 venv with dotenv/yaml must not shadow a floor-qualified pick.
+
+    The venv probes used to check only imports; the pre-push check scripts use
+    PEP 604 syntax at module scope, so a below-floor venv crashes the gate even
+    when a valid interpreter exists (Codex P2 on the venv path).
+    """
+    repo = tmp_path / "repo"
+    below_floor = repo / "backend/.venv/bin/python"
+    _write_probe_stub_python(below_floor.parent, "python", floor_ok=False, imports_ok=True)
+    stubbed = _stubbed_probe_path(
+        tmp_path,
+        {
+            # The PATH fallback the resolver must reach instead.
+            "python3.14": (True, False),
+            "python3.13": (True, True),
+            "python3.12": (False, False),
+            "python3.11": (False, False),
+            "python3.10": (False, False),
+            "python3": (False, False),
+        },
+    )
+    resolved = _resolve_python(repo, monkeypatch, path=stubbed)
+    assert resolved == "python3.13", resolved
+
+
 def test_resolver_skips_incomplete_venv_that_cannot_import_cheap_gates(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

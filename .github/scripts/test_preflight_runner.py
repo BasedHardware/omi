@@ -739,6 +739,33 @@ class PythonFloorTests(unittest.TestCase):
         # No command after `--` is its own guard, reached only past the floor gate.
         self.assertEqual(exit_code, 2)
 
+    def test_module_imports_on_python_3_9_so_the_floor_gate_is_reachable(self) -> None:
+        """The runner must load on bare 3.9 or the resolver's diagnostic is dead.
+
+        When only Python 3.9 exists the resolver deliberately returns bare
+        `python3` so pre-push-singleflight can start the runner, which then
+        prints the actionable floor diagnostic. That path exists only if the
+        module itself imports on 3.9 — e.g. `WindowsJob | None` annotations
+        must stay covered by postponed annotations.
+        """
+        source = Path(str(runner.__file__)).resolve().read_text(encoding="utf-8")
+        self.assertIn("from __future__ import annotations", source)
+        # PEP 563 is load-bearing at import time; re-executing the module on
+        # this host's interpreter (3.9 wherever the floor gate matters) proves
+        # no annotation or default evaluates a `X | Y` union eagerly.
+        import importlib.util
+
+        runner_path = Path(str(runner.__file__)).resolve()
+        spec = importlib.util.spec_from_file_location("preflight_runner_39_probe", runner_path)
+        assert spec is not None and spec.loader is not None
+        module = importlib.util.module_from_spec(spec)
+        try:
+            spec.loader.exec_module(module)
+        except TypeError as exc:  # pragma: no cover - the regression this pins
+            self.fail(f"preflight_runner must import on {sys.version.split()[0]}: {exc}")
+        finally:
+            sys.modules.pop("preflight_runner_39_probe", None)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -185,3 +185,68 @@ def test_dev_init_next_steps_cover_mobile_and_desktop(tmp_path: Path) -> None:
     assert result.returncode == 0, result.stdout
     assert "make dev-up" in result.stdout, result.stdout
     assert "make dev-desktop" in result.stdout, result.stdout
+
+
+def test_dev_init_creates_the_venv_even_with_a_floor_qualified_fallback(
+    tmp_path: Path,
+) -> None:
+    """A floor-qualified versioned interpreter must not skip venv creation.
+
+    dev-init used to create backend/.venv only when the resolver returned the
+    literal `python3`; on a host with python3.12 on PATH but no venv, it ran
+    `pip install -r requirements.txt` against the global interpreter instead
+    (externally-managed Homebrew Pythons reject that; others get polluted).
+    Creation now keys on the venv's absence, and the requirements install must
+    run through the freshly created venv (Codex P1).
+    """
+    repo = _fixture_repo(tmp_path)
+    (repo / "backend/.venv/bin/python").unlink()
+    log = tmp_path / "python-calls.log"
+    stub_bin = tmp_path / "devinit-stub-bin"
+    stub_bin.mkdir()
+    stub = stub_bin / "python3"
+    stub.write_text(
+        "#!/usr/bin/env bash\n"
+        "# Fake bootstrap interpreter: `-m venv <dir>` materializes a stub venv\n"
+        "# whose python logs its invocations; every other call is logged too.\n"
+        f'LOG="{log}"\n'
+        'if [ "${1:-}" = "-m" ] && [ "${2:-}" = "venv" ]; then\n'
+        '  target="$3"\n'
+        '  mkdir -p "$target/bin"\n'
+        "  cat > \"$target/bin/python\" <<'INNER'\n"
+        "#!/usr/bin/env bash\n"
+        f'printf \'VENV %s\\n\' \"$*\" >> "{log}"\n'
+        "exit 0\n"
+        "INNER\n"
+        '  chmod +x "$target/bin/python"\n'
+        "  exit 0\n"
+        "fi\n"
+        f'printf \'%s\\n\' "$*" >> "{log}"\n'
+        "exit 0\n",
+        encoding="utf-8",
+    )
+    stub.chmod(stub.stat().st_mode | stat.S_IXUSR)
+
+    env = _clean_env()
+    env["PATH"] = os.pathsep.join((str(stub_bin), "/usr/bin", "/bin"))
+    env["DEVINIT_LOG"] = str(log)
+    result = subprocess.run(
+        [_bash(), "scripts/dev-harness/dev-init.sh"],
+        cwd=repo,
+        env=env,
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        timeout=120,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stdout
+    assert (repo / "backend/.venv/bin/python").is_file(), result.stdout
+    assert "Created backend/.venv" in result.stdout, result.stdout
+    calls = log.read_text(encoding="utf-8").splitlines()
+    # The requirements install (and its pip probe) must have run through the
+    # freshly created venv interpreter — the P1 contract — never a bare/global
+    # interpreter.
+    assert any(line.startswith("VENV -m pip --version") for line in calls), calls
+    assert any(line.startswith("VENV -m pip install") for line in calls), calls

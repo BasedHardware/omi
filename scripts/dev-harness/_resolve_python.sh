@@ -21,6 +21,9 @@ dev_harness_python_floor_ok() {
 }
 
 # Print the canonical locked backend interpreter when setup has created it.
+# A venv must BOTH import the cheap-gate deps AND satisfy the 3.10 floor: a
+# 3.9-created venv with dotenv/yaml installed would otherwise pass the import
+# probe and still crash the PEP 604 check scripts at import time.
 dev_harness_canonical_python() {
   local repo_root candidate
   repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
@@ -30,6 +33,10 @@ dev_harness_canonical_python() {
     if [ -x "$candidate" ]; then
       if ! dev_harness_venv_covers_cheap_gates "$candidate"; then
         echo "dev-harness: $candidate exists but cannot import yaml and dotenv (incomplete venv); ignoring it. Run: make lane-bootstrap" >&2
+        continue
+      fi
+      if ! dev_harness_python_floor_ok "$candidate"; then
+        echo "dev-harness: $candidate is below the 3.10 floor the pre-push check scripts require; ignoring it. Run: make lane-bootstrap" >&2
         continue
       fi
       printf '%s\n' "$candidate"
@@ -61,6 +68,10 @@ dev_harness_python() {
     if [ -x "$candidate" ]; then
       if ! dev_harness_venv_covers_cheap_gates "$candidate"; then
         echo "dev-harness: $candidate exists but cannot import yaml and dotenv (incomplete venv); ignoring it. Run: make lane-bootstrap" >&2
+        continue
+      fi
+      if ! dev_harness_python_floor_ok "$candidate"; then
+        echo "dev-harness: $candidate is below the 3.10 floor the pre-push check scripts require; ignoring it. Run: make lane-bootstrap" >&2
         continue
       fi
       printf '%s\n' "$candidate"

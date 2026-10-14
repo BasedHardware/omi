@@ -15,13 +15,17 @@ else
   echo "Keeping existing $secrets_file (not overwritten)"
 fi
 
-PYTHON_BIN="$(dev_harness_python)"
-if [ "$PYTHON_BIN" = "python3" ]; then
+# Any missing venv gets created from bare `python3` (best available bootstrap
+# interpreter); the resolver is re-run afterwards, so a floor-qualified
+# versioned/Homebrew interpreter no longer prevents venv creation (a fresh
+# checkout with python3.12 but no backend/.venv must still get the venv, and
+# the requirements install must never hit the global interpreter).
+if [ ! -x "backend/.venv/bin/python" ] && [ ! -x "backend/.venv/Scripts/python.exe" ]; then
   python3 -m venv backend/.venv
-  PYTHON_BIN="$(dev_harness_python)"
   echo "Created backend/.venv"
 fi
 
+PYTHON_BIN="$(dev_harness_python)"
 if ! "$PYTHON_BIN" -m pip --version >/dev/null; then
   echo "${PYTHON_BIN%/bin/python} is incomplete; recreate it with: python3 -m venv backend/.venv" >&2
   exit 1
