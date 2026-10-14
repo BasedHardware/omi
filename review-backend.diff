@@ -1,0 +1,547 @@
+diff --git a/backend/database/legal_holds.py b/backend/database/legal_holds.py
+index 55adc9e0d0c5..552b0489f8e7 100644
+--- a/backend/database/legal_holds.py
++++ b/backend/database/legal_holds.py
+@@ -9,6 +9,7 @@ outcome is known. User-facing routes never write either authority document.
+ 
+ from __future__ import annotations
+ 
++import logging
+ from contextlib import contextmanager
+ from contextvars import ContextVar
+ from datetime import datetime, timezone
+@@ -20,6 +21,8 @@ from google.cloud.firestore_v1 import transactional
+ from database.account_deletion_marker import account_deletion_firestore_client
+ from database.account_deletion_policy import account_deletion_blocks_access, normalize_account_deletion_status
+ 
++logger = logging.getLogger(__name__)
++
+ LEGAL_HOLDS_COLLECTION = "legal_holds"
+ LEGAL_HOLD_DELETION_GATES_COLLECTION = "legal_hold_deletion_gates"
+ LEGAL_HOLD_SCHEMA_VERSION = "legal_hold.v1"
+@@ -108,12 +111,12 @@ def _validated_gate(snapshot: Any) -> dict[str, Any] | None:
+     return payload
+ 
+ 
+-def _gate_blocks(gate: dict[str, Any] | None, now: datetime) -> bool:
+-    """True when a validated gate row represents a live destructive operation."""
++def _gate_blocks(gate: dict[str, Any] | None, now: datetime, *, kind: str | None = None) -> bool:
++    """Block live work of a different kind; untyped fences stay conservative."""
+ 
+     if gate is None or gate["state"] != "running":
+         return False
+-    if gate["kind"] == _OBSOLETE_WRITER_GATE_KIND:
++    if gate["kind"] == _OBSOLETE_WRITER_GATE_KIND or (kind is not None and gate["kind"] == kind):
+         return False
+     return (now - gate["started_at"]).total_seconds() < GATE_STALE_AFTER_SECONDS
+ 
+@@ -213,10 +216,10 @@ def _acquire_destructive_operation_transaction(
+     if gate is not None and gate["state"] == "running":
+         if gate["uid"] == uid and gate["kind"] == kind and gate["token"] == token:
+             return
+-        if _gate_blocks(gate, now):
++        if _gate_blocks(gate, now, kind=kind):
+             raise DestructiveOperationInProgress("another destructive operation owns the account gate")
+-        # Abandoned gate (holder crashed, or an obsolete writer-kind row):
+-        # take it over rather than leaving the account permanently blocked.
++        # Same-kind peers replace the token; abandoned and obsolete gates
++        # also allow takeover. Transactional deletion still checks the token.
+     transaction.set(
+         gate_ref,
+         {
+@@ -258,10 +261,15 @@ def _finish_destructive_operation_transaction(
+ ) -> None:
+     gate_ref = _document(client, f"{LEGAL_HOLD_DELETION_GATES_COLLECTION}/{uid}")
+     gate = _validated_gate(gate_ref.get(transaction=transaction))
+-    if gate is None or gate["uid"] != uid or gate["kind"] != kind or gate["token"] != token:
++    if gate is None or gate["uid"] != uid or gate["kind"] != kind:
+         raise LegalHoldAuthorityUnavailable("destructive operation gate ownership changed")
++    if gate["token"] != token:
++        # A same-kind peer owns this row now. Never finish its operation.
++        logger.info("destructive operation finish skipped after same-kind takeover")
++        return
+     if gate["state"] != "running":
+         if gate["state"] == outcome:
++            logger.info("destructive operation finish already recorded")
+             return
+         raise LegalHoldAuthorityUnavailable("destructive operation gate is already terminal")
+     transaction.set(gate_ref, {**gate, "state": outcome, "finished_at": now})
+diff --git a/backend/database/memory_apply_store.py b/backend/database/memory_apply_store.py
+index 2017bdcbc4a4..def7a174b88c 100644
+--- a/backend/database/memory_apply_store.py
++++ b/backend/database/memory_apply_store.py
+@@ -3316,6 +3316,8 @@ def cleanup_expired_memory_deletion_receipts(
+         rows = list(query.stream())
+     except Exception:
+         return 0
++    if not rows:
++        return 0
+     try:
+         # Legal hold and retention cleanup share the same account-wide
+         # linearization gate. A hold that wins first preserves every receipt;
+diff --git a/backend/routers/conversations.py b/backend/routers/conversations.py
+index c38deff2cc99..45a180fcf8d4 100644
+--- a/backend/routers/conversations.py
++++ b/backend/routers/conversations.py
+@@ -1323,7 +1323,7 @@ def delete_conversation(
+                 ) from error
+             except RuntimeError as error:
+                 # Isolated router tests stub database/utils.other at import time.
+-                if type(error).__name__ != "DestructiveOperationInProgress":
++                if type(error).__name__ not in {"DestructiveOperationInProgress", "LegalHoldAuthorityUnavailable"}:
+                     raise
+                 from utils.other.account_gate_http import account_gate_busy_http_exception
+ 
+diff --git a/backend/routers/memories.py b/backend/routers/memories.py
+index 3b07c2448231..f7af75656ed2 100644
+--- a/backend/routers/memories.py
++++ b/backend/routers/memories.py
+@@ -11,7 +11,7 @@ from functools import wraps
+ from typing import Any, Callable, Dict, List, Literal, Optional, Tuple, cast
+ 
+ import database._client as db_client_module
+-from database.legal_holds import DestructiveOperationInProgress
++from database.legal_holds import DestructiveOperationInProgress, LegalHoldAuthorityUnavailable
+ from utils.executors import db_executor, llm_executor, postprocess_executor, run_blocking, submit_with_context
+ from utils.other.account_gate_http import account_gate_busy_http_exception
+ 
+@@ -1085,7 +1085,7 @@ def delete_memories_batch(
+     except HTTPException:
+         # Preserve service-owned 402/404/413 mappings and observability details.
+         raise
+-    except DestructiveOperationInProgress as exc:
++    except (DestructiveOperationInProgress, LegalHoldAuthorityUnavailable) as exc:
+         raise account_gate_busy_http_exception() from exc
+     except ValueError:
+         raise HTTPException(status_code=404, detail='Memory not found')
+@@ -1103,7 +1103,7 @@ def delete_memory(
+ ):
+     try:
+         MemoryService(db_client=getattr(db_client_module, 'db', None)).delete(uid, memory_id)
+-    except DestructiveOperationInProgress as exc:
++    except (DestructiveOperationInProgress, LegalHoldAuthorityUnavailable) as exc:
+         raise account_gate_busy_http_exception() from exc
+     except ValueError:
+         raise HTTPException(status_code=404, detail='Memory not found')
+@@ -1123,10 +1123,13 @@ def delete_memories(
+     http_request: Request = None,  # type: ignore[assignment]
+ ):
+     service = MemoryService(db_client=getattr(db_client_module, 'db', None))
+-    if scope == 'default':
+-        service.delete_default(uid)
+-    else:
+-        service.delete_all(uid)
++    try:
++        if scope == 'default':
++            service.delete_default(uid)
++        else:
++            service.delete_all(uid)
++    except (DestructiveOperationInProgress, LegalHoldAuthorityUnavailable) as exc:
++        raise account_gate_busy_http_exception() from exc
+     record_product_event('memory_deleted', request=http_request)
+     return {'status': 'ok'}
+ 
+diff --git a/backend/tests/unit/test_account_gate_busy_http.py b/backend/tests/unit/test_account_gate_busy_http.py
+index 2b9eb1059947..49e606ec0869 100644
+--- a/backend/tests/unit/test_account_gate_busy_http.py
++++ b/backend/tests/unit/test_account_gate_busy_http.py
+@@ -6,7 +6,7 @@ from types import SimpleNamespace
+ import pytest
+ from fastapi import HTTPException
+ 
+-from database.legal_holds import DestructiveOperationInProgress
++from database.legal_holds import DestructiveOperationInProgress, LegalHoldAuthorityUnavailable
+ from models.feedback import MemoryUseFeedback
+ from utils.other.account_gate_http import (
+     ACCOUNT_GATE_BUSY_DETAIL,
+@@ -85,3 +85,39 @@ def test_memory_use_replay_maps_destructive_gate_to_account_gate_busy(monkeypatc
+         )
+ 
+     _assert_gate_busy(caught.value, fence)
++
++
++@pytest.mark.parametrize("error_type", [DestructiveOperationInProgress, LegalHoldAuthorityUnavailable])
++def test_account_gate_cascade_purge_maps_fence_before_generic_failure(monkeypatch, error_type):
++    from utils.memory import memory_service
++
++    fence = error_type("canonical mutation blocked by destructive operation")
++
++    def blocked(*args, **kwargs):
++        raise fence
++
++    monkeypatch.setattr(memory_service, "purge_canonical_memory_projections", blocked)
++    with pytest.raises(HTTPException) as caught:
++        memory_service._purge_required_canonical_projections("uid", ["mem"], db_client=object(), reason="delete")
++    assert caught.value.status_code == 409
++    assert caught.value.headers["Retry-After"] == "2"
++    assert caught.value.__cause__ is fence
++
++
++@pytest.mark.parametrize("error_type", [DestructiveOperationInProgress, LegalHoldAuthorityUnavailable])
++def test_account_gate_deletion_boundary_maps_inner_transaction_fence(monkeypatch, error_type):
++    from contextlib import nullcontext
++    from utils.memory import memory_service
++
++    fence = error_type("canonical mutation blocked by destructive operation")
++    monkeypatch.setattr(memory_service, "destructive_operation_gate", lambda *args, **kwargs: nullcontext("token"))
++
++    @memory_service._legal_hold_gated_deletion
++    def deletion(self, uid):
++        raise fence
++
++    with pytest.raises(HTTPException) as caught:
++        deletion(SimpleNamespace(db_client=object()), "uid")
++    assert caught.value.status_code == 409
++    assert caught.value.headers["Retry-After"] == "2"
++    assert caught.value.__cause__ is fence
+diff --git a/backend/tests/unit/test_delete_conversation_cascade_retraction_fence.py b/backend/tests/unit/test_delete_conversation_cascade_retraction_fence.py
+index 2bae26d497c1..8e1a0c112ac9 100644
+--- a/backend/tests/unit/test_delete_conversation_cascade_retraction_fence.py
++++ b/backend/tests/unit/test_delete_conversation_cascade_retraction_fence.py
+@@ -84,7 +84,7 @@ def test_gate_contention_maps_to_409_with_retry_after():
+     """Static checker: importing routers.conversations is too heavy for unit isolation.
+ 
+     Concurrent account-gated deletes used to escape as 500. The retract path
+-    must map DestructiveOperationInProgress to the shared 409 helper — same
++    must map contention and unavailable authority to the shared 409 helper — same
+     structural-regex approach as the 503 test above, so a regression that maps
+     it to anything else (500/503) or moves the mapping to an unrelated handler
+     fails this guard.
+@@ -96,7 +96,7 @@ def test_gate_contention_maps_to_409_with_retry_after():
+     mapped = re.search(
+         r"except RuntimeError as error:\s*\n"
+         r"\s+#.*\n"
+-        r'\s+if type\(error\)\.__name__ != "DestructiveOperationInProgress":\s*\n'
++        r'\s+if type\(error\)\.__name__ not in \{"DestructiveOperationInProgress", "LegalHoldAuthorityUnavailable"\}:\s*\n'
+         r"\s+raise\s*\n"
+         r"\s+from utils\.other\.account_gate_http import account_gate_busy_http_exception\s*\n"
+         r"\s+raise account_gate_busy_http_exception\(\) from error",
+diff --git a/backend/tests/unit/test_legal_holds.py b/backend/tests/unit/test_legal_holds.py
+index 8b10612d9259..102ee68af408 100644
+--- a/backend/tests/unit/test_legal_holds.py
++++ b/backend/tests/unit/test_legal_holds.py
+@@ -167,10 +167,10 @@ def test_gate_finish_is_token_cas_and_failed_gate_allows_later_hold():
+     now = legal_holds.datetime.now(legal_holds.timezone.utc)
+     client = _FakeClient({"legal_hold_deletion_gates/uid1": _gate()})
+ 
+-    with pytest.raises(legal_holds.LegalHoldAuthorityUnavailable):
+-        legal_holds._finish_destructive_operation_transaction.to_wrap(
+-            client.transaction(), client, "uid1", "explicit_memory_deletion", "wrong", "failed", now
+-        )
++    legal_holds._finish_destructive_operation_transaction.to_wrap(
++        client.transaction(), client, "uid1", "explicit_memory_deletion", "wrong", "failed", now
++    )
++    assert client.docs["legal_hold_deletion_gates/uid1"]["state"] == "running"
+ 
+     legal_holds._finish_destructive_operation_transaction.to_wrap(
+         client.transaction(), client, "uid1", "explicit_memory_deletion", "token-1", "failed", now
+@@ -310,13 +310,8 @@ def test_inflight_deletion_blocks_external_writer_before_provider_work():
+         )
+ 
+ 
+-def test_concurrent_single_deletes_one_succeeds_other_raises_typed_exception(monkeypatch):
+-    """Reproduction: two concurrent destructive_operation_gate contexts for one uid.
+-
+-    The account gate is exclusive. One caller finishes; the other surfaces
+-    DestructiveOperationInProgress rather than sharing the lock. Read-only
+-    fences still honor the live gate.
+-    """
++def test_concurrent_same_kind_deletes_both_finish_but_write_fence_still_blocks(monkeypatch):
++    """Same-kind contexts overlap while conservative write fences block."""
+     client = _FakeClient()
+     gate_lock = threading.Lock()
+ 
+@@ -371,8 +366,93 @@ def test_concurrent_single_deletes_one_succeeds_other_raises_typed_exception(mon
+     second.join(timeout=5)
+     assert not first.is_alive() and not second.is_alive()
+     assert outcomes.count("first_ok") == 1
+-    assert "DestructiveOperationInProgress" in outcomes
+-    assert "second_ok" not in outcomes
++    assert "DestructiveOperationInProgress" not in outcomes
++    assert outcomes.count("second_ok") == 1
+     assert "fence_blocked" in outcomes
+     assert "fence_leaked" not in outcomes
+     assert legal_holds.GATE_STALE_AFTER_SECONDS == 6 * 60 * 60
++
++
++@pytest.mark.parametrize("kind", ["explicit_memory_deletion", "retention_cleanup", "account_deletion"])
++def test_same_kind_fresh_acquire_replaces_token_and_invalidates_old_authority(kind):
++    now = legal_holds.datetime.now(legal_holds.timezone.utc)
++    client = _FakeClient({"legal_hold_deletion_gates/uid1": _gate(kind=kind)})
++    legal_holds._acquire_destructive_operation_transaction.to_wrap(
++        client.transaction(), client, "uid1", kind, "peer-token", now
++    )
++    assert client.docs["legal_hold_deletion_gates/uid1"]["token"] == "peer-token"
++    with pytest.raises(legal_holds.LegalHoldAuthorityUnavailable):
++        legal_holds.assert_destructive_operation_transaction(
++            client.transaction(), client, uid="uid1", kind=kind, token="token-1"
++        )
++    with pytest.raises(legal_holds.DestructiveOperationInProgress):
++        legal_holds.assert_no_destructive_operation_transaction(client.transaction(), client, uid="uid1")
++
++
++@pytest.mark.parametrize(
++    "owner,attempt",
++    [
++        ("retention_cleanup", "explicit_memory_deletion"),
++        ("explicit_memory_deletion", "retention_cleanup"),
++        ("account_deletion", "retention_cleanup"),
++    ],
++)
++def test_different_kind_fresh_gate_still_blocks(owner, attempt):
++    now = legal_holds.datetime.now(legal_holds.timezone.utc)
++    original = _gate(kind=owner)
++    client = _FakeClient({"legal_hold_deletion_gates/uid1": original})
++    with pytest.raises(legal_holds.DestructiveOperationInProgress):
++        legal_holds._acquire_destructive_operation_transaction.to_wrap(
++            client.transaction(), client, "uid1", attempt, "peer-token", now
++        )
++    assert client.docs["legal_hold_deletion_gates/uid1"] == original
++
++
++@pytest.mark.parametrize("state", ["running", "completed", "failed"])
++def test_finish_same_kind_takeover_never_mutates_peer(state):
++    now = legal_holds.datetime.now(legal_holds.timezone.utc)
++    original = _gate(token="peer-token", state=state)
++    client = _FakeClient({"legal_hold_deletion_gates/uid1": original})
++    legal_holds._finish_destructive_operation_transaction.to_wrap(
++        client.transaction(), client, "uid1", "explicit_memory_deletion", "old-token", "completed", now
++    )
++    assert client.docs["legal_hold_deletion_gates/uid1"] == original
++
++
++def test_finish_refuses_different_kind_fresh_owner():
++    now = legal_holds.datetime.now(legal_holds.timezone.utc)
++    original = _gate(kind="account_deletion", token="peer-token")
++    client = _FakeClient({"legal_hold_deletion_gates/uid1": original})
++    with pytest.raises(legal_holds.LegalHoldAuthorityUnavailable):
++        legal_holds._finish_destructive_operation_transaction.to_wrap(
++            client.transaction(), client, "uid1", "explicit_memory_deletion", "old-token", "completed", now
++        )
++    assert client.docs["legal_hold_deletion_gates/uid1"] == original
++
++
++@pytest.mark.parametrize("outcome", ["failed", "completed"])
++def test_finish_same_outcome_is_idempotent_but_opposite_outcome_fails(outcome):
++    now = legal_holds.datetime.now(legal_holds.timezone.utc)
++    original = _gate(state=outcome)
++    client = _FakeClient({"legal_hold_deletion_gates/uid1": original})
++    legal_holds._finish_destructive_operation_transaction.to_wrap(
++        client.transaction(), client, "uid1", "explicit_memory_deletion", "token-1", outcome, now
++    )
++    with pytest.raises(legal_holds.LegalHoldAuthorityUnavailable):
++        legal_holds._finish_destructive_operation_transaction.to_wrap(
++            client.transaction(),
++            client,
++            "uid1",
++            "explicit_memory_deletion",
++            "token-1",
++            "failed" if outcome == "completed" else "completed",
++            now,
++        )
++    assert client.docs["legal_hold_deletion_gates/uid1"] == original
++
++
++def test_six_hour_takeover_boundary_is_unchanged():
++    now = legal_holds.datetime.now(legal_holds.timezone.utc)
++    gate = _gate(kind="account_deletion", started_at=now - timedelta(hours=6))
++    assert not legal_holds._gate_blocks(gate, now, kind="explicit_memory_deletion")
++    assert legal_holds._gate_blocks(gate, now - timedelta(microseconds=1), kind="explicit_memory_deletion")
+diff --git a/backend/tests/unit/test_memories_batch_delete.py b/backend/tests/unit/test_memories_batch_delete.py
+index 3f01c5b5fde2..161d6a7897b3 100644
+--- a/backend/tests/unit/test_memories_batch_delete.py
++++ b/backend/tests/unit/test_memories_batch_delete.py
+@@ -6,7 +6,7 @@ import pytest
+ from fastapi import HTTPException
+ from pydantic import ValidationError
+ 
+-from database.legal_holds import DestructiveOperationInProgress
++from database.legal_holds import DestructiveOperationInProgress, LegalHoldAuthorityUnavailable
+ from routers import memories as mem_mod
+ 
+ 
+@@ -108,3 +108,35 @@ def test_batch_delete_maps_gate_busy_to_409_not_500(monkeypatch):
+     assert error.value.detail == "account_gate_busy"
+     assert error.value.headers["Retry-After"] == "2"
+     service.delete_batch.assert_called_once_with("uid-gate", ["a", "b"])
++
++
++@pytest.mark.parametrize("error_type", [DestructiveOperationInProgress, LegalHoldAuthorityUnavailable])
++@pytest.mark.parametrize("path", ["single", "batch", "all", "default"])
++def test_memory_delete_routes_map_transaction_fence_with_retry_after(monkeypatch, error_type, path):
++    from fastapi import FastAPI
++    from fastapi.testclient import TestClient
++
++    fence = error_type("canonical mutation blocked by destructive operation")
++    service = MagicMock()
++    method = {"single": "delete", "batch": "delete_batch", "all": "delete_all", "default": "delete_default"}[path]
++    getattr(service, method).side_effect = fence
++    monkeypatch.setattr(mem_mod, "MemoryService", lambda **_kwargs: service)
++    app = FastAPI()
++    app.include_router(mem_mod.router)
++    app.dependency_overrides[mem_mod.auth.get_current_user_uid] = lambda: "uid-gate"
++    # The route dependencies wrap auth with the released rate-limit policy.
++    for route in mem_mod.router.routes:
++        if "DELETE" in getattr(route, "methods", set()):
++            for dependency in route.dependant.dependencies:
++                if dependency.name == "uid":
++                    app.dependency_overrides[dependency.call] = lambda: "uid-gate"
++    client = TestClient(app)
++    if path == "batch":
++        response = client.request("DELETE", "/v3/memories/batch", json={"memory_ids": ["mem-1"]})
++    elif path == "single":
++        response = client.delete("/v3/memories/mem-1")
++    else:
++        response = client.delete(f"/v3/memories?scope={path}")
++    assert response.status_code == 409
++    assert response.json() == {"detail": "account_gate_busy"}
++    assert response.headers["Retry-After"] == "2"
+diff --git a/backend/tests/unit/test_memory_apply_store.py b/backend/tests/unit/test_memory_apply_store.py
+index 18f4deba9247..3b55cec3d306 100644
+--- a/backend/tests/unit/test_memory_apply_store.py
++++ b/backend/tests/unit/test_memory_apply_store.py
+@@ -3149,3 +3149,10 @@ def test_memory_use_commit_replay_conflict_and_receipt_failure_are_atomic(store,
+             db_client=strict,
+         )
+     assert strict.rows == before_failed_commit
++
++
++def test_deletion_receipt_cleanup_empty_query_never_acquires_gate(store, monkeypatch):
++    gate = MagicMock(side_effect=AssertionError("empty sweep must not acquire gate"))
++    monkeypatch.setattr(store, "destructive_operation_gate", gate)
++    assert store.cleanup_expired_memory_deletion_receipts("u1", db_client=_db_with()) == 0
++    gate.assert_not_called()
+diff --git a/backend/utils/memory/memory_service.py b/backend/utils/memory/memory_service.py
+index 25600ed16f05..9d5eed77bc37 100644
+--- a/backend/utils/memory/memory_service.py
++++ b/backend/utils/memory/memory_service.py
+@@ -34,7 +34,11 @@ from database._client import db as default_db_client
+ from database.memory_collections import MemoryCollections
+ from database.memory_apply_store import EvidenceIdentityConflict, privacy_deletion_receipt_id
+ from database.memory_ledger import purge_source_replacement_receipts_for_memories
+-from database.legal_holds import destructive_operation_gate
++from database.legal_holds import (
++    DestructiveOperationInProgress,
++    LegalHoldAuthorityUnavailable,
++    destructive_operation_gate,
++)
+ from database.review_queue import purge_stale_review_conflicts_for_memories
+ from database.vector_db import delete_memory_vector
+ from models.memories import MemoryDB
+@@ -58,6 +62,7 @@ from models.product_memory import (
+     SourceState,
+ )
+ from utils.log_sanitizer import sanitize, sanitize_validation_error
++from utils.other.account_gate_http import account_gate_busy_http_exception
+ from utils.other.list_budget import ListReadBudget, ListReadBudgetExhausted, budgeted_get_all
+ from utils.other.portability_read import check_portability_read
+ from utils.memory.canonical_visibility_filter import batch_canonical_expiry_observations
+@@ -158,14 +163,17 @@ def _legal_hold_gated_deletion(method: Callable[..., Any]) -> Callable[..., Any]
+         # derived data for a row the assignment transaction already tombstoned.
+         # It must not take the exclusive account gate reserved for genuinely
+         # destructive work; callers pass claim_destructive_gate=False.
+-        if not kwargs.get("claim_destructive_gate", True):
+-            return method(self, uid, *args, **kwargs)
+-        with destructive_operation_gate(
+-            uid,
+-            kind="explicit_memory_deletion",
+-            firestore_client=self.db_client,
+-        ):
+-            return method(self, uid, *args, **kwargs)
++        try:
++            if not kwargs.get("claim_destructive_gate", True):
++                return method(self, uid, *args, **kwargs)
++            with destructive_operation_gate(
++                uid,
++                kind="explicit_memory_deletion",
++                firestore_client=self.db_client,
++            ):
++                return method(self, uid, *args, **kwargs)
++        except (DestructiveOperationInProgress, LegalHoldAuthorityUnavailable) as exc:
++            raise account_gate_busy_http_exception() from exc
+ 
+     return wrapped
+ 
+@@ -199,6 +207,10 @@ def _purge_required_canonical_projections(
+             include_review_queue=False,
+             preserve_source_replacement_receipts=preserve_source_replacement_receipts,
+         )
++    except (DestructiveOperationInProgress, LegalHoldAuthorityUnavailable) as exc:
++        raise account_gate_busy_http_exception() from exc
++    except HTTPException:
++        raise
+     except Exception as exc:
+         raise HTTPException(
+             status_code=503,
+@@ -4132,6 +4144,8 @@ class MemoryService:
+                         db_client=self.db_client,
+                         include_legacy_commits=True,
+                     )
++                except (DestructiveOperationInProgress, LegalHoldAuthorityUnavailable) as exc:
++                    raise account_gate_busy_http_exception() from exc
+                 except Exception as exc:
+                     raise HTTPException(
+                         status_code=503,
+@@ -4186,6 +4200,8 @@ class MemoryService:
+                 db_client=self.db_client,
+                 include_legacy_commits=True,
+             )
++        except (DestructiveOperationInProgress, LegalHoldAuthorityUnavailable) as exc:
++            raise account_gate_busy_http_exception() from exc
+         except Exception as exc:
+             raise HTTPException(
+                 status_code=503,
+@@ -4227,6 +4243,8 @@ class MemoryService:
+                 if getattr(canonical_item, "status", None) == MemoryItemStatus.tombstoned:
+                     try:
+                         historical_ids.extend(canonical_memory_lineage_ids(uid, [memory_id], db_client=self.db_client))
++                    except (DestructiveOperationInProgress, LegalHoldAuthorityUnavailable) as exc:
++                        raise account_gate_busy_http_exception() from exc
+                     except Exception as exc:
+                         raise HTTPException(
+                             status_code=503,
+@@ -4305,6 +4323,8 @@ class MemoryService:
+                 db_client=self.db_client,
+                 include_legacy_commits=True,
+             )
++        except (DestructiveOperationInProgress, LegalHoldAuthorityUnavailable) as exc:
++            raise account_gate_busy_http_exception() from exc
+         except Exception as exc:
+             raise HTTPException(
+                 status_code=503,
+@@ -4339,6 +4359,8 @@ class MemoryService:
+                 db_client=self.db_client,
+                 include_legacy_commits=True,
+             )
++        except (DestructiveOperationInProgress, LegalHoldAuthorityUnavailable) as exc:
++            raise account_gate_busy_http_exception() from exc
+         except Exception as exc:
+             raise HTTPException(
+                 status_code=503,
+@@ -4375,6 +4397,8 @@ class MemoryService:
+                 db_client=self.db_client,
+                 include_legacy_commits=True,
+             )
++        except (DestructiveOperationInProgress, LegalHoldAuthorityUnavailable) as exc:
++            raise account_gate_busy_http_exception() from exc
+         except Exception as exc:
+             raise HTTPException(
+                 status_code=503,
+@@ -4441,6 +4465,8 @@ class MemoryService:
+                     include_legacy_commits=True,
+                     preserve_source_replacement_receipts=True,
+                 )
++            except (DestructiveOperationInProgress, LegalHoldAuthorityUnavailable) as exc:
++                raise account_gate_busy_http_exception() from exc
+             except Exception as exc:
+                 raise HTTPException(
+                     status_code=503,
+@@ -4456,6 +4482,8 @@ class MemoryService:
+                     retracted_ids,
+                     firestore_client=self.db_client,
+                 )
++            except (DestructiveOperationInProgress, LegalHoldAuthorityUnavailable) as exc:
++                raise account_gate_busy_http_exception() from exc
+             except Exception as exc:
+                 raise HTTPException(
+                     status_code=503,
