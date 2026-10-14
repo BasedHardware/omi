@@ -228,3 +228,19 @@ async def test_replay_failure_after_fence_recovers_vendor_without_losing_prefix(
     finally:
         actual.stt_socket.finish()
         await stop(raws)
+
+
+@pytest.mark.asyncio
+async def test_disconnect_during_fresh_demand_check_releases_candidate(monkeypatch):
+    actual, _, raws, _, _ = await demand_receiver(monkeypatch)
+    old = actual.stt_socket
+    monkeypatch.setattr(actual.live_demand, 'can_admit_window', AsyncMock(side_effect=asyncio.CancelledError))
+    try:
+        with pytest.raises(asyncio.CancelledError):
+            await actual._switch_live_demand('parakeet')
+        assert window.admission.active == 0
+        assert actual.stt_socket is old and not old.retired_for_replay
+        assert actual.host.stt_service == st.STTService.soniox
+    finally:
+        actual.stt_socket.finish()
+        await stop(raws)

@@ -83,20 +83,25 @@ async def switch_live_demand(receiver, lane: str) -> bool:
             session._routing_target_entry = old_target
         # Demand may change during the dial; do not install a cheap candidate
         # after a visible report or rollback.
-        if lane == 'parakeet' and (
-            not demand.window_permitted
-            or demand.policy.state != 'hidden'
-            or not resolve_live_demand().admits(host.request.uid)
-            or not await demand.can_admit_window()
-        ):
+        try:
+            if lane == 'parakeet' and (
+                not demand.window_permitted
+                or demand.policy.state != 'hidden'
+                or not resolve_live_demand().admits(host.request.uid)
+                or not await demand.can_admit_window()
+            ):
+                raw.retire_for_replay()
+                await abort_replay_socket(raw)
+                return False
+            if not host.state.active or live_stt_socket_is_dead(raw) or live_stt_socket_is_dead(previous):
+                raw.retire_for_replay()
+                await abort_replay_socket(raw)
+                fallback(receiver, 'connection_lost')
+                return False
+        except asyncio.CancelledError:
             raw.retire_for_replay()
             await abort_replay_socket(raw)
-            return False
-        if not host.state.active or live_stt_socket_is_dead(raw):
-            raw.retire_for_replay()
-            await abort_replay_socket(raw)
-            fallback(receiver, 'connection_lost')
-            return False
+            raise
         demand.meter()
         ring = receiver._window_ring()
         trim_window_replay_to_anchor(ring, previous)
@@ -147,6 +152,10 @@ async def switch_live_demand(receiver, lane: str) -> bool:
             fallback(receiver, 'send_failed')
             await receiver._rebuild_stt_socket_locked()
             return False
+        except asyncio.CancelledError:
+            raw.retire_for_replay()
+            await abort_replay_socket(raw)
+            raise
         finally:
             receiver._replay_delivery = None
             receiver._replay_ingesting = False
