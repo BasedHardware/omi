@@ -4890,11 +4890,6 @@
       "owner": "CI maintainers",
       "rationale": "Register the daily mobile train workflow that landed on main without an inventory row.",
       "triggers": {
-        "schedule": [
-          {
-            "cron": "0 14 * * *"
-          }
-        ],
         "workflow_dispatch": {
           "inputs": {
             "dry_run": {
