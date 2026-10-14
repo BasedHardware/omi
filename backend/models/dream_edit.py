@@ -96,6 +96,11 @@ class MemoryHygieneEdit(Strict):
         max_length=2000,
         description='For supersede_memory without other, the newer time-scoped fact text supported by conversations. Empty for retire_memory.',
     )
+    effective_from: str = Field(
+        default='',
+        max_length=40,
+        description='For supersede_memory: optional timezone-aware ISO 8601 time when the cited evidence says the new fact became true. Never invent a time; omit to use apply time.',
+    )
     reason: str = Field(
         min_length=1,
         max_length=1000,
@@ -111,7 +116,8 @@ class MemoryHygieneEdit(Strict):
     def hygiene_semantics(self):
         if self.kind == 'retire_memory' and (self.other or self.after):
             raise ValueError('Retirement changes status only')
-        if self.kind == 'supersede_memory' and bool(self.other) == bool(self.after.strip()):
+        self.after = self.after.strip()
+        if self.kind == 'supersede_memory' and bool(self.other) == bool(self.after):
             raise ValueError('Supersede requires exactly one of other or after')
         if not self.reason.strip():
             raise ValueError('Memory hygiene requires a reason')

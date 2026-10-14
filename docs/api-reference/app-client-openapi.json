@@ -1506,6 +1506,17 @@
             ],
             "title": "Other Label"
           },
+          "target_content": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target Content"
+          },
           "target_label": {
             "default": "",
             "title": "Target Label",

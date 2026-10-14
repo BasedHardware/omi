@@ -64,6 +64,12 @@ final class PhoneMicController {
     /// Repeating interval currently armed, so a tick can retarget after a
     /// state change that did not reschedule itself.
     private var progressIntervalArmed: TimeInterval = 0
+    /// True while a shorter first fire is pending ahead of the armed repeating
+    /// cadence (the fast foreground beat). The timer records one leeway for the
+    /// whole schedule, so the pending fast beat must be tracked separately:
+    /// after it emits, the timer retargets to the armed cadence and regains
+    /// that cadence's full coalescing leeway.
+    private var progressFastFirePending = false
 
     init(environment: PhoneMicControllerEnvironment) {
         self.environment = environment
@@ -562,6 +568,7 @@ final class PhoneMicController {
         let leeway: DispatchTimeInterval = min(first, repeating) >= Self.healthyProgressTickInterval
             ? .milliseconds(500)
             : .milliseconds(50)
+        progressFastFirePending = first < repeating
         if let timer = progressTimer {
             timer.schedule(deadline: .now() + first, repeating: repeating, leeway: leeway)
             progressIntervalArmed = repeating
@@ -572,6 +579,18 @@ final class PhoneMicController {
         timer.setEventHandler { [weak self] in
             guard let self else { return }
             self.emitBatchProgressTick()
+            // After a pending fast first fire emits, retarget to the armed
+            // repeating cadence so later healthy beats regain the full
+            // coalescing leeway instead of keeping the fast beat's 50 ms.
+            // If the state changed while the beat was pending, fall through
+            // and let the desired-cadence branch below retarget instead.
+            if self.progressFastFirePending {
+                self.progressFastFirePending = false
+                if self.progressIntervalArmed == self.desiredProgressInterval() {
+                    self.syncProgressTimer(first: self.progressIntervalArmed, repeating: self.progressIntervalArmed)
+                    return
+                }
+            }
             let desired = self.desiredProgressInterval()
             if self.state != .idle, self.progressIntervalArmed != desired {
                 self.syncProgressTimer(first: desired, repeating: desired)
@@ -608,6 +627,7 @@ final class PhoneMicController {
         progressTimer?.cancel()
         progressTimer = nil
         progressIntervalArmed = 0
+        progressFastFirePending = false
     }
 
     /// Heartbeat on controlQueue. Reads the writer's committed frame count and drains

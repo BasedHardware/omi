@@ -63,6 +63,7 @@ import 'package:omi/services/devices/transports/device_transport.dart';
 import 'package:omi/services/devices/transports/native_ble_transport.dart';
 import 'package:omi/services/audio_sources/phone_mic_source.dart';
 import 'package:omi/services/wals.dart';
+import 'package:omi/services/wals/mobile_standard_batch.dart';
 import 'package:omi/utils/alerts/app_snackbar.dart';
 import 'package:omi/utils/batch_recording.dart';
 import 'package:omi/utils/enums.dart';
@@ -133,6 +134,21 @@ class CaptureController extends ChangeNotifier
   int? _deliveredExplanationGeneration;
   int? _announcedNoConversationGeneration;
   final CalendarCaptureGapMonitor? _calendarGapMonitor;
+  MobileStandardBatch? _mobileStandardBatch;
+  bool _mobileStandardBatchAllowed = false;
+  bool _mobileBatchOwnsSocketAudio = false;
+
+  void installMobileStandardBatch(MobileStandardBatch lane) {
+    if (_captureControllerDisposed) {
+      unawaited(lane.close());
+      return;
+    }
+    _mobileStandardBatch = lane;
+    lane.authorize(_mobileStandardBatchAllowed);
+    lifetime.listenTo(lane.visibility, lane.visibilityChanged);
+    lifetime.own(lane.close);
+  }
+
   final CaptureLivenessWatchdog _livenessWatchdog = CaptureLivenessWatchdog();
   bool _livenessCheckRunning = false;
   int _livenessEpoch = 0;
@@ -317,6 +333,7 @@ class CaptureController extends ChangeNotifier
     CaptureNativeWriterGate? nativeWriterGate,
     CaptureWedgeMonitor? captureWedgeMonitor,
     CalendarCaptureGapMonitor? calendarGapMonitor,
+    MobileStandardBatch? mobileStandardBatch,
   })  : externalActions = externalActions ?? const NoopCaptureExternalActions(),
         _conversationLocationCapture = conversationLocationCapture ?? ConversationLocationCapture(),
         _inProgressConversationLoader = inProgressConversationLoader,
@@ -343,6 +360,7 @@ class CaptureController extends ChangeNotifier
         _wedgeMonitorOverride = captureWedgeMonitor,
         _calendarGapMonitor = calendarGapMonitor,
         _preferences = preferences ?? SharedPreferencesUtil() {
+    if (mobileStandardBatch != null) installMobileStandardBatch(mobileStandardBatch);
     _isConnected = _connectivity.initiallyConnected;
     lifetime.listen(_connectivity.changes, onConnectionStateChanged);
     final ble = _bleListeners ?? const BleBridgeCaptureListeners();
@@ -1101,6 +1119,8 @@ class CaptureController extends ChangeNotifier
   bool _deviceIdentityStale(int? revision) => revision != null && _deviceIdentityRevision != revision;
 
   void _rollCaptureSession(String identity) {
+    _mobileStandardBatchAllowed = false;
+    _mobileStandardBatch?.authorize(false);
     _sourceCaptureRoot = null;
     _sessionOwner?.replaceSession(identity);
   }
@@ -1695,6 +1715,7 @@ class CaptureController extends ChangeNotifier
         ? _wedgeMonitor.onCaptureSessionConnected(deviceId: _recordingDevice!.id, source: socket.source ?? '')
         : -1;
     _wedgeSession = (socket: socket, handle: handle);
+    if (_mobileBatchOwnsSocketAudio && handle >= 0) _wedgeMonitor.setTranscriptExpected(handle, false);
   }
 
   bool _isHardwareCaptureSocket(TranscriptSegmentSocketService socket) {
@@ -2063,6 +2084,29 @@ class CaptureController extends ChangeNotifier
         if (_voiceCommandSession != null && voiceCommandSupported && collectCommandAudio) {
           final payload = blePayload ?? source?.getSocketPayload(snapshot) ?? snapshot.sublist(3);
           _commandBytes.add(payload);
+        }
+
+        // Batch routing happens before either ordinary WAL or WS ownership.
+        // A visibility switch never replays previously batched frames live.
+        if (blePayload != null && _mobileStandardBatch != null) {
+          final batched = _mobileStandardBatch!.route(
+            blePayload,
+            codec: codec,
+            realtimeConsumer: _voiceCommandSession != null ||
+                deviceOnboardingProvider?.isOnboardingActive == true ||
+                _socket?.customSttMode == true ||
+                _preferences.batchModeEnabled ||
+                !_preferences.autoSyncOfflineRecordings ||
+                _recordingDevice?.type != DeviceType.omi,
+            geolocation: _sessionGeolocation,
+            recordingSessionId: activeRecordingId,
+          );
+          if (batched != _mobileBatchOwnsSocketAudio) {
+            _mobileBatchOwnsSocketAudio = batched;
+            final handle = _wedgeSession?.handle;
+            if (handle != null && handle >= 0) _wedgeMonitor.setTranscriptExpected(handle, !batched);
+          }
+          if (batched) return;
         }
 
         // Local safety copy. A connected socket proves only that send() accepted
@@ -2518,6 +2562,8 @@ class CaptureController extends ChangeNotifier
   }
 
   void clearUserData() {
+    _mobileStandardBatchAllowed = false;
+    _mobileStandardBatch?.authorize(false);
     _sourceCaptureRoot = null;
     segments = [];
     photos = [];
@@ -3105,6 +3151,8 @@ class CaptureController extends ChangeNotifier
 
   @override
   void onClosed([int? closeCode]) {
+    _mobileStandardBatchAllowed = false;
+    _mobileStandardBatch?.authorize(false);
     _keepAliveEpoch++;
     _socketCloseQueued = true;
     _transcriptServiceReady = false;
@@ -3570,6 +3618,11 @@ class CaptureController extends ChangeNotifier
     }
 
     if (event is MessageServiceStatusEvent) {
+      if (event.status == 'ready' || event.status == 'mobile_batch_admission') {
+        _mobileStandardBatchAllowed = event.mobileStandardBatch;
+        _mobileStandardBatch?.authorize(event.mobileStandardBatch);
+        if (event.status == 'mobile_batch_admission') return;
+      }
       // Handle freemium threshold event via status field
       if (event.status == 'freemium_threshold_reached') {
         // Parse as FreemiumThresholdReachedEvent for consistent handling

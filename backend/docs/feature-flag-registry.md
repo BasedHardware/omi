@@ -203,6 +203,9 @@ and an explicit empty literal renders as `''`.
 | `MEMORY_DAILY_MEMORY_SWEEP_MODEL_ENABLED` | Allow model calls during daily memory sweep | backend | env | closed | declared | true | false | — | pending | 2026-10-23 | unowned |
 | `MEMORY_DAILY_MEMORY_SWEEP_TIMEZONE_RECONCILIATION_ENABLED` | Reconcile sweep timezone selection | backend | env | closed | declared | true | false | — | pending | 2026-10-23 | unowned |
 | `MEMORY_OWNER_JEV_FLIP_ENABLED` | Switch memory owner decisions to Jev | backend | env | closed | — | true (backend-listen (chart), cloud_run/backend, cloud_run/backend-sync, gke/backend-listen, gke/pusher, pusher (chart)) | — | — | pending | 2026-10-23 | unowned |
+| `MOBILE_STANDARD_BATCH_ENABLED` | Authorize hidden mobile Standard pendant capture to batch via existing WAL sync | backend, mobile | env | closed | — | — | — | — | pending | 2026-11-14 | dazheng |
+| `MOBILE_STANDARD_BATCH_PERCENT` | Stable UID percentage for mobile Standard batch, default zero | backend | env | closed | — | — | — | — | pending | 2026-11-14 | dazheng |
+| `MOBILE_STANDARD_BATCH_UIDS` | Comma-separated UID allowlist for mobile Standard batch, default empty | backend | env | closed | — | — | — | — | pending | 2026-11-14 | dazheng |
 | `NOTES_TIER_ESCALATION_ENABLED` | Escalate shaped notes to xhigh effort for long meetings with at least five screen frames; enabled on the 1 percent episode cohort (2026-10-09) | backend | env | closed | — | — | true (backend-listen (chart), cloud_run/backend, cloud_run/backend-sync, cloud_run/backend-sync-backfill, gke/backend-listen, gke/pusher, pusher (chart)) | — | pending | 2026-11-08 | dazheng |
 | `OMI_IMESSAGE_CONTACT_CARD` | Default-off sharing of a preconfigured Linq contact card. | backend | env | closed | — | — | — | — | keep | 2026-11-09 | dazheng |
 | `OMI_IMESSAGE_ENABLED` | Default-off registration of the iMessage provider adapter. | backend | env | closed | — | — | {value: 'on', category: rollout} | — | keep | 2026-11-09 | dazheng |
@@ -245,11 +248,11 @@ and an explicit empty literal renders as `''`.
 | `SYNC_LINEAGE_S1_REQUIRED` | Require valid S1 upload claims before per-segment lineage binding (default gated) | backend | env | closed | {value: 'true', category: rollout} | {value: 'true', category: rollout} | {value: 'true', category: rollout} | — | pending | 2026-11-02 | dazheng |
 | `SYNC_SAFETY_WAL_DEDUPE_ENABLED` | Fleet server safety-WAL interval-confirmed coverage cuts and corroborated transcript dedupe | backend | env | open | {value: 'true', category: rollout} | {value: 'true', category: rollout} | {value: 'true', category: rollout} | — | pending | 2026-11-12 | dazheng |
 | `SYNC_WAL_AUDIO_COVERAGE_ENABLED` | Trim safety-WAL frames positively proven live-received by shared source-frame identity before VAD/STT (default on) | backend | env | open | true | true | true | — | pending | 2026-11-02 | dazheng |
-| `TRANSCRIPTION_FINAL_PASS_AUTHORITATIVE` | Revision-fenced speaker-only promotion preserving stored text | backend | env | closed | — | — | — | — | pending | 2026-11-12 | dazheng |
-| `TRANSCRIPTION_FINAL_PASS_PERCENT` | Shared diarization cohort percentage | backend | env | closed | — | — | — | — | pending | 2026-11-12 | dazheng |
-| `TRANSCRIPTION_FINAL_PASS_SYNC_ENABLED` | Shared diarization and centroid naming for sync and safety WAL | backend | env | closed | — | — | — | — | pending | 2026-11-12 | dazheng |
-| `TRANSCRIPTION_SHADOW_ENABLED` | Run the stored-audio Parakeet final pass in shadow | backend | env | closed | — | false (backend-listen (chart), cloud_run/backend-sync, gke/backend-listen); true (gke/pusher, pusher (chart)) | true (gke/pusher, pusher (chart)) | — | pending | 2026-10-26 | dazheng |
-| `TRANSCRIPTION_SHADOW_PERCENT` | Allocate UIDs to the Parakeet final-pass shadow | backend | env | closed | — | 0 (backend-listen (chart), cloud_run/backend-sync, gke/backend-listen, gke/pusher, pusher (chart)) | 0 (gke/pusher, pusher (chart)) | — | pending | 2026-10-26 | dazheng |
+| `TRANSCRIPTION_FINAL_PASS_AUTHORITATIVE` | Revision-fenced speaker-only promotion preserving stored text | backend | env | closed | — | — | false (cloud_run/backend, cloud_run/backend-sync, gke/pusher, pusher (chart)) | — | pending | 2026-11-12 | dazheng |
+| `TRANSCRIPTION_FINAL_PASS_PERCENT` | Shared diarization cohort percentage | backend | env | closed | — | — | 0 (cloud_run/backend, cloud_run/backend-sync, gke/pusher, pusher (chart)) | — | pending | 2026-11-12 | dazheng |
+| `TRANSCRIPTION_FINAL_PASS_SYNC_ENABLED` | Shared diarization and centroid naming for sync and safety WAL | backend | env | closed | — | — | false (cloud_run/backend, cloud_run/backend-sync, gke/pusher, pusher (chart)) | — | pending | 2026-11-12 | dazheng |
+| `TRANSCRIPTION_SHADOW_ENABLED` | Run the stored-audio Parakeet final pass in shadow | backend | env | closed | — | false (backend-listen (chart), cloud_run/backend-sync, gke/backend-listen); true (gke/pusher, pusher (chart)) | true (cloud_run/backend, cloud_run/backend-sync, gke/pusher, pusher (chart)) | — | pending | 2026-10-26 | dazheng |
+| `TRANSCRIPTION_SHADOW_PERCENT` | Allocate UIDs to the Parakeet final-pass shadow | backend | env | closed | — | 0 (backend-listen (chart), cloud_run/backend-sync, gke/backend-listen, gke/pusher, pusher (chart)) | 0 (cloud_run/backend, cloud_run/backend-sync, gke/pusher, pusher (chart)) | — | pending | 2026-10-26 | dazheng |
 | `TRANSLATION_DEMAND_LEASE_V1_ENABLED` | Accept lease-v1 demand semantics from opted-in clients | backend | env | closed | {value: 'true', category: rollout} | true (backend-listen (chart)); {value: 'true', category: rollout} (cloud_run/backend, gke/backend-listen) | true (backend-listen (chart)); {value: 'true', category: rollout} (cloud_run/backend, gke/backend-listen) | — | pending | 2026-10-29 | dazheng |
 | `TRANSLATION_DEMAND_SHADOW_ENABLED` | Measure would-be demand admission without changing translation behavior | backend | env | closed | {value: 'false', category: rollout} | false (backend-listen (chart)); {value: 'false', category: rollout} (cloud_run/backend, gke/backend-listen) | false (backend-listen (chart)); {value: 'false', category: rollout} (cloud_run/backend, gke/backend-listen) | — | pending | 2026-10-29 | dazheng |
 | `TRANSLATION_ONDEMAND_COHORT_PERCENT` | Percentage of eligible UIDs admitted to on-demand translation (100 = all eligible) | backend | env | closed | {value: '100', category: rollout} | 100 (backend-listen (chart)); {value: '100', category: rollout} (cloud_run/backend, gke/backend-listen) | 100 (backend-listen (chart)); {value: '100', category: rollout} (cloud_run/backend, gke/backend-listen) | — | pending | 2026-10-29 | dazheng |
@@ -318,7 +321,7 @@ and an explicit empty literal renders as `''`.
 | `SCREEN_TASK_STOP` | Stop screen-task gate and flagged extraction admission; default false; clients poll every 30 seconds with a 55-second lease | backend | env | inverted | — | — | — | — | keep | — | dazheng |
 | `SYNC_BACKFILL_ENABLED` | Emergency stop for accepting sync backfill | backend | env | open | true | true | true | — | keep | — | unowned |
 | `SYNC_BACKFILL_ROUTING_ENABLED` | Route eligible sync work to backfill lane | backend | env | closed | — | — | — | — | keep | — | unowned |
-| `TRANSCRIPTION_SHADOW_KILL_SWITCH` | Stop Parakeet final-pass shadow admission | backend | env | inverted | — | false (backend-listen (chart), cloud_run/backend-sync, gke/backend-listen, gke/pusher, pusher (chart)) | false (gke/pusher, pusher (chart)) | — | keep | — | dazheng |
+| `TRANSCRIPTION_SHADOW_KILL_SWITCH` | Stop Parakeet final-pass shadow admission | backend | env | inverted | — | false (backend-listen (chart), cloud_run/backend-sync, gke/backend-listen, gke/pusher, pusher (chart)) | false (cloud_run/backend, cloud_run/backend-sync, gke/pusher, pusher (chart)) | — | keep | — | dazheng |
 | `TRANSLATION_DEMAND_GATE_ENABLED` | Gate live translation on transcript-view demand (on-demand rollout; false restores legacy always-translate) | backend | env | closed | {value: 'true', category: rollout} | true (backend-listen (chart)); {value: 'true', category: rollout} (cloud_run/backend, gke/backend-listen) | true (backend-listen (chart)); {value: 'true', category: rollout} (cloud_run/backend, gke/backend-listen) | — | keep | — | dazheng |
 | `WAKE_WORD_ADJUDICATION_ENABLED` | Incident stop for wake-word adjudication | backend | env | open | true | true (backend-listen (chart), cloud_run/backend, gke/backend-listen) | true (backend-listen (chart), cloud_run/backend, gke/backend-listen) | — | keep | — | unowned |
 | `client_telemetry_posthog_retirement` | Kill switch that stops moved infrastructure telemetry on PostHog after parity; desktop_health_event and connection-balance events are structurally exempt | macos | posthog | inverted | — | — | — | absent (enable) | pending | — | dazheng |
@@ -384,8 +387,8 @@ and an explicit empty literal renders as `''`.
 | `SYNC_DISPATCH_MODE` | Select sync dispatch lane | backend | env | closed | — | — | — | — | keep | — | unowned |
 | `SYNC_LEDGER_FENCE_MODE` | Select sync ledger fence authority | backend | env | closed | env_var | env_var | env_var | — | keep | — | unowned |
 | `SYNC_PHASE_METRICS_EXPORT_ENABLED` | Export aggregate sync phase histograms through a bounded background flush; default off, enabled by reviewed deploy overlays | backend | env | closed | — | {value: 'true', category: telemetry} | {value: 'true', category: telemetry} | — | keep | — | dazheng |
-| `TRANSCRIPTION_FINAL_PASS_BACKEND` | Select pyannote, legacy AHC or contract-compatible Nemotron | backend | env | closed | — | — | — | — | keep | — | dazheng |
-| `TRANSCRIPTION_FINAL_PASS_DIARIZER` | Default-off shared final-pass diarization admission | backend | env | closed | — | — | — | — | keep | — | dazheng |
+| `TRANSCRIPTION_FINAL_PASS_BACKEND` | Select pyannote, legacy AHC or contract-compatible Nemotron | backend | env | closed | — | — | pyannote (cloud_run/backend, cloud_run/backend-sync, gke/pusher, pusher (chart)) | — | keep | — | dazheng |
+| `TRANSCRIPTION_FINAL_PASS_DIARIZER` | Default-off shared final-pass diarization admission | backend | env | closed | — | — | pyannote_shadow (cloud_run/backend, cloud_run/backend-sync, gke/pusher, pusher (chart)) | — | keep | — | dazheng |
 | `TYPESENSE_CONVERSATION_INDEX_WRITES` | Write conversations to Typesense index | backend | env | closed | — | — | — | — | keep | — | unowned |
 | `USE_VERTEX_AI` | Select Vertex AI model route | backend | env | closed | true | true (backend-listen (chart), cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, desktop-backend, gke/backend-listen) | true (backend-listen (chart), cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, desktop-backend, gke/backend-listen) | — | keep | — | unowned |
 | `VAD_GATE_MODE` | Select off, shadow, or active server VAD gate | backend, mobile | env | closed | — | active (backend-listen (chart)) | active (backend-listen (chart)) | — | keep | — | unowned |
@@ -438,6 +441,9 @@ their code default (`fail` tells you which way a missing value resolves).
 - `MEMORY_IMPORT_BODY_STORAGE_MODE` — Select memory import body storage mode (fail: closed)
 - `MEMORY_IMPORT_WRITE_BLOCK_MODE` — Block memory import writes during incident (fail: inverted)
 - `MEMORY_TYPESENSE_READINESS_REQUIRED` — Require Typesense projection readiness for memory reads (fail: closed)
+- `MOBILE_STANDARD_BATCH_ENABLED` — Authorize hidden mobile Standard pendant capture to batch via existing WAL sync (fail: closed)
+- `MOBILE_STANDARD_BATCH_PERCENT` — Stable UID percentage for mobile Standard batch, default zero (fail: closed)
+- `MOBILE_STANDARD_BATCH_UIDS` — Comma-separated UID allowlist for mobile Standard batch, default empty (fail: closed)
 - `OMI_GEMINI_OVERFLOW_ENABLED` — Enable overflow routing to Gemini (fail: open)
 - `OMI_IMESSAGE_CONTACT_CARD` — Default-off sharing of a preconfigured Linq contact card. (fail: closed)
 - `OMI_LLM_GATEWAY_OBSERVABILITY_LOGS_ENABLED` — Enable gateway observability logs (fail: closed)
@@ -465,11 +471,6 @@ their code default (`fail` tells you which way a missing value resolves).
 - `SYNC_BACKFILL_ROUTING_ENABLED` — Route eligible sync work to backfill lane (fail: closed)
 - `SYNC_DISPATCH_MODE` — Select sync dispatch lane (fail: closed)
 - `SYNC_LINEAGE_RESOLVE_ENABLED` — Bind each segment of a recording-id safety-WAL upload to the live rollover generation that owns its audio, and stamp live generations with their origin recording id (default on) (fail: open)
-- `TRANSCRIPTION_FINAL_PASS_AUTHORITATIVE` — Revision-fenced speaker-only promotion preserving stored text (fail: closed)
-- `TRANSCRIPTION_FINAL_PASS_BACKEND` — Select pyannote, legacy AHC or contract-compatible Nemotron (fail: closed)
-- `TRANSCRIPTION_FINAL_PASS_DIARIZER` — Default-off shared final-pass diarization admission (fail: closed)
-- `TRANSCRIPTION_FINAL_PASS_PERCENT` — Shared diarization cohort percentage (fail: closed)
-- `TRANSCRIPTION_FINAL_PASS_SYNC_ENABLED` — Shared diarization and centroid naming for sync and safety WAL (fail: closed)
 - `TRANSLATION_OUTPUT_GUARD_ENABLED` — Reject conservative same-language translation rewrites (fail: open)
 - `TRANSLATION_PROFILE_GATE_ENABLED` — Defer short out-of-profile translation guesses (fail: open)
 - `TYPESENSE_CONVERSATION_INDEX_WRITES` — Write conversations to Typesense index (fail: closed)

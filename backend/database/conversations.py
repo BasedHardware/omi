@@ -802,10 +802,16 @@ def is_visible_conversation(conversation: Optional[Mapping[str, Any]], *, includ
     """Whether a stored conversation may be put in front of a user or downstream job."""
     if not conversation:
         return False
-    if is_soft_deleted(conversation) or conversation.get('dream_duplicate_of'):
+    if is_soft_deleted(conversation):
         return False
     if not include_discarded:
-        if conversation.get('discarded') or is_completed_rule_discard(conversation):
+        # Dream duplicate captures are folded out of product reads, but the
+        # preserved recordings stay visible to export/compliance readers.
+        if (
+            conversation.get('dream_duplicate_of')
+            or conversation.get('discarded')
+            or is_completed_rule_discard(conversation)
+        ):
             return False
     return True
 
@@ -3815,13 +3821,12 @@ def get_closest_conversation_to_timestamps(uid: str, start_timestamp: int, end_t
     )
 
     conversations = [doc.to_dict() for doc in query.stream()]
-    logger.info(f'get_closest_conversation_to_timestamps len(conversations) {len(conversations)}')
+    logger.debug(f'get_closest_conversation_to_timestamps len(conversations) {len(conversations)}')
     if not conversations:
         return None
 
-    logger.info('get_closest_conversation_to_timestamps found:')
     for conversation in conversations:
-        logger.info(f"- {conversation['id']} {conversation['started_at']} {conversation['finished_at']}")
+        logger.debug("- %s %s %s", conversation['id'], conversation['started_at'], conversation['finished_at'])
 
     closest_conversation = select_closest_conversation(conversations, start_timestamp, end_timestamp)
     if closest_conversation is None:

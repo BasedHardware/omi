@@ -59,10 +59,9 @@ def count_hidden(
     per user are few; this avoids a composite index on every list-filter combo.
     """
     matching = 0
-    queries = (
-        collection.where(filter=FieldFilter('deleted', '==', True)),
-        collection.where(filter=FieldFilter('dream_duplicate_of', '>', '')),
-    )
+    queries = (collection.where(filter=FieldFilter('deleted', '==', True)),)
+    if not include_discarded:
+        queries += (collection.where(filter=FieldFilter('dream_duplicate_of', '>', '')),)
     for index, query in enumerate(queries):
         for doc in query.stream():
             data = doc.to_dict() or {}

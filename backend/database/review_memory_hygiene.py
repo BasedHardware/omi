@@ -14,6 +14,7 @@ from google.cloud import firestore
 from database import memory_apply_store, memory_review_apply, review_store as store
 from database.read_boundary import parse_payload_strict
 from database.legal_holds import DestructiveOperationInProgress, LegalHoldAuthorityUnavailable
+from models.agent_refs import base_ref
 from models.memory_apply import memory_content_hash, WriterAdmissionError
 from models.memory_evidence import MemoryEvidence, ArtifactPreservationState
 from models.memory_contracts import deterministic_contract_id
@@ -21,10 +22,14 @@ from models.product_memory import (
     MemoryItem,
     MemoryItemStatus,
     MemoryKind,
+    MemoryLayer,
     LedgerWriteReason,
+    default_short_term_expiry,
     normalized_memory_content_key,
 )
 from models.review import ReviewChange
+from config.memory_secret_patterns import SECRET_PATTERNS
+from database.dream_dirty import dream_writing
 
 
 def fact(uid, key, raw):
@@ -53,15 +58,100 @@ def commit_items(tx, uid, operation_id, items, **kwargs):
         raise store.ReviewConflict('Memory lifecycle authority changed or is unavailable') from exc
 
 
+def _conversation_refs(edit):
+    # Canonical conversation identities cited by this edit. base_ref strips
+    # segment citations (conversations/x#seg) down to the durable row id.
+    return sorted({base_ref(ref) for ref in edit.evidence if base_ref(ref).partition('/')[0] == 'conversations'})
+
+
+def _supersede_evidence(uid, edit, edit_key, change):
+    """One evidence object per cited conversation, in deterministic order.
+
+    Conversation deletion/reprocessing discovers affected rows through
+    MemoryItem.source_ids, which is computed from each evidence object's
+    source_id/conversation_id alone; quote_refs are display-only. Binding
+    every cited conversation keeps the new active fact inside its sources'
+    cohort, so deleting or reprocessing the conversation reaches this row.
+    """
+    cited = _conversation_refs(edit)
+    others = [ref for ref in edit.evidence if base_ref(ref).partition('/')[0] != 'conversations']
+    return [
+        MemoryEvidence(
+            evidence_id='ev_'
+            + deterministic_contract_id(
+                'dream-supersede-evidence', {'uid': uid, 'key': edit_key, 'conversation': conversation}
+            )[:32],
+            source_type='agent_conclusion',
+            source_id=change.change_id,
+            # Canonical evidence stores the bare conversation id: source-cohort
+            # discovery matches MemoryItem.source_ids with array_contains on the
+            # raw id, never the conversations/<id> ref.
+            conversation_id=conversation.partition('/')[2],
+            source_version='v1',
+            artifact_preservation=ArtifactPreservationState.not_applicable,
+            quote_refs=[
+                *[{'ref': ref} for ref in others if index == 0],
+                *[
+                    {'ref': ref}
+                    for ref in edit.evidence
+                    if base_ref(ref).partition('/')[0] == 'conversations' and base_ref(ref) == conversation
+                ],
+            ],
+        )
+        for index, conversation in enumerate(cited)
+    ]
+
+
+def _effective_from(edit, now):
+    # A replacement became true when its evidence says it did, not when Dream
+    # happened to run. Unstated or malformed times fall back to apply time;
+    # a time after `now` cannot be evidenced by already-captured speech.
+    raw = (getattr(edit, 'effective_from', '') or '').strip()
+    if not raw:
+        return now
+    try:
+        parsed = datetime.fromisoformat(raw.replace('Z', '+00:00'))
+        if parsed.tzinfo is None or parsed.utcoffset() is None:
+            return now
+    except (TypeError, ValueError):
+        return now
+    if parsed is None or parsed > now:
+        return now
+    return parsed
+
+
+def _replacement_sensitivity_labels(text, inherited):
+    """Conservative labels for free-form replacement content.
+
+    Never drop the predecessor's restricted labels, and screen the new text
+    with the shared ingestion secret patterns: an inherited-unrestricted label
+    set would otherwise clear newly secret-shaped content for vector delivery.
+    """
+    labels = set(inherited)
+    if any(pattern.regex.search(text or '') for pattern in SECRET_PATTERNS):
+        labels.add('credential')
+    return sorted(labels)
+
+
+def _background_pass():
+    # dream_writing is set only around the scheduled Dream effect loop; the
+    # user-accepted Review proposal path runs outside it.
+    return bool(dream_writing.get())
+
+
 def record_change(uid, change, edit, edit_key, *, expected_records=None):
     store.require_enabled()
     ref = store.user(uid).collection('review_changes').document(store.safe_id(change.change_id))
     marker = store.user(uid).collection('review_do_not_redo').document(store.safe_id(edit_key))
     target_id = edit.target.split('/', 1)[1]
     other_id = edit.other.split('/', 1)[1] if edit.other else None
+    # Validators treat a whitespace-only `after` as empty (exactly-one-of
+    # other/after); the apply path must make the same decision on the same
+    # normalized value or it will try to create a blank replacement tail.
+    replacement_text = edit.after.strip() if edit.after else ''
     new_id = (
         'mem_' + deterministic_contract_id('dream-memory-supersede', {'uid': uid, 'key': edit_key})[:32]
-        if edit.after
+        if replacement_text
         else None
     )
 
@@ -100,7 +190,7 @@ def record_change(uid, change, edit, edit_key, *, expected_records=None):
                 raise store.ReviewConflict('Replacement must be an active fact for the same subject and attribute')
             if (other.valid_from or other.captured_at) <= (target.valid_from or target.captured_at):
                 raise store.ReviewConflict('Replacement fact must be newer')
-        evidence = None
+        new_evidence: list = []
         if new_id:
             receipt = (
                 store.user(uid)
@@ -110,51 +200,62 @@ def record_change(uid, change, edit, edit_key, *, expected_records=None):
             )
             if before[new_id] is not None or receipt.exists:
                 raise store.ReviewConflict('Replacement identity unavailable')
-            evidence = MemoryEvidence(
-                evidence_id='ev_'
-                + deterministic_contract_id('dream-supersede-evidence', {'uid': uid, 'key': edit_key})[:32],
-                source_type='agent_conclusion',
-                source_id=change.change_id,
-                source_version='v1',
-                artifact_preservation=ArtifactPreservationState.not_applicable,
-                quote_refs=[{'ref': ev} for ev in edit.evidence],
-            )
-            evidence_ref = store.user(uid).collection('memory_evidence').document(evidence.evidence_id)
-            if evidence_ref.get(transaction=tx).exists:
-                raise store.ReviewConflict('Replacement evidence identity unavailable')
+            new_evidence = _supersede_evidence(uid, edit, edit_key, change)
+            for existing in new_evidence:
+                evidence_ref = store.user(uid).collection('memory_evidence').document(existing.evidence_id)
+                if evidence_ref.get(transaction=tx).exists:
+                    raise store.ReviewConflict('Replacement evidence identity unavailable')
             # Same ledger fields as an agent fact append; no inherited graph claims.
-            fresh = target.model_copy(
-                update={
-                    'memory_id': new_id,
-                    'content': edit.after,
-                    'evidence': [evidence, *target.evidence],
-                    'normalized_content_key': normalized_memory_content_key(edit.after),
-                    'content_hash': memory_content_hash(
-                        content=edit.after, evidence_ids=[ev.evidence_id for ev in [evidence, *target.evidence]]
-                    ),
-                    'captured_at': now,
-                    'updated_at': now,
-                    'valid_from': now,
-                    'valid_to': None,
-                    'version': 1,
-                    'item_revision': 1,
-                    'superseded_by': None,
-                    'canonical_memory_id': None,
-                    'user_asserted': False,
-                    'write_reason': LedgerWriteReason.agent_reusable_conclusion,
-                    'intent_backed': True,
-                    'body': None,
-                    'predicate': None,
-                    'arguments': {},
-                    'promotion': None,
-                    'graph_ready': False,
-                    'kg_extracted': False,
-                    'graph_assertion_id': None,
-                    'graph_plan_hash': None,
-                    'source_commit_id': None,
-                    'source_commit_sequence': None,
-                }
-            )
+            effective = _effective_from(edit, now)
+            replacement_fields = {
+                'memory_id': new_id,
+                'content': replacement_text,
+                'evidence': [*new_evidence, *target.evidence],
+                'normalized_content_key': normalized_memory_content_key(replacement_text),
+                'content_hash': memory_content_hash(
+                    content=replacement_text,
+                    evidence_ids=[ev.evidence_id for ev in [*new_evidence, *target.evidence]],
+                ),
+                'captured_at': now,
+                'updated_at': now,
+                'valid_from': effective,
+                'valid_to': None,
+                'version': 1,
+                'item_revision': 1,
+                'superseded_by': None,
+                'canonical_memory_id': None,
+                'user_asserted': False,
+                'write_reason': (
+                    # A tail written by the scheduled background pass is the
+                    # daily reconciliation channel (rank 300): the request-
+                    # serving agent-conclusion reason (rank 400) would outrank
+                    # the sweep's own later corrections. A user-accepted Review
+                    # proposal keeps the agent-conclusion reason.
+                    LedgerWriteReason.daily_reconciliation
+                    if _background_pass()
+                    else LedgerWriteReason.agent_reusable_conclusion
+                ),
+                'intent_backed': True,
+                'body': None,
+                'predicate': None,
+                'arguments': {},
+                'promotion': None,
+                'graph_ready': False,
+                'kg_extracted': False,
+                'graph_assertion_id': None,
+                'graph_plan_hash': None,
+                'source_commit_id': None,
+                'source_commit_sequence': None,
+                'sensitivity_labels': _replacement_sensitivity_labels(replacement_text, target.sensitivity_labels),
+            }
+            if target.tier == MemoryLayer.short_term:
+                # A fresh tail earns a fresh short-term window from its own
+                # capture time. Inheriting the predecessor's expires_at can
+                # invalidate the tail outright once that row is past its TTL
+                # (expires_at <= captured_at) and would otherwise only ever
+                # grant the old row's remaining lifetime.
+                replacement_fields['expires_at'] = default_short_term_expiry(now)
+            fresh = target.model_copy(update=replacement_fields)
             after[new_id] = fresh.model_dump(mode='python')
         after[target_id] = {
             **before[target_id],
@@ -174,7 +275,7 @@ def record_change(uid, change, edit, edit_key, *, expected_records=None):
             changed,
             source_generation=None,
             stamp=True,
-            new_evidence=evidence,
+            new_evidence=new_evidence or None,
         )
         for row in committed:
             key = row['memory_id']
@@ -240,15 +341,31 @@ def set_undone(uid, change_id, undone):
         changed = [fact(uid, key, raw) for key, raw in destination.items() if raw != rows[key]]
         if not changed:
             raise store.ReviewConflict('Memory reversal unavailable')
-        commit_items(
+        _, committed = commit_items(
             tx,
             uid,
             f"review:{change_id}:{data['revision'] + 1}:{undone}",
             changed,
             source_generation=journal['source_generation'],
+            # Restored rows must carry the reversal commit: the outbox events
+            # of this commit are stamped with it, and vector hydration rejects
+            # any hit whose projection commit differs from the authoritative
+            # row's ledger_commit_id. An unstamped restore would leave the
+            # row's events pointing at a commit the row never held, silently
+            # dropping it from vector-backed search.
+            stamp=True,
         )
+        for row in committed:
+            destination[row['memory_id']].update(
+                ledger_commit_id=row['ledger_commit_id'], ledger_sequence=row['ledger_sequence']
+            )
         if undone:
             journal['undone_rows'] = destination
+        else:
+            # Redo re-stamps the applied state with this reversal's commit;
+            # persist it so a later Undo fences against the real stored rows,
+            # not the original apply-time stamps.
+            journal['after'] = destination
         desired_graphs = journal['graphs'] if undone else journal['after_graphs']
         for key, graph in desired_graphs.items():
             graph_ref = store.user(uid).collection('memory_graph_assertions').document(key)

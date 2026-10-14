@@ -165,6 +165,10 @@ async def run_session(
             try:
                 for item in staged:
                     decision = dream_verify.disposition(support[item.id])
+                    auto_allowed = item.kind in automatic and not (
+                        isinstance(item.operation, HarnessEdit)
+                        and dream_tools.target_authority_protected(item.operation, item.records)
+                    )
                     decisions[decision] += 1
                     category = (
                         'questions'
@@ -175,16 +179,12 @@ async def run_session(
                         {
                             **item.operation.model_dump(mode='python'),
                             'key': item.key,
-                            'policy': 'auto' if decision == 'agree' and item.kind in automatic else 'suggest',
+                            'policy': 'auto' if decision == 'agree' and auto_allowed else 'suggest',
                         }
                     )
                     if decision == 'disagree':
                         report['outcomes'].append({'key': item.key, 'kind': item.kind, 'status': 'verifier_disagree'})
-                    elif (
-                        decision == 'agree'
-                        and item.kind in automatic
-                        and not isinstance(item.operation, HarnessQuestion)
-                    ):
+                    elif decision == 'agree' and auto_allowed and not isinstance(item.operation, HarnessQuestion):
                         try:
                             if isinstance(item.operation, HarnessEdit):
                                 status = await effect(

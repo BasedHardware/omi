@@ -19,7 +19,6 @@ from pydantic import ValidationError
 from google.cloud import firestore
 
 from database._client import db as default_db_client
-from database.memory_collections import MemoryCollections
 from jobs.short_term_lifecycle_worker import fetch_expiry_urgent_short_term_memory_items_firestore
 from models.product_memory import DEFAULT_SHORT_TERM_TTL
 from utils.executors import db_executor, run_blocking

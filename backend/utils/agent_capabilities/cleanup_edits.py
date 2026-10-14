@@ -138,6 +138,14 @@ def apply_cleanup(uid, edit, records, change, key, *, expected_records=None):
         and int(raw.get('account_generation', 0)) != get_task_workflow_control(uid).account_generation
     ):
         raise review_store.ReviewConflict('Cleanup task generation changed')
+    witnesses = {}
+    if edit.kind in {'merge_tasks', 'merge_conversations'} and edit.other:
+        other_ref = base_ref(edit.other)
+        other_collection, other_id = other_ref.split('/', 1)
+        # Use the staged witness, never replace it with an unverified reread.
+        if other_ref not in fences:
+            fences[other_ref] = review_store.user(uid).collection(other_collection).document(other_id).get().to_dict()
+        witnesses[other_ref] = fences[other_ref]
     now = datetime.now(timezone.utc)
     if edit.kind == 'dismiss_person':
         patch = {'is_dismissed': True, 'dismissed_at': now, 'updated_at': now}
@@ -151,7 +159,7 @@ def apply_cleanup(uid, edit, records, change, key, *, expected_records=None):
             'updated_at': now,
         }
     elif edit.kind == 'merge_conversations':
-        patch = {'dream_duplicate_of': edit.other.split('/', 1)[1]}
+        patch = {'dream_duplicate_of': edit.other.split('/', 1)[1], 'dream_duplicate': True}
     else:
         patch = {'language': edit.after}
     ref_types: dict[str, Literal['person', 'task', 'conversation']] = {
@@ -180,6 +188,7 @@ def apply_cleanup(uid, edit, records, change, key, *, expected_records=None):
         expected_documents={document_id: raw},
         expected_records=fences,
         exact_undo=True,
+        witness_records=witnesses,
     )
     return 'applied'
 

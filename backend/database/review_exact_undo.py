@@ -30,10 +30,10 @@ def restored_row(row, fields):
     return result
 
 
-def journal_fences(edits, rows, expected_records):
+def journal_fences(edits, rows, expected_records, witnesses=None):
     # The ordinary owned-field journal still performs reversal. Full-row hashes
     # ensure a later user edit cannot be touched by cleanup's Undo/Redo.
-    return {
+    journal: dict = {
         'reversal_fences': [
             {
                 'collection': edit.collection,
@@ -49,6 +49,11 @@ def journal_fences(edits, rows, expected_records):
             if path == 'task_intelligence_control/state'
         },
     }
+    if witnesses:
+        # Redo-only survivor fences for merges: the hidden target points at a
+        # survivor this edit never owned, so Redo must verify it is unchanged.
+        journal['witness_fences'] = {path: store.fingerprint(raw) for path, raw in witnesses.items() if raw is not None}
+    return journal
 
 
 def validate_generation(uid, tx, journal):

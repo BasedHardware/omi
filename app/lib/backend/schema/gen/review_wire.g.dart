@@ -559,6 +559,7 @@ class GeneratedAgentProposalItem {
   final GeneratedHarnessEdit? harnessEdit;
   final GeneratedMemoryHygieneEdit? memoryHygiene;
   final String? otherLabel;
+  final String? targetContent;
   final String targetLabel;
   final GeneratedTerm? vocabulary;
 
@@ -567,6 +568,7 @@ class GeneratedAgentProposalItem {
     this.harnessEdit,
     this.memoryHygiene,
     this.otherLabel,
+    this.targetContent,
     this.targetLabel = "",
     this.vocabulary,
   });
@@ -577,6 +579,7 @@ class GeneratedAgentProposalItem {
       harnessEdit: _readFieldValue<GeneratedHarnessEdit>(_readField(json, const ["harness_edit"]), "harness_edit", (value) => _readObject(value, GeneratedHarnessEdit.fromJson), requiredField: false, nullable: true),
       memoryHygiene: _readFieldValue<GeneratedMemoryHygieneEdit>(_readField(json, const ["memory_hygiene"]), "memory_hygiene", (value) => _readObject(value, GeneratedMemoryHygieneEdit.fromJson), requiredField: false, nullable: true),
       otherLabel: _readFieldValue<String>(_readField(json, const ["other_label"]), "other_label", _readString, requiredField: false, nullable: true),
+      targetContent: _readFieldValue<String>(_readField(json, const ["target_content"]), "target_content", _readString, requiredField: false, nullable: true),
       targetLabel: _required(_readFieldValue<String>(_readField(json, const ["target_label"]), "target_label", _readString, requiredField: false, nullable: false, defaultValue: ""), "target_label"),
       vocabulary: _readFieldValue<GeneratedTerm>(_readField(json, const ["vocabulary"]), "vocabulary", (value) => _readObject(value, GeneratedTerm.fromJson), requiredField: false, nullable: true),
     );
@@ -588,6 +591,7 @@ class GeneratedAgentProposalItem {
       'harness_edit': harnessEdit?.toJson(),
       'memory_hygiene': memoryHygiene?.toJson(),
       'other_label': otherLabel,
+      'target_content': targetContent,
       'target_label': targetLabel,
       'vocabulary': vocabulary?.toJson(),
     };

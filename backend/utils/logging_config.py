@@ -12,6 +12,7 @@ while preserving the default ``levelname:name:message`` format.
 """
 
 import logging
+import os
 import sys
 from typing import Optional, TextIO
 
@@ -33,11 +34,44 @@ class SuccessfulHealthAccessFilter(logging.Filter):
         return not (method in ('GET', 'HEAD') and path in ('/v1/health', '/health', '/ready') and status == 200)
 
 
+class CloudRunAccessFilter(logging.Filter):
+    """Drop every Uvicorn access record on Cloud Run.
+
+    Cloud Run already writes one ``run.googleapis.com/requests`` entry per
+    request, with status, latency and URL, so the stdout access line is a
+    duplicate. GKE services (listen, pusher) have no such platform log and keep
+    their access lines.
+    """
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        return record.name != 'uvicorn.access'
+
+
+def running_on_cloud_run() -> bool:
+    return bool(os.environ.get('K_SERVICE', '').strip())
+
+
 def configure_health_access_logging() -> None:
     """Install once on the emitting logger, independent of its handlers."""
     logger = logging.getLogger('uvicorn.access')
     if not any(isinstance(item, SuccessfulHealthAccessFilter) for item in logger.filters):
         logger.addFilter(SuccessfulHealthAccessFilter())
+    if running_on_cloud_run() and not any(isinstance(item, CloudRunAccessFilter) for item in logger.filters):
+        logger.addFilter(CloudRunAccessFilter())
+
+
+# Outbound HTTP client libraries log one INFO line per request. The lines are
+# the bulk of listen stderr (the batch-metrics poll) and backfill stderr, and
+# httpx prints the full URL, including signed GCS query strings. Warnings and
+# errors from these loggers still pass.
+NOISY_HTTP_CLIENT_LOGGERS = ('httpx', 'httpcore', 'google.resumable_media')
+
+
+def quiet_http_client_loggers() -> None:
+    for name in NOISY_HTTP_CLIENT_LOGGERS:
+        logger = logging.getLogger(name)
+        if logger.level == logging.NOTSET or logger.level < logging.WARNING:
+            logger.setLevel(logging.WARNING)
 
 
 class _MaxLevelFilter(logging.Filter):
@@ -67,6 +101,7 @@ def configure_split_stream_logging(
     err_stream = stderr if stderr is not None else sys.stderr
 
     configure_health_access_logging()
+    quiet_http_client_loggers()
 
     root = logging.getLogger()
     root.setLevel(level)

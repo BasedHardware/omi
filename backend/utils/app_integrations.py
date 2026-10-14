@@ -416,7 +416,7 @@ async def trigger_realtime_integrations(
     *,
     client_kind: ClientKind = 'unknown',
 ):
-    logger.info(f"trigger_realtime_integrations {uid}")
+    logger.debug(f"trigger_realtime_integrations {uid}")
     """REALTIME STREAMING"""
     return await _async_trigger_realtime_integrations(
         uid,
@@ -428,7 +428,7 @@ async def trigger_realtime_integrations(
 
 
 async def trigger_realtime_audio_bytes(uid: str, sample_rate: int, data: bytearray):
-    logger.info(f"trigger_realtime_audio_bytes {uid}")
+    logger.debug(f"trigger_realtime_audio_bytes {uid}")
     """REALTIME AUDIO STREAMING"""
     return await _async_trigger_realtime_audio_bytes(uid, sample_rate, data)
 

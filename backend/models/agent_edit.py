@@ -51,6 +51,9 @@ class HarnessEdit(Strict):
             'Empty for retirement, dismissal and task/conversation/person merges: preserve the survivor.'
         ),
     )
+    effective_from: str = Field(
+        default='', max_length=40, description=MemoryHygieneEdit.model_fields['effective_from'].description
+    )
     reason: str = Field(min_length=1, max_length=1000, description='Explain the defect and cited evidence.')
     evidence: list[str] = Field(
         min_length=1,
@@ -67,7 +70,13 @@ class HarnessEdit(Strict):
     def semantics(self):
         if not self.reason.strip():
             raise ValueError('An edit requires a nonblank reason')
+        if self.kind in {'retire_memory', 'supersede_memory'}:
+            self.after = self.after.strip()
+        elif self.effective_from:
+            raise ValueError('Only memory supersession may carry effective_from')
         payload = self.model_dump(exclude={'value', 'why_it_matters'})
+        if self.kind not in {'retire_memory', 'supersede_memory'}:
+            payload.pop('effective_from', None)
         if self.kind in {'retire_memory', 'supersede_memory'}:
             MemoryHygieneEdit.model_validate(payload)
         elif self.kind in {'merge_tasks', 'merge_conversations'}:

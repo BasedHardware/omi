@@ -453,12 +453,26 @@ def apply_edit(uid, edit, records, *, expected_records=None, authority='user'):
     return 'applied'
 
 
+def target_authority_protected(edit, records):
+    """Autonomous cleanup cannot silently close owner-authored facts."""
+    if edit.kind not in {'merge_memories', 'retire_memory', 'supersede_memory'}:
+        return False
+    return any(
+        str((records.get(base_ref(ref)) or {}).get('write_reason') or '')
+        in {'direct_user_statement', 'explicit_remember', 'onboarding'}
+        for ref in (edit.target, edit.other)
+        if ref
+    )
+
+
 def apply_verified_edit(uid, edit, records, *, expected_records, authority):
     """The harness alone selects this boundary after independent verification.
 
     User acceptance retains apply_edit. Verification never relaxes schema,
     current evidence, source/account fences, or durable Undo suppression.
     """
+    if authority == 'dream' and target_authority_protected(edit, records):
+        raise ValueError('agent_user_memory_requires_review')
     validate_edit(edit, records, authority=authority)
     refs = {base_ref(ref) for ref in [edit.target, *edit.evidence, *([edit.other] if edit.other else [])]}
     sources = EvidenceRecords({ref: records[ref] for ref in refs})
@@ -624,23 +638,23 @@ def suggest_edit(uid, edit, records, *, run_id=None):
         raise review_store.ReviewConflict('Dream task generation changed')
     target_label = proposal_label(records[base_ref(edit.target)])
     other_label = proposal_label(records[base_ref(edit.other)]) if edit.other else None
-    proposal = (
-        AgentProposalItem(harness_edit=edit, target_label=target_label, other_label=other_label)
-        if isinstance(edit, HarnessEdit)
-        else (
-            AgentProposalItem(
-                memory_hygiene=MemoryHygieneEdit.model_validate(edit.model_dump(exclude={'value'})),
-                target_label=target_label,
-                other_label=other_label,
-            )
-            if edit.kind in {'retire_memory', 'supersede_memory'}
-            else AgentProposalItem(
-                edit=Edit.model_validate(edit.model_dump(exclude={'value'})),
-                target_label=target_label,
-                other_label=other_label,
-            )
+    contents = {}
+    if edit.kind in {'retire_memory', 'supersede_memory'}:
+        contents = {
+            'target_content': str(records[base_ref(edit.target)].get('content') or ''),
+            'other_content': str(records[base_ref(edit.other)].get('content') or '') if edit.other else None,
+        }
+    labels = {'target_label': target_label, 'other_label': other_label, **contents}
+    if isinstance(edit, HarnessEdit):
+        proposal = AgentProposalItem(harness_edit=edit, **labels)
+    elif edit.kind in {'retire_memory', 'supersede_memory'}:
+        proposal = AgentProposalItem(
+            memory_hygiene=MemoryHygieneEdit.model_validate(edit.model_dump(exclude={'value'})), **labels
         )
-    )
+    else:
+        proposal = AgentProposalItem(
+            edit=Edit.model_validate(edit.model_dump(exclude={'value', 'effective_from'})), **labels
+        )
     item = ReviewItemV2(
         item_id='agent_proposal:' + review_store.safe_id(key),
         kind='agent_proposal',

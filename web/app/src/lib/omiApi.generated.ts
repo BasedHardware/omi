@@ -199,6 +199,7 @@ export interface AgentProposalItem {
   harness_edit?: HarnessEdit | null;
   memory_hygiene?: MemoryHygieneEdit | null;
   other_label?: string | null;
+  target_content?: string | null;
   target_label?: string;
   vocabulary?: Term | null;
 }
