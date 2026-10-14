@@ -180,7 +180,13 @@ def _install_runtime_fakes(monkeypatch, runtime, stt_sockets, blocking_calls):
 @pytest.fixture
 def runtime_session():
     websocket = _FakeWebSocket(audio=_AUDIO)
-    return ListenSessionRuntime(ListenRequest(websocket=websocket, uid=_PRINCIPAL, codec='pcm16', sample_rate=16000))
+    runtime = ListenSessionRuntime(ListenRequest(websocket=websocket, uid=_PRINCIPAL, codec='pcm16', sample_rate=16000))
+    # Clear the cold router-import graph in setup, rather than charging its first
+    # automatic collection to the async capture lifecycle under test.
+    import gc
+
+    gc.collect()
+    return runtime
 
 
 @pytest.fixture

@@ -187,6 +187,12 @@ final class StorefrontPlansRenderTests: XCTestCase {
     .frame(width: width)
     .background(Color(nsColor: .windowBackgroundColor))
     .environment(\.colorScheme, .dark)
+    .shellConfirmation(
+      isPresented: .constant(name == "plus_yearly_confirmation"),
+      title: data.tiers.first(where: \.isCurrent)?.prices.first?.ctaLabel ?? "Plans",
+      message: data.tiers.first(where: \.isCurrent)?.prices.first?.confirmLines.joined(separator: "\n") ?? "",
+      confirmTitle: data.tiers.first(where: \.isCurrent)?.prices.first?.ctaLabel ?? "Switch to yearly",
+      isDestructive: false, onConfirm: {})
 
     var png: Data?
     let dark = try XCTUnwrap(NSAppearance(named: .darkAqua))
@@ -205,6 +211,7 @@ final class StorefrontPlansRenderTests: XCTestCase {
   }
 
   func testRendersReviewStates() throws {
+    try render(try PlanStorefrontTests.golden("plus_monthly_yearly_toggle"), name: "plus_yearly_confirmation")
     for name in [
       "free_settings", "plus_monthly_yearly_toggle", "pro_budget_cap", "cancel_scheduled_plus", "legacy_neo",
       "free_budget80", "pro_budget80",

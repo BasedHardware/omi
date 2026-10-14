@@ -35,6 +35,13 @@
       "description": "SwiftUI ImageRenderer of Pro 80% with Architect absent",
       "captured_by": "agent",
       "source": "visual-audit"
+    },
+    {
+      "file": "006-desktop-macos-yearly-confirmation.png",
+      "platform": "desktop-macos",
+      "description": "Shared shell confirmation over actual SwiftUI plans view using backend annual lines and CTA",
+      "captured_by": "agent",
+      "source": "visual-audit"
     }
   ]
 }

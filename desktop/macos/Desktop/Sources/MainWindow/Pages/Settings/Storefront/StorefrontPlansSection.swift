@@ -20,6 +20,7 @@ struct StorefrontPlansSection: View {
   @State private var failed = false
   @State private var reported = false
   @State private var confirmation: Selection?
+  @State private var showsConfirmation = false
 
   private struct Selection: Identifiable {
     let tier: PlanStorefront.Tier
@@ -39,18 +40,24 @@ struct StorefrontPlansSection: View {
           onPurchase(tier, price)
         } else {
           confirmation = Selection(tier: tier, price: price)
+          showsConfirmation = true
         }
       },
       onManage: onManage
     )
-    .alert(item: $confirmation) { selection in
-      Alert(
-        title: Text(selection.price.ctaLabel ?? selection.tier.ctaLabel ?? "Plans"),
-        message: Text(selection.price.confirmLines.joined(separator: "\n")),
-        primaryButton: .default(Text(selection.price.ctaLabel ?? "Switch to yearly")) {
-          onPurchase(selection.tier, selection.price)
-        }, secondaryButton: .cancel())
-    }
+    .shellConfirmation(
+      isPresented: $showsConfirmation,
+      title: confirmation?.price.ctaLabel ?? confirmation?.tier.ctaLabel ?? "Plans",
+      message: confirmation?.price.confirmLines.joined(separator: "\n") ?? "",
+      confirmTitle: confirmation?.price.ctaLabel ?? "Switch to yearly",
+      isDestructive: false,
+      onCancel: { confirmation = nil },
+      onConfirm: {
+        guard let selection = confirmation else { return }
+        confirmation = nil
+        onPurchase(selection.tier, selection.price)
+      }
+    )
     .task(id: reloadKey) {
       // The first render of a contextual sheet already has its payload.
       if initial != nil && data == nil && !reported {
