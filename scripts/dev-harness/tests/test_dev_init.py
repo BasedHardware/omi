@@ -349,10 +349,10 @@ def test_dev_init_bootstraps_the_venv_with_a_floor_qualified_interpreter(
 def test_dev_init_refuses_to_install_outside_the_venv(tmp_path: Path) -> None:
     """The requirements install must never run outside backend/.venv.
 
-    When the resolver's final pick is not the repo venv (here: an explicit
-    PYTHON override, the same seam the resolver documents), dev-init must
-    refuse with lane-bootstrap guidance instead of pip-installing into a
-    global/foreign interpreter (Oracle follow-up on the Codex P1).
+    dev-init binds the install to this repo's venv python; if that interpreter
+    has been replaced by (or symlinked to) a foreign one, the sys.prefix
+    membership check must refuse with lane-bootstrap guidance instead of
+    pip-installing elsewhere (Oracle follow-up on the Codex P1).
     """
     repo = _fixture_repo(tmp_path)
     log = tmp_path / "refusal-calls.log"
@@ -366,9 +366,12 @@ def test_dev_init_refuses_to_install_outside_the_venv(tmp_path: Path) -> None:
         encoding="utf-8",
     )
     foreign.chmod(foreign.stat().st_mode | stat.S_IXUSR)
+    # Replace the repo venv python with a link to the foreign interpreter: the
+    # exact spoofing shape the sys.prefix check exists for.
+    (repo / "backend/.venv/bin/python").unlink()
+    (repo / "backend/.venv/bin/python").symlink_to(foreign)
 
     env = _clean_env()
-    env["PYTHON"] = str(foreign)
     result = subprocess.run(
         [_bash(), "scripts/dev-harness/dev-init.sh"],
         cwd=repo,
@@ -381,19 +384,18 @@ def test_dev_init_refuses_to_install_outside_the_venv(tmp_path: Path) -> None:
     )
 
     assert result.returncode == 1, result.stdout
-    assert "refusing to install requirements outside the venv" in result.stdout, result.stdout
+    assert "does not belong to this repo's backend/.venv" in result.stdout, result.stdout
     assert "make lane-bootstrap" in result.stdout, result.stdout
     calls = log.read_text(encoding="utf-8").splitlines() if log.exists() else []
     assert not any(line.startswith("FOREIGN -m pip") for line in calls), calls
 
 
 def test_dev_init_refuses_a_foreign_checkout_venv_override(tmp_path: Path) -> None:
-    """Another repo's backend/.venv must not pass the venv guard.
+    """A symlinked repo venv python pointing at another checkout must fail.
 
-    The guard compares the resolved interpreter's physical path against THIS
-    repo's canonical venv, so a PYTHON override whose path merely contains
-    `backend/.venv` cannot pip-install this repo's requirements elsewhere
-    (Oracle follow-up: substring match bypass).
+    The membership check compares sys.prefix against THIS repo's venv realpath,
+    so a backend/.venv/bin/python that resolves into a foreign checkout's venv
+    (different prefix) cannot pip-install this repo's requirements there.
     """
     repo = _fixture_repo(tmp_path)
     log = tmp_path / "foreign-venv-calls.log"
@@ -402,14 +404,21 @@ def test_dev_init_refuses_a_foreign_checkout_venv_override(tmp_path: Path) -> No
     foreign = other / "backend/.venv/bin/python"
     foreign.write_text(
         "#!/usr/bin/env bash\n"
+        f'LOG="{log}"\n'
+        'if [ "${1:-}" = "-c" ] && [ "${2:-}" = "import sys; print(sys.prefix)" ]; then\n'
+        '  d="$(cd "$(dirname "$0")/../.." && pwd -P)"\n'
+        '  printf \'%s\\n\' "$d"\n'
+        '  exit 0\n'
+        "fi\n"
         f'printf \'FOREIGNVENV %s\\n\' "$*" >> "{log}"\n'
         "exit 0\n",
         encoding="utf-8",
     )
     foreign.chmod(foreign.stat().st_mode | stat.S_IXUSR)
+    (repo / "backend/.venv/bin/python").unlink()
+    (repo / "backend/.venv/bin/python").symlink_to(foreign)
 
     env = _clean_env()
-    env["PYTHON"] = str(foreign)
     result = subprocess.run(
         [_bash(), "scripts/dev-harness/dev-init.sh"],
         cwd=repo,
@@ -422,6 +431,6 @@ def test_dev_init_refuses_a_foreign_checkout_venv_override(tmp_path: Path) -> No
     )
 
     assert result.returncode == 1, result.stdout
-    assert "refusing to install requirements outside the venv" in result.stdout, result.stdout
+    assert "does not belong to this repo's backend/.venv" in result.stdout, result.stdout
     calls = log.read_text(encoding="utf-8").splitlines() if log.exists() else []
     assert not any(line.startswith("FOREIGNVENV -m pip") for line in calls), calls
