@@ -55,10 +55,12 @@ void main() {
         return {'onboarding_paywall': true};
       }
 
-      final first = await PaywallExperiment.resolve(readVariant: readVariant, readPayload: readPayload);
+      final first =
+          await PaywallExperiment.resolve(identity: () => 'u', readVariant: readVariant, readPayload: readPayload);
       expect(first.variant, PaywallVariant.outline);
       expect(first.onboardingPaywall, isTrue);
       final second = await PaywallExperiment.resolve(
+        identity: () => 'u',
         readVariant: (_) async => 'web',
         readPayload: (_) async => {'url': 'https://x.example'},
       );
@@ -70,6 +72,7 @@ void main() {
     test('control skips the payload read', () async {
       var payloadReads = 0;
       final config = await PaywallExperiment.resolve(
+        identity: () => 'u',
         readVariant: (_) async => 'control',
         readPayload: (_) async {
           payloadReads++;
@@ -81,25 +84,95 @@ void main() {
     });
 
     test('an unresolved read is control but not cached', () async {
-      final unresolved = await PaywallExperiment.resolve(readVariant: (_) async => null);
+      final unresolved = await PaywallExperiment.resolve(identity: () => 'u', readVariant: (_) async => null);
       expect(unresolved, PaywallExperimentConfig.control);
-      final later =
-          await PaywallExperiment.resolve(readVariant: (_) async => 'outline', readPayload: (_) async => null);
+      final later = await PaywallExperiment.resolve(
+        identity: () => 'u',
+        readVariant: (_) async => 'outline',
+        readPayload: (_) async => null,
+      );
       expect(later.variant, PaywallVariant.outline);
     });
 
     test('a flag read error is control (fail closed)', () async {
-      final config = await PaywallExperiment.resolve(readVariant: (_) => Future.error(StateError('no sdk')));
+      final config = await PaywallExperiment.resolve(
+        identity: () => 'u',
+        readVariant: (_) => Future.error(StateError('no sdk')),
+      );
       expect(config, PaywallExperimentConfig.control);
+    });
+  });
+
+  group('identity', () {
+    test('the held arm belongs to one identity; another identity reads again', () async {
+      final a = await PaywallExperiment.resolve(
+        identity: () => 'user-a',
+        readVariant: (_) async => 'outline',
+        readPayload: (_) async => null,
+      );
+      expect(a.variant, PaywallVariant.outline);
+      final b = await PaywallExperiment.resolve(
+        identity: () => 'user-b',
+        readVariant: (_) async => 'web',
+        readPayload: (_) async => {'url': 'https://x.example'},
+      );
+      expect(b.variant, PaywallVariant.web, reason: 'user-b must not inherit user-a\'s arm');
+      var reads = 0;
+      final aAgain = await PaywallExperiment.resolve(
+        identity: () => 'user-a',
+        readVariant: (_) async {
+          reads++;
+          return 'control';
+        },
+      );
+      expect(aAgain, PaywallExperimentConfig.control);
+      expect(reads, 1, reason: 'the hold was replaced by user-b, so user-a reads again');
+    });
+
+    test('an account switch while the reads are in flight yields control and holds nothing', () async {
+      // Asked once before the reads (user-a) and once after (user-b, the account switched).
+      final identities = ['user-a', 'user-b'];
+      final switched = await PaywallExperiment.resolve(
+        identity: () => identities.length > 1 ? identities.removeAt(0) : identities.first,
+        readVariant: (_) async => 'outline',
+        readPayload: (_) async => null,
+      );
+      expect(switched, PaywallExperimentConfig.control);
+      var reads = 0;
+      await PaywallExperiment.resolve(
+        identity: () => 'user-b',
+        readVariant: (_) async {
+          reads++;
+          return 'control';
+        },
+      );
+      expect(reads, 1, reason: 'nothing was held for user-b');
+    });
+
+    test('no identity yet means control and no read', () async {
+      var reads = 0;
+      final config = await PaywallExperiment.resolve(
+        identity: () => null,
+        readVariant: (_) async {
+          reads++;
+          return 'outline';
+        },
+      );
+      expect(config, PaywallExperimentConfig.control);
+      expect(reads, 0);
     });
   });
 
   test('exposure records the flag key and the arm', () {
     final recorded = <String>[];
-    PaywallExperiment.recordExposure(
+    final sent = PaywallExperiment.recordExposure(
       const PaywallExperimentConfig(variant: PaywallVariant.outline),
-      record: (key, variant) => recorded.add('$key=$variant'),
+      record: (key, variant) {
+        recorded.add('$key=$variant');
+        return true;
+      },
     );
+    expect(sent, isTrue);
     expect(recorded, ['paywall-variant=outline']);
   });
 

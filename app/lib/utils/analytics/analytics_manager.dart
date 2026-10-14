@@ -574,16 +574,19 @@ class AnalyticsManager {
   /// The multivariate arm for [key]; null when the flag is off, not multivariate, or unresolved.
   Future<String?> getFeatureFlagVariant(String key) => _readFlag<String?>((a) => a.getFeatureFlagVariant(key));
 
+  String? get settledDistinctId => _settledDistinctId; // null until an identity settles
+
   final Set<String> _recordedFlagExposures = {};
 
-  /// Records an experiment exposure the way PostHog Experiments attribute metrics
-  /// (`$feature_flag_called`), once per arm per process. The SDK's own exposure events are off
-  /// (`sendFeatureFlagEvents = false`), so only experiment flags emit one. Also registers
-  /// `$feature/<key>` so every later event can be broken down by arm.
-  void recordFeatureFlagExposure(String key, String variant) {
-    if (!_recordedFlagExposures.add('$key:$variant')) return;
+  /// PostHog Experiments exposure (`$feature_flag_called`), once per identity, flag and arm (the
+  /// SDK's own exposure events are off); also registers `$feature/<key>`. False when nothing was sent.
+  bool recordFeatureFlagExposure(String key, String variant) {
+    final identity = _settledDistinctId;
+    if (identity == null || !_trackingEnabled) return false;
+    if (!_recordedFlagExposures.add('$identity:$key:$variant')) return false;
     _adapter?.registerSuperProperties({'\$feature/$key': variant});
     track(r'$feature_flag_called', properties: {r'$feature_flag': key, r'$feature_flag_response': variant});
+    return true;
   }
 
   void track(String eventName, {Map<String, dynamic>? properties}) =>

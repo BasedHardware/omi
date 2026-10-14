@@ -219,4 +219,21 @@ void main() {
 
     expect(await read, isFalse);
   });
+
+  test('an experiment exposure is sent once per identity and arm, and again for a new identity', () async {
+    final adapter = _FlagAdapter();
+    AnalyticsManager.configure(adapter);
+    await AnalyticsManager.init();
+    expect(AnalyticsManager().recordFeatureFlagExposure('paywall-variant', 'control'), isFalse,
+        reason: 'nothing to attribute to before an identity settles');
+
+    await settleIdentity(adapter, 'user-a');
+    expect(AnalyticsManager().recordFeatureFlagExposure('paywall-variant', 'control'), isTrue);
+    expect(AnalyticsManager().recordFeatureFlagExposure('paywall-variant', 'control'), isFalse);
+    expect(AnalyticsManager().recordFeatureFlagExposure('paywall-variant', 'outline'), isTrue);
+
+    await settleIdentity(adapter, 'user-b');
+    expect(AnalyticsManager().recordFeatureFlagExposure('paywall-variant', 'control'), isTrue,
+        reason: 'a different account is exposed in its own right');
+  });
 }

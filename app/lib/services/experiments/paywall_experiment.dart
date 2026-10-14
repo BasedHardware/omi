@@ -28,8 +28,9 @@ enum PaywallVariant {
   }
 }
 
-/// The resolved arm plus its payload. Immutable for the session so a reader never flips between
-/// paywalls mid-session; PostHog's experience continuity keeps the arm stable across sessions.
+/// The resolved arm plus its payload. Held for the analytics identity it was read for, so a reader
+/// never flips between paywalls mid-session and an account switch never inherits another
+/// account's arm; PostHog's experience continuity keeps the arm stable across sessions.
 @immutable
 class PaywallExperimentConfig {
   const PaywallExperimentConfig({required this.variant, this.webUrl, this.onboardingPaywall = false});
@@ -64,8 +65,9 @@ class PaywallExperimentConfig {
 /// Client gate for the mobile paywall A/B test.
 ///
 /// Evaluated from the PostHog multivariate flag `paywall-variant` (project 302298). Fail-closed:
-/// no analytics identity, a slow read, an unknown variant or a malformed payload all mean
-/// [PaywallVariant.control], and the app behaves exactly as it did before the experiment.
+/// no analytics identity, a slow read, an unknown variant, a malformed payload or an account
+/// switch while reading all mean [PaywallVariant.control], and the app behaves exactly as it did
+/// before the experiment.
 ///
 /// Payload per variant (JSON object):
 /// `{"url": "https://…", "onboarding_paywall": true}` — `url` is required for `web` and must be
@@ -84,7 +86,8 @@ abstract final class PaywallExperiment {
 
   static bool get debugOverrideActive => kDebugMode && _debugVariant.isNotEmpty;
 
-  static PaywallExperimentConfig? _session;
+  static PaywallExperimentConfig? _cached;
+  static String? _cachedIdentity;
 
   /// Parses one flag read into a config. Anything unexpected collapses to control.
   static PaywallExperimentConfig parse({String? variant, Object? payload}) {
@@ -115,11 +118,14 @@ abstract final class PaywallExperiment {
     }
   }
 
-  /// The arm for this session. [readVariant] and [readPayload] default to the analytics manager's
-  /// flag reads and are injectable for tests. The first non-null read is cached for the process.
+  /// The arm for the current analytics identity. [readVariant], [readPayload] and [identity]
+  /// default to the analytics manager and are injectable for tests. The first resolved read is
+  /// held for that identity; a different identity reads again, and an identity that changes while
+  /// the reads are in flight yields control without being held.
   static Future<PaywallExperimentConfig> resolve({
     Future<String?> Function(String key)? readVariant,
     Future<Object?> Function(String key)? readPayload,
+    String? Function()? identity,
     bool refresh = false,
   }) async {
     if (debugOverrideActive) {
@@ -128,16 +134,21 @@ abstract final class PaywallExperiment {
         payload: {'url': _debugWebUrl.isEmpty ? defaultWebUrl : _debugWebUrl, 'onboarding_paywall': true},
       );
     }
-    final cached = _session;
-    if (cached != null && !refresh) return cached;
+    final whoAmI = identity ?? () => AnalyticsManager().settledDistinctId;
+    final who = whoAmI();
+    if (who == null) return PaywallExperimentConfig.control; // nobody to assign yet: try again later
+    final cached = _cached;
+    if (cached != null && _cachedIdentity == who && !refresh) return cached;
     try {
       final variant = await (readVariant ?? AnalyticsManager().getFeatureFlagVariant)(enabledFlag);
       if (variant == null) return PaywallExperimentConfig.control; // unresolved: try again next time
       final payload = variant == PaywallVariant.control.wireName
           ? null
           : await (readPayload ?? AnalyticsManager().getFeatureFlagPayload)(enabledFlag);
+      if (whoAmI() != who) return PaywallExperimentConfig.control; // account switched mid-read
       final config = parse(variant: variant, payload: payload);
-      _session = config;
+      _cached = config;
+      _cachedIdentity = who;
       return config;
     } catch (_) {
       return PaywallExperimentConfig.control;
@@ -145,13 +156,14 @@ abstract final class PaywallExperiment {
   }
 
   /// Records the exposure PostHog Experiments attribute metrics to (`$feature_flag_called`), once
-  /// per arm per process, and tags every later event with `$feature/paywall-variant`.
-  static void recordExposure(PaywallExperimentConfig config, {void Function(String key, String variant)? record}) {
-    (record ?? AnalyticsManager().recordFeatureFlagExposure)(enabledFlag, config.variant.wireName);
-  }
+  /// per identity and arm, and tags every later event with `$feature/paywall-variant`. Control
+  /// counts too: it is the experiment's denominator. True when an exposure was sent.
+  static bool recordExposure(PaywallExperimentConfig config, {bool Function(String key, String variant)? record}) =>
+      (record ?? AnalyticsManager().recordFeatureFlagExposure)(enabledFlag, config.variant.wireName);
 
   @visibleForTesting
   static void resetForTesting() {
-    _session = null;
+    _cached = null;
+    _cachedIdentity = null;
   }
 }
