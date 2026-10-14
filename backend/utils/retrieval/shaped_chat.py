@@ -6,7 +6,6 @@ from dataclasses import replace
 from typing import Any, Optional
 
 from utils.messaging.projection import surface_runtime
-from utils.messaging.context import prepare as prepare_context, assemble, schedule_refresh, degraded
 from utils.llm.shaped_agent import Turn
 from utils.llm.prompt_cache import chat_cache_options, model_supports_explicit_cache
 
@@ -30,6 +29,7 @@ async def run_shaped_chat_stream(
     shadow=False,
 ) -> Optional[str]:
     from utils.retrieval import agentic as a
+    from utils.messaging.context import prepare as prepare_context, assemble, schedule_refresh, degraded
 
     mount = a.chat_mount(tool_schemas, deadline_seconds=a.AGENT_STREAM_MAX_DURATION_SECONDS)
     runtime = surface_runtime.get()
