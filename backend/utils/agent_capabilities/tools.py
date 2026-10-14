@@ -638,22 +638,31 @@ def suggest_edit(uid, edit, records, *, run_id=None):
         raise review_store.ReviewConflict('Dream task generation changed')
     target_label = proposal_label(records[base_ref(edit.target)])
     other_label = proposal_label(records[base_ref(edit.other)]) if edit.other else None
-    contents = {}
+    target_content, other_content = None, None
     if edit.kind in {'retire_memory', 'supersede_memory'}:
-        contents = {
-            'target_content': str(records[base_ref(edit.target)].get('content') or ''),
-            'other_content': str(records[base_ref(edit.other)].get('content') or '') if edit.other else None,
-        }
-    labels = {'target_label': target_label, 'other_label': other_label, **contents}
+        target_content = str(records[base_ref(edit.target)].get('content') or '')
+        other_content = str(records[base_ref(edit.other)].get('content') or '') if edit.other else None
     if isinstance(edit, HarnessEdit):
-        proposal = AgentProposalItem(harness_edit=edit, **labels)
+        proposal = AgentProposalItem(
+            harness_edit=edit,
+            target_label=target_label,
+            other_label=other_label,
+            target_content=target_content,
+            other_content=other_content,
+        )
     elif edit.kind in {'retire_memory', 'supersede_memory'}:
         proposal = AgentProposalItem(
-            memory_hygiene=MemoryHygieneEdit.model_validate(edit.model_dump(exclude={'value'})), **labels
+            memory_hygiene=MemoryHygieneEdit.model_validate(edit.model_dump(exclude={'value'})),
+            target_label=target_label,
+            other_label=other_label,
+            target_content=target_content,
+            other_content=other_content,
         )
     else:
         proposal = AgentProposalItem(
-            edit=Edit.model_validate(edit.model_dump(exclude={'value', 'effective_from'})), **labels
+            edit=Edit.model_validate(edit.model_dump(exclude={'value', 'effective_from'})),
+            target_label=target_label,
+            other_label=other_label,
         )
     item = ReviewItemV2(
         item_id='agent_proposal:' + review_store.safe_id(key),

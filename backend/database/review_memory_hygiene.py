@@ -115,7 +115,7 @@ def _effective_from(edit, now):
             return now
     except (TypeError, ValueError):
         return now
-    if parsed is None or parsed > now:
+    if parsed > now:
         return now
     return parsed
 
