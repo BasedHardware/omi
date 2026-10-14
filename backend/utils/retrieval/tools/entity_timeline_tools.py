@@ -855,7 +855,7 @@ def get_entity_timeline_tool(
     )
     included_entries: List[TimelineEntry] = []
     result = format_entity_timeline(timeline, included_entries=included_entries)
-    cfg = config if config is not None else _agent_config()
+    cfg = config or _agent_config()
     configurable = (cfg or {}).get('configurable') or {}
     if reference.kind == 'person' and aliases.resolved:
         register_record_ref(configurable, 'people', reference.identifier)
