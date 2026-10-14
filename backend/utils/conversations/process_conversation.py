@@ -2015,7 +2015,9 @@ def send_new_memories_notification(user_id: str, memories: List[MemoryDB]) -> No
 def _write_action_items(uid: str, conversation: Conversation, trigger: Optional[ProcessingTrigger] = None):
     """Preserve automatic-refresh tasks; use legacy replacement for all other processing."""
     now = datetime.now(timezone.utc)
-    action_items_data = action_items_for_write(uid, conversation, now)
+    action_items_data = action_items_for_write(
+        uid, conversation, now, conversation_capture.canonical_conversation_fields
+    )
 
     if preserve_refresh_tasks(uid, conversation, action_items_data, trigger, upsert_action_item_vectors_batch):
         return

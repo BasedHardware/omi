@@ -1,11 +1,9 @@
 """Apply extraction guards before either replacement, refresh or candidate capture."""
 
 import logging
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from datetime import datetime
 from typing import Any
-
-from prometheus_client import Counter
 
 from config.action_item_extraction_policy import (
     UNKNOWN_OWNERS,
@@ -15,15 +13,9 @@ from config.action_item_extraction_policy import (
     normalized_name,
 )
 from database.auth import get_user_full_name
-from utils.task_intelligence import conversation_capture
+from utils.metrics import OMI_ACTION_ITEM_EXTRACTION_DROPPED_TOTAL
 
 logger = logging.getLogger(__name__)
-
-OMI_ACTION_ITEM_EXTRACTION_DROPPED_TOTAL = Counter(
-    'omi_action_item_extraction_dropped_total',
-    'Model-extracted tasks rejected by conservative guards: other_owner|status_statement',
-    ['reason'],
-)
 
 
 def _field(item: Any, name: str) -> Any:
@@ -49,7 +41,9 @@ def filter_extracted_items(uid: str, items: Sequence[Any]) -> list[Any]:
     return kept
 
 
-def action_items_for_write(uid: str, conversation: Any, now: datetime) -> list[dict[str, Any]]:
+def action_items_for_write(
+    uid: str, conversation: Any, now: datetime, canonical_fields: Callable[[Any, Any], dict[str, Any]]
+) -> list[dict[str, Any]]:
     """Project only admitted extraction items to the shared initial/refresh write payload."""
     return [
         {
@@ -61,7 +55,7 @@ def action_items_for_write(uid: str, conversation: Any, now: datetime) -> list[d
             'completed_at': action_item.completed_at,
             'conversation_id': conversation.id,
             'is_locked': conversation.is_locked,
-            **conversation_capture.canonical_conversation_fields(action_item, conversation),
+            **canonical_fields(action_item, conversation),
         }
         for action_item in filter_extracted_items(uid, conversation.structured.action_items)
     ]
