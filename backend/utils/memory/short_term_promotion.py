@@ -251,8 +251,8 @@ def _merge_canonical_outbox_summaries(*summaries: Dict[str, Any]) -> Dict[str, A
 
 async def _drain_canonical_outbox_async(uid, *, db_client, run_id, now, job_budget_guard=None):
     """Borrow a DB worker for one delivery tick, never for an entire drain."""
-    config = _canonical_outbox_worker_config(run_id=run_id, event_limit=1)
-    effects = _canonical_outbox_side_effects(db_client=db_client)
+    config = await run_blocking(db_executor, _canonical_outbox_worker_config, run_id=run_id, event_limit=1)
+    effects = await run_blocking(db_executor, _canonical_outbox_side_effects, db_client=db_client)
     result = _merge_canonical_outbox_summaries({'uid': uid, 'worker_id': config.worker_id})
     for _ in range(500):
         if job_budget_guard is not None:
