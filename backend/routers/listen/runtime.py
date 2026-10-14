@@ -569,12 +569,13 @@ class ListenSessionRuntime:
             and request.source != 'phone_call'
         )
         window_kwargs: WindowSelection = {} if demand_vendor_start else window_selection_kwargs(self, request.uid)
+        if demand_vendor_start:
+            window_kwargs['exclude'] = frozenset({'parakeet'})
         self.stt_service, self.stt_language, self.stt_model = get_stt_service_for_language(
             self.language,
             multi_lang_enabled=self.multi_lang_enabled,
             preferred_service=request.stt_service,
             language_profile=self.language_profile,
-            exclude=frozenset({'parakeet'}) if demand_vendor_start else frozenset(),
             **window_kwargs,
         )
         # The provider the serving policy chose, captured before `_create_stt_socket`
@@ -698,7 +699,9 @@ class ListenSessionRuntime:
 
     async def _heartbeat(self) -> None:
         while self.state.active:
-            self.receiver.lane_meter.flush()
+            meter = getattr(getattr(self, 'receiver', None), 'lane_meter', None)
+            if meter is not None:
+                meter.flush()
             if self.request.websocket.client_state != WebSocketState.CONNECTED:
                 self.state.active = False
                 break
@@ -1014,8 +1017,9 @@ class ListenSessionRuntime:
             current_routing_cohort.set(self._routing_cohort)
             if not await self.receiver.initialize_stt():
                 return
-            if self.receiver.live_demand is not None:
-                self.spawn(self.receiver.live_demand.run(), name='live_demand_routing')
+            demand = getattr(self.receiver, 'live_demand', None)
+            if demand is not None:
+                self.spawn(demand.run(), name='live_demand_routing')
             record_listen_session_accepted(source=self.request.source, platform=self.client_device_context.platform)
             if not self.use_custom_stt:
                 self._no_audio_observation = ListenNoAudioObservation()
@@ -1173,10 +1177,13 @@ class ListenSessionRuntime:
             except Exception as error:
                 logger.error('Translation flush failed type=%s', type(error).__name__)
         self.state.active = False
-        self.receiver.lane_meter.close()
-        if self.receiver.live_demand is not None:
-            self.receiver.live_demand.close()
-            await self.receiver.live_demand.publish()
+        meter = getattr(self.receiver, 'lane_meter', None)
+        if meter is not None:
+            meter.close()
+        demand = getattr(self.receiver, 'live_demand', None)
+        if demand is not None:
+            demand.close()
+            await demand.publish()
         try:
             self.receiver.finish()
         except Exception as error:

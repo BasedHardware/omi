@@ -2079,8 +2079,9 @@ class ListenReceiver(ReplayFilterMixin):
         elif kind == 'speaker_assigned':
             await self._handle_speaker_assigned(payload)
         elif kind == 'client_state':
-            if self.live_demand is not None:
-                self.live_demand.observe(payload)
+            demand = getattr(self, 'live_demand', None)
+            if demand is not None:
+                demand.observe(payload)
             if not self.host.state.realtime_demand.observe(payload):
                 logger.debug('Ignored malformed or over-budget client_state')
             config = resolve_ondemand_config()
