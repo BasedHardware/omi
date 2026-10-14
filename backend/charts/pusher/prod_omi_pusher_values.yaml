@@ -115,6 +115,9 @@ envFrom:
 runtimeConfigMapName: prod-omi-backend-config
 
 env:
+  # Bounded, process-local late identity repair coalescing; rollback with false.
+  - name: OWNER_IDENTITY_RETRY_COALESCE_ENABLED
+    value: "true"
   - name: DREAM_AGENT_MODE
     value: 'on'
   - name: DREAM_AGENT_UID_ALLOWLIST
