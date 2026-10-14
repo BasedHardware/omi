@@ -13270,4 +13270,21 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String get syncDetailsCopy => 'کپی جزئیات برای پشتیبانی';
+
+  @override
+  String get chatAppsChannelPlanRequired => 'در Operator و Architect در دسترس است';
+
+  @override
+  String chatAppsAtCapacity(String app) {
+    return 'ظرفیت $app تکمیل است';
+  }
+
+  @override
+  String get chatAppsJoinWaitlist => 'پیوستن به فهرست انتظار';
+
+  @override
+  String get chatAppsOnWaitlist => 'شما در فهرست انتظار هستید';
+
+  @override
+  String get chatAppsWaitlistJoined => 'شما در فهرست انتظار هستید. وقتی جا باز شود خبرتان می‌کنیم.';
 }

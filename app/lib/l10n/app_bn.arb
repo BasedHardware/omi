@@ -11501,5 +11501,10 @@
     "syncDetailsForSupport": "সাপোর্টের জন্য",
     "syncDetailsAudioFiles": "অডিও ফাইল",
     "syncDetailsServerJobs": "সার্ভার জব (সম্পন্ন / মোট)",
-    "syncDetailsCopy": "সাপোর্টের জন্য বিবরণ কপি করুন"
+    "syncDetailsCopy": "সাপোর্টের জন্য বিবরণ কপি করুন",
+    "chatAppsChannelPlanRequired": "Operator এবং Architect-এ উপলব্ধ",
+    "chatAppsAtCapacity": "{app} পূর্ণ হয়ে গেছে",
+    "chatAppsJoinWaitlist": "অপেক্ষা তালিকায় যোগ দিন",
+    "chatAppsOnWaitlist": "আপনি অপেক্ষা তালিকায় আছেন",
+    "chatAppsWaitlistJoined": "আপনি অপেক্ষা তালিকায় আছেন। জায়গা খালি হলে আমরা জানাব।"
 }

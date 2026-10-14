@@ -4075,5 +4075,10 @@
     "syncDetailsForSupport": "Per a assistència",
     "syncDetailsAudioFiles": "Fitxers d'àudio",
     "syncDetailsServerJobs": "Tasques del servidor (fetes / total)",
-    "syncDetailsCopy": "Copia els detalls per a assistència"
+    "syncDetailsCopy": "Copia els detalls per a assistència",
+    "chatAppsChannelPlanRequired": "Disponible amb Operator i Architect",
+    "chatAppsAtCapacity": "{app} és ple",
+    "chatAppsJoinWaitlist": "Uneix-te a la llista d'espera",
+    "chatAppsOnWaitlist": "Ets a la llista d'espera",
+    "chatAppsWaitlistJoined": "Ets a la llista d'espera. T'avisarem quan hi hagi lloc."
 }

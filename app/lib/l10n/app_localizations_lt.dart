@@ -13299,4 +13299,21 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get syncDetailsCopy => 'Kopijuoti informaciją palaikymo komandai';
+
+  @override
+  String get chatAppsChannelPlanRequired => 'Prieinama su Operator ir Architect';
+
+  @override
+  String chatAppsAtCapacity(String app) {
+    return '$app užpildytas';
+  }
+
+  @override
+  String get chatAppsJoinWaitlist => 'Prisijungti prie laukiančiųjų sąrašo';
+
+  @override
+  String get chatAppsOnWaitlist => 'Esate laukiančiųjų sąraše';
+
+  @override
+  String get chatAppsWaitlistJoined => 'Esate laukiančiųjų sąraše. Pranešime, kai atsiras vietos.';
 }

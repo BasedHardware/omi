@@ -13089,4 +13089,21 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get syncDetailsCopy => 'サポート用に詳細をコピー';
+
+  @override
+  String get chatAppsChannelPlanRequired => 'OperatorとArchitectで利用できます';
+
+  @override
+  String chatAppsAtCapacity(String app) {
+    return '$appは定員に達しています';
+  }
+
+  @override
+  String get chatAppsJoinWaitlist => 'ウェイトリストに登録';
+
+  @override
+  String get chatAppsOnWaitlist => 'ウェイトリストに登録済みです';
+
+  @override
+  String get chatAppsWaitlistJoined => 'ウェイトリストに登録しました。空きが出たらお知らせします。';
 }

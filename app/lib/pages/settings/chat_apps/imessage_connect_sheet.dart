@@ -116,6 +116,10 @@ class _IMessageConnectSheetState extends State<IMessageConnectSheet>
           _problem = ChatAppsProblem.fromApi(problem);
       }
     });
+    if (_problem == ChatAppsProblem.waitlisted) {
+      closeConnectSheetOnWaitlist(context);
+      return;
+    }
     _clock?.cancel();
     _clock = Timer.periodic(const Duration(seconds: 1), (_) {
       if (!mounted) return;
