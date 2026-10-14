@@ -65,6 +65,7 @@ from utils.other.storage import (
 from utils.byok import has_byok_keys
 from utils.cloud_tasks import (
     enqueue_sync_job,
+    enqueue_audio_merge_job_deferred,
     get_sync_tasks_max_attempts,
     is_cloud_tasks_dispatch_enabled,
     verify_audio_merge_cloud_tasks_oidc,
@@ -2300,6 +2301,34 @@ async def _run_sync_job_body(request: Request, task_retry_count: int):
             await run_blocking(db_executor, release_job_run_lock, job_id, lock_token)
 
 
+# A destructive operation (explicit memory deletion, retention cleanup) owns the
+# account gate for seconds to a few minutes. Queue retries land inside that
+# window, use up every attempt, and leave the file marked merge_failed, so
+# playback is never built. A deferred, delayed copy waits the gate out instead,
+# without a 5xx or a spent attempt. Delays run 60, 120, 240, 480, 900, 900 s,
+# about 45 min in total.
+AUDIO_MERGE_DESTRUCTIVE_DEFERRALS_MAX = 6
+
+
+async def _defer_merge_for_destructive_operation(payload: dict):
+    """Return a 200 'deferred' response after re-enqueueing, or None to keep the
+    caller's existing retry and final-attempt handling (deferrals exhausted, or
+    the re-enqueue itself failed)."""
+    deferrals = int(payload.get('destructive_deferrals') or 0)
+    if deferrals >= AUDIO_MERGE_DESTRUCTIVE_DEFERRALS_MAX:
+        return None
+    delay = min(60 * 2**deferrals, 900)
+    try:
+        await run_blocking(
+            db_executor, enqueue_audio_merge_job_deferred, {**payload, 'destructive_deferrals': deferrals + 1}, delay
+        )
+    except Exception as e:
+        logger.warning(f'audio_merge: destructive deferral enqueue failed exception_type={type(e).__name__}')
+        return None
+    logger.info(f'audio_merge: deferred reason=destructive_operation deferral={deferrals + 1} delay_s={delay}')
+    return JSONResponse(status_code=200, content={'status': 'deferred', 'reason': 'destructive_operation'})
+
+
 # response_model omitted: include_in_schema=False Cloud Tasks handler; JSONResponse status
 # codes (200/409/500) drive the queue protocol, not a typed client-facing body.
 @router.post("/v2/audio-merge-jobs/run", include_in_schema=False)
@@ -2375,6 +2404,10 @@ async def run_audio_merge_job(request: Request, task_retry_count: int = Depends(
                 )
             return JSONResponse(status_code=200, content={'status': 'dropped', 'reason': 'chunks_missing'})
         except Exception as e:
+            if isinstance(e, DestructiveOperationInProgress):
+                deferred = await _defer_merge_for_destructive_operation(payload)
+                if deferred is not None:
+                    return deferred
             max_attempts = get_sync_tasks_max_attempts()
             if task_retry_count >= max_attempts - 1:
                 logger.error(f'audio_merge_failed_final conv={conversation_id} file={audio_file_id}: {e}')
@@ -2415,6 +2448,10 @@ async def run_audio_merge_job(request: Request, task_retry_count: int = Depends(
                 storage_executor, upload_playback_artifact, uid, conversation_id, audio_file_id, mp3_data
             )
         except Exception as e:
+            if isinstance(e, DestructiveOperationInProgress):
+                deferred = await _defer_merge_for_destructive_operation(payload)
+                if deferred is not None:
+                    return deferred
             # The upload fence raises DestructiveOperationInProgress while a
             # destructive operation owns the account. Leaving it unhandled
             # reports that frame to Error Reporting. The unavailable marker is
@@ -2521,6 +2558,10 @@ async def _run_conversation_merge_job(payload: dict, task_retry_count: int):
                 )
             return JSONResponse(status_code=200, content={'status': 'dropped', 'reason': 'chunks_missing'})
         except Exception as e:
+            if isinstance(e, DestructiveOperationInProgress):
+                deferred = await _defer_merge_for_destructive_operation(payload)
+                if deferred is not None:
+                    return deferred
             max_attempts = get_sync_tasks_max_attempts()
             if task_retry_count >= max_attempts - 1:
                 logger.error(f'audio_merge_failed_final conversation artifact conv={conversation_id}: {e}')
@@ -2546,6 +2587,10 @@ async def _run_conversation_merge_job(payload: dict, task_retry_count: int):
         try:
             await run_blocking(storage_executor, upload_conversation_playback_artifact, uid, conversation_id, mp3_data)
         except Exception as e:
+            if isinstance(e, DestructiveOperationInProgress):
+                deferred = await _defer_merge_for_destructive_operation(payload)
+                if deferred is not None:
+                    return deferred
             # Same contract as the build: a destructive-operation fence on the
             # upload must retry (or mark unavailable on the final attempt)
             # instead of escaping as an unhandled legal_holds traceback. The
