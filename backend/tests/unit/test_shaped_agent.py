@@ -44,6 +44,7 @@ def isolated_imports():
 @pytest.fixture(autouse=True)
 def flag_off(monkeypatch):
     monkeypatch.delenv(shaped.FLAG, raising=False)
+    monkeypatch.setattr(pc, 'conversation_known_spellings', lambda *_: '')
 
 
 @pytest.mark.parametrize(

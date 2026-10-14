@@ -5,7 +5,7 @@ from copy import deepcopy
 from google.api_core.exceptions import InvalidArgument, ServiceUnavailable
 from pathlib import Path
 import threading
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock, MagicMock
 import uuid
 
 import fakeredis
@@ -132,6 +132,63 @@ def test_empty_transcription_creates_nothing_and_cannot_bridge(pipeline, empty_w
     assert not store.rows and not errors
     assert response == {'new_memories': set(), 'updated_memories': set()}
     assert outcome['outcome'].value == 'expected_silence' and not outcome['retryable']
+
+
+@pytest.mark.parametrize('failed_read', [False, True])
+def test_sync_passes_real_dream_keyterms_to_stt_with_nonfatal_fallback(pipeline, monkeypatch, failed_read):
+    module, store = pipeline
+    dream_store = AutoMockModule('database.dream_store')
+    dream_store.vocabulary = MagicMock(
+        return_value=[{'spelling': 'Quorbi'}, {'spelling': 'Tala'}, {'spelling': 'x' * 51}],
+        side_effect=RuntimeError('synthetic unavailable') if failed_read else None,
+    )
+    with stub_modules({'database.dream_store': dream_store}):
+        helper = load_module_fresh(
+            'utils.dream_vocabulary', Path(__file__).resolve().parents[2] / 'utils/dream_vocabulary.py'
+        )
+        helper.run_blocking = AsyncMock(side_effect=lambda executor, fn, uid: fn(uid))
+        helper.record_fallback = MagicMock()
+        monkeypatch.setenv('DREAM_AGENT_VOCABULARY_STT', 'true')
+        monkeypatch.setattr(module, 'keyterms', helper.keyterms)
+        errors = []
+        assert module.process_segment(
+            '1700000000.wav',
+            'synthetic-owner',
+            {'new_memories': set(), 'updated_memories': set()},
+            threading.Lock(),
+            errors,
+            transcription_prefs={'vocabulary': ['Tala', 'Omi', 'Tala']},
+        )
+        assert errors == [] and len(conversations(store)) == 1
+        expected = ['Omi', 'Tala'] if failed_read else ['Omi', 'Tala', 'Quorbi']
+        assert module.prerecorded.call_args.kwargs['keywords'] == expected
+        dream_store.vocabulary.assert_called_once_with('synthetic-owner')
+        assert helper.record_fallback.call_count == int(failed_read)
+
+
+def test_sync_keyterm_cap_keeps_product_and_preferences_first(pipeline, monkeypatch):
+    module, _ = pipeline
+    dream_store = AutoMockModule('database.dream_store')
+    dream_store.vocabulary = MagicMock(return_value=[{'spelling': f'Learned {i}'} for i in range(150)])
+    with stub_modules({'database.dream_store': dream_store}):
+        helper = load_module_fresh(
+            'utils.dream_vocabulary', Path(__file__).resolve().parents[2] / 'utils/dream_vocabulary.py'
+        )
+        helper.run_blocking = AsyncMock(side_effect=lambda executor, fn, uid: fn(uid))
+        monkeypatch.setenv('DREAM_AGENT_VOCABULARY_STT', 'true')
+        monkeypatch.setattr(module, 'keyterms', helper.keyterms)
+        assert module.process_segment(
+            '1700000000.wav',
+            'synthetic-owner',
+            {'new_memories': set(), 'updated_memories': set()},
+            threading.Lock(),
+            [],
+            transcription_prefs={'vocabulary': ['Tala']},
+        )
+        keywords = module.prerecorded.call_args.kwargs['keywords']
+        assert len(keywords) == 100
+        assert keywords[:3] == ['Omi', 'Tala', 'Learned 0']
+        assert keywords[-1] == 'Learned 97'
 
 
 def test_empty_retry_recovers_through_original_path_once(pipeline):

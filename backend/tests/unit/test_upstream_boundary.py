@@ -166,6 +166,7 @@ def _ensure_process_conversation_importable():
 
     _PROCESS_CONVERSATION_MODULE = importlib.import_module("utils.conversations.process_conversation")
     _PROCESS_CONVERSATION_MODULE.should_skip_omi_paid_postprocessing = skip_helper
+    _PROCESS_CONVERSATION_MODULE.conversation_known_spellings = lambda *_: ''
     return _PROCESS_CONVERSATION_MODULE
 
 
@@ -383,6 +384,7 @@ class TestNoConversationAsMemory:
             language="en",
             content_date="2026-06-01",
             strict=True,
+            known_spellings='',
         )
 
         text_arg = mock_text_extractor.call_args[0][1]

@@ -53,9 +53,47 @@ GPT-5.6-family or Luna. Unrelated STT keys do not disable OpenAI cache opt-out.
 
 Production backend-listen and pusher set `DREAM_AGENT_MODE=on` (owner dogfood since 2026-10-11) with the same David-only `DREAM_AGENT_UID_ALLOWLIST`; existing conversation/memory/task post-write hooks signal the hourly backend-sync sweep.
 Shadow writes only admission state and encrypted reports, preserving finalization, user records, questions and vocabulary. See [the dream runbook](runbooks/dream-agent.md).
-Dream vocabulary is optional capture context: `DREAM_AGENT_VOCABULARY_STT=true` combines encrypted per-user vocabulary spellings with existing live keyterms;
+Dream vocabulary is optional capture context: `DREAM_AGENT_VOCABULARY_STT=true` combines encrypted per-user vocabulary spellings with existing live and offline-sync keyterms;
 Soniox also retains its `SONIOX_CONTEXT_TERMS` gate. Read failure uses existing terms with fallback telemetry.
 Vocabulary and STT gate defaults remain off.
+
+Conversation processing adds a shared **Known spellings** block from Dream vocabulary
+(including aliases) and trustworthy active People names. `CONVERSATION_KNOWN_SPELLINGS` defaults
+to `true`; set it to `false` to disable the block and its reads. The block is capped
+at 60 canonical entries and 1,500 characters, including grounding instructions:
+use a spelling only when the transcript clearly refers to it, never invent a
+reference or infer attendance/identity. Summary, action-item, app-summary and
+transcript-memory prompts share it; each source is read at most once within a
+processing run, with a fresh scope for a separately deferred extraction. Read
+failures retain available context and emit fallback telemetry. No extra LLM call
+is made. Spellings are per-user context after the shared cache breakpoint, never
+part of the shared prefix bytes or cache eligibility. Shaped notes carry them as
+a separate per-user field alongside their capture evidence.
+
+People names require a nonempty stored speech sample, a positive `label_evidence`
+counter (`manual_labels`, `card_confirms`, `card_picks`, or `auto_confirmed`, all
+authored by user assignments/answers), or retained aliases from the explicit
+rename transaction. Creation has no origin marker, so timestamps and derived
+confidence alone do not qualify a name, including a multiword name. Single-token
+filler/common words and demonyms, letterless names, and dismissed people are
+excluded even when evidence exists. Unconfirmed CJK fragments therefore cannot
+enter the block; confirmed names in any script can. Old People aliases are not
+rendered, because an old filler alias could cause the model to invent a reference.
+Dream vocabulary and its aliases retain their own authority.
+
+The speaker-resolution step seeds the spelling cache from its already-read full
+People list. If that step did not read People, spelling hints use one collection
+query capped at 200 documents, without voice-learning projection transactions.
+Filtering the already-read list may scan past junk entries without additional
+Firestore reads, retaining at most 60 names. Both paths retain the per-run cache;
+an empty reused list does not trigger a second query.
+
+Modulate batch language is selected by utterance word totals, breaking ties by
+total duration. Utterances under three words do not vote when any longer utterance
+exists. Missing detection uses the requested language or `multi`, including empty
+results. Sync retains its existing chunk-merge language behavior: persisted
+`TranscriptSegment` records have no per-segment language for a conversation-wide
+weighted recomputation.
 
 The live calendar stamp includes the meeting title (an empty string when absent)
 so it is a valid `CalendarMeetingContext` for finalization and summarization even
