@@ -692,6 +692,8 @@ curl -s -X POST -H "Authorization: Bearer $PROD_GRAFANA_TOKEN" \
 
 Alerting is configured through Grafana unified alerting (not Prometheus AlertManager rules directly). Alert screenshots are disabled: renders call back into Grafana and stalled it under load (2026-10-13). Notifications link to the dashboard panel instead.
 
+Alert rules never query a log datasource (Cloud Logging or Loki) for raw lines. Each 60s tick re-scans raw lines, exceeds the 30s datasource timeout, drops evaluation ticks, and has twice loaded the alerting plane into 502s: 2026-10-13 via Cloud Logging (#21390) and 2026-10-14 via Loki (`{namespace="prod-omi-backend"}` regex scans; one rule alone failed 196 times in 3h). `test_live_alert_rules_never_query_log_datasources` rejects any unpaused rule that tries. Held rules stay paused via `metric-inventory.prod.json` `admission_holds`; re-admit only on a bounded counter (a Cloud Monitoring log-based metric or an exported Prometheus counter).
+
 Loki ruler is configured to send alerts to AlertManager at `http://prod-kube-prometheus-stack-alertmanager:9093`.
 
 ### Telegram notification quality
@@ -1001,9 +1003,15 @@ helm -n prod-omi-monitoring --kube-context "$PROD_CONTEXT" upgrade --install pro
 ### Production kube-prometheus-stack review and rollback
 
 The production values file is the source for the Prometheus CR: 10d retention,
-1 CPU / 2Gi memory requests, 2 CPU / 8Gi memory limits, and a 100Gi
-`standard-rwo` claim. It preserves the scrape configuration from deployed
-revision 14 and does not drop `app_build`; the backend now emits the fixed
+1 CPU / 2Gi memory requests, 1600m CPU / 8Gi memory limits, and a 100Gi
+`standard-rwo` claim. The CPU limit sits below the monitoring node's ~1930m
+allocatable so Prometheus bursts cannot starve the kubelet probes, Grafana and
+the operator on the same node (2026-10-14: 48 operator and 35 adapter
+liveness-probe restarts in 31h, Grafana `/api/health` 502s); Grafana and the
+operator carry explicit requests in the same file, and the adapter in its own
+values. The 2-vCPU monitoring pool itself is undersized for ~592k head series —
+resizing the pool is the follow-up. The values file preserves
+the scrape configuration from deployed revision 14 and does not drop `app_build`; the backend now emits the fixed
 `unknown` value, so that extra label does not help bound cardinality and dropping
 it would blank the fixed value.
 

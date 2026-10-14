@@ -2029,7 +2029,7 @@
       "component": "api",
       "impact": "product"
     },
-    "isPaused": false,
+    "isPaused": true,
     "notification_settings": {
       "receiver": "Omi - Services Alerting (Telegram)",
       "group_by": ["alertname"], "group_wait": "5m", "group_interval": "1h", "repeat_interval": "24h"
@@ -2516,7 +2516,7 @@
       "component": "api",
       "impact": "product"
     },
-    "isPaused": false,
+    "isPaused": true,
     "notification_settings": {
       "receiver": "Omi - Services Alerting (Telegram)",
       "group_by": ["alertname"], "group_wait": "5m", "group_interval": "1h", "repeat_interval": "24h"
@@ -5218,7 +5218,7 @@
       "component": "live-transcription",
       "impact": "product"
     },
-    "isPaused": false,
+    "isPaused": true,
     "notification_settings": {
       "receiver": "Omi - Services Alerting (Telegram)",
       "group_by": ["alertname"], "group_wait": "5m", "group_interval": "1h", "repeat_interval": "24h"
@@ -5366,7 +5366,7 @@
       "component": "live-transcription",
       "impact": "infrastructure"
     },
-    "isPaused": false,
+    "isPaused": true,
     "notification_settings": {
       "receiver": "Omi - Services Alerting (Telegram)",
       "group_by": ["alertname"], "group_wait": "5m", "group_interval": "1h", "repeat_interval": "24h"

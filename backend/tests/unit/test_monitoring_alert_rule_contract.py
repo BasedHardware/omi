@@ -146,6 +146,42 @@ def test_alert_uids_are_short_enough_for_grafana_to_accept():
         assert not over, f"{export_name}: Grafana will reject these UIDs at create time: {over}"
 
 
+# The prod Grafana Loki datasource UID, carried by the held raw-line rules.
+# Referenced here so a rule that names the datasource only by UID cannot slip
+# past the type check below.
+LOG_DATASOURCE_UIDS = {"aet29e27cgmwwc"}
+LOG_DATASOURCE_TYPES = {"loki", "cloudlogging"}
+
+
+def test_live_alert_rules_never_query_log_datasources():
+    """No unpaused rule may query a log datasource (Loki, Cloud Logging).
+
+    A raw-line alert query re-scans log lines on every 60s tick, blows the 30s
+    datasource timeout, drops evaluation ticks, and has twice loaded the
+    alerting plane into Grafana 502s: 2026-10-13 via Cloud Logging (#21390)
+    and 2026-10-14 via Loki on {namespace="prod-omi-backend"} (196 failures in
+    3h from one rule alone). Held rules stay paused through
+    ``metric-inventory.prod.json`` ``admission_holds``; re-admission requires a
+    bounded counter metric, never a log datasource.
+    """
+    offenders: dict[str, set[str]] = {}
+    for export_name, rules in _all_rule_exports().items():
+        for uid, rule in rules.items():
+            if rule.get("isPaused"):
+                continue
+            for node in rule.get("data", []):
+                model = node.get("model") or {}
+                ds_type = (model.get("datasource") or {}).get("type", "")
+                ds_uid = node.get("datasourceUid") or ""
+                if ds_type in LOG_DATASOURCE_TYPES or ds_uid in LOG_DATASOURCE_UIDS:
+                    offenders.setdefault(uid, set()).add(export_name)
+    assert not offenders, (
+        "live alert rules query a log datasource for raw lines "
+        f"(2026-10-13/#21390 failure class): {sorted(offenders)}; "
+        "pause the rule and record an admission hold, or move it to a bounded counter metric"
+    )
+
+
 def test_managed_gke_disables_unavailable_control_plane_scrapes_and_alerts():
     """Managed GKE must not page on control-plane targets it cannot expose.
 
