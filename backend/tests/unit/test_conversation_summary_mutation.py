@@ -285,3 +285,17 @@ def test_duplicate_app_id_is_rejected_by_summary_endpoint_without_mutation(monke
     )
     assert response.status_code == 409
     assert ref.update_calls == []
+
+
+@pytest.mark.parametrize('result,status', [('conflict', 409), ('correction_limit', 409), ('unexpected', 500)])
+def test_failed_transcript_mutation_cannot_be_confirmed_as_success(monkeypatch, summary_client, result, status):
+    from routers import conversations as routes
+
+    monkeypatch.setattr(routes, '_get_valid_conversation_by_id', lambda *_, **__: object())
+    monkeypatch.setattr(conversations_db, 'update_conversation_segment_text', lambda *_, **__: result)
+    response = summary_client.patch(
+        f'/v1/conversations/{CONVERSATION_ID}/segments/text',
+        json={'segment_id': 'synthetic-segment', 'text': 'Synthetic owner correction'},
+    )
+    assert response.status_code == status
+    assert response.json().get('status') != 'Ok'

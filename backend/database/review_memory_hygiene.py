@@ -140,7 +140,7 @@ def _background_pass():
 
 
 def record_change(uid, change, edit, edit_key, *, expected_records=None):
-    store.require_enabled()
+    store.require_enabled(uid)
     ref = store.user(uid).collection('review_changes').document(store.safe_id(change.change_id))
     marker = store.user(uid).collection('review_do_not_redo').document(store.safe_id(edit_key))
     target_id = edit.target.split('/', 1)[1]

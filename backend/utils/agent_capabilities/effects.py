@@ -7,6 +7,8 @@ Chat mounting is deliberately outside this change.
 
 from models.agent_edit import HarnessEdit
 from models.agent_tools import HarnessQuestion
+from contextlib import nullcontext
+from database import review_store
 from utils.agent_capabilities import tools
 
 
@@ -17,15 +19,16 @@ def apply_staged(uid, item, *, authority, verified=False):
         raise ValueError('agent_verification_required')
     if isinstance(item.operation, HarnessQuestion):
         raise ValueError('agent_question_requires_review')
-    if isinstance(item.operation, HarnessEdit):
-        return tools.apply_verified_edit(
-            uid, item.operation, item.records, expected_records=item.fences, authority=authority
+    with review_store.user_request_authority(uid) if authority == 'user' else nullcontext():
+        if isinstance(item.operation, HarnessEdit):
+            return tools.apply_verified_edit(
+                uid, item.operation, item.records, expected_records=item.fences, authority=authority
+            )
+        return tools.apply_vocabulary(
+            uid,
+            [item.operation],
+            expected_records=item.fences,
+            user_accepted=authority == 'user',
+            verified=verified,
+            records=item.records,
         )
-    return tools.apply_vocabulary(
-        uid,
-        [item.operation],
-        expected_records=item.fences,
-        user_accepted=authority == 'user',
-        verified=verified,
-        records=item.records,
-    )

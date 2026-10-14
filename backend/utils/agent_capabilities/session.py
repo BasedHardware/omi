@@ -76,6 +76,7 @@ class Session:
     records: EvidenceRecords = field(default_factory=EvidenceRecords)
     known: set[str] = field(default_factory=set)
     staged: dict[str, Staged] = field(default_factory=dict)
+    applied_keys: set[str] = field(default_factory=set)
     counters: Counter = field(default_factory=Counter)
     rejections: Counter = field(default_factory=Counter)
     failed_attempts: set[str] = field(default_factory=set)
@@ -183,7 +184,7 @@ class Session:
         used = sum(isinstance(item.operation, HarnessQuestion) for item in self.staged.values())
         if is_question and (candidate.value <= 2 or used >= self.limits.questions):
             raise ValueError('dream_low_value' if candidate.value <= 2 else 'dream_question_cap')
-        edits = len(self.staged) - used
+        edits = len(self.staged) - used + len(self.applied_keys)
         if not is_question and candidate.key not in self.staged and edits >= self.limits.edits:
             raise ValueError('dream_edit_cap')
         if isinstance(operation, HarnessEdit) and candidate.kind == 'spelling':
@@ -203,6 +204,8 @@ class Session:
             from utils.executors import db_executor, run_blocking
 
             result = await run_blocking(db_executor, apply_staged, self.uid, candidate, authority='user')
+            if result == 'applied':
+                self.applied_keys.add(candidate.key)
             return {'status': result, 'id': candidate.id, 'kind': candidate.kind}
         self.staged[candidate.key] = candidate
         return {'status': 'staged', 'id': candidate.id, 'kind': candidate.kind}
@@ -242,7 +245,7 @@ class Session:
                 else:
                     self.finish = parsed
                     return LoopStop(parsed.model_dump())
-                if identity in self.failed_attempts and result.get('status') == 'staged':
+                if identity in self.failed_attempts and result.get('status') in {'staged', 'applied'}:
                     self.counters['resubmits_succeeded'] += 1
                     self.failed_attempts.discard(identity)
             except Exception as error:

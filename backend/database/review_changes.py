@@ -83,7 +83,7 @@ def agent_change_allowed(uid: str, edit_key: str) -> bool:
 
 def suppress_agent_change(uid: str, edit_key: str) -> None:
     """A dismissed Review operation uses the same durable fence as an undo."""
-    store.require_enabled()
+    store.require_enabled(uid)
     store.user(uid).collection('review_do_not_redo').document(store.safe_id(edit_key)).set(
         {'edit_key': edit_key, 'created_at': datetime.now(timezone.utc)}
     )
@@ -110,7 +110,7 @@ def record_agent_change(
     speaker teaching path, including its generation fence; wire clients cannot
     supply AgentEdit. Transcript payloads must already be storage-encoded.
     """
-    store.require_enabled()
+    store.require_enabled(uid)
     if memory_edit is not None:
         if getattr(memory_edit, 'duplicate_memory_id', None):
             from database.review_memory_merges import record_merge
@@ -211,7 +211,7 @@ def merge_review_entities(
     People ids remain stable; the derived page folds facts/edges of both nodes.
     Undo restores each node's owned fields through a ledger split mutation.
     """
-    store.require_enabled()
+    store.require_enabled(uid)
 
     # Older people records need no graph backfill to participate. Materialize
     # only their canonical identity, preserving stable person ids on undo.

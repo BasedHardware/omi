@@ -8,6 +8,8 @@ Uncertain answers suppress an evidence fingerprint, never an entire identity.
 import os
 import hashlib
 import json
+from contextlib import contextmanager
+from contextvars import ContextVar
 from datetime import datetime, timezone
 from typing import Any
 
@@ -21,6 +23,7 @@ from models.review import ReviewItem, ReviewItemV2, ReviewAnswerReceipt
 from models.review_context import enrich_spelling
 
 DAILY_BUDGET = 3
+_USER_REQUEST_OWNER: ContextVar[str | None] = ContextVar('review_user_request_owner', default=None)
 
 
 class ReviewNotFound(ValueError):
@@ -47,7 +50,21 @@ def fingerprint(value: Any) -> str:
     return safe_id(json.dumps(value, sort_keys=True, default=str, separators=(',', ':')))
 
 
-def require_enabled() -> None:
+@contextmanager
+def user_request_authority(uid: str):
+    """Only this authenticated owner's explicit mutation may bypass Review admission."""
+    if not uid:
+        raise ValueError('agent_invalid_owner')
+    token = _USER_REQUEST_OWNER.set(uid)
+    try:
+        yield
+    finally:
+        _USER_REQUEST_OWNER.reset(token)
+
+
+def require_enabled(uid: str | None = None) -> None:
+    if uid is not None and _USER_REQUEST_OWNER.get() == uid:
+        return
     if os.environ.get('REVIEW_SURFACE_MODE', 'off').strip().lower() != 'on':
         raise ReviewConflict('review_surface_disabled')
 
@@ -67,7 +84,7 @@ def enqueue_review_proposal(
     Identity, spelling and agent proposals share this queue. New evidence_version explicitly
     permits re-asking an uncertain answer. Resolved decisions remain terminal.
     """
-    require_enabled()
+    require_enabled(uid)
     item = enrich_spelling(item, source or {}, overwrite=True)
     is_agent = item.kind == 'agent_proposal'
     if item.kind not in {'same_person', 'spelling', 'agent_proposal'} or not evidence_version.strip():

@@ -11,6 +11,8 @@ from tests.unit.test_dream_cleanup_edits import store, UID
 from utils.agent_capabilities import tools, transcripts
 from utils.agent_capabilities.effects import apply_staged
 from utils.agent_capabilities.staging import stage
+from utils.agent_capabilities.session import Session
+from utils.agent_capabilities.limits import SessionLimits
 
 
 def correction(target='conversations/one#segment-one', **changes):
@@ -108,6 +110,57 @@ def test_shared_authority_requires_dream_verification_but_user_applies_with_undo
     assert entry['source'] == 'user'
     review_changes.set_undone(UID, entry['change_id'], True)
     assert seen()['transcript_segments'][0]['text'].startswith('Qorby plans')
+
+
+def test_user_request_updates_populated_title_with_review_disabled_and_keeps_undo(store, monkeypatch):
+    seen, _ = setup(store, monkeypatch)
+    monkeypatch.setenv('REVIEW_SURFACE_MODE', 'off')
+    monkeypatch.setenv('DREAM_AGENT_ENABLED', 'false')
+    operation = correction(
+        kind='title', target='conversations/one', before='Qorby workshop', after='Owner chosen title'
+    )
+    item = asyncio.run(stage(UID, operation, {'conversations/one': seen()}, authority='user'))
+    assert apply_staged(UID, item, authority='user') == 'applied'
+    assert seen()['structured']['title'] == 'Owner chosen title'
+    journal = next(row for path, row in store.rows.items() if path[2:3] == ('review_changes',))
+    change = review_store.decode_doc(UID, journal)['change']
+    assert change['before'] == 'Qorby workshop' and change['after'] == 'Owner chosen title'
+    review_changes.set_undone(UID, change['change_id'], True)
+    assert seen()['structured']['title'] == 'Qorby workshop'
+    with pytest.raises(review_store.ReviewConflict, match='review_surface_disabled'):
+        review_store.require_enabled(UID)
+
+
+def test_user_authority_does_not_grant_review_access_to_another_owner(monkeypatch):
+    monkeypatch.setenv('REVIEW_SURFACE_MODE', 'off')
+    with review_store.user_request_authority(UID):
+        review_store.require_enabled(UID)
+        with pytest.raises(review_store.ReviewConflict, match='review_surface_disabled'):
+            review_store.require_enabled('synthetic-other-owner')
+        with pytest.raises(review_store.ReviewConflict, match='review_surface_disabled'):
+            review_store.require_enabled()
+    with pytest.raises(review_store.ReviewConflict, match='review_surface_disabled'):
+        review_store.require_enabled(UID)
+
+
+@pytest.mark.asyncio
+async def test_immediate_user_edits_still_obey_the_session_edit_cap(store, monkeypatch):
+    seen, _ = setup(store, monkeypatch)
+    session = Session(
+        UID,
+        source=None,
+        limits=SessionLimits(edits=1),
+        seed={},
+        authority='user',
+        records={'conversations/one': seen()},
+    )
+    first = correction(kind='title', target='conversations/one', before='Qorby workshop', after='Owner title')
+    assert (await session.propose(first))['status'] == 'applied'
+    session.records['conversations/one'] = seen()
+    second = first.model_copy(update={'before': 'Owner title', 'after': 'Another owner title'})
+    with pytest.raises(ValueError, match='dream_edit_cap'):
+        await session.propose(second)
+    assert seen()['structured']['title'] == 'Owner title'
 
 
 def test_original_replacement_blocks_overlay_undo(store, monkeypatch):

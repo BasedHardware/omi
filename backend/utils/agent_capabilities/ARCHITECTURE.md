@@ -6,6 +6,12 @@ owner's current request and applies guarded edits with journal/Undo; `dream`
 stages work for Dream's independent verifier and Review policy. Chat mounting is
 outside this PR.
 
+An explicit user mutation carries a temporary owner-scoped authority through
+the journal writer even when autonomous Review admission is disabled. It grants
+no access to another owner and ends with the mutation. User edits keep the same
+source, generation, suppression and session edit caps; immediate apply does not
+turn a shared session into an unbounded write loop.
+
 | Module | Responsibility |
 | --- | --- |
 | `session.py` | Seen refs, budgets, precise tool results, resubmission and the sanctioned shaped-agent loop |
@@ -15,6 +21,7 @@ outside this PR.
 | `evidence.py` | Snapshot container; session roles stay outside persisted records |
 | `staging.py` | Immediate schema, evidence, suppression, current-snapshot and byte guards; no writes |
 | `guards.py` | Shared deterministic quality and eligibility checks |
+| `errors.py` | Stable non-content mutation errors shared with HTTP boundaries |
 | `effects.py` | Explicit authority and verification boundary for staged effects |
 | `tools.py` | Reversible domain mutations and Review acceptance through existing writers |
 | `cleanup_edits.py` | Protected tasks/people, same-speech duplicate links and language guards |
