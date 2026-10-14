@@ -151,6 +151,8 @@ void main() {
   test('import repair retains an existing local conversation and phone-only custody', () {
     final wal = Wal(
         timerStart: 1,
+        seconds: 1,
+        originalStorage: WalStorage.sdcard,
         codec: BleAudioCodec.opus,
         storage: WalStorage.sdcard,
         onDeviceOnly: true,
