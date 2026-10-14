@@ -14,8 +14,7 @@ app = FastAPI()
 
 @app.post('/v1/vad')
 def vad(file: UploadFile = File) -> Any:  # pyright: ignore[reportArgumentType]  # FastAPI bare File default
-    logger.info('vad')
-    logger.info(vad_endpoint)
+    logger.debug('vad')
     return vad_endpoint(file)
 
 

@@ -1,0 +1,4 @@
+{
+  "change": "On iOS, phone-microphone batch capture uses less battery after you return to the app, by tightening timer precision only while it is actually needed",
+  "platforms": ["ios"]
+}

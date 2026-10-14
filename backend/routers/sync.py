@@ -54,6 +54,7 @@ from utils.analytics import record_sync_v1_usage as record_usage
 from utils.other import endpoints as auth
 from utils.account_cutover.access import should_skip_background_account_mutation
 from utils.other.storage import (
+    archive_mobile_batch_raw_files,
     get_playback_artifact_signed_url,
     upload_playback_artifact,
     mark_playback_unavailable,
@@ -1070,6 +1071,10 @@ async def sync_local_files_v2(
                     'detail': 'Fresh capture manifest did not match the uploaded audio',
                 },
             )
+
+        # Keep original bytes before any 202, content-cache hit, decode or VAD.
+        # An archive failure leaves the client responsible for retrying its WAL.
+        await run_blocking(sync_executor, archive_mobile_batch_raw_files, uid, paths)
 
         content_id = await run_blocking(sync_executor, compute_sync_content_id, uid, paths)
 

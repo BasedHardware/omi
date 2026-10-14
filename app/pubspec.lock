@@ -1389,6 +1389,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "2.1.0"
+  onnxruntime_v2:
+    dependency: "direct main"
+    description:
+      name: onnxruntime_v2
+      sha256: a3a1f7baf40c6a77b4d359489643232414a4ee2e934d865dd7d30b758abaeef7
+      url: "https://pub.dev"
+    source: hosted
+    version: "1.23.2+2"
   opus_dart:
     dependency: "direct main"
     description:
