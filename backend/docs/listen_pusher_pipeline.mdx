@@ -4666,7 +4666,8 @@ in [the Gateway caller runbook](internal-gateway-callers.md).
 
 The optional sync final pass shares a fleet Redis budget across fresh and backfill
 (10 audio-hours and 1,000 attempts per UTC hour) and one in-flight call per process.
-Admission refuses immediately, before embeddings and batch work. Exhaustion, Redis
+Admission refuses immediately, before embeddings and batch work. Redis connect/read
+I/O has finite 0.5s timeouts; a stalled peer cannot retain the final-pass slot. Exhaustion, Redis
 failure or invalid limits retains legacy speakers and logs
 `event=sync_final_pass outcome=skipped_budget`. Retries consume another reservation.
 `TRANSCRIPTION_SYNC_FINAL_PASS_HOURLY_AUDIO_HOURS` and

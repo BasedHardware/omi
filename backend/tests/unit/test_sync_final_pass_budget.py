@@ -1,10 +1,11 @@
 """Admission must preserve legacy speakers under pressure and infrastructure failure."""
 
 import io
+import socket
+import time
 import threading
 import wave
 from concurrent.futures import ThreadPoolExecutor
-from types import SimpleNamespace
 
 import fakeredis
 import pytest
@@ -24,19 +25,19 @@ def wav(seconds=1):
 
 def test_shared_budget_is_atomic_across_workers_and_counts_retries(monkeypatch):
     server = fakeredis.FakeServer()
-    clients = [fakeredis.FakeRedis(server=server) for _ in range(8)]
+    inspector = fakeredis.FakeRedis(server=server)
     monkeypatch.setenv('TRANSCRIPTION_SYNC_FINAL_PASS_HOURLY_REQUESTS', '3')
-    monkeypatch.setattr(sync, 'redis_client', clients[0])
+    monkeypatch.setattr(sync, 'create_bounded_redis_client', lambda timeout: fakeredis.FakeRedis(server=server))
     with ThreadPoolExecutor(max_workers=8) as pool:
         results = list(pool.map(lambda _: sync._reserve_budget(1), range(32)))
     assert sum(results) == 3
     assert not sync._reserve_budget(1)
-    assert 0 < clients[0].ttl(clients[0].keys()[0]) <= 7200
+    assert 0 < inspector.ttl(inspector.keys()[0]) <= 7200
 
 
 def test_audio_budget_charges_before_work_and_does_not_refund(monkeypatch):
-    client = fakeredis.FakeRedis()
-    monkeypatch.setattr(sync, 'redis_client', client)
+    server = fakeredis.FakeServer()
+    monkeypatch.setattr(sync, 'create_bounded_redis_client', lambda timeout: fakeredis.FakeRedis(server=server))
     monkeypatch.setenv('TRANSCRIPTION_SYNC_FINAL_PASS_HOURLY_AUDIO_HOURS', str(2 / 3600))
     assert sync._reserve_budget(1)
     assert sync._reserve_budget(1)
@@ -53,7 +54,7 @@ def test_redis_failure_skips_before_embeddings_or_gpu(monkeypatch):
     def unavailable(*args):
         raise ConnectionError('synthetic')
 
-    monkeypatch.setattr(sync, 'redis_client', SimpleNamespace(eval=unavailable))
+    monkeypatch.setattr(sync, 'create_bounded_redis_client', unavailable)
     monkeypatch.setattr(sync, 'speaker_embedding_configured', lambda: pytest.fail('embedding work admitted'))
     original = [object()]
     assert sync.run_sync_final_pass('synthetic', wav(), [], original, {}, scope='job', owner_reserved=False) == (
@@ -87,3 +88,44 @@ def test_concurrent_call_skips_without_waiting_and_exception_releases_slot(monke
     assert (
         sync.run_sync_final_pass('c', b'', [], [], {}, scope='job', owner_reserved=False)[1]['outcome'] == 'synthetic'
     )
+
+
+def test_stalled_redis_socket_returns_legacy_and_releases_slot(monkeypatch):
+    """A peer accepts AUTH/EVAL but never replies; exercise real Redis socket I/O."""
+    accepted, release = threading.Event(), threading.Event()
+    listener = socket.socket()
+    listener.bind(('127.0.0.1', 0))
+    listener.listen(1)
+    listener.settimeout(3)
+    port = listener.getsockname()[1]
+
+    def silent_peer():
+        with listener:
+            connection, _ = listener.accept()
+            with connection:
+                accepted.set()
+                release.wait(3)
+
+    monkeypatch.setenv('REDIS_DB_HOST', '127.0.0.1')
+    monkeypatch.setenv('REDIS_DB_PORT', str(port))
+    monkeypatch.delenv('REDIS_DB_PASSWORD', raising=False)
+    monkeypatch.setattr(sync, 'speaker_embedding_configured', lambda: pytest.fail('embedding work admitted'))
+    peer = threading.Thread(target=silent_peer)
+    peer.start()
+    try:
+        started = time.monotonic()
+        assert sync.run_sync_final_pass('synthetic', wav(), [], [], {}, scope='job', owner_reserved=False) == (
+            None,
+            {'outcome': 'skipped_budget'},
+        )
+        assert accepted.is_set()
+        assert time.monotonic() - started < 2
+        # A timed-out reservation cannot strand the one local slot.
+        monkeypatch.setattr(sync, '_run_sync_final_pass', lambda *a, **kw: (None, {'outcome': 'synthetic'}))
+        assert (
+            sync.run_sync_final_pass('next', b'', [], [], {}, scope='job', owner_reserved=False)[1]['outcome']
+            == 'synthetic'
+        )
+    finally:
+        release.set()
+        peer.join(3)

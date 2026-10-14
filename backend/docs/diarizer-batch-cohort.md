@@ -121,7 +121,8 @@ waiting. Shared Redis atomically reserves at most 10 WAV audio-hours and 1,000 a
 per UTC hour across backend, sync and backfill. The stage data binds
 `TRANSCRIPTION_SYNC_FINAL_PASS_HOURLY_AUDIO_HOURS=10` and
 `TRANSCRIPTION_SYNC_FINAL_PASS_HOURLY_REQUESTS=1000` on all four hosts.
-Each retry is charged again; reservations are never refunded. Invalid config,
+The reservation uses the shared bounded Redis factory with 0.5s connect/read
+timeouts and closes the client even on timeout. Each retry is charged again; reservations are never refunded. Invalid config,
 Redis failure and exhaustion skip before embedding/GPU calls, emit
 `event=sync_final_pass outcome=skipped_budget` plus fallback telemetry, and retain
 legacy speakers. UTC boundaries can admit twice the hourly allowance in a short

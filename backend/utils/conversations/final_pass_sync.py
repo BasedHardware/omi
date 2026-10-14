@@ -7,7 +7,7 @@ import os
 import threading
 from datetime import datetime, timezone
 
-from database.redis_db import r as redis_client
+from database.redis_db import create_bounded_redis_client
 
 from pydub import AudioSegment
 
@@ -39,17 +39,19 @@ def _reserve_budget(seconds):
         if not math.isfinite(hours) or hours <= 0 or calls <= 0:
             return False
         hour = datetime.now(timezone.utc).strftime('%Y%m%d%H')
-        return (
-            redis_client.eval(
-                _RESERVE_SCRIPT,
-                1,
-                f'transcription-sync-final-pass:budget:{hour}',
-                max(1, math.ceil(seconds * 1000)),
-                math.floor(hours * 3600 * 1000),
-                calls,
+        # One bounded client per reservation; close it even after socket timeout.
+        with create_bounded_redis_client(0.5) as client:
+            return (
+                client.eval(
+                    _RESERVE_SCRIPT,
+                    1,
+                    f'transcription-sync-final-pass:budget:{hour}',
+                    max(1, math.ceil(seconds * 1000)),
+                    math.floor(hours * 3600 * 1000),
+                    calls,
+                )
+                == 1
             )
-            == 1
-        )
     except Exception:
         # Infrastructure failure must retain legacy attribution, not remove the cap.
         return False
