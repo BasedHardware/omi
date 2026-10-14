@@ -174,7 +174,7 @@ class DeveloperErrorSanitizationTests(unittest.TestCase):
             read.call_args.kwargs['extra_field_paths'], ['structured', 'source', 'geolocation', 'folder_id']
         )
 
-    def test_unknown_list_query_is_rejected_instead_of_ignored(self):
+    def test_search_term_on_list_route_is_rejected_instead_of_ignored(self):
         response = self.client.get('/v1/dev/user/conversations?query=budget')
         self.assertEqual(response.status_code, 400)
         self.assertIn('Unknown query parameter', response.text)
