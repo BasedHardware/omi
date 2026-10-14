@@ -1241,13 +1241,10 @@ OMI_SYNC_LINEAGE_RESOLVE_TOTAL = Counter(
     ['outcome'],
 )
 
-# Per task written by a conversation's action-item replace
-# (utils/conversations/action_item_identity.py). Emitted from every processing host,
-# several unscraped, so the `event=action_item_identity` log line is the backup.
+# Task identity is emitted by all processing hosts; event=action_item_identity logs cover unscraped hosts.
 OMI_ACTION_ITEM_IDENTITY_TOTAL = Counter(
     'omi_action_item_identity_total',
-    'Task identity on a conversation task replace. outcome is a closed set: '
-    'reused_identity|new|skipped_already_exported|disabled',
+    'Task identity on replace: reused_identity|new|skipped_already_exported|disabled',
     ['outcome'],
 )
 
@@ -1257,10 +1254,13 @@ OMI_ACTION_ITEM_REFRESH_TOTAL = Counter(
     ['outcome'],
 )
 
-# Conversation shape at first durable completed persist. source is a closed
-# 6-value vocabulary (live/sync/import/integration/desktop/unknown). Sync
-# children are emitted from backend-sync, which is not scraped today; the
-# matching omi_conversation_shape log line is the Cloud Logging backup.
+OMI_ACTION_ITEM_EXTRACTION_DROPPED_TOTAL = Counter(
+    'omi_action_item_extraction_dropped_total',
+    'Model-extracted tasks rejected by conservative guards: other_owner|status_statement',
+    ['reason'],
+)
+
+# Shape at first durable completed persist; omi_conversation_shape logs cover unscraped backend-sync hosts.
 CONVERSATION_SHAPE_SOURCES = (
     'live',
     'sync',

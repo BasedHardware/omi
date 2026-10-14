@@ -45,6 +45,9 @@ class ConversationPromptPrefix:
     # key are unchanged; the notes task carries them in its volatile suffix.
     title_people: tuple[str, ...] = ()
     owner_names: tuple[str, ...] = ()
+    # Task-specific ownership metadata, including rich notes where title naming
+    # uses a roster. Never render it into the shared prefix or capture evidence.
+    account_owner_name: Optional[str] = None
     # Account vocabulary is volatile context, outside the shared cache boundary.
     known_spellings: str = ''
 
@@ -230,6 +233,7 @@ def build_conversation_prompt_prefix(
     metadata_lines = [
         f'- Captured at: {started_at_local} ({timezone_name or "UTC"})',
     ]
+    account_owner_name = _one_line(getattr(speaker_map, 'owner_name', None) or '')
     if roster is not None:
         if roster.display_title:
             metadata_lines.append(f'- Meeting title: {roster.display_title}')
@@ -345,5 +349,6 @@ def build_conversation_prompt_prefix(
         shaped_context=shaped_context,
         title_people=title_people,
         owner_names=owner_names,
+        account_owner_name=account_owner_name or None,
         known_spellings=known_spellings,
     )
