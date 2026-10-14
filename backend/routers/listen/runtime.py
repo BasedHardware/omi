@@ -23,10 +23,13 @@ from models.message_event import (
     MessageEvent,
     MessageServiceStatusEvent,
 )
-from models.users import PlanType
+from models.users import PlanType, WebhookType
+from database.redis_db import user_webhook_status_db
 from utils.analytics import billable_transcription_seconds, record_usage
 from utils.usage_provenance import live_usage_metadata
-from utils.apps import is_audio_bytes_app_enabled
+from utils.apps import is_audio_bytes_app_enabled, get_enabled_apps
+from utils.sync.mobile_standard_batch import mobile_standard_batch_enabled
+from utils.observability.fallback import record_fallback
 from utils.async_tasks import WebSocketTaskSupervisor, drain_tasks, wait_for_event
 from utils.byok import get_byok_keys
 from utils.client_device import resolve_client_device_from_headers
@@ -897,7 +900,49 @@ class ListenSessionRuntime:
             self.state.last_usage_record_timestamp = now
         return seconds
 
+    async def refresh_mobile_batch_admission(self) -> None:
+        # Conservatively retain live delivery for ANY enabled integration. This
+        # covers transcript consumers as well as audio consumers, and fails
+        # closed if their inventory cannot be read. Re-evaluate on reconnect.
+        checked = getattr(self, '_mobile_batch_checked_at', -float('inf'))
+        now = time.monotonic()
+        if now - checked < 30:
+            if not mobile_standard_batch_enabled(self.request.uid):
+                self.mobile_standard_batch = False
+            return
+        self._mobile_batch_checked_at = now
+        self.mobile_standard_batch = False
+        if mobile_standard_batch_enabled(self.request.uid) and self.private_cloud_sync_enabled:
+            try:
+                private_enabled = bool(
+                    await self.persistence.call(user_db.get_user_private_cloud_sync_enabled, self.request.uid)
+                )
+                has_apps = bool(await self.persistence.call(get_enabled_apps, self.request.uid))
+                has_webhook = bool(await self.persistence.call(get_audio_bytes_webhook_seconds, self.request.uid))
+                transcript_webhook = bool(
+                    await self.persistence.call(
+                        user_webhook_status_db, self.request.uid, WebhookType.realtime_transcript
+                    )
+                )
+                self.mobile_standard_batch = (
+                    private_enabled
+                    and not has_apps
+                    and not has_webhook
+                    and not transcript_webhook
+                    and not self.use_custom_stt
+                )
+            except Exception:
+                record_fallback(
+                    component='stt_selection',
+                    from_mode='batch',
+                    to_mode='live',
+                    reason='other',
+                    outcome='recovered',
+                    log=logger,
+                )
+
     async def _start_pusher(self) -> None:
+        await self.refresh_mobile_batch_admission()
         if not PUSHER_ENABLED:
             return
         audio_bytes_enabled = (
@@ -979,6 +1024,7 @@ class ListenSessionRuntime:
         return MessageServiceStatusEvent(
             status='ready',
             provider=serving,
+            mobile_standard_batch=getattr(self, 'mobile_standard_batch', False),
             reason=f'fallback_from_{selected}' if fell_back else None,
         )
 
