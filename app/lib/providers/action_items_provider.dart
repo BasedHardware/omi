@@ -179,6 +179,12 @@ class ActionItemsProvider extends ChangeNotifier {
   // revision it carried, never a newer edit the user staged while the older
   // request was awaiting its response (Codex PRRT sTqip).
   final Map<String, int> _layoutRevisions = {};
+  // Monotonic revision of completion (done/undone) mutations per id. Rapid
+  // toggles can have their PATCH responses resolve out of order; only the
+  // latest attempt for an item may settle its row, register its fetch
+  // shadow, or revert the visible state. Mirrors [_layoutRevisions]
+  // (Codex PRRT sf5P9).
+  final Map<String, int> _completionMutationRevisions = {};
   int _layoutRevisionCounter = 0;
   int _wholesaleListFetchOrdinal = 0;
   final Set<int> _wholesaleFetchesInFlight = {};
@@ -599,9 +605,14 @@ class ActionItemsProvider extends ChangeNotifier {
       // empty list would otherwise render the false empty state for the rest
       // of the request: upgrade the presentation to the screen shimmer.
       if (showShimmer && !_isLoading) {
+        final joinGeneration = _sessionGeneration;
         setLoading(true);
         existingLoad.whenComplete(() {
-          if (_isLoading) setLoading(false);
+          // Generation-fence like every other completion in this provider:
+          // this callback belongs to the account that joined the load, and
+          // clearUserData() already reset _isLoading for a successor account
+          // whose shimmer must survive this stale completion.
+          if (joinGeneration == _sessionGeneration && _isLoading) setLoading(false);
         });
       }
       return existingLoad;
@@ -1013,6 +1024,13 @@ class ActionItemsProvider extends ChangeNotifier {
     bool newState,
   ) async {
     final generation = _sessionGeneration;
+    // A newer completion attempt on the same item supersedes this one: only
+    // the latest attempt may settle the row, register its fetch shadow, or
+    // revert the visible state when its own request fails.
+    final mutationRevision = (_completionMutationRevisions[item.id] ?? 0) + 1;
+    _completionMutationRevisions[item.id] = mutationRevision;
+    bool isLatestCompletionAttempt() =>
+        _completionMutationRevisions[item.id] == mutationRevision && generation == _sessionGeneration;
     final attempt = ProductTelemetry.instance.start(
       ProductJourney.taskMutation,
       surface: ProductSurface.tasks,
@@ -1034,9 +1052,11 @@ class ActionItemsProvider extends ChangeNotifier {
       }
 
       if (success == null) {
-        _findAndUpdateItemState(item.id, !newState);
-        notifyListeners();
-        Logger.debug('Failed to update action item state on server');
+        if (isLatestCompletionAttempt()) {
+          _findAndUpdateItemState(item.id, !newState);
+          notifyListeners();
+          Logger.debug('Failed to update action item state on server');
+        }
         attempt.complete(
           ProductOutcome.failure,
           failure: ProductFailure.server,
@@ -1048,18 +1068,28 @@ class ActionItemsProvider extends ChangeNotifier {
       // The echo of a completed-only mutation is not layout-authoritative,
       // so keep the hierarchy the visible row already shows.
       final settled = _withVisibleLayout(success.id, success);
-      _registerFetchShadowedEdit(settled);
+      // A superseded response must not register a fetch shadow either: it
+      // would protect the stale pre-newer-toggle state from wholesale fetches
+      // that will return the up-to-date row.
+      if (isLatestCompletionAttempt()) {
+        _registerFetchShadowedEdit(settled);
+      }
       // A wholesale fetch that already applied while this mutation was
       // awaiting its response retired its ordinal before the shadow could be
       // registered, so the visible row may still hold the pre-mutation state.
       // Splice the confirmed server row back in — the same settle behavior
       // the description and due-date edits already have.
       final settledIndex = _actionItems.indexWhere((i) => i.id == success.id);
-      if (settledIndex != -1) {
+      if (isLatestCompletionAttempt() && settledIndex != -1) {
         _actionItems[settledIndex] = settled;
         notifyListeners();
       }
-      SiriIntegration.current.queueUpsertTasks([settled]);
+      if (isLatestCompletionAttempt()) {
+        // External projections (Siri donations, Apple Reminders) must not
+        // receive the superseded state either; the newer attempt pushes its
+        // own confirmed row when it settles.
+        SiriIntegration.current.queueUpsertTasks([settled]);
+      }
       // Cancel notification if the action item is marked as completed
       if (newState == true) {
         await ActionItemNotificationHandler.cancelNotification(item.id);
@@ -1068,7 +1098,9 @@ class ActionItemsProvider extends ChangeNotifier {
         attempt.complete(ProductOutcome.cancelled);
         return false;
       }
-      _pushUpdateToAppleReminder(item, completed: newState);
+      if (isLatestCompletionAttempt()) {
+        _pushUpdateToAppleReminder(item, completed: newState);
+      }
       attempt.complete(ProductOutcome.success);
       if (newState) {
         unawaited(SiriIntegration.current.donateUiAction('task', item.id));
@@ -1084,8 +1116,10 @@ class ActionItemsProvider extends ChangeNotifier {
         attempt.complete(ProductOutcome.cancelled);
         return false;
       }
-      _findAndUpdateItemState(item.id, !newState);
-      notifyListeners();
+      if (isLatestCompletionAttempt()) {
+        _findAndUpdateItemState(item.id, !newState);
+        notifyListeners();
+      }
       Logger.debug('Error updating action item state: $e');
       attempt.complete(ProductOutcome.failure, failure: ProductFailure.network);
       return false;
@@ -1957,6 +1991,7 @@ class ActionItemsProvider extends ChangeNotifier {
     _preservedCreateIds.clear();
     _uncommittedLayout.clear();
     _layoutRevisions.clear();
+    _completionMutationRevisions.clear();
     // Wholesale fetches from the signed-out generation may still resolve
     // later; their ordinals are dead threats. Clear them so a create in the
     // successor account never records a stale ordinal as a fetch threat —

@@ -1353,4 +1353,91 @@ void main() {
       provider.dispose();
     });
   });
+
+  group('round 6 review races', () {
+    test('a shimmer joined before sign-out cannot clear the successor account shimmer', () async {
+      final typed = _HeldListApi();
+      final provider = ActionItemsProvider(actionItemsApi: typed);
+
+      // A non-screen caller (Chat task card) starts the load without a shimmer.
+      final load = provider.ensureLoaded();
+      await Future<void>.delayed(Duration.zero);
+      expect(provider.isLoading, isFalse, reason: 'the non-screen load does not shimmer');
+
+      // The Tasks screen joins the in-flight load and upgrades to shimmer.
+      final joined = provider.ensureLoaded(showShimmer: true);
+      expect(provider.isLoading, isTrue, reason: 'the joined screen presentation shimmers');
+
+      // Sign-out mid-flight; the successor account starts its own shimmer load.
+      provider.clearUserData();
+      final successorLoad = provider.fetchActionItems(showShimmer: true);
+      await Future<void>.delayed(Duration.zero);
+      expect(provider.isLoading, isTrue, reason: 'successor shimmer flag sanity');
+
+      // The signed-out account's joined load resolves first, while the
+      // successor's request is still held: its stale joined completion must
+      // not clear the successor's shimmer (false empty state until the
+      // successor request finishes).
+      typed.completeAt(0, typed.result);
+      await Future<void>.delayed(Duration.zero);
+      expect(
+        provider.isLoading,
+        isTrue,
+        reason: 'the stale joined completion must not clear the successor account shimmer',
+      );
+
+      typed.resolve();
+      await load;
+      await joined;
+      await successorLoad;
+      expect(provider.isLoading, isFalse);
+      provider.dispose();
+    });
+
+    test('an out-of-order completion response cannot resurrect a superseded state', () async {
+      final typed = _HeldListApi();
+      final mutationResponses = <Completer<ActionItemWithMetadata>>[];
+      final provider = ActionItemsProvider(
+        actionItemsApi: typed,
+        updateActionItemRequest: (id, {description, completed, dueAt}) {
+          final responder = Completer<ActionItemWithMetadata>();
+          mutationResponses.add(responder);
+          return responder.future;
+        },
+      );
+
+      // Populate the visible rows.
+      typed.result = ApiSuccess(ActionItemsResponse(actionItems: [_row('a'), _row('b')], hasMore: false));
+      final preview = provider.ensureHomeWidgetPreviewLoaded();
+      await Future<void>.delayed(Duration.zero);
+      typed.resolve();
+      await preview;
+
+      // First toggle (complete); its response is held.
+      final first = provider.updateActionItemState(provider.actionItems.firstWhere((i) => i.id == 'a'), true);
+      await Future<void>.delayed(Duration.zero);
+
+      // The user toggles the same task again before the first response returns.
+      final second = provider.updateActionItemState(provider.actionItems.firstWhere((i) => i.id == 'a'), false);
+      await Future<void>.delayed(Duration.zero);
+
+      // The newer response lands first: the server confirms not-completed.
+      mutationResponses[1].complete(_row('a').copyWith(completed: false));
+      await second;
+      await Future<void>.delayed(Duration.zero);
+      expect(provider.actionItems.firstWhere((i) => i.id == 'a').completed, isFalse);
+
+      // The older response resolves last; it must not overwrite the row with
+      // the superseded completed state.
+      mutationResponses[0].complete(_row('a').copyWith(completed: true));
+      await first;
+      await Future<void>.delayed(Duration.zero);
+      expect(
+        provider.actionItems.firstWhere((item) => item.id == 'a').completed,
+        isFalse,
+        reason: 'a superseded completion response must not overwrite the newer confirmed state',
+      );
+      provider.dispose();
+    });
+  });
 }
