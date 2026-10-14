@@ -875,3 +875,149 @@ def test_make_harness_does_not_execute_double_quote_in_checkout_name(tmp_path: P
     assert not marker.exists()
     assert result.returncode == 0, result.stderr
     assert calls.read_text(encoding="utf-8").splitlines() == ["scripts/dev-harness/list-memory-scenarios.py"]
+
+
+def _run_resolver_function(
+    repo: Path, monkeypatch: pytest.MonkeyPatch, function: str, path: str | None = None
+) -> subprocess.CompletedProcess[str]:
+    resolver = repo / "scripts/dev-harness/_resolve_python.sh"
+    resolver.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(RESOLVER, resolver)
+    monkeypatch.delenv("PYTHON", raising=False)
+    env = _shell_env()
+    if path is not None:
+        env["PATH"] = path
+    return subprocess.run(
+        [
+            _bash_command(),
+            "-c",
+            f'source "$1"; {function}',
+            "bash",
+            _as_bash_path(resolver),
+        ],
+        cwd=repo,
+        env=env,
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        timeout=30,
+        check=False,
+    )
+
+
+def test_backend_pinned_python_prefers_path_311_over_uv(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The pinned-backend helper prefers a PATH python3.11 over uv discovery.
+
+    Both sources are the same runtime family; the PATH name is the cheaper
+    probe, so it must win when it exists. `uv` is absent from the stubbed PATH
+    here, proving the PATH branch answers alone.
+    """
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    calls = tmp_path / "pinned-calls.log"
+    stub_bin = tmp_path / "pinned-stub-bin"
+    stub_bin.mkdir()
+    stub = stub_bin / "python3.11"
+    stub.write_text(
+        "#!/usr/bin/env bash\n"
+        f'printf "%s\\\\n" "$*" >> "{calls}"\n'
+        'if [ "${1:-}" = "-c" ]; then\n'
+        "  exit 0\n"
+        "fi\n"
+        "exit 0\n",
+        encoding="utf-8",
+    )
+    stub.chmod(stub.stat().st_mode | stat.S_IXUSR)
+
+    result = _run_resolver_function(
+        repo,
+        monkeypatch,
+        "dev_harness_backend_pinned_python",
+        path=os.pathsep.join((str(stub_bin), "/usr/bin", "/bin")),
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.strip() == "python3.11"
+    # The floor probe ran against the PATH name; no uv discovery was needed.
+    assert any("version_info" in line for line in calls.read_text(encoding="utf-8").splitlines()), calls
+
+
+def test_backend_pinned_python_falls_back_to_uv_managed_311(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Without a PATH python3.11, the helper discovers the uv-managed 3.11.
+
+    This is the provisioning contract the Codex P1 asks for: dev-init must be
+    able to bootstrap the pinned backend runtime from the same toolchain
+    `make lane-backend` uses, without requiring an install first.
+    """
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    uv_managed = tmp_path / "uv" / "python3.11"
+    uv_managed.parent.mkdir(parents=True)
+    uv_managed.write_text("#!/usr/bin/env bash\nexit 0\n", encoding="utf-8")
+    uv_managed.chmod(uv_managed.stat().st_mode | stat.S_IXUSR)
+    stub_bin = tmp_path / "uv-stub-bin"
+    stub_bin.mkdir()
+    uv = stub_bin / "uv"
+    uv.write_text(
+        "#!/usr/bin/env bash\n"
+        'if [ "${1:-}" = "python" ] && [ "${2:-}" = "find" ] && [ "${3:-}" = "3.11" ]; then\n'
+        f'  printf "%s\\\\n" "{uv_managed}"\n'
+        "  exit 0\n"
+        "fi\n"
+        "exit 1\n",
+        encoding="utf-8",
+    )
+    uv.chmod(uv.stat().st_mode | stat.S_IXUSR)
+
+    result = _run_resolver_function(
+        repo,
+        monkeypatch,
+        "dev_harness_backend_pinned_python",
+        path=os.pathsep.join((str(stub_bin), "/usr/bin", "/bin")),
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.strip() == str(uv_managed)
+
+
+def test_backend_pinned_python_fails_without_any_311(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """No usable 3.11 anywhere means failure — callers fall back.
+
+    dev-init keys its advisory path on this failure, so the helper must return
+    non-zero instead of printing an unqualified interpreter. Stubs make this
+    deterministic: a PATH python3.11 that fails the floor probe is skipped,
+    and a uv that cannot find 3.11 ends the discovery.
+    """
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    stub_bin = tmp_path / "nopin-stub-bin"
+    stub_bin.mkdir()
+    below_floor = stub_bin / "python3.11"
+    below_floor.write_text(
+        "#!/usr/bin/env bash\n"
+        'if [ "${1:-}" = "-c" ]; then\n'
+        "  exit 1\n"
+        "fi\n"
+        "exit 0\n",
+        encoding="utf-8",
+    )
+    below_floor.chmod(below_floor.stat().st_mode | stat.S_IXUSR)
+    uv = stub_bin / "uv"
+    uv.write_text("#!/usr/bin/env bash\nexit 1\n", encoding="utf-8")
+    uv.chmod(uv.stat().st_mode | stat.S_IXUSR)
+
+    result = _run_resolver_function(
+        repo,
+        monkeypatch,
+        "dev_harness_backend_pinned_python",
+        path=os.pathsep.join((str(stub_bin), "/usr/bin", "/bin")),
+    )
+
+    assert result.returncode != 0
+    assert result.stdout.strip() == ""

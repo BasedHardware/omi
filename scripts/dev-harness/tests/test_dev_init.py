@@ -434,3 +434,88 @@ def test_dev_init_refuses_a_foreign_checkout_venv_override(tmp_path: Path) -> No
     assert "does not belong to this repo's backend/.venv" in result.stdout, result.stdout
     calls = log.read_text(encoding="utf-8").splitlines() if log.exists() else []
     assert not any(line.startswith("FOREIGNVENV -m pip") for line in calls), calls
+
+
+
+
+def test_dev_init_bootstraps_the_pinned_311_when_discoverable(tmp_path: Path) -> None:
+    """Bootstrap must prefer the repo-pinned 3.11 over the floor pick.
+
+    The backend pylock is `>=3.11,<3.12` and mobile_doctor rejects a non-3.11
+    backend venv, so dev-init provisioning a 3.12/3.14 venv would create an
+    environment the documented mobile flow immediately blocks (Codex P1).
+    Discovery comes from the resolver's pinned-backend helper; this test pins
+    the dev-init preference contract, not the helper's internals.
+    """
+    repo = _fixture_repo(tmp_path)
+    (repo / "backend/.venv/bin/python").unlink()
+    log = tmp_path / "pinned-calls.log"
+    stub_bin = tmp_path / "pinned-stub-bin"
+    stub_bin.mkdir()
+
+    # A venv-creating, membership-reporting python3.11 (floor OK)…
+    _write_logging_bootstrap_stub(stub_bin, "python3.11", log, floor_ok=True)
+    # …and a floor-qualified python3.12 that must NOT be preferred over it.
+    _write_logging_bootstrap_stub(stub_bin, "python3.12", log, floor_ok=True)
+
+    env = _clean_env()
+    env["PATH"] = os.pathsep.join((str(stub_bin), "/usr/bin", "/bin"))
+    result = subprocess.run(
+        [_bash(), "scripts/dev-harness/dev-init.sh"],
+        cwd=repo,
+        env=env,
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        timeout=120,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stdout
+    assert "Created backend/.venv (with python3.11)" in result.stdout, result.stdout
+    calls = log.read_text(encoding="utf-8").splitlines()
+    assert any(line.startswith("python3.11 -m venv backend/.venv") for line in calls), calls
+    assert not any(line.startswith("python3.12 -m venv") for line in calls), calls
+    assert any(line.startswith("VENV -m pip install") for line in calls), calls
+
+
+def test_dev_init_refuses_an_existing_below_floor_venv(tmp_path: Path) -> None:
+    """A pre-existing below-floor venv must not receive the requirements install.
+
+    The executable-only bootstrap condition used to skip every check on a
+    checkout that already had backend/.venv, so dev-init ran the full install
+    under 3.9 and reported success while the resolver (and the pre-push gate)
+    ignores that same venv (Codex P1). dev-init must refuse with
+    lane-bootstrap guidance instead.
+    """
+    repo = _fixture_repo(tmp_path)
+    # The fixture venv python exits 0 for everything; script it into a
+    # below-floor interpreter so dev_harness_canonical_python rejects it.
+    venv_python = repo / "backend/.venv/bin/python"
+    venv_python.write_text(
+        "#!/usr/bin/env bash\n"
+        'if [ "${1:-}" = "-c" ]; then\n'
+        "  exit 1\n"
+        "fi\n"
+        "exit 0\n",
+        encoding="utf-8",
+    )
+    venv_python.chmod(venv_python.stat().st_mode | 0o755)
+
+    env = _clean_env()
+    env["PATH"] = os.pathsep.join(("/usr/bin", "/bin"))
+    result = subprocess.run(
+        [_bash(), "scripts/dev-harness/dev-init.sh"],
+        cwd=repo,
+        env=env,
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        timeout=120,
+        check=False,
+    )
+
+    assert result.returncode == 1, result.stdout
+    assert "not usable by the dev harness" in result.stdout, result.stdout
+    assert "make lane-bootstrap" in result.stdout, result.stdout
+    assert "refusing to install requirements into it" in result.stdout, result.stdout

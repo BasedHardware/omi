@@ -22,8 +22,23 @@ fi
 # checkout must not skip it — Codex P1), and the install below runs only
 # through the venv, never a global interpreter (Codex/Oracle follow-up: a
 # 3.9-only host must not have its requirements installed globally either).
-if [ ! -x "backend/.venv/bin/python" ] && [ ! -x "backend/.venv/Scripts/python.exe" ]; then
-  BOOTSTRAP_PY="$(dev_harness_python)"
+# Prefer the repo-pinned 3.11 backend runtime when it is discoverable — the
+# backend pylock declares `>=3.11,<3.12` and mobile_doctor rejects a non-3.11
+# backend venv — falling back to the pre-push floor pick only when no 3.11
+# is discoverable without installing anything (Codex P1).
+VENV_PREEXISTED=0
+if [ -x "backend/.venv/bin/python" ] || [ -x "backend/.venv/Scripts/python.exe" ]; then
+  VENV_PREEXISTED=1
+fi
+if [ "$VENV_PREEXISTED" -eq 0 ]; then
+  BOOTSTRAP_PY=""
+  if BOOTSTRAP_PY="$(dev_harness_backend_pinned_python)"; then
+    echo "Using the repo-pinned backend runtime: $BOOTSTRAP_PY"
+  else
+    BOOTSTRAP_PY="$(dev_harness_python)"
+    echo "dev-init: no pinned Python 3.11 discoverable; bootstrapping with the floor pick $BOOTSTRAP_PY" >&2
+    echo "dev-init: the backend pylock is >=3.11,<3.12 — run 'make lane-backend' to upgrade this venv to 3.11." >&2
+  fi
   # A bare-3.9 bootstrap would create a venv every later resolver call
   # rejects; stop here with the documented guidance instead (Codex P2).
   if ! dev_harness_python_floor_ok "$BOOTSTRAP_PY"; then
@@ -32,6 +47,20 @@ if [ ! -x "backend/.venv/bin/python" ] && [ ! -x "backend/.venv/Scripts/python.e
   fi
   "$BOOTSTRAP_PY" -m venv backend/.venv
   echo "Created backend/.venv (with $BOOTSTRAP_PY)"
+fi
+
+# A pre-existing venv that the resolver rejects (below the 3.10 floor) must
+# not receive this install: the resolver ignores it, so dev-init would report
+# success while dev-harness/pre-push refuses the environment it just
+# provisioned (Codex P1). The resolver emits the actionable guidance itself.
+if [ "$VENV_PREEXISTED" -eq 1 ]; then
+  # stdout (the resolved path) is discarded; the resolver's stderr names the
+  # exact reason (below-floor or missing cheap-gate imports).
+  if ! dev_harness_canonical_python >/dev/null; then
+    echo "dev-init: the existing backend/.venv is not usable by the dev harness (below the 3.10 floor or missing cheap-gate imports); refusing to install requirements into it." >&2
+    echo "Run: make lane-bootstrap (Python 3.11 venv), or recreate it: rm -rf backend/.venv && dev-init." >&2
+    exit 1
+  fi
 fi
 
 # Select the executable for the layout that exists (native Windows venvs use

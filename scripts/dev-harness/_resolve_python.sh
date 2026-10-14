@@ -20,6 +20,30 @@ dev_harness_python_floor_ok() {
   "$python_bin" -c 'import sys; raise SystemExit(0 if sys.version_info >= (3, 10) else 1)' >/dev/null 2>&1
 }
 
+# dev_harness_python serves the whole pre-push harness, whose floor is 3.10.
+# The backend itself is pinned tighter: every backend pylock declares
+# `>=3.11,<3.12` and mobile_doctor rejects a non-3.11 backend venv, so
+# provisioning (dev-init) prefers this interpreter when one is discoverable
+# without installing anything: the PATH name first, then the uv-managed
+# toolchain — the same runtime `make lane-backend` / `make lane-bootstrap`
+# provision.
+dev_harness_backend_pinned_python() {
+  if command -v python3.11 >/dev/null 2>&1 \
+    && dev_harness_python_floor_ok python3.11; then
+    printf '%s\n' python3.11
+    return 0
+  fi
+  local uv_bin candidate
+  uv_bin="$(command -v uv 2>/dev/null)" || return 1
+  candidate="$("$uv_bin" python find 3.11 2>/dev/null)" || return 1
+  [ -n "$candidate" ] || return 1
+  if [ -x "$candidate" ] && dev_harness_python_floor_ok "$candidate"; then
+    printf '%s\n' "$candidate"
+    return 0
+  fi
+  return 1
+}
+
 # Print the canonical locked backend interpreter when setup has created it.
 # A venv must BOTH import the cheap-gate deps AND satisfy the 3.10 floor: a
 # 3.9-created venv with dotenv/yaml installed would otherwise pass the import
