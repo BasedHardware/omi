@@ -13145,6 +13145,9 @@ class AppLocalizationsTe extends AppLocalizations {
   String get onboardingActWriting => 'సారాంశం తయారవుతోంది…';
 
   @override
+  String get onboardingActRemembers => 'మీరు గుర్తుంచుకోనవసరం లేదు, Omi గుర్తుంచుకుంటుంది';
+
+  @override
   String get onboardingActNotesLabel => 'మీ రోజు, సంక్షిప్తంగా';
 
   @override
@@ -13210,9 +13213,6 @@ class AppLocalizationsTe extends AppLocalizations {
 
   @override
   String get homeNewRecordingButton => 'కొత్త రికార్డింగ్';
-
-  @override
-  String get onboardingActNotesLater => 'Omi ఇంకా మీ నోట్స్ రాస్తోంది. మీరు వాటిని హోమ్‌లో చూడవచ్చు.';
 
   @override
   String get chatWelcomeMessage =>

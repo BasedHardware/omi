@@ -13122,6 +13122,9 @@ class AppLocalizationsLv extends AppLocalizations {
   String get onboardingActWriting => 'Apkopojam…';
 
   @override
+  String get onboardingActRemembers => 'Omi atceras, lai jums nebūtu jāatceras';
+
+  @override
   String get onboardingActNotesLabel => 'Jūsu diena īsumā';
 
   @override
@@ -13187,9 +13190,6 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get homeNewRecordingButton => 'Jauns ieraksts';
-
-  @override
-  String get onboardingActNotesLater => 'Omi vēl raksta jūsu piezīmes. Tās atradīsiet sākumlapā.';
 
   @override
   String get chatWelcomeMessage =>

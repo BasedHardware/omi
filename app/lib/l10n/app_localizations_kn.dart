@@ -13132,6 +13132,9 @@ class AppLocalizationsKn extends AppLocalizations {
   String get onboardingActWriting => 'ಸಾರಾಂಶ ಮಾಡುತ್ತಿದೆ…';
 
   @override
+  String get onboardingActRemembers => 'ನೀವು ನೆನಪಿಡಬೇಕಿಲ್ಲ, Omi ನೆನಪಿಡುತ್ತದೆ';
+
+  @override
   String get onboardingActNotesLabel => 'ನಿಮ್ಮ ದಿನದ ಸಾರಾಂಶ';
 
   @override
@@ -13197,10 +13200,6 @@ class AppLocalizationsKn extends AppLocalizations {
 
   @override
   String get homeNewRecordingButton => 'ಹೊಸ ರೆಕಾರ್ಡಿಂಗ್';
-
-  @override
-  String get onboardingActNotesLater =>
-      'Omi ಇನ್ನೂ ನಿಮ್ಮ ಟಿಪ್ಪಣಿಗಳನ್ನು ಬರೆಯುತ್ತಿದೆ. ನೀವು ಅವುಗಳನ್ನು ಹೋಮ್‌ನಲ್ಲಿ ಕಾಣುವಿರಿ.';
 
   @override
   String get chatWelcomeMessage =>

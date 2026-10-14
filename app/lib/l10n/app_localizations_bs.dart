@@ -13124,6 +13124,9 @@ class AppLocalizationsBs extends AppLocalizations {
   String get onboardingActWriting => 'Sažimamo…';
 
   @override
+  String get onboardingActRemembers => 'Omi pamti da vi ne morate';
+
+  @override
   String get onboardingActNotesLabel => 'Vaš dan, ukratko';
 
   @override
@@ -13189,9 +13192,6 @@ class AppLocalizationsBs extends AppLocalizations {
 
   @override
   String get homeNewRecordingButton => 'Novo snimanje';
-
-  @override
-  String get onboardingActNotesLater => 'Omi još piše vaše bilješke. Naći ćete ih na početnoj.';
 
   @override
   String get chatWelcomeMessage =>

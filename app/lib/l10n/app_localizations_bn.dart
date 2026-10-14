@@ -13090,6 +13090,9 @@ class AppLocalizationsBn extends AppLocalizations {
   String get onboardingActWriting => 'সারাংশ তৈরি হচ্ছে…';
 
   @override
+  String get onboardingActRemembers => 'Omi মনে রাখে, যাতে আপনাকে রাখতে না হয়';
+
+  @override
   String get onboardingActNotesLabel => 'আপনার দিন, সংক্ষেপে';
 
   @override
@@ -13155,9 +13158,6 @@ class AppLocalizationsBn extends AppLocalizations {
 
   @override
   String get homeNewRecordingButton => 'নতুন রেকর্ডিং';
-
-  @override
-  String get onboardingActNotesLater => 'Omi এখনও আপনার নোট লিখছে। আপনি সেগুলো হোমে পাবেন।';
 
   @override
   String get chatWelcomeMessage =>

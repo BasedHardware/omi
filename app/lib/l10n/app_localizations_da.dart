@@ -13082,6 +13082,9 @@ class AppLocalizationsDa extends AppLocalizations {
   String get onboardingActWriting => 'Opsummerer…';
 
   @override
+  String get onboardingActRemembers => 'Omi husker det, så du ikke behøver';
+
+  @override
   String get onboardingActNotesLabel => 'Din dag, opsummeret';
 
   @override
@@ -13147,9 +13150,6 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String get homeNewRecordingButton => 'Ny optagelse';
-
-  @override
-  String get onboardingActNotesLater => 'Omi skriver stadig dine noter. Du finder dem på Hjem.';
 
   @override
   String get chatWelcomeMessage =>

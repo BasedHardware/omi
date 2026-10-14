@@ -13088,6 +13088,9 @@ class AppLocalizationsEt extends AppLocalizations {
   String get onboardingActWriting => 'Teeme kokkuvõtet…';
 
   @override
+  String get onboardingActRemembers => 'Omi mäletab, et sina ei peaks';
+
+  @override
   String get onboardingActNotesLabel => 'Sinu päev lühidalt';
 
   @override
@@ -13153,9 +13156,6 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get homeNewRecordingButton => 'Uus salvestus';
-
-  @override
-  String get onboardingActNotesLater => 'Omi kirjutab veel su märkmeid. Leiad need avalehelt.';
 
   @override
   String get chatWelcomeMessage =>

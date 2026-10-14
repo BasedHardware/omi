@@ -13089,6 +13089,9 @@ class AppLocalizationsFa extends AppLocalizations {
   String get onboardingActWriting => 'در حال خلاصه‌سازی…';
 
   @override
+  String get onboardingActRemembers => 'Omi به خاطر می‌سپارد تا شما مجبور نباشید';
+
+  @override
   String get onboardingActNotesLabel => 'روز شما، خلاصه‌شده';
 
   @override
@@ -13154,9 +13157,6 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String get homeNewRecordingButton => 'ضبط جدید';
-
-  @override
-  String get onboardingActNotesLater => 'Omi هنوز در حال نوشتن یادداشت‌های شماست. آن‌ها را در صفحه اصلی پیدا می‌کنید.';
 
   @override
   String get chatWelcomeMessage =>

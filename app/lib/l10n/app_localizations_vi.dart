@@ -13092,6 +13092,9 @@ class AppLocalizationsVi extends AppLocalizations {
   String get onboardingActWriting => 'Đang tóm tắt…';
 
   @override
+  String get onboardingActRemembers => 'Omi ghi nhớ để bạn không phải nhớ';
+
+  @override
   String get onboardingActNotesLabel => 'Ngày của bạn, tóm tắt';
 
   @override
@@ -13157,9 +13160,6 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get homeNewRecordingButton => 'Ghi âm mới';
-
-  @override
-  String get onboardingActNotesLater => 'Omi vẫn đang viết ghi chú của bạn. Bạn sẽ thấy chúng ở Trang chủ.';
 
   @override
   String get chatWelcomeMessage =>

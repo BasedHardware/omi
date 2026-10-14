@@ -13104,6 +13104,9 @@ class AppLocalizationsId extends AppLocalizations {
   String get onboardingActWriting => 'Merangkum…';
 
   @override
+  String get onboardingActRemembers => 'Omi mengingat, jadi kamu tidak perlu';
+
+  @override
   String get onboardingActNotesLabel => 'Harimu, dirangkum';
 
   @override
@@ -13169,9 +13172,6 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get homeNewRecordingButton => 'Rekaman Baru';
-
-  @override
-  String get onboardingActNotesLater => 'Omi masih menulis catatanmu. Kamu akan menemukannya di Beranda.';
 
   @override
   String get chatWelcomeMessage =>

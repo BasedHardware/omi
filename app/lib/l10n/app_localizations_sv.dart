@@ -13099,6 +13099,9 @@ class AppLocalizationsSv extends AppLocalizations {
   String get onboardingActWriting => 'Sammanfattar…';
 
   @override
+  String get onboardingActRemembers => 'Omi minns så att du slipper';
+
+  @override
   String get onboardingActNotesLabel => 'Din dag, sammanfattad';
 
   @override
@@ -13164,9 +13167,6 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get homeNewRecordingButton => 'Ny inspelning';
-
-  @override
-  String get onboardingActNotesLater => 'Omi skriver fortfarande dina anteckningar. Du hittar dem på Hem.';
 
   @override
   String get chatWelcomeMessage =>

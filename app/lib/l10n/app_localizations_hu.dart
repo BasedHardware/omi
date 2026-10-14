@@ -13146,6 +13146,9 @@ class AppLocalizationsHu extends AppLocalizations {
   String get onboardingActWriting => 'Összefoglalás…';
 
   @override
+  String get onboardingActRemembers => 'Az Omi emlékszik helyetted';
+
+  @override
   String get onboardingActNotesLabel => 'A napod röviden';
 
   @override
@@ -13211,9 +13214,6 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get homeNewRecordingButton => 'Új felvétel';
-
-  @override
-  String get onboardingActNotesLater => 'Az Omi még írja a jegyzeteidet. A kezdőlapon találod őket.';
 
   @override
   String get chatWelcomeMessage =>

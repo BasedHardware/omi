@@ -13129,6 +13129,9 @@ class AppLocalizationsNl extends AppLocalizations {
   String get onboardingActWriting => 'Samenvatten…';
 
   @override
+  String get onboardingActRemembers => 'Omi onthoudt het, zodat jij dat niet hoeft';
+
+  @override
   String get onboardingActNotesLabel => 'Je dag, samengevat';
 
   @override
@@ -13194,9 +13197,6 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get homeNewRecordingButton => 'Nieuwe opname';
-
-  @override
-  String get onboardingActNotesLater => 'Omi schrijft je notities nog. Je vindt ze op Home.';
 
   @override
   String get chatWelcomeMessage =>

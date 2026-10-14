@@ -15819,6 +15819,10 @@
     "@onboardingActWriting": {
         "description": "Activation: shown while Omi processes the dictation"
     },
+    "onboardingActRemembers": "Omi remembers so you don't have to",
+    "@onboardingActRemembers": {
+        "description": "Line above the summary title at the end of the onboarding dictation"
+    },
     "onboardingActNotesLabel": "Your day, summarized",
     "@onboardingActNotesLabel": {
         "description": "Activation: small label above the generated summary"
@@ -15908,10 +15912,6 @@
     "homeNewRecordingButton": "New Recording",
     "@homeNewRecordingButton": {
         "description": "Label on Home's main bottom button that starts a new recording with the phone."
-    },
-    "onboardingActNotesLater": "Omi is still writing your notes. You'll find them on Home.",
-    "@onboardingActNotesLater": {
-        "description": "Onboarding activation: shown under the reader's words when Omi's notes took too long; they appear on Home later"
     },
     "chatWelcomeMessage": "Hi, I'm Omi. Ask me anything you've talked about: what someone said, what you promised, or a summary of your day. I can also add to-dos and remember things for you.",
     "@chatWelcomeMessage": {

@@ -23313,6 +23313,12 @@ abstract class AppLocalizations {
   /// **'Summarizing…'**
   String get onboardingActWriting;
 
+  /// Line above the summary title at the end of the onboarding dictation
+  ///
+  /// In en, this message translates to:
+  /// **'Omi remembers so you don\'t have to'**
+  String get onboardingActRemembers;
+
   /// Activation: small label above the generated summary
   ///
   /// In en, this message translates to:
@@ -23438,12 +23444,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'New Recording'**
   String get homeNewRecordingButton;
-
-  /// Onboarding activation: shown under the reader's words when Omi's notes took too long; they appear on Home later
-  ///
-  /// In en, this message translates to:
-  /// **'Omi is still writing your notes. You\'ll find them on Home.'**
-  String get onboardingActNotesLater;
 
   /// First message Omi shows in an empty chat the first time it is opened, explaining what chat can do
   ///

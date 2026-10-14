@@ -13095,6 +13095,9 @@ class AppLocalizationsCs extends AppLocalizations {
   String get onboardingActWriting => 'Shrnujeme…';
 
   @override
+  String get onboardingActRemembers => 'Omi si to pamatuje, abyste nemuseli vy';
+
+  @override
   String get onboardingActNotesLabel => 'Váš den ve zkratce';
 
   @override
@@ -13160,9 +13163,6 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get homeNewRecordingButton => 'Nový záznam';
-
-  @override
-  String get onboardingActNotesLater => 'Omi ještě píše vaše poznámky. Najdete je na domovské obrazovce.';
 
   @override
   String get chatWelcomeMessage =>

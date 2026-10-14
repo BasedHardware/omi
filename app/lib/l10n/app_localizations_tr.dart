@@ -13107,6 +13107,9 @@ class AppLocalizationsTr extends AppLocalizations {
   String get onboardingActWriting => 'Özetleniyor…';
 
   @override
+  String get onboardingActRemembers => 'Omi hatırlar, senin hatırlamana gerek kalmaz';
+
+  @override
   String get onboardingActNotesLabel => 'Günün, özetle';
 
   @override
@@ -13172,9 +13175,6 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get homeNewRecordingButton => 'Yeni Kayıt';
-
-  @override
-  String get onboardingActNotesLater => 'Omi notlarını hâlâ yazıyor. Onları Ana Sayfa\'da bulacaksın.';
 
   @override
   String get chatWelcomeMessage =>

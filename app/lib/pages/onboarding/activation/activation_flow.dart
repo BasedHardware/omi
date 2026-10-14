@@ -213,6 +213,7 @@ class _ActivationFlowState extends State<ActivationFlow> {
         ),
       ActivationStage.summary => _Stage(
           key: const ValueKey('summary'),
+          eyebrow: l10n.onboardingActRemembers,
           title: _result!.hasNotes ? l10n.onboardingActNotesLabel : l10n.onboardingActYourWords,
           body: _SummaryCard(result: _result!, heard: _heard),
           bottom: _ContinueButton(
@@ -259,6 +260,7 @@ class _Stage extends StatelessWidget {
   const _Stage({
     super.key,
     required this.title,
+    this.eyebrow,
     this.subtitle,
     required this.body,
     this.bottom,
@@ -268,6 +270,9 @@ class _Stage extends StatelessWidget {
   });
 
   final String title;
+
+  /// A quiet line above the title.
+  final String? eyebrow;
   final String? subtitle;
   final Widget body;
   final Widget? bottom;
@@ -287,7 +292,17 @@ class _Stage extends StatelessWidget {
               height: _kTopRowHeight,
               child: Align(alignment: Alignment.centerRight, child: topRight),
             ),
-            const SizedBox(height: _kHeadingGap),
+            // The eyebrow takes its line out of the gap, so the title stays at the same height.
+            SizedBox(height: eyebrow == null ? _kHeadingGap : _kHeadingGap - 26),
+            if (eyebrow != null)
+              SizedBox(
+                height: 26,
+                child: Text(
+                  eyebrow!,
+                  textAlign: TextAlign.center,
+                  style: OmiType.subhead.copyWith(color: OmiColors.textSecondary),
+                ),
+              ),
             Semantics(header: true, child: Text(title, style: OmiType.title1, textAlign: TextAlign.center)),
             if (subtitle != null) ...[
               const SizedBox(height: OmiSpacing.xs),
@@ -925,20 +940,7 @@ class _SummaryCardState extends State<_SummaryCard> {
             key: const Key('activation_summary_card'),
             child: WordReveal(text: _words, t: segment(t, 0, 1, Curves.linear), style: _wordsStyle),
           );
-          if (!_r.notesPending) return card;
-          return Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              card,
-              const SizedBox(height: OmiSpacing.md),
-              Text(
-                l10n.onboardingActNotesLater,
-                key: const Key('activation_notes_later'),
-                textAlign: TextAlign.center,
-                style: OmiType.footnote.copyWith(color: OmiColors.textTertiary),
-              ),
-            ],
-          );
+          return card;
         }
         return NoteCard(
           key: const Key('activation_summary_card'),

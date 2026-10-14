@@ -13142,6 +13142,9 @@ class AppLocalizationsBg extends AppLocalizations {
   String get onboardingActWriting => 'Обобщаваме…';
 
   @override
+  String get onboardingActRemembers => 'Omi помни вместо вас';
+
+  @override
   String get onboardingActNotesLabel => 'Денят ви накратко';
 
   @override
@@ -13207,9 +13210,6 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String get homeNewRecordingButton => 'Нов запис';
-
-  @override
-  String get onboardingActNotesLater => 'Omi все още пише бележките ви. Ще ги намерите на началния екран.';
 
   @override
   String get chatWelcomeMessage =>

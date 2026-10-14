@@ -13178,6 +13178,9 @@ class AppLocalizationsEl extends AppLocalizations {
   String get onboardingActWriting => 'Γίνεται σύνοψη…';
 
   @override
+  String get onboardingActRemembers => 'Το Omi θυμάται, για να μη χρειάζεται εσύ';
+
+  @override
   String get onboardingActNotesLabel => 'Η μέρα σου, σε σύνοψη';
 
   @override
@@ -13244,9 +13247,6 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get homeNewRecordingButton => 'Νέα ηχογράφηση';
-
-  @override
-  String get onboardingActNotesLater => 'Το Omi γράφει ακόμα τις σημειώσεις σου. Θα τις βρεις στην Αρχική.';
 
   @override
   String get chatWelcomeMessage =>

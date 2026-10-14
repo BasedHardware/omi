@@ -264,7 +264,8 @@ void main() {
     await tester.pump(const Duration(seconds: 5));
     expect(find.text("Here's what you said"), findsOneWidget);
     expect(find.text('Lunch with Sam today'), findsOneWidget);
-    expect(find.byKey(const Key('activation_notes_later')), findsOneWidget);
+    expect(find.textContaining('still writing'), findsNothing, reason: 'no apology line; the notes reach Home');
+    expect(find.text("Omi remembers so you don't have to"), findsOneWidget);
     await tapKey(tester, 'activation_continue_summary');
     expect(find.byKey(const Key('activation_continue_congrats')), findsOneWidget);
     await tester.pump(const Duration(seconds: 3));

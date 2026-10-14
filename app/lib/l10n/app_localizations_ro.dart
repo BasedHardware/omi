@@ -13149,6 +13149,9 @@ class AppLocalizationsRo extends AppLocalizations {
   String get onboardingActWriting => 'Rezumăm…';
 
   @override
+  String get onboardingActRemembers => 'Omi își amintește, ca să nu fie nevoie să o faci tu';
+
+  @override
   String get onboardingActNotesLabel => 'Ziua ta, pe scurt';
 
   @override
@@ -13214,9 +13217,6 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get homeNewRecordingButton => 'Înregistrare nouă';
-
-  @override
-  String get onboardingActNotesLater => 'Omi încă îți scrie notițele. Le vei găsi pe pagina principală.';
 
   @override
   String get chatWelcomeMessage =>

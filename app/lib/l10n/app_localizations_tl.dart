@@ -13199,6 +13199,9 @@ class AppLocalizationsTl extends AppLocalizations {
   String get onboardingActWriting => 'Binubuod…';
 
   @override
+  String get onboardingActRemembers => 'Tinatandaan ng Omi para hindi mo na kailangan';
+
+  @override
   String get onboardingActNotesLabel => 'Ang araw mo, buod';
 
   @override
@@ -13264,9 +13267,6 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get homeNewRecordingButton => 'Bagong Recording';
-
-  @override
-  String get onboardingActNotesLater => 'Isinusulat pa ng Omi ang iyong mga tala. Makikita mo ang mga ito sa Home.';
 
   @override
   String get chatWelcomeMessage =>

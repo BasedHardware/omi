@@ -13164,6 +13164,9 @@ class AppLocalizationsIt extends AppLocalizations {
   String get onboardingActWriting => 'Riassumendo…';
 
   @override
+  String get onboardingActRemembers => 'Omi ricorda al posto tuo';
+
+  @override
   String get onboardingActNotesLabel => 'La tua giornata, in sintesi';
 
   @override
@@ -13229,9 +13232,6 @@ class AppLocalizationsIt extends AppLocalizations {
 
   @override
   String get homeNewRecordingButton => 'Nuova registrazione';
-
-  @override
-  String get onboardingActNotesLater => 'Omi sta ancora scrivendo le tue note. Le troverai nella Home.';
 
   @override
   String get chatWelcomeMessage =>

@@ -13001,6 +13001,9 @@ class AppLocalizationsHe extends AppLocalizations {
   String get onboardingActWriting => 'מסכם…';
 
   @override
+  String get onboardingActRemembers => 'Omi זוכר, כדי שאתם לא תצטרכו';
+
+  @override
   String get onboardingActNotesLabel => 'היום שלך, בתמצית';
 
   @override
@@ -13065,9 +13068,6 @@ class AppLocalizationsHe extends AppLocalizations {
 
   @override
   String get homeNewRecordingButton => 'הקלטה חדשה';
-
-  @override
-  String get onboardingActNotesLater => 'Omi עדיין כותב את ההערות שלך. תמצא אותן במסך הבית.';
 
   @override
   String get chatWelcomeMessage =>

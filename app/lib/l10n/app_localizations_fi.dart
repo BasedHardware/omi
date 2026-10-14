@@ -13099,6 +13099,9 @@ class AppLocalizationsFi extends AppLocalizations {
   String get onboardingActWriting => 'Tiivistetään…';
 
   @override
+  String get onboardingActRemembers => 'Omi muistaa, ettei sinun tarvitse';
+
+  @override
   String get onboardingActNotesLabel => 'Päiväsi tiivistettynä';
 
   @override
@@ -13164,9 +13167,6 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get homeNewRecordingButton => 'Uusi tallennus';
-
-  @override
-  String get onboardingActNotesLater => 'Omi kirjoittaa vielä muistiinpanojasi. Löydät ne Kotinäkymästä.';
 
   @override
   String get chatWelcomeMessage =>

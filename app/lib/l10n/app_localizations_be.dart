@@ -13129,6 +13129,9 @@ class AppLocalizationsBe extends AppLocalizations {
   String get onboardingActWriting => 'Падсумоўваем…';
 
   @override
+  String get onboardingActRemembers => 'Omi памятае, каб вам не трэба было';
+
+  @override
   String get onboardingActNotesLabel => 'Ваш дзень коратка';
 
   @override
@@ -13194,9 +13197,6 @@ class AppLocalizationsBe extends AppLocalizations {
 
   @override
   String get homeNewRecordingButton => 'Новы запіс';
-
-  @override
-  String get onboardingActNotesLater => 'Omi яшчэ піша вашы нататкі. Вы знойдзеце іх на галоўнай.';
 
   @override
   String get chatWelcomeMessage =>

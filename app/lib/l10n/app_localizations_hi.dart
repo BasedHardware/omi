@@ -13076,6 +13076,9 @@ class AppLocalizationsHi extends AppLocalizations {
   String get onboardingActWriting => 'सारांश बन रहा है…';
 
   @override
+  String get onboardingActRemembers => 'Omi याद रखता है, ताकि आपको न रखना पड़े';
+
+  @override
   String get onboardingActNotesLabel => 'आपका दिन, संक्षेप में';
 
   @override
@@ -13141,9 +13144,6 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String get homeNewRecordingButton => 'नई रिकॉर्डिंग';
-
-  @override
-  String get onboardingActNotesLater => 'Omi अभी भी आपके नोट्स लिख रहा है। आप उन्हें होम पर पाएंगे।';
 
   @override
   String get chatWelcomeMessage =>

@@ -12913,6 +12913,9 @@ class AppLocalizationsKo extends AppLocalizations {
   String get onboardingActWriting => '요약하는 중…';
 
   @override
+  String get onboardingActRemembers => '기억은 Omi가 대신해요';
+
+  @override
   String get onboardingActNotesLabel => '오늘 하루 요약';
 
   @override
@@ -12976,9 +12979,6 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get homeNewRecordingButton => '새 녹음';
-
-  @override
-  String get onboardingActNotesLater => 'Omi가 아직 노트를 작성하고 있어요. 홈에서 확인할 수 있어요.';
 
   @override
   String get chatWelcomeMessage =>

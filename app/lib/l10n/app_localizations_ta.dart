@@ -13184,6 +13184,9 @@ class AppLocalizationsTa extends AppLocalizations {
   String get onboardingActWriting => 'சுருக்கப்படுகிறது…';
 
   @override
+  String get onboardingActRemembers => 'நீங்கள் நினைவில் வைக்க வேண்டியதில்லை, Omi வைத்துக்கொள்ளும்';
+
+  @override
   String get onboardingActNotesLabel => 'உங்கள் நாள், சுருக்கமாக';
 
   @override
@@ -13251,9 +13254,6 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String get homeNewRecordingButton => 'புதிய பதிவு';
-
-  @override
-  String get onboardingActNotesLater => 'Omi இன்னும் உங்கள் குறிப்புகளை எழுதுகிறது. அவற்றை முகப்பில் காணலாம்.';
 
   @override
   String get chatWelcomeMessage =>

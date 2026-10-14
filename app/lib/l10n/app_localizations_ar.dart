@@ -13020,6 +13020,9 @@ class AppLocalizationsAr extends AppLocalizations {
   String get onboardingActWriting => 'جارٍ التلخيص…';
 
   @override
+  String get onboardingActRemembers => 'يتذكّر Omi عنك حتى لا تضطر أنت';
+
+  @override
   String get onboardingActNotesLabel => 'يومك، باختصار';
 
   @override
@@ -13084,9 +13087,6 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get homeNewRecordingButton => 'تسجيل جديد';
-
-  @override
-  String get onboardingActNotesLater => 'لا يزال Omi يكتب ملاحظاتك. ستجدها في الصفحة الرئيسية.';
 
   @override
   String get chatWelcomeMessage =>

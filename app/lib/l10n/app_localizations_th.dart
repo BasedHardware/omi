@@ -13027,6 +13027,9 @@ class AppLocalizationsTh extends AppLocalizations {
   String get onboardingActWriting => 'กำลังสรุป…';
 
   @override
+  String get onboardingActRemembers => 'Omi จำให้ คุณไม่ต้องจำเอง';
+
+  @override
   String get onboardingActNotesLabel => 'สรุปวันของคุณ';
 
   @override
@@ -13091,9 +13094,6 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get homeNewRecordingButton => 'บันทึกใหม่';
-
-  @override
-  String get onboardingActNotesLater => 'Omi ยังเขียนโน้ตของคุณอยู่ คุณจะพบได้ที่หน้าหลัก';
 
   @override
   String get chatWelcomeMessage =>
