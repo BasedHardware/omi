@@ -3407,3 +3407,98 @@ async def test_busy_upload_exposes_existing_owner_without_dispatching(owner_job_
                 sys.modules.pop(mod_name, None)
             else:
                 sys.modules[mod_name] = orig
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    'flag,reply,expected',
+    [
+        ('false', 1, 'backfill'),
+        ('true', 1, 'fresh'),
+        ('true', 0, 'backfill'),
+        ('true', None, 'backfill'),
+    ],
+)
+async def test_legacy_fresh_budget_decides_persisted_and_dispatched_lane(monkeypatch, flag, reply, expected):
+    """Exercise the production admission handler; proof stays LEGACY in both lanes."""
+    from starlette.datastructures import UploadFile
+    from utils.sync import lanes, legacy_fresh
+
+    monkeypatch.setenv('OMI_ENV_STAGE', 'prod')
+    monkeypatch.setenv('SYNC_LEGACY_FRESH_ENABLED', flag)
+    monkeypatch.setattr(lanes, 'parse_sync_filename_timestamp', lambda _: time.time() - 60)
+    redis = MagicMock()
+    redis.eval.return_value = reply
+    monkeypatch.setattr(legacy_fresh, 'redis_client', redis)
+    module, saved_modules, _, BytesIO, _, _ = _load_sync_router_for_fast_path()
+    module.legacy_fresh = legacy_fresh
+    module.classify_sync_lane = lanes.classify_sync_lane
+    module.verify_capture_manifest = MagicMock(return_value=None)
+    module.start_background_task = MagicMock()
+    try:
+        upload = UploadFile(filename='recent.bin', file=BytesIO(b'\x00' * 10), size=10)
+        response = await module.sync_local_files_v2(files=[upload], uid='test-uid')
+        assert response.status_code == 202
+        assert json.loads(response.body)['lane'] == expected
+        assert module.create_sync_job.call_args.kwargs['lane'] == expected
+        assert module.create_sync_job.call_args.kwargs['capture_time_trust'] == 'legacy'
+        assert module.enqueue_sync_job.call_args.args[0]['lane'] == expected
+        assert module.enqueue_sync_job.call_args.args[0]['capture_time_trust'] == 'legacy'
+        module.start_background_task.assert_not_called()
+        if flag == 'false':
+            redis.eval.assert_not_called()
+        else:
+            redis.eval.assert_called_once()
+    finally:
+        sys.modules.pop('routers.sync', None)
+        sys.modules.pop('utils.sync.pipeline', None)
+        for mod_name, orig in saved_modules.items():
+            if orig is None:
+                sys.modules.pop(mod_name, None)
+            else:
+                sys.modules[mod_name] = orig
+
+
+@pytest.mark.parametrize('reply,expected', [(1, 'fresh'), (0, 'backfill')])
+def test_legacy_fresh_http_multipart_measures_bytes_and_returns_lane(monkeypatch, reply, expected):
+    """HTTP multipart -> actual handler -> persisted task, with synthetic storage/auth."""
+    from fastapi import FastAPI, File, UploadFile
+    from fastapi.testclient import TestClient
+    from utils.sync import lanes, legacy_fresh
+
+    monkeypatch.setenv('OMI_ENV_STAGE', 'prod')
+    monkeypatch.setenv('SYNC_LEGACY_FRESH_ENABLED', 'true')
+    monkeypatch.setattr(lanes, 'parse_sync_filename_timestamp', lambda _: time.time() - 60)
+    redis = MagicMock()
+    redis.eval.return_value = reply
+    monkeypatch.setattr(legacy_fresh, 'redis_client', redis)
+    module, saved_modules, _, _, _, _ = _load_sync_router_for_fast_path()
+    module.legacy_fresh = legacy_fresh
+    module.classify_sync_lane = lanes.classify_sync_lane
+    module.verify_capture_manifest = MagicMock(return_value=None)
+    try:
+        # Restore the real multipart parser at the transport boundary; all other
+        # test seams remain synthetic. This verifies UploadFile.size provenance.
+        for name in ('python_multipart', 'python_multipart.multipart'):
+            original = saved_modules.get(name)
+            if original is not None:
+                sys.modules[name] = original
+        app = FastAPI()
+
+        @app.post('/v2/sync-local-files')
+        async def upload(files: list[UploadFile] = File(...)):
+            return await module.sync_local_files_v2(files=files, uid='test-uid')
+
+        response = TestClient(app).post('/v2/sync-local-files', files={'files': ('recent.bin', b'abc', 'audio/opus')})
+        assert response.status_code == 202
+        assert response.json()['lane'] == expected
+        assert module.enqueue_sync_job.call_args.args[0]['lane'] == expected
+        assert redis.eval.call_args.args[-1] == 1
+    finally:
+        sys.modules.pop('routers.sync', None)
+        sys.modules.pop('utils.sync.pipeline', None)
+        for mod_name, orig in saved_modules.items():
+            if orig is None:
+                sys.modules.pop(mod_name, None)
+            else:
+                sys.modules[mod_name] = orig

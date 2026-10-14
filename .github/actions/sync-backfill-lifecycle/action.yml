@@ -195,8 +195,9 @@ runs:
       if: ${{ inputs.mode == 'platform' || inputs.mode == 'dispatch' }}
       shell: bash
       run: |
-        # The first concurrency=6 step retains 40 concurrent dispatches / 10 per second
-        # to isolate instance packing from higher downstream load.
+        # Reviewed drain step: 60 dispatches stays below 18 x 6 = 108 worker
+        # slots. Retain the 10/s rate, maxScale=18, 8 GiB and one owner per UID.
+        # Roll back queue concurrency to 40 on >10% p95 or retry regression.
         # Dispatch concurrency must not exceed the worker's capacity:
         # --max-instances x --concurrency (service-level --max above; the
         # service cap wins when it is lower).
@@ -210,7 +211,7 @@ runs:
           gcloud tasks queues update sync-backfill \
             --location=${{ inputs.region }} \
             --project=${{ inputs.project_id }} \
-            --max-concurrent-dispatches=40 \
+            --max-concurrent-dispatches=60 \
             --max-dispatches-per-second=10 \
             --min-backoff=5s \
             --max-backoff=60s
@@ -218,7 +219,7 @@ runs:
           gcloud tasks queues create sync-backfill \
             --location=${{ inputs.region }} \
             --project=${{ inputs.project_id }} \
-            --max-concurrent-dispatches=40 \
+            --max-concurrent-dispatches=60 \
             --max-dispatches-per-second=10 \
             --min-backoff=5s \
             --max-backoff=60s

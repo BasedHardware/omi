@@ -100,6 +100,7 @@ from utils.metrics import (
     OMI_SYNC_JOB_POLL_REQUESTS_TOTAL,
     OMI_SYNC_JOB_POLL_THROTTLED_TOTAL,
     OMI_SYNC_LANE_JOBS_TOTAL,
+    OMI_SYNC_LANE_ADMISSIONS_TOTAL,
     OMI_SYNC_QUEUE_WAIT_SECONDS,
     OMI_SYNC_RECORDING_AGE_SECONDS,
 )
@@ -168,7 +169,7 @@ from utils.sync.capture_manifest import (
     verify_capture_manifest,
 )
 from utils.sync.lanes import SyncLane, classify_sync_lane
-from utils.sync import backfill_cutover, stage as sync_stage, uid_sequencer
+from utils.sync import backfill_cutover, legacy_fresh, stage as sync_stage, uid_sequencer
 from utils.sync.provenance import capture_matches_server_conversation as _capture_matches_server_conversation
 
 logger = logging.getLogger(__name__)
@@ -962,7 +963,16 @@ async def sync_local_files_v2(
     lane_decision = classify_sync_lane(
         filenames,
         client_device_id=client_device_context.client_device_id if has_server_capture_proof else None,
+        allow_legacy_fresh=legacy_fresh.enabled(),
     )
+    if lane_decision.reason == 'recent_legacy_capture':
+        lane_decision = await run_blocking(db_executor, legacy_fresh.admit, uid, lane_decision, [f.size for f in files])
+    try:
+        OMI_SYNC_LANE_ADMISSIONS_TOTAL.labels(
+            lane=lane_decision.lane.value, trust=lane_decision.trust.value, reason=lane_decision.reason
+        ).inc()
+    except Exception:
+        pass
     logger.info(
         'sync_lane_admission uid=%s device_hash=%s platform=%s app_version=%s lane=%s trust=%s age_seconds=%s reason=%s',
         uid,
