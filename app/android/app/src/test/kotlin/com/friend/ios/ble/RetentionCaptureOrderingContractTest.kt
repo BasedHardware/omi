@@ -100,6 +100,32 @@ class RetentionCaptureOrderingContractTest {
     }
 
     @Test
+    fun `the disconnect path retires the in-flight probe before retry logic consumes verification`() {
+        // Refutation pin for the original finding 3 ("stale proof consumed on a
+        // pre-ready disconnect"): handleDisconnection calls retireRetentionProbe
+        // BEFORE handleRetryLogic, so at retry-selection time an in-flight probe
+        // is already cancelled on this path — a never-completed probe cannot be
+        // consumed, and RetentionProbeLifecycle.result rejects retired probes.
+        val service = serviceSource()
+        val disconnect = service.substringAfter("private fun handleDisconnection").substringBefore("private fun handleRetryLogic")
+        val retire = disconnect.indexOf("retireRetentionProbe(managed)")
+        val retry = disconnect.indexOf("handleRetryLogic(addr, status)")
+        assertTrue("disconnect must retire the probe", retire >= 0)
+        assertTrue("disconnect must select the retry delay", retry >= 0)
+        assertTrue("probe retirement must precede retry selection", retire < retry)
+        // And a probe cancelled before completion can never verify anything.
+        val state = RetentionProbeLifecycle()
+        val gatt = Any()
+        val probe = state.start(gatt)!!
+        state.cancel()
+        assertTrue(!state.result(probe, gatt, true, storageStatusWithClock))
+        assertEquals(false, state.runtimeVerified)
+    }
+
+    private val storageStatusWithClock = java.nio.ByteBuffer.allocate(16).order(java.nio.ByteOrder.LITTLE_ENDIAN)
+        .putInt(0).putInt(0).putInt(4096).putInt(1).array()
+
+    @Test
     fun `the post-clock-sync re-probe is bounded and bound to its originating link`() {
         val service = serviceSource()
         assertTrue(
