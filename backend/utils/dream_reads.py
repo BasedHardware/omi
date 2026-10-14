@@ -155,6 +155,21 @@ def record_budget_counts(records, caps, vocabulary, diagnostics):
         counts.update(triage_input_bytes=0, target_excerpt_bytes=0, context_excerpt_bytes=0)
 
 
+def active_memory_candidates(uid, read, diagnostics):
+    # The shared reader already orders newest first, bounds scans, and enforces
+    # current/default visibility. Rehydrate through Dream's owner-scoped reader.
+    try:
+        rows = MemoryService().read(uid, limit=100, authoritative=True)
+        diagnostics.setdefault('memory_context_counts', {'found': 0, 'failed': 0})['found'] += len(rows)
+    except Exception:
+        diagnostics.setdefault('memory_context_counts', {'found': 0, 'failed': 0})['failed'] += 1
+        record_fallback(component='other', from_mode='none', to_mode='none', reason='other', outcome='degraded')
+        return
+    for row in rows:
+        ref = 'memory_items/' + row.id
+        yield ref, lambda ref=ref: read(uid, ref), 'links'
+
+
 def retrieve_context(uid, records, caps, vocabulary=None, *, read=None, diagnostics=None, pending_refs=()):
     diagnostics = initialize({} if diagnostics is None else diagnostics)
     if caps.context_mode == 'full':
@@ -164,7 +179,16 @@ def retrieve_context(uid, records, caps, vocabulary=None, *, read=None, diagnost
         diagnostics['target_context_counts']['retrieval_seeded'] = len(selected.targets)
         diagnostics['context_budget_counts']['targets_deferred'] = len(records.targets - selected.targets)
         read = cached_reader(diagnostics) if read is None else read
-        return add_context(
+        selected = add_context(
+            selected,
+            active_memory_candidates(uid, read, diagnostics),
+            caps,
+            vocabulary,
+            diagnostics=diagnostics,
+            reserve_context=True,
+        )
+        diagnostics['context_budget_counts']['targets_deferred'] = len(records.targets - selected.targets)
+        result = add_context(
             selected,
             context_candidates(
                 uid,
@@ -180,6 +204,10 @@ def retrieve_context(uid, records, caps, vocabulary=None, *, read=None, diagnost
             vocabulary,
             diagnostics=diagnostics,
         )
+        diagnostics.setdefault('memory_context_counts', {'found': 0, 'failed': 0})['admitted'] = sum(
+            ref.startswith(('memory_items/', 'memories/')) for ref in result
+        )
+        return result
     original = records
     budget_counts = diagnostics['context_budget_counts']
     budget_counts.update(

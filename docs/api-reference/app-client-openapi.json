@@ -1475,6 +1475,16 @@
               }
             ]
           },
+          "memory_hygiene": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/MemoryHygieneEdit"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "other_label": {
             "anyOf": [
               {
@@ -21218,6 +21228,69 @@
           "reason"
         ],
         "title": "MemoryGlobalReadGateObservability",
+        "type": "object"
+      },
+      "MemoryHygieneEdit": {
+        "additionalProperties": false,
+        "properties": {
+          "after": {
+            "default": "",
+            "description": "For supersede_memory without other, the newer time-scoped fact text supported by conversations. Empty for retire_memory.",
+            "maxLength": 2000,
+            "title": "After",
+            "type": "string"
+          },
+          "before": {
+            "default": "",
+            "description": "Exact wrong text as it appears in the target, including its capitalization. For spelling, one edit fixes every occurrence of this text.",
+            "title": "Before",
+            "type": "string"
+          },
+          "evidence": {
+            "description": "Supplied conversation refs or other memory refs supporting retirement or replacement. The target alone is not evidence.",
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 10,
+            "minItems": 1,
+            "title": "Evidence",
+            "type": "array"
+          },
+          "kind": {
+            "description": "Retire garbage (not merely low-importance facts), facts misattributed from another speaker, or facts contradicted by evidence. Supersede an old fact only with a newer time-scoped fact about the same attribute; age alone is not staleness.",
+            "enum": [
+              "retire_memory",
+              "supersede_memory"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "other": {
+            "default": "",
+            "description": "For supersede_memory, the supplied newer memory ref. Otherwise empty. Choose exactly one of other or after.",
+            "title": "Other",
+            "type": "string"
+          },
+          "reason": {
+            "description": "Required explanation of garbage, another speaker attribution, contradiction, or the newer fact about the same attribute.",
+            "maxLength": 1000,
+            "minLength": 1,
+            "title": "Reason",
+            "type": "string"
+          },
+          "target": {
+            "description": "Supplied record ref to edit, optionally with #segment-id or #start-seconds. One spelling edit fixes every occurrence in its target; with a fragment, only that transcript segment is changed.",
+            "title": "Target",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "target",
+          "reason",
+          "evidence"
+        ],
+        "title": "MemoryHygieneEdit",
         "type": "object"
       },
       "MemoryItemStatus": {

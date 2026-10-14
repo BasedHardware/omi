@@ -50,6 +50,7 @@ SCHEMA_GROUPS = {
             'SpellingContext',
             'SpellingItem',
             'Edit',
+            'MemoryHygieneEdit',
             'Term',
             'AgentProposalItem',
             'AgentProposalAnswer',

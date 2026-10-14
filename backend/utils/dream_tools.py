@@ -17,7 +17,9 @@ from models.candidate import CandidateCreate, TaskCreateCandidate
 from models.review import AgentProposalItem, ChangeRef, ReviewChange, ReviewItem, ReviewItemV2
 from models.dream_refs import base_ref, has_ref, cited_value
 from config.dream_agent import context_mode
-from utils.dream_consensus import unanimous_spelling
+from utils.dream_consensus import unanimous_auto
+from models.dream_edit import Edit, MemoryHygieneEdit
+from database import review_memory_hygiene
 from utils.entity_pages import resolve_entity
 from models.review_context import question_source
 from utils.dream_guards import (
@@ -147,6 +149,8 @@ def validate_edit(edit, records):
     if edit.kind in {'close_task', 'retire_task'}:
         if collection != 'action_items' or row.get('status', 'active') != 'active':
             raise ValueError('dream_invalid_task')
+    elif edit.kind in {'retire_memory', 'supersede_memory'}:
+        validate_memory_hygiene(edit, records)
     elif edit.kind in {'memory', 'merge_memories'}:
         if collection not in {'memories', 'memory_items'}:
             raise ValueError('dream_invalid_memory')
@@ -182,6 +186,40 @@ def validate_edit(edit, records):
                 raise ValueError('dream_invalid_person_merge')
 
 
+def validate_memory_hygiene(edit, records):
+    if getattr(records, 'context_mode', 'bounded') != 'full':
+        raise ValueError('dream_invalid_memory')
+    MemoryHygieneEdit.model_validate(edit.model_dump(exclude={'value'}))
+    ref = base_ref(edit.target)
+    if ref.partition('/')[0] not in {'memories', 'memory_items'} or '#' in edit.target:
+        raise ValueError('dream_invalid_memory')
+    row = records[ref]
+    if edit.before and edit.before != row.get('content'):
+        raise review_store.ReviewConflict('Dream memory changed')
+    if not any(
+        base_ref(ev) != ref and base_ref(ev).partition('/')[0] in {'conversations', 'memories', 'memory_items'}
+        for ev in edit.evidence
+    ):
+        raise ValueError('dream_unknown_evidence')
+    if any(base_ref(ev).partition('/')[0] not in {'conversations', 'memories', 'memory_items'} for ev in edit.evidence):
+        raise ValueError('dream_unknown_evidence')
+    if edit.other:
+        other = records.get(base_ref(edit.other))
+        if (
+            not other
+            or base_ref(edit.other) == ref
+            or '#' in edit.other
+            or edit.other.partition('/')[0] not in {'memories', 'memory_items'}
+        ):
+            raise ValueError('dream_invalid_memory')
+        if any(
+            row.get(field) != other.get(field) for field in ('visibility', 'subject_scope', 'subject_entity_id', 'slot')
+        ):
+            raise review_store.ReviewConflict('Replacement must share privacy, subject and attribute')
+    elif edit.kind == 'supersede_memory' and not any(base_ref(ev).startswith('conversations/') for ev in edit.evidence):
+        raise ValueError('dream_unknown_evidence')
+
+
 def apply_edit(uid, edit, records, *, expected_records=None):
     validate_edit(edit, records)
     key = edit_key(edit, records)
@@ -195,6 +233,10 @@ def apply_edit(uid, edit, records, *, expected_records=None):
         reason=edit.reason,
         created_at=datetime.now(timezone.utc),
     )
+    if edit.kind in {'retire_memory', 'supersede_memory'}:
+        change.refs = [ChangeRef(type='memory', id=base_ref(edit.target).split('/', 1)[1], label=proposal_label(row))]
+        review_memory_hygiene.record_change(uid, change, edit, key, expected_records=expected_records)
+        return 'applied'
     if edit.kind == 'entity_summary':
         entity_id = row.get('entity_id')
         if not entity_id:
@@ -378,10 +420,16 @@ def apply_grounded_edit(uid, edit, records):
 
 def apply_unanimous_edit(uid, edit, records):
     """Full-owner consensus replaces independent spelling support, preserving fences."""
-    if context_mode(uid) != 'full' or not unanimous_spelling(edit):
+    if context_mode(uid) != 'full' or not unanimous_auto(edit):
         raise ValueError('dream_ungrounded_spelling')
     validate_edit(edit, records)
-    sources = {base_ref(ref): records[base_ref(ref)] for ref in {edit.target, *edit.evidence}}
+    sources = EvidenceRecords(
+        {
+            base_ref(ref): records[base_ref(ref)]
+            for ref in {edit.target, *edit.evidence, *([edit.other] if edit.other else [])}
+        }
+    )
+    sources.context_mode = 'full'
     fences = proposal_fences(uid, {'records': sources})
     revalidate_proposal(uid, {'records': sources})
     return apply_edit(uid, edit, sources, expected_records=fences)
@@ -508,13 +556,13 @@ def proposal_fences(uid, source):
 
 
 def validate_canonical_proposal(uid, edit):
-    if edit.kind not in {'memory', 'merge_memories'} and not (
+    if edit.kind not in {'memory', 'merge_memories', 'retire_memory', 'supersede_memory'} and not (
         edit.kind == 'spelling' and base_ref(edit.target).partition('/')[0] in {'memories', 'memory_items'}
     ):
         return
     from utils.memory.canonical_memory_adapter import read_canonical_memory_item
 
-    refs = [edit.target, *([edit.other] if edit.kind == 'merge_memories' else [])]
+    refs = [edit.target, *([edit.other] if edit.other else [])]
     sources = [
         read_canonical_memory_item(uid, base_ref(ref).split('/', 1)[1], db_client=review_store.client()) for ref in refs
     ]
@@ -544,7 +592,7 @@ def proposal_label(row):
     return ' '.join(str(label or 'Item').split())[:180]
 
 
-def suggest_edit(uid, edit, records):
+def suggest_edit(uid, edit, records, *, run_id=None):
     validate_edit(edit, records)
     key = edit_key(edit, records)
     if not review_changes.agent_change_allowed(uid, key):
@@ -568,20 +616,40 @@ def suggest_edit(uid, edit, records):
         != get_task_workflow_control(uid).account_generation
     ):
         raise review_store.ReviewConflict('Dream task generation changed')
+    target_label = proposal_label(records[base_ref(edit.target)])
+    other_label = proposal_label(records[base_ref(edit.other)]) if edit.other else None
+    proposal = (
+        AgentProposalItem(
+            memory_hygiene=MemoryHygieneEdit.model_validate(edit.model_dump(exclude={'value'})),
+            target_label=target_label,
+            other_label=other_label,
+        )
+        if edit.kind in {'retire_memory', 'supersede_memory'}
+        else AgentProposalItem(
+            edit=Edit.model_validate(edit.model_dump(exclude={'value'})),
+            target_label=target_label,
+            other_label=other_label,
+        )
+    )
     item = ReviewItemV2(
         item_id='agent_proposal:' + review_store.safe_id(key),
         kind='agent_proposal',
         title=edit.reason,
         created_at=datetime.now(timezone.utc),
-        agent_proposal=AgentProposalItem(
-            edit=edit,
-            target_label=proposal_label(records[base_ref(edit.target)]),
-            other_label=proposal_label(records[base_ref(edit.other)]) if edit.other else None,
-        ),
+        agent_proposal=proposal,
     )
     return review_store.enqueue_review_proposal(
-        uid, item, source=source, edit_key=key, evidence_version=review_store.fingerprint(source)
+        uid,
+        item,
+        source=source,
+        edit_key=key,
+        evidence_version=review_store.fingerprint(source),
+        **({'dream_run_id': run_id} if run_id is not None else {}),
     )
+
+
+def suggest_hygiene(uid, edit, records, run_id):
+    return suggest_edit(uid, edit, records, run_id=run_id)
 
 
 def vocabulary_key(term):
@@ -669,10 +737,11 @@ def answer_proposal(uid, proposal, source, decision):
         review_changes.suppress_agent_change(uid, source['edit_key'])
         return False
     records = revalidate_proposal(uid, source)
+    selected = proposal.memory_hygiene or proposal.edit
     try:
         status = (
-            apply_edit(uid, proposal.edit, records, expected_records=source.get('fences'))
-            if proposal.edit
+            apply_edit(uid, selected, records, expected_records=source.get('fences'))
+            if selected
             else apply_vocabulary(uid, [proposal.vocabulary], expected_records=source.get('fences'), user_accepted=True)
         )
     except ValueError as exc:

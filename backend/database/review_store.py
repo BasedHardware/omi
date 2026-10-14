@@ -72,7 +72,7 @@ def enqueue_review_proposal(
     is_agent = item.kind == 'agent_proposal'
     if item.kind not in {'same_person', 'spelling', 'agent_proposal'} or not evidence_version.strip():
         raise ValueError('Unsupported proposal kind or evidence version')
-    if dream_run_id and item.kind not in {'spelling', 'same_person'}:
+    if dream_run_id and item.kind not in {'spelling', 'same_person', 'agent_proposal'}:
         raise ValueError('Dream atomic question admission requires a question')
     if not item.item_id.startswith(f'{item.kind}:') or '/' in item.item_id:
         raise ValueError('item_id must be <kind>:<opaque source id>')
@@ -92,6 +92,7 @@ def enqueue_review_proposal(
             return 'suppressed'
         if current.get('status') == 'resolved' or current.get('evidence_version') == evidence_version:
             return 'already_suggested'
+        data = {}
         if dream_run_id:
             state = client().collection('dream_users').document(uid)
             data = state.get(transaction=tx).to_dict() or {}
@@ -100,11 +101,16 @@ def enqueue_review_proposal(
             questions = data.get('questions', 0) if data.get('question_day') == day else 0
             if questions + budget.get('dream_suggestions', 0) >= DAILY_BUDGET or budget.get('used', 0) >= DAILY_BUDGET:
                 return 'suggestion_cap'
-            tx.update(state, {'question_day': day, 'questions': questions + 1})
+            if not is_agent:
+                tx.update(state, {'question_day': day, 'questions': questions + 1})
         if is_agent:
             from config.dream_agent import SUGGESTIONS_PER_DAY
 
-            dream_state = client().collection('dream_users').document(uid).get(transaction=tx).to_dict() or {}
+            dream_state = (
+                data
+                if dream_run_id
+                else client().collection('dream_users').document(uid).get(transaction=tx).to_dict() or {}
+            )
             questions = dream_state.get('questions', 0) if dream_state.get('question_day') == day else 0
             if (
                 budget.get('dream_suggestions', 0) + questions >= SUGGESTIONS_PER_DAY

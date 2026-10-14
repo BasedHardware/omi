@@ -3,10 +3,11 @@
 from collections import Counter
 
 from config.dream_agent import apply_policy
+from models.dream_edit import MEMORY_HYGIENE_KINDS
 from database import review_store
 from models.dream_refs import base_ref
 from utils import dream_tools
-from utils.dream_consensus import unanimous_spelling, item_dump
+from utils.dream_consensus import unanimous_spelling, unanimous_memory_hygiene, item_dump
 from utils.dream_grounding import spelling_grounding_rejection, rank_questions
 from utils.executors import db_executor, run_blocking
 
@@ -36,6 +37,7 @@ def edit_decisions(plan, records, vocabulary, automatic, demoted, full, report):
             'suggest'
             if dream_tools.edit_key(edit, records).split(':')[1] in demoted
             or grounding[dream_tools.edit_key(edit, records)]
+            or (edit.kind in MEMORY_HYGIENE_KINDS and (not full or not unanimous_memory_hygiene(edit)))
             else apply_policy(edit.kind, automatic)
         )
         for edit in plan.edits
@@ -64,7 +66,12 @@ async def offer_questions(uid, run_id, records, items, question_edits, remaining
             continue
         try:
             if edit is not None:
-                status = await effect(dream_tools.suggest_spelling, edit, records, run_id)
+                status = await effect(
+                    dream_tools.suggest_hygiene if edit.kind in MEMORY_HYGIENE_KINDS else dream_tools.suggest_spelling,
+                    edit,
+                    records,
+                    run_id,
+                )
                 if status == 'suggestion_cap':
                     deferred.add(base_ref(edit.target))
             else:
@@ -75,7 +82,9 @@ async def offer_questions(uid, run_id, records, items, question_edits, remaining
                 report['questions_offered'] += 1
                 if edit is not None:
                     remaining -= 1
-                    report['suggested_majority'] += int(not unanimous_spelling(edit))
+                    report['suggested_majority'] += int(
+                        not (unanimous_memory_hygiene(edit) or unanimous_spelling(edit))
+                    )
         except (ValueError, review_store.ReviewConflict, review_store.ReviewNotFound):
             status = 'invalid_evidence'
         if outcome is not None:

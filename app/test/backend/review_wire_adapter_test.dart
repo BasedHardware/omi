@@ -4,21 +4,23 @@ import 'package:omi/backend/schema/review.dart';
 
 void main() {
   test('generated change page retains pagination and reversible UI state', () {
-    final page = ReviewChangesPage.fromGenerated(wire.GeneratedReviewChangesResponse.fromJson({
-      'changes': [
-        {
-          'change_id': 'synthetic-change',
-          'kind': 'rename',
-          'title': 'Synthetic correction',
-          'created_at': '2026-10-08T12:00:00Z',
-          'undone': true,
-          'refs': [
-            {'type': 'conversation', 'id': 'synthetic-conversation', 'label': 'Synthetic source'},
-          ],
-        },
-      ],
-      'next_cursor': 'opaque+/cursor',
-    }));
+    final page = ReviewChangesPage.fromGenerated(
+      wire.GeneratedReviewChangesResponse.fromJson({
+        'changes': [
+          {
+            'change_id': 'synthetic-change',
+            'kind': 'rename',
+            'title': 'Synthetic correction',
+            'created_at': '2026-10-08T12:00:00Z',
+            'undone': true,
+            'refs': [
+              {'type': 'conversation', 'id': 'synthetic-conversation', 'label': 'Synthetic source'},
+            ],
+          },
+        ],
+        'next_cursor': 'opaque+/cursor',
+      }),
+    );
     expect(page.nextCursor, 'opaque+/cursor');
     expect(page.changes.single.changeId, 'synthetic-change');
     expect(page.changes.single.undone, isTrue);
@@ -58,7 +60,7 @@ void main() {
           'quote_start': 6,
           'quote_end': 8,
           'segments': [
-            {'text': '🙂 请发 UL 给我', 'speaker_label': 'You', 'is_user': true}
+            {'text': '🙂 请发 UL 给我', 'speaker_label': 'You', 'is_user': true},
           ],
         },
       },
@@ -68,10 +70,12 @@ void main() {
       final spelling = Map<String, dynamic>.from(question['spelling']! as Map);
       if (!withContext) spelling.remove('context');
       payload['spelling'] = spelling;
-      final result = ReviewItemsResponse.fromGeneratedV2(wire.GeneratedReviewItemsResponseV2.fromJson({
-        'items': [payload],
-        'remaining_today': 3,
-      }));
+      final result = ReviewItemsResponse.fromGeneratedV2(
+        wire.GeneratedReviewItemsResponseV2.fromJson({
+          'items': [payload],
+          'remaining_today': 3,
+        }),
+      );
       expect(result.items.single.spelling!.options, ['UL', 'URL']);
       final context = result.items.single.spelling!.context;
       if (withContext) {
@@ -82,6 +86,44 @@ void main() {
       } else {
         expect(context, isNull);
       }
+    }
+  });
+
+  test('additive memory hygiene proposals retain operation, reason and memory labels', () {
+    for (final kind in ['retire_memory', 'supersede_memory']) {
+      final page = ReviewItemsResponse.fromGeneratedV2(
+        wire.GeneratedReviewItemsResponseV2.fromJson({
+          'items': [
+            {
+              'item_id': 'agent_proposal:synthetic-memory',
+              'kind': 'agent_proposal',
+              'title': 'Synthetic memory question',
+              'created_at': '2026-10-14T12:00:00Z',
+              'agent_proposal': {
+                'target_label': 'Lives in Toytown.',
+                'other_label': 'Since January, lives in New Toytown.',
+                'memory_hygiene': {
+                  'kind': kind,
+                  'target': 'memory_items/synthetic-old',
+                  'other': kind == 'supersede_memory' ? 'memory_items/synthetic-new' : '',
+                  'before': '',
+                  'after': '',
+                  'reason': 'Synthetic newer evidence.',
+                  'evidence': ['conversations/synthetic-source'],
+                },
+              },
+            },
+          ],
+          'remaining_today': 2,
+        }),
+      );
+      final proposal = page.items.single.agentProposal!;
+      expect(proposal.editKind, kind);
+      expect(proposal.targetLabel, 'Lives in Toytown.');
+      expect(proposal.otherLabel, 'Since January, lives in New Toytown.');
+      expect(proposal.reason, 'Synthetic newer evidence.');
+      expect(proposal.before, 'Lives in Toytown.');
+      expect(proposal.after, kind == 'supersede_memory' ? 'Since January, lives in New Toytown.' : '');
     }
   });
 }

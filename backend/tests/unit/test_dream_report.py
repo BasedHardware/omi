@@ -5,6 +5,7 @@ import json
 import httpx
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from types import SimpleNamespace
 
 from unittest.mock import AsyncMock
 
@@ -56,6 +57,7 @@ def store(monkeypatch):
     monkeypatch.setattr(dream_agent.review_store, 'remaining_today', lambda *a: 3)
     monkeypatch.setattr(dream_agent.review_changes, 'agent_change_allowed', lambda *a: True)
     monkeypatch.setattr(dream_reads, 'context_candidates', lambda *a, **k: [])
+    monkeypatch.setattr(dream_reads, 'MemoryService', lambda: SimpleNamespace(read=lambda *a, **k: []))
     monkeypatch.setattr(
         dream_reads,
         'read_record',

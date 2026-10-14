@@ -14,6 +14,11 @@ POLICY_WARNINGS = Counter('omi_dream_policy_warning_total', 'Ignored auto-apply 
 TOKENS = Counter('omi_dream_tokens_total', 'Observed dream model tokens')
 RESPONSE_RETRIES = Counter('omi_dream_response_retries_total', 'Dream malformed/truncated JSON response retries')
 DECISIONS = Counter('omi_dream_decision_total', 'Full-mode Dream decisions', ['decision'])
+MEMORY_EDITS = Counter(
+    'omi_dream_memory_edit_total', 'Dream memory edits by kind and disposition', ['kind', 'disposition']
+)
+MEMORY_CONTEXT = Counter('omi_dream_memory_context_total', 'Full-mode active memory read/admission counts', ['count'])
+MEMORY_EDIT_KINDS = ('memory', 'merge_memories', 'retire_memory', 'supersede_memory')
 DECISION_COUNTS = ('auto_applied_unanimous', 'suggested_majority', 'questions_offered', 'questions_dropped_low_value')
 CANARY = Counter('omi_dream_canary_total', 'Dream synthetic loop outcomes', ['status', 'stage'])
 
@@ -149,6 +154,24 @@ def record_pass(report):
     retries = max(0, int(report.get('response_retries', 0)))
     RESPONSE_RETRIES.inc(retries)
     if report.get('context_mode') == 'full':
+        context_counts = {
+            key: max(0, int(report.get('memory_context_counts', {}).get(key, 0)))
+            for key in ('found', 'failed', 'admitted')
+        }
+        for key, count in context_counts.items():
+            MEMORY_CONTEXT.labels(key).inc(count)
+        logger.info('Dream memory_context_counts=%s', json.dumps(context_counts, sort_keys=True))
+        proposed = report.get('proposed', {}).get('edits', [])
+        outcomes = {row['key']: row for row in report.get('outcomes', []) if 'key' in row}
+        for kind in MEMORY_EDIT_KINDS:
+            MEMORY_EDITS.labels(kind, 'proposed').inc(sum(row.get('kind') == kind for row in proposed))
+            for disposition, status in [('auto_applied', 'applied'), ('suggested', 'suggested')]:
+                MEMORY_EDITS.labels(kind, disposition).inc(
+                    sum(
+                        row['key'].startswith('dream:' + kind + ':') and row.get('status') == status
+                        for row in outcomes.values()
+                    )
+                )
         for decision in DECISION_COUNTS:
             DECISIONS.labels(decision).inc(max(0, int(report.get(decision, 0))))
 

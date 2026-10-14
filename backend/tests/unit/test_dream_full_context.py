@@ -35,6 +35,7 @@ def full(monkeypatch):
     monkeypatch.setenv('DREAM_AGENT_FULL_SAMPLES', '1')
     monkeypatch.setenv('DREAM_AGENT_FULL_CONTEXT_UIDS', ' someone-else, ' + UID + ', ')
     monkeypatch.setattr(dream_agent.dream_capacity, 'wait_for_capacity', AsyncMock(return_value=False))
+    monkeypatch.setattr(dream_reads, 'MemoryService', lambda: SimpleNamespace(read=lambda *a, **k: []))
     return Caps().for_uid(UID)
 
 
@@ -136,7 +137,9 @@ def test_whole_records_and_one_reasoning_turn(full):
 
 
 def test_drop_whole_records_by_priority_and_do_not_edit_dropped(full, monkeypatch):
-    monkeypatch.setenv('DREAM_AGENT_FULL_CONTEXT_TOKENS', '5000')
+    # The full hygiene schema has more field descriptions; keep the same
+    # whole-record priority case with room for its instruction/schema overhead.
+    monkeypatch.setenv('DREAM_AGENT_FULL_CONTEXT_TOKENS', '6000')
     caps = Caps().for_uid(UID)
     records = dream_context.EvidenceRecords(
         {
