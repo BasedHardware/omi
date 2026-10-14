@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources xmlns:tools="http://schemas.android.com/tools" tools:keep="@array/android_wear_capabilities">
+    <!-- The phone app announces itself to the Wear OS app (and-wear, `WatchWire.PHONE_CAPABILITY`). -->
+    <string-array name="android_wear_capabilities" translatable="false">
+        <item>omi_phone</item>
+    </string-array>
+</resources>

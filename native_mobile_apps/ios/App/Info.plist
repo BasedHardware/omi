@@ -1,0 +1,163 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>BGTaskSchedulerPermittedIdentifiers</key>
+	<array>
+		<string>$(PRODUCT_BUNDLE_IDENTIFIER).refresh</string>
+		<string>$(PRODUCT_BUNDLE_IDENTIFIER).processing</string>
+	</array>
+	<key>CFBundleLocalizations</key>
+	<array>
+		<string>ar</string>
+		<string>be</string>
+		<string>bg</string>
+		<string>bn</string>
+		<string>bs</string>
+		<string>ca</string>
+		<string>cs</string>
+		<string>da</string>
+		<string>de</string>
+		<string>el</string>
+		<string>en</string>
+		<string>es</string>
+		<string>et</string>
+		<string>fa</string>
+		<string>fi</string>
+		<string>fr</string>
+		<string>he</string>
+		<string>hi</string>
+		<string>hr</string>
+		<string>hu</string>
+		<string>id</string>
+		<string>it</string>
+		<string>ja</string>
+		<string>kn</string>
+		<string>ko</string>
+		<string>lt</string>
+		<string>lv</string>
+		<string>mk</string>
+		<string>mr</string>
+		<string>ms</string>
+		<string>nl</string>
+		<string>nb</string>
+		<string>pl</string>
+		<string>pt</string>
+		<string>ro</string>
+		<string>ru</string>
+		<string>sk</string>
+		<string>sl</string>
+		<string>sr</string>
+		<string>sv</string>
+		<string>ta</string>
+		<string>te</string>
+		<string>th</string>
+		<string>tl</string>
+		<string>tr</string>
+		<string>uk</string>
+		<string>ur</string>
+		<string>vi</string>
+		<string>zh</string>
+	</array>
+	<key>CFBundleDevelopmentRegion</key>
+	<string>$(DEVELOPMENT_LANGUAGE)</string>
+	<key>CFBundleDisplayName</key>
+	<string>Omi</string>
+	<key>CFBundleExecutable</key>
+	<string>$(EXECUTABLE_NAME)</string>
+	<key>CFBundleIdentifier</key>
+	<string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
+	<key>CFBundleInfoDictionaryVersion</key>
+	<string>6.0</string>
+	<key>CFBundleName</key>
+	<string>$(PRODUCT_NAME)</string>
+	<key>CFBundlePackageType</key>
+	<string>APPL</string>
+	<key>CFBundleShortVersionString</key>
+	<string>$(MARKETING_VERSION)</string>
+	<key>CFBundleVersion</key>
+	<string>$(CURRENT_PROJECT_VERSION)</string>
+	<key>LSRequiresIPhoneOS</key>
+	<true/>
+	<key>UILaunchScreen</key>
+	<dict/>
+	<key>UISupportedInterfaceOrientations</key>
+	<array>
+		<string>UIInterfaceOrientationPortrait</string>
+	</array>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>$(OMI_GOOGLE_REVERSED_CLIENT_ID)</string>
+				<string>$(OMI_CALLBACK_SCHEME)</string>
+			</array>
+		</dict>
+	</array>
+	<key>NSCameraUsageDescription</key>
+	<string>Omi can take a photo for you to ask about.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Omi records your conversations with your permission to transcribe and summarize them.</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>Omi can transcribe your conversations on this iPhone.</string>
+	<key>NSBluetoothAlwaysUsageDescription</key>
+	<string>Omi connects to your Omi wearable over Bluetooth.</string>
+	<key>NSContactsUsageDescription</key>
+	<string>When Omi asks who you mean, it looks the name up in your contacts. Omi only gets the person you pick.</string>
+	<key>NSRemindersFullAccessUsageDescription</key>
+	<string>Omi keeps your tasks in sync with an "Omi" list in Reminders.</string>
+	<!-- Location and Apple Health (begin) -->
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>Omi notes where your conversations happen, so you can find them on a map.</string>
+	<key>NSHealthShareUsageDescription</key>
+	<string>Omi reads your steps, walking and running distance, active energy, heart rate, sleep and workouts from Apple Health so you can ask about them in the chat. Omi never writes to Apple Health.</string>
+	<key>NSHealthUpdateUsageDescription</key>
+	<string>Omi does not write any data to Apple Health.</string>
+	<!-- Location and Apple Health (end) -->
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>Development builds connect to a backend on your local network.</string>
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>audio</string>
+		<string>bluetooth-central</string>
+		<string>remote-notification</string>
+		<!-- Background refresh and processing (App/System/BackgroundTasks.swift); location while a
+		     recording runs in the background, only with the user's When In Use permission (as Flutter). -->
+		<string>fetch</string>
+		<string>processing</string>
+		<string>location</string>
+		<!-- Phone calls: keeps a CallKit/Twilio call alive in the background (as Flutter). No PushKit. -->
+		<string>voip</string>
+		<!-- /Phone calls -->
+	</array>
+	<key>FirebaseAppDelegateProxyEnabled</key>
+	<false/>
+	<key>FirebaseMessagingAutoInitEnabled</key>
+	<false/>
+	<key>NSAppTransportSecurity</key>
+	<dict>
+		<key>NSAllowsLocalNetworking</key>
+		<true/>
+	</dict>
+	<key>OmiAPIScheme</key>
+	<string>$(OMI_API_SCHEME)</string>
+	<key>OmiAPIHost</key>
+	<string>$(OMI_API_HOST)</string>
+	<!-- Support chat (App/System/SupportChat.swift): empty unless set in Config/Secrets.xcconfig. -->
+	<key>OmiIntercomAppID</key>
+	<string>$(OMI_INTERCOM_APP_ID)</string>
+	<key>OmiIntercomAPIKey</key>
+	<string>$(OMI_INTERCOM_IOS_API_KEY)</string>
+	<key>IntercomAutoIntegratePushNotifications</key>
+	<false/>
+	<key>OmiAppProfile</key>
+	<string>$(OMI_APP_PROFILE)</string>
+	<key>OmiAuthEmulatorHost</key>
+	<string>$(OMI_AUTH_EMULATOR_HOST)</string>
+	<key>OmiAppGroup</key>
+	<string>group.$(OMI_BUNDLE_ID)</string>
+	<key>NSSupportsLiveActivities</key>
+	<true/>
+</dict>
+</plist>
