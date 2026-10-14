@@ -2607,3 +2607,49 @@ def test_a_shutdown_during_a_failing_save_still_releases_its_bytes(tmp_path, job
 
     release.assert_called_once_with(UID, 'byte', 'reservation')
     assert job.store.docs == {}
+
+
+def test_paragraph_title_line_stays_its_own_cue():
+    """#21203 — a title line + one speaker label must not glue onto the name.
+
+    Before: a block with <2 labels joined into one cue, so 'Meeting notes'
+    became part of the first speaker's name ('Meeting notes Alice')."""
+    from utils.imports.transcript_files import _paragraph_cues
+
+    cues = _paragraph_cues(['Meeting notes', 'Alice: hi there'])
+    texts = [c.text for c in cues]
+    assert texts == ['Meeting notes', 'Alice: hi there']
+
+
+def test_paragraph_wrapped_turn_still_joins():
+    from utils.imports.transcript_files import _paragraph_cues
+
+    cues = _paragraph_cues(['Alice: hi', 'more of the turn'])
+    assert [c.text for c in cues] == ['Alice: hi more of the turn']
+
+
+def test_paragraph_no_labels_whole_block():
+    from utils.imports.transcript_files import _paragraph_cues
+
+    cues = _paragraph_cues(['just', 'a', 'paragraph'])
+    assert [c.text for c in cues] == ['just a paragraph']
+
+
+def test_srt_cues_without_blank_lines_split():
+    """#21205 — SRT cues not separated by blank lines must each be a cue.
+
+    Before: a block with a textless first timing joined every later line —
+    including later cue numbers and timings — into one cue's body."""
+    from utils.imports.transcript_files import _srt_block_cues
+
+    cues = _srt_block_cues(
+        ['1', '00:00:01.000 --> 00:00:02.000', 'Hello', '2', '00:00:03.000 --> 00:00:04.000', 'World']
+    )
+    assert [c.text for c in cues] == ['Hello', 'World']
+
+
+def test_srt_inline_text_timing_still_works():
+    from utils.imports.transcript_files import _srt_block_cues
+
+    cues = _srt_block_cues(['00:00:01.000 --> 00:00:02.000 Hello'])
+    assert [c.text for c in cues] == ['Hello']
