@@ -1025,8 +1025,17 @@ def update_action_item(
         return updated
 
     # Check if exists
-    if not action_item_ref.get().exists:
+    existing = action_item_ref.get()
+    if not existing.exists:
         return False
+
+    # A completion that already happened keeps its original completed_at —
+    # a duplicate tap, a whole-object edit, or a sync replay must not
+    # re-stamp when the task was done. Preserve the stored timestamp when
+    # the item is already completed.
+    existing_data = typed_doc(existing)
+    if update_data.get('completed') is True and existing_data.get('completed') is True:
+        update_data['completed_at'] = existing_data.get('completed_at')
 
     # Add updated timestamp
     update_data['updated_at'] = datetime.now(timezone.utc)

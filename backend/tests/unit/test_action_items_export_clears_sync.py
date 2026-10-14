@@ -29,7 +29,7 @@ def _install_fake_db(monkeypatch):
     writes = []
 
     doc_ref = MagicMock()
-    doc_ref.get.return_value = SimpleNamespace(exists=True)
+    doc_ref.get.return_value = SimpleNamespace(exists=True, to_dict=lambda: {})
     doc_ref.update.side_effect = lambda data: writes.append(data)
 
     items_collection = MagicMock()
@@ -68,3 +68,53 @@ def test_non_export_update_leaves_sync_requested_alone(monkeypatch):
     action_items_db.update_action_item(UID, ITEM_ID, {"description": "x"})
 
     assert "sync_requested" not in writes[-1]
+
+
+def _install_fake_db_existing(monkeypatch, existing_completed, existing_completed_at):
+    """Fake db whose doc already holds completed/completed_at."""
+    writes = []
+
+    doc_ref = MagicMock()
+    doc_ref.get.return_value = SimpleNamespace(
+        exists=True,
+        to_dict=lambda: {"completed": existing_completed, "completed_at": existing_completed_at},
+    )
+    doc_ref.update.side_effect = lambda data: writes.append(data)
+
+    items_collection = MagicMock()
+    items_collection.document.return_value = doc_ref
+    user_doc = MagicMock()
+    user_doc.collection.return_value = items_collection
+    users = MagicMock()
+    users.document.return_value = user_doc
+    fake_db = MagicMock()
+    fake_db.collection.return_value = users
+
+    monkeypatch.setattr(action_items_db, "db", fake_db)
+    monkeypatch.setattr(action_items_db, "bump_action_items_list_version", lambda uid: None)
+    return writes
+
+
+def test_recompleting_preserves_completed_at(monkeypatch):
+    """#21218 — a duplicate completion keeps the original timestamp."""
+    from datetime import datetime, timezone
+
+    original = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    replay = datetime(2026, 10, 14, tzinfo=timezone.utc)
+    writes = _install_fake_db_existing(monkeypatch, True, original)
+
+    action_items_db.update_action_item(UID, ITEM_ID, {"completed": True, "completed_at": replay})
+
+    assert writes[-1]["completed_at"] == original
+
+
+def test_first_completion_stamps_now(monkeypatch):
+    """A genuinely-new completion still gets the fresh timestamp."""
+    from datetime import datetime, timezone
+
+    replay = datetime(2026, 10, 14, tzinfo=timezone.utc)
+    writes = _install_fake_db_existing(monkeypatch, False, None)
+
+    action_items_db.update_action_item(UID, ITEM_ID, {"completed": True, "completed_at": replay})
+
+    assert writes[-1]["completed_at"] == replay
