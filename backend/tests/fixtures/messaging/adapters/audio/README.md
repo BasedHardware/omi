@@ -11,4 +11,16 @@ ffmpeg -f lavfi -i sine=frequency=440:sample_rate=48000:duration=0.12 -ac 2 -c:a
 `PIL.Image.new('RGB', (16, 12), (220, 100, 30)).save('photo.heic')`.
 The MP4 fixture includes a tiny blue video frame (lavfi color=c=blue:s=16x16:r=10:d=0.12,
 libx264/yuv420p) and the stereo tone; extraction uses its first audio stream.
-Decode tests run real FFmpeg; only the STT network boundary is stubbed.
+Container-shape tests run real FFmpeg on the tiny tones and bypass speech detection;
+the STT response uses the normalized `text`/`timestamp`/`speaker` shape.
+
+`speech.ogg` is 2.9 KB of synthesized “Hello, how are you?” (no user recording):
+
+```sh
+say -o /tmp/omi-messaging-speech.aiff 'Hello, how are you?'
+ffmpeg -nostdin -hide_banner -loglevel error -y -i /tmp/omi-messaging-speech.aiff -ac 1 -ar 16000 -c:a libopus -b:a 16k speech.ogg
+```
+
+Its end-to-end regression runs real FFmpeg, local Silero VAD, provider routing,
+Parakeet response normalization, and app word postprocessing. Only database
+language preferences and the STT HTTP response are synthetic; no network is used.

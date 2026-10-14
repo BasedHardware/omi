@@ -730,20 +730,25 @@ def test_too_many_attachments_refuses_before_download(adapter):
     assert not adapter.transport.downloads
 
 
-def test_ogg_through_real_parakeet_normalization(monkeypatch, voice_environment):
+def test_ogg_through_real_parakeet_normalization(monkeypatch):
     import httpx
     import wave
     from utils.stt import pre_recorded
+    from utils import chat
 
     monkeypatch.setenv('HOSTED_PARAKEET_API_URL', 'http://parakeet.invalid')
-    monkeypatch.setattr(pre_recorded, 'get_prerecorded_models', lambda: ('parakeet',))
+    monkeypatch.setenv('STT_PRERECORDED_MODEL', 'parakeet')
+    monkeypatch.setattr(chat.user_db, 'get_user_language_preference', lambda uid: 'en')
+    monkeypatch.setattr(chat.user_db, 'get_user_transcription_preferences', lambda uid: {'single_language_mode': True})
     posted = []
 
     def post(url, **kwargs):
         wav = kwargs['files']['file'][1].getvalue()
         with wave.open(BytesIO(wav)) as audio:
             assert (audio.getframerate(), audio.getnchannels(), audio.getsampwidth()) == (16000, 1, 2)
-            assert audio.readframes(audio.getnframes()) == decode_audio((FIXTURES / 'audio' / 'voice.ogg').read_bytes())
+            assert audio.readframes(audio.getnframes()) == decode_audio(
+                (FIXTURES / 'audio' / 'speech.ogg').read_bytes()
+            )
         posted.append(wav)
         return httpx.Response(
             200,
@@ -759,7 +764,7 @@ def test_ogg_through_real_parakeet_normalization(monkeypatch, voice_environment)
     client.post.side_effect = post
     monkeypatch.setattr(pre_recorded.httpx, 'Client', lambda **k: client)
     assert (
-        ChatMediaStore().transcribe((FIXTURES / 'audio' / 'voice.ogg').read_bytes(), 'u')
+        ChatMediaStore().transcribe((FIXTURES / 'audio' / 'speech.ogg').read_bytes(), 'u')
         == 'Real normalized transcript.'
     )
     assert len(posted) == 1
