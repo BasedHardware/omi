@@ -1,3 +1,4 @@
+import 'package:omi/services/capture/local_stt_custody.dart';
 import 'dart:async';
 import 'dart:io';
 import 'dart:math';
@@ -147,6 +148,7 @@ typedef WalCoverageTelemetryEmitter = void Function(Map<String, Object?> fields)
 class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
   List<Wal> _wals = [];
 
+  bool _pendingPhoneOnly = false;
   List<WalFrame> _frames = [];
   String? _captureEvidenceRoot;
   int _captureEvidenceGeneration = 0;
@@ -278,6 +280,7 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
     _retiredWals.addAll(_wals);
     _wals = [];
     _frames = [];
+    _pendingPhoneOnly = false;
     _frameSynced = [];
     _captureEvidenceRoot = null;
     _captureEvidenceGeneration++;
@@ -390,6 +393,7 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
     // is owned by the signed-in account. Stamp only when unstamped so a
     // record surfaced by native recovery keeps its original owner.
     wal.ownerUid ??= _currentWalOwnerUid();
+    wal.repairLegacyImportedCustody();
     // Native-storage recovery can surface old WALs while a new recording is
     // active. Only inherit the current session's location for WALs that began
     // at (or after) this session, never for historical recordings.
@@ -599,6 +603,7 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
     await _enqueueBuffer(() => _flush(generation));
 
     _frames = [];
+    _pendingPhoneOnly = false;
     _frameSynced = [];
   }
 
@@ -612,6 +617,7 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
     await _enqueueBuffer(() => _flush(generation));
     if (!_isCurrent(generation)) return;
     _frames = [];
+    _pendingPhoneOnly = false;
     _frameSynced = [];
 
     _framesPerSecond = codec.getFramesPerSecond();
@@ -693,11 +699,12 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
         );
         if (walIdx < 0) {
           wal = Wal(
-            onDeviceOnly: OnDeviceTranscriptionController.instance.shouldKeepAudioLocal,
             codec: _codec,
             timerStart: timerStart,
             data: chunk,
             storage: WalStorage.mem,
+            onDeviceOnly: _pendingPhoneOnly || OnDeviceTranscriptionController.instance.shouldKeepAudioLocal,
+            capturedOnDeviceOnly: _pendingPhoneOnly || OnDeviceTranscriptionController.instance.shouldKeepAudioLocal,
             status: syncedOffset == chunkFrameCount ? WalStatus.synced : WalStatus.miss,
             device: _deviceId ?? "omi",
             deviceModel: _deviceModel ?? "Omi",
@@ -807,11 +814,12 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
       }
       if (walIdx < 0) {
         wal = Wal(
-          onDeviceOnly: OnDeviceTranscriptionController.instance.shouldKeepAudioLocal,
           codec: _codec,
           timerStart: timerStart,
           data: runFrames.map((f) => f.payload).toList(),
           storage: WalStorage.mem,
+          onDeviceOnly: _pendingPhoneOnly || OnDeviceTranscriptionController.instance.shouldKeepAudioLocal,
+          capturedOnDeviceOnly: _pendingPhoneOnly || OnDeviceTranscriptionController.instance.shouldKeepAudioLocal,
           status: syncedOffset == frameCount ? WalStatus.synced : WalStatus.miss,
           device: _deviceId ?? "omi",
           deviceModel: _deviceModel ?? "Omi",
@@ -913,11 +921,12 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
           );
         } else {
           final wal = Wal(
-            onDeviceOnly: OnDeviceTranscriptionController.instance.shouldKeepAudioLocal,
             codec: _codec,
             timerStart: timerStart,
             data: frames.map((f) => f.payload).toList(),
             storage: WalStorage.mem,
+            onDeviceOnly: _pendingPhoneOnly || OnDeviceTranscriptionController.instance.shouldKeepAudioLocal,
+            capturedOnDeviceOnly: _pendingPhoneOnly || OnDeviceTranscriptionController.instance.shouldKeepAudioLocal,
             status: syncedOffset == frameCount ? WalStatus.synced : WalStatus.miss,
             device: _deviceId ?? "omi",
             deviceModel: _deviceModel ?? "Omi",
@@ -1568,11 +1577,12 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
         // Use a distinct timerStart so we don't collide with WALs from _chunk().
         // This is the tail buffer that _chunk() left behind.
         final tailWal = Wal(
-          onDeviceOnly: OnDeviceTranscriptionController.instance.shouldKeepAudioLocal,
           codec: _codec,
           timerStart: timerStart,
           data: chunk,
           storage: WalStorage.mem,
+          onDeviceOnly: _pendingPhoneOnly || OnDeviceTranscriptionController.instance.shouldKeepAudioLocal,
+          capturedOnDeviceOnly: _pendingPhoneOnly || OnDeviceTranscriptionController.instance.shouldKeepAudioLocal,
           status: syncedOffset == chunkFrameCount ? WalStatus.synced : WalStatus.miss,
           device: _deviceId ?? "omi",
           deviceModel: _deviceModel ?? "Omi",
@@ -1594,6 +1604,7 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
     }
 
     _frames = [];
+    _pendingPhoneOnly = false;
     _frameSynced = [];
 
     // Flush all in-memory WALs to disk immediately
@@ -1816,6 +1827,13 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
 
   @override
   WalFrame onFrameCaptured(WalFrame frame, {String? captureRoot}) {
+    if (LocalSttCustody.keepsPhoneAudio || OnDeviceTranscriptionController.instance.shouldKeepAudioLocal) {
+      _pendingPhoneOnly = true;
+      for (final wal in _wals.where((w) => w.storage == WalStorage.mem)) {
+        wal.onDeviceOnly = true;
+        wal.capturedOnDeviceOnly = true;
+      }
+    }
     if (captureRoot != _captureEvidenceRoot) {
       _captureEvidenceRoot = captureRoot;
       // A restored WAL for the same root is the durable high-water mark.
@@ -1913,6 +1931,7 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
 
   @override
   void markFrameSynced(FrameSyncKey key) {
+    if (_pendingPhoneOnly || LocalSttCustody.keepsPhoneAudio) return;
     for (int i = _frames.length - 1; i >= 0; i--) {
       if (_frames[i].syncKey == key) {
         _frameSynced[i] = true;

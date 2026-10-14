@@ -177,6 +177,20 @@ class Wal {
   /// Explicit phone-only custody. Never admitted to a cloud audio drain.
   bool onDeviceOnly;
   Map<String, dynamic>? onDeviceConversation;
+
+  /// Recording-time custody evidence. Null identifies pre-fix dev records.
+  bool? capturedOnDeviceOnly;
+
+  /// Imported device storage was never part of the phone's live STT route.
+  /// Repair only the erroneous pre-fix stamp, preserving explicit capture consent.
+  void repairLegacyImportedCustody() {
+    if (capturedOnDeviceOnly == null &&
+        onDeviceConversation == null &&
+        (originalStorage == WalStorage.sdcard || originalStorage == WalStorage.flashPage)) {
+      onDeviceOnly = false;
+    }
+  }
+
   String? filePath;
   List<List<int>> data;
   int storageOffset = 0;
@@ -343,6 +357,7 @@ class Wal {
     this.storage = WalStorage.mem,
     this.onDeviceOnly = false,
     this.onDeviceConversation,
+    this.capturedOnDeviceOnly,
     this.filePath,
     this.device = "phone",
     this.deviceModel,
@@ -384,6 +399,7 @@ class Wal {
       onDeviceOnly: json['on_device_only'] == true,
       onDeviceConversation:
           json['on_device_conversation'] is Map ? Map<String, dynamic>.from(json['on_device_conversation']) : null,
+      capturedOnDeviceOnly: json['captured_on_device_only'] as bool?,
       filePath: json['file_path'],
       seconds: json['seconds'] ?? chunkSizeInSeconds,
       device: json['device'] ?? "phone",
@@ -413,7 +429,7 @@ class Wal {
       uploadedAt: json['uploaded_at'] ?? 0,
       syncedAt: json['synced_at'] ?? 0,
       keptForTranscriptRecovery: json['kept_for_transcript_recovery'] == true,
-    );
+    )..repairLegacyImportedCustody();
   }
 
   Map<String, dynamic> toJson() {
@@ -426,6 +442,7 @@ class Wal {
       'storage': storage.name,
       'on_device_only': onDeviceOnly,
       'on_device_conversation': onDeviceConversation,
+      if (capturedOnDeviceOnly != null) 'captured_on_device_only': capturedOnDeviceOnly,
       'file_path': filePath,
       'seconds': seconds,
       'device': device,

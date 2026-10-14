@@ -1322,6 +1322,14 @@ class TestAsyncCoordinatorBehavioral:
     """Behavioral tests that invoke _run_full_pipeline_background_async with
     mocked dependencies. Verifies actual call sequences and outcomes."""
 
+    @pytest.fixture(autouse=True)
+    def _collect_previous_case_mocks(self):
+        # Each case creates a fresh cyclic MagicMock graph. Collect the prior
+        # case in setup so a random later call does not pay its cleanup cost.
+        import gc
+
+        gc.collect()
+
     @staticmethod
     def _load_sync_module():
         """Load routers/sync.py with all heavy deps stubbed, return (module, stubs)."""

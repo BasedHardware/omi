@@ -18,6 +18,7 @@ import 'package:omi/pages/conversations/widgets/processing_capture.dart';
 import 'package:omi/pages/conversation_capturing/page.dart';
 import 'package:omi/pages/home/widgets/battery_info_widget.dart';
 import 'package:omi/providers/capture_provider.dart';
+import 'package:omi/services/sockets/local_stt_failure.dart';
 import 'package:omi/providers/connectivity_provider.dart';
 import 'package:omi/providers/device_provider.dart';
 import 'package:omi/providers/phone_call_provider.dart';
@@ -33,6 +34,11 @@ class _Capture extends ChangeNotifier implements CaptureProvider {
       this.interrupted = false,
       this.callActive = false,
       this.readerPaused = false});
+  @override
+  LocalSttFailure? localSttFailure;
+  int localRetries = 0;
+  @override
+  Future<void> retryLocalTranscription() async => localRetries++;
   bool verified = true;
   int? offlineElapsedOverride;
   @override
@@ -211,6 +217,21 @@ void main() {
     ));
     await tester.pump();
   }
+
+  testWidgets('permanent local failure keeps phone capture visible with saved audio and a working retry',
+      (tester) async {
+    final capture = _Capture(_Live.phone)
+      ..localSttFailure = const LocalSttFailure('permission_denied', canProbeRecovery: true);
+    await pump(tester, const ConversationCaptureWidget(showsCall: true), capture: capture);
+    expect(find.text(en.transcriptionUnavailableRecordingSaved), findsWidgets);
+    expect(find.text(en.openSettings), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('local_stt_retry')));
+    await tester.pumpAndSettle();
+    expect(capture.localRetries, 1);
+    expect(capture.recordingState, RecordingState.record);
+    expect(capture.liveCaptureSource, 'phone');
+    expect(tester.takeException(), isNull);
+  });
 
   group('live card', () {
     testWidgets('names the source as a glyph, the state and the latest line, with Pause', (tester) async {
