@@ -8,7 +8,7 @@ import os
 import threading
 import time
 from collections import deque
-from typing import TYPE_CHECKING, Awaitable, Callable
+from typing import TYPE_CHECKING, Awaitable, Callable, Mapping
 
 if TYPE_CHECKING:
     from utils.stt.streaming import STTService
@@ -132,7 +132,7 @@ async def connect_configured_chain(
     *,
     primary_service: STTService,
     connect_primary: Connect,
-    callbacks: dict[STTService, Connect | None],
+    callbacks: Mapping[STTService, Connect | None],
     failed: set[str],
     models: list[str],
     routing_uid: str | None = None,
@@ -141,6 +141,7 @@ async def connect_configured_chain(
     routing_models: dict[str, str | None] | None = None,
     failed_targets: set[str] | None = None,
     _routing_static: bool = False,
+    optional_handover: bool = False,
 ) -> tuple[STTSocket, STTService]:
     from utils.stt.streaming import STTService, _circuit_for_primary  # type: ignore[reportPrivateUsage]  # shared circuit owner
 
@@ -1064,6 +1065,8 @@ async def connect_configured_chain(
             if result is not None:
                 return result
             break
+    if optional_handover:
+        raise RejectedStream(prior_reason)
     CHAIN_EXHAUSTED.inc()
     pending = PendingLiveFailover(
         component='stt_selection',

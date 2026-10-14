@@ -6,6 +6,49 @@ description: "Sequence diagrams and finalization policy for the /v4/listen WebSo
 
 # Listen + Pusher Pipeline — Sequence Diagrams
 
+## Demand-driven live provider lane
+
+The `/v4/listen` runtime owns the dark-by-default live-demand policy. Existing
+`client_state {foreground, transcript_visible}` reports affect provider selection
+only for allocated, declared-English single-language sessions. Unknown, malformed,
+mixed or unreported state requires the vendor path; any active real-time app,
+developer webhook, or admitted v2 mentor consumer does too.
+
+With `STT_LIVE_DEMAND_ENABLED=true`, every listen socket registers authenticated,
+stage-scoped Redis presence, including sockets outside the routing cohort. The
+server generates the socket identity; payloads cannot supply another user's
+identity. Hidden state remains valid while the socket heartbeats. Stale/missing
+presence and dependency failures require a vendor. Deploy presence globally at
+zero allocation and drain older pods/sockets before admitting a canary.
+
+`STT_LIVE_DEMAND_PERCENT` and comma-separated `STT_LIVE_DEMAND_UID_ALLOWLIST`
+select the cohort. `STT_LIVE_DEMAND_MIN_DWELL_SECONDS` defaults to 15: stable
+hidden demand admits the existing Parakeet window leg, while visible/unknown
+or consumer demand returns to vendors immediately. Existing window allocation,
+capacity, pressure and recovery controls remain authoritative. Non-English,
+multi-language, BYOK, custom, multi-channel, onboarding and phone-call routes
+retain their existing selection.
+
+A replacement connects while the old leg serves. Before retiring that leg,
+listen rechecks shared demand and consumers, snapshots unanswered capture, and
+fences old callbacks. New audio enters the existing ordered replay/live-tail
+pump. Refused or dead cheap candidates keep the healthy vendor and pin the
+session to vendors; a dead previous leg belongs to ordinary transport recovery.
+The demand coordinator is a supervised lifetime task, so its failure cannot
+leave an adopted cheap lane without future visibility reconciliation.
+
+Pusher continues receiving the adopted transcript/audio and running its existing
+fanout; it does not select this demand lane or need these four env variables.
+Listen exposes `omi_listen_live_lane_seconds_total{lane,reason}` and
+`omi_listen_live_lane_switches_total{from_lane,to_lane,reason}`. Shared
+`omi_fallback_total{component="stt_live_session"}` records provider and gate
+failure causes. These session-wall seconds complement actual paid-audio meters.
+
+Rollout, lease/capacity details, test acceptance and rollback belong to the
+[demand-driven live STT runbook](./operational/demand-driven-live-stt.md). The
+lead starts at at most 5% and waits at least 12 hours before any expansion.
+
+
 The standalone `POST /v1/stt/transcribe` Parakeet proxy uses the shared
 managed-transcription allowance before calling the provider. It probes the
 uploaded media duration and rejects a file that exceeds the remaining allowance;
@@ -2170,8 +2213,15 @@ can lose events, and clients that replace metadata can reduce coverage. See
 qualification experiment.
 Offline sync on Cloud Run calls the same Embedding API through
 `HOSTED_SPEAKER_EMBEDDING_API_URL`. That binding must be the diarizer
-GCE-internal ILB hostname used by GKE backend-listen and pusher — not the
+reachable internal HTTP endpoint used by GKE backend-listen and pusher — not the
 in-cluster `*.svc.cluster.local` URL that only in-cluster Parakeet can reach.
+The optional [shared model Gateway](../charts/internal-gateway/README.md) adds
+`/diarizer`, `/diarizer-batch`, `/parakeet`, `/vad` and `/nllb` routes through
+separate Services while preserving existing Ingresses. This chart change leaves
+caller URLs unchanged; the lead switches one service at a time, including every
+speaker-ID host together. VAD requires the full `/vad/v1/vad` URL. Batch uses its
+own isolated release and `/diarizer-batch/v2/diarization`; Parakeet WebSocket and
+window paths retain their base prefix through the rewrite.
 
 `is_user` remains the compatibility projection, while
 `speaker_identity_status` preserves its evidence state: `user`, `not_user`,
@@ -4512,6 +4562,10 @@ retention contract. No new client capability is advertised by this foundation.
 
 ### Flagged shared batch diarization
 
+Production stage A binds David-only shadow on backend, backend-sync and pusher
+through the shared Gateway `/diarizer-batch` prefix. Exact env stages, caps,
+acceptance gates and rollback: [batch cohort ramp](diarizer-batch-cohort.md).
+
 `TRANSCRIPTION_FINAL_PASS_DIARIZER=legacy` preserves the current shadow and sync
 paths. `pyannote_shadow` admits only `TRANSCRIPTION_FINAL_PASS_UID_ALLOWLIST` or
 `TRANSCRIPTION_FINAL_PASS_PERCENT`. `TRANSCRIPTION_FINAL_PASS_BACKEND` selects
@@ -4557,13 +4611,23 @@ Deploy the additive diarizer image first, then a separate batch Helm release
 and pusher with all cutover flags off, then a separately reviewed cohort flag PR.
 The default embedding/v1 app eagerly warms its models before TCP readiness and
 keeps concurrent legacy routes without the batch lock. The batch app warms its
-models before listening; failures abort startup. `/v2/diarization` uses the batch
-separate internal ingress (`diarizer-batch.omi.me`), not the embedding ingress.
-Cloud Run cannot use ClusterIP DNS. The batch release has a dedicated tainted
-L4 pool, a one-pod David-only floor, and a direct per-pod Prometheus queue scrape
-and adapter rule. Exact install/metric/cohort gates: `scripts/diarization_eval/batch_install.md`. See `scripts/diarization_eval/capacity.md`
+models before listening; failures abort startup. `/v2/diarization` is reached
+only through the shared internal Gateway `/diarizer-batch` prefix. Cloud Run
+cannot use ClusterIP DNS. Production batch runs on the dedicated tainted T4
+`diarizer-batch-pool`, with a one-pod David-only floor; qualify the direct per-pod
+Prometheus queue scrape and adapter rule before ramping. Exact install/metric/cohort gates: `scripts/diarization_eval/batch_install.md`. See `scripts/diarization_eval/capacity.md`
 for routing and the opt-in release overlay; verify caller reachability before
 cohort enablement.
 Rollback: disable authoritative/sync flags first, set mode to `legacy`, then restore
 previous backend and diarizer image digests if needed. No stored-history reversal
 is automatic. Shared scorer instructions: `scripts/diarization_eval/README.md`.
+
+### Shared Gateway caller routes
+
+NLLB, VAD and every speaker-embedding host (including Parakeet fallback) use
+the environment-specific shared Gateway paths. Parakeet STT retains its legacy
+hostname. Dev uses `172.16.48.49`; prod uses `172.16.160.20`. Qualify Gateway
+programming and caller reachability before deploying.
+
+Caller deploy order, route requirements and independent rollback are documented
+in [the Gateway caller runbook](internal-gateway-callers.md).

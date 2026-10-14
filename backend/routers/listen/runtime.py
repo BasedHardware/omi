@@ -64,7 +64,8 @@ from utils.live_speaker_suggestions import emit_speaker_suggestion as emit_live_
 from utils.stt.streaming import get_stt_service_for_language
 import utils.stt.replay_delivery as replay_delivery
 from utils.stt.live_failure import terminate_live_stt_backoff
-from utils.stt.live_rollout import managed_chain_enabled, window_allocation, window_selection_kwargs
+from config.live_demand import DemandSelection, language_qualified, resolve_live_demand
+from utils.stt.live_rollout import WindowSelection, managed_chain_enabled, window_allocation, window_selection_kwargs
 from utils.stt.live_metrics import (
     COST_CANARY_OUTCOME,
     LIVE_SESSION_TERMINAL_AFTER_TEXT,
@@ -558,12 +559,23 @@ class ListenSessionRuntime:
             learned_sessions=learned_sessions,
         )
         self.language_observations = LiveLanguageObservations(self.language_profile)
+        demand_vendor_start = (
+            resolve_live_demand().admits(request.uid)
+            and language_qualified(self)
+            and self.recovery_enabled
+            and managed_chain_enabled(self)
+            and not request.onboarding_mode
+            and request.source != 'phone_call'
+        )
+        window_kwargs: WindowSelection = {} if demand_vendor_start else window_selection_kwargs(self, request.uid)
+        demand_kwargs: DemandSelection = {'exclude': frozenset({'parakeet'})} if demand_vendor_start else {}
         self.stt_service, self.stt_language, self.stt_model = get_stt_service_for_language(
             self.language,
             multi_lang_enabled=self.multi_lang_enabled,
             preferred_service=request.stt_service,
             language_profile=self.language_profile,
-            **window_selection_kwargs(self, request.uid),
+            **window_kwargs,
+            **demand_kwargs,
         )
         # The provider the serving policy chose, captured before `_create_stt_socket`
         # can walk the fallback chain. Only the *selected* value is safe to hold onto:
@@ -686,6 +698,9 @@ class ListenSessionRuntime:
 
     async def _heartbeat(self) -> None:
         while self.state.active:
+            meter = getattr(getattr(self, 'receiver', None), 'lane_meter', None)
+            if meter is not None:
+                meter.flush()
             if self.request.websocket.client_state != WebSocketState.CONNECTED:
                 self.state.active = False
                 break
@@ -1001,6 +1016,9 @@ class ListenSessionRuntime:
             current_routing_cohort.set(self._routing_cohort)
             if not await self.receiver.initialize_stt():
                 return
+            demand = getattr(self.receiver, 'live_demand', None)
+            if demand is not None:
+                background.append(self.task_supervisor.create_lifetime_task(demand.run(), name='live_demand_routing'))
             record_listen_session_accepted(source=self.request.source, platform=self.client_device_context.platform)
             if not self.use_custom_stt:
                 self._no_audio_observation = ListenNoAudioObservation()
@@ -1158,6 +1176,13 @@ class ListenSessionRuntime:
             except Exception as error:
                 logger.error('Translation flush failed type=%s', type(error).__name__)
         self.state.active = False
+        meter = getattr(self.receiver, 'lane_meter', None)
+        if meter is not None:
+            meter.close()
+        demand = getattr(self.receiver, 'live_demand', None)
+        if demand is not None:
+            demand.close()
+            await demand.publish()
         try:
             self.receiver.finish()
         except Exception as error:

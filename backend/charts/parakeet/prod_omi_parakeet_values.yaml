@@ -128,7 +128,7 @@ env:
     # of newly arrived live work in the worker's FIFO queue.
     value: "1"
   - name: HOSTED_SPEAKER_EMBEDDING_API_URL
-    value: "http://prod-omi-diarizer.prod-omi-backend.svc.cluster.local:8080"
+    value: "http://172.16.160.20/diarizer"
 
 terminationGracePeriodSeconds: 150
 
@@ -255,3 +255,8 @@ strategy:
   rollingUpdate:
     maxUnavailable: 1
     maxSurge: 0
+
+# Route activation does not switch callers. Install the shared Gateway first.
+gateway:
+  enabled: true
+  name: prod-omi-internal-gateway
