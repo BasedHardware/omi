@@ -46,6 +46,16 @@ class WorkstreamCreate(BaseModel):
     current_state_summary: str = Field(default='', max_length=4000)
     next_review_at: Optional[datetime] = None
 
+    @model_validator(mode='after')
+    def validate_non_blank_strings(self):
+        self.title = self.title.strip()
+        if not self.title:
+            raise ValueError('title cannot be blank')
+        self.objective = self.objective.strip()
+        if not self.objective:
+            raise ValueError('objective cannot be blank')
+        return self
+
 
 class WorkstreamUpdate(BaseModel):
     model_config = ConfigDict(extra='forbid')
@@ -63,6 +73,14 @@ class WorkstreamUpdate(BaseModel):
         for field_name in ('title', 'objective', 'status', 'current_state_summary'):
             if field_name in self.model_fields_set and getattr(self, field_name) is None:
                 raise ValueError(f'{field_name} cannot be null')
+        if self.title is not None:
+            self.title = self.title.strip()
+            if not self.title:
+                raise ValueError('title cannot be blank')
+        if self.objective is not None:
+            self.objective = self.objective.strip()
+            if not self.objective:
+                raise ValueError('objective cannot be blank')
         return self
 
 
