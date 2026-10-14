@@ -57,8 +57,12 @@ def require_access(uid, channel='telegram'):
 
     plans = channel_policy(channel).get('plans')
     plan = getattr(subscription.plan, 'value', subscription.plan)
-    if plans is not None and plan not in plans:
-        raise AccessDenied('channel_plan', 'Operator or Architect plan required for iMessage')
+    if plans is not None:
+        if not isinstance(plans, list):
+            raise AccessDenied('channel_disabled', 'Invalid channel plan policy')
+        allowed_plans: list[str] = [value for value in plans if isinstance(value, str)]
+        if plan not in allowed_plans:
+            raise AccessDenied('channel_plan', 'Operator or Architect plan required for iMessage')
 
 
 def require_app_access(uid):

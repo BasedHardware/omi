@@ -11,7 +11,7 @@ import threading
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from typing import Any, Callable, Dict, Iterator, Mapping, Optional, cast
+from typing import Any, Protocol, Dict, Iterator, Mapping, Optional, cast
 
 from langchain_core.callbacks import BaseCallbackHandler
 from langchain_core.outputs import LLMResult
@@ -52,16 +52,34 @@ class UsageRecord:
     timestamp: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
 
 
+class UsageWriter(Protocol):
+    """Usage sink accepting basic counts and optional chat cache/surface attribution."""
+
+    def __call__(
+        self,
+        uid: str,
+        feature: str,
+        model: str,
+        input_tokens: int,
+        output_tokens: int,
+        *,
+        cache_read_tokens: int = 0,
+        cache_write_tokens: int = 0,
+        surface: str | None = None,
+        turn_id: str | None = None,
+    ) -> None: ...
+
+
 class LLMUsageCallback(BaseCallbackHandler):
     """LangChain callback handler for tracking LLM token usage by feature."""
 
-    def __init__(self, flush_fn: Optional[Callable[[str, str, str, int, int], None]] = None) -> None:
+    def __init__(self, flush_fn: Optional[UsageWriter] = None) -> None:
         """
         Initialize the callback.
 
         Args:
             flush_fn: Optional function to call for each usage record.
-                      Signature: (uid, feature, model, input_tokens, output_tokens) -> None
+                      Basic counts plus optional keyword-only cache/surface/turn attribution.
         """
         self._flush_fn = flush_fn
 

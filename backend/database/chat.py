@@ -1,5 +1,5 @@
 from database.chat_history_window import (
-    cache_aligned_history_limit,
+    cache_aligned_history_limit as cache_aligned_history_limit,
 )
 from database.channel_visibility import visible_sessions
 import copy
@@ -85,7 +85,7 @@ def is_automatic_chat_message(message: Dict[str, Any]) -> bool:
     )
 
 
-def _typed_doc(doc: Any) -> Dict[str, Any]:
+def typed_message_document(doc: Any) -> Dict[str, Any]:
     """Typed adapter for a Firestore DocumentSnapshot.to_dict() result.
 
     Returns an empty dict when the document has no fields (None payload),
@@ -289,7 +289,7 @@ def get_app_messages(
 
         for document in documents:
             cursor_snapshot = document
-            message: Dict[str, Any] = _typed_doc(document)
+            message: Dict[str, Any] = typed_message_document(document)
             if is_automatic_chat_message(message):
                 hidden_row_seen = True
                 continue
@@ -315,7 +315,7 @@ def get_app_messages(
     docs = db.get_all(doc_refs)
     for doc in docs:
         if doc.exists:
-            conversation: Dict[str, Any] = _typed_doc(doc)
+            conversation: Dict[str, Any] = typed_message_document(doc)
             conversations[conversation['id']] = conversation
 
     # Attach conversations to messages
@@ -393,7 +393,7 @@ def get_messages(
 
         for document in documents:
             cursor_snapshot = document
-            message: Dict[str, Any] = _typed_doc(document)
+            message: Dict[str, Any] = typed_message_document(document)
             if is_automatic_chat_message(message):
                 hidden_row_seen = True
                 continue
@@ -423,7 +423,7 @@ def get_messages(
     docs = db.get_all(doc_refs)
     for doc in docs:
         if doc.exists:
-            conversation: Dict[str, Any] = _typed_doc(doc)
+            conversation: Dict[str, Any] = typed_message_document(doc)
             conversations[conversation['id']] = conversation
 
     # Attach conversations to messages
@@ -441,7 +441,7 @@ def get_messages(
     doc_files = db.get_all(files_ref)
     for doc in doc_files:
         if doc.exists:
-            file: Dict[str, Any] = _typed_doc(doc)
+            file: Dict[str, Any] = typed_message_document(doc)
             files[file['id']] = file
 
     # Attach files to messages
@@ -451,7 +451,7 @@ def get_messages(
     return messages
 
 
-from database.chat_context_reads import get_cache_aligned_messages
+from database.chat_context_reads import get_cache_aligned_messages as get_cache_aligned_messages
 
 
 @prepare_for_read(decrypt_func=_prepare_message_for_read)
@@ -488,7 +488,7 @@ def get_messages_reconcile_page(
         cursor_snapshot = messages_collection.document(cursor_message_id).get()
         if not cursor_snapshot.exists:
             raise MessageReconcileCursorError('message cursor does not exist')
-        cursor_payload = _typed_doc(cursor_snapshot)
+        cursor_payload = typed_message_document(cursor_snapshot)
         cursor_in_scope = (
             cursor_payload.get('chat_session_id') == chat_session_id
             if chat_session_id
@@ -518,7 +518,7 @@ def get_messages_reconcile_page(
             scanned += 1
             cursor_snapshot = document
             next_cursor = str(document.id)
-            message = _typed_doc(document)
+            message = typed_message_document(document)
             if message.get('reported') is not True and not is_automatic_chat_message(message):
                 messages.append(message)
                 if len(messages) == limit:
@@ -572,7 +572,7 @@ def iter_all_messages(uid: str, batch_size: int = 1000) -> Iterator[Dict[str, An
         snapshots = list(iter_portability_guarded(batch_ref.stream()))
         for doc in snapshots:
             check_portability_read()
-            msg: Dict[str, Any] = _typed_doc(doc)
+            msg: Dict[str, Any] = typed_message_document(doc)
             msg['id'] = doc.id
             msg = _prepare_message_for_read(msg, uid) or msg
             batch.append(msg)
@@ -592,7 +592,7 @@ def get_message(uid: str, message_id: str) -> tuple[Message, str] | None:
     message = parse_snapshot_or_none(
         Message,
         message_doc,
-        payload_from_snapshot=lambda snapshot: _prepare_message_for_read(_typed_doc(snapshot), uid),
+        payload_from_snapshot=lambda snapshot: _prepare_message_for_read(typed_message_document(snapshot), uid),
     )
     if message is None:
         return None
@@ -605,7 +605,9 @@ def report_message(uid: str, msg_doc_id: str) -> Dict[str, str]:
     message_ref = user_ref.collection('messages').document(msg_doc_id)
     try:
         snapshot = message_ref.get()
-        session_id = _typed_doc(snapshot).get('chat_session_id') or _typed_doc(snapshot).get('session_id')
+        session_id = typed_message_document(snapshot).get('chat_session_id') or typed_message_document(snapshot).get(
+            'session_id'
+        )
         batch = db.batch()
         invalidate_sessions(batch, user_ref, [session_id])
         batch.update(message_ref, {'reported': True})
@@ -632,7 +634,7 @@ def update_message_rating(uid: str, message_id: str, rating: Optional[int]) -> O
         logger.warning(f"⚠️ Message {message_id} not found for user {uid}")
         return None
 
-    snapshot = _typed_doc(message_doc)
+    snapshot = typed_message_document(message_doc)
     try:
         user_ref.collection('messages').document(message_doc.id).update({'rating': rating})
         logger.info(f"✅ Updated message {message_id} rating to {rating}")
@@ -665,7 +667,10 @@ def batch_delete_messages(
         invalidate_sessions(
             batch,
             parent_doc_ref,
-            [_typed_doc(doc).get('chat_session_id') or _typed_doc(doc).get('session_id') for doc in docs_list],
+            [
+                typed_message_document(doc).get('chat_session_id') or typed_message_document(doc).get('session_id')
+                for doc in docs_list
+            ],
         )
         batch.update(parent_doc_ref, {'chat_context_generation': firestore.Increment(1)})
         for doc in docs_list:
@@ -722,12 +727,12 @@ def get_chat_files(uid: str, files_id: Optional[List[str]] = None) -> List[Dict[
 
     # If no specific files requested, return all
     if len(files_id) == 0:
-        return [_typed_doc(doc) for doc in files_ref.stream()]
+        return [typed_message_document(doc) for doc in files_ref.stream()]
 
     # Firestore IN operator supports max 30 values, so chunk the queries
     if len(files_id) <= 30:
         files_ref = files_ref.where(filter=FieldFilter('id', 'in', files_id))
-        return [_typed_doc(doc) for doc in files_ref.stream()]
+        return [typed_message_document(doc) for doc in files_ref.stream()]
 
     # Chunk into batches of 30
     results: List[Dict[str, Any]] = []
@@ -735,7 +740,7 @@ def get_chat_files(uid: str, files_id: Optional[List[str]] = None) -> List[Dict[
         chunk = files_id[i : i + 30]
         chunk_ref = db.collection('users').document(uid).collection('files')
         chunk_ref = chunk_ref.where(filter=FieldFilter('id', 'in', chunk))
-        results.extend([_typed_doc(doc) for doc in chunk_ref.stream()])
+        results.extend([typed_message_document(doc) for doc in chunk_ref.stream()])
 
     return results
 
@@ -750,14 +755,14 @@ def get_chat_files_desc(uid: str, files_id: Optional[List[str]] = None, limit: i
     # If no specific files requested, return most recent files
     if len(files_id) == 0:
         files_ref = files_ref.order_by('created_at', direction=firestore.Query.DESCENDING).limit(limit)
-        return [_typed_doc(doc) for doc in files_ref.stream()]
+        return [typed_message_document(doc) for doc in files_ref.stream()]
 
     # If specific files requested, filter by them first
     # Firestore IN operator supports max 30 values
     if len(files_id) <= 30:
         files_ref = files_ref.where(filter=FieldFilter('id', 'in', files_id))
         files_ref = files_ref.order_by('created_at', direction=firestore.Query.DESCENDING).limit(limit)
-        return [_typed_doc(doc) for doc in files_ref.stream()]
+        return [typed_message_document(doc) for doc in files_ref.stream()]
 
     # Chunk into batches of 30 if more than 30 files
     results: List[Dict[str, Any]] = []
@@ -766,7 +771,7 @@ def get_chat_files_desc(uid: str, files_id: Optional[List[str]] = None, limit: i
         chunk_ref = db.collection('users').document(uid).collection('files')
         chunk_ref = chunk_ref.where(filter=FieldFilter('id', 'in', chunk))
         chunk_ref = chunk_ref.order_by('created_at', direction=firestore.Query.DESCENDING)
-        results.extend([_typed_doc(doc) for doc in chunk_ref.stream()])
+        results.extend([typed_message_document(doc) for doc in chunk_ref.stream()])
 
     # Sort all results by created_at and limit. Use a tz-aware sentinel for a missing created_at so it
     # never TypeError-compares against the tz-aware Firestore datetimes and sinks to the bottom of the
@@ -831,7 +836,7 @@ def get_chat_session(uid: str, app_id: Optional[str] = None) -> Optional[Dict[st
         .limit(1)
         .stream()
     )
-    ordered_docs = [_typed_doc(session) for session in ordered_sessions]
+    ordered_docs = [typed_message_document(session) for session in ordered_sessions]
     if ordered_docs:
         return max(
             ordered_docs,
@@ -853,14 +858,14 @@ def get_chat_session(uid: str, app_id: Optional[str] = None) -> Optional[Dict[st
         .stream()
     )
 
-    legacy_docs = [_typed_doc(session) for session in legacy_session]
+    legacy_docs = [typed_message_document(session) for session in legacy_session]
     if len(legacy_docs) > 1:
         legacy_docs = legacy_docs[:1]
 
     newest: Optional[Dict[str, Any]] = None
     newest_key: Optional[tuple] = None
     for data in legacy_docs:
-        # `_typed_doc` returns {} for a document with no fields, which sorts as
+        # `typed_message_document` returns {} for a document with no fields, which sorts as
         # untimestamped and loses to anything real rather than being skipped.
         created = data.get('created_at')
         key = (created is not None, created or datetime.min.replace(tzinfo=timezone.utc), str(data.get('id') or ''))
@@ -958,7 +963,7 @@ def get_chats_to_migrate(uid: str, target_level: str) -> List[Dict[str, Any]]:
 
     to_migrate: List[Dict[str, Any]] = []
     for doc in all_messages:
-        doc_data: Dict[str, Any] = _typed_doc(doc)
+        doc_data: Dict[str, Any] = typed_message_document(doc)
         current_level = doc_data.get('data_protection_level', 'standard')
         if target_level != current_level:
             to_migrate.append({'id': doc.id, 'type': 'chat'})
@@ -981,7 +986,7 @@ def migrate_chats_level_batch(uid: str, message_doc_ids: List[str], target_level
             logger.warning(f"Message {doc_snapshot.id} not found, skipping.")
             continue
 
-        message_data: Dict[str, Any] = _typed_doc(doc_snapshot)
+        message_data: Dict[str, Any] = typed_message_document(doc_snapshot)
         current_level = message_data.get('data_protection_level', 'standard')
 
         if current_level == target_level:
@@ -1093,7 +1098,7 @@ def get_chat_sessions(
     query = query.offset(0 if extra else offset).limit(offset + limit if extra else limit)
     items: List[Dict[str, Any]] = []
     for doc in query.stream():
-        data: Dict[str, Any] = _typed_doc(doc)
+        data: Dict[str, Any] = typed_message_document(doc)
         data['id'] = doc.id
         normalized = _normalize_chat_session(data)
         if normalized is not None:
@@ -1120,7 +1125,7 @@ def update_chat_session(
     if starred is not None:
         updates['starred'] = starred
     ref.update(updates)
-    result: Dict[str, Any] = _typed_doc(ref.get())
+    result: Dict[str, Any] = typed_message_document(ref.get())
     result['id'] = session_id
     return _normalize_chat_session(result)
 
@@ -1275,7 +1280,7 @@ def _apply_existing_message_revision(
         snapshot = message_ref.get(transaction=write_transaction)
         if not snapshot.exists:
             return None
-        existing = _typed_doc(snapshot)
+        existing = typed_message_document(snapshot)
         _assert_message_identity(
             existing,
             sender=sender,
@@ -1463,7 +1468,7 @@ def delete_messages(uid: str, app_id: Optional[str] = None, session_id: Optional
         deleted_message_ids_by_session: Dict[str, List[str]] = {}
         deleted_previews_by_session: Dict[str, set[str]] = {}
         for doc in docs:
-            data = _typed_doc(doc)
+            data = typed_message_document(doc)
             message_session_id = data.get('chat_session_id') or data.get('session_id')
             if isinstance(message_session_id, str) and message_session_id:
                 deleted_by_session[message_session_id] = deleted_by_session.get(message_session_id, 0) + 1
@@ -1491,7 +1496,7 @@ def delete_messages(uid: str, app_id: Optional[str] = None, session_id: Optional
             session_snapshot = session_snapshots[message_session_id]
             if not session_snapshot.exists:
                 continue
-            session_data = _typed_doc(session_snapshot)
+            session_data = typed_message_document(session_snapshot)
             stored_count = session_data.get('message_count')
             updates: Dict[str, Any] = invalidation_fields()
             if isinstance(session_data.get('message_ids'), list):

@@ -33,3 +33,7 @@ tests/unit/test_shaped_chat_context.py
 tests/unit/test_desktop_migration.py
 tests/unit/test_chat_message_save_atomic.py
 tests/unit/test_messaging_review_fixes.py
+tests/unit/test_messaging_typecheck_contracts.py
+tests/unit/test_chat_agent_loop_guard.py
+tests/unit/test_chat_followup_outcome_text.py
+tests/unit/test_chat_message_count.py

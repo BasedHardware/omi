@@ -557,7 +557,7 @@ def _collected_results_from_config(configurable: dict | None) -> Any:
     return evidence or None
 
 
-async def _execute_independent_tool_calls(
+async def execute_independent_tool_calls(
     tool_calls: list,
     *,
     name_of,
@@ -590,7 +590,7 @@ async def _execute_independent_tool_calls(
             stub_after = True
             break
         except SafetyGuardError as error:
-            await _put_outcome_text(callback, full_response, f'\n\n{str(error)}')
+            await put_outcome_text(callback, full_response, f'\n\n{str(error)}')
             logger.error('Safety Guard blocked tool call: %s', error)
             await callback.end()
             return None
@@ -632,7 +632,7 @@ async def _execute_independent_tool_calls(
         try:
             safety_guard.check_context_size(result)
         except SafetyGuardError as error:
-            await _put_outcome_text(callback, full_response, f'\n\n{str(error)}')
+            await put_outcome_text(callback, full_response, f'\n\n{str(error)}')
             logger.error('Safety Guard blocked due to context size: %s', error)
             await callback.end()
             return None
@@ -901,7 +901,7 @@ async def get_mobile_city(uid: str, platform: Optional[str]) -> Optional[str]:
 # ---------------------------------------------------------------------------
 
 
-async def _put_answer_text(callback: AsyncStreamingCallback, full_response: list, text: str) -> None:
+async def put_answer_text(callback: AsyncStreamingCallback, full_response: list, text: str) -> None:
     """Stream text to the client and record it as part of the answer.
 
     ``put_data`` alone reaches only the live stream; the persisted reply and the terminal
@@ -912,7 +912,7 @@ async def _put_answer_text(callback: AsyncStreamingCallback, full_response: list
     await callback.put_data(text)
 
 
-async def _put_outcome_text(callback: AsyncStreamingCallback, full_response: list, text: str) -> None:
+async def put_outcome_text(callback: AsyncStreamingCallback, full_response: list, text: str) -> None:
     """Record backend-authored text that ends the turn, voiding any follow-up tail.
 
     A model can emit its closing-question marker and still leave tool calls to run. If the turn
@@ -926,7 +926,7 @@ async def _put_outcome_text(callback: AsyncStreamingCallback, full_response: lis
     marker = joined.find(FOLLOWUP_DELIMITER)
     if marker >= 0:
         full_response[:] = [joined[:marker].rstrip()]
-    await _put_answer_text(callback, full_response, text)
+    await put_answer_text(callback, full_response, text)
 
 
 def _has_answer(full_response: list) -> bool:
@@ -939,7 +939,7 @@ def _has_answer(full_response: list) -> bool:
     return bool(''.join(full_response).strip())
 
 
-async def _end_with_answer_guarantee(
+async def end_with_answer_guarantee(
     callback: AsyncStreamingCallback, full_response: list, provider: str
 ) -> Optional[str]:
     """Close the stream, guaranteeing the turn left the user something to read.
@@ -953,7 +953,7 @@ async def _end_with_answer_guarantee(
         await callback.end()
         return None
     logger.warning('Chat agent loop finished with no answer provider=%s', provider)
-    await _put_answer_text(callback, full_response, AGENT_EMPTY_ANSWER_MESSAGE)
+    await put_answer_text(callback, full_response, AGENT_EMPTY_ANSWER_MESSAGE)
     await callback.end()
     return 'empty_answer'
 
@@ -1096,7 +1096,7 @@ async def _run_anthropic_agent_stream(
                 await handle_llm_error_async(e, 'anthropic', feature='chat_agent', model=ANTHROPIC_AGENT_MODEL)
                 # ``put_data`` alone reaches the live stream but not the persisted answer, so the
                 # router would overwrite this apology with its own canned error.
-                await _put_outcome_text(callback, full_response, "\n\nSorry, I encountered an error. Please try again.")
+                await put_outcome_text(callback, full_response, "\n\nSorry, I encountered an error. Please try again.")
                 await callback.end()
                 return f'provider_{type(e).__name__}'
 
@@ -1117,7 +1117,7 @@ async def _run_anthropic_agent_stream(
         if response.stop_reason == "refusal":
             logger.warning('Chat agent turn refused by provider category=%s', _refusal_category(response))
             if not _has_answer(full_response):
-                await _put_outcome_text(callback, full_response, AGENT_REFUSAL_MESSAGE)
+                await put_outcome_text(callback, full_response, AGENT_REFUSAL_MESSAGE)
             await callback.end()
             return 'provider_refusal'
 
@@ -1127,7 +1127,7 @@ async def _run_anthropic_agent_stream(
 
         # Execute independent tool_use blocks concurrently (leftover Anthropic path).
         tool_use_blocks = [b for b in response.content if b.type == "tool_use"]
-        tool_results = await _execute_independent_tool_calls(
+        tool_results = await execute_independent_tool_calls(
             tool_use_blocks,
             name_of=lambda block: block.name,
             input_of=lambda block: block.input,
@@ -1169,10 +1169,10 @@ async def _run_anthropic_agent_stream(
     stats = safety_guard.get_stats()
     logger.info(f"Safety Guard final stats: {stats}")
 
-    return await _end_with_answer_guarantee(callback, full_response, 'anthropic')
+    return await end_with_answer_guarantee(callback, full_response, 'anthropic')
 
 
-def _openai_content_text(content: Any) -> str:
+def openai_content_text(content: Any) -> str:
     """Extract text from an OpenAI-compatible message or message chunk."""
     if isinstance(content, str):
         return content
@@ -1212,7 +1212,7 @@ def _normalize_openai_tool_call(raw_call: dict, index: int) -> dict:
     return {'id': call_id, 'name': name, 'input': arguments}
 
 
-def _openai_tool_calls(chunks: list[Any]) -> list[dict]:
+def openai_tool_calls(chunks: list[Any]) -> list[dict]:
     """Collect complete tool calls from streamed OpenAI-compatible chunks."""
     tool_call_chunks = []
     for chunk in chunks:
@@ -1288,7 +1288,7 @@ async def _run_openai_agent_stream(
         await handle_llm_error_async(error, 'openai', feature='chat_agent', model='omi:auto:chat-agent')
         # ``put_data`` alone reaches the live stream but not the persisted answer, so the
         # router would overwrite this apology with its own canned error.
-        await _put_answer_text(callback, full_response, '\n\nSorry, I encountered an error. Please try again.')
+        await put_answer_text(callback, full_response, '\n\nSorry, I encountered an error. Please try again.')
         await callback.end()
         return f'provider_{type(error).__name__}'
 
@@ -1315,7 +1315,7 @@ async def _run_openai_agent_stream(
                 try:
                     async for chunk in chat_model.astream([{'role': 'system', 'content': system_prompt}, *messages]):
                         chunks.append(chunk)
-                        text = _openai_content_text(getattr(chunk, 'content', ''))
+                        text = openai_content_text(getattr(chunk, 'content', ''))
                         if not text:
                             continue
                         if first_text_in_iteration and loop_iteration > 1 and full_response:
@@ -1327,14 +1327,14 @@ async def _run_openai_agent_stream(
                                 and last_char not in (' ', '\n')
                                 and first_char not in (' ', '\n')
                             ):
-                                await _put_answer_text(callback, full_response, '\n\n')
+                                await put_answer_text(callback, full_response, '\n\n')
                         first_text_in_iteration = False
                         iteration_text.append(text)
-                        await _put_answer_text(callback, full_response, text)
+                        await put_answer_text(callback, full_response, text)
                 finally:
                     if usage_token is not None:
                         reset_usage_context(usage_token)
-                tool_calls = _openai_tool_calls(chunks)
+                tool_calls = openai_tool_calls(chunks)
                 break
             except Exception as error:
                 elapsed = asyncio.get_running_loop().time() - producer_started_at
@@ -1356,7 +1356,7 @@ async def _run_openai_agent_stream(
                     continue
 
                 await handle_llm_error_async(error, 'openai', feature='chat_agent', model='omi:auto:chat-agent')
-                await _put_outcome_text(callback, full_response, '\n\nSorry, I encountered an error. Please try again.')
+                await put_outcome_text(callback, full_response, '\n\nSorry, I encountered an error. Please try again.')
                 await callback.end()
                 return f'provider_{type(error).__name__}'
 
@@ -1372,7 +1372,7 @@ async def _run_openai_agent_stream(
         if not tool_calls:
             break
 
-        tool_results = await _execute_independent_tool_calls(
+        tool_results = await execute_independent_tool_calls(
             tool_calls,
             name_of=lambda tool_call: tool_call['name'],
             input_of=lambda tool_call: tool_call['input'],
@@ -1410,7 +1410,7 @@ async def _run_openai_agent_stream(
         messages.extend(tool_results)
 
     logger.info('Safety Guard final stats: %s', safety_guard.get_stats())
-    return await _end_with_answer_guarantee(callback, full_response, 'openai')
+    return await end_with_answer_guarantee(callback, full_response, 'openai')
 
 
 from utils.retrieval.shaped_chat import run_shaped_chat_stream as _run_shaped_chat_stream

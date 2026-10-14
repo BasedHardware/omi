@@ -3,7 +3,7 @@
 import json
 import logging
 from dataclasses import replace
-from typing import Optional
+from typing import Any, Optional
 
 from utils.messaging.projection import surface_runtime
 from utils.messaging.context import prepare as prepare_context, assemble, schedule_refresh, degraded
@@ -35,7 +35,7 @@ async def run_shaped_chat_stream(
     runtime = surface_runtime.get()
     if runtime is not None:
         mount = replace(mount, skills=(*mount.skills, runtime.skill))
-    model = a.get_llm('chat_agent', streaming=True, stream_usage=True)
+    model = a.get_llm('chat_agent', streaming=True)
     cache_enabled = a.gpt56_explicit_cache_enabled() and model_supports_explicit_cache(model)
     options = chat_cache_options() if cache_enabled else None
     cache_enabled = cache_enabled and options is not None
@@ -70,7 +70,7 @@ async def run_shaped_chat_stream(
         turn_id=configurable.get('thread_id') or (runtime.turn_id if runtime else None),
     )
     try:
-        params = {'tools': list(mount.tools), 'tool_choice': 'auto', 'max_completion_tokens': 8192}
+        params: dict[str, Any] = {'tools': list(mount.tools), 'tool_choice': 'auto', 'max_completion_tokens': 8192}
         if cache_enabled:
             params['extra_body'] = {'prompt_cache_options': options}
         model = model.bind(**params)
@@ -79,13 +79,13 @@ async def run_shaped_chat_stream(
             chunks, text_parts = [], []
             async for chunk in model.astream(history):
                 chunks.append(chunk)
-                text = a._openai_content_text(getattr(chunk, 'content', ''))
+                text = a.openai_content_text(getattr(chunk, 'content', ''))
                 if text:
                     if not text_parts and full_response:
-                        await a._put_answer_text(callback, full_response, '\n\n')
+                        await a.put_answer_text(callback, full_response, '\n\n')
                     text_parts.append(text)
-                    await a._put_answer_text(callback, full_response, text)
-            calls = a._openai_tool_calls(chunks)
+                    await a.put_answer_text(callback, full_response, text)
+            calls = a.openai_tool_calls(chunks)
             assistant = {
                 'role': 'assistant',
                 'content': ''.join(text_parts),
@@ -112,7 +112,7 @@ async def run_shaped_chat_stream(
                     }
                     for call in calls
                 ]
-            results = await a._execute_independent_tool_calls(
+            results = await a.execute_independent_tool_calls(
                 list(calls),
                 name_of=lambda c: c['name'],
                 input_of=lambda c: c['input'],
@@ -130,9 +130,9 @@ async def run_shaped_chat_stream(
 
         result = await a.run_loop(mount, evidence, model_turn, execute_tools, explicit_cache=cache_enabled)
         if result.reason != 'stopped':
-            await a._end_with_answer_guarantee(callback, full_response, 'shaped')
+            await a.end_with_answer_guarantee(callback, full_response, 'shaped')
             return result.reason
-        return await a._end_with_answer_guarantee(callback, full_response, 'shaped')
+        return await a.end_with_answer_guarantee(callback, full_response, 'shaped')
     except _ShapedToolsStopped:
         return 'tool_safety_stop'
     except TimeoutError:
@@ -142,7 +142,7 @@ async def run_shaped_chat_stream(
             logger.warning('Shaped chat shadow failed error_type=%s', type(error).__name__)
             return 'shadow_failure'
         await a.handle_llm_error_async(error, 'openai', feature='chat_agent', model='omi:auto:chat-agent')
-        await a._put_outcome_text(callback, full_response, a.AGENT_STREAM_FAILURE_MESSAGE)
+        await a.put_outcome_text(callback, full_response, a.AGENT_STREAM_FAILURE_MESSAGE)
         await callback.end()
         return f'provider_{type(error).__name__}'
     finally:

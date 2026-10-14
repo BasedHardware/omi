@@ -30,7 +30,7 @@ def get_cache_aligned_messages(
     visibility_fields = ['reported', 'sender', 'metadata', 'message_source', 'type', 'content_blocks']
     visible_total = 0
     for document in scoped_ref.select(visibility_fields).stream():
-        message = chat_db._typed_doc(document)
+        message = chat_db.typed_message_document(document)
         if message.get('reported') is not True and not chat_db.is_automatic_chat_message(message):
             visible_total += 1
     visible_limit = cache_aligned_history_limit(visible_total)

@@ -2,6 +2,7 @@
 
 import asyncio
 import logging
+from typing import Any
 import copy
 import json
 
@@ -190,7 +191,9 @@ def assemble(
         if boundary >= 0 and has_cacheable_prefix(cumulative):
             row = history[boundary]
             content = row.get('content', '')
-            parts = [{'type': 'text', 'text': content}] if isinstance(content, str) else copy.deepcopy(content)
+            parts: list[dict[str, Any]] = (
+                [{'type': 'text', 'text': content}] if isinstance(content, str) else copy.deepcopy(content)
+            )
             if parts and isinstance(parts[-1], dict) and parts[-1].get('type') == 'text':
                 parts[-1]['prompt_cache_breakpoint'] = dict(EXPLICIT_CACHE_BREAKPOINT)
             row['content'] = parts
