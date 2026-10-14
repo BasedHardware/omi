@@ -13131,7 +13131,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get onDeviceScheduleLive => '边说边转';
 
   @override
-  String get onDeviceScheduleLiveBody => '文字在几秒内出现，就像实时转录一样。';
+  String get onDeviceScheduleLiveBody => 'Omi打开时定期转录。';
 
   @override
   String onDeviceBatteryPerHour(int percent) {

@@ -13390,7 +13390,7 @@ class AppLocalizationsBg extends AppLocalizations {
   String get onDeviceScheduleLive => 'Докато говорите';
 
   @override
-  String get onDeviceScheduleLiveBody => 'Текстът се появява за секунди, както при транскрипцията на живо.';
+  String get onDeviceScheduleLiveBody => 'Транскрибира редовно, докато Omi е отворено.';
 
   @override
   String onDeviceBatteryPerHour(int percent) {
@@ -13454,7 +13454,7 @@ class AppLocalizationsBg extends AppLocalizations {
   String get onDeviceWhySavingLiveHours => 'Избрахте да транскрибирате на този телефон, за да пестите часове на живо.';
 
   @override
-  String get onDeviceWhySummaryOnPhone => 'Резюмето също е създадено на този iPhone. Нищо не е напуснало устройството.';
+  String get onDeviceWhySummaryOnPhone => 'Резюмето също е създадено на този iPhone.';
 
   @override
   String get onDeviceWhyNoSummary => 'Пазите всичко на този телефон, затова няма резюме.';

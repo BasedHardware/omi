@@ -13155,7 +13155,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get onDeviceScheduleLive => '말하는 동안';
 
   @override
-  String get onDeviceScheduleLiveBody => '실시간 음성 변환처럼 몇 초 안에 텍스트가 표시돼요.';
+  String get onDeviceScheduleLiveBody => 'Omi가 열려 있는 동안 주기적으로 전사합니다.';
 
   @override
   String onDeviceBatteryPerHour(int percent) {
@@ -13216,7 +13216,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get onDeviceWhySavingLiveHours => '실시간 시간을 아끼기 위해 이 휴대폰에서 변환하도록 선택하셨어요.';
 
   @override
-  String get onDeviceWhySummaryOnPhone => '요약도 이 iPhone에서 작성됐어요. 기기 밖으로 나간 데이터는 없어요.';
+  String get onDeviceWhySummaryOnPhone => '요약도 이 iPhone에서 작성됐어요.';
 
   @override
   String get onDeviceWhyNoSummary => '모든 것을 이 휴대폰에만 보관하도록 설정해서 요약이 없어요.';

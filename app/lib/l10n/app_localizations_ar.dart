@@ -13266,7 +13266,7 @@ class AppLocalizationsAr extends AppLocalizations {
   String get onDeviceScheduleLive => 'أثناء حديثك';
 
   @override
-  String get onDeviceScheduleLiveBody => 'يظهر النص خلال ثوانٍ، مثل النسخ المباشر.';
+  String get onDeviceScheduleLiveBody => 'يحوّل الكلام إلى نص بانتظام أثناء فتح Omi.';
 
   @override
   String onDeviceBatteryPerHour(int percent) {
@@ -13328,7 +13328,7 @@ class AppLocalizationsAr extends AppLocalizations {
   String get onDeviceWhySavingLiveHours => 'اخترت النسخ على هذا الهاتف لتوفير الساعات المباشرة.';
 
   @override
-  String get onDeviceWhySummaryOnPhone => 'كُتب الملخص أيضًا على هذا iPhone. لم يغادر أي شيء الجهاز.';
+  String get onDeviceWhySummaryOnPhone => 'كُتب الملخص أيضًا على هذا iPhone.';
 
   @override
   String get onDeviceWhyNoSummary => 'تحتفظ بكل شيء على هذا الهاتف، لذا لا يوجد ملخص.';

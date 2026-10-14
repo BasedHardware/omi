@@ -6,6 +6,8 @@ import 'package:flutter/services.dart' show MethodChannel;
 import 'package:path_provider/path_provider.dart';
 
 import 'package:omi/models/stt_result.dart';
+import 'package:omi/services/experiments/on_device_overflow_gate.dart';
+import 'package:omi/services/on_device/on_device_engine.dart';
 import 'package:omi/services/custom_stt_log_service.dart';
 import 'package:omi/services/sockets/on_device_transcript_quality_gate.dart';
 import 'package:omi/services/sockets/pure_polling.dart';
@@ -24,6 +26,11 @@ class OnDeviceAppleProvider implements ISttProvider {
   static Future<bool> isOnDeviceAvailable(String language) async {
     if (!Platform.isIOS) return false;
     try {
+      if (await OnDeviceOverflowGate.read()) {
+        final status =
+            await AppleBatchEngine.channel.invokeMapMethod<String, dynamic>('status', {'language': language});
+        if (status?['engine'] != 'sfspeech') return status?['phase'] == 'installed';
+      }
       final available = await _channel.invokeMethod<bool>('onDeviceAvailable', {'language': language});
       return available ?? false;
     } catch (e) {
@@ -39,6 +46,29 @@ class OnDeviceAppleProvider implements ISttProvider {
     String? language,
   }) async {
     try {
+      if (await OnDeviceOverflowGate.read()) {
+        final result = await AppleBatchEngine().transcribe(audioData, language: language ?? this.language);
+        final duration = pcmWavDurationSeconds(audioData);
+        if (result.text.trim().isEmpty)
+          return SttTranscriptionResult(segments: [], rawText: '', audioEndSeconds: audioOffsetSeconds + duration);
+        return SttTranscriptionResult(rawText: result.text, audioEndSeconds: audioOffsetSeconds + duration, segments: [
+          if (result.words.isEmpty)
+            SttSegment(
+                text: result.text,
+                start: audioOffsetSeconds,
+                end: audioOffsetSeconds + duration,
+                speakerId: 0,
+                sttProvider: 'on_device:${result.engine}')
+          else
+            for (final word in result.words)
+              SttSegment(
+                  text: word.text,
+                  start: audioOffsetSeconds + word.start,
+                  end: audioOffsetSeconds + word.end,
+                  speakerId: 0,
+                  sttProvider: 'on_device:${result.engine}'),
+        ]);
+      }
       final sw = Stopwatch()..start();
 
       final tempDir = await getTemporaryDirectory();

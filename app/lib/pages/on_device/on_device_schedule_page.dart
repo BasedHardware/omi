@@ -4,7 +4,6 @@ import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/pages/on_device/on_device_components.dart';
 import 'package:omi/services/on_device/on_device_settings.dart';
 import 'package:omi/services/on_device/on_device_transcription_controller.dart';
-import 'package:omi/services/on_device/on_device_tuning.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 
@@ -41,7 +40,7 @@ class OnDeviceSchedulePage extends StatelessWidget {
           listenable: controller,
           builder: (context, _) {
             final settings = controller.settings;
-            Widget option(OnDeviceSchedule schedule, String body, String meta) => Padding(
+            Widget option(OnDeviceSchedule schedule, String body, String? meta) => Padding(
                   padding: const EdgeInsets.only(bottom: OmiSpacing.sm),
                   child: OnDeviceChoiceCard(
                     key: Key('on_device_schedule_${schedule.storageId}'),
@@ -69,12 +68,9 @@ class OnDeviceSchedulePage extends StatelessWidget {
                       Text(l10n.onDeviceScheduleBody,
                           style: OmiType.callout.copyWith(color: OmiColors.textSecondary, height: 1.4)),
                       const SizedBox(height: OmiSpacing.xl),
-                      option(OnDeviceSchedule.whileCharging, l10n.onDeviceScheduleChargingBody,
-                          l10n.onDeviceBatteryAlmostNone),
-                      option(OnDeviceSchedule.everyFewHours, l10n.onDeviceScheduleHoursBody,
-                          l10n.onDeviceBatteryPerDay(OnDeviceTuning.everyFewHoursBatteryPercentPerDay)),
-                      option(OnDeviceSchedule.asYouTalk, l10n.onDeviceScheduleLiveBody,
-                          l10n.onDeviceBatteryPerHour(OnDeviceTuning.asYouTalkBatteryPercentPerHour)),
+                      option(OnDeviceSchedule.whileCharging, l10n.onDeviceScheduleChargingBody, null),
+                      option(OnDeviceSchedule.everyFewHours, l10n.onDeviceScheduleHoursBody, l10n.onDeviceUsesBattery),
+                      option(OnDeviceSchedule.asYouTalk, l10n.onDeviceScheduleLiveBody, l10n.onDeviceUsesBattery),
                     ],
                   ),
                 ),

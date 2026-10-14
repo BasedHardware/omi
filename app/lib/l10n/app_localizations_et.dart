@@ -13335,7 +13335,7 @@ class AppLocalizationsEt extends AppLocalizations {
   String get onDeviceScheduleLive => 'Rääkimise ajal';
 
   @override
-  String get onDeviceScheduleLiveBody => 'Tekst ilmub mõne sekundiga, nagu reaalajas transkriptsioonis.';
+  String get onDeviceScheduleLiveBody => 'Transkribeerib regulaarselt, kui Omi on avatud.';
 
   @override
   String onDeviceBatteryPerHour(int percent) {
@@ -13398,7 +13398,7 @@ class AppLocalizationsEt extends AppLocalizations {
   String get onDeviceWhySavingLiveHours => 'Valisite reaalajas tundide säästmiseks transkribeerimise selles telefonis.';
 
   @override
-  String get onDeviceWhySummaryOnPhone => 'Ka kokkuvõte koostati selles iPhone\'is. Miski ei lahkunud seadmest.';
+  String get onDeviceWhySummaryOnPhone => 'Ka kokkuvõte koostati selles iPhone\'is.';
 
   @override
   String get onDeviceWhyNoSummary => 'Hoiate kõike selles telefonis, seega kokkuvõtet pole.';

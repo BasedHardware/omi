@@ -13377,7 +13377,7 @@ class AppLocalizationsNl extends AppLocalizations {
   String get onDeviceScheduleLive => 'Terwijl je praat';
 
   @override
-  String get onDeviceScheduleLiveBody => 'Tekst verschijnt binnen enkele seconden, net als bij live-transcriptie.';
+  String get onDeviceScheduleLiveBody => 'Transcribeert regelmatig terwijl Omi open is.';
 
   @override
   String onDeviceBatteryPerHour(int percent) {
@@ -13442,8 +13442,7 @@ class AppLocalizationsNl extends AppLocalizations {
       'Je hebt ervoor gekozen om op deze telefoon te transcriberen om live-uren te besparen.';
 
   @override
-  String get onDeviceWhySummaryOnPhone =>
-      'De samenvatting is ook op deze iPhone geschreven. Er heeft niets het apparaat verlaten.';
+  String get onDeviceWhySummaryOnPhone => 'De samenvatting is ook op deze iPhone geschreven.';
 
   @override
   String get onDeviceWhyNoSummary => 'Je houdt alles op deze telefoon, dus er is geen samenvatting.';

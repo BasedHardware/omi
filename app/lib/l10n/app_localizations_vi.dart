@@ -13338,7 +13338,7 @@ class AppLocalizationsVi extends AppLocalizations {
   String get onDeviceScheduleLive => 'Ngay khi bạn nói';
 
   @override
-  String get onDeviceScheduleLiveBody => 'Văn bản xuất hiện trong vài giây, giống phiên âm trực tiếp.';
+  String get onDeviceScheduleLiveBody => 'Chép lời định kỳ khi Omi đang mở.';
 
   @override
   String onDeviceBatteryPerHour(int percent) {
@@ -13401,7 +13401,7 @@ class AppLocalizationsVi extends AppLocalizations {
   String get onDeviceWhySavingLiveHours => 'Bạn đã chọn phiên âm trên điện thoại này để tiết kiệm giờ trực tiếp.';
 
   @override
-  String get onDeviceWhySummaryOnPhone => 'Bản tóm tắt cũng được viết trên iPhone này. Không có gì rời khỏi thiết bị.';
+  String get onDeviceWhySummaryOnPhone => 'Bản tóm tắt cũng được viết trên iPhone này.';
 
   @override
   String get onDeviceWhyNoSummary => 'Bạn giữ mọi thứ trên điện thoại này nên không có bản tóm tắt.';

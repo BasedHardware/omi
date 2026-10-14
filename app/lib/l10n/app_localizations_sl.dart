@@ -13370,7 +13370,7 @@ class AppLocalizationsSl extends AppLocalizations {
   String get onDeviceScheduleLive => 'Med pogovorom';
 
   @override
-  String get onDeviceScheduleLiveBody => 'Besedilo se pojavi v nekaj sekundah, kot pri prepisovanju v živo.';
+  String get onDeviceScheduleLiveBody => 'Redno prepisuje, ko je Omi odprt.';
 
   @override
   String onDeviceBatteryPerHour(int percent) {
@@ -13434,7 +13434,7 @@ class AppLocalizationsSl extends AppLocalizations {
   String get onDeviceWhySavingLiveHours => 'Izbrali ste prepisovanje na tem telefonu, da prihranite ure v živo.';
 
   @override
-  String get onDeviceWhySummaryOnPhone => 'Tudi povzetek je bil napisan na tem iPhonu. Nič ni zapustilo naprave.';
+  String get onDeviceWhySummaryOnPhone => 'Tudi povzetek je bil napisan na tem iPhonu.';
 
   @override
   String get onDeviceWhyNoSummary => 'Vse hranite na tem telefonu, zato povzetka ni.';

@@ -13345,7 +13345,7 @@ class AppLocalizationsFi extends AppLocalizations {
   String get onDeviceScheduleLive => 'Puhuessasi';
 
   @override
-  String get onDeviceScheduleLiveBody => 'Teksti näkyy sekunneissa, kuten live-litteroinnissa.';
+  String get onDeviceScheduleLiveBody => 'Litteroi säännöllisesti, kun Omi on avoinna.';
 
   @override
   String onDeviceBatteryPerHour(int percent) {
@@ -13408,7 +13408,7 @@ class AppLocalizationsFi extends AppLocalizations {
   String get onDeviceWhySavingLiveHours => 'Valitsit litteroinnin tällä puhelimella säästääksesi live-tunteja.';
 
   @override
-  String get onDeviceWhySummaryOnPhone => 'Myös yhteenveto tehtiin tällä iPhonella. Mitään ei lähtenyt laitteelta.';
+  String get onDeviceWhySummaryOnPhone => 'Myös yhteenveto tehtiin tällä iPhonella.';
 
   @override
   String get onDeviceWhyNoSummary => 'Pidät kaiken tällä puhelimella, joten yhteenvetoa ei ole.';

@@ -4093,7 +4093,7 @@
     "onDeviceScheduleHoursBody": "使用电池时分小段补齐，文字记录很少会延迟超过几小时。",
     "onDeviceBatteryPerDay": "电量：每天约 {percent}%",
     "onDeviceScheduleLive": "边说边转",
-    "onDeviceScheduleLiveBody": "文字在几秒内出现，就像实时转录一样。",
+    "onDeviceScheduleLiveBody": "Omi打开时定期转录。",
     "onDeviceBatteryPerHour": "电量：每小时对话约 {percent}%",
     "onDeviceQueueWaiting": "{duration} 等待转录",
     "onDeviceQueueChargingBody": "手机接上充电器后即可完成。录音照常进行。",

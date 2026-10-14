@@ -13273,7 +13273,7 @@ class AppLocalizationsTh extends AppLocalizations {
   String get onDeviceScheduleLive => 'ขณะที่คุณพูด';
 
   @override
-  String get onDeviceScheduleLiveBody => 'ข้อความจะแสดงภายในไม่กี่วินาที เหมือนการถอดเสียงแบบสด';
+  String get onDeviceScheduleLiveBody => 'ถอดเสียงเป็นระยะขณะที่เปิด Omi';
 
   @override
   String onDeviceBatteryPerHour(int percent) {
@@ -13335,7 +13335,7 @@ class AppLocalizationsTh extends AppLocalizations {
   String get onDeviceWhySavingLiveHours => 'คุณเลือกถอดเสียงบนโทรศัพท์เครื่องนี้เพื่อประหยัดชั่วโมงแบบสด';
 
   @override
-  String get onDeviceWhySummaryOnPhone => 'สรุปก็เขียนบน iPhone เครื่องนี้เช่นกัน ไม่มีข้อมูลใดออกจากอุปกรณ์';
+  String get onDeviceWhySummaryOnPhone => 'สรุปนี้เขียนบน iPhone เครื่องนี้ด้วย';
 
   @override
   String get onDeviceWhyNoSummary => 'คุณเก็บทุกอย่างไว้บนโทรศัพท์เครื่องนี้ จึงไม่มีสรุป';

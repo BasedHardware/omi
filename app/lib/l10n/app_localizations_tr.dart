@@ -13355,7 +13355,7 @@ class AppLocalizationsTr extends AppLocalizations {
   String get onDeviceScheduleLive => 'Siz konuşurken';
 
   @override
-  String get onDeviceScheduleLiveBody => 'Metin, canlı transkripsiyondaki gibi saniyeler içinde görünür.';
+  String get onDeviceScheduleLiveBody => 'Omi açıkken düzenli olarak yazıya döker.';
 
   @override
   String onDeviceBatteryPerHour(int percent) {
@@ -13418,7 +13418,7 @@ class AppLocalizationsTr extends AppLocalizations {
   String get onDeviceWhySavingLiveHours => 'Canlı saatlerden tasarruf etmek için bu telefonda yazıya dökmeyi seçtiniz.';
 
   @override
-  String get onDeviceWhySummaryOnPhone => 'Özet de bu iPhone\'da yazıldı. Hiçbir şey cihazdan çıkmadı.';
+  String get onDeviceWhySummaryOnPhone => 'Özet de bu iPhone\'da yazıldı.';
 
   @override
   String get onDeviceWhyNoSummary => 'Her şeyi bu telefonda tutuyorsunuz, bu yüzden özet yok.';

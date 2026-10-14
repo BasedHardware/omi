@@ -16049,7 +16049,7 @@
     "@onDeviceScheduleLive": {
         "description": "Schedule option: transcribe continuously while recording"
     },
-    "onDeviceScheduleLiveBody": "Text appears within seconds, like live transcription.",
+    "onDeviceScheduleLiveBody": "Transcribes regularly while Omi is open.",
     "@onDeviceScheduleLiveBody": {
         "description": "Explains the as-you-talk option"
     },
@@ -16135,7 +16135,7 @@
     "@onDeviceWhySavingLiveHours": {
         "description": "Explanation: on-phone transcription by the user's choice"
     },
-    "onDeviceWhySummaryOnPhone": "The summary was written on this iPhone too. Nothing left the device.",
+    "onDeviceWhySummaryOnPhone": "The summary was written on this iPhone too.",
     "@onDeviceWhySummaryOnPhone": {
         "description": "Explanation: summary made on the iPhone"
     },

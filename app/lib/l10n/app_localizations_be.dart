@@ -13376,7 +13376,7 @@ class AppLocalizationsBe extends AppLocalizations {
   String get onDeviceScheduleLive => 'Падчас размовы';
 
   @override
-  String get onDeviceScheduleLiveBody => 'Тэкст з\'яўляецца за лічаныя секунды, як пры транскрыпцыі ў рэальным часе.';
+  String get onDeviceScheduleLiveBody => 'Рэгулярна расшыфроўвае, пакуль Omi адкрыта.';
 
   @override
   String onDeviceBatteryPerHour(int percent) {
@@ -13441,7 +13441,7 @@ class AppLocalizationsBe extends AppLocalizations {
       'Вы выбралі транскрыпцыю на гэтым тэлефоне, каб эканоміць гадзіны ў рэальным часе.';
 
   @override
-  String get onDeviceWhySummaryOnPhone => 'Зводка таксама створана на гэтым iPhone. Нішто не пакінула прыладу.';
+  String get onDeviceWhySummaryOnPhone => 'Зводка таксама створана на гэтым iPhone.';
 
   @override
   String get onDeviceWhyNoSummary => 'Вы захоўваеце ўсё на гэтым тэлефоне, таму зводкі няма.';

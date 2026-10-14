@@ -13449,7 +13449,7 @@ class AppLocalizationsTl extends AppLocalizations {
   String get onDeviceScheduleLive => 'Habang nagsasalita ka';
 
   @override
-  String get onDeviceScheduleLiveBody => 'Lumalabas ang text sa loob ng ilang segundo, tulad ng live transcription.';
+  String get onDeviceScheduleLiveBody => 'Regular na nagtatranscribe habang bukas ang Omi.';
 
   @override
   String onDeviceBatteryPerHour(int percent) {
@@ -13513,7 +13513,7 @@ class AppLocalizationsTl extends AppLocalizations {
   String get onDeviceWhySavingLiveHours => 'Pinili mong mag-transcribe sa phone na ito para makatipid ng live hours.';
 
   @override
-  String get onDeviceWhySummaryOnPhone => 'Sa iPhone na ito rin isinulat ang buod. Walang lumabas sa device.';
+  String get onDeviceWhySummaryOnPhone => 'Sa iPhone na ito rin isinulat ang buod.';
 
   @override
   String get onDeviceWhyNoSummary => 'Itinatago mo ang lahat sa phone na ito, kaya walang buod.';

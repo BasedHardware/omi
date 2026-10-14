@@ -13394,7 +13394,7 @@ class AppLocalizationsHu extends AppLocalizations {
   String get onDeviceScheduleLive => 'Beszéd közben';
 
   @override
-  String get onDeviceScheduleLiveBody => 'A szöveg másodperceken belül megjelenik, akárcsak az élő átírásnál.';
+  String get onDeviceScheduleLiveBody => 'Rendszeresen átír, amíg az Omi nyitva van.';
 
   @override
   String onDeviceBatteryPerHour(int percent) {
@@ -13459,8 +13459,7 @@ class AppLocalizationsHu extends AppLocalizations {
   String get onDeviceWhySavingLiveHours => 'Úgy döntöttél, hogy ezen a telefonon írsz át, hogy élő órákat spórolj.';
 
   @override
-  String get onDeviceWhySummaryOnPhone =>
-      'Az összefoglaló is ezen az iPhone-on készült. Semmi sem hagyta el az eszközt.';
+  String get onDeviceWhySummaryOnPhone => 'Az összefoglaló is ezen az iPhone-on készült.';
 
   @override
   String get onDeviceWhyNoSummary => 'Mindent ezen a telefonon tartasz, ezért nincs összefoglaló.';

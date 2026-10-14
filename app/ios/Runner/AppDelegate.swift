@@ -449,6 +449,7 @@ final class QuickActionsIconPatcher: NSObject {
     }
 
     // Create Speech Recognition method channel
+    _ = OnDeviceOverflowPlugin(messenger: messenger)
     let speechChannel = FlutterMethodChannel(name: "com.omi.ios/speech", binaryMessenger: messenger)
     let speechHandler = SpeechRecognitionHandler()
     speechChannel.setMethodCallHandler { (call, result) in

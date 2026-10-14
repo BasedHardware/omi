@@ -13395,7 +13395,7 @@ class AppLocalizationsTe extends AppLocalizations {
   String get onDeviceScheduleLive => 'మీరు మాట్లాడుతున్నప్పుడే';
 
   @override
-  String get onDeviceScheduleLiveBody => 'లైవ్ ట్రాన్‌స్క్రిప్షన్ లాగా, టెక్స్ట్ కొన్ని సెకన్లలో కనిపిస్తుంది.';
+  String get onDeviceScheduleLiveBody => 'Omi తెరిచి ఉన్నప్పుడు క్రమం తప్పకుండా లిప్యంతరీకరిస్తుంది.';
 
   @override
   String onDeviceBatteryPerHour(int percent) {
@@ -13460,7 +13460,7 @@ class AppLocalizationsTe extends AppLocalizations {
       'లైవ్ గంటలను ఆదా చేయడానికి మీరు ఈ ఫోన్‌లో ట్రాన్‌స్క్రైబ్ చేయాలని ఎంచుకున్నారు.';
 
   @override
-  String get onDeviceWhySummaryOnPhone => 'సారాంశం కూడా ఈ iPhone‌లోనే రాయబడింది. ఏదీ పరికరం నుండి బయటకు వెళ్లలేదు.';
+  String get onDeviceWhySummaryOnPhone => 'సారాంశం కూడా ఈ iPhone‌లోనే రాయబడింది.';
 
   @override
   String get onDeviceWhyNoSummary => 'మీరు అన్నింటినీ ఈ ఫోన్‌లోనే ఉంచుతారు, కాబట్టి సారాంశం లేదు.';

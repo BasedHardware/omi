@@ -38,6 +38,7 @@ import 'package:omi/services/capture/conversation_location_capture.dart';
 import 'package:omi/services/capture/native_batch_geolocation.dart';
 import 'package:omi/services/capture/native_ble_stream_config.dart';
 import 'package:omi/services/capture/freemium_threshold_tracker.dart';
+import 'package:omi/services/on_device/on_device_transcription_controller.dart';
 import 'package:omi/services/capture/stt_mode_resolver.dart';
 import 'package:omi/services/capture/recording_lifecycle_telemetry.dart';
 import 'package:omi/backend/http/shared.dart' show accountDeletionWebSocketCloseCode;
@@ -343,6 +344,16 @@ class CaptureController extends ChangeNotifier
         _wedgeMonitorOverride = captureWedgeMonitor,
         _calendarGapMonitor = calendarGapMonitor,
         _preferences = preferences ?? SharedPreferencesUtil() {
+    var retainedOnPhone = OnDeviceTranscriptionController.instance.shouldKeepAudioLocal;
+    void onOverflowChanged() {
+      final next = OnDeviceTranscriptionController.instance.shouldKeepAudioLocal;
+      if (next == retainedOnPhone) return;
+      retainedOnPhone = next;
+      unawaited(_reconcileNativeBackgroundStreamingPolicy());
+    }
+
+    OnDeviceTranscriptionController.instance.addListener(onOverflowChanged);
+    lifetime.own(() => OnDeviceTranscriptionController.instance.removeListener(onOverflowChanged));
     _isConnected = _connectivity.initiallyConnected;
     lifetime.listen(_connectivity.changes, onConnectionStateChanged);
     final ble = _bleListeners ?? const BleBridgeCaptureListeners();
@@ -467,7 +478,8 @@ class CaptureController extends ChangeNotifier
         final frames = _activeSource?.processBytes(bytes) ?? [];
         for (final frame in frames) {
           final positioned = _wal.getSyncs().phone.onFrameCaptured(frame, captureRoot: _captureEvidenceRoot);
-          if (_socket?.state == SocketServiceState.connected) {
+          if (_socket?.state == SocketServiceState.connected &&
+              !OnDeviceTranscriptionController.instance.shouldKeepAudioLocal) {
             if (positioned.captureRoot != null) {
               _socket?.sendEvidenceFrame(positioned);
             } else {
@@ -2086,7 +2098,8 @@ class CaptureController extends ChangeNotifier
         }
 
         // Send WS
-        if (_socket?.state == SocketServiceState.connected) {
+        if (_socket?.state == SocketServiceState.connected &&
+            !OnDeviceTranscriptionController.instance.shouldKeepAudioLocal) {
           final socketPayload = blePayload ?? source?.getSocketPayload(snapshot) ?? snapshot;
           if (positionedFrame?.captureRoot != null && positionedFrame!.payload.length == socketPayload.length) {
             _socket?.sendEvidenceFrame(positionedFrame);
@@ -2396,6 +2409,7 @@ class CaptureController extends ChangeNotifier
   }
 
   bool get _shouldEnableNativeBackgroundStreaming =>
+      !OnDeviceTranscriptionController.instance.shouldKeepAudioLocal &&
       !isPaused &&
       !_preferences.batchModeEnabled &&
       hasNativeBackgroundStreamRoute &&
@@ -2500,7 +2514,8 @@ class CaptureController extends ChangeNotifier
             base64Image,
             id: tempId,
             emit: (payload) async {
-              if (_socket?.state == SocketServiceState.connected) {
+              if (_socket?.state == SocketServiceState.connected &&
+                  !OnDeviceTranscriptionController.instance.shouldKeepAudioLocal) {
                 _socket?.send(payload);
               }
             },
@@ -2758,7 +2773,8 @@ class CaptureController extends ChangeNotifier
           for (final frame in frames) {
             final positioned = _wal.getSyncs().phone.onFrameCaptured(frame, captureRoot: _captureEvidenceRoot);
 
-            if (_socket?.state == SocketServiceState.connected) {
+            if (_socket?.state == SocketServiceState.connected &&
+                !OnDeviceTranscriptionController.instance.shouldKeepAudioLocal) {
               if (positioned.captureRoot != null) {
                 _socket?.sendEvidenceFrame(positioned);
               } else {
@@ -4081,7 +4097,8 @@ class CaptureController extends ChangeNotifier
         }
       }
       _segmentsPhotosVersion++;
-      if (_socket?.state == SocketServiceState.connected) {
+      if (_socket?.state == SocketServiceState.connected &&
+          !OnDeviceTranscriptionController.instance.shouldKeepAudioLocal) {
         _socket?.send(
           jsonEncode({
             'type': 'speaker_assigned',
@@ -4220,7 +4237,8 @@ class CaptureController extends ChangeNotifier
   void _flushPhoneFrames() {
     for (final frame in _activeSource?.flush() ?? const []) {
       final positioned = _wal.getSyncs().phone.onFrameCaptured(frame, captureRoot: _captureEvidenceRoot);
-      if (_socket?.state == SocketServiceState.connected) {
+      if (_socket?.state == SocketServiceState.connected &&
+          !OnDeviceTranscriptionController.instance.shouldKeepAudioLocal) {
         if (positioned.captureRoot != null) {
           _socket?.sendEvidenceFrame(positioned);
         } else {

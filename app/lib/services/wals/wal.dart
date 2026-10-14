@@ -174,6 +174,9 @@ class Wal {
   WalStatus status;
   WalStorage storage;
 
+  /// Explicit phone-only custody. Never admitted to a cloud audio drain.
+  bool onDeviceOnly;
+  Map<String, dynamic>? onDeviceConversation;
   String? filePath;
   List<List<int>> data;
   int storageOffset = 0;
@@ -338,6 +341,8 @@ class Wal {
     this.channel = 1,
     this.status = WalStatus.inProgress,
     this.storage = WalStorage.mem,
+    this.onDeviceOnly = false,
+    this.onDeviceConversation,
     this.filePath,
     this.device = "phone",
     this.deviceModel,
@@ -376,6 +381,9 @@ class Wal {
       sampleRate: json['sample_rate'] ?? 16000,
       status: WalStatus.values.asNameMap()[json['status']] ?? WalStatus.inProgress,
       storage: WalStorage.values.asNameMap()[json['storage']] ?? WalStorage.mem,
+      onDeviceOnly: json['on_device_only'] == true,
+      onDeviceConversation:
+          json['on_device_conversation'] is Map ? Map<String, dynamic>.from(json['on_device_conversation']) : null,
       filePath: json['file_path'],
       seconds: json['seconds'] ?? chunkSizeInSeconds,
       device: json['device'] ?? "phone",
@@ -416,6 +424,8 @@ class Wal {
       'sample_rate': sampleRate,
       'status': status.name,
       'storage': storage.name,
+      'on_device_only': onDeviceOnly,
+      'on_device_conversation': onDeviceConversation,
       'file_path': filePath,
       'seconds': seconds,
       'device': device,

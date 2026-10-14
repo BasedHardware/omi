@@ -13342,7 +13342,7 @@ class AppLocalizationsCs extends AppLocalizations {
   String get onDeviceScheduleLive => 'Během mluvení';
 
   @override
-  String get onDeviceScheduleLiveBody => 'Text se objeví během několika sekund, jako u živého přepisu.';
+  String get onDeviceScheduleLiveBody => 'Pravidelně přepisuje, když je Omi otevřené.';
 
   @override
   String onDeviceBatteryPerHour(int percent) {
@@ -13406,7 +13406,7 @@ class AppLocalizationsCs extends AppLocalizations {
       'Zvolili jste přepis v tomto telefonu, abyste ušetřili hodiny živého přepisu.';
 
   @override
-  String get onDeviceWhySummaryOnPhone => 'Souhrn byl také vytvořen v tomto iPhonu. Nic neopustilo zařízení.';
+  String get onDeviceWhySummaryOnPhone => 'Souhrn byl také vytvořen v tomto iPhonu.';
 
   @override
   String get onDeviceWhyNoSummary => 'Vše uchováváte v tomto telefonu, proto souhrn není k dispozici.';

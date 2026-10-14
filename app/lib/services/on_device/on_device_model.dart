@@ -2,6 +2,8 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
+import 'package:omi/backend/preferences.dart';
 
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:http/http.dart' as http;
@@ -63,6 +65,9 @@ class OnDeviceModelStatus {
 abstract class OnDeviceModel extends ChangeNotifier {
   OnDeviceModelStatus get status;
 
+  String? get engine => null;
+  bool get isOsManaged => engine == 'speech_analyzer' || engine == 'sfspeech';
+
   /// Re-reads what is on disk.
   Future<void> refresh();
 
@@ -72,9 +77,13 @@ abstract class OnDeviceModel extends ChangeNotifier {
 
   Future<void> remove();
 
-  /// Android runs the Whisper model the app already downloads for on-device STT. iOS has no
-  /// on-device batch model in the app yet (Parakeet is pending), so it reports unsupported.
-  static OnDeviceModel forPlatform() => Platform.isAndroid ? WhisperOnDeviceModel() : UnavailableOnDeviceModel();
+  /// Android uses the existing Whisper directory. Apple assets and Parakeet are
+  /// selected by the native capability bridge, availability-gated from iOS 15.
+  static OnDeviceModel forPlatform() => Platform.isIOS
+      ? AppleOnDeviceModel()
+      : Platform.isAndroid
+          ? WhisperOnDeviceModel()
+          : UnavailableOnDeviceModel();
 }
 
 /// A model this phone does not have and cannot get yet.
@@ -111,6 +120,7 @@ class WhisperOnDeviceModel extends OnDeviceModel {
   final Future<List<ConnectivityResult>> Function() _checkConnectivity;
   OnDeviceModelStatus _status = const OnDeviceModelStatus(phase: OnDeviceModelPhase.notDownloaded);
   http.Client? _client;
+  StreamSubscription<List<ConnectivityResult>>? _wifiSubscription;
 
   @override
   OnDeviceModelStatus get status => _status;
@@ -146,6 +156,15 @@ class WhisperOnDeviceModel extends OnDeviceModel {
     }
     _set(const OnDeviceModelStatus(phase: OnDeviceModelPhase.downloading));
     final client = _client = http.Client();
+    var wifiLost = false;
+    if (wifiOnly) {
+      _wifiSubscription = Connectivity().onConnectivityChanged.listen((networks) {
+        if (!networks.contains(ConnectivityResult.wifi)) {
+          wifiLost = true;
+          cancel();
+        }
+      });
+    }
     IOSink? sink;
     File? partial;
     try {
@@ -176,12 +195,20 @@ class WhisperOnDeviceModel extends OnDeviceModel {
       sink = null;
       await partial.rename('${dir.path}/$fileName');
       partial = null;
-      await refresh();
+      await _freemium.checkReadiness();
+      _set(OnDeviceModelStatus(phase: OnDeviceModelPhase.installed, sizeBytes: received));
     } catch (e) {
       Logger.debug('[OnDeviceModel] download stopped: $e');
       final cancelled = e is http.ClientException && !identical(_client, client);
-      _set(OnDeviceModelStatus(phase: cancelled ? OnDeviceModelPhase.notDownloaded : OnDeviceModelPhase.failed));
+      _set(OnDeviceModelStatus(
+          phase: wifiLost
+              ? OnDeviceModelPhase.waitingForWifi
+              : cancelled
+                  ? OnDeviceModelPhase.notDownloaded
+                  : OnDeviceModelPhase.failed));
     } finally {
+      await _wifiSubscription?.cancel();
+      _wifiSubscription = null;
       await sink?.close();
       if (partial != null && await partial.exists()) await partial.delete();
       client.close();
@@ -205,5 +232,72 @@ class WhisperOnDeviceModel extends OnDeviceModel {
       if (await file.exists()) await file.delete();
     }
     _set(const OnDeviceModelStatus(phase: OnDeviceModelPhase.notDownloaded));
+  }
+}
+
+/// Apple assets are OS-managed; Parakeet v2 is an explicit Wi-Fi-aware setup download.
+class AppleOnDeviceModel extends OnDeviceModel {
+  static const channel = MethodChannel('com.omi/on_device');
+  OnDeviceModelStatus _status = const OnDeviceModelStatus(phase: OnDeviceModelPhase.notDownloaded);
+  String? _engine;
+  Timer? _poll;
+  @override
+  String? get engine => _engine;
+  @override
+  OnDeviceModelStatus get status => _status;
+  Map<String, dynamic> get _args => {
+        'language':
+            SharedPreferencesUtil().userPrimaryLanguage.isEmpty ? 'en' : SharedPreferencesUtil().userPrimaryLanguage
+      };
+  @override
+  Future<void> refresh() async {
+    try {
+      final value = await channel.invokeMapMethod<String, dynamic>('status', _args);
+      _engine = value?['engine'] as String?;
+      _status = OnDeviceModelStatus(
+          phase: OnDeviceModelPhase.values
+              .firstWhere((v) => v.name == value?['phase'], orElse: () => OnDeviceModelPhase.failed),
+          progress: (value?['progress'] as num?)?.toDouble() ?? 0,
+          sizeBytes: (value?['sizeBytes'] as num?)?.toInt() ?? 0);
+    } on PlatformException {
+      _status = const OnDeviceModelStatus(phase: OnDeviceModelPhase.failed);
+    } on MissingPluginException {
+      _status = const OnDeviceModelStatus(phase: OnDeviceModelPhase.unsupported);
+    }
+    notifyListeners();
+  }
+
+  @override
+  Future<void> download({required bool wifiOnly}) async {
+    if (_status.phase == OnDeviceModelPhase.downloading) return;
+    if (wifiOnly && !isOsManaged && !(await Connectivity().checkConnectivity()).contains(ConnectivityResult.wifi)) {
+      _status = OnDeviceModelStatus(phase: OnDeviceModelPhase.waitingForWifi, sizeBytes: _status.sizeBytes);
+      notifyListeners();
+      return;
+    }
+    _poll = Timer.periodic(const Duration(milliseconds: 500), (_) => unawaited(refresh()));
+    try {
+      await channel.invokeMethod<void>('download', {..._args, 'wifiOnly': wifiOnly && !isOsManaged});
+    } on PlatformException {
+      _status = const OnDeviceModelStatus(phase: OnDeviceModelPhase.failed);
+    } finally {
+      _poll?.cancel();
+      _poll = null;
+      await refresh();
+    }
+  }
+
+  @override
+  void cancel() => unawaited(channel.invokeMethod<void>('cancel'));
+  @override
+  Future<void> remove() async {
+    await channel.invokeMethod<void>('remove', _args);
+    await refresh();
+  }
+
+  @override
+  void dispose() {
+    _poll?.cancel();
+    super.dispose();
   }
 }

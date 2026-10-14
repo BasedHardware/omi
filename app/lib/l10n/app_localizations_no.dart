@@ -13342,7 +13342,7 @@ class AppLocalizationsNo extends AppLocalizations {
   String get onDeviceScheduleLive => 'Mens du snakker';
 
   @override
-  String get onDeviceScheduleLiveBody => 'Teksten vises i løpet av sekunder, som ved live-transkribering.';
+  String get onDeviceScheduleLiveBody => 'Transkriberer jevnlig mens Omi er åpen.';
 
   @override
   String onDeviceBatteryPerHour(int percent) {
@@ -13406,7 +13406,7 @@ class AppLocalizationsNo extends AppLocalizations {
   String get onDeviceWhySavingLiveHours => 'Du valgte å transkribere på denne telefonen for å spare live-timer.';
 
   @override
-  String get onDeviceWhySummaryOnPhone => 'Sammendraget ble også skrevet på denne iPhonen. Ingenting forlot enheten.';
+  String get onDeviceWhySummaryOnPhone => 'Sammendraget ble også skrevet på denne iPhonen.';
 
   @override
   String get onDeviceWhyNoSummary => 'Du beholder alt på denne telefonen, så det finnes ikke noe sammendrag.';

@@ -53,7 +53,8 @@ class OnDeviceSettingsPage extends StatelessWidget {
               resetsOn: OnDeviceLiveHours.nextReset(DateTime.now()),
             ),
       showSaveLiveHours: subscription?.subscription.plan.isPaid ?? false,
-      pendingSeconds: recordings.fold(0, (sum, r) => sum + r.seconds),
+      pendingSeconds: recordings.fold<int>(0, (sum, r) => sum + r.seconds) +
+          OnDeviceTranscriptionController.instance.pendingSeconds,
       pendingBytes: recordings.fold(0, (sum, r) => sum + r.sizeBytes),
       onGetMoreLiveHours: () => openOnDeviceUpgrade(context),
     );
@@ -171,7 +172,9 @@ class OnDeviceSettingsView extends StatelessWidget {
                     key: const Key('on_device_settings_model'),
                     leading: const Icon(Icons.graphic_eq),
                     title: l10n.onDeviceSpeechModel,
-                    value: onDeviceModelStatusLabel(l10n, status, wifiOnly: settings.wifiOnlyDownload),
+                    value: controller.model.isOsManaged && status.isInstalled
+                        ? l10n.noModelDownloadRequired
+                        : onDeviceModelStatusLabel(l10n, status, wifiOnly: settings.wifiOnlyDownload),
                     onTap: status.isSupported && !status.isInstalled
                         ? () => unawaited(routeToPage(context, OnDeviceSetupPage(controller: this.controller)))
                         : null,
@@ -186,7 +189,7 @@ class OnDeviceSettingsView extends StatelessWidget {
                     title: l10n.onDeviceAudioWaiting,
                     value: onDeviceSizeLabel(l10n, pendingBytes),
                   ),
-                  if (status.isInstalled)
+                  if (status.isInstalled && !controller.model.isOsManaged)
                     OmiSettingsRow(
                       key: const Key('on_device_settings_remove'),
                       leading: const Icon(Icons.delete_outline),

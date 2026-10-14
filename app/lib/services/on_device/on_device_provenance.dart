@@ -1,4 +1,5 @@
 import 'package:flutter/foundation.dart';
+import 'package:omi/backend/schema/conversation.dart';
 
 /// Who wrote a conversation's summary, given its transcript was made on the phone.
 enum OnDeviceSummaryOrigin {
@@ -25,14 +26,42 @@ enum OnDeviceReason {
 /// phone. Conversations transcribed live by Omi Cloud have none.
 @immutable
 class OnDeviceProvenance {
-  const OnDeviceProvenance({required this.summary, required this.reason});
+  const OnDeviceProvenance({required this.summary, required this.reason, this.engine});
 
+  static OnDeviceProvenance? fromConversation(ServerConversation conversation) {
+    final raw = conversation.onDeviceProvenance;
+    final local = conversation.transcriptSegments.any((s) => s.sttProvider?.startsWith('on_device:') == true);
+    if (raw == null && !local) return null;
+    final summary = raw?['summary'] is String ? raw!['summary'] as String : null;
+    String? engine = raw?['engine'] is String ? raw!['engine'] as String : null;
+    if (engine == null) {
+      for (final segment in conversation.transcriptSegments) {
+        if (segment.sttProvider?.startsWith('on_device:') == true) {
+          engine = segment.sttProvider!.substring(10);
+          break;
+        }
+      }
+    }
+    return OnDeviceProvenance(
+        engine: engine,
+        summary: OnDeviceSummaryOrigin.values.firstWhere((s) => s.name == summary,
+            orElse: () => conversation.clientProcessing?['provenance'] is Map &&
+                    conversation.clientProcessing!['provenance']['runtime'] == 'local'
+                ? OnDeviceSummaryOrigin.phone
+                : OnDeviceSummaryOrigin.cloud),
+        reason: raw?['reason'] == OnDeviceReason.savingLiveHours.name
+            ? OnDeviceReason.savingLiveHours
+            : OnDeviceReason.liveHoursUsed);
+  }
+
+  final String? engine;
   final OnDeviceSummaryOrigin summary;
   final OnDeviceReason reason;
 
   @override
-  bool operator ==(Object other) => other is OnDeviceProvenance && other.summary == summary && other.reason == reason;
+  bool operator ==(Object other) =>
+      other is OnDeviceProvenance && other.summary == summary && other.reason == reason && other.engine == engine;
 
   @override
-  int get hashCode => Object.hash(summary, reason);
+  int get hashCode => Object.hash(summary, reason, engine);
 }

@@ -13347,7 +13347,7 @@ class AppLocalizationsMr extends AppLocalizations {
   String get onDeviceScheduleLive => 'तुम्ही बोलत असताना';
 
   @override
-  String get onDeviceScheduleLiveBody => 'लाइव्ह ट्रान्सक्रिप्शनप्रमाणे काही सेकंदांत मजकूर दिसतो.';
+  String get onDeviceScheduleLiveBody => 'Omi उघडे असताना नियमितपणे लिप्यंतरण करते.';
 
   @override
   String onDeviceBatteryPerHour(int percent) {
@@ -13411,7 +13411,7 @@ class AppLocalizationsMr extends AppLocalizations {
   String get onDeviceWhySavingLiveHours => 'लाइव्ह तास वाचवण्यासाठी तुम्ही या फोनवर ट्रान्सक्राइब करणे निवडले.';
 
   @override
-  String get onDeviceWhySummaryOnPhone => 'सारांशही या iPhone वरच लिहिला गेला. काहीही डिव्हाइसबाहेर गेले नाही.';
+  String get onDeviceWhySummaryOnPhone => 'सारांशही या iPhone वरच लिहिला गेला.';
 
   @override
   String get onDeviceWhyNoSummary => 'तुम्ही सर्व काही या फोनवर ठेवता, म्हणून सारांश नाही.';

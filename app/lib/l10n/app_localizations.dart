@@ -23748,7 +23748,7 @@ abstract class AppLocalizations {
   /// Explains the as-you-talk option
   ///
   /// In en, this message translates to:
-  /// **'Text appears within seconds, like live transcription.'**
+  /// **'Transcribes regularly while Omi is open.'**
   String get onDeviceScheduleLiveBody;
 
   /// Battery cost per hour of recorded conversation
@@ -23862,7 +23862,7 @@ abstract class AppLocalizations {
   /// Explanation: summary made on the iPhone
   ///
   /// In en, this message translates to:
-  /// **'The summary was written on this iPhone too. Nothing left the device.'**
+  /// **'The summary was written on this iPhone too.'**
   String get onDeviceWhySummaryOnPhone;
 
   /// Explanation: no summary because the user keeps everything local

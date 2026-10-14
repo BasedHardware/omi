@@ -13368,7 +13368,7 @@ class AppLocalizationsLv extends AppLocalizations {
   String get onDeviceScheduleLive => 'Runājot';
 
   @override
-  String get onDeviceScheduleLiveBody => 'Teksts parādās dažu sekunžu laikā, kā tiešraides transkripcijā.';
+  String get onDeviceScheduleLiveBody => 'Regulāri transkribē, kamēr Omi ir atvērts.';
 
   @override
   String onDeviceBatteryPerHour(int percent) {
@@ -13432,7 +13432,7 @@ class AppLocalizationsLv extends AppLocalizations {
   String get onDeviceWhySavingLiveHours => 'Jūs izvēlējāties transkribēt šajā tālrunī, lai taupītu tiešraides stundas.';
 
   @override
-  String get onDeviceWhySummaryOnPhone => 'Arī kopsavilkums tika uzrakstīts šajā iPhone. Nekas neatstāja ierīci.';
+  String get onDeviceWhySummaryOnPhone => 'Arī kopsavilkums tika uzrakstīts šajā iPhone.';
 
   @override
   String get onDeviceWhyNoSummary => 'Jūs visu glabājat šajā tālrunī, tāpēc kopsavilkuma nav.';

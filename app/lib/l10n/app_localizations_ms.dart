@@ -13372,7 +13372,7 @@ class AppLocalizationsMs extends AppLocalizations {
   String get onDeviceScheduleLive => 'Semasa anda bercakap';
 
   @override
-  String get onDeviceScheduleLiveBody => 'Teks muncul dalam beberapa saat, seperti transkripsi langsung.';
+  String get onDeviceScheduleLiveBody => 'Mentranskripsikan secara berkala semasa Omi dibuka.';
 
   @override
   String onDeviceBatteryPerHour(int percent) {
@@ -13437,7 +13437,7 @@ class AppLocalizationsMs extends AppLocalizations {
       'Anda memilih untuk mentranskripsi pada telefon ini bagi menjimatkan jam langsung.';
 
   @override
-  String get onDeviceWhySummaryOnPhone => 'Ringkasan juga ditulis pada iPhone ini. Tiada apa yang keluar dari peranti.';
+  String get onDeviceWhySummaryOnPhone => 'Ringkasan juga ditulis pada iPhone ini.';
 
   @override
   String get onDeviceWhyNoSummary => 'Anda menyimpan semuanya pada telefon ini, jadi tiada ringkasan.';

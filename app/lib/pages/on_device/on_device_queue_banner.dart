@@ -49,13 +49,18 @@ class _OnDeviceQueueBannerState extends State<OnDeviceQueueBanner> {
       listenable: _controller,
       builder: (context, _) {
         if (!_controller.isActive) return const SizedBox.shrink();
-        final pendingSeconds = context.select<LocalRecordingsProvider, int>((p) => p.recordings
+        final recordingSeconds = context.select<LocalRecordingsProvider, int>((p) => p.recordings
             .where((r) => r.state == LocalRecordingState.pending)
             .fold<int>(0, (sum, r) => sum + r.seconds));
+        final pendingSeconds = recordingSeconds + _controller.pendingSeconds;
         final atCap = context.select<UsageProvider, bool>((p) => p.isOutOfCredits);
         if (pendingSeconds != _evaluatedSeconds) {
           _evaluatedSeconds = pendingSeconds;
           unawaited(_controller.evaluate(pendingAudio: Duration(seconds: pendingSeconds)));
+        }
+        if (_controller.lastRunFailed) {
+          return OmiErrorState(
+              message: context.l10n.failedToTranscribeAudio, onRetry: () => unawaited(_controller.transcribeNow()));
         }
         return OnDeviceQueueBannerView(
           controller: _controller,
@@ -164,6 +169,10 @@ class OnDeviceQueueBannerView extends StatelessWidget {
         _title(Icons.schedule, l10n.onDeviceQueueWaiting(_duration(context))),
         if (!controller.isTranscribing) _body(body),
         const SizedBox(height: OmiSpacing.sm),
+        if (controller.isTranscribing && controller.progress > 0) ...[
+          OnDeviceProgressBar(value: controller.progress),
+          const SizedBox(height: OmiSpacing.sm),
+        ],
         if (controller.isTranscribing)
           Row(
             children: [
@@ -180,8 +189,7 @@ class OnDeviceQueueBannerView extends StatelessWidget {
                 label: l10n.onDeviceTranscribeNow,
                 icon: Icons.bolt,
                 size: OmiButtonSize.compact,
-                onPressed: () =>
-                    controller.evaluate(pendingAudio: Duration(seconds: pendingSeconds), transcribeNow: true),
+                onPressed: () => controller.transcribeNow(seconds: pendingSeconds),
               ),
               const SizedBox(width: OmiSpacing.sm),
               Flexible(

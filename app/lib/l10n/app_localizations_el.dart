@@ -13427,7 +13427,7 @@ class AppLocalizationsEl extends AppLocalizations {
   String get onDeviceScheduleLive => 'Καθώς μιλάτε';
 
   @override
-  String get onDeviceScheduleLiveBody => 'Το κείμενο εμφανίζεται μέσα σε δευτερόλεπτα, όπως στη ζωντανή μεταγραφή.';
+  String get onDeviceScheduleLiveBody => 'Μεταγράφει τακτικά όσο το Omi είναι ανοιχτό.';
 
   @override
   String onDeviceBatteryPerHour(int percent) {
@@ -13493,7 +13493,7 @@ class AppLocalizationsEl extends AppLocalizations {
       'Επιλέξατε μεταγραφή σε αυτό το τηλέφωνο για να εξοικονομήσετε ζωντανές ώρες.';
 
   @override
-  String get onDeviceWhySummaryOnPhone => 'Και η περίληψη γράφτηκε σε αυτό το iPhone. Τίποτα δεν έφυγε από τη συσκευή.';
+  String get onDeviceWhySummaryOnPhone => 'Και η περίληψη γράφτηκε σε αυτό το iPhone.';
 
   @override
   String get onDeviceWhyNoSummary => 'Κρατάτε τα πάντα σε αυτό το τηλέφωνο, οπότε δεν υπάρχει περίληψη.';

@@ -51,25 +51,30 @@ class _OnDeviceSetupPageState extends State<OnDeviceSetupPage> {
                       const SizedBox(height: OmiSpacing.xs),
                       Semantics(header: true, child: Text(l10n.onDeviceTranscribeOnPhone, style: OmiType.title1)),
                       const SizedBox(height: OmiSpacing.xs),
-                      Text(l10n.onDeviceSetupBody,
+                      Text(_controller.model.isOsManaged ? l10n.noModelDownloadRequired : l10n.onDeviceSetupBody,
                           style: OmiType.callout.copyWith(color: OmiColors.textSecondary, height: 1.4)),
+                      if (_controller.model.engine == 'sfspeech')
+                        Text(l10n.transcriptionSlowerLessAccurate,
+                            style: OmiType.callout.copyWith(color: OmiColors.textSecondary)),
                       const SizedBox(height: OmiSpacing.xl),
                       OnDeviceModelCard(model: _controller.model, wifiOnly: settings.wifiOnlyDownload),
                       const SizedBox(height: OmiSpacing.md),
-                      OnDeviceFactRow(icon: Icons.mic_none, text: l10n.onDeviceSetupKeepRecording),
+                      if (!_controller.model.isOsManaged || !_controller.model.status.isInstalled)
+                        OnDeviceFactRow(icon: Icons.mic_none, text: l10n.onDeviceSetupKeepRecording),
                       OnDeviceFactRow(icon: Icons.lock_outline, text: l10n.onDeviceSetupAudioStays),
                       const SizedBox(height: OmiSpacing.lg),
-                      OmiSettingsGroup(
-                        children: [
-                          OmiSettingsRow.toggle(
-                            leading: const Icon(Icons.wifi),
-                            title: l10n.onDeviceWifiOnly,
-                            value: settings.wifiOnlyDownload,
-                            onChanged: (value) =>
-                                _controller.updateSettings(settings.copyWith(wifiOnlyDownload: value)),
-                          ),
-                        ],
-                      ),
+                      if (!_controller.model.isOsManaged)
+                        OmiSettingsGroup(
+                          children: [
+                            OmiSettingsRow.toggle(
+                              leading: const Icon(Icons.wifi),
+                              title: l10n.onDeviceWifiOnly,
+                              value: settings.wifiOnlyDownload,
+                              onChanged: (value) =>
+                                  _controller.updateSettings(settings.copyWith(wifiOnlyDownload: value)),
+                            ),
+                          ],
+                        ),
                     ],
                   ),
                 ),
@@ -124,7 +129,7 @@ class OnDeviceModelCard extends StatelessWidget {
                   ),
                   const SizedBox(width: OmiSpacing.sm),
                   Expanded(child: Text(l10n.onDeviceSpeechModel, style: OmiType.headline)),
-                  if (status.isSupported && !status.isInstalled)
+                  if (status.isSupported && !status.isInstalled && status.sizeBytes > 0)
                     Text(onDeviceSizeLabel(l10n, status.sizeBytes),
                         style: OmiType.subhead.copyWith(color: OmiColors.textSecondary)),
                 ],
@@ -142,7 +147,9 @@ class OnDeviceModelCard extends StatelessWidget {
                   ],
                   Expanded(
                     child: Text(
-                      onDeviceModelStatusLabel(l10n, status, wifiOnly: wifiOnly),
+                      model.isOsManaged && phase == OnDeviceModelPhase.installed
+                          ? l10n.noModelDownloadRequired
+                          : onDeviceModelStatusLabel(l10n, status, wifiOnly: wifiOnly && !model.isOsManaged),
                       style: OmiType.footnote.copyWith(
                         color: phase == OnDeviceModelPhase.failed ? OmiColors.danger : OmiColors.textSecondary,
                       ),

@@ -13432,7 +13432,7 @@ class AppLocalizationsTa extends AppLocalizations {
   String get onDeviceScheduleLive => 'நீங்கள் பேசும்போதே';
 
   @override
-  String get onDeviceScheduleLiveBody => 'நேரலை உரையாக்கம் போல, சில நொடிகளில் உரை தோன்றும்.';
+  String get onDeviceScheduleLiveBody => 'Omi திறந்திருக்கும் போது தொடர்ந்து உரையாக மாற்றுகிறது.';
 
   @override
   String onDeviceBatteryPerHour(int percent) {
@@ -13495,8 +13495,7 @@ class AppLocalizationsTa extends AppLocalizations {
   String get onDeviceWhySavingLiveHours => 'நேரலை மணிநேரங்களைச் சேமிக்க இந்த ஃபோனில் உரையாக்கத் தேர்ந்தெடுத்தீர்கள்.';
 
   @override
-  String get onDeviceWhySummaryOnPhone =>
-      'சுருக்கமும் இந்த iPhone-இலேயே எழுதப்பட்டது. எதுவும் சாதனத்தை விட்டு வெளியேறவில்லை.';
+  String get onDeviceWhySummaryOnPhone => 'சுருக்கமும் இந்த iPhone-இலேயே எழுதப்பட்டது.';
 
   @override
   String get onDeviceWhyNoSummary => 'எல்லாவற்றையும் இந்த ஃபோனிலேயே வைத்திருப்பதால், சுருக்கம் இல்லை.';

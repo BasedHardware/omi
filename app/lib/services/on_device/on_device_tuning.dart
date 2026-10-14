@@ -1,18 +1,14 @@
-/// PLACEHOLDER numbers for on-device transcription. A benchmark is measuring the real values; every
-/// figure the UI shows about model size or battery cost comes from this file, so replacing them is a
-/// one-file change. Do not copy these into widgets.
+/// Sizes from the internal pendant sample benchmark (2026-10-14).
+/// Phone energy is unmeasured; battery thresholds below are conservative policy estimates.
 abstract final class OnDeviceTuning {
-  /// Download size of the speech model, in bytes. PLACEHOLDER until the benchmark lands.
-  static const int modelSizeBytes = 600 * 1024 * 1024;
+  static const parakeetSizeBytes = 443 * 1024 * 1024;
+  static const decodeChunkSeconds = 30;
 
-  /// Whisper model Android downloads for batch transcription. PLACEHOLDER until the benchmark picks one.
-  static const String androidWhisperModel = 'base';
+  /// Download size of the speech model, in bytes. whisper.cpp tiny; Parakeet v2 is 443 MiB. Apple assets are OS-managed.
+  static const int modelSizeBytes = 74 * 1024 * 1024;
 
-  /// Battery a day of "Every few hours" costs, in percent. PLACEHOLDER.
-  static const int everyFewHoursBatteryPercentPerDay = 5;
-
-  /// Battery an hour of conversation costs with "As you talk", in percent. PLACEHOLDER.
-  static const int asYouTalkBatteryPercentPerHour = 8;
+  /// Whisper model Android downloads for batch transcription. Bounded 30-second decoding.
+  static const String androidWhisperModel = 'tiny';
 
   /// How long "Every few hours" waits between runs on battery.
   static const Duration everyFewHoursInterval = Duration(hours: 3);

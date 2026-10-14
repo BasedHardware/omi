@@ -13386,7 +13386,7 @@ class AppLocalizationsRu extends AppLocalizations {
   String get onDeviceScheduleLive => 'Во время разговора';
 
   @override
-  String get onDeviceScheduleLiveBody => 'Текст появляется через несколько секунд, как при онлайн-расшифровке.';
+  String get onDeviceScheduleLiveBody => 'Регулярно расшифровывает, пока Omi открыт.';
 
   @override
   String onDeviceBatteryPerHour(int percent) {
@@ -13450,7 +13450,7 @@ class AppLocalizationsRu extends AppLocalizations {
   String get onDeviceWhySavingLiveHours => 'Вы выбрали расшифровку на этом телефоне, чтобы сэкономить онлайн-часы.';
 
   @override
-  String get onDeviceWhySummaryOnPhone => 'Резюме тоже создано на этом iPhone. Ничего не покинуло устройство.';
+  String get onDeviceWhySummaryOnPhone => 'Резюме тоже создано на этом iPhone.';
 
   @override
   String get onDeviceWhyNoSummary => 'Вы храните всё на этом телефоне, поэтому резюме нет.';

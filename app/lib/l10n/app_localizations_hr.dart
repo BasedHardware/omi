@@ -13375,7 +13375,7 @@ class AppLocalizationsHr extends AppLocalizations {
   String get onDeviceScheduleLive => 'Dok govorite';
 
   @override
-  String get onDeviceScheduleLiveBody => 'Tekst se pojavljuje za nekoliko sekundi, kao kod transkripcije uživo.';
+  String get onDeviceScheduleLiveBody => 'Redovito transkribira dok je Omi otvoren.';
 
   @override
   String onDeviceBatteryPerHour(int percent) {
@@ -13438,7 +13438,7 @@ class AppLocalizationsHr extends AppLocalizations {
       'Odabrali ste transkripciju na ovom telefonu kako biste uštedjeli sate uživo.';
 
   @override
-  String get onDeviceWhySummaryOnPhone => 'I sažetak je napisan na ovom iPhoneu. Ništa nije napustilo uređaj.';
+  String get onDeviceWhySummaryOnPhone => 'I sažetak je napisan na ovom iPhoneu.';
 
   @override
   String get onDeviceWhyNoSummary => 'Sve čuvate na ovom telefonu pa nema sažetka.';

@@ -36,6 +36,7 @@ class FreemiumSwitchHandler {
     if (!context.mounted) return false;
     final usage = context.read<UsageProvider>();
     if (!usage.showSubscriptionUI) return false;
+    if (OnDeviceTranscriptionController.instance.isActive && usage.isOutOfCredits) return true;
     return FreemiumThresholdTracker.shouldShowPlusMeterPaywall(
       reached: captureProvider.freemiumThresholdReached,
       requiresUserAction: captureProvider.freemiumRequiresUserAction,

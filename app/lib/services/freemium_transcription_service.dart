@@ -1,6 +1,8 @@
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:omi/services/experiments/on_device_overflow_gate.dart';
 
 import 'package:path_provider/path_provider.dart';
 
@@ -63,6 +65,19 @@ class FreemiumTranscriptionService extends ChangeNotifier {
   Future<FreemiumReadiness> checkReadiness() async {
     // iOS: Native Apple Speech Recognition is always available
     if (Platform.isIOS) {
+      if (await OnDeviceOverflowGate.read()) {
+        try {
+          final status = await const MethodChannel('com.omi/on_device').invokeMapMethod<String, dynamic>('status', {
+            'language':
+                SharedPreferencesUtil().userPrimaryLanguage.isEmpty ? 'en' : SharedPreferencesUtil().userPrimaryLanguage
+          });
+          _readiness = status?['phase'] == 'installed' ? FreemiumReadiness.ready : FreemiumReadiness.requiresSetup;
+        } on PlatformException {
+          _readiness = FreemiumReadiness.requiresSetup;
+        }
+        notifyListeners();
+        return _readiness;
+      }
       _readiness = FreemiumReadiness.ready;
       notifyListeners();
       return _readiness;

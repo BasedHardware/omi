@@ -13396,7 +13396,7 @@ class AppLocalizationsRo extends AppLocalizations {
   String get onDeviceScheduleLive => 'În timp ce vorbești';
 
   @override
-  String get onDeviceScheduleLiveBody => 'Textul apare în câteva secunde, ca la transcrierea live.';
+  String get onDeviceScheduleLiveBody => 'Transcrie regulat cât timp Omi este deschis.';
 
   @override
   String onDeviceBatteryPerHour(int percent) {
@@ -13460,8 +13460,7 @@ class AppLocalizationsRo extends AppLocalizations {
   String get onDeviceWhySavingLiveHours => 'Ai ales să transcrii pe acest telefon ca să economisești ore live.';
 
   @override
-  String get onDeviceWhySummaryOnPhone =>
-      'Rezumatul a fost scris tot pe acest iPhone. Nimic nu a părăsit dispozitivul.';
+  String get onDeviceWhySummaryOnPhone => 'Rezumatul a fost scris tot pe acest iPhone.';
 
   @override
   String get onDeviceWhyNoSummary => 'Păstrezi totul pe acest telefon, deci nu există rezumat.';

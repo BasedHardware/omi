@@ -13150,7 +13150,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get onDeviceScheduleLive => '話している間';
 
   @override
-  String get onDeviceScheduleLiveBody => 'ライブ文字起こしのように、数秒でテキストが表示されます。';
+  String get onDeviceScheduleLiveBody => 'Omiを開いている間、定期的に文字起こしします。';
 
   @override
   String onDeviceBatteryPerHour(int percent) {
@@ -13211,7 +13211,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get onDeviceWhySavingLiveHours => 'ライブ時間を節約するため、このスマホでの文字起こしを選択しています。';
 
   @override
-  String get onDeviceWhySummaryOnPhone => '要約もこのiPhoneで作成されました。データは端末の外に出ていません。';
+  String get onDeviceWhySummaryOnPhone => '要約もこのiPhoneで作成されました。';
 
   @override
   String get onDeviceWhyNoSummary => 'すべてをこのスマホに保存する設定のため、要約はありません。';

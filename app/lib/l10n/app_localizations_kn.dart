@@ -13382,7 +13382,7 @@ class AppLocalizationsKn extends AppLocalizations {
   String get onDeviceScheduleLive => 'ನೀವು ಮಾತನಾಡುವಾಗ';
 
   @override
-  String get onDeviceScheduleLiveBody => 'ಲೈವ್ ಪ್ರತಿಲೇಖನದಂತೆ, ಪಠ್ಯ ಕೆಲವೇ ಸೆಕೆಂಡುಗಳಲ್ಲಿ ಕಾಣಿಸುತ್ತದೆ.';
+  String get onDeviceScheduleLiveBody => 'Omi ತೆರೆದಿರುವಾಗ ನಿಯಮಿತವಾಗಿ ಪ್ರತಿಲೇಖಿಸುತ್ತದೆ.';
 
   @override
   String onDeviceBatteryPerHour(int percent) {
@@ -13448,7 +13448,7 @@ class AppLocalizationsKn extends AppLocalizations {
       'ಲೈವ್ ಗಂಟೆಗಳನ್ನು ಉಳಿಸಲು ನೀವು ಈ ಫೋನ್‌ನಲ್ಲಿ ಪ್ರತಿಲೇಖಿಸುವುದನ್ನು ಆಯ್ಕೆಮಾಡಿದ್ದೀರಿ.';
 
   @override
-  String get onDeviceWhySummaryOnPhone => 'ಸಾರಾಂಶವನ್ನೂ ಈ iPhone ನಲ್ಲೇ ಬರೆಯಲಾಗಿದೆ. ಯಾವುದೂ ಸಾಧನದಿಂದ ಹೊರಹೋಗಿಲ್ಲ.';
+  String get onDeviceWhySummaryOnPhone => 'ಸಾರಾಂಶವನ್ನೂ ಈ iPhone ನಲ್ಲೇ ಬರೆಯಲಾಗಿದೆ.';
 
   @override
   String get onDeviceWhyNoSummary => 'ನೀವು ಎಲ್ಲವನ್ನೂ ಈ ಫೋನ್‌ನಲ್ಲೇ ಇರಿಸುತ್ತೀರಿ, ಆದ್ದರಿಂದ ಸಾರಾಂಶ ಇಲ್ಲ.';

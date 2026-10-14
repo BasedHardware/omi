@@ -13364,7 +13364,7 @@ class AppLocalizationsLt extends AppLocalizations {
   String get onDeviceScheduleLive => 'Kalbant';
 
   @override
-  String get onDeviceScheduleLiveBody => 'Tekstas atsiranda per kelias sekundes, kaip tiesioginėje transkripcijoje.';
+  String get onDeviceScheduleLiveBody => 'Reguliariai transkribuoja, kol Omi atidaryta.';
 
   @override
   String onDeviceBatteryPerHour(int percent) {
@@ -13428,7 +13428,7 @@ class AppLocalizationsLt extends AppLocalizations {
       'Pasirinkote transkribuoti šiame telefone, kad sutaupytumėte tiesioginių valandų.';
 
   @override
-  String get onDeviceWhySummaryOnPhone => 'Santrauka taip pat parašyta šiame iPhone. Niekas nepaliko įrenginio.';
+  String get onDeviceWhySummaryOnPhone => 'Santrauka taip pat parašyta šiame iPhone.';
 
   @override
   String get onDeviceWhyNoSummary => 'Viską laikote šiame telefone, todėl santraukos nėra.';

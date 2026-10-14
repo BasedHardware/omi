@@ -13354,7 +13354,7 @@ class AppLocalizationsUr extends AppLocalizations {
   String get onDeviceScheduleLive => 'بولتے وقت';
 
   @override
-  String get onDeviceScheduleLiveBody => 'لائیو ٹرانسکرپشن کی طرح متن چند سیکنڈ میں ظاہر ہوتا ہے۔';
+  String get onDeviceScheduleLiveBody => 'Omi کھلا ہونے کے دوران باقاعدگی سے نقل نویسی کرتا ہے۔';
 
   @override
   String onDeviceBatteryPerHour(int percent) {
@@ -13418,7 +13418,7 @@ class AppLocalizationsUr extends AppLocalizations {
   String get onDeviceWhySavingLiveHours => 'آپ نے لائیو گھنٹے بچانے کے لیے اسی فون پر ٹرانسکرائب کرنا منتخب کیا۔';
 
   @override
-  String get onDeviceWhySummaryOnPhone => 'خلاصہ بھی اسی iPhone پر لکھا گیا۔ کچھ بھی ڈیوائس سے باہر نہیں گیا۔';
+  String get onDeviceWhySummaryOnPhone => 'خلاصہ بھی اسی iPhone پر لکھا گیا۔';
 
   @override
   String get onDeviceWhyNoSummary => 'آپ سب کچھ اسی فون پر رکھتے ہیں، اس لیے کوئی خلاصہ نہیں ہے۔';

@@ -13447,7 +13447,7 @@ class AppLocalizationsFr extends AppLocalizations {
   String get onDeviceScheduleLive => 'Pendant que vous parlez';
 
   @override
-  String get onDeviceScheduleLiveBody => 'Le texte apparaît en quelques secondes, comme la transcription en direct.';
+  String get onDeviceScheduleLiveBody => 'Transcrit régulièrement lorsque Omi est ouvert.';
 
   @override
   String onDeviceBatteryPerHour(int percent) {
@@ -13513,7 +13513,7 @@ class AppLocalizationsFr extends AppLocalizations {
       'Vous avez choisi de transcrire sur ce téléphone pour économiser vos heures en direct.';
 
   @override
-  String get onDeviceWhySummaryOnPhone => 'Le résumé a aussi été rédigé sur cet iPhone. Rien n\'a quitté l\'appareil.';
+  String get onDeviceWhySummaryOnPhone => 'Le résumé a aussi été rédigé sur cet iPhone.';
 
   @override
   String get onDeviceWhyNoSummary => 'Vous gardez tout sur ce téléphone, il n\'y a donc pas de résumé.';

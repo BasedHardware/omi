@@ -13335,7 +13335,7 @@ class AppLocalizationsSk extends AppLocalizations {
   String get onDeviceScheduleLive => 'Počas rozprávania';
 
   @override
-  String get onDeviceScheduleLiveBody => 'Text sa zobrazí do pár sekúnd, ako pri živom prepise.';
+  String get onDeviceScheduleLiveBody => 'Pravidelne prepisuje, keď je Omi otvorené.';
 
   @override
   String onDeviceBatteryPerHour(int percent) {
@@ -13400,7 +13400,7 @@ class AppLocalizationsSk extends AppLocalizations {
       'Rozhodli ste sa prepisovať v tomto telefóne, aby ste ušetrili hodiny živého prepisu.';
 
   @override
-  String get onDeviceWhySummaryOnPhone => 'Aj zhrnutie vzniklo v tomto iPhone. Nič neopustilo zariadenie.';
+  String get onDeviceWhySummaryOnPhone => 'Aj zhrnutie vzniklo v tomto iPhone.';
 
   @override
   String get onDeviceWhyNoSummary => 'Všetko uchovávate v tomto telefóne, takže zhrnutie nie je k dispozícii.';

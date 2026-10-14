@@ -13246,7 +13246,7 @@ class AppLocalizationsHe extends AppLocalizations {
   String get onDeviceScheduleLive => 'תוך כדי דיבור';
 
   @override
-  String get onDeviceScheduleLiveBody => 'הטקסט מופיע תוך שניות, כמו בתמלול חי.';
+  String get onDeviceScheduleLiveBody => 'מתמלל באופן קבוע כל עוד Omi פתוח.';
 
   @override
   String onDeviceBatteryPerHour(int percent) {
@@ -13307,7 +13307,7 @@ class AppLocalizationsHe extends AppLocalizations {
   String get onDeviceWhySavingLiveHours => 'בחרת לתמלל בטלפון הזה כדי לחסוך שעות חיות.';
 
   @override
-  String get onDeviceWhySummaryOnPhone => 'גם הסיכום נכתב ב-iPhone הזה. שום דבר לא יצא מהמכשיר.';
+  String get onDeviceWhySummaryOnPhone => 'גם הסיכום נכתב ב-iPhone הזה.';
 
   @override
   String get onDeviceWhyNoSummary => 'אתה שומר הכול בטלפון הזה, ולכן אין סיכום.';

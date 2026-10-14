@@ -13335,7 +13335,7 @@ class AppLocalizationsFa extends AppLocalizations {
   String get onDeviceScheduleLive => 'همزمان با صحبت';
 
   @override
-  String get onDeviceScheduleLiveBody => 'متن ظرف چند ثانیه نمایش داده می‌شود، مانند رونویسی زنده.';
+  String get onDeviceScheduleLiveBody => 'تا وقتی Omi باز است، مرتب رونویسی می‌کند.';
 
   @override
   String onDeviceBatteryPerHour(int percent) {
@@ -13397,7 +13397,7 @@ class AppLocalizationsFa extends AppLocalizations {
   String get onDeviceWhySavingLiveHours => 'شما رونویسی روی همین گوشی را برای صرفه‌جویی در ساعت‌های زنده انتخاب کردید.';
 
   @override
-  String get onDeviceWhySummaryOnPhone => 'خلاصه هم روی همین iPhone نوشته شد. هیچ چیز از دستگاه خارج نشد.';
+  String get onDeviceWhySummaryOnPhone => 'خلاصه هم روی همین iPhone نوشته شد.';
 
   @override
   String get onDeviceWhyNoSummary => 'همه چیز را روی همین گوشی نگه می‌دارید، پس خلاصه‌ای وجود ندارد.';
