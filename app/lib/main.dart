@@ -313,8 +313,9 @@ Future _init() async {
   // persisted override. This also makes release builds pin their flavor URL
   // before the first connectivity probe.
   if (!_serviceManagerInitialized) {
-    if (!kIsWeb && defaultTargetPlatform == TargetPlatform.android)
+    if (!kIsWeb && defaultTargetPlatform == TargetPlatform.android) {
       await const MethodChannel('com.omi/on_device').invokeMethod<void>('awaitBackgroundIdle');
+    }
     await PhysicalQualification.startupStage('service_manager_init', () => ServiceManager.init());
     _serviceManagerInitialized = true;
   }

@@ -646,6 +646,18 @@
             "title": "Start",
             "type": "number"
           },
+          "stt_provider": {
+            "anyOf": [
+              {
+                "maxLength": 120,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Stt Provider"
+          },
           "text": {
             "description": "The text spoken in this segment",
             "title": "Text",

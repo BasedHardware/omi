@@ -1311,8 +1311,9 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
     ServerConversation? updatedConversation;
     try {
       updatedConversation = await _fetchConversation(openedId);
-      if (updatedConversation != null)
+      if (updatedConversation != null) {
         updatedConversation = OnDeviceTranscriptionController.instance.displayConversation(updatedConversation);
+      }
     } catch (e) {
       Logger.debug('Error refreshing conversation: $e');
     }
