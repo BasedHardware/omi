@@ -52,6 +52,14 @@ def upsert_desktop_daily_usage(
     counters: Dict[str, int],
 ) -> None:
     """Atomically merge one device's running daily counters by maximum value."""
+    # An empty uid/date/client_device_id makes a malformed doc path/id; the
+    # counters dict may legitimately omit a counter field. Reject the path
+    # inputs and read each counter with a default so neither crashes.
+    if not isinstance(uid, str) or not uid.strip():
+        raise ValueError('uid must be a non-empty string')
+    if not date or not client_device_id:
+        raise ValueError('date and client_device_id are required')
+    counters = counters or {}
     user_ref = db.collection('users').document(uid)
     usage_ref = user_ref.collection(DESKTOP_DAILY_USAGE_COLLECTION).document(f'{date}__{client_device_id}')
     transaction = db.transaction()
@@ -70,7 +78,9 @@ def upsert_desktop_daily_usage(
         for field in DESKTOP_DAILY_USAGE_COUNTER_FIELDS:
             previous = existing.get(field, 0)
             previous_value = previous if isinstance(previous, int) and not isinstance(previous, bool) else 0
-            payload[field] = max(previous_value, counters[field])
+            current = counters.get(field, 0)
+            current_value = current if isinstance(current, int) and not isinstance(current, bool) else 0
+            payload[field] = max(previous_value, current_value)
         write_transaction.set(usage_ref, payload)
 
     merge_running_totals(transaction)
