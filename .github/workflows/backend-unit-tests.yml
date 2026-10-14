@@ -180,6 +180,11 @@ jobs:
           uv pip sync pylock.toml --python .venv/bin/python
           echo "$PWD/.venv/bin" >> "$GITHUB_PATH"
 
+      - name: Install native audio replay dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends ffmpeg libopus0
+
       - name: Run authoritative backend unit contract
         working-directory: backend
         env:
