@@ -372,7 +372,7 @@ and an explicit empty literal renders as `''`.
 | `OMI_MESSAGING_CHANNEL_POLICY` | Per-channel JSON admission; absent retains legacy switch/cohort. iMessage defaults Operator/Architect and 180 distinct linked users; malformed JSON denies. | backend | env | closed | — | — | — | — | keep | — | dazheng |
 | `OMI_MESSAGING_KILL_SWITCH_DOC` | Optional Firestore channel switch document, cached at most 60 seconds; missing/read failure denies. Unset uses env admission only. | backend | env | closed | — | — | — | — | keep | — | dazheng |
 | `OMI_MESSAGING_RETENTION_DAYS` | Hourly messaging maintenance retains done inbox markers and unknown identities for 30 days by default; minimum seven; does not send. | backend | env | closed | — | — | — | — | keep | — | dazheng |
-| `OMI_TELEGRAM_SHARED_PACING` | Runtime Telegram Redis server-clock pacing defaults on; Redis failure denies provider sends. Off is safe only for one backend process. | backend | env | closed | — | — | — | — | keep | — | dazheng |
+| `OMI_TELEGRAM_SHARED_PACING` | Runtime Telegram Redis server-clock pacing defaults on; Redis errors fall back to per-process pacing with a recorded fallback. | backend | env | closed | — | — | — | — | keep | — | dazheng |
 | `OMI_TELEGRAM_STREAMING` | Telegram preview mode draft, edit or none; default draft. | backend | env | closed | — | — | — | — | keep | — | dazheng |
 | `OMI_VERTEX_LEGACY_TASK_MIN_CAPABLE_MACOS_BUILD` | First released macOS build containing #20374; positive integer read per request; unset/invalid serves all and counts candidate would-refuse volume in bounded build buckets | backend | env | open | env_var | env_var | env_var | — | keep | — | dazheng |
 | `OMI_VERTEX_PT_TARGET_LOCATION` | Moved Vertex order location; default us; global explicitly widens residency | backend | env | closed | — | — | — | — | keep | — | dazheng |
@@ -469,7 +469,7 @@ their code default (`fail` tells you which way a missing value resolves).
 - `OMI_MESSAGING_CHANNEL_POLICY` — Per-channel JSON admission; absent retains legacy switch/cohort. iMessage defaults Operator/Architect and 180 distinct linked users; malformed JSON denies. (fail: closed)
 - `OMI_MESSAGING_KILL_SWITCH_DOC` — Optional Firestore channel switch document, cached at most 60 seconds; missing/read failure denies. Unset uses env admission only. (fail: closed)
 - `OMI_MESSAGING_RETENTION_DAYS` — Hourly messaging maintenance retains done inbox markers and unknown identities for 30 days by default; minimum seven; does not send. (fail: closed)
-- `OMI_TELEGRAM_SHARED_PACING` — Runtime Telegram Redis server-clock pacing defaults on; Redis failure denies provider sends. Off is safe only for one backend process. (fail: closed)
+- `OMI_TELEGRAM_SHARED_PACING` — Runtime Telegram Redis server-clock pacing defaults on; Redis errors fall back to per-process pacing with a recorded fallback. (fail: closed)
 - `OMI_TELEGRAM_STREAMING` — Telegram preview mode draft, edit or none; default draft. (fail: closed)
 - `OMI_VERTEX_PT_TARGET_LOCATION` — Moved Vertex order location; default us; global explicitly widens residency (fail: closed)
 - `PARAKEET_DIARIZATION` — Enable prerecorded Parakeet diarization (fail: closed)
