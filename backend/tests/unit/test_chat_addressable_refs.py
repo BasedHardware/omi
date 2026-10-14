@@ -14,6 +14,7 @@ from models.other import Person
 from models.structured import Structured
 from models.transcript_segment import TranscriptSegment
 from utils.conversations.render import conversations_to_string
+from utils.conversations.mcp_transcript_search import ChatTranscriptSearch, chat_transcript_excerpts
 from utils.retrieval import agentic
 from utils.retrieval.chat_mount import EDIT_GUARDRAIL
 from utils.retrieval.chat_scope import build_chat_scope
@@ -107,6 +108,19 @@ def test_jit_refs_align_and_retain_evidence_contract():
     assert ('conversations', 'read-1') in cfg['turn_refs'].seen
     assert cfg['conversations_collected'][0]['id'] == 'read-1'
     assert any(ref['kind'] == 'conversation_segment' for ref in cfg['evidence_references'])
+
+
+def test_search_excerpts_include_segment_ids_without_changing_chunk_positions():
+    row = _conversation().model_dump(mode='python')
+    row['transcript_segments'] = [
+        {'id': f'segment-{index}', 'text': f'Words {index}', 'is_user': True} for index in range(10)
+    ]
+    excerpts = chat_transcript_excerpts(
+        [row], ChatTranscriptSearch([{'conversation_id': 'attached', 'chunk_index': 1}], True)
+    )
+    assert '#segment-6 Words 6' in excerpts['attached']
+    assert '#segment-0 ' not in excerpts['attached']
+    assert '#segment-9 Words 9' in excerpts['attached']
 
 
 def test_omitted_id_edits_attachment_and_preserves_transcript(monkeypatch):
