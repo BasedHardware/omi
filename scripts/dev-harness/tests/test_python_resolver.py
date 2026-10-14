@@ -883,6 +883,7 @@ def _run_resolver_function(
     function: str,
     path: str | None = None,
     extra_env: dict[str, str] | None = None,
+    preamble: str = "",
 ) -> subprocess.CompletedProcess[str]:
     resolver = repo / "scripts/dev-harness/_resolve_python.sh"
     resolver.parent.mkdir(parents=True, exist_ok=True)
@@ -897,7 +898,7 @@ def _run_resolver_function(
         [
             _bash_command(),
             "-c",
-            f'source "$1"; {function}',
+            f'source "$1"; {preamble}{function}',
             "bash",
             _as_bash_path(resolver),
         ],
@@ -984,6 +985,10 @@ def test_backend_pinned_python_falls_back_to_uv_managed_311(
         monkeypatch,
         "dev_harness_backend_pinned_python",
         path=os.pathsep.join((str(stub_bin), "/usr/bin", "/bin")),
+        # A host with a real keg-only Homebrew 3.11 would otherwise satisfy
+        # discovery before the fixture's uv is consulted (Codex P2): point the
+        # prefix list at nothing.
+        preamble="dev_harness_backend_pinned_prefixes() { :; }\n",
     )
 
     assert result.returncode == 0, result.stderr
@@ -1023,6 +1028,8 @@ def test_backend_pinned_python_fails_without_any_311(
         monkeypatch,
         "dev_harness_backend_pinned_python",
         path=os.pathsep.join((str(stub_bin), "/usr/bin", "/bin")),
+        # Host isolation: a real keg-only prefix must not rescue this fixture.
+        preamble="dev_harness_backend_pinned_prefixes() { :; }\n",
     )
 
     assert result.returncode != 0

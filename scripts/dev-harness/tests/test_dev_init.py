@@ -241,6 +241,20 @@ def _write_logging_bootstrap_stub(directory: Path, name: str, log: Path, *, pinn
     stub.chmod(stub.stat().st_mode | stat.S_IXUSR)
 
 
+def _isolate_host_prefixes(repo: Path) -> None:
+    """Neutralize the host's real Homebrew 3.11 prefixes in a fixture repo.
+
+    `dev_harness_backend_pinned_python` probes absolute Homebrew prefixes, so on
+    a macOS host with a keg-only 3.11 the fallback/absence fixtures would be
+    silently rescued (Codex P2). The fixture's resolver copy gets an empty
+    prefix list; only PATH/uv/PYTHON discovery remains host-dependent, and
+    those tests already stub them.
+    """
+    resolver = repo / "scripts/dev-harness/_resolve_python.sh"
+    with resolver.open("a", encoding="utf-8") as handle:
+        handle.write("\ndev_harness_backend_pinned_prefixes() { :; }\n")
+
+
 def test_dev_init_refuses_to_bootstrap_without_a_pinned_311(tmp_path: Path) -> None:
     """No discoverable or provisionable 3.11 means refusal — not a fallback.
 
@@ -251,6 +265,7 @@ def test_dev_init_refuses_to_bootstrap_without_a_pinned_311(tmp_path: Path) -> N
     3.9 python3 on PATH and no uv, dev-init must exit 1 with install guidance.
     """
     repo = _fixture_repo(tmp_path)
+    _isolate_host_prefixes(repo)
     (repo / "backend/.venv/bin/python").unlink()
     log = tmp_path / "bootstrap-calls.log"
     stub_bin = tmp_path / "bootstrap-stub-bin"
@@ -289,6 +304,7 @@ def test_dev_installs_311_via_uv_when_not_on_path(tmp_path: Path) -> None:
     runtime rather than a refusal (Codex P1 + Oracle review).
     """
     repo = _fixture_repo(tmp_path)
+    _isolate_host_prefixes(repo)
     (repo / "backend/.venv/bin/python").unlink()
     log = tmp_path / "uv-calls.log"
     stub_bin = tmp_path / "uv-stub-bin"
