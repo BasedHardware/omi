@@ -86,6 +86,16 @@ void main() {
     expect((await WalFileManager.loadWals()).map((w) => w.timerStart), [1000]);
   });
 
+  test('a failing superseded backup never blocks the index write', () async {
+    // The backup target cannot be replaced (it is a directory).
+    Directory(backupFile.path).createSync();
+    final first = WalFileManager.saveWals([_wal(1000)]);
+    final second = WalFileManager.saveWals([_wal(1000), _wal(2000)]);
+
+    expect(await Future.wait([first, second]), [true, true]);
+    expect((await WalFileManager.loadWals()).map((w) => w.timerStart), [1000, 2000]);
+  });
+
   test('a large index is encoded off the UI isolate and round-trips', () async {
     WalFileManager.backgroundEncodeThreshold = 2;
     offUiIsolateFallbacks = 0;

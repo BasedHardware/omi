@@ -172,10 +172,15 @@ class WalFileManager {
 
     if (superseded != null && _walBackupFile != null) {
       // Serial saves would have left the newest superseded snapshot on disk as
-      // the backup; write it there directly.
-      final backupTmp = File('${_walBackupFile!.path}.tmp');
-      await backupTmp.writeAsString(await _encodeIndex(superseded), flush: true);
-      await backupTmp.rename(_walBackupFile!.path);
+      // the backup; write it there directly. Best effort, like _createBackup:
+      // a backup failure must never block the index write.
+      try {
+        final backupTmp = File('${_walBackupFile!.path}.tmp');
+        await backupTmp.writeAsString(await _encodeIndex(superseded), flush: true);
+        await backupTmp.rename(_walBackupFile!.path);
+      } on FileSystemException catch (e) {
+        Logger.debug('WalFileManager: Failed to write superseded backup: $e');
+      }
     } else {
       await _createBackup();
     }

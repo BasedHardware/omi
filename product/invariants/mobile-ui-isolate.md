@@ -1,6 +1,6 @@
 # INV-PERF-1: The mobile UI isolate stays free for frames
 
-**Status:** locked
+**Status:** proposed
 **Statement:** In the Flutter app, work that grows with the user's history (WAL index, live transcript, conversation pages, recordings directory) never runs synchronously on the UI isolate, and a state change notifies only the listeners whose inputs actually changed.
 
 The UI isolate builds, lays out and paints every frame. The October 2026 lag audit found the app
@@ -56,7 +56,8 @@ Details and the measurement tools: [`app/docs/performance.md`](../../app/docs/pe
 
 ## PR rule
 
-Do **not** require naming `INV-PERF-1` in routine app PRs. The ratchet and the tests carry the
+Proposed per `PRODUCT.md` (seven unchanged days before locking); the guard runs in CI regardless
+(`.github/checks-manifest.yaml`). Once locked, do **not** require naming `INV-PERF-1` in routine app PRs. The ratchet and the tests carry the
 floor. Name `INV-PERF-1` only when changing a rule, the guard, or `offUiIsolate`.
 
 ## Related

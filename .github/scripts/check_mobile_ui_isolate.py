@@ -104,9 +104,10 @@ HISTORY_JSON_PATH = re.compile(
 
 def _outside_off_ui_isolate(text: str, match: re.Match[str]) -> bool:
     """False when the match sits inside an `offUiIsolate(...)` call's arguments."""
-    for call in re.finditer(r"\boffUiIsolate\s*(?:<[^>(]*>)?\s*\(", text[: match.start()]):
+    masked = _mask(text)
+    for call in re.finditer(r"\boffUiIsolate\s*(?:<[^>(]*>)?\s*\(", masked[: match.start()]):
         open_paren = call.end() - 1
-        if open_paren + 1 + len(_call_args(text, open_paren)) >= match.start():
+        if _matching(masked, open_paren, "(", ")") > match.start():
             return False
     return True
 
@@ -307,19 +308,39 @@ def _in_hook_scope(body: str, position: int) -> bool:
 UNCHANGED_TEST = re.compile(r"\bidentical\s*\(|==(?!\s*null\b)")
 
 
-def _guarded_before(body: str, limit: int) -> bool:
-    """True when, before [limit], an `if` whose condition is an identical/== test returns.
+def _parameter_names(params: str) -> set[str]:
+    """Names declared in a parameter list (`Foo p, {required Bar b}` -> {p, b})."""
+    names = set()
+    for part in re.split(r",", re.sub(r"[{}\[\]]", ",", params)):
+        part = part.split("=")[0].strip()
+        found = re.findall(r"([A-Za-z_]\w*)\s*$", part)
+        if found and found[0] not in {"required", "this"}:
+            names.add(found[0])
+    return names
+
+
+def _guarded_before(body: str, limit: int, params: set[str]) -> bool:
+    """True when, before [limit], an `if` whose condition is an identical/== test on the injected
+    values returns.
 
     The return must be that `if`'s own branch (`if (same) return;` or `if (same) { return; }`),
-    so an unrelated equality check next to an unrelated `return` does not count.
+    and the condition must name a parameter or a local computed from one, so an unrelated
+    equality (`if (disposed == true) return;`) does not count.
     """
     prefix = body[:limit]
+    injected = set(params)
+    for local in re.finditer(r"\b(?:final|var|[A-Z]\w*(?:<[^;=]*>)?\??)\s+([A-Za-z_]\w*)\s*=\s*([^;]*);", prefix):
+        if any(re.search(rf"\b{re.escape(name)}\b", local.group(2)) for name in injected):
+            injected.add(local.group(1))
     for match in re.finditer(r"\bif\s*\(", prefix):
         if not _in_hook_scope(body, match.start()):
             continue
         open_paren = match.end() - 1
         close = _matching(prefix, open_paren, "(", ")")
-        if close >= len(prefix) or not UNCHANGED_TEST.search(prefix[open_paren + 1 : close]):
+        condition = prefix[open_paren + 1 : close] if close < len(prefix) else ""
+        if not UNCHANGED_TEST.search(condition):
+            continue
+        if not any(re.search(rf"\b{re.escape(name)}\b", condition) for name in injected):
             continue
         if re.match(r"\s*(?:\{\s*)?return\b", prefix[close + 1 :]):
             return True
@@ -352,7 +373,8 @@ def hook_violations(name: str, sources: dict[str, str]) -> list[str]:
             notify = body.find("notifyListeners()")
             if notify == -1:
                 continue
-            if not is_arrow and _guarded_before(body, notify):
+            params = _parameter_names(masked[masked.index("(", match.start()) + 1 : close])
+            if not is_arrow and _guarded_before(body, notify, params):
                 continue
             line = text.count("\n", 0, match.start()) + 1
             problems.append(

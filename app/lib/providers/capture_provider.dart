@@ -48,7 +48,11 @@ class CaptureProvider extends CaptureController {
   void _persistLiveSegments() {
     if (!localSegmentStore.enabled) return;
     final sessionId = activeCaptureSessionId ?? activeRecordingId;
-    if (sessionId == null) return;
+    if (sessionId == null) {
+      // Do not keep the last capture's transcript alive through the key.
+      _lastSeenSegmentsKey = null;
+      return;
+    }
     // This listener runs on every capture notify (state, metrics, sockets),
     // most of which leave the transcript untouched. Building the fingerprint
     // walks the whole transcript, so skip it unless the list, its length or

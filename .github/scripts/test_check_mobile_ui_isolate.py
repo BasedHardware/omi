@@ -110,6 +110,10 @@ class RuleTests(unittest.TestCase):
         self.assertEqual(count_hits(unwrapped, WAL_INDEX)["history-json-on-ui"], 1)
         self.assertEqual(count_hits(unwrapped, "app/lib/backend/http/api/apps.dart")["history-json-on-ui"], 0)
 
+    def test_a_comment_naming_the_wrapper_does_not_exempt_json(self) -> None:
+        text = "// Large indexes go through offUiIsolate(\nfinal s = jsonEncode(jsonData);\nfinal t = 'offUiIsolate(';\nfinal u = jsonEncode(other);"
+        self.assertEqual(count_hits(text, WAL_INDEX)["history-json-on-ui"], 2)
+
     def test_removing_the_off_ui_isolate_wrapper_fails_the_ratchet(self) -> None:
         base = "final s = await offUiIsolate(() => jsonEncode(data), size: n, threshold: t);"
         head = "final s = jsonEncode(data);"
@@ -299,6 +303,13 @@ class ProviderGraphTests(unittest.TestCase):
             "    if (identical(foo, p) && identical(bar, b)) return;\n    foo = p;\n    notifyListeners();\n  }\n"
         )
         self.assertEqual(hook_violations("setFoo", {"app/lib/x.dart": text}), [])
+
+    def test_a_guard_on_unrelated_state_fails(self) -> None:
+        text = "  void setFoo(FooProvider p) {\n    if (disposed == true) return;\n    foo = p;\n    notifyListeners();\n  }\n"
+        self.assertEqual(len(hook_violations("setFoo", {"app/lib/x.dart": text})), 1)
+
+    def test_a_guard_on_a_local_derived_from_a_parameter_passes(self) -> None:
+        self.assertEqual(hook_violations("updateExternalActions", {"app/lib/x.dart": BRACED_GUARD}), [])
 
     def test_a_graph_with_no_recognised_hooks_fails(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
