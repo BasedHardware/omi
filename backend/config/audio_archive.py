@@ -4,8 +4,26 @@ import hashlib
 import os
 
 
+def _phase_enabled(phase: str) -> bool:
+    if phase == 'LIVE':
+        return os.getenv('AUDIO_ARCHIVE_LIVE_ENABLED', 'false').lower() == 'true'
+    if phase == 'READ':
+        return os.getenv('AUDIO_ARCHIVE_READ_ENABLED', 'false').lower() == 'true'
+    if phase == 'STOP_PCM':
+        return os.getenv('AUDIO_ARCHIVE_STOP_PCM_ENABLED', 'false').lower() == 'true'
+    if phase == 'SYNC':
+        return os.getenv('AUDIO_ARCHIVE_SYNC_ENABLED', 'false').lower() == 'true'
+    if phase == 'REGIONAL_CACHE':
+        return os.getenv('AUDIO_ARCHIVE_REGIONAL_CACHE_ENABLED', 'false').lower() == 'true'
+    if phase == 'COALESCE':
+        return os.getenv('AUDIO_ARCHIVE_COALESCE_ENABLED', 'false').lower() == 'true'
+    if phase == 'SEPARATE_MERGE':
+        return os.getenv('AUDIO_ARCHIVE_SEPARATE_MERGE_ENABLED', 'false').lower() == 'true'
+    return False
+
+
 def admitted(uid: str, phase: str) -> bool:
-    if os.getenv(f'AUDIO_ARCHIVE_{phase}_ENABLED', 'false').lower() != 'true' or not uid:
+    if not _phase_enabled(phase) or not uid:
         return False
     allowlist = {item.strip() for item in os.getenv('AUDIO_ARCHIVE_UID_ALLOWLIST', '').split(',') if item.strip()}
     try:

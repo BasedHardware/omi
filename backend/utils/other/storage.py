@@ -2231,10 +2231,16 @@ def archive_mobile_batch_raw_files(uid: str, paths: List[str], metadata: Optiona
     selected = [
         p for p in paths if Path(p).name.startswith('audio_omimobilebatch') or audio_archive.admitted(uid, 'SYNC')
     ]
+    if not selected:
+        return []
+    consent_enabled = users_db.get_user_private_cloud_sync_enabled(uid)
+    if not consent_enabled and any(Path(path).name.startswith('audio_omimobilebatch') for path in selected):
+        raise PermissionError('mobile archive requires cloud audio storage permission')
+    protection = users_db.get_data_protection_level(uid) if consent_enabled else None
     archived = []
     for path in selected:
         mobile = Path(path).name.startswith('audio_omimobilebatch')
-        if not mobile and not users_db.get_user_private_cloud_sync_enabled(uid):
+        if not consent_enabled:
             continue
         raw = Path(path).read_bytes()
         details = {
@@ -2247,7 +2253,14 @@ def archive_mobile_batch_raw_files(uid: str, paths: List[str], metadata: Optiona
         }
         details = packet_provenance(raw, details)
         archived.append(
-            archive_capture_bytes(uid, raw, 'raw-mobile-batch' if mobile else 'raw-sync', Path(path).name, details)
+            archive_capture_bytes(
+                uid,
+                raw,
+                'raw-mobile-batch' if mobile else 'raw-sync',
+                Path(path).name,
+                details,
+                data_protection_level=protection,
+            )
         )
     return archived
 

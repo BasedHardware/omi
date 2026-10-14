@@ -160,6 +160,14 @@ def test_sync_off_does_not_gain_persistent_archive(monkeypatch, buckets, tmp_pat
     assert not buckets['canonical'].blobs
 
 
+def test_mobile_filename_cannot_claim_storage_consent(monkeypatch, buckets, tmp_path):
+    monkeypatch.setattr(storage.users_db, 'get_user_private_cloud_sync_enabled', lambda uid: False)
+    path = tmp_path / 'audio_omimobilebatch001_opus_16000_1_fs160_1000.bin'
+    with pytest.raises(PermissionError):
+        storage.archive_mobile_batch_raw_files('owner', [str(path)])
+    assert not buckets['canonical'].blobs
+
+
 def test_completed_job_links_archived_original_without_rewrite(monkeypatch, buckets, tmp_path):
     enable(monkeypatch, 'SYNC')
     audio = tmp_path / 'audio_omi_opus_16000_1_fs160_1000.bin'
