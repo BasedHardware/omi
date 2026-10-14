@@ -139,6 +139,90 @@ void main() {
     expect(controller.segments.single.personId, 'p1');
     expect(controller.segments.single.speakerLabelSource, 'manual');
   });
+
+  test('a range-only positive label does not retire the whole-voice exclusion', () async {
+    final controller = CaptureController(
+      externalActions: _Actions(),
+      bleListeners: _Ble(),
+      connectivity: CaptureConnectivityBoundary(
+        initiallyConnected: true,
+        changes: const Stream.empty(),
+        isConnected: () => true,
+      ),
+      excludeSpeaker: (id, ids) async => true,
+    );
+    addTearDown(() async {
+      controller.dispose();
+      await controller.lifetime.close();
+    });
+    controller.applyInProgressConversation(
+      ServerConversation(
+        id: 'c',
+        createdAt: DateTime(2026),
+        structured: Structured('TV', 'TV'),
+        transcriptSegments: [_segment('s1'), _segment('s2')],
+      ),
+    );
+    expect(await controller.assignSpeakerToConversation(4, '', '', ['s1'], notAPerson: true), isTrue);
+
+    // Another surface assigns only a start/end range of the excluded speaker.
+    // The backend marks that decision segment_only: in-range segments carry the
+    // manual positive while the whole-voice not_a_person rejection stays
+    // authoritative, so out-of-range segments project as unlabeled. The local
+    // exclusion must survive this snapshot — the server still excludes the
+    // voice.
+    controller.applyInProgressConversation(
+      ServerConversation(
+        id: 'c',
+        createdAt: DateTime(2026),
+        structured: Structured('TV', 'TV'),
+        transcriptSegments: [
+          _segment('s1'),
+          _segment('s2')
+            ..isUser = false
+            ..personId = 'p1'
+            ..speakerLabelSource = 'manual',
+        ],
+      ),
+    );
+
+    // The exclusion still owns the voice: the in-range label is blanked, the
+    // out-of-range segment stays unlabeled, and suggestions stay suppressed.
+    final inRange = controller.segments.firstWhere((s) => s.id == 's2');
+    expect(inRange.isUser, isFalse);
+    expect(inRange.personId, isNull);
+    expect(inRange.speakerLabelSource, isNull);
+    final suggestion = SpeakerLabelSuggestionEvent(speakerId: 4, personId: '', personName: 'Sam', segmentId: 's1');
+    controller.onMessageEventReceived(suggestion);
+    expect(controller.suggestionsBySegmentId, isEmpty);
+
+    // The same snapshot with the positive covering the whole cluster IS a
+    // whole-voice replacement and does retire the exclusion.
+    controller.applyInProgressConversation(
+      ServerConversation(
+        id: 'c',
+        createdAt: DateTime(2026),
+        structured: Structured('TV', 'TV'),
+        transcriptSegments: [
+          _segment('s1')
+            ..isUser = false
+            ..personId = 'p1'
+            ..speakerLabelSource = 'manual',
+          _segment('s2')
+            ..isUser = false
+            ..personId = 'p1'
+            ..speakerLabelSource = 'manual',
+        ],
+      ),
+    );
+    expect(controller.segments.every((s) => s.personId == 'p1'), isTrue);
+    // The whole-voice replacement retired the exclusion: a fresh unlabeled
+    // segment of the speaker is eligible for suggestions again.
+    controller.onSegmentReceived([_segment('s3')..isUser = false]);
+    final fresh = SpeakerLabelSuggestionEvent(speakerId: 4, personId: '', personName: 'Sam', segmentId: 's3');
+    controller.onMessageEventReceived(fresh);
+    expect(controller.suggestionsBySegmentId, isNotEmpty);
+  });
   test('exclusion clears the cluster, skips person creation, suppresses suggestions and is reversible', () async {
     final actions = _Actions();
     final calls = <List<String>>[];
@@ -277,15 +361,19 @@ void main() {
     expect(controller.suggestionsBySegmentId, isEmpty);
 
     // Another manual-positive flush arrives; this time the authoritative
-    // snapshot carries the newer persisted manual positive, so the exclusion
-    // retires and the label survives.
+    // snapshot carries the newer persisted whole-voice manual positive (a
+    // decision that replaced the exclusion labels EVERY segment of the
+    // speaker), so the exclusion retires and the label survives.
     reconcileSnapshots.add(
       ServerConversation(
         id: 'c',
         createdAt: DateTime(2026),
         structured: Structured('TV', 'TV'),
         transcriptSegments: [
-          _segment('s1')..isUser = false,
+          _segment('s1')
+            ..isUser = false
+            ..personId = 'p9'
+            ..speakerLabelSource = 'manual',
           _segment('s2')
             ..isUser = false
             ..personId = 'p9'
@@ -305,8 +393,12 @@ void main() {
     expect(updated.personId, 'p9');
     expect(updated.speakerLabelSource, 'manual');
 
-    // The retired exclusion no longer suppresses suggestions for the speaker.
-    final suggestion = SpeakerLabelSuggestionEvent(speakerId: 4, personId: '', personName: 'Sam', segmentId: 's1');
+    // The retired exclusion no longer suppresses suggestions for the speaker:
+    // the snapshot's own segments carry the whole-voice positive, so a fresh
+    // unlabeled segment of that speaker arriving afterwards is the eligible
+    // case.
+    controller.onSegmentReceived([_segment('s3')..isUser = false]);
+    final suggestion = SpeakerLabelSuggestionEvent(speakerId: 4, personId: '', personName: 'Sam', segmentId: 's3');
     controller.onMessageEventReceived(suggestion);
     expect(controller.suggestionsBySegmentId, isNotEmpty);
 
@@ -622,9 +714,11 @@ void main() {
     controller.onMessageEventReceived(suggestion);
     expect(controller.suggestionsBySegmentId, isEmpty); // exclusion still suppresses
 
-    // A successful fetch still installs the authoritative snapshot: the newer
-    // manual positive retires the exclusion. s2 stays unlabeled (speaker 4,
-    // undecided), so a suggestion for it is eligible again.
+    // A successful fetch still installs the authoritative snapshot. A whole-
+    // voice positive covers EVERY segment of the speaker in the snapshot (the
+    // receipt's speaker entry projects onto all of its cluster), so the
+    // exclusion retires; a range-only positive (some segments labeled, others
+    // of the same speaker unlabeled) must not.
     CaptureController.inProgressConversationFetchForTesting = () async => (
           items: [
             ServerConversation(
@@ -636,7 +730,10 @@ void main() {
                   ..isUser = false
                   ..personId = 'p1'
                   ..speakerLabelSource = 'manual',
-                _segment('s2')..isUser = false,
+                _segment('s2')
+                  ..isUser = false
+                  ..personId = 'p1'
+                  ..speakerLabelSource = 'manual',
               ],
             ),
           ],
@@ -654,11 +751,11 @@ void main() {
     final updated = controller.segments.firstWhere((s) => s.id == 's1');
     expect(updated.personId, 'p1');
     expect(updated.speakerLabelSource, 'manual');
-    // The retired exclusion no longer blanks speaker 4's unlabeled segment.
-    final unlabeled = controller.segments.firstWhere((s) => s.id == 's2');
-    expect(unlabeled.isUser, isFalse);
-    expect(unlabeled.personId, isNull);
-    final eligible = SpeakerLabelSuggestionEvent(speakerId: 4, personId: '', personName: 'Sam', segmentId: 's2');
+    expect(controller.segments.firstWhere((s) => s.id == 's2').personId, 'p1');
+    // The retired exclusion no longer suppresses the speaker: a fresh
+    // unlabeled segment arriving afterwards is eligible for suggestions again.
+    controller.onSegmentReceived([_segment('s3')..isUser = false]);
+    final eligible = SpeakerLabelSuggestionEvent(speakerId: 4, personId: '', personName: 'Sam', segmentId: 's3');
     controller.onMessageEventReceived(eligible);
     expect(controller.suggestionsBySegmentId, isNotEmpty);
   });

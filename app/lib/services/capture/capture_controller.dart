@@ -3562,19 +3562,30 @@ class CaptureController extends ChangeNotifier
     if (_conversation != null) {
       segments = _conversation!.transcriptSegments;
       if (isSameConversation) {
-        for (final segment in segments) {
-          // A persisted manual positive label for an excluded speaker means a
-          // newer authoritative assignment won (another surface replaced the
-          // exclusion; the receipt projects exclusions as unlabeled, never as
-          // manual). Only a refresh that *started* after the exclusion's
-          // acknowledgement may retire it: one requested earlier can still be
-          // carrying the pre-exclusion manual label when it installs.
-          if (_excludedSpeakers.contains(segment.speakerId) &&
-              segment.speakerLabelSource == 'manual' &&
-              (segment.isUser || (segment.personId?.isNotEmpty ?? false)) &&
-              startedAt > (_excludedAtEpoch[segment.speakerId] ?? 0)) {
-            _excludedSpeakers.remove(segment.speakerId);
-            _excludedAtEpoch.remove(segment.speakerId);
+        // A persisted manual positive label only retires the exclusion when it
+        // carries whole-voice authority: another surface replaced the exclusion
+        // (the receipt projects exclusions as unlabeled, never as manual), and
+        // a whole-voice positive decision labels EVERY segment of the speaker.
+        // A range-only decision deliberately does neither: the backend marks it
+        // segment_only, the whole-voice not_a_person rejection stays
+        // authoritative for the voice, and segments outside the range project
+        // as unlabeled. Retiring on any single positive segment would drop the
+        // speaker-wide exclusion while the server still considers the voice
+        // excluded (suggestions reappearing, other segments unblanked), so
+        // require the positive to cover the whole cluster in this snapshot.
+        // Only a refresh that *started* after the exclusion's acknowledgement
+        // may retire it: one requested earlier can still be carrying the
+        // pre-exclusion manual label when it installs.
+        for (final speakerId in List<int>.of(_excludedSpeakers)) {
+          final cluster = segments.where((segment) => segment.speakerId == speakerId).toList();
+          final wholeVoicePositive = cluster.isNotEmpty &&
+              cluster.every((segment) =>
+                  segment.speakerLabelSource == 'manual' &&
+                  (segment.isUser || (segment.personId?.isNotEmpty ?? false))) &&
+              startedAt > (_excludedAtEpoch[speakerId] ?? 0);
+          if (wholeVoicePositive) {
+            _excludedSpeakers.remove(speakerId);
+            _excludedAtEpoch.remove(speakerId);
           }
         }
         for (final segment in segments) {
