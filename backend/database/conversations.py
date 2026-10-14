@@ -3874,13 +3874,16 @@ def get_closest_conversation_to_timestamps(uid: str, start_timestamp: int, end_t
     )
 
     conversations = [doc.to_dict() for doc in query.stream()]
-    logger.info(f'get_closest_conversation_to_timestamps len(conversations) {len(conversations)}')
+    logger.debug(f'get_closest_conversation_to_timestamps len(conversations) {len(conversations)}')
     if not conversations:
         return None
 
-    logger.info('get_closest_conversation_to_timestamps found:')
-    for conversation in conversations:
-        logger.info(f"- {conversation['id']} {conversation['started_at']} {conversation['finished_at']}")
+    if logger.isEnabledFor(logging.DEBUG):
+        for conversation in conversations:
+            logger.debug(
+                f"get_closest_conversation_to_timestamps candidate {conversation['id']} "
+                f"{conversation['started_at']} {conversation['finished_at']}"
+            )
 
     closest_conversation = select_closest_conversation(conversations, start_timestamp, end_timestamp)
     if closest_conversation is None:

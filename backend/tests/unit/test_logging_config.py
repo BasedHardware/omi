@@ -8,6 +8,8 @@ from utils.logging_config import (
     SuccessfulHealthAccessFilter,
     configure_health_access_logging,
     configure_split_stream_logging,
+    NOISY_HTTP_CLIENT_LOGGERS,
+    quiet_http_client_loggers,
 )
 
 
@@ -147,3 +149,21 @@ def test_outside_cloud_run_access_records_are_kept(monkeypatch, value):
         assert logger.filter(_access_record(200))
     finally:
         logger.filters[:] = saved_filters
+
+
+def test_http_client_loggers_drop_info_but_keep_warnings():
+    saved = {name: logging.getLogger(name).level for name in NOISY_HTTP_CLIENT_LOGGERS}
+    try:
+        for name in NOISY_HTTP_CLIENT_LOGGERS:
+            logging.getLogger(name).setLevel(logging.NOTSET)
+        logging.getLogger('httpx').setLevel(logging.ERROR)
+        quiet_http_client_loggers()
+        assert logging.getLogger('httpx').level == logging.ERROR
+        for name in ('httpcore', 'google.resumable_media'):
+            logger = logging.getLogger(name)
+            assert not logger.isEnabledFor(logging.INFO)
+            assert logger.isEnabledFor(logging.WARNING)
+        assert not logging.getLogger('google.resumable_media._helpers').isEnabledFor(logging.INFO)
+    finally:
+        for name, level in saved.items():
+            logging.getLogger(name).setLevel(level)

@@ -60,6 +60,20 @@ def configure_health_access_logging() -> None:
         logger.addFilter(CloudRunAccessFilter())
 
 
+# Outbound HTTP client libraries log one INFO line per request. The lines are
+# the bulk of listen stderr (the batch-metrics poll) and backfill stderr, and
+# httpx prints the full URL, including signed GCS query strings. Warnings and
+# errors from these loggers still pass.
+NOISY_HTTP_CLIENT_LOGGERS = ('httpx', 'httpcore', 'google.resumable_media')
+
+
+def quiet_http_client_loggers() -> None:
+    for name in NOISY_HTTP_CLIENT_LOGGERS:
+        logger = logging.getLogger(name)
+        if logger.level == logging.NOTSET or logger.level < logging.WARNING:
+            logger.setLevel(logging.WARNING)
+
+
 class _MaxLevelFilter(logging.Filter):
     """Only allow records strictly below ``level`` (keeps errors off stdout)."""
 
@@ -87,6 +101,7 @@ def configure_split_stream_logging(
     err_stream = stderr if stderr is not None else sys.stderr
 
     configure_health_access_logging()
+    quiet_http_client_loggers()
 
     root = logging.getLogger()
     root.setLevel(level)
