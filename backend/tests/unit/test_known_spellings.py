@@ -226,3 +226,171 @@ def test_external_text_memory_prompt_receives_hints_as_instructions(sources, mon
     )
     rendered = model.call_args.args[0].to_string()
     assert rendered.count(block) == 1
+
+
+@pytest.mark.parametrize(
+    'signal',
+    [
+        {'speech_samples': ['synthetic/sample.wav']},
+        {'label_evidence': {'manual_labels': 1}},
+        {'label_evidence': {'card_confirms': 1}},
+        {'label_evidence': {'card_picks': 1}},
+        {'label_evidence': {'auto_confirmed': 1}},
+        {'aliases': ['Old Synthetic Name']},
+    ],
+)
+def test_stored_user_evidence_admits_mononyms_and_unicode_names(signal):
+    for name in ('Tala', 'tala', '林澄', 'Tala Quill'):
+        assert hints._trusted_people_spellings([{'name': name, **signal}]) == [{'name': name}]
+
+
+@pytest.mark.parametrize(
+    'name', ['Mhmm', 'Just:', 'just', 'hmm', 'Chinese !', 'Mhmm 123', 'Spanish', 'happy', '123', '!!!', '123 !!!']
+)
+@pytest.mark.parametrize(
+    'signal', [{'speech_samples': ['synthetic/sample.wav']}, {'label_evidence': {'manual_labels': 1}}]
+)
+def test_junk_names_are_rejected_even_with_stale_evidence(name, signal):
+    assert hints._trusted_people_spellings([{'name': name, **signal}]) == []
+
+
+@pytest.mark.parametrize(
+    'signal',
+    [
+        {},
+        {'created_at': 'synthetic-date', 'updated_at': 'synthetic-later-date'},
+        {'confidence': 'confirmed', 'voice_readiness': 'ready', 'conversation_count': 40},
+        {'created_by': 'user', 'source': 'manual', 'confirmed': True},  # not fields written by our schema
+        {'label_evidence': {'auto_corrected': 2}},
+        {'label_evidence': {'manual_labels': True}},
+        {'label_evidence': {'card_confirms': '2'}},
+        {'label_evidence': {'card_picks': -1}},
+        {'speech_samples': [None, '', '  ', 1]},
+        {'speech_samples': 'synthetic/sample.wav'},
+    ],
+)
+def test_unconfirmed_detections_and_guessed_metadata_are_not_authority(signal):
+    assert hints._trusted_people_spellings([{'name': 'Tala Quill', **signal}]) == []
+    assert hints._trusted_people_spellings([{'name': '明天重新讨论', **signal}]) == []
+
+
+def test_renamed_person_does_not_map_old_filler_aliases_into_the_prompt():
+    people = hints._trusted_people_spellings([{'name': 'Tala Quill', 'aliases': ['Just', '今天需要讨论']}])
+    block = hints.render_known_spellings([], people)
+    assert 'Tala Quill' in block and 'Just' not in block and '今天需要讨论' not in block
+
+
+def test_empty_or_unchanged_aliases_are_not_rename_evidence():
+    for name in ('Tala Quill', '明天重新讨论'):
+        assert hints._trusted_people_spellings([{'name': name, 'aliases': [None, '', name]}]) == []
+
+
+def test_dismissed_people_and_empty_names_are_excluded():
+    for row in (
+        {'name': 'Tala', 'is_dismissed': True},
+        {'name': ''},
+        {'name': None},
+        {'name': '  '},
+    ):
+        assert hints._trusted_people_spellings([{**row, 'speech_samples': ['synthetic/sample.wav']}]) == []
+
+
+def test_real_people_read_is_bounded_filtered_and_cached_per_run(monkeypatch):
+    client = MagicMock()
+    query = client.collection.return_value.document.return_value.collection.return_value
+    query.limit.return_value = query
+    snapshots = []
+    for i, row in enumerate(
+        [
+            {'name': 'Tala Quill', 'label_evidence': {'manual_labels': 1}},
+            {'name': 'Mhmm', 'speech_samples': ['synthetic/sample.wav']},
+            {'name': '明天重新讨论'},
+            {'name': 'Unconfirmed Synthetic'},
+        ]
+    ):
+        snapshot = MagicMock(id=f'synthetic-person-{i}')
+        snapshot.to_dict.return_value = row
+        snapshots.append(snapshot)
+    query.stream.return_value = snapshots
+    monkeypatch.setattr(hints, 'get_firestore_client', lambda: client)
+    monkeypatch.setattr(hints.dream_store, 'vocabulary', MagicMock(return_value=[{'spelling': 'Quorbi'}]))
+    monkeypatch.delenv('CONVERSATION_KNOWN_SPELLINGS', raising=False)
+
+    @hints.spelling_context_run
+    def run():
+        first = hints.conversation_known_spellings('synthetic-owner')
+        assert first == hints.conversation_known_spellings('synthetic-owner')
+        assert 'Tala Quill' in first and 'Quorbi' in first
+        assert all(junk not in first for junk in ('Mhmm', '明天重新讨论', 'Unconfirmed Synthetic'))
+
+    run()
+    query.limit.assert_called_once_with(200)
+    query.stream.assert_called_once()
+    run()
+    assert query.limit.call_count == query.stream.call_count == 2
+
+
+@pytest.fixture
+def resolution_module():
+    from utils.conversations import speaker_resolution
+
+    return speaker_resolution
+
+
+@pytest.mark.parametrize('people', [[], [{'name': 'Tala', 'speech_samples': ['synthetic/sample.wav']}]])
+def test_speaker_resolution_reuses_its_full_list_without_an_extra_query(monkeypatch, resolution_module, people):
+    stage = resolution_module
+    monkeypatch.delenv('CONVERSATION_KNOWN_SPELLINGS', raising=False)
+    monkeypatch.setattr(stage, 'load_owner_embedding', lambda *args, **kwargs: None)
+    monkeypatch.setattr(stage, 'named_speaker_prompts_allowed', lambda uid: True)
+    original_read = MagicMock(return_value=people)
+    monkeypatch.setattr(stage.users_db, 'get_people', original_read)
+    extra_read = MagicMock(side_effect=AssertionError('unexpected second People query'))
+    monkeypatch.setattr(hints, 'list_people', extra_read)
+    monkeypatch.setattr(hints.dream_store, 'vocabulary', MagicMock(return_value=[{'spelling': 'Quorbi'}]))
+
+    @hints.spelling_context_run
+    def run():
+        stage.load_voiceprints_for_resolution('synthetic-owner', allow_audio_repair=False)
+        block = hints.conversation_known_spellings('synthetic-owner')
+        assert ('Tala' in block) == bool(people)
+        assert block == hints.conversation_known_spellings('synthetic-owner')
+
+    run()
+    original_read.assert_called_once_with('synthetic-owner')
+    extra_read.assert_not_called()
+
+
+def test_reused_people_are_capped_and_do_not_leak_between_runs(monkeypatch):
+    monkeypatch.delenv('CONVERSATION_KNOWN_SPELLINGS', raising=False)
+    monkeypatch.setattr(hints, 'get_firestore_client', lambda: 'synthetic-client')
+    read = MagicMock(return_value=[])
+    monkeypatch.setattr(hints, 'list_people', read)
+    rows = [{'name': 'Mhmm'}] * 200 + [
+        {'name': f'Synthetic Person {i}', 'speech_samples': ['synthetic/sample.wav']} for i in range(61)
+    ]
+
+    @hints.spelling_context_run
+    def seeded_run():
+        hints.reuse_people_for_spellings('synthetic-owner', rows)
+        spellings = hints._people_spellings('synthetic-owner')
+        assert len(spellings) == hints.MAX_TERMS
+        assert spellings[0] == {'name': 'Synthetic Person 0'}
+
+    seeded_run()
+    read.assert_not_called()
+    # A reused list outside processing must not become a process-global cache.
+    hints.reuse_people_for_spellings('synthetic-owner', rows)
+
+    @hints.spelling_context_run
+    def fresh_run():
+        assert hints._people_spellings('synthetic-owner') == []
+
+    fresh_run()
+    read.assert_called_once_with('synthetic-client', 'synthetic-owner', limit=200)
+
+
+def test_person_filter_does_not_filter_deliberately_learned_vocabulary():
+    people = hints._trusted_people_spellings([{'name': 'Spanish'}])
+    block = hints.render_known_spellings([{'spelling': 'Spanish', 'aliases': ['Synthetic Alias']}], people)
+    assert 'Spanish' in block and 'Synthetic Alias' in block

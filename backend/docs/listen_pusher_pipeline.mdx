@@ -58,7 +58,7 @@ Soniox also retains its `SONIOX_CONTEXT_TERMS` gate. Read failure uses existing 
 Vocabulary and STT gate defaults remain off.
 
 Conversation processing adds a shared **Known spellings** block from Dream vocabulary
-(including aliases) and active People names. `CONVERSATION_KNOWN_SPELLINGS` defaults
+(including aliases) and trustworthy active People names. `CONVERSATION_KNOWN_SPELLINGS` defaults
 to `true`; set it to `false` to disable the block and its reads. The block is capped
 at 60 canonical entries and 1,500 characters, including grounding instructions:
 use a spelling only when the transcript clearly refers to it, never invent a
@@ -67,6 +67,24 @@ transcript-memory prompts share it; each source is read at most once within a
 processing run, with a fresh scope for a separately deferred extraction. Read
 failures retain available context and emit fallback telemetry. No extra LLM call
 is made.
+
+People names require a nonempty stored speech sample, a positive `label_evidence`
+counter (`manual_labels`, `card_confirms`, `card_picks`, or `auto_confirmed`, all
+authored by user assignments/answers), or retained aliases from the explicit
+rename transaction. Creation has no origin marker, so timestamps and derived
+confidence alone do not qualify a name, including a multiword name. Single-token
+filler/common words and demonyms, letterless names, and dismissed people are
+excluded even when evidence exists. Unconfirmed CJK fragments therefore cannot
+enter the block; confirmed names in any script can. Old People aliases are not
+rendered, because an old filler alias could cause the model to invent a reference.
+Dream vocabulary and its aliases retain their own authority.
+
+The speaker-resolution step seeds the spelling cache from its already-read full
+People list. If that step did not read People, spelling hints use one collection
+query capped at 200 documents, without voice-learning projection transactions.
+Filtering the already-read list may scan past junk entries without additional
+Firestore reads, retaining at most 60 names. Both paths retain the per-run cache;
+an empty reused list does not trigger a second query.
 
 Modulate batch language is selected by utterance word totals, breaking ties by
 total duration. Utterances under three words do not vote when any longer utterance
