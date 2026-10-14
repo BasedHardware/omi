@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:omi/services/sockets/local_stt_failure.dart';
 import 'package:omi/services/sockets/on_device_apple_provider.dart';
-import 'package:omi/backend/preferences.dart';
+import 'package:omi/services/freemium_transcription_service.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 
@@ -14,9 +14,11 @@ class LocalSttRecoveryNotice extends StatefulWidget {
       required this.failure,
       required this.onRetry,
       required this.onSetup,
+      this.language,
       this.preparePermission,
       this.openSettings});
   final LocalSttFailure failure;
+  final String? language;
   final Future<void> Function() onRetry;
   final VoidCallback onSetup;
   final Future<bool> Function()? preparePermission;
@@ -39,9 +41,10 @@ class _LocalSttRecoveryNoticeState extends State<LocalSttRecoveryNotice> {
   Future<void> _setup() async {
     if (widget.failure.code == 'permission_required') {
       final ready = await (widget.preparePermission ??
-          () async =>
-              (await OnDeviceAppleProvider.readiness(SharedPreferencesUtil().userPrimaryLanguage, prepare: true))
-                  .ready)();
+          () async => (await OnDeviceAppleProvider.readiness(
+                  FreemiumTranscriptionService.effectiveLanguage(language: widget.language),
+                  prepare: true))
+              .ready)();
       if (ready) {
         await _retry();
         return;

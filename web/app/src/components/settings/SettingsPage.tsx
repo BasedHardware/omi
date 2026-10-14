@@ -840,7 +840,7 @@ function UnknownPlanCard() {
   );
 }
 
-function UsageSectionContent({
+export function UsageSectionContent({
   allUsage,
   subscription,
   onSubscriptionUpdate,
@@ -919,12 +919,13 @@ function UsageSectionContent({
   // grid on mount; unknown-plan users never see choices here.
   const plansImpressionRecorded = useRef(false);
   useEffect(() => {
+    if (activeTab !== 'plan' || !cachedPlans?.length) return;
     if (!subscription || plansImpressionRecorded.current) return;
     if (isUnknownPlan) return;
     if (!isPaid && !showUpgradeOptions) return;
     plansImpressionRecorded.current = true;
     trackPaywallOpened('usage_page', subscription.plan);
-  }, [subscription, isPaid, isUnknownPlan, showUpgradeOptions]);
+  }, [subscription, isPaid, isUnknownPlan, showUpgradeOptions, activeTab, cachedPlans]);
 
   // Sort pricing options: monthly first, then annual
   const sortedOptions = cachedPlans

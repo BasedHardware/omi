@@ -171,9 +171,23 @@ class Wal {
   String device;
   String? deviceModel;
 
-  bool onDeviceOnly;
   WalStatus status;
   WalStorage storage;
+
+  /// Explicit phone-only custody. Never admitted to a cloud audio drain.
+  bool onDeviceOnly;
+
+  /// Recording-time custody evidence. Null identifies pre-fix dev records.
+  bool? capturedOnDeviceOnly;
+
+  /// Imported device storage was never part of the phone's live STT route.
+  /// Repair only the erroneous pre-fix stamp, preserving explicit capture consent.
+  void repairLegacyImportedCustody() {
+    if (capturedOnDeviceOnly == null &&
+        (originalStorage == WalStorage.sdcard || originalStorage == WalStorage.flashPage)) {
+      onDeviceOnly = false;
+    }
+  }
 
   String? filePath;
   List<List<int>> data;
@@ -337,9 +351,10 @@ class Wal {
     required this.seconds,
     this.sampleRate = 16000,
     this.channel = 1,
-    this.onDeviceOnly = false,
     this.status = WalStatus.inProgress,
     this.storage = WalStorage.mem,
+    this.onDeviceOnly = false,
+    this.capturedOnDeviceOnly,
     this.filePath,
     this.device = "phone",
     this.deviceModel,
@@ -378,6 +393,8 @@ class Wal {
       sampleRate: json['sample_rate'] ?? 16000,
       status: WalStatus.values.asNameMap()[json['status']] ?? WalStatus.inProgress,
       storage: WalStorage.values.asNameMap()[json['storage']] ?? WalStorage.mem,
+      onDeviceOnly: json['on_device_only'] == true,
+      capturedOnDeviceOnly: json['captured_on_device_only'] as bool?,
       filePath: json['file_path'],
       seconds: json['seconds'] ?? chunkSizeInSeconds,
       device: json['device'] ?? "phone",
@@ -406,9 +423,8 @@ class Wal {
       jobId: json['job_id'],
       uploadedAt: json['uploaded_at'] ?? 0,
       syncedAt: json['synced_at'] ?? 0,
-      onDeviceOnly: json['on_device_only'] == true,
       keptForTranscriptRecovery: json['kept_for_transcript_recovery'] == true,
-    );
+    )..repairLegacyImportedCustody();
   }
 
   Map<String, dynamic> toJson() {
@@ -419,6 +435,8 @@ class Wal {
       'sample_rate': sampleRate,
       'status': status.name,
       'storage': storage.name,
+      'on_device_only': onDeviceOnly,
+      if (capturedOnDeviceOnly != null) 'captured_on_device_only': capturedOnDeviceOnly,
       'file_path': filePath,
       'seconds': seconds,
       'device': device,
@@ -444,7 +462,6 @@ class Wal {
       'job_id': jobId,
       'uploaded_at': uploadedAt,
       'synced_at': syncedAt,
-      'on_device_only': onDeviceOnly,
       if (keptForTranscriptRecovery) 'kept_for_transcript_recovery': true,
     };
   }

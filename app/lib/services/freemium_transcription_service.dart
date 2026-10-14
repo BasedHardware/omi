@@ -68,11 +68,20 @@ class FreemiumTranscriptionService extends ChangeNotifier {
   }
 
   /// Check if freemium (on-device) STT is ready to use
-  Future<FreemiumReadiness> checkReadiness() async {
+  static String effectiveLanguage({String? language}) {
+    final preferences = SharedPreferencesUtil();
+    final config = preferences.customSttConfig;
+    final selected = language ??
+        (config.isEnabled && config.provider == SttProvider.onDeviceWhisper
+            ? (config.language ?? 'en')
+            : preferences.userPrimaryLanguage);
+    return selected.isEmpty ? 'multi' : selected;
+  }
+
+  Future<FreemiumReadiness> checkReadiness({String? language}) async {
     if (iosOverride ?? Platform.isIOS) {
-      final language = SharedPreferencesUtil().userPrimaryLanguage;
       appleReadiness =
-          await (appleReadinessReader ?? OnDeviceAppleProvider.readiness)(language.isEmpty ? 'multi' : language);
+          await (appleReadinessReader ?? OnDeviceAppleProvider.readiness)(effectiveLanguage(language: language));
       _readiness = appleReadiness!.ready ? FreemiumReadiness.ready : FreemiumReadiness.requiresSetup;
       notifyListeners();
       return _readiness;

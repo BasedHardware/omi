@@ -58,13 +58,13 @@ class SttModeResolver {
 
   final bool Function() flagReader;
   final TranscriptionAllowanceSnapshot? Function() allowanceReader;
-  final Future<FreemiumReadiness> Function() readinessReader;
+  final Future<FreemiumReadiness> Function({String? language}) readinessReader;
   final CustomSttConfig? Function() onDeviceConfigBuilder;
 
   SttModeResolver({
     bool Function()? flagReader,
     TranscriptionAllowanceSnapshot? Function()? allowanceReader,
-    Future<FreemiumReadiness> Function()? readinessReader,
+    Future<FreemiumReadiness> Function({String? language})? readinessReader,
     CustomSttConfig? Function()? onDeviceConfigBuilder,
   })  : flagReader = flagReader ?? _defaultFlag,
         allowanceReader = allowanceReader ?? _defaultAllowance,
@@ -80,7 +80,8 @@ class SttModeResolver {
 
   static TranscriptionAllowanceSnapshot? _defaultAllowance() => TranscriptionAllowanceCache.current;
 
-  static Future<FreemiumReadiness> _defaultReadiness() => FreemiumTranscriptionService().checkReadiness();
+  static Future<FreemiumReadiness> _defaultReadiness({String? language}) =>
+      FreemiumTranscriptionService().checkReadiness(language: language);
 
   static CustomSttConfig? _defaultOnDeviceConfig() {
     final config = FreemiumTranscriptionService().getFreemiumConfig();
@@ -96,7 +97,10 @@ class SttModeResolver {
             !kIsWeb &&
             defaultTargetPlatform == TargetPlatform.iOS) ||
         (flag && !persistedCustomStt.isEnabled && _needsOnDeviceReadiness(allowance))) {
-      readiness = await readinessReader();
+      readiness = await readinessReader(
+          language: persistedCustomStt.isEnabled && persistedCustomStt.provider == SttProvider.onDeviceWhisper
+              ? persistedCustomStt.language
+              : null);
     }
     return resolve(
       flagEnabled: flag,

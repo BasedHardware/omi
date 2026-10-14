@@ -243,7 +243,9 @@ class PurePollingSocket implements IPureSocket {
 
     var droppedBytes = 0;
     while (_totalBufferBytes > config.maxBufferBytes && _audioFrames.isNotEmpty) {
-      droppedBytes += _audioFrames.removeAt(0).length;
+      final dropped = _audioFrames.removeAt(0);
+      droppedBytes += dropped.length;
+      _audioOffsetSeconds += (config.transcoder ?? PassThroughTranscoder()).sourceSeconds(dropped);
     }
     if (droppedBytes > 0) {
       final serviceId = config.serviceId ?? 'Polling';

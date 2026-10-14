@@ -3,6 +3,8 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 
 const mocks = vi.hoisted(() => ({
   opened: vi.fn(),
+  emptyPlans: false,
+
   selected: vi.fn(),
   succeeded: vi.fn(),
   upgrade: vi.fn(async () => ({ status: 'success' })),
@@ -44,30 +46,37 @@ vi.mock('@/lib/api', () => ({
   getDailySummarySettings: vi.fn(async () => null),
   getAllUsageData: vi.fn(async () => null),
   getUserSubscription: vi.fn(async () => mocks.subscription),
-  getAvailablePlans: vi.fn(async () => ({
-    plans: [
-      {
-        id: 'price_plus',
-        plan_id: 'plus',
-        title: 'Plus Monthly',
-        interval: 'month',
-        price_string: '$17.99/mo',
-        is_active: true,
-      },
-      {
-        id: 'price_unlimited',
-        plan_id: 'unlimited_v2',
-        title: 'Unlimited Annual',
-        interval: 'year',
-        price_string: '$22.49/mo',
-      },
-    ],
-  })),
+  getAvailablePlans: vi.fn(async () => {
+    return {
+      plans: mocks.emptyPlans
+        ? []
+        : [
+            {
+              id: 'price_plus',
+              plan_id: 'plus',
+              title: 'Plus Monthly',
+              interval: 'month',
+              price_string: '$17.99/mo',
+              is_active: true,
+            },
+            {
+              id: 'price_unlimited',
+              plan_id: 'unlimited_v2',
+              title: 'Unlimited Annual',
+              interval: 'year',
+              price_string: '$22.49/mo',
+            },
+          ],
+    };
+  }),
   upgradeSubscription: mocks.upgrade,
 }));
-import { SettingsPage } from '../SettingsPage';
+import { SettingsPage, UsageSectionContent } from '../SettingsPage';
 
-beforeEach(() => vi.clearAllMocks());
+beforeEach(() => {
+  vi.clearAllMocks();
+  mocks.emptyPlans = false;
+});
 
 describe('Account billing keeps paid identity separate from the allowance', () => {
   it('shows Plus with its finite meter and records a real checkout selection', async () => {
@@ -85,6 +94,41 @@ describe('Account billing keeps paid identity separate from the allowance', () =
       'usage_page',
     );
     expect(mocks.succeeded).toHaveBeenCalledExactlyOnceWith('unlimited_v2', 'year');
+  });
+
+  it('does not record a paywall when prices load while usage is visible', async () => {
+    const props: Parameters<typeof UsageSectionContent>[0] = {
+      allUsage: null,
+      subscription: { plan: 'plus', status: 'active' } as Parameters<
+        typeof UsageSectionContent
+      >[0]['subscription'],
+      onSubscriptionUpdate: vi.fn(),
+      cachedPlans: null,
+    };
+    const { rerender } = render(<UsageSectionContent {...props} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Usage' }));
+    const plans = [
+      {
+        id: 'price_plus',
+        plan_id: 'plus',
+        title: 'Plus Monthly',
+        interval: 'month',
+        price_string: '$17.99/mo',
+      },
+    ] as Parameters<typeof UsageSectionContent>[0]['cachedPlans'];
+    rerender(<UsageSectionContent {...props} cachedPlans={plans} />);
+    expect(mocks.opened).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: 'Plan' }));
+    await waitFor(() =>
+      expect(mocks.opened).toHaveBeenCalledExactlyOnceWith('usage_page', 'plus'),
+    );
+  });
+  it('does not record a paywall when no pricing choices are available', async () => {
+    mocks.emptyPlans = true;
+    mocks.subscription = { plan: 'plus', status: 'active' };
+    render(<SettingsPage />);
+    await screen.findByRole('heading', { name: 'Plus' });
+    expect(mocks.opened).not.toHaveBeenCalled();
   });
 
   it('records the Basic paywall impression only when plan choices become visible', async () => {

@@ -11,6 +11,7 @@ import 'package:omi/backend/preferences.dart';
 import 'package:omi/models/stt_result.dart';
 import 'package:omi/services/freemium_transcription_service.dart';
 import 'package:omi/services/sockets/on_device_apple_provider.dart';
+import 'package:omi/services/sockets/apple_speech_readiness.dart';
 import 'package:omi/services/sockets/on_device_whisper_provider.dart';
 import 'package:omi/services/sockets/local_stt_failure.dart';
 import 'package:omi/services/sockets/pure_polling.dart';
@@ -51,6 +52,25 @@ class SpeechThenSilence extends OnDeviceWhisperProvider {
   }
 }
 
+class PausedSpeech implements ISttProvider, RecoverableLocalSttProvider {
+  bool ready = false;
+  final offsets = <double>[];
+  @override
+  Future<bool> isReadyToRetry() async => ready;
+  @override
+  Future<SttTranscriptionResult?> transcribe(Uint8List bytes, {double audioOffsetSeconds = 0}) async {
+    if (!ready) throw const LocalSttFailure('permission_denied', canProbeRecovery: true);
+    offsets.add(audioOffsetSeconds);
+    final seconds = PassThroughTranscoder().sourceSeconds(bytes);
+    return SttTranscriptionResult(
+        audioEndSeconds: audioOffsetSeconds + seconds,
+        segments: [SttSegment(text: 'recovered', start: audioOffsetSeconds, end: audioOffsetSeconds + seconds)]);
+  }
+
+  @override
+  void dispose() {}
+}
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   setUp(() async {
@@ -70,6 +90,61 @@ void main() {
     expect(socket.audioOffset, 70);
     socket.stop();
   });
+  for (final rate in [8000, 16000]) {
+    test('real polling overflow advances source clock before recovery at $rate Hz', () async {
+      final provider = PausedSpeech();
+      final listener = Listener();
+      final socket = PurePollingSocket(
+          config: AudioPollingConfig(
+              minBufferSizeBytes: 1, maxBufferBytes: rate * 2 * 2, transcoder: PcmToWavTranscoder(sampleRate: rate)),
+          sttProvider: provider);
+      socket.setListener(listener);
+      await socket.connect();
+      socket.setAudioOffset(10);
+      socket.send(Uint8List(rate * 2));
+      await socket.flushNow(); // Actual failure retains the first second.
+      socket.send(Uint8List(rate * 2));
+      socket.send(Uint8List(rate * 2)); // Drop exactly the oldest source second.
+      expect(socket.audioOffset, 11);
+      expect(socket.bufferedBytes, rate * 4);
+      provider.ready = true;
+      await socket.retryLocalTranscription();
+      expect(provider.offsets, [11]);
+      expect(listener.messages.single, contains('"start":11'));
+      expect(socket.audioOffset, 13);
+      await socket.stop();
+    });
+  }
+  test('Opus source clock counts TOC duration, not compressed byte size', () {
+    expect(opusPacketSeconds(Uint8List.fromList([0x98, 0])), 0.02);
+    expect(opusPacketSeconds(Uint8List.fromList([0x99, 0, 0, 0])), 0.04);
+    expect(opusPacketSeconds(Uint8List.fromList([0x9b, 3, 0])), 0.06);
+  });
+  for (final configuredSupported in [true, false]) {
+    test('explicit language readiness overrides primary in both directions: $configuredSupported', () async {
+      debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
+      addTearDown(() => debugDefaultTargetPlatformOverride = null);
+      final configured = configuredSupported ? 'en' : 'zz';
+      SharedPreferencesUtil().userPrimaryLanguage = configuredSupported ? 'zz' : 'en';
+      final config = CustomSttConfig(provider: SttProvider.onDeviceWhisper, language: configured);
+      await SharedPreferencesUtil().saveCustomSttConfig(config);
+      final probed = <String>[];
+      final service = FreemiumTranscriptionService.testing(
+          iosOverride: true,
+          appleReadinessReader: (language) async {
+            probed.add(language);
+            return AppleSpeechReadiness('speech_analyzer', language == 'en' ? 'ready' : 'unavailable');
+          });
+      final resolver = SttModeResolver(flagReader: () => false, readinessReader: service.checkReadiness);
+      final decision = await resolver.decide(persistedCustomStt: config, codec: BleAudioCodec.pcm16);
+      expect(probed, [configured]);
+      expect(decision.blockSocket, !configuredSupported);
+      // Default readiness/preparation callers use the same configured language.
+      await service.checkReadiness();
+      expect(probed.last, configured);
+      expect(FreemiumTranscriptionService.effectiveLanguage(), configured);
+    });
+  }
   test('pcm8 and stereo normalize before native entry without changing duration', () {
     for (final rate in [8000, 16000, 44100, 48000]) {
       for (final channels in [1, 2]) {

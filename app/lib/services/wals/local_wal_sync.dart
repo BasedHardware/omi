@@ -392,7 +392,7 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
     // is owned by the signed-in account. Stamp only when unstamped so a
     // record surfaced by native recovery keeps its original owner.
     wal.ownerUid ??= _currentWalOwnerUid();
-    if (LocalSttCustody.keepsPhoneAudio) wal.onDeviceOnly = true;
+    wal.repairLegacyImportedCustody();
     // Native-storage recovery can surface old WALs while a new recording is
     // active. Only inherit the current session's location for WALs that began
     // at (or after) this session, never for historical recordings.
@@ -693,6 +693,7 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
             data: chunk,
             storage: WalStorage.mem,
             onDeviceOnly: _pendingPhoneOnly,
+            capturedOnDeviceOnly: _pendingPhoneOnly,
             status: syncedOffset == chunkFrameCount ? WalStatus.synced : WalStatus.miss,
             device: _deviceId ?? "omi",
             deviceModel: _deviceModel ?? "Omi",
@@ -807,6 +808,7 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
           data: runFrames.map((f) => f.payload).toList(),
           storage: WalStorage.mem,
           onDeviceOnly: _pendingPhoneOnly,
+          capturedOnDeviceOnly: _pendingPhoneOnly,
           status: syncedOffset == frameCount ? WalStatus.synced : WalStatus.miss,
           device: _deviceId ?? "omi",
           deviceModel: _deviceModel ?? "Omi",
@@ -913,6 +915,7 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
             data: frames.map((f) => f.payload).toList(),
             storage: WalStorage.mem,
             onDeviceOnly: _pendingPhoneOnly,
+            capturedOnDeviceOnly: _pendingPhoneOnly,
             status: syncedOffset == frameCount ? WalStatus.synced : WalStatus.miss,
             device: _deviceId ?? "omi",
             deviceModel: _deviceModel ?? "Omi",
@@ -1565,6 +1568,7 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
           data: chunk,
           storage: WalStorage.mem,
           onDeviceOnly: _pendingPhoneOnly,
+          capturedOnDeviceOnly: _pendingPhoneOnly,
           status: syncedOffset == chunkFrameCount ? WalStatus.synced : WalStatus.miss,
           device: _deviceId ?? "omi",
           deviceModel: _deviceModel ?? "Omi",
@@ -1803,6 +1807,7 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
       _pendingPhoneOnly = true;
       for (final wal in _wals.where((w) => w.storage == WalStorage.mem)) {
         wal.onDeviceOnly = true;
+        wal.capturedOnDeviceOnly = true;
       }
     }
     if (captureRoot != _captureEvidenceRoot) {
