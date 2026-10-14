@@ -1803,6 +1803,14 @@ class CaptureController extends ChangeNotifier
           deviceOnboardingProvider!.onVoiceQuestionFailed();
         }
       },
+      // Any other failure (transcription, network, an answer that never came) must not leave the
+      // tutorial on "processing your question": it offers to try again.
+      onFailed: () async {
+        await _playVoiceQuestionFailureHaptic(deviceId);
+        if (deviceOnboardingProvider?.isOnboardingActive == true) {
+          deviceOnboardingProvider!.onVoiceQuestionFailed();
+        }
+      },
     );
   }
 

@@ -14,6 +14,7 @@ abstract interface class CaptureExternalActions {
     List<List<int>> data, {
     required VoidCallback onFirstChunkRecived,
     required Future<void> Function() onNoSpeech,
+    Future<void> Function()? onFailed,
     required BleAudioCodec codec,
     required bool playResponseAudio,
   });
@@ -66,6 +67,7 @@ class NoopCaptureExternalActions implements CaptureExternalActions {
     List<List<int>> data, {
     required VoidCallback onFirstChunkRecived,
     required Future<void> Function() onNoSpeech,
+    Future<void> Function()? onFailed,
     required BleAudioCodec codec,
     required bool playResponseAudio,
   }) async {}

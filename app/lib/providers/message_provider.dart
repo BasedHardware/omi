@@ -603,6 +603,7 @@ class MessageProvider extends ChangeNotifier with ChatHistoryState {
     List<List<int>> audioBytes, {
     Function? onFirstChunkRecived,
     Future<void> Function()? onNoSpeech,
+    Future<void> Function()? onFailed,
     BleAudioCodec? codec,
     bool playResponseAudio = false,
   }) async {
@@ -769,6 +770,7 @@ class MessageProvider extends ChangeNotifier with ChatHistoryState {
             setShowTypingIndicator(false);
             _logChatFailure(ChatStreamFailureClass.quota, stage: 'voice_stream');
             completeChat(ProductOutcome.failure, failure: ProductFailure.quota);
+            if (onFailed != null) await onFailed();
             return;
           }
           final failure = _chunkFailureClass(chunk);
@@ -779,6 +781,7 @@ class MessageProvider extends ChangeNotifier with ChatHistoryState {
           }
           completeChat(ProductOutcome.failure, failure: _productFailureFor(failure));
           notifyListeners();
+          if (onFailed != null) await onFailed();
           return;
         }
       }
@@ -791,6 +794,7 @@ class MessageProvider extends ChangeNotifier with ChatHistoryState {
       }
       completeChat(ProductOutcome.failure, failure: _productFailureFor(failure.kind));
       notifyListeners();
+      if (onFailed != null) await onFailed();
     } finally {
       _voiceSendInFlight = false;
       setShowTypingIndicator(false);
@@ -801,6 +805,8 @@ class MessageProvider extends ChangeNotifier with ChatHistoryState {
         await OmiVoicePlaybackService.instance.interrupt(source: VoiceReplyPlaybackInterruptSource.streamError);
       }
       completeChat(ProductOutcome.failure, failure: ProductFailure.incomplete);
+      // The stream ended without an answer: whoever waits on it (the device tutorial) must hear so.
+      if (onFailed != null) await onFailed();
     }
   }
 

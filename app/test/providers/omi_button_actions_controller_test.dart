@@ -72,6 +72,7 @@ class _RecordingCaptureExternalActions extends NoopCaptureExternalActions {
     List<List<int>> data, {
     required void Function() onFirstChunkRecived,
     required Future<void> Function() onNoSpeech,
+    Future<void> Function()? onFailed,
     required BleAudioCodec codec,
     required bool playResponseAudio,
   }) async {

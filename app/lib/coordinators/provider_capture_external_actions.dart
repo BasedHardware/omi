@@ -38,6 +38,7 @@ class ProviderCaptureExternalActions implements CaptureExternalActions {
     List<List<int>> data, {
     required VoidCallback onFirstChunkRecived,
     required Future<void> Function() onNoSpeech,
+    Future<void> Function()? onFailed,
     required BleAudioCodec codec,
     required bool playResponseAudio,
   }) {
@@ -45,6 +46,7 @@ class ProviderCaptureExternalActions implements CaptureExternalActions {
       data,
       onFirstChunkRecived: onFirstChunkRecived,
       onNoSpeech: onNoSpeech,
+      onFailed: onFailed,
       codec: codec,
       playResponseAudio: playResponseAudio,
     );

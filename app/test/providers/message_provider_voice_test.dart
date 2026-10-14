@@ -127,4 +127,38 @@ void main() {
     await stalled.close();
     provider.dispose();
   });
+
+  // The device tutorial waits on this callback: a failed transcription, a dropped connection or a
+  // stream that ends with no answer must each say so, or the tutorial stays on "processing".
+  for (final (name, streamer) in <(String, Stream<ServerMessageChunk> Function())>[
+    (
+      'a transcription error',
+      () => Stream.value(ServerMessageChunk('id', 'Transcription failed', MessageChunkType.error))
+    ),
+    ('a dropped connection', () => Stream<ServerMessageChunk>.error(const SocketException('gone'))),
+    ('a stream with no answer', () => const Stream<ServerMessageChunk>.empty()),
+  ]) {
+    test('$name reports failure, not silence', () async {
+      var failed = 0;
+      var noSpeech = 0;
+      final provider = MessageProvider(
+        voiceAudioFileSaver: (_, __, ___) async => File('/tmp/unused-voice-question.opus'),
+        voiceReplyStreamer: (_, {language}) => streamer(),
+      );
+
+      await provider.sendVoiceMessageStreamToServer(
+        [
+          <int>[1]
+        ],
+        codec: BleAudioCodec.opus,
+        onNoSpeech: () async => noSpeech++,
+        onFailed: () async => failed++,
+      );
+
+      expect(failed, 1);
+      expect(noSpeech, 0);
+      expect(provider.showTypingIndicator, isFalse);
+      provider.dispose();
+    });
+  }
 }
