@@ -140,10 +140,10 @@ void main() {
       await tester.pumpWidget(
         ChangeNotifierProvider<ActionItemsProvider>.value(
           value: provider,
-          child: MaterialApp(
+          child: const MaterialApp(
             localizationsDelegates: AppLocalizations.localizationsDelegates,
-            supportedLocales: const [Locale('en')],
-            home: const Scaffold(
+            supportedLocales: [Locale('en')],
+            home: Scaffold(
               body: TaskCardBlock(block: TaskCardContentBlock(id: 'block-task', taskId: 'task-1')),
             ),
           ),
