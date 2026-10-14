@@ -19,6 +19,7 @@ import unicodedata
 from dataclasses import dataclass
 from typing import Any, Awaitable, Callable, Dict, List, Optional, Sequence
 
+from models.transcript_segment import legacy_conversation_segment_id
 from utils.conversations.transcript_chunks import build_transcript_chunks
 from utils.executors import db_executor, run_blocking
 from utils.log_sanitizer import sanitize
@@ -127,11 +128,22 @@ def chat_transcript_excerpts(
             continue
         if cid not in chunks_by_id:
             conv = allowed[cid]
+            # Chunk windows depend on segment count, not text length. Adding refs
+            # here preserves indexed chunk positions and leaves embedding text unchanged.
+            segments = [
+                (
+                    {
+                        **segment,
+                        'text': f"#{segment.get('id') or legacy_conversation_segment_id(cid, index)} {segment['text']}",
+                    }
+                    if (segment.get('text') or '').strip()
+                    else segment
+                )
+                for index, segment in enumerate(conv.get('transcript_segments') or [])
+            ]
             chunks_by_id[cid] = {
                 chunk['chunk_index']: chunk['text']
-                for chunk in build_transcript_chunks(
-                    conv.get('transcript_segments') or [], conv.get('started_at') or conv.get('created_at')
-                )
+                for chunk in build_transcript_chunks(segments, conv.get('started_at') or conv.get('created_at'))
             }
         excerpt = chunks_by_id[cid].get(chunk_index)
         if excerpt:
