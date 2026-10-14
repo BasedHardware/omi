@@ -121,6 +121,8 @@ overlay:
           value: parakeet-window,modulate-velma-2,soniox,dg-nova-3
         STT_RESILIENT_RECONNECT:
           value: 'false'
+        # Presence-only first rollout: keep percent zero and allowlist empty until all old sockets drain.
+        STT_LIVE_DEMAND_ENABLED: {value: 'true', category: rollout}
         STT_FAILOVER_RECOVERY_ENABLED:
           value: 'true'
           category: rollout

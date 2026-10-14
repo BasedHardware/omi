@@ -445,7 +445,7 @@ env:
   - name: STT_RESILIENT_RECONNECT
     value: "false"
   - name: STT_LIVE_DEMAND_ENABLED
-    value: "false"
+    value: "true"
   - name: STT_LIVE_DEMAND_PERCENT
     value: "0"
   - name: STT_LIVE_DEMAND_UID_ALLOWLIST
