@@ -12,12 +12,18 @@ import 'package:omi/utils/analytics/adapters/posthog_adapter.dart';
 // current distinct id. A failed fetch must not let cached (stale, possibly another person's) flags
 // decide, and the identity changing clears the verified snapshot.
 
-PostHogAnalyticsAdapter _adapter(MockClient client, {String? distinctId = 'u', DateTime Function()? clock}) =>
+PostHogAnalyticsAdapter _adapter(
+  MockClient client, {
+  String? distinctId = 'u',
+  DateTime Function()? clock,
+  Map<String, Object?> Function()? personProperties,
+}) =>
     PostHogAnalyticsAdapter(
       apiKey: 'phc_test',
       host: 'https://ph.test',
       client: client,
       distinctIdReader: () async => distinctId,
+      personPropertiesForFlags: personProperties,
       clock: clock,
     );
 
@@ -28,6 +34,23 @@ MockClient _answering(Map<String, Object?> body, {int status = 200}) => MockClie
     });
 
 void main() {
+  test('person properties ride along with the fetch; blank ones are dropped', () async {
+    Object? sent;
+    final client = MockClient((request) async {
+      sent = jsonDecode(request.body);
+      return http.Response(jsonEncode({'featureFlags': {}}), 200);
+    });
+    expect(await _adapter(client, personProperties: () => {'\$email': 'n@x.io', '\$name': ''}).reloadFeatureFlags(),
+        isTrue);
+    expect(sent, {
+      'api_key': 'phc_test',
+      'distinct_id': 'u',
+      'person_properties': {'\$email': 'n@x.io'}
+    });
+    expect(await _adapter(client, personProperties: () => {'\$email': ''}).reloadFeatureFlags(), isTrue);
+    expect(sent, {'api_key': 'phc_test', 'distinct_id': 'u'});
+  });
+
   test('a successful fetch verifies the flags and the reads use them', () async {
     final adapter = _adapter(_answering({
       'featureFlags': {'onboarding-webview': true, 'paywall-variant': 'outline', 'off-flag': false},
