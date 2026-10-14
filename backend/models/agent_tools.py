@@ -92,7 +92,8 @@ class LearnTerm(Strict):
 
 class Finish(Strict):
     summary: str = Field(
-        max_length=1000, description='What was checked and the tool-reported outcomes; never claim staging is application.'
+        max_length=1000,
+        description='What was checked and the tool-reported outcomes; never claim staging is application.',
     )
     notes: str = Field(
         default='',

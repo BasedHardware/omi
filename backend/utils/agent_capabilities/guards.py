@@ -77,7 +77,9 @@ def spelling_rejection(edit):
 
 @lru_cache(maxsize=1)
 def common_words():
-    return frozenset((Path(__file__).parent.parent / 'data' / 'common_english_words.txt').read_text(encoding='utf-8').split())
+    return frozenset(
+        (Path(__file__).parent.parent / 'data' / 'common_english_words.txt').read_text(encoding='utf-8').split()
+    )
 
 
 def vocabulary_rejection(term):

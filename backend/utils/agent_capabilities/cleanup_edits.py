@@ -68,7 +68,15 @@ def validate_cleanup(edit, records):
         if collection != 'people':
             raise ValueError('dream_invalid_person')
         if any(
-            row.get(field) for field in ('speech_samples', 'speaker_embedding', 'user_confirmed', 'is_user_created', 'pinned', 'label_evidence')
+            row.get(field)
+            for field in (
+                'speech_samples',
+                'speaker_embedding',
+                'user_confirmed',
+                'is_user_created',
+                'pinned',
+                'label_evidence',
+            )
         ):
             raise ValueError('dream_person_user_protected')
         if edit.before and edit.before != row.get('name'):
