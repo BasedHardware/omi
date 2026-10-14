@@ -1114,6 +1114,7 @@ def _default_device_runner(command: Sequence[str], timeout: float = 180.0) -> tu
             from .device_runner import (
                 XCODE_FIRST_LAUNCH_COMPLETE_MARKER,
                 XCODE_FIRST_LAUNCH_PENDING_MARKER,
+                XCODE_FIRST_LAUNCH_PROBE_TIMEOUT_MARKER,
             )
 
             first_launch = "pending"
@@ -1126,7 +1127,17 @@ def _default_device_runner(command: Sequence[str], timeout: float = 180.0) -> tu
                     check=False,
                 )
                 first_launch = "pending" if probe.returncode != 0 else "complete"
-            except (OSError, subprocess.TimeoutExpired):
+            except subprocess.TimeoutExpired:
+                # The probe itself hung: xcodebuild ran, so this is Xcode
+                # tooling-stack evidence (shared marker; the doctor's remedy
+                # must be retry/restart, never a fresh install).
+                diagnosis += (
+                    f" {XCODE_FIRST_LAUNCH_PROBE_TIMEOUT_MARKER} after 10s;"
+                    " xcodebuild ran and hung — the applicable step is the same"
+                    " tooling-stack retry/restart as below."
+                )
+                return 124, diagnosis
+            except OSError:
                 first_launch = "unknown"
             if first_launch == "pending":
                 # Shared marker: device_runner.device_doctor classifies this

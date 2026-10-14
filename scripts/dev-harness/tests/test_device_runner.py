@@ -258,6 +258,36 @@ class TestDoctor:
         assert "install Xcode" not in ios["remedy"]
         assert "retry" in ios["remedy"]
 
+    def test_real_xcrun_timeout_with_hung_probe_keeps_timeout_remedy(
+        self, env: dict, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """End-to-end: the status probe itself hanging is tooling evidence.
+
+        xcodebuild started and hung, so the doctor JSON must carry the
+        retry/restart remedy — never a fresh Xcode install (Codex P2 on
+        d190f49's probe-unknown fallthrough).
+        """
+
+        def run(command: Sequence[str], **_kwargs: object):
+            if command[0] == "xcrun":
+                raise subprocess.TimeoutExpired(cmd=list(command), timeout=25)
+            if command[0] == "xcodebuild":
+                raise subprocess.TimeoutExpired(cmd=list(command), timeout=10)
+            raise AssertionError(f"unexpected command: {command}")
+
+        monkeypatch.setattr(ms.subprocess, "run", run)
+        report = dr.device_doctor(
+            REPO_ROOT,
+            ios=dr.IosTooling(ms._default_device_runner),
+            env=env,
+        )
+        ios = report["checks"][0]
+        assert ios["check"] == "ios.tooling"
+        assert ios["status"] == "agent-remediable"
+        assert dr.XCODE_FIRST_LAUNCH_PROBE_TIMEOUT_MARKER in ios["detail"]
+        assert "install Xcode" not in ios["remedy"]
+        assert "retry" in ios["remedy"]
+
     def test_real_adb_timeout_keeps_server_remedy_not_reinstall(
         self, env: dict, monkeypatch: pytest.MonkeyPatch
     ) -> None:

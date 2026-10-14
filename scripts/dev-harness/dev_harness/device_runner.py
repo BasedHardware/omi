@@ -66,6 +66,10 @@ XCODE_FIRST_LAUNCH_PENDING_MARKER = "Xcode first launch is pending"
 # install-Xcode remedy would be wrong; the doctor keeps agent-remediable but
 # points at the timeout-specific retry/restart step instead.
 XCODE_FIRST_LAUNCH_COMPLETE_MARKER = "Xcode first launch is complete"
+# Marker for the case where the first-launch status probe ITSELF times out:
+# xcodebuild ran and hung, which is Xcode tooling-stack evidence, so the
+# doctor's remedy must be retry/restart — never a fresh Xcode install.
+XCODE_FIRST_LAUNCH_PROBE_TIMEOUT_MARKER = "Xcode first-launch status probe timed out"
 # Diagnosis marker for an adb timeout: adb is present and running, so the
 # doctor's remedy must be the adb-server/USB retry step, not a reinstall.
 ADB_TIMEOUT_MARKER = "adb timed out"
@@ -321,8 +325,10 @@ def device_doctor(
                     "`sudo xcodebuild -runFirstLaunch && sudo xcodebuild -license accept` "
                     "(or open Xcode.app and finish the prompt), then rerun `mobile-session device doctor`",
                 )
-            elif XCODE_FIRST_LAUNCH_COMPLETE_MARKER in detail:
-                # Xcode was just probed successfully: first launch is done, so
+            elif XCODE_FIRST_LAUNCH_COMPLETE_MARKER in detail or (
+                XCODE_FIRST_LAUNCH_PROBE_TIMEOUT_MARKER in detail
+            ):
+                # Xcode tooling ran (probe completed or the probe itself hung):
                 # an install-Xcode remedy would be irrelevant. Keep it agent
                 # work but point at the timeout-specific retry/restart step.
                 check(
