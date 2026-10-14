@@ -11,6 +11,10 @@ from tests.unit.test_live_replay_provider_pairs import setup_receiver, stop, unt
 from tests.unit.test_live_cost_router import controls  # noqa: F401
 from routers.listen.demand_routing import LiveDemandRouting
 from routers.listen import demand_routing
+from config.live_demand import resolve_live_demand
+from tests.unit.fixtures.replay_clock import VirtualClock
+from utils.audio_timeline import CaptureTimeline
+from utils.stt import recovery_state, replay_delivery, resilient_stream
 from utils.stt import streaming as st, parakeet_window as window, live_session
 from utils.stt.recovery_state import RecoveryState
 from utils.stt.resilient_stream import ResilientAudio
@@ -249,8 +253,6 @@ async def test_disconnect_during_fresh_demand_check_releases_candidate(monkeypat
 
 @pytest.mark.asyncio
 async def test_live_capture_during_healthy_switch_does_not_wait_on_prefix(monkeypatch):
-    from utils.audio_timeline import CaptureTimeline
-
     actual, _, raws, _, _ = await demand_receiver(monkeypatch)
     prefix = b'\x51\x01' * 3200
     tail = b'\x52\x01' * 480
@@ -292,10 +294,6 @@ async def test_live_capture_during_healthy_switch_does_not_wait_on_prefix(monkey
 
 @pytest.mark.asyncio
 async def test_default_hidden_dwell_fits_quiet_capture_replay_budget(monkeypatch):
-    from config.live_demand import resolve_live_demand
-    from tests.unit.fixtures.replay_clock import VirtualClock
-    from utils.stt import recovery_state, replay_delivery, resilient_stream
-
     actual, _, raws, _, _ = await demand_receiver(monkeypatch)
     timer = VirtualClock()
     monkeypatch.setattr(replay_delivery, 'clock', lambda: timer.now)
@@ -314,6 +312,55 @@ async def test_default_hidden_dwell_fits_quiet_capture_replay_budget(monkeypatch
         assert old.retired_for_replay
         assert actual.host.stt_model == 'parakeet-window'
         assert not actual.live_demand.policy.fallback
+    finally:
+        actual.stt_socket.finish()
+        await stop(raws)
+
+
+@pytest.mark.asyncio
+async def test_dead_cheap_candidate_during_fresh_check_pins_healthy_vendor(monkeypatch):
+    actual, _, raws, _, _ = await demand_receiver(monkeypatch)
+    old = actual.stt_socket
+    opened = []
+    connect = actual._managed_live_chain.connect
+
+    async def tracked(*args, **kwargs):
+        candidate = await connect(*args, **kwargs)
+        opened.append(candidate)
+        return candidate
+
+    async def degraded():
+        opened[-1].raw.fail('provider_5xx')
+        return True
+
+    monkeypatch.setattr(actual._managed_live_chain, 'connect', tracked)
+    monkeypatch.setattr(actual.live_demand, 'can_admit_window', degraded)
+    try:
+        assert not await actual._switch_live_demand('parakeet')
+        assert actual.stt_socket is old and not old.is_connection_dead
+        assert actual.live_demand.policy.fallback and not actual.live_demand.window_permitted
+        assert not await actual._switch_live_demand('parakeet')
+        assert len(opened) == 1
+    finally:
+        actual.stt_socket.finish()
+        await stop(raws)
+
+
+@pytest.mark.asyncio
+async def test_previous_vendor_death_does_not_condemn_healthy_cheap_candidate(monkeypatch):
+    actual, _, raws, _, _ = await demand_receiver(monkeypatch)
+    old = actual.stt_socket
+
+    async def previous_died():
+        old.fail('send_failed')
+        return True
+
+    monkeypatch.setattr(actual.live_demand, 'can_admit_window', previous_died)
+    try:
+        assert not await actual._switch_live_demand('parakeet')
+        assert actual.stt_socket is old and old.is_connection_dead
+        assert not actual.live_demand.policy.fallback
+        assert window.admission.active == 0
     finally:
         actual.stt_socket.finish()
         await stop(raws)

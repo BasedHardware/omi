@@ -143,7 +143,7 @@ async def connect_configured_chain(
     _routing_static: bool = False,
     optional_handover: bool = False,
 ) -> tuple[STTSocket, STTService]:
-    from utils.stt.streaming import STTService, ParakeetConnectionError, _circuit_for_primary  # type: ignore[reportPrivateUsage]  # shared circuit owner
+    from utils.stt.streaming import STTService, _circuit_for_primary  # type: ignore[reportPrivateUsage]  # shared circuit owner
 
     recovery_on = recovery_enabled()
     ordered: list[STTService] = []
@@ -1066,7 +1066,7 @@ async def connect_configured_chain(
                 return result
             break
     if optional_handover:
-        raise ParakeetConnectionError(prior_reason)
+        raise RejectedStream(prior_reason)
     CHAIN_EXHAUSTED.inc()
     pending = PendingLiveFailover(
         component='stt_selection',

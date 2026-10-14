@@ -6,6 +6,8 @@ import pytest
 
 from config.live_demand import language_qualified, resolve_live_demand
 from routers.listen.demand_routing import DemandPolicy
+from routers.listen.lane_meter import LiveLaneMeter
+from utils.stt.live_metrics import DEMAND_LANE_SECONDS, DEMAND_SWITCHES
 
 
 def test_dark_defaults_and_invalid_config(monkeypatch):
@@ -94,9 +96,6 @@ def test_declared_english_only(declared, multi, expected, qualified):
 
 
 def test_lane_meter_counts_flag_off_and_switches_once():
-    from routers.listen.lane_meter import LiveLaneMeter
-    from utils.stt.live_metrics import DEMAND_LANE_SECONDS, DEMAND_SWITCHES
-
     now = [0.0]
     meter = LiveLaneMeter(lambda: now[0])
     vendor = DEMAND_LANE_SECONDS.labels(lane='vendor', reason='baseline')

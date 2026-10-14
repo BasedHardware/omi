@@ -26,6 +26,8 @@ from utils.stt.live_health import health, bounded_language
 from utils.stt.live_router import connecting_target, target_circuit, TargetEngineMismatch, engine_matches
 from utils.stt.live_target_connect import connect_modulate
 from config.live_stt_registry import DEFAULT_IDS, Target, routing_on
+from config.stt_provider_policy import provider_for_model_token
+from utils.stt.live_chain import connect_configured_chain
 from config.audio_timeline import soniox_wire_ledger_enabled
 from utils.stt.soniox_wire_ledger import capture_spans
 from utils.stt.soniox_capture_axis import disable_socket_diagnostics, enabled as capture_axis_diagnostics_enabled
@@ -370,8 +372,6 @@ class LiveChainSession:
             models = ['parakeet-window']
         primary_service = host.stt_service
         if demand_lane is not None:
-            from config.stt_provider_policy import provider_for_model_token
-
             service = next(
                 (
                     st.STTService(provider_for_model_token(model))
@@ -425,8 +425,6 @@ class LiveChainSession:
                 finally:
                     connecting_target.reset(token)
             elif demand_lane is not None:
-                from utils.stt.live_chain import connect_configured_chain
-
                 socket, actual = await connect_configured_chain(
                     primary_service=primary_service,
                     connect_primary=primary,

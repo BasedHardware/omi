@@ -20,6 +20,9 @@ from config.capture_evidence import (
     listen_committed_capture_coverage_enabled,
 )
 from routers.listen.contracts import ConversationCaptureOrigin
+from routers.listen.demand_routing import attach_live_demand
+from routers.listen.demand_switch import switch_live_demand
+from routers.listen.lane_meter import LiveLaneMeter
 from utils.audio_timeline import CaptureTimeline, ProviderEpochTranslator
 from utils.stt.replay_capture_accounting import record_replay_sends
 from utils.capture_evidence import SourcePositionMap, parse_live_frame
@@ -245,8 +248,6 @@ class ListenReceiver(ReplayFilterMixin):
     def __init__(self, host: Any, channel_configs: List[ChannelConfig], channel_id_to_index: Dict[int, int]):
         self.soniox_idle_budget = SonioxIdleBudget()
         self.host = host
-        from routers.listen.lane_meter import LiveLaneMeter
-
         self.lane_meter = LiveLaneMeter()
         self.live_demand = None
         self.translation_demand = TranslationDemand()
@@ -1216,8 +1217,6 @@ class ListenReceiver(ReplayFilterMixin):
         ).inc()
 
     async def initialize_stt(self) -> bool:
-        from routers.listen.demand_routing import attach_live_demand
-
         self.live_demand = attach_live_demand(self)
         if self.live_demand is not None:
             await self.live_demand.publish()
@@ -1321,8 +1320,6 @@ class ListenReceiver(ReplayFilterMixin):
             return False
 
     async def _switch_live_demand(self, lane: str) -> bool:
-        from routers.listen.demand_switch import switch_live_demand
-
         return await switch_live_demand(self, lane)
 
     async def _failover_stt_socket(self) -> bool:

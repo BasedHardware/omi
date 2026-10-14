@@ -2,18 +2,17 @@
 
 import os
 
+from database.notifications import get_mentor_notification_frequency
+from database.redis_db import get_user_webhook_db, user_webhook_status_db
+from models.users import WebhookType, webhook_url_from_setting
+from utils import proactivity_flags
+from utils.apps import get_available_apps
+from utils.executors import db_executor, run_blocking
+from utils.mentor_admission import mentor_plan_allows_evaluation
+
 
 async def realtime_consumer_active(uid: str) -> bool:
-    from database.redis_db import get_user_webhook_db, user_webhook_status_db
-    from models.users import WebhookType, webhook_url_from_setting
-    from utils.apps import get_available_apps
-    from utils.executors import db_executor, run_blocking
-
     if os.getenv('MENTOR_PIPELINE') == 'cohort':
-        from database.notifications import get_mentor_notification_frequency
-        from utils.mentor_admission import mentor_plan_allows_evaluation
-        from utils import proactivity_flags
-
         frequency = await run_blocking(db_executor, get_mentor_notification_frequency, uid)
         # Match the producer's opt-out and paid admission. Buffered context
         # and cohort/flag uncertainty must never be mistaken for inactivity.

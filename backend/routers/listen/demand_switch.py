@@ -9,7 +9,7 @@ import asyncio
 
 from config.live_demand import resolve_live_demand
 from utils.observability.fallback import record_fallback
-from utils.stt.live_failure import PendingLiveFailover, live_stt_socket_is_dead
+from utils.stt.live_failure import PendingLiveFailover, live_stt_socket_is_dead, live_stt_terminal_reason
 from utils.stt.recovery_state import LiveRecoveryController, RecoveryState, current_recovery
 from utils.stt.replay_delivery import abort_replay_socket, socket_replay_limits
 from utils.stt import replay_delivery
@@ -93,10 +93,18 @@ async def switch_live_demand(receiver, lane: str) -> bool:
                 raw.retire_for_replay()
                 await abort_replay_socket(raw)
                 return False
-            if not host.state.active or live_stt_socket_is_dead(raw) or live_stt_socket_is_dead(previous):
+            if not host.state.active or live_stt_socket_is_dead(previous):
                 raw.retire_for_replay()
                 await abort_replay_socket(raw)
-                fallback(receiver, 'connection_lost')
+                return False
+            if live_stt_socket_is_dead(raw):
+                reason = live_stt_terminal_reason(raw, 'connection_lost')
+                if lane == 'parakeet':
+                    demand.policy.fallback = True
+                    demand.policy.window_permitted = False
+                raw.retire_for_replay()
+                await abort_replay_socket(raw)
+                fallback(receiver, reason)
                 return False
         except asyncio.CancelledError:
             raw.retire_for_replay()

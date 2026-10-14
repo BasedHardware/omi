@@ -64,6 +64,7 @@ from utils.live_speaker_suggestions import emit_speaker_suggestion as emit_live_
 from utils.stt.streaming import get_stt_service_for_language
 import utils.stt.replay_delivery as replay_delivery
 from utils.stt.live_failure import terminate_live_stt_backoff
+from config.live_demand import DemandSelection, language_qualified, resolve_live_demand
 from utils.stt.live_rollout import WindowSelection, managed_chain_enabled, window_allocation, window_selection_kwargs
 from utils.stt.live_metrics import (
     COST_CANARY_OUTCOME,
@@ -558,8 +559,6 @@ class ListenSessionRuntime:
             learned_sessions=learned_sessions,
         )
         self.language_observations = LiveLanguageObservations(self.language_profile)
-        from config.live_demand import DemandSelection, language_qualified, resolve_live_demand
-
         demand_vendor_start = (
             resolve_live_demand().admits(request.uid)
             and language_qualified(self)
@@ -1019,7 +1018,7 @@ class ListenSessionRuntime:
                 return
             demand = getattr(self.receiver, 'live_demand', None)
             if demand is not None:
-                self.spawn(demand.run(), name='live_demand_routing')
+                background.append(self.task_supervisor.create_lifetime_task(demand.run(), name='live_demand_routing'))
             record_listen_session_accepted(source=self.request.source, platform=self.client_device_context.platform)
             if not self.use_custom_stt:
                 self._no_audio_observation = ListenNoAudioObservation()
