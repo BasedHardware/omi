@@ -647,7 +647,6 @@ async def sync_local_files(
             archive_paths = await run_blocking(
                 sync_executor,
                 archive_mobile_batch_raw_files,
-                link_archive_captures,
                 uid,
                 paths,
                 {
@@ -1101,7 +1100,6 @@ async def sync_local_files_v2(
         archive_paths = await run_blocking(
             sync_executor,
             archive_mobile_batch_raw_files,
-            link_archive_captures,
             uid,
             paths,
             {

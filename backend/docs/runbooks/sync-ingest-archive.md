@@ -25,8 +25,9 @@ Archive/read support for already-produced objects is permanent. Rollback stops
 new archive writes/retirement/routing; it never makes stored raw or migrated
 renditions unreadable. Keep destination bucket/worker URL configuration while
 old objects/tasks exist. Stage C cannot remove already-written PCM and does not
-assume an hour of volatile raw is durable. Stage C commits bounded 60-second parts within each hour before the corresponding
-pusher flush, and commits the tail before teardown. Whole-pack capture-PCM hashes
+assume an hour of volatile raw is durable. Stage C queues supervised 60-second part commits within each hour without blocking
+the receive/STT loop. Pusher retires PCM only if the commit finishes before its
+batched upload; otherwise PCM stays. The tail drains before teardown. Whole-pack capture-PCM hashes
 allow identity verification across stateful Opus decoder boundaries without
 requiring a second lossy encoding. Consequently savings depend on
 committed coverage at the time pusher uploads; this trial must measure that
@@ -39,8 +40,9 @@ state/version and plaintext SHA-256. Missing old-client provenance is explicitly
 `unknown`, not a fabricated firmware, clock, gap-free assertion or training
 permission. Optional `X-Omi-Firmware-Version`, `X-Omi-Device-Model`, and existing
 `X-App-Version` carry upload provenance. Live sockets accept the corresponding
-headers and `X-Omi-Audio-Consent-Version`. Auto-assigned sync archives also carry
-`sync_job_id`; a multi-conversation original has no invented singular owner link.
+headers and `X-Omi-Audio-Consent-Version`. Auto-assigned sync archives carry
+`sync_job_id` and append completed `conversation_ids` under the owner fence;
+a multi-conversation original has no invented singular owner link.
 Enhanced protection encrypts unchanged canonical bytes. PCM captures use FLAC;
 playback resampling is a rendition operation only.
 
@@ -78,8 +80,11 @@ invoker SA and its endpoint-specific OIDC audience. Configure
 named task before the cohort ramp. Do not enable a worker without runtime-image,
 identity, index-readiness and route qualification.
 
-Set GitHub environment variable `BACKEND_SYNC_MEMORY=6Gi` for the separate
-memory trial; the backend-stack action validates only `6Gi|8Gi` and defaults
+First deploy this SHA at the default 8Gi through GitHub Actions. For the
+separate memory trial, the lead creates a tagged **no-traffic** 6Gi revision
+from that already-built same-SHA image, routes at most 5% to it and waits ≥12h.
+Only after qualification/full promotion set GitHub environment variable
+`BACKEND_SYNC_MEMORY=6Gi` for future deployments; the backend-stack action validates only `6Gi|8Gi` and defaults
 to `8Gi`. The deployment remains through the existing release admission and
 GitHub Actions workflow. Rollback: restore `8Gi`, redeploy the admitted image.
 Watch memory peak, OOMs, queue age and retry rate; 4.9 GiB is an observed sample

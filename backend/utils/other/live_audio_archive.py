@@ -1,5 +1,6 @@
 """Bounded per-owner/conversation/hour capture packs, before lossy processing."""
 
+import asyncio
 import hashlib
 import uuid
 
@@ -15,6 +16,7 @@ class LiveAudioArchive:
         self.host = host
         self.packs: dict[int, CapturePack] = {}
         self.failed = False
+        self.inflight: set[asyncio.Task] = set()
         self.capture_session_id = uuid.uuid4().hex
 
     async def append(
@@ -31,14 +33,14 @@ class LiveAudioArchive:
             return
         pack = self.packs.get(channel)
         if pack is not None and pack.boundary(conversation_id, timestamp, len(raw)):
-            await self.flush(channel)
+            self.flush(channel)
             pack = None
         if pack is None:
             pack = CapturePack(request.codec, request.sample_rate, 1)
             self.packs[channel] = pack
         pack.append(raw, conversation_id, timestamp, samples, decoded)
-        # Commit a bounded part before pusher receives its 60-second PCM flush.
-        # Volatile hour buffers are never authority for PCM retirement.
+        # Queue bounded commits ahead of pusher's batched upload without
+        # stalling capture/STT clocks. Uncommitted data never retires PCM.
         if (
             admitted(request.uid, 'STOP_PCM')
             and admitted(request.uid, 'READ')
@@ -46,28 +48,38 @@ class LiveAudioArchive:
             and pack.end is not None
             and pack.end - pack.start >= 60 - 0.0001
         ):
-            await self.flush(channel)
+            self.flush(channel)
 
-    async def flush(self, channel: int):
-        try:
-            await self._flush(channel)
-        except Exception:
-            # Keep today's PCM path on every archive failure. Disabling this
-            # session's optional writer also bounds memory during a GCS outage.
+    def _disable(self, reason: str):
+        if not self.failed:
             self.failed = True
             self.packs.clear()
             record_fallback(
                 component='pusher',
                 from_mode='raw_audio',
                 to_mode='private_cloud_sync',
-                reason='upload_failed',
+                reason=reason,
                 outcome='degraded',
             )
 
-    async def _flush(self, channel: int):
-        pack = self.packs.get(channel)
+    def flush(self, channel: int):
+        pack = self.packs.pop(channel, None)
         if pack is None or not pack.data:
             return
+        if len(self.inflight) >= 4:
+            self._disable('capacity_exhausted')
+            return
+        task = self.host.spawn(self._commit(pack, channel), name='raw_capture_commit')
+        self.inflight.add(task)
+        task.add_done_callback(self.inflight.discard)
+
+    async def _commit(self, pack: CapturePack, channel: int):
+        try:
+            await self._write(pack, channel)
+        except Exception:
+            self._disable('upload_failed')
+
+    async def _write(self, pack: CapturePack, channel: int):
         request = self.host.request
         context = request.client_device_context
         raw, metadata = await run_blocking(storage_executor, pack.encoded)
@@ -103,8 +115,13 @@ class LiveAudioArchive:
             f'{owner}/{hour}/{channel}/{pack.start:.6f}',
             metadata,
         )
-        self.packs.pop(channel, None)
 
     async def close(self):
         for channel in list(self.packs):
-            await self.flush(channel)
+            self.flush(channel)
+        if self.inflight:
+            _, pending = await asyncio.wait(tuple(self.inflight), timeout=15)
+            if pending:
+                self._disable('timeout')
+                for task in pending:
+                    task.cancel()

@@ -1,3 +1,4 @@
+import asyncio
 import hashlib
 import io
 import struct
@@ -256,11 +257,14 @@ async def test_retirement_parts_commit_before_minute_pcm_flush(monkeypatch, buck
             websocket=SimpleNamespace(headers={}),
         ),
     )
+    host.spawn = lambda coroutine, **kwargs: asyncio.create_task(coroutine)
     archive = LiveAudioArchive(host)
     # Collector seam: the decoder has already supplied each run's PCM.
     await archive.append(b'first-run', 'conversation', 1000, 480000, decoded=b'\x00\x00' * 480000)
     assert not buckets['canonical'].blobs
     await archive.append(b'second-run', 'conversation', 1030, 480000, decoded=b'\x00\x00' * 480000)
+    assert archive.inflight  # no GCS wait in the receive loop
+    await archive.close()
     blob = next(iter(buckets['canonical'].blobs.values()))
     assert blob.metadata['pcm_sha256'] == hashlib.sha256(b'\x00\x00' * 960000).hexdigest()
     assert not archive.packs
@@ -299,6 +303,7 @@ async def test_live_pack_tail_and_metadata(monkeypatch, buckets):
             websocket=SimpleNamespace(headers={'x-omi-firmware-version': '2.0'}),
         ),
     )
+    host.spawn = lambda coroutine, **kwargs: asyncio.create_task(coroutine)
     archive = LiveAudioArchive(host)
     await archive.append(b'unchanged-packet', 'conversation', 1000, 160)
     await archive.close()
@@ -307,6 +312,42 @@ async def test_live_pack_tail_and_metadata(monkeypatch, buckets):
     assert blob.metadata['firmware'] == '2.0'
     assert blob.metadata['app_version'] == '1.2'
     assert not archive.packs
+
+
+@pytest.mark.asyncio
+async def test_identical_silence_at_different_times_is_not_deduplicated(monkeypatch, buckets):
+    enable(monkeypatch, 'LIVE')
+    host = SimpleNamespace(
+        private_cloud_sync_enabled=True,
+        request=SimpleNamespace(
+            uid='owner',
+            codec='opus',
+            sample_rate=16000,
+            source='omi',
+            client_device_context=None,
+            websocket=SimpleNamespace(headers={}),
+        ),
+    )
+    host.spawn = lambda coroutine, **kwargs: asyncio.create_task(coroutine)
+    archive = LiveAudioArchive(host)
+    for timestamp in (1000, 1060):
+        await archive.append(b'identical-silence', 'conversation', timestamp, 160)
+        await archive.close()
+    blobs = list(buckets['canonical'].blobs.values())
+    assert len(blobs) == 2
+    assert blobs[0].data == blobs[1].data
+    assert blobs[0].metadata['capture_start'] != blobs[1].metadata['capture_start']
+
+
+def test_enhanced_capture_read_verifies_plaintext(monkeypatch, buckets):
+    monkeypatch.setattr(storage.users_db, 'get_data_protection_level', lambda uid: 'enhanced')
+    pack = CapturePack('pcm16', 16000)
+    pcm = b'\x01\x00' * 160
+    pack.append(pcm, 'conversation', 1000, 160)
+    raw, metadata = pack.encoded()
+    path = storage.archive_capture_bytes('owner', raw, 'raw-live', 'conversation/0/0/1000', metadata)
+    assert buckets['canonical'].blob(path).data != raw
+    assert read_pack(buckets['canonical'], path, 'owner') == pcm
 
 
 @pytest.mark.asyncio
@@ -329,6 +370,7 @@ async def test_archive_failure_retains_pcm_path(monkeypatch, buckets):
         raise OSError('archive unavailable')
 
     monkeypatch.setattr(live_audio_archive, 'archive_capture_bytes', unavailable)
+    host.spawn = lambda coroutine, **kwargs: asyncio.create_task(coroutine)
     archive = LiveAudioArchive(host)
     await archive.append(b'unchanged-packet', 'conversation', 1000, 160)
     await archive.close()
