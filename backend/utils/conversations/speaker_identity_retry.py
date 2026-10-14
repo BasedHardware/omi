@@ -226,6 +226,8 @@ class _RetryCohort:
     initial_count: int = 0
     current: Optional[Future] = None
     unresolved: tuple[str, ...] = ()
+    wake: asyncio.Event = field(default_factory=asyncio.Event)
+    loop: Optional[asyncio.AbstractEventLoop] = None
 
 
 _cohorts: dict[str, _RetryCohort] = {}
@@ -235,7 +237,12 @@ def _schedule_coalesced(uid: str, conversation_ids: Iterable[str]) -> bool:
     known = sorted(set(conversation_ids))
     with _coalescing_lock:
         cohort = _cohorts.get(uid)
-        known = [cid for cid in known if cohort is None or cid not in cohort.seen]
+        fresh = [cid for cid in known if cohort is None or cid not in cohort.seen]
+        if len(fresh) < len(known):
+            # Count suppressed submissions, including prior transient failures;
+            # retain seen IDs so resubmits cannot reset the cohort scan budget.
+            record_retry('late', 'skipped', 'cohort_seen', len(known) - len(fresh))
+        known = fresh
         if not known:
             return True
         record_retry('late', 'entry', 'candidate', len(known))
@@ -244,7 +251,9 @@ def _schedule_coalesced(uid: str, conversation_ids: Iterable[str]) -> bool:
             return False
         created = cohort is None
         if cohort is None:
-            cohort = _RetryCohort(deadline=time.monotonic() + sum(ADMISSION_RECHECK_DELAYS))
+            cohort = _RetryCohort(
+                deadline=time.monotonic() + sum(ADMISSION_RECHECK_DELAYS), loop=asyncio.get_running_loop()
+            )
             _cohorts[uid] = cohort
         room = MAX_LATE_IDENTITY_CANDIDATES - len(cohort.seen)
         candidates = known[:room]
@@ -252,6 +261,8 @@ def _schedule_coalesced(uid: str, conversation_ids: Iterable[str]) -> bool:
         cohort.pending.update(candidates)
         if created:
             cohort.initial_count = len(candidates)
+        elif cohort.acquired and candidates:
+            _signal_cohort(cohort)
     if len(known) > len(candidates):
         record_retry('late', 'skipped', 'scan_limit', len(known) - len(candidates))
     if not created:
@@ -289,26 +300,84 @@ def _release_cohort(uid: str, cohort: _RetryCohort, reason: str) -> None:
             except Exception:
                 pass
         dropped = len(cohort.pending | set(unresolved))
-        del _cohorts[uid]
-        if cohort.acquired:
-            _slots.release()
+        _retire_cohort_locked(uid, cohort)
     if dropped:
         record_retry('late', 'skipped', reason, dropped)
 
 
-async def _run_cohort(uid: str, cohort: _RetryCohort) -> None:
+def _signal_cohort(cohort: _RetryCohort) -> None:
+    # Slot cleanup can run on the storage worker's thread.
+    if cohort.loop is not None:
+        try:
+            cohort.loop.call_soon_threadsafe(cohort.wake.set)
+        except RuntimeError:
+            pass  # A closed loop cannot run remaining work during process shutdown.
+
+
+def _wake_oldest_cohort_locked() -> None:
+    for waiting in _cohorts.values():
+        if not waiting.acquired:
+            _signal_cohort(waiting)
+            return
+
+
+def _retire_cohort_locked(uid: str, cohort: _RetryCohort) -> None:
+    del _cohorts[uid]
+    if cohort.acquired:
+        _slots.release()
+    _wake_oldest_cohort_locked()
+
+
+def _try_admit_cohort(cohort: _RetryCohort) -> bool:
+    with _coalescing_lock:
+        oldest = next((c for c in _cohorts.values() if not c.acquired), None)
+        if oldest is not cohort or time.monotonic() > cohort.deadline or not _slots.acquire(blocking=False):
+            return False
+        cohort.acquired = True
+        # A second free slot can admit the next arrival immediately.
+        _wake_oldest_cohort_locked()
+        return True
+
+
+async def _wait_for_cohort_signal(cohort: _RetryCohort, seconds: float) -> bool:
+    try:
+        await asyncio.wait_for(cohort.wake.wait(), timeout=seconds)
+        return True
+    except asyncio.TimeoutError:
+        return False
+
+
+async def _admit_cohort(cohort: _RetryCohort) -> bool:
     for delay in (0, *ADMISSION_RECHECK_DELAYS):
-        remaining = cohort.deadline - time.monotonic()
-        if remaining < 0:
-            break
-        if delay:
-            await asyncio.sleep(min(delay, remaining))
-        if time.monotonic() <= cohort.deadline and _slots.acquire(blocking=False):
-            cohort.acquired = True
-            break
-        if not delay:
-            record_retry('late', 'deferred', 'slot_limit', cohort.initial_count)
-    if not cohort.acquired:
+        poll_at = min(cohort.deadline, time.monotonic() + delay)
+        while time.monotonic() <= cohort.deadline:
+            cohort.wake.clear()
+            if _try_admit_cohort(cohort):
+                return True
+            if not delay:
+                record_retry('late', 'deferred', 'slot_limit', cohort.initial_count)
+            left = poll_at - time.monotonic()
+            if left <= 0 or not await _wait_for_cohort_signal(cohort, left):
+                break
+            # Signals retry admission immediately without consuming a fallback
+            # poll or extending the original deadline. FIFO gates every attempt.
+    return _try_admit_cohort(cohort)
+
+
+async def _wait_for_coalesced_pending(cohort: _RetryCohort, seconds: float) -> None:
+    recheck_at = time.monotonic() + seconds
+    while True:
+        with _coalescing_lock:
+            cohort.wake.clear()
+            if cohort.pending:
+                return
+        left = recheck_at - time.monotonic()
+        if left <= 0 or not await _wait_for_cohort_signal(cohort, left):
+            return
+
+
+async def _run_cohort(uid: str, cohort: _RetryCohort) -> None:
+    if not await _admit_cohort(cohort):
         _release_cohort(uid, cohort, 'queue_expired')
         return
 
@@ -319,11 +388,11 @@ async def _run_cohort(uid: str, cohort: _RetryCohort) -> None:
             if not cohort.pending:
                 # Remove atomically with the empty check: a concurrent submit
                 # either joined this cohort or creates the next one.
-                _cohorts.pop(uid)
-                _slots.release()
+                _retire_cohort_locked(uid, cohort)
                 return
             candidates = tuple(sorted(cohort.pending))
             cohort.pending.clear()
+            cohort.wake.clear()
         if not remaining_passes or time.monotonic() > completion_deadline:
             cohort.unresolved = candidates
             _release_cohort(uid, cohort, 'pass_limit' if not remaining_passes else 'queue_expired')
@@ -334,9 +403,15 @@ async def _run_cohort(uid: str, cohort: _RetryCohort) -> None:
                 left = completion_deadline - time.monotonic()
                 if left < 0:
                     break
-                await asyncio.sleep(min(delay, left))
+                await _wait_for_coalesced_pending(cohort, min(delay, left))
                 if time.monotonic() > completion_deadline:
                     break
+            with _coalescing_lock:
+                # Fresh arrivals join this round while older rows still wait
+                # for completion. Neither deadline nor pass budget is reset.
+                cohort.unresolved = tuple(sorted(set(cohort.unresolved) | cohort.pending))
+                cohort.pending.clear()
+                cohort.wake.clear()
             cohort.current = submit_with_context(
                 storage_executor,
                 partial(_retry_batch, remaining_passes=remaining_passes),

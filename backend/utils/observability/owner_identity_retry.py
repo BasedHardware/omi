@@ -20,6 +20,7 @@ FUNNEL_REASONS = {
             'queue_limit',
             'queue_expired',
             'cancelled',
+            'cohort_seen',
             'scan_limit',
             'pass_limit',
             'missing',

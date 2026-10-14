@@ -29,7 +29,7 @@ def isolated(monkeypatch):
 
 
 async def settle():
-    for _ in range(12):
+    for _ in range(24):
         await asyncio.sleep(0)
 
 
@@ -241,17 +241,8 @@ async def test_coalesced_pending_cannot_reset_completion_deadline(monkeypatch):
 
 async def test_two_workers_and_queued_uid_recover_without_extra_thread(monkeypatch):
     futures = []
-    monkeypatch.setattr(retry, 'ADMISSION_RECHECK_DELAYS', (1,))
-    sleepers = asyncio.Event()
-    wake = asyncio.Event()
-
-    async def pause(delay):
-        sleepers.set()
-        await wake.wait()
-
-    monkeypatch.setattr(
-        retry, 'asyncio', SimpleNamespace(sleep=pause, shield=asyncio.shield, wrap_future=asyncio.wrap_future)
-    )
+    # Polling cannot account for progress within this test's event-loop turns.
+    monkeypatch.setattr(retry, 'ADMISSION_RECHECK_DELAYS', (60,))
 
     def submit(*args):
         f = Future()
@@ -262,11 +253,9 @@ async def test_two_workers_and_queued_uid_recover_without_extra_thread(monkeypat
     before = count('deferred', 'slot_limit')
     for i in range(3):
         assert retry.schedule_completed_identity_retries(str(i), ['a'])
-    await sleepers.wait()
+    await settle()
     assert len(futures) == 2 and count('deferred', 'slot_limit') == before + 1
     futures[0].set_result(retry.RetryRound((), 1))
-    await settle()
-    wake.set()
     await settle()
     assert len(futures) == 3
     for f in futures[1:]:
@@ -286,3 +275,205 @@ async def test_worker_submission_failure_releases_acquired_slot(monkeypatch):
     await settle()
     assert not retry._cohorts and count('skipped', 'submission_error') == before + 2
     assert retry._slots.acquire(blocking=False) and retry._slots.acquire(blocking=False)
+
+
+async def test_merged_completed_arrival_runs_while_previous_row_remains_processing(monkeypatch):
+    monkeypatch.setattr(retry, 'COMPLETION_RECHECK_DELAYS', (60, 60))
+    rounds, repairs = [], []
+
+    def read(uid, cid):
+        return dict(
+            id=cid,
+            status='processing' if cid == 'older' else 'completed',
+            private_cloud_sync_enabled=True,
+            updated_at='fresh',
+        )
+
+    def submit(pool, fn, uid, ids):
+        rounds.append(ids)
+        f = Future()
+        f.set_result(fn(uid, ids))
+        return f
+
+    monkeypatch.setattr(retry, 'submit_with_context', submit)
+    monkeypatch.setattr(stage.conversations_db, 'get_conversation', read)
+    monkeypatch.setattr(stage, 'refresh_completed_speaker_identity', lambda uid, cid, **kw: repairs.append(cid))
+    existing = set(executors._background_tasks)
+    assert retry.schedule_completed_identity_retries('u', ['older'])
+    task = (executors._background_tasks - existing).pop()
+    await settle()
+    assert rounds == [('older',)]
+    assert retry.schedule_completed_identity_retries('u', ['arrival'])
+    await settle()
+    assert rounds == [('older',), ('arrival', 'older')]
+    assert repairs == ['arrival']
+    assert retry._cohorts['u'].unresolved == ('older',)
+    task.cancel()
+    await settle()
+    assert not retry._cohorts
+
+
+async def test_fifo_admission_even_if_background_tasks_start_in_reverse(monkeypatch):
+    monkeypatch.setattr(retry, 'ADMISSION_RECHECK_DELAYS', (60,))
+    coros, tasks, calls, futures = [], [], [], []
+    start = retry.start_background_task
+
+    def defer(coro, **kw):
+        # A Future supplies the same done-callback seam without starting work.
+        task = asyncio.get_running_loop().create_future()
+        tasks.append(task)
+        coros.append(coro)
+        return task
+
+    def submit(pool, fn, uid, ids):
+        calls.append(uid)
+        f = Future()
+        futures.append(f)
+        return f
+
+    monkeypatch.setattr(retry, 'start_background_task', defer)
+    monkeypatch.setattr(retry, 'submit_with_context', submit)
+    for i in range(4):
+        assert retry.schedule_completed_identity_retries(str(i), ['a'])
+    live = [start(coro, name='fifo_test') for coro in reversed(coros)]
+    await settle()
+    assert calls == ['0', '1']  # Arrival order, independent of task start order.
+    futures[1].set_result(retry.RetryRound((), 1))
+    await settle()
+    assert calls == ['0', '1', '2']
+    futures[0].set_result(retry.RetryRound((), 1))
+    await settle()
+    assert calls == ['0', '1', '2', '3']
+    for f in futures[2:]:
+        f.set_result(retry.RetryRound((), 1))
+    await asyncio.gather(*live)
+    for task in tasks:
+        task.set_result(None)
+    await settle()
+    assert not retry._cohorts
+
+
+async def test_waiting_cancellation_wakes_next_arrival(monkeypatch):
+    monkeypatch.setattr(retry, 'ADMISSION_RECHECK_DELAYS', (60,))
+    assert retry._slots.acquire(blocking=False) and retry._slots.acquire(blocking=False)
+    tasks, futures, calls = [], [], []
+
+    def submit(pool, fn, uid, ids):
+        calls.append(uid)
+        f = Future()
+        futures.append(f)
+        return f
+
+    monkeypatch.setattr(retry, 'submit_with_context', submit)
+    for uid in ['oldest', 'next']:
+        existing = set(executors._background_tasks)
+        assert retry.schedule_completed_identity_retries(uid, ['a'])
+        tasks.append((executors._background_tasks - existing).pop())
+    await settle()
+    retry._slots.release()  # A free slot alone cannot let the younger waiter bypass FIFO.
+    assert not retry._try_admit_cohort(retry._cohorts['next'])
+    tasks[0].cancel()
+    await settle()
+    assert calls == ['next']
+    futures[0].set_result(retry.RetryRound((), 1))
+    await settle()
+    assert not retry._cohorts
+    retry._slots.release()
+
+
+async def test_slot_release_from_worker_thread_wakes_oldest_waiter(monkeypatch):
+    monkeypatch.setattr(retry, 'ADMISSION_RECHECK_DELAYS', (60,))
+    futures, calls, tasks = [], [], []
+
+    def submit(pool, fn, uid, ids):
+        calls.append(uid)
+        f = Future()
+        futures.append(f)
+        return f
+
+    monkeypatch.setattr(retry, 'submit_with_context', submit)
+    for uid in ['active', 'other', 'waiting']:
+        existing = set(executors._background_tasks)
+        assert retry.schedule_completed_identity_retries(uid, ['a'])
+        tasks.append((executors._background_tasks - existing).pop())
+    await settle()
+    tasks[0].cancel()
+    await settle()
+    worker = threading.Thread(target=futures[0].set_result, args=(retry.RetryRound((), 1),))
+    worker.start()
+    worker.join()
+    await settle()
+    assert calls == ['active', 'other', 'waiting']
+    for f in futures[1:]:
+        f.set_result(retry.RetryRound((), 1))
+    await settle()
+    assert not retry._cohorts
+
+
+@pytest.mark.parametrize('reason', ['read_error', 'processing_error', 'not_completed'])
+async def test_resubmits_after_transient_exit_are_observed_without_resetting_budget(monkeypatch, reason):
+    monkeypatch.setattr(retry, 'COMPLETION_RECHECK_DELAYS', (60,))
+
+    def read(uid, cid):
+        if cid == 'exited' and reason == 'read_error':
+            raise RuntimeError('synthetic')
+        return dict(
+            id=cid,
+            status='processing' if cid == 'pending' else 'failed',
+            private_cloud_sync_enabled=True,
+            updated_at='fresh',
+        )
+
+    skip = stage.completed_identity_retry_skip_reason
+
+    def classify(raw):
+        if raw['id'] == 'exited' and reason == 'processing_error':
+            raise RuntimeError('synthetic')
+        return skip(raw)
+
+    def submit(pool, fn, uid, ids):
+        f = Future()
+        f.set_result(fn(uid, ids))
+        return f
+
+    monkeypatch.setattr(stage.conversations_db, 'get_conversation', read)
+    monkeypatch.setattr(stage, 'completed_identity_retry_skip_reason', classify)
+    monkeypatch.setattr(retry, 'submit_with_context', submit)
+    existing = set(executors._background_tasks)
+    before = count('skipped', reason), count('skipped', 'cohort_seen'), count('entry', 'candidate')
+    assert retry.schedule_completed_identity_retries('u', ['exited', 'pending'])
+    task = (executors._background_tasks - existing).pop()
+    await settle()
+    assert count('skipped', reason) == before[0] + 1
+    assert retry.schedule_completed_identity_retries('u', ['exited'])
+    assert count('skipped', 'cohort_seen') == before[1] + 1
+    assert count('entry', 'candidate') == before[2] + 2
+    assert len(retry._cohorts['u'].seen) == 2 and not retry._cohorts['u'].pending
+    task.cancel()
+    await settle()
+    assert not retry._cohorts
+
+
+async def test_admission_poll_fallback_recovers_when_release_signal_is_missing(monkeypatch):
+    assert retry._slots.acquire(blocking=False) and retry._slots.acquire(blocking=False)
+    futures, delays = [], []
+
+    async def timeout_without_signal(cohort, seconds):
+        delays.append(seconds)
+        retry._slots.release()
+        return False
+
+    def submit(*args):
+        f = Future()
+        futures.append(f)
+        return f
+
+    monkeypatch.setattr(retry, '_wait_for_cohort_signal', timeout_without_signal)
+    monkeypatch.setattr(retry, 'submit_with_context', submit)
+    assert retry.schedule_completed_identity_retries('u', ['a'])
+    await settle()
+    assert delays == [5] and len(futures) == 1
+    futures[0].set_result(retry.RetryRound((), 1))
+    await settle()
+    assert not retry._cohorts
+    retry._slots.release()

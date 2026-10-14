@@ -91,7 +91,14 @@ Expected direction: fewer repeated submissions competing for slots, more
 eligible/committed attempts if metadata admission was limiting. There is no
 measured multiplicative effect. A 2× recovery scenario gives 4,266 eligible and
 4,236 commits per 12h; demand-only ceiling at unchanged mix is about 6,988 and
-6,939. These are planning scenarios, not rollout promises. Compare throughput,
-queue-limit/expiry/pass-limit skips and billed reads; owner-added remains the
+6,939. These are planning scenarios, not rollout promises. Fresh merged IDs wake completion waits and join the next inner round even while
+older candidates remain processing. Slot releases wake the oldest waiter with
+FIFO admission; polling remains the fallback. Suppressed resubmissions, including
+previous transient exits, emit `skipped/cohort_seen` without resetting budgets.
+
+Canary readout: `skipped/queue_limit`, `skipped/queue_expired`, `skipped/cancelled`,
+`deferred/coalesced`, `eligible/candidate` and `cas_committed/done`, plus
+`skipped/cohort_seen`, pass-limit skips and billed reads. `skipped/slot_limit`
+is legacy and goes quiet when this flag is on; owner-added remains the
 product-success metric. Roll back with false plus a process restart; no stored
 schema or historical conversation changes are required.
