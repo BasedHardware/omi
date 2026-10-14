@@ -439,20 +439,14 @@ def _get_agentic_module():
 
     sys.modules.pop("utils.retrieval.agentic", None)
 
-    # Module-scope import in agentic.py; stub is enough for CORE_TOOLS / convert_tools tests.
+    # Pure routing/ref helpers must load before chat_mount in this empty-path stub graph.
+    _load_module_from_file("utils.retrieval.chat_scope", BACKEND_DIR / "utils" / "retrieval" / "chat_scope.py")
+    _load_module_from_file("utils.retrieval.turn_refs", BACKEND_DIR / "utils" / "retrieval" / "turn_refs.py")
     _load_module_from_file("utils.retrieval.chat_mount", BACKEND_DIR / "utils" / "retrieval" / "chat_mount.py")
     _load_module_from_file(
         "database.firestore_transaction_retry",
         BACKEND_DIR / "database" / "firestore_transaction_retry.py",
     )
-    chat_scope_mod = _stub_module("utils.retrieval.chat_scope")
-    if not hasattr(chat_scope_mod, "build_chat_scope"):
-        chat_scope_mod.build_chat_scope = MagicMock(return_value=None)
-    if not hasattr(chat_scope_mod, "chat_scope_from_config"):
-        chat_scope_mod.chat_scope_from_config = MagicMock(return_value=None)
-    if not hasattr(chat_scope_mod, "apply_chat_scope_dates"):
-        chat_scope_mod.apply_chat_scope_dates = MagicMock(side_effect=lambda _s, a, b: (a, b, None))
-
     # First make sure tool submodules are stubbed (they import from database)
     tools_pkg = _stub_module("utils.retrieval.tools")
     if not hasattr(tools_pkg, "__path__"):
