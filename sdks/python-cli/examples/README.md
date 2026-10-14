@@ -18,6 +18,7 @@
   (Malay agent guide).
 * [`agent_quickstart.cy.md`](agent_quickstart.cy.md) — canllaw omi-cli ar gyfer
   asiantau (Welsh agent guide).
+* [`agent_quickstart.tkl.md`](agent_quickstart.tkl.md) — omi-cli mo nā ʻekene (Tokelauan Agent Quickstart).
 * [`agent_quickstart.th.md`](agent_quickstart.th.md) — คู่มือ omi-cli สำหรับ
   AI agent (Thai agent guide).
 * [`shell_examples.sh`](shell_examples.sh) — runnable shell snippets covering
