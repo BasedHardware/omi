@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:math';
 
 import 'package:http/http.dart' as http;
 import 'package:path_provider/path_provider.dart';
@@ -31,15 +32,22 @@ class AudioDownloadService {
       // Asking for URLs also enqueues artifact builds server-side; poll while
       // they finish instead of giving up immediately. A failed request throws —
       // the caller's download-failure handling reports it instead of silently
-      // polling an empty answer for a minute.
+      // polling an empty answer for a minute. Each poll re-enqueues pending
+      // builds server-side, so the delay grows (with jitter, capped) instead of
+      // staying at the server hint: a slow or stuck build must not turn one
+      // playback request into a fixed-rate poll storm.
       final deadline = DateTime.now().add(const Duration(seconds: 60));
+      final random = Random();
       var urlsResponse = switch (await getConversationAudioSignedUrls(conversation.id)) {
         ApiSuccess<AudioUrlsResponse>(:final data) => data,
         ApiFailure<AudioUrlsResponse>(:final problem) => throw problem,
       };
+      var pollDelayMs = urlsResponse.pollAfterMs ?? 3000;
       while (!urlsResponse.playbackReady && urlsResponse.files.isNotEmpty) {
         if (DateTime.now().isAfter(deadline)) break;
-        await Future.delayed(Duration(milliseconds: urlsResponse.pollAfterMs ?? 3000));
+        final jitter = 0.8 + 0.4 * random.nextDouble();
+        await Future.delayed(Duration(milliseconds: (pollDelayMs * jitter).round()));
+        pollDelayMs = min(pollDelayMs * 2, 10000);
         urlsResponse = switch (await getConversationAudioSignedUrls(conversation.id)) {
           ApiSuccess<AudioUrlsResponse>(:final data) => data,
           ApiFailure<AudioUrlsResponse>(:final problem) => throw problem,

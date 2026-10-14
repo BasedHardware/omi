@@ -124,6 +124,17 @@ def get_sync_tasks_max_attempts() -> int:
     return int(os.getenv('SYNC_TASKS_MAX_ATTEMPTS', '5'))
 
 
+def get_audio_merge_fence_retry_after_seconds() -> int:
+    """Deferral spacing for audio-merge tasks refused by a legal-holds fence.
+
+    Destructive operations (memory deletion, retention cleanup, account wipe)
+    can own an account gate for minutes; a fence refusal cannot succeed until
+    the gate lifts, so retries are spaced past typical gate lifetimes instead
+    of riding the queue's fast backoff ladder.
+    """
+    return int(os.getenv('AUDIO_MERGE_FENCE_RETRY_AFTER_SECONDS', '600'))
+
+
 def is_cloud_tasks_dispatch_enabled() -> bool:
     return os.getenv('SYNC_DISPATCH_MODE', 'inline') == 'cloud_tasks'
 

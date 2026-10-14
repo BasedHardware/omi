@@ -137,6 +137,14 @@ class TestEnqueueAudioMergeJob:
         with patch.dict(os.environ, {}, clear=False):
             os.environ.pop('AUDIO_MERGE_DISPATCH_MODE', None)
             assert ct.is_audio_merge_dispatch_enabled() is False
+
+    def test_fence_retry_after_default_and_env_override(self):
+        ct = _load_cloud_tasks()
+        with patch.dict(os.environ, {}, clear=False):
+            os.environ.pop('AUDIO_MERGE_FENCE_RETRY_AFTER_SECONDS', None)
+            assert ct.get_audio_merge_fence_retry_after_seconds() == 600
+        with patch.dict(os.environ, {'AUDIO_MERGE_FENCE_RETRY_AFTER_SECONDS': '30'}):
+            assert ct.get_audio_merge_fence_retry_after_seconds() == 30
         with patch.dict(os.environ, {'AUDIO_MERGE_DISPATCH_MODE': 'cloud_tasks'}):
             assert ct.is_audio_merge_dispatch_enabled() is True
 
@@ -319,6 +327,7 @@ class TestConversationMergeStartedAtCoercion:
             patch.object(routers_sync, 'try_acquire_job_run_lock', return_value='tok'),
             patch.object(routers_sync, 'release_job_run_lock'),
             patch.object(routers_sync, 'should_skip_background_account_mutation', return_value=False),
+            patch.object(routers_sync, 'probe_external_write_fence_for_merge'),
             patch.object(routers_sync.conversations_db, 'get_conversation', return_value=conversation),
             patch.object(routers_sync, 'compute_audio_files_fingerprint', return_value='fp1'),
             patch.object(
@@ -341,7 +350,7 @@ class TestConversationMergeStartedAtCoercion:
             return b'mp3', [{'len': 1.0, 'wall_offset': 0.0}]
 
         patches = self._patched(conversation, fake_build)
-        with patches[0], patches[1], patches[2], patches[3], patches[4], patches[5], patches[6], patches[7]:
+        with patches[0], patches[1], patches[2], patches[3], patches[4], patches[5], patches[6], patches[7], patches[8]:
             result = await routers_sync._run_conversation_merge_job(payload, task_retry_count=0)
 
         assert result.status_code == 200
@@ -360,7 +369,7 @@ class TestConversationMergeStartedAtCoercion:
             return b'mp3', [{'len': 1.0, 'wall_offset': 0.0}]
 
         patches = self._patched(conversation, fake_build)
-        with patches[0], patches[1], patches[2], patches[3], patches[4], patches[5], patches[6], patches[7]:
+        with patches[0], patches[1], patches[2], patches[3], patches[4], patches[5], patches[6], patches[7], patches[8]:
             result = await routers_sync._run_conversation_merge_job(payload, task_retry_count=0)
 
         assert result.status_code == 200

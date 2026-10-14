@@ -65,6 +65,7 @@ from utils.other.storage import (
 from utils.byok import has_byok_keys
 from utils.cloud_tasks import (
     enqueue_sync_job,
+    get_audio_merge_fence_retry_after_seconds,
     get_sync_tasks_max_attempts,
     is_cloud_tasks_dispatch_enabled,
     verify_audio_merge_cloud_tasks_oidc,
@@ -2300,8 +2301,49 @@ async def _run_sync_job_body(request: Request, task_retry_count: int):
             await run_blocking(db_executor, release_job_run_lock, job_id, lock_token)
 
 
+def probe_external_write_fence_for_merge(uid: str) -> None:
+    """Raise when a legal-holds fence would refuse this account's artifact writes.
+
+    Preflight for the merge jobs: while a destructive operation (memory
+    deletion, retention cleanup, account wipe) owns the account gate, the
+    artifact upload is refused after the build, so the GCS downloads and MP3
+    encode of every retry are wasted. This probe is the same two authority
+    reads ``external_write_fence`` performs around the write itself; the real
+    fence still backstops the upload, so the probe is only an optimization.
+    """
+    from database.legal_holds import (  # deferred: sync.py imported with database stubbed in test isolation
+        external_write_fence,
+    )
+
+    with external_write_fence(uid):
+        pass
+
+
+def audio_merge_fenced_response(task_retry_count: int, scope: str) -> JSONResponse:
+    """Queue response for a merge refused by a legal-holds fence.
+
+    A fence refusal cannot succeed until the owning operation finishes, so a
+    non-final attempt defers with 429 + Retry-After (Cloud Tasks honors the
+    header on 429) instead of feeding the fast 500-retry ladder that surfaces
+    as backend-sync 5xx bursts while a gate is held. The final attempt
+    consumes the task without the unavailable marker: that marker is the same
+    fenced write, and 'unavailable' would misreport audio that is merely
+    deferred — the /urls poll re-enqueues the build once the fence lifts.
+    """
+    if task_retry_count >= get_sync_tasks_max_attempts() - 1:
+        logger.info(f'audio_merge: fence held on final attempt, consuming task {scope}')
+        return JSONResponse(status_code=200, content={'status': 'failed_final'})
+    retry_after = get_audio_merge_fence_retry_after_seconds()
+    logger.info(f'audio_merge: destructive-operation fence active, deferring {scope} retry_after={retry_after}s')
+    return JSONResponse(
+        status_code=429,
+        headers={'Retry-After': str(retry_after)},
+        content={'status': 'deferred'},
+    )
+
+
 # response_model omitted: include_in_schema=False Cloud Tasks handler; JSONResponse status
-# codes (200/409/500) drive the queue protocol, not a typed client-facing body.
+# codes (200/409/429/500) drive the queue protocol, not a typed client-facing body.
 @router.post("/v2/audio-merge-jobs/run", include_in_schema=False)
 async def run_audio_merge_job(request: Request, task_retry_count: int = Depends(verify_audio_merge_cloud_tasks_oidc)):
     from database.legal_holds import (
@@ -2311,7 +2353,8 @@ async def run_audio_merge_job(request: Request, task_retry_count: int = Depends(
     """Cloud Tasks handler: build one playback MP3 artifact inside the request.
 
     Response semantics drive the queue: 2xx consumes the task, 409 while the
-    run-lock is held retries later, 500 retries with backoff. Idempotency:
+    run-lock is held retries later, 429 while a legal-holds fence owns the
+    account defers with Retry-After, 500 retries with backoff. Idempotency:
     named tasks dedupe enqueues, the run-lock serializes duplicate deliveries,
     and an existing artifact is acked without rebuilding.
     """
@@ -2357,6 +2400,11 @@ async def run_audio_merge_job(request: Request, task_retry_count: int = Depends(
             return JSONResponse(status_code=200, content={'status': 'exists'})
 
         try:
+            await run_blocking(db_executor, probe_external_write_fence_for_merge, uid)
+        except DestructiveOperationInProgress:
+            return audio_merge_fenced_response(task_retry_count, f'conv={conversation_id} file={audio_file_id}')
+
+        try:
             mp3_data = await run_blocking(
                 sync_executor, sync_playback.build_playback_artifact, uid, conversation_id, timestamps
             )
@@ -2374,6 +2422,8 @@ async def run_audio_merge_job(request: Request, task_retry_count: int = Depends(
                     f'conv={conversation_id} file={audio_file_id}'
                 )
             return JSONResponse(status_code=200, content={'status': 'dropped', 'reason': 'chunks_missing'})
+        except DestructiveOperationInProgress:
+            return audio_merge_fenced_response(task_retry_count, f'conv={conversation_id} file={audio_file_id}')
         except Exception as e:
             max_attempts = get_sync_tasks_max_attempts()
             if task_retry_count >= max_attempts - 1:
@@ -2414,12 +2464,9 @@ async def run_audio_merge_job(request: Request, task_retry_count: int = Depends(
             await run_blocking(
                 storage_executor, upload_playback_artifact, uid, conversation_id, audio_file_id, mp3_data
             )
+        except DestructiveOperationInProgress:
+            return audio_merge_fenced_response(task_retry_count, f'conv={conversation_id} file={audio_file_id}')
         except Exception as e:
-            # The upload fence raises DestructiveOperationInProgress while a
-            # destructive operation owns the account. Leaving it unhandled
-            # reports that frame to Error Reporting. The unavailable marker is
-            # the same fenced GCS write, so the final attempt must catch a
-            # second fence and still return failed_final.
             max_attempts = get_sync_tasks_max_attempts()
             if task_retry_count >= max_attempts - 1:
                 logger.error(f'audio_merge_failed_final conv={conversation_id} file={audio_file_id}: {e}')
@@ -2488,6 +2535,11 @@ async def _run_conversation_merge_job(payload: dict, task_retry_count: int):
             if existing:
                 return JSONResponse(status_code=200, content={'status': 'exists'})
 
+        try:
+            await run_blocking(db_executor, probe_external_write_fence_for_merge, uid)
+        except DestructiveOperationInProgress:
+            return audio_merge_fenced_response(task_retry_count, f'conv={conversation_id}')
+
         started_at_ts = persisted_started_seconds(conversation.get('started_at') or conversation.get('created_at'))
         if started_at_ts is None:
             chunk_starts = [
@@ -2520,6 +2572,8 @@ async def _run_conversation_merge_job(payload: dict, task_retry_count: int):
                     f'audio_merge: unavailable marker deferred reason=destructive_operation conv={conversation_id}'
                 )
             return JSONResponse(status_code=200, content={'status': 'dropped', 'reason': 'chunks_missing'})
+        except DestructiveOperationInProgress:
+            return audio_merge_fenced_response(task_retry_count, f'conv={conversation_id}')
         except Exception as e:
             max_attempts = get_sync_tasks_max_attempts()
             if task_retry_count >= max_attempts - 1:
@@ -2545,12 +2599,9 @@ async def _run_conversation_merge_job(payload: dict, task_retry_count: int):
 
         try:
             await run_blocking(storage_executor, upload_conversation_playback_artifact, uid, conversation_id, mp3_data)
+        except DestructiveOperationInProgress:
+            return audio_merge_fenced_response(task_retry_count, f'conv={conversation_id}')
         except Exception as e:
-            # Same contract as the build: a destructive-operation fence on the
-            # upload must retry (or mark unavailable on the final attempt)
-            # instead of escaping as an unhandled legal_holds traceback. The
-            # marker write is fenced too, so a second fence is logged and the
-            # task still completes as failed_final.
             max_attempts = get_sync_tasks_max_attempts()
             if task_retry_count >= max_attempts - 1:
                 logger.error(f'audio_merge_failed_final conversation artifact conv={conversation_id}: {e}')

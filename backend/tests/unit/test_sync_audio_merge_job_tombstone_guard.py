@@ -68,11 +68,14 @@ def _install_real_gcs_write_fence(monkeypatch):
     return fence_uids, uploads
 
 
-def _assert_marker_fence_classified(caplog, fence_uids, uploads):
-    assert fence_uids == ['user-1', 'user-1']
+def _assert_final_fence_consumes_without_marker(caplog, fence_uids, uploads):
+    """The fence refuses the upload on the final attempt: the task is consumed
+    without attempting the unavailable marker (that write is the same fenced
+    operation, and 'unavailable' would misreport deferred audio)."""
+    assert fence_uids == ['user-1']
     assert uploads == []
     assert any(
-        record.levelno == logging.INFO and 'unavailable marker deferred reason=destructive_operation' in record.message
+        record.levelno == logging.INFO and 'audio_merge: fence held on final attempt' in record.message
         for record in caplog.records
     )
     assert all(
@@ -204,6 +207,8 @@ class TestV2ConversationAudioMergeTombstoneGuard:
         with patch.object(routers_sync, 'try_acquire_job_run_lock', return_value='token-1'), patch.object(
             routers_sync, 'release_job_run_lock'
         ), patch.object(routers_sync, 'should_skip_background_account_mutation', return_value=False), patch.object(
+            routers_sync, 'probe_external_write_fence_for_merge'
+        ), patch.object(
             routers_sync.conversations_db, 'get_conversation', return_value=active_conv
         ), patch.object(
             routers_sync, 'compute_audio_files_fingerprint', return_value='fp-active'
@@ -226,8 +231,9 @@ class TestV2ConversationAudioMergeTombstoneGuard:
         mock_update.assert_called_once()
 
     @pytest.mark.anyio
-    async def test_v2_upload_fence_retries_instead_of_escaping(self):
-        """A destructive-operation fence on the artifact upload is a retry, not a crash."""
+    async def test_v2_upload_fence_defers_with_retry_after(self):
+        """A destructive-operation fence on the artifact upload defers with 429 +
+        Retry-After instead of feeding the fast 500-retry ladder."""
         from database.legal_holds import DestructiveOperationInProgress
 
         active_conv = _make_conversation(deleted=False, conversation_id='conv-active')
@@ -246,6 +252,8 @@ class TestV2ConversationAudioMergeTombstoneGuard:
         with patch.object(routers_sync, 'try_acquire_job_run_lock', return_value='token-1'), patch.object(
             routers_sync, 'release_job_run_lock'
         ), patch.object(routers_sync, 'should_skip_background_account_mutation', return_value=False), patch.object(
+            routers_sync, 'probe_external_write_fence_for_merge'
+        ), patch.object(
             routers_sync.conversations_db, 'get_conversation', return_value=active_conv
         ), patch.object(
             routers_sync, 'compute_audio_files_fingerprint', return_value='fp-active'
@@ -266,14 +274,55 @@ class TestV2ConversationAudioMergeTombstoneGuard:
         ):
             resp = await routers_sync._run_conversation_merge_job(payload, task_retry_count=0)
 
-        assert resp.status_code == 500
-        assert b'"status":"retry"' in resp.body
+        assert resp.status_code == 429
+        assert b'"status":"deferred"' in resp.body
+        assert int(resp.headers['retry-after']) > 0
         mock_update.assert_not_called()
         mock_unavailable.assert_not_called()
 
     @pytest.mark.anyio
+    async def test_v2_probe_fence_skips_build_and_defers(self):
+        """A fence detected by the pre-build probe must skip the GCS downloads and
+        MP3 encode entirely: the upload would be refused after all that work."""
+        from database.legal_holds import DestructiveOperationInProgress
+
+        active_conv = _make_conversation(deleted=False, conversation_id='conv-active')
+        payload = {
+            'schema_version': 2,
+            'uid': 'user-1',
+            'conversation_id': 'conv-active',
+            'fingerprint': 'fp-active',
+        }
+        mock_build = MagicMock()
+
+        with patch.object(routers_sync, 'try_acquire_job_run_lock', return_value='token-1'), patch.object(
+            routers_sync, 'release_job_run_lock'
+        ), patch.object(routers_sync, 'should_skip_background_account_mutation', return_value=False), patch.object(
+            routers_sync,
+            'probe_external_write_fence_for_merge',
+            side_effect=DestructiveOperationInProgress('external data write blocked by destructive operation'),
+        ), patch.object(
+            routers_sync.conversations_db, 'get_conversation', return_value=active_conv
+        ), patch.object(
+            routers_sync, 'compute_audio_files_fingerprint', return_value='fp-active'
+        ), patch.object(
+            routers_sync, 'get_conversation_playback_signed_url', return_value=None
+        ), patch.object(
+            routers_sync.sync_playback, 'build_conversation_playback_artifact', mock_build
+        ), patch.object(
+            routers_sync, 'get_sync_tasks_max_attempts', return_value=5
+        ):
+            resp = await routers_sync._run_conversation_merge_job(payload, task_retry_count=0)
+
+        assert resp.status_code == 429
+        assert b'"status":"deferred"' in resp.body
+        assert int(resp.headers['retry-after']) > 0
+        mock_build.assert_not_called()
+
+    @pytest.mark.anyio
     async def test_v2_upload_fence_marker_fence_returns_failed_final(self, monkeypatch, caplog):
-        """The real unavailable marker is fenced. That second fence is not a crash."""
+        """The fenced upload on the final attempt consumes the task without the
+        unavailable marker: that marker is the same fenced write."""
         active_conv = _make_conversation(deleted=False, conversation_id='conv-active')
         payload = {
             'schema_version': 2,
@@ -286,6 +335,8 @@ class TestV2ConversationAudioMergeTombstoneGuard:
         with patch.object(routers_sync, 'try_acquire_job_run_lock', return_value='token-1'), patch.object(
             routers_sync, 'release_job_run_lock'
         ), patch.object(routers_sync, 'should_skip_background_account_mutation', return_value=False), patch.object(
+            routers_sync, 'probe_external_write_fence_for_merge'
+        ), patch.object(
             routers_sync.conversations_db, 'get_conversation', return_value=active_conv
         ), patch.object(
             routers_sync, 'compute_audio_files_fingerprint', return_value='fp-active'
@@ -302,7 +353,7 @@ class TestV2ConversationAudioMergeTombstoneGuard:
 
         assert resp.status_code == 200
         assert b'"status":"failed_final"' in resp.body
-        _assert_marker_fence_classified(caplog, fence_uids, uploads)
+        _assert_final_fence_consumes_without_marker(caplog, fence_uids, uploads)
 
 
 class TestV1SingleFileAudioMergeTombstoneGuard:
@@ -369,8 +420,8 @@ class TestV1SingleFileAudioMergeTombstoneGuard:
         mock_build.assert_not_called()
 
     @pytest.mark.anyio
-    async def test_v1_upload_fence_retries_instead_of_escaping(self, monkeypatch):
-        """A destructive-operation fence on the v1 artifact upload is a retry, not a crash."""
+    async def test_v1_upload_fence_defers_with_retry_after(self, monkeypatch):
+        """A destructive-operation fence on the v1 artifact upload defers with 429."""
         active_conv = _make_conversation(deleted=False, conversation_id='conv-active')
         payload = {
             'uid': 'user-1',
@@ -383,6 +434,8 @@ class TestV1SingleFileAudioMergeTombstoneGuard:
         with patch.object(routers_sync, 'try_acquire_job_run_lock', return_value='token-1'), patch.object(
             routers_sync, 'release_job_run_lock'
         ), patch.object(routers_sync, 'should_skip_background_account_mutation', return_value=False), patch.object(
+            routers_sync, 'probe_external_write_fence_for_merge'
+        ), patch.object(
             routers_sync.conversations_db, 'get_conversation', return_value=active_conv
         ), patch.object(
             routers_sync.sync_playback, 'build_playback_artifact', return_value=b'fake_mp3'
@@ -391,14 +444,86 @@ class TestV1SingleFileAudioMergeTombstoneGuard:
         ):
             resp = await routers_sync.run_audio_merge_job(self._FakeRequest(payload), task_retry_count=0)
 
-        assert resp.status_code == 500
-        assert b'"status":"retry"' in resp.body
+        assert resp.status_code == 429
+        assert b'"status":"deferred"' in resp.body
+        assert int(resp.headers['retry-after']) > 0
         assert fence_uids == ['user-1']
         assert uploads == []
 
     @pytest.mark.anyio
+    async def test_v1_probe_fence_skips_build_and_defers(self):
+        """The v1 pre-build fence probe skips the merge work and defers."""
+        from database.legal_holds import DestructiveOperationInProgress
+
+        active_conv = _make_conversation(deleted=False, conversation_id='conv-active')
+        payload = {
+            'uid': 'user-1',
+            'conversation_id': 'conv-active',
+            'audio_file_id': 'file-1',
+            'timestamps': [100.0],
+        }
+        mock_build = MagicMock()
+
+        with patch.object(routers_sync, 'try_acquire_job_run_lock', return_value='token-1'), patch.object(
+            routers_sync, 'release_job_run_lock'
+        ), patch.object(routers_sync, 'should_skip_background_account_mutation', return_value=False), patch.object(
+            routers_sync, 'get_playback_artifact_signed_url', return_value=None
+        ), patch.object(
+            routers_sync,
+            'probe_external_write_fence_for_merge',
+            side_effect=DestructiveOperationInProgress('external data write blocked by destructive operation'),
+        ), patch.object(
+            routers_sync.conversations_db, 'get_conversation', return_value=active_conv
+        ), patch.object(
+            routers_sync.sync_playback, 'build_playback_artifact', mock_build
+        ), patch.object(
+            routers_sync, 'get_sync_tasks_max_attempts', return_value=5
+        ):
+            resp = await routers_sync.run_audio_merge_job(self._FakeRequest(payload), task_retry_count=0)
+
+        assert resp.status_code == 429
+        assert b'"status":"deferred"' in resp.body
+        assert int(resp.headers['retry-after']) > 0
+        mock_build.assert_not_called()
+
+    @pytest.mark.anyio
+    async def test_v1_existing_artifact_acked_before_fence_probe(self):
+        """An existing artifact acks 'exists' even while the account is fenced:
+        the read is unfenced and idempotent acks must not depend on the gate."""
+        from database.legal_holds import DestructiveOperationInProgress
+
+        active_conv = _make_conversation(deleted=False, conversation_id='conv-active')
+        payload = {
+            'uid': 'user-1',
+            'conversation_id': 'conv-active',
+            'audio_file_id': 'file-1',
+            'timestamps': [100.0],
+        }
+        mock_build = MagicMock()
+
+        with patch.object(routers_sync, 'try_acquire_job_run_lock', return_value='token-1'), patch.object(
+            routers_sync, 'release_job_run_lock'
+        ), patch.object(routers_sync, 'should_skip_background_account_mutation', return_value=False), patch.object(
+            routers_sync, 'get_playback_artifact_signed_url', return_value='https://signed/example'
+        ), patch.object(
+            routers_sync,
+            'probe_external_write_fence_for_merge',
+            side_effect=DestructiveOperationInProgress('external data write blocked by destructive operation'),
+        ), patch.object(
+            routers_sync.conversations_db, 'get_conversation', return_value=active_conv
+        ), patch.object(
+            routers_sync.sync_playback, 'build_playback_artifact', mock_build
+        ):
+            resp = await routers_sync.run_audio_merge_job(self._FakeRequest(payload), task_retry_count=0)
+
+        assert resp.status_code == 200
+        assert b'"status":"exists"' in resp.body
+        mock_build.assert_not_called()
+
+    @pytest.mark.anyio
     async def test_v1_upload_fence_marker_fence_returns_failed_final(self, monkeypatch, caplog):
-        """The real v1 unavailable marker is fenced. That second fence is not a crash."""
+        """The fenced v1 upload on the final attempt consumes the task without the
+        unavailable marker: that marker is the same fenced write."""
         active_conv = _make_conversation(deleted=False, conversation_id='conv-active')
         payload = {
             'uid': 'user-1',
@@ -411,6 +536,8 @@ class TestV1SingleFileAudioMergeTombstoneGuard:
         with patch.object(routers_sync, 'try_acquire_job_run_lock', return_value='token-1'), patch.object(
             routers_sync, 'release_job_run_lock'
         ), patch.object(routers_sync, 'should_skip_background_account_mutation', return_value=False), patch.object(
+            routers_sync, 'probe_external_write_fence_for_merge'
+        ), patch.object(
             routers_sync.conversations_db, 'get_conversation', return_value=active_conv
         ), patch.object(
             routers_sync.sync_playback, 'build_playback_artifact', return_value=b'fake_mp3'
@@ -423,4 +550,4 @@ class TestV1SingleFileAudioMergeTombstoneGuard:
 
         assert resp.status_code == 200
         assert b'"status":"failed_final"' in resp.body
-        _assert_marker_fence_classified(caplog, fence_uids, uploads)
+        _assert_final_fence_consumes_without_marker(caplog, fence_uids, uploads)
