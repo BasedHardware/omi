@@ -398,7 +398,7 @@ and exits 1 without retrying. Do not treat admission refusal as route success.
 The pinned client validates HTTP 101 and `{"type":"ready"}`; sample rate is
 configured by `?sample_rate=16000`, **not** a made-up start/config frame. It sends
 ordered mono PCM16 and literal `finalize`. The gate preserves wire order and requires non-empty text **before** finalize,
-finite nonnegative non-inverted spans, settled client tasks and a clean WebSocket finish (1000, 1001 or empty-frame 1005).
+finite nonnegative non-inverted spans, settled client tasks and the lead-ratified legacy-parity finish below.
 `parakeet/main.py` forwards `StreamSession.feed`/`flush` results unchanged.
 `stream_handler.py` removes the shared text of cumulative RNNT hypotheses, but
 `_build_segments` keeps utterance spans; suffixes/revisions can overlap. The
@@ -421,13 +421,20 @@ cleanup at ten seconds and cancels stragglers. Context exit and `_run` finally
 call `ws.close()`. A timeout can initiate client close before a server close frame;
 there is no promised server frame to await. Production listen teardown awaits this
 drain and does not demand a server 1000 acknowledgment.
-The gate requires a settled connection with pinned websockets' clean codes
-1000/1001/1005, no task exceptions and no dead connection. Expected bounded-drain
-cancellation is reported, not a server error; unfinished tasks, missing close
-status, 1006/1011 or any other abnormal status still fail. Every stream receipt
-records actual `close_code`, `close_reason`, `sender_task` and `receiver_task`
-states (exception type only, no exception payload). The lead's next receipt
-establishes the actual transport code; the previous receipt did not record it.
+**Legacy parity ruling:** the lead's `probe-gke-e7c002b1.jsonl` reports 1006 with
+an empty reason for all twelve GKE v3 checks across Gateway and legacy routes.
+The gate accepts this only after a successfully sent literal `finalize`, valid
+non-empty speech received before finalize, and both sender/receiver tasks
+completed without cancellation or exception. Such a receipt records
+`close_kind=server_dropped_after_finalize` and `finalize_sent=true`. This qualifies
+parity with today's legacy behavior; it does not certify a clean close handshake.
+1006 before finalize, missing speech, malformed segments, dead connections,
+cancelled/unfinished/error tasks in the 1006 case, and 1011 still fail. Standard
+1000/1001/empty-frame 1005 closes remain clean; bounded cleanup cancellation is
+reported for those clean codes. Receipts retain actual close code/reason, task
+states (exception type only), and transcript-free failure diagnostics.
+The clean-close server correction is a separate PR based on main; it is excluded
+from #21486 and must not be merged or deployed by this qualification run.
 There is no server finalize-ack frame to invent. After parallel streams release
 leases, one connection idles for 35s (crossing the server's 30s receive interval),
 then transcribes; a new connection must transcribe again. Per-check deadline is

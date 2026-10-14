@@ -158,6 +158,7 @@ async def stream_check(streaming: Any, base: str, pcm: bytes, idle_seconds: floa
     segments: list[dict[str, Any]] = []
     first_text = asyncio.Event()
     sent_bytes = 0
+    finalize_sent = False
     invalid_reason: str | None = None
     first_text_at: float | None = None
     started = time.monotonic()
@@ -212,6 +213,17 @@ async def stream_check(streaming: Any, base: str, pcm: bytes, idle_seconds: floa
         # The pinned websockets 12 client exposes response_headers, not status.
         await socket.start()
         ws = socket._ws
+        original_send = ws.send
+
+        async def observe_send(data: Any) -> None:
+            nonlocal finalize_sent
+            await original_send(data)
+            if data == 'finalize':
+                finalize_sent = True
+
+        # Observe successful wire writes; queuing drain alone isn't proof that
+        # finalize was sent. Keep the served client's payload/control flow.
+        ws.send = observe_send
         if not ws.open or ws.response_headers.get('Upgrade', '').lower() != 'websocket':
             raise QualificationFailure('WebSocket upgrade was not confirmed')
         await asyncio.sleep(idle_seconds)
@@ -237,19 +249,28 @@ async def stream_check(streaming: Any, base: str, pcm: bytes, idle_seconds: floa
         await socket.drain_and_close()  # Existing client sends literal "finalize".
         if invalid_reason or socket.is_connection_dead:
             raise QualificationFailure(invalid_reason or 'connection dead during finalize')
-        # The handler flushes/returns without websocket.close(). Production
-        # drains wait 5s, bound receiver cleanup, then close from the client.
-        # Never require a server 1000 ACK that isn't part of this protocol.
-        if ws.close_code not in CLEAN_CLOSE_CODES:
-            raise QualificationFailure('stream finished with abnormal or missing close code')
-        for name, task in (('sender', socket._sender_task), ('receiver', socket._receiver_task)):
-            state = task_state(task)['state']
+        states = {
+            name: task_state(task)['state']
+            for name, task in (('sender', socket._sender_task), ('receiver', socket._receiver_task))
+        }
+        for name, state in states.items():
             if state in {'missing', 'pending', 'error'}:
                 raise QualificationFailure(f'stream finalization left {name} task {state}')
-        # Cancellation is the existing drain's bounded-cleanup fallback, not
-        # proof of a server fault. Require a completed clean close nevertheless.
+        if ws.close_code == 1006:
+            # Lead-ratified legacy parity: main.py flushes then returns without
+            # a close frame. This exception requires actual finalize delivery,
+            # validated speech before it, and both tasks completed normally.
+            if not finalize_sent or first_text_at is None or any(state != 'completed' for state in states.values()):
+                raise QualificationFailure('1006 without sent finalize, prior speech and completed tasks')
+            close_kind = 'server_dropped_after_finalize'
+        elif ws.close_code in CLEAN_CLOSE_CODES:
+            close_kind = 'normal'
+        else:
+            raise QualificationFailure('stream finished with abnormal or missing close code')
         return {
             'http_status': 101,
+            'finalize_sent': finalize_sent,
+            'close_kind': close_kind,
             'sample_rate': SAMPLE_RATE,
             'ready': True,
             'pcm_bytes': sent_bytes,
@@ -265,6 +286,7 @@ async def stream_check(streaming: Any, base: str, pcm: bytes, idle_seconds: floa
         }
     except BaseException as error:
         diagnostics = {
+            'finalize_sent': finalize_sent,
             'segment_spans': spans[:5],
             'is_connection_dead': socket.is_connection_dead,
             'overlap_against_previous_end': overlap_count,

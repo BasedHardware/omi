@@ -96,7 +96,7 @@ async def test_stream_uses_real_ready_pcm_finalize_protocol(monkeypatch, fast_cl
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize('kwargs', [{'ready': 'wrong'}, {'order': False}, {'close_code': 1006}, {'close_code': 1011}])
+@pytest.mark.parametrize('kwargs', [{'ready': 'wrong'}, {'order': False}, {'close_code': 1011}])
 async def test_stream_rejects_invalid_protocol_order_or_close(monkeypatch, fast_clock, kwargs):
     transport = WebSocketTransport(**kwargs)
     monkeypatch.setattr(streaming.websockets, 'connect', transport.connect)
@@ -383,7 +383,7 @@ async def test_clean_finish_codes_match_served_websockets_client(monkeypatch, fa
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize('close_code', [1006, 1011])
+@pytest.mark.parametrize('close_code', [1011])
 async def test_abnormal_close_receipt_even_when_drain_suppresses_receive_error(
     monkeypatch, fast_clock, capsys, close_code
 ):
@@ -470,9 +470,9 @@ async def test_actual_main_handler_flushes_returns_without_close_code(monkeypatc
 
             async def server():
                 await namespace['stream_transcribe'](websocket, 16000, None, None)
-                # Transport may end the completed ASGI stream with an empty
-                # close frame: websockets reports synthetic 1005, not wire 1005.
-                self.close_code = 1005
+                # Served ASGI transport drops TCP after handler return, without
+                # a close frame: production receipts report synthetic 1006.
+                self.close_code = 1006
                 await self.close()
 
             server_task = asyncio.create_task(server())
@@ -491,7 +491,9 @@ async def test_actual_main_handler_flushes_returns_without_close_code(monkeypatc
     transport = MainTransport()
     monkeypatch.setattr(streaming.websockets, 'connect', transport.connect)
     result = await probe.stream_check(streaming, 'http://legacy', b'\0\0' * 1600)
-    assert result['close_code'] == 1005
+    assert result['close_code'] == 1006
+    assert result['close_kind'] == 'server_dropped_after_finalize'
+    assert result['finalize_sent'] is True
     assert result['text'] == 'blue bird sings'
     assert transport.sent[-1] == 'finalize'
     transport.app_close.assert_not_awaited()
@@ -534,3 +536,67 @@ async def test_task_state_reports_error_type_without_payload():
     task = asyncio.create_task(fail())
     await asyncio.gather(task, return_exceptions=True)
     assert probe.task_state(task) == {'state': 'error', 'exception_type': 'RuntimeError'}
+
+
+@pytest.mark.asyncio
+async def test_1006_before_finalize_fails_even_after_speech(monkeypatch, fast_clock, capsys):
+    class EarlyDrop(WebSocketTransport):
+        async def send(self, data):
+            await super().send(data)
+            if self.pcm_count == 4:
+                await self.close()
+
+    transport = EarlyDrop(close_code=1006)
+    monkeypatch.setattr(streaming.websockets, 'connect', transport.connect)
+    _, pcm = probe.load_corpus()
+    assert not await probe.receipt('v3', lambda: probe.stream_check(streaming, 'http://legacy', pcm), 5, {})
+    result = json.loads(capsys.readouterr().out)
+    assert result['close_code'] == 1006 and result['finalize_sent'] is False
+    assert result['outcome'] == 'fail' and result['first_words'] == ''
+    assert 'finalize' not in transport.sent
+
+
+@pytest.mark.asyncio
+async def test_no_speech_fails_without_sending_finalize(monkeypatch, fast_clock, capsys):
+    original_wait = asyncio.wait_for
+
+    async def short_wait(awaitable, timeout):
+        return await original_wait(awaitable, 0.01 if timeout == 15 else timeout)
+
+    monkeypatch.setattr(asyncio, 'wait_for', short_wait)
+
+    class SilentTransport(WebSocketTransport):
+        async def send(self, data):
+            self.sent.append(data)
+
+    transport = SilentTransport(close_code=1006)
+    monkeypatch.setattr(streaming.websockets, 'connect', transport.connect)
+    _, pcm = probe.load_corpus()
+    assert not await probe.receipt('v3', lambda: probe.stream_check(streaming, 'http://legacy', pcm), 5, {})
+    result = json.loads(capsys.readouterr().out)
+    assert result['reason'] == 'empty text before finalize'
+    assert result['finalize_sent'] is False and 'finalize' not in transport.sent
+
+
+@pytest.mark.asyncio
+async def test_1006_with_task_error_fails(monkeypatch, fast_clock, capsys):
+    original_drain = streaming.ParakeetWebSocketSocket.drain_and_close
+
+    async def broken_drain(socket):
+        await original_drain(socket)
+
+        async def fail():
+            raise RuntimeError('private error payload')
+
+        socket._receiver_task = asyncio.create_task(fail())
+        await asyncio.gather(socket._receiver_task, return_exceptions=True)
+
+    monkeypatch.setattr(streaming.ParakeetWebSocketSocket, 'drain_and_close', broken_drain)
+    transport = WebSocketTransport(close_code=1006)
+    monkeypatch.setattr(streaming.websockets, 'connect', transport.connect)
+    _, pcm = probe.load_corpus()
+    assert not await probe.receipt('v3', lambda: probe.stream_check(streaming, 'http://legacy', pcm), 5, {})
+    result = json.loads(capsys.readouterr().out)
+    assert result['reason'] == 'stream finalization left receiver task error'
+    assert result['finalize_sent'] is True
+    assert result['first_words'] == '' and 'private error payload' not in json.dumps(result)
