@@ -381,7 +381,10 @@ def build_storefront(
                 tier_id=f'{plan}:ladder_v1',
                 plan_id=plan,
                 name=plan_name(plan, ladder),
-                recommended=bool(badge) and plan == badge and is_higher_offer(current_plan, plan),
+                # An empty price list already demoted checkout to none. Badge only a real checkout.
+                recommended=(
+                    action == 'checkout' and bool(badge) and plan == badge and is_higher_offer(current_plan, plan)
+                ),
                 is_current=is_current,
                 hours_line=hours_line(plan, locale),
                 bullets=[] if is_current or plain_free else bullets(plan, trigger, locale),

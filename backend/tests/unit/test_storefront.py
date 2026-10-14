@@ -266,7 +266,7 @@ def test_contextual_recommendation_per_subscription_and_gate(plan, trigger):
         }
         for key in rows
     ]
-    # Non-basic includes legacy plans; their recommendation must not authorize migration.
+    # A badge requires checkout. Legacy prices never check out, so they are not badged.
     sheet = build(
         plan,
         None if plan == 'basic' else 'price_legacy',
@@ -276,11 +276,7 @@ def test_contextual_recommendation_per_subscription_and_gate(plan, trigger):
         source='macos_usage_limit',
         trigger=trigger,
     )
-    expected = (
-        []
-        if plan in {'operator', 'architect'}
-        else ['operator'] if plan != 'basic' or trigger in {'proactive_agent', 'screen_context'} else ['plus']
-    )
+    expected = [] if plan != 'basic' else ['operator'] if trigger in {'proactive_agent', 'screen_context'} else ['plus']
     assert [tier.plan_id for tier in sheet.tiers if tier.recommended] == expected
     if plan != 'basic':
         assert not any(tier.action == 'checkout' for tier in sheet.tiers)
@@ -351,7 +347,8 @@ def test_non_ladder_paid_plans_only_offer_explicit_higher_tiers(plan, registered
         assert by_plan['plus'].action == 'none'
         assert not by_plan['plus'].recommended
         assert by_plan['operator'].action == by_plan['architect'].action == 'none'
-        assert by_plan['operator'].recommended
+        assert not by_plan['operator'].recommended
+        assert not by_plan['architect'].recommended
     assert len([tier for tier in sheet.tiers if tier.action == 'current']) == 1
     assert by_plan[plan].action == 'current' and sheet.current.legacy
     assert by_plan[plan].prices[0].amount_minor == 2999

@@ -487,6 +487,72 @@ def test_pro_budget_cap_recommends_architect_checkout(percent):
     assert all(tier.plan_id != 'basic' for tier in built.tiers)
 
 
+@pytest.mark.parametrize('percent', (100, 140))
+def test_legacy_price_pro_at_cap_lists_architect_without_checkout(percent):
+    """A price outside the ladder still includes Architect at the cap, never as checkout."""
+    rows, recognized = ladder_catalog()
+    price_id = 'price_legacy_operator'
+    priced = dict(rows)
+    priced[price_id] = price(price_id, 4999)
+    assert price_id not in rows
+    assert is_legacy_plan('operator', price_id, set(rows)) is True
+    assert (
+        include_architect_card(current_plan='operator', resubscribe_only=False, trigger='usage_budget', percent=percent)
+        is True
+    )
+    built = sheet_for(
+        'operator',
+        price_id=price_id,
+        rows=priced,
+        bindings=list(rows),
+        recognized=recognized,
+        trigger='usage_budget',
+        percent=percent,
+        period_end=PERIOD_END,
+    )
+    assert built.current.legacy is True
+    architect = next(tier for tier in built.tiers if tier.plan_id == 'architect')
+    assert architect.action == 'none'
+    assert architect.recommended is False
+    assert architect.cta_label is None
+    assert not any(tier.action == 'checkout' for tier in built.tiers)
+    assert not any(tier.recommended for tier in built.tiers)
+
+
+@pytest.mark.parametrize('percent', (100, 140))
+def test_pro_at_cap_without_purchasable_architect_price_is_not_recommended(percent):
+    """No ladder-v1 Architect price demotes checkout, so the card is not recommended."""
+    rows, recognized = ladder_catalog()
+    built = build_storefront(
+        catalog_revision=catalog.CATALOG_REVISION,
+        ladder=load_ladder(),
+        bindings=list(rows),
+        recognized=recognized,
+        subscription=Subscription(
+            plan=PlanType.operator,
+            current_price_id='price_operator_month',
+            current_period_end=PERIOD_END,
+        ),
+        retrieve_price=lambda key: rows[key],
+        purchasable=lambda key: not str(key).startswith('price_architect_'),
+        usage=StorefrontUsage(
+            **present_usage(
+                plan_id='operator',
+                kind='usage_budget',
+                percent=percent,
+                reset_at=PERIOD_END,
+            )
+        ),
+        trigger='usage_budget',
+    )
+    architect = next(tier for tier in built.tiers if tier.plan_id == 'architect')
+    assert architect.prices == []
+    assert architect.action == 'none'
+    assert architect.recommended is False
+    assert architect.cta_label is None
+    assert not any(tier.recommended for tier in built.tiers)
+
+
 def test_cancel_scheduled_pro_at_cap_blocks_architect_instead_of_checkout():
     rows, recognized = ladder_catalog()
     built = sheet_for(
