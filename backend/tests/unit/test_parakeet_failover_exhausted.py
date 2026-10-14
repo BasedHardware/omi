@@ -371,10 +371,9 @@ async def test_five_minutes_on_replacement_trim_on_text_and_remain_bounded(monke
             await _flush_capture(actual, pcm, 1920 + second * 16000)
             end = 1.12 + second
             modulate.callback([{'text': 'part', 'start': 0.12 + second, 'end': end}])
-            # Provider seconds are truncated to capture samples; binary float
-            # rounding may leave exactly one sample awaiting the next segment.
-            assert actual._window_ring().capture_bounds == (int(end * 16000), 1920 + (second + 1) * 16000)
-            assert actual._window_ring().buffered_bytes == 2 * (1920 + (second + 1) * 16000 - int(end * 16000))
+            # Provider seconds are rounded to the nearest capture sample.
+            assert actual._window_ring().capture_bounds == (round(end * 16000), 1920 + (second + 1) * 16000)
+            assert actual._window_ring().buffered_bytes == 2 * (1920 + (second + 1) * 16000 - round(end * 16000))
             assert actual.host.stt_service == st.STTService.modulate
         assert len(legs['modulate']) == 1
         assert legs['soniox'] == []
