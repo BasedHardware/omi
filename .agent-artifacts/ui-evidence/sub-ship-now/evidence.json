@@ -1,0 +1,19 @@
+{
+  "version": 1,
+  "images": [
+    {
+      "file": "001-desktop-macos-saved-waiting-light.png",
+      "platform": "desktop-macos",
+      "description": "Actual ConversationStatusBadge(.locked) rendered in light mode with SwiftUI ImageRenderer; isolated synthetic fixture, no account data",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "002-desktop-macos-saved-waiting-dark.png",
+      "platform": "desktop-macos",
+      "description": "Actual ConversationStatusBadge(.locked) rendered in dark mode with SwiftUI ImageRenderer; isolated synthetic fixture, no account data",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    }
+  ]
+}
