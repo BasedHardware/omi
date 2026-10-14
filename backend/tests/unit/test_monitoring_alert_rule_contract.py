@@ -182,6 +182,33 @@ def test_live_alert_rules_never_query_log_datasources():
     )
 
 
+CORRUPTED_STREAM_LOG_RULE = "df2a40h2fbjswe"
+CORRUPTED_STREAM_METRIC_RULE = "omi-listen-audio-decode-failures"
+CORRUPTED_STREAM_METRIC_EXPR = (
+    'sum(increase(omi_listen_audio_decode_failures_total{job="backend-listen-metrics"}[15m])) or vector(0)'
+)
+
+
+def test_corrupted_stream_log_rule_stays_shadowed_by_the_decode_failures_counter():
+    """The paused corrupted-stream log rule must keep its metric shadow.
+
+    df2a40h2fbjswe scanned Loki raw lines for the corrupted-stream error and
+    sits under an admission hold (FC-alert-rule-scans-raw-log-lines). Its
+    signal exists as a counter the backend-listen scrape job already carries,
+    so the replacement keeps the coverage while the log rule stays paused. If
+    this rule is ever removed, the hold's re-admission path goes with it and
+    the two must be decided together.
+    """
+    for export_name, rules in _all_rule_exports().items():
+        assert rules[CORRUPTED_STREAM_LOG_RULE]["isPaused"] is True, export_name
+        replacement = rules[CORRUPTED_STREAM_METRIC_RULE]
+        assert replacement["isPaused"] is False, export_name
+        assert replacement["data"][0]["model"]["expr"] == CORRUPTED_STREAM_METRIC_EXPR, export_name
+        assert replacement["data"][0]["datasourceUid"] == "prometheus", export_name
+        assert replacement["noDataState"] == "OK", export_name
+        assert replacement["for"] == "5m", export_name
+
+
 def test_managed_gke_disables_unavailable_control_plane_scrapes_and_alerts():
     """Managed GKE must not page on control-plane targets it cannot expose.
 
