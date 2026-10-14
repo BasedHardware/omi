@@ -58,7 +58,7 @@ if [ "$VENV_PREEXISTED" -eq 1 ]; then
   [ -x "$VENV_PY_BIN" ] || VENV_PY_BIN="$PWD/backend/.venv/Scripts/python.exe"
   if ! dev_harness_venv_python_is_pinned_311 "$VENV_PY_BIN"; then
     echo "dev-init: the existing backend/.venv is not the pinned Python 3.11 runtime the backend requires; refusing to install requirements into it." >&2
-    echo "Run: make lane-bootstrap (Python 3.11 venv), or recreate it: rm -rf backend/.venv && dev-init." >&2
+    echo "Recreate it pinned: rm -rf backend/.venv && python3.11 -m venv backend/.venv, or run: make lane-bootstrap." >&2
     exit 1
   fi
 fi
@@ -70,7 +70,8 @@ if [ -x "$PWD/backend/.venv/bin/python" ]; then
 elif [ -x "$PWD/backend/.venv/Scripts/python.exe" ]; then
   PYTHON_BIN="$PWD/backend/.venv/Scripts/python.exe"
 else
-  echo "dev-init: backend/.venv exists but has no interpreter; recreate it (python3 -m venv backend/.venv or make lane-bootstrap)." >&2
+  echo "dev-init: backend/.venv exists but has no interpreter; recreate it with the pinned runtime:" >&2
+  echo "  python3.11 -m venv backend/.venv   (or: make lane-bootstrap)" >&2
   exit 1
 fi
 # Bind the install to THIS repo's venv python directly: re-running the resolver
@@ -82,10 +83,16 @@ fi
 CANONICAL_PREFIX="$(cd "$PWD/backend/.venv" 2>/dev/null && pwd -P)" || CANONICAL_PREFIX=""
 if [ -z "$CANONICAL_PREFIX" ]; then
   echo "dev-init: backend/.venv is missing; refusing to install requirements outside the venv." >&2
-  echo "Run: make lane-bootstrap (Python 3.11 venv), or install Python >= 3.10 and re-run dev-init." >&2
+  echo "Run: make lane-bootstrap (Python 3.11 venv), or install Python 3.11 and re-run dev-init." >&2
   exit 1
 fi
 INTERPRETER_PREFIX="$("$PYTHON_BIN" -c 'import sys; print(sys.prefix)' 2>/dev/null)" || INTERPRETER_PREFIX=""
+# Native Windows Python reports a drive path (C:\...); Git Bash's filesystem
+# operators need the POSIX form, matching the cygpath conversion used for uv
+# results in _resolve_python.sh (Codex P1).
+if command -v cygpath >/dev/null 2>&1; then
+  INTERPRETER_PREFIX="$(cygpath -u "$INTERPRETER_PREFIX" 2>/dev/null || printf '%s' "$INTERPRETER_PREFIX")"
+fi
 INTERPRETER_PREFIX_PHYS=""
 if [ -n "$INTERPRETER_PREFIX" ] && [ -d "$INTERPRETER_PREFIX" ]; then
   INTERPRETER_PREFIX_PHYS="$(cd "$INTERPRETER_PREFIX" && pwd -P)" || INTERPRETER_PREFIX_PHYS=""
@@ -97,7 +104,7 @@ if [ "$INTERPRETER_PREFIX_PHYS" != "$CANONICAL_PREFIX" ]; then
   exit 1
 fi
 if ! "$PYTHON_BIN" -m pip --version >/dev/null; then
-  echo "${PYTHON_BIN%/bin/python} is incomplete; recreate it with: python3 -m venv backend/.venv" >&2
+  echo "$PYTHON_BIN is incomplete; recreate the venv pinned: rm -rf backend/.venv && python3.11 -m venv backend/.venv" >&2
   exit 1
 fi
 

@@ -878,7 +878,11 @@ def test_make_harness_does_not_execute_double_quote_in_checkout_name(tmp_path: P
 
 
 def _run_resolver_function(
-    repo: Path, monkeypatch: pytest.MonkeyPatch, function: str, path: str | None = None
+    repo: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    function: str,
+    path: str | None = None,
+    extra_env: dict[str, str] | None = None,
 ) -> subprocess.CompletedProcess[str]:
     resolver = repo / "scripts/dev-harness/_resolve_python.sh"
     resolver.parent.mkdir(parents=True, exist_ok=True)
@@ -887,6 +891,8 @@ def _run_resolver_function(
     env = _shell_env()
     if path is not None:
         env["PATH"] = path
+    for key, value in (extra_env or {}).items():
+        env[key] = value
     return subprocess.run(
         [
             _bash_command(),
@@ -1017,6 +1023,62 @@ def test_backend_pinned_python_fails_without_any_311(
         monkeypatch,
         "dev_harness_backend_pinned_python",
         path=os.pathsep.join((str(stub_bin), "/usr/bin", "/bin")),
+    )
+
+    assert result.returncode != 0
+    assert result.stdout.strip() == ""
+
+
+def test_backend_pinned_python_honors_python_override(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """An explicit PYTHON= selection passing the pin is the bootstrap pick.
+
+    The resolver-level PYTHON override is a supported caller choice; when it
+    points at a pinned 3.11 (e.g. a bare-named python3.11 without a python3.11
+    on PATH), the helper must accept it instead of reporting failure (Codex P1).
+    """
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    selected = tmp_path / "selected-python"
+    selected.write_text("#!/usr/bin/env bash\nexit 0\n", encoding="utf-8")
+    selected.chmod(selected.stat().st_mode | 0o755)
+
+    result = _run_resolver_function(
+        repo,
+        monkeypatch,
+        "dev_harness_backend_pinned_python",
+        path=os.pathsep.join(("/usr/bin", "/bin")),
+        extra_env={"PYTHON": str(selected)},
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.strip() == str(selected)
+
+
+def test_backend_pinned_python_rejects_below_pin_python_override(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A PYTHON= override that fails the pin is not accepted."""
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    below = tmp_path / "below-pin-python"
+    below.write_text(
+        "#!/usr/bin/env bash\n"
+        'if [ "${1:-}" = "-c" ]; then\n'
+        "  exit 1\n"
+        "fi\n"
+        "exit 0\n",
+        encoding="utf-8",
+    )
+    below.chmod(below.stat().st_mode | 0o755)
+
+    result = _run_resolver_function(
+        repo,
+        monkeypatch,
+        "dev_harness_backend_pinned_python",
+        path=os.pathsep.join(("/usr/bin", "/bin")),
+        extra_env={"PYTHON": str(below)},
     )
 
     assert result.returncode != 0

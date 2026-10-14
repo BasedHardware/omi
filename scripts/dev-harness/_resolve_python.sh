@@ -36,6 +36,12 @@ dev_harness_venv_python_is_pinned_311() {
 }
 
 dev_harness_backend_pinned_python() {
+  # An explicit PYTHON= selection is the caller's interpreter choice (the same
+  # override dev_harness_python honors); accept it when it passes the pin.
+  if [ -n "${PYTHON:-}" ] && dev_harness_venv_python_is_pinned_311 "$PYTHON"; then
+    printf '%s\n' "$PYTHON"
+    return 0
+  fi
   if command -v python3.11 >/dev/null 2>&1 \
     && dev_harness_venv_python_is_pinned_311 python3.11; then
     printf '%s\n' python3.11
