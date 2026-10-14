@@ -82,9 +82,13 @@ class OmiClient:
 
         self._profile = profile
         self._verbose = verbose
+        client_headers = {
+            "User-Agent": USER_AGENT,
+            "Accept": "application/json",
+        }
         self._http = httpx.Client(
             base_url=profile.api_base.rstrip("/"),
-            headers=self._build_headers(profile),
+            headers=client_headers,
             timeout=timeout or DEFAULT_TIMEOUT,
             follow_redirects=False,
         )
