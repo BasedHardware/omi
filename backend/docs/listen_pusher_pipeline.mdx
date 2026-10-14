@@ -1569,8 +1569,11 @@ differences and surname initials stay kept because STT can mangle them. Empty or
 unknown ownership, including an unavailable profile name, stays compatible.
 A conservative English post-filter drops clear third-person ongoing-status
 sentences. Both rejection reasons increment `omi_action_item_extraction_dropped_total`
-and emit bounded count logs without names or task text. The notes prompt receives
-the account profile identity and asks for only the owner's commitments/direct requests;
+and emit bounded count logs without names or task text. The notes task-specific user
+suffix receives the account profile identity. Universal ownership/status instructions
+live in the notes-only mount after the shared baseline, independent of episode/title flags;
+shared conversation context and baseline static/volatile prompt bytes stay unchanged.
+It asks for only the owner's commitments/direct requests;
 another attendee asking/emailing the owner is that attendee's task, while the owner's
 agreement to deliver becomes a verb-led Send task. Observations are excluded.
 

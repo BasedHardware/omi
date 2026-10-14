@@ -1,7 +1,9 @@
 """Synthetic ownership/status cases through the real task writer and refresh transaction."""
 
 from copy import deepcopy
+from contextlib import asynccontextmanager
 from datetime import timedelta
+import json
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
@@ -19,7 +21,8 @@ from utils.conversations import (
 )
 from utils.conversations.processing_trigger import ProcessingTrigger as Trigger
 from utils.conversations.transcript_for_llm import SpeakerMap
-from utils.llm.conversation_notes_prompts import conversation_notes_static_instructions
+from utils.llm.conversation_notes_prompts import ACTION_ITEM_EXTRACTION_RULES, conversation_notes_static_instructions
+from utils.llm import conversation_processing
 from utils.llm.conversation_prompt_context import build_conversation_prompt_prefix
 
 
@@ -298,19 +301,69 @@ def test_desktop_candidate_capture_also_filters_ownership_and_status(monkeypatch
     ]
 
 
-def test_prompt_identifies_account_owner_and_states_extraction_rules(monkeypatch):
+@pytest.mark.parametrize('rich', [False, True])
+def test_notes_task_suffix_identifies_owner_and_carries_rules_without_changing_shared_bytes(monkeypatch, rich):
     monkeypatch.setenv('OMI_SHAPED_AGENT_MODE', 'on')
     speakers = SpeakerMap({0: 'User'}, owner_name='Riley Chen')
-    prefix = build_conversation_prompt_prefix(
+    kwargs = dict(
         conversation_id='synthetic',
         transcript='[s1 0] I will send the link.',
         started_at=NOW,
         timezone_name='UTC',
         language_code='en',
-        speaker_map=speakers,
         uid=UID,
     )
-    assert 'Account owner: Riley Chen' in prefix.context
-    assert '"account_owner_name": "Riley Chen"' in prefix.shaped_context
-    rules = conversation_notes_static_instructions('')
-    assert 'only tasks the account owner' in rules and 'Exclude observations and status statements' in rules
+    prefix = build_conversation_prompt_prefix(speaker_map=speakers, **kwargs)
+    plain = build_conversation_prompt_prefix(speaker_map=dict(speakers), **kwargs)
+    assert prefix.account_owner_name == 'Riley Chen'
+    assert prefix.context == plain.context
+    assert prefix.shaped_context == plain.shaped_context
+    assert prefix.messages(cache_enabled=True) == plain.messages(cache_enabled=True)
+    assert ACTION_ITEM_EXTRACTION_RULES not in conversation_notes_static_instructions('')
+
+    captured = []
+
+    class Model:
+        async def ainvoke(self, messages):
+            captured.extend(messages)
+            return SimpleNamespace(
+                content=json.dumps(
+                    {
+                        'title': 'Link follow-up',
+                        'overview': 'A link will be sent.',
+                        'emoji': '💬',
+                        'category': 'work',
+                        'sections': [],
+                        'action_items': [],
+                        'events': [],
+                    }
+                )
+            )
+
+    @asynccontextmanager
+    async def isolated_model(model):
+        yield model
+
+    monkeypatch.setattr(conversation_processing, 'get_llm', lambda *a, **k: Model())
+    monkeypatch.setattr(conversation_processing, 'isolated_notes_model', isolated_model)
+    conversation_processing.get_conversation_notes(
+        prefix,
+        uid=UID,
+        started_at=NOW,
+        language_code='en',
+        output_language_code='en',
+        tz='UTC',
+        task_intelligence_capture=True,
+        rich_context_enabled=rich,
+    )
+    system, user = captured[:2]
+    assert system['role'] == 'system' and user['role'] == 'user'
+    system_text = '\n'.join(block['text'] for block in system['content'])
+    assert 'Riley Chen' not in system_text
+    assert system_text.count(ACTION_ITEM_EXTRACTION_RULES) == 1
+    assert conversation_processing.notes_mount().instructions.startswith(conversation_notes_static_instructions(''))
+    assert 'only tasks the account owner' in system_text
+    assert 'Exclude observations and status statements' in system_text
+    suffix = json.loads(user['content'])
+    assert suffix['account_owner_name'] == 'Riley Chen'
+    assert 'action_item_rules' not in suffix
