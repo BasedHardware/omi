@@ -187,7 +187,7 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
     if (isActive && step != null && step.step != SyncStep.transcribe) {
       final run = _runTracker.runSeconds ?? 0;
       title = run > 0 ? l.syncCardSyncingAmount(dur(run)) : l.syncCardSyncingTitle;
-      barStep = step.step;
+      barStep = step.barStep;
       final known = step.totalSeconds > 0;
       if (step.step == SyncStep.download) {
         subtitle = known ? l.syncStepDownloadingAmount(dur(step.doneSeconds), dur(step.totalSeconds)) : null;
@@ -201,6 +201,8 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
         subtitle = known ? l.syncStepUploadingAmount(dur(step.doneSeconds), dur(step.totalSeconds)) : null;
         barFraction = known && step.doneSeconds > 0 ? step.fraction : null;
       }
+      // Live-capture uploads run before the device drain: the bar stays on the device step, unfilled.
+      if (barStep != step.step) barFraction = 0;
       action = statusActionPill(l.cancel, Colors.redAccent, () => _confirmCancel(context, p));
     } else if (p.isRateLimited) {
       title = syncCooldownTitle(p.rateLimitReason, l);
@@ -229,13 +231,10 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
       // All synced, or nothing recorded yet: the same calm baseline, so the card never pops in/out.
       title = l.syncCardAllBackedUp;
       titleColor = OmiColors.active == OmiPalette.light ? OmiColors.textPrimary : Colors.grey.shade400;
-      final created = p.syncCompleted ? p.syncedConversationsPointers.length : 0;
-      if (created > 0) {
-        subtitle = l.nConversationsCreated(created);
-        action =
-            statusActionPill(l.view, OmiColors.accent, () => routeToPage(context, const SyncedConversationsPage()));
-      }
     }
+    // Independent of the branch above: a sync that created conversations can
+    // still leave jobs processing or a recording that needs the user.
+    final created = p.syncCompleted ? p.syncedConversationsPointers.length : 0;
 
     return Container(
       padding: const EdgeInsets.fromLTRB(16, 15, 16, 4),
@@ -277,25 +276,31 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
             SyncStepBar(step: barStep, fraction: barFraction),
           ],
           const SizedBox(height: 6),
+          if (created > 0) ...[
+            Divider(height: 1, color: OmiColors.border),
+            _cardLink(l.nConversationsCreated(created), () => routeToPage(context, const SyncedConversationsPage())),
+          ],
           Divider(height: 1, color: OmiColors.border),
-          InkWell(
-            onTap: () => showSyncDetailsSheet(context, onHowSyncingWorks: () => _showInfoSheet(context)),
-            child: Padding(
-              padding: const EdgeInsets.symmetric(vertical: 12),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      l.syncDetailsTitle,
-                      style: TextStyle(color: Colors.grey.shade400, fontSize: 14),
-                    ),
-                  ),
-                  FaIcon(FontAwesomeIcons.chevronRight, color: Colors.grey.shade600, size: 12),
-                ],
-              ),
-            ),
+          _cardLink(
+            l.syncDetailsTitle,
+            () => showSyncDetailsSheet(context, onHowSyncingWorks: () => _showInfoSheet(context)),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _cardLink(String label, VoidCallback onTap) {
+    return InkWell(
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 12),
+        child: Row(
+          children: [
+            Expanded(child: Text(label, style: TextStyle(color: Colors.grey.shade400, fontSize: 14))),
+            FaIcon(FontAwesomeIcons.chevronRight, color: Colors.grey.shade600, size: 12),
+          ],
+        ),
       ),
     );
   }
@@ -546,9 +551,10 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
             _blockRow(block)
           else
             Dismissible(
-              // Index suffix because `wal.id` (device_timerStart) is not unique
-              // across SD-card + on-phone copies of the same recording.
-              key: ValueKey('${wal.id}#$i'),
+              // Storage suffix because `wal.id` (device_timerStart) is shared by the
+              // SD-card and on-phone copies of one recording. Not the row index: rows
+              // shift after a dismiss, and a reused key asserts.
+              key: ValueKey('${wal.id}#${wal.storage.name}'),
               direction: state == WalSyncDisplayState.syncing ? DismissDirection.none : DismissDirection.endToStart,
               confirmDismiss: (direction) {
                 final uploading = wal.syncDisplayState == WalSyncDisplayState.uploaded;

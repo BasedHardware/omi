@@ -89,9 +89,13 @@ class OfflineProcessingDisplay {
       final pending = wals.where((w) => w.status == WalStatus.uploaded).fold(0, (sum, w) => sum + seconds(w));
       return (doneSeconds: 0, totalSeconds: pending, tracked: false);
     }
+    // Only phone copies are uploaded. A device copy shares the id
+    // (device_timerStart) and can still read `miss` after its phone twin was
+    // uploaded, so it must not stand in for the copy the server is processing.
     var done = 0, total = 0;
     final seen = <String>{};
     for (final w in wals) {
+      if (w.storage == WalStorage.sdcard || w.storage == WalStorage.flashPage) continue;
       if (!trackedUploadedWalIds.contains(w.id) || !seen.add(w.id)) continue;
       total += seconds(w);
       if (w.status != WalStatus.uploaded) done += seconds(w);

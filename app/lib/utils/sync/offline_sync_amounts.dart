@@ -65,9 +65,20 @@ enum SyncStep { download, upload, transcribe }
 
 /// Progress of the active step, in seconds of audio.
 class SyncStepProgress {
-  const SyncStepProgress({required this.step, required this.doneSeconds, required this.totalSeconds});
+  const SyncStepProgress({
+    required this.step,
+    required this.doneSeconds,
+    required this.totalSeconds,
+    SyncStep? barStep,
+  }) : barStep = barStep ?? step;
 
+  /// The step the provider is running, which the subtitle describes.
   final SyncStep step;
+
+  /// The bar segment to draw as active. It never moves backwards within a run,
+  /// and stays on [SyncStep.download] while audio is still waiting on the
+  /// device: a sync uploads live-capture files before it drains the device.
+  final SyncStep barStep;
   final int doneSeconds;
   final int totalSeconds;
 
@@ -84,58 +95,74 @@ class SyncStepProgress {
 /// drain, which is applied to the snapshot's seconds.
 class SyncRunTracker {
   int? _runSeconds;
-  SyncPhase? _stepPhase;
+  SyncStep? _stepKey;
   Set<String> _stepIds = const {};
   int _stepSeconds = 0;
+  int _doneHighWater = 0;
+  SyncStep? _barStep;
 
-  /// Seconds of audio the current run set out to sync; null when idle or unknown.
+  /// Seconds of audio the current run set out to sync; null when idle.
   int? get runSeconds => _runSeconds;
 
   static String _key(Wal w) => '${w.id}#${w.storage.name}';
+
+  static SyncStep _stepOf(SyncPhase phase) => switch (phase) {
+        SyncPhase.downloadingFromDevice => SyncStep.download,
+        SyncPhase.uploadingToCloud || SyncPhase.waitingForInternet => SyncStep.upload,
+        SyncPhase.processingOnServer || SyncPhase.idle => SyncStep.transcribe,
+      };
 
   /// Call on every build. Returns null when no sync is running.
   SyncStepProgress? update(SyncState state, List<Wal> wals) {
     final active = state.isSyncing || state.isFetchingConversations;
     if (!active) {
       _runSeconds = null;
-      _stepPhase = null;
+      _stepKey = null;
       _stepIds = const {};
       _stepSeconds = 0;
+      _doneHighWater = 0;
+      _barStep = null;
       return null;
     }
 
-    _runSeconds ??= walSeconds(wals.where((w) => w.status == WalStatus.miss && walIsSyncable(w)));
+    // Grows when device discovery lands after the first frame; never shrinks
+    // as recordings finish.
+    final pending = walSeconds(wals.where((w) => w.status == WalStatus.miss && walIsSyncable(w)));
+    if (_runSeconds == null || pending > _runSeconds!) _runSeconds = pending;
 
-    final phase = state.phase;
-    if (phase != _stepPhase) {
-      _stepPhase = phase;
-      final members = switch (phase) {
-        SyncPhase.downloadingFromDevice => wals.where((w) => walIsOnDevice(w) && w.status == WalStatus.miss),
-        SyncPhase.uploadingToCloud ||
-        SyncPhase.waitingForInternet =>
-          wals.where((w) => !walIsOnDevice(w) && w.status == WalStatus.miss && walIsSyncable(w)),
-        _ => const <Wal>[],
+    final step = _stepOf(state.phase);
+    if (step != _stepKey) {
+      _stepKey = step;
+      final members = switch (step) {
+        SyncStep.download => wals.where((w) => walIsOnDevice(w) && w.status == WalStatus.miss),
+        SyncStep.upload => wals.where((w) => !walIsOnDevice(w) && w.status == WalStatus.miss && walIsSyncable(w)),
+        SyncStep.transcribe => const <Wal>[],
       };
       _stepIds = members.map(_key).toSet();
       _stepSeconds = walSeconds(members);
+      _doneHighWater = 0;
     }
 
-    switch (phase) {
-      case SyncPhase.downloadingFromDevice:
-        return SyncStepProgress(
-          step: SyncStep.download,
-          doneSeconds: (state.progress.clamp(0.0, 1.0) * _stepSeconds).round(),
-          totalSeconds: _stepSeconds,
-        );
-      case SyncPhase.uploadingToCloud:
-      case SyncPhase.waitingForInternet:
-        final done = walSeconds(wals.where(
+    final deviceStillHolds = wals.any((w) => walIsOnDevice(w) && w.status == WalStatus.miss && walIsSyncable(w));
+    final natural = step == SyncStep.upload && deviceStillHolds ? SyncStep.download : step;
+    final barStep = _barStep == null || natural.index > _barStep!.index ? natural : _barStep!;
+    _barStep = barStep;
+
+    int done;
+    switch (step) {
+      case SyncStep.download:
+        // The device restarts its fraction per file and per storage; keep the high-water mark.
+        done = (state.progress.clamp(0.0, 1.0) * _stepSeconds).round();
+      case SyncStep.upload:
+        done = walSeconds(wals.where(
           (w) => _stepIds.contains(_key(w)) && (w.status == WalStatus.uploaded || w.status == WalStatus.synced),
         ));
-        return SyncStepProgress(step: SyncStep.upload, doneSeconds: done, totalSeconds: _stepSeconds);
-      case SyncPhase.processingOnServer:
-      case SyncPhase.idle:
-        return const SyncStepProgress(step: SyncStep.transcribe, doneSeconds: 0, totalSeconds: 0);
+      case SyncStep.transcribe:
+        return SyncStepProgress(step: step, doneSeconds: 0, totalSeconds: 0, barStep: barStep);
     }
+    if (done > _stepSeconds) done = _stepSeconds;
+    if (done < _doneHighWater) done = _doneHighWater;
+    _doneHighWater = done;
+    return SyncStepProgress(step: step, doneSeconds: done, totalSeconds: _stepSeconds, barStep: barStep);
   }
 }

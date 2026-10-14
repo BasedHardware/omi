@@ -64,6 +64,27 @@ void main() {
       expect(job, (doneSeconds: 600, totalSeconds: 735, tracked: true));
     });
 
+    test('a device copy still on the card does not count its uploaded phone twin as done', () {
+      final job = OfflineProcessingDisplay.serverJobSeconds(
+        trackedUploadedWalIds: {'phone_1'},
+        wals: [
+          Wal(
+              timerStart: 1,
+              codec: BleAudioCodec.opus,
+              seconds: 75,
+              status: WalStatus.miss,
+              storage: WalStorage.sdcard),
+          Wal(
+              timerStart: 1,
+              codec: BleAudioCodec.opus,
+              seconds: 75,
+              status: WalStatus.uploaded,
+              storage: WalStorage.disk),
+        ],
+      );
+      expect(job, (doneSeconds: 0, totalSeconds: 75, tracked: true));
+    });
+
     test('untracked backlog reports its length without claiming progress', () {
       final job = OfflineProcessingDisplay.serverJobSeconds(
         trackedUploadedWalIds: const {},
@@ -111,6 +132,35 @@ void main() {
       )!;
       expect((step.step, step.doneSeconds, step.totalSeconds), (SyncStep.download, 540, 1080));
       expect(tracker.runSeconds, 1110);
+    });
+
+    test('live-capture uploads before the device drain keep the bar on the device step, and it never rewinds', () {
+      final onDevice = wal(1, 600, WalStatus.miss, WalStorage.sdcard);
+      final live = wal(2, 75, WalStatus.miss, WalStorage.disk);
+      final wals = [onDevice, live];
+      final tracker = SyncRunTracker();
+
+      final preDrain =
+          tracker.update(const SyncState(status: SyncStatus.syncing, phase: SyncPhase.uploadingToCloud), wals)!;
+      expect((preDrain.step, preDrain.barStep), (SyncStep.upload, SyncStep.download));
+
+      final drain = tracker.update(
+        const SyncState(status: SyncStatus.syncing, phase: SyncPhase.downloadingFromDevice, progress: 0.5),
+        wals,
+      )!;
+      expect((drain.barStep, drain.doneSeconds), (SyncStep.download, 300));
+
+      // The device restarts its fraction for the next file; the count holds.
+      final restarted = tracker.update(
+        const SyncState(status: SyncStatus.syncing, phase: SyncPhase.downloadingFromDevice, progress: 0.1),
+        wals,
+      )!;
+      expect(restarted.doneSeconds, 300);
+
+      onDevice.status = WalStatus.synced;
+      final upload =
+          tracker.update(const SyncState(status: SyncStatus.syncing, phase: SyncPhase.uploadingToCloud), wals)!;
+      expect(upload.barStep, SyncStep.upload);
     });
 
     test('idle resets, and terminal recordings never count as work', () {
