@@ -1108,6 +1108,19 @@ async def download_immutable_desktop_preview(slug: str, source_sha: str):
     return _preview_landing_response({"manifest": manifest})
 
 
+def _verify_admin_key(secret_key: str) -> None:
+    """Constant-time ADMIN_KEY check for the privileged release/cache routes.
+
+    Fails closed: an empty or unset configured ``ADMIN_KEY`` never authenticates,
+    and an empty presented ``secret_key`` never authenticates — a bare
+    ``secret_key != os.getenv('ADMIN_KEY')`` would pass when both are empty and
+    leaks the key via a non-constant-time ``!=`` comparison.
+    """
+    configured = os.getenv('ADMIN_KEY') or ''
+    if not configured or not secret_key or not hmac.compare_digest(secret_key, configured):
+        raise HTTPException(status_code=403, detail='You are not authorized to perform this action')
+
+
 def _has_preview_publish_authorization(secret_key: str) -> bool:
     """Require a preview-only secret and fail closed when it is not configured."""
     preview_key = os.getenv("DESKTOP_PREVIEW_PUBLISH_KEY")
@@ -1196,8 +1209,7 @@ def clear_desktop_cache(secret_key: str = Header(...)):
     This forces the next appcast.xml request to fetch fresh data from GitHub.
     Last-known-good entries are deliberately preserved for incident recovery.
     """
-    if secret_key != os.getenv('ADMIN_KEY'):
-        raise HTTPException(status_code=403, detail='You are not authorized to perform this action')
+    _verify_admin_key(secret_key)
     delete_generic_cache("github_releases_desktop")
     for platform in ("macos", "windows", "linux"):
         for channel in VALID_CHANNELS:
@@ -1208,8 +1220,7 @@ def clear_desktop_cache(secret_key: str = Header(...)):
 @router.post("/v2/desktop/releases", status_code=201)
 async def register_desktop_release(request: Dict[str, Any], secret_key: str = Header(...)):
     """Register an immutable release manifest without making it user-visible."""
-    if secret_key != os.getenv('ADMIN_KEY'):
-        raise HTTPException(status_code=403, detail='You are not authorized to perform this action')
+    _verify_admin_key(secret_key)
     try:
         manifest = await run_blocking(db_executor, register_release_manifest, request)
     except ValueError as exc:
@@ -1262,8 +1273,7 @@ async def mutate_broken_beta(
     secret_key: str = Header(...),
 ):
     """Rollback or emergency-roll-forward only the hard-coded macOS Beta pointer."""
-    if not secret_key or secret_key != os.getenv("ADMIN_KEY"):
-        raise HTTPException(status_code=403, detail="You are not authorized to perform this action")
+    _verify_admin_key(secret_key)
     try:
         if request.operation == "rollback":
             receipt = await run_blocking(db_executor, rollback_beta, request.model_dump())
@@ -1313,8 +1323,7 @@ async def set_beta_admission(
     secret_key: str | None = Header(default=None),
 ):
     """Allow only ADMIN_KEY operators to pause or resume the Beta fence."""
-    if secret_key != os.getenv("ADMIN_KEY") or not secret_key:
-        raise HTTPException(status_code=403, detail="You are not authorized to perform this action")
+    _verify_admin_key(secret_key)
     try:
         control = await run_blocking(db_executor, set_beta_admission_enabled, request.promotion_enabled)
     except ValueError as exc:
@@ -1332,8 +1341,7 @@ async def set_beta_admission(
 @router.get("/v2/desktop/releases/{release_id}")
 async def get_desktop_release_manifest(release_id: str, secret_key: str = Header(...)):
     """Return the retained manifest used for a pointer transition, not GitHub metadata."""
-    if secret_key != os.getenv('ADMIN_KEY'):
-        raise HTTPException(status_code=403, detail='You are not authorized to perform this action')
+    _verify_admin_key(secret_key)
     manifest = await run_blocking(db_executor, get_release_manifest, release_id)
     if manifest is None:
         raise HTTPException(status_code=404, detail='desktop release manifest not found')
@@ -1344,8 +1352,7 @@ async def get_desktop_release_manifest(release_id: str, secret_key: str = Header
 @router.post("/v2/desktop/channels/promote")
 async def promote_desktop_channel(request: DesktopChannelPromotionRequest, secret_key: str = Header(...)):
     """Atomically advance or repoint one explicit qualified channel pointer."""
-    if secret_key != os.getenv('ADMIN_KEY'):
-        raise HTTPException(status_code=403, detail='You are not authorized to perform this action')
+    _verify_admin_key(secret_key)
     if request.channel != "stable":
         # This generic ADMIN_KEY route is deliberately unable to reach Beta's
         # database transaction or cache. Beta has one admission-only path.
