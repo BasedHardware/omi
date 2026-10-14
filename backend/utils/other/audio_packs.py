@@ -25,6 +25,10 @@ TARGET_BYTES = 256 * 1024 * 1024
 MAX_CAPTURE_BYTES = 32 * 1024 * 1024
 
 
+class CaptureDeleted(ValueError):
+    pass
+
+
 def enabled() -> bool:
     return os.getenv('AUDIO_CANONICAL_PACKING_ENABLED', 'false').lower() == 'true'
 
@@ -90,7 +94,7 @@ def archive_capture(
             raise ValueError('canonical identity metadata conflict')
     try:
         assert_capture_allowed(bucket, uid, conversation_ranges)
-    except Exception:
+    except CaptureDeleted:
         try:
             blob.delete(if_generation_match=int(blob.generation))
         except NotFound:
@@ -103,7 +107,7 @@ def archive_capture(
         pass
     try:
         assert_capture_allowed(bucket, uid, conversation_ranges)
-    except Exception:
+    except CaptureDeleted:
         for object_to_delete in (blob, receipt):
             try:
                 object_to_delete.delete(if_generation_match=int(object_to_delete.generation))
@@ -372,7 +376,7 @@ def assert_capture_allowed(bucket: Any, uid: str, ranges: list[dict[str, Any]]) 
         if conversation_id:
             for linked in conversation_chain(bucket, uid, conversation_id):
                 if bucket.blob(control_path(uid, 'deletions', linked)).exists():
-                    raise ValueError('canonical capture blocked by conversation deletion')
+                    raise CaptureDeleted('canonical capture blocked by conversation deletion')
 
 
 def link_conversations(bucket: Any, uid: str, sources: list[str], target: str) -> None:

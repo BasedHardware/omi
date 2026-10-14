@@ -274,7 +274,7 @@ def test_pcm_capture_range_uses_full_tail_and_authoritative_span():
     assert result[1]['plaintext_byte_start'] == 32000
 
 
-def test_post_upload_authority_failure_removes_unaccepted_capture(bucket, monkeypatch):
+def test_post_upload_authority_failure_never_accepts_or_discards_capture(bucket, monkeypatch):
     calls = 0
 
     def authority(*args):
@@ -286,7 +286,8 @@ def test_post_upload_authority_failure_removes_unaccepted_capture(bucket, monkey
     monkeypatch.setattr(packs, 'assert_capture_allowed', authority)
     with pytest.raises(RuntimeError, match='authority unavailable'):
         capture(bucket)
-    assert bucket.list_blobs(packs.owner_prefix(packs.SOURCE_PREFIX, 'alice')) == []
+    assert bucket.list_blobs(packs.owner_prefix(packs.SOURCE_PREFIX, 'alice'))
+    assert bucket.list_blobs(packs.owner_prefix(packs.INDEX_PREFIX, 'alice')) == []
 
 
 def test_packer_refuses_a_pending_privacy_erasure(bucket):
