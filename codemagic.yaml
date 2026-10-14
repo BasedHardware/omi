@@ -2978,6 +2978,8 @@ workflows:
           # newer build (its completed submission is resolved via items?include=appStoreVersion).
           # Android: start a staged production rollout at 5% from the newest internal/alpha build
           # (haltable in Play Console). Nothing here bypasses store approval.
+          # TRAIN_PIN_IOS / TRAIN_PIN_ANDROID (X.Y.Z/build, optional): the gate's audited
+          # candidates; when set, the train fails closed if the store moved on after the audit.
           DRY_RUN_FLAG=""
           if [ "${TRAIN_DRY_RUN:-false}" = "true" ]; then
             DRY_RUN_FLAG="--dry-run"
