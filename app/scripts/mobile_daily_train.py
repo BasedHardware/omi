@@ -350,16 +350,21 @@ def review_submission_for_version(asc: Callable[..., object], version_id: str) -
     headers = {"Authorization": f"Bearer {token}"}
     for submission in submissions:
         submission_id = _resource_id(submission)
-        url = f"{base}/reviewSubmissions/{submission_id}/items?include=appStoreVersion"
-        request = urllib.request.Request(url, headers=headers)
-        try:
-            with urllib.request.urlopen(request, timeout=60) as response:
-                payload = json.load(response)
-        except (urllib.error.URLError, ValueError) as exc:
-            raise TrainError(f"App Store Connect items lookup failed for {submission_id}: {exc}") from exc
-        for item in payload.get("included", []) or []:
-            if item.get("type") == "appStoreVersions" and item.get("id") == version_id:
-                return submission_id
+        # Review items paginate; follow links.next so a version on a later
+        # page is still found (the CLI-less REST surface has no auto-paging).
+        url = f"{base}/reviewSubmissions/{submission_id}/items?include=appStoreVersion&limit=200"
+        while url:
+            request = urllib.request.Request(url, headers=headers)
+            try:
+                with urllib.request.urlopen(request, timeout=60) as response:
+                    payload = json.load(response)
+            except (urllib.error.URLError, ValueError) as exc:
+                raise TrainError(f"App Store Connect items lookup failed for {submission_id}: {exc}") from exc
+            for item in payload.get("included", []) or []:
+                if item.get("type") == "appStoreVersions" and item.get("id") == version_id:
+                    return submission_id
+            next_url = payload.get("links", {}).get("next") if isinstance(payload, dict) else None
+            url = next_url if isinstance(next_url, str) and next_url else None
     raise TrainError(f"no completed review submission contains App Store version {version_id}")
 
 
@@ -676,21 +681,32 @@ def run_android(*, dry_run: bool, release_date: str) -> str:
             return f"android=staged {staged_version} {codes[0]} @{current:.0%} (ladder done)"
         hop = next_hops[0]
         log(f"Android live {live}; promoting staged {staged_version} {codes[0]} from {current:.0%} to {hop:.0%}")
-        if dry_run:
-            return f"android=dry-run:staged-hop {staged_version} {codes[0]} {current:.0%}->{hop:.0%}"
         # The rollout shipped its What's-New text when it started. Re-use the
         # exact text Play already holds, falling back to the durable release
         # file WITHOUT collecting: collect() would fold the NEXT version's
         # unreleased fragments into this in-flight version and consume them.
+        # Resolved before the dry-run return so a plan reports a hop only
+        # when the real run could actually take it.
         notes = _staged_release_notes(staged) or promote.require_notes(
             ensure_release_notes(staged_version, release_date, write=False), staged_version, "android"
         )
+        if dry_run:
+            return f"android=dry-run:staged-hop {staged_version} {codes[0]} {current:.0%}->{hop:.0%}"
         try:
             if hop >= 1.0:
-                promote.submit_android(client, edit_id, staged_version, codes[0], notes, status="completed")
+                promote.submit_android(
+                    client, edit_id, staged_version, codes[0], notes, status="completed", extra_codes=codes[1:]
+                )
             else:
                 promote.submit_android(
-                    client, edit_id, staged_version, codes[0], notes, status="inProgress", user_fraction=hop
+                    client,
+                    edit_id,
+                    staged_version,
+                    codes[0],
+                    notes,
+                    status="inProgress",
+                    user_fraction=hop,
+                    extra_codes=codes[1:],
                 )
         except promote.PromotionError as exc:
             raise TrainError(str(exc)) from exc

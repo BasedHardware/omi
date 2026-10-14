@@ -405,6 +405,43 @@ class RunIOSTests(unittest.TestCase):
         self.assertNotIn(("review-submissions", "cancel", "rs-old"), asc.calls)
         self.assertTrue(summary.startswith("ios=replace 1.0.554 (1335)"))
 
+    def test_review_submission_lookup_follows_pagination(self):
+        asc = FakeASC(
+            {
+                ("apps", "list-review-submissions"): [
+                    {"id": "rs", "attributes": {"state": "COMPLETE", "submittedDate": "x"}}
+                ],
+            }
+        )
+
+        def rest_items(request, headers=None, timeout=60):
+            url = request.full_url if hasattr(request, "full_url") else request
+
+            class Response:
+                def __enter__(self):
+                    return self
+
+                def __exit__(self, *exc):
+                    return False
+
+                def read(self):
+                    if "page=2" not in url:
+                        # First page holds a different version; the target is on page 2.
+                        return json.dumps(
+                            {
+                                "included": [{"type": "appStoreVersions", "id": "other"}],
+                                "links": {"next": "https://api.appstoreconnect.apple.com/v1/reviewSubmissions/rs/items?include=appStoreVersion&limit=200&page=2"},
+                            }
+                        ).encode()
+                    return json.dumps({"included": [{"type": "appStoreVersions", "id": "target"}]}).encode()
+
+            return Response()
+
+        with patch.object(train.urllib.request, "urlopen", side_effect=rest_items), patch.object(
+            train, "_asc_rest_token", return_value="faketoken"
+        ):
+            self.assertEqual(train.review_submission_for_version(asc, "target"), "rs")
+
     def test_rejection_that_does_not_reach_developer_rejected_fails_loudly(self):
         asc = FakeASC(
             {
@@ -647,6 +684,37 @@ class AndroidTests(unittest.TestCase):
         ), patch.object(train, "STAGED_ROLLOUT_FRACTION", None):
             summary = train.run_android(dry_run=False, release_date="2026-10-06")
         self.assertEqual(summary, "android=staged 1.0.554 1340 @5% parked (staged disabled)")
+        client.edits().tracks().update.assert_not_called()
+
+    def test_ladder_hop_retains_every_apk_code(self):
+        client = Mock()
+        staged = {
+            "name": "1.0.554 (1340)",
+            "versionCodes": ["1340", "1339"],
+            "status": "inProgress",
+            "userFraction": 0.05,
+            "releaseNotes": [{"language": "en-US", "text": "Shipped text"}],
+        }
+        tracks = {"internal": self.internal, "alpha": self.alpha, "production": {"track": "production", "releases": [staged]}}
+        with patch.object(promote, "play_edit", return_value=(client, "edit")), patch.object(
+            promote, "play_track", side_effect=lambda c, e, name: tracks[name]
+        ), patch.object(train, "ensure_release_notes") as ensure_notes:
+            summary = train.run_android(dry_run=False, release_date="2026-10-06")
+        self.assertEqual(summary, "android=staged 1.0.554 1340 @25%")
+        body = client.edits().tracks().update.call_args.kwargs["body"]
+        self.assertEqual(body["releases"][0]["versionCodes"], ["1340", "1339"])
+        self.assertEqual(body["releases"][0]["userFraction"], 0.25)
+        ensure_notes.assert_not_called()
+
+    def test_ladder_dry_run_validates_the_notes_fallback(self):
+        client = Mock()
+        staged = {"name": "1.0.554 (1340)", "versionCodes": ["1340"], "status": "inProgress", "userFraction": 0.05}
+        tracks = {"internal": self.internal, "alpha": self.alpha, "production": {"track": "production", "releases": [staged]}}
+        with patch.object(promote, "play_edit", return_value=(client, "edit")), patch.object(
+            promote, "play_track", side_effect=lambda c, e, name: tracks[name]
+        ), patch.object(train, "ensure_release_notes", side_effect=train.TrainError("no release notes for 1.0.554")):
+            with self.assertRaisesRegex(train.TrainError, "no release notes"):
+                train.run_android(dry_run=True, release_date="2026-10-06")
         client.edits().tracks().update.assert_not_called()
 
     def test_existing_draft_with_the_same_code_is_idempotent(self):

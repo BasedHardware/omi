@@ -316,14 +316,17 @@ def submit_android(
     *,
     status: str = "completed",
     user_fraction: float | None = None,
+    extra_codes: Sequence[str] = (),
 ) -> None:
-    """Write one production release for an existing code.
+    """Write one production release for the given code(s).
 
     status "completed" = fully live; "draft" = Play Console draft; "inProgress"
     = staged rollout (with user_fraction, e.g. 0.05) that is haltable from the
     Play Console as a post-release brake. userFraction is rejected for
     completed/draft releases; a completed release cannot later be halted, so
-    decide the exposure path before writing.
+    decide the exposure path before writing. extra_codes carries any
+    additional versionCodes an existing in-flight release already had (a
+    multi-APK rollout must not lose its variants when the track is rewritten).
     """
     if status not in PLAY_RELEASE_STATUSES:
         raise PromotionError("Play release status must be completed, draft, inProgress or halted")
@@ -333,9 +336,12 @@ def submit_android(
         # fraction-less inProgress is the HALTED representation, not a writable
         # release; halting is an explicit Play Console (or halted) operation
         raise PromotionError("a staged (inProgress) release requires a userFraction")
+    codes = [build_number, *extra_codes]
+    if len(set(codes)) != len(codes):
+        raise PromotionError("Play release version codes must be unique")
     release: dict[str, object] = {
         "name": version,
-        "versionCodes": [build_number],
+        "versionCodes": codes,
         "status": status,
         "releaseNotes": [{"language": "en-US", "text": notes}],
     }

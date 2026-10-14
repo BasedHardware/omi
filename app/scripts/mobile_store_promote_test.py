@@ -219,6 +219,19 @@ class AndroidChecks(unittest.TestCase):
         with self.assertRaises(promote.PromotionError):
             promote.submit_android(Mock(), "edit-id", "1.2.3", "23", "New line", status="completed", user_fraction=0.05)
 
+    def test_extra_codes_are_retained_and_must_be_unique(self):
+        client = Mock()
+        promote.submit_android(
+            client, "edit-id", "1.2.3", "23", "New line", status="inProgress", user_fraction=0.25, extra_codes=("22",)
+        )
+        body = client.edits().tracks().update.call_args.kwargs["body"]
+        self.assertEqual(body["releases"][0]["versionCodes"], ["23", "22"])
+        client.edits().commit.assert_called_once()
+        with self.assertRaisesRegex(promote.PromotionError, "unique"):
+            promote.submit_android(
+                Mock(), "edit-id", "1.2.3", "23", "New line", status="inProgress", user_fraction=0.25, extra_codes=("23",)
+            )
+
 
 if __name__ == "__main__":
     unittest.main()
