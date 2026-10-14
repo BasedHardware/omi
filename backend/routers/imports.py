@@ -83,12 +83,20 @@ async def import_limitless_data(
     if not file.filename or not file.filename.endswith('.zip'):
         raise HTTPException(status_code=400, detail="File must be a ZIP archive")
 
+    # Reduce the user-supplied name to a safe basename so it can never escape the
+    # temp directory via '..' or an absolute path ('../../tmp/x.zip', '/etc/x.zip',
+    # 'C:\..\x.zip'). The job id is still the unique prefix, so the name only adds
+    # a human-readable hint.
+    safe_name = os.path.basename(file.filename.replace('\\', '/'))
+    if not safe_name.lower().endswith('.zip'):
+        raise HTTPException(status_code=400, detail="File must be a ZIP archive")
+
     # Create import job
     job = await run_blocking(db_executor, create_import_job, uid, ImportSourceType.limitless)
 
     # Save uploaded file to temp directory
     os.makedirs(TEMP_DIR, exist_ok=True)
-    zip_path = os.path.join(TEMP_DIR, f"{job.id}_{file.filename}")
+    zip_path = os.path.join(TEMP_DIR, f"{job.id}_{safe_name}")
 
     try:
         # Stream the file to disk to avoid loading it all into memory
@@ -99,14 +107,16 @@ async def import_limitless_data(
         finally:
             f.close()
     except Exception as e:
-        # Clean up on error
+        # Shield internal paths/OS details from the client and the persisted job
+        # record; the operator sees them in the logs.
+        logger.error('limitless import upload not staged job_id=%s error_class=%s', job.id, type(e).__name__)
         await run_blocking(
             db_executor,
             import_jobs_db.update_import_job,
             job.id,
-            {'status': ImportJobStatus.failed.value, 'error': f"Failed to save uploaded file: {str(e)}"},
+            {'status': ImportJobStatus.failed.value, 'error': "Failed to save uploaded file"},
         )
-        raise HTTPException(status_code=500, detail=f"Failed to save uploaded file: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to save uploaded file")
 
     # Start background processing
     storage_executor.submit(process_limitless_import, job.id, uid, zip_path, language)
