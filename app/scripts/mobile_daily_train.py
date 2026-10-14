@@ -1,17 +1,28 @@
 #!/usr/bin/env python3
-"""Daily mobile release train: queue the newest internal build for a human to release.
+"""Daily mobile release train: self-drive the newest internal build through the stores.
+
+Self-driving posture (2026-10-14): releases proceed once the stores approve.
 
 iOS: the newest processed TestFlight build whose marketing version is newer than the live
-App Store version is submitted for review with release type MANUAL. One submission is in
-flight at a time: anything WAITING_FOR_REVIEW / IN_REVIEW is left alone. An approved version
-nobody released (PENDING_DEVELOPER_RELEASE) is cancelled and replaced when a newer build
-exists; when it already carries the newest build it stays, so a human can still release it.
+App Store version is submitted for review with release type AFTER_APPROVAL and the automatic
+phased rollout enabled (pausable in App Store Connect — the post-release brake). One
+submission is in flight at a time: anything WAITING_FOR_REVIEW / IN_REVIEW is left alone. An
+approved version nobody released (PENDING_DEVELOPER_RELEASE) is cancelled and replaced when
+a newer build exists; when it already carries the newest build it stays, so a human can still
+release it (App Store Connect has no API to issue the developer-release command).
 
 Android: the newest build on the Play internal/alpha tracks that is newer than the live
-production release is written to production as a *draft* release. Each run overwrites the
-draft with the newer build; a human presses Release in Play Console.
+production release is written to production as a staged rollout at 5% (haltable in Play
+Console) and promoted one ladder hop per gate-green day. Every advancing action stamps a
+gate receipt into the release name so a same-day retry cannot hop twice.
 
-Nothing here releases to users. Exit 0 when there is nothing to do; exit 1 on a real failure.
+The operator release gate audits the candidate before dispatching; its audited
+platform/version/build identifiers travel as TRAIN_PIN_IOS / TRAIN_PIN_ANDROID and the train
+fails closed when the store no longer matches them (the self-driving posture removed the
+old human queue's final interception point; the pin replaces it).
+
+Store approval always gates everything. Exit 0 when there is nothing to do; exit 1 on a
+real failure.
 """
 
 from __future__ import annotations
@@ -69,6 +80,16 @@ STAGED_ROLLOUT_FRACTION = 0.05
 # None disables the ladder too (queue-for-human rollback parks any rollout
 # that is already in flight).
 STAGED_ROLLOUT_LADDER = (0.05, 0.25, 1.0)
+# Gate receipts: the train stamps the gate date of every advancing action
+# (start or ladder hop) into the Play release name ("1.0.554 (gate 2026-10-15)")
+# so a same-day retry of a failed train reads the receipt and holds position
+# instead of hopping twice. main() runs both platforms before exiting nonzero,
+# so a failed platform's retry would otherwise re-observe the other platform's
+# fresh fraction and collapse the ladder's observation window. The receipt is
+# server-side Play state: it survives ephemeral build machines, needs no
+# repo-side storage, and PRODUCTION_NAME_VERSION_RE already tolerates the
+# "(...)" suffix on release names.
+GATE_RECEIPT_RE = re.compile(r"\(gate (\d{4}-\d{2}-\d{2})\)")
 
 
 class TrainError(Exception):
@@ -86,6 +107,35 @@ def strict_version(value: object) -> str | None:
 def newest_version(versions: Iterable[str]) -> str | None:
     strict = [version for version in versions if strict_version(version)]
     return max(strict, key=promote.version_parts) if strict else None
+
+
+PIN_RE = re.compile(r"^\s*((?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*))\s*/\s*([1-9][0-9]*)\s*$")
+
+
+@dataclass(frozen=True)
+class StorePin:
+    """A candidate the operator release gate already audited (`X.Y.Z/build`).
+
+    The self-driving posture removed the last human interception point, so the
+    gate's audited identifiers travel with the dispatch and every releasing
+    action fails closed when the store no longer matches them: the train must
+    ship what was audited, not whatever became newest in the gap between the
+    gate's audit and the Codemagic run.
+    """
+
+    version: str
+    build: str
+
+
+def store_pin(name: str) -> StorePin | None:
+    """Parse `TRAIN_PIN_*` (`X.Y.Z/build`) into a StorePin; malformed fails closed."""
+    raw = os.environ.get(name, "")
+    if not raw:
+        return None
+    match = PIN_RE.fullmatch(raw)
+    if match is None:
+        raise TrainError(f"{name} must be X.Y.Z/build (got {raw!r}); refusing to select a candidate")
+    return StorePin(match.group(1), match.group(2))
 
 
 # --------------------------------------------------------------------------- iOS
@@ -491,12 +541,21 @@ def run_ios(*, dry_run: bool, release_date: str, asc: Callable[..., object] = as
     for name in ("APP_STORE_CONNECT_ISSUER_ID", "APP_STORE_CONNECT_KEY_IDENTIFIER", "APP_STORE_CONNECT_PRIVATE_KEY"):
         if not os.environ.get(name):
             raise TrainError(f"missing App Store Connect credential: {name}")
+    pin = store_pin("TRAIN_PIN_IOS")
     state = fetch_ios_state(asc)
     plan = plan_ios(state)
     log(f"iOS live {state.live_version}; plan={plan.action}: {plan.reason}")
     if plan.submit is None:
         return f"ios={plan.action} ({plan.reason})"
     candidate = plan.submit
+    if pin is not None and (candidate.version, str(candidate.build_number)) != (pin.version, pin.build):
+        # The operator gate audited a specific build; the store moved on in
+        # the gap (a newer TestFlight build processed). Fail closed instead of
+        # self-driving an unaudited build to production.
+        raise TrainError(
+            f"TRAIN_PIN_IOS {pin.version}/{pin.build} does not match the selected candidate "
+            f"{candidate.version}/{candidate.build_number}; refusing to release an unaudited build"
+        )
     live = next(v for v in ios_versions_in_state(asc, LIVE_STATE) if v.version == state.live_version)
     if PHASED_RELEASE and ios_phased_release_paused(live.id):
         # The operator paused the live version's phased rollout in App Store
@@ -621,7 +680,27 @@ def _staged_release_notes(staged: dict[str, object]) -> str | None:
     return None
 
 
+def _staged_name_with_receipt(version: str, release_date: str) -> str:
+    """Play release name carrying the gate receipt for this run's date."""
+    return f"{version} (gate {release_date})"
+
+
+def _staged_gate_receipt(staged: dict[str, object]) -> str | None:
+    """The gate date a staged release was last advanced, if its name carries one.
+
+    Names written before receipts existed (or by Play Console) carry no
+    receipt; None means "advance freely" so the first receipted run bootstraps
+    the ledger.
+    """
+    name = staged.get("name")
+    if not isinstance(name, str):
+        return None
+    match = GATE_RECEIPT_RE.search(name)
+    return match.group(1) if match else None
+
+
 def run_android(*, dry_run: bool, release_date: str) -> str:
+    pin = store_pin("TRAIN_PIN_ANDROID")
     try:
         client, edit_id = promote.play_edit()
         tracks = {name: promote.play_track(client, edit_id, name) for name in PLAY_SOURCE_TRACKS}
@@ -665,6 +744,17 @@ def run_android(*, dry_run: bool, release_date: str) -> str:
                 f"a human decides halt or resume in Play Console"
             )
             return f"android=staged-halted {staged_version} {codes[0]}"
+        receipt = _staged_gate_receipt(staged)
+        if receipt == release_date:
+            # This rollout was already advanced by today's gate (a retry of a
+            # train whose other platform failed — main() runs both platforms
+            # before exiting nonzero). One advancing action per gate period
+            # keeps the daily observation window the ladder exists for.
+            log(
+                f"Android production staged {staged_version} {codes[0]} was already advanced by the "
+                f"{receipt} gate; holding at {current:.0%} for the next gate window"
+            )
+            return f"android=staged {staged_version} {codes[0]} @{current:.0%} (gate {receipt} done)"
         if candidate is not None:
             # A newer internal build exists, but Play allows only one staged
             # release at a time, so it starts only after this rollout
@@ -703,6 +793,7 @@ def run_android(*, dry_run: bool, release_date: str) -> str:
                     status="completed",
                     extra_codes=codes[1:],
                     base_release=staged,
+                    release_name=_staged_name_with_receipt(staged_version, release_date),
                 )
             else:
                 promote.submit_android(
@@ -715,6 +806,7 @@ def run_android(*, dry_run: bool, release_date: str) -> str:
                     user_fraction=hop,
                     extra_codes=codes[1:],
                     base_release=staged,
+                    release_name=_staged_name_with_receipt(staged_version, release_date),
                 )
         except promote.PromotionError as exc:
             raise TrainError(str(exc)) from exc
@@ -726,6 +818,14 @@ def run_android(*, dry_run: bool, release_date: str) -> str:
     if candidate is None:
         log(f"Android live {live}; no internal/alpha build is newer")
         return f"android=nothing (live {live})"
+    if pin is not None and (candidate.version, candidate.version_code) != (pin.version, pin.build):
+        # Same fail-closed rule as iOS: the gate audited this exact build; a
+        # newer internal build that appeared after the audit must not be
+        # self-driven to production.
+        raise TrainError(
+            f"TRAIN_PIN_ANDROID {pin.version}/{pin.build} does not match the selected candidate "
+            f"{candidate.version}/{candidate.version_code}; refusing to release an unaudited build"
+        )
     draft = existing_production_draft(production)
     draft_codes = promote.release_codes(draft) if draft is not None else None
     if draft is not None and draft_codes == [candidate.version_code]:
@@ -768,6 +868,7 @@ def run_android(*, dry_run: bool, release_date: str) -> str:
                 notes,
                 status="inProgress",
                 user_fraction=STAGED_ROLLOUT_FRACTION,
+                release_name=_staged_name_with_receipt(candidate.version, release_date),
             )
         else:
             promote.submit_android(client, edit_id, candidate.version, candidate.version_code, notes, status="draft")

@@ -318,6 +318,7 @@ def submit_android(
     user_fraction: float | None = None,
     extra_codes: Sequence[str] = (),
     base_release: dict[str, object] | None = None,
+    release_name: str | None = None,
 ) -> None:
     """Write one production release for the given code(s).
 
@@ -332,6 +333,8 @@ def submit_android(
     its metadata (countryTargeting, localized releaseNotes,
     inAppUpdatePriority, ...) and changes only name/codes/status/fraction —
     the derived single-locale notes are used only when it carries none.
+    release_name overrides the written name (defaults to the bare version);
+    the daily train uses it to stamp a gate receipt into the name.
     """
     if status not in PLAY_RELEASE_STATUSES:
         raise PromotionError("Play release status must be completed, draft, inProgress or halted")
@@ -347,7 +350,7 @@ def submit_android(
     existing_notes = base_release.get("releaseNotes") if isinstance(base_release, dict) else None
     preserved_notes = existing_notes if isinstance(existing_notes, list) and existing_notes else None
     release: dict[str, object] = dict(base_release) if isinstance(base_release, dict) else {}
-    release["name"] = version
+    release["name"] = release_name if release_name is not None else version
     release["versionCodes"] = codes
     release["status"] = status
     release["releaseNotes"] = preserved_notes if preserved_notes is not None else [

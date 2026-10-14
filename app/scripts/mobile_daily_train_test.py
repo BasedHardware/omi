@@ -545,7 +545,7 @@ class AndroidTests(unittest.TestCase):
         self.assertEqual(body["releases"][0]["status"], "inProgress")
         self.assertEqual(body["releases"][0]["userFraction"], train.STAGED_ROLLOUT_FRACTION)
         self.assertEqual(body["releases"][0]["versionCodes"], ["1340"])
-        self.assertEqual(body["releases"][0]["name"], "1.0.554")
+        self.assertEqual(body["releases"][0]["name"], f"1.0.554 (gate 2026-10-06)")
         self.assertEqual(body["releases"][0]["releaseNotes"], [{"language": "en-US", "text": "Faster sync"}])
         client.edits().commit.assert_called_once()
 
@@ -686,6 +686,66 @@ class AndroidTests(unittest.TestCase):
         self.assertEqual(summary, "android=staged 1.0.554 1340 @5% parked (staged disabled)")
         client.edits().tracks().update.assert_not_called()
 
+    def test_a_same_day_retry_holds_position_after_a_gate_receipt(self):
+        client = Mock()
+        staged = {"name": "1.0.554 (gate 2026-10-06)", "versionCodes": ["1340"], "status": "inProgress", "userFraction": 0.05}
+        tracks = {"internal": self.internal, "alpha": self.alpha, "production": {"track": "production", "releases": [staged]}}
+        with patch.object(promote, "play_edit", return_value=(client, "edit")), patch.object(
+            promote, "play_track", side_effect=lambda c, e, name: tracks[name]
+        ):
+            summary = train.run_android(dry_run=False, release_date="2026-10-06")
+        self.assertEqual(summary, "android=staged 1.0.554 1340 @5% (gate 2026-10-06 done)")
+        client.edits().tracks().update.assert_not_called()
+
+    def test_a_dry_run_also_holds_position_after_a_gate_receipt(self):
+        client = Mock()
+        staged = {"name": "1.0.554 (gate 2026-10-06)", "versionCodes": ["1340"], "status": "inProgress", "userFraction": 0.25}
+        tracks = {"internal": self.internal, "alpha": self.alpha, "production": {"track": "production", "releases": [staged]}}
+        with patch.object(promote, "play_edit", return_value=(client, "edit")), patch.object(
+            promote, "play_track", side_effect=lambda c, e, name: tracks[name]
+        ):
+            summary = train.run_android(dry_run=True, release_date="2026-10-06")
+        self.assertEqual(summary, "android=staged 1.0.554 1340 @25% (gate 2026-10-06 done)")
+        client.edits().tracks().update.assert_not_called()
+
+    def test_the_next_day_after_a_receipt_hops_again(self):
+        client = Mock()
+        staged = {
+            "name": "1.0.554 (gate 2026-10-06)",
+            "versionCodes": ["1340"],
+            "status": "inProgress",
+            "userFraction": 0.05,
+            "releaseNotes": [{"language": "en-US", "text": "Shipped text"}],
+        }
+        tracks = {"internal": self.internal, "alpha": self.alpha, "production": {"track": "production", "releases": [staged]}}
+        with patch.object(promote, "play_edit", return_value=(client, "edit")), patch.object(
+            promote, "play_track", side_effect=lambda c, e, name: tracks[name]
+        ), patch.object(train, "ensure_release_notes") as ensure_notes:
+            summary = train.run_android(dry_run=False, release_date="2026-10-07")
+        self.assertEqual(summary, "android=staged 1.0.554 1340 @25%")
+        body = client.edits().tracks().update.call_args.kwargs["body"]
+        self.assertEqual(body["releases"][0]["name"], "1.0.554 (gate 2026-10-07)")
+        self.assertEqual(body["releases"][0]["userFraction"], 0.25)
+        client.edits().commit.assert_called_once()
+
+    def test_a_receipt_free_name_advances_freely(self):
+        client = Mock()
+        staged = {
+            "name": "1.0.554 (1340)",
+            "versionCodes": ["1340"],
+            "status": "inProgress",
+            "userFraction": 0.05,
+            "releaseNotes": [{"language": "en-US", "text": "Shipped text"}],
+        }
+        tracks = {"internal": self.internal, "alpha": self.alpha, "production": {"track": "production", "releases": [staged]}}
+        with patch.object(promote, "play_edit", return_value=(client, "edit")), patch.object(
+            promote, "play_track", side_effect=lambda c, e, name: tracks[name]
+        ), patch.object(train, "ensure_release_notes") as ensure_notes:
+            summary = train.run_android(dry_run=False, release_date="2026-10-06")
+        self.assertEqual(summary, "android=staged 1.0.554 1340 @25%")
+        body = client.edits().tracks().update.call_args.kwargs["body"]
+        self.assertEqual(body["releases"][0]["name"], "1.0.554 (gate 2026-10-06)")
+
     def test_ladder_hop_retains_every_apk_code(self):
         client = Mock()
         staged = {
@@ -768,6 +828,91 @@ class AndroidTests(unittest.TestCase):
             summary = train.run_android(dry_run=True, release_date="2026-10-06")
         self.assertEqual(summary, "android=dry-run:draft 1.0.554 (1340)")
         client.edits().tracks().update.assert_not_called()
+
+    def test_a_matching_android_pin_still_stages_the_candidate(self):
+        client = Mock()
+        tracks = {"internal": self.internal, "alpha": self.alpha, "production": self.production}
+        with tempfile.TemporaryDirectory() as tmp:
+            release = Path(tmp) / "1.0.554.json"
+            release.write_text(json.dumps({"version": "1.0.554", "date": "2026-10-06", "changes": ["Faster sync"]}))
+            with patch.object(promote, "play_edit", return_value=(client, "edit")), patch.object(
+                promote, "play_track", side_effect=lambda c, e, name: tracks[name]
+            ), patch.object(train, "ensure_release_notes", return_value=release), patch.object(
+                promote, "require_notes", return_value="Faster sync"
+            ), patch.dict(train.os.environ, {"TRAIN_PIN_ANDROID": "1.0.554/1340"}):
+                summary = train.run_android(dry_run=False, release_date="2026-10-06")
+        self.assertEqual(summary, "android=staged 1.0.554 (1340) @5%")
+        client.edits().commit.assert_called_once()
+
+    def test_a_drifted_android_pin_fails_closed_before_any_write(self):
+        client = Mock()
+        tracks = {"internal": self.internal, "alpha": self.alpha, "production": self.production}
+        with patch.object(promote, "play_edit", return_value=(client, "edit")), patch.object(
+            promote, "play_track", side_effect=lambda c, e, name: tracks[name]
+        ), patch.dict(train.os.environ, {"TRAIN_PIN_ANDROID": "1.0.553/1320"}):
+            with self.assertRaisesRegex(train.TrainError, "TRAIN_PIN_ANDROID"):
+                train.run_android(dry_run=False, release_date="2026-10-06")
+        client.edits().tracks().update.assert_not_called()
+        client.edits().commit.assert_not_called()
+
+    def test_a_drifted_android_pin_fails_closed_even_in_dry_run(self):
+        client = Mock()
+        tracks = {"internal": self.internal, "alpha": self.alpha, "production": self.production}
+        with patch.object(promote, "play_edit", return_value=(client, "edit")), patch.object(
+            promote, "play_track", side_effect=lambda c, e, name: tracks[name]
+        ), patch.dict(train.os.environ, {"TRAIN_PIN_ANDROID": "9.9.9/9999"}):
+            with self.assertRaisesRegex(train.TrainError, "unaudited"):
+                train.run_android(dry_run=True, release_date="2026-10-06")
+        client.edits().tracks().update.assert_not_called()
+
+
+class PinTests(unittest.TestCase):
+    def test_store_pin_parses_the_gate_identifier(self):
+        with patch.dict(train.os.environ, {"TRAIN_PIN_IOS": "1.0.554/1334"}):
+            self.assertEqual(train.store_pin("TRAIN_PIN_IOS"), train.StorePin("1.0.554", "1334"))
+        with patch.dict(train.os.environ, {"TRAIN_PIN_IOS": " 1.0.554 / 1334 "}):
+            self.assertEqual(train.store_pin("TRAIN_PIN_IOS"), train.StorePin("1.0.554", "1334"))
+        with patch.dict(train.os.environ, {"TRAIN_PIN_IOS": ""}):
+            self.assertIsNone(train.store_pin("TRAIN_PIN_IOS"))
+
+    def test_store_pin_malformed_fails_closed(self):
+        for bad in ("1.0.554", "1334", "1.0.554/13x4", "v1.0.554/1334"):
+            with patch.dict(train.os.environ, {"TRAIN_PIN_IOS": bad}):
+                with self.assertRaisesRegex(train.TrainError, "X.Y.Z/build"):
+                    train.store_pin("TRAIN_PIN_IOS")
+
+    def test_a_matching_ios_pin_still_submits(self):
+        asc = FakeASC(
+            live_responses(
+                extra={
+                    ("builds", "app-store-version"): {"id": "new-version", "attributes": {"appStoreState": "WAITING_FOR_REVIEW"}},
+                    ("app-store-versions", "get"): {"id": "new-version", "attributes": {"appStoreState": "WAITING_FOR_REVIEW"}},
+                }
+            )
+        )
+
+        def fake_run(command, **kwargs):
+            return Mock(returncode=0)
+
+        with patch.dict(train.os.environ, CREDENTIALS | {"TRAIN_PIN_IOS": "1.0.554/1334"}), patch.object(
+            train, "_asc_rest_token", return_value="faketoken"
+        ), patch.object(train, "ios_phased_release_paused", return_value=False), patch.object(
+            promote.subprocess, "run", side_effect=fake_run
+        ), patch.object(promote, "require_notes", return_value="- New thing"), patch.object(
+            train, "ensure_release_notes"
+        ):
+            summary = train.run_ios(dry_run=False, release_date="2026-10-06", asc=asc)
+        self.assertTrue(summary.startswith("ios=submit"))
+
+    def test_a_drifted_ios_pin_fails_closed_before_any_mutation(self):
+        asc = FakeASC(live_responses())
+        with patch.dict(train.os.environ, CREDENTIALS | {"TRAIN_PIN_IOS": "1.0.555/1400"}), patch.object(
+            train, "ios_phased_release_paused", return_value=False
+        ), patch.object(promote.subprocess, "run") as run:
+            with self.assertRaisesRegex(train.TrainError, "unaudited"):
+                train.run_ios(dry_run=False, release_date="2026-10-06", asc=asc)
+        run.assert_not_called()
+        self.assertEqual(asc.mutations(), [])
 
 
 class MainTests(unittest.TestCase):
