@@ -1,3 +1,6 @@
+import 'dart:convert';
+import 'dart:io';
+import 'package:omi/backend/schema/gen/storefront_wire.g.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -20,6 +23,7 @@ import 'package:omi/services/on_device/on_device_transcription_controller.dart';
 import 'package:omi/services/on_device/phone_power_source.dart';
 
 import '../support/on_device_fakes.dart';
+import 'storefront_plans_content_test.dart' as renders;
 
 final l10n = lookupAppLocalizations(const Locale('en'));
 
@@ -60,6 +64,24 @@ void main() {
   });
 
   group('at-cap sheet', () {
+    testWidgets('ladder cap renders backend strings and records the monthly preference', (tester) async {
+      final copy = GeneratedStorefrontCapChoice.fromJson(
+          jsonDecode(File('../backend/tests/fixtures/ladder_v1_at_cap.json').readAsStringSync()));
+      var dontAsk = false;
+      await renders.pumpSheet(tester,
+          title: null,
+          content: Padding(
+              padding: const EdgeInsets.all(20),
+              child: OnDeviceAtCapSheet(copy: copy, onDontAskAgain: (value) => dontAsk = value, onContinue: (_) {})));
+      expect(find.text(copy.title), findsOneWidget);
+      expect(find.text(copy.body), findsOneWidget);
+      expect(find.text(copy.onDeviceUpgradeLine), findsOneWidget);
+      expect(find.text(l10n.onDeviceAtCapTitle), findsNothing);
+      await _tap(tester, find.byType(CheckboxListTile));
+      await tester.pumpAndSettle();
+      expect(dontAsk, true);
+      await renders.capture(tester, '018-mobile-integrated-at-cap.png');
+    });
     testWidgets('defaults to the phone, says when hours return, and reports the choice', (tester) async {
       final choices = <OnDeviceAtCapChoice>[];
       await _pump(tester, OnDeviceAtCapSheet(onContinue: choices.add, liveHoursReturnOn: DateTime(2026, 11, 1)));

@@ -24,7 +24,7 @@ Future<bool> openContextualPlans(
   final provider = context.read<UsageProvider>();
   if (!provider.showSubscriptionUI || !await PlanStorefrontGate.sheetEnabled()) return false;
   if (!context.mounted || !provider.showSubscriptionUI) return false;
-  if (await PaywallRouter.openVariant(context, source: source)) return true;
+  if (trigger.isEmpty && await PaywallRouter.openVariant(context, source: source)) return true;
   if (!context.mounted) return false;
   PlatformManager.instance.analytics
       .paywallOpened(source, currentPlan: provider.subscription?.subscription.plan.wireName ?? 'unknown');
@@ -128,7 +128,7 @@ class _BudgetUpsellBannerState extends State<BudgetUpsellBanner> {
     }
     if (!mounted || generation != _generation || !provider.showSubscriptionUI) return;
     final result =
-        await PlanStorefrontApi().load(source: 'budget_80', trigger: 'budget_80', locale: context.l10n.localeName);
+        await PlanStorefrontApi().load(source: 'budget_80', trigger: 'usage_budget', locale: context.l10n.localeName);
     if (mounted && generation == _generation && result is ApiSuccess<PlanStorefront>) {
       setState(() => _data = result.data);
     }
@@ -151,7 +151,7 @@ class _BudgetUpsellBannerState extends State<BudgetUpsellBanner> {
             data: data,
             onDismiss: () => BudgetNudgeDismissal.dismiss(period),
             onOpen: () async {
-              await openContextualPlans(context, source: 'budget_80', trigger: 'budget_80', storefront: data);
+              await openContextualPlans(context, source: 'budget_80', trigger: 'usage_budget', storefront: data);
             }),
     ]);
   }
@@ -248,5 +248,51 @@ class _BudgetUpsellCardState extends State<BudgetUpsellCard> {
         ]),
       ]),
     );
+  }
+}
+
+/// Only the backend's observed daily cap opens this entry, never the key count or tier name.
+class McpCapUpsellEntry extends StatefulWidget {
+  const McpCapUpsellEntry({super.key});
+  @override
+  State<McpCapUpsellEntry> createState() => _McpCapUpsellEntryState();
+}
+
+class _McpCapUpsellEntryState extends State<McpCapUpsellEntry> {
+  PlanStorefront? _data;
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _load());
+  }
+
+  Future<void> _load() async {
+    if (!mounted ||
+        !context.read<UsageProvider>().showSubscriptionUI ||
+        !await PlanStorefrontGate.contextualEnabled()) {
+      return;
+    }
+    if (!mounted) return;
+    final result = await PlanStorefrontApi()
+        .load(source: 'mobile_mcp_cap', trigger: 'mcp_daily_cap', locale: context.l10n.localeName);
+    if (mounted && result is ApiSuccess<PlanStorefront>) setState(() => _data = result.data);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final data = _data;
+    if (!context.watch<UsageProvider>().showSubscriptionUI ||
+        data == null ||
+        !data.showSubscriptionUi ||
+        data.usage?.mcpCapReached != true) {
+      return const SizedBox.shrink();
+    }
+    return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+      Text(data.header, style: OmiType.subhead),
+      OmiButton.secondary(
+          label: context.l10n.paywallComparePlans,
+          onPressed: () =>
+              openContextualPlans(context, source: 'mobile_mcp_cap', trigger: 'mcp_daily_cap', storefront: data)),
+    ]);
   }
 }

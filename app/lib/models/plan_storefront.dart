@@ -1,4 +1,5 @@
 import 'package:omi/models/subscription.dart';
+import 'package:omi/backend/schema/gen/storefront_wire.g.dart';
 
 /// Presentation only. The backend owns tier rank, recommendation, copy, prices and entitlements.
 /// Schema version 2 is the only accepted payload. Unknown versions and malformed purchasable prices fail closed.
@@ -10,6 +11,7 @@ class PlanStorefront {
   final String header;
   final String? yearlyToggleLabel;
   final bool showSubscriptionUi;
+  final GeneratedStorefrontCapChoice? atCap;
 
   const PlanStorefront({
     required this.catalogRevision,
@@ -19,6 +21,7 @@ class PlanStorefront {
     required this.header,
     this.yearlyToggleLabel,
     required this.showSubscriptionUi,
+    this.atCap,
   });
 
   /// Current and usage snapshots must both permit a nonblocking budget nudge.
@@ -56,6 +59,7 @@ class PlanStorefront {
       throw const FormatException('Invalid yearly toggle label');
     }
     return PlanStorefront(
+      atCap: json['at_cap'] == null ? null : GeneratedStorefrontCapChoice.fromJson(_object(json['at_cap'])),
       catalogRevision: revision,
       tiers: List.unmodifiable(tiers),
       current: json['current'] == null ? null : StorefrontCurrentPlan.fromJson(_object(json['current'])),
@@ -265,6 +269,7 @@ class StorefrontPrice {
   final String? renewalLine;
   final int? monthsFree;
   final String? ctaLabel;
+  final List<String> confirmLines;
 
   const StorefrontPrice({
     required this.id,
@@ -276,6 +281,7 @@ class StorefrontPrice {
     this.renewalLine,
     this.monthsFree,
     this.ctaLabel,
+    this.confirmLines = const [],
   });
 
   factory StorefrontPrice.fromJson(Map<String, dynamic> json) {
@@ -298,6 +304,8 @@ class StorefrontPrice {
       renewalLine: _optionalText(json, 'renewal_line'),
       monthsFree: months as int?,
       ctaLabel: _optionalText(json, 'cta_label'),
+      confirmLines: List<String>.unmodifiable(
+          (json['confirm_lines'] as List? ?? const []).whereType<String>().where((line) => line.trim().isNotEmpty)),
     );
   }
 }
@@ -360,6 +368,7 @@ class StorefrontUsage {
   final String? meterLine;
   final String? nudgeLine;
   final Set<String> proGates;
+  final bool mcpCapReached;
 
   const StorefrontUsage({
     required this.kind,
@@ -368,6 +377,7 @@ class StorefrontUsage {
     this.resetLabel,
     this.meterLine,
     this.nudgeLine,
+    this.mcpCapReached = false,
     this.proGates = const {},
   });
 
@@ -391,6 +401,7 @@ class StorefrontUsage {
       resetLabel: _optionalText(json, 'reset_label'),
       meterLine: _optionalText(json, 'meter_line'),
       nudgeLine: _optionalText(json, 'nudge_line'),
+      mcpCapReached: json['mcp_cap_reached'] == true,
       proGates: Set<String>.unmodifiable(gates.map((value) => value as String)),
     );
   }

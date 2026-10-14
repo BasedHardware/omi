@@ -2,10 +2,9 @@
   "schema_version": 1,
   "default_locale": "en",
   "recording": {
-    "units_per_recorded_hour": 130,
     "recording_share": 0.85,
     "free_hours": 15,
-    "note": "units_per_recorded_hour is provisional (~$0.13 fully loaded: transcription $1.83 per 1,000 wall-clock minutes + ~19% extraction) from evidence/2026-10-12-unit-economics-and-usage.md §1/§3. Replace with shadow-ledger p50 (#21369)."
+    "note": "Worn-hour rates and 98% background blend live in versioned rate_card_v2.json; provisional rates both 130 preserve existing numbers"
   },
   "budget_units_note": "Plan-catalog usage budgets in units per month (Plus 16360, Pro 44090, Architect 189463). plan_catalog.json has no usage-units allocation; this rate card is what the hours formula reads until the catalog exposes one. Free hours are fixed.",
   "budget_units": {
@@ -96,7 +95,12 @@
         "months_free_many": "{n} months free",
         "renewal_month": "Renews monthly until you cancel. Cancel anytime in settings.",
         "renewal_year": "Renews yearly until you cancel. Cancel anytime in settings.",
-        "toggle": "Yearly · {free}"
+        "toggle": "Yearly · {free}",
+        "confirm_yearly_lines": [
+          "Your monthly plan continues until {date}",
+          "Your payment method will be charged {amount} when your yearly plan starts",
+          "Your yearly plan starts on {date}"
+        ]
       },
       "meter": {
         "line": "{percent}% used · about {hours} hours of recording left · {reset}",
@@ -113,6 +117,11 @@
         "on_device_label": "Keep going on this phone",
         "dont_ask_again_label": "Don't ask again this month",
         "on_device_upgrade_line": "Upgrade to Pro for speaker separation and higher accuracy"
+      },
+      "hours_bands": {
+        "plus": "About {hours} hours of recording a month · Enough for casual daily use",
+        "operator": "About {hours} hours of recording a month · Enough to wear it 24/7",
+        "architect": "About {hours} hours of recording a month · 24/7 on more than one device"
       }
     }
   }

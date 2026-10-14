@@ -70,7 +70,9 @@ def _share() -> Decimal:
 
 
 def _units_per_hour() -> Decimal:
-    return Decimal(_recording()['units_per_recorded_hour'])
+    from config.rate_card import recording_units_per_hour
+
+    return recording_units_per_hour()
 
 
 def budget_units_for(plan_id: str) -> int | None:
@@ -132,6 +134,14 @@ def hours_line(plan_id: str, locale: str | None = None) -> str:
     if not template:
         return ''
     hours = recording_hours(plan_id)
+    bands = copy_for(locale)['hours_bands']
+    threshold = {'plus': 240, 'operator': 720, 'architect': 1440}.get(plan_id)
+    if threshold is not None:
+        raw = Decimal(budget_units_for(plan_id) or 0) * _share() / _units_per_hour()
+        if raw >= threshold:
+            # Preserve the capacity threshold when floor_to_nice would round 720 down to 700.
+            hours = max(hours, threshold)
+            return bands[plan_id].format(hours=f'{hours:,}')
     return template.format(hours=f'{hours:,}', per_day=per_day_count(hours))
 
 

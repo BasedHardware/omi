@@ -126,6 +126,20 @@ def get_storefront(
         for price_id, plan in catalog.RECOGNIZED_STRIPE_PRICE_PLAN_TYPES.items()
     ]
     recognized.extend(configured.values())
+    usage = _usage(uid, subscription, locale)
+    from config import ladder_v1 as policy
+    from utils.ladder_v1 import account
+
+    entitlement = account(uid, subscription)
+    if not policy.enabled('LADDER_V1_PRO_GATES_ENABLED') or entitlement is None or entitlement['plan_id'] in ('operator', 'architect'):
+        usage.pro_gates = []
+    if trigger == 'mcp_daily_cap' and policy.mcp_daily_caps_enabled() and entitlement is not None:
+        from database.ladder_v1 import daily_cap_reached
+
+        try:
+            usage.mcp_cap_reached = daily_cap_reached(uid, catalog.ENTITLEMENT_VERSIONS['ladder_v1']['mcp_daily_caps'][entitlement['plan_id']])
+        except Exception:
+            _degraded('storefront_daily_cap', 'unavailable_usage')
     return build_storefront(
         catalog_revision=catalog.CATALOG_REVISION,
         ladder=load_ladder(),
@@ -134,7 +148,7 @@ def get_storefront(
         subscription=subscription,
         retrieve_price=_retrieve_price,
         purchasable=subscription_utils.is_purchasable_price_id,
-        usage=_usage(uid, subscription, locale),
+        usage=usage,
         source=source,
         trigger=trigger,
         locale=locale,

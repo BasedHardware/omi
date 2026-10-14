@@ -63,6 +63,8 @@ final class PlanStorefrontTests: XCTestCase {
       ["operator": "Upgrade to Pro", "plus": "Switch to yearly · save $39.98", "architect": "Upgrade to Architect"])
     let plus = try XCTUnwrap(data.tiers.first(where: \.isCurrent))
     XCTAssertEqual(data.offeredPrice(plus, interval: .month)?.headline, "$19.99/month")
+    XCTAssertEqual(
+      data.offeredPrice(plus, interval: .month)?.confirmLines.first, "Your monthly plan continues until Nov 1")
   }
 
   func testAnnualPlusStartsYearlyAndIsNeverOfferedMonthly() throws {
@@ -80,6 +82,7 @@ final class PlanStorefrontTests: XCTestCase {
       ["architect": "Upgrade to Architect", "plus": "", "operator": "Switch to yearly · save $99.98"])
     XCTAssertEqual(capped.partitionedTiers.primary.map(\.planId), ["architect", "operator"])
     XCTAssertFalse(try Self.golden("pro_settings").tiers.map(\.planId).contains("architect"))
+    XCTAssertFalse(try Self.golden("pro_budget80").tiers.map(\.planId).contains("architect"))
   }
 
   func testEightyPercentBudgetShowsTheNudge() throws {
@@ -204,13 +207,10 @@ final class StorefrontPlansRenderTests: XCTestCase {
   func testRendersReviewStates() throws {
     for name in [
       "free_settings", "plus_monthly_yearly_toggle", "pro_budget_cap", "cancel_scheduled_plus", "legacy_neo",
-      "free_budget80",
+      "free_budget80", "pro_budget80",
     ] {
       try render(try PlanStorefrontTests.golden(name), name: name)
     }
-    // Pro at 80% has no backend golden yet (requested); the harness supplies one when present.
-    if let extra = ProcessInfo.processInfo.environment["OMI_STOREFRONT_EXTRA_FIXTURE"] {
-      try render(try PlanStorefront.decode(Data(contentsOf: URL(fileURLWithPath: extra))), name: "pro_budget80")
-    }
+
   }
 }

@@ -5133,6 +5133,7 @@ public enum OmiAPI {
 
   public struct StorefrontPrice: Codable {
     public let amountMinor: Int
+    public let confirmLines: [String]?
     public let ctaLabel: String?
     public let currency: String
     public let headline: String
@@ -5144,6 +5145,7 @@ public enum OmiAPI {
 
     private enum CodingKeys: String, CodingKey {
       case amountMinor = "amount_minor"
+      case confirmLines = "confirm_lines"
       case ctaLabel = "cta_label"
       case currency
       case headline
@@ -5157,6 +5159,7 @@ public enum OmiAPI {
     public init(from decoder: Decoder) throws {
       let c = try decoder.container(keyedBy: CodingKeys.self)
       amountMinor = try c.decode(Int.self, forKey: .amountMinor)
+      confirmLines = try c.decodeIfPresent([String].self, forKey: .confirmLines)
       ctaLabel = try c.decodeIfPresent(String.self, forKey: .ctaLabel)
       currency = try c.decode(String.self, forKey: .currency)
       headline = try c.decode(String.self, forKey: .headline)
@@ -5167,8 +5170,9 @@ public enum OmiAPI {
       subline = try c.decodeIfPresent(String.self, forKey: .subline)
     }
 
-    public init(amountMinor: Int, ctaLabel: String? = nil, currency: String, headline: String, interval: String, monthsFree: Int? = nil, priceId: String? = nil, renewalLine: String? = nil, subline: String? = nil) {
+    public init(amountMinor: Int, confirmLines: [String]? = nil, ctaLabel: String? = nil, currency: String, headline: String, interval: String, monthsFree: Int? = nil, priceId: String? = nil, renewalLine: String? = nil, subline: String? = nil) {
       self.amountMinor = amountMinor
+      self.confirmLines = confirmLines
       self.ctaLabel = ctaLabel
       self.currency = currency
       self.headline = headline
@@ -5295,6 +5299,7 @@ public enum OmiAPI {
 
   public struct StorefrontUsage: Codable {
     public let kind: String?
+    public let mcpCapReached: Bool?
     public let meterLine: String?
     public let nudgeLine: String?
     public let percent: Int?
@@ -5304,6 +5309,7 @@ public enum OmiAPI {
 
     private enum CodingKeys: String, CodingKey {
       case kind
+      case mcpCapReached = "mcp_cap_reached"
       case meterLine = "meter_line"
       case nudgeLine = "nudge_line"
       case percent
@@ -5315,6 +5321,7 @@ public enum OmiAPI {
     public init(from decoder: Decoder) throws {
       let c = try decoder.container(keyedBy: CodingKeys.self)
       kind = try c.decodeIfPresent(String.self, forKey: .kind)
+      mcpCapReached = try c.decodeIfPresent(Bool.self, forKey: .mcpCapReached)
       meterLine = try c.decodeIfPresent(String.self, forKey: .meterLine)
       nudgeLine = try c.decodeIfPresent(String.self, forKey: .nudgeLine)
       percent = try c.decodeIfPresent(Int.self, forKey: .percent)
@@ -5323,8 +5330,9 @@ public enum OmiAPI {
       resetLabel = try c.decodeIfPresent(String.self, forKey: .resetLabel)
     }
 
-    public init(kind: String? = nil, meterLine: String? = nil, nudgeLine: String? = nil, percent: Int? = nil, periodId: String? = nil, proGates: [String]? = nil, resetLabel: String? = nil) {
+    public init(kind: String? = nil, mcpCapReached: Bool? = nil, meterLine: String? = nil, nudgeLine: String? = nil, percent: Int? = nil, periodId: String? = nil, proGates: [String]? = nil, resetLabel: String? = nil) {
       self.kind = kind
+      self.mcpCapReached = mcpCapReached
       self.meterLine = meterLine
       self.nudgeLine = nudgeLine
       self.percent = percent

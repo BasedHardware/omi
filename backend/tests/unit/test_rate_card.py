@@ -306,3 +306,17 @@ def test_self_hosted_deepgram_retains_unknown_compute_proxy():
     assert 'provider_unknown' in priced['reasons']
     assert get_rate_card()['transcription']['unknown']['micro_usd_per_hour'] == 258000
     assert get_rate_card()['transcription']['deepgram']['micro_usd_per_hour'] == 468000
+
+
+def test_recording_v2_identity_and_detached_copy():
+    from config.rate_card import recording_rate_card
+    from config.rate_card_versions import RATE_CARD_SHA256
+    from pathlib import Path
+    import hashlib
+
+    raw = (Path(__file__).parents[2] / 'config/rate_card_v2.json').read_bytes()
+    expected = 'd80126c622eccf485c692b8ddebfa7d8306d3b940242c855f8f118ea37e33267'
+    assert hashlib.sha256(raw).hexdigest() == RATE_CARD_SHA256['v2'] == expected
+    detached = recording_rate_card()
+    detached['recording']['units_per_recorded_hour']['batch'] = '1'
+    assert recording_rate_card()['recording']['units_per_recorded_hour']['batch'] == '130'

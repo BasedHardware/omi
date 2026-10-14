@@ -1,4 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:omi/backend/http/api_result.dart';
+import 'package:omi/models/plan_storefront.dart';
+import 'package:omi/backend/schema/gen/budget_choice_wire.g.dart';
+import 'package:omi/backend/http/plan_storefront_api.dart';
+import 'package:omi/backend/http/budget_choice_api.dart';
+import 'package:omi/pages/settings/widgets/plans/contextual_plans.dart';
+import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:provider/provider.dart';
 
@@ -87,9 +94,34 @@ class FreemiumSwitchHandler {
     final controller = OnDeviceTranscriptionController.instance;
     await controller.ensureLoaded();
     if (!context.mounted) return false;
-    final choice =
-        await showOnDeviceAtCapSheet(context, liveHoursReturnOn: OnDeviceLiveHours.nextReset(DateTime.now()));
+    final storefront = await PlanStorefrontApi()
+        .load(source: 'on_device_at_cap', trigger: 'usage_budget', locale: context.l10n.localeName);
+    if (!context.mounted) return true;
+    final data = storefront is ApiSuccess<PlanStorefront> ? storefront.data : null;
+    final copy = data?.atCap;
+    final api = BudgetChoiceApi();
+    final record = copy == null ? null : await api.load();
+    if (!context.mounted) return true;
+    if (copy != null && record is! ApiSuccess<GeneratedBudgetChoiceResponse>) {
+      return true;
+    } // Hold, retry later; no local entitlement guess.
+    if (record is ApiSuccess<GeneratedBudgetChoiceResponse> && !record.data.ask) {
+      if (record.data.state == 'on_device') {
+        await controller.updateSettings(controller.settings.copyWith(enabled: true));
+      }
+      return true;
+    }
+    var dontAskAgain = false;
+    final choice = await showOnDeviceAtCapSheet(context,
+        liveHoursReturnOn: OnDeviceLiveHours.nextReset(DateTime.now()),
+        copy: copy,
+        onDontAskAgain: (value) => dontAskAgain = value);
     if (!context.mounted || choice == null) return true;
+    if (copy != null && record is ApiSuccess<GeneratedBudgetChoiceResponse>) {
+      final saved = await api.save(
+          record.data.period, choice == OnDeviceAtCapChoice.upgrade ? 'upgrade' : 'on_device', dontAskAgain);
+      if (saved is! ApiSuccess || !context.mounted) return true;
+    }
     switch (choice) {
       case OnDeviceAtCapChoice.transcribeOnPhone:
         await controller.updateSettings(controller.settings.copyWith(enabled: true));
@@ -97,7 +129,11 @@ class FreemiumSwitchHandler {
           await routeToPage(context, const OnDeviceSetupPage());
         }
       case OnDeviceAtCapChoice.upgrade:
-        openOnDeviceUpgrade(context);
+        if (copy != null) {
+          await openContextualPlans(context, source: 'on_device_at_cap', trigger: 'usage_budget', storefront: data);
+        } else {
+          openOnDeviceUpgrade(context);
+        }
     }
     return true;
   }

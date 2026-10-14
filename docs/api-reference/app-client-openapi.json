@@ -30489,6 +30489,20 @@
             "title": "Amount Minor",
             "type": "integer"
           },
+          "confirm_lines": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Confirm Lines"
+          },
           "cta_label": {
             "anyOf": [
               {
@@ -30748,6 +30762,11 @@
             ],
             "title": "Kind",
             "type": "string"
+          },
+          "mcp_cap_reached": {
+            "default": false,
+            "title": "Mcp Cap Reached",
+            "type": "boolean"
           },
           "meter_line": {
             "anyOf": [

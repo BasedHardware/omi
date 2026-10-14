@@ -111,6 +111,24 @@ describe('StorefrontPanel purchase routing', () => {
     vi.stubGlobal('open', vi.fn());
   });
 
+  it('same-tier annual requires backend confirmation before any billing call', async () => {
+    api.getStorefront.mockResolvedValue(golden('plus_monthly_yearly_toggle'));
+    api.upgradeSubscription.mockResolvedValue({ status: 'success' });
+    render(<StorefrontPanel source="web_plans" onSubscriptionUpdate={vi.fn()} />);
+    const label = 'Switch to yearly · save $39.98';
+    fireEvent.click(await screen.findByRole('button', { name: label }));
+    expect(
+      await screen.findByText('Your monthly plan continues until Nov 1'),
+    ).toBeInTheDocument();
+    expect(api.upgradeSubscription).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+    expect(api.upgradeSubscription).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: label }));
+    const dialog = screen.getByRole('dialog');
+    fireEvent.click(within(dialog).getByRole('button', { name: label }));
+    await waitFor(() => expect(api.upgradeSubscription).toHaveBeenCalled());
+  });
+
   it('Free starts Stripe Checkout with the payload price id', async () => {
     api.getStorefront.mockResolvedValue(golden('free_settings'));
     api.createCheckoutSession.mockResolvedValue({

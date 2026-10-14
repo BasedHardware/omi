@@ -17,6 +17,8 @@ from models.storefront import (
 from models.users import Subscription
 from utils.storefront_copy import (
     copy_for,
+    format_date,
+    format_money,
     blocked_line,
     bullets,
     cta_label,
@@ -354,6 +356,13 @@ def build_storefront(
             )
             want_switch = is_current and current_interval == 'month' and not resubscribe_only and 'year' in offered
             prices = _prices_for(rows, offered=offered, locale=locale, switch_yearly=want_switch)
+            if want_switch and subscription.current_period_end:
+                for item in prices:
+                    if item.interval == 'year' and item.cta_label:
+                        item.confirm_lines = [
+                            line.format(date=format_date(subscription.current_period_end), amount=format_money(item.amount_minor, item.currency))
+                            for line in copy_for(locale)['prices']['confirm_yearly_lines']
+                        ]
             if resubscribe_this and current_price_id:
                 prices = [item for item in prices if item.price_id == current_price_id]
             switch = want_switch and any(item.cta_label for item in prices)

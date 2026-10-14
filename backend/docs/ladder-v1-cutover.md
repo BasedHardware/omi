@@ -129,3 +129,24 @@ admission paths. Restore alias acceptance immediately if a decoder/stored-row
 regression appears. Never rewrite legacy subscription prices, usage history or
 captured content. Existing reset recovery has its own default-off switch and
 requires its documented runbook; this PR does not enable it.
+
+
+## Efficiency admission gate (David, 2026-10-14 later ruling)
+
+Do not flip `STOREFRONT_LADDER_V1_ENABLED` until the batch/background lane is live,
+its fully loaded worn-hour cost has been measured, and the versioned 98% background /
+2% live blend supports the copy bands. Pro 720 hours on one device needs at most
+about $0.052/worn hour; Plus 240 hours needs at most about $0.058/worn hour.
+Use the actual configured budget and 0.85 recording share to validate both thresholds.
+A vendor-only batch STT estimate is insufficient: include summaries, memories, apps and infra.
+
+`rate_card_v2.json` owns the lane-specific advertised rates. Both cloud lanes remain
+130 units/hour provisionally, preserving 100 / 280 / 1,200 hours today. On-device
+transcription is zero units; cloud processing of its text still consumes LLM units.
+V1 event pricing and its digest remain unchanged. Replace the measured batch value in
+an approved new versioned card (and pin its digest); live capacity stays separate.
+Plus switches bands at 240 hours, Pro at 720, Architect at 1,440 (two full devices).
+Below these thresholds, the existing per-day copy remains. This is presentation capacity,
+not a new independent live budget or a completeness claim about the usage ledger.
+
+Cheap fallback chat model/cap at the shared budget remains OPEN for David's ruling.

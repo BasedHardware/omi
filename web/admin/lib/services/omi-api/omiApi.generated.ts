@@ -5020,6 +5020,7 @@ export interface StorefrontCurrent {
 
 export interface StorefrontPrice {
   amount_minor: number;
+  confirm_lines?: Array<string> | null;
   cta_label?: string | null;
   currency: string;
   headline: string;
@@ -5059,6 +5060,7 @@ export interface StorefrontTier {
 
 export interface StorefrontUsage {
   kind?: "usage_budget" | "transcription" | "unavailable";
+  mcp_cap_reached?: boolean;
   meter_line?: string | null;
   nudge_line?: string | null;
   percent?: number | null;

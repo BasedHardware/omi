@@ -392,21 +392,26 @@ class _PlansSheetState extends State<PlansSheet> {
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  l10n.importantBillingInfo,
-                  textAlign: TextAlign.start,
-                  style: OmiType.subhead.copyWith(fontWeight: FontWeight.w600),
-                ),
-                const SizedBox(height: OmiSpacing.xxs),
-                PlanDialogLine(icon: FontAwesomeIcons.clock, text: l10n.monthlyPlanContinues),
-                PlanDialogLine(icon: FontAwesomeIcons.creditCard, text: l10n.paymentMethodCharged),
-                PlanDialogLine(icon: FontAwesomeIcons.calendarDay, text: l10n.annualSubscriptionStarts),
-                const SizedBox(height: OmiSpacing.xs),
-                PlanDialogLine(
-                  icon: FontAwesomeIcons.circleInfo,
-                  text: l10n.thirteenMonthsCoverage,
-                  color: OmiColors.success,
-                ),
+                if (storefrontPrice?.confirmLines.isNotEmpty == true)
+                  ...storefrontPrice!.confirmLines
+                      .map((line) => PlanDialogLine(icon: FontAwesomeIcons.calendarDay, text: line))
+                else ...[
+                  Text(
+                    l10n.importantBillingInfo,
+                    textAlign: TextAlign.start,
+                    style: OmiType.subhead.copyWith(fontWeight: FontWeight.w600),
+                  ),
+                  const SizedBox(height: OmiSpacing.xxs),
+                  PlanDialogLine(icon: FontAwesomeIcons.clock, text: l10n.monthlyPlanContinues),
+                  PlanDialogLine(icon: FontAwesomeIcons.creditCard, text: l10n.paymentMethodCharged),
+                  PlanDialogLine(icon: FontAwesomeIcons.calendarDay, text: l10n.annualSubscriptionStarts),
+                  const SizedBox(height: OmiSpacing.xs),
+                  PlanDialogLine(
+                    icon: FontAwesomeIcons.circleInfo,
+                    text: l10n.thirteenMonthsCoverage,
+                    color: OmiColors.success,
+                  ),
+                ],
               ],
             ),
           ),
@@ -434,6 +439,7 @@ class _PlansSheetState extends State<PlansSheet> {
       billingInterval: isYearly ? 'year' : 'month',
       releaseUpgradingLock: releaseUpgradingLock,
       storefrontDecision: storefrontDecision,
+      confirmedByStorefront: isUpgradingFromMonthlyToAnnual && storefrontPrice?.confirmLines.isNotEmpty == true,
     );
   }
 
@@ -443,6 +449,7 @@ class _PlansSheetState extends State<PlansSheet> {
     required String billingInterval,
     bool releaseUpgradingLock = true,
     StorefrontCheckoutDecision? storefrontDecision,
+    bool confirmedByStorefront = false,
   }) async {
     final provider = context.read<UsageProvider>();
     final l10n = context.l10n;
@@ -467,7 +474,7 @@ class _PlansSheetState extends State<PlansSheet> {
 
     final currentSub = provider.subscription!.subscription;
 
-    if (currentSub.plan.isPaid) {
+    if (currentSub.plan.isPaid && !confirmedByStorefront) {
       final confirmed = await showOmiConfirm(
         context,
         title: l10n.confirmPlanChange,

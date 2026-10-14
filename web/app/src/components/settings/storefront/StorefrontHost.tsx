@@ -134,6 +134,10 @@ export function StorefrontPanel({
   const [busyPriceId, setBusyPriceId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const opened = useRef(false);
+  const [confirmation, setConfirmation] = useState<{
+    tier: PlanStorefrontTier;
+    price: PlanStorefrontPrice;
+  } | null>(null);
 
   useEffect(() => {
     if (opened.current || !data?.showSubscriptionUi) return;
@@ -141,7 +145,10 @@ export function StorefrontPanel({
     trackPaywallOpened(source, data.current?.planId ?? 'unknown');
   }, [data, source]);
 
-  const onSelect = async (tier: PlanStorefrontTier, price: PlanStorefrontPrice) => {
+  const executePurchase = async (
+    tier: PlanStorefrontTier,
+    price: PlanStorefrontPrice,
+  ) => {
     if (!data || busyPriceId !== null) return;
     setBusyPriceId(price.id);
     setError(null);
@@ -157,6 +164,13 @@ export function StorefrontPanel({
     }
   };
 
+  const onSelect = async (tier: PlanStorefrontTier, price: PlanStorefrontPrice) => {
+    if (!data || storefrontCheckoutDecision(data, tier, price, livePlanId) === 'refuse')
+      return;
+    if (price.confirmLines?.length) setConfirmation({ tier, price });
+    else await executePurchase(tier, price);
+  };
+
   const onManage = async () => {
     setError(null);
     try {
@@ -169,17 +183,57 @@ export function StorefrontPanel({
   };
 
   return (
-    <StorefrontPlans
-      data={data}
-      loading={loading}
-      failed={failed}
-      busyPriceId={busyPriceId}
-      error={error}
-      livePlanId={livePlanId}
-      onRetry={() => void reload()}
-      onSelect={onSelect}
-      onManage={onManage}
-    />
+    <>
+      <StorefrontPlans
+        data={data}
+        loading={loading}
+        failed={failed}
+        busyPriceId={busyPriceId}
+        error={error}
+        livePlanId={livePlanId}
+        onRetry={() => void reload()}
+        onSelect={onSelect}
+        onManage={onManage}
+      />
+      <Dialog.Root
+        open={confirmation !== null}
+        onOpenChange={(open) => {
+          if (!open) setConfirmation(null);
+        }}
+      >
+        <Dialog.Portal>
+          <Dialog.Overlay className="fixed inset-0 z-[110] bg-black/50" />
+          <Dialog.Content className="fixed left-1/2 top-1/2 z-[111] w-[calc(100vw-32px)] max-w-md -translate-x-1/2 -translate-y-1/2 rounded-2xl border border-bg-tertiary bg-bg-primary p-6 text-text-primary shadow-2xl">
+            <Dialog.Title className="text-lg font-semibold">
+              {confirmation?.price.ctaLabel}
+            </Dialog.Title>
+            <Dialog.Description asChild>
+              <div className="my-4 space-y-3 text-sm text-text-secondary">
+                {confirmation?.price.confirmLines?.map((line) => (
+                  <p key={line}>{line}</p>
+                ))}
+              </div>
+            </Dialog.Description>
+            <div className="flex justify-end gap-3">
+              <Dialog.Close className="rounded-lg border border-bg-tertiary px-4 py-2">
+                Cancel
+              </Dialog.Close>
+              <button
+                className="rounded-lg bg-text-primary px-4 py-2 text-bg-primary"
+                onClick={() => {
+                  if (!confirmation) return;
+                  const { tier, price } = confirmation;
+                  setConfirmation(null);
+                  void executePurchase(tier, price);
+                }}
+              >
+                {confirmation?.price.ctaLabel}
+              </button>
+            </div>
+          </Dialog.Content>
+        </Dialog.Portal>
+      </Dialog.Root>
+    </>
   );
 }
 

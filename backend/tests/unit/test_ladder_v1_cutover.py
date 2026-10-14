@@ -159,8 +159,15 @@ def test_live_batch_and_on_device_are_disjoint(monkeypatch):
             assert lanes[lane]['speech_seconds'] == 10
 
 
-def test_at_cap_backend_owned_copy_golden(monkeypatch):
+@pytest.fixture
+def cap_presentation():
     from tests.unit.test_storefront_presentation import sheet_for, ladder_catalog
+
+    return sheet_for, ladder_catalog
+
+
+def test_at_cap_backend_owned_copy_golden(monkeypatch, cap_presentation):
+    sheet_for, ladder_catalog = cap_presentation
 
     monkeypatch.setenv('LADDER_V1_BUDGET_ENFORCEMENT_ENABLED', 'true')
     rows, recognized = ladder_catalog()

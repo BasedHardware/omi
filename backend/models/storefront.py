@@ -14,6 +14,7 @@ class StorefrontPrice(BaseModel):
     subline: str | None = None
     renewal_line: str | None = None
     months_free: int | None = None
+    confirm_lines: list[str] | None = None
     # Present only when this price overrides the tier cta_label (switch to yearly).
     cta_label: str | None = None
 
@@ -22,6 +23,8 @@ class StorefrontPrice(BaseModel):
         data = handler(self)
         if data.get('months_free') is None:
             data.pop('months_free', None)
+        if data.get('confirm_lines') is None:
+            data.pop('confirm_lines', None)
         if data.get('cta_label') is None:
             data.pop('cta_label', None)
         return data
@@ -63,6 +66,14 @@ class StorefrontUsage(BaseModel):
     meter_line: str | None = None
     nudge_line: str | None = None
     pro_gates: list[str] = Field(default_factory=list)
+    mcp_cap_reached: bool = False
+
+    @model_serializer(mode='wrap')
+    def _omit_inactive_cap(self, handler):
+        data = handler(self)
+        if not self.mcp_cap_reached:
+            data.pop('mcp_cap_reached', None)
+        return data
 
 
 class StorefrontCapChoice(BaseModel):

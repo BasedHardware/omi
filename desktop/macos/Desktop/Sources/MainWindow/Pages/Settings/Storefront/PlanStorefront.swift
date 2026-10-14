@@ -29,6 +29,7 @@ struct PlanStorefront: Equatable {
     let renewalLine: String?
     let monthsFree: Int?
     let ctaLabel: String?
+    var confirmLines: [String] = []
   }
 
   struct Tier: Equatable, Identifiable {
@@ -73,6 +74,7 @@ struct PlanStorefront: Equatable {
     let meterLine: String?
     let nudgeLine: String?
     let proGates: [String]
+    var mcpCapReached: Bool = false
   }
 
   let catalogRevision: Int
@@ -122,7 +124,7 @@ struct PlanStorefront: Equatable {
     return Price(
       id: text(row.priceId), interval: interval, amountMinor: row.amountMinor, currency: row.currency,
       headline: headline, subline: text(row.subline), renewalLine: text(row.renewalLine),
-      monthsFree: row.monthsFree, ctaLabel: text(row.ctaLabel))
+      monthsFree: row.monthsFree, ctaLabel: text(row.ctaLabel), confirmLines: (row.confirmLines ?? []).compactMap(text))
   }
 
   private static func decodeTier(_ row: OmiAPI.StorefrontTier) -> Tier? {
@@ -156,7 +158,7 @@ struct PlanStorefront: Equatable {
       kind: row?.kind.flatMap(Usage.Kind.init(rawValue:)) ?? .unavailable,
       percent: row?.percent.flatMap { $0 >= 0 ? $0 : nil }, periodId: text(row?.periodId),
       resetLabel: text(row?.resetLabel), meterLine: text(row?.meterLine), nudgeLine: text(row?.nudgeLine),
-      proGates: (row?.proGates ?? []).compactMap(text))
+      proGates: (row?.proGates ?? []).compactMap(text), mcpCapReached: row?.mcpCapReached == true)
   }
 
   // MARK: - Policy

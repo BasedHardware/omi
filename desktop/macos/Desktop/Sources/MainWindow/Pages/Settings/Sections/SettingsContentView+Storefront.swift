@@ -23,6 +23,12 @@ extension SettingsContentView {
     }
   }
 
+  func storefrontFeatureEntry(_ trigger: PlanStorefront.Trigger) -> some View {
+    StorefrontFeatureEntry(
+      trigger: trigger, livePlanId: userSubscription?.subscription.plan.rawValue,
+      onPurchase: startStorefrontCheckout, onManage: openCustomerPortal)
+  }
+
   func startStorefrontCheckout(_ tier: PlanStorefront.Tier, _ price: PlanStorefront.Price) {
     guard let priceId = price.id else { return }
     selectedPlanIdForCheckout = tier.planId

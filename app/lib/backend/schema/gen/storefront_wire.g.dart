@@ -92,6 +92,7 @@ class GeneratedStorefrontCurrent {
 
 class GeneratedStorefrontPrice {
   final int amountMinor;
+  final List<String>? confirmLines;
   final String? ctaLabel;
   final String currency;
   final String headline;
@@ -103,6 +104,7 @@ class GeneratedStorefrontPrice {
 
   const GeneratedStorefrontPrice({
     required this.amountMinor,
+    this.confirmLines,
     this.ctaLabel,
     required this.currency,
     required this.headline,
@@ -116,6 +118,7 @@ class GeneratedStorefrontPrice {
   factory GeneratedStorefrontPrice.fromJson(Map<String, dynamic> json) {
     return GeneratedStorefrontPrice(
       amountMinor: _required(_readFieldValue<int>(_readField(json, const ["amount_minor"]), "amount_minor", _readInt, requiredField: true, nullable: false), "amount_minor"),
+      confirmLines: _readFieldValue<List<String>>(_readField(json, const ["confirm_lines"]), "confirm_lines", _readStringList, requiredField: false, nullable: true),
       ctaLabel: _readFieldValue<String>(_readField(json, const ["cta_label"]), "cta_label", _readString, requiredField: false, nullable: true),
       currency: _required(_readFieldValue<String>(_readField(json, const ["currency"]), "currency", _readString, requiredField: true, nullable: false), "currency"),
       headline: _required(_readFieldValue<String>(_readField(json, const ["headline"]), "headline", _readString, requiredField: true, nullable: false), "headline"),
@@ -130,6 +133,7 @@ class GeneratedStorefrontPrice {
   Map<String, dynamic> toJson() {
     return {
       'amount_minor': amountMinor,
+      'confirm_lines': confirmLines,
       'cta_label': ctaLabel,
       'currency': currency,
       'headline': headline,
@@ -260,6 +264,7 @@ class GeneratedStorefrontTier {
 
 class GeneratedStorefrontUsage {
   final String kind;
+  final bool mcpCapReached;
   final String? meterLine;
   final String? nudgeLine;
   final int? percent;
@@ -269,6 +274,7 @@ class GeneratedStorefrontUsage {
 
   const GeneratedStorefrontUsage({
     this.kind = "unavailable",
+    this.mcpCapReached = false,
     this.meterLine,
     this.nudgeLine,
     this.percent,
@@ -280,6 +286,7 @@ class GeneratedStorefrontUsage {
   factory GeneratedStorefrontUsage.fromJson(Map<String, dynamic> json) {
     return GeneratedStorefrontUsage(
       kind: _required(_readFieldValue<String>(_readField(json, const ["kind"]), "kind", _readString, requiredField: false, nullable: false, defaultValue: "unavailable"), "kind"),
+      mcpCapReached: _required(_readFieldValue<bool>(_readField(json, const ["mcp_cap_reached"]), "mcp_cap_reached", _readBool, requiredField: false, nullable: false, defaultValue: false), "mcp_cap_reached"),
       meterLine: _readFieldValue<String>(_readField(json, const ["meter_line"]), "meter_line", _readString, requiredField: false, nullable: true),
       nudgeLine: _readFieldValue<String>(_readField(json, const ["nudge_line"]), "nudge_line", _readString, requiredField: false, nullable: true),
       percent: _readFieldValue<int>(_readField(json, const ["percent"]), "percent", _readInt, requiredField: false, nullable: true),
@@ -292,6 +299,7 @@ class GeneratedStorefrontUsage {
   Map<String, dynamic> toJson() {
     return {
       'kind': kind,
+      'mcp_cap_reached': mcpCapReached,
       'meter_line': meterLine,
       'nudge_line': nudgeLine,
       'percent': percent,

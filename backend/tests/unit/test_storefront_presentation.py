@@ -729,6 +729,8 @@ def _scenario(name):
         return sheet_for('plus', price_id='price_plus_year', source='settings', **common)
     if name == 'pro_settings':
         return sheet_for('operator', price_id='price_operator_month', source='settings', **common)
+    if name == 'pro_budget80':
+        return sheet_for('operator', price_id='price_operator_month', trigger='usage_budget', percent=80, **common)
     if name == 'pro_budget_cap':
         return sheet_for('operator', price_id='price_operator_month', trigger='usage_budget', percent=100, **common)
     if name == 'architect_settings':
@@ -774,6 +776,7 @@ SCENARIOS = (
     'plus_monthly_yearly_toggle',
     'plus_annual_current',
     'pro_settings',
+    'pro_budget80',
     'pro_budget_cap',
     'architect_settings',
     'legacy_unlimited',
@@ -830,6 +833,12 @@ def test_golden_storefront_scenarios():
     assert pro_settings.current.line == "You're on Pro · $49.99/mo · renews Nov 1"
     assert [tier.plan_id for tier in pro_settings.tiers] == ['plus', 'operator']
     assert all(tier.plan_id != 'architect' for tier in pro_settings.tiers)
+    assert all(tier.plan_id != 'architect' for tier in rendered['pro_budget80'].tiers)
+    assert plus_month.prices[0].confirm_lines == [
+        'Your monthly plan continues until Nov 1',
+        'Your payment method will be charged $199.90 when your yearly plan starts',
+        'Your yearly plan starts on Nov 1',
+    ]
     capped = rendered['pro_budget_cap']
     assert capped.header == "You've used all of this month's usage"
     assert capped.usage.percent == 100
@@ -904,8 +913,30 @@ def test_golden_storefront_scenarios():
         payload = _dump(rendered[name])
         if os.environ.get('UPDATE_STOREFRONT_GOLDENS') == '1':
             path.write_text(payload, encoding='utf-8')
+            APP_FIXTURE_DIR.mkdir(parents=True, exist_ok=True)
+            (APP_FIXTURE_DIR / f'{name}.json').write_text(payload, encoding='utf-8')
         assert path.read_text(encoding='utf-8') == payload
     for name in SCENARIOS:
         path = GOLDEN_DIR / f'{name}.json'
         app_path = APP_FIXTURE_DIR / f'{name}.json'
         assert app_path.read_bytes() == path.read_bytes()
+
+
+def test_efficiency_hours_bands(monkeypatch):
+    import config.rate_card as rates
+    from copy import deepcopy
+    card = rates.recording_rate_card()
+    assert rates.recording_units_per_hour() == Decimal('130')
+    assert rates.recording_units_per_hour('on_device') == 0
+    for plan, hours in [('plus', 100), ('operator', 280), ('architect', 1200)]:
+        assert recording_hours(plan) == hours
+        assert '24/7' not in hours_line(plan)
+        assert 'Enough for casual daily use' not in hours_line(plan)
+    measured = deepcopy(card)
+    measured['recording']['units_per_recorded_hour']['batch'] = '30'
+    monkeypatch.setattr(rates, 'recording_rate_card', lambda: measured)
+    assert rates.recording_units_per_hour() == Decimal('32')
+    assert 'Enough for casual daily use' in hours_line('plus')
+    assert 'Enough to wear it 24/7' in hours_line('operator')
+    assert '24/7 on more than one device' in hours_line('architect')
+    assert rates.recording_units_per_hour('live') == 130

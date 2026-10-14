@@ -122,6 +122,7 @@ class UsageProvider with ChangeNotifier {
   bool get isOutOfCredits {
     if (_forceOutOfCredits) return true;
     if (_subscription == null) return false;
+    if (_subscription!.transcriptionAllowance?.reason == 'usage_budget_exhausted') return true;
     final plan = _subscription!.subscription.plan;
     // Plus is paid but metered, so it falls through to the usage check below.
     if (plan.hasUnlimitedTranscription) return false;

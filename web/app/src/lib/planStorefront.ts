@@ -36,6 +36,7 @@ export interface PlanStorefrontPrice {
   renewalLine: string | null;
   monthsFree: number | null;
   ctaLabel: string | null;
+  confirmLines?: string[];
 }
 
 export interface PlanStorefrontTier {
@@ -109,6 +110,9 @@ function decodePrice(raw: StorefrontPrice): PlanStorefrontPrice | null {
     renewalLine: text(raw.renewal_line),
     monthsFree: Number.isInteger(raw.months_free) ? (raw.months_free as number) : null,
     ctaLabel: text(raw.cta_label),
+    confirmLines: (raw.confirm_lines ?? []).filter(
+      (line): line is string => text(line) !== null,
+    ),
   };
 }
 

@@ -39,3 +39,12 @@ def reserve_daily_request(uid: str, cap: int, *, now: datetime | None = None, fi
     client = firestore_client if firestore_client is not None else _client.get_customer_firestore_client()
     ref = client.collection('users').document(uid).collection('ladder_v1_api_days').document(now.date().isoformat())
     return _client.run_transactional(client, _reserve, ref, cap, int(reset.timestamp()))
+
+
+def daily_cap_reached(uid: str, cap: int, *, now: datetime | None = None, firestore_client: Any = None) -> bool:
+    """Presentation-only read: never reserve requests from a storefront/settings visit."""
+    now = (now or datetime.now(timezone.utc)).astimezone(timezone.utc)
+    client = firestore_client if firestore_client is not None else _client.get_customer_firestore_client()
+    ref = client.collection('users').document(uid).collection('ladder_v1_api_days').document(now.date().isoformat())
+    data = ref.get().to_dict() or {}
+    return int(data.get('requests', 0)) >= cap

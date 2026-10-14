@@ -123,6 +123,11 @@
           "subline": "$499.90 billed yearly · 2 months free",
           "renewal_line": "Renews yearly until you cancel. Cancel anytime in settings.",
           "months_free": 2,
+          "confirm_lines": [
+            "Your monthly plan continues until Nov 1",
+            "Your payment method will be charged $499.90 when your yearly plan starts",
+            "Your yearly plan starts on Nov 1"
+          ],
           "cta_label": "Switch to yearly · save $99.98"
         }
       ]

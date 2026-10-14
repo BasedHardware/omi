@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:omi/backend/schema/gen/storefront_wire.g.dart';
 
 import 'package:omi/pages/on_device/on_device_components.dart';
 import 'package:omi/ui/ui.dart';
@@ -9,20 +10,26 @@ enum OnDeviceAtCapChoice { transcribeOnPhone, upgrade }
 /// Offered once when the month's live hours run out: keep going on the phone (included) or
 /// upgrade. Returns the reader's choice, or null when they close the sheet. Recording continues
 /// either way.
-Future<OnDeviceAtCapChoice?> showOnDeviceAtCapSheet(BuildContext context, {DateTime? liveHoursReturnOn}) {
+Future<OnDeviceAtCapChoice?> showOnDeviceAtCapSheet(BuildContext context,
+    {DateTime? liveHoursReturnOn, GeneratedStorefrontCapChoice? copy, ValueChanged<bool>? onDontAskAgain}) {
   return showOmiSheet<OnDeviceAtCapChoice>(
     context: context,
     builder: (sheetContext) => OnDeviceAtCapSheet(
       liveHoursReturnOn: liveHoursReturnOn,
+      copy: copy,
+      onDontAskAgain: onDontAskAgain,
       onContinue: (choice) => Navigator.of(sheetContext).pop(choice),
     ),
   );
 }
 
 class OnDeviceAtCapSheet extends StatefulWidget {
-  const OnDeviceAtCapSheet({super.key, required this.onContinue, this.liveHoursReturnOn});
+  const OnDeviceAtCapSheet(
+      {super.key, required this.onContinue, this.liveHoursReturnOn, this.copy, this.onDontAskAgain});
 
   final ValueChanged<OnDeviceAtCapChoice> onContinue;
+  final GeneratedStorefrontCapChoice? copy;
+  final ValueChanged<bool>? onDontAskAgain;
 
   /// When live hours reset; the sentence is left out when unknown.
   final DateTime? liveHoursReturnOn;
@@ -32,6 +39,7 @@ class OnDeviceAtCapSheet extends StatefulWidget {
 }
 
 class _OnDeviceAtCapSheetState extends State<OnDeviceAtCapSheet> {
+  bool _dontAskAgain = false;
   OnDeviceAtCapChoice _choice = OnDeviceAtCapChoice.transcribeOnPhone;
 
   @override
@@ -46,13 +54,13 @@ class _OnDeviceAtCapSheetState extends State<OnDeviceAtCapSheet> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Semantics(header: true, child: Text(l10n.onDeviceAtCapTitle, style: OmiType.title2)),
+          Semantics(header: true, child: Text(widget.copy?.title ?? l10n.onDeviceAtCapTitle, style: OmiType.title2)),
           const SizedBox(height: OmiSpacing.xs),
-          Text(body, style: OmiType.callout.copyWith(color: OmiColors.textSecondary, height: 1.4)),
+          Text(widget.copy?.body ?? body, style: OmiType.callout.copyWith(color: OmiColors.textSecondary, height: 1.4)),
           const SizedBox(height: OmiSpacing.lg),
           OnDeviceChoiceCard(
             key: const Key('on_device_at_cap_phone'),
-            title: l10n.onDeviceTranscribeOnPhone,
+            title: widget.copy?.onDeviceLabel ?? l10n.onDeviceTranscribeOnPhone,
             badge: l10n.onDeviceIncluded,
             body: l10n.onDeviceOptionChargingBody,
             selected: _choice == OnDeviceAtCapChoice.transcribeOnPhone,
@@ -61,15 +69,29 @@ class _OnDeviceAtCapSheetState extends State<OnDeviceAtCapSheet> {
           const SizedBox(height: OmiSpacing.sm),
           OnDeviceChoiceCard(
             key: const Key('on_device_at_cap_upgrade'),
-            title: l10n.upgradeToPro,
-            body: l10n.onDeviceUpgradeBody,
+            title: widget.copy?.upgradeLabel ?? l10n.upgradeToPro,
+            body: widget.copy?.onDeviceUpgradeLine ?? l10n.onDeviceUpgradeBody,
             selected: _choice == OnDeviceAtCapChoice.upgrade,
             onSelected: () => setState(() => _choice = OnDeviceAtCapChoice.upgrade),
           ),
           const SizedBox(height: OmiSpacing.lg),
+          if (widget.copy != null)
+            CheckboxListTile(
+              title: Text(widget.copy!.dontAskAgainLabel,
+                  style: OmiType.footnote.copyWith(color: OmiColors.textSecondary)),
+              value: _dontAskAgain,
+              onChanged: (value) {
+                setState(() => _dontAskAgain = value == true);
+                widget.onDontAskAgain?.call(_dontAskAgain);
+              },
+            ),
           OmiButton(
             key: const Key('on_device_at_cap_continue'),
-            label: l10n.continueButton,
+            label: widget.copy == null
+                ? l10n.continueButton
+                : _choice == OnDeviceAtCapChoice.upgrade
+                    ? widget.copy!.upgradeLabel
+                    : widget.copy!.onDeviceLabel,
             expand: true,
             onPressed: () => widget.onContinue(_choice),
           ),

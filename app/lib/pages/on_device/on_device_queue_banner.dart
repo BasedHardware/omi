@@ -8,6 +8,7 @@ import 'package:omi/models/local_recording.dart';
 import 'package:omi/pages/on_device/on_device_components.dart';
 import 'package:omi/pages/on_device/on_device_setup_page.dart';
 import 'package:omi/pages/settings/usage_page.dart';
+import 'package:omi/pages/settings/widgets/plans/contextual_plans.dart';
 import 'package:omi/providers/local_recordings_provider.dart';
 import 'package:omi/providers/usage_provider.dart';
 import 'package:omi/services/on_device/on_device_model.dart';
@@ -19,8 +20,13 @@ import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/other/temp.dart';
 
 /// Opens the usage page with the plans sheet: the one place live hours are bought.
-void openOnDeviceUpgrade(BuildContext context) =>
-    unawaited(routeToPage(context, const UsagePage(showUpgradeDialog: true, paywallSource: 'on_device_overflow')));
+void openOnDeviceUpgrade(BuildContext context) => unawaited(_openOnDeviceUpgrade(context));
+
+Future<void> _openOnDeviceUpgrade(BuildContext context) async {
+  if (await openContextualPlans(context, source: 'on_device_overflow', trigger: 'usage_budget')) return;
+  if (context.mounted)
+    await routeToPage(context, const UsagePage(showUpgradeDialog: true, paywallSource: 'on_device_overflow'));
+}
 
 /// The conversations list's banner for recordings waiting on this phone. Renders nothing unless the
 /// on-device flag is on and something is waiting.

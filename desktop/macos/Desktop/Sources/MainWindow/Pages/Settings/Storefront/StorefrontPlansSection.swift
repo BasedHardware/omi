@@ -19,6 +19,13 @@ struct StorefrontPlansSection: View {
   @State private var loading = false
   @State private var failed = false
   @State private var reported = false
+  @State private var confirmation: Selection?
+
+  private struct Selection: Identifiable {
+    let tier: PlanStorefront.Tier
+    let price: PlanStorefront.Price
+    var id: String { price.id ?? "" }
+  }
 
   var body: some View {
     StorefrontPlansView(
@@ -28,10 +35,22 @@ struct StorefrontPlansSection: View {
         guard let shown = data ?? initial,
           shown.checkoutDecision(tier: tier, price: price, livePlanId: livePlanId) != .refuse
         else { return }
-        onPurchase(tier, price)
+        if price.confirmLines.isEmpty {
+          onPurchase(tier, price)
+        } else {
+          confirmation = Selection(tier: tier, price: price)
+        }
       },
       onManage: onManage
     )
+    .alert(item: $confirmation) { selection in
+      Alert(
+        title: Text(selection.price.ctaLabel ?? selection.tier.ctaLabel ?? "Plans"),
+        message: Text(selection.price.confirmLines.joined(separator: "\n")),
+        primaryButton: .default(Text(selection.price.ctaLabel ?? "Switch to yearly")) {
+          onPurchase(selection.tier, selection.price)
+        }, secondaryButton: .cancel())
+    }
     .task(id: reloadKey) {
       // The first render of a contextual sheet already has its payload.
       if initial != nil && data == nil && !reported {
@@ -110,6 +129,47 @@ struct StorefrontBudgetEntry: View {
           .keyboardShortcut(.cancelAction)
           .padding(OmiSpacing.md)
       }
+    }
+  }
+}
+
+/// Context entry only where a feature already exists. Server gate/cap + both flags are required.
+struct StorefrontFeatureEntry: View {
+  let trigger: PlanStorefront.Trigger
+  var livePlanId: String?
+  let onPurchase: (PlanStorefront.Tier, PlanStorefront.Price) -> Void
+  let onManage: () -> Void
+  @State private var data: PlanStorefront?
+  @State private var showing = false
+
+  private var eligible: Bool {
+    guard let data, data.showSubscriptionUi, data.current?.legacy == false else { return false }
+    return trigger == .mcpDailyCap ? data.usage.mcpCapReached : data.shouldGate(trigger, livePlanId: livePlanId)
+  }
+  var body: some View {
+    Group {
+      if eligible, let data {
+        Button(data.header ?? "Plans") { showing = true }
+          .buttonStyle(OmiButtonStyle(.secondary, size: .compact))
+      }
+    }
+    .task(id: livePlanId) {
+      data = nil
+      guard PlanStorefrontGate.contextualEnabled else { return }
+      data = try? await APIClient.shared.getStorefront(source: "macos_" + trigger.rawValue, trigger: trigger)
+    }
+    .sheet(isPresented: $showing) {
+      ScrollView {
+        StorefrontPlansSection(
+          source: "macos_" + trigger.rawValue, trigger: trigger, initial: data,
+          livePlanId: livePlanId,
+          onPurchase: { tier, price in
+            showing = false
+            onPurchase(tier, price)
+          }, onManage: onManage
+        )
+        .padding(OmiSpacing.xxl)
+      }.frame(width: 520, height: 640)
     }
   }
 }

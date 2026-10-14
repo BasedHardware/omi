@@ -171,3 +171,14 @@ payload are defined in [ladder-v1-cutover.md](ladder-v1-cutover.md). The field i
 absent on the dark path. Clients render it verbatim and continue using the
 existing `usage_budget` trigger at 80% and 100%. Daily API nudge/reset metadata
 uses `mcp_daily_cap`; no new trigger enum is required.
+
+Integrated ladder additions remain optional in schema 2: `prices[].confirm_lines`
+contains backend-owned monthly→yearly confirmation lines (only for a valid same-tier
+switch with known period end). All first-party clients show them before any billing call.
+`usage.pro_gates` is empty unless backend Pro enforcement applies to this account;
+`usage.mcp_cap_reached=true` is emitted only after a read of the daily cap for a
+ladder account with daily enforcement on. Settings visits never consume a request.
+Mobile's 80% banner sends `trigger=usage_budget`; `budget_80` remains a source/key only.
+The `pro_budget80` golden pins Architect's absence at 80% across clients.
+Mobile renders `at_cap` strings verbatim, reads/writes the capability-gated monthly
+choice, then enables on-device processing or opens the usage-budget upgrade surface.

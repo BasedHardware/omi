@@ -7,5 +7,6 @@ V1 is finalized in its draft before any production projection or release.
 from typing import Final
 
 RATE_CARD_SHA256: Final[dict[str, str]] = {
+    'v2': 'd80126c622eccf485c692b8ddebfa7d8306d3b940242c855f8f118ea37e33267',
     'v1': '782edb7e64afdd72be88e81d03cc7346b46df332881de836a5e7cd6fe8ae32a0',
 }

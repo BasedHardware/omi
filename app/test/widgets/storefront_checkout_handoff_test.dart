@@ -319,12 +319,14 @@ void main() {
     await tester.tap(button.hitTestable());
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 400));
+    for (final line in price.confirmLines) {
+      expect(find.text(line), findsOneWidget);
+    }
+    expect(usage.upgradedPrice, isNull);
     await tester.tap(find.text('Confirm Upgrade').hitTestable());
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 400));
-    await tester.tap(find.text('Change Plan').hitTestable());
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 400));
+    expect(find.text('Change Plan'), findsNothing);
     expect(usage.upgradedPrice, price.id);
     expect(usage.sessionPrice, isNull);
     expect(tester.takeException(), isNull);
