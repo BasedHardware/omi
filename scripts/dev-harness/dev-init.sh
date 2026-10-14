@@ -24,11 +24,26 @@ fi
 # 3.9-only host must not have its requirements installed globally either).
 if [ ! -x "backend/.venv/bin/python" ] && [ ! -x "backend/.venv/Scripts/python.exe" ]; then
   BOOTSTRAP_PY="$(dev_harness_python)"
+  # A bare-3.9 bootstrap would create a venv every later resolver call
+  # rejects; stop here with the documented guidance instead (Codex P2).
+  if ! dev_harness_python_floor_ok "$BOOTSTRAP_PY"; then
+    dev_harness_python_floor_advisory
+    exit 1
+  fi
   "$BOOTSTRAP_PY" -m venv backend/.venv
   echo "Created backend/.venv (with $BOOTSTRAP_PY)"
 fi
 
-PYTHON_BIN="$PWD/backend/.venv/bin/python"
+# Select the executable for the layout that exists (native Windows venvs use
+# Scripts/python.exe; POSIX use bin/python — Codex P1).
+if [ -x "$PWD/backend/.venv/bin/python" ]; then
+  PYTHON_BIN="$PWD/backend/.venv/bin/python"
+elif [ -x "$PWD/backend/.venv/Scripts/python.exe" ]; then
+  PYTHON_BIN="$PWD/backend/.venv/Scripts/python.exe"
+else
+  echo "dev-init: backend/.venv exists but has no interpreter; recreate it (python3 -m venv backend/.venv or make lane-bootstrap)." >&2
+  exit 1
+fi
 # Bind the install to THIS repo's venv python directly: re-running the resolver
 # here would reject a freshly created venv (it cannot import dotenv/yaml before
 # this install — Codex P1) and fall back to a global interpreter. The
