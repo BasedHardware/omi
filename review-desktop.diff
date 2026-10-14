@@ -1,0 +1,955 @@
+diff --git a/desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeHubSessionPolicies.swift b/desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeHubSessionPolicies.swift
+index e60bf96c10b9..5d1255d88907 100644
+--- a/desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeHubSessionPolicies.swift
++++ b/desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeHubSessionPolicies.swift
+@@ -823,7 +823,8 @@ enum RealtimeHubToolFailureKind: String, Equatable {
+         default:
+           return .backendTransport
+         }
+-      case .unsupportedTierScopedBulkMutation, .syncUploadRejected, .accountCutoverOfflineQueueBlocked:
++      case .unsupportedTierScopedBulkMutation, .syncUploadRejected, .accountCutoverOfflineQueueBlocked,
++        .memoryDeleteGateBusy:
+         return .backendClientRejected
+       }
+     }
+diff --git a/desktop/macos/Desktop/Sources/MainWindow/Components/UserFacingErrorPresentation.swift b/desktop/macos/Desktop/Sources/MainWindow/Components/UserFacingErrorPresentation.swift
+index 4b5c9ff05bf3..3caa86a3caa6 100644
+--- a/desktop/macos/Desktop/Sources/MainWindow/Components/UserFacingErrorPresentation.swift
++++ b/desktop/macos/Desktop/Sources/MainWindow/Components/UserFacingErrorPresentation.swift
+@@ -82,6 +82,11 @@ enum UserFacingErrorPresentation {
+         }
+       case .invalidResponse, .decodingError:
+         return "Omi received an unexpected response. Try again."
++      case .memoryDeleteGateBusy:
++        if case .memoryDeletion = context {
++          return "Deletion is delayed while Omi finishes another account task. It will retry automatically."
++        }
++        return "Omi is busy right now. Try again in a moment."
+       case .syncRateLimited:
+         return "Omi is busy right now. Try again in a moment."
+       case .unsupportedTierScopedBulkMutation:
+diff --git a/desktop/macos/Desktop/Sources/MainWindow/Pages/MemoriesPage.swift b/desktop/macos/Desktop/Sources/MainWindow/Pages/MemoriesPage.swift
+index df6ab609002b..ee18208d584c 100644
+--- a/desktop/macos/Desktop/Sources/MainWindow/Pages/MemoriesPage.swift
++++ b/desktop/macos/Desktop/Sources/MainWindow/Pages/MemoriesPage.swift
+@@ -570,12 +570,17 @@ class MemoriesViewModel: ObservableObject {
+   // MARK: - Initialization
+ 
+   private let deleteMemoryRequest: (String) async throws -> Void
++  private(set) var deferredDeleteRetry: MemoryDeleteRetryScheduler
+ 
+-  init(deleteMemoryRequest: ((String) async throws -> Void)? = nil) {
++  init(
++    deleteMemoryRequest: ((String) async throws -> Void)? = nil,
++    deferredRetrySleeper: MemoryDeleteRetryScheduler.Sleeper? = nil
++  ) {
+     self.deleteMemoryRequest =
+       deleteMemoryRequest ?? { id in
+         try await APIClient.shared.deleteMemory(id: id)
+       }
++    deferredDeleteRetry = MemoryDeleteRetryScheduler(sleeper: deferredRetrySleeper)
+     // Owner fencing: an in-place account switch posts only
+     // .runtimeOwnerDidChange (never .userDidSignOut), so without this reset the
+     // previous owner's memories keep rendering until the container's deferred
+@@ -1363,10 +1368,11 @@ class MemoriesViewModel: ObservableObject {
+ 
+     isLoading = false
+ 
+-    // Kick off one-time full sync, then a one-time cache reconcile, in background.
++    // Kick off one-time full sync, cache reconcile, and stale local-only purge.
+     Task {
+       await performFullSyncIfNeeded()
+       await reconcileCacheIfNeeded()
++      await purgeStaleLocalOnlyMemoriesIfNeeded()
+     }
+   }
+ 
+@@ -1391,8 +1397,11 @@ class MemoriesViewModel: ObservableObject {
+   /// population. `softDeleteSyncedOrphans` only touches rows with a non-nil
+   /// backendId, so local-only memories that were never synced are never pruned.
+   ///
+-  /// Absence is only authoritative when the pull was complete, so a truncated or
+-  /// empty result prunes nothing and leaves the cache as it found it.
++  /// Absence is authoritative whenever the pull was complete — including a
++  /// complete pull that returned nothing. A failed or unauthorized read throws
++  /// and never reaches the prune; a truncated pull returns early above. An
++  /// empty complete pull means the account is empty, and an empty keep-set is
++  /// what clears zombie rows a wiped account keeps rendering from the cache.
+   ///
+   /// Runs once per launch rather than once per user: a delete on another device
+   /// can happen at any time, so a permanent one-shot latch would converge the
+@@ -1438,20 +1447,14 @@ class MemoriesViewModel: ObservableObject {
+         return
+       }
+ 
+-      // An empty result is far more likely to be a failed or unauthorized read
+-      // than a genuinely empty account, and pruning against it would tombstone
+-      // the entire local cache. Treat it as no evidence rather than as absence.
+-      guard !backendIds.isEmpty else {
+-        log("MemoriesViewModel: Cache reconcile skipped pruning (no backend memories returned)")
+-        return
+-      }
+-
+       let pruned = try await MemoryStorage.shared.softDeleteSyncedOrphans(
+         keepingBackendIds: backendIds,
+         within: .allIncludingArchive
+       )
+       Self.reconciledUserIDsThisLaunch.insert(userId)
+-      if pruned > 0 {
++      if backendIds.isEmpty {
++        log("MemoriesViewModel: Cache reconcile pruned all \(pruned) synced orphans (account empty)")
++      } else if pruned > 0 {
+         log("MemoriesViewModel: Cache reconcile pruned \(pruned) memories deleted on another device")
+       }
+ 
+@@ -1467,23 +1470,6 @@ class MemoriesViewModel: ObservableObject {
+   /// are the risky part of this function, not the transport.
+   var reconcilePageFetch: ((Int, String?, RuntimeOwnerAuthorizationSnapshot?) async throws -> APIClient.MemoryListPage)?
+ 
+-  private func fetchReconcilePage(
+-    limit: Int,
+-    cursor: String?,
+-    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot?
+-  ) async throws -> APIClient.MemoryListPage {
+-    if let reconcilePageFetch {
+-      return try await reconcilePageFetch(limit, cursor, authorizationSnapshot)
+-    }
+-    // Archive is included so the pulled population matches the scope the prune
+-    // claims below; a default-scope pull would read Archive rows as absent.
+-    return try await APIClient.shared.getMemoriesPage(
+-      limit: limit,
+-      cursor: cursor,
+-      includeArchive: true,
+-      authorizationSnapshot: authorizationSnapshot)
+-  }
+-
+   /// Reconcile runs once per launch per user; see `reconcileCacheIfNeeded`.
+   private static var reconciledUserIDsThisLaunch: Set<String> = []
+ 
+@@ -1859,7 +1845,7 @@ class MemoriesViewModel: ObservableObject {
+     }
+   }
+ 
+-  private func performActualDelete(_ memory: ServerMemory) async {
++  private func performActualDelete(_ memory: ServerMemory, allowsDeferredRetry: Bool = true) async {
+     guard finalizingDeleteMemoryIDs.insert(memory.id).inserted else { return }
+     defer { finalizingDeleteMemoryIDs.remove(memory.id) }
+ 
+@@ -1877,6 +1863,20 @@ class MemoriesViewModel: ObservableObject {
+       // undo window; decrementing earlier would re-fetch and duplicate it.
+       rawBackendOffset = max(0, rawBackendOffset - 1)
+     } catch {
++      // A gate-busy 409 asks for a short backoff, not a refusal: restoring made
++      // every delete during a retention-cleanup window resurrect seconds after
++      // confirmation. Keep the row soft-deleted; the initial attempt arms the
++      // one deferred retry, and a still-busy retry stops without restoring.
++      if let retryDelay = MemoryDeleteRecovery.retryDelay(for: error) {
++        logError("MemoriesViewModel: Delete deferred by busy account gate", error: error)
++        errorMessage = UserFacingErrorPresentation.message(for: error, while: .memoryDeletion)
++        if allowsDeferredRetry {
++          deferredDeleteRetry.schedule(after: retryDelay) { [weak self] in
++            await self?.performActualDelete(memory, allowsDeferredRetry: false)
++          }
++        }
++        return
++      }
+       logError("Failed to delete memory", error: error)
+       // Restoring the row without saying why is indistinguishable from the delete
+       // being ignored: the memory vanishes, comes back seconds later, and the user
+diff --git a/desktop/macos/Desktop/Sources/MainWindow/Pages/MemoriesViewModel+CacheMaintenance.swift b/desktop/macos/Desktop/Sources/MainWindow/Pages/MemoriesViewModel+CacheMaintenance.swift
+new file mode 100644
+index 000000000000..0fd3dbd7d8f3
+--- /dev/null
++++ b/desktop/macos/Desktop/Sources/MainWindow/Pages/MemoriesViewModel+CacheMaintenance.swift
+@@ -0,0 +1,49 @@
++import Foundation
++
++// MARK: - Cache Maintenance
++
++extension MemoriesViewModel {
++
++  /// Reconcile's server page transport. Extracted from `MemoriesPage.swift`
++  /// to keep that file inside its line-count ceiling; behavior unchanged.
++  func fetchReconcilePage(
++    limit: Int,
++    cursor: String?,
++    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot?
++  ) async throws -> APIClient.MemoryListPage {
++    if let reconcilePageFetch {
++      return try await reconcilePageFetch(limit, cursor, authorizationSnapshot)
++    }
++    // Archive is included so the pulled population matches the scope the prune
++    // claims; a default-scope pull would read Archive rows as absent.
++    return try await APIClient.shared.getMemoriesPage(
++      limit: limit,
++      cursor: cursor,
++      includeArchive: true,
++      authorizationSnapshot: authorizationSnapshot)
++  }
++
++  /// Give stranded local-only rows a bounded fate: purge them once per launch
++  /// per user, next to the reconcile. See
++  /// `MemoryStorage.purgeStaleLocalOnlyMemories(olderThan:now:)` for why rows
++  /// younger than the bound are kept.
++  func purgeStaleLocalOnlyMemoriesIfNeeded() async {
++    let userId = UserDefaults.standard.string(forKey: .authUserId) ?? "unknown"
++    guard !LocalOnlyPurgeLatch.purgedUserIDs.contains(userId) else { return }
++    do {
++      let purged = try await MemoryStorage.shared.purgeStaleLocalOnlyMemories()
++      LocalOnlyPurgeLatch.purgedUserIDs.insert(userId)
++      if purged > 0 {
++        log("MemoriesViewModel: Purged \(purged) stranded local-only memories (older than 30 days)")
++      }
++    } catch {
++      // No latch on failure: retry on the next load this launch or the next launch.
++      logError("MemoriesViewModel: Stale local-only purge failed (will retry)", error: error)
++    }
++  }
++
++  /// Purge runs once per launch per user, mirroring the reconcile latch.
++  @MainActor private enum LocalOnlyPurgeLatch {
++    static var purgedUserIDs: Set<String> = []
++  }
++}
+diff --git a/desktop/macos/Desktop/Sources/MainWindow/Pages/MemoriesViewModel+DeleteRecovery.swift b/desktop/macos/Desktop/Sources/MainWindow/Pages/MemoriesViewModel+DeleteRecovery.swift
+new file mode 100644
+index 000000000000..ba3e494b7d05
+--- /dev/null
++++ b/desktop/macos/Desktop/Sources/MainWindow/Pages/MemoriesViewModel+DeleteRecovery.swift
+@@ -0,0 +1,102 @@
++import Foundation
++
++/// Classifies a failed server memory delete and bounds its deferred retry.
++///
++/// The backend's account-wide destructive-operation gate answers a concurrent
++/// delete with 409 `account_gate_busy` plus a `Retry-After` header. That answer
++/// means "try again shortly", not "the delete is impossible" — but the old
++/// failure path restored the row on any error, so every delete during a
++/// retention-cleanup window visibly resurrected seconds after the user
++/// confirmed it.
++enum MemoryDeleteRecovery {
++  /// Matches `ACCOUNT_GATE_BUSY_DETAIL` in `backend/utils/other/account_gate_http.py`.
++  static let gateBusyDetail = "account_gate_busy"
++  static let minRetryDelay: TimeInterval = 5
++  static let maxRetryDelay: TimeInterval = 300
++  /// Used when the server sent no usable `Retry-After`.
++  static let defaultRetryDelay: TimeInterval = 30
++
++  /// The bounded retry delay for a gate-busy delete failure, or nil when the
++  /// failure is not retryable and the caller must restore the row.
++  static func retryDelay(for error: Error) -> TimeInterval? {
++    switch error {
++    case APIError.memoryDeleteGateBusy(let retryAfterSeconds):
++      return clamp(retryAfterSeconds)
++    case APIError.httpError(let statusCode, let detail)
++    where statusCode == 409 && detail == gateBusyDetail:
++      return clamp(nil)
++    default:
++      return nil
++    }
++  }
++
++  /// Clamp the server's hint to a sane backoff window: long enough to let the
++  /// gate clear, short enough that a stuck gate cannot hold a pending delete
++  /// hostage for the rest of the session.
++  static func clamp(_ seconds: Int?) -> TimeInterval {
++    guard let seconds, seconds > 0 else { return defaultRetryDelay }
++    return min(max(TimeInterval(seconds), minRetryDelay), maxRetryDelay)
++  }
++}
++
++/// Runs the single deferred retry for a gate-busy delete.
++///
++/// Holds at most one pending retry: a new schedule replaces (cancels) the
++/// previous one, so repeated failures cannot accumulate tasks. The task holds
++/// the scheduler weakly and the scheduler cancels its task on deinit, so a
++/// deallocated view model cannot fire a late retry into a fresh instance.
++/// The sleeper is injected so tests drive the delay deterministically.
++@MainActor
++final class MemoryDeleteRetryScheduler {
++  typealias Sleeper = @Sendable (TimeInterval) async throws -> Void
++
++  private let sleeper: Sleeper
++  private var task: Task<Void, Never>?
++
++  /// Delay of the currently pending retry, or nil when none is scheduled.
++  private(set) var pendingDelay: TimeInterval?
++
++  /// How many deferred retries have actually run.
++  private(set) var retryCount = 0
++
++  init(sleeper: Sleeper? = nil) {
++    self.sleeper = sleeper ?? MemoryDeleteRetryScheduler.taskSleeper
++  }
++
++  /// Schedule one deferred `retry`. A pending retry is cancelled first; when
++  /// the sleeper throws (cancellation) the retry is dropped without running.
++  func schedule(after delay: TimeInterval, retry: @escaping @MainActor () async -> Void) {
++    task?.cancel()
++    pendingDelay = delay
++    task = Task { [weak self] in
++      guard let self else { return }
++      do {
++        try await self.sleeper(delay)
++      } catch {
++        self.pendingDelay = nil
++        return
++      }
++      guard !Task.isCancelled else {
++        self.pendingDelay = nil
++        return
++      }
++      self.pendingDelay = nil
++      self.retryCount += 1
++      await retry()
++    }
++  }
++
++  func cancel() {
++    task?.cancel()
++    task = nil
++    pendingDelay = nil
++  }
++
++  deinit {
++    task?.cancel()
++  }
++
++  static let taskSleeper: Sleeper = { delay in
++    try await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
++  }
++}
+diff --git a/desktop/macos/Desktop/Sources/Rewind/Core/MemoryStorage+StaleLocalOnlyPurge.swift b/desktop/macos/Desktop/Sources/Rewind/Core/MemoryStorage+StaleLocalOnlyPurge.swift
+new file mode 100644
+index 000000000000..a98d48d9e866
+--- /dev/null
++++ b/desktop/macos/Desktop/Sources/Rewind/Core/MemoryStorage+StaleLocalOnlyPurge.swift
+@@ -0,0 +1,43 @@
++import Foundation
++@preconcurrency import GRDB
++
++// MARK: - Stale Local-Only Purge
++
++extension MemoryStorage {
++  /// Soft-delete local-only rows stranded by a failed backend create.
++  ///
++  /// The extraction durability pipeline inserts locally first; when the remote
++  /// create fails (for example an expired auth refresh), the row stays
++  /// `backendId NULL, backendSynced false` forever because nothing retries
++  /// `getUnsyncedMemories()`. Such rows keep counting in cache-first surfaces
++  /// — home knowledge count, local search, Spotlight candidates — while the
++  /// Memories page renders the authoritative server page, so the user has no
++  /// delete affordance for them. Rows younger than `days` are kept so a stuck
++  /// extraction has a window to be retried; rows with a backendId are never
++  /// touched (those are the reconcile's to prune).
++  @discardableResult
++  func purgeStaleLocalOnlyMemories(olderThan days: Int = 30, now: Date = Date()) async throws -> Int {
++    let db = try await ensureInitialized()
++    let cutoff = now.addingTimeInterval(-TimeInterval(days) * 86_400)
++    let purged = try await db.write { database -> Int in
++      let stale =
++        try MemoryRecord
++        .filter(Column("backendId") == nil)
++        .filter(Column("backendSynced") == false)
++        .filter(Column("deleted") == false)
++        .filter(Column("createdAt") < cutoff)
++        .fetchAll(database)
++      for var record in stale {
++        record.deleted = true
++        record.updatedAt = now
++        try record.update(database)
++      }
++      return stale.count
++    }
++    if purged > 0 {
++      log("MemoryStorage: Purged \(purged) stale local-only memories older than \(days) days")
++      HomeKnowledgeCountInvalidation.post()
++    }
++    return purged
++  }
++}
+diff --git a/desktop/macos/Desktop/Sources/Services/APIClient/APIClient+Memories.swift b/desktop/macos/Desktop/Sources/Services/APIClient/APIClient+Memories.swift
+index 01fe6400a061..9b457bc8deb9 100644
+--- a/desktop/macos/Desktop/Sources/Services/APIClient/APIClient+Memories.swift
++++ b/desktop/macos/Desktop/Sources/Services/APIClient/APIClient+Memories.swift
+@@ -1285,26 +1285,6 @@ extension APIClient {
+       authorizationSnapshot: authorizationSnapshot)
+   }
+ 
+-  /// Deletes a memory by ID.
+-  ///
+-  /// A 404 completes normally. The caller asked for this memory to be gone, and the
+-  /// backend reporting it absent already satisfies that — delete is idempotent in
+-  /// intent, so "it is not here" is the requested end state, not a failure.
+-  ///
+-  /// This is load-bearing rather than defensive. The desktop cache routinely outlives
+-  /// the backend row: nothing prunes a local row whose memory was deleted on another
+-  /// device, because `reconcileCacheIfNeeded` deliberately fails closed while the list
+-  /// endpoint cannot prove scope completeness. Every one of those orphans answers 404
+-  /// on delete, and treating that as an error made the caller restore the row it had
+-  /// just removed — so the memory could never be cleared from this device at all.
+-  func deleteMemory(id: String) async throws {
+-    do {
+-      try await delete("v3/memories/\(id)")
+-    } catch APIError.httpError(statusCode: 404, _) {
+-      return
+-    }
+-  }
+-
+   /// Edits a memory's content
+   func editMemory(id: String, content: String) async throws {
+     struct EditRequest: Encodable {
+diff --git a/desktop/macos/Desktop/Sources/Services/APIClient/APIClient+MemoryDelete.swift b/desktop/macos/Desktop/Sources/Services/APIClient/APIClient+MemoryDelete.swift
+new file mode 100644
+index 000000000000..8e4a3cf1bd68
+--- /dev/null
++++ b/desktop/macos/Desktop/Sources/Services/APIClient/APIClient+MemoryDelete.swift
+@@ -0,0 +1,57 @@
++import Foundation
++
++// MARK: - Memory Delete
++
++extension APIClient {
++
++  /// Deletes a memory by ID.
++  ///
++  /// A 404 completes normally. The caller asked for this memory to be gone, and the
++  /// backend reporting it absent already satisfies that — delete is idempotent in
++  /// intent, so "it is not here" is the requested end state, not a failure.
++  ///
++  /// This is load-bearing rather than defensive. The desktop cache routinely outlives
++  /// the backend row: orphaned rows whose memory was deleted on another device answer
++  /// 404 on delete, and treating that as an error made the caller restore the row it
++  /// had just removed — so the memory could never be cleared from this device at all.
++  ///
++  /// A 409 is different: it is the backend's account-wide destructive-operation gate
++  /// (`account_gate_busy`, mapped by `account_gate_busy_http_exception`) asking for a
++  /// short backoff while it finishes a retention cleanup. The response carries a
++  /// `Retry-After` header; the generic `delete` helper discards response headers, so
++  /// this method owns its request path and preserves the header in the thrown error
++  /// for the caller's deferred retry.
++  func deleteMemory(id: String) async throws {
++    guard let url = URL(string: baseURL + "v3/memories/\(id)") else {
++      throw APIError.invalidResponse
++    }
++    let authPolicy = try resolvedRequestAuthPolicy(expectedOwnerId: nil, authorizationSnapshot: nil)
++    try validateExpectedOwner(authPolicy)
++    var request = URLRequest(url: url)
++    request.httpMethod = "DELETE"
++    request.allHTTPHeaderFields = try await buildHeaders(
++      requireAuth: true,
++      includeBYOK: true,
++      expectedAuthOwnerId: authPolicy.expectedAuthOwnerId)
++    try validateExpectedOwner(authPolicy)
++
++    let (data, httpResponse) = try await performAuthenticatedData(for: request, authPolicy: authPolicy)
++
++    switch httpResponse.statusCode {
++    case 200...299, 404:
++      return
++    case 409:
++      throw APIError.memoryDeleteGateBusy(
++        retryAfterSeconds: Self.memoryDeleteRetryAfterSeconds(from: httpResponse))
++    default:
++      throw APIError.httpError(
++        statusCode: httpResponse.statusCode,
++        detail: OmiHTTPTransport.extractErrorDetail(from: data))
++    }
++  }
++
++  private static func memoryDeleteRetryAfterSeconds(from response: HTTPURLResponse) -> Int? {
++    guard let raw = response.value(forHTTPHeaderField: "Retry-After") else { return nil }
++    return Int(raw.trimmingCharacters(in: .whitespacesAndNewlines))
++  }
++}
+diff --git a/desktop/macos/Desktop/Sources/Services/OmiHTTPTransport.swift b/desktop/macos/Desktop/Sources/Services/OmiHTTPTransport.swift
+index 579862d681e3..fb1f0174ad6f 100644
+--- a/desktop/macos/Desktop/Sources/Services/OmiHTTPTransport.swift
++++ b/desktop/macos/Desktop/Sources/Services/OmiHTTPTransport.swift
+@@ -309,6 +309,10 @@ enum APIError: LocalizedError {
+   case syncRateLimited(retryAfterSeconds: Int?)
+   case syncUploadRejected(reason: String)
+   case accountCutoverOfflineQueueBlocked
++  /// The backend's account-wide destructive-operation gate is held (409
++  /// `account_gate_busy`): the delete is retryable after `retryAfterSeconds`
++  /// (from the response's `Retry-After` header), not refused.
++  case memoryDeleteGateBusy(retryAfterSeconds: Int?)
+ 
+   var detail: String? {
+     switch self {
+@@ -343,6 +347,11 @@ enum APIError: LocalizedError {
+       return reason
+     case .accountCutoverOfflineQueueBlocked:
+       return "Account cutover offline upload gate closed"
++    case .memoryDeleteGateBusy(let retryAfterSeconds):
++      if let retryAfterSeconds {
++        return "Memory delete is delayed by another account operation (retry after \(retryAfterSeconds)s)"
++      }
++      return "Memory delete is delayed by another account operation"
+     }
+   }
+ }
+diff --git a/desktop/macos/Desktop/Tests/APIClientMemoryDeleteIdempotencyTests.swift b/desktop/macos/Desktop/Tests/APIClientMemoryDeleteIdempotencyTests.swift
+index bc3b617a2a8e..c7f10984fca2 100644
+--- a/desktop/macos/Desktop/Tests/APIClientMemoryDeleteIdempotencyTests.swift
++++ b/desktop/macos/Desktop/Tests/APIClientMemoryDeleteIdempotencyTests.swift
+@@ -44,22 +44,29 @@ private final class MemoryDeleteStatusStub: URLProtocol, @unchecked Sendable {
+     let status = Self._status
+     Self.lock.unlock()
+ 
+-    guard let url = request.url,
++    var headerFields = ["Content-Type": "application/json"]
++    var payload = Data("{\"status\":\"ok\"}".utf8)
++    if status == 404 {
++      payload = Data("{\"detail\":\"Memory not found\"}".utf8)
++    } else if status == 409 {
++      // Mirrors `account_gate_busy_http_exception`: 409 account_gate_busy
++      // plus a Retry-After header.
++      headerFields["Retry-After"] = "2"
++      payload = Data("{\"detail\":\"account_gate_busy\"}".utf8)
++    }
++    guard
++      let url = request.url,
+       let response = HTTPURLResponse(
+         url: url,
+         statusCode: status,
+         httpVersion: nil,
+-        headerFields: ["Content-Type": "application/json"]
++        headerFields: headerFields
+       )
+     else {
+       client?.urlProtocol(self, didFailWithError: URLError(.badServerResponse))
+       return
+     }
+     client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
+-    let payload =
+-      status == 404
+-      ? Data("{\"detail\":\"Memory not found\"}".utf8)
+-      : Data("{\"status\":\"ok\"}".utf8)
+     client?.urlProtocol(self, didLoad: payload)
+     client?.urlProtocolDidFinishLoading(self)
+   }
+@@ -143,4 +150,19 @@ final class APIClientMemoryDeleteIdempotencyTests: XCTestCase {
+       XCTAssertEqual(statusCode, 403)
+     }
+   }
++
++  /// The account-gate-busy 409 must arrive as a typed, retryable error that
++  /// carries the server's Retry-After, so the Memories page can back off and
++  /// retry instead of resurrecting the row it just removed.
++  func testDeleteSurfacesGateBusy409WithRetryAfter() async throws {
++    let client = await makeClient()
++    MemoryDeleteStatusStub.status = 409
++
++    do {
++      try await client.deleteMemory(id: "gated-memory")
++      XCTFail("A gate-busy 409 must surface as a retryable error, not a completed delete")
++    } catch APIError.memoryDeleteGateBusy(let retryAfterSeconds) {
++      XCTAssertEqual(retryAfterSeconds, 2, "the Retry-After header must survive the transport")
++    }
++  }
+ }
+diff --git a/desktop/macos/Desktop/Tests/MemoriesCacheReconcilePruneTests.swift b/desktop/macos/Desktop/Tests/MemoriesCacheReconcilePruneTests.swift
+index b64042842d51..d52abf60780e 100644
+--- a/desktop/macos/Desktop/Tests/MemoriesCacheReconcilePruneTests.swift
++++ b/desktop/macos/Desktop/Tests/MemoriesCacheReconcilePruneTests.swift
+@@ -126,7 +126,11 @@ final class MemoriesCacheReconcilePruneTests: XCTestCase {
+       "a truncated pull saw only part of the backend, so absence proves nothing")
+   }
+ 
+-  func testEmptyPullPrunesNothing() async throws {
++  /// A complete pull that returned nothing is an authoritative empty account:
++  /// failures throw and truncated pulls return early, so reaching the prune
++  /// with an empty keep-set means the server verifiably holds no memories.
++  /// Refusing to prune here protected zombie rows forever on wiped accounts.
++  func testCompleteEmptyPullPrunesSyncedOrphans() async throws {
+     let existing = makeMemory(id: "existing", tier: .longTerm)
+     try await MemoryStorage.shared.syncServerMemories([existing])
+ 
+@@ -134,7 +138,24 @@ final class MemoriesCacheReconcilePruneTests: XCTestCase {
+ 
+     let record = try await MemoryStorage.shared.getMemoryByBackendId("existing")
+     XCTAssertEqual(
+-      record?.deleted, false,
+-      "an empty read is far more likely to be a failure than an empty account")
++      record?.deleted, true,
++      "a synced row must not outlive a verifiably empty account")
++  }
++
++  /// Local-only rows are the only copy and must survive an empty-account prune;
++  /// `softDeleteSyncedOrphans` restricts the prune to rows with a backendId.
++  func testCompleteEmptyPullKeepsLocalOnlyRows() async throws {
++    let stranded = MemoryRecord(
++      content: "stranded local-only memory",
++      createdAt: Date(timeIntervalSinceNow: -86_400 * 90))
++    _ = try await MemoryStorage.shared.insertLocalMemory(stranded)
++
++    await makeViewModel(returning: page([])).reconcileCacheIfNeeded()
++
++    let unsynced = try await MemoryStorage.shared.getUnsyncedMemories()
++    XCTAssertEqual(
++      unsynced.count, 1,
++      "a local-only row must never be pruned by the reconcile, even against an empty account")
++    XCTAssertEqual(unsynced.first?.deleted, false)
+   }
+ }
+diff --git a/desktop/macos/Desktop/Tests/MemoriesDeleteGateBusyRecoveryTests.swift b/desktop/macos/Desktop/Tests/MemoriesDeleteGateBusyRecoveryTests.swift
+new file mode 100644
+index 000000000000..6c4d203242bc
+--- /dev/null
++++ b/desktop/macos/Desktop/Tests/MemoriesDeleteGateBusyRecoveryTests.swift
+@@ -0,0 +1,229 @@
++import XCTest
++
++@testable import Omi_Computer
++
++/// Thread-safe mutable cell for closures that XCTest injects across actor
++/// boundaries (same lock pattern as the URLProtocol stubs in these suites).
++private final class Locked<Value>: @unchecked Sendable {
++  private let lock = NSLock()
++  private var _value: Value
++
++  init(_ value: Value) { self._value = value }
++
++  var value: Value {
++    get {
++      lock.lock()
++      defer { lock.unlock() }
++      return _value
++    }
++    set {
++      lock.lock()
++      _value = newValue
++      lock.unlock()
++    }
++  }
++}
++
++/// A gate-busy delete must stop resurrecting the row.
++///
++/// The backend's account-wide destructive-operation gate answers a concurrent
++/// delete with 409 `account_gate_busy` plus `Retry-After`. The old failure
++/// path restored the row on any error, so every delete during a
++/// retention-cleanup window visibly resurrected seconds after confirmation.
++/// The row must stay soft-deleted, the user must be told the deletion is
++/// delayed, exactly one deferred retry may be scheduled, and only
++/// non-retryable failures keep restoring.
++@MainActor
++final class MemoriesDeleteGateBusyRecoveryTests: XCTestCase {
++  private var userDir: URL?
++  private var authSnapshot: RewindStorageTestIsolation.AuthSnapshot?
++
++  override func setUp() async throws {
++    authSnapshot = RewindStorageTestIsolation.captureAuthSnapshot()
++    let fixture = try await RewindStorageTestIsolation.setUp(userIdPrefix: "memories-delete-gate-busy")
++    userDir = fixture.userDir
++    RewindStorageTestIsolation.signInForTests(userId: fixture.testUserId)
++  }
++
++  override func tearDown() async throws {
++    if let authSnapshot {
++      RewindStorageTestIsolation.restoreAuthSnapshot(authSnapshot)
++    }
++    if let userDir {
++      await RewindStorageTestIsolation.tearDown(userDir: userDir)
++    }
++  }
++
++  private func makeServerMemory(id: String) -> ServerMemory {
++    ServerMemory(
++      id: id,
++      content: "Memory \(id)",
++      category: .system,
++      tier: .longTerm,
++      createdAt: Date(timeIntervalSince1970: 1),
++      updatedAt: Date(timeIntervalSince1970: 2),
++      conversationId: nil,
++      reviewed: false,
++      userReview: nil,
++      visibility: "private",
++      manuallyAdded: false,
++      scoring: nil,
++      source: "desktop",
++      confidence: nil,
++      sourceApp: nil,
++      contextSummary: nil,
++      isRead: false,
++      isDismissed: false,
++      tags: [],
++      reasoning: nil,
++      currentActivity: nil,
++      inputDeviceName: nil,
++      windowTitle: nil,
++      headline: nil
++    )
++  }
++
++  /// Delete-then-confirm without waiting out the undo countdown.
++  private func deleteImmediately(_ memory: ServerMemory, on viewModel: MemoriesViewModel) async {
++    await viewModel.deleteMemory(memory)
++    let finalize = viewModel.confirmDelete()
++    await finalize.value
++  }
++
++  func testClampBoundedRetryDelays() {
++    XCTAssertEqual(MemoryDeleteRecovery.clamp(nil), MemoryDeleteRecovery.defaultRetryDelay)
++    XCTAssertEqual(MemoryDeleteRecovery.clamp(0), MemoryDeleteRecovery.defaultRetryDelay)
++    XCTAssertEqual(MemoryDeleteRecovery.clamp(-3), MemoryDeleteRecovery.defaultRetryDelay)
++    XCTAssertEqual(MemoryDeleteRecovery.clamp(1), MemoryDeleteRecovery.minRetryDelay)
++    XCTAssertEqual(MemoryDeleteRecovery.clamp(60), 60)
++    XCTAssertEqual(MemoryDeleteRecovery.clamp(60_000), MemoryDeleteRecovery.maxRetryDelay)
++  }
++
++  func testOnlyGateBusyFailuresAreRetryable() {
++    XCTAssertNotNil(MemoryDeleteRecovery.retryDelay(for: APIError.memoryDeleteGateBusy(retryAfterSeconds: 2)))
++    XCTAssertNotNil(
++      MemoryDeleteRecovery.retryDelay(
++        for: APIError.httpError(statusCode: 409, detail: MemoryDeleteRecovery.gateBusyDetail)))
++    XCTAssertNil(
++      MemoryDeleteRecovery.retryDelay(for: APIError.httpError(statusCode: 409, detail: "other conflict")),
++      "a non-gate 409 keeps the restore behavior")
++    XCTAssertNil(MemoryDeleteRecovery.retryDelay(for: APIError.httpError(statusCode: 500)))
++    XCTAssertNil(MemoryDeleteRecovery.retryDelay(for: APIError.unauthorized))
++  }
++
++  /// First delete hits the busy gate: the row stays deleted, the message says
++  /// the deletion is delayed, one retry is scheduled after the clamped delay,
++  /// and the retry that succeeds completes the delete.
++  func testGateBusyKeepsRowDeletedAndRetriesOnceUntilSuccess() async throws {
++    let memory = makeServerMemory(id: "gate-busy-then-success")
++    try await MemoryStorage.shared.syncServerMemories([memory])
++
++    let gateBusy = expectation(description: "initial delete answered gate-busy")
++    let retrySucceeded = expectation(description: "deferred retry completed the delete")
++    let serverCalls = Locked(0)
++    let delays = Locked<[TimeInterval]>([])
++    // The sleeper parks the retry on a continuation the test releases, so the
++    // pre-retry assertions observe the scheduled state deterministically.
++    let retryGate = Locked<CheckedContinuation<Void, Never>?>(nil)
++    let viewModel = MemoriesViewModel(
++      deleteMemoryRequest: { _ in
++        let call = serverCalls.value + 1
++        serverCalls.value = call
++        if call == 1 {
++          gateBusy.fulfill()
++          throw APIError.memoryDeleteGateBusy(retryAfterSeconds: 1)
++        }
++        retrySucceeded.fulfill()
++      },
++      deferredRetrySleeper: { delay in
++        delays.value.append(delay)
++        await withCheckedContinuation { continuation in
++          retryGate.value = continuation
++        }
++      }
++    )
++
++    await deleteImmediately(memory, on: viewModel)
++
++    let afterFailure = try await MemoryStorage.shared.getMemoryByBackendId(memory.id)
++    XCTAssertEqual(afterFailure?.deleted, true, "a gate-busy delete must not resurrect the row")
++    XCTAssertEqual(
++      viewModel.errorMessage,
++      "Deletion is delayed while Omi finishes another account task. It will retry automatically.")
++    while delays.value.isEmpty { await Task.yield() }
++    XCTAssertEqual(delays.value, [MemoryDeleteRecovery.minRetryDelay], "Retry-After 1s clamps up to 5s")
++    XCTAssertEqual(viewModel.deferredDeleteRetry.pendingDelay, MemoryDeleteRecovery.minRetryDelay)
++
++    retryGate.value?.resume()
++    retryGate.value = nil
++    await fulfillment(of: [gateBusy, retrySucceeded], timeout: 5)
++
++    XCTAssertEqual(serverCalls.value, 2, "one attempt plus one deferred retry")
++    XCTAssertEqual(viewModel.deferredDeleteRetry.retryCount, 1, "exactly one deferred retry ran")
++    XCTAssertEqual(viewModel.deferredDeleteRetry.pendingDelay, nil, "no further retry is armed")
++    let afterRetry = try await MemoryStorage.shared.getMemoryByBackendId(memory.id)
++    XCTAssertEqual(afterRetry?.deleted, true, "the successful retry leaves the row deleted")
++  }
++
++  /// A gate that stays busy: exactly one retry runs, and it does not arm
++  /// another — but the row still stays deleted instead of resurrecting.
++  func testPersistentGateBusyRetriesOnlyOnceAndKeepsRowDeleted() async throws {
++    let memory = makeServerMemory(id: "gate-stays-busy")
++    try await MemoryStorage.shared.syncServerMemories([memory])
++
++    let firstGateBusy = expectation(description: "initial delete answered gate-busy")
++    let retryGateBusy = expectation(description: "deferred retry answered gate-busy again")
++    let serverCalls = Locked(0)
++    let viewModel = MemoriesViewModel(
++      deleteMemoryRequest: { _ in
++        let call = serverCalls.value + 1
++        serverCalls.value = call
++        if call == 1 { firstGateBusy.fulfill() } else { retryGateBusy.fulfill() }
++        throw APIError.memoryDeleteGateBusy(retryAfterSeconds: nil)
++      },
++      deferredRetrySleeper: { _ in }
++    )
++
++    await deleteImmediately(memory, on: viewModel)
++
++    await fulfillment(of: [firstGateBusy, retryGateBusy], timeout: 5)
++    await settleAsyncWork()
++
++    XCTAssertEqual(serverCalls.value, 2, "one attempt plus one deferred retry, never a loop")
++    XCTAssertEqual(viewModel.deferredDeleteRetry.retryCount, 1)
++    XCTAssertEqual(viewModel.deferredDeleteRetry.pendingDelay, nil)
++    let record = try await MemoryStorage.shared.getMemoryByBackendId(memory.id)
++    XCTAssertEqual(record?.deleted, true, "a still-busy gate keeps the row soft-deleted")
++  }
++
++  /// Non-retryable failures keep the existing behavior: the row is restored.
++  func testNonRetryableFailureStillRestoresTheRow() async throws {
++    let memory = makeServerMemory(id: "server-error")
++    try await MemoryStorage.shared.syncServerMemories([memory])
++
++    let failed = expectation(description: "delete failed with 500")
++    let viewModel = MemoriesViewModel(
++      deleteMemoryRequest: { _ in
++        failed.fulfill()
++        throw APIError.httpError(statusCode: 500)
++      },
++      deferredRetrySleeper: { _ in XCTFail("a 500 must not schedule a deferred retry") }
++    )
++
++    await deleteImmediately(memory, on: viewModel)
++
++    await fulfillment(of: [failed], timeout: 5)
++    await settleAsyncWork()
++
++    let record = try await MemoryStorage.shared.getMemoryByBackendId(memory.id)
++    XCTAssertEqual(record?.deleted, false, "a non-retryable failure restores the row as before")
++    XCTAssertEqual(viewModel.deferredDeleteRetry.pendingDelay, nil)
++    XCTAssertEqual(viewModel.deferredDeleteRetry.retryCount, 0)
++  }
++
++  /// Lets already-started tasks (the retry scheduler hop) drain without a
++  /// wall-clock wait before asserting no further work appeared.
++  private func settleAsyncWork() async {
++    for _ in 0..<20 { await Task.yield() }
++  }
++}
+diff --git a/desktop/macos/Desktop/Tests/MemoryStaleLocalOnlyPurgeTests.swift b/desktop/macos/Desktop/Tests/MemoryStaleLocalOnlyPurgeTests.swift
+new file mode 100644
+index 000000000000..d8f8c0cb6d64
+--- /dev/null
++++ b/desktop/macos/Desktop/Tests/MemoryStaleLocalOnlyPurgeTests.swift
+@@ -0,0 +1,110 @@
++import XCTest
++
++@testable import Omi_Computer
++
++/// Stranded local-only rows need a bounded fate.
++///
++/// The extraction durability pipeline inserts locally before the backend
++/// create; when that create fails (e.g. an expired auth refresh), the row
++/// stays `backendId NULL, backendSynced false` forever because nothing
++/// retries `getUnsyncedMemories()`. It keeps counting in cache-first surfaces
++/// with no delete affordance. The purge tombstones only rows older than the
++/// bound — younger rows keep their retry window — and never touches rows the
++/// reconcile owns (those with a backendId).
++@MainActor
++final class MemoryStaleLocalOnlyPurgeTests: XCTestCase {
++  private var userDir: URL?
++  private var authSnapshot: RewindStorageTestIsolation.AuthSnapshot?
++
++  override func setUp() async throws {
++    authSnapshot = RewindStorageTestIsolation.captureAuthSnapshot()
++    let fixture = try await RewindStorageTestIsolation.setUp(userIdPrefix: "memory-stale-local-only-purge")
++    userDir = fixture.userDir
++    RewindStorageTestIsolation.signInForTests(userId: fixture.testUserId)
++  }
++
++  override func tearDown() async throws {
++    if let authSnapshot {
++      RewindStorageTestIsolation.restoreAuthSnapshot(authSnapshot)
++    }
++    if let userDir {
++      await RewindStorageTestIsolation.tearDown(userDir: userDir)
++    }
++  }
++
++  private func daysAgo(_ days: Double) -> Date {
++    Date(timeIntervalSinceNow: -86_400 * days)
++  }
++
++  /// `insertLocalMemory` always writes `backendSynced false`; a backendId is
++  /// attached here only to prove the purge scopes on it, not on the sync flag.
++  private func insertRow(
++    content: String,
++    createdAt: Date,
++    backendId: String? = nil
++  ) async throws -> Int64 {
++    let record = MemoryRecord(
++      backendId: backendId,
++      content: content,
++      createdAt: createdAt,
++      updatedAt: createdAt)
++    let inserted = try await MemoryStorage.shared.insertLocalMemory(record)
++    return try XCTUnwrap(inserted.id, "inserted row must have an id")
++  }
++
++  private func deletedFlag(rowId: Int64) async throws -> Bool? {
++    try await MemoryStorage.shared.getMemory(id: rowId)?.deleted
++  }
++
++  func testPurgeRemovesOnlyLocalOnlyRowsOlderThanTheBound() async throws {
++    let staleRow = try await insertRow(content: "stale stranded", createdAt: daysAgo(45))
++    let freshRow = try await insertRow(content: "fresh stranded", createdAt: daysAgo(1))
++    let backendIdRow = try await insertRow(
++      content: "old but server-backed", createdAt: daysAgo(45), backendId: "backend-1")
++    let tombstonedRow = try await insertRow(content: "already tombstoned", createdAt: daysAgo(45))
++    try await MemoryStorage.shared.deleteMemory(id: tombstonedRow)
++
++    let purged = try await MemoryStorage.shared.purgeStaleLocalOnlyMemories(olderThan: 30)
++
++    XCTAssertEqual(purged, 1, "only the stale local-only row is purged")
++    let staleDeleted = try await deletedFlag(rowId: staleRow)
++    XCTAssertEqual(staleDeleted, true, "the stale local-only row is tombstoned")
++    let freshDeleted = try await deletedFlag(rowId: freshRow)
++    XCTAssertEqual(freshDeleted, false, "a young local-only row keeps its retry window")
++    let backendIdDeleted = try await deletedFlag(rowId: backendIdRow)
++    XCTAssertEqual(
++      backendIdDeleted, false, "rows with a backendId belong to the reconcile, never this purge")
++    let tombstonedDeleted = try await deletedFlag(rowId: tombstonedRow)
++    XCTAssertEqual(
++      tombstonedDeleted, true, "an already-tombstoned row is not counted or touched")
++  }
++
++  func testPurgeBoundaryIsExclusiveAtTheCutoff() async throws {
++    let now = Date()
++    let exactlyAtBound = try await insertRow(
++      content: "exactly 30 days old", createdAt: now.addingTimeInterval(-86_400 * 30))
++    let justOver = try await insertRow(
++      content: "31 days old", createdAt: now.addingTimeInterval(-86_400 * 31))
++
++    let purged = try await MemoryStorage.shared.purgeStaleLocalOnlyMemories(olderThan: 30, now: now)
++
++    XCTAssertEqual(purged, 1)
++    let atBoundDeleted = try await deletedFlag(rowId: exactlyAtBound)
++    XCTAssertEqual(atBoundDeleted, false)
++    let justOverDeleted = try await deletedFlag(rowId: justOver)
++    XCTAssertEqual(justOverDeleted, true)
++  }
++
++  /// The purge runs next to the reconcile, once per launch per user: a second
++  /// call in the same launch must be a no-op even when new stale rows exist.
++  func testPurgeIfNeededRunsOncePerLaunchPerUser() async throws {
++    await MemoriesViewModel().purgeStaleLocalOnlyMemoriesIfNeeded()
++
++    _ = try await insertRow(content: "stale after first purge", createdAt: daysAgo(45))
++    await MemoriesViewModel().purgeStaleLocalOnlyMemoriesIfNeeded()
++
++    let unsynced = try await MemoryStorage.shared.getUnsyncedMemories()
++    XCTAssertEqual(
++      unsynced.count, 1, "the second same-launch purge must not run against the latched user")
++  }
++}
+diff --git a/desktop/macos/changelog/unreleased/20261014-memory-deletion-sticks.json b/desktop/macos/changelog/unreleased/20261014-memory-deletion-sticks.json
+new file mode 100644
+index 000000000000..4d419607fb0f
+--- /dev/null
++++ b/desktop/macos/changelog/unreleased/20261014-memory-deletion-sticks.json
+@@ -0,0 +1,3 @@
++{
++  "change": "Fixed memories that refused to disappear: memories deleted everywhere else (or on emptied accounts) no longer linger on the desktop, stuck unsynced local memories are cleared after 30 days, and a delayed server delete now retries in the background instead of popping back"
++}
