@@ -6,6 +6,25 @@ description: "Sequence diagrams and finalization policy for the /v4/listen WebSo
 
 # Listen + Pusher Pipeline — Sequence Diagrams
 
+## Windowed live transcription deadlines
+
+`PARAKEET_WINDOW_DEADLINE_CUT_ENABLED` defaults to `false` in code and
+both listen manifests. Qualification must explicitly enable it in the target
+listen cohort. While enabled, a successful nonempty POST can release its held
+tail through the existing timestamp-preserving cut only when the remaining
+first-text/progress deadline is at most
+`PARAKEET_WINDOW_DEADLINE_CUT_POST_LATENCY_SECONDS` (default `1.2`, approximately
+the observed POST p95; invalid/nonpositive values use the default). A normal
+first POST after six seconds of capture retains sentence anchoring. Neither a
+full audio pace nor the next pacing wait increases the allowance.
+
+Emitted text advances the existing capture anchor and cancels the applicable
+deadline. Empty answers and stalled in-flight POSTs retain the original deadline
+and replay/failover behavior. This opt-in mitigation only rescues a nonempty
+answer returning near expiry; it does not extend the deadline or guarantee
+survival for a held answer returned earlier. Forced releases remain included in
+`omi_stt_window_forced_cuts_total`.
+
 ## Demand-driven live provider lane
 
 The `/v4/listen` runtime owns the dark-by-default live-demand policy. Existing
