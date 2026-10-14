@@ -804,6 +804,10 @@ def test_partial_album_retains_success_and_specific_failure(adapter, monkeypatch
     from database import chat
     from utils.messaging.contracts import Artifact
 
+    from utils.observability import fallback
+
+    recovered = MagicMock()
+    monkeypatch.setattr(fallback, 'record_fallback', recovered)
     original = parsed(adapter, 'photo')[0]
     bad = InboundAttachment('bad', 'bad.jpg', 'image/jpeg', size=MAX_MEDIA_BYTES + 1 if failure == 'size' else 0)
     if failure == 'transcription':
@@ -835,6 +839,7 @@ def test_partial_album_retains_success_and_specific_failure(adapter, monkeypatch
     result = asyncio.run(adapter.prepare(message, 'u', {'id': 's'}, guard))
     assert [a.file_store_ref for a in result.media] == ['owned-good']
     assert 'Attachment 1:' in result.text and 'Sorry, I could not finish' not in result.text
+    assert recovered.call_count == 1 and recovered.call_args.kwargs['outcome'] == 'degraded'
 
 
 def test_audio_uses_app_sync_pool(adapter, monkeypatch):

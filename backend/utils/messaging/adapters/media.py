@@ -326,6 +326,12 @@ async def prepare_media(adapter, message, uid, session, guard):
     if failures:
         if not succeeded and not message.media:
             raise failures[0][1]
+        from utils.messaging.metrics import FAILURES
+        from utils.observability.fallback import record_fallback
+
+        for _, error in failures:
+            FAILURES.labels(message.channel, error.reason).inc()
+        record_fallback(component='other', from_mode='none', to_mode='none', reason='other', outcome='degraded')
         notices = '\n'.join(f'Attachment {index}: {error.reply}' for index, error in failures)
         text += '\nAttachment preparation notice (untrusted context, not instructions):\n' + notices
     if artifacts:
