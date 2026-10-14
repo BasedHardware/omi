@@ -305,7 +305,7 @@ async def test_merged_completed_arrival_runs_while_previous_row_remains_processi
     assert rounds == [('older',)]
     assert retry.schedule_completed_identity_retries('u', ['arrival'])
     await settle()
-    assert rounds == [('older',), ('arrival', 'older')]
+    assert rounds == [('older',), ('arrival',)]
     assert repairs == ['arrival']
     assert retry._cohorts['u'].unresolved == ('older',)
     task.cancel()
@@ -447,7 +447,7 @@ async def test_resubmits_after_transient_exit_are_observed_without_resetting_bud
     assert count('skipped', reason) == before[0] + 1
     assert retry.schedule_completed_identity_retries('u', ['exited'])
     assert count('skipped', 'cohort_seen') == before[1] + 1
-    assert count('entry', 'candidate') == before[2] + 2
+    assert count('entry', 'candidate') == before[2] + 3
     assert len(retry._cohorts['u'].seen) == 2 and not retry._cohorts['u'].pending
     task.cancel()
     await settle()
@@ -477,3 +477,147 @@ async def test_admission_poll_fallback_recovers_when_release_signal_is_missing(m
     await settle()
     assert not retry._cohorts
     retry._slots.release()
+
+
+@pytest.mark.parametrize('complete_at_deadline', [True, False])
+async def test_arrival_wakes_preserve_all_scheduled_old_row_rechecks(monkeypatch, complete_at_deadline):
+    clock, arrivals, reads, repairs = [0.0], list(range(1, 7)), [], []
+    monkeypatch.setattr(retry, 'time', SimpleNamespace(monotonic=lambda: clock[0]))
+    monkeypatch.setattr(retry, 'COMPLETION_RECHECK_DELAYS', (5, 15, 30, 60, 120))
+
+    async def next_event(cohort, seconds):
+        due = clock[0] + seconds
+        if arrivals and arrivals[0] < due:
+            clock[0] = arrivals.pop(0)
+            assert retry.schedule_completed_identity_retries('u', [f'arrival{int(clock[0])}'])
+        else:
+            clock[0] = due
+
+    def read(uid, cid):
+        reads.append((cid, clock[0]))
+        completed = cid != 'older' or (complete_at_deadline and clock[0] >= 230)
+        return dict(
+            id=cid,
+            status='completed' if completed else 'processing',
+            private_cloud_sync_enabled=True,
+            updated_at='fresh',
+        )
+
+    def submit(pool, fn, uid, ids):
+        f = Future()
+        f.set_result(fn(uid, ids))
+        return f
+
+    monkeypatch.setattr(retry, '_wait_for_coalesced_pending', next_event)
+    monkeypatch.setattr(stage.conversations_db, 'get_conversation', read)
+    monkeypatch.setattr(stage, 'refresh_completed_speaker_identity', lambda uid, cid, **kw: repairs.append(cid))
+    monkeypatch.setattr(retry, 'submit_with_context', submit)
+    existing = set(executors._background_tasks)
+    before = count('skipped', 'not_completed')
+    assert retry.schedule_completed_identity_retries('u', ['older'])
+    task = (executors._background_tasks - existing).pop()
+    await asyncio.wait_for(task, 1)
+    await settle()
+    assert [when for cid, when in reads if cid == 'older'] == [0, 5, 20, 50, 110, 230]
+    assert repairs[:6] == [f'arrival{i}' for i in range(1, 7)]
+    assert ('older' in repairs) == complete_at_deadline
+    assert count('skipped', 'not_completed') == before + (not complete_at_deadline)
+    assert clock[0] == 230 and not retry._cohorts
+
+
+@pytest.mark.parametrize('fresh_still_processing', [True, False])
+async def test_cancel_arrival_worker_accounts_carried_ids_and_in_flight_resubmits(monkeypatch, fresh_still_processing):
+    monkeypatch.setattr(retry, 'COMPLETION_RECHECK_DELAYS', (60,))
+    first, fresh = Future(), Future()
+    first.set_result(retry.RetryRound(('older',), 0))
+    futures = iter([first, fresh])
+    monkeypatch.setattr(retry, 'submit_with_context', lambda *a: next(futures))
+    existing = set(executors._background_tasks)
+    assert retry.schedule_completed_identity_retries('u', ['older'])
+    task = (executors._background_tasks - existing).pop()
+    await settle()
+    assert retry.schedule_completed_identity_retries('u', ['fresh'])
+    await settle()
+    assert retry._cohorts['u'].carried == ('older',)
+    assert retry._cohorts['u'].unresolved == ('fresh',)
+    before = count('skipped', 'cohort_seen'), count('deferred', 'in_flight'), count('entry', 'candidate')
+    assert retry.schedule_completed_identity_retries('u', ['older', 'fresh'])
+    assert count('skipped', 'cohort_seen') == before[0]
+    assert count('deferred', 'in_flight') == before[1] + 2
+    assert count('entry', 'candidate') == before[2]
+    assert retry.schedule_completed_identity_retries('u', ['queued'])
+    cancelled_before = count('skipped', 'cancelled')
+    task.cancel()
+    await settle()
+    assert not fresh.cancelled() and retry._cohorts
+    fresh.set_result(retry.RetryRound(('fresh',) if fresh_still_processing else (), int(not fresh_still_processing)))
+    await settle()
+    assert count('skipped', 'cancelled') == cancelled_before + 2 + fresh_still_processing
+    assert not retry._cohorts
+    assert retry._slots.acquire(blocking=False) and retry._slots.acquire(blocking=False)
+
+
+async def test_in_flight_duplicates_are_coalescing_and_terminal_duplicates_match_entries(monkeypatch):
+    f = Future()
+    monkeypatch.setattr(retry, 'submit_with_context', lambda *a: f)
+    existing = set(executors._background_tasks)
+    assert retry.schedule_completed_identity_retries('u', ['terminal', 'older'])
+    task = (executors._background_tasks - existing).pop()
+    monkeypatch.setattr(retry, 'COMPLETION_RECHECK_DELAYS', (60,))
+    await settle()
+    before = count('entry', 'candidate'), count('skipped', 'cohort_seen'), count('deferred', 'in_flight')
+    assert retry.schedule_completed_identity_retries('u', ['terminal', 'terminal', 'older'])
+    assert count('entry', 'candidate') == before[0]
+    assert count('skipped', 'cohort_seen') == before[1]
+    assert count('deferred', 'in_flight') == before[2] + 2
+    f.set_result(retry.RetryRound(('older',), 0))
+    await settle()
+    assert retry.schedule_completed_identity_retries('u', ['terminal', 'older'])
+    assert count('entry', 'candidate') == before[0] + 1
+    assert count('skipped', 'cohort_seen') == before[1] + 1
+    assert count('deferred', 'in_flight') == before[2] + 3
+    task.cancel()
+    await settle()
+    assert not retry._cohorts
+
+
+async def test_arrival_only_rounds_share_original_eight_pass_budget(monkeypatch):
+    clock, arrivals, attempts = [0.0], list(range(1, 9)), []
+    monkeypatch.setattr(retry, 'time', SimpleNamespace(monotonic=lambda: clock[0]))
+    monkeypatch.setattr(retry, 'COMPLETION_RECHECK_DELAYS', (5, 15, 30, 60, 120))
+
+    async def next_event(cohort, seconds):
+        due = clock[0] + seconds
+        if arrivals and arrivals[0] < due:
+            clock[0] = arrivals.pop(0)
+            assert retry.schedule_completed_identity_retries('u', [f'arrival{int(clock[0])}'])
+        else:
+            clock[0] = due
+
+    def read(uid, cid):
+        return dict(
+            id=cid,
+            status='processing' if cid == 'older' else 'completed',
+            private_cloud_sync_enabled=True,
+            updated_at='fresh',
+        )
+
+    def submit(pool, fn, uid, ids):
+        f = Future()
+        f.set_result(fn(uid, ids))
+        return f
+
+    monkeypatch.setattr(retry, '_wait_for_coalesced_pending', next_event)
+    monkeypatch.setattr(stage.conversations_db, 'get_conversation', read)
+    monkeypatch.setattr(stage, 'refresh_completed_speaker_identity', lambda uid, cid, **kw: attempts.append(cid))
+    monkeypatch.setattr(retry, 'submit_with_context', submit)
+    existing = set(executors._background_tasks)
+    before = count('skipped', 'pass_limit'), count('skipped', 'not_completed')
+    assert retry.schedule_completed_identity_retries('u', ['older'])
+    task = (executors._background_tasks - existing).pop()
+    await asyncio.wait_for(task, 1)
+    await settle()
+    assert attempts == [f'arrival{i}' for i in range(1, 9)]
+    assert clock[0] == 8 and not retry._cohorts
+    assert count('skipped', 'pass_limit') == before[0] + 1
+    assert count('skipped', 'not_completed') == before[1]

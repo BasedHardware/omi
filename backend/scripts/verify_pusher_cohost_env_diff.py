@@ -281,6 +281,8 @@ PUSHER_ONLY_ALLOWED: dict[str, frozenset[str]] = {
         {
             "DEEPGRAM_API_KEY",
             "DEEPGRAM_SELF_HOSTED_URL",
+            # Late identity retries are scheduled only by prod pusher audio drain.
+            "OWNER_IDENTITY_RETRY_COALESCE_ENABLED",
             "REDIS_DB_HOST",
             "TYPESENSE_HOST",
             # Process-local final-pass shadow is admitted only on the prod pusher.
