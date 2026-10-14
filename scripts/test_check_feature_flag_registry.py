@@ -123,6 +123,34 @@ class RegistryFixture(unittest.TestCase):
         self.write("config/feature-flags.yaml", self.yaml([flag(aliases=["FORMER_ENABLED"])]))
         self.assertIn("stale registry entry: delete it or restore the read: FORMER_ENABLED", self.errors())
 
+    def test_reads_tracked_at_head_are_scanned_in_sparse_checkout(self) -> None:
+        # Cone-mode sparse checkouts do not materialise out-of-cone sources:
+        # the read scanner must fall back to the HEAD blob or every app/web
+        # flag is misreported as stale in a backend-scoped lane.
+        self.write(
+            "app/lib/services/experiments/gate.dart",
+            "final a = ExperimentDefinition<String>(key: 'SPARSE_MOBILE_GATE');\n",
+        )
+        self.write(
+            "config/feature-flags.yaml",
+            self.yaml([flag(), flag(key="SPARSE_MOBILE_GATE", surfaces=["mobile"])]),
+        )
+        env = {key: value for key, value in os.environ.items() if not key.startswith("GIT_")}
+        identity = ["-c", "user.email=flags@example.test", "-c", "user.name=Flag Tests"]
+        subprocess.run(["git", "-C", str(self.root), *identity, "add", "-A"], check=True, env=env)
+        subprocess.run(["git", "-C", str(self.root), *identity, "commit", "-qm", "fixture"], check=True, env=env)
+        (self.root / "app/lib/services/experiments/gate.dart").unlink()
+        self.assertEqual(self.errors(), [])
+        # An alias with no read on disk or at HEAD is still stale: the HEAD
+        # fallback widens sparse visibility, it does not weaken the check.
+        (self.root / "config/feature-flags.yaml").write_text(
+            self.yaml([flag(), flag(key="SPARSE_MOBILE_GATE", surfaces=["mobile"], aliases=["SPARSE_GONE"])]),
+            encoding="utf-8",
+        )
+        errors = self.errors()
+        self.assertIn("stale registry entry: delete it or restore the read: SPARSE_GONE", errors)
+        self.assertNotIn("stale registry entry: delete it or restore the read: SPARSE_MOBILE_GATE", errors)
+
     def test_deploy_key_missing_from_registry(self) -> None:
         self.write("backend/deploy/runtime_env/_base.yaml", "services:\n  MISSING_KILL_SWITCH:\n    value: false\n")
         self.assertTrue(
