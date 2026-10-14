@@ -265,6 +265,7 @@ flags:
 
 
   - {"key":"SYNC_LEGACY_FRESH_ENABLED","aliases":[],"kind":"env","lifecycle":"rollout","surfaces":["backend"],"summary":"Admit recent LEGACY offline sync to fresh under an atomic per-user upload and byte budget","fail":"closed","owner":"dazheng","created":"2026-10-14","review_by":"2026-11-14","decision":"pending","notes":"Code, dev and prod default false. V2 only; budget exhaustion/unavailability demotes to backfill. Roll back by setting false; accepted jobs retain their lane. Drain qualification: backend/docs/runbooks/sync-legacy-fresh-drain.md"}
+  - {"key":"AUDIO_CANONICAL_PACKING_ENABLED","aliases":[],"kind":"env","lifecycle":"rollout","surfaces":["backend"],"summary":"Default off; new release-scoped canonical capture intake and owner-only verified tar packing; requires new regional bucket","fail":"closed","owner":"dazheng","created":"2026-10-15","review_by":"2026-11-14","decision":"pending"}
 ignore:
   - {"key":"DD_TRACE_ENABLED","reason":"Datadog telemetry instrumentation switch, not a product behavior flag"}
   - {"key":"DD_LOGS_ENABLED","reason":"Datadog telemetry log routing switch, not a product behavior flag"}

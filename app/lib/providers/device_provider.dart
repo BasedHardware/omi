@@ -292,7 +292,11 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     present();
   }
 
+  /// Called from the proxy provider on every CaptureProvider notify (each
+  /// transcript segment). The references only change when the providers are
+  /// recreated; notifying otherwise rebuilds every device listener per segment.
   void setProviders(CaptureProvider provider, LocalRecordingsProvider recordingsProvider) {
+    if (identical(captureProvider, provider) && identical(localRecordingsProvider, recordingsProvider)) return;
     captureProvider = provider;
     localRecordingsProvider = recordingsProvider;
     notifyListeners();
