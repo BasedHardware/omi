@@ -135,7 +135,8 @@ class WalFileManager {
   /// full snapshot of the in-memory index, and the last snapshot written always
   /// wins on disk, so a newer request may replace a queued (not yet started)
   /// one: the final file is identical and the superseded caller resolves only
-  /// after a write at least as new as its own.
+  /// after a write at least as new as its own. The newest superseded snapshot
+  /// becomes the backup, exactly as if each save had been written in turn.
   static _QueuedSave? _queued;
 
   /// Length and modification time of the index as this process last wrote it.
@@ -146,6 +147,7 @@ class WalFileManager {
   static Future<bool> saveWals(List<Wal> wals) {
     final queued = _queued;
     if (queued != null) {
+      queued.superseded = queued.wals;
       queued.wals = wals;
       return queued.completer.future;
     }
@@ -153,12 +155,12 @@ class WalFileManager {
     _queued = save;
     _saveLock.withResource(() {
       if (identical(_queued, save)) _queued = null;
-      return _saveWals(save.wals);
+      return _saveWals(save.wals, superseded: save.superseded);
     }).then(save.completer.complete, onError: save.completer.completeError);
     return save.completer.future;
   }
 
-  static Future<bool> _saveWals(List<Wal> wals) async {
+  static Future<bool> _saveWals(List<Wal> wals, {List<Wal>? superseded}) async {
     if (_walFile == null) {
       await init();
     }
@@ -168,16 +170,17 @@ class WalFileManager {
       return false;
     }
 
-    await _createBackup();
+    if (superseded != null && _walBackupFile != null) {
+      // Serial saves would have left the newest superseded snapshot on disk as
+      // the backup; write it there directly.
+      final backupTmp = File('${_walBackupFile!.path}.tmp');
+      await backupTmp.writeAsString(await _encodeIndex(superseded), flush: true);
+      await backupTmp.rename(_walBackupFile!.path);
+    } else {
+      await _createBackup();
+    }
 
-    final jsonData = {
-      'version': 1,
-      'timestamp': DateTime.now().millisecondsSinceEpoch,
-      'wals': wals.map((wal) => wal.toJson()).toList(),
-    };
-
-    final jsonString = await offUiIsolate(() => jsonEncode(jsonData),
-        size: wals.length, threshold: backgroundEncodeThreshold, debugName: 'wal_index_encode');
+    final jsonString = await _encodeIndex(wals);
     final tmp = File('${_walFile!.path}.tmp');
     await tmp.writeAsString(jsonString, flush: true);
     await tmp.rename(_walFile!.path);
@@ -185,6 +188,16 @@ class WalFileManager {
 
     Logger.debug('Successfully saved ${wals.length} WALs to file');
     return true;
+  }
+
+  static Future<String> _encodeIndex(List<Wal> wals) {
+    final jsonData = {
+      'version': 1,
+      'timestamp': DateTime.now().millisecondsSinceEpoch,
+      'wals': wals.map((wal) => wal.toJson()).toList(),
+    };
+    return offUiIsolate(() => jsonEncode(jsonData),
+        size: wals.length, threshold: backgroundEncodeThreshold, debugName: 'wal_index_encode');
   }
 
   static Future<void> _recordWrite(File file) async {
@@ -411,5 +424,6 @@ class _QueuedSave {
   _QueuedSave(this.wals);
 
   List<Wal> wals;
+  List<Wal>? superseded;
   final completer = Completer<bool>();
 }

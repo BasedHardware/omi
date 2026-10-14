@@ -246,33 +246,69 @@ def _hook_body(masked: str, after_params: int) -> tuple[str, bool] | None:
     return masked[start + 2 : end if end != -1 else len(masked)], True
 
 
-def _top_level_return_before(body: str, limit: int) -> bool:
-    """True when a `return` sits directly in the body (not in a nested closure) before [limit]."""
+CONTROL_KEYWORDS = ("if", "for", "while", "switch", "catch")
+CONTROL_BLOCK_WORDS = ("else", "try", "finally", "do")
+
+
+def _opens_control_block(body: str, brace: int) -> bool:
+    """True when the `{` at [brace] opens an if/else/loop/try block, not a closure or literal."""
+    before = body[:brace].rstrip()
+    if before.endswith(CONTROL_BLOCK_WORDS) and re.search(r"\b(?:else|try|finally|do)$", before):
+        return True
+    if not before.endswith(")"):
+        return False
     depth = 0
+    for index in range(len(before) - 1, -1, -1):
+        char = before[index]
+        if char == ")":
+            depth += 1
+        elif char == "(":
+            depth -= 1
+            if depth == 0:
+                return re.search(rf"\b(?:{'|'.join(CONTROL_KEYWORDS)})\s*$", before[:index]) is not None
+    return False
+
+
+def _top_level_return_before(body: str, limit: int) -> bool:
+    """True when a `return` before [limit] belongs to the hook itself.
+
+    A return inside if/else/loop/try blocks counts (`if (same) { return; }`); one inside a
+    closure or other nested function body does not.
+    """
+    stack: list[bool] = []
     for match in re.finditer(r"[{}]|\breturn\b", body[:limit]):
         token = match.group(0)
         if token == "{":
-            depth += 1
+            stack.append(_opens_control_block(body, match.start()))
         elif token == "}":
-            depth -= 1
-        elif depth == 0:
+            if stack:
+                stack.pop()
+        elif all(stack):
             return True
     return False
 
 
 def hook_violations(name: str, sources: dict[str, str]) -> list[str]:
-    """Declarations of [name] that notify with no early return before the first notify."""
-    declaration = re.compile(rf"\b(?:void|Future<void>|FutureOr<void>)\s+{re.escape(name)}\s*\(")
+    """Declarations of [name] that notify with no early return before the first notify.
+
+    A hook named in main.dart with no recognisable declaration is itself a violation, so a
+    declaration shape this parser does not understand cannot pass vacuously.
+    """
+    declaration = re.compile(
+        rf"^[ \t]*(?:(?:void|Future<void>|FutureOr<void>)\s+)?{re.escape(name)}\s*\(", re.MULTILINE
+    )
     problems: list[str] = []
+    found = False
     for path, text in sources.items():
         masked = _mask(text)
         for match in declaration.finditer(masked):
-            start, end = _line_bounds(text, match.start())
-            if _allowed_at(text, start, end, PROXY_HOOK_RULE):
-                continue
-            close = _matching(masked, match.end() - 1, "(", ")")
+            close = _matching(masked, masked.index("(", match.start()), "(", ")")
             parsed = _hook_body(masked, close + 1)
             if parsed is None:
+                continue  # a call statement, not a declaration
+            found = True
+            start, end = _line_bounds(text, match.start())
+            if _allowed_at(text, start, end, PROXY_HOOK_RULE):
                 continue
             body, is_arrow = parsed
             notify = body.find("notifyListeners()")
@@ -285,6 +321,11 @@ def hook_violations(name: str, sources: dict[str, str]) -> list[str]:
                 f"{path}:{line}: {name}() is a proxy update hook (app/lib/main.dart) and notifies without an "
                 f"early return; return when the injected references are unchanged"
             )
+    if not found:
+        problems.append(
+            f"{MAIN_DART}: proxy update hook {name}() has no declaration this check can read; "
+            f"declare it as `void {name}(...) {{ ... }}`"
+        )
     return problems
 
 

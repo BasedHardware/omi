@@ -157,6 +157,18 @@ class CaptureController extends ChangeNotifier {
   }
 }
 """
+BRACED_GUARD = """
+class CaptureController extends ChangeNotifier {
+  void updateExternalActions(CaptureExternalActions? actions) {
+    final next = actions ?? const NoopCaptureExternalActions();
+    if (next == externalActions) {
+      return;
+    }
+    externalActions = next;
+    notifyListeners();
+  }
+}
+"""
 SILENT = """
 class MessageProvider extends ChangeNotifier {
   void updateAppProvider(AppProvider p) {
@@ -222,6 +234,30 @@ class ProviderGraphTests(unittest.TestCase):
 """
         self.assertEqual(len(hook_violations("setFoo", {"app/lib/x.dart": text})), 1)
 
+    def test_braced_guard_passes(self) -> None:
+        self.assertEqual(hook_violations("updateExternalActions", {"app/lib/x.dart": BRACED_GUARD}), [])
+
+    def test_return_inside_a_loop_block_counts_but_a_closure_does_not(self) -> None:
+        looped = "  void setFoo(FooProvider p) {\n    for (final x in xs) { return; }\n    notifyListeners();\n  }\n"
+        self.assertEqual(hook_violations("setFoo", {"app/lib/x.dart": looped}), [])
+        closure = "  void setFoo(FooProvider p) {\n    run(() { return; });\n    notifyListeners();\n  }\n"
+        self.assertEqual(len(hook_violations("setFoo", {"app/lib/x.dart": closure})), 1)
+
+    def test_declaration_without_return_type_is_checked(self) -> None:
+        text = "  setFoo(FooProvider p) {\n    foo = p;\n    notifyListeners();\n  }\n"
+        self.assertEqual(len(hook_violations("setFoo", {"app/lib/x.dart": text})), 1)
+
+    def test_calls_are_not_declarations(self) -> None:
+        text = "  void other() {\n    device.setFoo(p);\n    setFoo(p);\n  }\n"
+        problems = hook_violations("setFoo", {"app/lib/x.dart": text})
+        self.assertEqual(len(problems), 1)
+        self.assertIn("no declaration", problems[0])
+
+    def test_a_hook_with_no_declaration_fails(self) -> None:
+        problems = hook_violations("setMissing", {"app/lib/x.dart": SILENT})
+        self.assertEqual(len(problems), 1)
+        self.assertIn("no declaration", problems[0])
+
     def test_a_graph_with_no_recognised_hooks_fails(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -236,6 +272,7 @@ class ProviderGraphTests(unittest.TestCase):
             (root / "app/lib/main.dart").write_text(MAIN)
             (root / "app/lib/providers/device.dart").write_text(GUARDED)
             (root / "app/lib/providers/message.dart").write_text(SILENT)
+            (root / "app/lib/providers/capture.dart").write_text(BRACED_GUARD)
             self.assertEqual(check_provider_graph(root), [])
             (root / "app/lib/providers/capture.dart").write_text(UNGUARDED)
             self.assertEqual(len(check_provider_graph(root)), 1)
@@ -248,6 +285,8 @@ class CliTests(unittest.TestCase):
         (root / "app/lib/providers").mkdir(parents=True)
         (root / "app/lib/main.dart").write_text(MAIN)
         (root / "app/lib/providers/device.dart").write_text(GUARDED)
+        (root / "app/lib/providers/message.dart").write_text(SILENT)
+        (root / "app/lib/providers/capture.dart").write_text(BRACED_GUARD)
         (root / PROVIDER).write_text(VIOLATIONS["sync-file-io"] + "\n")
         subprocess.run(["git", "add", "."], cwd=root, check=True)
         subprocess.run(

@@ -69,6 +69,20 @@ void main() {
     await inFlight;
   });
 
+  test('collapsed saves keep the newest superseded snapshot as the backup', () async {
+    // A fresh install: no index yet, so serial writes would have left the
+    // first snapshot as the backup.
+    final first = WalFileManager.saveWals([_wal(1000)]);
+    final second = WalFileManager.saveWals([_wal(1000), _wal(2000)]);
+    await Future.wait([first, second]);
+
+    final backup = jsonDecode(backupFile.readAsStringSync()) as Map<String, dynamic>;
+    expect((backup['wals'] as List).map((w) => w['timer_start']), [1000]);
+    // And the index falls back to it when the main file is lost.
+    walFile.writeAsStringSync('');
+    expect((await WalFileManager.loadWals()).map((w) => w.timerStart), [1000]);
+  });
+
   test('a large index is encoded off the UI isolate and round-trips', () async {
     WalFileManager.backgroundEncodeThreshold = 2;
     offUiIsolateFallbacks = 0;
