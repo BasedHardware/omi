@@ -97,7 +97,7 @@ double _syncWalAudioStart(Wal wal) {
   var end = double.negativeInfinity;
   for (final wal in wals) {
     final walStart = _syncWalAudioStart(wal);
-    final walEnd = captureEvidenceWalClaimable(wal)
+    final walEnd = captureEvidenceWalClaimable(wal) || isMobileStandardBatchWal(wal)
         ? walStart + wal.totalFrames / wal.codec.getFramesPerSecond()
         : (wal.timerStart + wal.seconds).toDouble();
     if (walStart < start) start = walStart;

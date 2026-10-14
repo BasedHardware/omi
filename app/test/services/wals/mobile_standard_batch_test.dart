@@ -248,7 +248,7 @@ void main() {
         seconds: 1,
         totalFrames: 50,
         recordingSessionId: 'origin',
-        filePath: 'audio_omimobilebatch001_opus_16000_1_fs160_1001.5.bin');
+        filePath: 'audio_omimobilebatch001_opus_16000_1_fs160_1001.75.bin');
     final live = Wal(
         timerStart: 1000,
         codec: BleAudioCodec.opus,
@@ -258,8 +258,8 @@ void main() {
     expect(nextSyncUploadBatch([live, batch], 1002), [batch]);
     expect(nextSyncUploadBatch([live], 1002), [live]);
     final bounds = syncUploadAudioBounds([batch]);
-    expect(bounds.start, 1001.5);
-    expect(bounds.end, 1002.0);
+    expect(bounds.start, 1001.75);
+    expect(bounds.end, 1002.25);
     await buffer.initialize();
     expect(buffer.append([1], uid: uid, codec: BleAudioCodec.opus, now: clock, recordingSessionId: 'first'), true);
     expect(buffer.append([2], uid: uid, codec: BleAudioCodec.opus, now: clock, recordingSessionId: 'second'), true);
