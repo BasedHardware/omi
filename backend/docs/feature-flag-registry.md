@@ -1,4 +1,4 @@
-<!-- feature-flag-registry as-of: 2026-10-13 -->
+<!-- feature-flag-registry as-of: 2026-10-14 -->
 
 # Feature-flag authority registry
 
@@ -113,7 +113,7 @@ entries are exempt: they are queued for removal, not running.
 
 ## Overdue for a decision
 
-None as of 2026-10-13.
+None as of 2026-10-14.
 
 ## Flags
 
@@ -338,6 +338,7 @@ and an explicit empty literal renders as `''`.
 | `exp-002-desktop-identity-kill-v1` | EXP-002 desktop identity arm emergency stop | backend, macos | posthog | inverted | — | — | — | expected (kill) | keep | — | unowned |
 | `free-tier-kill-switch-v1` | Remote free-tier stop | backend | posthog | inverted | — | — | — | expected (kill) | keep | — | unowned |
 | `jit-processing-kill-switch-v1` | JIT remote kill for allowlisted accounts | backend | posthog | inverted | — | — | — | expected (kill) | keep | — | unowned |
+| `mobile-speech-analyzer-disabled` | Force existing iOS freemium fallback to SFSpeech; false or absent selects SpeechAnalyzer on supported iOS 26 devices/locales | mobile | posthog | inverted | — | — | — | expected (kill) | keep | — | dazheng |
 
 ### config_switch
 

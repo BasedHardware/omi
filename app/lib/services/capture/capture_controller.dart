@@ -1,3 +1,7 @@
+import 'package:omi/models/stt_provider.dart';
+import 'package:omi/services/capture/local_stt_custody.dart';
+import 'package:omi/services/freemium_transcription_service.dart';
+import 'package:omi/services/sockets/local_stt_failure.dart';
 import 'dart:async';
 
 import 'package:omi/services/capture/uplink_silence_timer.dart';
@@ -263,6 +267,18 @@ class CaptureController extends ChangeNotifier
 
   /// How long the custom STT endpoint has been unreachable, or null if it is
   /// not in use or is currently healthy.
+  LocalSttFailure? _localSetupFailure;
+  LocalSttFailure? get localSttFailure => customSttPollingSocket(_socket?.socket)?.localFailure ?? _localSetupFailure;
+  Future<void> retryLocalTranscription() async {
+    final polling = customSttPollingSocket(_socket?.socket);
+    if (polling != null) {
+      await polling.retryLocalTranscription();
+    } else {
+      await onRecordProfileSettingChanged();
+    }
+    notifyListeners();
+  }
+
   Duration? get customSttBufferingDuration => customSttBufferingFor(_socket?.socket);
 
   // Phone mic WAL: buffer for splitting variable-sized PCM chunks into fixed-size frames
@@ -1583,6 +1599,12 @@ class CaptureController extends ChangeNotifier
       'custom=${customSttConfig.isEnabled} provider=${customSttConfig.provider}',
     );
 
+    LocalSttCustody.selectedLocalRoute =
+        decision.allowanceOnDevice || decision.customSttConfig?.provider == SttProvider.onDeviceWhisper;
+    _localSetupFailure = decision.blockSocket && decision.allowanceOnDevice
+        ? LocalSttFailure(FreemiumTranscriptionService().appleReadiness?.status ?? 'unavailable',
+            canProbeRecovery: true)
+        : null;
     if (decision.blockSocket) {
       Logger.warning('[SttMode] Blocking transcription socket (${decision.reason})');
       await _abandonTranscriptionSocket(reason: 'stt mode blocked: ${decision.reason}');
@@ -2261,6 +2283,12 @@ class CaptureController extends ChangeNotifier
     final customSttConfig = _preferences.customSttConfig;
     final decision = await SttModeResolver.instance.decide(persistedCustomStt: customSttConfig, codec: codec);
     if (_deviceIdentityStale(deviceRevision)) return;
+    LocalSttCustody.selectedLocalRoute =
+        decision.allowanceOnDevice || decision.customSttConfig?.provider == SttProvider.onDeviceWhisper;
+    _localSetupFailure = decision.blockSocket && decision.allowanceOnDevice
+        ? LocalSttFailure(FreemiumTranscriptionService().appleReadiness?.status ?? 'unavailable',
+            canProbeRecovery: true)
+        : null;
     if (decision.blockSocket) {
       await _abandonTranscriptionSocket(reason: 'stt mode blocked: ${decision.reason}');
       return;
@@ -3340,6 +3368,11 @@ class CaptureController extends ChangeNotifier
   }
 
   Future<void> _socketErrorBody(Object err) async {
+    if (err is LocalSttFailure) {
+      FreemiumTranscriptionService().reportLocalFailure(err.code);
+      notifyListeners(); // WAL/microphone and the healthy transcript-ingest socket continue.
+      return;
+    }
     _recordingTelemetry.observeSocketError();
     _transcriptionServiceStatuses = [];
     _transcriptServiceReady = false;
