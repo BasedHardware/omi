@@ -397,7 +397,8 @@ non-gateway transports means unavailable or zero, not a measured provider write.
 
 Cold existing chats rebuild earlier history in bounded pages/model chunks. This can
 increase first-turn latency; do not infer lost continuity from a timeout. Original
-history stays searchable. Summary failure leaves the checkpoint unchanged, so retry
-cannot silently skip dropped history. Summaries are compact and lossy; retrieve exact
+history stays searchable. Only fully summarized source pages advance the checkpoint. A timeout or failed
+page resumes from the last completed page, so retry neither repeats the whole cold
+bootstrap nor silently skips dropped history. Summaries are compact and lossy; retrieve exact
 facts through `search_chat_history`. Cache expiration and epoch changes cause legitimate
 misses. Local synthetic prefix tests establish eligibility, not a production hit rate.

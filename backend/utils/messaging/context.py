@@ -36,7 +36,7 @@ async def prepare(uid, session_id, message_ids, *, store=None, summary=summarize
     """Advance the summary only after all dropped source rows were incorporated.
 
     The original messages remain searchable. Mutation generations invalidate derived summaries.
-    Source pages are scoped and bounded; model inputs are chunked. Failures do not advance state.
+    Source pages are scoped and bounded; model inputs are chunked. Only completed pages advance state.
     """
     if not session_id or not message_ids:
         return {'summary': '', 'digest': ''}
@@ -67,6 +67,13 @@ async def prepare(uid, session_id, message_ids, *, store=None, summary=summarize
                 if not isinstance(rolling, str) or not rolling.strip() or len(rolling) > SUMMARY_CHARS:
                     raise ValueError('Rolling summary exceeded context budget')
             cursor = next_cursor
+            if more:
+                # A cold long-lived chat may exceed one turn's deadline. Persist completed
+                # pages so retry continues; never checkpoint a partly summarized page.
+                checkpoint = dict(state, cursor=cursor, summary=rolling)
+                await run_blocking(db_executor, store.save, uid, session_id, checkpoint, original['revision'])
+                state = dict(checkpoint, revision=original['revision'] + 1)
+                original = dict(state)
         state.update(anchor=anchor, cursor=cursor, summary=rolling)
     since = state.get('activity_watermark', '')
     activity = await run_blocking(db_executor, recent_activity, uid, since, session_id)

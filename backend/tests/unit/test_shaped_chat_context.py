@@ -147,6 +147,39 @@ def test_summary_failure_does_not_advance_cursor(monkeypatch):
     assert store.state == {'generation': 0, 'revision': 0} and not store.saves
 
 
+def test_long_bootstrap_retries_after_last_completed_page(monkeypatch):
+    monkeypatch.setattr(context_module, 'recent_activity', lambda *args: [])
+
+    class Pages(StateStore):
+        def source_page(self, uid, session, before, cursor=None):
+            if cursor is None:
+                return self.all[:4], {'id': '3'}, True
+            return self.all[4:8], {'id': '7'}, False
+
+    store = Pages()
+    calls = []
+
+    async def failing(uid, text):
+        calls.append(text)
+        if len(calls) == 2:
+            raise TimeoutError('Turn deadline')
+        return 'First page continuity'
+
+    with pytest.raises(TimeoutError):
+        asyncio.run(prepare('u', 's', ['8'], store=store, summary=failing))
+    assert store.state['cursor'] == {'id': '3'} and 'anchor' not in store.state
+    assert len(store.saves) == 1
+
+    async def retry(uid, text):
+        assert 'First page continuity' in text and 'message 4' in text
+        assert 'message 0' not in text
+        return 'All earlier continuity'
+
+    result = asyncio.run(prepare('u', 's', ['8'], store=store, summary=retry))
+    assert result['summary'] == 'All earlier continuity'
+    assert store.state['anchor'] == '8' and store.state['cursor'] == {'id': '7'}
+
+
 def test_activity_is_bounded_and_not_an_event_log_append(monkeypatch):
     activity = [{'created_at': datetime.now(timezone.utc), 'sender': 'human', 'text': 'a' * 12000}]
     monkeypatch.setattr(context_module, 'recent_activity', lambda *args: activity)
