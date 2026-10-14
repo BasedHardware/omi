@@ -126,8 +126,7 @@ class SharedPreferencesUtil {
 
     final lastVersion = prefs.get('lastKnownAppVersion');
     final bootSchema = prefs.get(BootRecovery.schemaKey);
-    final existingInstall =
-        prefs.get('onboardingCompleted') == true ||
+    final existingInstall = prefs.get('onboardingCompleted') == true ||
         (lastVersion is String && lastVersion.trim().isNotEmpty) ||
         (bootSchema is int && bootSchema > 0);
     final savedDefault = prefs.get(appearanceDefaultMigrationKey);
@@ -1159,12 +1158,10 @@ class SharedPreferencesUtil {
   Future<void> cacheConversations(List<ServerConversation> value) async {
     final generation = ++_cachedConversationsGeneration;
     final snapshot = List<ServerConversation>.of(value);
-    final encoded = await offUiIsolate(
-      () => [for (final c in snapshot) jsonEncode(c.toJson())],
-      size: snapshot.length,
-      threshold: cachedConversationsBackgroundEncodeThreshold,
-      debugName: 'conversation_cache_encode',
-    );
+    final encoded = await offUiIsolate(() => [for (final c in snapshot) jsonEncode(c.toJson())],
+        size: snapshot.length,
+        threshold: cachedConversationsBackgroundEncodeThreshold,
+        debugName: 'conversation_cache_encode');
     if (generation != _cachedConversationsGeneration) return;
     await saveStringList('cachedConversations', encoded);
   }

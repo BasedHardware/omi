@@ -74,15 +74,15 @@ class _CountingSegments extends ListBase<TranscriptSegment> {
 }
 
 TranscriptSegment _seg(int i) => TranscriptSegment(
-  id: 'seg-$i',
-  text: 'Segment $i of a long live capture.',
-  speaker: 'SPEAKER_00',
-  isUser: false,
-  personId: null,
-  start: i.toDouble(),
-  end: i + 1.0,
-  translations: const [],
-);
+      id: 'seg-$i',
+      text: 'Segment $i of a long live capture.',
+      speaker: 'SPEAKER_00',
+      isUser: false,
+      personId: null,
+      start: i.toDouble(),
+      end: i + 1.0,
+      translations: const [],
+    );
 
 class _OfflineConnectivity extends ConnectivityPlatform {
   @override
@@ -113,17 +113,10 @@ void main() {
     final capture = CaptureProvider();
     addTearDown(capture.dispose);
     ProviderCaptureExternalActions adapter() => ProviderCaptureExternalActions(
-      conversationProvider: conversations,
-      messageProvider: messages,
-      peopleProvider: people,
-      usageProvider: usage,
-    );
+        conversationProvider: conversations, messageProvider: messages, peopleProvider: people, usageProvider: usage);
 
-    expect(
-      _countNotifies(capture, () => capture.updateExternalActions(adapter())),
-      1,
-      reason: 'installing new backing providers is a real change',
-    );
+    expect(_countNotifies(capture, () => capture.updateExternalActions(adapter())), 1,
+        reason: 'installing new backing providers is a real change');
     final repeats = _countNotifies(capture, () {
       for (var i = 0; i < 50; i++) {
         capture.updateExternalActions(adapter());
@@ -165,11 +158,8 @@ void main() {
     }
     await capture.pendingLiveSegmentWrite;
 
-    expect(
-      transcript.reads - readsAfterFirstPersist,
-      0,
-      reason: 'state/metrics/socket notifies must not cost O(transcript) on the UI isolate',
-    );
+    expect(transcript.reads - readsAfterFirstPersist, 0,
+        reason: 'state/metrics/socket notifies must not cost O(transcript) on the UI isolate');
   });
 
   test('a burst of transcript events costs one snapshot per write, not one walk per event', () async {
@@ -188,11 +178,8 @@ void main() {
     }
     await capture.pendingLiveSegmentWrite;
 
-    expect(
-      transcript.reads,
-      lessThan(transcript.length * 3),
-      reason: 'each segment event must not walk the whole transcript on the UI isolate',
-    );
+    expect(transcript.reads, lessThan(transcript.length * 3),
+        reason: 'each segment event must not walk the whole transcript on the UI isolate');
     final saved = await LocalSegmentStore.at(dir).loadSession('live-1700000200');
     expect(saved.length, 450, reason: 'the coalesced write still lands the latest transcript');
   });

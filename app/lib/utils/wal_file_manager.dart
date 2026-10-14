@@ -153,12 +153,10 @@ class WalFileManager {
     }
     final save = _QueuedSave(wals);
     _queued = save;
-    _saveLock
-        .withResource(() {
-          if (identical(_queued, save)) _queued = null;
-          return _saveWals(save.wals, superseded: save.superseded);
-        })
-        .then(save.completer.complete, onError: save.completer.completeError);
+    _saveLock.withResource(() {
+      if (identical(_queued, save)) _queued = null;
+      return _saveWals(save.wals, superseded: save.superseded);
+    }).then(save.completer.complete, onError: save.completer.completeError);
     return save.completer.future;
   }
 
@@ -203,12 +201,8 @@ class WalFileManager {
       'timestamp': DateTime.now().millisecondsSinceEpoch,
       'wals': wals.map((wal) => wal.toJson()).toList(),
     };
-    return offUiIsolate(
-      () => jsonEncode(jsonData),
-      size: wals.length,
-      threshold: backgroundEncodeThreshold,
-      debugName: 'wal_index_encode',
-    );
+    return offUiIsolate(() => jsonEncode(jsonData),
+        size: wals.length, threshold: backgroundEncodeThreshold, debugName: 'wal_index_encode');
   }
 
   static Future<void> _recordWrite(File file) async {
