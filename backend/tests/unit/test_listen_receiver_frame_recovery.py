@@ -78,8 +78,9 @@ async def test_receiver_drops_malformed_codec_frame_and_continues_to_custom_tran
         ]
     )
     host = SimpleNamespace(
-        request=SimpleNamespace(websocket=websocket, codec=codec),
+        request=SimpleNamespace(websocket=websocket, uid='test-uid', codec=codec),
         state=SimpleNamespace(
+            current_conversation_id=None,
             active=True,
             close_code=1001,
             last_audio_received_time=None,
@@ -114,8 +115,8 @@ async def test_receiver_drops_malformed_codec_frame_and_continues_to_custom_tran
 @pytest.mark.anyio
 async def test_multi_channel_receiver_drops_malformed_opus_frame_without_mixing_it():
     host = SimpleNamespace(
-        request=SimpleNamespace(codec='opus', sample_rate=16000),
-        state=SimpleNamespace(),
+        request=SimpleNamespace(uid='test-uid', codec='opus', sample_rate=16000),
+        state=SimpleNamespace(current_conversation_id=None),
         is_multi_channel=True,
         use_custom_stt=True,
     )
