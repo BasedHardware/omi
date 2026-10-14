@@ -1221,6 +1221,7 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
               final readiness = snapshot.data;
               if (readiness == null || readiness.ready) return const SizedBox.shrink();
               return LocalSttRecoveryNotice(
+                  language: _currentLanguage,
                   failure: LocalSttFailure(readiness.status, canProbeRecovery: true),
                   onRetry: () async {
                     setState(() {});

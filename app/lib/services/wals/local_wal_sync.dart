@@ -393,7 +393,7 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
     // is owned by the signed-in account. Stamp only when unstamped so a
     // record surfaced by native recovery keeps its original owner.
     wal.ownerUid ??= _currentWalOwnerUid();
-    if (LocalSttCustody.keepsPhoneAudio) wal.onDeviceOnly = true;
+    wal.repairLegacyImportedCustody();
     // Native-storage recovery can surface old WALs while a new recording is
     // active. Only inherit the current session's location for WALs that began
     // at (or after) this session, never for historical recordings.
@@ -699,7 +699,8 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
         );
         if (walIdx < 0) {
           wal = Wal(
-            onDeviceOnly: _pendingPhoneOnly || OnDeviceTranscriptionController.instance.shouldKeepAudioLocal,
+            onDeviceOnly: _pendingPhoneOnly,
+            capturedOnDeviceOnly: _pendingPhoneOnly,
             codec: _codec,
             timerStart: timerStart,
             data: chunk,
@@ -813,7 +814,8 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
       }
       if (walIdx < 0) {
         wal = Wal(
-          onDeviceOnly: _pendingPhoneOnly || OnDeviceTranscriptionController.instance.shouldKeepAudioLocal,
+          onDeviceOnly: _pendingPhoneOnly,
+          capturedOnDeviceOnly: _pendingPhoneOnly,
           codec: _codec,
           timerStart: timerStart,
           data: runFrames.map((f) => f.payload).toList(),
@@ -919,7 +921,8 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
           );
         } else {
           final wal = Wal(
-            onDeviceOnly: _pendingPhoneOnly || OnDeviceTranscriptionController.instance.shouldKeepAudioLocal,
+            onDeviceOnly: _pendingPhoneOnly,
+            capturedOnDeviceOnly: _pendingPhoneOnly,
             codec: _codec,
             timerStart: timerStart,
             data: frames.map((f) => f.payload).toList(),
@@ -980,7 +983,7 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
       if (wal.storage == WalStorage.mem) {
         // A policy edge may share a partially filled chunk with previously sent
         // frames. Conservatively retain the whole chunk; never upload its local tail.
-        if (OnDeviceTranscriptionController.instance.shouldKeepAudioLocal) wal.onDeviceOnly = true;
+        // Custody was latched when these frames were captured.
         final fileName = await _uniqueStorageFileName(wal);
         String? filePath = await Wal.getFilePath(fileName);
         if (filePath == null) {
@@ -1574,7 +1577,8 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
         // Use a distinct timerStart so we don't collide with WALs from _chunk().
         // This is the tail buffer that _chunk() left behind.
         final tailWal = Wal(
-          onDeviceOnly: _pendingPhoneOnly || OnDeviceTranscriptionController.instance.shouldKeepAudioLocal,
+          onDeviceOnly: _pendingPhoneOnly,
+          capturedOnDeviceOnly: _pendingPhoneOnly,
           codec: _codec,
           timerStart: timerStart,
           data: chunk,
@@ -1827,6 +1831,7 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
       _pendingPhoneOnly = true;
       for (final wal in _wals.where((w) => w.storage == WalStorage.mem)) {
         wal.onDeviceOnly = true;
+        wal.capturedOnDeviceOnly = true;
       }
     }
     if (captureRoot != _captureEvidenceRoot) {
