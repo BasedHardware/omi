@@ -1099,8 +1099,22 @@ def _default_device_runner(command: Sequence[str], timeout: float = 180.0) -> tu
             " if it persists check the tool's server/daemon state (e.g. for"
             " Android: adb server, USB connection, SDK tooling)."
         )
+        if tool == "adb":
+            # Shared marker: device_doctor swaps its default install remedy
+            # for this timeout-specific retry/server guidance.
+            from .device_runner import ADB_TIMEOUT_MARKER
+
+            diagnosis = (
+                f"{ADB_TIMEOUT_MARKER} after {timeout:g}s; adb is installed, so"
+                " retry and check the adb server/USB state"
+                " (`adb kill-server && adb start-server`, cable/port, device"
+                " authorization) instead of reinstalling platform-tools."
+            )
         if tool == "xcrun":
-            from .device_runner import XCODE_FIRST_LAUNCH_PENDING_MARKER
+            from .device_runner import (
+                XCODE_FIRST_LAUNCH_COMPLETE_MARKER,
+                XCODE_FIRST_LAUNCH_PENDING_MARKER,
+            )
 
             first_launch = "pending"
             try:
@@ -1125,9 +1139,9 @@ def _default_device_runner(command: Sequence[str], timeout: float = 180.0) -> tu
                 )
             elif first_launch == "complete":
                 diagnosis += (
-                    " Xcode first launch is complete; the hang is in the Xcode"
-                    " tooling stack (CoreDevice/devicectl) — retry, and if it"
-                    " persists restart the tooling daemons or the host."
+                    f" {XCODE_FIRST_LAUNCH_COMPLETE_MARKER}; the hang is in the"
+                    " Xcode tooling stack (CoreDevice/devicectl) — retry, and if"
+                    " it persists restart the tooling daemons or the host."
                 )
             else:
                 diagnosis += (

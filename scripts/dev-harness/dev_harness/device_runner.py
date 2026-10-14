@@ -62,6 +62,13 @@ class DeviceRunnerError(RuntimeError):
 # launch needs admin rights, so device_doctor must classify it as
 # operator-action-needed (MOBILE_SESSIONS.md "Doctor"), never agent-remediable.
 XCODE_FIRST_LAUNCH_PENDING_MARKER = "Xcode first launch is pending"
+# Diagnosis marker for the opposite case: first launch already complete, so an
+# install-Xcode remedy would be wrong; the doctor keeps agent-remediable but
+# points at the timeout-specific retry/restart step instead.
+XCODE_FIRST_LAUNCH_COMPLETE_MARKER = "Xcode first launch is complete"
+# Diagnosis marker for an adb timeout: adb is present and running, so the
+# doctor's remedy must be the adb-server/USB retry step, not a reinstall.
+ADB_TIMEOUT_MARKER = "adb timed out"
 
 
 @dataclass
@@ -252,12 +259,25 @@ def device_doctor(
         try:
             devices = android.connected()
         except DeviceRunnerError as exc:
-            check(
-                "android.tooling",
-                "agent-remediable",
-                str(exc),
-                "install Android SDK platform-tools and ensure adb is on PATH",
-            )
+            detail = str(exc)
+            if ADB_TIMEOUT_MARKER in detail:
+                # adb is present and running; the hang is server/USB state, so
+                # reinstalling platform-tools would be the wrong remedy.
+                check(
+                    "android.tooling",
+                    "agent-remediable",
+                    detail,
+                    "retry, and if it persists restart the adb server "
+                    "(`adb kill-server && adb start-server`), then check the USB "
+                    "connection and device authorization",
+                )
+            else:
+                check(
+                    "android.tooling",
+                    "agent-remediable",
+                    detail,
+                    "install Android SDK platform-tools and ensure adb is on PATH",
+                )
         else:
             if devices:
                 for device in devices:
@@ -300,6 +320,18 @@ def device_doctor(
                     "complete the pending Xcode first launch with admin rights once: "
                     "`sudo xcodebuild -runFirstLaunch && sudo xcodebuild -license accept` "
                     "(or open Xcode.app and finish the prompt), then rerun `mobile-session device doctor`",
+                )
+            elif XCODE_FIRST_LAUNCH_COMPLETE_MARKER in detail:
+                # Xcode was just probed successfully: first launch is done, so
+                # an install-Xcode remedy would be irrelevant. Keep it agent
+                # work but point at the timeout-specific retry/restart step.
+                check(
+                    "ios.tooling",
+                    "agent-remediable",
+                    detail,
+                    "retry, and if it persists restart the Xcode tooling daemons "
+                    "(`killall -9 remoted` or reboot the host), then rerun "
+                    "`mobile-session device doctor`",
                 )
             else:
                 check(
