@@ -1792,9 +1792,9 @@ environments:
             value: prod
             category: runtime_identity
           STT_RESILIENT_RECONNECT: {value: 'false', category: rollout}
-          STT_LIVE_DEMAND_ENABLED: {value: 'false', category: rollout}
+          STT_LIVE_DEMAND_ENABLED: {value: 'true', category: rollout}
           STT_LIVE_DEMAND_PERCENT: {value: '0', category: rollout}
-          STT_LIVE_DEMAND_UID_ALLOWLIST: {value: '', category: rollout}
+          STT_LIVE_DEMAND_UID_ALLOWLIST: {value: vi7SA9ckQCe4ccobWNxlbdcNdC23, category: rollout}
           STT_LIVE_DEMAND_MIN_DWELL_SECONDS: {value: '15', category: rollout}
           STT_FAILOVER_RECOVERY_ENABLED: {value: 'true', category: rollout}
           STT_ROUTING_MODE: {value: 'on', category: rollout}
@@ -1961,6 +1961,9 @@ environments:
           PARAKEET_WINDOW_MAX_EMPTY_STREAK:
             value: '4'
             category: reliability
+          MOBILE_STANDARD_BATCH_ENABLED: {value: 'true', category: rollout}
+          MOBILE_STANDARD_BATCH_PERCENT: {value: '0', category: rollout}
+          MOBILE_STANDARD_BATCH_UIDS: {value: vi7SA9ckQCe4ccobWNxlbdcNdC23, category: rollout}
           SONIOX_IDLE_CLOSE_SECONDS: {value: '45', category: rollout}
           STT_NO_TEXT_RESCUE_ENABLED: {value: 'true', category: rollout}
           OMI_CUSTOMER_DATA_PROJECT:

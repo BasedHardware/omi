@@ -445,13 +445,19 @@ env:
   - name: STT_RESILIENT_RECONNECT
     value: "false"
   - name: STT_LIVE_DEMAND_ENABLED
-    value: "false"
+    value: "true"
   - name: STT_LIVE_DEMAND_PERCENT
     value: "0"
   - name: STT_LIVE_DEMAND_UID_ALLOWLIST
-    value: ""
+    value: "vi7SA9ckQCe4ccobWNxlbdcNdC23"
   - name: STT_LIVE_DEMAND_MIN_DWELL_SECONDS
     value: "15"
+  - name: MOBILE_STANDARD_BATCH_ENABLED
+    value: "true"
+  - name: MOBILE_STANDARD_BATCH_PERCENT
+    value: "0"
+  - name: MOBILE_STANDARD_BATCH_UIDS
+    value: "vi7SA9ckQCe4ccobWNxlbdcNdC23"
   - name: STT_FAILOVER_RECOVERY_ENABLED
     value: "true"
   - name: SONIOX_IDLE_CLOSE_SECONDS
