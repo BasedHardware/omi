@@ -4,6 +4,7 @@ from copy import deepcopy
 from dataclasses import replace
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
+import json
 
 import pytest
 from pydantic import ValidationError
@@ -114,6 +115,8 @@ def test_apply_undo_redo_exactness(hygiene, operation):
     assert 'belief_class' not in db.rows[('users', UID, 'memory_items', 'old')]
     assert db.rows[('users', UID, 'memory_items', 'new')] == newer
     changes = [row for path, row in db.rows.items() if path[-2] == 'review_changes']
+    assert set(changes[0]['memory_hygiene']) == {'review_encrypted_v1'}
+    assert 'Toytown' not in json.dumps(changes[0], default=str)
     data = review_store.decode_doc(UID, changes[0])
     change_id = data['change']['change_id']
     after = deepcopy(db.rows[('users', UID, 'memory_items', 'old')])
