@@ -183,6 +183,11 @@ LISTEN_ONLY_ALLOWED: dict[str, frozenset[str]] = {
     | _DEMAND_LISTEN_ONLY,
     "prod": frozenset(
         {
+            # Only listen's runtime reads these to advertise mobile control-channel
+            # admission. Pusher never grants permission; sync archives unconditionally.
+            "MOBILE_STANDARD_BATCH_ENABLED",
+            "MOBILE_STANDARD_BATCH_PERCENT",
+            "MOBILE_STANDARD_BATCH_UIDS",
             # Managed listen-only STT rollout; pusher is not a live audio receiver.
             "PARAKEET_BATCH_PRESSURE_MIN_REPLICAS",
             "PARAKEET_BATCH_PRESSURE_POOL_HOST",
