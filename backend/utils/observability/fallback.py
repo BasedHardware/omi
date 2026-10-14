@@ -208,6 +208,7 @@ ALLOWED_COMPONENTS = frozenset(
         'agent_tools',
         'conversation_finalization',
         'conversation_notes',
+        'speaker_assignments',
         'daily_summary',
         'other',
     }

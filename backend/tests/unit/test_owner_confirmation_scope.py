@@ -92,6 +92,10 @@ def world(monkeypatch):
     monkeypatch.setattr(db, 'record_speaker_review', lambda *a: None)
     monkeypatch.setattr(db, 'get_conversation', lambda uid, cid: decoded(store, path))
     monkeypatch.setattr(service.voice_profiles_db, 'record_tag_prompt_answered', lambda *a: None)
+    # The shared marker retirement must stay inert here: these tests drive the
+    # real assignment transaction, and the marker clear must not build a real
+    # Firestore client.
+    monkeypatch.setattr(service.voice_profiles_db, 'clear_ignored_voices', lambda *a, **k: 0)
     monkeypatch.setattr(router, 'conversation_clip_pcm', lambda *a: b'\x01\x00' * (16000 * 6))
     monkeypatch.setattr(service, 'verified_clip_pcm', lambda *a, **k: b'\x01\x00' * (16000 * 6))
     monkeypatch.setattr(service.owner_embedding_cache, 'load', lambda *a: {})

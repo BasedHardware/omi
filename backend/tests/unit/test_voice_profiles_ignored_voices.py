@@ -140,3 +140,20 @@ def test_stale_generation_marker_is_not_recorded_after_a_newer_positive():
     # No fence applies without an assignment generation (legacy tag prompts).
     db.record_ignored_voice('u', 'c3', 2, NOW, firestore_client=store)
     assert 'c3:2' in db.ignored_voice_keys(store.rows[STATE])
+
+
+def test_delayed_clear_cannot_remove_a_newer_decisions_marker():
+    store = StrictFirestore()
+    # Generation 3 positive committed, then a generation 4 re-exclusion
+    # recorded its marker. The generation 3 request's delayed clear must not
+    # remove the newer marker — the voice would silently leave Settings >
+    # Ignored Voices and could no longer be restored from there.
+    db.record_ignored_voice('u', 'c1', 1, NOW, assignment_generation=4, firestore_client=store)
+    assert db.clear_ignored_voices('u', 'c1', [1], assignment_generation=3, firestore_client=store) == 0
+    assert db.ignored_voice_keys(store.rows[STATE]) == {'c1:1'}
+    # The same-generation positive retirement still clears it.
+    assert db.clear_ignored_voices('u', 'c1', [1], assignment_generation=4, firestore_client=store) == 1
+    assert db.ignored_voice_keys(store.rows.get(STATE) or {'ignored_voices': {}}) == set()
+    # A legacy marker without a generation fence stays clearable by any positive.
+    db.record_ignored_voice('u', 'c2', 2, NOW, firestore_client=store)
+    assert db.clear_ignored_voices('u', 'c2', [2], assignment_generation=9, firestore_client=store) == 1

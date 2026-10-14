@@ -14,6 +14,7 @@ from fastapi import BackgroundTasks, Depends, HTTPException
 from models.conversation import BulkAssignSegmentsRequest
 from models.transcript_segment import TranscriptSegment
 from utils.manual_speaker_assignments import manual_assignment, apply_manual_assignments, manual_rejected_speakers
+from utils.ignored_voice_markers import record_exclusion_markers, retire_exclusion_markers
 from utils.speaker_tag_prompts.selection import _manually_decided
 from utils.person_evidence import assignment_evidence, receipt_person_ids
 
@@ -50,6 +51,12 @@ def test_bulk_not_a_person_is_resolved_persisted_reversible_and_never_teaches():
         datetime=__import__('datetime').datetime,
         timezone=__import__('datetime').timezone,
         voice_profiles_db=SimpleNamespace(record_ignored_voice=ignored, clear_ignored_voices=cleared),
+        record_exclusion_markers=lambda uid, cid, raw, resolved, **kwargs: record_exclusion_markers(
+            uid, cid, raw, resolved, voice_profiles=SimpleNamespace(record_ignored_voice=ignored), **kwargs
+        ),
+        retire_exclusion_markers=lambda uid, cid, raw, resolved, **kwargs: retire_exclusion_markers(
+            uid, cid, raw, resolved, voice_profiles=SimpleNamespace(clear_ignored_voices=cleared), **kwargs
+        ),
         manual_rejected_speakers=manual_rejected_speakers,
         teaching_segment_ids=lambda segments, resolved: resolved,
         delete_speech_profile_blob=Mock(),
@@ -122,7 +129,12 @@ def test_bulk_not_a_person_is_resolved_persisted_reversible_and_never_teaches():
         assert response.transcript_segments[0].is_user is (assign_type == 'is_user')
     # Replacing the exclusion with a person/user assignment retires the
     # ignored-voice marker: the voice leaves Ignored Voices and matching again.
-    cleared.assert_has_calls([call('u', 'conversation', [4]), call('u', 'conversation', [4])])
+    cleared.assert_has_calls(
+        [
+            call('u', 'conversation', [4], assignment_generation=3),
+            call('u', 'conversation', [4], assignment_generation=4),
+        ]
+    )
     assert cleared.call_count == 2
     learning.assert_not_called()
 
@@ -160,6 +172,12 @@ def test_range_reassignment_keeps_a_winning_whole_voice_rejection_restorable():
         _emit_speaker_identity_confirmed=Mock(),
         _speaker_assignment=lambda segment: str(segment.person_id),
         voice_profiles_db=SimpleNamespace(record_ignored_voice=ignored, clear_ignored_voices=cleared),
+        record_exclusion_markers=lambda uid, cid, raw, resolved, **kwargs: record_exclusion_markers(
+            uid, cid, raw, resolved, voice_profiles=SimpleNamespace(record_ignored_voice=ignored), **kwargs
+        ),
+        retire_exclusion_markers=lambda uid, cid, raw, resolved, **kwargs: retire_exclusion_markers(
+            uid, cid, raw, resolved, voice_profiles=SimpleNamespace(clear_ignored_voices=cleared), **kwargs
+        ),
         manual_rejected_speakers=manual_rejected_speakers,
         teaching_segment_ids=lambda segments, resolved: resolved,
         delete_speech_profile_blob=Mock(),
@@ -215,6 +233,12 @@ def test_marker_store_failure_after_commit_still_reports_the_exclusion_saved():
             timezone=__import__('datetime').timezone,
             logger=Mock(),
             voice_profiles_db=SimpleNamespace(record_ignored_voice=ignored, clear_ignored_voices=cleared),
+            record_exclusion_markers=lambda uid, cid, raw, resolved, **kwargs: record_exclusion_markers(
+                uid, cid, raw, resolved, voice_profiles=SimpleNamespace(record_ignored_voice=ignored), **kwargs
+            ),
+            retire_exclusion_markers=lambda uid, cid, raw, resolved, **kwargs: retire_exclusion_markers(
+                uid, cid, raw, resolved, voice_profiles=SimpleNamespace(clear_ignored_voices=cleared), **kwargs
+            ),
             manual_rejected_speakers=manual_rejected_speakers,
             teaching_segment_ids=lambda segments, resolved: resolved,
             delete_speech_profile_blob=Mock(),

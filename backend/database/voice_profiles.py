@@ -8,6 +8,8 @@ from google.cloud import firestore
 from utils.owner_voice_evidence import owner_base
 
 from ._client import get_firestore_client, run_transactional
+from . import conversations
+from .conversations import conversations_collection
 from .speaker_profile_authority import owner_teaching_authorized
 
 SETTINGS_DEFAULTS: Dict[str, bool] = {
@@ -252,16 +254,11 @@ def _newer_positive_decision(
     """
     if generation is None:
         return False
-    from database import conversations as conversations_db
-
     conversation_ref = (
-        client.collection('users')
-        .document(uid)
-        .collection(conversations_db.conversations_collection)
-        .document(conversation_id)
+        client.collection('users').document(uid).collection(conversations_collection).document(conversation_id)
     )
     raw = conversation_ref.get(transaction=transaction).to_dict() or {}
-    receipt = conversations_db.decode_manual_speaker_assignments(
+    receipt = conversations.decode_manual_speaker_assignments(
         uid, raw.get('manual_speaker_assignments'), bool(raw.get('manual_speaker_assignments_compressed'))
     )
     entries: List[Dict[str, Any]] = []
@@ -337,16 +334,11 @@ def remove_ignored_voice(
         marker = ignored.pop(ignored_voice_key(conversation_id, speaker_id), None)
         if marker is None:
             return False
-        from database import conversations as conversations_db
-
         conversation_ref = (
-            client.collection('users')
-            .document(uid)
-            .collection(conversations_db.conversations_collection)
-            .document(conversation_id)
+            client.collection('users').document(uid).collection(conversations_collection).document(conversation_id)
         )
         raw = conversation_ref.get(transaction=transaction).to_dict() or {}
-        receipt = conversations_db.decode_manual_speaker_assignments(
+        receipt = conversations.decode_manual_speaker_assignments(
             uid, raw.get('manual_speaker_assignments'), bool(raw.get('manual_speaker_assignments_compressed'))
         )
         speakers = dict(receipt.get('speakers') or {})
@@ -386,7 +378,7 @@ def remove_ignored_voice(
             receipt['generation'] = receipt.get('generation', 0) + 1
             transaction.update(
                 conversation_ref,
-                conversations_db.encode_conversation_for_write(
+                conversations.encode_conversation_for_write(
                     uid, {'manual_speaker_assignments': receipt}, raw.get('data_protection_level', 'standard')
                 ),
             )
@@ -398,13 +390,23 @@ def remove_ignored_voice(
 
 
 def clear_ignored_voices(
-    uid: str, conversation_id: str, speaker_ids: List[int], *, firestore_client: Any = None
+    uid: str,
+    conversation_id: str,
+    speaker_ids: List[int],
+    *,
+    assignment_generation: Optional[int] = None,
+    firestore_client: Any = None,
 ) -> int:
     """Drop ignored-voice markers a newer positive assignment supersedes.
 
     A later person/user assignment replaces the exclusion (the live sheet is
     reversible by design), so the marker that keeps the voice listed under
     Settings > Ignored Voices must not outlive the decision it recorded.
+
+    Like the record path, the clear is fenced by assignment generation: a
+    delayed clear from an older positive request must not remove a marker a
+    newer decision recorded, or the voice would silently leave Settings >
+    Ignored Voices and could no longer be restored from there.
     """
 
     if not speaker_ids:
@@ -419,8 +421,22 @@ def clear_ignored_voices(
         ignored = dict(state.get('ignored_voices') or {})
         removed = 0
         for speaker_id in speaker_ids:
-            if ignored.pop(ignored_voice_key(conversation_id, speaker_id), None) is not None:
-                removed += 1
+            key = ignored_voice_key(conversation_id, speaker_id)
+            marker = ignored.get(key)
+            if marker is None:
+                continue
+            marker_generation = marker.get('assignment_generation')
+            if (
+                assignment_generation is not None
+                and isinstance(marker_generation, int)
+                and marker_generation > assignment_generation
+            ):
+                # A newer decision (e.g. a re-exclusion) recorded this marker
+                # after the positive request that queued this clear committed;
+                # the newer decision owns the voice, so keep its marker.
+                continue
+            ignored.pop(key, None)
+            removed += 1
         if removed:
             transaction.update(ref, {'ignored_voices': ignored})
         return removed

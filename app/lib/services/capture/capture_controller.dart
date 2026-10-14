@@ -3446,6 +3446,18 @@ class CaptureController extends ChangeNotifier
       segments = _conversation!.transcriptSegments;
       if (isSameConversation) {
         for (final segment in segments) {
+          // A persisted manual positive label for an excluded speaker means a
+          // newer authoritative assignment won (another surface replaced the
+          // exclusion; the receipt projects exclusions as unlabeled, never as
+          // manual). Retire the local exclusion instead of blanking the label
+          // below — same rule as incremental socket segments.
+          if (_excludedSpeakers.contains(segment.speakerId) &&
+              segment.speakerLabelSource == 'manual' &&
+              (segment.isUser || (segment.personId?.isNotEmpty ?? false))) {
+            _excludedSpeakers.remove(segment.speakerId);
+          }
+        }
+        for (final segment in segments) {
           if (_excludedSpeakers.contains(segment.speakerId)) {
             segment.isUser = false;
             segment.personId = null;

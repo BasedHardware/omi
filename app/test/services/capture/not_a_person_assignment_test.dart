@@ -70,11 +70,14 @@ void main() {
       createdAt: DateTime(2026),
       structured: Structured('TV', 'TV'),
       transcriptSegments: [
-        _segment('s1')..speakerLabelSource = 'manual',
+        // Stale *non-manual* labels (auto/cached) are still re-blanked: the
+        // receipt projects exclusions as unlabeled, so any non-manual label
+        // for an excluded speaker predates the exclusion.
+        _segment('s1')..speakerLabelSource = 'auto',
         _segment('s2')
           ..isUser = false
           ..personId = 'p1'
-          ..speakerLabelSource = 'manual',
+          ..speakerLabelSource = 'auto',
       ],
     );
     expect(await controller.assignSpeakerToConversation(4, '', '', ['s1'], notAPerson: true), isTrue);
@@ -87,6 +90,50 @@ void main() {
       expect(segment.personId, isNull);
       expect(segment.speakerLabelSource, isNull);
     }
+  });
+
+  test('a newer manual positive label survives a same-conversation refresh', () async {
+    final controller = CaptureController(
+      externalActions: _Actions(),
+      bleListeners: _Ble(),
+      connectivity: CaptureConnectivityBoundary(
+        initiallyConnected: true,
+        changes: const Stream.empty(),
+        isConnected: () => true,
+      ),
+      excludeSpeaker: (id, ids) async => true,
+    );
+    addTearDown(() async {
+      controller.dispose();
+      await controller.lifetime.close();
+    });
+    controller.applyInProgressConversation(
+      ServerConversation(
+        id: 'c',
+        createdAt: DateTime(2026),
+        structured: Structured('TV', 'TV'),
+        transcriptSegments: [_segment('s1')],
+      ),
+    );
+    // The local exclusion commits, then another client assigns the speaker to
+    // a person: the refreshed snapshot carries the newer manual positive.
+    expect(await controller.assignSpeakerToConversation(4, '', '', ['s1'], notAPerson: true), isTrue);
+    final newerPositive = ServerConversation(
+      id: 'c',
+      createdAt: DateTime(2026),
+      structured: Structured('TV', 'TV'),
+      transcriptSegments: [
+        _segment('s1')
+          ..isUser = false
+          ..personId = 'p1'
+          ..speakerLabelSource = 'manual',
+      ],
+    );
+
+    controller.applyInProgressConversation(newerPositive);
+
+    expect(controller.segments.single.personId, 'p1');
+    expect(controller.segments.single.speakerLabelSource, 'manual');
   });
   test('exclusion clears the cluster, skips person creation, suppresses suggestions and is reversible', () async {
     final actions = _Actions();

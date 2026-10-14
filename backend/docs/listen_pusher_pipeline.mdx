@@ -2205,6 +2205,12 @@ positive decision wins. The live capture sheet's media exclusion
 `assign_type: "not_a_person"`) writes the same receipt decision and the same
 ignored-voice marker (fenced by the assignment generation), never queues a
 voice sample, and stays reversible: a later person/user assignment replaces it.
+Marker reconciliation is shared by every writer (`utils/ignored_voice_markers.py`):
+the live sheet, the reject route, and card answers all record and retire through
+the same helpers, retirement is fenced by the assignment generation (a delayed
+older clear cannot remove a newer decision's marker), and a post-commit marker
+persistence failure fails open with shared fallback telemetry
+(`omi_fallback_total{component="speaker_assignments"}`).
 A segment's `speaker_label_source` projects provenance:
 `manual`/`carried` under a winning decision, `auto` for match-only evidence.
 

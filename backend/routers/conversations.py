@@ -11,7 +11,6 @@ import database._client as db_client_module
 import database.action_items as action_items_db
 import database.redis_db as redis_db
 import database.users as users_db
-from database import voice_profiles as voice_profiles_db
 from database import conversation_tombstones
 from database.firestore_read_metrics import FirestoreReadSite
 from database.vector_db import (
@@ -101,7 +100,7 @@ from utils.conversations.search import (
 )
 from utils.llm.conversation_processing import SummaryProviderError, generate_summary_with_prompt
 from utils.speaker_assignment_teaching import commit_manual_assignment
-from utils.manual_speaker_assignments import manual_rejected_speakers
+from utils.ignored_voice_markers import record_exclusion_markers, retire_exclusion_markers
 from utils.speaker_learning_jobs import schedule_reprocessed_learning
 from utils.other import endpoints as auth
 from utils.other.storage import get_conversation_recording_if_exists
@@ -1600,63 +1599,13 @@ def _assign_manual_speaker(
         # Live-sheet exclusions write the same ignored-voice marker the reject
         # route and tag-prompt answers write, so the voice shows under
         # Settings > Ignored Voices and can be restored from there.
-        resolved_ids = set(resolved)
-        affected = {
-            int(segment['speaker_id'])
-            for segment in raw.get('transcript_segments') or []
-            if segment.get('id') in resolved_ids and isinstance(segment.get('speaker_id'), int)
-        } or ({speaker_id} if speaker_id is not None else set())
-        generation = (raw.get('manual_speaker_assignments') or {}).get('generation')
-        for affected_speaker in sorted(affected):
-            try:
-                voice_profiles_db.record_ignored_voice(
-                    uid,
-                    resolved_conversation_id,
-                    affected_speaker,
-                    datetime.now(timezone.utc),
-                    assignment_generation=generation,
-                )
-            except Exception:
-                # The assignment transaction already committed the exclusion
-                # (prompt suppression and no-teaching ride on the receipt), and
-                # the marker only powers Settings > Ignored Voices and
-                # restoration. Failing the response here would report a saved
-                # decision as unsaved, make the client retry, and skip the
-                # socket update, so log and keep the committed edit authoritative.
-                logger.exception(
-                    'ignored-voice marker record failed after commit uid=%s conv=%s speaker=%s',
-                    uid,
-                    resolved_conversation_id,
-                    affected_speaker,
-                )
+        record_exclusion_markers(uid, resolved_conversation_id, raw, resolved, speaker_id=speaker_id)
     elif person_id or is_user:
         # A later person/user assignment replaces the exclusion (reversible by
         # design), so the ignored-voice marker must not outlive that decision.
         # Range-only entries (segment_only) do not unseat a whole-voice
         # rejection, so those assignments must keep the marker restorable.
-        resolved_ids = set(resolved)
-        reassigned = {
-            int(segment['speaker_id'])
-            for segment in raw.get('transcript_segments') or []
-            if segment.get('id') in resolved_ids and isinstance(segment.get('speaker_id'), int)
-        } or ({speaker_id} if speaker_id is not None else set())
-        still_rejected = set(manual_rejected_speakers(raw.get('manual_speaker_assignments') or {}))
-        retired = sorted(reassigned - still_rejected)
-        if retired:
-            try:
-                voice_profiles_db.clear_ignored_voices(uid, resolved_conversation_id, retired)
-            except Exception:
-                # Same post-commit discipline as the exclusion path: the
-                # assignment is durable; a failed marker retirement must not
-                # report the saved decision as unsaved. A stale marker is
-                # self-healing — the record path fences stale generations and
-                # Settings > Ignored Voices restore remains available.
-                logger.exception(
-                    'ignored-voice marker retirement failed after commit uid=%s conv=%s speakers=%s',
-                    uid,
-                    resolved_conversation_id,
-                    retired,
-                )
+        retire_exclusion_markers(uid, resolved_conversation_id, raw, resolved, speaker_id=speaker_id)
     _drop_display_projection(conversation)
     _emit_speaker_identity_confirmed(
         uid=uid,
