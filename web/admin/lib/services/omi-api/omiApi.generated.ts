@@ -1702,6 +1702,7 @@ export interface CreateConversationTranscriptSegment {
   speaker?: string | null;
   speaker_id?: number | null;
   start: number;
+  stt_provider?: string | null;
   text: string;
 }
 
