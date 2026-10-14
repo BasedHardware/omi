@@ -583,8 +583,7 @@ class AnalyticsManager {
   Future<String?> getFeatureFlagVariant(String key) => _readFlag<String?>((a) => a.getFeatureFlagVariant(key));
 
   /// Re-fetches flags for the settled identity (a read right after sign-in would otherwise see the anonymous id's).
-  Future<bool> reloadFeatureFlags() async =>
-      await _readFlag<bool>((a) => a.reloadFeatureFlags().then((_) => true)) ?? false;
+  Future<bool> reloadFeatureFlags() async => await _readFlag<bool>((a) => a.reloadFeatureFlags()) ?? false;
   String? get settledDistinctId => _settledDistinctId; // null until an identity settles
   final Set<String> _recordedFlagExposures = {};
 

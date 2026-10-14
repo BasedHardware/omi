@@ -30,8 +30,17 @@ class PostHogAnalyticsAdapter
   /// possibly another person's) when its own refresh fails.
   ({String distinctId, Map<String, Object?> flags, Map<String, Object?> payloads})? _verified;
 
+  /// Bumped on every identity change; a reload commits its answer only if the generation it started
+  /// in is still current, so a slow response for account A cannot land after B took over.
+  int _identityGeneration = 0;
+
   @visibleForTesting
   bool get hasVerifiedFlags => _verified != null;
+
+  void _identityChanged() {
+    _identityGeneration++;
+    _verified = null;
+  }
 
   final String apiKey;
   final String host;
@@ -72,7 +81,7 @@ class PostHogAnalyticsAdapter
 
   @override
   void identify({required String userId, Map<String, Object>? userProperties}) {
-    _verified = null;
+    _identityChanged();
     if (!_initialized) return;
     if (userProperties == null) {
       _background(() => Posthog().identify(userId: userId));
@@ -171,6 +180,7 @@ class PostHogAnalyticsAdapter
   /// either way), so its cache is never taken as fresh here.
   @override
   Future<bool> reloadFeatureFlags() async {
+    final generation = _identityGeneration;
     try {
       final distinctId = await (_distinctIdReader ?? Posthog().getDistinctId)();
       if (distinctId == null || distinctId.isEmpty) return false;
@@ -187,6 +197,7 @@ class PostHogAnalyticsAdapter
       final flags = decoded is Map ? decoded['featureFlags'] : null;
       if (flags is! Map) return false;
       final payloads = decoded['featureFlagPayloads'];
+      if (generation != _identityGeneration) return false; // another identity took over mid-flight
       _verified = (
         distinctId: distinctId,
         flags: Map<String, Object?>.from(flags),
@@ -219,7 +230,7 @@ class PostHogAnalyticsAdapter
 
   @override
   Future<String> settleIdentity(String? identity, {required bool reset}) async {
-    _verified = null;
+    _identityChanged();
     String? distinctId;
     await _serialize(() async {
       if (reset) await Posthog().reset();
@@ -270,6 +281,7 @@ class PostHogAnalyticsAdapter
 
   @override
   void reset() {
+    _identityChanged();
     if (!_initialized) return;
     _targetExpiry?.cancel();
     _targetExpiry = null;

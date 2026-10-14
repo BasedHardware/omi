@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -73,5 +74,33 @@ void main() {
     expect(adapter.hasVerifiedFlags, isTrue);
     adapter.identify(userId: 'someone-else');
     expect(adapter.hasVerifiedFlags, isFalse, reason: 'the next read must not see the previous identity\'s flags');
+  });
+
+  test("a delayed answer for account A cannot land after account B's reload", () async {
+    final pendingA = Completer<http.Response>();
+    var requests = 0;
+    final client = MockClient((request) async {
+      requests++;
+      if (requests == 1) return pendingA.future; // A's request hangs
+      return http.Response(
+          jsonEncode({
+            'featureFlags': {'only-b': true}
+          }),
+          200);
+    });
+    final adapter = _adapter(client);
+    final reloadA = adapter.reloadFeatureFlags();
+    adapter.identify(userId: 'b');
+    expect(await adapter.reloadFeatureFlags(), isTrue);
+    expect(await adapter.isFeatureEnabled('only-b'), isTrue);
+
+    pendingA.complete(http.Response(
+        jsonEncode({
+          'featureFlags': {'only-a': true}
+        }),
+        200));
+    expect(await reloadA, isFalse, reason: 'started under A, finished under B');
+    expect(await adapter.isFeatureEnabled('only-a'), isFalse);
+    expect(await adapter.isFeatureEnabled('only-b'), isTrue);
   });
 }
