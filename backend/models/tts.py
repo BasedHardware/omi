@@ -3,8 +3,8 @@
 Defines the request shape shared by mobile and desktop clients.
 """
 
-from typing import Optional
-from pydantic import BaseModel, ConfigDict, Field
+from typing import List, Optional
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 DEFAULT_VOICE_ID = "BAMYoBHLZM7lJgJAmFz0"  # Sloane
 DEFAULT_MODEL_ID = "eleven_turbo_v2_5"
@@ -12,9 +12,9 @@ DEFAULT_OUTPUT_FORMAT = "mp3_44100_128"
 
 
 class TtsVoiceSettings(BaseModel):
-    stability: Optional[float] = None
-    similarity_boost: Optional[float] = None
-    style: Optional[float] = None
+    stability: Optional[float] = Field(default=None, ge=0.0, le=1.0)
+    similarity_boost: Optional[float] = Field(default=None, ge=0.0, le=1.0)
+    style: Optional[float] = Field(default=None, ge=0.0, le=1.0)
     use_speaker_boost: Optional[bool] = None
 
 
@@ -30,20 +30,70 @@ class TtsSynthesizeRequest(BaseModel):
     output_format: str = DEFAULT_OUTPUT_FORMAT
     voice_settings: Optional[TtsVoiceSettings] = None
 
+    @field_validator("text", "voice_id", "model_id", "output_format", mode="before")
+    @classmethod
+    def _validate_non_blank_strings(cls, value: object) -> str:
+        if not isinstance(value, str):
+            raise TypeError("TTS fields must be strings")
+        value = value.strip()
+        if not value:
+            raise ValueError("TTS fields must not be blank")
+        return value
+
 
 class TtsVoice(BaseModel):
-    id: str
-    name: str
+    id: str = Field(min_length=1)
+    name: str = Field(min_length=1)
+
+    @field_validator("id", "name", mode="before")
+    @classmethod
+    def _validate_non_blank(cls, value: object) -> str:
+        if not isinstance(value, str):
+            raise TypeError("voice fields must be strings")
+        value = value.strip()
+        if not value:
+            raise ValueError("voice fields must not be blank")
+        return value
 
 
 class TtsVoiceCatalog(BaseModel):
-    voices: list[TtsVoice]
-    default_voice_id: str
+    voices: List[TtsVoice]
+    default_voice_id: str = Field(min_length=1)
+
+    @field_validator("default_voice_id", mode="before")
+    @classmethod
+    def _validate_non_blank(cls, value: object) -> str:
+        if not isinstance(value, str):
+            raise TypeError("default_voice_id must be a string")
+        value = value.strip()
+        if not value:
+            raise ValueError("default_voice_id must not be blank")
+        return value
 
 
 class AssistantVoicePreference(BaseModel):
-    voice_id: str
+    voice_id: str = Field(min_length=1)
+
+    @field_validator("voice_id", mode="before")
+    @classmethod
+    def _validate_non_blank(cls, value: object) -> str:
+        if not isinstance(value, str):
+            raise TypeError("voice_id must be a string")
+        value = value.strip()
+        if not value:
+            raise ValueError("voice_id must not be blank")
+        return value
 
 
 class AssistantVoicePreferenceUpdate(BaseModel):
-    voice_id: str
+    voice_id: str = Field(min_length=1)
+
+    @field_validator("voice_id", mode="before")
+    @classmethod
+    def _validate_non_blank(cls, value: object) -> str:
+        if not isinstance(value, str):
+            raise TypeError("voice_id must be a string")
+        value = value.strip()
+        if not value:
+            raise ValueError("voice_id must not be blank")
+        return value
