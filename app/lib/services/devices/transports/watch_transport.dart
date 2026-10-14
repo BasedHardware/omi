@@ -9,7 +9,7 @@ import 'package:omi/utils/logger.dart';
 import 'device_transport.dart';
 
 class WatchTransport extends DeviceTransport {
-  final WatchRecorderHostAPI _hostAPI = WatchRecorderHostAPI();
+  final WatchRecorderHostAPI _hostAPI;
   final StreamController<DeviceTransportState> _connectionStateController;
   final Map<String, StreamController<List<int>>> _streamControllers = {};
   final Map<String, Timer> _periodicTimers = {};
@@ -20,7 +20,9 @@ class WatchTransport extends DeviceTransport {
   static final List<StreamController<List<int>>> _audioControllers = [];
   static final List<StreamController<List<int>>> _batteryControllers = [];
 
-  WatchTransport() : _connectionStateController = StreamController<DeviceTransportState>.broadcast() {
+  WatchTransport({WatchRecorderHostAPI? hostAPI})
+      : _hostAPI = hostAPI ?? WatchRecorderHostAPI(),
+        _connectionStateController = StreamController<DeviceTransportState>.broadcast() {
     _ensureWatchBridgeSetup();
   }
 
