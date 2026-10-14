@@ -87,7 +87,7 @@ def is_budget_cap_surface(*, trigger: str | None, percent: float | int | None) -
     ``budget_100``, otherwise ``budget_80``. There is no second trigger.
     Other triggers, including settings (no trigger), are not budget surfaces.
     """
-    if trigger != 'usage_budget' or isinstance(percent, bool) or type(percent) not in {int, float}:
+    if trigger != 'usage_budget' or isinstance(percent, bool) or not isinstance(percent, (int, float)):
         return False
     return percent >= 100
 
