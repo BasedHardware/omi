@@ -797,6 +797,16 @@ class WindowedParakeetSocket(ParakeetStreamingSocket):
         has_held_tail = cut_requested and len(
             decide_window(segments, job.duration, job.duration + 1.0, force=job.force, pause=job.pause).emit
         ) < len(segments)
+        # Sentence anchoring may hold a healthy nonempty answer until the
+        # context cap (24s), beyond the first/progress deadline (12s). If the
+        # remaining budget is no longer than one full POST pace, publish the
+        # held tail using the existing timestamp-preserving cut. Empty answers
+        # and in-flight faults still exhaust the original deadline.
+        deadline_cut = (
+            self._deadline_speech_at is not None
+            and (not self._first_text_recorded or self.progress_deadline_enabled)
+            and self._deadline_speech_at + self._first_text_deadline - time.monotonic() <= self._pace_seconds
+        )
         decision = decide_window(
             segments,
             job.duration,
@@ -808,7 +818,7 @@ class WindowedParakeetSocket(ParakeetStreamingSocket):
             # the long held tail only when another pace of audio would leave
             # too little room for the next POST to make progress.
             min_cap_progress=(self._pace_seconds if len(self._buf) >= self._buffer_cap() - self._pace_bytes else 0.0),
-            force_replay_cut=self._replay_cut_requested,
+            force_replay_cut=self._replay_cut_requested or deadline_cut,
         )
         if decision.forced_cut:
             WINDOW_FORCED_CUTS.inc()

@@ -1253,10 +1253,12 @@ async def _fragment_frame(actual, clock, sample, *, speech=False, wall_seconds=0
     return sample + 640
 
 
-async def _settled_fragment_silence(actual, clock, sample, frames, *, wall_seconds=0.04, settled=False):
+async def _settled_fragment_silence(
+    actual, clock, sample, frames, *, wall_seconds=0.04, settled=False, transition_frames=140
+):
     # Keep 40ms packets at state transitions. Once VAD is settled, batch known
     # silence while retaining a final 320ms of packets for exact pre-roll.
-    first = 0 if settled else min(140, frames)
+    first = 0 if settled else min(transition_frames, frames)
     for _ in range(first):
         sample = await _fragment_frame(actual, clock, sample, wall_seconds=wall_seconds)
     remaining = frames - first
@@ -1414,7 +1416,10 @@ async def test_repeated_short_empty_episodes_exhaust_cumulative_rescue_budget(mo
         timer = previous.raw._first_text_timer
         started_at = previous.raw._deadline_speech_at
         assert timer is not None
-        sample = await _settled_fragment_silence(actual, clock, sample, 125)
+        # 640ms of 40ms frames settles this window gate's 300ms hangover.
+        # Batch only the remaining known silence, preserving its full PCM,
+        # capture duration and final pre-roll; numeric gain remains real.
+        sample = await _settled_fragment_silence(actual, clock, sample, 125, transition_frames=16)
         assert len(client.requests) == cycle + 1
         # Each POST includes old context; overlapping answers must not recount it.
         assert previous.raw._answered_empty_speech_bytes == (cycle + 1) * admitted_bytes
@@ -1454,6 +1459,9 @@ async def test_repeated_short_empty_episodes_exhaust_cumulative_rescue_budget(mo
 async def test_only_emitted_text_resets_answered_empty_speech_budget(monkeypatch):
     _mock_post_pacing(monkeypatch, lambda _delay: _REAL_SLEEP(0))
     actual, base, previous, client, replayed, callbacks, clock, sample = await _fragment_session(monkeypatch)
+    # Isolate accounting with room to hold the sentence until the silence
+    # flush. The production 12s deadline-cut behavior has its own regression.
+    previous.raw._first_text_deadline = 60
     sample = await _settled_fragment_silence(actual, clock, sample, 8)
     sample = await _fragment_frame(actual, clock, sample, speech=True)
     sample = await _settled_fragment_silence(actual, clock, sample, 125)
@@ -4148,3 +4156,42 @@ async def test_expired_rescue_with_no_cheap_capacity_never_extends_paid(monkeypa
     assert len(callbacks) == 1
     client.release.set()
     await actual._drain_stt_sockets()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('progress', [False, True])
+async def test_held_text_emits_before_next_post_would_miss_deadline(monkeypatch, progress):
+    # Real socket, HTTP response parser and sentence-anchor decision. Successful
+    # unpunctuated answers must not be held until the 12s timer kills the leg.
+    now = [100.0]
+    monkeypatch.setattr(window, 'time', SimpleNamespace(monotonic=lambda: now[0]))
+    client = UnpunctuatedClient()
+    monkeypatch.setattr(window, 'get_stt_client', lambda: client)
+    monkeypatch.setattr(window.WindowedParakeetSocket, '_assign_speaker', AsyncMock(return_value=0))
+    emitted = []
+    sock = window.WindowedParakeetSocket(emitted.extend, 'http://tdt.invalid', 16000, lambda: None)
+    sock.progress_deadline_enabled = progress
+    sock._first_text_recorded = progress  # exercise a later progress episode too
+    pcm = b'\x01\x00' * 16000 * 6
+    try:
+        sock.mark_speech()
+        assert sock.send(pcm)
+        job = sock._next_job()
+        assert job is not None and not job.force
+        await sock._run_job(job)
+        assert emitted == []  # preserve sentence anchoring with deadline room
+        assert sock._first_text_timer is not None
+        now[0] += 7
+        sock.mark_speech()
+        assert sock.send(pcm)
+        job = sock._next_job()
+        assert job is not None and not job.force
+        await sock._run_job(job)
+        assert emitted and all(segment['text'].strip() for segment in emitted)
+        assert sock._anchor_bytes > 0
+        assert sock._first_text_timer is None
+        now[0] += 6
+        sock._expire_first_text()
+        assert not sock.is_connection_dead
+    finally:
+        sock.finish()

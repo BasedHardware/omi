@@ -6,6 +6,17 @@ description: "Sequence diagrams and finalization policy for the /v4/listen WebSo
 
 # Listen + Pusher Pipeline — Sequence Diagrams
 
+## Windowed live transcription deadlines
+
+Windowed Parakeet holds an unfinished sentence while there is room in the
+first-text or progress deadline. A successful nonempty POST releases that held
+text through the existing timestamp-preserving cut when the remaining deadline
+is no longer than one full POST pace. The emitted capture anchor advances normally;
+this avoids switching a healthy decoder solely because its sentence is longer
+than the 12-second delivery budget. Empty answers and stalled POSTs retain the
+original deadline and replay/failover behavior. Forced releases are included in
+`omi_stt_window_forced_cuts_total`.
+
 ## Demand-driven live provider lane
 
 The `/v4/listen` runtime owns the dark-by-default live-demand policy. Existing
