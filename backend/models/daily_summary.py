@@ -36,18 +36,18 @@ class DailySummaryKnowledgeNugget(BaseModel):
 
 
 class DailySummaryDayStats(BaseModel):
-    total_conversations: Optional[int] = None
-    total_duration_minutes: Optional[int] = None
-    action_items_count: Optional[int] = None
-    memories_created: Optional[int] = None
-    action_items_created: Optional[int] = None
-    watching_minutes: Optional[int] = None
-    proactive_moments: Optional[int] = None
+    total_conversations: Optional[int] = Field(default=None, ge=0)
+    total_duration_minutes: Optional[int] = Field(default=None, ge=0)
+    action_items_count: Optional[int] = Field(default=None, ge=0)
+    memories_created: Optional[int] = Field(default=None, ge=0)
+    action_items_created: Optional[int] = Field(default=None, ge=0)
+    watching_minutes: Optional[int] = Field(default=None, ge=0)
+    proactive_moments: Optional[int] = Field(default=None, ge=0)
 
 
 class DailySummaryLocationPin(BaseModel):
-    latitude: Optional[float] = None
-    longitude: Optional[float] = None
+    latitude: Optional[float] = Field(default=None, ge=-90, le=90)
+    longitude: Optional[float] = Field(default=None, ge=-180, le=180)
     address: Optional[str] = None
     conversation_id: Optional[str] = None
     time: Optional[str] = None
