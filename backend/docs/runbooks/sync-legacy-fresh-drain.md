@@ -41,8 +41,8 @@ burst, sixty tokens/hour across devices and replicas. This bounds requests
 and bytes even when timestamps are forged. Retries spend; no client duration
 is trusted. Exhaustion/store failure goes to backfill without upload refusal.
 Future/invalid/lookback checks and DEVICE_BOUND routing remain unchanged.
-Trust stays LEGACY in persisted jobs and task payloads. Promotions remain
-subject to existing fresh fair-use gates. Flags/budgets are declared in both
+Trust stays LEGACY in persisted jobs and task payloads. Fresh-only hard restriction/daily ceiling refusals demote promoted LEGACY
+batches before persistence; DEVICE_BOUND fresh retains its existing 429. Flags/budgets are declared in both
 environments, generated from `_base.yaml`.
 
 Qualify on synthetic dev first, then enable on backend-sync through the reviewed

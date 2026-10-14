@@ -4680,13 +4680,17 @@ tokens/hour with a ten-token burst per account across replicas and devices.
 failure demotes to backfill. Budget Redis connect/read I/O has a one-second
 timeout and runs off the event loop. Upload retries spend again; timestamp/session-id
 changes cannot reset the account budget. The budget bounds work admission,
-not billed speech; trusted manifests retain their existing route. Future,
+not billed speech. A fresh-only hard restriction or daily ceiling demotes a
+promoted LEGACY batch to backfill before persistence and final admission metrics,
+so optional promotion never introduces a fair-use 429. DEVICE_BOUND fresh keeps
+its existing 429 response. Trusted manifests retain their existing route. Future,
 invalid/missing timestamps, mixed historical batches and lookback rejection
 keep their existing semantics. Deprecated V1 stays unchanged.
 
 `omi_sync_lane_admissions_total{lane,trust,reason}` and `sync_lane_admission`
-record the final budget decision. New reasons: `recent_legacy_capture`,
-`legacy_fresh_budget_exceeded`, `legacy_fresh_budget_unavailable`. No account
+record the final budget and fresh-gate decision. New reasons: `recent_legacy_capture`,
+`legacy_fresh_budget_exceeded`, `legacy_fresh_budget_unavailable`,
+`legacy_fresh_hard_restricted`, `legacy_fresh_daily_ceiling`. No account
 labels are added. Optional final-pass logs now include `lane` and
 `duration_seconds`, covering decoding, embedding triage, diarization and naming
 inside the adapter. These times exclude the preceding WAV download and are
