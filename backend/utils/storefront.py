@@ -360,7 +360,10 @@ def build_storefront(
                 for item in prices:
                     if item.interval == 'year' and item.cta_label:
                         item.confirm_lines = [
-                            line.format(date=format_date(subscription.current_period_end), amount=format_money(item.amount_minor, item.currency))
+                            line.format(
+                                date=format_date(subscription.current_period_end),
+                                amount=format_money(item.amount_minor, item.currency),
+                            )
                             for line in copy_for(locale)['prices']['confirm_yearly_lines']
                         ]
             if resubscribe_this and current_price_id:

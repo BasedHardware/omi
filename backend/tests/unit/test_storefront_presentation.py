@@ -925,6 +925,7 @@ def test_golden_storefront_scenarios():
 def test_efficiency_hours_bands(monkeypatch):
     import config.rate_card as rates
     from copy import deepcopy
+
     card = rates.recording_rate_card()
     assert rates.recording_units_per_hour() == Decimal('130')
     assert rates.recording_units_per_hour('on_device') == 0

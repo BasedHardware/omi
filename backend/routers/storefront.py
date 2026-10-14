@@ -131,13 +131,19 @@ def get_storefront(
     from utils.ladder_v1 import account
 
     entitlement = account(uid, subscription)
-    if not policy.enabled('LADDER_V1_PRO_GATES_ENABLED') or entitlement is None or entitlement['plan_id'] in ('operator', 'architect'):
+    if (
+        not policy.enabled('LADDER_V1_PRO_GATES_ENABLED')
+        or entitlement is None
+        or entitlement['plan_id'] in ('operator', 'architect')
+    ):
         usage.pro_gates = []
     if trigger == 'mcp_daily_cap' and policy.mcp_daily_caps_enabled() and entitlement is not None:
         from database.ladder_v1 import daily_cap_reached
 
         try:
-            usage.mcp_cap_reached = daily_cap_reached(uid, catalog.ENTITLEMENT_VERSIONS['ladder_v1']['mcp_daily_caps'][entitlement['plan_id']])
+            usage.mcp_cap_reached = daily_cap_reached(
+                uid, catalog.ENTITLEMENT_VERSIONS['ladder_v1']['mcp_daily_caps'][entitlement['plan_id']]
+            )
         except Exception:
             _degraded('storefront_daily_cap', 'unavailable_usage')
     return build_storefront(

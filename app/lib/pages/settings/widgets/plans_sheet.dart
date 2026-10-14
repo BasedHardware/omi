@@ -385,7 +385,9 @@ class _PlansSheetState extends State<PlansSheet> {
       final confirmed = await showDialog<bool>(
         context: context,
         builder: (ctx) => OmiAlertDialog(
-          title: l10n.upgradeToAnnualPlan,
+          title: storefrontPrice?.confirmLines.isNotEmpty == true
+              ? (storefrontPrice!.ctaLabel ?? l10n.upgradeToAnnualPlan)
+              : l10n.upgradeToAnnualPlan,
           content: Material(
             type: MaterialType.transparency,
             child: Column(
@@ -393,8 +395,9 @@ class _PlansSheetState extends State<PlansSheet> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 if (storefrontPrice?.confirmLines.isNotEmpty == true)
-                  ...storefrontPrice!.confirmLines
-                      .map((line) => PlanDialogLine(icon: FontAwesomeIcons.calendarDay, text: line))
+                  ...storefrontPrice!.confirmLines.map((line) => Padding(
+                      padding: const EdgeInsets.only(bottom: OmiSpacing.sm),
+                      child: Text(line, style: OmiType.callout.copyWith(color: OmiColors.textPrimary))))
                 else ...[
                   Text(
                     l10n.importantBillingInfo,
@@ -417,7 +420,12 @@ class _PlansSheetState extends State<PlansSheet> {
           ),
           actions: [
             OmiDialogAction(label: l10n.cancel, onPressed: () => Navigator.of(ctx).pop(false)),
-            OmiDialogAction(label: l10n.confirmUpgrade, isDefault: true, onPressed: () => Navigator.of(ctx).pop(true)),
+            OmiDialogAction(
+                label: storefrontPrice?.confirmLines.isNotEmpty == true
+                    ? (storefrontPrice!.ctaLabel ?? l10n.confirmUpgrade)
+                    : l10n.confirmUpgrade,
+                isDefault: true,
+                onPressed: () => Navigator.of(ctx).pop(true)),
           ],
         ),
       );

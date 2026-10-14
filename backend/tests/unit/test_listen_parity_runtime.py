@@ -177,13 +177,20 @@ def _install_runtime_fakes(monkeypatch, runtime, stt_sockets, blocking_calls):
     monkeypatch.setattr(runtime, '_build_components', build_components)
 
 
+@pytest.fixture
+def parity_export_module():
+    import routers.listen.parity_pack_export as export_module
+
+    return export_module
+
+
 @pytest.mark.asyncio
 @pytest.mark.parametrize('fail_usage', [False, True], ids=['normal-close', 'teardown-persistence-failure'])
 async def test_listen_runtime_persists_and_exports_capture_exactly_once_after_close(
-    tmp_path, monkeypatch, caplog, fail_usage
+    tmp_path, monkeypatch, caplog, fail_usage, parity_export_module
 ):
     """Bootstrap, real receiver callback attachment, audio, close, persist, export."""
-    import routers.listen.parity_pack_export as export_module
+    export_module = parity_export_module
 
     root = tmp_path / 'absolute-capture-root'
     monkeypatch.setenv('OMI_ENV_STAGE', 'dev')
