@@ -530,9 +530,12 @@ overlay:
             version: latest
         env:
           <<: *batch_cohort
-          # David-only channel launch; recovery runs inside this backend process.
+          # Telegram all-paid launch; iMessage retains the exact legacy cohort without a seat counter.
           OMI_MESSAGING_CHANNELS: {value: 'on', category: rollout}
           OMI_MESSAGING_CHANNELS_UIDS: {value: 'vi7SA9ckQCe4ccobWNxlbdcNdC23', category: rollout}
+          OMI_MESSAGING_CHANNEL_POLICY: {value: '{"telegram":{"enabled":true,"cohort":"*"},"imessage":{"enabled":true,"cohort":["vi7SA9ckQCe4ccobWNxlbdcNdC23"],"seat_cap":"off"}}', category: rollout}
+          OMI_TELEGRAM_STREAMING: {value: 'none', category: rollout}
+          OMI_TELEGRAM_SHARED_PACING: {value: 'on', category: rollout}
           OMI_TELEGRAM_ENABLED: {value: 'on', category: rollout}
           OMI_IMESSAGE_ENABLED: {value: 'on', category: rollout}
           OMI_IMESSAGE_PROVIDER: {value: 'linq', category: rollout}

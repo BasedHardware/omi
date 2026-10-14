@@ -963,6 +963,12 @@ sdist = { url = "https://files.pythonhosted.org/packages/1c/3d/bb7fca845737cf9d7
 wheels = [{ url = "https://files.pythonhosted.org/packages/63/c6/4bad1b18d132a50b27e1365e1ab163616f7a5bb56d330f66f9d1d9d4f9d4/pillow-12.3.0-cp311-cp311-win_amd64.whl", upload-time = 2026-07-01T11:54:02Z, size = 7233653, hashes = { sha256 = "8e95e1385e4998ae9694eeaa4730ba5457ff61185b3a55e2e7bea0880aef452a" } }]
 
 [[packages]]
+name = "pillow-heif"
+version = "1.3.0"
+sdist = { url = "https://files.pythonhosted.org/packages/cd/58/2df4fc42840633e01c97b75965cb1bc6e14425973b92382391650e97e4b7/pillow_heif-1.3.0.tar.gz", upload-time = 2026-02-27T12:21:36Z, size = 17133211, hashes = { sha256 = "af8d2bda85e395677d5bb50d7bda3b5655c946cc95b913b5e7222fabacbb467f" } }
+wheels = [{ url = "https://files.pythonhosted.org/packages/32/c8/81b89012508d29aaa0de9a888c6925d8138e390242c20ed75bcbdbbfbbde/pillow_heif-1.3.0-cp311-cp311-win_amd64.whl", upload-time = 2026-02-27T12:20:43Z, size = 5483492, hashes = { sha256 = "b5a1458bc11ca83cd72ec4a93f739ad3ae4315ae66766022ec16d12993a863a4" } }]
+
+[[packages]]
 name = "pinecone"
 version = "7.3.0"
 sdist = { url = "https://files.pythonhosted.org/packages/fa/38/12731d4af470851b4963eba616605868a8599ef4df51c7b6c928e5f3166d/pinecone-7.3.0.tar.gz", upload-time = 2025-06-27T20:03:51Z, size = 235256, hashes = { sha256 = "307edc155621d487c20dc71b76c3ad5d6f799569ba42064190d03917954f9a7b" } }
