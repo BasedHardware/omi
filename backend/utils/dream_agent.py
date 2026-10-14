@@ -28,9 +28,10 @@ from database.dream_dirty import dream_writing
 from models.dream_agent import Triage, Plan
 from models.dream_refs import base_ref, has_ref, cited_value
 from utils import dream_capacity, dream_reads, dream_tools, dream_transport, dream_guards
-from utils.dream_consensus import majority
+from utils.dream_consensus import majority, unanimous_spelling, plan_dump, item_dump
 from utils.dream_context import EvidenceRecords, target_refs, cluster_hints, REASONING_TARGET_LIMIT
-from utils.dream_grounding import spelling_grounding_rejection, spelling_question
+from utils.dream_grounding import spelling_grounding_rejection, spelling_question, rank_questions
+from utils.dream_decisions import edit_decisions, offer_questions
 from utils.executors import db_executor, postprocess_executor, run_blocking
 from utils.llm.shaped_agent import run_loop
 from utils.dream_metrics import record_pass, error_code, record_reclaimed
@@ -89,7 +90,7 @@ async def plan_pass(uid, records, caps, *, turn=None, usage_sink=None, vocabular
                 targets=len(selected.targets),
                 records=len(selected),
                 input_tokens_estimate=dream_transport.input_estimate(
-                    active_mount.messages(messages), Plan.model_json_schema()
+                    active_mount.messages(messages), active_mount.schema.model_json_schema()
                 ),
             )
             usage_sink['admitted_records'] = selected
@@ -187,7 +188,7 @@ async def plan_pass(uid, records, caps, *, turn=None, usage_sink=None, vocabular
             raise next(result for result in results if isinstance(result, Exception))
         plan = majority(plans, usage_sink=usage_sink)
         if usage_sink is not None:
-            usage_sink['raw_plan'] = plan.model_dump(mode='python')
+            usage_sink['raw_plan'] = plan_dump(plan, full=True)
         return dream_guards.filter_plan(plan, selected, usage_sink=usage_sink), sum(
             sink['tokens'] for sink in sample_usage
         )
@@ -301,17 +302,24 @@ async def dry_run(uid, records, *, targets=None, caps=None, turn=None, vocabular
                 counts['privacy_rejected'] += 1
                 sink['rejected'] = dict(counts)
         plan = plan.model_copy(update={'feedback': dream_guards.cap_feedback(accepted, usage_sink=sink)})
-    proposed = plan.model_dump(mode='python')
+    full = caps.context_mode == 'full'
+    proposed = plan_dump(plan, full=full)
     for edit, row in zip(plan.edits, proposed['edits']):
         reason = spelling_grounding_rejection(edit, evidence, vocabulary or [])
-        row['policy'] = 'suggest' if reason else apply_policy(edit.kind, auto_apply_kinds())
+        if full and unanimous_spelling(edit) and reason == 'ungrounded_spelling':
+            reason = None
+        row['policy'] = 'suggest' if reason else apply_policy(edit.kind, auto_apply_kinds(uid))
         if reason == 'ungrounded_spelling':
             sink.setdefault('rejected', {}).setdefault(reason, 0)
             sink['rejected'][reason] += 1
             if not dream_guards.verbatim_quote(edit.before, cited_value(edit.target, evidence)):
                 sink['rejected']['invalid_question_evidence'] = sink['rejected'].get('invalid_question_evidence', 0) + 1
+            elif full:
+                plan.questions.append(spelling_question(edit, full=True))
             elif len(proposed['questions']) < 3:
                 proposed['questions'].append(spelling_question(edit).model_dump(mode='python'))
+    if full:
+        proposed['questions'] = [item_dump(item) for item in rank_questions(plan.questions, usage_sink=sink)[:3]]
     result = {
         'plan': proposed,
         'guard_decisions': sink.get('rejected', {}),
@@ -486,12 +494,20 @@ async def _run_admitted_pass(
             seeded.update(set(records) - inspected)  # Retrieval-only refs have no inspected dirty version.
             report.pop('raw_plan', None)  # Raw private feedback is only returned to the dry-run caller.
             plan = dream_guards.filter_plan(plan, records, targets=target_refs(records), usage_sink=report)
+            full = caps.context_mode == 'full'
+            if full:
+                report.update(
+                    auto_applied_unanimous=0,
+                    suggested_majority=0,
+                    questions_offered=0,
+                    questions_dropped_low_value=report.get('questions_dropped_low_value', 0),
+                )
             report.update(
                 status='planned',
                 tokens=tokens,
                 cost_usd_upper_bound=tokens * caps.max_usd_per_token,
                 # A privacy timeout/fault must not leave unchecked feedback in the failed report.
-                proposed={**plan.model_dump(mode='python'), 'feedback': []},
+                proposed={**plan_dump(plan, full=full), 'feedback': []},
                 outcomes=[],
             )
             # Reject feedback before even saving it in a per-user shadow report.
@@ -515,30 +531,15 @@ async def _run_admitted_pass(
             accepted = dream_guards.cap_feedback(accepted, usage_sink=report)
             report['proposed']['feedback'] = [f.model_dump() for f in accepted]
             demoted = await run_blocking(db_executor, dream_store.demoted_types, uid, caps)
-            automatic = auto_apply_kinds() - demoted
-            grounding = {
-                dream_tools.edit_key(edit, records): spelling_grounding_rejection(edit, records, vocabulary)
-                for edit in plan.edits
-            }
-            ungrounded = sum(reason == 'ungrounded_spelling' for reason in grounding.values())
-            if ungrounded:
-                counts = Counter(report.get('rejected', {}))
-                counts['ungrounded_spelling'] += ungrounded
-                report['rejected'] = dict(counts)
-            edit_policies = {
-                dream_tools.edit_key(edit, records): (
-                    'suggest'
-                    if dream_tools.edit_key(edit, records).split(':')[1] in demoted
-                    or grounding[dream_tools.edit_key(edit, records)]
-                    else apply_policy(edit.kind, automatic)
-                )
-                for edit in plan.edits
-            }
+            automatic = auto_apply_kinds(uid) - demoted
+            grounding, edit_policies = edit_decisions(plan, records, vocabulary, automatic, demoted, full, report)
             for edit, proposed_edit in zip(plan.edits, report['proposed']['edits']):
                 proposed_edit['policy'] = edit_policies[dream_tools.edit_key(edit, records)]
             for term in report['proposed']['vocabulary']:
                 term['policy'] = apply_policy('vocabulary', automatic)
             outcomes: list[dict[str, Any]] = report['outcomes']
+            queued_questions = list(plan.questions)
+            question_edits = {}
             token = dream_writing.set(True)
             try:
 
@@ -573,6 +574,12 @@ async def _run_admitted_pass(
                     elif remaining <= 0:
                         status = 'edit_cap'
                     else:
+                        if full and grounding[key] == 'ungrounded_spelling':
+                            item = spelling_question(edit, full=True)
+                            queued_questions.append(item)
+                            question_edits[item.item_id] = edit
+                            outcomes.append({'key': key, 'status': 'suggest_only', 'policy': 'suggest'})
+                            continue
                         remaining -= 1
                         is_question = grounding[key] == 'ungrounded_spelling'
                         tool = (
@@ -580,6 +587,8 @@ async def _run_admitted_pass(
                             if edit_policies[key] == 'auto'
                             else dream_tools.suggest_spelling if is_question else dream_tools.suggest_edit
                         )
+                        if full and edit_policies[key] == 'auto' and unanimous_spelling(edit):
+                            tool = dream_tools.apply_unanimous_edit
                         try:
                             if is_question:
                                 report['proposed']['questions'].append(
@@ -594,20 +603,35 @@ async def _run_admitted_pass(
                                 remaining += 1
                             if is_question and status == 'suggestion_cap':
                                 deferred.add(base_ref(edit.target))
+                            if full and status == 'applied' and unanimous_spelling(edit):
+                                report['auto_applied_unanimous'] += 1
                         except (ValueError, review_store.ReviewConflict, review_store.ReviewNotFound):
                             status = 'invalid_evidence'
                     outcomes.append({'key': key, 'status': status, 'policy': edit_policies[key]})
-                attention = await run_blocking(db_executor, review_store.remaining_today, uid)
-                if lease['mode'] == 'on' and mode() == 'on' and plan.questions:
-                    attention = await run_blocking(
-                        db_executor,
-                        dream_store.reserve_questions,
+                if full:
+                    remaining = await offer_questions(
                         uid,
                         lease['run_id'],
-                        min(len(plan.questions), attention),
+                        records,
+                        queued_questions,
+                        question_edits,
+                        remaining,
+                        deferred,
+                        report,
+                        effect,
                     )
-                for item in plan.questions[:attention]:
-                    outcomes.append({'tool': 'ask', 'status': await effect(dream_tools.ask, item, records)})
+                else:
+                    attention = await run_blocking(db_executor, review_store.remaining_today, uid)
+                    if lease['mode'] == 'on' and mode() == 'on' and plan.questions:
+                        attention = await run_blocking(
+                            db_executor,
+                            dream_store.reserve_questions,
+                            uid,
+                            lease['run_id'],
+                            min(len(plan.questions), attention),
+                        )
+                    for item in plan.questions[:attention]:
+                        outcomes.append({'tool': 'ask', 'status': await effect(dream_tools.ask, item, records)})
                 # Slow tasks share the per-pass write budget; cannot bypass edit caps.
                 for task in plan.slow_tasks[:remaining]:
                     remaining -= 1

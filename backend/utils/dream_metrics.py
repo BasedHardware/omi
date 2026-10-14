@@ -13,6 +13,8 @@ POLICY_WARNINGS = Counter('omi_dream_policy_warning_total', 'Ignored auto-apply 
 
 TOKENS = Counter('omi_dream_tokens_total', 'Observed dream model tokens')
 RESPONSE_RETRIES = Counter('omi_dream_response_retries_total', 'Dream malformed/truncated JSON response retries')
+DECISIONS = Counter('omi_dream_decision_total', 'Full-mode Dream decisions', ['decision'])
+DECISION_COUNTS = ('auto_applied_unanimous', 'suggested_majority', 'questions_offered', 'questions_dropped_low_value')
 CANARY = Counter('omi_dream_canary_total', 'Dream synthetic loop outcomes', ['status', 'stage'])
 
 REJECTED = Counter('omi_dream_rejected_total', 'Dream deterministic proposal rejections', ['reason'])
@@ -146,6 +148,8 @@ def record_pass(report):
     TOKENS.inc(max(0, int(report.get('tokens', 0))))
     retries = max(0, int(report.get('response_retries', 0)))
     RESPONSE_RETRIES.inc(retries)
+    for decision in DECISION_COUNTS:
+        DECISIONS.labels(decision).inc(max(0, int(report.get(decision, 0))))
 
     for reason, count in report.get('rejected', {}).items():
         if reason in REJECTION_REASONS:
@@ -173,7 +177,7 @@ def record_pass(report):
     logger.info(
         'Dream pass status=%s error_code=%s context_mode=%s input_tokens_estimate=%d targets=%d records=%d response_retries=%d '
         'samples_requested=%d samples_returned=%d samples_failed=%d consensus_threshold=%d '
-        'samples_attempted=%d samples_capacity_wait=%d capacity_retries=%d '
+        'samples_attempted=%d samples_capacity_wait=%d capacity_retries=%d decisions=%s '
         'triage_evidence_chars=%d reasoning_evidence_chars=%d '
         'dropped_invalid=%s validation_errors=%s rejected=%s poisoned=%d retrieval_counts=%s '
         'retrieval_failure_counts=%s dirty_counts=%s target_context_counts=%s input_content_counts=%s context_budget_counts=%s',
@@ -191,6 +195,7 @@ def record_pass(report):
         max(0, int(report.get('samples_attempted', 0))),
         max(0, int(report.get('samples_capacity_wait', 0))),
         max(0, int(report.get('capacity_retries', 0))),
+        json.dumps({key: max(0, int(report.get(key, 0))) for key in DECISION_COUNTS}, sort_keys=True),
         triage,
         reasoning,
         json.dumps(report.get('dropped_invalid', {}), sort_keys=True),

@@ -42,7 +42,7 @@ def full_context_enabled() -> bool:
     )
 
 
-def auto_apply_kinds() -> frozenset[str]:
+def auto_apply_kinds(uid: str | None = None) -> frozenset[str]:
     """An override may narrow safe automation; risky operations always require Review."""
     value = os.getenv('DREAM_AGENT_AUTO_APPLY_KINDS')
     if value is None:
@@ -55,7 +55,8 @@ def auto_apply_kinds() -> frozenset[str]:
 
         POLICY_WARNINGS.inc(len(ignored))
         logging.getLogger(__name__).warning('Dream auto-apply policy ignored kinds count=%d', len(ignored))
-    return frozenset(requested & AUTO)
+    effective = frozenset(requested & AUTO)
+    return effective | {'spelling'} if uid is not None and context_mode(uid) == 'full' else effective
 
 
 def apply_policy(kind: str, automatic: frozenset[str]) -> str:
