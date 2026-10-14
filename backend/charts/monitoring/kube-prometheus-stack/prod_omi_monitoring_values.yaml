@@ -106,8 +106,9 @@ grafana:
 # 2026-10-14: the operator ran BestEffort on the monitoring node and was
 # SIGTERM-killed by its own liveness probe 48 times in 31h whenever Prometheus
 # pinned the node's CPU. Requests buy it a guaranteed share (measured use:
-# 2-25m CPU, 25Mi). Probe timeout stays at the chart default.
-operator:
+# 2-25m CPU, 25Mi). Probe timeout stays at the chart default. The chart key is
+# prometheusOperator; a top-level "operator:" key is silently ignored.
+prometheusOperator:
   resources:
     requests:
       cpu: 50m
