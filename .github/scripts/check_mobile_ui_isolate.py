@@ -183,6 +183,22 @@ def _allowed_at(text: str, line_start: int, line_end: int, rule_id: str) -> bool
     return above.lstrip().startswith("//") and _allowed(above, rule_id)
 
 
+def _in_interpolation(line: str, column: int) -> bool:
+    """True when [column] is inside a `${...}` interpolation, which is executable code."""
+    for match in re.finditer(r"\$\{", line):
+        depth = 0
+        for index in range(match.end() - 1, len(line)):
+            if line[index] == "{":
+                depth += 1
+            elif line[index] == "}":
+                depth -= 1
+                if depth == 0:
+                    if match.end() <= column < index:
+                        return True
+                    break
+    return False
+
+
 def find_hits(text: str, path: str = "app/lib/x.dart") -> dict[str, list[int]]:
     """Map rule id -> 1-based line numbers of every counted hit in [text]."""
     hits: dict[str, list[int]] = {rule_id: [] for rule_id in RULE_IDS}
@@ -193,7 +209,7 @@ def find_hits(text: str, path: str = "app/lib/x.dart") -> dict[str, list[int]]:
             start, end = _line_bounds(text, match.start())
             line = text[start:end]
             column = match.start() - start
-            if _in_comment(line, column) or _in_string(line, column):
+            if _in_comment(line, column) or (_in_string(line, column) and not _in_interpolation(line, column)):
                 continue
             if rule.accept is not None and not rule.accept(text, match):  # type: ignore[operator]
                 continue

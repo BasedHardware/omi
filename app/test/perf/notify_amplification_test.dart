@@ -51,6 +51,9 @@ class _CountingSegments extends ListBase<TranscriptSegment> {
   @override
   set length(int value) => _inner.length = value;
 
+  @override
+  void add(TranscriptSegment element) => _inner.add(element);
+
   /// Element reads; a full walk of N segments reads N elements.
   int reads = 0;
 
@@ -157,5 +160,27 @@ void main() {
 
     expect(transcript.reads - readsAfterFirstPersist, 0,
         reason: 'state/metrics/socket notifies must not cost O(transcript) on the UI isolate');
+  });
+
+  test('a burst of transcript events costs one snapshot per write, not one walk per event', () async {
+    final dir = await Directory.systemTemp.createTemp('notify-amplification-burst-');
+    addTearDown(() => dir.delete(recursive: true));
+    final capture = CaptureProvider(localSegmentStore: LocalSegmentStore.at(dir));
+    addTearDown(capture.dispose);
+    capture.testSessionStartSeconds = 1700000200;
+    final transcript = _CountingSegments([for (var i = 0; i < 400; i++) _seg(i)]);
+    capture.segments = transcript;
+
+    // 50 new segments arrive faster than a write completes.
+    for (var i = 400; i < 450; i++) {
+      transcript.add(_seg(i));
+      capture.notifyListeners();
+    }
+    await capture.pendingLiveSegmentWrite;
+
+    expect(transcript.reads, lessThan(transcript.length * 3),
+        reason: 'each segment event must not walk the whole transcript on the UI isolate');
+    final saved = await LocalSegmentStore.at(dir).loadSession('live-1700000200');
+    expect(saved.length, 450, reason: 'the coalesced write still lands the latest transcript');
   });
 }

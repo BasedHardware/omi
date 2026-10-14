@@ -87,6 +87,11 @@ class RuleTests(unittest.TestCase):
         self.assertEqual(count_hits("// dir.listSync() used to block here", PROVIDER)["sync-file-io"], 0)
         self.assertEqual(count_hits("final s = 'file.existsSync()';", PROVIDER)["sync-file-io"], 0)
 
+    def test_interpolated_code_counts(self) -> None:
+        self.assertEqual(count_hits("final s = 'raw: ${file.readAsStringSync()}';", PROVIDER)["sync-file-io"], 1)
+        self.assertEqual(count_hits("log('index ${jsonEncode(history)}');", WAL_INDEX)["history-json-on-ui"], 1)
+        self.assertEqual(count_hits("final s = 'call file.existsSync() later';", PROVIDER)["sync-file-io"], 0)
+
     def test_async_io_is_clean(self) -> None:
         clean = "final files = await dir.list().toList(); if (await file.exists()) await file.readAsString();"
         self.assertEqual(count_hits(clean, PROVIDER)["sync-file-io"], 0)
