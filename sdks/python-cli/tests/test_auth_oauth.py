@@ -365,3 +365,35 @@ def test_exchange_firebase_token_raises_when_key_field_missing(monkeypatch) -> N
     with pytest.raises(AuthError) as info:
         oauth._exchange_firebase_token_for_dev_key("https://api.test.omi.local", "tok")
     assert "missing the api key" in str(info.value).lower()
+
+
+def test_store_oauth_tokens_can_keep_a_minted_dev_key(config_path) -> None:
+    """The browser-login profile must be oauth (for chat) AND keep the dev key.
+
+    #21223: browser login minted an api_key profile, so `omi chat` rejected it
+    with "Chat requires browser sign-in". store_oauth_tokens now accepts an
+    optional api_key so the profile is oauth AND the /v1/dev/* calls still
+    have their key.
+    """
+    from omi_cli.auth.store import store_oauth_tokens
+
+    profile = store_oauth_tokens(
+        "default",
+        id_token="idt",
+        refresh_token="rt",
+        expires_at=9999.0,
+        api_key="omi_dev_key",
+    )
+    assert profile.auth_method == "oauth"
+    assert profile.api_key == "omi_dev_key"
+    assert profile.id_token == "idt"
+    assert profile.refresh_token == "rt"
+
+
+def test_store_oauth_tokens_without_key_still_nulls_it(config_path) -> None:
+    """Backwards-compatible: no api_key passed -> api_key cleared as before."""
+    from omi_cli.auth.store import store_oauth_tokens
+
+    profile = store_oauth_tokens("default", id_token="idt", refresh_token="rt", expires_at=9999.0)
+    assert profile.auth_method == "oauth"
+    assert profile.api_key is None
