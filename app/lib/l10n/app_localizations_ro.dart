@@ -5673,11 +5673,6 @@ class AppLocalizationsRo extends AppLocalizations {
   String get downloadingFromSdCard => 'Se descarcă de pe cardul SD';
 
   @override
-  String processingProgress(int current, int total) {
-    return 'Se procesează $current/$total';
-  }
-
-  @override
   String conversationsCreated(int count) {
     return '$count conversații create';
   }
@@ -9134,18 +9129,10 @@ class AppLocalizationsRo extends AppLocalizations {
   }
 
   @override
-  String syncCardProgressOf(int current, int total) {
-    return '$current din $total';
-  }
-
-  @override
   String get syncStatusOnDevice => 'Pe dispozitivul tău';
 
   @override
   String get syncStatusDownloadingFromDevice => 'Se descarcă de pe dispozitivul tău';
-
-  @override
-  String get newestFirst => 'Cele mai noi primele';
 
   @override
   String get noSyncedRecordingsYet => 'Încă nu există înregistrări sincronizate';
@@ -12052,9 +12039,6 @@ class AppLocalizationsRo extends AppLocalizations {
   }
 
   @override
-  String get localCopiesSection => 'Copii locale';
-
-  @override
   String speakerLabelLinesLabeled(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,
@@ -13271,4 +13255,79 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get connectAnAgentSubtitle => 'Obține un prompt de configurare pentru Claude, ChatGPT, Codex sau orice agent';
+
+  @override
+  String syncCardSyncingAmount(String amount) {
+    return 'Se sincronizează $amount de audio';
+  }
+
+  @override
+  String get syncCardSyncingTitle => 'Se sincronizează înregistrările';
+
+  @override
+  String syncStepDownloadingAmount(String done, String total) {
+    return 'Se descarcă de pe Omi · $done din $total';
+  }
+
+  @override
+  String syncStepUploadingAmount(String done, String total) {
+    return 'Se încarcă · $done din $total';
+  }
+
+  @override
+  String syncCardTranscribingAmount(String amount) {
+    return 'Se transformă $amount în conversații';
+  }
+
+  @override
+  String syncCardTranscribedOf(String done, String total) {
+    return '$done din $total gata · poți părăsi acest ecran';
+  }
+
+  @override
+  String syncCardReadyAmount(String amount) {
+    return '$amount gata de sincronizare';
+  }
+
+  @override
+  String get syncStepLabelDownload => 'Omi → telefon';
+
+  @override
+  String get syncStepLabelUpload => 'Încărcare';
+
+  @override
+  String get syncStepLabelTranscribe => 'Transcriere';
+
+  @override
+  String get syncDetailsTitle => 'Detalii sincronizare';
+
+  @override
+  String get syncDetailsRightNow => 'Chiar acum';
+
+  @override
+  String get syncDetailsYourOmi => 'Omi-ul tău';
+
+  @override
+  String get syncDetailsTransferSpeed => 'Viteză de transfer';
+
+  @override
+  String get syncDetailsWaitingOnOmi => 'Așteaptă Omi-ul';
+
+  @override
+  String get syncDetailsWaitingOnPhone => 'Așteaptă pe acest telefon';
+
+  @override
+  String get syncDetailsTranscribing => 'Se transcrie pe Omi';
+
+  @override
+  String get syncDetailsForSupport => 'Pentru asistență';
+
+  @override
+  String get syncDetailsAudioFiles => 'Fișiere audio';
+
+  @override
+  String get syncDetailsServerJobs => 'Joburi pe server (finalizate / total)';
+
+  @override
+  String get syncDetailsCopy => 'Copiază detaliile pentru asistență';
 }

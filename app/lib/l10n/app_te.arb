@@ -6818,18 +6818,6 @@
     "@downloadingFromSdCard": {
         "description": "Progress label when downloading from SD card"
     },
-    "processingProgress": "{current}/{total} ప్రక్రియ చేస్తున్నాను",
-    "@processingProgress": {
-        "description": "Progress label showing current/total items",
-        "placeholders": {
-            "current": {
-                "type": "int"
-            },
-            "total": {
-                "type": "int"
-            }
-        }
-    },
     "conversationsCreated": "{count} సంభాషణలు సృష్టించబడ్డాయి",
     "@conversationsCreated": {
         "description": "Success message showing number of conversations created",
@@ -10359,10 +10347,8 @@
     "syncStatusConversationCreated": "సంభాషణ సృష్టించబడింది",
     "syncCardUploadingTitle": "Omi కి అప్‌లోడ్ అవుతోంది",
     "syncCardDownloadingTitle": "మీ పరికరం నుండి డౌన్‌లోడ్ అవుతోంది",
-    "syncCardProgressOf": "{total}లో {current}",
     "syncStatusOnDevice": "మీ పరికరంలో",
     "syncStatusDownloadingFromDevice": "మీ పరికరం నుండి డౌన్‌లోడ్ అవుతోంది",
-    "newestFirst": "కొత్తవి మొదట",
     "noSyncedRecordingsYet": "ఇంకా సమకాలీకరించిన రికార్డింగ్‌లు లేవు",
     "morePaymentMethodsComingSoon": "మరిన్ని చెల్లింపు పద్ధతులు త్వరలో",
     "@morePaymentMethodsComingSoon": {
@@ -11157,7 +11143,6 @@
     "autoRemoveSyncedCopiesTitle": "సింక్ చేసిన కాపీలను స్వయంచాలకంగా తొలగించు",
     "autoRemoveSyncedCopiesDays": "సింక్ చేసిన కాపీలు {days} రోజుల తర్వాత తొలగించబడతాయి",
     "autoRemoveSyncedCopiesDescription": "సింక్ అయిన {days} రోజుల తర్వాత స్థానిక కాపీలను తొలగిస్తుంది. క్లౌడ్ కాపీలు ఉంచబడతాయి.",
-    "localCopiesSection": "స్థానిక కాపీలు",
     "speakerLabelLinesLabeled": "{count, plural, =1{1 లైన్‌కు లేబుల్ వేయబడింది} other{{count} లైన్లకు లేబుల్ వేయబడింది}}",
     "speakerLabelVoiceStatus": "{state, select, learned{వాయిస్ నేర్చుకుంది} pending{వాయిస్‌ను నేర్చుకుంటోంది…} disabled{వాయిస్ సేవింగ్ ఆఫ్‌లో ఉంది} other{వాయిస్ ఇంకా నేర్చుకోలేదు}}",
     "speakerLabelVoiceDetail": "{state, select, learned{Omi వచ్చే సారి {name} ను గుర్తిస్తుంది.} pending{దీనికి కొన్ని సెకన్లు పడుతుంది.} disabled{Omi {name} ను గుర్తించేందుకు సెట్టింగ్‌లలో వాయిస్ సేవింగ్ ఆన్ చేయండి.} other{Omi కి {name} యొక్క మరింత స్పష్టమైన మాట అవసరం, అది ప్రయత్నిస్తూనే ఉంటుంది.}}",
@@ -11495,5 +11480,26 @@
     "paywallOutlineHeadline": "ఇకపై ఒక్క మాట కూడా మిస్ అవ్వకండి.",
     "paywallCancelAnytime": "ఎప్పుడైనా రద్దు చేసుకోవచ్చు.",
     "connectAnAgent": "ఏజెంట్‌ను కనెక్ట్ చేయండి",
-    "connectAnAgentSubtitle": "Claude, ChatGPT, Codex లేదా ఏ ఏజెంట్‌కైనా సెటప్ ప్రాంప్ట్ పొందండి"
+    "connectAnAgentSubtitle": "Claude, ChatGPT, Codex లేదా ఏ ఏజెంట్‌కైనా సెటప్ ప్రాంప్ట్ పొందండి",
+    "syncCardSyncingAmount": "{amount} ఆడియో సింక్ అవుతోంది",
+    "syncCardSyncingTitle": "మీ రికార్డింగ్‌లు సింక్ అవుతున్నాయి",
+    "syncStepDownloadingAmount": "మీ Omi నుండి డౌన్‌లోడ్ · {done} / {total}",
+    "syncStepUploadingAmount": "అప్‌లోడ్ · {done} / {total}",
+    "syncCardTranscribingAmount": "{amount} సంభాషణలుగా మార్చబడుతోంది",
+    "syncCardTranscribedOf": "{done} / {total} పూర్తయింది · మీరు ఈ స్క్రీన్ నుండి వెళ్లవచ్చు",
+    "syncCardReadyAmount": "{amount} సింక్ కోసం సిద్ధంగా ఉంది",
+    "syncStepLabelDownload": "Omi → ఫోన్",
+    "syncStepLabelUpload": "అప్‌లోడ్",
+    "syncStepLabelTranscribe": "ట్రాన్స్క్రిప్షన్",
+    "syncDetailsTitle": "సింక్ వివరాలు",
+    "syncDetailsRightNow": "ప్రస్తుతం",
+    "syncDetailsYourOmi": "మీ Omi",
+    "syncDetailsTransferSpeed": "బదిలీ వేగం",
+    "syncDetailsWaitingOnOmi": "Omi లో వేచి ఉంది",
+    "syncDetailsWaitingOnPhone": "ఈ ఫోన్‌లో వేచి ఉంది",
+    "syncDetailsTranscribing": "Omi లో ట్రాన్స్క్రైబ్ అవుతోంది",
+    "syncDetailsForSupport": "సపోర్ట్ కోసం",
+    "syncDetailsAudioFiles": "ఆడియో ఫైళ్లు",
+    "syncDetailsServerJobs": "సర్వర్ జాబ్‌లు (పూర్తైనవి / మొత్తం)",
+    "syncDetailsCopy": "సపోర్ట్ కోసం వివరాలను కాపీ చేయండి"
 }

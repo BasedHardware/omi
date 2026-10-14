@@ -6818,18 +6818,6 @@
     "@downloadingFromSdCard": {
         "description": "Progress label when downloading from SD card"
     },
-    "processingProgress": "Апрацаванне {current}/{total}",
-    "@processingProgress": {
-        "description": "Progress label showing current/total items",
-        "placeholders": {
-            "current": {
-                "type": "int"
-            },
-            "total": {
-                "type": "int"
-            }
-        }
-    },
     "conversationsCreated": "{count} разговор(аў) стварана",
     "@conversationsCreated": {
         "description": "Success message showing number of conversations created",
@@ -10359,10 +10347,8 @@
     "syncStatusConversationCreated": "Размова створана",
     "syncCardUploadingTitle": "Запампоўка ў Omi",
     "syncCardDownloadingTitle": "Загрузка з вашага прыбора",
-    "syncCardProgressOf": "{current} з {total}",
     "syncStatusOnDevice": "На вашым прыборы",
     "syncStatusDownloadingFromDevice": "Загрузка з вашага прыбора",
-    "newestFirst": "Спачатку новыя",
     "noSyncedRecordingsYet": "Пакуль няма сінхранізаваных запісаў",
     "morePaymentMethodsComingSoon": "Хутка з'явяцца новыя спосабы аплаты",
     "@morePaymentMethodsComingSoon": {
@@ -11157,7 +11143,6 @@
     "autoRemoveSyncedCopiesTitle": "Аўтаматычна выдаляць сінхранізаваныя копіі",
     "autoRemoveSyncedCopiesDays": "Сінхранізаваныя копіі выдаляюцца праз {days} дзён",
     "autoRemoveSyncedCopiesDescription": "Выдаляе лакальныя копіі праз {days} дзён пасля сінхранізацыі. Воблачныя копіі захоўваюцца.",
-    "localCopiesSection": "Лакальныя копіі",
     "speakerLabelLinesLabeled": "{count, plural, =1{Пазначаны 1 радок} other{Пазначана радкоў: {count}}}",
     "speakerLabelVoiceStatus": "{state, select, learned{Голас запомнены} pending{Вывучэнне голасу…} disabled{Захаванне голасу выключана} other{Голас яшчэ не вывучаны}}",
     "speakerLabelVoiceDetail": "{state, select, learned{Omi пазнае {name} наступным разам.} pending{Гэта зойме некалькі секунд.} disabled{Уключыце захаванне галасоў у Наладах, каб Omi мог пазнаваць {name}.} other{Omi патрэбна больш выразнай мовы ад {name}, і ён будзе працягваць спробы.}}",
@@ -11495,5 +11480,26 @@
     "paywallOutlineHeadline": "Больш не прапусціце ніводнага слова.",
     "paywallCancelAnytime": "Адмяняйце ў любы час.",
     "connectAnAgent": "Падключыць агента",
-    "connectAnAgentSubtitle": "Атрымайце падказку для наладкі Claude, ChatGPT, Codex або любога агента"
+    "connectAnAgentSubtitle": "Атрымайце падказку для наладкі Claude, ChatGPT, Codex або любога агента",
+    "syncCardSyncingAmount": "Сінхранізацыя {amount} аўдыё",
+    "syncCardSyncingTitle": "Сінхранізацыя запісаў",
+    "syncStepDownloadingAmount": "Спампоўка з Omi · {done} з {total}",
+    "syncStepUploadingAmount": "Загрузка на сервер · {done} з {total}",
+    "syncCardTranscribingAmount": "Ператварэнне {amount} у размовы",
+    "syncCardTranscribedOf": "Гатова {done} з {total} · можна пакінуць гэты экран",
+    "syncCardReadyAmount": "{amount} гатова да сінхранізацыі",
+    "syncStepLabelDownload": "Omi → тэлефон",
+    "syncStepLabelUpload": "Загрузка",
+    "syncStepLabelTranscribe": "Расшыфроўка",
+    "syncDetailsTitle": "Дэталі сінхранізацыі",
+    "syncDetailsRightNow": "Цяпер",
+    "syncDetailsYourOmi": "Ваш Omi",
+    "syncDetailsTransferSpeed": "Хуткасць перадачы",
+    "syncDetailsWaitingOnOmi": "Чакае на Omi",
+    "syncDetailsWaitingOnPhone": "Чакае на гэтым тэлефоне",
+    "syncDetailsTranscribing": "Расшыфроўваецца ў Omi",
+    "syncDetailsForSupport": "Для падтрымкі",
+    "syncDetailsAudioFiles": "Аўдыяфайлы",
+    "syncDetailsServerJobs": "Заданні сервера (гатова / усяго)",
+    "syncDetailsCopy": "Скапіяваць дэталі для падтрымкі"
 }

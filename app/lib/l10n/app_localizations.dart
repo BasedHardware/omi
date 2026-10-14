@@ -10743,12 +10743,6 @@ abstract class AppLocalizations {
   /// **'Downloading from SD Card'**
   String get downloadingFromSdCard;
 
-  /// Progress label showing current/total items
-  ///
-  /// In en, this message translates to:
-  /// **'Processing {current}/{total}'**
-  String processingProgress(int current, int total);
-
   /// Success message showing number of conversations created
   ///
   /// In en, this message translates to:
@@ -16941,12 +16935,6 @@ abstract class AppLocalizations {
   /// **'{percent}% · {speed} KB/s'**
   String syncCardDownloadPercentSpeed(int percent, String speed);
 
-  /// Top status card: secondary progress line under the phase title.
-  ///
-  /// In en, this message translates to:
-  /// **'{current} of {total}'**
-  String syncCardProgressOf(int current, int total);
-
   /// Row subtitle for a recording still on the Omi device (SD-card or flash page) that has not been downloaded to the phone yet.
   ///
   /// In en, this message translates to:
@@ -16958,12 +16946,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Downloading from your device'**
   String get syncStatusDownloadingFromDevice;
-
-  /// Subtle sort-order indicator next to the recordings list header so the user knows the newest items are at the top.
-  ///
-  /// In en, this message translates to:
-  /// **'Newest first'**
-  String get newestFirst;
 
   /// Empty-state message when the Synced filter is active but no recording has finished backing up.
   ///
@@ -21525,12 +21507,6 @@ abstract class AppLocalizations {
   /// **'Deletes local copies {days} days after sync. Cloud copies are kept.'**
   String autoRemoveSyncedCopiesDescription(int days);
 
-  /// Section header above the auto-remove synced copies setting
-  ///
-  /// In en, this message translates to:
-  /// **'Local Copies'**
-  String get localCopiesSection;
-
   /// After tagging a speaker: how many transcript lines received the name
   ///
   /// In en, this message translates to:
@@ -23540,6 +23516,132 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Get a setup prompt for Claude, ChatGPT, Codex, or any agent'**
   String get connectAnAgentSubtitle;
+
+  /// Offline Sync status card title while a sync runs; amount is a compact audio length like 18m.
+  ///
+  /// In en, this message translates to:
+  /// **'Syncing {amount} of audio'**
+  String syncCardSyncingAmount(String amount);
+
+  /// Offline Sync status card title while a sync runs and the amount of audio is not known yet.
+  ///
+  /// In en, this message translates to:
+  /// **'Syncing your recordings'**
+  String get syncCardSyncingTitle;
+
+  /// Offline Sync status card subtitle: audio moved from the Omi device to the phone so far, as compact lengths.
+  ///
+  /// In en, this message translates to:
+  /// **'Downloading from your Omi · {done} of {total}'**
+  String syncStepDownloadingAmount(String done, String total);
+
+  /// Offline Sync status card subtitle: audio uploaded from the phone to Omi so far, as compact lengths.
+  ///
+  /// In en, this message translates to:
+  /// **'Uploading · {done} of {total}'**
+  String syncStepUploadingAmount(String done, String total);
+
+  /// Offline Sync status card title while the server transcribes uploaded audio; amount is a compact audio length.
+  ///
+  /// In en, this message translates to:
+  /// **'Turning {amount} into conversations'**
+  String syncCardTranscribingAmount(String amount);
+
+  /// Offline Sync status card subtitle while the server transcribes: compact audio lengths done and total.
+  ///
+  /// In en, this message translates to:
+  /// **'{done} of {total} done · you can leave this screen'**
+  String syncCardTranscribedOf(String done, String total);
+
+  /// Offline Sync status card title when recordings wait for a manual sync; amount is a compact audio length.
+  ///
+  /// In en, this message translates to:
+  /// **'{amount} ready to sync'**
+  String syncCardReadyAmount(String amount);
+
+  /// Tiny label under the first of three Offline Sync progress segments: moving audio from the Omi device to the phone.
+  ///
+  /// In en, this message translates to:
+  /// **'Omi → phone'**
+  String get syncStepLabelDownload;
+
+  /// Tiny label under the second of three Offline Sync progress segments: uploading to Omi.
+  ///
+  /// In en, this message translates to:
+  /// **'Upload'**
+  String get syncStepLabelUpload;
+
+  /// Tiny label under the third of three Offline Sync progress segments: server transcription.
+  ///
+  /// In en, this message translates to:
+  /// **'Transcribe'**
+  String get syncStepLabelTranscribe;
+
+  /// Title of the Offline Sync diagnostics sheet and the link on the status card that opens it.
+  ///
+  /// In en, this message translates to:
+  /// **'Sync details'**
+  String get syncDetailsTitle;
+
+  /// Section header in Sync details: where unsynced audio is at this moment.
+  ///
+  /// In en, this message translates to:
+  /// **'Right now'**
+  String get syncDetailsRightNow;
+
+  /// Sync details row label for the Omi device; the value is Connected or Disconnected.
+  ///
+  /// In en, this message translates to:
+  /// **'Your Omi'**
+  String get syncDetailsYourOmi;
+
+  /// Sync details row label for the Bluetooth transfer speed, e.g. 50 KB/s.
+  ///
+  /// In en, this message translates to:
+  /// **'Transfer speed'**
+  String get syncDetailsTransferSpeed;
+
+  /// Sync details row label: audio still stored on the Omi device.
+  ///
+  /// In en, this message translates to:
+  /// **'Waiting on your Omi'**
+  String get syncDetailsWaitingOnOmi;
+
+  /// Sync details row label: audio on the phone that has not been uploaded yet.
+  ///
+  /// In en, this message translates to:
+  /// **'Waiting on this phone'**
+  String get syncDetailsWaitingOnPhone;
+
+  /// Sync details row label: audio uploaded and still being transcribed by Omi.
+  ///
+  /// In en, this message translates to:
+  /// **'Transcribing on Omi'**
+  String get syncDetailsTranscribing;
+
+  /// Sync details section header for raw technical counts meant for customer support.
+  ///
+  /// In en, this message translates to:
+  /// **'For support'**
+  String get syncDetailsForSupport;
+
+  /// Sync details row label: number of raw audio files the app holds.
+  ///
+  /// In en, this message translates to:
+  /// **'Audio files'**
+  String get syncDetailsAudioFiles;
+
+  /// Sync details row label: server processing jobs, shown as done / total.
+  ///
+  /// In en, this message translates to:
+  /// **'Server jobs (done / total)'**
+  String get syncDetailsServerJobs;
+
+  /// Sync details button that copies the diagnostics text to the clipboard.
+  ///
+  /// In en, this message translates to:
+  /// **'Copy details for support'**
+  String get syncDetailsCopy;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

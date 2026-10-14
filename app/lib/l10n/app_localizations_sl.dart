@@ -5656,11 +5656,6 @@ class AppLocalizationsSl extends AppLocalizations {
   String get downloadingFromSdCard => 'Prenašanje iz SD kartice';
 
   @override
-  String processingProgress(int current, int total) {
-    return 'Obdelava $current/$total';
-  }
-
-  @override
   String conversationsCreated(int count) {
     return '$count pogovorov ustvarjeno';
   }
@@ -9116,18 +9111,10 @@ class AppLocalizationsSl extends AppLocalizations {
   }
 
   @override
-  String syncCardProgressOf(int current, int total) {
-    return '$current od $total';
-  }
-
-  @override
   String get syncStatusOnDevice => 'V vaši napravi';
 
   @override
   String get syncStatusDownloadingFromDevice => 'Prenašanje iz vaše naprave';
-
-  @override
-  String get newestFirst => 'Najprej najnovejši';
 
   @override
   String get noSyncedRecordingsYet => 'Sinhroniziranih posnetkov še ni';
@@ -12027,9 +12014,6 @@ class AppLocalizationsSl extends AppLocalizations {
   }
 
   @override
-  String get localCopiesSection => 'Lokalne kopije';
-
-  @override
   String speakerLabelLinesLabeled(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,
@@ -13247,4 +13231,79 @@ class AppLocalizationsSl extends AppLocalizations {
   @override
   String get connectAnAgentSubtitle =>
       'Pridobite poziv za nastavitev za Claude, ChatGPT, Codex ali katerega koli agenta';
+
+  @override
+  String syncCardSyncingAmount(String amount) {
+    return 'Sinhronizacija $amount zvoka';
+  }
+
+  @override
+  String get syncCardSyncingTitle => 'Sinhronizacija posnetkov';
+
+  @override
+  String syncStepDownloadingAmount(String done, String total) {
+    return 'Prenos iz naprave Omi · $done od $total';
+  }
+
+  @override
+  String syncStepUploadingAmount(String done, String total) {
+    return 'Nalaganje · $done od $total';
+  }
+
+  @override
+  String syncCardTranscribingAmount(String amount) {
+    return 'Pretvarjanje $amount v pogovore';
+  }
+
+  @override
+  String syncCardTranscribedOf(String done, String total) {
+    return 'Končano $done od $total · lahko zapustite ta zaslon';
+  }
+
+  @override
+  String syncCardReadyAmount(String amount) {
+    return '$amount pripravljeno za sinhronizacijo';
+  }
+
+  @override
+  String get syncStepLabelDownload => 'Omi → telefon';
+
+  @override
+  String get syncStepLabelUpload => 'Nalaganje';
+
+  @override
+  String get syncStepLabelTranscribe => 'Prepis';
+
+  @override
+  String get syncDetailsTitle => 'Podrobnosti sinhronizacije';
+
+  @override
+  String get syncDetailsRightNow => 'Trenutno';
+
+  @override
+  String get syncDetailsYourOmi => 'Vaš Omi';
+
+  @override
+  String get syncDetailsTransferSpeed => 'Hitrost prenosa';
+
+  @override
+  String get syncDetailsWaitingOnOmi => 'Čaka na Omi';
+
+  @override
+  String get syncDetailsWaitingOnPhone => 'Čaka na tem telefonu';
+
+  @override
+  String get syncDetailsTranscribing => 'Prepisovanje v Omi';
+
+  @override
+  String get syncDetailsForSupport => 'Za podporo';
+
+  @override
+  String get syncDetailsAudioFiles => 'Zvočne datoteke';
+
+  @override
+  String get syncDetailsServerJobs => 'Opravila strežnika (končana / skupaj)';
+
+  @override
+  String get syncDetailsCopy => 'Kopiraj podrobnosti za podporo';
 }
