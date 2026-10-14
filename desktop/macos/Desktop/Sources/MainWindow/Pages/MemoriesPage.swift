@@ -570,12 +570,17 @@ class MemoriesViewModel: ObservableObject {
   // MARK: - Initialization
 
   private let deleteMemoryRequest: (String) async throws -> Void
+  private(set) var deferredDeleteRetry: MemoryDeleteRetryScheduler
 
-  init(deleteMemoryRequest: ((String) async throws -> Void)? = nil) {
+  init(
+    deleteMemoryRequest: ((String) async throws -> Void)? = nil,
+    deferredRetrySleeper: MemoryDeleteRetryScheduler.Sleeper? = nil
+  ) {
     self.deleteMemoryRequest =
       deleteMemoryRequest ?? { id in
         try await APIClient.shared.deleteMemory(id: id)
       }
+    deferredDeleteRetry = MemoryDeleteRetryScheduler(sleeper: deferredRetrySleeper)
     // Owner fencing: an in-place account switch posts only
     // .runtimeOwnerDidChange (never .userDidSignOut), so without this reset the
     // previous owner's memories keep rendering until the container's deferred
@@ -1363,10 +1368,11 @@ class MemoriesViewModel: ObservableObject {
 
     isLoading = false
 
-    // Kick off one-time full sync, then a one-time cache reconcile, in background.
+    // Kick off one-time full sync, cache reconcile, and stale local-only purge.
     Task {
       await performFullSyncIfNeeded()
       await reconcileCacheIfNeeded()
+      await purgeStaleLocalOnlyMemoriesIfNeeded()
     }
   }
 
@@ -1391,8 +1397,11 @@ class MemoriesViewModel: ObservableObject {
   /// population. `softDeleteSyncedOrphans` only touches rows with a non-nil
   /// backendId, so local-only memories that were never synced are never pruned.
   ///
-  /// Absence is only authoritative when the pull was complete, so a truncated or
-  /// empty result prunes nothing and leaves the cache as it found it.
+  /// Absence is authoritative whenever the pull was complete — including a
+  /// complete pull that returned nothing. A failed or unauthorized read throws
+  /// and never reaches the prune; a truncated pull returns early above. An
+  /// empty complete pull means the account is empty, and an empty keep-set is
+  /// what clears zombie rows a wiped account keeps rendering from the cache.
   ///
   /// Runs once per launch rather than once per user: a delete on another device
   /// can happen at any time, so a permanent one-shot latch would converge the
@@ -1438,20 +1447,14 @@ class MemoriesViewModel: ObservableObject {
         return
       }
 
-      // An empty result is far more likely to be a failed or unauthorized read
-      // than a genuinely empty account, and pruning against it would tombstone
-      // the entire local cache. Treat it as no evidence rather than as absence.
-      guard !backendIds.isEmpty else {
-        log("MemoriesViewModel: Cache reconcile skipped pruning (no backend memories returned)")
-        return
-      }
-
       let pruned = try await MemoryStorage.shared.softDeleteSyncedOrphans(
         keepingBackendIds: backendIds,
         within: .allIncludingArchive
       )
       Self.reconciledUserIDsThisLaunch.insert(userId)
-      if pruned > 0 {
+      if backendIds.isEmpty {
+        log("MemoriesViewModel: Cache reconcile pruned all \(pruned) synced orphans (account empty)")
+      } else if pruned > 0 {
         log("MemoriesViewModel: Cache reconcile pruned \(pruned) memories deleted on another device")
       }
 
@@ -1466,23 +1469,6 @@ class MemoriesViewModel: ObservableObject {
   /// without a network: the guards that decide whether absence is authoritative
   /// are the risky part of this function, not the transport.
   var reconcilePageFetch: ((Int, String?, RuntimeOwnerAuthorizationSnapshot?) async throws -> APIClient.MemoryListPage)?
-
-  private func fetchReconcilePage(
-    limit: Int,
-    cursor: String?,
-    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot?
-  ) async throws -> APIClient.MemoryListPage {
-    if let reconcilePageFetch {
-      return try await reconcilePageFetch(limit, cursor, authorizationSnapshot)
-    }
-    // Archive is included so the pulled population matches the scope the prune
-    // claims below; a default-scope pull would read Archive rows as absent.
-    return try await APIClient.shared.getMemoriesPage(
-      limit: limit,
-      cursor: cursor,
-      includeArchive: true,
-      authorizationSnapshot: authorizationSnapshot)
-  }
 
   /// Reconcile runs once per launch per user; see `reconcileCacheIfNeeded`.
   private static var reconciledUserIDsThisLaunch: Set<String> = []
@@ -1859,7 +1845,7 @@ class MemoriesViewModel: ObservableObject {
     }
   }
 
-  private func performActualDelete(_ memory: ServerMemory) async {
+  private func performActualDelete(_ memory: ServerMemory, allowsDeferredRetry: Bool = true) async {
     guard finalizingDeleteMemoryIDs.insert(memory.id).inserted else { return }
     defer { finalizingDeleteMemoryIDs.remove(memory.id) }
 
@@ -1877,6 +1863,20 @@ class MemoriesViewModel: ObservableObject {
       // undo window; decrementing earlier would re-fetch and duplicate it.
       rawBackendOffset = max(0, rawBackendOffset - 1)
     } catch {
+      // A gate-busy 409 asks for a short backoff, not a refusal: restoring made
+      // every delete during a retention-cleanup window resurrect seconds after
+      // confirmation. Keep the row soft-deleted; the initial attempt arms the
+      // one deferred retry, and a still-busy retry stops without restoring.
+      if let retryDelay = MemoryDeleteRecovery.retryDelay(for: error) {
+        logError("MemoriesViewModel: Delete deferred by busy account gate", error: error)
+        errorMessage = UserFacingErrorPresentation.message(for: error, while: .memoryDeletion)
+        if allowsDeferredRetry {
+          deferredDeleteRetry.schedule(after: retryDelay) { [weak self] in
+            await self?.performActualDelete(memory, allowsDeferredRetry: false)
+          }
+        }
+        return
+      }
       logError("Failed to delete memory", error: error)
       // Restoring the row without saying why is indistinguishable from the delete
       // being ignored: the memory vanishes, comes back seconds later, and the user

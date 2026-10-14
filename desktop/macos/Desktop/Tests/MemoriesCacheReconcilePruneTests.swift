@@ -126,7 +126,11 @@ final class MemoriesCacheReconcilePruneTests: XCTestCase {
       "a truncated pull saw only part of the backend, so absence proves nothing")
   }
 
-  func testEmptyPullPrunesNothing() async throws {
+  /// A complete pull that returned nothing is an authoritative empty account:
+  /// failures throw and truncated pulls return early, so reaching the prune
+  /// with an empty keep-set means the server verifiably holds no memories.
+  /// Refusing to prune here protected zombie rows forever on wiped accounts.
+  func testCompleteEmptyPullPrunesSyncedOrphans() async throws {
     let existing = makeMemory(id: "existing", tier: .longTerm)
     try await MemoryStorage.shared.syncServerMemories([existing])
 
@@ -134,7 +138,24 @@ final class MemoriesCacheReconcilePruneTests: XCTestCase {
 
     let record = try await MemoryStorage.shared.getMemoryByBackendId("existing")
     XCTAssertEqual(
-      record?.deleted, false,
-      "an empty read is far more likely to be a failure than an empty account")
+      record?.deleted, true,
+      "a synced row must not outlive a verifiably empty account")
+  }
+
+  /// Local-only rows are the only copy and must survive an empty-account prune;
+  /// `softDeleteSyncedOrphans` restricts the prune to rows with a backendId.
+  func testCompleteEmptyPullKeepsLocalOnlyRows() async throws {
+    let stranded = MemoryRecord(
+      content: "stranded local-only memory",
+      createdAt: Date(timeIntervalSinceNow: -86_400 * 90))
+    _ = try await MemoryStorage.shared.insertLocalMemory(stranded)
+
+    await makeViewModel(returning: page([])).reconcileCacheIfNeeded()
+
+    let unsynced = try await MemoryStorage.shared.getUnsyncedMemories()
+    XCTAssertEqual(
+      unsynced.count, 1,
+      "a local-only row must never be pruned by the reconcile, even against an empty account")
+    XCTAssertEqual(unsynced.first?.deleted, false)
   }
 }
