@@ -176,7 +176,7 @@ def test_linq_link_then_reply_and_next_turn_after_failure(adapter, monkeypatch, 
             failure_when=lambda frame: frame.startswith('error: '),
         )
 
-    gateway = Gateway(adapter, store=store, turn=turn, admission=lambda uid: None)
+    gateway = Gateway(adapter, store=store, turn=turn, admission=lambda uid, channel: None, rate_limit=lambda uid: None)
 
     async def deliver(kind, message_id, text=None):
         value = json.loads(fixture('linq', kind))
@@ -280,7 +280,7 @@ def test_failed_deferred_reply_remains_fenced(adapter, monkeypatch):
 
         return stream()
 
-    gateway = Gateway(adapter, store=store, turn=turn, admission=lambda uid: None)
+    gateway = Gateway(adapter, store=store, turn=turn, admission=lambda uid, channel: None, rate_limit=lambda uid: None)
     principal = Principal('user', frozenset(), datetime.now(timezone.utc) + timedelta(minutes=5), 'task')
     event = ReentryEvent('event', 'Synthetic result', 'task')
 
@@ -326,7 +326,7 @@ def test_task_cancellation_retains_lease_until_worker_stops(adapter, monkeypatch
 
         return stream()
 
-    gateway = Gateway(adapter, store=store, turn=turn, admission=lambda uid: None)
+    gateway = Gateway(adapter, store=store, turn=turn, admission=lambda uid, channel: None, rate_limit=lambda uid: None)
 
     async def deliver(kind, message_id, text=None):
         value = json.loads(fixture('linq', kind))
@@ -489,7 +489,7 @@ def test_voice_notes_off_does_not_run_a_turn(adapter):
     async def turn(*args, **kwargs):
         turns.append(args)
 
-    gateway = Gateway(adapter, store=store, turn=turn, admission=lambda uid: None)
+    gateway = Gateway(adapter, store=store, turn=turn, admission=lambda uid, channel: None, rate_limit=lambda uid: None)
     asyncio.run(gateway.process(path))
     assert turns == []
     assert 'Voice notes are turned off' in adapter.sent[-1]['text']

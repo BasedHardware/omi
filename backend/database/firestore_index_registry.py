@@ -2072,6 +2072,7 @@ FIELD_INDEXING_EXEMPTIONS: tuple[tuple[str, str], ...] = (
 )
 
 FIELD_INDEX_REQUIREMENTS: tuple[FieldIndexRequirement, ...] = (
+    FieldIndexRequirement('messaging_waitlist_expiry', 'channel_waitlist', 'expires_at', ('ASCENDING',)),
     FieldIndexRequirement('conversations_id_group_ascending', 'conversations', 'id', ('ASCENDING',)),
     FieldIndexRequirement('conversations_source_group_ascending', 'conversations', 'source', ('ASCENDING',)),
     FieldIndexRequirement('conversations_status_group_ascending', 'conversations', 'status', ('ASCENDING',)),

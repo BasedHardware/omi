@@ -155,7 +155,7 @@ def test_gateway_serializes_same_user_surface_and_reentry(monkeypatch, adapter):
 
         return stream()
 
-    gateway = Gateway(adapter, store=store, turn=turn, admission=lambda uid: None)
+    gateway = Gateway(adapter, store=store, turn=turn, admission=lambda uid, channel: None, rate_limit=lambda uid: None)
 
     async def run():
         nonlocal entered, proceed
@@ -434,7 +434,7 @@ def test_channel_retrieval_drops_private_and_restricted_memories():
 def test_invalid_link_proof_completes_without_a_distinct_reply(adapter):
     store = MemoryStore()
     body, headers = adapter.signed(link_proof='not-a-real-proof', text='/start not-a-real-proof')
-    gateway = Gateway(adapter, store=store, admission=lambda uid: None)
+    gateway = Gateway(adapter, store=store, admission=lambda uid, channel: None, rate_limit=lambda uid: None)
 
     async def run():
         path = (await gateway.webhook(body, headers))['jobs'][0]
