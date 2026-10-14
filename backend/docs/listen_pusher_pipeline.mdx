@@ -2170,8 +2170,15 @@ can lose events, and clients that replace metadata can reduce coverage. See
 qualification experiment.
 Offline sync on Cloud Run calls the same Embedding API through
 `HOSTED_SPEAKER_EMBEDDING_API_URL`. That binding must be the diarizer
-GCE-internal ILB hostname used by GKE backend-listen and pusher — not the
+reachable internal HTTP endpoint used by GKE backend-listen and pusher — not the
 in-cluster `*.svc.cluster.local` URL that only in-cluster Parakeet can reach.
+The optional [shared model Gateway](../charts/internal-gateway/README.md) adds
+`/diarizer`, `/diarizer-batch`, `/parakeet`, `/vad` and `/nllb` routes through
+separate Services while preserving existing Ingresses. This chart change leaves
+caller URLs unchanged; the lead switches one service at a time, including every
+speaker-ID host together. VAD requires the full `/vad/v1/vad` URL. Batch uses its
+own isolated release and `/diarizer-batch/v2/diarization`; Parakeet WebSocket and
+window paths retain their base prefix through the rewrite.
 
 `is_user` remains the compatibility projection, while
 `speaker_identity_status` preserves its evidence state: `user`, `not_user`,
