@@ -146,14 +146,35 @@ def test_adapter_projection_loop_aborts_before_next_memory_on_takeover(monkeypat
 
 
 @pytest.mark.parametrize("loop", ["tombstone", "retraction"])
-def test_adapter_takeover_maps_to_existing_conflict_without_retry(monkeypatch, loop):
+def test_adapter_takeover_preserves_marker_without_retry(monkeypatch, loop):
     def check(*args, **kwargs):
         raise DestructiveGateTakeover("peer completed")
 
     monkeypatch.setattr(canonical_adapter, "assert_destructive_gate_still_ours", check)
     if loop == "tombstone":
-        with pytest.raises(canonical_adapter.CanonicalMemoryTombstoneConflict):
+        with pytest.raises(DestructiveGateTakeover):
             canonical_adapter._tombstone_memory_items_under_gate("uid", ["a"], db_client=object(), reason="delete")
     else:
-        with pytest.raises(canonical_adapter.ConversationReplacementConflictError):
+        with pytest.raises(DestructiveGateTakeover):
             canonical_adapter._retract_conversation_sourced_memories_under_gate("uid", "conv", db_client=object())
+
+
+def test_conversation_delete_route_maps_takeover_to_409(monkeypatch):
+    from unittest.mock import MagicMock
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+    from routers import conversations as conversation_routes
+
+    service = MagicMock()
+    service.retract_conversation_memories.side_effect = DestructiveGateTakeover("peer completed before hold")
+    monkeypatch.setattr(conversation_routes, "MemoryService", lambda **kwargs: service)
+    monkeypatch.setattr(conversation_routes.conversation_tombstones, "record_deletion", lambda *args: None)
+    monkeypatch.setattr(conversation_routes, "delete_owner_prompt_embedding_cache", lambda *args: None)
+    monkeypatch.setattr(conversation_routes, "retraction_can_be_skipped", lambda *args, **kwargs: False)
+    app = FastAPI()
+    app.include_router(conversation_routes.router)
+    app.dependency_overrides[conversation_routes.auth.get_current_user_uid] = lambda: "uid"
+    response = TestClient(app).delete("/v1/conversations/conv?cascade=true")
+    assert response.status_code == 409
+    assert response.json() == {"detail": "account_gate_busy"}
+    assert response.headers["Retry-After"] == "2"

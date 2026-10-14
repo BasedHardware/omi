@@ -171,6 +171,7 @@ def test_global_write_pause_blocks_intake_but_not_reads_or_privacy_delete(servic
         reason="explicit_memory_delete",
         db_client=service.db_client,
         include_legacy_commits=True,
+        revalidate_gate=True,
     )
 
 
@@ -1991,6 +1992,7 @@ def test_delete_all_commits_historical_fence_before_cleanup_then_purges_it(servi
         reason="canonical_memory_delete_all_retry",
         db_client=service.db_client,
         include_legacy_commits=True,
+        revalidate_gate=True,
     )
 
 
@@ -2017,6 +2019,7 @@ def test_delete_default_retries_required_review_scrub_for_canonical_and_historic
         reason="canonical_memory_delete_default_retry",
         db_client=service.db_client,
         include_legacy_commits=True,
+        revalidate_gate=True,
     )
     service._canonical.delete_default.assert_called_once_with("uid-test")
     service.history.cleanup_all.assert_called_once_with(
@@ -2345,6 +2348,7 @@ def test_delete_batch_tombstones_historical_without_materializing_then_cleans(se
         reason="canonical_memory_delete_batch_retry",
         db_client=service.db_client,
         include_legacy_commits=True,
+        revalidate_gate=True,
     )
 
 
@@ -2377,6 +2381,7 @@ def test_delete_batch_retries_already_tombstoned_historical_identity(service_mod
         reason="canonical_memory_delete_batch_retry",
         db_client=service.db_client,
         include_legacy_commits=True,
+        revalidate_gate=True,
     )
     assert cleanup.call_args_list == [
         (("uid-test", "legacy"), {"db_client": service.db_client, "required": True}),
@@ -2469,6 +2474,7 @@ def test_single_delete_retries_cleanup_after_canonical_tombstone(service_mod, mo
         reason="canonical_memory_delete_retry",
         db_client=service.db_client,
         include_legacy_commits=True,
+        revalidate_gate=True,
     )
     cleanup.assert_called_once_with("uid-test", "legacy", db_client=service.db_client, required=True)
 
@@ -2503,6 +2509,7 @@ def test_retract_conversation_suppresses_and_cleans_historical_memories(service_
         reason="conversation_memory_retraction",
         db_client=service.db_client,
         include_legacy_commits=True,
+        revalidate_gate=True,
         preserve_source_replacement_receipts=True,
     )
     cleanup.assert_called_once_with("uid-test", "legacy", db_client=service.db_client, required=True)

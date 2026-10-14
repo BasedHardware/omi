@@ -4168,6 +4168,7 @@ class MemoryService:
                     purge_stale_review_conflicts_for_memories(
                         uid,
                         lineage_ids,
+                        revalidate_gate=_EXPLICIT_DELETION_ACTIVE.get(),
                         reason="canonical_memory_delete_retry",
                         db_client=self.db_client,
                         include_legacy_commits=True,
@@ -4224,6 +4225,7 @@ class MemoryService:
             purge_stale_review_conflicts_for_memories(
                 uid,
                 lineage_ids,
+                revalidate_gate=_EXPLICIT_DELETION_ACTIVE.get(),
                 reason="explicit_memory_delete",
                 db_client=self.db_client,
                 include_legacy_commits=True,
@@ -4351,6 +4353,7 @@ class MemoryService:
             purge_stale_review_conflicts_for_memories(
                 uid,
                 cleanup_ids,
+                revalidate_gate=_EXPLICIT_DELETION_ACTIVE.get(),
                 reason="canonical_memory_delete_batch_retry",
                 db_client=self.db_client,
                 include_legacy_commits=True,
@@ -4387,6 +4390,7 @@ class MemoryService:
             purge_stale_review_conflicts_for_memories(
                 uid,
                 list(dict.fromkeys(canonical_ids + historical_ids)),
+                revalidate_gate=_EXPLICIT_DELETION_ACTIVE.get(),
                 reason="canonical_memory_delete_all_retry",
                 db_client=self.db_client,
                 include_legacy_commits=True,
@@ -4425,6 +4429,7 @@ class MemoryService:
             purge_stale_review_conflicts_for_memories(
                 uid,
                 list(dict.fromkeys(canonical_ids + historical_ids)),
+                revalidate_gate=_EXPLICIT_DELETION_ACTIVE.get(),
                 reason="canonical_memory_delete_default_retry",
                 db_client=self.db_client,
                 include_legacy_commits=True,
@@ -4492,6 +4497,7 @@ class MemoryService:
                 purge_stale_review_conflicts_for_memories(
                     uid,
                     all_ids,
+                    revalidate_gate=_EXPLICIT_DELETION_ACTIVE.get(),
                     reason="conversation_memory_retraction",
                     db_client=self.db_client,
                     include_legacy_commits=True,
@@ -4512,6 +4518,7 @@ class MemoryService:
                 purge_source_replacement_receipts_for_memories(
                     uid,
                     retracted_ids,
+                    revalidate_gate=_EXPLICIT_DELETION_ACTIVE.get(),
                     firestore_client=self.db_client,
                 )
             except (DestructiveGateTakeover, DestructiveOperationInProgress, LegalHoldAuthorityUnavailable) as exc:
