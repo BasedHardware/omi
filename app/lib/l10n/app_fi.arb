@@ -3806,6 +3806,7 @@
     "reviewRemaining": "{count} jäljellä",
     "reviewQuestionSpeaker": "Kuka sanoi tämän?",
     "reviewQuestionSamePerson": "Sama henkilö kuin ”{name}”?",
+    "reviewSpellingContext": "Keskustelun asiayhteys",
     "reviewQuestionSpelling": "Miten tämä kirjoitetaan?",
     "reviewPlayClip": "Toista klippi",
     "reviewStopClip": "Pysäytä klippi",

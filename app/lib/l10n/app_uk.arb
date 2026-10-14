@@ -3806,6 +3806,7 @@
     "reviewRemaining": "Залишилося: {count}",
     "reviewQuestionSpeaker": "Хто це сказав?",
     "reviewQuestionSamePerson": "Це та сама людина, що й «{name}»?",
+    "reviewSpellingContext": "Контекст розмови",
     "reviewQuestionSpelling": "Як це пишеться?",
     "reviewPlayClip": "Відтворити фрагмент",
     "reviewStopClip": "Зупинити фрагмент",

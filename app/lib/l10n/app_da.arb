@@ -3848,6 +3848,7 @@
     "reviewRemaining": "{count} tilbage",
     "reviewQuestionSpeaker": "Hvem sagde det her?",
     "reviewQuestionSamePerson": "Samme person som “{name}”?",
+    "reviewSpellingContext": "Samtalens kontekst",
     "reviewQuestionSpelling": "Hvordan staves dette?",
     "reviewPlayClip": "Afspil klip",
     "reviewStopClip": "Stop klip",

@@ -3806,6 +3806,7 @@
     "reviewRemaining": "تبقّى {count}",
     "reviewQuestionSpeaker": "من قال هذا؟",
     "reviewQuestionSamePerson": "هل هو نفس الشخص “{name}”؟",
+    "reviewSpellingContext": "سياق المحادثة",
     "reviewQuestionSpelling": "كيف تُكتب هذه؟",
     "reviewPlayClip": "تشغيل المقطع",
     "reviewStopClip": "إيقاف المقطع",

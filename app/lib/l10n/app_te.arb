@@ -11243,6 +11243,7 @@
     "reviewRemaining": "{count} మిగిలాయి",
     "reviewQuestionSpeaker": "ఇది ఎవరు చెప్పారు?",
     "reviewQuestionSamePerson": "“{name}” అనే వ్యక్తి ఇతనేనా?",
+    "reviewSpellingContext": "సంభాషణ సందర్భం",
     "reviewQuestionSpelling": "ఇది ఎలా రాస్తారు?",
     "reviewPlayClip": "క్లిప్ ప్లే చేయండి",
     "reviewStopClip": "క్లిప్ ఆపండి",

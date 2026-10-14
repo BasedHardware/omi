@@ -3806,6 +3806,7 @@
     "reviewRemaining": "Mai sunt {count}",
     "reviewQuestionSpeaker": "Cine a spus asta?",
     "reviewQuestionSamePerson": "Aceeași persoană cu „{name}”?",
+    "reviewSpellingContext": "Contextul conversației",
     "reviewQuestionSpelling": "Cum se scrie asta?",
     "reviewPlayClip": "Redă clipul",
     "reviewStopClip": "Oprește clipul",

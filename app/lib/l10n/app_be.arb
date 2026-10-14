@@ -11243,6 +11243,7 @@
     "reviewRemaining": "Засталося {count}",
     "reviewQuestionSpeaker": "Хто гэта сказаў?",
     "reviewQuestionSamePerson": "Той самы чалавек, што і «{name}»?",
+    "reviewSpellingContext": "Кантэкст размовы",
     "reviewQuestionSpelling": "Як гэта пішацца?",
     "reviewPlayClip": "Прайграць фрагмент",
     "reviewStopClip": "Спыніць фрагмент",

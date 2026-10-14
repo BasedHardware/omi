@@ -12325,6 +12325,9 @@ class AppLocalizationsId extends AppLocalizations {
   }
 
   @override
+  String get reviewSpellingContext => 'Konteks percakapan';
+
+  @override
   String get reviewQuestionSpelling => 'Bagaimana ejaannya?';
 
   @override

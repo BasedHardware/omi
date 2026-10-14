@@ -12345,6 +12345,9 @@ class AppLocalizationsUk extends AppLocalizations {
   }
 
   @override
+  String get reviewSpellingContext => 'Контекст розмови';
+
+  @override
   String get reviewQuestionSpelling => 'Як це пишеться?';
 
   @override

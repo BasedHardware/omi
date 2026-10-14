@@ -4949,8 +4949,24 @@ export interface SpellingAnswer {
   value: string;
 }
 
+export interface SpellingContext {
+  conversation_date?: string | null;
+  conversation_title: string;
+  main_index: number;
+  quote_end?: number | null;
+  quote_start?: number | null;
+  segments: Array<SpellingContextSegment>;
+}
+
+export interface SpellingContextSegment {
+  is_user?: boolean;
+  speaker_label?: string | null;
+  text: string;
+}
+
 export interface SpellingItem {
   allow_custom: boolean;
+  context?: SpellingContext | null;
   options: Array<string>;
   term_id: string;
 }
@@ -6690,6 +6706,8 @@ export interface OmiApiSchemas {
   "SpeechProfileStatusResponse": SpeechProfileStatusResponse;
   "SpeechProfileUploadResponse": SpeechProfileUploadResponse;
   "SpellingAnswer": SpellingAnswer;
+  "SpellingContext": SpellingContext;
+  "SpellingContextSegment": SpellingContextSegment;
   "SpellingItem": SpellingItem;
   "StatusResponse": StatusResponse;
   "StoreMeetingRequest": StoreMeetingRequest;

@@ -12351,6 +12351,9 @@ class AppLocalizationsBe extends AppLocalizations {
   }
 
   @override
+  String get reviewSpellingContext => 'Кантэкст размовы';
+
+  @override
   String get reviewQuestionSpelling => 'Як гэта пішацца?';
 
   @override

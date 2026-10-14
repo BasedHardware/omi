@@ -12346,6 +12346,9 @@ class AppLocalizationsBs extends AppLocalizations {
   }
 
   @override
+  String get reviewSpellingContext => 'Kontekst razgovora';
+
+  @override
   String get reviewQuestionSpelling => 'Kako se ovo piše?';
 
   @override

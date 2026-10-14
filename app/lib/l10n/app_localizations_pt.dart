@@ -12339,6 +12339,9 @@ class AppLocalizationsPt extends AppLocalizations {
   }
 
   @override
+  String get reviewSpellingContext => 'Contexto da conversa';
+
+  @override
   String get reviewQuestionSpelling => 'Como isso se escreve?';
 
   @override

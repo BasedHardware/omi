@@ -12313,6 +12313,9 @@ class AppLocalizationsSk extends AppLocalizations {
   }
 
   @override
+  String get reviewSpellingContext => 'Kontext konverzácie';
+
+  @override
   String get reviewQuestionSpelling => 'Ako sa to píše?';
 
   @override

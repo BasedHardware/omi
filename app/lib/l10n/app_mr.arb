@@ -11243,6 +11243,7 @@
     "reviewRemaining": "{count} बाकी",
     "reviewQuestionSpeaker": "हे कोण म्हणाले?",
     "reviewQuestionSamePerson": "“{name}” हीच व्यक्ती आहे का?",
+    "reviewSpellingContext": "संभाषणाचा संदर्भ",
     "reviewQuestionSpelling": "हे कसे लिहितात?",
     "reviewPlayClip": "क्लिप प्ले करा",
     "reviewStopClip": "क्लिप थांबवा",

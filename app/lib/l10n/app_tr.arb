@@ -3841,6 +3841,7 @@
     "reviewRemaining": "{count} kaldı",
     "reviewQuestionSpeaker": "Bunu kim söyledi?",
     "reviewQuestionSamePerson": "“{name}” ile aynı kişi mi?",
+    "reviewSpellingContext": "Konuşma bağlamı",
     "reviewQuestionSpelling": "Bu nasıl yazılır?",
     "reviewPlayClip": "Klibi oynat",
     "reviewStopClip": "Klibi durdur",

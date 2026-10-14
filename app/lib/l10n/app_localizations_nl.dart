@@ -12353,6 +12353,9 @@ class AppLocalizationsNl extends AppLocalizations {
   }
 
   @override
+  String get reviewSpellingContext => 'Gesprekscontext';
+
+  @override
   String get reviewQuestionSpelling => 'Hoe schrijf je dit?';
 
   @override

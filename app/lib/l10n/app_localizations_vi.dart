@@ -12317,6 +12317,9 @@ class AppLocalizationsVi extends AppLocalizations {
   }
 
   @override
+  String get reviewSpellingContext => 'Ngữ cảnh cuộc trò chuyện';
+
+  @override
   String get reviewQuestionSpelling => 'Từ này viết thế nào?';
 
   @override

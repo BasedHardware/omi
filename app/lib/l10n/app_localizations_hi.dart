@@ -12301,6 +12301,9 @@ class AppLocalizationsHi extends AppLocalizations {
   }
 
   @override
+  String get reviewSpellingContext => 'बातचीत का संदर्भ';
+
+  @override
   String get reviewQuestionSpelling => 'यह कैसे लिखा जाता है?';
 
   @override

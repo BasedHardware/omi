@@ -3806,6 +3806,7 @@
     "reviewRemaining": "Quedan {count}",
     "reviewQuestionSpeaker": "¿Quién dijo esto?",
     "reviewQuestionSamePerson": "¿Es la misma persona que “{name}”?",
+    "reviewSpellingContext": "Contexto de la conversación",
     "reviewQuestionSpelling": "¿Cómo se escribe esto?",
     "reviewPlayClip": "Reproducir clip",
     "reviewStopClip": "Detener clip",

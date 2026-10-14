@@ -19,6 +19,7 @@ from models.dream_refs import base_ref, has_ref, cited_value
 from config.dream_agent import context_mode
 from utils.dream_consensus import unanimous_spelling
 from utils.entity_pages import resolve_entity
+from models.review_context import question_source
 from utils.dream_guards import (
     spelling_rejection,
     summary_rejection,
@@ -395,6 +396,7 @@ def suggest_spelling(uid, edit, records, run_id):
         'edit_key': edit_key(edit, records),
         'spelling_edit': edit.model_dump(mode='python', exclude={'value'}),
     }
+    source['speaker_names'] = question_source(spelling_question(edit), records).get('speaker_names', {})
     source['fences'] = proposal_fences(uid, source)
     revalidate_proposal(uid, source)
     validate_canonical_proposal(uid, edit)
@@ -699,6 +701,7 @@ def ask(uid, item, records, *, run_id=None):
             }
         ),
         evidence_version=review_store.fingerprint(records),
+        source=question_source(item, records),
         **({'dream_run_id': run_id} if run_id is not None else {}),
     )
     if run_id is not None:

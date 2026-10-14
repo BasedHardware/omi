@@ -3841,6 +3841,7 @@
     "reviewRemaining": "{count} restantes",
     "reviewQuestionSpeaker": "Qui a dit ça ?",
     "reviewQuestionSamePerson": "Même personne que « {name} » ?",
+    "reviewSpellingContext": "Contexte de la conversation",
     "reviewQuestionSpelling": "Comment ça s’écrit ?",
     "reviewPlayClip": "Lire l’extrait",
     "reviewStopClip": "Arrêter l’extrait",

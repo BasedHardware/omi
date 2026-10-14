@@ -11243,6 +11243,7 @@
     "reviewRemaining": "আর {count}টি বাকি",
     "reviewQuestionSpeaker": "এটি কে বলেছেন?",
     "reviewQuestionSamePerson": "“{name}”-এর মতো একই ব্যক্তি?",
+    "reviewSpellingContext": "কথোপকথনের প্রসঙ্গ",
     "reviewQuestionSpelling": "এটি কীভাবে লেখা হয়?",
     "reviewPlayClip": "ক্লিপ চালান",
     "reviewStopClip": "ক্লিপ থামান",

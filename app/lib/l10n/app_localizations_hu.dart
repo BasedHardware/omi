@@ -12367,6 +12367,9 @@ class AppLocalizationsHu extends AppLocalizations {
   }
 
   @override
+  String get reviewSpellingContext => 'A beszélgetés kontextusa';
+
+  @override
   String get reviewQuestionSpelling => 'Hogyan írják ezt?';
 
   @override

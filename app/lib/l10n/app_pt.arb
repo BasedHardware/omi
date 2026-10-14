@@ -3841,6 +3841,7 @@
     "reviewRemaining": "Faltam {count}",
     "reviewQuestionSpeaker": "Quem disse isso?",
     "reviewQuestionSamePerson": "É a mesma pessoa que “{name}”?",
+    "reviewSpellingContext": "Contexto da conversa",
     "reviewQuestionSpelling": "Como isso se escreve?",
     "reviewPlayClip": "Reproduzir trecho",
     "reviewStopClip": "Parar trecho",

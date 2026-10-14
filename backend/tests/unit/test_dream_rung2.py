@@ -331,3 +331,40 @@ def test_decision_metrics_are_counts_only(caplog):
         dream_metrics.record_pass({'context_mode': 'full', 'status': 'complete', **{key: 2 for key in before}})
     assert all(dream_metrics.DECISIONS.labels(key)._value.get() == value + 2 for key, value in before.items())
     assert 'Qorby' not in caplog.text and 'questions_offered' in caplog.text
+
+
+@pytest.mark.parametrize('from_edit', [True, False], ids=['edit-derived', 'direct-full-question'])
+def test_full_ranked_questions_keep_encrypted_spelling_context(store, monkeypatch, from_edit):
+    row = deepcopy(ROW)
+    row['transcript_segments'][0]['is_user'] = True
+    row['transcript_segments'][1]['person_id'] = 'alex'
+    store.rows[('users', UID, 'conversations', 'toy')] = dream_tools.conversations.encode_conversation_for_write(
+        UID, row, 'enhanced'
+    )
+    original_read = dream_agent.dream_reads.read_changes
+
+    def with_known_speaker(*args, **kwargs):
+        records, dirty = original_read(*args, **kwargs)
+        records['people/alex'] = {'name': 'Alex'}
+        return records, dirty
+
+    monkeypatch.setattr(dream_agent.dream_reads, 'read_changes', with_known_speaker)
+    proposal = FullPlan(edits=[edit(value=4)]) if from_edit else FullPlan(questions=[question(value=4)])
+    # Two-of-three consensus routes through offer_questions, then either
+    # suggest_spelling or ask_ranked; both use the real encrypted queue writer.
+    report = run([proposal, proposal, FullPlan()])
+    assert report['status'] == 'complete' and report['questions_offered'] == 1
+    assert store.rows[('dream_users', UID)]['questions'] == 1
+    queued = proposals(store)
+    assert len(queued) == 1
+    saved = queued[0]
+    context = saved['item']['spelling']['context']
+    assert context['conversation_title'] == ROW['structured']['title']
+    assert context['main_index'] == 0 and len(context['segments']) == 2
+    assert [s['speaker_label'] for s in context['segments']] == ['You', 'Alex']
+    assert context['segments'][0]['text'][context['quote_start'] : context['quote_end']] == saved['item']['quote']
+    assert saved['source']['records'][REF]['transcript_segments'][0]['id'] == 's1'
+    assert saved['source']['speaker_names'] == {'alex': 'Alex'}
+    raw = [value for path, value in store.rows.items() if 'review_proposals' in path]
+    assert len(raw) == 1 and 'review_encrypted_v1' in raw[0]['item']
+    assert 'Qorby workshop' not in str(raw[0]) and 'Alex' not in str(raw[0])

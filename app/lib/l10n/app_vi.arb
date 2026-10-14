@@ -3806,6 +3806,7 @@
     "reviewRemaining": "Còn {count}",
     "reviewQuestionSpeaker": "Ai đã nói điều này?",
     "reviewQuestionSamePerson": "Có phải cùng người với “{name}” không?",
+    "reviewSpellingContext": "Ngữ cảnh cuộc trò chuyện",
     "reviewQuestionSpelling": "Từ này viết thế nào?",
     "reviewPlayClip": "Phát đoạn ghi",
     "reviewStopClip": "Dừng đoạn ghi",

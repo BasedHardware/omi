@@ -11243,6 +11243,7 @@
     "reviewRemaining": "נשארו {count}",
     "reviewQuestionSpeaker": "מי אמר את זה?",
     "reviewQuestionSamePerson": "אותו אדם כמו “{name}”?",
+    "reviewSpellingContext": "הקשר השיחה",
     "reviewQuestionSpelling": "איך זה נכתב?",
     "reviewPlayClip": "הפעל קטע",
     "reviewStopClip": "עצור קטע",

@@ -12413,6 +12413,9 @@ class AppLocalizationsDe extends AppLocalizations {
   }
 
   @override
+  String get reviewSpellingContext => 'Gesprächskontext';
+
+  @override
   String get reviewQuestionSpelling => 'Wie wird das geschrieben?';
 
   @override

@@ -3841,6 +3841,7 @@
     "reviewRemaining": "{count} tersisa",
     "reviewQuestionSpeaker": "Siapa yang mengatakan ini?",
     "reviewQuestionSamePerson": "Orang yang sama dengan “{name}”?",
+    "reviewSpellingContext": "Konteks percakapan",
     "reviewQuestionSpelling": "Bagaimana ejaannya?",
     "reviewPlayClip": "Putar klip",
     "reviewStopClip": "Hentikan klip",

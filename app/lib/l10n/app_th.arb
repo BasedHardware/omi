@@ -3806,6 +3806,7 @@
     "reviewRemaining": "เหลือ {count}",
     "reviewQuestionSpeaker": "ใครพูดสิ่งนี้?",
     "reviewQuestionSamePerson": "คนเดียวกับ “{name}” ใช่ไหม",
+    "reviewSpellingContext": "บริบทการสนทนา",
     "reviewQuestionSpelling": "สะกดอย่างไร",
     "reviewPlayClip": "เล่นคลิป",
     "reviewStopClip": "หยุดคลิป",

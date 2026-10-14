@@ -3806,6 +3806,7 @@
     "reviewRemaining": "Nog {count}",
     "reviewQuestionSpeaker": "Wie zei dit?",
     "reviewQuestionSamePerson": "Dezelfde persoon als “{name}”?",
+    "reviewSpellingContext": "Gesprekscontext",
     "reviewQuestionSpelling": "Hoe schrijf je dit?",
     "reviewPlayClip": "Fragment afspelen",
     "reviewStopClip": "Fragment stoppen",

@@ -3841,6 +3841,7 @@
     "reviewRemaining": "Осталось: {count}",
     "reviewQuestionSpeaker": "Кто это сказал?",
     "reviewQuestionSamePerson": "Это тот же человек, что и «{name}»?",
+    "reviewSpellingContext": "Контекст разговора",
     "reviewQuestionSpelling": "Как это пишется?",
     "reviewPlayClip": "Воспроизвести фрагмент",
     "reviewStopClip": "Остановить фрагмент",

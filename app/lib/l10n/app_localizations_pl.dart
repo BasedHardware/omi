@@ -12355,6 +12355,9 @@ class AppLocalizationsPl extends AppLocalizations {
   }
 
   @override
+  String get reviewSpellingContext => 'Kontekst rozmowy';
+
+  @override
   String get reviewQuestionSpelling => 'Jak to się pisze?';
 
   @override

@@ -12249,6 +12249,9 @@ class AppLocalizationsAr extends AppLocalizations {
   }
 
   @override
+  String get reviewSpellingContext => 'سياق المحادثة';
+
+  @override
   String get reviewQuestionSpelling => 'كيف تُكتب هذه؟';
 
   @override

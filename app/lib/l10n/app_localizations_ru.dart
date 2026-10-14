@@ -12362,6 +12362,9 @@ class AppLocalizationsRu extends AppLocalizations {
   }
 
   @override
+  String get reviewSpellingContext => 'Контекст разговора';
+
+  @override
   String get reviewQuestionSpelling => 'Как это пишется?';
 
   @override

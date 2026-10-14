@@ -12374,6 +12374,9 @@ class AppLocalizationsRo extends AppLocalizations {
   }
 
   @override
+  String get reviewSpellingContext => 'Contextul conversației';
+
+  @override
   String get reviewQuestionSpelling => 'Cum se scrie asta?';
 
   @override

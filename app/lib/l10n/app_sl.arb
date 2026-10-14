@@ -11243,6 +11243,7 @@
     "reviewRemaining": "Še {count}",
     "reviewQuestionSpeaker": "Kdo je to rekel?",
     "reviewQuestionSamePerson": "Ista oseba kot »{name}«?",
+    "reviewSpellingContext": "Kontekst pogovora",
     "reviewQuestionSpelling": "Kako se to piše?",
     "reviewPlayClip": "Predvajaj posnetek",
     "reviewStopClip": "Ustavi posnetek",

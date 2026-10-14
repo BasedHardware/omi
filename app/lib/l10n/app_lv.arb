@@ -3806,6 +3806,7 @@
     "reviewRemaining": "Atlikuši: {count}",
     "reviewQuestionSpeaker": "Kas to teica?",
     "reviewQuestionSamePerson": "Vai tā ir tā pati persona, kas „{name}”?",
+    "reviewSpellingContext": "Sarunas konteksts",
     "reviewQuestionSpelling": "Kā tas tiek rakstīts?",
     "reviewPlayClip": "Atskaņot fragmentu",
     "reviewStopClip": "Apturēt fragmentu",

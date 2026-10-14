@@ -12321,6 +12321,9 @@ class AppLocalizationsNo extends AppLocalizations {
   }
 
   @override
+  String get reviewSpellingContext => 'Samtalekontekst';
+
+  @override
   String get reviewQuestionSpelling => 'Hvordan staves dette?';
 
   @override
