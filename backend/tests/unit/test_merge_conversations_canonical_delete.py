@@ -293,7 +293,7 @@ def test_bridge_ancestor_cleanup_uses_the_requested_canonical_intent(merged_into
 
 def test_canonical_link_failure_aborts_source_deletion():
     merge_mod = sys.modules['utils.conversations.merge_conversations']
-    with patch.object(
+    with patch.object(merge_mod, 'MemoryService', return_value=MagicMock()), patch.object(
         merge_mod, 'delete_conversation_audio_files', side_effect=RuntimeError('link unavailable')
     ), patch.object(merge_mod, 'delete_conversation_with_sync_sources') as delete_parent:
         with pytest.raises(RuntimeError, match='link unavailable'):
