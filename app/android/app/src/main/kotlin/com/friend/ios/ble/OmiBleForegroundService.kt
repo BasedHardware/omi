@@ -48,6 +48,11 @@ class OmiBleForegroundService : Service() {
         private const val MTU_SIZE = 512
         private const val STABILITY_TIMER_MS = 60_000L
         private const val RETENTION_PROBE_TIMEOUT_MS = 10_000L
+
+        /** Dart performs performSyncTime after onDeviceReady; one re-probe after
+         *  this window covers a factory-reset pendant whose first probe failed
+         *  only on RTC validity. Bounded: a single delayed run per failed probe. */
+        private const val RETENTION_REPROBE_DELAY_MS = 20_000L
         // Base delay for CCCD-timeout recovery. Ordinary out-of-range retries use
         // reconnectBackoff so a fixed 3s loop cannot spin the radio forever.
         private const val RECONNECT_DELAY_MS = 3_000L
@@ -172,7 +177,10 @@ class OmiBleForegroundService : Service() {
          *  callback reports CONNECTED. Used to distinguish fail-to-connect from
          *  an established link dropping. Independent of hasEverConnected which
          *  tracks the full device lifetime. */
-        var currentAttemptEstablished: Boolean = false
+        var currentAttemptEstablished: Boolean = false,
+        /** Post-clock-sync re-probes already run on the current link; one per
+         *  connection, reset in onGattConnected. */
+        var retentionReprobes: Int = 0
     ) {
         internal val reconnectDiagnostics = BleReconnectDiagnostics()
         internal val retentionProbe = RetentionProbeLifecycle()
@@ -233,6 +241,7 @@ class OmiBleForegroundService : Service() {
             synchronized(managed) {
                 managed.hasVerifiedRetention = false
                 managed.retentionProbe.resetVerification()
+                managed.retentionReprobes = 0
             }
             managed.hasEverConnected = true
             managed.currentAttemptEstablished = true
@@ -363,37 +372,48 @@ class OmiBleForegroundService : Service() {
         // this function puts on the GATT command queue before the CCCD write
         // widens the connected-but-deaf window, and a wedged head command would
         // block capture for the whole link. The retention probe is an optional
-        // battery optimization; capture is the product. probeRetentionRuntime
-        // posts its enqueue behind this subscription's own post, so the CCCD
-        // write owns the serial queue first and a slow or lost probe read can
-        // never delay it.
-        ensureBackgroundAudioSubscription(addr, services)
+        // battery optimization; capture is the product.
+        val nativeSubscribed = ensureBackgroundAudioSubscription(addr, services)
         recordVerifiedRetention(addr, services)
-        probeRetentionRuntime(addr)
         limitlessDrainEngine.onDeviceReady(addr)
         if (OmiBleManager.isFlutterAlive) {
             bleManager.mainHandler.post {
                 bleManager.flutterApi?.onDeviceReady(addr, services) {}
             }
         }
+        // The probe read must never reach the serial GATT queue ahead of an
+        // audio subscription. With a native target the subscription is already
+        // queued above; without one, Dart queues its own subscription from the
+        // onDeviceReady post above, so posting the probe after that post keeps
+        // it behind. With neither (no native target, Flutter gone) no
+        // subscription can ever arrive on this link, so the probe cannot delay
+        // one. probeRetentionRuntime still defers its enqueue through the same
+        // looper as subscribeCharacteristic.
+        when {
+            nativeSubscribed -> probeRetentionRuntime(addr)
+            OmiBleManager.isFlutterAlive -> bleManager.mainHandler.post { probeRetentionRuntime(addr) }
+            else -> probeRetentionRuntime(addr)
+        }
     }
 
-    private fun ensureBackgroundAudioSubscription(address: String, services: List<BleService>) {
+    /** Returns true when this call queued an audio CCCD write for the device. */
+    private fun ensureBackgroundAudioSubscription(address: String, services: List<BleService>): Boolean {
         // Subscribe for background streaming OR batch capture (whichever is configured)
         // so native keeps receiving audio after the Flutter engine is gone. Never deferred
         // to Dart: enabling notifications is idempotent, and waiting on an engine that is
         // gone left the characteristic subscribed by nobody (issue #10847).
         val target = backgroundAudioStreamer.configuredAudioTargetFor(address)
             ?: batchAudioWriter.configuredAudioTargetFor(address)
-            ?: return
+            ?: return false
         val hasTarget = services.any { service ->
             service.uuid.equals(target.first, ignoreCase = true) &&
                 service.characteristicUuids.any { it.equals(target.second, ignoreCase = true) }
         }
-        if (!hasTarget) return
+        if (!hasTarget) return false
 
         Log.i(TAG, "Ensuring BLE audio subscription for background transcription on $address")
         bleManager.subscribeCharacteristic(address, target.first, target.second)
+        return true
     }
 
     /** INV-CAP-1 requires both advertisement and a successful runtime storage probe. */
@@ -440,6 +460,18 @@ class OmiBleForegroundService : Service() {
                 if (managed.retentionRuntimeVerified) {
                     Log.i(TAG, "Verified runtime offline retention for $address (storage status nonzero)")
                 } else {
+                    val payload = result.getOrNull()
+                    if (payload != null && BleReconnectBackoff.storageStatusHasDataWithoutClock(payload) &&
+                        managed.retentionReprobes < 1
+                    ) {
+                        // Mounted storage with an unsynced clock: Dart performs
+                        // performSyncTime after onDeviceReady, so the same link
+                        // can legitimately gain a valid RTC. One bounded re-probe
+                        // after that sync window keeps the schedule reachable for
+                        // factory-reset devices without weakening the RTC gate.
+                        managed.retentionReprobes += 1
+                        scheduleRetentionReprobe(address)
+                    }
                     Log.w(TAG, "Runtime offline retention unverified for $address; keeping flat retry cadence: " +
                         (result.exceptionOrNull()?.message ?: "invalid or all-zero storage status"))
                 }
@@ -469,6 +501,16 @@ class OmiBleForegroundService : Service() {
             // gone and still needs the proof to keep the escalated schedule.
             managed.retentionProbe.cancel()
         }
+    }
+
+    /** One re-probe on the CURRENT link after Dart's post-ready clock sync.
+     *  Replaced links are ignored: the guard inside probeRetentionRuntime
+     *  rejects a GATT that no longer matches, and a new link probes fresh. */
+    private fun scheduleRetentionReprobe(address: String) {
+        handler.postDelayed({
+            val managed = managedDevices[address.uppercase()] ?: return@postDelayed
+            probeRetentionRuntime(address)
+        }, RETENTION_REPROBE_DELAY_MS)
     }
 
     private fun mapGattServices(services: List<BluetoothGattService>): List<BleService> =

@@ -145,6 +145,12 @@ class BleReconnectBackoffTest {
         repeat(5) {
             assertEquals(3_000L, backoff.delayForFailure("A", false, null, BleReconnectBackoff.retentionProbeSucceeds(storageStatus(used = 5, free = 100))))
         }
+        // The one failure shape a post-clock-sync re-probe can flip is detected:
+        // mounted storage whose RTC-valid field is still zero.
+        assertTrue(BleReconnectBackoff.storageStatusHasDataWithoutClock(storageStatus(used = 5, unread = 5, free = 100)))
+        assertFalse(BleReconnectBackoff.storageStatusHasDataWithoutClock(storageStatus(used = 5, free = 100, rtc = 1)))
+        assertFalse(BleReconnectBackoff.storageStatusHasDataWithoutClock(ByteArray(16)))
+        assertFalse(BleReconnectBackoff.storageStatusHasDataWithoutClock(null))
     }
 
     @Test

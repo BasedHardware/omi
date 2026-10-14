@@ -44,6 +44,13 @@ class RetentionCaptureOrderingContractTest {
         assertTrue("retention probe must run inside fireDeviceReady", probe >= 0)
         assertTrue("audio subscription must precede retention advertisement recording", subscribe < record)
         assertTrue("audio subscription must precede the retention probe read", subscribe < probe)
+        // The probe is gated on an audio subscription being queued: with no
+        // native target and Flutter alive, the probe waits behind Dart's
+        // onDeviceReady post so Dart's own subscription can win the queue.
+        assertTrue(
+            "probe must be deferred behind the Flutter onDeviceReady post when no native subscription was queued",
+            body.contains("OmiBleManager.isFlutterAlive -> bleManager.mainHandler.post { probeRetentionRuntime(addr) }"),
+        )
     }
 
     @Test
@@ -84,10 +91,24 @@ class RetentionCaptureOrderingContractTest {
         val connect = service.substringAfter("override fun onGattConnected").substringBefore("override fun onGattDisconnected")
         assertTrue("connect must reset the stale retention proof", connect.contains("retentionProbe.resetVerification()"))
         assertTrue("connect must also clear the advertisement flag", connect.contains("hasVerifiedRetention = false"))
+        assertTrue("connect must reset the bounded re-probe budget", connect.contains("retentionReprobes = 0"))
         val backoff = BleReconnectBackoff()
         // And the predicate it gates: RTC-less storage never licenses escalation.
         val timeless = java.nio.ByteBuffer.allocate(16).order(java.nio.ByteOrder.LITTLE_ENDIAN)
             .putInt(0).putInt(0).putInt(4096).putInt(0).array()
         assertEquals(3_000L, backoff.delayForFailure("AA", false, null, BleReconnectBackoff.retentionProbeSucceeds(timeless)))
+    }
+
+    @Test
+    fun `the post-clock-sync re-probe is bounded to one per connection`() {
+        val service = serviceSource()
+        assertTrue(
+            "re-probe scheduling must be guarded by the per-link budget",
+            service.contains("managed.retentionReprobes < 1"),
+        )
+        assertTrue(
+            "scheduling a re-probe must consume the budget",
+            service.contains("managed.retentionReprobes += 1"),
+        )
     }
 }

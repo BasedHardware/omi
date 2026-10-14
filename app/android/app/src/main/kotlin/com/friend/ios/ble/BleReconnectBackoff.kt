@@ -110,6 +110,21 @@ internal class BleReconnectBackoff(
             return rtcValid && used + unread + free > 0L
         }
 
+        /**
+         * True when the status payload shows mounted storage (nonzero
+         * used+unread+free) whose RTC-valid field is still zero — the one
+         * failure shape a post-clock-sync re-probe can legitimately flip.
+         */
+        fun storageStatusHasDataWithoutClock(payload: ByteArray?): Boolean {
+            if (payload == null || payload.size != 16) return false
+            val buffer = java.nio.ByteBuffer.wrap(payload).order(java.nio.ByteOrder.LITTLE_ENDIAN)
+            val used = buffer.int.toLong() and 0xffff_ffffL
+            val unread = buffer.int.toLong() and 0xffff_ffffL
+            val free = buffer.int.toLong() and 0xffff_ffffL
+            val rtcValid = buffer.int != 0
+            return !rtcValid && used + unread + free > 0L
+        }
+
         val DEFAULT_STEPS_MS = longArrayOf(3_000L, 6_000L, 12_000L, 30_000L, 60_000L)
         const val FASTEST_DELAY_MS = 3_000L
     }
