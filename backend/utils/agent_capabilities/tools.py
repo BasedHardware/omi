@@ -3,7 +3,6 @@
 import copy
 import hashlib
 import json
-import re
 from types import SimpleNamespace
 from datetime import datetime, timezone
 from uuid import uuid5, NAMESPACE_URL
@@ -14,6 +13,7 @@ from database.review_changes import AgentEdit
 from database.review_memory_changes import MemoryEdit
 from database.task_intelligence_control import get_task_workflow_control
 from models.review import AgentProposalItem, ChangeRef, ReviewChange, ReviewItem, ReviewItemV2
+from utils.agent_capabilities.text_edits import replace_term
 from models.agent_refs import base_ref, has_ref, cited_value
 from models.dream_edit import Edit, MemoryHygieneEdit
 from models.agent_edit import HarnessEdit
@@ -89,10 +89,6 @@ def edit_key(edit, records=None):
     return 'dream:' + kind + ':' + hashlib.sha256(json.dumps(value).encode()).hexdigest()
 
 
-def replace_term(text, before, after):
-    return re.sub(r'(?<!\w)' + re.escape(before) + r'(?!\w)', lambda _: after, text)
-
-
 def _replace_tree(value: Any, before: str, after: str) -> Any:
     if isinstance(value, str):
         return replace_term(value, before, after)
@@ -129,7 +125,11 @@ def validate_summary_edit(edit, row, *, full=False, authority='dream'):
     if row.get('is_locked') or not conversations.is_visible_conversation(row):
         raise review_store.ReviewConflict('Dream conversation unavailable')
     if authority == 'user' and isinstance(edit, HarnessEdit):
-        current = row.get('user_title') if edit.kind == 'title' and row.get('user_title') else (row.get('structured') or {}).get(edit.kind, '')
+        current = (
+            row.get('user_title')
+            if edit.kind == 'title' and row.get('user_title')
+            else (row.get('structured') or {}).get(edit.kind, '')
+        )
         if edit.before != current:
             raise review_store.ReviewConflict('Agent summary changed')
         if not edit.after.strip():
@@ -164,13 +164,18 @@ def validate_edit(edit, records, *, authority='dream'):
         elif collection in {'memory_items', 'memories'}:
             values = [row.get('content', '')]
         else:
-            generated = {key: value for key, value in (row.get('structured') or {}).items()
-                         if key in {'title', 'overview', 'sections', 'note_claims'}}
+            generated = {
+                key: value
+                for key, value in (row.get('structured') or {}).items()
+                if key in {'title', 'overview', 'sections', 'note_claims'}
+            }
             changed = _replace_tree(generated, edit.before, edit.after)
             values = [segment.get('text', '') for segment in row.get('transcript_segments') or []]
             if generated != changed:
                 values.append(edit.before)
-        if not any(isinstance(value, str) and replace_term(value, edit.before, edit.after) != value for value in values):
+        if not any(
+            isinstance(value, str) and replace_term(value, edit.before, edit.after) != value for value in values
+        ):
             raise ValueError('dream_invalid_target')
     if (
         edit.kind == 'spelling'
@@ -406,11 +411,21 @@ def apply_edit(uid, edit, records, *, expected_records=None, authority='user'):
                 )
             ]
             from utils.agent_capabilities import transcripts
+
             corrections = transcripts.entries(edit, current, authority=authority, change_id=change.change_id)
             if corrections:
                 from database.review_transcript_changes import record_change
-                record_change(uid, change, patch, corrections, edit_key=key,
-                              expected_records=expected_records, expected_document=raw)
+
+                record_change(
+                    uid,
+                    change,
+                    patch,
+                    corrections,
+                    edit_key=key,
+                    expected_records=expected_records,
+                    expected_document=raw,
+                    authority=authority,
+                )
                 return 'applied'
         else:
             raise ValueError('dream_unsupported_spelling_target')
@@ -438,8 +453,6 @@ def apply_edit(uid, edit, records, *, expected_records=None, authority='user'):
     return 'applied'
 
 
-
-
 def apply_verified_edit(uid, edit, records, *, expected_records, authority):
     """The harness alone selects this boundary after independent verification.
 
@@ -452,8 +465,6 @@ def apply_verified_edit(uid, edit, records, *, expected_records, authority):
     revalidate_proposal(uid, {'records': sources})
     validate_canonical_proposal(uid, edit)
     return apply_edit(uid, edit, sources, expected_records=expected_records, authority=authority)
-
-
 
 
 def answer_spelling(uid, source, value):
@@ -544,6 +555,8 @@ def proposal_fences(uid, source):
             paths.add('screen_activity/' + key)
         else:
             paths.add(ref)
+            if collection == 'conversations' and row.get('has_transcript_corrections'):
+                paths.add('transcript_corrections/' + key)
     return {
         path: review_store.user(uid).collection(path.split('/', 1)[0]).document(path.split('/', 1)[1]).get().to_dict()
         for path in sorted(paths)
@@ -691,12 +704,28 @@ def apply_vocabulary(uid, terms, *, expected_records=None, user_accepted=False, 
         if records:
             ref = next((ref for ref in term.evidence if base_ref(ref) in records), '')
             if ref:
-                evidence_edit = SimpleNamespace(kind='vocabulary', target=ref,
-                    other='', before='', after=term.spelling, reason=change.title, evidence=term.evidence)
+                evidence_edit = SimpleNamespace(
+                    kind='vocabulary',
+                    target=ref,
+                    other='',
+                    before='',
+                    after=term.spelling,
+                    reason=change.title,
+                    evidence=term.evidence,
+                )
                 viewed = dream_change_view.edit_change(uid, evidence_edit, records, key)
                 change.context = viewed.context
-                change.refs = [ChangeRef(type='conversation', id=base_ref(ref).partition('/')[2],
-                                        label=proposal_label(records[base_ref(ref)]))] if ref.startswith('conversations/') else []
+                change.refs = (
+                    [
+                        ChangeRef(
+                            type='conversation',
+                            id=base_ref(ref).partition('/')[2],
+                            label=proposal_label(records[base_ref(ref)]),
+                        )
+                    ]
+                    if ref.startswith('conversations/')
+                    else []
+                )
         review_changes.record_agent_change(
             uid,
             change,

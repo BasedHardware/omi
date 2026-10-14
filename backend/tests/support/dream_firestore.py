@@ -100,19 +100,28 @@ class Query:
 
 class Transaction(StrictFirestoreTransaction):
     def update(self, ref, data):
-        # Firestore dotted field paths mutate nested maps; the base fixture's
-        # literal-key updates cannot witness summary spelling or its Undo.
+        # Dotted paths and DELETE_FIELD are witnessed by the real local SDK
+        # overlay/invalidation/Undo test, rather than guessed in this fixture.
         super().update(ref, data)
         row = self._database.rows[ref.path]
         for field, value in data.items():
             if '.' not in field:
+                if value is firestore.DELETE_FIELD:
+                    row.pop(field, None)
                 continue
-            row.pop(field)
+            row.pop(field, None)
             parent = row
             parts = field.split('.')
             for part in parts[:-1]:
+                if value is firestore.DELETE_FIELD and part not in parent:
+                    parent = None
+                    break
                 parent = parent.setdefault(part, {})
-            parent[parts[-1]] = deepcopy(value)
+            if parent is not None:
+                if value is firestore.DELETE_FIELD:
+                    parent.pop(parts[-1], None)
+                else:
+                    parent[parts[-1]] = deepcopy(value)
 
     def set(self, ref, data, merge=False):
         super().set(ref, merged(self._database.rows.get(ref.path, {}), data, merge))

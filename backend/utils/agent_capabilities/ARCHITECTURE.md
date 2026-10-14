@@ -19,6 +19,7 @@ outside this PR.
 | `tools.py` | Reversible domain mutations and Review acceptance through existing writers |
 | `cleanup_edits.py` | Protected tasks/people, same-speech duplicate links and language guards |
 | `change_view.py` | Before/after and surrounding speech for the encrypted change receipt |
+| `text_edits.py` | Pure exact-term replacement with no storage or agent dependencies |
 | `transcripts.py` | Immutable captured text, encrypted correction overlays and read/storage projections |
 
 Tool schemas and uniform `collection/id#segment` refs live in `models/agent_tools.py`,
@@ -32,7 +33,15 @@ summary patch with the journal. The conversation read boundary renders active
 corrections and exposes original text alongside the projection. Storage encoding
 restores captured text. Undo marks overlay entries inactive and checks speech
 anchors and newer dependent edits; historical in-place receipts retain their
-existing reversal path.
+existing reversal path. The existing manual segment-edit API creates a user
+correction through that same writer, even when autonomous Review is disabled.
+Summary source references and cached client processing are invalidated in the
+same commit. A newer correction that depends on an older one prevents reversing
+its input underneath it. Late client output binds to the rendered transcript in
+a transaction that also reads the overlay; changing captured bytes is not needed
+to reject a stale summary. Pure field-presence helpers and exact-term replacement
+are separate from domain mutations so these read boundaries do not import the
+entire write stack.
 
 Dream owns scheduling, admission, prompts, verification decisions, demotion,
 attention ranking and counts-only telemetry outside this package. The capability

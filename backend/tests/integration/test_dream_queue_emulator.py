@@ -102,7 +102,9 @@ def test_fragment_spelling_round_trip_and_undo_preserve_other_segments(monkeypat
     assert dream_tools.apply_edit(uid, edit, records) == 'applied'
     current = conversations.prepare_conversation_for_read(document.get().to_dict(), uid)
     assert current['transcript_segments'][0]['text'] == 'Alice met Alice.'
-    assert current['transcript_segments'][1] == row['transcript_segments'][1]
+    from utils.agent_capabilities.transcripts import originals
+
+    assert originals(current['transcript_segments'])[1] == row['transcript_segments'][1]
     assert current['structured'] == row['structured']
     change_id = str(uuid5(NAMESPACE_URL, uid + ':' + dream_tools.edit_key(edit, records)))
     journal = review_store.decode_doc(
@@ -114,7 +116,9 @@ def test_fragment_spelling_round_trip_and_undo_preserve_other_segments(monkeypat
     assert journal['change']['refs'][0]['label'] == 'Conversation #s1'
     review_changes.set_undone(uid, change_id, True)
     restored = conversations.prepare_conversation_for_read(document.get().to_dict(), uid)
-    assert restored['transcript_segments'] == row['transcript_segments']
+    from utils.agent_capabilities.transcripts import originals
+
+    assert originals(restored['transcript_segments']) == row['transcript_segments']
     assert restored['structured'] == row['structured']
     assert (
         dream_tools.apply_edit(uid, edit.model_copy(update={'target': 'conversations/synthetic#12.5'}), records)
@@ -123,10 +127,8 @@ def test_fragment_spelling_round_trip_and_undo_preserve_other_segments(monkeypat
 
 
 @pytest.fixture(autouse=True)
-def deterministic_cleanup_admission(monkeypatch):
-    # Queue-only proofs must not draw a random cleanup page. The cleanup proof
-    # explicitly enables seeding with its own deterministic draw.
-    monkeypatch.setenv('DREAM_AGENT_BACKFILL_SHARE', '0')
+def review_journal_available(monkeypatch):
+    monkeypatch.setenv('REVIEW_SURFACE_MODE', 'on')
 
 
 def test_dirty_queue_transforms_queries_and_transaction_deletes(monkeypatch):
@@ -167,13 +169,17 @@ def test_dirty_queue_transforms_queries_and_transaction_deletes(monkeypatch):
     )
     assert dream_store.dirty_count(uid, firestore_client=database) == 468
     assert state.get().to_dict()['passes'] == 1
-    assert dream_store.spend_ref(database, uid, lease['day']).get().to_dict()['reserved_usd'] == pytest.approx(0.24)
+    assert dream_store.spend_ref(database, uid, lease['day']).get().to_dict()['reserved_usd'] == pytest.approx(
+        Caps().reservation_usd
+    )
 
     lease = dream_store.acquire(uid, Caps(), firestore_client=database)
     dream_store.finish(uid, lease, {'tokens': 0}, success=False, release=False, refund=True, firestore_client=database)
     data = state.get().to_dict()
     assert data['passes'] == 1 and data['lease']['run_id'] == lease['run_id']
-    assert dream_store.spend_ref(database, uid, lease['day']).get().to_dict()['reserved_usd'] == pytest.approx(0.24)
+    assert dream_store.spend_ref(database, uid, lease['day']).get().to_dict()['reserved_usd'] == pytest.approx(
+        Caps().reservation_usd
+    )
     assert dream_store.acquire(uid, Caps(), firestore_client=database) is None
     runs = dream_store.own_runs(uid, limit=20, firestore_client=database)
     assert len(runs) >= 3
@@ -223,7 +229,7 @@ def test_poison_settlement_is_atomic_and_preserves_refreshed_version(monkeypatch
     monkeypatch.setenv('DREAM_AGENT_ELIGIBILITY', 'all')
     monkeypatch.setenv('DREAM_AGENT_UID_ALLOWLIST', uid)
     database.collection('users').document(uid).set({})
-    caps = Caps(passes=10)
+    caps = Caps(passes=10, daily_usd=250, global_daily_usd=1000)
     dream_store.mark_dirty(uid, [('conversations', 'poison')], firestore_client=database)
     for attempt in range(2):
         lease = dream_store.acquire(uid, caps, firestore_client=database)
@@ -311,7 +317,6 @@ def test_stale_reclamation_contended_admission_and_late_finish(monkeypatch, lega
     monkeypatch.setenv('DREAM_AGENT_ENABLED', 'true')
     monkeypatch.setenv('DREAM_AGENT_ELIGIBILITY', 'all')
     monkeypatch.setenv('DREAM_AGENT_UID_ALLOWLIST', uid)
-    monkeypatch.setenv('DREAM_AGENT_BACKFILL_SHARE', '0')
     old_time = datetime(2026, 10, 14, 23, 0, tzinfo=timezone.utc)
     now = old_time + timedelta(days=1)
     caps = Caps(tokens=24000, passes=24, daily_usd=250, global_daily_usd=1000)
@@ -376,3 +381,118 @@ def test_stale_reclamation_contended_admission_and_late_finish(monkeypatch, lega
     assert state.get().to_dict() == current
     assert new_spend.get().to_dict()['reserved_usd'] == pytest.approx(caps.reservation_usd)
     assert [s.to_dict() for s in dream_store.dirty_refs(uid, firestore_client=database)] == pending
+
+
+def test_manual_overlay_projection_boundaries_dependencies_and_atomic_invalidation(monkeypatch):
+    from database import review_changes
+    from utils.agent_capabilities import tools
+    from utils.agent_capabilities.transcripts import originals
+
+    host = os.environ.get('FIRESTORE_EMULATOR_HOST', '')
+    if not host.startswith(('127.0.0.1:', 'localhost:')):
+        pytest.skip('local Firestore emulator required')
+    database = firestore.Client(project='demo-dream-coalesce', credentials=AnonymousCredentials())
+    monkeypatch.setattr(_client, '_firestore_client', database)
+    uid = 'synthetic-manual-overlay-' + str(uuid4())
+    document = database.collection('users').document(uid).collection('conversations').document('synthetic')
+    row = {
+        'id': 'synthetic',
+        'visibility': 'shared',
+        'status': 'completed',
+        'data_protection_level': 'enhanced',
+        'client_processing': {'synthetic_stale_projection': True},
+        'structured': {
+            'title': 'Invented workshop',
+            'sections': [{'heading': 'Plan', 'body_markdown': '- A synthetic plan', 'source_segment_ids': ['s1']}],
+        },
+        'transcript_segments': [
+            {'id': 's1', 'start': 0, 'end': 5, 'text': 'Qorby plans an invented workshop.'},
+            {'id': 's2', 'start': 6, 'end': 8, 'text': 'This other segment stays unchanged.'},
+        ],
+    }
+    original = conversations.encode_conversation_for_write(uid, row, 'enhanced')
+    document.set(original)
+    edit = Edit(
+        kind='spelling',
+        target='conversations/synthetic#s1',
+        before='Qorby',
+        after='Qorbi',
+        reason='Synthetic explicit spelling',
+        evidence=['conversations/synthetic#s1'],
+    )
+    assert tools.apply_edit(uid, edit, {'conversations/synthetic': row}) == 'applied'
+    first_id = str(uuid5(NAMESPACE_URL, uid + ':' + tools.edit_key(edit, {'conversations/synthetic': row})))
+    # The existing manual API works independently of autonomous Review enablement.
+    monkeypatch.setenv('REVIEW_SURFACE_MODE', 'off')
+    assert (
+        conversations.update_conversation_segment_text(
+            uid, 'synthetic', 's1', 'Owner corrected synthetic workshop wording.'
+        )
+        == 'ok'
+    )
+    raw = document.get().to_dict()
+    assert raw['transcript_segments'] == original['transcript_segments']
+    assert 'client_processing' not in raw
+    assert raw['structured']['sections'][0]['source_segment_ids'] == []
+    entries = review_store.decode_doc(
+        uid,
+        database.collection('users')
+        .document(uid)
+        .collection('transcript_corrections')
+        .document('synthetic')
+        .get()
+        .to_dict(),
+    )['source']
+    manual_id = entries[-1]['change_id']
+    assert entries[-1]['source'] == 'user' and entries[-1]['depends_on'] == [first_id]
+    projected = conversations.prepare_conversation_for_read(raw, uid)
+    assert projected['transcript_segments'][0]['text'] == 'Owner corrected synthetic workshop wording.'
+    assert projected['transcript_segments'][0]['original_text'] == row['transcript_segments'][0]['text']
+    assert originals(projected['transcript_segments'])[1] == row['transcript_segments'][1]
+    mcp = conversations.get_mcp_conversations_by_id(
+        uid, ['synthetic'], include_transcript=True, firestore_client=database
+    )
+    public = conversations.get_public_shared_conversation_bounded(uid, 'synthetic', firestore_client=database)
+    assert (
+        mcp[0]['transcript_segments'][0]['text']
+        == public['transcript_segments'][0]['text']
+        == projected['transcript_segments'][0]['text']
+    )
+    with pytest.raises(review_store.ReviewConflict, match='dependent newer correction'):
+        review_changes.set_undone(uid, first_id, True)
+    undone = review_changes.set_undone(uid, manual_id, True)
+    assert review_changes.set_undone(uid, manual_id, True) == undone
+    raw = document.get().to_dict()
+    assert raw['transcript_segments'] == original['transcript_segments']
+    assert 'client_processing' not in raw
+    assert raw['structured']['sections'] == original['structured']['sections']
+    assert 'has_user_transcript_corrections' not in raw
+    assert conversations.prepare_conversation_for_read(raw, uid)['transcript_segments'][0]['text'].startswith('Qorbi')
+    review_changes.set_undone(uid, first_id, True)
+    with pytest.raises(review_store.ReviewConflict, match='depends on an undone correction'):
+        review_changes.set_undone(uid, manual_id, False)
+    review_changes.set_undone(uid, first_id, False)
+    review_changes.set_undone(uid, manual_id, False)
+    assert (
+        conversations.prepare_conversation_for_read(document.get().to_dict(), uid)['transcript_segments'][0]['text']
+        == 'Owner corrected synthetic workshop wording.'
+    )
+
+    from utils.conversations.transcript_hash import transcript_sha256
+
+    assert not conversations.bind_client_processing(
+        uid,
+        'synthetic',
+        {'client_processing': {'transcript_sha256': transcript_sha256(row['transcript_segments'])}},
+        firestore_client=database,
+    )
+    current = conversations.prepare_conversation_for_read(document.get().to_dict(), uid)
+    digest = transcript_sha256(current['transcript_segments'])
+    assert conversations.bind_client_processing(
+        uid, 'synthetic', {'client_processing': {'transcript_sha256': digest}}, firestore_client=database
+    )
+    review_changes.set_undone(uid, manual_id, True)
+    assert 'client_processing' not in document.get().to_dict()
+    review_changes.set_undone(uid, first_id, True)
+    assert document.get().to_dict()['client_processing'] == original['client_processing']
+    assert document.get().to_dict()['transcript_segments'] == original['transcript_segments']

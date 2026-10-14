@@ -340,7 +340,7 @@ def absorb_conversation(
         audit = audit_db.SKIPPED_ERROR if audit_unavailable else audit_db.gate_skip(transaction, client, uid)
         level = survivor_update.get('data_protection_level') or 'enhanced'
         payload = conversations_db.encode_conversation_for_write(uid, survivor_update, level)
-        conversations_db._guard_match_score_size(payload, survivor_raw)  # pyright: ignore[reportPrivateUsage]
+        conversations_db.guard_match_score_size(payload, survivor_raw)
         if (
             'speaker_match_scores' in survivor_raw
             and 'speaker_match_scores' not in payload

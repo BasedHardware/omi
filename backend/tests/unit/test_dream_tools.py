@@ -9,7 +9,7 @@ import pytest
 from database import review_changes, review_store
 from tests.unit.test_dream_cleanup_edits import store, UID
 from models.dream_edit import Edit
-from utils.agent_capabilities import tools as dream_tools
+from utils.agent_capabilities import tools as dream_tools, transcripts
 
 
 def spelling(target='conversations/c1'):
@@ -74,7 +74,7 @@ def test_transcript_fix_uses_immutable_overlay_and_snapshot_fence(store, monkeyp
     assert decoded['structured']['title'] == 'Alice meeting'
     assert decoded['structured']['overview'] == row['structured']['overview']
     assert decoded['structured']['sections'] == row['structured']['sections']
-    assert decoded['client_processing'] == row['client_processing']
+    assert 'client_processing' not in decoded
     journal = next(
         review_store.decode_doc(uid, value) for path, value in store.rows.items() if path[2:3] == ('review_changes',)
     )
@@ -83,7 +83,9 @@ def test_transcript_fix_uses_immutable_overlay_and_snapshot_fence(store, monkeyp
     assert journal['transcript_overlay']['original_fingerprint'] == original_fingerprint(uid, stored)
     review_changes.set_undone(uid, journal['change']['change_id'], True)
     assert (
-        dream_tools.conversations.prepare_conversation_for_read(persisted, uid)['transcript_segments']
+        transcripts.originals(
+            dream_tools.conversations.prepare_conversation_for_read(persisted, uid)['transcript_segments']
+        )
         == row['transcript_segments']
     )
 
@@ -185,19 +187,23 @@ def test_fragment_spelling_only_changes_selected_segment_and_journals_scope(stor
     assert raw['transcript_segments'] == stored['transcript_segments']
     decoded = dream_tools.conversations.prepare_conversation_for_read(raw, uid)
     assert decoded['transcript_segments'][0]['text'] == 'Alice met Alice.'
-    assert decoded['transcript_segments'][1] == row['transcript_segments'][1]
+    assert decoded['transcript_segments'][1] == {
+        **row['transcript_segments'][1],
+        'original_text': row['transcript_segments'][1]['text'],
+    }
     assert decoded['structured'] == row['structured'] and decoded['user_title'] == row['user_title']
     journal = next(
         review_store.decode_doc(uid, value) for path, value in store.rows.items() if path[2:3] == ('review_changes',)
     )
-    assert journal['transcript_overlay']['before'] == {}
+    assert journal['transcript_overlay']['before'] == {'client_processing': {'present': False}}
+    assert journal['transcript_overlay']['after'] == {'client_processing': {'present': False}}
     assert len(journal['transcript_overlay']['corrections']) == 1
     assert journal['change']['refs'][0]['label'] == 'Conversation #' + fragment
     alias = edit.model_copy(update={'target': 'conversations/c1#s1'})
     assert dream_tools.edit_key(edit, records) == dream_tools.edit_key(alias, records)
     review_changes.set_undone(uid, journal['change']['change_id'], True)
     assert (
-        dream_tools.conversations.prepare_conversation_for_read(raw, uid)['transcript_segments']
+        transcripts.originals(dream_tools.conversations.prepare_conversation_for_read(raw, uid)['transcript_segments'])
         == row['transcript_segments']
     )
 

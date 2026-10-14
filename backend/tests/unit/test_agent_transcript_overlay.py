@@ -94,7 +94,7 @@ def test_reprocessing_storage_never_persists_projected_text(store, monkeypatch):
     store.rows[('users', UID, 'conversations', 'one')] = encoded
     entry = review_store.decode_doc(UID, store.rows[('users', UID, 'transcript_corrections', 'one')])['source'][0]
     review_changes.set_undone(UID, entry['change_id'], True)
-    assert seen()['transcript_segments'] == original
+    assert transcripts.originals(seen()['transcript_segments']) == original
 
 
 def test_shared_authority_requires_dream_verification_but_user_applies_with_undo(store, monkeypatch):
@@ -120,3 +120,29 @@ def test_original_replacement_blocks_overlay_undo(store, monkeypatch):
     )
     with pytest.raises(review_store.ReviewConflict, match='Original speech changed'):
         review_changes.set_undone(UID, entry['change_id'], True)
+
+
+def test_manual_edit_keeps_capture_and_restores_projection_invalidations(store, monkeypatch):
+    seen, original = setup(store, monkeypatch)
+    raw = store.rows[('users', UID, 'conversations', 'one')]
+    raw['client_processing'] = {'synthetic': True}
+    monkeypatch.setenv('REVIEW_SURFACE_MODE', 'off')
+    assert (
+        conversations.update_conversation_segment_text(
+            UID, 'one', 'segment-one', 'Owner corrected synthetic workshop text.', firestore_client=store
+        )
+        == 'ok'
+    )
+    assert raw['transcript_segments'] == original['transcript_segments']
+    assert 'client_processing' not in raw
+    assert seen()['transcript_segments'][0]['text'] == 'Owner corrected synthetic workshop text.'
+    journal = next(row for path, row in store.rows.items() if path[2:3] == ('review_changes',))
+    assert 'Owner corrected' not in str(journal)
+    change_id = review_store.decode_doc(UID, journal)['change']['change_id']
+    first = review_changes.set_undone(UID, change_id, True)
+    assert review_changes.set_undone(UID, change_id, True) == first
+    assert raw['client_processing'] == {'synthetic': True}
+    assert 'has_user_transcript_corrections' not in raw
+    assert seen()['transcript_segments'][0]['text'].startswith('Qorby')
+    review_changes.set_undone(UID, change_id, False)
+    assert seen()['transcript_segments'][0]['text'] == 'Owner corrected synthetic workshop text.'

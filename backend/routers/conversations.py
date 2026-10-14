@@ -1261,6 +1261,10 @@ def patch_conversation_segment_text(
         raise HTTPException(status_code=402, detail="Unlimited Plan Required to access this conversation.")
     if result == 'segment_not_found':
         raise HTTPException(status_code=404, detail="Segment not found")
+    if result == 'conflict':
+        raise HTTPException(status_code=409, detail='Transcript changed; refresh before retrying')
+    if result == 'correction_limit':
+        raise HTTPException(status_code=409, detail='Transcript correction history is full')
     return {'status': 'Ok'}
 
 

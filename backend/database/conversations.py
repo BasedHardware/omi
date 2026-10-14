@@ -123,6 +123,7 @@ MCP_CONVERSATION_CARD_FIELD_PATHS = (
 _MCP_CONVERSATION_TRANSCRIPT_FIELD_PATHS = MCP_CONVERSATION_CARD_FIELD_PATHS + (
     'transcript_segments',
     'transcript_segments_compressed',
+    'has_transcript_corrections',
 )
 
 
@@ -253,7 +254,7 @@ def _drop_match_scores(data: dict, reason: str = 'other') -> None:
     match_scores.record_failure(logger, reason=reason)
 
 
-def _guard_match_score_size(data: dict, existing: Optional[dict] = None, path: Optional[str] = None) -> None:
+def guard_match_score_size(data: dict, existing: Optional[dict] = None, path: Optional[str] = None) -> None:
     """Optional scores cannot push the existing document towards Firestore's ceiling.
     Uses only the snapshot already read by the write owner. The 124 KiB
     headroom matches sync's existing budget and covers unknown SDK types.
@@ -387,7 +388,7 @@ def _prepare_conversation_for_write(data: Dict[str, Any], uid: str, level: str) 
     if 'user_corrections' in data and isinstance(data['user_corrections'], list):
         data['user_corrections'] = _protect_json_value(data['user_corrections'], uid, level)
         data['user_corrections_compressed'] = True
-    _guard_match_score_size(data)
+    guard_match_score_size(data)
     return data
 
 
@@ -470,6 +471,7 @@ def _decode_public_transcript_segments_bounded(
     max_segments: int = _PUBLIC_TRANSCRIPT_MAX_SEGMENTS,
     max_segment_text_chars: int = _PUBLIC_TRANSCRIPT_MAX_SEGMENT_TEXT_CHARS,
     decompressor_factory: Callable[[], Any] = zlib.decompressobj,
+    retain_anchors: bool = False,
 ) -> List[Dict[str, Any]]:
     """Decode only the bounded compressed transcript shape used by public chat."""
 
@@ -535,6 +537,19 @@ def _decode_public_transcript_segments_bounded(
             speaker_id = segment.get('speaker_id')
             if isinstance(speaker_id, int) and not isinstance(speaker_id, bool):
                 safe_segment['speaker_id'] = speaker_id
+            if retain_anchors:
+                for field in ('id', 'segment_id'):
+                    value = segment.get(field)
+                    if value is not None:
+                        if not isinstance(value, str) or len(value) > 256:
+                            raise invalid()
+                        safe_segment[field] = value
+                for field in ('start', 'end'):
+                    value = segment.get(field)
+                    if value is not None:
+                        if isinstance(value, bool) or not isinstance(value, (int, float)):
+                            raise invalid()
+                        safe_segment[field] = value
             safe_segments.append(safe_segment)
         return safe_segments
     except (json.JSONDecodeError, RecursionError, TypeError, UnicodeDecodeError, ValueError, zlib.error) as exc:
@@ -583,7 +598,9 @@ def _reveal_user_corrections_for_read(data: Dict[str, Any], uid: str) -> None:
         data['user_corrections'] = _reveal_json_value(data.get('user_corrections'), uid, True)
 
 
-def prepare_conversation_for_read(conversation_data: Optional[Dict[str, Any]], uid: str) -> Optional[Dict[str, Any]]:
+def prepare_conversation_for_read(
+    conversation_data: Optional[Dict[str, Any]], uid: str, *, firestore_client: Any = None
+) -> Optional[Dict[str, Any]]:
     if not conversation_data:
         return None
 
@@ -606,7 +623,7 @@ def prepare_conversation_for_read(conversation_data: Optional[Dict[str, Any]], u
     if level == 'enhanced':
         from utils.agent_capabilities.transcripts import project
 
-        return project(uid, _decrypt_conversation_data(data, uid))
+        return project(uid, _decrypt_conversation_data(data, uid), firestore_client=firestore_client)
 
     # Handle standard level with potential compression
     if data.get('transcript_segments_compressed'):
@@ -626,7 +643,7 @@ def prepare_conversation_for_read(conversation_data: Optional[Dict[str, Any]], u
     _reveal_match_scores_for_read(data, uid)
     from utils.agent_capabilities.transcripts import project
 
-    return project(uid, data)
+    return project(uid, data, firestore_client=firestore_client)
 
 
 def document_data_with_revision(document) -> Optional[Dict[str, Any]]:
@@ -951,7 +968,7 @@ def upsert_conversation_with_lifecycle(uid: str, conversation_data: dict):
                 write_data.setdefault('structured', {})['overview'] = existing['user_overview']
 
             _reapply_current_manual_assignments(uid, write_data, existing)
-            _guard_match_score_size(write_data, existing, getattr(conversation_ref, 'path', None))
+            guard_match_score_size(write_data, existing, getattr(conversation_ref, 'path', None))
             transaction.set(conversation_ref, write_data, merge=True)
             return
 
@@ -1122,7 +1139,7 @@ def persist_processing_result_with_lifecycle(
             write_data.setdefault('structured', {})['overview'] = existing['user_overview']
 
         _reapply_current_manual_assignments(uid, write_data, existing)
-        _guard_match_score_size(write_data, existing, getattr(conversation_ref, 'path', None))
+        guard_match_score_size(write_data, existing, getattr(conversation_ref, 'path', None))
         transaction.set(conversation_ref, write_data, merge=True)
         existing_status = existing.get('status')
         write_status = write_data.get('status')
@@ -1284,6 +1301,7 @@ def get_public_shared_conversation_bounded(
             'is_locked',
             'transcript_segments_compressed',
             'transcript_segments',
+            'has_transcript_corrections',
         ]
     )
     if not snapshot.exists:
@@ -1306,10 +1324,31 @@ def get_public_shared_conversation_bounded(
             uid,
             raw.get('transcript_segments'),
             compressed=raw.get('transcript_segments_compressed') is True,
+            retain_anchors=True,
         )
     except ValueError:
         return None
-    return public_conversation
+    from utils.agent_capabilities.transcripts import project
+
+    public_conversation.update(
+        id=conversation_id, has_transcript_corrections=raw.get('has_transcript_corrections', False)
+    )
+    try:
+        projected = project(uid, public_conversation, firestore_client=client)
+        segments = projected['transcript_segments']
+        if (
+            any(len(segment['text']) > _PUBLIC_TRANSCRIPT_MAX_SEGMENT_TEXT_CHARS for segment in segments)
+            or len(json.dumps(segments, ensure_ascii=False).encode()) > _PUBLIC_TRANSCRIPT_MAX_DECODED_BYTES
+        ):
+            return None
+        for segment in segments:
+            for field in ('id', 'segment_id', 'start', 'end'):
+                segment.pop(field, None)
+        projected.pop('id', None)
+        projected.pop('has_transcript_corrections', None)
+        return projected
+    except ValueError:
+        return None
 
 
 def get_conversation_audio_stamp(uid: str, conversation_id: str) -> Optional[dict]:
@@ -1615,7 +1654,7 @@ def update_conversation(uid: str, conversation_id: str, update_data: dict) -> bo
 
     doc_level = doc_snapshot.to_dict().get('data_protection_level', 'standard')
     prepared_data = _prepare_conversation_for_write(update_data, uid, doc_level)
-    _guard_match_score_size(prepared_data, doc_snapshot.to_dict(), getattr(doc_ref, 'path', None))
+    guard_match_score_size(prepared_data, doc_snapshot.to_dict(), getattr(doc_ref, 'path', None))
     try:
         doc_ref.update(prepared_data)
     except NotFound:
@@ -1857,67 +1896,13 @@ def update_conversation_summary(uid: str, conversation_id: str, app_id: Optional
 
 
 @after_write('conversations')
-def update_conversation_segment_text(uid: str, conversation_id: str, segment_id: str, text: str) -> str:
-    """
-    Update a single segment's text in a conversation.
+def update_conversation_segment_text(
+    uid: str, conversation_id: str, segment_id: str, text: str, *, firestore_client: Any = None
+) -> str:
+    """Correct a captured segment through an encrypted, journaled projection."""
+    from database.review_transcript_changes import edit_user_segment
 
-    The read-modify-write runs in a Firestore transaction so concurrent edits
-    (e.g. the same conversation open in two tabs) can't lose-update each other.
-    Without it, two edits that both read the pre-edit transcript_segments array
-    and each rewrite the whole array clobber one another — the later write wins
-    and silently drops the earlier edit. The same write DELETE_FIELDs
-    ``client_processing`` and clears structured source references that include
-    the edited segment: a projection bound to the old transcript must not
-    outlive it. A whole section or action-item reference set is cleared when
-    it contains the edited segment, even when other segment IDs remain,
-    because the evidence is no longer complete. Summary text, action-item
-    fields, and unrelated references are preserved. Missing projection:
-    DELETE_FIELD is a no-op.
-
-    Returns:
-        'ok' on success, 'not_found' if conversation missing, 'locked' if conversation is locked,
-        'segment_not_found' if segment_id not found.
-    """
-    doc_ref = db.collection('users').document(uid).collection(conversations_collection).document(conversation_id)
-
-    @firestore.transactional
-    def _update_segment_text(transaction) -> str:
-        doc_snapshot = doc_ref.get(transaction=transaction)
-        if not doc_snapshot.exists:
-            return 'not_found'
-
-        raw_data = doc_snapshot.to_dict()
-        if raw_data.get('is_locked', False):
-            return 'locked'
-
-        conversation_data = prepare_conversation_for_read(raw_data, uid)
-        if not conversation_data:
-            return 'not_found'
-
-        segments = conversation_data.get('transcript_segments', [])
-        found = False
-        for segment in segments:
-            if isinstance(segment, dict) and segment.get('id') == segment_id:
-                segment['text'] = text
-                found = True
-                break
-
-        if not found:
-            return 'segment_not_found'
-
-        doc_level = conversation_data.get('data_protection_level', 'standard')
-        prepared_payload = _prepare_conversation_for_write({'transcript_segments': segments}, uid, doc_level)
-        prepared_payload.update(summary_source_reference_invalidations(conversation_data.get('structured'), segment_id))
-        # Keep the summary/reference invalidation and transcript edit under
-        # one server-side revision. Consumers can use this as the freshness
-        # boundary without pretending that the old evidence still applies.
-        prepared_payload['updated_at'] = datetime.now(timezone.utc)
-        clear_client_processing(prepared_payload)
-        _guard_match_score_size(prepared_payload, raw_data, getattr(doc_ref, 'path', None))
-        transaction.update(doc_ref, prepared_payload)
-        return 'ok'
-
-    return run_transactional(db, _update_segment_text)
+    return edit_user_segment(uid, conversation_id, segment_id, text, firestore_client=firestore_client)
 
 
 def delete_conversation_photos(uid: str, conversation_id: str) -> int:
@@ -2132,7 +2117,7 @@ def migrate_conversations_level_batch(uid: str, conversation_ids: List[str], tar
                     bool(current.get('manual_speaker_assignments_compressed')),
                 )
             prepared = _prepare_conversation_for_write(payload, uid, target_level)
-            _guard_match_score_size(prepared, current, getattr(doc_snapshot.reference, 'path', None))
+            guard_match_score_size(prepared, current, getattr(doc_snapshot.reference, 'path', None))
             if had_match_scores and match_scores.FIELD not in prepared:
                 # Failed re-encryption must not retain a standard blob after
                 # the document switches to enhanced protection.
@@ -2759,6 +2744,8 @@ def extra_updates_with_bound_client_processing(
     uid: str,
     current: Mapping[str, Any],
     extra_updates: Mapping[str, Any] | None,
+    *,
+    transcript_corrections: list[dict] | None = None,
 ) -> BoundExtraUpdates:
     """Copy ``extra_updates``, dropping any projection that does not bind to ``current``.
 
@@ -2792,6 +2779,12 @@ def extra_updates_with_bound_client_processing(
             current.get('transcript_segments'),
             bool(current.get('transcript_segments_compressed')),
         )
+        if current.get('has_transcript_corrections'):
+            from utils.agent_capabilities.transcripts import apply_entries
+
+            if transcript_corrections is None:
+                raise ValueError('Transcript corrections must be read in the binding transaction')
+            segments = apply_entries(segments, transcript_corrections)
     except (json.JSONDecodeError, TypeError, zlib.error, ValueError, RecursionError):
         for field in PROJECTION_FAMILY_FIELDS:
             if field not in updates:
@@ -2841,7 +2834,17 @@ def bind_client_processing(
         if not getattr(snapshot, 'exists', False):
             return False
         current = snapshot.to_dict() or {}
-        bound_updates = extra_updates_with_bound_client_processing(uid, current, mutation)
+        corrections = None
+        if current.get('has_transcript_corrections'):
+            from utils.agent_capabilities.transcripts import load_entries
+
+            try:
+                corrections = load_entries(uid, conversation_id, firestore_client=client, transaction=transaction)
+            except ValueError:
+                return False
+        bound_updates = extra_updates_with_bound_client_processing(
+            uid, current, mutation, transcript_corrections=corrections
+        )
         if not any(field in bound_updates for field in PROJECTION_FAMILY_FIELDS):
             return False
         transaction.update(doc_ref, bound_updates)
@@ -2983,7 +2986,7 @@ def assign_conversation_speaker(
         current.update(owner_updates)
         payload = _prepare_conversation_for_write(written, uid, raw.get('data_protection_level', 'standard'))
         clear_client_processing(payload)
-        _guard_match_score_size(payload, raw, getattr(ref, 'path', None))
+        guard_match_score_size(payload, raw, getattr(ref, 'path', None))
         transaction.update(ref, payload)
         current.update(transcript_segments=segments, manual_speaker_assignments=receipt)
         if payload.get(match_scores.FIELD) is firestore.DELETE_FIELD:
@@ -3225,7 +3228,7 @@ def update_conversation_segments(
             # no projection exists. A projection that is really there (overlap
             # with finalize) must still be cleared in this same write.
             clear_client_processing(prepared_payload)
-        _guard_match_score_size(prepared_payload, current, getattr(doc_ref, 'path', None))
+        guard_match_score_size(prepared_payload, current, getattr(doc_ref, 'path', None))
         _merge_owner_diagnostics(prepared_payload, current, getattr(doc_ref, 'path', None))
         transaction.update(doc_ref, prepared_payload)
         if planned is not None:
@@ -3360,7 +3363,7 @@ def materialize_translation(
         payload['translation_materializations_compressed'] = True
         if reservation is not None and not reservation_is_current(reservation):
             return None
-        _guard_match_score_size(payload, current, getattr(doc_ref, 'path', None))
+        guard_match_score_size(payload, current, getattr(doc_ref, 'path', None))
         transaction.update(doc_ref, payload)
         return selected
 
@@ -3734,7 +3737,7 @@ def assign_sync_conversation(uid: str, incoming: dict, *, candidate_id=None, tar
         def encode(payload):
             encoded = _prepare_conversation_for_write(payload, uid, payload.get('data_protection_level') or 'enhanced')
             current = score_snapshots.get(payload.get('id'))
-            _guard_match_score_size(encoded, current)
+            guard_match_score_size(encoded, current)
             if (
                 current
                 and match_scores.FIELD in current
@@ -3907,7 +3910,7 @@ def promote_final_pass_if_current(
             ),
         }
         prepared = encode_conversation_for_write(uid, patch, current.get('data_protection_level') or 'standard')
-        _guard_match_score_size(prepared, current, getattr(parent, 'path', None))
+        guard_match_score_size(prepared, current, getattr(parent, 'path', None))
         transaction.update(parent, prepared)
         return True
 

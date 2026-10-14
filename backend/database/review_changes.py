@@ -22,6 +22,7 @@ from database import (
     review_store as store,
 )
 from database import review_exact_undo
+from database.review_field_states import read_field_state, write_field_state
 from utils.dream_metrics import record_undo
 from utils.review_projection import sync_conversations
 from database.read_boundary import parse_payload_strict
@@ -63,19 +64,6 @@ class AgentEdit(BaseModel):
     ]
     document_id: str = Field(min_length=1, max_length=128, pattern=r'^[^/]+$')
     patch: dict
-
-
-def read_field_state(data: dict, path: str) -> dict:
-    value = data
-    for key in path.split('.'):
-        if not isinstance(value, dict) or key not in value:
-            return {'present': False}
-        value = value[key]
-    return {'present': True, 'value': copy.deepcopy(value)}
-
-
-def write_field_state(value: dict):
-    return value['value'] if value['present'] else firestore.DELETE_FIELD
 
 
 def _wire(data: dict) -> ReviewChange:

@@ -9,6 +9,7 @@ from datetime import datetime, timezone
 import pytest
 
 from database import conversations as conversations_db
+from tests.support.transcript_correction_store import install_store, target_updates, read
 
 UID = 'summary-user'
 CONVERSATION_ID = 'summary-conversation'
@@ -130,8 +131,10 @@ def test_missing_app_edit_does_not_write(monkeypatch):
 
 
 def test_segment_edit_invalidates_affected_summary_evidence_in_same_transaction(monkeypatch):
-    ref = _install_db(
+    database = install_store(
         monkeypatch,
+        UID,
+        CONVERSATION_ID,
         {
             'data_protection_level': 'standard',
             'transcript_segments': [
@@ -171,9 +174,12 @@ def test_segment_edit_invalidates_affected_summary_evidence_in_same_transaction(
 
     assert conversations_db.update_conversation_segment_text(UID, CONVERSATION_ID, 's1', 'New source text') == 'ok'
 
-    assert ref.get_transactions == [conversations_db.db.tx]
-    assert len(ref.update_calls) == 1
-    payload = ref.update_calls[0]
+    assert len(database.transactions) == 1
+    patches = target_updates(database, UID, CONVERSATION_ID)
+    assert len(patches) == 1
+    payload = patches[0]
+    assert 'transcript_segments' not in payload
+    assert read(database, UID, CONVERSATION_ID)['transcript_segments'][0]['text'] == 'New source text'
     assert payload['updated_at'].tzinfo == timezone.utc
     assert payload['structured.sections'] == [
         {
@@ -203,11 +209,17 @@ def test_segment_edit_invalidates_affected_summary_evidence_in_same_transaction(
     assert 'structured.overview' not in payload
     assert 'structured.events' not in payload
 
-    stored_segments = json.loads(zlib.decompress(payload['transcript_segments']).decode('utf-8'))
-    assert stored_segments == [
-        {'id': 's1', 'text': 'New source text'},
-        {'id': 's2', 'text': 'Unaffected source text'},
-    ]
+    raw = database.rows[('users', UID, 'conversations', CONVERSATION_ID)]
+    captured = conversations_db.decode_transcript_segments_verified(UID, raw['transcript_segments'], True)
+    assert {segment['id']: segment['text'] for segment in captured} == {
+        's1': 'Old source text',
+        's2': 'Unaffected source text',
+    }
+    projected = read(database, UID, CONVERSATION_ID)['transcript_segments']
+    assert {segment['id']: segment['text'] for segment in projected} == {
+        's1': 'New source text',
+        's2': 'Unaffected source text',
+    }
 
 
 def test_missing_conversation_summary_edit_does_not_write(monkeypatch):
