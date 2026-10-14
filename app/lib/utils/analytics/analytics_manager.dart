@@ -123,8 +123,7 @@ class AnalyticsManager {
     final previousOwner = _identityKnown ? _boundIdentity : null;
     final hadSession = _eventContext.containsKey('app_session_id');
     _identityResetNeeded = _identityResetNeeded || !_identityKnown || _boundIdentity != null;
-    // Preserve a durable epoch across relaunch of the same account so native
-    // session markers survive process death, but retire them on account changes.
+    // Keep a durable epoch across relaunch of the same account (native session markers survive), retire on change.
     final savedIdentity = _preferences.getString('device_health_identity');
     final savedEpoch = _preferences.getInt('device_health_identity_epoch');
     final sameOnRestart = !_identityKnown && identity != null && savedIdentity == identity && savedEpoch > 0;
@@ -584,7 +583,8 @@ class AnalyticsManager {
   Future<String?> getFeatureFlagVariant(String key) => _readFlag<String?>((a) => a.getFeatureFlagVariant(key));
 
   /// Re-fetches flags for the settled identity (a read right after sign-in would otherwise see the anonymous id's).
-  Future<void> reloadFeatureFlags() async => await _readFlag<bool>((a) => a.reloadFeatureFlags().then((_) => true));
+  Future<bool> reloadFeatureFlags() async =>
+      await _readFlag<bool>((a) => a.reloadFeatureFlags().then((_) => true)) ?? false;
   String? get settledDistinctId => _settledDistinctId; // null until an identity settles
   final Set<String> _recordedFlagExposures = {};
 
