@@ -760,6 +760,8 @@ volumeMounts: []
 #   mountPath: "/etc/foo"
 #   readOnly: true
 
+# Placement uses service/env labels, not pool names or CPU family.
+# New N4 and qualified N2 fallback pools retain the affinity labels below.
 nodeSelector: {}
 
 tolerations: []

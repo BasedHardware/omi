@@ -353,8 +353,7 @@ env:
       secretKeyRef:
         name: prod-omi-backend-secrets
         key: ADMIN_KEY
-  # Shared Deepgram credential: this deployment reaches self-hosted dg.omi.me,
-  # while backend-listen uses the hosted API with the same key.
+  # Retain the cloud/BYOK credential; self-hosted Deepgram is retired.
   - name: DEEPGRAM_API_KEY
     valueFrom:
       secretKeyRef:
@@ -457,9 +456,7 @@ env:
         name: prod-omi-backend-secrets
         key: TYPESENSE_API_KEY
   - name: DEEPGRAM_SELF_HOSTED_ENABLED
-    value: "true"
-  - name: DEEPGRAM_SELF_HOSTED_URL
-    value: "https://dg.omi.me"
+    value: "false"
   - name: HOSTED_PARAKEET_API_URL
     value: "http://parakeet.omi.me"
   - name: STT_PRERECORDED_MODEL
@@ -609,6 +606,8 @@ volumeMounts: []
 #   mountPath: "/etc/foo"
 #   readOnly: true
 
+# Placement uses service/env labels, not pool names or CPU family.
+# New N4 and qualified N2 fallback pools retain the affinity labels below.
 nodeSelector: {}
 
 tolerations: []
