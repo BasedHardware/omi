@@ -495,4 +495,15 @@ def test_flagged_free_snapshot_and_admission_share_budget_not_trial(monkeypatch,
     )
     snapshot = sub_mod.get_chat_quota_snapshot('u')
     assert snapshot['allowed'] is allowed
+    assert snapshot['uses_shared_budget'] is True
     assert ('chat_at_cap' in snapshot) is not allowed
+
+
+def test_legacy_quota_wire_omits_ladder_state():
+    from models.users import ChatUsageQuota
+
+    quota = ChatUsageQuota(plan='Free', plan_type='basic', unit='questions', used=30, limit=30)
+    payload = quota.model_dump(mode='json')
+    assert 'uses_shared_budget' not in payload
+    assert 'chat_at_cap' not in payload
+    assert ChatUsageQuota(**payload, uses_shared_budget=True).model_dump(mode='json')['uses_shared_budget'] is True

@@ -310,6 +310,7 @@ extension APIClient {
 
   struct ChatUsageQuota: Decodable {
     var chatAtCap: ChatAtCap? = nil
+    var usesSharedBudget: Bool? = nil
     let plan: String  // display name: "Free" | "Plus" | "Pro"
     let planType: String  // internal id: "basic" | "unlimited" | "architect"
     let unit: String  // "questions" | "cost_usd"
@@ -335,6 +336,7 @@ extension APIClient {
       case resetAt = "reset_at"
       case isOveragePlan = "is_overage_plan"
       case chatAtCap = "chat_at_cap"
+      case usesSharedBudget = "uses_shared_budget"
     }
   }
 

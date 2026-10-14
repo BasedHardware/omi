@@ -1174,6 +1174,7 @@ def get_chat_quota_snapshot(
         result['allowed'] = shared_budget['budget_percent'] < 100
         result['reset_at'] = shared_budget['reset_at']
         result['is_overage_plan'] = False
+        result['uses_shared_budget'] = True
         if not result['allowed']:
             from utils.storefront_copy import chat_at_cap
 

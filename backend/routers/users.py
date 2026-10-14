@@ -1548,6 +1548,7 @@ def get_user_chat_usage_quota(
         reset_at=snapshot['reset_at'],
         is_overage_plan=snapshot.get('is_overage_plan', plan_uses_overage(plan)),
         chat_at_cap=snapshot.get('chat_at_cap'),
+        uses_shared_budget=snapshot.get('uses_shared_budget', False),
     )
 
 

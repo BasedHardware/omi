@@ -196,3 +196,8 @@ send. Legacy prices and disabled enforcement do not emit the storefront state.
 Capture, held content and on-device transcription/summaries continue. There is
 no fallback chat model or capped fallback allowance (David's October 14 evening
 ruling supersedes ladder decision 7).
+
+The chat-quota response sets `uses_shared_budget=true` for flagged ladder/Free
+accounts at every percentage. Clients use the server `allowed` value there;
+legacy question counters and optimistic question deltas do not decide admission.
+The marker and pause state are omitted on the legacy/flag-off quota response.

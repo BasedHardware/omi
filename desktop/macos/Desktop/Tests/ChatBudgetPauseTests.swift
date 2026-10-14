@@ -27,6 +27,18 @@ final class ChatBudgetPauseTests: XCTestCase {
       XCTAssertFalse(expired.active)
     }
   }
+  func testSharedBudgetDoesNotApplyTheOldQuestionCounter() throws {
+    let data = Data(
+      #"{"plan":"Free","plan_type":"basic","unit":"questions","used":999,"limit":30,"percent":100,"allowed":true,"uses_shared_budget":true}"#
+        .utf8)
+    let quota = try JSONDecoder().decode(APIClient.ChatUsageQuota.self, from: data)
+    let limiter = FloatingBarUsageLimiter()
+    limiter.applyQuota(quota)
+    XCTAssertFalse(limiter.isLimitReached)
+    limiter.recordQuery()
+    XCTAssertFalse(limiter.isLimitReached)
+  }
+
   func testRendersChatPauseStates() throws {
     for plan in ["basic", "plus", "operator", "architect"] {
       let pause = try state(plan)

@@ -1228,6 +1228,7 @@ export interface ChatUsageQuota {
   reset_at?: number | null;
   unit: ChatQuotaUnit;
   used: number;
+  uses_shared_budget?: boolean;
 }
 
 export interface CheckVerificationRequest {

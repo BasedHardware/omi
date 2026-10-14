@@ -7822,6 +7822,11 @@
           "used": {
             "title": "Used",
             "type": "number"
+          },
+          "uses_shared_budget": {
+            "default": false,
+            "title": "Uses Shared Budget",
+            "type": "boolean"
           }
         },
         "required": [

@@ -44,7 +44,7 @@ struct ChatQuotaBannerView: View {
     @ViewBuilder
     private var content: some View {
       ChatBudgetPauseView.Slot()
-      if usageLimiter.serverQuota?.chatAtCap == nil, let banner {
+      if usageLimiter.serverQuota?.usesSharedBudget != true, let banner {
         ChatQuotaBannerView(
           banner: banner,
           onViewPlan: {

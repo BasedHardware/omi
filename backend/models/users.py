@@ -3,7 +3,7 @@ from datetime import datetime, timezone
 from enum import Enum
 from typing import Optional, List
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_serializer
 
 from config.plan_catalog import PlanType
 
@@ -105,6 +105,7 @@ class ChatQuotaUnit(str, Enum):
 
 class ChatUsageQuota(BaseModel):
     chat_at_cap: ChatAtCap | None = None
+    uses_shared_budget: bool = False
     plan: str  # display name: "Free", "Plus", "Architect"
     plan_type: str  # internal id: "basic" | "unlimited" | "architect"
     unit: ChatQuotaUnit
@@ -118,6 +119,15 @@ class ChatUsageQuota(BaseModel):
     # gate sends on `allowed` alone (`utils.subscription.enforce_chat_quota`
     # returns without raising for these plans).
     is_overage_plan: bool = False
+
+    @model_serializer(mode='wrap')
+    def _omit_inactive_shared_budget(self, handler):
+        data = handler(self)
+        if self.chat_at_cap is None:
+            data.pop('chat_at_cap', None)
+        if not self.uses_shared_budget:
+            data.pop('uses_shared_budget', None)
+        return data
 
 
 class Subscription(BaseModel):
