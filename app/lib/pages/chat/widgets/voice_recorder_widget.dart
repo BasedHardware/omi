@@ -54,9 +54,12 @@ class _VoiceRecorderWidgetState extends State<VoiceRecorderWidget> with SingleTi
           case VoiceRecorderState.recording:
             return SizedBox(
               height: 44,
-              child: CustomPaint(
-                painter: AudioWavePainter(levels: provider.audioLevels),
-                child: const SizedBox.expand(),
+              child: ListenableBuilder(
+                listenable: provider.waveformTick,
+                builder: (context, _) => CustomPaint(
+                  painter: AudioWavePainter(levels: provider.audioLevels),
+                  child: const SizedBox.expand(),
+                ),
               ),
             );
 
@@ -67,10 +70,7 @@ class _VoiceRecorderWidgetState extends State<VoiceRecorderWidget> with SingleTi
                 child: ShimmerWithTimeout(
                   baseColor: OmiColors.surface3,
                   highlightColor: OmiColors.textPrimary,
-                  child: Text(
-                    context.l10n.transcribing,
-                    style: OmiType.subhead,
-                  ),
+                  child: Text(context.l10n.transcribing, style: OmiType.subhead),
                 ),
               ),
             );
@@ -147,11 +147,7 @@ class AudioWavePainter extends CustomPainter {
       final level = levels[i].clamp(0.0, 1.0);
       final barHeight = (minBarHeight + level * (maxBarHeight - minBarHeight)).clamp(minBarHeight, maxBarHeight);
 
-      canvas.drawLine(
-        Offset(x, centerY - barHeight / 2),
-        Offset(x, centerY + barHeight / 2),
-        paint,
-      );
+      canvas.drawLine(Offset(x, centerY - barHeight / 2), Offset(x, centerY + barHeight / 2), paint);
     }
   }
 

@@ -58,12 +58,11 @@ class OnboardingWrapper extends StatefulWidget {
     required int currentIndex,
     required bool setupPageEnabled,
     required bool knowledgeGraphStepEnabled,
-  }) =>
-      _OnboardingWrapperState.previousStepForTesting(
-        currentIndex: currentIndex,
-        setupPageEnabled: setupPageEnabled,
-        knowledgeGraphStepEnabled: knowledgeGraphStepEnabled,
-      );
+  }) => _OnboardingWrapperState.previousStepForTesting(
+    currentIndex: currentIndex,
+    setupPageEnabled: setupPageEnabled,
+    knowledgeGraphStepEnabled: knowledgeGraphStepEnabled,
+  );
 
   @visibleForTesting
   static int resumeStepForTesting(int saved) => _OnboardingWrapperState.resolveResumeStep(saved);
@@ -150,8 +149,9 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
       );
     }
     final signedIn = !widget.forceAuthPage && AuthService.instance.isSignedIn();
-    final initialIndex =
-        signedIn ? (!SharedPreferencesUtil().aiConsentGiven ? kAiConsentPage : _resumeStep()) : kAuthPage;
+    final initialIndex = signedIn
+        ? (!SharedPreferencesUtil().aiConsentGiven ? kAiConsentPage : _resumeStep())
+        : kAuthPage;
     _stepTelemetry.seed(initialIndex);
     // Auth, AiConsent, Name, Lang, FoundOmi, Permissions, SpeechProfile, KnowledgeGraph, Setup, Complete
     _controller = TabController(length: kPageCount, initialIndex: initialIndex, vsync: this);
@@ -431,6 +431,7 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
 
   /// "Use a Different Account" on the consent step: sign out and start again from the beginning.
   Future<void> _useDifferentAccount() async {
+    OnboardingWebviewGate.invalidate();
     _voiceController?.dispose();
     _voiceController = null;
     final navigator = Navigator.of(context, rootNavigator: true);
@@ -636,10 +637,7 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
           _controller!.animateTo(kCompletePage);
         },
       ),
-      OnboardingCompleteScreen(
-        onSkipped: () => _stepTelemetry.skipped = true,
-        onComplete: _finishOnboarding,
-      ),
+      OnboardingCompleteScreen(onSkipped: () => _stepTelemetry.skipped = true, onComplete: _finishOnboarding),
     ];
 
     // The speech step draws the Omi device with a mic-level glow instead of a background image,

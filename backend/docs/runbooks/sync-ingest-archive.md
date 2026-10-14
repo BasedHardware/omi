@@ -133,3 +133,13 @@ Conversation deletion also purges linked originals (including a shared multi-con
 raw-live packs, chunks, merged and playback objects in both buckets and all generations.
 Missing regional/worker destinations log and retain the existing bucket/handler.
 Consent-off mobile uploads are accepted without cloud archival.
+
+## Coexistence with verified owner packs (#21544)
+
+The independent `AUDIO_CANONICAL_PACKING_ENABLED`/`BUCKET_CANONICAL_AUDIO`
+forward archive remains intact. `merged_into` links owner packs before donor
+cleanup; a failed link aborts cleanup. Mobile forwarding follows a successful
+primary raw commit and remains best-effort. Proven PCM retirement still invokes
+the optional owner-pack writer. If both archive systems are enabled, count those
+forward PCM bytes in the receipt: the ~13 MB/worn-hour target applies to this
+live raw/PCM leg and must not be claimed for total storage across both systems.

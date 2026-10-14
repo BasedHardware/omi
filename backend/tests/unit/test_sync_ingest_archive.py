@@ -1,4 +1,5 @@
 import asyncio
+from contextlib import nullcontext
 import ctypes.util
 import importlib
 import hashlib
@@ -586,3 +587,51 @@ def test_conversation_purge_covers_raw_links_and_regional_objects(monkeypatch, b
         assert all('/conversation/' not in path and not path.endswith('/original') for path in bucket.blobs)
     assert len(buckets['canonical'].blobs) == 7
     assert len(buckets['regional'].blobs) == 5
+
+
+@pytest.mark.parametrize('link_fails', [False, True])
+def test_merged_into_links_owner_packs_before_raw_and_derived_cleanup(monkeypatch, buckets, link_fails):
+    monkeypatch.setenv('BUCKET_CANONICAL_AUDIO', 'forward')
+    monkeypatch.setenv('BUCKET_AUDIO_DERIVED', 'regional')
+    forward = object()
+    monkeypatch.setattr(storage, 'get_canonical_audio_bucket', lambda: forward)
+    monkeypatch.setattr(storage, 'destructive_operation_gate', lambda *args, **kwargs: nullcontext())
+    raw = buckets['canonical'].blob('raw-live/owner/source/a')
+    raw.data = b'original'
+    cache = buckets['regional'].blob('playback/owner/source/a')
+    cache.data = b'rendition'
+
+    def link(bucket, uid, sources, target):
+        assert (bucket, uid, sources, target) == (forward, 'owner', ['source'], 'target')
+        assert raw.data == b'original' and cache.data == b'rendition'
+        if link_fails:
+            raise RuntimeError('link unavailable')
+
+    monkeypatch.setattr(storage.audio_packs, 'link_conversations', link)
+    if link_fails:
+        with pytest.raises(RuntimeError, match='link unavailable'):
+            storage.delete_conversation_audio_files('owner', 'source', merged_into='target')
+        assert raw.name in buckets['canonical'].blobs and cache.name in buckets['regional'].blobs
+    else:
+        storage.delete_conversation_audio_files('owner', 'source', merged_into='target')
+        assert not buckets['canonical'].blobs and not buckets['regional'].blobs
+
+
+def test_retired_pcm_still_reaches_optional_owner_pack_archive(monkeypatch, buckets):
+    pcm = b'\x01\x00' * 160
+    pack = CapturePack('pcm16', 16000)
+    pack.append(pcm, 'conversation', 1000, 160)
+    raw, metadata = pack.encoded()
+    path = storage.archive_capture_bytes('owner', raw, 'raw-live', 'conversation/0/a', metadata)
+    enable(monkeypatch, 'READ')
+    enable(monkeypatch, 'STOP_PCM')
+    monkeypatch.setenv('AUDIO_CANONICAL_PACKING_ENABLED', 'true')
+    monkeypatch.setattr(storage.conversation_tombstones, 'is_deleted', lambda *args: False)
+    forward = object()
+    monkeypatch.setattr(storage, 'get_canonical_audio_bucket', lambda: forward)
+    seen = []
+    monkeypatch.setattr(storage.audio_packs, 'archive_capture', lambda *args, **kwargs: seen.append(args))
+    chunk = {'timestamp': 1000, 'data': pcm, 'span': {'sample_rate': 16000, 'samples': 160}}
+    assert storage.upload_audio_chunks_batch([chunk], 'owner', 'conversation', sample_rate=16000) == [path]
+    assert seen == [(forward, 'owner', pcm)]
+    assert not any(name.startswith('chunks/') for name in buckets['canonical'].blobs)
