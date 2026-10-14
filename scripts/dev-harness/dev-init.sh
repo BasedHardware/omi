@@ -29,15 +29,15 @@ if [ ! -x "backend/.venv/bin/python" ] && [ ! -x "backend/.venv/Scripts/python.e
 fi
 
 PYTHON_BIN="$(dev_harness_python)"
-case "$PYTHON_BIN" in
-  *backend/.venv/*) ;;
-  *)
-    echo "dev-init: resolved interpreter '$PYTHON_BIN' is not backend/.venv; refusing to install requirements outside the venv." >&2
-    echo "The venv is missing or below the 3.10 floor. Run: make lane-bootstrap (Python 3.11 venv)," >&2
-    echo "or install Python >= 3.10 and re-run dev-init." >&2
-    exit 1
-    ;;
-esac
+# Resolve to a physical path and compare against THIS repo's canonical venv
+# interpreter: a substring match would let a PYTHON override pointing at
+# another checkout's backend/.venv count as "inside the venv".
+if [ "$(cd "$(dirname "$PYTHON_BIN")" && pwd)/$(basename "$PYTHON_BIN")" != "$PWD/backend/.venv/bin/python" ]; then
+  echo "dev-init: resolved interpreter '$PYTHON_BIN' is not this repo's backend/.venv/bin/python; refusing to install requirements outside the venv." >&2
+  echo "The venv is missing or below the 3.10 floor. Run: make lane-bootstrap (Python 3.11 venv)," >&2
+  echo "or install Python >= 3.10 and re-run dev-init." >&2
+  exit 1
+fi
 if ! "$PYTHON_BIN" -m pip --version >/dev/null; then
   echo "${PYTHON_BIN%/bin/python} is incomplete; recreate it with: python3 -m venv backend/.venv" >&2
   exit 1

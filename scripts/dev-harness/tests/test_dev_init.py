@@ -360,3 +360,43 @@ def test_dev_init_refuses_to_install_outside_the_venv(tmp_path: Path) -> None:
     assert "make lane-bootstrap" in result.stdout, result.stdout
     calls = log.read_text(encoding="utf-8").splitlines() if log.exists() else []
     assert not any(line.startswith("FOREIGN -m pip") for line in calls), calls
+
+
+def test_dev_init_refuses_a_foreign_checkout_venv_override(tmp_path: Path) -> None:
+    """Another repo's backend/.venv must not pass the venv guard.
+
+    The guard compares the resolved interpreter's physical path against THIS
+    repo's canonical venv, so a PYTHON override whose path merely contains
+    `backend/.venv` cannot pip-install this repo's requirements elsewhere
+    (Oracle follow-up: substring match bypass).
+    """
+    repo = _fixture_repo(tmp_path)
+    log = tmp_path / "foreign-venv-calls.log"
+    other = tmp_path / "other-checkout"
+    (other / "backend/.venv/bin").mkdir(parents=True)
+    foreign = other / "backend/.venv/bin/python"
+    foreign.write_text(
+        "#!/usr/bin/env bash\n"
+        f'printf \'FOREIGNVENV %s\\n\' "$*" >> "{log}"\n'
+        "exit 0\n",
+        encoding="utf-8",
+    )
+    foreign.chmod(foreign.stat().st_mode | stat.S_IXUSR)
+
+    env = _clean_env()
+    env["PYTHON"] = str(foreign)
+    result = subprocess.run(
+        [_bash(), "scripts/dev-harness/dev-init.sh"],
+        cwd=repo,
+        env=env,
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        timeout=120,
+        check=False,
+    )
+
+    assert result.returncode == 1, result.stdout
+    assert "refusing to install requirements outside the venv" in result.stdout, result.stdout
+    calls = log.read_text(encoding="utf-8").splitlines() if log.exists() else []
+    assert not any(line.startswith("FOREIGNVENV -m pip") for line in calls), calls
