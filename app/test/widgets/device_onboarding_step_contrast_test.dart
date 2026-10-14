@@ -38,7 +38,7 @@ void main() {
       final subtitle = tester.widget<Text>(find.text('Step subtitle'));
       expect(subtitle.style!.color, palette.textSecondary);
 
-      final button = tester.widget<ElevatedButton>(find.byType(ElevatedButton));
+      final button = tester.widget<TextButton>(find.descendant(of: find.byType(OnboardingContinueButton), matching: find.byType(TextButton)));
       final background = button.style!.backgroundColor!.resolve(<WidgetState>{});
       final foreground = button.style!.foregroundColor!.resolve(<WidgetState>{});
       expect(background, palette.accent);

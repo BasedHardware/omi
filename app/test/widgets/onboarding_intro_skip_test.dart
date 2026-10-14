@@ -20,29 +20,21 @@ Widget _app(Widget child) {
 
 void main() {
   // Regression: the forced first-run tour soft-locked users when a step hung
-  // (e.g. the mic-test "processing your question"). The intro must always
-  // offer a skip, and a way out must always be present. The tour floats over the app, so the way
-  // out is a trailing close X (docs/ux-contract.md §1), not a back chevron that means "quit".
-  testWidgets('intro screen shows Skip below Get Started and fires onSkip', (tester) async {
+  // (e.g. the mic-test "processing your question"). A way out must always be present. The tour
+  // floats over the app, so the way out is a trailing close X (docs/ux-contract.md §1), not a back
+  // chevron that means "quit" — and not a second Skip under Get Started as well.
+  testWidgets('intro screen leaves by the close X only, with no Skip under Get Started', (tester) async {
     var started = false;
-    var skipped = false;
-    await tester.pumpWidget(_app(OnboardingIntroScreen(
-      onStart: () => started = true,
-      onSkip: () => skipped = true,
-    )));
+    await tester.pumpWidget(_app(OnboardingIntroScreen(onStart: () => started = true, onSkip: () {})));
     await tester.pump();
 
-    final skipFinder = find.byKey(const Key('device_onboarding_skip_button'));
-    expect(skipFinder, findsOneWidget);
-
-    // The close X is always visible (no allowExit gating anymore), and no back chevron is drawn.
     expect(find.byKey(const Key('device_onboarding_close_button')), findsOneWidget);
+    expect(find.byKey(const Key('device_onboarding_skip_button')), findsNothing);
+    expect(find.text('Skip'), findsNothing);
     expect(find.byIcon(Icons.arrow_back_ios_new), findsNothing);
-    expect(find.text('Skip'), findsOneWidget);
 
-    await tester.tap(skipFinder);
-    expect(skipped, isTrue);
-    expect(started, isFalse);
+    await tester.tap(find.text('Get Started'));
+    expect(started, isTrue);
   });
 
   testWidgets('close X fires onSkip and is labelled', (tester) async {

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
-import 'package:omi/ui/omi_tokens.dart';
+import 'package:omi/pages/onboarding/widgets/onboarding_card.dart';
+import 'package:omi/ui/ui.dart';
 
 import 'package:omi/providers/device_onboarding_provider.dart';
 import 'package:omi/utils/l10n_extensions.dart';
@@ -77,13 +78,15 @@ class OnboardingStepScaffold extends StatelessWidget {
           ],
           const SizedBox(height: 40),
           Expanded(child: content),
-          if (bottomAction != null) ...[bottomAction!, const SizedBox(height: 24)],
+          // Continue sits where it does on every other onboarding step.
+          if (bottomAction != null) ...[bottomAction!, const SizedBox(height: kOnboardingButtonBottomGap)],
         ],
       ),
     );
   }
 }
 
+/// The tutorial's Continue: the same button, at the same height, as the rest of onboarding.
 class OnboardingContinueButton extends StatelessWidget {
   final VoidCallback onPressed;
   final String? label;
@@ -92,22 +95,13 @@ class OnboardingContinueButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return SizedBox(
-      width: double.infinity,
-      height: 56,
-      child: ElevatedButton(
-        onPressed: onPressed,
-        style: ElevatedButton.styleFrom(
-          backgroundColor: OmiColors.accent,
-          foregroundColor: OmiColors.onAccent,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
-          elevation: 0,
-        ),
-        child: Text(
-          label ?? context.l10n.deviceOnboardingContinue,
-          style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
-        ),
-      ),
+    return OmiButton(
+      label: label ?? context.l10n.deviceOnboardingContinue,
+      expand: true,
+      onPressed: () {
+        OmiHaptics.selection();
+        onPressed();
+      },
     );
   }
 }

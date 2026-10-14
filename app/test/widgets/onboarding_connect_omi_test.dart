@@ -26,6 +26,18 @@ class _FakeOnboarding extends OnboardingProvider {
 
   @override
   void cancelActiveScan() => cancels++;
+
+  /// Connecting succeeds at once, as `handleTap` does when the radio answers.
+  @override
+  Future<void> handleTap({required BtDevice device, required bool isFromOnboarding, VoidCallback? goNext}) async {
+    isClicked = true;
+    deviceId = device.id;
+    deviceName = device.name;
+    deviceType = device.type;
+    isConnected = true;
+    notifyListeners();
+    goNext?.call();
+  }
 }
 
 class _FakeDevice extends DeviceProvider {
@@ -149,5 +161,27 @@ void main() {
 
     expect(onboarding.cancels, greaterThan(0));
     expect(onboarding.enableInstructions, isFalse);
+  });
+
+  testWidgets('connecting says Connected with a ✓, then moves on once the moment has played', (tester) async {
+    final device = BtDevice(name: 'Omi', id: 'AA:BB', type: DeviceType.omi, rssi: -50);
+    final onboarding = _FakeOnboarding()
+      ..deviceList = [device]
+      ..foundDevicesMap = {device.id: device};
+    final choices = <OnboardingDeviceChoice>[];
+    await pump(tester, onboarding, onDone: choices.add);
+    await tester.pump(const Duration(seconds: 2)); // The search rings never settle.
+
+    await tester.tap(find.text('Omi'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 900));
+
+    expect(find.text('Connected'), findsOneWidget);
+    expect(find.byKey(const Key('connect_omi_connected_badge')), findsOneWidget);
+    expect(choices, isEmpty, reason: 'the reader sees Connected before the tutorial opens');
+
+    await tester.pump(const Duration(milliseconds: 300)); // The ring and ✓ finish.
+    await tester.pump(const Duration(seconds: 1)); // Then a beat to read it.
+    expect(choices, [OnboardingDeviceChoice.connected]);
   });
 }

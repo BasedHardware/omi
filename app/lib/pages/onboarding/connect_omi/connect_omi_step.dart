@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
@@ -46,7 +47,7 @@ class ConnectOmiStep extends StatefulWidget {
   State<ConnectOmiStep> createState() => _ConnectOmiStepState();
 }
 
-class _ConnectOmiStepState extends State<ConnectOmiStep> with SingleTickerProviderStateMixin {
+class _ConnectOmiStepState extends State<ConnectOmiStep> with TickerProviderStateMixin {
   OnboardingProvider? _provider;
   bool _done = false;
 
@@ -73,6 +74,14 @@ class _ConnectOmiStepState extends State<ConnectOmiStep> with SingleTickerProvid
     curve: const Interval(0.7, 1.0, curve: Curves.easeOut),
   );
   Timer? _landingTap;
+
+  /// The moment the Omi connects: a ring draws around it, a ✓ lands on the ring and one soft pulse
+  /// goes out, the title says Connected, then the step moves on by itself.
+  late final AnimationController _celebration = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 1100),
+  );
+  bool _celebrating = false;
 
   @override
   void initState() {
@@ -115,6 +124,7 @@ class _ConnectOmiStepState extends State<ConnectOmiStep> with SingleTickerProvid
   void dispose() {
     _landingTap?.cancel();
     _entrance.dispose();
+    _celebration.dispose();
     _provider?.endSearch();
     _provider = null;
     super.dispose();
@@ -153,6 +163,22 @@ class _ConnectOmiStepState extends State<ConnectOmiStep> with SingleTickerProvid
     _done = true;
     PlatformManager.instance.analytics.onboardingDeviceChoice(choice.wireValue);
     widget.onDone(choice);
+  }
+
+  /// Connected: hold the step for the celebration (long enough to read "Connected"), then move on.
+  Future<void> _connected() async {
+    if (_done) return;
+    _done = true;
+    PlatformManager.instance.analytics.onboardingDeviceChoice(OnboardingDeviceChoice.connected.wireValue);
+    final still = OmiMotion.of(context).emphasized == Duration.zero;
+    setState(() => _celebrating = true);
+    if (still) {
+      _celebration.value = 1;
+    } else {
+      await _celebration.forward();
+    }
+    await Future<void>.delayed(Duration(milliseconds: still ? 1200 : 700));
+    if (mounted) widget.onDone(OnboardingDeviceChoice.connected);
   }
 
   void _showConnectionGuide() {
@@ -218,7 +244,7 @@ class _ConnectOmiStepState extends State<ConnectOmiStep> with SingleTickerProvid
               );
 
         final String subtitle = provider.isConnected
-            ? l10n.connected
+            ? (provider.deviceName.isNotEmpty ? provider.deviceName : l10n.connected)
             : found
                 ? l10n.onboardingConnectTapToConnect
                 : cantFind
@@ -238,7 +264,15 @@ class _ConnectOmiStepState extends State<ConnectOmiStep> with SingleTickerProvid
                         children: [
                           AnimatedBuilder(
                             animation: _device,
-                            child: SizedBox(height: stage, child: Center(child: visual)),
+                            child: SizedBox(
+                              height: stage,
+                              child: _ConnectedHalo(
+                                progress: _celebration,
+                                active: _celebrating,
+                                diameter: stage * 0.86,
+                                child: Center(child: visual),
+                              ),
+                            ),
                             builder: (context, child) {
                               final t = _device.value;
                               return Opacity(
@@ -255,8 +289,24 @@ class _ConnectOmiStepState extends State<ConnectOmiStep> with SingleTickerProvid
                             _title,
                             Semantics(
                               header: true,
-                              child:
-                                  Text(l10n.onboardingConnectOmi, style: OmiType.title1, textAlign: TextAlign.center),
+                              liveRegion: true,
+                              // The title becomes the news once the Omi is connected.
+                              child: AnimatedSwitcher(
+                                duration: OmiMotion.of(context).standard,
+                                transitionBuilder: (child, animation) => FadeTransition(
+                                  opacity: animation,
+                                  child: SlideTransition(
+                                    position: Tween(begin: const Offset(0, 0.25), end: Offset.zero).animate(animation),
+                                    child: child,
+                                  ),
+                                ),
+                                child: Text(
+                                  _celebrating ? l10n.connected : l10n.onboardingConnectOmi,
+                                  key: ValueKey(_celebrating),
+                                  style: OmiType.title1,
+                                  textAlign: TextAlign.center,
+                                ),
+                              ),
                             ),
                           ),
                           const SizedBox(height: OmiSpacing.xs),
@@ -276,7 +326,7 @@ class _ConnectOmiStepState extends State<ConnectOmiStep> with SingleTickerProvid
                           const SizedBox(height: OmiSpacing.lg),
                           // The tappable device rows; stays mounted because it owns the connection handling.
                           FoundDevices(
-                            goNext: () => _finish(OnboardingDeviceChoice.connected),
+                            goNext: _connected,
                             isFromOnboarding: true,
                             onRescan: _scanAgain,
                             showStatus: false,
@@ -348,4 +398,96 @@ class _ConnectOmiStepState extends State<ConnectOmiStep> with SingleTickerProvid
       },
     );
   }
+}
+
+/// Around the connected Omi: a ring that draws itself, a ✓ that lands where the ring closes, and
+/// one pulse outward. Nothing shows until [active].
+class _ConnectedHalo extends StatelessWidget {
+  const _ConnectedHalo({required this.progress, required this.active, required this.diameter, required this.child});
+
+  final Animation<double> progress;
+  final bool active;
+  final double diameter;
+  final Widget child;
+
+  static const _badge = 40.0;
+
+  @override
+  Widget build(BuildContext context) {
+    if (!active) return child;
+    return AnimatedBuilder(
+      animation: progress,
+      child: child,
+      builder: (context, child) {
+        final t = progress.value;
+        final ring = Curves.easeInOutCubic.transform((t / 0.55).clamp(0.0, 1.0));
+        final badge = Curves.easeOutBack.transform(((t - 0.45) / 0.35).clamp(0.0, 1.0));
+        final pulse = Curves.easeOut.transform(((t - 0.5) / 0.5).clamp(0.0, 1.0));
+        // The ✓ sits on the ring at its lower right, where the drawing ends.
+        const angle = math.pi / 4;
+        final r = diameter / 2;
+        return Stack(
+          alignment: Alignment.center,
+          clipBehavior: Clip.none,
+          children: [
+            // One pulse outward as the ✓ lands.
+            if (pulse > 0 && pulse < 1)
+              Container(
+                width: diameter * (1 + 0.22 * pulse),
+                height: diameter * (1 + 0.22 * pulse),
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  border: Border.all(color: OmiColors.textPrimary.withValues(alpha: 0.3 * (1 - pulse)), width: 2),
+                ),
+              ),
+            SizedBox.square(
+              dimension: diameter,
+              child: CustomPaint(painter: _RingPainter(progress: ring, color: OmiColors.textPrimary)),
+            ),
+            child!,
+            Transform.translate(
+              offset: Offset(r * math.cos(angle), r * math.sin(angle)),
+              child: Transform.scale(
+                scale: badge,
+                child: Container(
+                  key: const Key('connect_omi_connected_badge'),
+                  width: _badge,
+                  height: _badge,
+                  decoration: BoxDecoration(
+                    color: OmiColors.accent,
+                    shape: BoxShape.circle,
+                    border: Border.all(color: OmiColors.surface0, width: 3),
+                  ),
+                  child: Icon(Icons.check_rounded, size: 22, color: OmiColors.onAccent),
+                ),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+}
+
+class _RingPainter extends CustomPainter {
+  _RingPainter({required this.progress, required this.color});
+
+  final double progress;
+  final Color color;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (progress <= 0) return;
+    final rect = Offset.zero & size;
+    final paint = Paint()
+      ..color = color
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 2.5
+      ..strokeCap = StrokeCap.round;
+    // Starts and closes under the ✓ (lower right), clockwise.
+    canvas.drawArc(rect.deflate(1.25), math.pi / 4, 2 * math.pi * progress, false, paint);
+  }
+
+  @override
+  bool shouldRepaint(covariant _RingPainter old) => old.progress != progress || old.color != color;
 }

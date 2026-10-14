@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+
+import 'package:omi/pages/onboarding/widgets/onboarding_card.dart';
 import 'package:provider/provider.dart';
 
 import 'package:omi/backend/preferences.dart';
@@ -87,9 +89,8 @@ class AllSetStep extends StatelessWidget {
             label: context.l10n.deviceOnboardingFinish,
             onPressed: onComplete,
             expand: true,
-            labelStyle: OmiType.callout.copyWith(fontWeight: FontWeight.w600, fontFamily: 'Roboto'),
           ),
-          const SizedBox(height: OmiSpacing.lg),
+          const SizedBox(height: kOnboardingButtonBottomGap),
         ],
       ),
     );

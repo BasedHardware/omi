@@ -2,6 +2,8 @@ import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+
+import 'package:omi/pages/onboarding/widgets/onboarding_card.dart';
 import 'package:provider/provider.dart';
 
 import 'package:omi/backend/preferences.dart';
@@ -191,9 +193,8 @@ class _VoiceReplyStepState extends State<VoiceReplyStep> with SingleTickerProvid
               label: context.l10n.deviceOnboardingContinue,
               onPressed: widget.onComplete,
               expand: true,
-              labelStyle: OmiType.callout.copyWith(fontWeight: FontWeight.w600, fontFamily: 'Roboto'),
             ),
-            const SizedBox(height: OmiSpacing.lg),
+            const SizedBox(height: kOnboardingButtonBottomGap),
           ],
         ),
       );

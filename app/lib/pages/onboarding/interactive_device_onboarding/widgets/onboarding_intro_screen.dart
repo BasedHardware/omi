@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import 'package:omi/gen/assets.gen.dart';
 import 'package:omi/pages/onboarding/interactive_device_onboarding/widgets/onboarding_step_scaffold.dart';
+import 'package:omi/pages/onboarding/widgets/onboarding_card.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 
@@ -103,14 +104,9 @@ class _OnboardingIntroScreenState extends State<OnboardingIntroScreen> with Sing
                 ],
               ),
               const Spacer(flex: 3),
+              // One way on; the close X above is the way out (no second Skip).
               OnboardingContinueButton(label: context.l10n.getStarted, onPressed: widget.onStart),
-              const SizedBox(height: 8),
-              OmiButton.tertiary(
-                key: const Key('device_onboarding_skip_button'),
-                label: context.l10n.skip,
-                onPressed: widget.onSkip ?? () => Navigator.of(context).maybePop(),
-              ),
-              const SizedBox(height: 8),
+              const SizedBox(height: kOnboardingButtonBottomGap),
             ],
           ),
         ),
