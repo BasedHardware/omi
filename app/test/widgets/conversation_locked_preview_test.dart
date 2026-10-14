@@ -23,6 +23,13 @@ class _Routes extends NavigatorObserver {
   void didPush(Route<dynamic> route, Route<dynamic>? previousRoute) => pushed.add(route);
 }
 
+class _Usage extends UsageProvider {
+  _Usage(this.visible);
+  final bool visible;
+  @override
+  bool get showSubscriptionUI => visible;
+}
+
 void main() {
   late ConversationProvider conversations;
   late UsageProvider usage;
@@ -240,4 +247,55 @@ void main() {
     expect(conversations.selectedConversationIds, isEmpty);
     expect(tester.takeException(), isNull);
   });
+  for (final visible in [true, false]) {
+    for (final grouped in [true, false]) {
+      testWidgets('frost tap on ${grouped ? 'grouped' : 'single'} held conversation visibility $visible',
+          (tester) async {
+        usage.dispose();
+        usage = _Usage(visible);
+        final routes = _Routes();
+        final run = lockedRun();
+        await pumpRow(tester,
+            observer: routes,
+            body: grouped ? LockedConversationRun(conversations: run, date: run.first.createdAt) : null);
+        final rect =
+            tester.getRect(grouped ? find.byKey(const ValueKey('locked_locked-1')) : find.byType(OmiLockedPreview));
+        await tester.tapAt(Offset(rect.left + 16, rect.center.dy));
+        expect(routes.pushed, hasLength(visible ? 2 : 1));
+        if (visible) {
+          expect((routes.pushed.last as MaterialPageRoute).builder(tester.element(find.byType(OmiLockedPreview))),
+              isA<UsagePage>());
+          await tester.pumpWidget(const SizedBox.shrink());
+        } else {
+          await tester.pumpAndSettle();
+          expect(find.byType(UsagePage), findsNothing);
+          expect(find.bySemanticsLabel(RegExp(_title)), findsNothing);
+          expect(tester.takeException(), isNull);
+        }
+      });
+    }
+  }
+  for (final visible in [true, false]) {
+    testWidgets('gap in held conversation run uses guarded action visibility $visible', (tester) async {
+      usage.dispose();
+      usage = _Usage(visible);
+      final routes = _Routes();
+      final run = lockedRun();
+      await pumpRow(tester,
+          observer: routes, body: LockedConversationRun(conversations: run, date: run.first.createdAt));
+      final first = tester.getRect(find.byKey(const ValueKey('locked_locked-0')));
+      final second = tester.getRect(find.byKey(const ValueKey('locked_locked-1')));
+      await tester.tapAt(Offset(first.left + 16, (first.bottom + second.top) / 2));
+      expect(routes.pushed, hasLength(visible ? 2 : 1));
+      if (visible) {
+        expect((routes.pushed.last as MaterialPageRoute).builder(tester.element(find.byType(LockedConversationRun))),
+            isA<UsagePage>());
+        await tester.pumpWidget(const SizedBox.shrink());
+      } else {
+        await tester.pumpAndSettle();
+        expect(find.bySemanticsLabel(RegExp(_title)), findsNothing);
+        expect(tester.takeException(), isNull);
+      }
+    });
+  }
 }

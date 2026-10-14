@@ -50,6 +50,22 @@ class MemoryItem extends StatelessWidget {
     final provenanceLabel = _resolveProvenanceLabel(context, provenanceType);
     final temporalLabel = _temporalLabel(context, memory);
     final editable = memoryIsEditable(memory);
+    void openMemory() {
+      if (memory.isLocked) {
+        if (!context.read<UsageProvider>().showSubscriptionUI) {
+          showMemoryQuickEditSheet(context, memory, provider, readOnly: true);
+          return;
+        }
+        routeToPage(context, const UsagePage());
+        return;
+      }
+      if (editable) {
+        onTap(context, memory, provider);
+      } else {
+        showMemoryQuickEditSheet(context, memory, provider);
+      }
+    }
+
     final rowContent = Row(
       crossAxisAlignment: CrossAxisAlignment.center,
       children: [
@@ -155,9 +171,8 @@ class MemoryItem extends StatelessWidget {
       ],
     );
     final Widget memoryWidget = GestureDetector(
-      // Every memory opens: editable ones into the edit sheet, the rest read-only.
-      onTap:
-          editable ? () => onTap(context, memory, provider) : () => showMemoryQuickEditSheet(context, memory, provider),
+      // Padding and frosted-content taps obey the same access guard as the action.
+      onTap: openMemory,
       // A locked row's content is behind the paywall overlay; the row menu would show it in full.
       onLongPress: memory.isLocked ? null : () => _showRowMenu(context, editable),
       child: AnimatedContainer(
@@ -175,13 +190,7 @@ class MemoryItem extends StatelessWidget {
                 label: context.watch<UsageProvider>().showSubscriptionUI
                     ? context.l10n.paywallComparePlans
                     : context.l10n.saved,
-                onPressed: () {
-                  if (!context.read<UsageProvider>().showSubscriptionUI) {
-                    showMemoryQuickEditSheet(context, memory, provider, readOnly: true);
-                    return;
-                  }
-                  routeToPage(context, const UsagePage());
-                },
+                onPressed: openMemory,
                 child: rowContent,
               )
             : rowContent,
