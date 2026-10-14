@@ -12429,6 +12429,15 @@ class AppLocalizationsLv extends AppLocalizations {
   String get reviewRecentChanges => 'Nesenās izmaiņas';
 
   @override
+  String get reviewChangeAfter => 'Pēc';
+
+  @override
+  String get reviewChangeBefore => 'Pirms';
+
+  @override
+  String get reviewChangeRemoved => 'Noņemts no aktīvā saraksta';
+
+  @override
   String get reviewChangesIntro =>
       'Ko Omi pats ir mainījis pēdējo 30 dienu laikā. Atceliet visu, kas izskatās nepareizi.';
 

@@ -12457,6 +12457,15 @@ class AppLocalizationsRo extends AppLocalizations {
   String get reviewRecentChanges => 'Modificări recente';
 
   @override
+  String get reviewChangeAfter => 'După';
+
+  @override
+  String get reviewChangeBefore => 'Înainte';
+
+  @override
+  String get reviewChangeRemoved => 'Eliminat din lista activă';
+
+  @override
   String get reviewChangesIntro => 'Ce a schimbat Omi singur în ultimele 30 de zile. Anulează orice pare greșit.';
 
   @override

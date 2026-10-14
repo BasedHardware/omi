@@ -12423,6 +12423,15 @@ class AppLocalizationsLt extends AppLocalizations {
   String get reviewRecentChanges => 'Naujausi pakeitimai';
 
   @override
+  String get reviewChangeAfter => 'Po';
+
+  @override
+  String get reviewChangeBefore => 'Prieš';
+
+  @override
+  String get reviewChangeRemoved => 'Pašalinta iš aktyvaus sąrašo';
+
+  @override
   String get reviewChangesIntro =>
       'Ką Omi pats pakeitė per pastarąsias 30 dienų. Atšaukite viską, kas atrodo neteisinga.';
 

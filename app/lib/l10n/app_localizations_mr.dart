@@ -12410,6 +12410,15 @@ class AppLocalizationsMr extends AppLocalizations {
   String get reviewRecentChanges => 'अलीकडील बदल';
 
   @override
+  String get reviewChangeAfter => 'नंतर';
+
+  @override
+  String get reviewChangeBefore => 'आधी';
+
+  @override
+  String get reviewChangeRemoved => 'सक्रिय यादीतून काढले';
+
+  @override
   String get reviewChangesIntro => 'गेल्या 30 दिवसांत Omi ने स्वतः काय बदलले. चुकीचे वाटेल ते पूर्ववत करा.';
 
   @override

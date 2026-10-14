@@ -12487,6 +12487,15 @@ class AppLocalizationsTa extends AppLocalizations {
   String get reviewRecentChanges => 'சமீபத்திய மாற்றங்கள்';
 
   @override
+  String get reviewChangeAfter => 'பிறகு';
+
+  @override
+  String get reviewChangeBefore => 'முன்பு';
+
+  @override
+  String get reviewChangeRemoved => 'செயலில் உள்ள பட்டியலிலிருந்து அகற்றப்பட்டது';
+
+  @override
   String get reviewChangesIntro =>
       'கடந்த 30 நாட்களில் Omi தானாக மாற்றியவை. தவறாகத் தோன்றும் எதையும் செயல்தவிர்க்கவும்.';
 

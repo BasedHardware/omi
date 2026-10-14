@@ -5,6 +5,7 @@ import json
 
 from database import memory_ledger, review_store as store
 from database.review_changes import read_field_state, write_field_state
+from database.read_boundary import parse_payload_strict
 from models.review import ReviewChange
 from utils.review_projection import sync_conversations
 from utils.agent_capabilities.transcripts import original_fingerprint
@@ -63,7 +64,7 @@ def record_change(uid, change, patch, corrections, *, edit_key, expected_records
     sync_conversations(
         uid, [{'collection': 'conversations', 'document_id': conversation_id}], firestore_client=store.client()
     )
-    return ReviewChange.model_validate(result['change'])
+    return parse_payload_strict(ReviewChange, result['change'], document_path=journal.path)
 
 
 def set_undone(uid, change_id, undone):
@@ -137,4 +138,4 @@ def set_undone(uid, change_id, undone):
         [{'collection': 'conversations', 'document_id': result['transcript_overlay']['conversation_id']}],
         firestore_client=store.client(),
     )
-    return ReviewChange.model_validate(result['change'])
+    return parse_payload_strict(ReviewChange, result['change'], document_path=journal.path)

@@ -12408,6 +12408,15 @@ class AppLocalizationsId extends AppLocalizations {
   String get reviewRecentChanges => 'Perubahan Terbaru';
 
   @override
+  String get reviewChangeAfter => 'Sesudah';
+
+  @override
+  String get reviewChangeBefore => 'Sebelum';
+
+  @override
+  String get reviewChangeRemoved => 'Dihapus dari daftar aktif';
+
+  @override
   String get reviewChangesIntro =>
       'Apa yang Omi ubah sendiri dalam 30 hari terakhir. Urungkan apa pun yang terlihat salah.';
 

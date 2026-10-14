@@ -12397,6 +12397,15 @@ class AppLocalizationsFa extends AppLocalizations {
   String get reviewRecentChanges => 'تغییرات اخیر';
 
   @override
+  String get reviewChangeAfter => 'بعد';
+
+  @override
+  String get reviewChangeBefore => 'قبل';
+
+  @override
+  String get reviewChangeRemoved => 'از فهرست فعال حذف شد';
+
+  @override
   String get reviewChangesIntro =>
       'آنچه Omi در ۳۰ روز گذشته خودش تغییر داده است. هر چیزی که اشتباه به نظر می‌رسد را برگردانید.';
 

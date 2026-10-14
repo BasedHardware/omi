@@ -12436,6 +12436,15 @@ class AppLocalizationsNl extends AppLocalizations {
   String get reviewRecentChanges => 'Recente wijzigingen';
 
   @override
+  String get reviewChangeAfter => 'Na';
+
+  @override
+  String get reviewChangeBefore => 'Voor';
+
+  @override
+  String get reviewChangeRemoved => 'Verwijderd uit de actieve lijst';
+
+  @override
   String get reviewChangesIntro =>
       'Wat Omi de afgelopen 30 dagen zelf heeft gewijzigd. Maak alles ongedaan wat niet klopt.';
 

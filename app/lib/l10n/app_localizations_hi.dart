@@ -12384,6 +12384,15 @@ class AppLocalizationsHi extends AppLocalizations {
   String get reviewRecentChanges => 'हाल के बदलाव';
 
   @override
+  String get reviewChangeAfter => 'बाद में';
+
+  @override
+  String get reviewChangeBefore => 'पहले';
+
+  @override
+  String get reviewChangeRemoved => 'सक्रिय सूची से हटाया गया';
+
+  @override
   String get reviewChangesIntro => 'पिछले 30 दिनों में Omi ने खुद क्या बदला। जो गलत लगे उसे पूर्ववत करें।';
 
   @override

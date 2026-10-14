@@ -12462,6 +12462,15 @@ class AppLocalizationsMk extends AppLocalizations {
   String get reviewRecentChanges => 'Неодамнешни промени';
 
   @override
+  String get reviewChangeAfter => 'По';
+
+  @override
+  String get reviewChangeBefore => 'Пред';
+
+  @override
+  String get reviewChangeRemoved => 'Отстрането од активната листа';
+
+  @override
   String get reviewChangesIntro => 'Што Omi сам го промени во последните 30 дена. Вратете сè што изгледа погрешно.';
 
   @override

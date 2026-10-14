@@ -12396,6 +12396,15 @@ class AppLocalizationsSk extends AppLocalizations {
   String get reviewRecentChanges => 'Nedávne zmeny';
 
   @override
+  String get reviewChangeAfter => 'Po';
+
+  @override
+  String get reviewChangeBefore => 'Pred';
+
+  @override
+  String get reviewChangeRemoved => 'Odstránené z aktívneho zoznamu';
+
+  @override
   String get reviewChangesIntro => 'Čo Omi samo zmenilo za posledných 30 dní. Vráťte späť všetko, čo vyzerá zle.';
 
   @override

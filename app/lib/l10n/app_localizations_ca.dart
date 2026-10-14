@@ -12467,6 +12467,15 @@ class AppLocalizationsCa extends AppLocalizations {
   String get reviewRecentChanges => 'Canvis recents';
 
   @override
+  String get reviewChangeAfter => 'Després';
+
+  @override
+  String get reviewChangeBefore => 'Abans';
+
+  @override
+  String get reviewChangeRemoved => 'Eliminat de la llista activa';
+
+  @override
   String get reviewChangesIntro =>
       'El que Omi ha canviat pel seu compte en els últims 30 dies. Desfés qualsevol cosa que no sembli correcta.';
 

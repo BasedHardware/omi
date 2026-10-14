@@ -12438,6 +12438,15 @@ class AppLocalizationsPl extends AppLocalizations {
   String get reviewRecentChanges => 'Ostatnie zmiany';
 
   @override
+  String get reviewChangeAfter => 'Po';
+
+  @override
+  String get reviewChangeBefore => 'Przed';
+
+  @override
+  String get reviewChangeRemoved => 'Usunięto z aktywnej listy';
+
+  @override
   String get reviewChangesIntro => 'Co Omi zmieniło samo w ciągu ostatnich 30 dni. Cofnij wszystko, co wygląda źle.';
 
   @override

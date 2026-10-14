@@ -12428,6 +12428,15 @@ class AppLocalizationsUk extends AppLocalizations {
   String get reviewRecentChanges => 'Нещодавні зміни';
 
   @override
+  String get reviewChangeAfter => 'Після';
+
+  @override
+  String get reviewChangeBefore => 'До';
+
+  @override
+  String get reviewChangeRemoved => 'Вилучено з активного списку';
+
+  @override
   String get reviewChangesIntro => 'Що Omi змінив сам за останні 30 днів. Скасуйте все, що виглядає неправильно.';
 
   @override

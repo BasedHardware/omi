@@ -12445,6 +12445,15 @@ class AppLocalizationsRu extends AppLocalizations {
   String get reviewRecentChanges => 'Недавние изменения';
 
   @override
+  String get reviewChangeAfter => 'После';
+
+  @override
+  String get reviewChangeBefore => 'До';
+
+  @override
+  String get reviewChangeRemoved => 'Удалено из активного списка';
+
+  @override
   String get reviewChangesIntro => 'Что Omi изменил сам за последние 30 дней. Отмените всё, что выглядит неправильно.';
 
   @override

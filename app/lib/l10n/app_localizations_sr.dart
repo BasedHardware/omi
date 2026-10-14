@@ -12412,6 +12412,15 @@ class AppLocalizationsSr extends AppLocalizations {
   String get reviewRecentChanges => 'Скорашње измене';
 
   @override
+  String get reviewChangeAfter => 'После';
+
+  @override
+  String get reviewChangeBefore => 'Пре';
+
+  @override
+  String get reviewChangeRemoved => 'Уклоњено са активне листе';
+
+  @override
   String get reviewChangesIntro => 'Шта је Omi сам променио у последњих 30 дана. Поништите све што изгледа погрешно.';
 
   @override

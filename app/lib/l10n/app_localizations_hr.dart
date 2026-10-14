@@ -12437,6 +12437,15 @@ class AppLocalizationsHr extends AppLocalizations {
   String get reviewRecentChanges => 'Nedavne promjene';
 
   @override
+  String get reviewChangeAfter => 'Poslije';
+
+  @override
+  String get reviewChangeBefore => 'Prije';
+
+  @override
+  String get reviewChangeRemoved => 'Uklonjeno s aktivnog popisa';
+
+  @override
   String get reviewChangesIntro => 'Što je Omi sam promijenio u posljednjih 30 dana. Poništite sve što izgleda krivo.';
 
   @override

@@ -12502,6 +12502,15 @@ class AppLocalizationsTl extends AppLocalizations {
   String get reviewRecentChanges => 'Mga Kamakailang Pagbabago';
 
   @override
+  String get reviewChangeAfter => 'Pagkatapos';
+
+  @override
+  String get reviewChangeBefore => 'Bago';
+
+  @override
+  String get reviewChangeRemoved => 'Inalis sa aktibong listahan';
+
+  @override
   String get reviewChangesIntro =>
       'Ang mga binago ng Omi nang mag-isa sa nakalipas na 30 araw. I-undo ang anumang mukhang mali.';
 

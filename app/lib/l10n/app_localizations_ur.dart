@@ -12415,6 +12415,15 @@ class AppLocalizationsUr extends AppLocalizations {
   String get reviewRecentChanges => 'حالیہ تبدیلیاں';
 
   @override
+  String get reviewChangeAfter => 'بعد میں';
+
+  @override
+  String get reviewChangeBefore => 'پہلے';
+
+  @override
+  String get reviewChangeRemoved => 'فعال فہرست سے ہٹا دیا گیا';
+
+  @override
   String get reviewChangesIntro => 'پچھلے 30 دنوں میں Omi نے خود کیا بدلا۔ جو غلط لگے اسے واپس کریں۔';
 
   @override

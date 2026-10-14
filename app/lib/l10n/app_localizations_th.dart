@@ -12337,6 +12337,15 @@ class AppLocalizationsTh extends AppLocalizations {
   String get reviewRecentChanges => 'การเปลี่ยนแปลงล่าสุด';
 
   @override
+  String get reviewChangeAfter => 'หลัง';
+
+  @override
+  String get reviewChangeBefore => 'ก่อน';
+
+  @override
+  String get reviewChangeRemoved => 'นำออกจากรายการที่ใช้งานอยู่';
+
+  @override
   String get reviewChangesIntro => 'สิ่งที่ Omi เปลี่ยนเองในช่วง 30 วันที่ผ่านมา ย้อนกลับสิ่งที่ดูไม่ถูกต้องได้';
 
   @override

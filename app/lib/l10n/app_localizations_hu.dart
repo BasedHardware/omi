@@ -12450,6 +12450,15 @@ class AppLocalizationsHu extends AppLocalizations {
   String get reviewRecentChanges => 'Legutóbbi módosítások';
 
   @override
+  String get reviewChangeAfter => 'Utána';
+
+  @override
+  String get reviewChangeBefore => 'Előtte';
+
+  @override
+  String get reviewChangeRemoved => 'Eltávolítva az aktív listáról';
+
+  @override
   String get reviewChangesIntro =>
       'Mit módosított az Omi magától az elmúlt 30 napban. Vond vissza, ami rossznak tűnik.';
 
