@@ -987,9 +987,11 @@ def list_audio_chunks(
                     'path': blob.name,
                     'size': blob.size,
                     'is_batch': is_batch,
-                    'bucket': getattr(getattr(blob, 'bucket', None), 'name', private_cloud_sync_bucket),
                     'generation': getattr(blob, 'generation', None),
                 }
+                blob_bucket = getattr(getattr(blob, 'bucket', None), 'name', private_cloud_sync_bucket)
+                if blob_bucket != private_cloud_sync_bucket:
+                    chunk_entry['bucket'] = blob_bucket
                 span = parse_span_blob_metadata(getattr(blob, 'metadata', None))
                 if span is not None:
                     chunk_entry['span'] = span
@@ -997,27 +999,40 @@ def list_audio_chunks(
             except ValueError:
                 continue
 
-    chunks = list({item['path']: item for item in chunks}.values())
-    if timeout is None and deadline is None:
-        for pack in list_packs(bucket, uid, conversation_id):
-            if not any(pack['timestamp'] <= item['timestamp'] < pack['raw_end'] for item in chunks):
-                chunks.append(pack)
+    if regional and regional != private_cloud_sync_bucket:
+        chunks = list({item['path']: item for item in chunks}.values())
+    if audio_archive.admitted(uid, 'READ') and timeout is None and deadline is None:
+        try:
+            packs = list_packs(bucket, uid, conversation_id)
+            for pack in packs:
+                if not any(pack['timestamp'] <= item['timestamp'] < pack['raw_end'] for item in chunks):
+                    chunks.append(pack)
+        except Exception:
+            logger.warning('raw archive listing failed; retaining legacy chunks', exc_info=True)
     return sorted(chunks, key=lambda x: x['timestamp'])
 
 
 def delete_conversation_audio_files(uid: str, conversation_id: str) -> None:
-    """Delete all audio files (chunks and merged) for a conversation."""
-    bucket = _get_storage_client().bucket(private_cloud_sync_bucket)
-
-    # Delete chunks
-    chunks_prefix = f'chunks/{uid}/{conversation_id}/'
-    for blob in bucket.list_blobs(prefix=chunks_prefix):
-        blob.delete()
-
-    # Delete merged files
-    audio_prefix = f'audio/{uid}/{conversation_id}/'
-    for blob in bucket.list_blobs(prefix=audio_prefix):
-        blob.delete()
+    """Purge canonical and derived conversation objects, including old generations."""
+    bucket_names = {private_cloud_sync_bucket, os.getenv('BUCKET_AUDIO_DERIVED', '').strip()}
+    for bucket_name in filter(None, bucket_names):
+        bucket = _get_storage_client().bucket(bucket_name)
+        for prefix in ('chunks', 'audio', 'merged', 'playback', 'raw-live'):
+            _delete_owner_bucket_prefix(bucket, f'{prefix}/{uid}/{conversation_id}/')
+        if bucket_name == private_cloud_sync_bucket:
+            # Original sync files may span conversations; deleting a linked
+            # conversation removes the shared original too, so its audio cannot
+            # remain in another conversation's canonical object.
+            for prefix in ('raw-sync', 'raw-mobile-batch'):
+                for blob in list(bucket.list_blobs(prefix=f'{prefix}/{uid}/', versions=True)):
+                    metadata = blob.metadata or {}
+                    try:
+                        links = json.loads(metadata.get('conversation_ids', '[]'))
+                    except (TypeError, ValueError):
+                        links = []
+                    if metadata.get('conversation_id') == conversation_id or conversation_id in links:
+                        blob.delete()
+        invalidate_pack_index(bucket, uid, conversation_id)
 
 
 # PCM16 mono: one sample is 2 bytes. A chunk whose byte count is not a multiple
@@ -1061,6 +1076,8 @@ def download_and_decode_chunk_blob(
 ) -> bytes | None:
     """Download one stored chunk blob (single or batch) and decode/decrypt it by extension to PCM16."""
     if path.startswith(f'raw-live/{uid}/'):
+        if not audio_archive.admitted(uid, 'READ'):
+            return None
         try:
             return read_pack(bucket, path, uid, download_kwargs, sample_rate)
         except Exception:
@@ -2234,8 +2251,8 @@ def archive_mobile_batch_raw_files(uid: str, paths: List[str], metadata: Optiona
     if not selected:
         return []
     consent_enabled = users_db.get_user_private_cloud_sync_enabled(uid)
-    if not consent_enabled and any(Path(path).name.startswith('audio_omimobilebatch') for path in selected):
-        raise PermissionError('mobile archive requires cloud audio storage permission')
+    if not consent_enabled:
+        return []
     protection = users_db.get_data_protection_level(uid) if consent_enabled else None
     archived = []
     for path in selected:

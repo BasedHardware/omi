@@ -184,8 +184,7 @@ def test_sync_off_does_not_gain_persistent_archive(monkeypatch, buckets, tmp_pat
 def test_mobile_filename_cannot_claim_storage_consent(monkeypatch, buckets, tmp_path):
     monkeypatch.setattr(storage.users_db, 'get_user_private_cloud_sync_enabled', lambda uid: False)
     path = tmp_path / 'audio_omimobilebatch001_opus_16000_1_fs160_1000.bin'
-    with pytest.raises(PermissionError):
-        storage.archive_mobile_batch_raw_files('owner', [str(path)])
+    assert storage.archive_mobile_batch_raw_files('owner', [str(path)]) == []
     assert not buckets['canonical'].blobs
 
 
@@ -430,8 +429,8 @@ def test_pcm_retirement_requires_whole_byte_identical_coverage(monkeypatch, buck
     enable(monkeypatch, 'READ')
     assert storage.upload_audio_chunks_batch([chunk], 'owner', 'conversation', sample_rate=16000) == [path]
     assert not any(name.startswith('chunks/') for name in buckets['canonical'].blobs)
-    # Archive format compatibility survives rolling the write/preference flags off.
-    monkeypatch.setenv('AUDIO_ARCHIVE_READ_ENABLED', 'false')
+    # Rolling writes back preserves committed raw reads; READ stays on after phase C.
+    monkeypatch.setenv('AUDIO_ARCHIVE_STOP_PCM_ENABLED', 'false')
     chunks = storage.list_audio_chunks('owner', 'conversation')
     assert len(chunks) == 1
     assert storage.download_audio_chunks_and_merge('owner', 'conversation', [1000]) == pcm
@@ -481,8 +480,7 @@ def test_purge_enumerates_noncurrent_generations(monkeypatch):
 def test_regional_route_is_explicit_and_purge_covers_both_buckets(monkeypatch, buckets):
     enable(monkeypatch, 'REGIONAL_CACHE')
     monkeypatch.delenv('BUCKET_AUDIO_DERIVED', raising=False)
-    with pytest.raises(RuntimeError):
-        audio_archive.regional_bucket('owner', 'canonical')
+    assert audio_archive.regional_bucket('owner', 'canonical') == 'canonical'
     monkeypatch.setenv('BUCKET_AUDIO_DERIVED', 'regional')
     assert audio_archive.regional_bucket('owner', 'canonical') == 'regional'
     assert audio_archive.regional_bucket('other', 'canonical') == 'canonical'
@@ -535,3 +533,56 @@ def test_rebuild_singleflight_shares_result_and_retries_failure(monkeypatch):
     for _ in range(2):
         with pytest.raises(OSError):
             failed('owner', 'conversation')
+
+
+def test_flags_off_listing_matches_main_and_never_lists_raw(monkeypatch, buckets):
+    monkeypatch.setenv('AUDIO_ARCHIVE_READ_ENABLED', 'false')
+    monkeypatch.delenv('BUCKET_AUDIO_DERIVED', raising=False)
+    path = 'chunks/owner/conversation/1000.000.opus'
+    buckets['canonical'].blob(path).data = b'pcm'
+
+    def forbidden(*args):
+        raise AssertionError('flags-off must not list raw')
+
+    monkeypatch.setattr(storage, 'list_packs', forbidden)
+    expected = [{'timestamp': 1000.0, 'path': path, 'size': 3, 'is_batch': False, 'generation': 1}]
+    assert storage.list_audio_chunks('owner', 'conversation') == expected
+    enable(monkeypatch, 'READ')
+    assert storage.list_audio_chunks('owner', 'conversation') == expected
+
+
+def test_raw_playback_requires_read_phase(monkeypatch, buckets):
+    monkeypatch.setenv('AUDIO_ARCHIVE_READ_ENABLED', 'false')
+
+    def forbidden(*args):
+        raise AssertionError('flags-off must not decode raw')
+
+    monkeypatch.setattr(storage, 'read_pack', forbidden)
+    assert storage.download_and_decode_chunk_blob(buckets['canonical'], 'raw-live/owner/c/a', 'owner', 16000) is None
+
+
+def test_missing_merge_worker_retains_current_handler(monkeypatch):
+    enable(monkeypatch, 'SEPARATE_MERGE')
+    monkeypatch.delenv('AUDIO_MERGE_WORKER_URL', raising=False)
+    monkeypatch.setenv('AUDIO_MERGE_HANDLER_URL', 'https://legacy/run')
+    assert cloud_tasks._audio_merge_handler_url('owner') == 'https://legacy/run'
+
+
+def test_conversation_purge_covers_raw_links_and_regional_objects(monkeypatch, buckets):
+    monkeypatch.setenv('BUCKET_AUDIO_DERIVED', 'regional')
+    for name in ('canonical', 'regional'):
+        for prefix in ('chunks', 'audio', 'merged', 'playback', 'raw-live'):
+            buckets[name].blob(f'{prefix}/owner/conversation/a').data = b'audio'
+            buckets[name].blob(f'{prefix}/owner/other/a').data = b'keep'
+    for prefix in ('raw-sync', 'raw-mobile-batch'):
+        blob = buckets['canonical'].blob(f'{prefix}/owner/original')
+        blob.data = b'original'
+        blob.metadata = {'conversation_ids': '["conversation", "shared"]'}
+        keep = buckets['canonical'].blob(f'{prefix}/owner/keep')
+        keep.data = b'keep'
+        keep.metadata = {'conversation_ids': '["other"]'}
+    storage.delete_conversation_audio_files('owner', 'conversation')
+    for bucket in buckets.values():
+        assert all('/conversation/' not in path and not path.endswith('/original') for path in bucket.blobs)
+    assert len(buckets['canonical'].blobs) == 7
+    assert len(buckets['regional'].blobs) == 5

@@ -2360,11 +2360,14 @@ class ListenReceiver(ReplayFilterMixin):
                 else:
                     await self._teardown_body(buffer, decoded_audio_bytes)
             finally:
+                self.stt_drain_complete.set()
+                self.host.state.active = False
+                # Archive I/O runs only after transcript drain, outside the STT
+                # shutdown deadline. Its bounded wait cannot cancel STT tails.
                 try:
                     await self.raw_archive.close()
-                finally:
-                    self.stt_drain_complete.set()
-                    self.host.state.active = False
+                except Exception as error:
+                    logger.warning('archive tail flush failed: %s', type(error).__name__)
 
     async def _bounded_teardown(self, buffer: bytearray, decoded_audio_bytes: int) -> None:
         bound = (self.shutdown_deadline or replay_delivery.clock()) + SHUTDOWN_CLEANUP_SECONDS
@@ -2406,7 +2409,6 @@ class ListenReceiver(ReplayFilterMixin):
         self._release_drained_sockets()
 
     async def _teardown_body(self, buffer: bytearray, decoded_audio_bytes: int) -> None:
-        await self.raw_archive.close()
         request = self.host.request
         if self.recovery is not None:
             self.recovery.mark_client_leaving()

@@ -2,7 +2,7 @@
 
 Owner: David approves cohorts; Claude deploys and ramps. All new writes and
 routing trials default off. Canonical capture stays in `BUCKET_PRIVATE_CLOUD_SYNC`
-(the existing US multi-region bucket), indefinitely except account deletion.
+(the existing US multi-region bucket), indefinitely except user-requested conversation/account deletion.
 Training use is **not authorized** by storage consent. No age deletion or
 historical rewrite is part of this change.
 
@@ -21,13 +21,14 @@ The common deterministic cohort uses `AUDIO_ARCHIVE_PERCENT` (0) and
 | `AUDIO_ARCHIVE_COALESCE_ENABLED` | Share concurrent identical file rebuild results, including failures; released admission permits retry. Existing fingerprint-named Cloud Tasks and distributed conversation leases still cover cross-instance rebuilds. |
 | `AUDIO_ARCHIVE_SEPARATE_MERGE_ENABLED` | Route admitted merge tasks to `AUDIO_MERGE_WORKER_URL` (full `/v2/audio-merge-jobs/run` URL). Non-admitted tasks retain `AUDIO_MERGE_HANDLER_URL`. |
 
-Archive/read support for already-produced objects is permanent. Rollback stops
-new archive writes/retirement/routing; it never makes stored raw or migrated
-renditions unreadable. Keep destination bucket/worker URL configuration while
+Stored-format decode support is permanent, with raw playback gated by READ.
+After phase C, rollback STOP_PCM first and retain READ for owners with raw-only
+historical audio until PCM has been regenerated and verified. Never disable
+READ for that cohort prematurely. Regional rendition reads survive write rollback. Keep destination bucket/worker URL configuration while
 old objects/tasks exist. Stage C cannot remove already-written PCM and does not
 assume an hour of volatile raw is durable. Stage C queues supervised 60-second part commits within each hour without blocking
 the receive/STT loop. Pusher retires PCM only if the commit finishes before its
-batched upload; otherwise PCM stays. The tail drains before teardown. Whole-pack capture-PCM hashes
+batched upload; otherwise PCM stays. The archive tail flush runs after STT drain, outside its shutdown deadline. Whole-pack capture-PCM hashes
 allow identity verification across stateful Opus decoder boundaries without
 requiring a second lossy encoding. Consequently savings depend on
 committed coverage at the time pusher uploads; this trial must measure that
@@ -126,4 +127,9 @@ same 7-day baseline. These counters are operation evidence, not billing dollars.
 3. Use the lead's owned capture/playback harness for one raw-only conversation: measure cold/warm playback first-byte and complete latency, duration, gaps and duplicate ranges, and a successful batch final pass. No ad hoc authenticated `api.omi.me` user calls.
 4. Delete that canary account through the supported product flow. Read-only verification: `gcloud storage ls --all-versions "gs://<canonical>/raw-live/<uid>/**"` and equivalent `raw-sync/`, `raw-mobile-batch/`, `chunks/`, `audio/`, `merged/`, `playback/`, `syncing/` in every configured bucket. Expect no live or noncurrent objects. Report any pre-existing soft-deleted residue separately.
 5. Measure bytes/worn-hour and retirement coverage. Target ~13 MB only after phase C demonstrably suppresses the full ~115 MB live PCM stream; hold the ramp if committed coverage, provenance, playback or deletion fails. Read replication/Class A deltas from the closed billing day, not counters alone.
-6. For **each** independent phase: David → at most 5% → wait at least 12h with gates green → all. Roll back its enable to false (STOP_PCM first), retain read compatibility/bucket URLs, and verify fresh sessions again. No rollout or deployment was executed by this PR.
+6. For **each** independent phase: David → at most 5% → wait at least 12h with gates green → all. Roll back its enable to false (STOP_PCM first; retain READ for raw-only history), retain bucket URLs, and verify fresh sessions again. No rollout or deployment was executed by this PR.
+
+Conversation deletion also purges linked originals (including a shared multi-conversation upload),
+raw-live packs, chunks, merged and playback objects in both buckets and all generations.
+Missing regional/worker destinations log and retain the existing bucket/handler.
+Consent-off mobile uploads are accepted without cloud archival.

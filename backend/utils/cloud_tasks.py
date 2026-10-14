@@ -114,8 +114,9 @@ def _audio_merge_handler_url(uid: str = '') -> str:
     if audio_archive.admitted(uid, 'SEPARATE_MERGE'):
         worker = os.getenv('AUDIO_MERGE_WORKER_URL', '').strip()
         if not worker:
-            raise RuntimeError('separate merge worker enabled without AUDIO_MERGE_WORKER_URL')
-        return worker
+            logger.warning('separate merge worker missing AUDIO_MERGE_WORKER_URL; retaining legacy handler')
+        else:
+            return worker
     return os.getenv('AUDIO_MERGE_HANDLER_URL', '')
 
 

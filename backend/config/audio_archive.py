@@ -2,6 +2,9 @@
 
 import hashlib
 import os
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 def _phase_enabled(phase: str) -> bool:
@@ -40,6 +43,7 @@ def regional_bucket(uid: str, legacy: str | None) -> str | None:
     if admitted(uid, 'REGIONAL_CACHE'):
         configured = os.getenv('BUCKET_AUDIO_DERIVED', '').strip()
         if not configured:
-            raise RuntimeError('regional audio cache enabled without BUCKET_AUDIO_DERIVED')
+            logger.warning('regional audio cache missing BUCKET_AUDIO_DERIVED; retaining legacy bucket')
+            return legacy
         return configured
     return legacy
