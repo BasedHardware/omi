@@ -19,7 +19,7 @@ def test_prepared_cohort_matches_reviewed_stage(monkeypatch, host):
     stages = json.loads((ROOT / 'config/diarization-cohort-stages.json').read_text())
     keys = tuple(stages['A'])
     selected = {key: binding[key]['value'] for key in keys}
-    assert selected in stages.values()
+    assert selected == stages['C']
     assert selected == {key: manifest['gke']['pusher']['env'][key]['value'] for key in keys}
     for key, value in selected.items():
         monkeypatch.setenv(key, value)

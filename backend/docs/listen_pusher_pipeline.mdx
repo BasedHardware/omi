@@ -4661,3 +4661,15 @@ programming and caller reachability before deploying.
 
 Caller deploy order, route requirements and independent rollback are documented
 in [the Gateway caller runbook](internal-gateway-callers.md).
+
+### Sync batch final-pass admission
+
+The optional sync final pass shares a fleet Redis budget across fresh and backfill
+(10 audio-hours and 1,000 attempts per UTC hour) and one in-flight call per process.
+Admission refuses immediately, before embeddings and batch work. Exhaustion, Redis
+failure or invalid limits retains legacy speakers and logs
+`event=sync_final_pass outcome=skipped_budget`. Retries consume another reservation.
+`TRANSCRIPTION_SYNC_FINAL_PASS_HOURLY_AUDIO_HOURS` and
+`TRANSCRIPTION_SYNC_FINAL_PASS_HOURLY_REQUESTS` declare the limits; stage C keeps
+David allowlisted with 1% on all four hosts. Outcome/failure logs use the full
+SHA-256 of `sync-final-pass:` plus UID for correlation, with no identity metric label.

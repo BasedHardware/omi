@@ -1,6 +1,7 @@
 # Shared Gateway batch cohort ramp
 
-Lead owns merges, deployments and ramp decisions. The current binding is complete stage B, David authoritative including sync/backfill.
+Lead owns merges, deployments and ramp decisions. The prepared binding is complete stage C, 1% plus David authoritative including sync/backfill.
+This is preparation only; deployment and long-audio qualification remain lead-owned.
 The reserved prod Gateway is `172.16.160.20`; reservation is not serving readiness.
 Follow [Gateway installation and route probes](../charts/internal-gateway/README.md)
 before deploying callers. The pyannote adapter appends `/v2/diarization`, yielding
@@ -103,6 +104,10 @@ assignments, clocks, translations and source references on the actual sync outpu
 
 ## Capacity and limits
 
+[Stage C aggregate measurements and provisional capacity model](diarizer-batch-stagec-load.md)
+qualify the combined sync/pusher planning assumptions and document the remaining
+long-audio measurement gap.
+
 The daily cap is already configurable through `TRANSCRIPTION_SHADOW_DAILY_AUDIO_HOURS`
 and reserved atomically in shared Redis across shadow workers before provider work. It
 charges **all** selected stored audio, even single-speaker triage skips. At the
@@ -111,7 +116,22 @@ headroom. At D, ~140 multi-speaker audio-h/day × supplied T4 RTF 0.06 is **8.4 
 (~35% average occupancy). These are planning assumptions, not a T4 load-test receipt.
 At the same ~45% multi-speaker share, spending the entire 400 h cap is ~10.8 GPU-h.
 Bursts, extra ASR work and retries still require queue/latency gates.
-**Sync bypasses this shadow cap.** Backfill has its own global speech allowance
+**Sync has an independent admission cap.** Each process admits one final pass without
+waiting. Shared Redis atomically reserves at most 10 WAV audio-hours and 1,000 attempts
+per UTC hour across backend, sync and backfill. The stage data binds
+`TRANSCRIPTION_SYNC_FINAL_PASS_HOURLY_AUDIO_HOURS=10` and
+`TRANSCRIPTION_SYNC_FINAL_PASS_HOURLY_REQUESTS=1000` on all four hosts.
+Each retry is charged again; reservations are never refunded. Invalid config,
+Redis failure and exhaustion skip before embedding/GPU calls, emit
+`event=sync_final_pass outcome=skipped_budget` plus fallback telemetry, and retain
+legacy speakers. UTC boundaries can admit twice the hourly allowance in a short
+interval; batch admission still bounds each replica to one running plus two queued.
+The one-process slot is not a fleet cap; Redis is the fleet authority.
+Outcome and speaker-failure logs include `uid_hash=sha256("sync-final-pass:" + uid)`
+(full hex), with no UID metric labels. The hash is stable for scoped verification;
+no transcript, audio, or stored record read is needed to count outcomes.
+
+ Backfill has its own global speech allowance
 (`SYNC_BACKFILL_GLOBAL_DAILY_HOURS`, default 555), not a diarization-specific cap.
 The 8.4 GPU-h estimate above covers the original shadow planning load, not combined
 shadow plus fresh/backfill sync work. B stays David-only; do not advance C/D until
