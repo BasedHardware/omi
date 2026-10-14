@@ -872,9 +872,17 @@ class WalSessionRoll extends CaptureEffect {
 /// Mint the recording id for a fresh session. The port returns the id, which
 /// the dispatcher folds into the committed active session.
 class MintRecording extends CaptureEffect {
-  const MintRecording({required this.sessionKey, required this.telemetrySource});
+  const MintRecording({
+    required this.sessionKey,
+    required this.telemetrySource,
+    this.requestOrigin = 'unknown',
+  });
   final String sessionKey;
   final String telemetrySource;
+
+  /// `explicit_user`, `automatic_roll`, or `unknown`. See
+  /// [RecordingLifecycleTelemetry].
+  final String requestOrigin;
 }
 
 /// Run a migrated composite transition body on the controller (the staged
@@ -1164,7 +1172,8 @@ class CaptureEffectPorts {
 
   /// Completes any open telemetry recording, then
   /// `_recordingTelemetry.prepare(source:)` and returns the fresh id.
-  final String Function(String sessionKey, String telemetrySource) mintRecordingId;
+  /// [requestOrigin] is `explicit_user`, `automatic_roll`, or `unknown`.
+  final String Function(String sessionKey, String telemetrySource, String requestOrigin) mintRecordingId;
 
   /// Phone-start preflight — requests the OS mic permission once; `false`
   /// abandons the start without touching state or hardware.
@@ -1707,7 +1716,10 @@ class CaptureCoordinator {
         WalFinalize() => _ports.finalizeWal(),
         WalSessionRoll() => _ports.rollSession(effect.identity),
         MintRecording() => Future<_MintedRecordingId>.value(
-            _MintedRecordingId(effect.sessionKey, _ports.mintRecordingId(effect.sessionKey, effect.telemetrySource)),
+            _MintedRecordingId(
+              effect.sessionKey,
+              _ports.mintRecordingId(effect.sessionKey, effect.telemetrySource, effect.requestOrigin),
+            ),
           ),
         RunStage() => _ports.runStage(effect.stage),
       };
@@ -1839,6 +1851,7 @@ CaptureTransition _reducePhoneStart(CaptureCoordinatorState state, PhoneStartReq
           CaptureTransport.batch => env.batchModeEnabled ? 'phone_mic_batch' : 'phone_mic_batch_auto',
           CaptureTransport.live => 'phone_mic_live',
         },
+        requestOrigin: 'explicit_user',
       ),
     )
     ..add(RunStage(StartPhoneSessionStage(mode: mode)));
@@ -2844,6 +2857,7 @@ CaptureTransition _reduceBatchMode(CaptureCoordinatorState state, BatchModeSetRe
           telemetrySource: rolledTo == CaptureTransport.batch
               ? (event.enabled ? 'phone_mic_batch' : 'phone_mic_batch_auto')
               : 'phone_mic_live',
+          requestOrigin: 'automatic_roll',
         ),
       )
       ..add(RunStage(StartPhoneSessionStage(mode: rolledTo)));
@@ -2921,7 +2935,11 @@ CaptureTransition _reducePhoneBatchStart(CaptureCoordinatorState state, PhoneBat
     ),
     [
       const CheckPhonePermission(),
-      MintRecording(sessionKey: key, telemetrySource: event.auto ? 'phone_mic_batch_auto' : 'phone_mic_batch'),
+      MintRecording(
+        sessionKey: key,
+        telemetrySource: event.auto ? 'phone_mic_batch_auto' : 'phone_mic_batch',
+        requestOrigin: event.auto ? 'unknown' : 'explicit_user',
+      ),
       RunStage(StartPhoneBatchStage(auto: event.auto)),
     ],
   );

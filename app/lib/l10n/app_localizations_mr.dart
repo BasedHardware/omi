@@ -13213,4 +13213,10 @@ class AppLocalizationsMr extends AppLocalizations {
 
   @override
   String get paywallCancelAnytime => 'कधीही रद्द करा.';
+
+  @override
+  String get connectAnAgent => 'एजंट कनेक्ट करा';
+
+  @override
+  String get connectAnAgentSubtitle => 'Claude, ChatGPT, Codex किंवा कोणत्याही एजंटसाठी सेटअप प्रॉम्प्ट मिळवा';
 }

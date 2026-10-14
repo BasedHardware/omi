@@ -13246,4 +13246,10 @@ class AppLocalizationsKn extends AppLocalizations {
 
   @override
   String get paywallCancelAnytime => 'ಯಾವಾಗ ಬೇಕಾದರೂ ರದ್ದುಗೊಳಿಸಿ.';
+
+  @override
+  String get connectAnAgent => 'ಏಜೆಂಟ್ ಅನ್ನು ಸಂಪರ್ಕಿಸಿ';
+
+  @override
+  String get connectAnAgentSubtitle => 'Claude, ChatGPT, Codex ಅಥವಾ ಯಾವುದೇ ಏಜೆಂಟ್‌ಗಾಗಿ ಸೆಟಪ್ ಪ್ರಾಂಪ್ಟ್ ಪಡೆಯಿರಿ';
 }

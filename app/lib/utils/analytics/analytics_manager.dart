@@ -28,6 +28,8 @@ import 'package:omi/utils/speech_profile_enroll_events.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:uuid/uuid.dart';
 import 'package:omi/utils/debugging/crashlytics_manager.dart';
+import 'package:omi/services/telemetry/client_telemetry.dart';
+import 'package:omi/services/telemetry/client_telemetry_flags.dart';
 import 'package:omi/utils/analytics/background_checkpoint_store.dart';
 
 enum ProductErrorKind { flutterFramework, uncaughtDart, startup }
@@ -117,6 +119,7 @@ class AnalyticsManager {
   /// Fence synchronously, before any SDK identify/reset operation is scheduled.
   void bindIdentity(String? identity) {
     if (_identityKnown && _boundIdentity == identity) return;
+    final previousOwner = _identityKnown ? _boundIdentity : null;
     final hadSession = _eventContext.containsKey('app_session_id');
     _identityResetNeeded = _identityResetNeeded || !_identityKnown || _boundIdentity != null;
     // Preserve a durable epoch across relaunch of the same account so native
@@ -129,6 +132,7 @@ class AnalyticsManager {
     _identityEpoch++;
     _boundIdentity = identity;
     _identityChanges.value = _identityEpoch;
+    ClientTelemetry.instance.onOwnerChanged(previous: previousOwner, next: identity);
     _droppedEvents += _queuedEvents.length;
     _queuedEvents.clear();
     _pendingTimedEvents.clear();
@@ -1182,6 +1186,7 @@ class AnalyticsManager {
   }
 
   void deviceSessionEnded({required BtDevice device, required Duration duration, String? reason, int? hciReasonCode}) {
+    if (ClientTelemetryFlags.posthogRetirementEnabled) return;
     final properties = <String, Object>{
       'duration_seconds': duration.inMilliseconds / Duration.millisecondsPerSecond,
       'reason': _knownDeviceValue(reason ?? ''),

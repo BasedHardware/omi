@@ -13026,4 +13026,10 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get paywallCancelAnytime => '언제든지 해지할 수 있습니다.';
+
+  @override
+  String get connectAnAgent => '에이전트 연결';
+
+  @override
+  String get connectAnAgentSubtitle => 'Claude, ChatGPT, Codex 등 모든 에이전트용 설정 프롬프트 받기';
 }

@@ -7,10 +7,19 @@ typedef PerformanceEmitter = void Function(String name, Map<String, dynamic> pro
 /// Bounded aggregates of Flutter frames. These measure rendering, not network
 /// readiness, native hangs, battery use, or whether content was useful.
 class MobilePerformanceTelemetry extends NavigatorObserver {
-  MobilePerformanceTelemetry({required this.emit, required this.identityEpoch});
+  MobilePerformanceTelemetry({
+    required this.emit,
+    required this.identityEpoch,
+    this.diagnosticsEnabled,
+  });
 
   final PerformanceEmitter emit;
   final int Function() identityEpoch;
+
+  /// Explicit local-diagnostics switch. Routine PostHog emission is removed.
+  /// Null and false both stay silent; only an explicit true enables the
+  /// bounded local path.
+  final bool Function()? diagnosticsEnabled;
   int _epoch = 0;
   int _frames = 0;
   int _slowFrames = 0;
@@ -103,6 +112,7 @@ class MobilePerformanceTelemetry extends NavigatorObserver {
   }
 
   void _send(String name, Map<String, dynamic> properties) {
+    if (diagnosticsEnabled?.call() != true) return;
     try {
       emit(name, properties);
     } catch (_) {}

@@ -405,3 +405,6 @@ tests/unit/test_mobile_client_journeys.py::test_sync_visible_conversation_accept
 # First live speaker-collapse test in the file pays the routers.listen.speakers
 # import under file isolation. Measured 0.44s CPU during pre-push (2026-10-07).
 tests/unit/test_live_speaker_collapse.py::test_controller_emits_metric_and_log_without_changing_speaker_maps
+
+tests/unit/test_client_telemetry.py::test_voice_actor_capacity_sharded_across_documents
+# 2,200-actor sharding capacity regression; volume is the property under test (~0.86s CPU)

@@ -140,7 +140,9 @@ void main() {
     await tester.pumpAndSettle();
   }
 
-  testWidgets('the sheet is Account, Plan, Referral, the groups, Memories, Goals and Feedback, in order, keyed', (
+  testWidgets(
+      'the sheet is Account, Plan, Referral, the groups, Connect an Agent, Memories, Goals and Feedback, in order, keyed',
+      (
     tester,
   ) async {
     await pumpSheet(tester);
@@ -154,6 +156,7 @@ void main() {
       'settings_group_voice',
       'settings_group_notifications',
       'settings_group_integrations',
+      'settings_row_connect_agent',
       'settings_group_privacy',
       'settings_row_memories',
       'settings_row_goals',
@@ -172,6 +175,7 @@ void main() {
       en.assistantVoiceSettingsTitle,
       en.notificationsAndDisplay,
       en.integrations,
+      en.connectAnAgent,
       en.dataAndPrivacy,
       en.memories,
       en.goals,
@@ -220,6 +224,8 @@ void main() {
       SettingsDestination.profile: 'settings_account',
       SettingsDestination.integrations: 'settings_group_integrations',
       SettingsDestination.developer: 'settings_group_developer',
+      // Connect an Agent joined the sheet (2026-10-14) so agent setup is not buried in Developer.
+      SettingsDestination.connectAgent: 'settings_row_connect_agent',
       SettingsDestination.planAndUsage: 'settings_row_planAndUsage',
       SettingsDestination.referral: 'settings_row_referral',
       SettingsDestination.feedback: 'settings_row_feedback', // where Intercom is supported (the host test is)

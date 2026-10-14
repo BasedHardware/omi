@@ -13277,4 +13277,11 @@ class AppLocalizationsIt extends AppLocalizations {
 
   @override
   String get paywallCancelAnytime => 'Disdici quando vuoi.';
+
+  @override
+  String get connectAnAgent => 'Collega un agente';
+
+  @override
+  String get connectAnAgentSubtitle =>
+      'Ottieni un prompt di configurazione per Claude, ChatGPT, Codex o qualsiasi agente';
 }

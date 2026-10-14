@@ -11492,5 +11492,7 @@
     "firstCaptureCancelWarning": "Going back stops this recording. Keep talking to give Omi a few more sentences.",
     "firstCaptureSiriTip": "Tip: Enable Omi in Shortcuts → Siri.",
     "paywallOutlineHeadline": "Больш не прапусціце ніводнага слова.",
-    "paywallCancelAnytime": "Адмяняйце ў любы час."
+    "paywallCancelAnytime": "Адмяняйце ў любы час.",
+    "connectAnAgent": "Падключыць агента",
+    "connectAnAgentSubtitle": "Атрымайце падказку для наладкі Claude, ChatGPT, Codex або любога агента"
 }

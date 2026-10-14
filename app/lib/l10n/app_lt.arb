@@ -4055,5 +4055,7 @@
     "firstCaptureCancelWarning": "Going back stops this recording. Keep talking to give Omi a few more sentences.",
     "firstCaptureSiriTip": "Tip: Enable Omi in Shortcuts → Siri.",
     "paywallOutlineHeadline": "Daugiau nepraleiskite nė žodžio.",
-    "paywallCancelAnytime": "Atšaukite bet kada."
+    "paywallCancelAnytime": "Atšaukite bet kada.",
+    "connectAnAgent": "Prijungti agentą",
+    "connectAnAgentSubtitle": "Gaukite sąrankos užklausą Claude, ChatGPT, Codex ar bet kuriam agentui"
 }

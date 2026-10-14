@@ -13201,4 +13201,10 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get paywallCancelAnytime => 'Tühista igal ajal.';
+
+  @override
+  String get connectAnAgent => 'Ühenda agent';
+
+  @override
+  String get connectAnAgentSubtitle => 'Hangi seadistusjuhis Claude\'i, ChatGPT, Codexi või mõne muu agendi jaoks';
 }

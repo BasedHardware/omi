@@ -4055,5 +4055,7 @@
     "firstCaptureCancelWarning": "Going back stops this recording. Keep talking to give Omi a few more sentences.",
     "firstCaptureSiriTip": "Tip: Enable Omi in Shortcuts → Siri.",
     "paywallOutlineHeadline": "Nekad vairs nepalaidiet garām nevienu vārdu.",
-    "paywallCancelAnytime": "Atcelt jebkurā laikā."
+    "paywallCancelAnytime": "Atcelt jebkurā laikā.",
+    "connectAnAgent": "Pievienot aģentu",
+    "connectAnAgentSubtitle": "Iegūstiet iestatīšanas uzvedni Claude, ChatGPT, Codex vai jebkuram aģentam"
 }
