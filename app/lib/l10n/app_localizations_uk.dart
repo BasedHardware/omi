@@ -13594,4 +13594,21 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get onDeviceEntrySubtitle => 'Коли години наживо закінчаться, транскрибувати на цьому телефоні';
+
+  @override
+  String get chatAppsChannelPlanRequired => 'Доступно в Operator і Architect';
+
+  @override
+  String chatAppsAtCapacity(String app) {
+    return '$app заповнено';
+  }
+
+  @override
+  String get chatAppsJoinWaitlist => 'Приєднатися до списку очікування';
+
+  @override
+  String get chatAppsOnWaitlist => 'Ви в списку очікування';
+
+  @override
+  String get chatAppsWaitlistJoined => 'Ви в списку очікування. Ми повідомимо, коли з\'явиться місце.';
 }

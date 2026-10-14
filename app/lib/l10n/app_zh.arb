@@ -4159,5 +4159,10 @@
     "onDeviceFinishSetupBody": "你本月的实时时长已用完。Omi 仍在录音并将音频保存在你的手机上。下载语音模型后即可补齐转录。",
     "onDeviceDownloadSize": "需下载 {size}",
     "onDeviceUnsupportedBody": "本机暂时无法运行语音模型。音频会一直保存，直到实时时长恢复或你升级套餐。",
-    "onDeviceEntrySubtitle": "实时时长用完后，在本机转录"
+    "onDeviceEntrySubtitle": "实时时长用完后，在本机转录",
+    "chatAppsChannelPlanRequired": "Operator 和 Architect 套餐可用",
+    "chatAppsAtCapacity": "{app} 名额已满",
+    "chatAppsJoinWaitlist": "加入候补名单",
+    "chatAppsOnWaitlist": "你已在候补名单中",
+    "chatAppsWaitlistJoined": "你已在候补名单中。有名额时我们会通知你。"
 }

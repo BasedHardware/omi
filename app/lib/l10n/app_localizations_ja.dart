@@ -13368,4 +13368,21 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get onDeviceEntrySubtitle => 'ライブ時間を使い切ったら、このスマホで文字起こし';
+
+  @override
+  String get chatAppsChannelPlanRequired => 'OperatorとArchitectで利用できます';
+
+  @override
+  String chatAppsAtCapacity(String app) {
+    return '$appは定員に達しています';
+  }
+
+  @override
+  String get chatAppsJoinWaitlist => 'ウェイトリストに登録';
+
+  @override
+  String get chatAppsOnWaitlist => 'ウェイトリストに登録済みです';
+
+  @override
+  String get chatAppsWaitlistJoined => 'ウェイトリストに登録しました。空きが出たらお知らせします。';
 }

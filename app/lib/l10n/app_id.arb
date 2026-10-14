@@ -4194,5 +4194,10 @@
     "onDeviceFinishSetupBody": "Jam langsung bulan ini sudah habis. Omi masih merekam dan menyimpan audio di ponsel Anda. Unduh model suara dan Omi akan menyusul.",
     "onDeviceDownloadSize": "Unduhan {size}",
     "onDeviceUnsupportedBody": "Ponsel ini belum dapat menjalankan model suara. Audio tetap tersimpan sampai jam langsung kembali atau Anda meningkatkan paket.",
-    "onDeviceEntrySubtitle": "Saat jam langsung habis, transkripsi di ponsel ini"
+    "onDeviceEntrySubtitle": "Saat jam langsung habis, transkripsi di ponsel ini",
+    "chatAppsChannelPlanRequired": "Tersedia di Operator dan Architect",
+    "chatAppsAtCapacity": "{app} sudah penuh",
+    "chatAppsJoinWaitlist": "Gabung daftar tunggu",
+    "chatAppsOnWaitlist": "Anda ada di daftar tunggu",
+    "chatAppsWaitlistJoined": "Anda ada di daftar tunggu. Kami akan memberi tahu saat ada tempat."
 }

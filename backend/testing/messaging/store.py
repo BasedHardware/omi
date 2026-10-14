@@ -15,6 +15,7 @@ class MemoryStore:
     def __init__(self):
         self.proofs, self.identities, self.jobs, self.sessions, self.logs, self.leases = {}, {}, {}, {}, {}, {}
         self.chat_heads = {}
+        self.notices = {}
         self.lock = RLock()
 
     def mint(self, uid, channel, provider, kind, *, now=None):
@@ -157,6 +158,34 @@ class MemoryStore:
         log = self.logs.setdefault((uid, session), [])
         if not any(e['id'] == event['id'] for e in log):
             log.append(copy.deepcopy(event))
+
+    def assert_link_capacity(self, message, link):
+        pass
+
+    def assert_notice_link(self, message, link):
+        current = self.lookup(message)
+        if not current or not current.get('active') or current.get('generation') != link['generation']:
+            raise PermissionError('Link revoked')
+
+    def has_event(self, uid, session, event_ids):
+        return any(e['id'] in event_ids for e in self.events(uid, session))
+
+    def notice_allowed(self, message, reason, window=3600):
+        identity = (message.channel, message.external_user_id, reason)
+        now = datetime.now(timezone.utc)
+        with self.lock:
+            if identity in self.notices and (now - self.notices[identity]).total_seconds() < window:
+                return False
+            self.notices[identity] = now
+            return True
+
+    def reset_session(self, uid, message, link):
+        surface = 'channel:' + key(message.channel, message.external_chat_id)
+        self.sessions[(uid, surface)] = {'id': uuid4().hex, 'surface': surface}
+        return self.sessions[(uid, surface)]
+
+    def claim_expired(self, channel, provider, limit=20):
+        return []
 
     def persist_message(self, uid, document, session_id):
         return document

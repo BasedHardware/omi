@@ -4159,5 +4159,10 @@
     "onDeviceFinishSetupBody": "Sie haben die Live-Stunden dieses Monats aufgebraucht. Omi nimmt weiter auf und speichert Audio auf Ihrem Telefon. Laden Sie das Sprachmodell herunter, dann holt es alles nach.",
     "onDeviceDownloadSize": "{size} Download",
     "onDeviceUnsupportedBody": "Dieses Telefon kann das Sprachmodell noch nicht ausführen. Das Audio bleibt gespeichert, bis wieder Live-Stunden verfügbar sind oder Sie ein Upgrade durchführen.",
-    "onDeviceEntrySubtitle": "Wenn Live-Stunden aufgebraucht sind, auf diesem Telefon transkribieren"
+    "onDeviceEntrySubtitle": "Wenn Live-Stunden aufgebraucht sind, auf diesem Telefon transkribieren",
+    "chatAppsChannelPlanRequired": "Verfügbar mit Operator und Architect",
+    "chatAppsAtCapacity": "{app} ist ausgelastet",
+    "chatAppsJoinWaitlist": "Auf die Warteliste",
+    "chatAppsOnWaitlist": "Du stehst auf der Warteliste",
+    "chatAppsWaitlistJoined": "Du stehst auf der Warteliste. Wir melden uns, sobald ein Platz frei ist."
 }

@@ -13665,4 +13665,21 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get onDeviceEntrySubtitle => 'Wenn Live-Stunden aufgebraucht sind, auf diesem Telefon transkribieren';
+
+  @override
+  String get chatAppsChannelPlanRequired => 'Verfügbar mit Operator und Architect';
+
+  @override
+  String chatAppsAtCapacity(String app) {
+    return '$app ist ausgelastet';
+  }
+
+  @override
+  String get chatAppsJoinWaitlist => 'Auf die Warteliste';
+
+  @override
+  String get chatAppsOnWaitlist => 'Du stehst auf der Warteliste';
+
+  @override
+  String get chatAppsWaitlistJoined => 'Du stehst auf der Warteliste. Wir melden uns, sobald ein Platz frei ist.';
 }

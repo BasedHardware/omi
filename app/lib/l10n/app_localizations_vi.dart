@@ -13561,4 +13561,21 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get onDeviceEntrySubtitle => 'Khi hết giờ trực tiếp, phiên âm trên điện thoại này';
+
+  @override
+  String get chatAppsChannelPlanRequired => 'Có trên gói Operator và Architect';
+
+  @override
+  String chatAppsAtCapacity(String app) {
+    return '$app đã hết chỗ';
+  }
+
+  @override
+  String get chatAppsJoinWaitlist => 'Tham gia danh sách chờ';
+
+  @override
+  String get chatAppsOnWaitlist => 'Bạn đã có trong danh sách chờ';
+
+  @override
+  String get chatAppsWaitlistJoined => 'Bạn đã có trong danh sách chờ. Chúng tôi sẽ báo khi có chỗ.';
 }

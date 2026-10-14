@@ -13553,4 +13553,21 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String get onDeviceEntrySubtitle => 'Transskribér på denne telefon, når live-timerne er brugt op';
+
+  @override
+  String get chatAppsChannelPlanRequired => 'Tilgængelig med Operator og Architect';
+
+  @override
+  String chatAppsAtCapacity(String app) {
+    return '$app er fuldt';
+  }
+
+  @override
+  String get chatAppsJoinWaitlist => 'Skriv dig på ventelisten';
+
+  @override
+  String get chatAppsOnWaitlist => 'Du er på ventelisten';
+
+  @override
+  String get chatAppsWaitlistJoined => 'Du er på ventelisten. Vi giver besked, når der er plads.';
 }

@@ -13574,4 +13574,21 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get onDeviceEntrySubtitle => 'Saat jam langsung habis, transkripsi di ponsel ini';
+
+  @override
+  String get chatAppsChannelPlanRequired => 'Tersedia di Operator dan Architect';
+
+  @override
+  String chatAppsAtCapacity(String app) {
+    return '$app sudah penuh';
+  }
+
+  @override
+  String get chatAppsJoinWaitlist => 'Gabung daftar tunggu';
+
+  @override
+  String get chatAppsOnWaitlist => 'Anda ada di daftar tunggu';
+
+  @override
+  String get chatAppsWaitlistJoined => 'Anda ada di daftar tunggu. Kami akan memberi tahu saat ada tempat.';
 }

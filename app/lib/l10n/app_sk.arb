@@ -4159,5 +4159,10 @@
     "onDeviceFinishSetupBody": "Vyčerpali ste hodiny živého prepisu na tento mesiac. Omi stále nahráva a ukladá zvuk vo vašom telefóne. Stiahnite rečový model a všetko dobehne.",
     "onDeviceDownloadSize": "Na stiahnutie: {size}",
     "onDeviceUnsupportedBody": "Tento telefón zatiaľ nedokáže spustiť rečový model. Zvuk zostáva uložený, kým sa neobnovia hodiny živého prepisu alebo neprejdete na vyšší plán.",
-    "onDeviceEntrySubtitle": "Keď sa minú hodiny živého prepisu, prepisovať v tomto telefóne"
+    "onDeviceEntrySubtitle": "Keď sa minú hodiny živého prepisu, prepisovať v tomto telefóne",
+    "chatAppsChannelPlanRequired": "K dispozícii v Operator a Architect",
+    "chatAppsAtCapacity": "{app} je plne obsadený",
+    "chatAppsJoinWaitlist": "Pridať sa na čakaciu listinu",
+    "chatAppsOnWaitlist": "Ste na čakacej listine",
+    "chatAppsWaitlistJoined": "Ste na čakacej listine. Dáme vám vedieť, keď bude miesto."
 }

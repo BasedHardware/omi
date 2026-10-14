@@ -4159,5 +4159,10 @@
     "onDeviceFinishSetupBody": "今月のライブ時間を使い切りました。Omiは録音を続け、音声をスマホに保存しています。音声モデルをダウンロードすると、たまった分を処理します。",
     "onDeviceDownloadSize": "{size}のダウンロード",
     "onDeviceUnsupportedBody": "このスマホではまだ音声モデルを実行できません。ライブ時間が戻るかアップグレードするまで、音声は保存されます。",
-    "onDeviceEntrySubtitle": "ライブ時間を使い切ったら、このスマホで文字起こし"
+    "onDeviceEntrySubtitle": "ライブ時間を使い切ったら、このスマホで文字起こし",
+    "chatAppsChannelPlanRequired": "OperatorとArchitectで利用できます",
+    "chatAppsAtCapacity": "{app}は定員に達しています",
+    "chatAppsJoinWaitlist": "ウェイトリストに登録",
+    "chatAppsOnWaitlist": "ウェイトリストに登録済みです",
+    "chatAppsWaitlistJoined": "ウェイトリストに登録しました。空きが出たらお知らせします。"
 }

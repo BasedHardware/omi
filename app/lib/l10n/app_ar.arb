@@ -4159,5 +4159,10 @@
     "onDeviceFinishSetupBody": "لقد استهلكت الساعات المباشرة لهذا الشهر. لا يزال Omi يسجّل ويحفظ الصوت على هاتفك. نزّل نموذج الكلام وسيلحق بكل ما فات.",
     "onDeviceDownloadSize": "تنزيل بحجم {size}",
     "onDeviceUnsupportedBody": "لا يستطيع هذا الهاتف تشغيل نموذج الكلام بعد. يبقى الصوت محفوظًا حتى تعود الساعات المباشرة أو تقوم بالترقية.",
-    "onDeviceEntrySubtitle": "عند نفاد الساعات المباشرة، انسخ على هذا الهاتف"
+    "onDeviceEntrySubtitle": "عند نفاد الساعات المباشرة، انسخ على هذا الهاتف",
+    "chatAppsChannelPlanRequired": "متاح في Operator وArchitect",
+    "chatAppsAtCapacity": "{app} وصل إلى الحد الأقصى",
+    "chatAppsJoinWaitlist": "انضم إلى قائمة الانتظار",
+    "chatAppsOnWaitlist": "أنت في قائمة الانتظار",
+    "chatAppsWaitlistJoined": "أنت في قائمة الانتظار. سنُعلمك عندما يتوفر مكان."
 }

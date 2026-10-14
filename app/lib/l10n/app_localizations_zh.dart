@@ -13349,4 +13349,21 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get onDeviceEntrySubtitle => '实时时长用完后，在本机转录';
+
+  @override
+  String get chatAppsChannelPlanRequired => 'Operator 和 Architect 套餐可用';
+
+  @override
+  String chatAppsAtCapacity(String app) {
+    return '$app 名额已满';
+  }
+
+  @override
+  String get chatAppsJoinWaitlist => '加入候补名单';
+
+  @override
+  String get chatAppsOnWaitlist => '你已在候补名单中';
+
+  @override
+  String get chatAppsWaitlistJoined => '你已在候补名单中。有名额时我们会通知你。';
 }

@@ -11585,5 +11585,10 @@
     "onDeviceFinishSetupBody": "আপনি এই মাসের লাইভ ঘণ্টা শেষ করে ফেলেছেন। Omi এখনও রেকর্ড করছে এবং আপনার ফোনে অডিও সংরক্ষণ করছে। স্পিচ মডেল ডাউনলোড করুন, বাকি কাজ এটি সেরে নেবে।",
     "onDeviceDownloadSize": "{size} ডাউনলোড",
     "onDeviceUnsupportedBody": "এই ফোন এখনও স্পিচ মডেল চালাতে পারে না। লাইভ ঘণ্টা ফিরে আসা বা আপগ্রেড করা পর্যন্ত অডিও সংরক্ষিত থাকবে।",
-    "onDeviceEntrySubtitle": "লাইভ ঘণ্টা শেষ হলে এই ফোনে ট্রান্সক্রাইব করুন"
+    "onDeviceEntrySubtitle": "লাইভ ঘণ্টা শেষ হলে এই ফোনে ট্রান্সক্রাইব করুন",
+    "chatAppsChannelPlanRequired": "Operator এবং Architect-এ উপলব্ধ",
+    "chatAppsAtCapacity": "{app} পূর্ণ হয়ে গেছে",
+    "chatAppsJoinWaitlist": "অপেক্ষা তালিকায় যোগ দিন",
+    "chatAppsOnWaitlist": "আপনি অপেক্ষা তালিকায় আছেন",
+    "chatAppsWaitlistJoined": "আপনি অপেক্ষা তালিকায় আছেন। জায়গা খালি হলে আমরা জানাব।"
 }

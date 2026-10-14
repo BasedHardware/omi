@@ -13621,4 +13621,21 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get onDeviceEntrySubtitle => 'Când se termină orele live, transcrie pe acest telefon';
+
+  @override
+  String get chatAppsChannelPlanRequired => 'Disponibil cu Operator și Architect';
+
+  @override
+  String chatAppsAtCapacity(String app) {
+    return '$app este plin';
+  }
+
+  @override
+  String get chatAppsJoinWaitlist => 'Intră pe lista de așteptare';
+
+  @override
+  String get chatAppsOnWaitlist => 'Ești pe lista de așteptare';
+
+  @override
+  String get chatAppsWaitlistJoined => 'Ești pe lista de așteptare. Te anunțăm când se eliberează un loc.';
 }

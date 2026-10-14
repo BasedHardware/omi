@@ -11585,5 +11585,10 @@
     "onDeviceFinishSetupBody": "ניצלת את השעות החיות של החודש. Omi עדיין מקליט ושומר את האודיו בטלפון שלך. הורד את מודל הדיבור והוא ישלים את הפער.",
     "onDeviceDownloadSize": "הורדה של {size}",
     "onDeviceUnsupportedBody": "הטלפון הזה עדיין לא יכול להריץ את מודל הדיבור. האודיו נשאר שמור עד שהשעות החיות יחזרו או שתשדרג.",
-    "onDeviceEntrySubtitle": "כשהשעות החיות נגמרות, לתמלל בטלפון הזה"
+    "onDeviceEntrySubtitle": "כשהשעות החיות נגמרות, לתמלל בטלפון הזה",
+    "chatAppsChannelPlanRequired": "זמין ב-Operator וב-Architect",
+    "chatAppsAtCapacity": "{app} מלא כרגע",
+    "chatAppsJoinWaitlist": "הצטרפות לרשימת ההמתנה",
+    "chatAppsOnWaitlist": "את/ה ברשימת ההמתנה",
+    "chatAppsWaitlistJoined": "את/ה ברשימת ההמתנה. נעדכן כשיתפנה מקום."
 }

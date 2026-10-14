@@ -4159,5 +4159,10 @@
     "onDeviceFinishSetupBody": "Bạn đã dùng hết giờ trực tiếp của tháng này. Omi vẫn đang ghi âm và lưu âm thanh trên điện thoại của bạn. Hãy tải mô hình giọng nói để xử lý bù.",
     "onDeviceDownloadSize": "Tải xuống {size}",
     "onDeviceUnsupportedBody": "Điện thoại này chưa chạy được mô hình giọng nói. Âm thanh vẫn được lưu cho đến khi có lại giờ trực tiếp hoặc bạn nâng cấp.",
-    "onDeviceEntrySubtitle": "Khi hết giờ trực tiếp, phiên âm trên điện thoại này"
+    "onDeviceEntrySubtitle": "Khi hết giờ trực tiếp, phiên âm trên điện thoại này",
+    "chatAppsChannelPlanRequired": "Có trên gói Operator và Architect",
+    "chatAppsAtCapacity": "{app} đã hết chỗ",
+    "chatAppsJoinWaitlist": "Tham gia danh sách chờ",
+    "chatAppsOnWaitlist": "Bạn đã có trong danh sách chờ",
+    "chatAppsWaitlistJoined": "Bạn đã có trong danh sách chờ. Chúng tôi sẽ báo khi có chỗ."
 }

@@ -11585,5 +11585,10 @@
     "onDeviceFinishSetupBody": "Потрошили сте овомесечне сате уживо. Omi и даље снима и чува звук на вашем телефону. Преузмите говорни модел и он ће надокнадити заостатак.",
     "onDeviceDownloadSize": "Преузимање од {size}",
     "onDeviceUnsupportedBody": "Овај телефон још не може да покреће говорни модел. Звук остаје сачуван док се сати уживо не врате или не надоградите план.",
-    "onDeviceEntrySubtitle": "Када истекну сати уживо, преписуј на овом телефону"
+    "onDeviceEntrySubtitle": "Када истекну сати уживо, преписуј на овом телефону",
+    "chatAppsChannelPlanRequired": "Доступно уз Operator и Architect",
+    "chatAppsAtCapacity": "{app} је попуњен",
+    "chatAppsJoinWaitlist": "Придружи се листи чекања",
+    "chatAppsOnWaitlist": "На листи чекања сте",
+    "chatAppsWaitlistJoined": "На листи чекања сте. Јавићемо вам када буде места."
 }

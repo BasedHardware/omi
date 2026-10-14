@@ -11585,5 +11585,10 @@
     "onDeviceFinishSetupBody": "Porabili ste ure v živo za ta mesec. Omi še vedno snema in shranjuje zvok na telefon. Prenesite govorni model in bo dohitel zaostanek.",
     "onDeviceDownloadSize": "Prenos {size}",
     "onDeviceUnsupportedBody": "Ta telefon govornega modela še ne more poganjati. Zvok ostane shranjen, dokler se ure v živo ne vrnejo ali ne nadgradite.",
-    "onDeviceEntrySubtitle": "Ko zmanjka ur v živo, prepisuj na tem telefonu"
+    "onDeviceEntrySubtitle": "Ko zmanjka ur v živo, prepisuj na tem telefonu",
+    "chatAppsChannelPlanRequired": "Na voljo v paketih Operator in Architect",
+    "chatAppsAtCapacity": "{app} je zaseden",
+    "chatAppsJoinWaitlist": "Pridruži se čakalnemu seznamu",
+    "chatAppsOnWaitlist": "Ste na čakalnem seznamu",
+    "chatAppsWaitlistJoined": "Ste na čakalnem seznamu. Sporočili vam bomo, ko bo prostor."
 }

@@ -4201,5 +4201,10 @@
     "onDeviceFinishSetupBody": "Du har brugt månedens live-timer. Omi optager stadig og gemmer lyd på din telefon. Download talemodellen, så indhenter den.",
     "onDeviceDownloadSize": "Download på {size}",
     "onDeviceUnsupportedBody": "Denne telefon kan endnu ikke køre talemodellen. Lyden forbliver gemt, indtil live-timerne kommer tilbage, eller du opgraderer.",
-    "onDeviceEntrySubtitle": "Transskribér på denne telefon, når live-timerne er brugt op"
+    "onDeviceEntrySubtitle": "Transskribér på denne telefon, når live-timerne er brugt op",
+    "chatAppsChannelPlanRequired": "Tilgængelig med Operator og Architect",
+    "chatAppsAtCapacity": "{app} er fuldt",
+    "chatAppsJoinWaitlist": "Skriv dig på ventelisten",
+    "chatAppsOnWaitlist": "Du er på ventelisten",
+    "chatAppsWaitlistJoined": "Du er på ventelisten. Vi giver besked, når der er plads."
 }

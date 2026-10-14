@@ -13674,4 +13674,22 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get onDeviceEntrySubtitle => 'Quand les heures en direct sont épuisées, transcrire sur ce téléphone';
+
+  @override
+  String get chatAppsChannelPlanRequired => 'Disponible avec Operator et Architect';
+
+  @override
+  String chatAppsAtCapacity(String app) {
+    return '$app est complet';
+  }
+
+  @override
+  String get chatAppsJoinWaitlist => 'Rejoindre la liste d\'attente';
+
+  @override
+  String get chatAppsOnWaitlist => 'Vous êtes sur la liste d\'attente';
+
+  @override
+  String get chatAppsWaitlistJoined =>
+      'Vous êtes sur la liste d\'attente. Nous vous préviendrons dès qu\'une place se libère.';
 }

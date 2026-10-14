@@ -4159,5 +4159,10 @@
     "onDeviceFinishSetupBody": "Šī mēneša tiešraides stundas ir izlietotas. Omi joprojām ieraksta un saglabā audio jūsu tālrunī. Lejupielādējiet runas modeli, un tas panāks nokavēto.",
     "onDeviceDownloadSize": "Lejupielāde: {size}",
     "onDeviceUnsupportedBody": "Šis tālrunis vēl nevar darbināt runas modeli. Audio paliek saglabāts, līdz atgriežas tiešraides stundas vai jūs jaunināt plānu.",
-    "onDeviceEntrySubtitle": "Kad tiešraides stundas beigušās, transkribēt šajā tālrunī"
+    "onDeviceEntrySubtitle": "Kad tiešraides stundas beigušās, transkribēt šajā tālrunī",
+    "chatAppsChannelPlanRequired": "Pieejams ar Operator un Architect",
+    "chatAppsAtCapacity": "{app} ir pilns",
+    "chatAppsJoinWaitlist": "Pievienoties gaidīšanas sarakstam",
+    "chatAppsOnWaitlist": "Jūs esat gaidīšanas sarakstā",
+    "chatAppsWaitlistJoined": "Jūs esat gaidīšanas sarakstā. Mēs paziņosim, kad būs vieta."
 }

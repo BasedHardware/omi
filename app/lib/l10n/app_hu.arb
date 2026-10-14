@@ -4255,5 +4255,10 @@
     "onDeviceFinishSetupBody": "Elhasználtad az e havi élő órákat. Az Omi továbbra is rögzít, és a telefonodra menti a hangot. Töltsd le a beszédmodellt, és pótolja a lemaradást.",
     "onDeviceDownloadSize": "{size} letöltés",
     "onDeviceUnsupportedBody": "Ez a telefon még nem tudja futtatni a beszédmodellt. A hang mentve marad, amíg vissza nem térnek az élő órák, vagy amíg nem váltasz magasabb csomagra.",
-    "onDeviceEntrySubtitle": "Ha elfogynak az élő órák, átírás ezen a telefonon"
+    "onDeviceEntrySubtitle": "Ha elfogynak az élő órák, átírás ezen a telefonon",
+    "chatAppsChannelPlanRequired": "Elérhető az Operator és Architect csomagban",
+    "chatAppsAtCapacity": "A(z) {app} megtelt",
+    "chatAppsJoinWaitlist": "Feliratkozás a várólistára",
+    "chatAppsOnWaitlist": "Fent vagy a várólistán",
+    "chatAppsWaitlistJoined": "Fent vagy a várólistán. Szólunk, ha lesz hely."
 }

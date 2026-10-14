@@ -4159,5 +4159,10 @@
     "onDeviceFinishSetupBody": "이번 달 실시간 시간을 모두 사용했어요. Omi는 계속 녹음하고 오디오를 휴대폰에 저장하고 있어요. 음성 모델을 다운로드하면 밀린 분량을 처리해요.",
     "onDeviceDownloadSize": "{size} 다운로드",
     "onDeviceUnsupportedBody": "이 휴대폰은 아직 음성 모델을 실행할 수 없어요. 실시간 시간이 충전되거나 업그레이드할 때까지 오디오는 저장돼요.",
-    "onDeviceEntrySubtitle": "실시간 시간을 다 쓰면 이 휴대폰에서 변환"
+    "onDeviceEntrySubtitle": "실시간 시간을 다 쓰면 이 휴대폰에서 변환",
+    "chatAppsChannelPlanRequired": "Operator 및 Architect에서 사용 가능",
+    "chatAppsAtCapacity": "{app} 정원이 찼습니다",
+    "chatAppsJoinWaitlist": "대기자 명단 등록",
+    "chatAppsOnWaitlist": "대기자 명단에 등록되었습니다",
+    "chatAppsWaitlistJoined": "대기자 명단에 등록되었습니다. 자리가 나면 알려 드릴게요."
 }

@@ -4159,5 +4159,10 @@
     "onDeviceFinishSetupBody": "Išnaudojote šio mėnesio tiesiogines valandas. Omi vis dar įrašinėja ir saugo garsą jūsų telefone. Atsisiųskite kalbos modelį ir jis viską pasivys.",
     "onDeviceDownloadSize": "Atsisiuntimas: {size}",
     "onDeviceUnsupportedBody": "Šis telefonas dar negali paleisti kalbos modelio. Garsas lieka išsaugotas, kol grįš tiesioginės valandos arba atnaujinsite planą.",
-    "onDeviceEntrySubtitle": "Kai baigiasi tiesioginės valandos, transkribuoti šiame telefone"
+    "onDeviceEntrySubtitle": "Kai baigiasi tiesioginės valandos, transkribuoti šiame telefone",
+    "chatAppsChannelPlanRequired": "Prieinama su Operator ir Architect",
+    "chatAppsAtCapacity": "{app} užpildytas",
+    "chatAppsJoinWaitlist": "Prisijungti prie laukiančiųjų sąrašo",
+    "chatAppsOnWaitlist": "Esate laukiančiųjų sąraše",
+    "chatAppsWaitlistJoined": "Esate laukiančiųjų sąraše. Pranešime, kai atsiras vietos."
 }

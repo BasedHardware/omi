@@ -4159,5 +4159,10 @@
     "onDeviceFinishSetupBody": "Heu esgotat les hores en directe d'aquest mes. Omi continua enregistrant i desant l'àudio al vostre telèfon. Baixeu el model de veu i es posarà al dia.",
     "onDeviceDownloadSize": "Baixada de {size}",
     "onDeviceUnsupportedBody": "Aquest telèfon encara no pot executar el model de veu. L'àudio es manté desat fins que tornin les hores en directe o milloreu el pla.",
-    "onDeviceEntrySubtitle": "Quan s'esgotin les hores en directe, transcriu en aquest telèfon"
+    "onDeviceEntrySubtitle": "Quan s'esgotin les hores en directe, transcriu en aquest telèfon",
+    "chatAppsChannelPlanRequired": "Disponible amb Operator i Architect",
+    "chatAppsAtCapacity": "{app} és ple",
+    "chatAppsJoinWaitlist": "Uneix-te a la llista d'espera",
+    "chatAppsOnWaitlist": "Ets a la llista d'espera",
+    "chatAppsWaitlistJoined": "Ets a la llista d'espera. T'avisarem quan hi hagi lloc."
 }

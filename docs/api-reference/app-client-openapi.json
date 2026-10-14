@@ -6884,6 +6884,36 @@
         "title": "ChangeRef",
         "type": "object"
       },
+      "ChannelAvailability": {
+        "description": "Whether this user may link a channel now, and why not. Content-free.",
+        "properties": {
+          "available": {
+            "title": "Available",
+            "type": "boolean"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          },
+          "waitlisted": {
+            "default": false,
+            "title": "Waitlisted",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "available"
+        ],
+        "title": "ChannelAvailability",
+        "type": "object"
+      },
       "ChannelLink": {
         "properties": {
           "channel": {
@@ -7047,6 +7077,14 @@
       },
       "ChannelLinksResponse": {
         "properties": {
+          "availability": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/ChannelAvailability"
+            },
+            "default": {},
+            "title": "Availability",
+            "type": "object"
+          },
           "links": {
             "items": {
               "$ref": "#/components/schemas/ChannelLink"

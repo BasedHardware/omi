@@ -13561,4 +13561,21 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get onDeviceEntrySubtitle => 'Keď sa minú hodiny živého prepisu, prepisovať v tomto telefóne';
+
+  @override
+  String get chatAppsChannelPlanRequired => 'K dispozícii v Operator a Architect';
+
+  @override
+  String chatAppsAtCapacity(String app) {
+    return '$app je plne obsadený';
+  }
+
+  @override
+  String get chatAppsJoinWaitlist => 'Pridať sa na čakaciu listinu';
+
+  @override
+  String get chatAppsOnWaitlist => 'Ste na čakacej listine';
+
+  @override
+  String get chatAppsWaitlistJoined => 'Ste na čakacej listine. Dáme vám vedieť, keď bude miesto.';
 }

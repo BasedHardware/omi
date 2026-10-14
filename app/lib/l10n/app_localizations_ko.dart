@@ -13375,4 +13375,21 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get onDeviceEntrySubtitle => '실시간 시간을 다 쓰면 이 휴대폰에서 변환';
+
+  @override
+  String get chatAppsChannelPlanRequired => 'Operator 및 Architect에서 사용 가능';
+
+  @override
+  String chatAppsAtCapacity(String app) {
+    return '$app 정원이 찼습니다';
+  }
+
+  @override
+  String get chatAppsJoinWaitlist => '대기자 명단 등록';
+
+  @override
+  String get chatAppsOnWaitlist => '대기자 명단에 등록되었습니다';
+
+  @override
+  String get chatAppsWaitlistJoined => '대기자 명단에 등록되었습니다. 자리가 나면 알려 드릴게요.';
 }

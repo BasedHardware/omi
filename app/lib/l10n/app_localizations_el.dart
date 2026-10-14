@@ -13653,4 +13653,21 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get onDeviceEntrySubtitle => 'Όταν εξαντληθούν οι ζωντανές ώρες, μεταγραφή σε αυτό το τηλέφωνο';
+
+  @override
+  String get chatAppsChannelPlanRequired => 'Διαθέσιμο στα Operator και Architect';
+
+  @override
+  String chatAppsAtCapacity(String app) {
+    return 'Το $app είναι πλήρες';
+  }
+
+  @override
+  String get chatAppsJoinWaitlist => 'Εγγραφή στη λίστα αναμονής';
+
+  @override
+  String get chatAppsOnWaitlist => 'Είστε στη λίστα αναμονής';
+
+  @override
+  String get chatAppsWaitlistJoined => 'Είστε στη λίστα αναμονής. Θα σας ενημερώσουμε όταν υπάρξει θέση.';
 }

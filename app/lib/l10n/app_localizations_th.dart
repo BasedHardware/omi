@@ -13496,4 +13496,21 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get onDeviceEntrySubtitle => 'เมื่อชั่วโมงแบบสดหมด ให้ถอดเสียงบนโทรศัพท์เครื่องนี้';
+
+  @override
+  String get chatAppsChannelPlanRequired => 'ใช้ได้ในแพ็กเกจ Operator และ Architect';
+
+  @override
+  String chatAppsAtCapacity(String app) {
+    return '$app เต็มแล้ว';
+  }
+
+  @override
+  String get chatAppsJoinWaitlist => 'เข้าร่วมรายชื่อรอ';
+
+  @override
+  String get chatAppsOnWaitlist => 'คุณอยู่ในรายชื่อรอแล้ว';
+
+  @override
+  String get chatAppsWaitlistJoined => 'คุณอยู่ในรายชื่อรอแล้ว เราจะแจ้งให้ทราบเมื่อมีที่ว่าง';
 }

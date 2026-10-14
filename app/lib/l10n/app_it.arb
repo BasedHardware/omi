@@ -4159,5 +4159,10 @@
     "onDeviceFinishSetupBody": "Hai esaurito le ore dal vivo di questo mese. Omi continua a registrare e salvare l'audio sul telefono. Scarica il modello vocale e recupererà.",
     "onDeviceDownloadSize": "Download di {size}",
     "onDeviceUnsupportedBody": "Questo telefono non può ancora eseguire il modello vocale. L'audio resta salvato finché non tornano le ore dal vivo o non passi a un piano superiore.",
-    "onDeviceEntrySubtitle": "Quando finiscono le ore dal vivo, trascrivi su questo telefono"
+    "onDeviceEntrySubtitle": "Quando finiscono le ore dal vivo, trascrivi su questo telefono",
+    "chatAppsChannelPlanRequired": "Disponibile con Operator e Architect",
+    "chatAppsAtCapacity": "{app} è al completo",
+    "chatAppsJoinWaitlist": "Unisciti alla lista d'attesa",
+    "chatAppsOnWaitlist": "Sei in lista d'attesa",
+    "chatAppsWaitlistJoined": "Sei in lista d'attesa. Ti avviseremo quando si libera un posto."
 }

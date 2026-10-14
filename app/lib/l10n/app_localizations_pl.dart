@@ -13604,4 +13604,21 @@ class AppLocalizationsPl extends AppLocalizations {
 
   @override
   String get onDeviceEntrySubtitle => 'Gdy skończą się godziny na żywo, transkrybuj na tym telefonie';
+
+  @override
+  String get chatAppsChannelPlanRequired => 'Dostępne w planach Operator i Architect';
+
+  @override
+  String chatAppsAtCapacity(String app) {
+    return '$app jest pełny';
+  }
+
+  @override
+  String get chatAppsJoinWaitlist => 'Dołącz do listy oczekujących';
+
+  @override
+  String get chatAppsOnWaitlist => 'Jesteś na liście oczekujących';
+
+  @override
+  String get chatAppsWaitlistJoined => 'Jesteś na liście oczekujących. Damy znać, gdy zwolni się miejsce.';
 }

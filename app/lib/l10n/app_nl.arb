@@ -4159,5 +4159,10 @@
     "onDeviceFinishSetupBody": "Je hebt de live-uren van deze maand opgebruikt. Omi neemt nog steeds op en slaat audio op je telefoon op. Download het spraakmodel en het werkt de achterstand weg.",
     "onDeviceDownloadSize": "Download van {size}",
     "onDeviceUnsupportedBody": "Deze telefoon kan het spraakmodel nog niet draaien. Audio blijft bewaard tot je live-uren terugkomen of je upgradet.",
-    "onDeviceEntrySubtitle": "Als de live-uren op zijn, transcriberen op deze telefoon"
+    "onDeviceEntrySubtitle": "Als de live-uren op zijn, transcriberen op deze telefoon",
+    "chatAppsChannelPlanRequired": "Beschikbaar met Operator en Architect",
+    "chatAppsAtCapacity": "{app} zit vol",
+    "chatAppsJoinWaitlist": "Op de wachtlijst",
+    "chatAppsOnWaitlist": "Je staat op de wachtlijst",
+    "chatAppsWaitlistJoined": "Je staat op de wachtlijst. We laten het je weten zodra er plek is."
 }

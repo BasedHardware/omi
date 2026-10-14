@@ -176,7 +176,7 @@ def test_linq_link_then_reply_and_next_turn_after_failure(adapter, monkeypatch, 
             failure_when=lambda frame: frame.startswith('error: '),
         )
 
-    gateway = Gateway(adapter, store=store, turn=turn, admission=lambda uid: None)
+    gateway = Gateway(adapter, store=store, turn=turn, admission=lambda uid, channel: None, rate_limit=lambda uid: None)
 
     async def deliver(kind, message_id, text=None):
         value = json.loads(fixture('linq', kind))
@@ -280,7 +280,7 @@ def test_failed_deferred_reply_remains_fenced(adapter, monkeypatch):
 
         return stream()
 
-    gateway = Gateway(adapter, store=store, turn=turn, admission=lambda uid: None)
+    gateway = Gateway(adapter, store=store, turn=turn, admission=lambda uid, channel: None, rate_limit=lambda uid: None)
     principal = Principal('user', frozenset(), datetime.now(timezone.utc) + timedelta(minutes=5), 'task')
     event = ReentryEvent('event', 'Synthetic result', 'task')
 
@@ -326,7 +326,7 @@ def test_task_cancellation_retains_lease_until_worker_stops(adapter, monkeypatch
 
         return stream()
 
-    gateway = Gateway(adapter, store=store, turn=turn, admission=lambda uid: None)
+    gateway = Gateway(adapter, store=store, turn=turn, admission=lambda uid, channel: None, rate_limit=lambda uid: None)
 
     async def deliver(kind, message_id, text=None):
         value = json.loads(fixture('linq', kind))
@@ -489,7 +489,7 @@ def test_voice_notes_off_does_not_run_a_turn(adapter):
     async def turn(*args, **kwargs):
         turns.append(args)
 
-    gateway = Gateway(adapter, store=store, turn=turn, admission=lambda uid: None)
+    gateway = Gateway(adapter, store=store, turn=turn, admission=lambda uid, channel: None, rate_limit=lambda uid: None)
     asyncio.run(gateway.process(path))
     assert turns == []
     assert 'Voice notes are turned off' in adapter.sent[-1]['text']
@@ -517,7 +517,7 @@ def test_renderers_escape_split_and_citations(adapter):
     assert all(len(p.encode('utf-16-le')) // 2 <= adapter.capabilities.max_text_len for p in parts)
     assert '[1]' not in ''.join(parts)
     assert not any(p.endswith('\\') for p in parts)
-    assert source_phrases('See [1]', [{'title': 'Weekly review'}]) == 'See '
+    assert source_phrases('See [1]', [{'title': 'Weekly review'}]) == 'See'
     assert ''.join(split_text('a b\n😀' * 10, 8)) == 'a b\n😀' * 10
 
 
@@ -953,3 +953,49 @@ def test_telegram_other_failure_never_replays_send_as_plain(status):
     with pytest.raises(ProviderError):
         asyncio.run(adapter.api('sendMessage', {'chat_id': 'fixture', 'text': '<b>A</b>', 'parse_mode': 'HTML'}))
     assert len(transport.calls) == 1
+
+
+def test_follow_up_suggestions_are_not_rendered_on_channels(adapter):
+    message = adapter.parse(fixture(adapter.provider))[0]
+
+    async def run():
+        await adapter.admitted(message)
+        await ChannelReplySink(adapter, message).finish_payload(
+            {
+                'text': 'Nothing linked here.',
+                'follow_up_suggestions': ['What was the next step for the share-buyback review?'],
+                'content_blocks': [{'type': 'followUp', 'id': 'synthetic:followup', 'text': 'What changed?'}],
+            }
+        )
+
+    asyncio.run(run())
+    payload = adapter.transport.calls[-1][2]['json']
+    assert 'reply_markup' not in payload
+    assert 'share-buyback' not in str(payload)
+    assert 'What changed?' not in str(payload)
+
+
+def test_legacy_follow_up_button_tap_still_asks():
+    adapter = TelegramAdapter(
+        '000:fixture-token', 'fixture_secret', transport=FixtureTransport(), ledger=FixtureLedger(), sleep=no_sleep
+    )
+    item = json.loads(fixture('telegram'))['message']
+    body = json.dumps(
+        {
+            'update_id': 9,
+            'callback_query': {'id': 'cb', 'from': item['from'], 'message': item, 'data': 'ask:What changed?'},
+        }
+    )
+    assert adapter.parse(body.encode())[0].text == 'What changed?'
+
+
+@pytest.mark.parametrize(
+    'channel, words', [('telegram', ('/new', '/unlink', 'Undo button')), ('imessage', ('new chat', 'unlink', 'undo'))]
+)
+def test_help_uses_channel_command_words(channel, words):
+    from utils.messaging.gateway import help_text
+
+    text = help_text(channel)
+    assert all(word in text for word in words)
+    if channel == 'imessage':
+        assert '/' not in text

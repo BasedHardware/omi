@@ -4159,5 +4159,10 @@
     "onDeviceFinishSetupBody": "Vyčerpali jste hodiny živého přepisu na tento měsíc. Omi stále nahrává a ukládá zvuk do vašeho telefonu. Stáhněte řečový model a vše se dožene.",
     "onDeviceDownloadSize": "Ke stažení {size}",
     "onDeviceUnsupportedBody": "Tento telefon zatím nedokáže spustit řečový model. Zvuk zůstane uložen, dokud se neobnoví hodiny živého přepisu nebo nepřejdete na vyšší tarif.",
-    "onDeviceEntrySubtitle": "Po vyčerpání hodin živého přepisu přepisovat v tomto telefonu"
+    "onDeviceEntrySubtitle": "Po vyčerpání hodin živého přepisu přepisovat v tomto telefonu",
+    "chatAppsChannelPlanRequired": "K dispozici v Operator a Architect",
+    "chatAppsAtCapacity": "{app} je plně obsazen",
+    "chatAppsJoinWaitlist": "Připojit se k čekací listině",
+    "chatAppsOnWaitlist": "Jste na čekací listině",
+    "chatAppsWaitlistJoined": "Jste na čekací listině. Dáme vám vědět, až bude místo."
 }

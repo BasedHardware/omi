@@ -13615,4 +13615,21 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String get onDeviceEntrySubtitle => 'Когато часовете на живо свършат, транскрибиране на този телефон';
+
+  @override
+  String get chatAppsChannelPlanRequired => 'Достъпно в Operator и Architect';
+
+  @override
+  String chatAppsAtCapacity(String app) {
+    return '$app е запълнен';
+  }
+
+  @override
+  String get chatAppsJoinWaitlist => 'Запиши се в списъка';
+
+  @override
+  String get chatAppsOnWaitlist => 'Вие сте в списъка с чакащи';
+
+  @override
+  String get chatAppsWaitlistJoined => 'Вие сте в списъка с чакащи. Ще ви уведомим, когато има място.';
 }

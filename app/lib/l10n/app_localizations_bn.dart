@@ -13561,4 +13561,21 @@ class AppLocalizationsBn extends AppLocalizations {
 
   @override
   String get onDeviceEntrySubtitle => 'লাইভ ঘণ্টা শেষ হলে এই ফোনে ট্রান্সক্রাইব করুন';
+
+  @override
+  String get chatAppsChannelPlanRequired => 'Operator এবং Architect-এ উপলব্ধ';
+
+  @override
+  String chatAppsAtCapacity(String app) {
+    return '$app পূর্ণ হয়ে গেছে';
+  }
+
+  @override
+  String get chatAppsJoinWaitlist => 'অপেক্ষা তালিকায় যোগ দিন';
+
+  @override
+  String get chatAppsOnWaitlist => 'আপনি অপেক্ষা তালিকায় আছেন';
+
+  @override
+  String get chatAppsWaitlistJoined => 'আপনি অপেক্ষা তালিকায় আছেন। জায়গা খালি হলে আমরা জানাব।';
 }

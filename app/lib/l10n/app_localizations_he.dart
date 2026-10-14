@@ -13467,4 +13467,21 @@ class AppLocalizationsHe extends AppLocalizations {
 
   @override
   String get onDeviceEntrySubtitle => 'כשהשעות החיות נגמרות, לתמלל בטלפון הזה';
+
+  @override
+  String get chatAppsChannelPlanRequired => 'זמין ב-Operator וב-Architect';
+
+  @override
+  String chatAppsAtCapacity(String app) {
+    return '$app מלא כרגע';
+  }
+
+  @override
+  String get chatAppsJoinWaitlist => 'הצטרפות לרשימת ההמתנה';
+
+  @override
+  String get chatAppsOnWaitlist => 'את/ה ברשימת ההמתנה';
+
+  @override
+  String get chatAppsWaitlistJoined => 'את/ה ברשימת ההמתנה. נעדכן כשיתפנה מקום.';
 }

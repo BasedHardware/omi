@@ -13572,4 +13572,21 @@ class AppLocalizationsMr extends AppLocalizations {
 
   @override
   String get onDeviceEntrySubtitle => 'लाइव्ह तास संपल्यावर या फोनवर ट्रान्सक्राइब करा';
+
+  @override
+  String get chatAppsChannelPlanRequired => 'Operator आणि Architect वर उपलब्ध';
+
+  @override
+  String chatAppsAtCapacity(String app) {
+    return '$app ची क्षमता पूर्ण झाली आहे';
+  }
+
+  @override
+  String get chatAppsJoinWaitlist => 'प्रतीक्षा यादीत सामील व्हा';
+
+  @override
+  String get chatAppsOnWaitlist => 'तुम्ही प्रतीक्षा यादीत आहात';
+
+  @override
+  String get chatAppsWaitlistJoined => 'तुम्ही प्रतीक्षा यादीत आहात. जागा मिळाल्यावर आम्ही कळवू.';
 }

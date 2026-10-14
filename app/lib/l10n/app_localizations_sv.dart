@@ -13571,4 +13571,21 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get onDeviceEntrySubtitle => 'Transkribera på den här telefonen när livetimmarna tar slut';
+
+  @override
+  String get chatAppsChannelPlanRequired => 'Tillgängligt med Operator och Architect';
+
+  @override
+  String chatAppsAtCapacity(String app) {
+    return '$app är fullt';
+  }
+
+  @override
+  String get chatAppsJoinWaitlist => 'Gå med i väntelistan';
+
+  @override
+  String get chatAppsOnWaitlist => 'Du står på väntelistan';
+
+  @override
+  String get chatAppsWaitlistJoined => 'Du står på väntelistan. Vi hör av oss när det finns plats.';
 }

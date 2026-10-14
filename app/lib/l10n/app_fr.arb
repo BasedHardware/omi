@@ -4194,5 +4194,10 @@
     "onDeviceFinishSetupBody": "Vous avez utilisé vos heures en direct de ce mois-ci. Omi continue d'enregistrer et de sauvegarder l'audio sur votre téléphone. Téléchargez le modèle vocal pour rattraper le retard.",
     "onDeviceDownloadSize": "Téléchargement de {size}",
     "onDeviceUnsupportedBody": "Ce téléphone ne peut pas encore exécuter le modèle vocal. L'audio reste enregistré jusqu'au retour des heures en direct ou jusqu'à votre passage à une offre supérieure.",
-    "onDeviceEntrySubtitle": "Quand les heures en direct sont épuisées, transcrire sur ce téléphone"
+    "onDeviceEntrySubtitle": "Quand les heures en direct sont épuisées, transcrire sur ce téléphone",
+    "chatAppsChannelPlanRequired": "Disponible avec Operator et Architect",
+    "chatAppsAtCapacity": "{app} est complet",
+    "chatAppsJoinWaitlist": "Rejoindre la liste d'attente",
+    "chatAppsOnWaitlist": "Vous êtes sur la liste d'attente",
+    "chatAppsWaitlistJoined": "Vous êtes sur la liste d'attente. Nous vous préviendrons dès qu'une place se libère."
 }

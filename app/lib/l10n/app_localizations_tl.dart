@@ -13676,4 +13676,21 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get onDeviceEntrySubtitle => 'Kapag naubos ang live hours, mag-transcribe sa phone na ito';
+
+  @override
+  String get chatAppsChannelPlanRequired => 'Available sa Operator at Architect';
+
+  @override
+  String chatAppsAtCapacity(String app) {
+    return 'Puno na ang $app';
+  }
+
+  @override
+  String get chatAppsJoinWaitlist => 'Sumali sa waitlist';
+
+  @override
+  String get chatAppsOnWaitlist => 'Nasa waitlist ka na';
+
+  @override
+  String get chatAppsWaitlistJoined => 'Nasa waitlist ka na. Sasabihan ka namin kapag may puwesto na.';
 }

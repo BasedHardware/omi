@@ -4159,5 +4159,10 @@
     "onDeviceFinishSetupBody": "คุณใช้ชั่วโมงแบบสดของเดือนนี้หมดแล้ว Omi ยังคงบันทึกและเก็บเสียงไว้บนโทรศัพท์ของคุณ ดาวน์โหลดโมเดลเสียงพูดแล้วระบบจะถอดเสียงส่วนที่ค้างให้",
     "onDeviceDownloadSize": "ดาวน์โหลด {size}",
     "onDeviceUnsupportedBody": "โทรศัพท์เครื่องนี้ยังใช้โมเดลเสียงพูดไม่ได้ เสียงจะถูกเก็บไว้จนกว่าชั่วโมงแบบสดจะกลับมาหรือคุณอัปเกรด",
-    "onDeviceEntrySubtitle": "เมื่อชั่วโมงแบบสดหมด ให้ถอดเสียงบนโทรศัพท์เครื่องนี้"
+    "onDeviceEntrySubtitle": "เมื่อชั่วโมงแบบสดหมด ให้ถอดเสียงบนโทรศัพท์เครื่องนี้",
+    "chatAppsChannelPlanRequired": "ใช้ได้ในแพ็กเกจ Operator และ Architect",
+    "chatAppsAtCapacity": "{app} เต็มแล้ว",
+    "chatAppsJoinWaitlist": "เข้าร่วมรายชื่อรอ",
+    "chatAppsOnWaitlist": "คุณอยู่ในรายชื่อรอแล้ว",
+    "chatAppsWaitlistJoined": "คุณอยู่ในรายชื่อรอแล้ว เราจะแจ้งให้ทราบเมื่อมีที่ว่าง"
 }

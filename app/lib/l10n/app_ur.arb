@@ -11585,5 +11585,10 @@
     "onDeviceFinishSetupBody": "آپ اس ماہ کے لائیو گھنٹے استعمال کر چکے ہیں۔ Omi اب بھی ریکارڈ کر رہا ہے اور آڈیو آپ کے فون پر محفوظ کر رہا ہے۔ اسپیچ ماڈل ڈاؤن لوڈ کریں اور یہ باقی کام مکمل کر لے گا۔",
     "onDeviceDownloadSize": "{size} ڈاؤن لوڈ",
     "onDeviceUnsupportedBody": "یہ فون ابھی اسپیچ ماڈل نہیں چلا سکتا۔ لائیو گھنٹے واپس آنے یا آپ کے اپ گریڈ کرنے تک آڈیو محفوظ رہے گی۔",
-    "onDeviceEntrySubtitle": "لائیو گھنٹے ختم ہونے پر اسی فون پر ٹرانسکرائب کریں"
+    "onDeviceEntrySubtitle": "لائیو گھنٹے ختم ہونے پر اسی فون پر ٹرانسکرائب کریں",
+    "chatAppsChannelPlanRequired": "Operator اور Architect پر دستیاب",
+    "chatAppsAtCapacity": "{app} کی گنجائش پوری ہو گئی ہے",
+    "chatAppsJoinWaitlist": "ویٹ لسٹ میں شامل ہوں",
+    "chatAppsOnWaitlist": "آپ ویٹ لسٹ میں ہیں",
+    "chatAppsWaitlistJoined": "آپ ویٹ لسٹ میں ہیں۔ جگہ ملنے پر ہم آپ کو بتائیں گے۔"
 }

@@ -11585,5 +11585,10 @@
     "onDeviceFinishSetupBody": "तुम्ही या महिन्याचे लाइव्ह तास वापरले आहेत. Omi अजूनही रेकॉर्ड करत आहे आणि ऑडिओ तुमच्या फोनवर सेव्ह करत आहे. स्पीच मॉडेल डाउनलोड करा, म्हणजे ते बाकी काम पूर्ण करेल.",
     "onDeviceDownloadSize": "{size} डाउनलोड",
     "onDeviceUnsupportedBody": "हा फोन अद्याप स्पीच मॉडेल चालवू शकत नाही. लाइव्ह तास परत येईपर्यंत किंवा तुम्ही अपग्रेड करेपर्यंत ऑडिओ सेव्ह राहतो.",
-    "onDeviceEntrySubtitle": "लाइव्ह तास संपल्यावर या फोनवर ट्रान्सक्राइब करा"
+    "onDeviceEntrySubtitle": "लाइव्ह तास संपल्यावर या फोनवर ट्रान्सक्राइब करा",
+    "chatAppsChannelPlanRequired": "Operator आणि Architect वर उपलब्ध",
+    "chatAppsAtCapacity": "{app} ची क्षमता पूर्ण झाली आहे",
+    "chatAppsJoinWaitlist": "प्रतीक्षा यादीत सामील व्हा",
+    "chatAppsOnWaitlist": "तुम्ही प्रतीक्षा यादीत आहात",
+    "chatAppsWaitlistJoined": "तुम्ही प्रतीक्षा यादीत आहात. जागा मिळाल्यावर आम्ही कळवू."
 }

@@ -11585,5 +11585,10 @@
     "onDeviceFinishSetupBody": "Nagamit mo na ang live hours ngayong buwan. Nagre-record pa rin ang Omi at nagse-save ng audio sa phone mo. I-download ang speech model at hahabol ito.",
     "onDeviceDownloadSize": "{size} na download",
     "onDeviceUnsupportedBody": "Hindi pa kayang patakbuhin ng phone na ito ang speech model. Mananatiling naka-save ang audio hanggang bumalik ang live hours o mag-upgrade ka.",
-    "onDeviceEntrySubtitle": "Kapag naubos ang live hours, mag-transcribe sa phone na ito"
+    "onDeviceEntrySubtitle": "Kapag naubos ang live hours, mag-transcribe sa phone na ito",
+    "chatAppsChannelPlanRequired": "Available sa Operator at Architect",
+    "chatAppsAtCapacity": "Puno na ang {app}",
+    "chatAppsJoinWaitlist": "Sumali sa waitlist",
+    "chatAppsOnWaitlist": "Nasa waitlist ka na",
+    "chatAppsWaitlistJoined": "Nasa waitlist ka na. Sasabihan ka namin kapag may puwesto na."
 }

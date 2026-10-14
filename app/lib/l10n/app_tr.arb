@@ -4194,5 +4194,10 @@
     "onDeviceFinishSetupBody": "Bu ayın canlı saatlerini kullandınız. Omi hâlâ kayıt yapıyor ve sesi telefonunuza kaydediyor. Konuşma modelini indirin, birikenleri yetiştirsin.",
     "onDeviceDownloadSize": "{size} indirme",
     "onDeviceUnsupportedBody": "Bu telefon henüz konuşma modelini çalıştıramıyor. Ses, canlı saatler yenilenene veya planınızı yükseltene kadar kayıtlı kalır.",
-    "onDeviceEntrySubtitle": "Canlı saatler bitince bu telefonda yazıya dök"
+    "onDeviceEntrySubtitle": "Canlı saatler bitince bu telefonda yazıya dök",
+    "chatAppsChannelPlanRequired": "Operator ve Architect planlarında kullanılabilir",
+    "chatAppsAtCapacity": "{app} kapasitesi dolu",
+    "chatAppsJoinWaitlist": "Bekleme listesine katıl",
+    "chatAppsOnWaitlist": "Bekleme listesindesin",
+    "chatAppsWaitlistJoined": "Bekleme listesindesin. Yer açıldığında haber vereceğiz."
 }

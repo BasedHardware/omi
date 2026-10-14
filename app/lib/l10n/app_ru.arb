@@ -4194,5 +4194,10 @@
     "onDeviceFinishSetupBody": "Онлайн-часы этого месяца израсходованы. Omi продолжает запись и сохраняет аудио на телефоне. Загрузите речевую модель, и она всё наверстает.",
     "onDeviceDownloadSize": "Загрузка {size}",
     "onDeviceUnsupportedBody": "Этот телефон пока не может запустить речевую модель. Аудио сохранится, пока не вернутся онлайн-часы или вы не перейдёте на другой план.",
-    "onDeviceEntrySubtitle": "Когда онлайн-часы закончатся, расшифровывать на этом телефоне"
+    "onDeviceEntrySubtitle": "Когда онлайн-часы закончатся, расшифровывать на этом телефоне",
+    "chatAppsChannelPlanRequired": "Доступно в Operator и Architect",
+    "chatAppsAtCapacity": "{app} заполнен",
+    "chatAppsJoinWaitlist": "Встать в лист ожидания",
+    "chatAppsOnWaitlist": "Вы в листе ожидания",
+    "chatAppsWaitlistJoined": "Вы в листе ожидания. Мы сообщим, когда появится место."
 }

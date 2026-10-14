@@ -4159,5 +4159,10 @@
     "onDeviceFinishSetupBody": "Du har använt månadens livetimmar. Omi spelar fortfarande in och sparar ljud på telefonen. Ladda ner talmodellen så kommer den ikapp.",
     "onDeviceDownloadSize": "{size} att ladda ner",
     "onDeviceUnsupportedBody": "Den här telefonen kan inte köra talmodellen än. Ljudet förblir sparat tills livetimmarna kommer tillbaka eller du uppgraderar.",
-    "onDeviceEntrySubtitle": "Transkribera på den här telefonen när livetimmarna tar slut"
+    "onDeviceEntrySubtitle": "Transkribera på den här telefonen när livetimmarna tar slut",
+    "chatAppsChannelPlanRequired": "Tillgängligt med Operator och Architect",
+    "chatAppsAtCapacity": "{app} är fullt",
+    "chatAppsJoinWaitlist": "Gå med i väntelistan",
+    "chatAppsOnWaitlist": "Du står på väntelistan",
+    "chatAppsWaitlistJoined": "Du står på väntelistan. Vi hör av oss när det finns plats."
 }

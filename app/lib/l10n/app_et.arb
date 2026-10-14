@@ -4159,5 +4159,10 @@
     "onDeviceFinishSetupBody": "Olete selle kuu reaalajas tunnid ära kasutanud. Omi salvestab endiselt ja hoiab heli teie telefonis. Laadige kõnemudel alla ja see teeb kõik järele.",
     "onDeviceDownloadSize": "Allalaadimine {size}",
     "onDeviceUnsupportedBody": "See telefon ei suuda veel kõnemudelit käitada. Heli jääb salvestatuks, kuni reaalajas tunnid taastuvad või te paketti uuendate.",
-    "onDeviceEntrySubtitle": "Kui reaalajas tunnid saavad otsa, transkribeeri selles telefonis"
+    "onDeviceEntrySubtitle": "Kui reaalajas tunnid saavad otsa, transkribeeri selles telefonis",
+    "chatAppsChannelPlanRequired": "Saadaval paketiga Operator ja Architect",
+    "chatAppsAtCapacity": "{app} on täis",
+    "chatAppsJoinWaitlist": "Liitu ootenimekirjaga",
+    "chatAppsOnWaitlist": "Oled ootenimekirjas",
+    "chatAppsWaitlistJoined": "Oled ootenimekirjas. Anname teada, kui koht vabaneb."
 }

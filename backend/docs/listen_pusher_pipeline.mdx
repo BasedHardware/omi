@@ -4562,8 +4562,11 @@ retention contract. No new client capability is advertised by this foundation.
 
 ### Flagged shared batch diarization
 
-Production stage A binds David-only shadow on backend, backend-sync and pusher
-through the shared Gateway `/diarizer-batch` prefix. Exact env stages, caps,
+Production stage B binds David-only authoritative diarization on backend,
+backend-sync, backend-sync-backfill and pusher through the shared Gateway
+`/diarizer-batch` prefix. Sync is enabled from B onward; A disables both sync
+and live authoritative promotion. David's offline/backfill recordings bypass
+pusher shadow admission, so acceptance checks the sync pipeline output. Exact env stages, caps,
 acceptance gates and rollback: [batch cohort ramp](diarizer-batch-cohort.md).
 
 `TRANSCRIPTION_FINAL_PASS_DIARIZER=legacy` preserves the current shadow and sync

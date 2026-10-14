@@ -4159,5 +4159,10 @@
     "onDeviceFinishSetupBody": "Anda telah menggunakan jam langsung bulan ini. Omi masih merakam dan menyimpan audio pada telefon anda. Muat turun model pertuturan dan ia akan mengejar semua ketinggalan.",
     "onDeviceDownloadSize": "Muat turun {size}",
     "onDeviceUnsupportedBody": "Telefon ini belum dapat menjalankan model pertuturan. Audio kekal disimpan sehingga jam langsung kembali atau anda naik taraf.",
-    "onDeviceEntrySubtitle": "Apabila jam langsung habis, transkripsi pada telefon ini"
+    "onDeviceEntrySubtitle": "Apabila jam langsung habis, transkripsi pada telefon ini",
+    "chatAppsChannelPlanRequired": "Tersedia pada Operator dan Architect",
+    "chatAppsAtCapacity": "{app} sudah penuh",
+    "chatAppsJoinWaitlist": "Sertai senarai menunggu",
+    "chatAppsOnWaitlist": "Anda dalam senarai menunggu",
+    "chatAppsWaitlistJoined": "Anda dalam senarai menunggu. Kami akan maklumkan apabila ada tempat."
 }

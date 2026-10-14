@@ -4194,5 +4194,10 @@
     "onDeviceFinishSetupBody": "Wykorzystano godziny na żywo w tym miesiącu. Omi nadal nagrywa i zapisuje dźwięk na telefonie. Pobierz model mowy, a nadrobi zaległości.",
     "onDeviceDownloadSize": "Do pobrania: {size}",
     "onDeviceUnsupportedBody": "Ten telefon nie może jeszcze uruchomić modelu mowy. Dźwięk pozostaje zapisany, aż wrócą godziny na żywo lub zmienisz plan na wyższy.",
-    "onDeviceEntrySubtitle": "Gdy skończą się godziny na żywo, transkrybuj na tym telefonie"
+    "onDeviceEntrySubtitle": "Gdy skończą się godziny na żywo, transkrybuj na tym telefonie",
+    "chatAppsChannelPlanRequired": "Dostępne w planach Operator i Architect",
+    "chatAppsAtCapacity": "{app} jest pełny",
+    "chatAppsJoinWaitlist": "Dołącz do listy oczekujących",
+    "chatAppsOnWaitlist": "Jesteś na liście oczekujących",
+    "chatAppsWaitlistJoined": "Jesteś na liście oczekujących. Damy znać, gdy zwolni się miejsce."
 }

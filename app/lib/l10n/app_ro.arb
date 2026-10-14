@@ -4159,5 +4159,10 @@
     "onDeviceFinishSetupBody": "Ai folosit orele live din această lună. Omi încă înregistrează și salvează audio pe telefonul tău. Descarcă modelul de vorbire și va recupera totul.",
     "onDeviceDownloadSize": "Descărcare de {size}",
     "onDeviceUnsupportedBody": "Acest telefon nu poate rula încă modelul de vorbire. Audio rămâne salvat până revin orele live sau până faci upgrade.",
-    "onDeviceEntrySubtitle": "Când se termină orele live, transcrie pe acest telefon"
+    "onDeviceEntrySubtitle": "Când se termină orele live, transcrie pe acest telefon",
+    "chatAppsChannelPlanRequired": "Disponibil cu Operator și Architect",
+    "chatAppsAtCapacity": "{app} este plin",
+    "chatAppsJoinWaitlist": "Intră pe lista de așteptare",
+    "chatAppsOnWaitlist": "Ești pe lista de așteptare",
+    "chatAppsWaitlistJoined": "Ești pe lista de așteptare. Te anunțăm când se eliberează un loc."
 }

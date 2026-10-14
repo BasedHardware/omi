@@ -11585,5 +11585,10 @@
     "onDeviceFinishSetupBody": "ساعت‌های زندهٔ این ماه را مصرف کرده‌اید. Omi همچنان ضبط می‌کند و صدا را روی گوشی شما ذخیره می‌کند. مدل گفتار را دانلود کنید تا عقب‌ماندگی جبران شود.",
     "onDeviceDownloadSize": "دانلود {size}",
     "onDeviceUnsupportedBody": "این گوشی هنوز نمی‌تواند مدل گفتار را اجرا کند. صدا ذخیره می‌ماند تا ساعت‌های زنده برگردند یا اشتراک خود را ارتقا دهید.",
-    "onDeviceEntrySubtitle": "وقتی ساعت‌های زنده تمام شد، روی همین گوشی رونویسی شود"
+    "onDeviceEntrySubtitle": "وقتی ساعت‌های زنده تمام شد، روی همین گوشی رونویسی شود",
+    "chatAppsChannelPlanRequired": "در Operator و Architect در دسترس است",
+    "chatAppsAtCapacity": "ظرفیت {app} تکمیل است",
+    "chatAppsJoinWaitlist": "پیوستن به فهرست انتظار",
+    "chatAppsOnWaitlist": "شما در فهرست انتظار هستید",
+    "chatAppsWaitlistJoined": "شما در فهرست انتظار هستید. وقتی جا باز شود خبرتان می‌کنیم."
 }
