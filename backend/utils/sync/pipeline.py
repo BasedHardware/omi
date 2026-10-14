@@ -16,6 +16,7 @@ import io
 import logging
 import os
 import shutil
+from utils.other.owned_paths import owned_scratch_path
 import threading
 import time
 import uuid
@@ -3148,8 +3149,10 @@ async def _run_full_pipeline_background_async(  # pyright: ignore[reportGeneralT
                 await run_blocking(storage_executor, _cleanup_files, list(segmented_paths))
                 await run_blocking(storage_executor, _cleanup_files, wav_paths)
                 try:
-                    if job_dir and os.path.isdir(job_dir):
-                        await run_blocking(storage_executor, shutil.rmtree, job_dir, True)
+                    if job_dir:
+                        safe_job_dir = owned_scratch_path(job_dir)
+                        if os.path.isdir(safe_job_dir):
+                            await run_blocking(storage_executor, shutil.rmtree, safe_job_dir, True)
                 except Exception as e:
                     logger.error(
                         'event=sync_cleanup outcome=failed exception_type=%s',

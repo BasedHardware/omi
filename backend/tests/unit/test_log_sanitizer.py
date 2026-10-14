@@ -918,3 +918,16 @@ async def test_parakeet_window_invalid_body_logs_no_payload(monkeypatch, caplog)
     assert SENTINEL not in _caplog_text(caplog)
     sock.finish()
     await asyncio.gather(sock._pump_task, return_exceptions=True)
+
+
+@pytest.mark.parametrize('address', ['alice+tag@sub.example.com', 'a.b%tag@example.co.uk'])
+def test_email_subdomains_and_special_local_parts_remain_masked(address):
+    assert address.split('@')[0] not in sanitize(address)
+    assert address.split('@')[1] in sanitize(address)
+
+
+def test_email_pattern_handles_long_unmatched_and_matched_local_parts():
+    from utils.log_sanitizer import _EMAIL_PATTERN
+
+    assert _EMAIL_PATTERN.sub('masked', '%' * 100_000) == '%' * 100_000
+    assert _EMAIL_PATTERN.sub('masked', '%' * 100_000 + '@example.com') == 'masked'

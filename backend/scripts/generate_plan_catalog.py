@@ -964,9 +964,13 @@ def _print_errors(errors: Iterable[str]) -> int:
     values = list(errors)
     if not values:
         return 0
-    print('plan catalog validation failed:', file=sys.stderr)
-    for error in values:
-        print(f'- {error}', file=sys.stderr)
+    # Catalog diagnostics can reflect arbitrary supplied environment-variable
+    # values. Keep CLI logs structural; validate_catalog() retains field details
+    # for local inspection without putting those values into CI logs.
+    print(
+        f'plan catalog validation failed: {len(values)} issue(s); inspect validate_catalog() diagnostics locally',
+        file=sys.stderr,
+    )
     return 1
 
 
