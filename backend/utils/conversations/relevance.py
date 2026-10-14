@@ -27,6 +27,13 @@ from utils.conversations.relevance_rules import RULES_VERSION, deterministic_rel
 from utils.conversations import relevance_rescue
 
 from utils.observability.fallback import record_fallback
+from utils.metrics import record_relevance_scorer_outcome
+from utils.conversations.relevance_circuit import (
+    observe_scorer_outcomes,
+    get_relevance_circuit,
+    report_scorer_outcome,
+    scorer_error_outcome,
+)
 
 RELEVANCE_DECISION_FIELD = 'relevance_decision'
 
@@ -99,19 +106,72 @@ class DecisionArm:
     name: str
     available: Callable[[], bool]
     decide: Callable[[], Optional[RelevanceDecision]]
+    paid: bool = True
 
 
 def _decision_chain(arms: Sequence[DecisionArm]) -> RelevanceDecision:
-    for index, candidate in enumerate(arms):
-        decision = candidate.decide() if candidate.available() else None
+    available = [candidate for candidate in arms if candidate.available()]
+    terminal = available[-1]
+    assert not terminal.paid, 'Relevance chain must end in a total deterministic arm'
+    primary = next((candidate for candidate in available if candidate.paid), None)
+    circuit = get_relevance_circuit(primary.name) if primary is not None else None
+    ticket = circuit.acquire() if circuit is not None else None
+
+    def circuit_decision() -> RelevanceDecision:
+        assert primary is not None
+        record_fallback(
+            component='conversation_relevance',
+            from_mode=primary.name,
+            to_mode=terminal.name,
+            reason='circuit_open',
+            outcome='degraded',
+        )
+        decision = terminal.decide()
+        assert decision is not None
+        return replace(decision, reason='circuit_open') if decision.decided_by == 'deterministic' else decision
+
+    if circuit is not None and ticket is None:
+        return circuit_decision()
+    for index, candidate in enumerate(available):
+        outcome = 'unavailable'
+
+        def observe(value: str) -> None:
+            nonlocal outcome
+            outcome = value
+
+        with observe_scorer_outcomes(observe):
+            decision = candidate.decide()
+        if candidate.paid:
+            # JEV's adapter records its exact client outcome; nano has no such
+            # observer, so record its callback/exception result here.
+            if candidate.name != 'jev':
+                record_relevance_scorer_outcome('success' if decision is not None else outcome, arm=candidate.name)
+            if candidate is primary:
+                assert circuit is not None and ticket is not None
+                opened = circuit.record(ticket, success=decision is not None)
+                if decision is None and opened:
+                    record_fallback(
+                        component='conversation_relevance',
+                        from_mode=candidate.name,
+                        to_mode=terminal.name,
+                        reason=outcome,
+                        outcome='degraded',
+                    )
+                    decision = terminal.decide()
+                    assert decision is not None
+                    return replace(
+                        decision,
+                        model_tier_reached=True,
+                        reason='circuit_open' if decision.decided_by == 'deterministic' else decision.reason,
+                    )
         if decision is not None:
-            return decision
-        if index + 1 < len(arms):
+            return replace(decision, model_tier_reached=primary is not None)
+        if index + 1 < len(available):
             record_fallback(
                 component='conversation_relevance',
                 from_mode=candidate.name,
-                to_mode=arms[index + 1].name,
-                reason='gate_unavailable',
+                to_mode=available[index + 1].name,
+                reason=outcome,
                 outcome='degraded',
             )
     raise AssertionError('Relevance chain must end in a total deterministic arm')
@@ -249,7 +309,11 @@ def decide_relevance(
     def jev_decision() -> Optional[RelevanceDecision]:
         nonlocal jev_failed
         assert jev_discard_probability is not None
-        p_discard = jev_discard_probability()
+        try:
+            p_discard = jev_discard_probability()
+        except Exception as error:
+            report_scorer_outcome(scorer_error_outcome(error))
+            p_discard = None
         if p_discard is None:
             jev_failed = True
             return None
@@ -263,6 +327,7 @@ def decide_relevance(
         def on_error(_error: Exception) -> None:
             nonlocal failed
             failed = True
+            report_scorer_outcome(scorer_error_outcome(_error))
 
         assert model_discards is not None
         adjacent = neighbor()
@@ -291,15 +356,14 @@ def decide_relevance(
 
     arms: list[DecisionArm] = []
     if jev_discard_probability is not None:
-        arms.append(DecisionArm('jev', lambda: model_discards is not None, jev_decision))
+        arms.append(DecisionArm('jev', lambda: jev_discard_probability is not None, jev_decision))
     arms.extend(
         (
             DecisionArm('model', lambda: model_discards is not None, nano_decision),
-            DecisionArm('deterministic', lambda: True, deterministic_decision),
+            DecisionArm('deterministic', lambda: True, deterministic_decision, paid=False),
         )
     )
-    decision = model_decision(_decision_chain(arms))
-    return replace(decision, model_tier_reached=model_discards is not None)
+    return replace(_decision_chain(arms), arm=arm if record_arm or arm != 'nano' else None)
 
 
 def final_relevance(decision: Optional[RelevanceDecision], *, discarded: bool) -> Optional[RelevanceDecision]:

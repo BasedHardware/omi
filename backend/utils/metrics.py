@@ -678,15 +678,33 @@ MEMORY_OWNER_JEV_TOTAL = Counter(
 # degraded relevance paths. Keep this separate from shared transition telemetry.
 CONVERSATION_RELEVANCE_SCORER_TOTAL = Counter(
     'omi_conversation_relevance_scorer_total',
-    'Primary relevance scorer outcomes; failures enter the cheaper decision chain.',
-    ['outcome'],
+    'Paid relevance scorer outcomes; failures enter the cheaper decision chain.',
+    ['arm', 'outcome'],
 )
 
 
-def record_relevance_scorer_outcome(outcome: str) -> None:
+CONVERSATION_RELEVANCE_CIRCUIT_TOTAL = Counter(
+    'omi_conversation_relevance_circuit_total',
+    'Primary relevance circuit transitions; open skips all paid decision arms.',
+    ['arm', 'state'],
+)
+
+
+def record_relevance_circuit_state(arm: str, state: str) -> None:
+    try:
+        CONVERSATION_RELEVANCE_CIRCUIT_TOTAL.labels(
+            arm=arm if arm in {'jev', 'model'} else 'other',
+            state=state if state in {'open', 'half_open', 'closed'} else 'other',
+        ).inc()
+    except Exception:
+        pass
+
+
+def record_relevance_scorer_outcome(outcome: str, *, arm: str = 'jev') -> None:
     try:
         CONVERSATION_RELEVANCE_SCORER_TOTAL.labels(
-            outcome=outcome if outcome in JEV_DECISION_LABELS['outcome'] else 'other'
+            arm=arm if arm in {'jev', 'model'} else 'other',
+            outcome=outcome if outcome in JEV_DECISION_LABELS['outcome'] | {'unavailable'} else 'other',
         ).inc()
     except Exception:
         pass

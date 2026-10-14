@@ -25,6 +25,15 @@ from utils.conversations.relevance_rules import RULES_VERSION
 LONG = [' '.join(f'topic{i}' for i in range(101))]
 
 
+@pytest.fixture(autouse=True)
+def isolated_relevance_circuits():
+    from utils.conversations.relevance_circuit import get_relevance_circuit
+
+    get_relevance_circuit.cache_clear()
+    yield
+    get_relevance_circuit.cache_clear()
+
+
 def _decide(
     *,
     trigger=ProcessingTrigger.CAPTURE_END,

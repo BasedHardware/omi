@@ -24,6 +24,15 @@ AMBIGUOUS = ('Coming over there in a second.',)
 TRIGGER = ProcessingTrigger.CAPTURE_END
 
 
+@pytest.fixture(autouse=True)
+def isolated_relevance_circuits():
+    from utils.conversations.relevance_circuit import get_relevance_circuit
+
+    get_relevance_circuit.cache_clear()
+    yield
+    get_relevance_circuit.cache_clear()
+
+
 def _decide(*, jev=None, model=None, calendar=None, texts=AMBIGUOUS, user_kept=False):
     model = model if model is not None else MagicMock(return_value=True)
     calendar = calendar or MagicMock(return_value=False)
@@ -218,7 +227,7 @@ def test_oct14_shape_benchmark(oct14_shape):
         assert decision.verdict == expected, texts
         assert decision.decided_by == ('rule' if len(texts) == 120 else 'deterministic')
         if len(texts) == 7 or expected == 'keep':
-            assert decision.reason == 'jev_fallback_deterministic'
+            assert decision.reason in {'jev_fallback_deterministic', 'circuit_open'}
 
 
 @pytest.mark.parametrize('with_jev', [False, True])
@@ -245,7 +254,7 @@ def test_failed_model_advances_to_deterministic(with_jev, raises, monkeypatch):
         component='conversation_relevance',
         from_mode='model',
         to_mode='deterministic',
-        reason='gate_unavailable',
+        reason='timeout' if raises else 'transport_error',
         outcome='degraded',
     )
 
@@ -263,7 +272,7 @@ def test_model_fallback_preserves_counterfactual_and_transition(discard, monkeyp
         component='conversation_relevance',
         from_mode='jev',
         to_mode='model',
-        reason='gate_unavailable',
+        reason='unavailable',
         outcome='degraded',
     )
 
@@ -280,7 +289,7 @@ def test_primary_scorer_outcome_counter(outcome, monkeypatch):
     monkeypatch.setattr(relevance_jev, 'ask_jev', ask)
     result = relevance_jev.jev_discard_probability('User: buy milk', record_outcome=True)
     assert result == (0.25 if outcome == 'success' else None)
-    counter.labels.assert_called_once_with(outcome=outcome)
+    counter.labels.assert_called_once_with(arm='jev', outcome=outcome)
     counter.labels.return_value.inc.assert_called_once()
 
 
@@ -352,14 +361,14 @@ def test_shared_transition_counter_emits_on_degraded_paths(monkeypatch):
         component='conversation_relevance',
         from_mode='jev',
         to_mode='model',
-        reason='gate_unavailable',
+        reason='unavailable',
         outcome='degraded',
     )
     counter.labels.assert_any_call(
         component='conversation_relevance',
         from_mode='model',
         to_mode='deterministic',
-        reason='gate_unavailable',
+        reason='transport_error',
         outcome='degraded',
     )
     assert counter.labels.return_value.inc.call_count == 2
@@ -376,9 +385,9 @@ def test_chain_accepts_another_arm_without_changing_the_runner():
                 DecisionArm('unavailable', lambda: False, skipped),
                 DecisionArm('no_answer', lambda: True, lambda: None),
                 DecisionArm('future_provider', lambda: True, lambda: answer),
-                DecisionArm('unused', lambda: True, skipped),
+                DecisionArm('unused', lambda: True, skipped, paid=False),
             ]
         )
-        is answer
+        == answer
     )
     skipped.assert_not_called()
