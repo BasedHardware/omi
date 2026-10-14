@@ -62,6 +62,10 @@ STATE_POLL_ATTEMPTS = 24
 RELEASE_TYPE = "AFTER_APPROVAL"
 PHASED_RELEASE = True
 STAGED_ROLLOUT_FRACTION = 0.05
+# Staged-rollout ladder: each daily gate-green run promotes the live staged
+# release one hop (5% -> 25% -> full). A hop is skipped only by HOLD, so a bad
+# release can be halted in Play Console before the next ladder step fires.
+STAGED_ROLLOUT_LADDER = (0.05, 0.25, 1.0)
 
 
 class TrainError(Exception):
@@ -534,6 +538,11 @@ def existing_production_draft(production: object) -> dict[str, object] | None:
     return drafts[0] if drafts else None
 
 
+def existing_production_staged(production: object) -> dict[str, object] | None:
+    staged = [release for release in _releases(production, "production") if release.get("status") == "inProgress"]
+    return staged[0] if staged else None
+
+
 def run_android(*, dry_run: bool, release_date: str) -> str:
     try:
         client, edit_id = promote.play_edit()
@@ -543,11 +552,62 @@ def run_android(*, dry_run: bool, release_date: str) -> str:
         raise TrainError(str(exc)) from exc
     live = play_live_version(production)
     candidate = pick_play_candidate(tracks, production)
+    staged = existing_production_staged(production)
+    if staged is not None and STAGED_ROLLOUT_LADDER:
+        # A staged rollout is in flight. The ladder promotes it one hop per
+        # gate-green day; a HALTED release (no userFraction) waits for a human.
+        # A NEWER candidate waits for the ladder to finish: Play allows only
+        # one staged release at a time (two inProgress in one PUT -> 400).
+        staged_name = staged.get("name")
+        staged_version = promote.production_release_version(staged_name) if isinstance(staged_name, str) else None
+        codes = [str(code) for code in staged.get("versionCodes", [])]
+        current = staged.get("userFraction")
+        current = float(current) if isinstance(current, (int, float)) else None
+        if staged_version is None or not codes:
+            raise TrainError(f"production staged release has no readable identity: {staged}")
+        if candidate is not None and promote.version_parts(candidate.version) > promote.version_parts(staged_version):
+            log(
+                f"Android live {live}; staged {staged_version} {codes} is mid-ladder; newer candidate "
+                f"{candidate.version} ({candidate.version_code}) waits for it to complete"
+            )
+            return f"android=staged {staged_version} mid-ladder; {candidate.version} ({candidate.version_code}) waiting"
+        if current is None:
+            log(
+                f"Android production staged {staged_version} {codes} is HALTED; "
+                f"a human decides halt or resume in Play Console"
+            )
+            return f"android=staged-halted {staged_version} {codes[0]}"
+        next_hops = [hop for hop in STAGED_ROLLOUT_LADDER if hop > current + 1e-9]
+        if not next_hops:
+            log(f"Android production staged {staged_version} at {current:.0%} is at or past the ladder top; nothing to do")
+            return f"android=staged {staged_version} {codes[0]} @{current:.0%} (ladder done)"
+        hop = next_hops[0]
+        log(f"Android live {live}; promoting staged {staged_version} {codes[0]} from {current:.0%} to {hop:.0%}")
+        release_path = ensure_release_notes(staged_version, release_date, write=not dry_run)
+        if dry_run:
+            return f"android=dry-run:staged-hop {staged_version} {codes[0]} {current:.0%}->{hop:.0%}"
+        notes = promote.require_notes(release_path, staged_version, "android")
+        try:
+            if hop >= 1.0:
+                promote.submit_android(client, edit_id, staged_version, codes[0], notes, status="completed")
+            else:
+                promote.submit_android(
+                    client, edit_id, staged_version, codes[0], notes, status="inProgress", user_fraction=hop
+                )
+        except promote.PromotionError as exc:
+            raise TrainError(str(exc)) from exc
+        if hop >= 1.0:
+            log(f"Android production rollout completed: {staged_version} {codes[0]} at 100%")
+            return f"android=completed {staged_version} {codes[0]} 100%"
+        log(f"Android production staged now {staged_version} {codes[0]} at {hop:.0%}")
+        return f"android=staged {staged_version} {codes[0]} @{hop:.0%}"
     if candidate is None:
         log(f"Android live {live}; no internal/alpha build is newer")
         return f"android=nothing (live {live})"
     draft = existing_production_draft(production)
-    if draft is not None and [str(code) for code in draft.get("versionCodes", [])] == [candidate.version_code]:
+    if draft is not None and [str(code) for code in draft.get("versionCodes", [])] == [
+        candidate.version_code
+    ]:
         log(f"Android production draft already carries {candidate.version} ({candidate.version_code})")
         return f"android=leave draft {candidate.version} ({candidate.version_code})"
     log(
