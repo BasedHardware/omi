@@ -366,7 +366,7 @@ synthetic probe and VPC-attached Cloud Run probe, qualify:
 
 - `/parakeet/v1/transcribe`: real window PCM POST, text/segments and p95<3s;
 - `/parakeet/v2/transcribe`: prerecorded audio, expected transcription contract;
-- `/parakeet/v3/stream`: real WebSocket 101, correct start/config frame, ordered
+- `/parakeet/v3/stream`: real WebSocket 101, correct query configuration and ready frame, ordered
   bidirectional PCM/text, normal finalization, and reconnect/idle behavior.
 
 The wire protocol is implemented in `backend/parakeet/main.py` and
@@ -384,10 +384,204 @@ old ingress. Roll back Parakeet route revision using the captured Helm history
 only after restoring callers. Never remove the shared Gateway or another service's
 route while they still serve callers.
 
+## Executable pre-merge route gate
+
+**#21486 must remain unmerged until the lead obtains all-pass receipts for both
+URLs from both networks.** Run `python -m scripts.qualify_parakeet_route --base
+<url>` in the backend image's `/app` working directory. The image copies
+`backend/` into `/app`, so imports are `utils.stt.*`, not `backend.utils.*`.
+The bundled 174,114-byte synthetic speech WAV needs no TTS/download/user data.
+Default concurrency is four paced streams (maximum eight); do not increase it
+while stockout persists. A refusal is `outcome=refused`, blocks qualification,
+and exits 1 without retrying. Do not treat admission refusal as route success.
+
+The pinned client validates HTTP 101 and `{"type":"ready"}`; sample rate is
+configured by `?sample_rate=16000`, **not** a made-up start/config frame. It sends
+ordered mono PCM16 and literal `finalize`. The gate preserves wire order and requires non-empty text **before** finalize,
+finite nonnegative non-inverted spans, settled client tasks and a clean WebSocket finish (1000, 1001 or empty-frame 1005).
+`parakeet/main.py` forwards `StreamSession.feed`/`flush` results unchanged.
+`stream_handler.py` removes the shared text of cumulative RNNT hypotheses, but
+`_build_segments` keeps utterance spans; suffixes/revisions can overlap. The
+`_speech_start_s or _stream_offset_s` expression also replaces a zero start with
+the current stream offset, moving the reported right edge beyond sent audio.
+Partial decoder chunks are right-padded, and spans are not word alignment.
+`utils/stt/streaming.py` forwards text-bearing frames without a timing filter;
+`TranscriptSegment.combine_segments` merges chronological overlapping spans and
+retains late arrivals separately. The probe therefore imposes no disjointness or
+bytes-sent timestamp ceiling. It reports overlap/right-edge counts as observations.
+Every stream receipt includes at most five `segment_spans` (start/end only) and
+`is_connection_dead`; failures identify the condition and expose no transcript.
+**Finalize ownership:** `main.py` breaks on literal `finalize`, flushes pending
+segments, cleans the session, releases admission and returns. It sends no
+application close frame/status and no finalize acknowledgment. The ASGI/transport
+may close on return; an empty close frame is decoded as 1005 (never sent as wire
+status 1005). Otherwise the client closes. `ParakeetWebSocketSocket._run` waits
+five seconds after sending finalize; drain sets `_closed`, bounds sender/receiver
+cleanup at ten seconds and cancels stragglers. Context exit and `_run` finally
+call `ws.close()`. A timeout can initiate client close before a server close frame;
+there is no promised server frame to await. Production listen teardown awaits this
+drain and does not demand a server 1000 acknowledgment.
+The gate requires a settled connection with pinned websockets' clean codes
+1000/1001/1005, no task exceptions and no dead connection. Expected bounded-drain
+cancellation is reported, not a server error; unfinished tasks, missing close
+status, 1006/1011 or any other abnormal status still fail. Every stream receipt
+records actual `close_code`, `close_reason`, `sender_task` and `receiver_task`
+states (exception type only, no exception payload). The lead's next receipt
+establishes the actual transport code; the previous receipt did not record it.
+There is no server finalize-ack frame to invent. After parallel streams release
+leases, one connection idles for 35s (crossing the server's 30s receive interval),
+then transcribes; a new connection must transcribe again. Per-check deadline is
+120s. JSONL includes latency, first words, corpus hash, status and outcome.
+`/v1` uses the live-window client's AGC/WAV and admission-budget headers; `/v2`
+uses the prerecorded client's multipart/diarize payload and response normalizer.
+Its probe-only response observer rejects non-200 or v2-to-v1 fallback; it restores
+the client module after use. No served STT code is modified.
+
+Before merge the served image cannot contain this new script. Stage only the
+reviewed script and corpus into that **exact immutable image**, using a ConfigMap
+for GKE and a read-only artifact volume for the job. No application secrets,
+customer env or provider keys are copied. Run from the reviewed PR checkout:
+
+```bash
+# LEAD ONLY: creates temporary synthetic probes/artifacts, never a service rollout.
+FLEET_CONTEXT=gke_based-hardware_us-central1_prod-omi-gke
+FLEET_PROJECT=based-hardware
+FLEET_REGION=us-central1
+FLEET_NAMESPACE=prod-omi-backend
+FLEET_PROBE_SHA=$(git rev-parse HEAD)
+FLEET_PROBE_ID="audio-fleet-probe-${FLEET_PROBE_SHA:0:12}-$(date -u +%H%M%S)"
+FLEET_PROBE_DIR=$(mktemp -d)
+mkdir -p "$FLEET_PROBE_DIR/scripts/fixtures"
+: > "$FLEET_PROBE_DIR/scripts/__init__.py"
+cp backend/scripts/qualify_parakeet_route.py "$FLEET_PROBE_DIR/scripts/"
+cp backend/scripts/fixtures/parakeet_route_synthetic.wav "$FLEET_PROBE_DIR/scripts/fixtures/"
+
+# Only image identifiers/traffic are read; never print workload env or secrets.
+FLEET_GKE_IMAGE=$(kubectl --context="$FLEET_CONTEXT" -n "$FLEET_NAMESPACE" \
+  get pods -l app.kubernetes.io/name=backend-listen --field-selector=status.phase=Running \
+  -o 'jsonpath={.items[0].status.containerStatuses[0].imageID}')
+FLEET_GKE_IMAGE=${FLEET_GKE_IMAGE#docker-pullable://}
+case "$FLEET_GKE_IMAGE" in *@sha256:*) ;; *) echo 'Require served image digest'; exit 1;; esac
+kubectl --context="$FLEET_CONTEXT" -n "$FLEET_NAMESPACE" create configmap "$FLEET_PROBE_ID" \
+  --from-file="__init__.py=$FLEET_PROBE_DIR/scripts/__init__.py" \
+  --from-file="qualify_parakeet_route.py=$FLEET_PROBE_DIR/scripts/qualify_parakeet_route.py" \
+  --from-file="parakeet_route_synthetic.wav=$FLEET_PROBE_DIR/scripts/fixtures/parakeet_route_synthetic.wav"
+
+FLEET_GKE_FAILED=0
+for route in gateway legacy; do
+  case "$route" in gateway) base=http://172.16.160.20/parakeet;; legacy) base=http://parakeet.omi.me;; esac
+  name="$FLEET_PROBE_ID-$route"
+  python3 - "$name" "$FLEET_GKE_IMAGE" "$FLEET_PROBE_ID" "$base" > "$FLEET_PROBE_DIR/pod.json" <<'PY'
+import json, sys
+name, image, configmap, base = sys.argv[1:]
+print(json.dumps({'apiVersion': 'v1', 'spec': {
+    'activeDeadlineSeconds': 600, 'restartPolicy': 'Never',
+    'containers': [{'name': name, 'image': image, 'workingDir': '/app',
+        'command': ['python'],
+        'args': ['-c', "import sys,runpy;sys.path.insert(0,'/probe');runpy.run_module('scripts.qualify_parakeet_route',run_name='__main__')",
+                 '--base', base, '--concurrency', '4', '--timeout', '120', '--idle-seconds', '35'],
+        'resources': {'requests': {'cpu': '250m', 'memory': '512Mi'},
+                      'limits': {'cpu': '1', 'memory': '1Gi'}},
+        'volumeMounts': [{'name': 'probe', 'mountPath': '/probe', 'readOnly': True}]}],
+    'volumes': [{'name': 'probe', 'configMap': {'name': configmap, 'items': [
+        {'key': '__init__.py', 'path': 'scripts/__init__.py'},
+        {'key': 'qualify_parakeet_route.py', 'path': 'scripts/qualify_parakeet_route.py'},
+        {'key': 'parakeet_route_synthetic.wav', 'path': 'scripts/fixtures/parakeet_route_synthetic.wav'}]}}]
+}}))
+PY
+  if kubectl --context="$FLEET_CONTEXT" -n "$FLEET_NAMESPACE" run "$name" \
+    --image="$FLEET_GKE_IMAGE" --restart=Never --attach=true --rm --quiet \
+    --pod-running-timeout=2m --overrides="$(cat "$FLEET_PROBE_DIR/pod.json")" \
+    > "$FLEET_PROBE_DIR/gke-$route.jsonl"; then
+    cat "$FLEET_PROBE_DIR/gke-$route.jsonl"
+  else
+    FLEET_GKE_FAILED=1
+    cat "$FLEET_PROBE_DIR/gke-$route.jsonl"
+  fi
+ done
+kubectl --context="$FLEET_CONTEXT" -n "$FLEET_NAMESPACE" delete configmap "$FLEET_PROBE_ID"
+test "$FLEET_GKE_FAILED" -eq 0
+```
+
+Cloud Run uses the backend's observed direct-VPC network/subnet and attached
+runtime identity. Reverify these fields before execution without printing env.
+Use an existing artifact bucket that this identity can read; no new IAM grant is
+part of these commands. The bucket prefix contains only the reviewed probe files.
+If backend traffic is split, repeat for **every** serving revision/image.
+
+```bash
+: "${FLEET_PROBE_BUCKET:?Set an existing synthetic-artifact bucket readable by backend-runtime}"
+FLEET_PROBE_PREFIX="audio-fleet/$FLEET_PROBE_SHA"
+FLEET_CR_REVISION=$(gcloud run services describe backend \
+  --project="$FLEET_PROJECT" --region="$FLEET_REGION" --format='json(status.traffic)' \
+  | python3 -c 'import json,sys; t=json.load(sys.stdin)["status"]["traffic"]; r=[x["revisionName"] for x in t if x.get("percent",0)>0]; assert len(r)==1,"Repeat for every serving revision"; print(r[0])')
+FLEET_CR_IMAGE=$(gcloud run revisions describe "$FLEET_CR_REVISION" \
+  --project="$FLEET_PROJECT" --region="$FLEET_REGION" --format='value(spec.containers[0].image)')
+case "$FLEET_CR_IMAGE" in *@sha256:*) ;; *) echo 'Require served image digest'; exit 1;; esac
+# The exact served backend image imports the mounted probe, not a new backend image.
+gcloud storage cp "$FLEET_PROBE_DIR/scripts/__init__.py" "gs://$FLEET_PROBE_BUCKET/$FLEET_PROBE_PREFIX/scripts/__init__.py"
+gcloud storage cp "$FLEET_PROBE_DIR/scripts/qualify_parakeet_route.py" "gs://$FLEET_PROBE_BUCKET/$FLEET_PROBE_PREFIX/scripts/qualify_parakeet_route.py"
+gcloud storage cp "$FLEET_PROBE_DIR/scripts/fixtures/parakeet_route_synthetic.wav" "gs://$FLEET_PROBE_BUCKET/$FLEET_PROBE_PREFIX/scripts/fixtures/parakeet_route_synthetic.wav"
+
+# Cloud Run may ingest JSON stdout as jsonPayload, not textPayload.
+cat > "$FLEET_PROBE_DIR/extract-receipts.py" <<'PYRECEIPT'
+import json, sys
+receipts = []
+for entry in json.load(sys.stdin):
+    payload = entry.get('jsonPayload')
+    if not isinstance(payload, dict):
+        try:
+            payload = json.loads(entry.get('textPayload', ''))
+        except (ValueError, TypeError):
+            continue
+    if isinstance(payload, dict) and 'check' in payload:
+        receipts.append(payload)
+        print(json.dumps(payload, sort_keys=True))
+raise SystemExit(0 if len(receipts) == 8 and all(r.get('outcome') == 'pass' for r in receipts) else 1)
+PYRECEIPT
+
+FLEET_CR_FAILED=0
+for route in gateway legacy; do
+  case "$route" in gateway) base=http://172.16.160.20/parakeet;; legacy) base=http://parakeet.omi.me;; esac
+  job="$FLEET_PROBE_ID-cr-$route"
+  gcloud run jobs create "$job" --project="$FLEET_PROJECT" --region="$FLEET_REGION" \
+    --image="$FLEET_CR_IMAGE" --workdir=/app \
+    --service-account=backend-runtime@based-hardware.iam.gserviceaccount.com \
+    --network=omi-prod-vpc-1 --subnet=omi-us-central1-prod-vpc-1-subnet-1 \
+    --vpc-egress=private-ranges-only --tasks=1 --parallelism=1 --max-retries=0 \
+    --task-timeout=600s --cpu=1 --memory=1Gi \
+    --add-volume="name=probe,type=cloud-storage,bucket=$FLEET_PROBE_BUCKET,readonly=true,mount-options=only-dir=$FLEET_PROBE_PREFIX" \
+    --add-volume-mount=volume=probe,mount-path=/probe --set-env-vars=PYTHONPATH=/probe \
+    --command=python \
+    --args="-m,scripts.qualify_parakeet_route,--base,$base,--concurrency,4,--timeout,120,--idle-seconds,35"
+  if ! gcloud run jobs execute "$job" --project="$FLEET_PROJECT" --region="$FLEET_REGION" --wait; then
+    FLEET_CR_FAILED=1
+  fi
+  if ! gcloud run jobs logs read "$job" --project="$FLEET_PROJECT" --region="$FLEET_REGION" \
+    --order=asc --limit=100 --format='json(jsonPayload,textPayload)' \
+    | python3 "$FLEET_PROBE_DIR/extract-receipts.py" > "$FLEET_PROBE_DIR/cloud-run-$route.jsonl"; then
+    FLEET_CR_FAILED=1
+  fi
+  cat "$FLEET_PROBE_DIR/cloud-run-$route.jsonl"
+  gcloud run jobs delete "$job" --project="$FLEET_PROJECT" --region="$FLEET_REGION" --quiet
+ done
+test "$FLEET_CR_FAILED" -eq 0
+```
+
+If log ingestion is delayed, reread logs before deleting the job; retry log
+retrieval, not an admission-refused workload. Retain all four JSONL receipts with image digests and reviewed probe SHA before
+removing the temporary artifact prefix. Require eight `pass` receipts per run at
+default concurrency, zero `fail/refused`, and exit 0. A transport timeout, wrong
+ready frame, empty transcript, disordered timestamps or abnormal close blocks
+merge. Existing rollout-across-sessions and p95/900s scale-down qualifications
+remain separate operational gates; this short probe does not prove zero-drop
+evacuation or sustained-load latency.
+
 ## Local verification
 
 ```bash
 backend/.venv/bin/python -m pytest -q backend/tests/unit/test_audio_fleet_helm.py \
+  backend/tests/unit/test_qualify_parakeet_route.py \
   backend/tests/unit/test_internal_gateway_helm.py \
   backend/tests/unit/test_verify_pusher_config_references.py \
   backend/tests/unit/test_monitoring_adapter_hpa_contract.py \
