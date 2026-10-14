@@ -58,6 +58,14 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
 
   bool _noDeadlineExpanded = true;
 
+  /// Tasks just ticked (or reopened) that are about to leave this view: shown in their new state
+  /// at once ([_completing] maps id → new completed value), then folded away ([_folding]) before the
+  /// provider moves them, so the change reads as an action instead of a row vanishing.
+  final Map<String, bool> _completing = {};
+  final Set<String> _folding = {};
+  static const _showDone = Duration(milliseconds: 450);
+  static const _fold = Duration(milliseconds: 320);
+
   // Search header lifecycle objects.
   final TextEditingController _searchController = TextEditingController();
   final FocusNode _searchFocusNode = FocusNode();
@@ -987,45 +995,84 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
 
     // One meaning on every row, at every indent level: swipe right completes (or reopens), swipe
     // left deletes with Undo. Indenting lives in the long-press menu and in drag.
-    return Dismissible(
-      key: Key('dismiss_${item.id}'),
-      direction: DismissDirection.horizontal,
-      dismissThresholds: const {DismissDirection.startToEnd: 0.3, DismissDirection.endToStart: 0.3},
-      confirmDismiss: (direction) async {
-        if (direction == DismissDirection.startToEnd) {
-          await _toggleCompleted(provider, item);
-          return false;
-        }
-        return true;
-      },
-      background: Container(
-        alignment: Alignment.centerLeft,
-        padding: const EdgeInsets.only(left: 20.0),
-        decoration: BoxDecoration(
-          color: item.completed ? OmiColors.surface3 : OmiColors.success,
-          borderRadius: OmiRadius.smAll,
-        ),
-        child: Icon(item.completed ? Icons.undo : Icons.check, color: OmiColors.textPrimary),
-      ),
-      secondaryBackground: Container(
-        alignment: Alignment.centerRight,
-        padding: const EdgeInsets.only(right: 20.0),
-        decoration: BoxDecoration(color: OmiColors.danger, borderRadius: OmiRadius.smAll),
-        child: Icon(Icons.delete_outline, color: OmiColors.textPrimary),
-      ),
-      onDismissed: (direction) {
-        if (direction == DismissDirection.endToStart) {
-          _deleteTask(item);
-        }
-      },
-      child: draggable,
-    );
+    return _foldable(
+        item,
+        Dismissible(
+          key: Key('dismiss_${item.id}'),
+          direction: DismissDirection.horizontal,
+          dismissThresholds: const {DismissDirection.startToEnd: 0.3, DismissDirection.endToStart: 0.3},
+          confirmDismiss: (direction) async {
+            if (direction == DismissDirection.startToEnd) {
+              await _toggleCompleted(provider, item);
+              return false;
+            }
+            return true;
+          },
+          background: Container(
+            alignment: Alignment.centerLeft,
+            padding: const EdgeInsets.only(left: 20.0),
+            decoration: BoxDecoration(
+              color: item.completed ? OmiColors.surface3 : OmiColors.success,
+              borderRadius: OmiRadius.smAll,
+            ),
+            child: Icon(item.completed ? Icons.undo : Icons.check, color: OmiColors.textPrimary),
+          ),
+          secondaryBackground: Container(
+            alignment: Alignment.centerRight,
+            padding: const EdgeInsets.only(right: 20.0),
+            decoration: BoxDecoration(color: OmiColors.danger, borderRadius: OmiRadius.smAll),
+            child: Icon(Icons.delete_outline, color: OmiColors.textPrimary),
+          ),
+          onDismissed: (direction) {
+            if (direction == DismissDirection.endToStart) {
+              _deleteTask(item);
+            }
+          },
+          child: draggable,
+        ));
   }
 
   Future<void> _toggleCompleted(ActionItemsProvider provider, ActionItemWithMetadata item) async {
     OmiHaptics.light();
-    await provider.updateActionItemState(item, !item.completed);
-    if (!item.completed) _onActionItemCompleted();
+    final completing = !item.completed;
+    // The open view drops completed tasks and the completed view drops reopened ones: either way
+    // the row is about to leave, so it shows its new state and folds away first.
+    final leaves = completing != provider.showCompletedView;
+    final animate = leaves && OmiMotion.of(context).emphasized != Duration.zero;
+    if (animate) {
+      if (_completing.containsKey(item.id)) return;
+      setState(() => _completing[item.id] = completing);
+      await Future<void>.delayed(_showDone);
+      if (!mounted) return;
+      setState(() => _folding.add(item.id));
+      await Future<void>.delayed(_fold);
+      if (!mounted) return;
+    }
+    await provider.updateActionItemState(item, completing);
+    if (mounted && animate) {
+      setState(() {
+        _completing.remove(item.id);
+        _folding.remove(item.id);
+      });
+    }
+    if (completing) _onActionItemCompleted();
+  }
+
+  /// Folds a just-completed row closed (height and opacity) before it leaves the list.
+  Widget _foldable(ActionItemWithMetadata item, Widget row) {
+    final folding = _folding.contains(item.id);
+    return AnimatedSize(
+      // Per task, so the next row never inherits a folded slot and grows back in.
+      key: ValueKey('fold_${item.id}'),
+      duration: _fold,
+      curve: Curves.easeInOutCubic,
+      alignment: Alignment.topCenter,
+      child: AnimatedOpacity(
+        duration: _fold,
+        opacity: folding ? 0 : 1,
+        child: folding ? const SizedBox(width: double.infinity, height: 0) : row,
+      ),
+    );
   }
 
   /// Long-press menu: the same shape as memories and conversations, with Select for multi-select
@@ -1087,6 +1134,8 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
     final indentLevel = _getIndentLevel(item);
     final goalTitle = _getGoalTitleForTask(item);
     final isSelected = provider.isSelectionMode && provider.isItemSelected(item.id);
+    // Ticked and about to fold away: already looks done.
+    final done = _completing[item.id] ?? item.completed;
 
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
@@ -1132,7 +1181,17 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
                   child: SizedBox(
                     width: 44,
                     height: 44,
-                    child: Center(child: TaskCompletionMark(completed: item.completed)),
+                    child: Center(
+                      child: AnimatedSwitcher(
+                        duration: const Duration(milliseconds: 220),
+                        transitionBuilder: (child, a) => ScaleTransition(
+                          scale: Tween(begin: 0.6, end: 1.0)
+                              .animate(CurvedAnimation(parent: a, curve: Curves.easeOutBack)),
+                          child: FadeTransition(opacity: a, child: child),
+                        ),
+                        child: TaskCompletionMark(key: ValueKey(done), completed: done),
+                      ),
+                    ),
                   ),
                 ),
               ),
@@ -1147,10 +1206,10 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
                       Text(
                         item.description,
                         style: OmiType.callout.copyWith(
-                          color: item.completed ? OmiColors.textTertiary : OmiColors.textPrimary,
+                          color: done ? OmiColors.textTertiary : OmiColors.textPrimary,
                           fontWeight: FontWeight.w500,
                           letterSpacing: -0.2,
-                          decoration: item.completed ? TextDecoration.lineThrough : null,
+                          decoration: done ? TextDecoration.lineThrough : null,
                           decorationColor: OmiColors.textTertiary,
                         ),
                       ),
