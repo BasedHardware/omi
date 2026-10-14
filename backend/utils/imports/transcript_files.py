@@ -291,15 +291,19 @@ def _paragraph_cues(block: Sequence[str]) -> List[TranscriptCue]:
     stands as its own cue before the first label (a title).
     """
     labeled = [_LABEL_RE.match(line) is not None for line in block]
-    if sum(labeled) < 2:
+    first_label = next((index for index, is_label in enumerate(labeled) if is_label), None)
+    if first_label is None:
         return [TranscriptCue(text=' '.join(block))]
+    cues = [TranscriptCue(text=' '.join(block[:first_label]))] if first_label else []
+    if sum(labeled) < 2:
+        return cues + [TranscriptCue(text=' '.join(block[first_label:]))]
     turns: List[List[str]] = []
-    for line, is_label in zip(block, labeled):
+    for line, is_label in zip(block[first_label:], labeled[first_label:]):
         if is_label or not turns:
             turns.append([line])
         else:
             turns[-1].append(line)
-    return [TranscriptCue(text=' '.join(turn)) for turn in turns]
+    return cues + [TranscriptCue(text=' '.join(turn)) for turn in turns]
 
 
 def parse_srt(text: str) -> List[TranscriptCue]:
