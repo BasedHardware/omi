@@ -131,8 +131,7 @@ class _ChatAppsPageState extends State<ChatAppsPage> {
 
   Future<void> _openWaitlist(MessagingChannelsProvider provider) async {
     final telegramAccess = provider.availabilityFor(ChatChannel.telegram)?.access;
-    final offerTelegram =
-        provider.linkFor(ChatChannel.telegram) == null &&
+    final offerTelegram = provider.linkFor(ChatChannel.telegram) == null &&
         provider.config.endpoint(ChatChannel.telegram) != null &&
         (telegramAccess == null
             ? _proStatus(context.read<UsageProvider>()) != _ProStatus.free

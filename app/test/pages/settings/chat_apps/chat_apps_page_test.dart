@@ -35,14 +35,12 @@ void main() {
   }) async {
     final b = backend ?? FakeMessagingBackend();
     usePhoneViewport(tester);
-    await tester.pumpWidget(
-      chatAppsHost(
-        const ChatAppsPage(),
-        provider: b.provider(config: config),
-        usage: usageWith(plan),
-        connectivity: StubConnectivity(online: online),
-      ),
-    );
+    await tester.pumpWidget(chatAppsHost(
+      const ChatAppsPage(),
+      provider: b.provider(config: config),
+      usage: usageWith(plan),
+      connectivity: StubConnectivity(online: online),
+    ));
     await settle(tester);
     return b;
   }
@@ -91,10 +89,8 @@ void main() {
     });
 
     testWidgets('a channel without an address is coming soon', (tester) async {
-      await pumpPage(
-        tester,
-        config: const ChatAppsConfig(enabled: true, endpoints: {ChatChannel.telegram: telegramEndpoint}),
-      );
+      await pumpPage(tester,
+          config: const ChatAppsConfig(enabled: true, endpoints: {ChatChannel.telegram: telegramEndpoint}));
       expect(find.text('Coming Soon'), findsOneWidget);
       expect(find.text('Connect'), findsOneWidget);
     });
@@ -244,7 +240,8 @@ void main() {
       WidgetTester tester,
       Map<String, Map<String, dynamic>> availability, {
       PlanType plan = PlanType.operator,
-    }) => pumpPage(tester, backend: FakeMessagingBackend()..availability = availability, plan: plan);
+    }) =>
+        pumpPage(tester, backend: FakeMessagingBackend()..availability = availability, plan: plan);
 
     testWidgets('available on both: today\'s connect flow', (tester) async {
       await pumpWith(tester, {
@@ -269,10 +266,13 @@ void main() {
     });
 
     testWidgets('channel_plan: iMessage offers an upgrade, Telegram still connects', (tester) async {
-      await pumpWith(tester, {
-        'telegram': availabilityJson(available: true),
-        'imessage': availabilityJson(reason: 'channel_plan'),
-      }, plan: PlanType.plus);
+      await pumpWith(
+          tester,
+          {
+            'telegram': availabilityJson(available: true),
+            'imessage': availabilityJson(reason: 'channel_plan'),
+          },
+          plan: PlanType.plus);
       expect(find.text('Available on Operator and Architect'), findsOneWidget);
       expect(find.text('Upgrade'), findsOneWidget);
       expect(row(tester, 'imessage').onTap, isNotNull);
@@ -328,11 +328,9 @@ void main() {
           'telegram': availabilityJson(available: true),
           'imessage': availabilityJson(reason: 'seat_cap'),
         };
-      await pumpPage(
-        tester,
-        backend: backend,
-        config: const ChatAppsConfig(enabled: true, endpoints: {ChatChannel.telegram: telegramEndpoint}),
-      );
+      await pumpPage(tester,
+          backend: backend,
+          config: const ChatAppsConfig(enabled: true, endpoints: {ChatChannel.telegram: telegramEndpoint}));
       expect(find.text('Coming Soon'), findsOneWidget);
       expect(find.text('Join Waitlist'), findsNothing);
     });
