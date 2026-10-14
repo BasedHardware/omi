@@ -574,5 +574,145 @@ void main() {
       expect(provider.actionItems, isEmpty);
       provider.dispose();
     });
+
+    test('an aborted full refresh still releases its shadow threat from the pagination offset', () async {
+      final typed = _HeldListApi();
+      final provider = ActionItemsProvider(
+        actionItemsApi: typed,
+        createActionItemRequest: ({required description, dueAt, conversationId, completed = false}) async =>
+            _row('server-16'),
+      );
+
+      // First page: three server rows, more available.
+      typed.result = ApiSuccess(
+        ActionItemsResponse(actionItems: [for (var i = 0; i < 3; i++) _serverRow('old-$i')], hasMore: true),
+      );
+      final load = provider.ensureLoaded(showShimmer: true);
+      await Future<void>.delayed(Duration.zero);
+      typed.resolve();
+      await load;
+
+      // A full refresh starts and stays pending; the create settles mid-flight.
+      final refresh = provider.fetchActionItems();
+      await Future<void>.delayed(Duration.zero);
+      final created = provider.createActionItem(description: 'abort race');
+      await Future<void>.delayed(Duration.zero);
+      await created;
+      expect(provider.actionItems.first.id, 'server-16');
+
+      // The refresh fails (typed outage): it aborts without replacing the list.
+      typed.completeAt(0, const ApiFailure(ApiProblem(ApiProblemKind.server, statusCode: 500)));
+      await refresh;
+
+      // First load-more observes the confirmed row server-side and retires the
+      // preserved-create exclusion (offset excludes it until then — sanity).
+      typed.result = ApiSuccess(
+        ActionItemsResponse(actionItems: [_serverRow('server-16'), _serverRow('a-0')], hasMore: true),
+      );
+      var more = provider.loadMoreActionItems();
+      await Future<void>.delayed(Duration.zero);
+      typed.completeAt(0, typed.result);
+      await more;
+      expect(typed.requestedOffsets.last, 3, reason: 'the not-yet-observed create stays out of the offset');
+
+      // The aborted refresh must have released its shadow threat: the
+      // confirmed row now counts as server-backed, so the next page starts
+      // after every visible row instead of re-requesting an overlapping
+      // window on every load-more.
+      typed.result = const ApiSuccess(ActionItemsResponse(actionItems: [], hasMore: false));
+      more = provider.loadMoreActionItems();
+      await Future<void>.delayed(Duration.zero);
+      typed.completeAt(0, typed.result);
+      await more;
+
+      expect(typed.requestedOffsets.last, 5,
+          reason: 'an aborted full refresh must not keep a server-confirmed row out of the pagination offset');
+      provider.dispose();
+    });
+
+    test('Undo before the overlapping fetch returns keeps the confirmed row in the replaced list', () async {
+      final typed = _HeldListApi();
+      var createResolved = false;
+      final provider = ActionItemsProvider(
+        actionItemsApi: typed,
+        createActionItemRequest: ({required description, dueAt, conversationId, completed = false}) async {
+          while (!createResolved) {
+            await Future<void>.delayed(const Duration(milliseconds: 1));
+          }
+          return _row('server-17');
+        },
+      );
+
+      // The wholesale fetch starts first and stays pending.
+      final load = provider.ensureLoaded(showShimmer: true);
+      await Future<void>.delayed(Duration.zero);
+
+      // The create's temp row appears, then the user stages its delete (D5).
+      final created = provider.createActionItem(description: 'undo race');
+      await Future<void>.delayed(Duration.zero);
+      final tempId = provider.actionItems.first.id;
+      provider.stageDeleteActionItem(provider.actionItems.first);
+      expect(provider.actionItems, isEmpty);
+
+      // The create settles while its row is hidden: the staged delete
+      // transfers to the confirmed server id.
+      createResolved = true;
+      final item = await created;
+      expect(item?.id, 'server-17');
+      expect(provider.actionItems, isEmpty);
+
+      // Undo — addressed through the temp id the toast captured — restores
+      // the confirmed row while the older fetch is still pending.
+      expect(await provider.undoStagedDelete(tempId), isTrue);
+      expect(provider.actionItems.map((row) => row.id), ['server-17']);
+
+      // The stale response predates the create and does not contain it.
+      typed.result = const ApiSuccess(ActionItemsResponse(actionItems: [], hasMore: false));
+      typed.completeAt(0, typed.result);
+      await load;
+
+      expect(provider.actionItems.map((row) => row.id), ['server-17'],
+          reason: 'Undo must re-arm preservation so the wholesale replacement cannot drop the confirmed row');
+      provider.dispose();
+    });
+
+    test('a committed staged delete is not resurrected by the overlapping fetch replacement', () async {
+      final typed = _HeldListApi();
+      var createResolved = false;
+      final provider = ActionItemsProvider(
+        actionItemsApi: typed,
+        createActionItemRequest: ({required description, dueAt, conversationId, completed = false}) async {
+          while (!createResolved) {
+            await Future<void>.delayed(const Duration(milliseconds: 1));
+          }
+          return _row('server-18');
+        },
+        deleteActionItemRequest: (String id) async => true,
+      );
+
+      // The wholesale fetch starts first and stays pending.
+      final load = provider.ensureLoaded(showShimmer: true);
+      await Future<void>.delayed(Duration.zero);
+
+      final created = provider.createActionItem(description: 'commit race');
+      await Future<void>.delayed(Duration.zero);
+      final tempId = provider.actionItems.first.id;
+      provider.stageDeleteActionItem(provider.actionItems.first);
+
+      createResolved = true;
+      await created;
+      expect(await provider.commitStagedDelete(tempId), isTrue);
+      expect(provider.actionItems, isEmpty);
+
+      // The stale response predates everything; it must not resurrect the
+      // committed delete even though its shadow threats were registered.
+      typed.result = ApiSuccess(ActionItemsResponse(actionItems: [_serverRow('old-0')], hasMore: false));
+      typed.completeAt(0, typed.result);
+      await load;
+
+      expect(provider.actionItems.map((row) => row.id), ['old-0'],
+          reason: 'a committed delete must stay deleted across the wholesale replacement');
+      provider.dispose();
+    });
   });
 }

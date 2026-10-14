@@ -160,11 +160,18 @@ class ActionItemsProvider extends ChangeNotifier {
     // pagination offset forever.
     _preservedCreateIds.removeWhere(fetchedIds.contains);
     if (_pendingCreates.isEmpty && _fetchShadowedCreates.isEmpty) return fetched;
+    // A row the user has deleted — staged behind an Undo toast or deleted
+    // outright — must not be resurrected by preservation: its pending-deletion
+    // tombstone deliberately outlives this replacement (the server delete may
+    // still be in flight), and the server-side filter above already dropped
+    // the row from `fetched`.
+    final hidden = _pendingDeletionIds;
     final preserved = <ActionItemWithMetadata>[
       for (final entry in _fetchShadowedCreates.entries)
-        if (entry.value.$2.contains(fetchOrdinal) && !fetchedIds.contains(entry.key)) entry.value.$1,
+        if (entry.value.$2.contains(fetchOrdinal) && !fetchedIds.contains(entry.key) && !hidden.contains(entry.key))
+          entry.value.$1,
       for (final entry in _pendingCreates.entries)
-        if (!fetchedIds.contains(entry.key)) entry.value,
+        if (!fetchedIds.contains(entry.key) && !hidden.contains(entry.key)) entry.value,
     ];
     // This replacement has applied, and any shadowed ordinal that is no longer
     // in flight either applied or aborted without replacing the list; neither
@@ -547,6 +554,12 @@ class ActionItemsProvider extends ChangeNotifier {
       Logger.debug('Error fetching action items: $e');
     } finally {
       _wholesaleFetchesInFlight.remove(fetchOrdinal);
+      // Null response (typed outage), discarded after sign-out, or thrown:
+      // this fetch never runs its _withPendingCreates replacement, so its
+      // ordinal must be pruned here exactly like the Home preview abort —
+      // otherwise a shadow keeps excluding a server-confirmed row from the
+      // pagination offset forever.
+      _dropFetchShadowOrdinal(fetchOrdinal);
       // Only the owning generation may retire the loading flags; a stale
       // completion would hide the successor account's shimmer/fetch state.
       if (generation == _sessionGeneration) {
@@ -1161,10 +1174,12 @@ class ActionItemsProvider extends ChangeNotifier {
       _preservedCreateIds.add(settledRow.id);
     }
     if (_wholesaleFetchesInFlight.isEmpty) return;
-    // If the row was already removed (e.g. the user deleted the temp entry),
-    // do not resurrect it via a later fetch's preservation.
-    final present = _actionItems.any((item) => item.id == settledRow.id || item.id == tempId);
-    if (!present) return;
+    // Register the fetch threats even when the row is currently hidden (the
+    // user staged a delete of it while the create was in flight): if Undo
+    // later restores the row, those older in-flight responses must still not
+    // drop it. Deletion intent is enforced at replacement time inside
+    // _withPendingCreates via _pendingDeletionIds, so a committed delete never
+    // resurrects the row while an Undo before the fetch returns re-arms it.
     _fetchShadowedCreates[settledRow.id] = (settledRow, {..._wholesaleFetchesInFlight});
   }
 
