@@ -80,7 +80,7 @@ def test_dev_shadow_scope_rejects_a_different_uid(gate: SimpleNamespace, chart_f
         ('KILL_SWITCH', 'false', 'true'),
         ('UID_ALLOWLIST', 'vi7SA9ckQCe4ccobWNxlbdcNdC23', 'other-user'),
         ('PERCENT', '0', '1'),
-        ('DAILY_AUDIO_HOURS', '1', '2'),
+        ('DAILY_AUDIO_HOURS', '4', '2'),
     ),
 )
 def test_prod_shadow_scope_rejects_value_drift(
