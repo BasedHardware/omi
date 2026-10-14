@@ -127,6 +127,12 @@ class WatchTransport extends DeviceTransport {
 
     _updateState(DeviceTransportState.disconnecting);
 
+    try {
+      await stopRecording();
+    } catch (e) {
+      Logger.debug('Watch Transport: Error stopping recording during disconnect: $e');
+    }
+
     for (final timer in _periodicTimers.values) {
       timer.cancel();
     }
@@ -306,6 +312,12 @@ class WatchTransport extends DeviceTransport {
 
   @override
   Future<void> dispose() async {
+    try {
+      await stopRecording();
+    } catch (e) {
+      Logger.debug('Watch Transport: Error stopping recording during dispose: $e');
+    }
+
     for (final timer in _periodicTimers.values) {
       timer.cancel();
     }
