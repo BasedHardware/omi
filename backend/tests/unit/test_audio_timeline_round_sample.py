@@ -11,6 +11,14 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
 
+from utils.audio_timeline import CaptureTimeline, ProviderEpochTranslator  # noqa: E402
+
+RATE = 16000
+
+
+def _pcm(samples: int) -> bytes:
+    return b'\x00\x00' * samples
+
 
 def test_sample_index_uses_round_not_truncate():
     """2.01 * 16000 must be 32160, not the truncated 32159."""
@@ -18,12 +26,18 @@ def test_sample_index_uses_round_not_truncate():
     assert int(2.01 * 16000) == 32159  # the old truncation bug
 
 
-def test_translate_rounds_provider_samples():
-    """translate() must round(), matching note_accepted_spans."""
-    import inspect
-    import utils.audio_timeline as at
+def test_translate_maps_issue_repro_samples():
+    """The #21212 repro at the translator level: a {'start': 2.01, 'end': 3.01}
+    segment inside an accepted send span maps to capture samples 32160/48160 —
+    the int() truncation this fixed produced 32159/48159."""
+    timeline = CaptureTimeline(sample_rate=RATE)
+    timeline.accept(_pcm(64000), arrival_wall=1000.0, arrival_monotonic=0.0)
+    translator = ProviderEpochTranslator(timeline, RATE)
+    translator.note_accepted(0, 64000)
 
-    src = inspect.getsource(at)
-    # no int(start * rate) truncation left in translate / outside-attribution
-    assert "int(start * rate)" not in src
-    assert "int(float(segment['start']) * self.provider_sample_rate)" not in src
+    translated = translator.translate([{'start': 2.01, 'end': 3.01, 'text': 'x'}])
+
+    assert len(translated) == 1
+    assert translated[0]['_capture_start_sample'] == 32160
+    assert translated[0]['_capture_end_sample'] == 48160
+    assert translated[0].get('audio_alignment') != 'unplaced'
