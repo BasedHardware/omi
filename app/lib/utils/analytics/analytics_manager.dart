@@ -550,66 +550,29 @@ class AnalyticsManager {
     _setUserPropertiesBatch({'\$name': _preferences.fullName, '\$email': _preferences.email});
   }
 
-  Future<bool> isFeatureEnabled(String key) async {
+  /// One fenced read for every flag value: no adapter, no settled identity, tracking off, or an
+  /// identity switch while the read is in flight all yield null (callers map null to "off").
+  Future<T?> _readFlag<T>(Future<T> Function(AnalyticsFeatureFlagAdapter adapter) read) async {
     final adapter = _adapter;
-    if (adapter == null || !adapter.isInitialized || !_trackingEnabled || _settledDistinctId == null) {
-      return false;
-    }
-    if (adapter is! AnalyticsFeatureFlagAdapter) return false;
+    if (adapter == null || !adapter.isInitialized || !_trackingEnabled || _settledDistinctId == null) return null;
+    if (adapter is! AnalyticsFeatureFlagAdapter) return null;
     final epoch = _identityEpoch;
     final identity = _settledDistinctId;
     try {
-      final enabled = await (adapter as AnalyticsFeatureFlagAdapter).isFeatureEnabled(key).timeout(_initTimeout);
-      if (epoch != _identityEpoch || !identical(identity, _settledDistinctId) || !_trackingEnabled) {
-        return false;
-      }
-      return enabled;
-    } catch (_) {
-      return false;
-    }
-  }
-
-  Future<Object?> getFeatureFlagPayload(String key) async {
-    final adapter = _adapter;
-    if (adapter == null ||
-        !adapter.isInitialized ||
-        !_trackingEnabled ||
-        _settledDistinctId == null ||
-        adapter is! AnalyticsFeatureFlagAdapter) {
-      return null;
-    }
-    final epoch = _identityEpoch;
-    final identity = _settledDistinctId;
-    try {
-      final payload = await (adapter as AnalyticsFeatureFlagAdapter).getFeatureFlagPayload(key).timeout(_initTimeout);
+      final value = await read(adapter as AnalyticsFeatureFlagAdapter).timeout(_initTimeout);
       if (epoch != _identityEpoch || !identical(identity, _settledDistinctId) || !_trackingEnabled) return null;
-      return payload;
+      return value;
     } catch (_) {
       return null;
     }
   }
 
-  /// The multivariate arm for [key]. Same identity and consent fences as [isFeatureEnabled];
-  /// null when the flag is off, not multivariate, or unresolved.
-  Future<String?> getFeatureFlagVariant(String key) async {
-    final adapter = _adapter;
-    if (adapter == null ||
-        !adapter.isInitialized ||
-        !_trackingEnabled ||
-        _settledDistinctId == null ||
-        adapter is! AnalyticsFeatureFlagAdapter) {
-      return null;
-    }
-    final epoch = _identityEpoch;
-    final identity = _settledDistinctId;
-    try {
-      final variant = await (adapter as AnalyticsFeatureFlagAdapter).getFeatureFlagVariant(key).timeout(_initTimeout);
-      if (epoch != _identityEpoch || !identical(identity, _settledDistinctId) || !_trackingEnabled) return null;
-      return variant;
-    } catch (_) {
-      return null;
-    }
-  }
+  Future<bool> isFeatureEnabled(String key) async => await _readFlag((a) => a.isFeatureEnabled(key)) ?? false;
+
+  Future<Object?> getFeatureFlagPayload(String key) => _readFlag<Object?>((a) => a.getFeatureFlagPayload(key));
+
+  /// The multivariate arm for [key]; null when the flag is off, not multivariate, or unresolved.
+  Future<String?> getFeatureFlagVariant(String key) => _readFlag<String?>((a) => a.getFeatureFlagVariant(key));
 
   final Set<String> _recordedFlagExposures = {};
 
