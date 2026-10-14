@@ -1314,5 +1314,43 @@ void main() {
       expect(a.sortOrder, 9, reason: 'the older batch settle must not retire the newer staged edit');
       provider.dispose();
     });
+
+    test('a drag changing order and indent commits one atomic batch', () async {
+      final typed = _HeldListApi();
+      final batches = <List<Map<String, dynamic>>>[];
+      final provider = ActionItemsProvider(
+        actionItemsApi: typed,
+        batchUpdateActionItemsRequest: (items) {
+          batches.add(List<Map<String, dynamic>>.from(items));
+          return Future.value(true);
+        },
+      );
+
+      typed.result = ApiSuccess(ActionItemsResponse(actionItems: [_row('a').copyWith(sortOrder: 1)], hasMore: false));
+      final load = provider.ensureLoaded(showShimmer: true);
+      await Future<void>.delayed(Duration.zero);
+      typed.resolve();
+      await load;
+
+      // One gesture moves the row across categories: new order and new indent
+      // land together before the debounce fires.
+      provider.updateItemSortOrder('a', 5);
+      provider.updateItemIndentLevel('a', 2);
+      await Future<void>.delayed(const Duration(milliseconds: 600));
+
+      // A single batch request carries both fields for the row: whichever
+      // single-field flush raced first under split debounces must not settle
+      // the shared layout revision while the other field is still pending.
+      expect(batches, hasLength(1));
+      expect(batches.single, hasLength(1));
+      expect(batches.single.single['id'], 'a');
+      expect(batches.single.single['sort_order'], 5);
+      expect(batches.single.single['indent_level'], 2);
+
+      // Everything was submitted and settled; no second flush remains.
+      await Future<void>.delayed(const Duration(milliseconds: 600));
+      expect(batches, hasLength(1));
+      provider.dispose();
+    });
   });
 }

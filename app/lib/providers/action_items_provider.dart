@@ -140,8 +140,7 @@ class ActionItemsProvider extends ChangeNotifier {
   // Debounced persistence for sort order and indent level
   final Map<String, int> _pendingSortUpdates = {};
   final Map<String, int> _pendingIndentUpdates = {};
-  Timer? _sortDebounce;
-  Timer? _indentDebounce;
+  Timer? _layoutDebounce;
 
   // Multi-selection state
   bool _isSelectionMode = false;
@@ -594,7 +593,19 @@ class ActionItemsProvider extends ChangeNotifier {
   Future<void> ensureLoaded({bool showShimmer = false}) {
     if (_initialLoadCompleted) return Future.value();
     final existingLoad = _initialLoad;
-    if (existingLoad != null) return existingLoad;
+    if (existingLoad != null) {
+      // A non-screen caller (Chat task card) started this load without a
+      // shimmer. If the Tasks screen joins while it is still in flight, the
+      // empty list would otherwise render the false empty state for the rest
+      // of the request: upgrade the presentation to the screen shimmer.
+      if (showShimmer && !_isLoading) {
+        setLoading(true);
+        existingLoad.whenComplete(() {
+          if (_isLoading) setLoading(false);
+        });
+      }
+      return existingLoad;
+    }
     final generation = _sessionGeneration;
     final load = fetchActionItems(showShimmer: showShimmer).then((loaded) {
       if (generation != _sessionGeneration) return;
@@ -1697,8 +1708,7 @@ class ActionItemsProvider extends ChangeNotifier {
     _pendingSortUpdates[id] = sortOrder;
     _stageUncommittedLayout(id, sortOrder: sortOrder);
     notifyListeners();
-    _sortDebounce?.cancel();
-    _sortDebounce = Timer(const Duration(milliseconds: 500), _flushSortUpdates);
+    _scheduleLayoutFlush();
   }
 
   void updateItemIndentLevel(String id, int indentLevel) {
@@ -1706,11 +1716,7 @@ class ActionItemsProvider extends ChangeNotifier {
     _pendingIndentUpdates[id] = indentLevel;
     _stageUncommittedLayout(id, indentLevel: indentLevel);
     notifyListeners();
-    _indentDebounce?.cancel();
-    _indentDebounce = Timer(
-      const Duration(milliseconds: 500),
-      _flushIndentUpdates,
-    );
+    _scheduleLayoutFlush();
   }
 
   void batchUpdateSortOrders(Map<String, int> updates) {
@@ -1720,38 +1726,41 @@ class ActionItemsProvider extends ChangeNotifier {
       _stageUncommittedLayout(entry.key, sortOrder: entry.value);
     }
     notifyListeners();
-    _sortDebounce?.cancel();
-    _sortDebounce = Timer(const Duration(milliseconds: 500), _flushSortUpdates);
+    _scheduleLayoutFlush();
   }
 
-  Future<void> _flushSortUpdates() async {
-    if (_pendingSortUpdates.isEmpty) return;
-    final updates = Map<String, int>.from(_pendingSortUpdates);
+  /// Both layout fields share one debounce and one batch request: a drag that
+  /// changes a row's order and indent must commit atomically, and the shared
+  /// revision must not be settled by whichever single-field flush would have
+  /// finished first (Codex PRRT sZ2hW).
+  void _scheduleLayoutFlush() {
+    _layoutDebounce?.cancel();
+    _layoutDebounce = Timer(const Duration(milliseconds: 500), _flushLayoutUpdates);
+  }
+
+  Future<void> _flushLayoutUpdates() async {
+    if (_pendingSortUpdates.isEmpty && _pendingIndentUpdates.isEmpty) return;
+    final sortUpdates = Map<String, int>.from(_pendingSortUpdates);
+    final indentUpdates = Map<String, int>.from(_pendingIndentUpdates);
     _pendingSortUpdates.clear();
-
-    final items = updates.entries.map((e) => {'id': e.key, 'sort_order': e.value}).toList();
-    // Snapshot each id's revision before the await: the response may only
-    // settle the values this batch actually submitted. (Every pending update
-    // was staged with a revision; ids without one have nothing to settle.)
-    final submitted = {
-      for (final id in updates.keys)
-        if (_layoutRevisions[id] != null) id: _layoutRevisions[id]!,
-    };
-    final committed = await _batchUpdateActionItemsRequest(items);
-    _settleUncommittedLayout(submitted, committed: committed);
-  }
-
-  Future<void> _flushIndentUpdates() async {
-    if (_pendingIndentUpdates.isEmpty) return;
-    final updates = Map<String, int>.from(_pendingIndentUpdates);
     _pendingIndentUpdates.clear();
 
-    final items = updates.entries.map((e) => {'id': e.key, 'indent_level': e.value}).toList();
+    final ids = {...sortUpdates.keys, ...indentUpdates.keys};
+    // One item per id carrying whichever fields changed; the batch endpoint
+    // accepts both fields in a single entry.
+    final items = [
+      for (final id in ids)
+        {
+          'id': id,
+          if (sortUpdates[id] != null) 'sort_order': sortUpdates[id],
+          if (indentUpdates[id] != null) 'indent_level': indentUpdates[id],
+        },
+    ];
     // Snapshot each id's revision before the await: the response may only
     // settle the values this batch actually submitted. (Every pending update
     // was staged with a revision; ids without one have nothing to settle.)
     final submitted = {
-      for (final id in updates.keys)
+      for (final id in ids)
         if (_layoutRevisions[id] != null) id: _layoutRevisions[id]!,
     };
     final committed = await _batchUpdateActionItemsRequest(items);
@@ -2161,10 +2170,8 @@ class ActionItemsProvider extends ChangeNotifier {
   void dispose() {
     _sessionGeneration++;
     _refreshDebounceTimer?.cancel();
-    _sortDebounce?.cancel();
-    _indentDebounce?.cancel();
-    _flushSortUpdates();
-    _flushIndentUpdates();
+    _layoutDebounce?.cancel();
+    _flushLayoutUpdates();
     super.dispose();
   }
 }
