@@ -208,6 +208,9 @@ and an explicit empty literal renders as `''`.
 | `MEMORY_DAILY_MEMORY_SWEEP_MODEL_ENABLED` | Allow model calls during daily memory sweep | backend | env | closed | declared | true | false | — | pending | 2026-10-23 | unowned |
 | `MEMORY_DAILY_MEMORY_SWEEP_TIMEZONE_RECONCILIATION_ENABLED` | Reconcile sweep timezone selection | backend | env | closed | declared | true | false | — | pending | 2026-10-23 | unowned |
 | `MEMORY_OWNER_JEV_FLIP_ENABLED` | Switch memory owner decisions to Jev | backend | env | closed | — | true (backend-listen (chart), cloud_run/backend, cloud_run/backend-sync, gke/backend-listen, gke/pusher, pusher (chart)) | — | — | pending | 2026-10-23 | unowned |
+| `MOBILE_STANDARD_BATCH_ENABLED` | Authorize hidden mobile Standard pendant capture to batch via existing WAL sync | backend, mobile | env | closed | — | — | — | — | pending | 2026-11-14 | dazheng |
+| `MOBILE_STANDARD_BATCH_PERCENT` | Stable UID percentage for mobile Standard batch, default zero | backend | env | closed | — | — | — | — | pending | 2026-11-14 | dazheng |
+| `MOBILE_STANDARD_BATCH_UIDS` | Comma-separated UID allowlist for mobile Standard batch, default empty | backend | env | closed | — | — | — | — | pending | 2026-11-14 | dazheng |
 | `NOTES_TIER_ESCALATION_ENABLED` | Escalate shaped notes to xhigh effort for long meetings with at least five screen frames; enabled on the 1 percent episode cohort (2026-10-09) | backend | env | closed | — | — | true (backend-listen (chart), cloud_run/backend, cloud_run/backend-sync, cloud_run/backend-sync-backfill, gke/backend-listen, gke/pusher, pusher (chart)) | — | pending | 2026-11-08 | dazheng |
 | `OMI_IMESSAGE_CONTACT_CARD` | Default-off sharing of a preconfigured Linq contact card. | backend | env | closed | — | — | — | — | keep | 2026-11-09 | dazheng |
 | `OMI_IMESSAGE_ENABLED` | Default-off registration of the iMessage provider adapter. | backend | env | closed | — | — | {value: 'on', category: rollout} | — | keep | 2026-11-09 | dazheng |
@@ -462,6 +465,9 @@ their code default (`fail` tells you which way a missing value resolves).
 - `MEMORY_IMPORT_BODY_STORAGE_MODE` — Select memory import body storage mode (fail: closed)
 - `MEMORY_IMPORT_WRITE_BLOCK_MODE` — Block memory import writes during incident (fail: inverted)
 - `MEMORY_TYPESENSE_READINESS_REQUIRED` — Require Typesense projection readiness for memory reads (fail: closed)
+- `MOBILE_STANDARD_BATCH_ENABLED` — Authorize hidden mobile Standard pendant capture to batch via existing WAL sync (fail: closed)
+- `MOBILE_STANDARD_BATCH_PERCENT` — Stable UID percentage for mobile Standard batch, default zero (fail: closed)
+- `MOBILE_STANDARD_BATCH_UIDS` — Comma-separated UID allowlist for mobile Standard batch, default empty (fail: closed)
 - `OMI_CHAT_PROMPT_CACHE_TTL` — Shaped GPT-5.6 explicit cache TTL; default and currently only supported value 30m. (fail: closed)
 - `OMI_GEMINI_OVERFLOW_ENABLED` — Enable overflow routing to Gemini (fail: open)
 - `OMI_IMESSAGE_CONTACT_CARD` — Default-off sharing of a preconfigured Linq contact card. (fail: closed)

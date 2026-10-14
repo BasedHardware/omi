@@ -129,6 +129,12 @@ ALLOWED_OUTCOMES = frozenset({'recovered', 'degraded', 'exhausted'})
 ALLOWED_REASONS = LIVE_STT_REASONS | frozenset(
     {
         'gate_unavailable',
+        'http_error',
+        'http_429',
+        'transport_error',
+        'unavailable',
+        'unconfigured',
+        'malformed',
         'timeout',
         'provider_5xx',
         'provider_429',
@@ -207,6 +213,7 @@ ALLOWED_COMPONENTS = frozenset(
         'firestore_read',
         'knowledge_graph',
         'agent_tools',
+        'conversation_relevance',
         'conversation_finalization',
         'conversation_notes',
         'daily_summary',
