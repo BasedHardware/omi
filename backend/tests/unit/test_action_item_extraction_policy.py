@@ -6,6 +6,7 @@ from types import SimpleNamespace
 from unittest.mock import MagicMock
 
 import pytest
+from prometheus_client import CollectorRegistry, Counter
 
 from config.action_item_extraction_policy import clearly_other_owner, clearly_status
 from config.action_item_similarity import near_duplicate
@@ -30,10 +31,53 @@ def test_owner_commitment_and_unknown_ownership_are_kept(name):
     assert not clearly_other_owner(name, 'Riley Chen')
 
 
-@pytest.mark.parametrize('name', ['Morgan Vale', 'Riley Stone'])
+@pytest.mark.parametrize('name', ['Morgan Vale', 'Casey Chen'])
 def test_named_other_attendee_is_rejected(name):
     assert clearly_other_owner(name, 'Riley Chen')
     assert not clearly_other_owner(name, None)  # Missing account identity is uncertain.
+
+
+@pytest.mark.parametrize('name', ['Dana Leigh', 'Dana L.', 'ＤＡＮＡ Leigh', 'dAnA Stone'])
+def test_owner_surname_mismatch_and_initial_only_are_kept(name):
+    assert not clearly_other_owner(name, 'Dana Lee')
+
+
+@pytest.mark.parametrize('name', ["Dana's", 'Dana’s', 'Dana.', '(Dana)', '“Dana”', "Dana's,", 'Ｄａｎａ’s'])
+def test_owner_given_name_possessive_and_punctuation_are_kept(name):
+    assert not clearly_other_owner(name, 'Dana Lee')
+
+
+@pytest.mark.parametrize('name', ['Morgan Lee', 'ＭＯＲＧＡＮ L.', 'Morgan’s'])
+def test_different_first_name_is_dropped_even_when_surname_matches(name):
+    assert clearly_other_owner(name, 'Dana Lee')
+
+
+def test_drop_metrics_and_logs_separate_reasons_without_content(monkeypatch, caplog):
+    metric = Counter(
+        'synthetic_action_item_drop_total', 'Synthetic extraction drops', ['reason'], registry=CollectorRegistry()
+    )
+    monkeypatch.setattr(extraction, 'OMI_ACTION_ITEM_EXTRACTION_DROPPED_TOTAL', metric)
+    monkeypatch.setattr(extraction, 'get_user_full_name', lambda uid: 'Dana Lee')
+    own = SimpleNamespace(description='Send the download link', owner_name='Dana Leigh')
+    items = [
+        own,
+        SimpleNamespace(description='Ask Dana for the download link', owner_name='Morgan Vale'),
+        SimpleNamespace(description='Email Dana the proposal', owner_name='Casey Chen'),
+        SimpleNamespace(description='User is testing the memory feature', owner_name='User'),
+    ]
+    with caplog.at_level('INFO', logger=extraction.__name__):
+        assert extraction.filter_extracted_items(UID, items) == [own]
+    counts = {
+        sample.labels['reason']: sample.value
+        for family in metric.collect()
+        for sample in family.samples
+        if sample.name.endswith('_total')
+    }
+    assert counts == {'other_owner': 2, 'status_statement': 1}
+    assert [record.getMessage() for record in caplog.records] == [
+        'event=action_item_extraction_dropped reason=other_owner count=2',
+        'event=action_item_extraction_dropped reason=status_statement count=1',
+    ]
 
 
 @pytest.mark.parametrize(

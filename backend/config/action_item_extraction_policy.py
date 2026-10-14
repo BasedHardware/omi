@@ -26,6 +26,13 @@ UNKNOWN_OWNERS = {
 OWNER_ALIASES = {'user', 'the user', 'me', 'myself', 'i', 'account owner'}
 
 
+def _given_name(name: str) -> str:
+    token = name.split()[0] if name else ''
+    token = re.sub(r'^\W+|\W+$', '', token)
+    token = re.sub(r"['’]s$", '', token)
+    return ''.join(char for char in token if not unicodedata.category(char).startswith('P'))
+
+
 def clearly_other_owner(owner_name: object, profile_name: str | None) -> bool:
     name = normalized_name(owner_name)
     profile = normalized_name(profile_name)
@@ -33,8 +40,10 @@ def clearly_other_owner(owner_name: object, profile_name: str | None) -> bool:
         return False
     if re.fullmatch(r'(?:speaker|spk)\s*\d+', name):
         return False
-    # Accept a first name or a full name, but not a different full name sharing it.
-    return name not in {profile, profile.split()[0]}
+    # STT surnames and initials are unreliable. Prefer keeping a stray task over
+    # losing the owner's commitment; only a different given name is a rejection.
+    owner_given, profile_given = _given_name(name), _given_name(profile)
+    return bool(owner_given and profile_given and owner_given != profile_given)
 
 
 _STATUS = re.compile(

@@ -1562,8 +1562,10 @@ extraction or blocking vector/export continuation. This is not a durable
 reminder retry; transport and offline-device delivery remain best effort.
 
 Before initial task writes, automatic refreshes and desktop candidate capture,
-`utils/conversations/action_item_extraction.py` rejects named owners that clearly
-do not match the account profile (full/first name or User/me aliases). Empty or
+`utils/conversations/action_item_extraction.py` rejects named owners only when
+their first name differs from the account profile (NFKC/casefolded, with
+possessives and punctuation stripped). User/me aliases remain admitted. Surname
+differences and surname initials stay kept because STT can mangle them. Empty or
 unknown ownership, including an unavailable profile name, stays compatible.
 A conservative English post-filter drops clear third-person ongoing-status
 sentences. Both rejection reasons increment `omi_action_item_extraction_dropped_total`
