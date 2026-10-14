@@ -6,7 +6,7 @@ import 'package:omi/utils/analytics/analytics_manager.dart';
 /// Re-offers the plans to free users when they open the app (A/B, flag `paywall-reask`).
 ///
 /// Readers who don't pay keep opening Omi but rarely meet a paywall, because every other paywall
-/// waits for a limit. The re-ask comes back on app open, spaced out so it never nags: 2, 2, 3, 4
+/// waits for a limit. The re-ask comes back on app open, spaced out so it never nags: 2, 3, 5
 /// and then every 7 days, counted from the last paywall the reader saw anywhere (so a limit or a
 /// Settings upgrade restarts the clock) and, for someone who never saw one, from their first Home
 /// visit (never on onboarding day).
@@ -23,7 +23,7 @@ abstract final class PaywallReask {
   static const promptId = 'paywall-reask';
 
   /// Days between re-asks; the last gap repeats.
-  static const gapsInDays = [2, 2, 3, 4, 7];
+  static const gapsInDays = [2, 3, 5, 7];
 
   /// Variants of the flag that show the re-ask; `control` and anything else show nothing.
   static const treatmentVariants = {'test', 'treatment', 'reask'};

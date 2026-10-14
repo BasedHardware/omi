@@ -4,7 +4,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/services/experiments/paywall_reask.dart';
 
-// The re-ask comes back 2, 2, 3, 4 and then every 7 days after the last paywall, never on the
+// The re-ask comes back 2, 3, 5 and then every 7 days after the last paywall, never on the
 // first Home visit, and counts both arms at the same moments.
 
 void main() {
@@ -31,7 +31,7 @@ void main() {
   });
 
   test('the gaps widen and then hold at a week', () {
-    expect([for (var i = 0; i < 7; i++) PaywallReask.gapAfter(i)], [2, 2, 3, 4, 7, 7, 7]);
+    expect([for (var i = 0; i < 7; i++) PaywallReask.gapAfter(i)], [2, 3, 5, 7, 7, 7, 7]);
   });
 
   test('calendar days, not hours: a late open and an early open two days later count as 2', () {
@@ -45,13 +45,13 @@ void main() {
     expect(await check(day(1)), isFalse);
     expect(await check(day(2)), isTrue, reason: 'gap 2 after the first visit');
     expect(await check(day(2, 18)), isFalse, reason: 'at most once a day');
-    expect(await check(day(3)), isFalse);
-    expect(await check(day(4)), isTrue, reason: 'second gap is 2');
-    expect(await check(day(6)), isFalse);
-    expect(await check(day(7)), isTrue, reason: 'third gap is 3');
-    expect(await check(day(11)), isTrue, reason: 'fourth gap is 4');
-    expect(await check(day(17)), isFalse);
-    expect(await check(day(18)), isTrue, reason: 'then weekly');
+    expect(await check(day(4)), isFalse);
+    expect(await check(day(5)), isTrue, reason: 'second gap is 3');
+    expect(await check(day(9)), isFalse);
+    expect(await check(day(10)), isTrue, reason: 'third gap is 5');
+    expect(await check(day(16)), isFalse);
+    expect(await check(day(17)), isTrue, reason: 'then weekly');
+    expect(await check(day(24)), isTrue, reason: 'still weekly');
     expect(exposures, everyElement('paywall-reask=test'));
     expect(exposures, hasLength(5));
   });
@@ -68,8 +68,8 @@ void main() {
     await check(day0);
     expect(await check(day(2)), isFalse);
     expect(exposures, ['paywall-reask=control']);
-    expect(await check(day(3)), isFalse);
     expect(await check(day(4)), isFalse);
+    expect(await check(day(5)), isFalse);
     expect(exposures, hasLength(2), reason: 'control advances the same schedule');
   });
 

@@ -11,7 +11,7 @@ user-based):
   anywhere else (`openUpgradePaywall`, so `paywall-variant` still picks its design), queued in
   `PromptQueue` (never over a recording, a call or another prompt).
 
-**Schedule** (`PaywallReask`). Due when 2, 2, 3, 4 and then every 7 local calendar days have
+**Schedule** (`PaywallReask`). Due when 2, 3, 5 and then every 7 local calendar days have
 passed since the last paywall the reader saw from any source; a reader who never saw one starts
 the clock at their first Home visit, so never on onboarding day. At most one per day. Free plan
 only (`basic`, subscription UI shown); dropped if the reader subscribed before it shows.
