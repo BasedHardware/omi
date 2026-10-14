@@ -47,6 +47,11 @@ MAX_RETRY_ATTEMPTS = 4
 # CliError immediately instead of sleeping a truncated delay and retrying early.
 MAX_RETRY_AFTER_SECONDS = 60.0
 
+# Endpoints under this prefix authenticate with the developer API key, not the
+# Firebase ID token. Used to pick the right credential on a dual-credential
+# (browser-login) profile.
+_DEV_PATH_PREFIX = "/v1/dev/"
+
 # Backend rate-limit policies surfaced to users on 429 (see
 # ``backend/utils/rate_limit_config.py``).
 KNOWN_RATE_LIMIT_POLICIES = {
@@ -132,8 +137,11 @@ class OmiClient:
         user's message twice. The caller owns parsing the application protocol.
         """
         try:
+            merged_headers = dict(self._build_headers(self._profile, path))
+            if headers:
+                merged_headers.update(headers)
             with self._http.stream(
-                "POST", path, json=json_body, headers=headers, timeout=CHAT_STREAM_TIMEOUT
+                "POST", path, json=json_body, headers=merged_headers, timeout=CHAT_STREAM_TIMEOUT
             ) as response:
                 if self._verbose:
                     import sys
@@ -178,7 +186,8 @@ class OmiClient:
         try:
             for attempt in retrying:
                 with attempt:
-                    response = self._http.request(method, path, params=cleaned_params, json=json_body)
+                    headers = self._build_headers(self._profile, path)
+                    response = self._http.request(method, path, params=cleaned_params, json=json_body, headers=headers)
                     self._maybe_log(method, path, response)
                     if response.status_code >= 500:
                         retry_after = _parse_retry_after(response.headers.get("Retry-After"))
@@ -256,20 +265,25 @@ class OmiClient:
             f"[debug] {method} {path} → {response.status_code} ({response.elapsed.total_seconds():.2f}s)\n"
         )
 
-    @staticmethod
-    def _build_headers(profile: Profile) -> dict[str, str]:
+    @classmethod
+    def _token_for_path(cls, profile: Profile, path: str = "/") -> str:
+        if path.startswith(_DEV_PATH_PREFIX) and profile.api_key:
+            return profile.api_key
+        if profile.auth_method == "api_key":
+            assert profile.api_key  # narrowed by is_authenticated
+            return profile.api_key
+        assert profile.id_token
+        return profile.id_token
+
+    @classmethod
+    def _build_headers(cls, profile: Profile, path: str = "/") -> dict[str, str]:
         if not profile.is_authenticated():
             raise CliError(
                 message="Not authenticated",
                 detail="Run `omi auth login` and paste your dev API key. (See `omi auth login --help`.)",
                 exit_code=2,
             )
-        if profile.auth_method == "api_key":
-            assert profile.api_key  # narrowed by is_authenticated
-            token = profile.api_key
-        else:
-            assert profile.id_token
-            token = profile.id_token
+        token = cls._token_for_path(profile, path)
         return {
             "Authorization": f"Bearer {token}",
             "User-Agent": USER_AGENT,

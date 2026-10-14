@@ -53,6 +53,43 @@ def store_oauth_tokens(
     return profile
 
 
+def store_oauth_session_with_dev_key(
+    profile_name: str,
+    *,
+    api_key: str,
+    id_token: str,
+    refresh_token: str,
+    expires_at: float,
+    api_base: Optional[str] = None,
+) -> cfg.Profile:
+    """Persist a browser-login session carrying BOTH credentials.
+
+    Browser sign-in establishes a Firebase OAuth session (which ``omi chat``
+    needs, because ``/v2/messages`` is authenticated by the signed-in user's
+    Firebase identity) *and* mints a long-lived developer API key (which every
+    ``/v1/dev/*`` command needs).
+
+    Persisting only the minted key via :func:`store_api_key` set
+    ``auth_method = "api_key"`` and nulled the OAuth tokens, which made
+    ``omi chat`` unreachable right after the very login the CLI tells the user
+    to run. Here we keep ``auth_method = "oauth"`` so chat stays available while
+    retaining the dev key for the dev endpoints.
+    """
+    config = cfg.load()
+    profile = config.get_profile(profile_name)
+    profile.auth_method = "oauth"
+    profile.api_key = api_key
+    profile.id_token = id_token
+    profile.refresh_token = refresh_token
+    profile.id_token_expires_at = expires_at
+    if api_base:
+        profile.api_base = api_base
+    config.set_profile(profile)
+    config.active_profile = profile_name
+    cfg.save(config)
+    return profile
+
+
 def update_oauth_id_token(profile_name: str, *, id_token: str, expires_at: float) -> cfg.Profile:
     """Update only the short-lived ID token after a refresh round-trip."""
     config = cfg.load()
