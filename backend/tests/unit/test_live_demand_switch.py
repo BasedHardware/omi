@@ -202,3 +202,29 @@ async def test_window_allocation_kill_retains_vendor(monkeypatch):
     finally:
         actual.stt_socket.finish()
         await stop(raws)
+
+
+@pytest.mark.asyncio
+async def test_replay_failure_after_fence_recovers_vendor_without_losing_prefix(monkeypatch):
+    actual, _, raws, _, _ = await demand_receiver(monkeypatch)
+    pcm = b'\x41\x01' * 3200
+    actual._window_replay_audio.append(pcm, 0)
+    pump = actual._pump_replacement
+
+    async def fail_cheap(raw, epoch, hop, replay, ring, previous, **kwargs):
+        if actual.host.stt_service == st.STTService.parakeet:
+            raw.raw.fail('send_failed')
+            await actual._reject_candidate(raw, epoch, hop, previous)
+            return False
+        return await pump(raw, epoch, hop, replay, ring, previous, **kwargs)
+
+    monkeypatch.setattr(actual, '_pump_replacement', fail_cheap)
+    try:
+        assert not await actual._switch_live_demand('parakeet')
+        assert actual.host.stt_service == st.STTService.soniox
+        assert actual.live_demand.policy.fallback
+        await until(lambda: raws[-1]._ws.byte_count == len(pcm))
+        assert raws[-1]._ws.pcm == pcm
+    finally:
+        actual.stt_socket.finish()
+        await stop(raws)
