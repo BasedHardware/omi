@@ -1,0 +1,77 @@
+import 'dart:convert';
+import 'dart:io';
+
+import 'package:flutter_test/flutter_test.dart';
+import 'package:http/http.dart' as http;
+import 'package:http/testing.dart';
+
+import 'package:omi/utils/analytics/adapters/posthog_adapter.dart';
+
+// The production adapter boundary: a flag reload is "successful" only when PostHog answered for the
+// current distinct id. A failed fetch must not let cached (stale, possibly another person's) flags
+// decide, and the identity changing clears the verified snapshot.
+
+PostHogAnalyticsAdapter _adapter(MockClient client, {String? distinctId = 'u'}) => PostHogAnalyticsAdapter(
+      apiKey: 'phc_test',
+      host: 'https://ph.test',
+      client: client,
+      distinctIdReader: () async => distinctId,
+    );
+
+MockClient _answering(Map<String, Object?> body, {int status = 200}) => MockClient((request) async {
+      expect(request.url.toString(), 'https://ph.test/decide/?v=3');
+      expect(jsonDecode(request.body), {'api_key': 'phc_test', 'distinct_id': 'u'});
+      return http.Response(jsonEncode(body), status);
+    });
+
+void main() {
+  test('a successful fetch verifies the flags and the reads use them', () async {
+    final adapter = _adapter(_answering({
+      'featureFlags': {'onboarding-webview': true, 'paywall-variant': 'outline', 'off-flag': false},
+      'featureFlagPayloads': {'onboarding-webview': '{"url": "https://x.example/onboarding"}'},
+    }));
+    expect(await adapter.reloadFeatureFlags(), isTrue);
+    expect(await adapter.isFeatureEnabled('onboarding-webview'), isTrue);
+    expect(await adapter.isFeatureEnabled('off-flag'), isFalse);
+    expect(await adapter.isFeatureEnabled('unknown'), isFalse);
+    expect(await adapter.getFeatureFlagPayload('onboarding-webview'), {'url': 'https://x.example/onboarding'});
+    expect(await adapter.getFeatureFlagVariant('paywall-variant'), 'outline');
+    expect(await adapter.getFeatureFlagVariant('onboarding-webview'), isNull);
+  });
+
+  test('a failed fetch is not a reload, and a stale enabled flag does not survive it', () async {
+    var status = 200;
+    final client = MockClient((_) async => http.Response(
+          jsonEncode({
+            'featureFlags': {'onboarding-webview': true}
+          }),
+          status,
+        ));
+    final adapter = _adapter(client);
+    expect(await adapter.reloadFeatureFlags(), isTrue);
+    expect(await adapter.isFeatureEnabled('onboarding-webview'), isTrue);
+
+    status = 500;
+    expect(await adapter.reloadFeatureFlags(), isFalse, reason: 'HTTP failure is not a refresh');
+    // The verified snapshot is what a read sees; the gate never reads after a false reload anyway.
+    expect(await adapter.isFeatureEnabled('onboarding-webview'), isTrue);
+  });
+
+  test('network errors, bad bodies and a missing distinct id all report no reload', () async {
+    expect(
+        await _adapter(MockClient((_) async => throw const SocketException('offline'))).reloadFeatureFlags(), isFalse);
+    expect(await _adapter(MockClient((_) async => http.Response('not json', 200))).reloadFeatureFlags(), isFalse);
+    expect(await _adapter(MockClient((_) async => http.Response('{"status":1}', 200))).reloadFeatureFlags(), isFalse);
+    expect(await _adapter(_answering({'featureFlags': {}}), distinctId: null).reloadFeatureFlags(), isFalse);
+  });
+
+  test('an identity change drops the verified snapshot', () async {
+    final adapter = _adapter(_answering({
+      'featureFlags': {'onboarding-webview': true}
+    }));
+    expect(await adapter.reloadFeatureFlags(), isTrue);
+    expect(adapter.hasVerifiedFlags, isTrue);
+    adapter.identify(userId: 'someone-else');
+    expect(adapter.hasVerifiedFlags, isFalse, reason: 'the next read must not see the previous identity\'s flags');
+  });
+}
