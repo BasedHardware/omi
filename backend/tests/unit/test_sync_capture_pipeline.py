@@ -541,3 +541,4 @@ def test_sync_budget_refusal_retains_legacy_and_logs_only_uid_hash(pipeline, mon
     digest = hashlib.sha256(('sync-final-pass:' + uid).encode()).hexdigest()
     assert all(f'uid_hash={digest}' in event and uid not in event for event in events)
     assert 'outcome=skipped_budget' in events[0]
+    assert 'lane=' in events[0] and 'duration_seconds=' in events[0]

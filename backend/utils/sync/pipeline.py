@@ -1391,6 +1391,7 @@ def process_segment(
             if sync_enabled_for(uid) and audio_bytes is not None:
                 from utils.conversations.final_pass_sync import run_sync_final_pass
 
+                final_pass_started = time.monotonic()
                 final_segments, final_outcome = run_sync_final_pass(
                     uid,
                     audio_bytes,
@@ -1401,9 +1402,11 @@ def process_segment(
                     owner_reserved=owner_reserved,
                 )
                 logger.info(
-                    'event=sync_final_pass outcome=%s uid_hash=%s',
+                    'event=sync_final_pass outcome=%s uid_hash=%s lane=%s duration_seconds=%.3f',
                     final_outcome['outcome'],
                     hashlib.sha256(('sync-final-pass:' + uid).encode()).hexdigest(),
+                    _bounded_sync_lane(sync_lane),
+                    time.monotonic() - final_pass_started,
                 )
             if final_segments and sync_enabled_for(uid):
                 transcript_segments = final_segments

@@ -121,6 +121,28 @@ overlay:
           value: parakeet-window,modulate-velma-2,soniox,dg-nova-3
         STT_RESILIENT_RECONNECT:
           value: 'false'
+        # Publish presence with an empty allowlist and drain old sockets before deploying this cohort.
+        STT_LIVE_DEMAND_ENABLED:
+          value: 'true'
+          category: rollout
+        STT_LIVE_DEMAND_PERCENT:
+          value: '0'
+          category: rollout
+        STT_LIVE_DEMAND_UID_ALLOWLIST:
+          value: 'vi7SA9ckQCe4ccobWNxlbdcNdC23'
+          category: rollout
+        STT_LIVE_DEMAND_MIN_DWELL_SECONDS:
+          value: '15'
+          category: rollout
+        MOBILE_STANDARD_BATCH_ENABLED:
+          value: 'true'
+          category: rollout
+        MOBILE_STANDARD_BATCH_PERCENT:
+          value: '0'
+          category: rollout
+        MOBILE_STANDARD_BATCH_UIDS:
+          value: 'vi7SA9ckQCe4ccobWNxlbdcNdC23'
+          category: rollout
         STT_FAILOVER_RECOVERY_ENABLED:
           value: 'true'
           category: rollout
@@ -746,6 +768,8 @@ overlay:
             secret: DREAM_AGENT_FEEDBACK_SALT
             version: latest
         forbidden_env:
+        - DEEPGRAM_SELF_HOSTED_ENABLED
+        - DEEPGRAM_SELF_HOSTED_URL
         - BASIC_TIER_MINUTES_LIMIT_PER_MONTH
         - BASIC_TIER_WORDS_TRANSCRIBED_LIMIT_PER_MONTH
         - BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH
@@ -931,6 +955,8 @@ overlay:
       backend-sync-backfill:
         service_account: backend-runtime@based-hardware.iam.gserviceaccount.com
         forbidden_env:
+        - DEEPGRAM_SELF_HOSTED_ENABLED
+        - DEEPGRAM_SELF_HOSTED_URL
         - BASIC_TIER_MINUTES_LIMIT_PER_MONTH
         - BASIC_TIER_WORDS_TRANSCRIBED_LIMIT_PER_MONTH
         - BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH
@@ -1085,6 +1111,8 @@ overlay:
       backend-integration:
         service_account: backend-runtime@based-hardware.iam.gserviceaccount.com
         forbidden_env:
+        - DEEPGRAM_SELF_HOSTED_ENABLED
+        - DEEPGRAM_SELF_HOSTED_URL
         - BASIC_TIER_MINUTES_LIMIT_PER_MONTH
         - BASIC_TIER_WORDS_TRANSCRIBED_LIMIT_PER_MONTH
         - BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH
