@@ -273,3 +273,29 @@ def test_merge_failure_aborts_target_cleanup_when_canonical_retraction_fails():
     delete_audio.assert_not_called()
     delete_vector.assert_not_called()
     delete_conversation.assert_not_called()
+
+
+@pytest.mark.parametrize('merged_into,erasure', [('merged', False), (None, True)])
+def test_bridge_ancestor_cleanup_uses_the_requested_canonical_intent(merged_into, erasure):
+    merge_mod = sys.modules['utils.conversations.merge_conversations']
+    with patch.object(
+        merge_mod.conversations_db, 'get_conversation', return_value={'sync_merged_from': ['donor']}
+    ), patch.object(merge_mod, '_delete_conversation_and_related_data') as cleanup, patch.object(
+        merge_mod.conversation_tombstones, 'record_deletion'
+    ), patch.object(
+        merge_mod, 'record_survivor_deleted'
+    ):
+        merge_mod.delete_conversation_with_sync_sources('u', 'source', merged_into=merged_into)
+    cleanup.assert_called_once_with(
+        'u', 'donor', purge_sync_sources=False, delete_canonical=erasure, merged_into=merged_into
+    )
+
+
+def test_canonical_link_failure_aborts_source_deletion():
+    merge_mod = sys.modules['utils.conversations.merge_conversations']
+    with patch.object(
+        merge_mod, 'delete_conversation_audio_files', side_effect=RuntimeError('link unavailable')
+    ), patch.object(merge_mod, 'delete_conversation_with_sync_sources') as delete_parent:
+        with pytest.raises(RuntimeError, match='link unavailable'):
+            merge_mod._delete_conversation_and_related_data('u', 'source', merged_into='merged')
+    delete_parent.assert_not_called()
