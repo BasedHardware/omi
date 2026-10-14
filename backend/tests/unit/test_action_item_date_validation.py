@@ -129,6 +129,7 @@ _SYS_MODULE_NAMES = [
     "utils.messaging.turn_context",
     "utils.retrieval.agentic",
     "utils.retrieval.chat_scope",
+    "utils.retrieval.turn_refs",
     "utils.conversations",
     "utils.conversations.render",
     "utils.conversations.wake_word",
@@ -356,6 +357,7 @@ _load_module_from_file("models.conversation", BACKEND_DIR / "models" / "conversa
 _load_module_from_file("models.app", BACKEND_DIR / "models" / "app.py")
 
 # Load action_item_tools
+_load_module_from_file("utils.retrieval.turn_refs", BACKEND_DIR / "utils" / "retrieval" / "turn_refs.py")
 action_item_tools = _load_module_from_file(
     "utils.retrieval.tools.action_item_tools",
     BACKEND_DIR / "utils" / "retrieval" / "tools" / "action_item_tools.py",

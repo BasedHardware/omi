@@ -1,36 +1,64 @@
 import 'dart:io';
 import 'dart:typed_data';
 
-import 'package:flutter/services.dart' show MethodChannel;
+import 'package:flutter/services.dart' show MethodChannel, PlatformException;
 
 import 'package:path_provider/path_provider.dart';
 
 import 'package:omi/models/stt_result.dart';
+import 'package:omi/utils/audio/whisper_pcm.dart';
+import 'package:omi/services/sockets/apple_speech_readiness.dart';
+import 'package:omi/services/sockets/local_stt_failure.dart';
+import 'package:omi/services/experiments/apple_speech_analyzer_gate.dart';
 import 'package:omi/services/custom_stt_log_service.dart';
 import 'package:omi/services/sockets/on_device_transcript_quality_gate.dart';
 import 'package:omi/services/sockets/pure_polling.dart';
 
-class OnDeviceAppleProvider implements ISttProvider {
+class OnDeviceAppleProvider implements ISttProvider, RecoverableLocalSttProvider {
   final String language;
+  final Future<bool> Function()? useSpeechAnalyzer;
   static const MethodChannel _channel = MethodChannel('com.omi.ios/speech');
   final OnDeviceTranscriptQualityGate _qualityGate = OnDeviceTranscriptQualityGate();
 
-  OnDeviceAppleProvider({this.language = 'en'});
+  OnDeviceAppleProvider({this.language = 'en', this.useSpeechAnalyzer});
 
   /// Whether iOS has an on-device recognizer (language model installed, not
   /// network-backed) for [language]. Bare codes like "en" are resolved
   /// natively to an installed full locale such as en-US. Returns false on any
   /// channel error so callers treat "unknown" as "unavailable".
-  static Future<bool> isOnDeviceAvailable(String language) async {
-    if (!Platform.isIOS) return false;
+  static Future<bool> isOnDeviceAvailable(String language,
+      {Future<bool> Function()? useSpeechAnalyzer, bool? isIOS}) async {
+    if (!(isIOS ?? Platform.isIOS)) return false;
     try {
-      final available = await _channel.invokeMethod<bool>('onDeviceAvailable', {'language': language});
+      final available = await _channel.invokeMethod<bool>('onDeviceAvailable', {
+        'language': language,
+        'useSpeechAnalyzer': await (useSpeechAnalyzer ?? AppleSpeechAnalyzerGate.useNewEngine)()
+      });
       return available ?? false;
     } catch (e) {
       CustomSttLogService.instance.error('OnDeviceApple', 'Availability check failed: $e');
       return false;
     }
   }
+
+  static Future<AppleSpeechReadiness> readiness(
+    String language, {
+    Future<bool> Function()? useSpeechAnalyzer,
+    bool prepare = false,
+  }) async {
+    try {
+      final data = await _channel.invokeMapMethod<String, dynamic>(prepare ? 'prepareSpeech' : 'readiness', {
+        'language': language,
+        'useSpeechAnalyzer': await (useSpeechAnalyzer ?? AppleSpeechAnalyzerGate.useNewEngine)(),
+      });
+      return AppleSpeechReadiness.fromMap(data);
+    } catch (_) {
+      return const AppleSpeechReadiness('unknown', 'unavailable');
+    }
+  }
+
+  @override
+  Future<bool> isReadyToRetry() async => (await readiness(language, useSpeechAnalyzer: useSpeechAnalyzer)).ready;
 
   @override
   Future<SttTranscriptionResult?> transcribe(
@@ -40,10 +68,11 @@ class OnDeviceAppleProvider implements ISttProvider {
   }) async {
     try {
       final sw = Stopwatch()..start();
+      final normalized = WhisperPcm.normalize(audioData);
 
       final tempDir = await getTemporaryDirectory();
       final tempFile = File('${tempDir.path}/temp_apple_audio_${DateTime.now().millisecondsSinceEpoch}.wav');
-      await tempFile.writeAsBytes(audioData);
+      await tempFile.writeAsBytes(normalized.wav);
 
       String effectiveLanguage = language ?? this.language;
       if (effectiveLanguage == 'multi') {
@@ -54,20 +83,21 @@ class OnDeviceAppleProvider implements ISttProvider {
         final String? result = await _channel.invokeMethod('transcribe', {
           'filePath': tempFile.path,
           'language': effectiveLanguage,
+          'useSpeechAnalyzer': await (useSpeechAnalyzer ?? AppleSpeechAnalyzerGate.useNewEngine)(),
         });
 
         if (result == null || result.isEmpty) {
-          return null;
+          return SttTranscriptionResult(audioEndSeconds: audioOffsetSeconds + normalized.duration);
         }
 
-        final duration = audioData.lengthInBytes / 32000.0;
+        final duration = normalized.duration;
         final filteredText = _qualityGate.filter(
           result,
           audioData: audioData,
         );
         if (filteredText == null) {
           CustomSttLogService.instance.warning('OnDeviceApple', 'Dropped low-quality local transcript: $result');
-          return null;
+          return SttTranscriptionResult(audioEndSeconds: audioOffsetSeconds + duration);
         }
 
         CustomSttLogService.instance.info(
@@ -76,6 +106,7 @@ class OnDeviceAppleProvider implements ISttProvider {
         );
 
         return SttTranscriptionResult(
+          audioEndSeconds: audioOffsetSeconds + duration,
           segments: [
             SttSegment(text: filteredText, start: audioOffsetSeconds, end: audioOffsetSeconds + duration, speakerId: 0),
           ],
@@ -87,6 +118,11 @@ class OnDeviceAppleProvider implements ISttProvider {
         }
       }
     } catch (e) {
+      if (e is PlatformException && ['UNAUTHORIZED', 'UNAVAILABLE', 'INVALID_ARGS'].contains(e.code)) {
+        final details = e.details;
+        final status = details is Map ? details['status'] as String? : null;
+        throw LocalSttFailure(status ?? e.code.toLowerCase(), canProbeRecovery: e.code != 'INVALID_ARGS');
+      }
       CustomSttLogService.instance.error('OnDeviceApple', 'Transcription error: $e');
       rethrow; // Keep failed/timed-out audio in the polling buffer for retry.
     }

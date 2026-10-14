@@ -11,6 +11,7 @@ import json
 from database import memory_ledger, review_store as store
 from database.review_field_states import read_field_state, write_field_state
 from database.read_boundary import parse_payload_strict
+from models.transcript_segment import legacy_conversation_segment_id
 from models.review import ReviewChange, ChangeRef
 from models.client_processing import PROJECTION_FAMILY_FIELDS
 from utils.conversations.transcript_hash import transcript_sha256_for_binding
@@ -255,7 +256,7 @@ def edit_user_segment(uid, conversation_id, segment_id, text, *, firestore_clien
             (
                 (i, segment)
                 for i, segment in enumerate(current.get('transcript_segments') or [])
-                if segment.get('id') == segment_id
+                if (segment.get('id') or legacy_conversation_segment_id(conversation_id, i)) == segment_id
             ),
             None,
         )
@@ -270,7 +271,9 @@ def edit_user_segment(uid, conversation_id, segment_id, text, *, firestore_clien
         item = SimpleNamespace(
             kind='spelling', source_ref='conversations/' + conversation_id + '#' + segment_id, quote=before
         )
-        context = build_context(item, question_source(item, {'conversations/' + conversation_id: current}))
+        display = deepcopy(current)
+        display['transcript_segments'][index]['id'] = segment_id
+        context = build_context(item, question_source(item, {'conversations/' + conversation_id: display}))
         change = ReviewChange(
             change_id=change_id,
             kind='other',
@@ -290,6 +293,8 @@ def edit_user_segment(uid, conversation_id, segment_id, text, *, firestore_clien
         )
         correction = dict(
             segment_id=segment_id,
+            legacy_anchor=not bool(segment.get('id')),
+            conversation_id=conversation_id,
             segment_index=index,
             start=segment.get('start'),
             before=before,

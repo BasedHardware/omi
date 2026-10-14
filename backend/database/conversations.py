@@ -20,7 +20,7 @@ from models.client_processing import PROJECTION_FAMILY_FIELDS
 from models.conversation_enums import ConversationStatus, PostProcessingModel, PostProcessingStatus
 from models.conversation_photo import ConversationPhoto
 from models.capture_window_proof import CaptureWindowProof
-from models.transcript_segment import TranscriptSegment
+from models.transcript_segment import TranscriptSegment, legacy_conversation_segment_id
 from utils import encryption
 from utils.conversations.fragment_visibility import is_completed_rule_discard, is_user_curated
 from utils.conversations.transcript_hash import (

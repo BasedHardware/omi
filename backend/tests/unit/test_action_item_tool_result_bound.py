@@ -68,6 +68,7 @@ _SYS_MODULE_NAMES = [
     "utils.retrieval",
     "utils.retrieval.agentic",
     "utils.retrieval.chat_scope",
+    "utils.retrieval.turn_refs",
     "utils.messaging",
     "utils.messaging.undo",
     "utils.messaging.projection",
@@ -121,6 +122,7 @@ _chat_scope.chat_scope_from_config = _chat_scope_from_config
 
 _mod("utils.messaging.projection").surface_runtime = types.SimpleNamespace(get=lambda: None)
 _load("utils.messaging.turn_context", "utils/messaging/turn_context.py")
+_load("utils.retrieval.turn_refs", "utils/retrieval/turn_refs.py")
 
 ai = _load("utils.retrieval.tools.action_item_tools", "utils/retrieval/tools/action_item_tools.py")
 

@@ -21,6 +21,7 @@ from utils.messaging.memory_privacy import (
     omit_channel_private,
 )
 from utils.retrieval.chat_scope import apply_chat_scope_dates, chat_scope_from_config
+from utils.retrieval.turn_refs import register_record_ref
 from utils.retrieval.memory_evidence import MAX_MEMORY_EVIDENCE_CHARS, format_memory_evidence, render_memory_evidence
 from utils.retrieval.tools.result_bounds import cap_items_for_llm
 from utils.messaging.projection import surface_runtime
@@ -33,6 +34,15 @@ logger = logging.getLogger(__name__)
 # all of them floods the chat model's context, so it freezes or refuses (#4927). Bound how many
 # are handed to the model at once; the most recent are kept.
 MAX_MEMORIES_FOR_LLM = 300
+
+
+def _publish_memory_refs(configurable, memories):
+    channel_items = configurable.get('channel_items')
+    for memory in memories:
+        memory_id = getattr(memory, 'id', None)
+        register_record_ref(configurable, 'memories', memory_id)
+        if memory_id and isinstance(channel_items, list):
+            channel_items.append({'kind': 'memory', 'id': memory_id, 'title': memory.content[:100]})
 
 
 def _channel_empty_memories(date_info=''):
@@ -346,9 +356,6 @@ def get_memories_tool(
             stamp = stamp.astimezone(timezone.utc)
         date_str = stamp.strftime('%Y-%m-%d %H:%M:%S UTC') if stamp else 'Unknown'
         memory_id = getattr(memory, 'id', None)
-        channel_items = configurable.get('channel_items')
-        if memory_id and isinstance(channel_items, list):
-            channel_items.append({'kind': 'memory', 'id': memory_id, 'title': memory.content[:100]})
         records.append(
             format_memory_evidence(
                 memory.content,
@@ -356,13 +363,17 @@ def get_memories_tool(
                 subject_attribution=getattr(memory, 'subject_attribution', 'unknown'),
             )
         )
-    return render_memory_evidence(
+    included_indices: list[int] = []
+    result = render_memory_evidence(
         records,
         title=title,
         max_chars=MAX_MEMORY_EVIDENCE_CHARS,
         more_available=results_truncated,
         offset=None if scan_truncated else max(offset, 0),
+        included_indices=included_indices,
     )
+    _publish_memory_refs(configurable, [memories[index] for index in included_indices])
+    return result
 
 
 @tool
@@ -524,9 +535,6 @@ def search_memories_tool(
             display_date = _memory_read_date(memory, temporal=effective_view != 'released')
             date_str = format_local_date(display_date, display_tz) if display_date else 'Unknown'
             memory_id = getattr(memory, 'id', None)
-            channel_items = configurable.get('channel_items')
-            if memory_id and isinstance(channel_items, list):
-                channel_items.append({'kind': 'memory', 'id': memory_id, 'title': memory.content[:100]})
             memory_id_prefix = f'memory_id: {memory_id}, ' if memory_id else ''
             suffix = f"{memory_id_prefix}relevance: {score:.2f}, category: {memory.category.value}, date: {date_str}"
             if effective_view != 'released':
@@ -548,9 +556,14 @@ def search_memories_tool(
                 )
             )
 
+        included_indices: list[int] = []
         result = render_memory_evidence(
-            records, title=f"Memories matching '{query}'", max_chars=MAX_MEMORY_EVIDENCE_CHARS
+            records,
+            title=f"Memories matching '{query}'",
+            max_chars=MAX_MEMORY_EVIDENCE_CHARS,
+            included_indices=included_indices,
         )
+        _publish_memory_refs(configurable, [matches[index].memory for index in included_indices])
 
         logger.info(f"🔍 search_memories_tool - Generated result string, length: {len(result)}")
 

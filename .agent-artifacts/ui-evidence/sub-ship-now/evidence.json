@@ -1,0 +1,33 @@
+{
+  "version": 1,
+  "images": [
+    {
+      "file": "001-desktop-macos-saved-waiting-light.png",
+      "platform": "desktop-macos",
+      "description": "Actual ConversationStatusBadge(.locked) rendered in light mode with SwiftUI ImageRenderer; isolated synthetic fixture, no account data",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "002-desktop-macos-saved-waiting-dark.png",
+      "platform": "desktop-macos",
+      "description": "Actual ConversationStatusBadge(.locked) rendered in dark mode with SwiftUI ImageRenderer; isolated synthetic fixture, no account data",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "003-mobile-ios-local-speech-permission.png",
+      "platform": "mobile-ios",
+      "description": "Actual local speech recovery notice with SF Pro, iOS platform and existing localized capture/custody/actions; synthetic UI fixture",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "004-mobile-ios-local-speech-unavailable.png",
+      "platform": "mobile-ios",
+      "description": "Actual local speech recovery notice with SF Pro, iOS platform and existing localized capture/custody/actions; synthetic UI fixture",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    }
+  ]
+}

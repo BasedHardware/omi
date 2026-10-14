@@ -12,6 +12,7 @@ import 'package:omi/backend/preferences.dart';
 import 'package:omi/services/services.dart';
 import 'package:omi/services/siri_integration.dart';
 import 'package:omi/services/account_cutover/account_cutover_runtime.dart';
+import 'package:omi/services/experiments/apple_speech_analyzer_gate.dart';
 import 'package:omi/services/sockets/on_device_apple_provider.dart';
 import 'package:omi/utils/audio/wav_bytes.dart';
 import 'package:omi/utils/hard_secret_detector.dart';
@@ -33,6 +34,10 @@ class DeviceGuidedVoiceIO implements GuidedVoiceIO, GuidedVoiceExperienceIO {
   bool _selectionLocked = false;
   bool _recording = false;
   bool _closed = false;
+  // Engine choice resolved once by preflight and injected into the recognizer
+  // created by prepare(), so a flag change mid-session cannot make the provider
+  // transcribe with a different engine than availability validated.
+  bool? _useSpeechAnalyzer;
   // Non-null while a start() call is awaiting the recorder's own start-up. A stop()
   // that lands in this window can't stop a recorder that isn't running yet, so it
   // defers to start(): once the recorder comes up, start() sees _recording is false
@@ -52,10 +57,17 @@ class DeviceGuidedVoiceIO implements GuidedVoiceIO, GuidedVoiceExperienceIO {
     final prefs = SharedPreferencesUtil();
     _language = prefs.hasSetPrimaryLanguage ? prefs.userPrimaryLanguage : 'en';
     if (_language == 'multi') _language = 'en';
-    final local = Platform.isIOS && await OnDeviceAppleProvider.isOnDeviceAvailable(_language);
+    // Resolve the engine gate once here; the provider created in prepare()
+    // reuses this exact choice instead of re-reading the flag per operation.
+    final analyzer = Platform.isIOS ? await AppleSpeechAnalyzerGate.useNewEngine() : true;
+    final local = Platform.isIOS &&
+        await OnDeviceAppleProvider.isOnDeviceAvailable(_language, useSpeechAnalyzer: () async => analyzer);
     // A slow preflight may finish after recording has been allowed. Never
     // switch its engine after prepare selected the recognizer/cloud path.
-    if (!_selectionLocked && !_closed) _local = local;
+    if (!_selectionLocked && !_closed) {
+      _local = local;
+      _useSpeechAnalyzer = analyzer;
+    }
     return _local || await guidedVoicePreflight();
   }
 
@@ -81,8 +93,15 @@ class DeviceGuidedVoiceIO implements GuidedVoiceIO, GuidedVoiceExperienceIO {
       throw GuidedVoiceFailure(permission.isPermanentlyDenied ? 'permission_permanently_denied' : 'permission_denied');
     }
     // Keep the language/engine selected by preflight: changing to cloud here
-    // would start a recording without checking that transcription path.
-    if (_local) _recognizer = OnDeviceAppleProvider(language: _language);
+    // would start a recording without checking that transcription path. The
+    // pinned engine choice is injected so transcribe() never re-reads the
+    // flag and diverges from what availability validated.
+    if (_local) {
+      _recognizer = OnDeviceAppleProvider(
+        language: _language,
+        useSpeechAnalyzer: () async => _useSpeechAnalyzer ?? true,
+      );
+    }
     _directory = await (await getTemporaryDirectory()).createTemp('omi-introduction-');
     if (_closed) await close();
   }

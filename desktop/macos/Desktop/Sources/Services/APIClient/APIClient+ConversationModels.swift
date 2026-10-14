@@ -521,7 +521,10 @@ struct ServerConversation: Codable, Identifiable, Equatable {
     switch displayState {
     case .titled(let title): return title
     case .processing, .awaitingFirstOpen: return provisionalTitle
-    case .locked: return "Locked"
+    // Matches the badge's waiting copy; rows/header that show the badge skip
+    // the title text so the pill is not duplicated beside itself. Plain-string
+    // callers (Spine tiles, link lists, accessibility) still get honest copy.
+    case .locked: return "Saved and waiting"
     case .failed: return "Failed to process"
     case .untitledRecoverable, .untitledEmpty: return "Untitled"
     }

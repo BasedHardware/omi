@@ -22,6 +22,7 @@ from utils.notifications import (
 )
 from utils.conversations.render import format_local_time, resolve_display_tz
 from utils.retrieval.chat_scope import apply_chat_scope_dates, chat_scope_from_config
+from utils.retrieval.turn_refs import register_record_ref, resolve_edit_ref
 import logging
 
 logger = logging.getLogger(__name__)
@@ -287,14 +288,6 @@ def get_action_items_tool(
         logger.error(f"❌ Error getting action items: {e}", exc_info=True)
         return "Error retrieving action items. Please try again."
 
-    channel_items = configurable.get('channel_items')
-    if isinstance(channel_items, list):
-        channel_items.extend(
-            {'kind': 'task', 'id': item['id'], 'title': item.get('description', 'Task')}
-            for item in action_items or ()
-            if item.get('id')
-        )
-
     action_items_count = len(action_items) if action_items else 0
     logger.info(f"📊 get_action_items_tool - found {action_items_count} action items")
 
@@ -340,9 +333,12 @@ def get_action_items_tool(
     except Exception as tz_error:
         logger.warning(f"get_action_items_tool - timezone lookup failed, formatting in UTC: {tz_error}")
         display_tz, tz_label = timezone.utc, "UTC"
-    result = f"User Action Items ({len(action_items)} shown):\n\n"
+    header = f"User Action Items ({len(action_items)} shown):\n\n"
+    result = header
+    shown = 0
 
     for i, item in enumerate(action_items, 1):
+        previous_result = result
         status = "✅ Completed" if item.get('completed', False) else "⬜ Pending"
         result += f"{i}. [{status}] {item.get('description', 'No description')}\n"
 
@@ -363,8 +359,18 @@ def get_action_items_tool(
             result += f"   From conversation: {item['conversation_id']}\n"
 
         result += "\n"
+        if len(result) > MAX_RESULT_CHARS:
+            result = previous_result
+            results_truncated = True
+            break
+        register_record_ref(configurable, 'tasks', item.get('id'))
+        shown += 1
+        channel_items = configurable.get('channel_items')
+        if item.get('id') and isinstance(channel_items, list):
+            channel_items.append({'kind': 'task', 'id': item['id'], 'title': item.get('description', 'Task')})
 
-    logger.info(f"✅ get_action_items_tool END - returning {len(action_items)} items")
+    result = f"User Action Items ({shown} shown):\n\n" + result[len(header) :]
+    logger.info(f"✅ get_action_items_tool END - returning {shown} items")
     return _bounded_action_items_result(result.strip(), results_truncated)
 
 
@@ -624,6 +630,11 @@ def update_action_item_tool(
         return "Error: User ID not found in configuration"
 
     # Check if action item exists
+    resolved_id, ref_error = resolve_edit_ref(configurable, 'tasks', action_item_id, parameter='action_item_id')
+    if ref_error:
+        return ref_error
+    assert resolved_id is not None
+    action_item_id = resolved_id
     existing_item = action_items_db.get_action_item(uid, action_item_id)
     if not existing_item:
         return f"Error: Action item with ID '{action_item_id}' not found. Please use get_action_items_tool first to get the correct ID."

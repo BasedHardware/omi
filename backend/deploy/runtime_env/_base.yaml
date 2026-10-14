@@ -480,6 +480,8 @@ environment_shared:
     services:
       backend:
         forbidden_env:
+        - DEEPGRAM_SELF_HOSTED_ENABLED
+        - DEEPGRAM_SELF_HOSTED_URL
         - BASIC_TIER_MINUTES_LIMIT_PER_MONTH
         - BASIC_TIER_WORDS_TRANSCRIBED_LIMIT_PER_MONTH
         - BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH
@@ -664,6 +666,9 @@ environment_shared:
             value: '{env}-v1'
             category: memory_rollout
       backend-sync:
+        forbidden_env:
+        - DEEPGRAM_SELF_HOSTED_ENABLED
+        - DEEPGRAM_SELF_HOSTED_URL
         capabilities:
         - conversation.finalize.persisted
         - memory.canonical.mutate
@@ -791,6 +796,9 @@ environment_shared:
             provisional: true
             value: '2592000'
             category: rollout
+          SYNC_LEGACY_FRESH_ENABLED: {value: 'false', category: rollout}
+          SYNC_LEGACY_FRESH_HOURLY_TOKENS: {value: '60', category: reliability}
+          SYNC_LEGACY_FRESH_BURST_TOKENS: {value: '10', category: reliability}
           SYNC_FRESH_MAX_AGE_SECONDS:
             provisional: true
             value: '21600'
@@ -839,6 +847,9 @@ environment_shared:
             value: canonical_memory_atoms
             category: memory_rollout
       backend-sync-backfill:
+        forbidden_env:
+        - DEEPGRAM_SELF_HOSTED_ENABLED
+        - DEEPGRAM_SELF_HOSTED_URL
         secrets:
           GOOGLE_CLIENT_SECRET:
             secret: GOOGLE_CLIENT_SECRET
@@ -950,6 +961,9 @@ environment_shared:
             provisional: true
             value: '2592000'
             category: rollout
+          SYNC_LEGACY_FRESH_ENABLED: {value: 'false', category: rollout}
+          SYNC_LEGACY_FRESH_HOURLY_TOKENS: {value: '60', category: reliability}
+          SYNC_LEGACY_FRESH_BURST_TOKENS: {value: '10', category: reliability}
           SYNC_FRESH_MAX_AGE_SECONDS:
             provisional: true
             value: '21600'
@@ -987,6 +1001,9 @@ environment_shared:
             category: memory_rollout
         provisional: true
       backend-integration:
+        forbidden_env:
+        - DEEPGRAM_SELF_HOSTED_ENABLED
+        - DEEPGRAM_SELF_HOSTED_URL
         secrets:
           GOOGLE_CLIENT_SECRET:
             secret: GOOGLE_CLIENT_SECRET

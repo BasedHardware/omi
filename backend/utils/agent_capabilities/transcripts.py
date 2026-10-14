@@ -9,6 +9,7 @@ from datetime import datetime, timezone
 
 from database import review_store
 from models.agent_refs import cited_value
+from models.transcript_segment import legacy_conversation_segment_id
 
 
 def original_fingerprint(uid, raw):
@@ -98,7 +99,10 @@ def apply_entries(original_segments, corrections):
         if index >= len(segments):
             raise review_store.ReviewConflict('Transcript correction anchor unavailable')
         segment = segments[index]
-        if correction['segment_id'] and correction['segment_id'] not in {segment.get('id'), segment.get('segment_id')}:
+        anchors = {segment.get('id'), segment.get('segment_id')}
+        if correction.get('legacy_anchor') and not segment.get('id') and not segment.get('segment_id'):
+            anchors.add(legacy_conversation_segment_id(correction['conversation_id'], index))
+        if correction['segment_id'] and correction['segment_id'] not in anchors:
             raise review_store.ReviewConflict('Transcript correction anchor changed')
         if segment.get('start') != correction['start']:
             raise review_store.ReviewConflict('Transcript correction anchor changed')

@@ -1495,6 +1495,17 @@
               }
             ]
           },
+          "other_content": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Other Content"
+          },
           "other_label": {
             "anyOf": [
               {
@@ -6915,6 +6926,36 @@
         "title": "ChangeRef",
         "type": "object"
       },
+      "ChannelAvailability": {
+        "description": "Whether this user may link a channel now, and why not. Content-free.",
+        "properties": {
+          "available": {
+            "title": "Available",
+            "type": "boolean"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          },
+          "waitlisted": {
+            "default": false,
+            "title": "Waitlisted",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "available"
+        ],
+        "title": "ChannelAvailability",
+        "type": "object"
+      },
       "ChannelLink": {
         "properties": {
           "channel": {
@@ -7078,6 +7119,14 @@
       },
       "ChannelLinksResponse": {
         "properties": {
+          "availability": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/ChannelAvailability"
+            },
+            "default": {},
+            "title": "Availability",
+            "type": "object"
+          },
           "links": {
             "items": {
               "$ref": "#/components/schemas/ChannelLink"
@@ -17734,6 +17783,13 @@
             "title": "Before",
             "type": "string"
           },
+          "effective_from": {
+            "default": "",
+            "description": "For supersede_memory: optional timezone-aware ISO 8601 time when the cited evidence says the new fact became true. Never invent a time; omit to use apply time.",
+            "maxLength": 40,
+            "title": "Effective From",
+            "type": "string"
+          },
           "evidence": {
             "description": "Fully read owner refs, with segment ids for speech when available. Cited evidence must support this change; do not invent refs or use the old memory itself as retirement support.",
             "items": {
@@ -21371,6 +21427,13 @@
             "default": "",
             "description": "Exact wrong text as it appears in the target, including its capitalization. For spelling, one edit fixes every occurrence of this text.",
             "title": "Before",
+            "type": "string"
+          },
+          "effective_from": {
+            "default": "",
+            "description": "For supersede_memory: optional timezone-aware ISO 8601 time when the cited evidence says the new fact became true. Never invent a time; omit to use apply time.",
+            "maxLength": 40,
+            "title": "Effective From",
             "type": "string"
           },
           "evidence": {

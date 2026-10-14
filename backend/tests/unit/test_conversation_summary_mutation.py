@@ -10,6 +10,7 @@ import pytest
 
 from database import conversations as conversations_db
 from tests.support.transcript_correction_store import install_store, target_updates, read
+from models.transcript_segment import legacy_conversation_segment_id
 
 UID = 'summary-user'
 CONVERSATION_ID = 'summary-conversation'
@@ -220,6 +221,33 @@ def test_segment_edit_invalidates_affected_summary_evidence_in_same_transaction(
         's1': 'New source text',
         's2': 'Unaffected source text',
     }
+
+
+def test_segment_edit_resolves_legacy_segment_with_no_stored_id(monkeypatch):
+    legacy_id = legacy_conversation_segment_id(CONVERSATION_ID, 1)
+    database = install_store(
+        monkeypatch,
+        UID,
+        CONVERSATION_ID,
+        {
+            'data_protection_level': 'standard',
+            'transcript_segments': [{'text': 'First segment, no id'}, {'text': 'Old source text'}],
+            'structured': {'overview': 'Keep this user-visible overview'},
+        },
+    )
+    path = ('users', UID, 'conversations', CONVERSATION_ID)
+    captured = database.rows[path]['transcript_segments']
+    assert conversations_db.update_conversation_segment_text(UID, CONVERSATION_ID, legacy_id, 'New source text') == 'ok'
+    assert database.rows[path]['transcript_segments'] == captured
+    projected = read(database, UID, CONVERSATION_ID)['transcript_segments']
+    assert [segment['text'] for segment in projected] == ['First segment, no id', 'New source text']
+    assert projected[1]['original_text'] == 'Old source text'
+    # A second edit uses the same virtual ID and preserves the original capture.
+    assert (
+        conversations_db.update_conversation_segment_text(UID, CONVERSATION_ID, legacy_id, 'Later source text') == 'ok'
+    )
+    assert database.rows[path]['transcript_segments'] == captured
+    assert read(database, UID, CONVERSATION_ID)['transcript_segments'][1]['text'] == 'Later source text'
 
 
 def test_missing_conversation_summary_edit_does_not_write(monkeypatch):

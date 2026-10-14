@@ -144,7 +144,11 @@ class LinqProvider:
                 reply_to=message_id,
                 link_proof=proof,
                 unlink=command in ('unlink', '/unlink', 'stop', 'unsubscribe'),
-                command='help' if command in ('help', '/help') else ('undo' if command == 'undo' else None),
+                command=(
+                    'help'
+                    if command in ('help', '/help')
+                    else ('new' if command == 'new chat' else 'undo' if command == 'undo' else None)
+                ),
                 attachments=attachments,
             ),
         )
