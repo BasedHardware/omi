@@ -378,3 +378,26 @@ stopped and external effects are reconciled.
   chats no longer need this to recover from the former event-log ceiling.
 - Client link-list reads happen on entry/focus with a 60-second load cache; connect sheets
   poll only with a pending proof, back off to 30 seconds, and pause in the background.
+
+## Shaped context and cache operations
+
+Deploy the generated `chat_context_summary_source` messages index (session id,
+created_at, document name ascending) and wait for readiness before enabling the new
+source reader. No historical data rewrite or new scheduled job is required. Session
+`shaped_context` is encrypted; `shaped_context_revision` and user
+`chat_context_generation` fence concurrent preparation and history mutations.
+Unlink/account wipe removes session state. `/new` starts with an empty summary.
+
+Keep `OMI_CHAT_PROMPT_CACHE_TTL=30m` or unset. GPT-5.6 and the current gateway do not
+support longer explicit TTLs. Verify actual hit rates using daily `llm_usage` surface
+buckets and `chat_agent_turns` children, or the
+`omi_chat_agent_tokens_total{surface,kind}` counters. Input includes cached tokens;
+use cache_read/input for the observed token hit ratio. Zero reported write tokens on
+non-gateway transports means unavailable or zero, not a measured provider write.
+
+Cold existing chats rebuild earlier history in bounded pages/model chunks. This can
+increase first-turn latency; do not infer lost continuity from a timeout. Original
+history stays searchable. Summary failure leaves the checkpoint unchanged, so retry
+cannot silently skip dropped history. Summaries are compact and lossy; retrieve exact
+facts through `search_chat_history`. Cache expiration and epoch changes cause legitimate
+misses. Local synthetic prefix tests establish eligibility, not a production hit rate.

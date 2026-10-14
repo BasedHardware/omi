@@ -192,3 +192,12 @@ backend/utils/messaging/pacing.py
 config/feature-flags.yaml
 firestore.indexes.json
 ```
+
+## Q2 correction
+
+Q2 supersedes item 4's context interpretation: production shaped channel turns consumed
+`channel_events`, so the Q-only forty-event tail still affected model context. The Q2
+implementation replaces this with authoritative cache-aligned message history, rolling
+summary and volatile request data. See `messaging-context-cache-report.md` for evidence
+and the corrected before/after token estimate. Q test results above describe the earlier
+Q commits, not Q2 validation.

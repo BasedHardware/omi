@@ -11,3 +11,7 @@ LATENCY = Histogram(
 QUEUE_AGE = Histogram(
     'omi_messaging_queue_age_seconds', 'Age of claimed inbound', ['channel'], buckets=(1, 5, 30, 60, 300, 900, 1800)
 )
+
+CHAT_TOKENS = Counter(
+    'omi_chat_agent_tokens_total', 'Provider-reported chat input and cache tokens', ['surface', 'kind']
+)

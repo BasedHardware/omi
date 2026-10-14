@@ -36,3 +36,10 @@ Storage authority remains `database/messaging.py`, task codecs/inverses remain i
 `MemoryService`. No adapter can select a different user or accept arbitrary remote URLs
 from tools. Test contracts, transport doubles and the manual live dev listener are under
 `backend/testing/messaging`; executable suites are under `backend/tests/unit`.
+
+Shaped context assembly is owned by `utils/retrieval/shaped_chat.py` and
+`context.py`: shared 10–17-message epochs, encrypted rolling summary before history,
+volatile digest/scope/clock in the final user turn, eligible stable explicit boundaries.
+`database/chat_context.py` owns source paging, generation invalidation and CAS state.
+Channel events remain bounded audit/fence data; only the current runtime event supplements
+authoritative message history. See the Q2 context report for validation and deployment.

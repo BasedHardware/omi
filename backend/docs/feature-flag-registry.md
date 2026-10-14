@@ -364,6 +364,7 @@ and an explicit empty literal renders as `''`.
 | `MEMORY_TYPESENSE_READINESS_REQUIRED` | Require Typesense projection readiness for memory reads | backend | env | closed | — | — | — | — | keep | — | unowned |
 | `MENTOR_PIPELINE` | Per-user cohort mentor dispatch; only cohort is valid — flag false/error or any other value dispatches nothing (legacy lane deleted) | backend | env | closed | — | — | cohort (backend-listen (chart), cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, desktop-backend, gke/backend-listen, gke/pusher, llm-gateway (chart), pusher (chart)) | — | keep | — | dazheng |
 | `OMI_BACKGROUND_FLEX_CAPABLE` | Allow background gateway Flex work | backend | env | closed | true | true | true | — | keep | — | unowned |
+| `OMI_CHAT_PROMPT_CACHE_TTL` | Shaped GPT-5.6 explicit cache TTL; default and currently only supported value 30m. | backend | env | closed | — | — | — | — | keep | — | dazheng |
 | `OMI_IMESSAGE_MAX_SEND_RECEIVE_RATIO` | Durable iMessage send/receive ratio ceiling; default 3, bounded 1 through 5. | backend | env | closed | — | — | {value: '3', category: rollout} | — | keep | — | dazheng |
 | `OMI_IMESSAGE_PROVIDER` | Installed iMessage provider selection; currently linq only. | backend | env | closed | — | — | {value: 'linq', category: rollout} | — | keep | — | dazheng |
 | `OMI_LLM_CHAT_AGENT_ROUTE` | Select managed chat-agent gateway route | backend | env | closed | gateway | gateway (backend-listen (chart), cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, gke/backend-listen, gke/pusher, job/memory-maintenance-job, pusher (chart)) | gateway (backend-listen (chart), cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, gke/backend-listen, job/memory-maintenance-job, pusher (chart)) | — | keep | — | unowned |
@@ -461,6 +462,7 @@ their code default (`fail` tells you which way a missing value resolves).
 - `MEMORY_IMPORT_BODY_STORAGE_MODE` — Select memory import body storage mode (fail: closed)
 - `MEMORY_IMPORT_WRITE_BLOCK_MODE` — Block memory import writes during incident (fail: inverted)
 - `MEMORY_TYPESENSE_READINESS_REQUIRED` — Require Typesense projection readiness for memory reads (fail: closed)
+- `OMI_CHAT_PROMPT_CACHE_TTL` — Shaped GPT-5.6 explicit cache TTL; default and currently only supported value 30m. (fail: closed)
 - `OMI_GEMINI_OVERFLOW_ENABLED` — Enable overflow routing to Gemini (fail: open)
 - `OMI_IMESSAGE_CONTACT_CARD` — Default-off sharing of a preconfigured Linq contact card. (fail: closed)
 - `OMI_LLM_GATEWAY_OBSERVABILITY_LOGS_ENABLED` — Enable gateway observability logs (fail: closed)

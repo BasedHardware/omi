@@ -37,21 +37,22 @@ def terminal(text='Synthetic answer'):
     return 'done: ' + base64.b64encode(json.dumps({'text': text}).encode()).decode() + '\n\n'
 
 
-def test_typing_precedes_cold_session_and_digest(monkeypatch, capsys):
+def test_typing_precedes_cold_session_completion(monkeypatch):
+    from threading import Event
+
     adapter, store, message = setup_turn()
-    started = time.monotonic()
-    first_typing = []
+    feedback = Event()
+    order = []
     original = store.session
 
     def cold_session(*args):
-        time.sleep(0.08)  # deliberate DB latency; never production code
+        assert feedback.wait(timeout=2), 'Feedback must arrive while context preparation is blocked'
+        order.append('context_ready')
         return original(*args)
 
-    async def cold_digest(*args):
-        await asyncio.sleep(0.08)
-
     async def typing(*args):
-        first_typing.append(time.monotonic() - started)
+        order.append('typing')
+        feedback.set()
 
     def turn(*args, **kwargs):
         async def stream():
@@ -60,13 +61,10 @@ def test_typing_precedes_cold_session_and_digest(monkeypatch, capsys):
         return stream()
 
     monkeypatch.setattr(store, 'session', cold_session)
-    monkeypatch.setattr(gateway_module, 'append_digest', cold_digest)
     monkeypatch.setattr(adapter, 'typing', typing)
     gateway = Gateway(adapter, store=store, turn=turn, admission=lambda uid, channel: None, rate_limit=lambda uid: None)
-    asyncio.run(gateway.process(store.enqueue(message)))
-    with capsys.disabled():
-        print(f'QA timing first_typing_ms={first_typing[0]*1000:.1f} total_ms={(time.monotonic()-started)*1000:.1f}')
-    assert first_typing[0] < 0.08, first_typing
+    assert asyncio.run(gateway.process(store.enqueue(message)))
+    assert order.index('typing') < order.index('context_ready')
 
 
 def test_no_write_callback_then_messages_and_provider_failure_release(monkeypatch):
@@ -89,7 +87,6 @@ def test_no_write_callback_then_messages_and_provider_failure_release(monkeypatc
 
         return stream()
 
-    monkeypatch.setattr(gateway_module, 'append_digest', digest)
     gateway = Gateway(adapter, store=store, turn=turn, admission=lambda uid, channel: None, rate_limit=lambda uid: None)
 
     async def run():
@@ -139,7 +136,6 @@ def test_slow_memory_undo_does_not_block_next_turn_and_second_tap_noop(monkeypat
 
         return stream()
 
-    monkeypatch.setattr(gateway_module, 'append_digest', digest)
     monkeypatch.setattr(undo.UndoStore, 'undo', inverse)
     monkeypatch.setattr(undo.UndoStore, 'mark_edited', lambda *args: None)
     monkeypatch.setattr(
@@ -257,8 +253,6 @@ def test_reminder_tool_runs_from_channel_projection_and_emits_task_receipt(monke
     async def digest(*args):
         pass
 
-    monkeypatch.setattr(gateway_module, 'append_digest', digest)
-
     def turn(*args, **kwargs):
         async def stream():
             runtime = surface_runtime.get()
@@ -301,8 +295,6 @@ def test_undo_failure_sends_error_and_next_message_runs(monkeypatch):
 
     async def digest(*args):
         pass
-
-    monkeypatch.setattr(gateway_module, 'append_digest', digest)
 
     def turn(*args, **kwargs):
         async def stream():
@@ -438,7 +430,6 @@ def test_typing_outage_and_stream_without_terminal_do_not_silence_chat(monkeypat
         return stream()
 
     monkeypatch.setattr(adapter, 'typing', typing)
-    monkeypatch.setattr(gateway_module, 'append_digest', digest)
     gateway = Gateway(adapter, store=store, turn=turn, admission=lambda uid, channel: None, rate_limit=lambda uid: None)
 
     async def run():
@@ -496,7 +487,6 @@ def test_verified_http_message_callback_message_sequence(monkeypatch):
 
         return stream()
 
-    monkeypatch.setattr(gateway_module, 'append_digest', digest)
     gateway = Gateway(adapter, store=store, turn=turn, admission=lambda uid, channel: None, rate_limit=lambda uid: None)
 
     completed = asyncio.Event()
@@ -620,7 +610,6 @@ def test_backlog_release_preserves_fifo_and_original_message_clock(monkeypatch):
 
         return stream()
 
-    monkeypatch.setattr(gateway_module, 'append_digest', digest)
     gateway = Gateway(adapter, store=store, turn=turn, admission=lambda uid, channel: None, rate_limit=lambda uid: None)
     paths = [
         store.enqueue(replace(message, provider_message_id=str(i), text=str(i), received_at=at))
@@ -642,8 +631,9 @@ def test_backlog_release_preserves_fifo_and_original_message_clock(monkeypatch):
 
     asyncio.run(run())
     assert seen == list(zip(['0', '1', '2'], times))
-    assert 'Confirmed 0' in str(contexts[1])
-    assert 'Confirmed 1' in str(contexts[2])
+    assert contexts[1] == ({'role': 'user', 'content': '1'},)
+    assert contexts[2] == ({'role': 'user', 'content': '2'},)
+    assert 'Confirmed 0' in str(store.logs) and 'Confirmed 1' in str(store.logs)
     replies = [call[2]['json']['text'] for call in adapter.transport.calls if call[1].endswith('/sendMessage')]
     assert replies == ['Confirmed 0', 'Confirmed 1', 'Confirmed 2']
 
@@ -779,7 +769,6 @@ def test_busy_lease_does_not_wake_its_own_head(monkeypatch):
 
         return stream()
 
-    monkeypatch.setattr(gateway_module, 'append_digest', digest)
     gateway = Gateway(
         adapter, store=store, turn=turn, admission=lambda uid, channel: None, rate_limit=lambda uid: None, wake=wake
     )
@@ -874,7 +863,6 @@ def test_prelease_admission_failure_does_not_poison_fifo_head(monkeypatch):
 
         return stream()
 
-    monkeypatch.setattr(gateway_module, 'append_digest', digest)
     gateway = Gateway(adapter, store=store, turn=turn, admission=admission, rate_limit=lambda uid: None)
     first = store.enqueue(message)
     second = store.enqueue(replace(message, provider_message_id='second'))
@@ -945,7 +933,6 @@ def test_merged_failed_send_then_undo_callback_then_next_message(monkeypatch):
     monkeypatch.setattr(adapter, 'send', send)
     monkeypatch.setattr(adapter, 'typing', typing)
     monkeypatch.setattr(store, 'release', release)
-    monkeypatch.setattr(gateway_module, 'append_digest', digest)
     gateway = Gateway(adapter, store=store, turn=turn, admission=lambda uid, channel: None, rate_limit=lambda uid: None)
     failed = store.enqueue(message)
     callback = store.enqueue(replace(message, provider_message_id='undo', command='undo', callback_id='callback'))

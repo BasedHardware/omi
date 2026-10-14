@@ -560,7 +560,7 @@ _add(
 )
 _add(
     DriverEntry(
-        'database.chat.get_cache_aligned_messages',
+        'database.chat_context_reads.get_cache_aligned_messages',
         base={'uid': UID},
         domains={'app_id': [None, 'app-1'], 'chat_session_id': [None, 'sess-1']},
     )
@@ -2791,5 +2791,26 @@ _add(
             'database.memories.unlock_all_memories',
         ),
         reason='Shared batch mechanics and bounded projection exercised by upgrade/reset unlock drivers',
+    )
+)
+
+
+from database.chat_context import ChatContextStore
+
+_context_store = ChatContextStore(messaging=_messaging_store)
+
+
+def _context_boundary(client, combo, trial):
+    client.documents['users/' + UID] = {'name': 'synthetic'}
+    client.documents['users/' + UID + '/chat_sessions/session'] = {'id': 'session'}
+    client.documents['users/' + UID + '/messages/boundary'] = {'chat_session_id': 'session', 'created_at': T0}
+
+
+_add(
+    DriverEntry(
+        'database.chat_context.ChatContextStore.source_page',
+        base={'self': _context_store, 'uid': UID, 'session_id': 'session', 'before_id': 'boundary'},
+        domains={'limit': [1, 40], 'cursor': [None, {'id': 'previous', 'at': T0.isoformat()}]},
+        setup=_context_boundary,
     )
 )

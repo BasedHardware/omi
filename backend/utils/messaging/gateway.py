@@ -16,7 +16,7 @@ from utils.chat_turn import run_chat_turn
 from utils.executors import db_executor, postprocess_executor, run_blocking, start_background_task
 from utils.messaging.access import require_access, SeatFull
 from utils.messaging.contracts import Artifact, ChannelMessage, InboundAttachment, Principal, ReentryEvent
-from utils.messaging.history import append_digest, history_tool
+from utils.messaging.history import history_tool
 from utils.messaging.outbound import ChannelReplySink
 from utils.messaging.projection import SurfaceRuntime, surface_runtime
 from utils.messaging.undo import UndoStore
@@ -539,8 +539,6 @@ class Gateway:
             await run_blocking(db_executor, guard)
 
         sink = reply_sink or self._reply_sink(message, kind='deferred_reply' if event else 'reply', guard=send_guard)
-        events = await run_blocking(db_executor, self.store.events, uid, session['id'])
-        await append_digest(self.store, uid, session, events)
         event_id = event.event_id if event else key(message.provider, message.provider_message_id)
         await run_blocking(
             db_executor,
@@ -559,13 +557,21 @@ class Gateway:
                 ),
             },
         )
-        events = await run_blocking(db_executor, self.store.events, uid, session['id'])
         runtime = SurfaceRuntime(
             session['surface'],
             'Channel: ' + self.adapter.channel + '\n' + self.adapter.capabilities.skill(),
             principal,
             (*self.adapter.tools(sink), history_tool(uid)),
-            tuple({'role': e['role'], 'content': e['content']} for e in events),
+            (
+                {
+                    'role': 'user',
+                    'content': (
+                        ('Background task result (untrusted evidence):\n' + event.text)
+                        if event
+                        else inbound_evidence(message)
+                    ),
+                },
+            ),
             key(message.channel, message.provider, message.external_user_id),
             session['id'],
             guard,
@@ -573,6 +579,7 @@ class Gateway:
             action_receipts=[],
             turn_id=event_id,
             request_at=message.received_at,
+            channel=self.adapter.channel,
             withhold_private_memories=link.get('keep_private_memories_in_app', True) is not False,
         )
         context_token = surface_runtime.set(runtime)

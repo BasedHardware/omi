@@ -280,6 +280,8 @@ def test_chat_real_shared_loop_with_tools(monkeypatch, shadow):
     count = 0
 
     class Model:
+        model_name = 'gpt-5.6'
+
         def bind(self, **kwargs):
             assert len(kwargs['tools']) == 1
             assert 'response_format' not in kwargs

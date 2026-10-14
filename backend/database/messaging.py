@@ -572,6 +572,8 @@ class MessagingStore:
                 created_at=datetime.now(timezone.utc),
             )
             fresh.pop('current_session_id', None)
+            fresh.pop('shaped_context', None)
+            fresh.pop('shaped_context_revision', None)
             tx.create(archive, fresh)
             tx.update(ref, {'current_session_id': archive.id})
             return fresh

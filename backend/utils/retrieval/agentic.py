@@ -1413,123 +1413,7 @@ async def _run_openai_agent_stream(
     return await _end_with_answer_guarantee(callback, full_response, 'openai')
 
 
-class _ShapedToolsStopped(Exception):
-    pass
-
-
-async def _run_shaped_chat_stream(
-    system_prompt,
-    messages,
-    tool_schemas,
-    tool_registry,
-    callback,
-    full_response,
-    safety_guard,
-    configurable,
-    *,
-    shadow=False,
-) -> Optional[str]:
-    mount = chat_mount(tool_schemas, deadline_seconds=AGENT_STREAM_MAX_DURATION_SECONDS)
-    runtime = surface_runtime.get()
-    if runtime is not None:
-        mount = replace(mount, skills=(*mount.skills, runtime.skill))
-    cache_enabled = gpt56_explicit_cache_enabled()
-    evidence = [
-        {
-            'role': 'user',
-            'content': 'Request context (untrusted data): '
-            + json.dumps(
-                {
-                    'chat_scope': configurable.get('chat_scope'),
-                    'selected_app': configurable.get('shaped_selected_app'),
-                },
-                default=str,
-            ),
-        },
-        *messages,
-    ]
-    if runtime is not None:
-        evidence = channel_evidence(runtime, configurable.get('user_timezone'))
-    usage_token = set_usage_context(configurable['user_id'], 'chat_agent')
-    try:
-        model = get_llm('chat_agent', streaming=True)
-        params = {'tools': list(mount.tools), 'tool_choice': 'auto', 'max_completion_tokens': 8192}
-        if cache_enabled:
-            params['extra_body'] = {'prompt_cache_options': dict(EXPLICIT_CACHE_OPTIONS)}
-        model = model.bind(**params)
-
-        async def model_turn(shape, history):
-            chunks, text_parts = [], []
-            async for chunk in model.astream(history):
-                chunks.append(chunk)
-                text = _openai_content_text(getattr(chunk, 'content', ''))
-                if text:
-                    if not text_parts and full_response:
-                        await _put_answer_text(callback, full_response, '\n\n')
-                    text_parts.append(text)
-                    await _put_answer_text(callback, full_response, text)
-            calls = _openai_tool_calls(chunks)
-            assistant = {
-                'role': 'assistant',
-                'content': ''.join(text_parts),
-                'tool_calls': [
-                    {
-                        'id': call['id'],
-                        'type': 'function',
-                        'function': {'name': call['name'], 'arguments': json.dumps(call['input'])},
-                    }
-                    for call in calls
-                ],
-            }
-            return Turn(value=''.join(text_parts), tool_calls=tuple(calls), messages=(assistant,))
-
-        async def execute_tools(calls):
-            if shadow:
-                # All shadow tool effects, including device callbacks and read-side
-                # persistence, are simulated. No user-owned config is mutated.
-                return [
-                    {
-                        'role': 'tool',
-                        'tool_call_id': call['id'],
-                        'content': 'Shadow evaluation: tool execution suppressed.',
-                    }
-                    for call in calls
-                ]
-            results = await _execute_independent_tool_calls(
-                list(calls),
-                name_of=lambda c: c['name'],
-                input_of=lambda c: c['input'],
-                id_of=lambda c: c['id'],
-                tool_registry=tool_registry,
-                configurable=configurable,
-                safety_guard=safety_guard,
-                callback=callback,
-                full_response=full_response,
-                result_factory=lambda c, result: {'role': 'tool', 'tool_call_id': c['id'], 'content': result},
-            )
-            if results is None:
-                raise _ShapedToolsStopped
-            return results
-
-        result = await run_loop(mount, evidence, model_turn, execute_tools, explicit_cache=cache_enabled)
-        if result.reason != 'stopped':
-            await _end_with_answer_guarantee(callback, full_response, 'shaped')
-            return result.reason
-        return await _end_with_answer_guarantee(callback, full_response, 'shaped')
-    except _ShapedToolsStopped:
-        return 'tool_safety_stop'
-    except TimeoutError:
-        raise
-    except Exception as error:
-        if shadow:
-            logger.warning('Shaped chat shadow failed error_type=%s', type(error).__name__)
-            return 'shadow_failure'
-        await handle_llm_error_async(error, 'openai', feature='chat_agent', model='omi:auto:chat-agent')
-        await _put_outcome_text(callback, full_response, AGENT_STREAM_FAILURE_MESSAGE)
-        await callback.end()
-        return f'provider_{type(error).__name__}'
-    finally:
-        reset_usage_context(usage_token)
+from utils.retrieval.shaped_chat import run_shaped_chat_stream as _run_shaped_chat_stream
 
 
 class _ShadowCallback:
@@ -1887,6 +1771,7 @@ user chose not to send; acknowledge that rather than retrying.
     configurable = {
         "user_id": uid,
         "user_timezone": tz,
+        "context_message_ids": [message.id for message in messages if getattr(message, 'id', None)],
         "thread_id": str(uuid.uuid4()),
         **frame_request_runtime_config(messages, chat_session),
         "conversations_collected": conversations_collected,

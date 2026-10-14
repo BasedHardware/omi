@@ -4,6 +4,12 @@ from database.firestore_query_types import FieldIndexRequirement, FirestoreIndex
 
 MESSAGING_INDEX_REQUIREMENTS = (
     FirestoreIndexRequirement(
+        'chat_context_summary_source',
+        'messages',
+        'COLLECTION',
+        tuple(FirestoreIndexField(name, order='ASCENDING') for name in ('chat_session_id', 'created_at', '__name__')),
+    ),
+    FirestoreIndexRequirement(
         'messaging_inbox_fifo',
         'inbox',
         'COLLECTION',

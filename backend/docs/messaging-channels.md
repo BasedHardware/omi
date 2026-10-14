@@ -130,7 +130,7 @@ re-entry; recovery must reconcile a reply event whose external delivery was inte
 | `channel_identities/{identity_id}/inbox/{dedup_id}` | Encrypted normalized payload, created_at, pending/running/done. Done removes the payload. |
 | `users/{uid}/chat_sessions/{surface_hash}` | Existing session fields plus surface, channel, channel_link_id, link_generation, current_session_id for rotated sessions; reserved plugin_id `__channel__` keeps default app histories separate. |
 | `users/{uid}/messages/{id}` | Existing chat fields plus surface, channel_link_id, data_usage=`user_serving_only`; channel text is encrypted using existing per-user encryption. |
-| `users/{uid}/chat_sessions/{id}/channel_events/{sequence}` | Encrypted bounded awareness tail: id, kind, at, role, content; numeric sequence plus separate deterministic content-free fences. Digests and re-entry evidence are hidden from message listing. |
+| `users/{uid}/chat_sessions/{id}/channel_events/{sequence}` | Encrypted bounded awareness tail: id, kind, at, role, content; numeric sequence plus separate deterministic content-free fences. Re-entry evidence is hidden from message listing; this log is not shaped model context. |
 | `channel_capacity/{channel}` / `members/{uid}` | Initialized count of distinct linked users and each member's linked identity IDs; transactional seat admission and release. |
 | `users/{uid}/channel_waitlist/{channel}` | Content-free waitlist with updated_at and expires_at; no proactive notification. |
 | `users/{uid}/channel_turn_leases/{surface_hash}` | token and created_at; fail-closed serialization. |
@@ -172,24 +172,44 @@ merges the selected channel sessions into the session list; no channel transcrip
 silently mirrored into the default app conversation. Linking visibility does not grant
 another account access. Existing app sessions logically have `surface=app`.
 
-A returning surface appends hidden activity from other sessions since its last event.
-Activity comes from the existing decrypted message iterator, paging until the surface
-watermark (100 messages per page). Under 800 tokens it is verbatim; larger activity uses a cheap `chat_graph` model
-through a one-turn shaped mount. The resulting digest is persisted once. It never edits
-an earlier event. The stable mount prefix and all earlier serialized model messages
-remain byte-identical across a surface switch. Enabled linked app turns use the same
-append-only event log; the default mobile history-window contract is unchanged when off.
-`search_chat_history` searches across history, returning the newest 20 matches.
-These paginated scans are not a new full-text index; large accounts may need an index.
+Shaped app, Telegram and iMessage turns load authoritative messages through the same
+cache-aligned 10–17 visible-message window. Its start advances by eight messages;
+within an epoch, the history prefix remains stable. Channel runtime evidence contributes
+only the current request (including forwarded/media evidence), never the event log.
 
-Surface events provide fences, digest watermarks and awareness; authoritative model
-chat messages remain in the shared chat database. Awareness reads at most forty events.
-New events store a numeric sequence, encrypted payload and deterministic hashed fence ID;
-pruning keeps forty events without deleting replay fences. Legacy events receive a
-one-time fence/sequence migration before pruning, so old reentries cannot replay. Large
-awareness content is clipped; authoritative messages are preserved. The former 500 KB
-hard failure is removed. `/new` or `new chat` rotates the surface session pointer under
-its lease, preserving owner-scoped older history and creating a fresh message session.
+When the window advances, owner/session-scoped source pages feed a cheap `chat_graph`
+rolling summary, capped at 2,400 characters. The encrypted summary lives on the session
+and appears immediately after the system prefix. Original messages remain reachable via
+`search_chat_history`; summarization is lossy, so exact details should be retrieved.
+A cold existing session may need multiple bounded summary calls before its first answer.
+Reported, cleared and revised messages increment a generation in the same write;
+derived summaries rebuild from surviving source rows. CAS revisions and link/deletion
+checks prevent stale writes from resurrecting removed sessions.
+
+Current activity elsewhere is sampled from at most twenty messages and capped at 3,200
+characters. It is retained as encrypted volatile session state, not appended to permanent
+events. Activity, app request scope and the original channel request clock appear only
+inside the final user message. The app's existing current datetime stays there too.
+
+GPT-5.6 explicit caching marks the system block and eligible stable history boundaries.
+Previously marked history endpoints remain marked as the tail grows, enabling reads
+across turns within an epoch. Prefixes below the 1,024-token minimum are not expected to
+hit. The provider examines its first two and latest fifty explicit boundaries and can
+write at most four caches per call; the bounded history stays within that lookback.
+`OMI_CHAT_PROMPT_CACHE_TTL` defaults to `30m`; the current gateway/provider supports only
+that value. Other resolved models omit these GPT-5.6 options.
+
+Surface events remain an encrypted forty-event audit/awareness tail with numeric sequences
+and separate deterministic content-free fences. Pruning does not remove replay fences.
+Legacy events receive a one-time sequence/fence migration before pruning. They are no
+longer shaped model context. `/new` or `new chat` starts a fresh surface session without
+copying summary state, preserving owner-scoped older history.
+
+`chat_agent` usage records input, cache-read and cache-write tokens for app/Telegram/iMessage
+in daily feature/model and surface/model buckets plus hashed per-turn child documents.
+Streaming gateway receipts preserve cache-write fields that LangChain otherwise drops.
+Prometheus `omi_chat_agent_tokens_total{surface,kind}` exposes input/cache_read/cache_write;
+these labels never contain uid, session or content.
 
 
 ## Tool and workspace compatibility

@@ -450,42 +450,7 @@ def get_messages(
     return messages
 
 
-def get_cache_aligned_messages(
-    uid: str,
-    *,
-    app_id: Optional[str] = None,
-    chat_session_id: Optional[str] = None,
-) -> List[Dict[str, Any]]:
-    """Read a cache-aligned, scope-safe chat history in newest-first order.
-
-    Count the same visibility predicate as the page reader, preserving the
-    append epoch when historical automatic rows are present. Provenance can be
-    serialized JSON, so aggregates cannot express this exclusion: project only
-    visibility fields, without loading message text or attachments.
-    """
-    user_ref = db.collection('users').document(uid)
-    scoped_ref = user_ref.collection('messages')
-    if chat_session_id:
-        scoped_ref = scoped_ref.where(filter=FieldFilter('chat_session_id', '==', chat_session_id))
-    else:
-        scoped_ref = scoped_ref.where(filter=FieldFilter('plugin_id', '==', app_id))
-
-    visibility_fields = ['reported', 'sender', 'metadata', 'message_source', 'type', 'content_blocks']
-    visible_total = 0
-    for document in scoped_ref.select(visibility_fields).stream():
-        message = _typed_doc(document)
-        if message.get('reported') is not True and not is_automatic_chat_message(message):
-            visible_total += 1
-    visible_limit = cache_aligned_history_limit(visible_total)
-    if visible_limit == 0:
-        return []
-
-    return get_messages(
-        uid,
-        limit=visible_limit,
-        app_id=app_id,
-        chat_session_id=chat_session_id,
-    )
+from database.chat_context_reads import get_cache_aligned_messages
 
 
 @prepare_for_read(decrypt_func=_prepare_message_for_read)
@@ -638,7 +603,10 @@ def report_message(uid: str, msg_doc_id: str) -> Dict[str, str]:
     user_ref = db.collection('users').document(uid)
     message_ref = user_ref.collection('messages').document(msg_doc_id)
     try:
-        message_ref.update({'reported': True})
+        batch = db.batch()
+        batch.update(message_ref, {'reported': True})
+        batch.update(user_ref, {'chat_context_generation': firestore.Increment(1)})
+        batch.commit()
         return {"message": "Message reported"}
     except Exception as e:
         logger.error(f"Update failed: {e}")
@@ -689,6 +657,7 @@ def batch_delete_messages(
             break
 
         batch = db.batch()
+        batch.update(parent_doc_ref, {'chat_context_generation': firestore.Increment(1)})
         for doc in docs_list:
             batch.delete(doc.reference)
         batch.commit()
@@ -1346,6 +1315,7 @@ def _apply_existing_message_revision(
         if content_blocks is not None:
             patch['content_blocks'] = content_blocks
         write_transaction.update(message_ref, patch)
+        write_transaction.update(message_ref.parent.parent, {'chat_context_generation': firestore.Increment(1)})
         existing.update(patch)
         existing['_revision_updated'] = True
         return existing
@@ -1496,6 +1466,7 @@ def delete_messages(uid: str, app_id: Optional[str] = None, session_id: Optional
             )
 
         batch = db.batch()
+        batch.update(user_ref, {'chat_context_generation': firestore.Increment(1)})
         for doc in docs:
             delete_option = db.write_option(last_update_time=doc.update_time)
             batch.delete(col.document(doc.id), option=delete_option)
