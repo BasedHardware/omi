@@ -218,7 +218,14 @@ BENCH_NS=prod-omi-backend
 BENCH_ID="diarizer-bench-${BENCH_SHA:0:12}-$(date -u +%H%M%S)"
 BENCH_DIR=$(mktemp -d)
 # Select a ready batch replica from this deployment; save metadata, never env.
-kubectl --context="$BENCH_CONTEXT" -n "$BENCH_NS" get pods -o json > "$BENCH_DIR/pods.json"
+kubectl --context="$BENCH_CONTEXT" -n "$BENCH_NS" get pods -o json | python3 -c '
+import json,sys
+pods=json.load(sys.stdin)["items"]
+print(json.dumps({"items":[{"metadata":{k:p["metadata"][k] for k in
+    ("name","uid","ownerReferences","deletionTimestamp") if k in p["metadata"]},
+    "spec":{"nodeName":p["spec"].get("nodeName")},
+    "status":{k:p["status"][k] for k in ("podIP","containerStatuses") if k in p["status"]}}
+    for p in pods]}))' > "$BENCH_DIR/pods.json"
 python3 - "$BENCH_DIR/pods.json" > "$BENCH_DIR/target.json" <<'PY'
 import json, sys
 pods = json.load(open(sys.argv[1]))['items']
@@ -303,7 +310,7 @@ time, not synchronized CUDA-event GPU time. No stage durations are exposed.
 Pinned [pyannote.audio 4.0.3 SpeakerDiarization source](https://github.com/pyannote/pyannote-audio/blob/4.0.3/src/pyannote/audio/pipelines/speaker_diarization.py)
 performs overlapping-window segmentation (speech/overlap activity, not a separate
 Omi VAD endpoint), batched internal embeddings, clustering, and reconstruction.
-The [clustering implementation](https://github.com/pyannote/pyannote-audio/tree/4.0.3/src/pyannote/audio/pipelines/clustering)
+The [clustering implementation](https://github.com/pyannote/pyannote-audio/blob/4.0.3/src/pyannote/audio/pipelines/clustering.py)
 uses NumPy/SciPy-style CPU operations; moving it to CPU is not a new optimization.
 Omi then makes up to three separate whole-window WeSpeaker calls per speaker
 (0.5–10s overlap-free clips) for canonical centroids. Interval cutting, exclusive
