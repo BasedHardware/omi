@@ -160,3 +160,44 @@ def test_browser_login_tail_persists_oauth_so_chat_is_reachable(config_path, mon
     fresh = cfg.load().get_profile("default")
     gate_blocks = bool(fresh.auth_method != "oauth" or os.environ.get(_cfg.ENV_API_KEY))
     assert gate_blocks is False, "chat auth gate would reject the browser-login profile"
+
+
+# ---- refresh-with-rotation preserves dev key -------------------------------
+
+
+def test_refresh_with_rotation_preserves_api_key_on_dual_credential_profile(config_path, respx_mock) -> None:
+    """Firebase refresh-token rotation must not wipe the minted developer API key.
+
+    When Firebase issues a fresh refresh token alongside the new ID token,
+    the profile must preserve its ``api_key`` so subsequent calls to
+    ``/v1/dev/*`` continue to succeed rather than regressing mid-session.
+    """
+    store_oauth_session_with_dev_key(
+        "default",
+        api_key="omi_dev_minted",
+        id_token="fb_id_old",
+        refresh_token="fb_refr_old",
+        expires_at=time.time() - 100,
+        api_base=API_BASE,
+    )
+    respx_mock.post(oauth._FIREBASE_REFRESH_URL).respond(
+        json={
+            "id_token": "fb_id_new",
+            "refresh_token": "fb_refr_new",
+            "expires_in": "3600",
+        }
+    )
+    new_tok = oauth.refresh_id_token("default")
+    assert new_tok == "fb_id_new"
+
+    reloaded = cfg.load().get_profile("default")
+    assert reloaded.auth_method == "oauth"
+    assert reloaded.api_key == "omi_dev_minted"
+    assert reloaded.id_token == "fb_id_new"
+    assert reloaded.refresh_token == "fb_refr_new"
+
+    # Verify client routes /v1/dev/* with the preserved api_key
+    route = respx_mock.get("/v1/dev/user/memories").respond(json=[])
+    with OmiClient(reloaded) as client:
+        client.get("/v1/dev/user/memories")
+    assert route.calls.last.request.headers["Authorization"] == "Bearer omi_dev_minted"
