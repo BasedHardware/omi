@@ -1241,12 +1241,6 @@ OMI_ACTION_ITEM_REFRESH_TOTAL = Counter(
     ['outcome'],
 )
 
-OMI_ACTION_ITEM_EXTRACTION_DROPPED_TOTAL = Counter(
-    'omi_action_item_extraction_dropped_total',
-    'Model-extracted tasks rejected by conservative guards: other_owner|status_statement',
-    ['reason'],
-)
-
 # Conversation shape at first durable completed persist. source is a closed
 # 6-value vocabulary (live/sync/import/integration/desktop/unknown). Sync
 # children are emitted from backend-sync, which is not scraped today; the
