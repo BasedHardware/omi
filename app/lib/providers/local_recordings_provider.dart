@@ -140,50 +140,31 @@ class LocalRecordingsProvider extends ChangeNotifier {
     return LocalRecordingState.pending;
   }
 
-  Future<void>? _refreshInFlight;
-  bool _refreshAgain = false;
+  int _scanGeneration = 0;
 
   /// Rescan the recordings directory and rebuild [recordings]. Cheap and
   /// idempotent — call it on app foreground, after a BLE disconnect, etc.
   ///
-  /// Scans never overlap: the listing is async, so two concurrent scans could
-  /// finish out of order and race on the owners file. A call during a scan
-  /// schedules one more scan and completes after it.
-  Future<void> refresh() {
-    final inFlight = _refreshInFlight;
-    if (inFlight != null) {
-      _refreshAgain = true;
-      return inFlight;
-    }
-    final run = () async {
-      try {
-        do {
-          _refreshAgain = false;
-          await _scan();
-        } while (_refreshAgain && !_disposed);
-      } finally {
-        _refreshInFlight = null;
-      }
-    }();
-    _refreshInFlight = run;
-    return run;
-  }
-
-  Future<void> _scan() async {
+  /// The listing is async, so overlapping scans can finish out of order; only
+  /// the newest scan publishes its results or rewrites the owners file.
+  Future<void> refresh() async {
+    final generation = ++_scanGeneration;
     _isLoading = true;
     notifyListeners();
     try {
       final dir = await _dir();
       if (dir == null || !await dir.exists()) {
-        _recordings = [];
+        if (generation == _scanGeneration) _recordings = [];
         return;
       }
       final uid = SharedPreferencesUtil().uid;
       final ownersFile = File('${dir.path}/$_ownersFileName');
       final owners = await _readOwners(ownersFile);
       if (owners == null) {
-        _recordings = [];
-        _ownedNames = {};
+        if (generation == _scanGeneration) {
+          _recordings = [];
+          _ownedNames = {};
+        }
         return;
       }
       var ownersChanged = false;
@@ -219,6 +200,7 @@ class LocalRecordingsProvider extends ChangeNotifier {
         );
         if (rec != null) list.add(rec);
       }
+      if (generation != _scanGeneration) return;
       final ownerCount = owners.length;
       owners.removeWhere((name, _) => !onDisk.contains(name));
       if (ownersChanged || owners.length != ownerCount) await _writeOwners(ownersFile, owners);
@@ -229,7 +211,7 @@ class LocalRecordingsProvider extends ChangeNotifier {
     } catch (e) {
       Logger.error('LocalRecordings: scan failed: $e');
     } finally {
-      _isLoading = false;
+      if (generation == _scanGeneration) _isLoading = false;
       // Resume polling if recordings are still awaiting transcription (e.g. the
       // timer was dropped while backgrounded and we just resumed).
       if (_ownedJobs().isNotEmpty) _startReconcileTimer();

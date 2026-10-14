@@ -16,7 +16,7 @@ with how much history the user had, not with the screen in front of them.
 | Proxy update hooks notified unconditionally, so every Conversation/Message/People/Usage notify re-notified Capture, and every Capture notify re-notified Device | `CaptureController.updateExternalActions`, `DeviceProvider.setProviders` | Return early when the injected references are unchanged |
 | A listener on every capture notify joined the whole live transcript into a string; each new segment also hashed and JSON-encoded the whole session | `CaptureProvider._persistLiveSegments`, `LocalSegmentStore` | Cheap change key (list identity, length, `segmentsPhotosVersion`, owner token); long sessions hash/encode via `offUiIsolate` |
 | On resume, multi-megabyte conversation pages (with transcripts) were parsed and re-cached on the UI isolate | `getConversations`, `SharedPreferencesUtil.cacheConversations` | Large bodies parse via `offUiIsolate`; the cache encodes in the background behind a generation guard |
-| `listSync` of the documents directory (which holds every WAL file) on every resume | `LocalRecordingsProvider.refresh` | Async `dir.list()`; overlapping refreshes coalesce into one scan at a time |
+| `listSync` of the documents directory (which holds every WAL file) on every resume | `LocalRecordingsProvider.refresh` | Async `dir.list()`; when scans overlap, only the newest publishes or rewrites the owners file |
 | The memories list re-filtered every memory for each row it built | `MemoriesPage` | Filter once per build |
 | Voice dictation notified the provider at 60 Hz, rebuilding the whole chat composer | `VoiceRecorderProvider` | A dedicated `waveformTick` that only the waveform listens to |
 
