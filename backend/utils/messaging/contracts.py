@@ -46,6 +46,7 @@ class ChannelMessage:
     display_name: str | None = None
     callback_id: str | None = None
     undo_receipt_id: str | None = None
+    forwarded: bool = False
 
     def __post_init__(self):
         if not all(

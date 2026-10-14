@@ -13202,4 +13202,21 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get syncDetailsCopy => 'نسخ التفاصيل للدعم';
+
+  @override
+  String get chatAppsChannelPlanRequired => 'متاح في Operator وArchitect';
+
+  @override
+  String chatAppsAtCapacity(String app) {
+    return '$app وصل إلى الحد الأقصى';
+  }
+
+  @override
+  String get chatAppsJoinWaitlist => 'انضم إلى قائمة الانتظار';
+
+  @override
+  String get chatAppsOnWaitlist => 'أنت في قائمة الانتظار';
+
+  @override
+  String get chatAppsWaitlistJoined => 'أنت في قائمة الانتظار. سنُعلمك عندما يتوفر مكان.';
 }

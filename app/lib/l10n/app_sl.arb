@@ -11501,5 +11501,10 @@
     "syncDetailsForSupport": "Za podporo",
     "syncDetailsAudioFiles": "Zvočne datoteke",
     "syncDetailsServerJobs": "Opravila strežnika (končana / skupaj)",
-    "syncDetailsCopy": "Kopiraj podrobnosti za podporo"
+    "syncDetailsCopy": "Kopiraj podrobnosti za podporo",
+    "chatAppsChannelPlanRequired": "Na voljo v paketih Operator in Architect",
+    "chatAppsAtCapacity": "{app} je zaseden",
+    "chatAppsJoinWaitlist": "Pridruži se čakalnemu seznamu",
+    "chatAppsOnWaitlist": "Ste na čakalnem seznamu",
+    "chatAppsWaitlistJoined": "Ste na čakalnem seznamu. Sporočili vam bomo, ko bo prostor."
 }

@@ -13327,4 +13327,21 @@ class AppLocalizationsTe extends AppLocalizations {
 
   @override
   String get syncDetailsCopy => 'సపోర్ట్ కోసం వివరాలను కాపీ చేయండి';
+
+  @override
+  String get chatAppsChannelPlanRequired => 'Operator మరియు Architect లో అందుబాటులో ఉంది';
+
+  @override
+  String chatAppsAtCapacity(String app) {
+    return '$app నిండిపోయింది';
+  }
+
+  @override
+  String get chatAppsJoinWaitlist => 'వెయిట్‌లిస్ట్‌లో చేరండి';
+
+  @override
+  String get chatAppsOnWaitlist => 'మీరు వెయిట్‌లిస్ట్‌లో ఉన్నారు';
+
+  @override
+  String get chatAppsWaitlistJoined => 'మీరు వెయిట్‌లిస్ట్‌లో ఉన్నారు. స్థలం దొరికినప్పుడు మీకు తెలియజేస్తాము.';
 }

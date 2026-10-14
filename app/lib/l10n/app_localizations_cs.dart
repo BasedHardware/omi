@@ -13277,4 +13277,21 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get syncDetailsCopy => 'Zkopírovat podrobnosti pro podporu';
+
+  @override
+  String get chatAppsChannelPlanRequired => 'K dispozici v Operator a Architect';
+
+  @override
+  String chatAppsAtCapacity(String app) {
+    return '$app je plně obsazen';
+  }
+
+  @override
+  String get chatAppsJoinWaitlist => 'Připojit se k čekací listině';
+
+  @override
+  String get chatAppsOnWaitlist => 'Jste na čekací listině';
+
+  @override
+  String get chatAppsWaitlistJoined => 'Jste na čekací listině. Dáme vám vědět, až bude místo.';
 }

@@ -13306,4 +13306,21 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get syncDetailsCopy => 'Salin butiran untuk sokongan';
+
+  @override
+  String get chatAppsChannelPlanRequired => 'Tersedia pada Operator dan Architect';
+
+  @override
+  String chatAppsAtCapacity(String app) {
+    return '$app sudah penuh';
+  }
+
+  @override
+  String get chatAppsJoinWaitlist => 'Sertai senarai menunggu';
+
+  @override
+  String get chatAppsOnWaitlist => 'Anda dalam senarai menunggu';
+
+  @override
+  String get chatAppsWaitlistJoined => 'Anda dalam senarai menunggu. Kami akan maklumkan apabila ada tempat.';
 }

@@ -4075,5 +4075,10 @@
     "syncDetailsForSupport": "Pro podporu",
     "syncDetailsAudioFiles": "Zvukové soubory",
     "syncDetailsServerJobs": "Úlohy serveru (hotovo / celkem)",
-    "syncDetailsCopy": "Zkopírovat podrobnosti pro podporu"
+    "syncDetailsCopy": "Zkopírovat podrobnosti pro podporu",
+    "chatAppsChannelPlanRequired": "K dispozici v Operator a Architect",
+    "chatAppsAtCapacity": "{app} je plně obsazen",
+    "chatAppsJoinWaitlist": "Připojit se k čekací listině",
+    "chatAppsOnWaitlist": "Jste na čekací listině",
+    "chatAppsWaitlistJoined": "Jste na čekací listině. Dáme vám vědět, až bude místo."
 }

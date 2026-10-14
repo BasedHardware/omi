@@ -4075,5 +4075,10 @@
     "syncDetailsForSupport": "Untuk sokongan",
     "syncDetailsAudioFiles": "Fail audio",
     "syncDetailsServerJobs": "Tugas pelayan (selesai / jumlah)",
-    "syncDetailsCopy": "Salin butiran untuk sokongan"
+    "syncDetailsCopy": "Salin butiran untuk sokongan",
+    "chatAppsChannelPlanRequired": "Tersedia pada Operator dan Architect",
+    "chatAppsAtCapacity": "{app} sudah penuh",
+    "chatAppsJoinWaitlist": "Sertai senarai menunggu",
+    "chatAppsOnWaitlist": "Anda dalam senarai menunggu",
+    "chatAppsWaitlistJoined": "Anda dalam senarai menunggu. Kami akan maklumkan apabila ada tempat."
 }

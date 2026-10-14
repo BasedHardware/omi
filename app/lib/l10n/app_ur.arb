@@ -11501,5 +11501,10 @@
     "syncDetailsForSupport": "سپورٹ کے لیے",
     "syncDetailsAudioFiles": "آڈیو فائلیں",
     "syncDetailsServerJobs": "سرور جابز (مکمل / کل)",
-    "syncDetailsCopy": "سپورٹ کے لیے تفصیلات کاپی کریں"
+    "syncDetailsCopy": "سپورٹ کے لیے تفصیلات کاپی کریں",
+    "chatAppsChannelPlanRequired": "Operator اور Architect پر دستیاب",
+    "chatAppsAtCapacity": "{app} کی گنجائش پوری ہو گئی ہے",
+    "chatAppsJoinWaitlist": "ویٹ لسٹ میں شامل ہوں",
+    "chatAppsOnWaitlist": "آپ ویٹ لسٹ میں ہیں",
+    "chatAppsWaitlistJoined": "آپ ویٹ لسٹ میں ہیں۔ جگہ ملنے پر ہم آپ کو بتائیں گے۔"
 }

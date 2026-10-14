@@ -11501,5 +11501,10 @@
     "syncDetailsForSupport": "Para sa support",
     "syncDetailsAudioFiles": "Mga audio file",
     "syncDetailsServerJobs": "Mga server job (tapos / kabuuan)",
-    "syncDetailsCopy": "Kopyahin ang mga detalye para sa support"
+    "syncDetailsCopy": "Kopyahin ang mga detalye para sa support",
+    "chatAppsChannelPlanRequired": "Available sa Operator at Architect",
+    "chatAppsAtCapacity": "Puno na ang {app}",
+    "chatAppsJoinWaitlist": "Sumali sa waitlist",
+    "chatAppsOnWaitlist": "Nasa waitlist ka na",
+    "chatAppsWaitlistJoined": "Nasa waitlist ka na. Sasabihan ka namin kapag may puwesto na."
 }

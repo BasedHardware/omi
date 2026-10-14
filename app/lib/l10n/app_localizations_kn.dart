@@ -13314,4 +13314,21 @@ class AppLocalizationsKn extends AppLocalizations {
 
   @override
   String get syncDetailsCopy => 'ಬೆಂಬಲಕ್ಕಾಗಿ ವಿವರಗಳನ್ನು ನಕಲಿಸಿ';
+
+  @override
+  String get chatAppsChannelPlanRequired => 'Operator ಮತ್ತು Architect ನಲ್ಲಿ ಲಭ್ಯವಿದೆ';
+
+  @override
+  String chatAppsAtCapacity(String app) {
+    return '$app ಸಾಮರ್ಥ್ಯ ತುಂಬಿದೆ';
+  }
+
+  @override
+  String get chatAppsJoinWaitlist => 'ಕಾಯುವ ಪಟ್ಟಿಗೆ ಸೇರಿ';
+
+  @override
+  String get chatAppsOnWaitlist => 'ನೀವು ಕಾಯುವ ಪಟ್ಟಿಯಲ್ಲಿದ್ದೀರಿ';
+
+  @override
+  String get chatAppsWaitlistJoined => 'ನೀವು ಕಾಯುವ ಪಟ್ಟಿಯಲ್ಲಿದ್ದೀರಿ. ಸ್ಥಳ ಲಭ್ಯವಾದಾಗ ತಿಳಿಸುತ್ತೇವೆ.';
 }

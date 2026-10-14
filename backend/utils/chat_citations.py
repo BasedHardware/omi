@@ -3,7 +3,7 @@
 import re
 from typing import Any
 
-from utils.messaging.adapters.rendering import CITATION_PATTERN
+from utils.messaging.adapters.rendering import CITATION_PATTERN, strip_citations
 
 
 def resolve_conversation_citations(text: str, conversations: list[dict[str, Any]]) -> tuple[str, list[dict[str, Any]]]:
@@ -18,6 +18,4 @@ def resolve_conversation_citations(text: str, conversations: list[dict[str, Any]
     indices = dict.fromkeys(
         int(index) for marker in re.finditer(CITATION_PATTERN, text) for index in re.findall(r'\d+', marker.group(0))
     )
-    return re.sub(CITATION_PATTERN, '', text), [
-        conversations[index - 1] for index in indices if 0 < index <= len(conversations)
-    ]
+    return strip_citations(text), [conversations[index - 1] for index in indices if 0 < index <= len(conversations)]

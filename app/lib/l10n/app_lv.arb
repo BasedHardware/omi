@@ -4075,5 +4075,10 @@
     "syncDetailsForSupport": "Atbalstam",
     "syncDetailsAudioFiles": "Audio faili",
     "syncDetailsServerJobs": "Servera uzdevumi (pabeigti / kopā)",
-    "syncDetailsCopy": "Kopēt informāciju atbalstam"
+    "syncDetailsCopy": "Kopēt informāciju atbalstam",
+    "chatAppsChannelPlanRequired": "Pieejams ar Operator un Architect",
+    "chatAppsAtCapacity": "{app} ir pilns",
+    "chatAppsJoinWaitlist": "Pievienoties gaidīšanas sarakstam",
+    "chatAppsOnWaitlist": "Jūs esat gaidīšanas sarakstā",
+    "chatAppsWaitlistJoined": "Jūs esat gaidīšanas sarakstā. Mēs paziņosim, kad būs vieta."
 }
