@@ -2202,6 +2202,8 @@ def delete_privacy_conversation_audio(uid: str, conversation_id: str, *, source_
     if os.getenv('BUCKET_CANONICAL_AUDIO'):
         with destructive_operation_gate(uid, kind='audio_conversation_deletion'):
             canonical = get_canonical_audio_bucket()
-            for cid in dict.fromkeys([conversation_id, *(source_ids or [])]):
+            conversation_ids: List[str] = [conversation_id]
+            conversation_ids.extend(source_ids or [])
+            for cid in set(conversation_ids):
                 audio_packs.delete_conversation(canonical, uid, cid)
     delete_conversation_audio_files(uid, conversation_id)
