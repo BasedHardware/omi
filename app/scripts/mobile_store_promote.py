@@ -354,6 +354,11 @@ def submit_android(
         {"language": "en-US", "text": notes}
     ]
     release.pop("userFraction", None)
+    if status != "inProgress" and "countryTargeting" in release:
+        # Google permits countryTargeting only on an inProgress release;
+        # carrying it into a completion PUT makes tracks.update reject the
+        # whole request and wedges the rollout at its final hop.
+        release.pop("countryTargeting", None)
     if user_fraction is not None:
         if not 0 < float(user_fraction) < 1:
             raise PromotionError("userFraction must be strictly between 0 and 1 (full rollout is status=completed)")

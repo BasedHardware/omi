@@ -273,6 +273,27 @@ class AndroidChecks(unittest.TestCase):
         self.assertNotIn("userFraction", release)
         client.edits().commit.assert_called_once()
 
+    def test_completion_drops_country_targeting_but_a_hop_keeps_it(self):
+        client = Mock()
+        staged = {
+            "name": "1.2.3 (23)",
+            "versionCodes": ["23"],
+            "status": "inProgress",
+            "userFraction": 0.05,
+            "countryTargeting": {"countries": ["US"]},
+        }
+        # Google permits countryTargeting only on inProgress releases: a
+        # mid-ladder hop keeps it, the completing PUT must drop it.
+        promote.submit_android(
+            client, "edit-id", "1.2.3", "23", "n", status="inProgress", user_fraction=0.25, base_release=dict(staged)
+        )
+        hop = client.edits().tracks().update.call_args.kwargs["body"]["releases"][0]
+        self.assertEqual(hop["countryTargeting"], {"countries": ["US"]})
+        promote.submit_android(client, "edit-id", "1.2.3", "23", "n", status="completed", base_release=dict(staged))
+        done = client.edits().tracks().update.call_args.kwargs["body"]["releases"][0]
+        self.assertNotIn("countryTargeting", done)
+        self.assertNotIn("userFraction", done)
+
 
 if __name__ == "__main__":
     unittest.main()
