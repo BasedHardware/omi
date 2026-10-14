@@ -38,6 +38,9 @@ logging.basicConfig(level=logging.INFO)
 # calls (one per audio segment) flood the log pipeline with 200 OK noise. Keep
 # only warnings/errors (4xx/5xx, timeouts) from httpx. See issue #8080.
 logging.getLogger("httpx").setLevel(logging.WARNING)
+# The internal HTTP LB already logs every request to this service (successes
+# sampled, errors in full), so Uvicorn's per-request access line is a duplicate.
+logging.getLogger("uvicorn.access").setLevel(logging.WARNING)
 logger = logging.getLogger(__name__)
 
 _ASR_BUCKETS = (0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0, 30.0)
