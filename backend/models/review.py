@@ -106,22 +106,22 @@ class AgentProposalItem(BaseModel):
     # show the real row, not the 180-character label prefix. None = not sent.
     target_content: Optional[str] = None
     other_content: Optional[str] = None
-    edit: Optional[Edit] = None
-    memory_hygiene: Optional[MemoryHygieneEdit] = None
-    harness_edit: Optional[HarnessEdit] = None
+    # Retain the existing wire arm: older mobile decoders read `edit` and its
+    # string kind, and would drop proposals sent under a new sibling arm.
+    edit: Optional[Edit | HarnessEdit | MemoryHygieneEdit] = None
     vocabulary: Optional[Term] = None
 
     @model_serializer(mode='wrap')
     def preserve_existing_wire(self, handler):
         data = handler(self)
-        for field in ('memory_hygiene', 'harness_edit', 'target_content', 'other_content'):
+        for field in ('target_content', 'other_content'):
             if getattr(self, field) is None:
                 data.pop(field, None)
         return data
 
     @model_validator(mode='after')
     def single_operation(self):
-        if sum(item is not None for item in (self.edit, self.memory_hygiene, self.harness_edit, self.vocabulary)) != 1:
+        if sum(item is not None for item in (self.edit, self.vocabulary)) != 1:
             raise ValueError('Exactly one agent operation is required')
         return self
 

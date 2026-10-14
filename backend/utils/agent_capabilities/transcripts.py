@@ -12,17 +12,34 @@ from models.agent_refs import cited_value
 from models.transcript_segment import legacy_conversation_segment_id
 
 
-def original_fingerprint(uid, raw):
+def original_fingerprint(uid, raw, indices=None):
     from database.conversations import decode_transcript_segments_verified
 
     segments = decode_transcript_segments_verified(
         uid, raw.get('transcript_segments') or [], bool(raw.get('transcript_segments_compressed'))
     )
+    if indices is not None:
+        if any(index < 0 or index >= len(segments) for index in indices):
+            raise review_store.ReviewConflict('Transcript correction anchor unavailable')
+        segments = [segments[index] for index in indices]
     # Encryption can legitimately be refreshed during reprocessing. Speech and
     # its anchors are immutable; speaker labels and ciphertext are not anchors.
     return review_store.fingerprint(
         [{key: segment.get(key) for key in ('id', 'start', 'end', 'text')} for segment in segments]
     )
+
+
+def preserves_correction_anchors(original_segments, incoming_segments, corrections):
+    for correction in corrections:
+        index = correction['segment_index']
+        if index < 0 or index >= min(len(original_segments), len(incoming_segments)):
+            return False
+        if any(
+            original_segments[index].get(field) != incoming_segments[index].get(field)
+            for field in ('id', 'start', 'end', 'text')
+        ):
+            return False
+    return True
 
 
 def entries(edit, current, *, authority, change_id):

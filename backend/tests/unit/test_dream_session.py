@@ -13,6 +13,39 @@ from utils.agent_capabilities.session import Session
 from utils.llm.shaped_agent import Turn
 
 
+def test_guard_feedback_distinguishes_stale_scope_and_schema_repairs():
+    from database.review_store import ReviewConflict
+    from models.agent_tools import ProposeEdit
+    from pydantic import ValidationError
+    from utils.agent_capabilities.session import rejection
+
+    assert rejection(ReviewConflict('Dream memory changed'))['reason'] == 'agent_memory_changed'
+    assert (
+        rejection(ReviewConflict('Replacement must share privacy, subject and attribute'))['reason']
+        == 'agent_memory_scope_mismatch'
+    )
+    assert rejection(RuntimeError('Synthetic private text')) == {
+        'status': 'rejected',
+        'reason': 'dream_stale_or_unavailable',
+    }
+    try:
+        ProposeEdit.model_validate(
+            {
+                'edit': {
+                    'kind': 'merge_tasks',
+                    'target': 'action_items/one',
+                    'reason': 'Synthetic duplicate',
+                    'evidence': ['conversations/one'],
+                }
+            }
+        )
+    except ValidationError as error:
+        feedback = rejection(error)
+        assert feedback['errors'][0]['message'] == 'A merge needs a distinct other ref and preserves its text'
+    else:
+        raise AssertionError('Merge without other must be rejected')
+
+
 def call(name, arguments, index=1):
     return {
         'id': 'synthetic-call-' + str(index),

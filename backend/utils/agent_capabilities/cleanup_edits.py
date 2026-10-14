@@ -15,6 +15,21 @@ from utils.agent_capabilities.guards import timestamp
 KINDS = frozenset({'dismiss_person', 'merge_tasks', 'retire_task', 'merge_conversations', 'set_language'})
 
 
+def require_unprotected_person(row):
+    if any(
+        row.get(field)
+        for field in (
+            'speech_samples',
+            'speaker_embedding',
+            'user_confirmed',
+            'is_user_created',
+            'pinned',
+            'label_evidence',
+        )
+    ):
+        raise ValueError('dream_person_user_protected')
+
+
 def require_generated_task(row):
     # Unknown provenance is insufficient permission, even when timestamps happen
     # to match. Existing refresh protection also keeps every edited/linked task.
@@ -67,18 +82,7 @@ def validate_cleanup(edit, records):
     if edit.kind == 'dismiss_person':
         if collection != 'people':
             raise ValueError('dream_invalid_person')
-        if any(
-            row.get(field)
-            for field in (
-                'speech_samples',
-                'speaker_embedding',
-                'user_confirmed',
-                'is_user_created',
-                'pinned',
-                'label_evidence',
-            )
-        ):
-            raise ValueError('dream_person_user_protected')
+        require_unprotected_person(row)
         if edit.before and edit.before != row.get('name'):
             raise ValueError('dream_person_changed')
     elif edit.kind in {'retire_task', 'merge_tasks'}:

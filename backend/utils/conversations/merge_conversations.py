@@ -148,6 +148,8 @@ def validate_merge_compatibility(
     """
     if len(conversations) < 2:
         return False, "At least 2 conversations required to merge", None
+    if any(c.get('has_transcript_corrections') for c in conversations):
+        return False, 'Captures with transcript correction history cannot be destructively merged', None
 
     # Check none are soft-deleted. A soft-deleted tombstone is invisible to the
     # user, so merging it resurrects deleted content into a new visible
@@ -240,7 +242,7 @@ def perform_merge_async(
         # at the endpoint) and this background re-fetch — the delete-vs-merge race. Re-check
         # here, before reading any content: merging a tombstone would resurrect its deleted
         # transcript/photos/audio into a new visible conversation. Abort rather than merge.
-        if any(conv.get("deleted") for conv in conversations):
+        if any(conv.get("deleted") or conv.get('has_transcript_corrections') for conv in conversations):
             logger.error(f"Merge aborted: a source was deleted after admission uid={uid}")
             _handle_merge_failure(uid, conversation_ids)
             return

@@ -90,9 +90,11 @@ def record_change(
         combined = [*data['source'], *enriched]
         if len(combined) > 500 or len(json.dumps(combined, default=str).encode()) > 256000:
             raise ValueError('dream_transcript_overlay_budget')
+        anchor_indices = sorted({row['segment_index'] for row in enriched})
         receipt = {
             'conversation_id': conversation_id,
-            'original_fingerprint': original_fingerprint(uid, current),
+            'original_anchor_indices': anchor_indices,
+            'original_fingerprint': original_fingerprint(uid, current, anchor_indices),
             'corrections': enriched,
             'before': {field: read_field_state(current, field) for field in patch},
             'after': {
@@ -143,7 +145,10 @@ def set_undone(uid, change_id, undone):
         rows = store.require_doc(uid, overlay.get(transaction=tx).to_dict())['source']
         if not current or current.get('deleted') or current.get('is_locked'):
             raise store.ReviewConflict('Transcript no longer available')
-        if original_fingerprint(uid, current) != receipt['original_fingerprint']:
+        if (
+            original_fingerprint(uid, current, receipt.get('original_anchor_indices'))
+            != receipt['original_fingerprint']
+        ):
             raise store.ReviewConflict('Original speech changed after this correction')
         expected, destination = ('after', 'before') if undone else ('before', 'after')
         if any(

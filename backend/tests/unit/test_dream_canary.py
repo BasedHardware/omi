@@ -153,6 +153,21 @@ def test_verifier_disagreement_does_not_decide_pipeline_health(canary, monkeypat
     assert lanes == [VERIFY_LANE, VERIFY_LANE]
 
 
+def test_failed_undo_does_not_poison_next_canary(canary, monkeypatch):
+    db, _ = canary
+    original = dream_canary.review_changes.set_undone
+    monkeypatch.setattr(
+        dream_canary.review_changes,
+        'set_undone',
+        lambda *args: (_ for _ in ()).throw(RuntimeError('Synthetic failure')),
+    )
+    assert asyncio.run(dream_canary.check())['status'] == 'fail'
+    assert any(path[2:3] == ('review_changes',) for path in db.rows)
+    monkeypatch.setattr(dream_canary.review_changes, 'set_undone', original)
+    assert asyncio.run(dream_canary.check())['status'] == 'pass'
+    assert not any(path[2:3] in [('review_changes',), ('review_do_not_redo',)] for path in db.rows)
+
+
 def test_canary_uses_scheduler_oidc_and_long_declared_deadline():
     app = FastAPI()
     app.include_router(dream_sweep.router)

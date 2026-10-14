@@ -15,6 +15,7 @@ from models.agent_refs import base_ref
 from utils.agent_capabilities.evidence import EvidenceRecords
 from utils.agent_capabilities.staging import Staged, stage
 from utils.agent_capabilities.reads import unavailable_is_transient
+from utils.agent_capabilities.errors import rejection_code, schema_feedback
 from utils.llm.shaped_agent import Budget, LoopStop, Mount, run_loop
 
 INSTRUCTIONS = (
@@ -41,16 +42,15 @@ def rejection(error):
             'status': 'rejected',
             'reason': 'schema',
             'errors': [
-                {'field': '.'.join(map(str, row['loc'])), 'type': row['type']}
+                {
+                    'field': '.'.join(map(str, row['loc'])),
+                    'type': row['type'],
+                    **schema_feedback(row),
+                }
                 for row in error.errors(include_input=False, include_context=False, include_url=False)[:8]
             ],
         }
-    message = str(error)
-    reason = (
-        message
-        if message.startswith(('dream_', 'agent_')) and len(message) < 80 and message.replace('_', '').isalnum()
-        else 'dream_stale_or_unavailable'
-    )
+    reason = rejection_code(error)
     return {'status': 'rejected', 'reason': reason}
 
 

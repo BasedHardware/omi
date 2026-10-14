@@ -219,6 +219,7 @@ def merge_review_entities(
     def ensure_nodes(tx):
         store.validate_records(uid, tx, expected_records)
         rows = []
+        nodes = {}
         for entity_id in (left, right):
             ref = store.user(uid).collection('knowledge_nodes').document(entity_id)
             node = ref.get(transaction=tx).to_dict()
@@ -247,12 +248,20 @@ def merge_review_entities(
                         },
                     )
                 )
+            nodes[entity_id] = node
         for ref, node in rows:
             tx.set(ref, node)
+            nodes[ref.id] = node
+        return nodes, {ref.id for ref, _ in rows}
 
-    ensure_nodes(store.client().transaction())
-    a = store.user(uid).collection('knowledge_nodes').document(left).get().to_dict()
-    b = store.user(uid).collection('knowledge_nodes').document(right).get().to_dict()
+    nodes, created = ensure_nodes(store.client().transaction())
+    a, b = nodes.get(left), nodes.get(right)
+    fences = dict(expected_records or {})
+    for entity_id in created:
+        path = 'knowledge_nodes/' + entity_id
+        # Only the node this transaction minted may replace its missing
+        # witness. Never bless a fresh reread or discard unrelated null fences.
+        fences[path] = nodes[entity_id]
     if left == right or not a or not b or a.get('redirect_entity_id') or b.get('redirect_entity_id'):
         raise store.ReviewConflict('Two current distinct entity nodes are required')
     merged = entities.apply_entity_mutations({left: a, right: b}, [memory_ledger.merge_entities(left, right)])[left]
@@ -275,7 +284,7 @@ def merge_review_entities(
         edit_key=edit_key,
         entity_merge=(left, right),
         expected_documents={left: a, right: b},
-        expected_records={path: value for path, value in (expected_records or {}).items() if value is not None},
+        expected_records=fences,
     )
 
 

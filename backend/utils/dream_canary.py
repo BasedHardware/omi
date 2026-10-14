@@ -25,8 +25,27 @@ class CanaryFailure(Exception):
     pass
 
 
+def fixture_edit():
+    ref = 'conversations/' + dream_canary.RECORD_ID
+    return HarnessEdit(
+        kind='spelling',
+        target=ref,
+        before='Qorby',
+        after='Qorbi',
+        evidence=[ref],
+        reason='Synthetic explicit spelling check',
+        value=4,
+    )
+
+
 def seed(uid):
     dream_canary.ensure_synthetic_owner(uid)
+    # A failed journal/Undo check must not poison the next deterministic probe.
+    # Only the fixed fixture's receipts are reset, after synthetic-owner proof.
+    key = tools.edit_key(fixture_edit())
+    change_id = tools.dream_change_view.change_id_for_key(uid, key)
+    review_store.user(uid).collection('review_changes').document(review_store.safe_id(change_id)).delete()
+    review_store.user(uid).collection('review_do_not_redo').document(review_store.safe_id(key)).delete()
     review_store.user(uid).collection('transcript_corrections').document(dream_canary.RECORD_ID).set(
         review_store.encode_doc(uid, {'source': []})
     )
@@ -81,15 +100,7 @@ async def check():
                 Caps.from_env(), tokens=min(96000, Caps.from_env().tokens), passes=96, edits=1, completion_tokens=256
             )
             ref = 'conversations/' + dream_canary.RECORD_ID
-            edit = HarnessEdit(
-                kind='spelling',
-                target=ref,
-                before='Qorby',
-                after='Qorbi',
-                evidence=[ref],
-                reason='Synthetic explicit spelling check',
-                value=4,
-            )
+            edit = fixture_edit()
             calls = [
                 {
                     'id': 'synthetic-edit',

@@ -195,9 +195,7 @@ export interface AgentProposalAnswer {
 }
 
 export interface AgentProposalItem {
-  edit?: Edit | null;
-  harness_edit?: HarnessEdit | null;
-  memory_hygiene?: MemoryHygieneEdit | null;
+  edit?: Edit | HarnessEdit | MemoryHygieneEdit | null;
   other_content?: string | null;
   other_label?: string | null;
   target_content?: string | null;

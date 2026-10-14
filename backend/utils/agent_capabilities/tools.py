@@ -236,6 +236,11 @@ def validate_edit(edit, records, *, authority='dream'):
                 or row['entity_id'] == other.get('entity_id')
             ):
                 raise ValueError('dream_invalid_person_merge')
+            if authority == 'dream':
+                from utils.agent_capabilities.cleanup_edits import require_unprotected_person
+
+                require_unprotected_person(row)
+                require_unprotected_person(other)
 
 
 def validate_memory_hygiene(edit, records):
@@ -556,7 +561,9 @@ def proposal_fences(uid, source):
         collection, key = ref.split('/', 1)
         if collection in {'action_items', 'candidates', 'workstreams'} or row.get('type') == 'project':
             paths.add('task_intelligence_control/state')
-        if collection in {'entity', 'knowledge_nodes', 'workstreams'}:
+        if collection == 'people':
+            paths.update({ref, 'knowledge_nodes/person:' + key})
+        elif collection in {'entity', 'knowledge_nodes', 'workstreams'}:
             entity_id = row['entity_id']
             paths.add('knowledge_nodes/' + entity_id)
             if row['type'] == 'person':
@@ -644,7 +651,7 @@ def suggest_edit(uid, edit, records, *, run_id=None):
         other_content = str(records[base_ref(edit.other)].get('content') or '') if edit.other else None
     if isinstance(edit, HarnessEdit):
         proposal = AgentProposalItem(
-            harness_edit=edit,
+            edit=edit,
             target_label=target_label,
             other_label=other_label,
             target_content=target_content,
@@ -652,7 +659,7 @@ def suggest_edit(uid, edit, records, *, run_id=None):
         )
     elif edit.kind in {'retire_memory', 'supersede_memory'}:
         proposal = AgentProposalItem(
-            memory_hygiene=MemoryHygieneEdit.model_validate(edit.model_dump(exclude={'value'})),
+            edit=MemoryHygieneEdit.model_validate(edit.model_dump(exclude={'value'})),
             target_label=target_label,
             other_label=other_label,
             target_content=target_content,
@@ -803,7 +810,7 @@ def answer_proposal(uid, proposal, source, decision):
         review_changes.suppress_agent_change(uid, source['edit_key'])
         return False
     records = revalidate_proposal(uid, source)
-    selected = proposal.harness_edit or proposal.memory_hygiene or proposal.edit
+    selected = proposal.edit
     try:
         status = (
             apply_edit(uid, selected, records, expected_records=source.get('fences'))

@@ -1973,6 +1973,8 @@ def delete_conversation(uid, conversation_id):
     for sub in conversation_ref.collections():
         delete_collection_recursive(sub, client=db)
     conversation_ref.delete()
+    # Corrections are a sibling owner collection, not a child of the capture.
+    user_ref.collection('transcript_corrections').document(conversation_id).delete()
     invalidate_people_stats_cache(uid)
     from database.proactivity import purge_source_items
 
@@ -2367,7 +2369,16 @@ def claim_conversation_status(
         if extra_updates:
             # Digest check against THIS snapshot, not a route-level read.
             # A T1-validated projection must not land on a T2 transcript.
-            updates.update(extra_updates_with_bound_client_processing(uid, current, extra_updates))
+            corrections = None
+            if current.get('has_transcript_corrections'):
+                from utils.agent_capabilities.transcripts import load_entries
+
+                corrections = load_entries(uid, conversation_id, firestore_client=db, transaction=transaction)
+            updates.update(
+                extra_updates_with_bound_client_processing(
+                    uid, current, extra_updates, transcript_corrections=corrections
+                )
+            )
         transaction.update(conversation_ref, updates)
         return True
 
@@ -3166,6 +3177,16 @@ def update_conversation_segments(
             incoming.extend(s for s in persisted if s.get('id') not in known)
             incoming.sort(key=lambda s: (s.get('start', 0), s.get('end', 0)))
         accepted = apply_manual_assignments(incoming, receipt)
+        if current.get('has_transcript_corrections'):
+            from utils.agent_capabilities.transcripts import load_entries, originals, preserves_correction_anchors
+
+            accepted = originals(accepted)
+            captured = decode_transcript_segments_verified(
+                uid, current.get('transcript_segments') or [], bool(current.get('transcript_segments_compressed'))
+            )
+            corrections = load_entries(uid, conversation_id, firestore_client=client, transaction=transaction)
+            if not preserves_correction_anchors(captured, accepted, corrections):
+                return False
         score_updates = []
         try:
             score_updates = match_scores.merge(

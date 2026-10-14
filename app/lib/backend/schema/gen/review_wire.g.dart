@@ -563,9 +563,7 @@ class GeneratedTerm {
 }
 
 class GeneratedAgentProposalItem {
-  final GeneratedEdit? edit;
-  final GeneratedHarnessEdit? harnessEdit;
-  final GeneratedMemoryHygieneEdit? memoryHygiene;
+  final Map<String, dynamic>? edit;
   final String? otherContent;
   final String? otherLabel;
   final String? targetContent;
@@ -574,8 +572,6 @@ class GeneratedAgentProposalItem {
 
   const GeneratedAgentProposalItem({
     this.edit,
-    this.harnessEdit,
-    this.memoryHygiene,
     this.otherContent,
     this.otherLabel,
     this.targetContent,
@@ -585,9 +581,7 @@ class GeneratedAgentProposalItem {
 
   factory GeneratedAgentProposalItem.fromJson(Map<String, dynamic> json) {
     return GeneratedAgentProposalItem(
-      edit: _readFieldValue<GeneratedEdit>(_readField(json, const ["edit"]), "edit", (value) => _readObject(value, GeneratedEdit.fromJson), requiredField: false, nullable: true),
-      harnessEdit: _readFieldValue<GeneratedHarnessEdit>(_readField(json, const ["harness_edit"]), "harness_edit", (value) => _readObject(value, GeneratedHarnessEdit.fromJson), requiredField: false, nullable: true),
-      memoryHygiene: _readFieldValue<GeneratedMemoryHygieneEdit>(_readField(json, const ["memory_hygiene"]), "memory_hygiene", (value) => _readObject(value, GeneratedMemoryHygieneEdit.fromJson), requiredField: false, nullable: true),
+      edit: _readFieldValue<Map<String, dynamic>>(_readField(json, const ["edit"]), "edit", _readMap, requiredField: false, nullable: true),
       otherContent: _readFieldValue<String>(_readField(json, const ["other_content"]), "other_content", _readString, requiredField: false, nullable: true),
       otherLabel: _readFieldValue<String>(_readField(json, const ["other_label"]), "other_label", _readString, requiredField: false, nullable: true),
       targetContent: _readFieldValue<String>(_readField(json, const ["target_content"]), "target_content", _readString, requiredField: false, nullable: true),
@@ -598,9 +592,7 @@ class GeneratedAgentProposalItem {
 
   Map<String, dynamic> toJson() {
     return {
-      'edit': edit?.toJson(),
-      'harness_edit': harnessEdit?.toJson(),
-      'memory_hygiene': memoryHygiene?.toJson(),
+      'edit': edit,
       'other_content': otherContent,
       'other_label': otherLabel,
       'target_content': targetContent,

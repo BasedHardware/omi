@@ -30,6 +30,35 @@ def correction(target='conversations/one#segment-one', **changes):
     )
 
 
+def test_correction_anchor_guard_permits_append_but_refuses_text_replacement_or_reorder():
+    original = [{'id': 'one', 'start': 0, 'end': 5, 'text': 'Synthetic captured speech'}]
+    entries = [{'segment_index': 0, 'undone': False}]
+    appended = [*original, {'id': 'two', 'start': 5, 'end': 10, 'text': 'Later speech'}]
+    assert transcripts.preserves_correction_anchors(original, appended, entries)
+    assert not transcripts.preserves_correction_anchors(original, list(reversed(appended)), entries)
+    assert not transcripts.preserves_correction_anchors(original, [{**original[0], 'text': 'Replacement'}], entries)
+
+
+def test_undo_survives_unrelated_captured_speech_append(store, monkeypatch):
+    seen, _ = setup(store, monkeypatch)
+    edit = correction()
+    tools.apply_edit(UID, edit, {'conversations/one': seen()}, authority='dream')
+    path = ('users', UID, 'conversations', 'one')
+    current = deepcopy(store.rows[path])
+    captured = conversations.decode_transcript_segments_verified(UID, current['transcript_segments'], True)
+    captured.append({'id': 'two', 'start': 6, 'end': 9, 'text': 'Unrelated appended speech'})
+    encoded = conversations.encode_conversation_for_write(UID, {'transcript_segments': captured}, 'enhanced')
+    store.rows[path].update(encoded)
+    journal = next(
+        review_store.decode_doc(UID, row)['change']
+        for key, row in store.rows.items()
+        if key[2:3] == ('review_changes',)
+    )
+    review_changes.set_undone(UID, journal['change_id'], True)
+    projected = seen()['transcript_segments']
+    assert projected[0]['text'].startswith('Qorby') and projected[1]['text'] == 'Unrelated appended speech'
+
+
 def setup(store, monkeypatch):
     row = store.rows[('users', UID, 'conversations', 'one')]
     row.update(

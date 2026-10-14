@@ -1471,29 +1471,16 @@
                 "$ref": "#/components/schemas/Edit"
               },
               {
-                "type": "null"
-              }
-            ]
-          },
-          "harness_edit": {
-            "anyOf": [
-              {
                 "$ref": "#/components/schemas/HarnessEdit"
               },
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "memory_hygiene": {
-            "anyOf": [
               {
                 "$ref": "#/components/schemas/MemoryHygieneEdit"
               },
               {
                 "type": "null"
               }
-            ]
+            ],
+            "title": "Edit"
           },
           "other_content": {
             "anyOf": [

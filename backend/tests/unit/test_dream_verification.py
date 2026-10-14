@@ -4,7 +4,7 @@ import asyncio
 from types import SimpleNamespace
 
 from models.agent_tools import Verification, VerificationBatch
-from utils.dream_verify import verify, disposition, batches
+from utils.dream_verify import verify, disposition, batches, minimal_context
 from utils.llm.shaped_agent import Turn
 
 
@@ -49,3 +49,21 @@ def test_oversized_evidence_is_not_silently_truncated_into_support():
     item = proposal()
     item.records['people/junk']['name'] = 'x' * 30000
     assert list(batches([item])) == []
+
+
+def test_fragment_verifier_receives_exact_citation_and_neighbors_without_other_content():
+    segments = [{'id': str(index), 'text': 'Synthetic speech ' + str(index), 'start': index} for index in range(7)]
+    records = {
+        'conversations/one': {
+            'id': 'one',
+            'transcript_segments': segments,
+            'structured': {'overview': 'Unrelated summary'},
+            'photos': ['unrelated'],
+        }
+    }
+    context = minimal_context('conversations/one#3', records)
+    assert context['cited_segment'] == segments[3]
+    assert context['transcript_segments'] == segments[2:5]
+    assert 'structured' not in context and 'photos' not in context
+    assert minimal_context('conversations/one#missing', records) is None
+    assert minimal_context('conversations/one', records)['transcript_segments'] == segments

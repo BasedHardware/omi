@@ -4,7 +4,7 @@ import json
 import asyncio
 
 from models.agent_tools import VerificationBatch
-from models.agent_refs import cited_value
+from models.agent_refs import base_ref, cited_value
 from utils.agent_capabilities.session import serialized_bytes
 from utils.llm.shaped_agent import Budget, Mount, run_loop
 
@@ -22,8 +22,35 @@ INSTRUCTIONS = (
 
 def evidence(item):
     # No seed, planner messages, prior notes, or another verifier's response.
-    rows = {ref: cited_value(ref, item.records) for ref in item.refs}
+    rows = {ref: minimal_context(ref, item.records) for ref in item.refs}
     return {**item.payload(), 'evidence': rows}
+
+
+def minimal_context(ref, records):
+    row = records.get(base_ref(ref))
+    if row is None:
+        return None
+    if not ref.startswith('conversations/'):
+        # A memory/task/person is already a small cited record. Its provenance,
+        # subject, dates and protection metadata are relevant to verification.
+        return cited_value(ref, records)
+    fields = ('id', 'status', 'created_at', 'started_at', 'finished_at', 'language', 'structured')
+    context = {key: row[key] for key in fields if key in row}
+    segments = row.get('transcript_segments') or []
+    if '#' in ref:
+        selected = cited_value(ref, records)
+        if selected is None:
+            return None
+        index = segments.index(selected)
+        context['transcript_segments'] = segments[max(0, index - 1) : index + 2]
+        context['cited_segment'] = selected
+        # A fragment does not cite the unrelated generated summary.
+        context.pop('structured', None)
+    else:
+        # Whole-record citations retain all speech. Never silently cut support;
+        # a genuinely oversized citation must be refined by the proposer.
+        context['transcript_segments'] = segments
+    return context
 
 
 def batches(staged, byte_limit=24000):

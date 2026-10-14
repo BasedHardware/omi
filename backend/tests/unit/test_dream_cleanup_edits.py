@@ -179,6 +179,81 @@ def test_cleanup_retains_audio_and_survivor_and_never_hard_deletes(store):
     assert store.rows[('users', UID, 'conversations', 'two')] == survivor
 
 
+def person_merge_records(store):
+    for key, name in [('left', 'Qorbi'), ('right', 'Qorby')]:
+        store.rows[('users', UID, 'people', key)] = {
+            'id': key,
+            'name': name,
+            'entity_id': 'person:' + key,
+            'type': 'person',
+        }
+    return records(store)
+
+
+def person_merge():
+    return HarnessEdit(
+        kind='merge_people',
+        target='people/left',
+        other='people/right',
+        reason='Synthetic split identity',
+        evidence=['conversations/one'],
+    )
+
+
+def test_person_bootstrap_merge_undo_redo_and_visible_survivor(store):
+    seen = person_merge_records(store)
+    operation = person_merge()
+    fences = dream_tools.proposal_fences(UID, {'records': seen})
+    assert fences['knowledge_nodes/person:left'] is None
+    assert dream_tools.apply_edit(UID, operation, seen, expected_records=fences) == 'applied'
+    left = ('users', UID, 'knowledge_nodes', 'person:left')
+    right = ('users', UID, 'knowledge_nodes', 'person:right')
+    assert store.rows[right]['redirect_entity_id'] == 'person:left'
+    journal = next(
+        review_store.decode_doc(UID, row) for key, row in store.rows.items() if key[2:3] == ('review_changes',)
+    )
+    change = journal['change']
+    assert change['before'] == 'Qorbi + Qorby' and change['after'] == 'Qorbi'
+    assert [ref['id'] for ref in change['refs']] == ['left', 'right']
+    after = deepcopy((store.rows[left], store.rows[right]))
+    review_changes.set_undone(UID, change['change_id'], True)
+    assert 'redirect_entity_id' not in store.rows[right]
+    assert 'merged_entity_ids' not in store.rows[left]
+    review_changes.set_undone(UID, change['change_id'], False)
+    assert (store.rows[left], store.rows[right]) == after
+
+
+@pytest.mark.parametrize('race', ['node', 'missing_witness'])
+def test_person_bootstrap_cannot_bless_post_bootstrap_changes(store, monkeypatch, race):
+    seen = person_merge_records(store)
+    fences = dream_tools.proposal_fences(UID, {'records': seen})
+    fences['people/missing-witness'] = None
+    original = review_changes.record_agent_change
+
+    def racing(*args, **kwargs):
+        if race == 'node':
+            store.rows[('users', UID, 'knowledge_nodes', 'person:left')]['label'] = 'A later edit'
+        else:
+            store.rows[('users', UID, 'people', 'missing-witness')] = {'name': 'New identity'}
+        return original(*args, **kwargs)
+
+    monkeypatch.setattr(review_changes, 'record_agent_change', racing)
+    with pytest.raises(review_store.ReviewConflict):
+        dream_tools.apply_edit(UID, person_merge(), seen, expected_records=fences)
+    assert not any(key[2:3] == ('review_changes',) for key in store.rows)
+
+
+@pytest.mark.parametrize(
+    'field', ['speech_samples', 'speaker_embedding', 'user_confirmed', 'is_user_created', 'pinned', 'label_evidence']
+)
+def test_autonomous_person_merge_preserves_user_identity(store, field):
+    seen = person_merge_records(store)
+    seen['people/right'][field] = True
+    with pytest.raises(ValueError, match='dream_person_user_protected'):
+        dream_tools.validate_edit(person_merge(), seen, authority='dream')
+    dream_tools.validate_edit(person_merge(), seen, authority='user')
+
+
 def test_new_schemas_report_precise_validation_and_keep_bounded_tool_outputs():
     with pytest.raises(ValidationError):
         HarnessEdit(kind='retire_memory', target='memory_items/one', reason=' ', evidence=['conversations/one'])

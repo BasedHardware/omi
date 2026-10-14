@@ -103,7 +103,7 @@ def enqueue_review_proposal(
 
     @firestore.transactional
     def enqueue(tx):
-        from utils.dream_effect_fence import assert_active
+        from database.dream_effect_fence import assert_active
 
         assert_active(uid, tx)
         budget = (budget_ref.get(transaction=tx).to_dict() or {}) if is_agent or dream_run_id else {}
@@ -162,7 +162,7 @@ def enqueue_review_proposal(
 
 def validate_records(uid: str, tx, expected_records: dict | None) -> None:
     """Fence the offered target/evidence snapshots in the edit's transaction."""
-    from utils.dream_effect_fence import assert_active
+    from database.dream_effect_fence import assert_active
 
     assert_active(uid, tx)
     for path, expected in (expected_records or {}).items():

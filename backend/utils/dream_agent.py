@@ -16,7 +16,7 @@ from utils import dream_capacity, dream_harness_transport, dream_seed, dream_ver
 from utils.agent_capabilities.search import OwnerSearch
 from utils.agent_capabilities.session import Session
 from utils.dream_metrics import record_pass, error_code, record_reclaimed
-from utils.dream_effect_fence import ACTIVE_RUN
+from database.dream_effect_fence import ACTIVE_RUN
 from utils.executors import db_executor, run_blocking
 
 

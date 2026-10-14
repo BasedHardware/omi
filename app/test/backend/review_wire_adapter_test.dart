@@ -38,7 +38,7 @@ void main() {
           'agent_proposal': {
             'target_label': 'Draft the invented outline.',
             'other_label': 'Prepare the invented outline.',
-            'harness_edit': {
+            'edit': {
               'kind': 'merge_tasks',
               'target': 'action_items/synthetic-one',
               'other': 'action_items/synthetic-two',
@@ -156,7 +156,7 @@ void main() {
               'agent_proposal': {
                 'target_label': 'Lives in Toytown.',
                 'other_label': 'Since January, lives in New Toytown.',
-                'memory_hygiene': {
+                'edit': {
                   'kind': kind,
                   'target': 'memory_items/synthetic-old',
                   'other': kind == 'supersede_memory' ? 'memory_items/synthetic-new' : '',
