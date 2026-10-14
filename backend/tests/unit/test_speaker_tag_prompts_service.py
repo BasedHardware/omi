@@ -985,3 +985,36 @@ def test_positive_card_answer_retires_a_prior_live_exclusion_marker(monkeypatch)
 
     service.apply_answer('u', _request(K.identify, O.unnamed, A.me), world.schedule, NOW)
     assert cleared == [(('u', 'c1', [1]), {'assignment_generation': 5})]
+
+
+def test_not_me_card_answer_retires_a_prior_not_a_person_marker(monkeypatch):
+    """A newer non-not_a_person card answer supersedes an earlier exclusion.
+
+    not_me / not_person / unnamed answers commit a newer rejection of a
+    different kind through the same whole-voice branch; the stale not_a_person
+    marker must retire or the voice stays listed under Ignored Voices and
+    prompt suppression keeps treating it as a media exclusion.
+    """
+    world = World(monkeypatch)
+    cleared = []
+    monkeypatch.setattr(
+        service.voice_profiles_db, 'clear_ignored_voices', lambda *args, **kwargs: cleared.append((args, kwargs)) or 0
+    )
+
+    def assign_with_receipt(uid, conversation_id, **kwargs):
+        world.assignments.append(kwargs)
+        segments = [{'id': 's1', 'speaker_id': 1, 'start': 0, 'end': 9}]
+        raw = {
+            'id': conversation_id,
+            'transcript_segments': segments,
+            'manual_speaker_assignments': {
+                'generation': 6,
+                'speakers': {'1': {'generation': 6, 'rejection': {'kind': 'not_me'}, 'person_id': None}},
+            },
+        }
+        return raw, ['s1'], [], []
+
+    monkeypatch.setattr(service.conversations_db, 'assign_conversation_speaker', assign_with_receipt)
+
+    service.apply_answer('u', _request(K.identify, O.unnamed, A.someone_else), world.schedule, NOW)
+    assert cleared == [(('u', 'c1', [1]), {'assignment_generation': 6})]

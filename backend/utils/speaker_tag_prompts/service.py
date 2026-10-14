@@ -806,6 +806,19 @@ def apply_answer(
         else:
             rejection = None
         conversation, resolved = _assign(uid, request, is_user=False, person_id=None, train=False, rejection=rejection)
+        # Any newer non-not_a_person answer supersedes an earlier exclusion:
+        # retire_exclusion_markers distinguishes rejection kinds, so the stale
+        # not_a_person marker is cleared for not_me / not_person / unnamed
+        # answers while a still-winning not_a_person keeps (and re-records)
+        # its marker below.
+        retire_exclusion_markers(
+            uid,
+            conversation.get('id') or request.conversation_id,
+            conversation,
+            resolved,
+            speaker_id=request.speaker_id,
+            logger_=logger,
+        )
         if answer == SpeakerTagPromptAnswer.not_a_person:
             resolved_ids = set(resolved)
             speaker_ids = {

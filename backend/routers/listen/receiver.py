@@ -2095,8 +2095,13 @@ class ListenReceiver(ReplayFilterMixin):
         # back to speaker_to_person for segments without an explicit override.
         rejected_speakers = manual_rejected_speakers(receipt)
         for rejected in rejected_speakers:
-            self.host.speakers.speaker_to_person.pop(rejected, None)
-            self.host.speakers.voice_identity_status.pop(rejected, None)
+            # Full matcher-state retirement via the shared retraction: popping
+            # speaker_to_person alone left _mapping_origin 'manual' behind, so
+            # a later restore of the ignored voice could never publish a new
+            # automatic match (manual-origin guard) until the matcher reset at
+            # a conversation boundary. The shared path also clears candidates
+            # and pending suggestions, mirroring the reject-route cleanup.
+            self.host.speakers.retire_excluded_voice(rejected)
             self.host.speakers.segment_identity_status = {
                 sid: status
                 for sid, status in self.host.speakers.segment_identity_status.items()

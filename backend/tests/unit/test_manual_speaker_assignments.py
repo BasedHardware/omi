@@ -659,6 +659,22 @@ def test_merged_donor_range_selects_using_original_offsets(world):
     assert raw['transcript_segments'][1]['person_id'] == 'new'
 
 
+def _matcher_with_manual_mapping():
+    """A real SpeakerMatcher whose voice 4 carries a live manual mapping."""
+    from types import SimpleNamespace as _NS
+
+    from routers.listen.speakers import SpeakerMatcher
+
+    matcher = SpeakerMatcher(_NS())
+    matcher.speaker_to_person[4] = ('old', 'Old Name')
+    matcher._mapping_origin[4] = 'manual'
+    matcher.voice_candidates[4] = ['p9']
+    matcher._suggested_person[4] = 'p9'
+    matcher.segment_identity_status = {'s0': object(), 's1': object()}
+    matcher.segment_assignments = {}
+    return matcher
+
+
 def test_socket_rejection_clears_speaker_wide_inference_map(world):
     """A winning not_a_person exclusion must retire speaker_to_person.
 
@@ -679,12 +695,7 @@ def test_socket_rejection_clears_speaker_wide_inference_map(world):
 
         receiver.host = SimpleNamespace(
             state=SimpleNamespace(current_conversation_id='c', speaker_map_dirty=False),
-            speakers=SimpleNamespace(
-                speaker_to_person={4: ('old', 'Old Name')},
-                voice_identity_status={},
-                segment_identity_status={'s0': object(), 's1': object()},
-                segment_assignments={},
-            ),
+            speakers=_matcher_with_manual_mapping(),
             transcripts=SimpleNamespace(cache=SimpleNamespace(get=AsyncMock(return_value=read(world)))),
             private_cloud_sync_enabled=True,
             send_speaker_sample_request=AsyncMock(),
@@ -698,7 +709,14 @@ def test_socket_rejection_clears_speaker_wide_inference_map(world):
         await receiver._handle_speaker_assigned(dict(person_id=None, segment_ids=['s1'], assign_type='not_a_person'))
 
         assert 4 not in receiver.host.speakers.speaker_to_person
-        assert 4 not in receiver.host.speakers.voice_identity_status
+        assert 4 in receiver.host.speakers.voice_identity_status  # retracted to no_match, not deleted
+        # Full matcher state retires with the mapping: a leftover manual
+        # _mapping_origin would block future automatic matches for a restored
+        # voice (manual-origin guard in _publish_decisions), and stale
+        # candidates/suggestions would resurface the rejected label.
+        assert 4 not in receiver.host.speakers._mapping_origin
+        assert 4 not in receiver.host.speakers.voice_candidates
+        assert 4 not in receiver.host.speakers._suggested_person
         # Segment-level status for the rejected speaker's segments is dropped
         # (s0/s1 both belong to speaker 4), not left stale.
         assert 's0' not in receiver.host.speakers.segment_identity_status

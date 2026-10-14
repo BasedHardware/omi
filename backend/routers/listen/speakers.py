@@ -984,6 +984,18 @@ class SpeakerMatcher:
             if stale:
                 self.host.emit_speaker_suggestion(voice, '', '', segment_id, retracted=True)
 
+    def retire_excluded_voice(self, voice: int) -> None:
+        """Retire the full matcher state for a receipt-excluded voice.
+
+        Socket receipt handling (ListenReceiver._handle_speaker_assigned) calls
+        this when a winning whole-voice rejection (e.g. ``not_a_person``)
+        supersedes prior inference: popping ``speaker_to_person`` alone would
+        leave ``_mapping_origin`` 'manual' behind, blocking future automatic
+        matches for a restored voice until the matcher resets at a
+        conversation boundary.
+        """
+        self._retract_rejected_voice(voice, None)
+
     def _manual_voice_decision(
         self, receipt: Mapping, speaker_id: int, *, scope: Optional[str] = None
     ) -> Optional[Mapping]:

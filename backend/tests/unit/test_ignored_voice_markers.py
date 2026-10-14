@@ -128,3 +128,35 @@ def test_marker_persistence_failure_emits_shared_fallback_telemetry(monkeypatch)
     assert fallback.call_count == 1
     assert fallback.call_args.kwargs['component'] == 'speaker_assignments'
     assert fallback.call_args.kwargs['outcome'] == 'degraded'
+
+
+def test_newer_non_not_a_person_rejection_retires_the_marker():
+    """A newer not_me / not_person / unnamed answer supersedes the exclusion.
+
+    The marker exists only for not_a_person, so a newer winning rejection of
+    a different kind must retire it — treating every rejection kind as
+    still-excluded left the voice listed under Ignored Voices forever.
+    """
+    db = Mock()
+    raw = _raw(
+        [{'id': 's1', 'speaker_id': 4}],
+        {
+            'generation': 7,
+            'speakers': {'4': {'generation': 7, 'rejection': {'kind': 'not_me'}, 'person_id': None}},
+        },
+    )
+    markers.retire_exclusion_markers('u', 'c1', raw, ['s1'], speaker_id=4, voice_profiles=db)
+    db.clear_ignored_voices.assert_called_once_with('u', 'c1', [4], assignment_generation=7)
+
+
+def test_still_winning_not_a_person_keeps_the_marker():
+    db = Mock()
+    raw = _raw(
+        [{'id': 's1', 'speaker_id': 4}],
+        {
+            'generation': 7,
+            'speakers': {'4': {'generation': 7, 'rejection': {'kind': 'not_a_person'}, 'person_id': None}},
+        },
+    )
+    markers.retire_exclusion_markers('u', 'c1', raw, ['s1'], speaker_id=4, voice_profiles=db)
+    db.clear_ignored_voices.assert_not_called()

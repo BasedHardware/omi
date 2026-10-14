@@ -118,8 +118,16 @@ def retire_exclusion_markers(
         for segment in raw.get('transcript_segments') or []
         if segment.get('id') in resolved_ids and isinstance(segment.get('speaker_id'), int)
     } or ({speaker_id} if speaker_id is not None else set())
-    still_rejected = set(manual_rejected_speakers(receipt))
-    retired = sorted(reassigned - still_rejected)
+    # Ignored-voice markers exist only for not_a_person exclusions, so only a
+    # still-winning not_a_person rejection keeps one: a newer not_me /
+    # not_person / unnamed decision supersedes the exclusion and must retire
+    # its marker even though that newer decision is itself a rejection.
+    still_excluded = {
+        excluded
+        for excluded, decision in manual_rejected_speakers(receipt).items()
+        if (decision.get('rejection') or {}).get('kind') == 'not_a_person'
+    }
+    retired = sorted(reassigned - still_excluded)
     if not retired:
         return
     generation = receipt.get('generation')

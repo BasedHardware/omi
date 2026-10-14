@@ -3340,13 +3340,22 @@ class CaptureController extends ChangeNotifier
   static Duration exclusionReconcileDelay = const Duration(milliseconds: 300);
 
   void _scheduleExclusionReconcileRefresh() {
-    if (_exclusionReconcileRefresh != null) return;
+    if (_exclusionReconcileRefresh != null) {
+      // A conflict arrived while another reconcile is in flight: its GET may
+      // have read before this write committed, so queue one follow-up refresh
+      // instead of discarding the event (the coalescing invariant still holds
+      // — at most one queued refresh behind the running one).
+      _exclusionReconcileQueued = true;
+      return;
+    }
     var cancelled = false;
     final owned = lifetime.own(() => cancelled = true);
-    // Session generation at schedule time: a stop/replace/dispose during the
-    // delay or the load must not install into a later capture session.
-    final sessionId = activeCaptureSessionId;
-    bool stillCurrent() => !cancelled && !lifetime.isClosed && activeCaptureSessionId == sessionId;
+    // Per-recording identity (owner token) at schedule time: a stop, replace,
+    // or dispose during the delay or the load must not install into a later
+    // capture. activeCaptureSessionId is deliberately NOT used here — it can
+    // stay identical across sequential phone-mic stop/next-start.
+    final sessionToken = _sessionOwner?.token;
+    bool stillCurrent() => !cancelled && !lifetime.isClosed && _captureSessionIsCurrent(sessionToken);
     _exclusionReconcileRefresh = Future<void>(() async {
       // Give the in-flight decision writes a moment to settle, then let the
       // persisted snapshot reconcile the local exclusion.
@@ -3359,14 +3368,22 @@ class CaptureController extends ChangeNotifier
       // error.
       Logger.debug('Exclusion reconcile refresh failed: ${error.runtimeType}');
     }).whenComplete(() async {
+      // Decide before release(): release() runs the cancel callback, which
+      // flips this closure's own cancelled flag.
+      final queueFollowUp = _exclusionReconcileQueued && stillCurrent();
+      _exclusionReconcileQueued = false;
       // The reconcile finished on its own: stop tracking this cancellation
       // so one-shot entries do not accumulate in the lifetime ledger.
       await owned.release();
       _exclusionReconcileRefresh = null;
+      if (queueFollowUp) {
+        _scheduleExclusionReconcileRefresh();
+      }
     });
   }
 
   Future<void>? _exclusionReconcileRefresh;
+  bool _exclusionReconcileQueued = false;
 
   bool get _canRefreshInProgressConversation =>
       recordingDeviceServiceReady ||

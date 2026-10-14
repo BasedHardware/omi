@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:omi/backend/preferences.dart';
@@ -9,6 +11,8 @@ import 'package:omi/backend/schema/transcript_segment.dart';
 import 'package:omi/services/capture/capture_controller.dart';
 import 'package:omi/services/capture/capture_external_actions.dart';
 import 'package:omi/services/capture/capture_seams.dart';
+import 'package:omi/services/capture/capture_session_owner.dart';
+import 'package:omi/services/wals/recording_transfer_coordinator.dart';
 
 class _Actions extends NoopCaptureExternalActions {
   int created = 0;
@@ -381,6 +385,17 @@ void main() {
   test('a session change during the reconcile delay cancels the refresh install', () async {
     var loads = 0;
     late final CaptureController controller;
+    final owner = CaptureSessionOwner(
+      coordinator: RecordingTransferCoordinator(
+        reconcile: () async {},
+        discover: () async {},
+        refreshPending: () async {},
+        drain: () async => const RecordingTransferDrainResult.skipped(),
+        autoUploadEnabled: () => false,
+      ),
+      startForeground: () async {},
+      stopForeground: () async {},
+    );
     controller = CaptureController(
       externalActions: _Actions(),
       bleListeners: _Ble(),
@@ -390,6 +405,7 @@ void main() {
         isConnected: () => true,
       ),
       excludeSpeaker: (id, ids) async => true,
+      sessionOwner: owner,
       inProgressConversationLoader: () async {
         loads++;
       },
@@ -412,18 +428,143 @@ void main() {
     expect(await controller.assignSpeakerToConversation(4, '', '', ['s1'], notAPerson: true), isTrue);
 
     // A manual-positive socket flush schedules the reconcile refresh, then
-    // the capture session ends before the delay elapses.
+    // the capture recording is replaced before the delay elapses.
     controller.onSegmentReceived([
       _segment('s1')
         ..isUser = false
         ..personId = 'p1'
         ..speakerLabelSource = 'manual',
     ]);
-    controller.testSessionStartSeconds = 0; // session rolled: no active capture.
+    owner.replaceSession('next-recording'); // per-recording identity rolled
     await Future<void>.delayed(Duration.zero);
     await Future<void>.delayed(Duration.zero);
 
     // The cancelled reconcile must not have run its load.
     expect(loads, 0);
+  });
+
+  test('a sequential phone-mic restart with an unchanged activeCaptureSessionId still fences the reconcile', () async {
+    // Regression for the per-recording-identity fence: activeCaptureSessionId
+    // is documented to stay identical across sequential phone-mic captures,
+    // so the old session-id fence could install the previous capture's
+    // snapshot into the new session. The owner token must differ.
+    var loads = 0;
+    late final CaptureController controller;
+    final owner = CaptureSessionOwner(
+      coordinator: RecordingTransferCoordinator(
+        reconcile: () async {},
+        discover: () async {},
+        refreshPending: () async {},
+        drain: () async => const RecordingTransferDrainResult.skipped(),
+        autoUploadEnabled: () => false,
+      ),
+      startForeground: () async {},
+      stopForeground: () async {},
+    );
+    controller = CaptureController(
+      externalActions: _Actions(),
+      bleListeners: _Ble(),
+      connectivity: CaptureConnectivityBoundary(
+        initiallyConnected: true,
+        changes: const Stream.empty(),
+        isConnected: () => true,
+      ),
+      excludeSpeaker: (id, ids) async => true,
+      sessionOwner: owner,
+      inProgressConversationLoader: () async {
+        loads++;
+      },
+    );
+    addTearDown(() async {
+      CaptureController.exclusionReconcileDelay = const Duration(milliseconds: 300);
+      controller.dispose();
+      await controller.lifetime.close();
+    });
+    CaptureController.exclusionReconcileDelay = Duration.zero;
+    controller.testSessionStartSeconds = 1000;
+    controller.applyInProgressConversation(
+      ServerConversation(
+        id: 'c',
+        createdAt: DateTime(2026),
+        structured: Structured('TV', 'TV'),
+        transcriptSegments: [_segment('s1')],
+      ),
+    );
+    expect(await controller.assignSpeakerToConversation(4, '', '', ['s1'], notAPerson: true), isTrue);
+
+    controller.onSegmentReceived([
+      _segment('s1')
+        ..isUser = false
+        ..personId = 'p1'
+        ..speakerLabelSource = 'manual',
+    ]);
+    // Phone-mic stop/next-start keeps _sessionStartSeconds, so
+    // activeCaptureSessionId is unchanged — but the recording rolled.
+    expect(controller.activeCaptureSessionId, 'live-1000');
+    owner.replaceSession('next-recording');
+    await Future<void>.delayed(Duration.zero);
+    await Future<void>.delayed(Duration.zero);
+    expect(loads, 0);
+  });
+
+  test('a conflict arriving mid-refresh queues a follow-up reconcile', () async {
+    var loads = 0;
+    final gate = Completer<void>();
+    late final CaptureController controller;
+    controller = CaptureController(
+      externalActions: _Actions(),
+      bleListeners: _Ble(),
+      connectivity: CaptureConnectivityBoundary(
+        initiallyConnected: true,
+        changes: const Stream.empty(),
+        isConnected: () => true,
+      ),
+      excludeSpeaker: (id, ids) async => true,
+      inProgressConversationLoader: () async {
+        loads++;
+        if (loads == 1) await gate.future; // second conflict lands mid-GET
+      },
+    );
+    addTearDown(() async {
+      CaptureController.exclusionReconcileDelay = const Duration(milliseconds: 300);
+      controller.dispose();
+      await controller.lifetime.close();
+    });
+    CaptureController.exclusionReconcileDelay = Duration.zero;
+    controller.applyInProgressConversation(
+      ServerConversation(
+        id: 'c',
+        createdAt: DateTime(2026),
+        structured: Structured('TV', 'TV'),
+        transcriptSegments: [_segment('s1')],
+      ),
+    );
+    expect(await controller.assignSpeakerToConversation(4, '', '', ['s1'], notAPerson: true), isTrue);
+
+    // First conflict starts the refresh; its GET is still in flight...
+    controller.onSegmentReceived([
+      _segment('s1')
+        ..isUser = false
+        ..personId = 'p1'
+        ..speakerLabelSource = 'manual',
+    ]);
+    await Future<void>.delayed(Duration.zero);
+    await Future<void>.delayed(Duration.zero);
+    expect(loads, 1);
+
+    // ...when a second speaker's conflict arrives and must queue a follow-up.
+    controller.onSegmentReceived([
+      _segment('s2')
+        ..isUser = false
+        ..personId = 'p2'
+        ..speakerLabelSource = 'manual',
+    ]);
+    gate.complete();
+    await Future<void>.delayed(Duration.zero);
+    await Future<void>.delayed(Duration.zero);
+    await Future<void>.delayed(Duration.zero);
+    await Future<void>.delayed(Duration.zero);
+    // The queued follow-up ran: the second conflict was not discarded.
+    expect(loads, 2);
   });
 }
