@@ -225,6 +225,15 @@ class OmiBleForegroundService : Service() {
             backfillTimeToReconnect(addr, managed)
             managed.retryCount = 0
             reconnectBackoff.reset(addr)
+            // Any retention proof describes the previous GATT link, not this one:
+            // the device may have rebooted into a storage failure while it was
+            // away. Reset before anything on this connection can consume the
+            // stale proof; fireDeviceReady re-proves storage for this link and
+            // re-licenses the escalated schedule only on a fresh successful read.
+            synchronized(managed) {
+                managed.hasVerifiedRetention = false
+                managed.retentionProbe.resetVerification()
+            }
             managed.hasEverConnected = true
             managed.currentAttemptEstablished = true
             managed.pendingReconnect?.let { handler.removeCallbacks(it) }
@@ -349,9 +358,18 @@ class OmiBleForegroundService : Service() {
 
     private fun fireDeviceReady(address: String, services: List<BleService>) {
         val addr = address.uppercase()
+        // Audio subscription goes first, always. Firmware drops dequeued frames
+        // while it is connected but not subscribed (transport.c), so anything
+        // this function puts on the GATT command queue before the CCCD write
+        // widens the connected-but-deaf window, and a wedged head command would
+        // block capture for the whole link. The retention probe is an optional
+        // battery optimization; capture is the product. probeRetentionRuntime
+        // posts its enqueue behind this subscription's own post, so the CCCD
+        // write owns the serial queue first and a slow or lost probe read can
+        // never delay it.
+        ensureBackgroundAudioSubscription(addr, services)
         recordVerifiedRetention(addr, services)
         probeRetentionRuntime(addr)
-        ensureBackgroundAudioSubscription(addr, services)
         limitlessDrainEngine.onDeviceReady(addr)
         if (OmiBleManager.isFlutterAlive) {
             bleManager.mainHandler.post {
@@ -427,10 +445,18 @@ class OmiBleForegroundService : Service() {
                 }
             }
         }
-        try {
-            bleManager.readCharacteristic(address, STORAGE_DRAIN_SERVICE_UUID, STORAGE_DRAIN_READ_CHAR_UUID, completeProbe)
-        } catch (e: Exception) {
-            completeProbe(Result.failure(e))
+        // subscribeCharacteristic defers its enqueue through mainHandler, so the
+        // probe read must defer the same way: enqueueing it directly from
+        // fireDeviceReady would win the race and take the serial queue ahead of
+        // the audio CCCD write. A post into the same looper keeps this behind
+        // the subscription unconditionally. If the link dropped before the post
+        // runs, readCharacteristic fails the completion and the probe retires.
+        bleManager.mainHandler.post {
+            try {
+                bleManager.readCharacteristic(address, STORAGE_DRAIN_SERVICE_UUID, STORAGE_DRAIN_READ_CHAR_UUID, completeProbe)
+            } catch (e: Exception) {
+                completeProbe(Result.failure(e))
+            }
         }
     }
 
@@ -438,7 +464,10 @@ class OmiBleForegroundService : Service() {
         synchronized(managed) {
             managed.retentionProbeTimeout?.let { handler.removeCallbacks(it) }
             managed.retentionProbeTimeout = null
-            managed.retentionProbe.interrupt()
+            // Cancel the in-flight probe only. A completed verification survives
+            // this link's disconnection: retry selection runs after the link is
+            // gone and still needs the proof to keep the escalated schedule.
+            managed.retentionProbe.cancel()
         }
     }
 

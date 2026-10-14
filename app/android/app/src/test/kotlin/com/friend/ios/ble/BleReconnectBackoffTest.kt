@@ -135,8 +135,21 @@ class BleReconnectBackoffTest {
     }
 
     @Test
+    fun `mounted but timeless storage keeps flat cadence even with data on the ring`() {
+        // INV-CAP-1: the firmware's offline writer drops every request while its
+        // RTC is unsynced (sd_card.c process_write_data_req), so nonzero storage
+        // without a valid clock cannot license longer reconnect gaps.
+        assertFalse(BleReconnectBackoff.retentionProbeSucceeds(storageStatus(free = 4096)))
+        assertFalse(BleReconnectBackoff.retentionProbeSucceeds(storageStatus(used = 5, unread = 5, free = 100)))
+        val backoff = BleReconnectBackoff()
+        repeat(5) {
+            assertEquals(3_000L, backoff.delayForFailure("A", false, null, BleReconnectBackoff.retentionProbeSucceeds(storageStatus(used = 5, free = 100))))
+        }
+    }
+
+    @Test
     fun `nonzero free bytes license escalation only with advertisement`() {
-        val runtimeVerified = BleReconnectBackoff.retentionProbeSucceeds(storageStatus(free = 4096))
+        val runtimeVerified = BleReconnectBackoff.retentionProbeSucceeds(storageStatus(free = 4096, rtc = 1))
         assertTrue(runtimeVerified)
         val backoff = BleReconnectBackoff()
         val advertised = true
@@ -152,11 +165,11 @@ class BleReconnectBackoffTest {
 
     @Test
     fun `used or unread status proves storage and uint32 totals do not overflow`() {
-        assertTrue(BleReconnectBackoff.retentionProbeSucceeds(storageStatus(used = 1)))
-        assertTrue(BleReconnectBackoff.retentionProbeSucceeds(storageStatus(unread = 1)))
-        assertTrue(BleReconnectBackoff.retentionProbeSucceeds(storageStatus(free = Int.MIN_VALUE)))
+        assertTrue(BleReconnectBackoff.retentionProbeSucceeds(storageStatus(used = 1, rtc = 1)))
+        assertTrue(BleReconnectBackoff.retentionProbeSucceeds(storageStatus(unread = 1, rtc = 1)))
+        assertTrue(BleReconnectBackoff.retentionProbeSucceeds(storageStatus(free = Int.MIN_VALUE, rtc = 1)))
         // Unsigned sum is 2^32, which would wrap to zero in Int arithmetic.
-        assertTrue(BleReconnectBackoff.retentionProbeSucceeds(storageStatus(used = -1, free = 1)))
+        assertTrue(BleReconnectBackoff.retentionProbeSucceeds(storageStatus(used = -1, free = 1, rtc = 1)))
     }
 
     private fun assertFlatCadenceWithProbe(payload: ByteArray?) {

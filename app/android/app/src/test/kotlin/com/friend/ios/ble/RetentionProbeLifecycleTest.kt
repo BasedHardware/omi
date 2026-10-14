@@ -9,7 +9,7 @@ import org.junit.Test
 
 class RetentionProbeLifecycleTest {
     private val storageStatus = java.nio.ByteBuffer.allocate(16).order(java.nio.ByteOrder.LITTLE_ENDIAN)
-        .putInt(0).putInt(0).putInt(4096).putInt(0).array()
+        .putInt(0).putInt(0).putInt(4096).putInt(1).array()
 
     @Test
     fun `missing callback times out and next probe can license escalation`() {
@@ -27,11 +27,11 @@ class RetentionProbeLifecycleTest {
     }
 
     @Test
-    fun `disconnect interrupts advertised probe and only replacement GATT result licenses escalation`() {
+    fun `cancelling an in-flight probe keeps flat cadence and only a fresh result verifies`() {
         val state = RetentionProbeLifecycle()
         val oldGatt = Any()
         val oldProbe = state.start(oldGatt)!!
-        state.interrupt()
+        state.cancel()
         assertFalse(state.inFlight)
         assertFlat(state)
         val newGatt = Any()
@@ -44,16 +44,22 @@ class RetentionProbeLifecycleTest {
     }
 
     @Test
-    fun `disconnect resets previously verified retention and requires a fresh probe`() {
+    fun `completed proof survives disconnected retries until the next connection resets it`() {
         val state = RetentionProbeLifecycle()
-        val oldGatt = Any()
-        assertTrue(state.result(state.start(oldGatt)!!, oldGatt, true, storageStatus))
+        val gatt = Any()
+        assertTrue(state.result(state.start(gatt)!!, gatt, true, storageStatus))
         assertTrue(state.runtimeVerified)
-        state.interrupt()
+        // The link drops: the service cancels the (already completed) probe and
+        // retry selection runs while disconnected. The proof must survive both
+        // or the escalated schedule is unreachable.
+        state.cancel()
         assertFalse(state.inFlight)
+        assertEscalates(state)
+        // A replacement GATT connects: the stale proof is invalidated before
+        // anything on the new link consumes it, and a fresh probe re-licenses.
+        state.resetVerification()
         assertFlat(state)
-        val newGatt = Any()
-        assertTrue(state.result(state.start(newGatt)!!, newGatt, true, storageStatus))
+        assertTrue(state.result(state.start(gatt)!!, gatt, true, storageStatus))
         assertEscalates(state)
     }
 

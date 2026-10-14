@@ -93,8 +93,12 @@ internal class BleReconnectBackoff(
     companion object {
         /**
          * Firmware status is exactly four LE uint32s: used, unread, free, RTC valid.
-         * Only a nonzero used + unread + free total proves initialized storage;
-         * RTC validity alone cannot license backoff. Null includes failed reads.
+         * A nonzero used + unread + free total proves initialized storage, and the
+         * RTC-valid field must also be set: the firmware's offline writer drops every
+         * request while its clock is unsynced (sd_card.c `process_write_data_req`),
+         * so a mounted-but-timeless device discards the audio a longer reconnect gap
+         * would strand. RTC validity alone is still not evidence of usable storage.
+         * Null includes failed reads.
          */
         fun retentionProbeSucceeds(payload: ByteArray?): Boolean {
             if (payload == null || payload.size != 16) return false
@@ -102,8 +106,8 @@ internal class BleReconnectBackoff(
             val used = status.int.toLong() and 0xffff_ffffL
             val unread = status.int.toLong() and 0xffff_ffffL
             val free = status.int.toLong() and 0xffff_ffffL
-            status.int // RTC validity is not evidence of usable storage.
-            return used + unread + free > 0L
+            val rtcValid = status.int != 0
+            return rtcValid && used + unread + free > 0L
         }
 
         val DEFAULT_STEPS_MS = longArrayOf(3_000L, 6_000L, 12_000L, 30_000L, 60_000L)

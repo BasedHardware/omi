@@ -1,0 +1,4 @@
+{
+  "change": "Android stays connected and catches up faster: your Omi is contacted again within seconds after leaving and returning to range, and its offline recordings are only trusted once the device proves it can keep them",
+  "platforms": ["android"]
+}
