@@ -13295,7 +13295,7 @@ class AppLocalizationsBn extends AppLocalizations {
       'ফোন চার্জ হওয়ার সময় চলে, তাই ব্যাটারি প্রায় খরচ হয় না। চার্জে লাগানোর পর ট্রান্সক্রিপ্ট দেখা যাবে।';
 
   @override
-  String get onDeviceUpgradeBody => 'এই মাসে আরও লাইভ ঘণ্টা, বক্তাদের নাম ও ক্লাউডের নির্ভুলতাসহ।';
+  String get onDeviceUpgradeBody => 'বক্তা পৃথকীকরণ ও আরও নির্ভুলতার জন্য Pro-তে আপগ্রেড করুন';
 
   @override
   String get onDeviceAtCapFooter =>
@@ -13479,7 +13479,7 @@ class AppLocalizationsBn extends AppLocalizations {
   String get onDeviceRedoWithCloud => 'Omi Cloud দিয়ে আবার করুন';
 
   @override
-  String get onDeviceRedoHint => 'আরও বিস্তারিত ও বক্তাদের নাম। লাইভ ঘণ্টা খরচ হয়।';
+  String get onDeviceRedoHint => 'বক্তা পৃথকীকরণ ও আরও নির্ভুলতার জন্য Pro-তে আপগ্রেড করুন';
 
   @override
   String get onDeviceKeepEverything => 'সবকিছু এই ফোনেই রাখুন';
@@ -13522,8 +13522,7 @@ class AppLocalizationsBn extends AppLocalizations {
   String get onDeviceSaveLiveHours => 'লাইভ ঘণ্টা বাঁচাতে এই ফোনে ট্রান্সক্রাইব করুন';
 
   @override
-  String get onDeviceSaveLiveHoursSubtitle =>
-      'বক্তাদের নাম ও ক্লাউডের নির্ভুলতা চাইলে ব্যবহারের জন্য লাইভ ঘণ্টা থেকে যায়।';
+  String get onDeviceSaveLiveHoursSubtitle => 'বক্তা পৃথকীকরণ ও আরও নির্ভুলতার জন্য Pro-তে আপগ্রেড করুন';
 
   @override
   String get onDeviceOnThisPhone => 'এই ফোনে';

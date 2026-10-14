@@ -13292,7 +13292,7 @@ class AppLocalizationsEt extends AppLocalizations {
       'Töötab telefoni laadimise ajal, nii et aku peaaegu ei kulu. Transkriptsioonid ilmuvad pärast laadijasse ühendamist.';
 
   @override
-  String get onDeviceUpgradeBody => 'Selles kuus rohkem reaalajas tunde, nimetatud kõnelejate ja pilve täpsusega.';
+  String get onDeviceUpgradeBody => 'Mine üle Pro-le kõnelejate eristamiseks ja suurema täpsuse saamiseks';
 
   @override
   String get onDeviceAtCapFooter =>
@@ -13477,7 +13477,7 @@ class AppLocalizationsEt extends AppLocalizations {
   String get onDeviceRedoWithCloud => 'Tee uuesti Omi Cloudiga';
 
   @override
-  String get onDeviceRedoHint => 'Rohkem üksikasju ja nimetatud kõnelejad. Kulutab reaalajas tunde.';
+  String get onDeviceRedoHint => 'Mine üle Pro-le kõnelejate eristamiseks ja suurema täpsuse saamiseks';
 
   @override
   String get onDeviceKeepEverything => 'Hoia kõike selles telefonis';
@@ -13520,8 +13520,7 @@ class AppLocalizationsEt extends AppLocalizations {
   String get onDeviceSaveLiveHours => 'Transkribeeri selles telefonis, et säästa reaalajas tunde';
 
   @override
-  String get onDeviceSaveLiveHoursSubtitle =>
-      'Reaalajas tunnid jäävad alles, kui soovite nimetatud kõnelejaid ja pilve täpsust.';
+  String get onDeviceSaveLiveHoursSubtitle => 'Mine üle Pro-le kõnelejate eristamiseks ja suurema täpsuse saamiseks';
 
   @override
   String get onDeviceOnThisPhone => 'Selles telefonis';

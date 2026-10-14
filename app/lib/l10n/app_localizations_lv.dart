@@ -13327,7 +13327,7 @@ class AppLocalizationsLv extends AppLocalizations {
       'Darbojas, kamēr tālrunis lādējas, tāpēc gandrīz netērē akumulatoru. Transkripcijas parādās pēc lādētāja pievienošanas.';
 
   @override
-  String get onDeviceUpgradeBody => 'Vairāk tiešraides stundu šomēnes, ar nosauktiem runātājiem un mākoņa precizitāti.';
+  String get onDeviceUpgradeBody => 'Pārejiet uz Pro runātāju nošķiršanai un augstākai precizitātei';
 
   @override
   String get onDeviceAtCapFooter => 'Nekas netiek zaudēts. To var mainīt sadaļā Iestatījumi › Transkripcija.';
@@ -13511,7 +13511,7 @@ class AppLocalizationsLv extends AppLocalizations {
   String get onDeviceRedoWithCloud => 'Pārtaisīt ar Omi Cloud';
 
   @override
-  String get onDeviceRedoHint => 'Vairāk detaļu un nosaukti runātāji. Izmanto tiešraides stundas.';
+  String get onDeviceRedoHint => 'Pārejiet uz Pro runātāju nošķiršanai un augstākai precizitātei';
 
   @override
   String get onDeviceKeepEverything => 'Glabāt visu šajā tālrunī';
@@ -13554,8 +13554,7 @@ class AppLocalizationsLv extends AppLocalizations {
   String get onDeviceSaveLiveHours => 'Transkribēt šajā tālrunī, lai taupītu tiešraides stundas';
 
   @override
-  String get onDeviceSaveLiveHoursSubtitle =>
-      'Tiešraides stundas paliek brīžiem, kad vēlaties nosauktus runātājus un mākoņa precizitāti.';
+  String get onDeviceSaveLiveHoursSubtitle => 'Pārejiet uz Pro runātāju nošķiršanai un augstākai precizitātei';
 
   @override
   String get onDeviceOnThisPhone => 'Šajā tālrunī';

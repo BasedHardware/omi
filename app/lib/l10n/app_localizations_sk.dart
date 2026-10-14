@@ -13294,7 +13294,7 @@ class AppLocalizationsSk extends AppLocalizations {
       'Beží počas nabíjania telefónu, takže takmer nemíňa batériu. Prepisy sa zobrazia po pripojení nabíjačky.';
 
   @override
-  String get onDeviceUpgradeBody => 'Viac hodín živého prepisu tento mesiac, s menami rečníkov a presnosťou cloudu.';
+  String get onDeviceUpgradeBody => 'Prejdite na Pro na rozlíšenie hovoriacich a vyššiu presnosť';
 
   @override
   String get onDeviceAtCapFooter => 'Tak či tak sa nič nestratí. Môžete to zmeniť v Nastavenia › Prepis.';
@@ -13479,7 +13479,7 @@ class AppLocalizationsSk extends AppLocalizations {
   String get onDeviceRedoWithCloud => 'Prerobiť cez Omi Cloud';
 
   @override
-  String get onDeviceRedoHint => 'Viac detailov a mená rečníkov. Míňa hodiny živého prepisu.';
+  String get onDeviceRedoHint => 'Prejdite na Pro na rozlíšenie hovoriacich a vyššiu presnosť';
 
   @override
   String get onDeviceKeepEverything => 'Uchovávať všetko v tomto telefóne';
@@ -13522,8 +13522,7 @@ class AppLocalizationsSk extends AppLocalizations {
   String get onDeviceSaveLiveHours => 'Prepisovať v tomto telefóne a šetriť hodiny živého prepisu';
 
   @override
-  String get onDeviceSaveLiveHoursSubtitle =>
-      'Hodiny živého prepisu zostanú na chvíle, keď chcete mená rečníkov a presnosť cloudu.';
+  String get onDeviceSaveLiveHoursSubtitle => 'Prejdite na Pro na rozlíšenie hovoriacich a vyššiu presnosť';
 
   @override
   String get onDeviceOnThisPhone => 'V tomto telefóne';

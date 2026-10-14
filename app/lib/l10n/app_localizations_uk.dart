@@ -13328,7 +13328,7 @@ class AppLocalizationsUk extends AppLocalizations {
       'Працює, поки телефон заряджається, тож майже не витрачає батарею. Розшифровки з’являться після підключення до зарядки.';
 
   @override
-  String get onDeviceUpgradeBody => 'Більше годин наживо цього місяця, з іменами мовців і хмарною точністю.';
+  String get onDeviceUpgradeBody => 'Перейдіть на Pro для розділення мовців і вищої точності';
 
   @override
   String get onDeviceAtCapFooter =>
@@ -13512,7 +13512,7 @@ class AppLocalizationsUk extends AppLocalizations {
   String get onDeviceRedoWithCloud => 'Повторити в Omi Cloud';
 
   @override
-  String get onDeviceRedoHint => 'Більше деталей та імена мовців. Витрачає години наживо.';
+  String get onDeviceRedoHint => 'Перейдіть на Pro для розділення мовців і вищої точності';
 
   @override
   String get onDeviceKeepEverything => 'Зберігати все на цьому телефоні';
@@ -13555,8 +13555,7 @@ class AppLocalizationsUk extends AppLocalizations {
   String get onDeviceSaveLiveHours => 'Транскрибувати на цьому телефоні, щоб заощадити години наживо';
 
   @override
-  String get onDeviceSaveLiveHoursSubtitle =>
-      'Години наживо залишаться для випадків, коли потрібні імена мовців і хмарна точність.';
+  String get onDeviceSaveLiveHoursSubtitle => 'Перейдіть на Pro для розділення мовців і вищої точності';
 
   @override
   String get onDeviceOnThisPhone => 'На цьому телефоні';

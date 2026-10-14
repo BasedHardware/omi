@@ -13303,7 +13303,7 @@ class AppLocalizationsFi extends AppLocalizations {
       'Toimii puhelimen latautuessa, joten akkua kuluu tuskin lainkaan. Litteroinnit näkyvät, kun kytket laturin.';
 
   @override
-  String get onDeviceUpgradeBody => 'Lisää live-tunteja tässä kuussa, puhujien nimet ja pilven tarkkuus.';
+  String get onDeviceUpgradeBody => 'Päivitä Pro-versioon puhujien erottelua ja parempaa tarkkuutta varten';
 
   @override
   String get onDeviceAtCapFooter =>
@@ -13487,7 +13487,7 @@ class AppLocalizationsFi extends AppLocalizations {
   String get onDeviceRedoWithCloud => 'Tee uudelleen Omi Cloudissa';
 
   @override
-  String get onDeviceRedoHint => 'Enemmän yksityiskohtia ja puhujien nimet. Kuluttaa live-tunteja.';
+  String get onDeviceRedoHint => 'Päivitä Pro-versioon puhujien erottelua ja parempaa tarkkuutta varten';
 
   @override
   String get onDeviceKeepEverything => 'Pidä kaikki tällä puhelimella';
@@ -13530,8 +13530,7 @@ class AppLocalizationsFi extends AppLocalizations {
   String get onDeviceSaveLiveHours => 'Litteroi tällä puhelimella säästääksesi live-tunteja';
 
   @override
-  String get onDeviceSaveLiveHoursSubtitle =>
-      'Live-tunnit säästyvät tilanteisiin, joissa haluat puhujien nimet ja pilven tarkkuuden.';
+  String get onDeviceSaveLiveHoursSubtitle => 'Päivitä Pro-versioon puhujien erottelua ja parempaa tarkkuutta varten';
 
   @override
   String get onDeviceOnThisPhone => 'Tällä puhelimella';

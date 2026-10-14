@@ -13300,8 +13300,7 @@ class AppLocalizationsCs extends AppLocalizations {
       'Běží, když se telefon nabíjí, takže baterii téměř nezatěžuje. Přepisy se objeví po připojení k nabíječce.';
 
   @override
-  String get onDeviceUpgradeBody =>
-      'Více hodin živého přepisu tento měsíc, s pojmenovanými mluvčími a přesností cloudu.';
+  String get onDeviceUpgradeBody => 'Přejděte na Pro pro rozlišení mluvčích a vyšší přesnost';
 
   @override
   String get onDeviceAtCapFooter => 'V obou případech se nic neztratí. Změnit to můžete v Nastavení › Přepis.';
@@ -13485,7 +13484,7 @@ class AppLocalizationsCs extends AppLocalizations {
   String get onDeviceRedoWithCloud => 'Zpracovat znovu v Omi Cloud';
 
   @override
-  String get onDeviceRedoHint => 'Více podrobností a pojmenovaní mluvčí. Čerpá hodiny živého přepisu.';
+  String get onDeviceRedoHint => 'Přejděte na Pro pro rozlišení mluvčích a vyšší přesnost';
 
   @override
   String get onDeviceKeepEverything => 'Uchovávat vše v tomto telefonu';
@@ -13528,8 +13527,7 @@ class AppLocalizationsCs extends AppLocalizations {
   String get onDeviceSaveLiveHours => 'Přepisovat v tomto telefonu a šetřit hodiny živého přepisu';
 
   @override
-  String get onDeviceSaveLiveHoursSubtitle =>
-      'Hodiny živého přepisu zůstanou pro chvíle, kdy chcete pojmenované mluvčí a přesnost cloudu.';
+  String get onDeviceSaveLiveHoursSubtitle => 'Přejděte na Pro pro rozlišení mluvčích a vyšší přesnost';
 
   @override
   String get onDeviceOnThisPhone => 'V tomto telefonu';

@@ -13328,8 +13328,7 @@ class AppLocalizationsBs extends AppLocalizations {
       'Radi dok se telefon puni, pa gotovo ne troši bateriju. Prepisi se pojave nakon što ga priključite na punjač.';
 
   @override
-  String get onDeviceUpgradeBody =>
-      'Više sati prepisa uživo ovog mjeseca, s imenovanim govornicima i preciznošću oblaka.';
+  String get onDeviceUpgradeBody => 'Nadogradite na Pro za razdvajanje govornika i veću preciznost';
 
   @override
   String get onDeviceAtCapFooter => 'Ništa se ne gubi ni u jednom slučaju. Ovo možete promijeniti u Postavke › Prepis.';
@@ -13512,7 +13511,7 @@ class AppLocalizationsBs extends AppLocalizations {
   String get onDeviceRedoWithCloud => 'Ponovi s Omi Cloud';
 
   @override
-  String get onDeviceRedoHint => 'Više detalja i imenovani govornici. Troši sate prepisa uživo.';
+  String get onDeviceRedoHint => 'Nadogradite na Pro za razdvajanje govornika i veću preciznost';
 
   @override
   String get onDeviceKeepEverything => 'Čuvaj sve na ovom telefonu';
@@ -13555,8 +13554,7 @@ class AppLocalizationsBs extends AppLocalizations {
   String get onDeviceSaveLiveHours => 'Prepisuj na ovom telefonu radi uštede sati prepisa uživo';
 
   @override
-  String get onDeviceSaveLiveHoursSubtitle =>
-      'Sati prepisa uživo ostaju za kada želite imenovane govornike i preciznost oblaka.';
+  String get onDeviceSaveLiveHoursSubtitle => 'Nadogradite na Pro za razdvajanje govornika i veću preciznost';
 
   @override
   String get onDeviceOnThisPhone => 'Na ovom telefonu';

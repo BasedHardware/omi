@@ -13312,7 +13312,7 @@ class AppLocalizationsTr extends AppLocalizations {
       'Telefonunuz şarj olurken çalışır, bu yüzden pili neredeyse hiç kullanmaz. Transkriptler şarja taktıktan sonra görünür.';
 
   @override
-  String get onDeviceUpgradeBody => 'Bu ay daha fazla canlı saat; adlandırılmış konuşmacılar ve bulut doğruluğuyla.';
+  String get onDeviceUpgradeBody => 'Konuşmacı ayrımı ve daha yüksek doğruluk için Pro\'ya yükseltin';
 
   @override
   String get onDeviceAtCapFooter =>
@@ -13497,7 +13497,7 @@ class AppLocalizationsTr extends AppLocalizations {
   String get onDeviceRedoWithCloud => 'Omi Cloud ile Yeniden Yap';
 
   @override
-  String get onDeviceRedoHint => 'Daha fazla ayrıntı ve adlandırılmış konuşmacılar. Canlı saat kullanır.';
+  String get onDeviceRedoHint => 'Konuşmacı ayrımı ve daha yüksek doğruluk için Pro\'ya yükseltin';
 
   @override
   String get onDeviceKeepEverything => 'Her şeyi bu telefonda tut';
@@ -13540,8 +13540,7 @@ class AppLocalizationsTr extends AppLocalizations {
   String get onDeviceSaveLiveHours => 'Canlı saatlerden tasarruf için bu telefonda yazıya dök';
 
   @override
-  String get onDeviceSaveLiveHoursSubtitle =>
-      'Canlı saatler, adlandırılmış konuşmacılar ve bulut doğruluğu istediğiniz zamanlar için saklanır.';
+  String get onDeviceSaveLiveHoursSubtitle => 'Konuşmacı ayrımı ve daha yüksek doğruluk için Pro\'ya yükseltin';
 
   @override
   String get onDeviceOnThisPhone => 'Bu telefonda';

@@ -13334,7 +13334,7 @@ class AppLocalizationsNl extends AppLocalizations {
       'Draait terwijl je telefoon oplaadt, dus kost nauwelijks batterij. Transcripties verschijnen nadat je de lader aansluit.';
 
   @override
-  String get onDeviceUpgradeBody => 'Meer live-uren deze maand, met sprekersnamen en cloudnauwkeurigheid.';
+  String get onDeviceUpgradeBody => 'Upgrade naar Pro voor sprekeronderscheiding en hogere nauwkeurigheid';
 
   @override
   String get onDeviceAtCapFooter =>
@@ -13521,7 +13521,7 @@ class AppLocalizationsNl extends AppLocalizations {
   String get onDeviceRedoWithCloud => 'Opnieuw met Omi Cloud';
 
   @override
-  String get onDeviceRedoHint => 'Meer detail en sprekersnamen. Kost live-uren.';
+  String get onDeviceRedoHint => 'Upgrade naar Pro voor sprekeronderscheiding en hogere nauwkeurigheid';
 
   @override
   String get onDeviceKeepEverything => 'Alles op deze telefoon houden';
@@ -13564,8 +13564,7 @@ class AppLocalizationsNl extends AppLocalizations {
   String get onDeviceSaveLiveHours => 'Transcriberen op deze telefoon om live-uren te besparen';
 
   @override
-  String get onDeviceSaveLiveHoursSubtitle =>
-      'Live-uren blijven over voor als je sprekersnamen en cloudnauwkeurigheid wilt.';
+  String get onDeviceSaveLiveHoursSubtitle => 'Upgrade naar Pro voor sprekeronderscheiding en hogere nauwkeurigheid';
 
   @override
   String get onDeviceOnThisPhone => 'Op deze telefoon';

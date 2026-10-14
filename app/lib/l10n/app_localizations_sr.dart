@@ -13307,7 +13307,7 @@ class AppLocalizationsSr extends AppLocalizations {
       'Ради док се телефон пуни, па готово не троши батерију. Преписи се појављују када прикључите пуњач.';
 
   @override
-  String get onDeviceUpgradeBody => 'Више сати уживо овог месеца, са именованим говорницима и прецизношћу облака.';
+  String get onDeviceUpgradeBody => 'Надоградите на Pro за раздвајање говорника и већу прецизност';
 
   @override
   String get onDeviceAtCapFooter => 'Ништа се не губи. Ово можете променити у Подешавања › Препис.';
@@ -13490,7 +13490,7 @@ class AppLocalizationsSr extends AppLocalizations {
   String get onDeviceRedoWithCloud => 'Понови помоћу Omi Cloud';
 
   @override
-  String get onDeviceRedoHint => 'Више детаља и именовани говорници. Троши сате уживо.';
+  String get onDeviceRedoHint => 'Надоградите на Pro за раздвајање говорника и већу прецизност';
 
   @override
   String get onDeviceKeepEverything => 'Чувај све на овом телефону';
@@ -13533,8 +13533,7 @@ class AppLocalizationsSr extends AppLocalizations {
   String get onDeviceSaveLiveHours => 'Преписуј на овом телефону ради уштеде сати уживо';
 
   @override
-  String get onDeviceSaveLiveHoursSubtitle =>
-      'Сати уживо остају за када желите именоване говорнике и прецизност облака.';
+  String get onDeviceSaveLiveHoursSubtitle => 'Надоградите на Pro за раздвајање говорника и већу прецизност';
 
   @override
   String get onDeviceOnThisPhone => 'На овом телефону';

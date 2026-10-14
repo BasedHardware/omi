@@ -13381,8 +13381,7 @@ class AppLocalizationsEl extends AppLocalizations {
       'Λειτουργεί όσο φορτίζει το τηλέφωνο, οπότε σχεδόν δεν καταναλώνει μπαταρία. Οι μεταγραφές εμφανίζονται όταν το συνδέσετε στον φορτιστή.';
 
   @override
-  String get onDeviceUpgradeBody =>
-      'Περισσότερες ζωντανές ώρες αυτόν τον μήνα, με ονόματα ομιλητών και την ακρίβεια του cloud.';
+  String get onDeviceUpgradeBody => 'Αναβαθμίστε σε Pro για διαχωρισμό ομιλητών και μεγαλύτερη ακρίβεια';
 
   @override
   String get onDeviceAtCapFooter =>
@@ -13572,7 +13571,7 @@ class AppLocalizationsEl extends AppLocalizations {
   String get onDeviceRedoWithCloud => 'Επανάληψη με το Omi Cloud';
 
   @override
-  String get onDeviceRedoHint => 'Περισσότερες λεπτομέρειες και ονόματα ομιλητών. Καταναλώνει ζωντανές ώρες.';
+  String get onDeviceRedoHint => 'Αναβαθμίστε σε Pro για διαχωρισμό ομιλητών και μεγαλύτερη ακρίβεια';
 
   @override
   String get onDeviceKeepEverything => 'Διατήρηση όλων σε αυτό το τηλέφωνο';
@@ -13615,8 +13614,7 @@ class AppLocalizationsEl extends AppLocalizations {
   String get onDeviceSaveLiveHours => 'Μεταγραφή σε αυτό το τηλέφωνο για εξοικονόμηση ζωντανών ωρών';
 
   @override
-  String get onDeviceSaveLiveHoursSubtitle =>
-      'Οι ζωντανές ώρες μένουν για όταν θέλετε ονόματα ομιλητών και την ακρίβεια του cloud.';
+  String get onDeviceSaveLiveHoursSubtitle => 'Αναβαθμίστε σε Pro για διαχωρισμό ομιλητών και μεγαλύτερη ακρίβεια';
 
   @override
   String get onDeviceOnThisPhone => 'Σε αυτό το τηλέφωνο';

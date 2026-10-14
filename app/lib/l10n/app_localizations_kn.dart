@@ -13338,7 +13338,7 @@ class AppLocalizationsKn extends AppLocalizations {
       'ಫೋನ್ ಚಾರ್ಜ್ ಆಗುತ್ತಿರುವಾಗ ಚಲಿಸುತ್ತದೆ, ಆದ್ದರಿಂದ ಬ್ಯಾಟರಿ ಬಹುತೇಕ ಖರ್ಚಾಗುವುದಿಲ್ಲ. ಚಾರ್ಜರ್ ಸಂಪರ್ಕಿಸಿದ ನಂತರ ಪ್ರತಿಲಿಪಿಗಳು ಕಾಣಿಸುತ್ತವೆ.';
 
   @override
-  String get onDeviceUpgradeBody => 'ಈ ತಿಂಗಳು ಹೆಚ್ಚು ಲೈವ್ ಗಂಟೆಗಳು, ಮಾತನಾಡುವವರ ಹೆಸರುಗಳು ಮತ್ತು ಕ್ಲೌಡ್ ನಿಖರತೆಯೊಂದಿಗೆ.';
+  String get onDeviceUpgradeBody => 'ಮಾತನಾಡುವವರನ್ನು ಪ್ರತ್ಯೇಕಿಸಲು ಮತ್ತು ಹೆಚ್ಚಿನ ನಿಖರತೆಗಾಗಿ Pro ಗೆ ಅಪ್‌ಗ್ರೇಡ್ ಮಾಡಿ';
 
   @override
   String get onDeviceAtCapFooter =>
@@ -13527,7 +13527,7 @@ class AppLocalizationsKn extends AppLocalizations {
   String get onDeviceRedoWithCloud => 'Omi Cloud ಮೂಲಕ ಮತ್ತೆ ಮಾಡಿ';
 
   @override
-  String get onDeviceRedoHint => 'ಹೆಚ್ಚು ವಿವರ ಮತ್ತು ಮಾತನಾಡುವವರ ಹೆಸರುಗಳು. ಲೈವ್ ಗಂಟೆಗಳನ್ನು ಬಳಸುತ್ತದೆ.';
+  String get onDeviceRedoHint => 'ಮಾತನಾಡುವವರನ್ನು ಪ್ರತ್ಯೇಕಿಸಲು ಮತ್ತು ಹೆಚ್ಚಿನ ನಿಖರತೆಗಾಗಿ Pro ಗೆ ಅಪ್‌ಗ್ರೇಡ್ ಮಾಡಿ';
 
   @override
   String get onDeviceKeepEverything => 'ಎಲ್ಲವನ್ನೂ ಈ ಫೋನ್‌ನಲ್ಲೇ ಇರಿಸಿ';
@@ -13571,7 +13571,7 @@ class AppLocalizationsKn extends AppLocalizations {
 
   @override
   String get onDeviceSaveLiveHoursSubtitle =>
-      'ಮಾತನಾಡುವವರ ಹೆಸರುಗಳು ಮತ್ತು ಕ್ಲೌಡ್ ನಿಖರತೆ ಬೇಕಾದಾಗಾಗಿ ಲೈವ್ ಗಂಟೆಗಳು ಉಳಿಯುತ್ತವೆ.';
+      'ಮಾತನಾಡುವವರನ್ನು ಪ್ರತ್ಯೇಕಿಸಲು ಮತ್ತು ಹೆಚ್ಚಿನ ನಿಖರತೆಗಾಗಿ Pro ಗೆ ಅಪ್‌ಗ್ರೇಡ್ ಮಾಡಿ';
 
   @override
   String get onDeviceOnThisPhone => 'ಈ ಫೋನ್‌ನಲ್ಲಿ';

@@ -13312,7 +13312,7 @@ class AppLocalizationsUr extends AppLocalizations {
       'یہ فون چارج ہوتے وقت چلتا ہے، اس لیے بیٹری بمشکل استعمال ہوتی ہے۔ چارجر لگانے کے بعد ٹرانسکرپٹس نظر آئیں گے۔';
 
   @override
-  String get onDeviceUpgradeBody => 'اس ماہ مزید لائیو گھنٹے، بولنے والوں کے ناموں اور کلاؤڈ کی درستگی کے ساتھ۔';
+  String get onDeviceUpgradeBody => 'بولنے والوں کو الگ پہچاننے اور زیادہ درستگی کے لیے Pro میں اپ گریڈ کریں';
 
   @override
   String get onDeviceAtCapFooter =>
@@ -13497,7 +13497,7 @@ class AppLocalizationsUr extends AppLocalizations {
   String get onDeviceRedoWithCloud => 'Omi Cloud سے دوبارہ کریں';
 
   @override
-  String get onDeviceRedoHint => 'زیادہ تفصیل اور بولنے والوں کے نام۔ لائیو گھنٹے استعمال ہوتے ہیں۔';
+  String get onDeviceRedoHint => 'بولنے والوں کو الگ پہچاننے اور زیادہ درستگی کے لیے Pro میں اپ گریڈ کریں';
 
   @override
   String get onDeviceKeepEverything => 'سب کچھ اسی فون پر رکھیں';
@@ -13540,8 +13540,7 @@ class AppLocalizationsUr extends AppLocalizations {
   String get onDeviceSaveLiveHours => 'لائیو گھنٹے بچانے کے لیے اسی فون پر ٹرانسکرائب کریں';
 
   @override
-  String get onDeviceSaveLiveHoursSubtitle =>
-      'لائیو گھنٹے اس وقت کے لیے محفوظ رہتے ہیں جب آپ بولنے والوں کے نام اور کلاؤڈ کی درستگی چاہیں۔';
+  String get onDeviceSaveLiveHoursSubtitle => 'بولنے والوں کو الگ پہچاننے اور زیادہ درستگی کے لیے Pro میں اپ گریڈ کریں';
 
   @override
   String get onDeviceOnThisPhone => 'اس فون پر';

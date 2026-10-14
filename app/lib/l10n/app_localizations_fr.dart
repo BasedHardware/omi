@@ -13402,8 +13402,7 @@ class AppLocalizationsFr extends AppLocalizations {
       'Fonctionne pendant la recharge, donc n\'use presque pas la batterie. Les transcriptions apparaissent une fois le téléphone branché.';
 
   @override
-  String get onDeviceUpgradeBody =>
-      'Plus d\'heures en direct ce mois-ci, avec les noms des intervenants et la précision du cloud.';
+  String get onDeviceUpgradeBody => 'Passez à Pro pour séparer les intervenants et obtenir une meilleure précision';
 
   @override
   String get onDeviceAtCapFooter =>
@@ -13592,7 +13591,7 @@ class AppLocalizationsFr extends AppLocalizations {
   String get onDeviceRedoWithCloud => 'Refaire avec Omi Cloud';
 
   @override
-  String get onDeviceRedoHint => 'Plus de détails et noms des intervenants. Utilise des heures en direct.';
+  String get onDeviceRedoHint => 'Passez à Pro pour séparer les intervenants et obtenir une meilleure précision';
 
   @override
   String get onDeviceKeepEverything => 'Tout garder sur ce téléphone';
@@ -13636,7 +13635,7 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get onDeviceSaveLiveHoursSubtitle =>
-      'Gardez vos heures en direct pour quand vous voulez les noms des intervenants et la précision du cloud.';
+      'Passez à Pro pour séparer les intervenants et obtenir une meilleure précision';
 
   @override
   String get onDeviceOnThisPhone => 'Sur ce téléphone';

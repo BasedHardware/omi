@@ -13351,8 +13351,7 @@ class AppLocalizationsHu extends AppLocalizations {
       'Töltés közben fut, így alig terheli az akkumulátort. Az átiratok a töltő csatlakoztatása után jelennek meg.';
 
   @override
-  String get onDeviceUpgradeBody =>
-      'Több élő óra ebben a hónapban, név szerint azonosított beszélőkkel és felhőalapú pontossággal.';
+  String get onDeviceUpgradeBody => 'Válts Pro-ra a beszélők elkülönítéséhez és a nagyobb pontosságért';
 
   @override
   String get onDeviceAtCapFooter => 'Egyik esetben sem vész el semmi. Ezt itt módosíthatod: Beállítások › Átírás.';
@@ -13538,7 +13537,7 @@ class AppLocalizationsHu extends AppLocalizations {
   String get onDeviceRedoWithCloud => 'Újra az Omi Clouddal';
 
   @override
-  String get onDeviceRedoHint => 'Több részlet és név szerinti beszélők. Élő órákat használ.';
+  String get onDeviceRedoHint => 'Válts Pro-ra a beszélők elkülönítéséhez és a nagyobb pontosságért';
 
   @override
   String get onDeviceKeepEverything => 'Minden maradjon ezen a telefonon';
@@ -13581,8 +13580,7 @@ class AppLocalizationsHu extends AppLocalizations {
   String get onDeviceSaveLiveHours => 'Átírás ezen a telefonon az élő órák spórolásához';
 
   @override
-  String get onDeviceSaveLiveHoursSubtitle =>
-      'Az élő órák megmaradnak arra az esetre, ha név szerinti beszélőket és felhőalapú pontosságot szeretnél.';
+  String get onDeviceSaveLiveHoursSubtitle => 'Válts Pro-ra a beszélők elkülönítéséhez és a nagyobb pontosságért';
 
   @override
   String get onDeviceOnThisPhone => 'Ezen a telefonon';

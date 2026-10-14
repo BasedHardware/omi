@@ -13351,7 +13351,7 @@ class AppLocalizationsTe extends AppLocalizations {
       'మీ ఫోన్ ఛార్జ్ అవుతున్నప్పుడు నడుస్తుంది, కాబట్టి బ్యాటరీని దాదాపు వాడదు. ఛార్జర్ పెట్టిన తర్వాత ట్రాన్‌స్క్రిప్ట్‌లు కనిపిస్తాయి.';
 
   @override
-  String get onDeviceUpgradeBody => 'ఈ నెల మరిన్ని లైవ్ గంటలు, పేర్లతో స్పీకర్లు మరియు క్లౌడ్ ఖచ్చితత్వంతో.';
+  String get onDeviceUpgradeBody => 'మాట్లాడేవారిని వేరు చేయడానికి మరియు మరింత ఖచ్చితత్వం కోసం Proకి అప్‌గ్రేడ్ చేయండి';
 
   @override
   String get onDeviceAtCapFooter =>
@@ -13539,7 +13539,7 @@ class AppLocalizationsTe extends AppLocalizations {
   String get onDeviceRedoWithCloud => 'Omi Cloudతో మళ్లీ చేయండి';
 
   @override
-  String get onDeviceRedoHint => 'మరింత వివరాలు మరియు పేర్లతో స్పీకర్లు. లైవ్ గంటలను వాడుతుంది.';
+  String get onDeviceRedoHint => 'మాట్లాడేవారిని వేరు చేయడానికి మరియు మరింత ఖచ్చితత్వం కోసం Proకి అప్‌గ్రేడ్ చేయండి';
 
   @override
   String get onDeviceKeepEverything => 'అన్నింటినీ ఈ ఫోన్‌లోనే ఉంచండి';
@@ -13583,7 +13583,7 @@ class AppLocalizationsTe extends AppLocalizations {
 
   @override
   String get onDeviceSaveLiveHoursSubtitle =>
-      'పేర్లతో స్పీకర్లు, క్లౌడ్ ఖచ్చితత్వం కావాలనుకున్నప్పుడు లైవ్ గంటలు అందుబాటులో ఉంటాయి.';
+      'మాట్లాడేవారిని వేరు చేయడానికి మరియు మరింత ఖచ్చితత్వం కోసం Proకి అప్‌గ్రేడ్ చేయండి';
 
   @override
   String get onDeviceOnThisPhone => 'ఈ ఫోన్‌లో';

@@ -13116,7 +13116,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get onDeviceOptionChargingBody => '휴대폰이 충전되는 동안 실행되므로 배터리를 거의 사용하지 않아요. 충전기를 연결하면 텍스트가 표시돼요.';
 
   @override
-  String get onDeviceUpgradeBody => '이번 달 실시간 시간 추가, 화자 이름 표시와 클라우드 정확도까지.';
+  String get onDeviceUpgradeBody => '화자 분리와 더 높은 정확도를 위해 Pro로 업그레이드하세요';
 
   @override
   String get onDeviceAtCapFooter => '어느 쪽을 선택해도 잃는 건 없어요. 설정 › 음성 변환에서 변경할 수 있어요.';
@@ -13295,7 +13295,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get onDeviceRedoWithCloud => 'Omi Cloud로 다시 하기';
 
   @override
-  String get onDeviceRedoHint => '더 자세한 내용과 화자 이름. 실시간 시간을 사용해요.';
+  String get onDeviceRedoHint => '화자 분리와 더 높은 정확도를 위해 Pro로 업그레이드하세요';
 
   @override
   String get onDeviceKeepEverything => '모두 이 휴대폰에 보관';
@@ -13338,7 +13338,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get onDeviceSaveLiveHours => '실시간 시간을 아끼려면 이 휴대폰에서 변환';
 
   @override
-  String get onDeviceSaveLiveHoursSubtitle => '화자 이름과 클라우드 정확도가 필요할 때를 위해 실시간 시간을 남겨 둬요.';
+  String get onDeviceSaveLiveHoursSubtitle => '화자 분리와 더 높은 정확도를 위해 Pro로 업그레이드하세요';
 
   @override
   String get onDeviceOnThisPhone => '이 휴대폰';

@@ -13283,7 +13283,7 @@ class AppLocalizationsEn extends AppLocalizations {
       'Runs while your phone charges, so it barely touches the battery. Transcripts show up after you plug in.';
 
   @override
-  String get onDeviceUpgradeBody => 'More live hours this month, with named speakers and cloud accuracy.';
+  String get onDeviceUpgradeBody => 'Upgrade to Pro for speaker separation and higher accuracy';
 
   @override
   String get onDeviceAtCapFooter => 'Nothing is lost either way. You can change this in Settings › Transcription.';
@@ -13467,7 +13467,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get onDeviceRedoWithCloud => 'Redo with Omi Cloud';
 
   @override
-  String get onDeviceRedoHint => 'More detail and named speakers. Uses live hours.';
+  String get onDeviceRedoHint => 'Upgrade to Pro for speaker separation and higher accuracy';
 
   @override
   String get onDeviceKeepEverything => 'Keep everything on this phone';
@@ -13510,7 +13510,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get onDeviceSaveLiveHours => 'Transcribe on this phone to save live hours';
 
   @override
-  String get onDeviceSaveLiveHoursSubtitle => 'Live hours stay for when you want named speakers and cloud accuracy.';
+  String get onDeviceSaveLiveHoursSubtitle => 'Upgrade to Pro for speaker separation and higher accuracy';
 
   @override
   String get onDeviceOnThisPhone => 'On this phone';

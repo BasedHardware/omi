@@ -23682,7 +23682,7 @@ abstract class AppLocalizations {
   /// Explains what upgrading the plan gives
   ///
   /// In en, this message translates to:
-  /// **'More live hours this month, with named speakers and cloud accuracy.'**
+  /// **'Upgrade to Pro for speaker separation and higher accuracy'**
   String get onDeviceUpgradeBody;
 
   /// Footer under the live-hours-used sheet; 'Settings › Transcription' is a menu path
@@ -24000,7 +24000,7 @@ abstract class AppLocalizations {
   /// Hint under the Redo with Omi Cloud button
   ///
   /// In en, this message translates to:
-  /// **'More detail and named speakers. Uses live hours.'**
+  /// **'Upgrade to Pro for speaker separation and higher accuracy'**
   String get onDeviceRedoHint;
 
   /// Setting: never send anything to the cloud
@@ -24078,7 +24078,7 @@ abstract class AppLocalizations {
   /// Subtitle of the save-live-hours setting
   ///
   /// In en, this message translates to:
-  /// **'Live hours stay for when you want named speakers and cloud accuracy.'**
+  /// **'Upgrade to Pro for speaker separation and higher accuracy'**
   String get onDeviceSaveLiveHoursSubtitle;
 
   /// Settings section header about storage on the phone

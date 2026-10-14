@@ -13329,7 +13329,7 @@ class AppLocalizationsMs extends AppLocalizations {
       'Berjalan semasa telefon anda dicas, jadi hampir tidak menggunakan bateri. Transkrip muncul selepas anda memasang pengecas.';
 
   @override
-  String get onDeviceUpgradeBody => 'Lebih banyak jam langsung bulan ini, dengan nama penutur dan ketepatan awan.';
+  String get onDeviceUpgradeBody => 'Naik taraf ke Pro untuk pemisahan penutur dan ketepatan lebih tinggi';
 
   @override
   String get onDeviceAtCapFooter => 'Tiada apa yang hilang. Anda boleh menukar ini dalam Tetapan › Transkripsi.';
@@ -13516,7 +13516,7 @@ class AppLocalizationsMs extends AppLocalizations {
   String get onDeviceRedoWithCloud => 'Buat semula dengan Omi Cloud';
 
   @override
-  String get onDeviceRedoHint => 'Lebih terperinci dan nama penutur. Menggunakan jam langsung.';
+  String get onDeviceRedoHint => 'Naik taraf ke Pro untuk pemisahan penutur dan ketepatan lebih tinggi';
 
   @override
   String get onDeviceKeepEverything => 'Simpan semuanya pada telefon ini';
@@ -13559,8 +13559,7 @@ class AppLocalizationsMs extends AppLocalizations {
   String get onDeviceSaveLiveHours => 'Transkripsi pada telefon ini untuk menjimatkan jam langsung';
 
   @override
-  String get onDeviceSaveLiveHoursSubtitle =>
-      'Jam langsung disimpan untuk masa anda mahukan nama penutur dan ketepatan awan.';
+  String get onDeviceSaveLiveHoursSubtitle => 'Naik taraf ke Pro untuk pemisahan penutur dan ketepatan lebih tinggi';
 
   @override
   String get onDeviceOnThisPhone => 'Pada telefon ini';

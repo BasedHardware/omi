@@ -13389,8 +13389,7 @@ class AppLocalizationsTa extends AppLocalizations {
       'ஃபோன் சார்ஜ் ஆகும்போது இயங்குவதால் பேட்டரியைக் கிட்டத்தட்ட பயன்படுத்தாது. சார்ஜரில் இணைத்த பிறகு உரைப்பதிவுகள் தோன்றும்.';
 
   @override
-  String get onDeviceUpgradeBody =>
-      'இந்த மாதம் கூடுதல் நேரலை மணிநேரங்கள், பெயரிடப்பட்ட பேச்சாளர்கள் மற்றும் கிளவுட் துல்லியத்துடன்.';
+  String get onDeviceUpgradeBody => 'பேச்சாளர்களைப் பிரித்தறியவும் அதிக துல்லியத்திற்கும் Pro-க்கு மேம்படுத்தவும்';
 
   @override
   String get onDeviceAtCapFooter => 'எந்த வழியிலும் எதுவும் இழக்கப்படாது. இதை அமைப்புகள் › பேச்சு என்பதில் மாற்றலாம்.';
@@ -13574,8 +13573,7 @@ class AppLocalizationsTa extends AppLocalizations {
   String get onDeviceRedoWithCloud => 'Omi Cloud மூலம் மீண்டும் செய்';
 
   @override
-  String get onDeviceRedoHint =>
-      'கூடுதல் விவரங்கள் மற்றும் பெயரிடப்பட்ட பேச்சாளர்கள். நேரலை மணிநேரங்களைப் பயன்படுத்தும்.';
+  String get onDeviceRedoHint => 'பேச்சாளர்களைப் பிரித்தறியவும் அதிக துல்லியத்திற்கும் Pro-க்கு மேம்படுத்தவும்';
 
   @override
   String get onDeviceKeepEverything => 'எல்லாவற்றையும் இந்த ஃபோனிலேயே வை';
@@ -13619,7 +13617,7 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String get onDeviceSaveLiveHoursSubtitle =>
-      'பெயரிடப்பட்ட பேச்சாளர்களும் கிளவுட் துல்லியமும் தேவைப்படும்போதுக்காக நேரலை மணிநேரங்கள் சேமிக்கப்படும்.';
+      'பேச்சாளர்களைப் பிரித்தறியவும் அதிக துல்லியத்திற்கும் Pro-க்கு மேம்படுத்தவும்';
 
   @override
   String get onDeviceOnThisPhone => 'இந்த ஃபோனில்';

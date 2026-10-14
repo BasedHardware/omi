@@ -13293,7 +13293,7 @@ class AppLocalizationsFa extends AppLocalizations {
       'هنگام شارژ گوشی اجرا می‌شود، پس تقریباً باتری مصرف نمی‌کند. رونوشت‌ها پس از وصل‌کردن شارژر نمایش داده می‌شوند.';
 
   @override
-  String get onDeviceUpgradeBody => 'ساعت‌های زندهٔ بیشتر در این ماه، همراه با نام گویندگان و دقت ابری.';
+  String get onDeviceUpgradeBody => 'برای تفکیک گویندگان و دقت بیشتر به Pro ارتقا دهید';
 
   @override
   String get onDeviceAtCapFooter => 'در هر صورت چیزی از دست نمی‌رود. می‌توانید این را در تنظیمات › رونویسی تغییر دهید.';
@@ -13476,7 +13476,7 @@ class AppLocalizationsFa extends AppLocalizations {
   String get onDeviceRedoWithCloud => 'انجام دوباره با Omi Cloud';
 
   @override
-  String get onDeviceRedoHint => 'جزئیات بیشتر و نام گویندگان. از ساعت‌های زنده استفاده می‌کند.';
+  String get onDeviceRedoHint => 'برای تفکیک گویندگان و دقت بیشتر به Pro ارتقا دهید';
 
   @override
   String get onDeviceKeepEverything => 'نگه‌داشتن همه چیز روی همین گوشی';
@@ -13519,7 +13519,7 @@ class AppLocalizationsFa extends AppLocalizations {
   String get onDeviceSaveLiveHours => 'رونویسی روی همین گوشی برای صرفه‌جویی در ساعت‌های زنده';
 
   @override
-  String get onDeviceSaveLiveHoursSubtitle => 'ساعت‌های زنده برای زمانی می‌مانند که نام گویندگان و دقت ابری می‌خواهید.';
+  String get onDeviceSaveLiveHoursSubtitle => 'برای تفکیک گویندگان و دقت بیشتر به Pro ارتقا دهید';
 
   @override
   String get onDeviceOnThisPhone => 'روی همین گوشی';

@@ -13353,7 +13353,7 @@ class AppLocalizationsRo extends AppLocalizations {
       'Rulează în timp ce telefonul se încarcă, deci aproape nu consumă bateria. Transcrierile apar după ce conectezi încărcătorul.';
 
   @override
-  String get onDeviceUpgradeBody => 'Mai multe ore live luna aceasta, cu numele vorbitorilor și precizia din cloud.';
+  String get onDeviceUpgradeBody => 'Treci la Pro pentru separarea vorbitorilor și o precizie mai mare';
 
   @override
   String get onDeviceAtCapFooter => 'Oricum ai alege, nu se pierde nimic. Poți schimba asta în Setări › Transcriere.';
@@ -13539,7 +13539,7 @@ class AppLocalizationsRo extends AppLocalizations {
   String get onDeviceRedoWithCloud => 'Refă cu Omi Cloud';
 
   @override
-  String get onDeviceRedoHint => 'Mai multe detalii și numele vorbitorilor. Folosește ore live.';
+  String get onDeviceRedoHint => 'Treci la Pro pentru separarea vorbitorilor și o precizie mai mare';
 
   @override
   String get onDeviceKeepEverything => 'Păstrează totul pe acest telefon';
@@ -13582,8 +13582,7 @@ class AppLocalizationsRo extends AppLocalizations {
   String get onDeviceSaveLiveHours => 'Transcrie pe acest telefon pentru a economisi ore live';
 
   @override
-  String get onDeviceSaveLiveHoursSubtitle =>
-      'Orele live rămân pentru când vrei numele vorbitorilor și precizia din cloud.';
+  String get onDeviceSaveLiveHoursSubtitle => 'Treci la Pro pentru separarea vorbitorilor și o precizie mai mare';
 
   @override
   String get onDeviceOnThisPhone => 'Pe acest telefon';

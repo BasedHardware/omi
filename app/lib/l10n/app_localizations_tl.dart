@@ -13405,7 +13405,7 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get onDeviceUpgradeBody =>
-      'Mas maraming live hours ngayong buwan, may pangalan ng mga nagsasalita at katumpakan ng cloud.';
+      'Mag-upgrade sa Pro para sa paghihiwalay ng mga nagsasalita at mas mataas na katumpakan';
 
   @override
   String get onDeviceAtCapFooter =>
@@ -13592,7 +13592,8 @@ class AppLocalizationsTl extends AppLocalizations {
   String get onDeviceRedoWithCloud => 'Ulitin gamit ang Omi Cloud';
 
   @override
-  String get onDeviceRedoHint => 'Mas detalyado at may pangalan ng mga nagsasalita. Gumagamit ng live hours.';
+  String get onDeviceRedoHint =>
+      'Mag-upgrade sa Pro para sa paghihiwalay ng mga nagsasalita at mas mataas na katumpakan';
 
   @override
   String get onDeviceKeepEverything => 'Itago ang lahat sa phone na ito';
@@ -13636,7 +13637,7 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get onDeviceSaveLiveHoursSubtitle =>
-      'Nakalaan ang live hours para kapag gusto mo ng pangalan ng mga nagsasalita at katumpakan ng cloud.';
+      'Mag-upgrade sa Pro para sa paghihiwalay ng mga nagsasalita at mas mataas na katumpakan';
 
   @override
   String get onDeviceOnThisPhone => 'Sa phone na ito';

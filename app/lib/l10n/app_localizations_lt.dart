@@ -13322,8 +13322,7 @@ class AppLocalizationsLt extends AppLocalizations {
       'Veikia, kol telefonas kraunasi, todėl beveik neeikvoja baterijos. Transkripcijos atsiras prijungus kroviklį.';
 
   @override
-  String get onDeviceUpgradeBody =>
-      'Daugiau tiesioginių valandų šį mėnesį, su įvardytais kalbėtojais ir debesies tikslumu.';
+  String get onDeviceUpgradeBody => 'Pereikite į Pro, kad būtų atskirti kalbėtojai ir padidėtų tikslumas';
 
   @override
   String get onDeviceAtCapFooter => 'Niekas neprarandama. Tai galite pakeisti skiltyje Nustatymai › Transkripcija.';
@@ -13507,7 +13506,7 @@ class AppLocalizationsLt extends AppLocalizations {
   String get onDeviceRedoWithCloud => 'Perdaryti su Omi Cloud';
 
   @override
-  String get onDeviceRedoHint => 'Daugiau detalių ir įvardyti kalbėtojai. Naudoja tiesiogines valandas.';
+  String get onDeviceRedoHint => 'Pereikite į Pro, kad būtų atskirti kalbėtojai ir padidėtų tikslumas';
 
   @override
   String get onDeviceKeepEverything => 'Viską laikyti šiame telefone';
@@ -13550,8 +13549,7 @@ class AppLocalizationsLt extends AppLocalizations {
   String get onDeviceSaveLiveHours => 'Transkribuoti šiame telefone, kad sutaupytumėte tiesioginių valandų';
 
   @override
-  String get onDeviceSaveLiveHoursSubtitle =>
-      'Tiesioginės valandos lieka tam, kai norėsite įvardytų kalbėtojų ir debesies tikslumo.';
+  String get onDeviceSaveLiveHoursSubtitle => 'Pereikite į Pro, kad būtų atskirti kalbėtojai ir padidėtų tikslumas';
 
   @override
   String get onDeviceOnThisPhone => 'Šiame telefone';

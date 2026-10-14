@@ -13279,7 +13279,7 @@ class AppLocalizationsHi extends AppLocalizations {
       'फ़ोन चार्ज होते समय चलता है, इसलिए बैटरी लगभग खर्च नहीं होती। चार्जर लगाने के बाद ट्रांसक्रिप्ट दिखते हैं।';
 
   @override
-  String get onDeviceUpgradeBody => 'इस महीने ज़्यादा लाइव घंटे, स्पीकर के नाम और क्लाउड जैसी सटीकता के साथ।';
+  String get onDeviceUpgradeBody => 'वक्ताओं को अलग पहचानने और अधिक सटीकता के लिए Pro में अपग्रेड करें';
 
   @override
   String get onDeviceAtCapFooter =>
@@ -13465,7 +13465,7 @@ class AppLocalizationsHi extends AppLocalizations {
   String get onDeviceRedoWithCloud => 'Omi Cloud से दोबारा करें';
 
   @override
-  String get onDeviceRedoHint => 'ज़्यादा विवरण और स्पीकर के नाम। लाइव घंटे खर्च होते हैं।';
+  String get onDeviceRedoHint => 'वक्ताओं को अलग पहचानने और अधिक सटीकता के लिए Pro में अपग्रेड करें';
 
   @override
   String get onDeviceKeepEverything => 'सब कुछ इसी फ़ोन पर रखें';
@@ -13508,8 +13508,7 @@ class AppLocalizationsHi extends AppLocalizations {
   String get onDeviceSaveLiveHours => 'लाइव घंटे बचाने के लिए इसी फ़ोन पर ट्रांसक्राइब करें';
 
   @override
-  String get onDeviceSaveLiveHoursSubtitle =>
-      'लाइव घंटे तब के लिए बचे रहते हैं जब आपको स्पीकर के नाम और क्लाउड जैसी सटीकता चाहिए।';
+  String get onDeviceSaveLiveHoursSubtitle => 'वक्ताओं को अलग पहचानने और अधिक सटीकता के लिए Pro में अपग्रेड करें';
 
   @override
   String get onDeviceOnThisPhone => 'इस फ़ोन पर';

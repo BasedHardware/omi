@@ -13303,7 +13303,7 @@ class AppLocalizationsSv extends AppLocalizations {
       'Körs medan telefonen laddas, så batteriet påverkas knappt. Transkriptionerna visas när du har satt i laddaren.';
 
   @override
-  String get onDeviceUpgradeBody => 'Fler livetimmar den här månaden, med namngivna talare och molnets precision.';
+  String get onDeviceUpgradeBody => 'Uppgradera till Pro för talarseparering och högre precision';
 
   @override
   String get onDeviceAtCapFooter =>
@@ -13489,7 +13489,7 @@ class AppLocalizationsSv extends AppLocalizations {
   String get onDeviceRedoWithCloud => 'Gör om med Omi Cloud';
 
   @override
-  String get onDeviceRedoHint => 'Mer detaljer och namngivna talare. Använder livetimmar.';
+  String get onDeviceRedoHint => 'Uppgradera till Pro för talarseparering och högre precision';
 
   @override
   String get onDeviceKeepEverything => 'Behåll allt på den här telefonen';
@@ -13532,8 +13532,7 @@ class AppLocalizationsSv extends AppLocalizations {
   String get onDeviceSaveLiveHours => 'Transkribera på den här telefonen för att spara livetimmar';
 
   @override
-  String get onDeviceSaveLiveHoursSubtitle =>
-      'Livetimmarna sparas till när du vill ha namngivna talare och molnets precision.';
+  String get onDeviceSaveLiveHoursSubtitle => 'Uppgradera till Pro för talarseparering och högre precision';
 
   @override
   String get onDeviceOnThisPhone => 'På den här telefonen';

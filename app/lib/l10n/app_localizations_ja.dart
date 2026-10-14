@@ -13111,7 +13111,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get onDeviceOptionChargingBody => '充電中に動作するので、バッテリーはほとんど消費しません。充電器につなぐと文字起こしが表示されます。';
 
   @override
-  String get onDeviceUpgradeBody => '今月のライブ時間を追加。話者名の表示とクラウドの高い精度も使えます。';
+  String get onDeviceUpgradeBody => '話者の分離と精度向上のためにProにアップグレード';
 
   @override
   String get onDeviceAtCapFooter => 'どちらを選んでもデータは失われません。設定 › 文字起こしでいつでも変更できます。';
@@ -13289,7 +13289,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get onDeviceRedoWithCloud => 'Omi Cloudでやり直す';
 
   @override
-  String get onDeviceRedoHint => 'より詳細で、話者名も表示されます。ライブ時間を消費します。';
+  String get onDeviceRedoHint => '話者の分離と精度向上のためにProにアップグレード';
 
   @override
   String get onDeviceKeepEverything => 'すべてをこのスマホに保存';
@@ -13332,7 +13332,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get onDeviceSaveLiveHours => 'このスマホで文字起こししてライブ時間を節約';
 
   @override
-  String get onDeviceSaveLiveHoursSubtitle => '話者名やクラウドの精度が必要なときのために、ライブ時間を残しておけます。';
+  String get onDeviceSaveLiveHoursSubtitle => '話者の分離と精度向上のためにProにアップグレード';
 
   @override
   String get onDeviceOnThisPhone => 'このスマホ';

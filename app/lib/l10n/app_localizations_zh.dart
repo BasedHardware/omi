@@ -13092,7 +13092,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get onDeviceOptionChargingBody => '在手机充电时运行，几乎不耗电。接上充电器后即可看到文字记录。';
 
   @override
-  String get onDeviceUpgradeBody => '本月获得更多实时时长，并支持说话人识别和云端级准确度。';
+  String get onDeviceUpgradeBody => '升级到 Pro，获得说话人分离和更高准确度';
 
   @override
   String get onDeviceAtCapFooter => '无论选哪种都不会丢失内容。你可以在 设置 › 转录 中更改。';
@@ -13270,7 +13270,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get onDeviceRedoWithCloud => '用 Omi Cloud 重新处理';
 
   @override
-  String get onDeviceRedoHint => '更多细节，并识别说话人。会占用实时时长。';
+  String get onDeviceRedoHint => '升级到 Pro，获得说话人分离和更高准确度';
 
   @override
   String get onDeviceKeepEverything => '所有内容保留在本机';
@@ -13313,7 +13313,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get onDeviceSaveLiveHours => '在本机转录以节省实时时长';
 
   @override
-  String get onDeviceSaveLiveHoursSubtitle => '实时时长留到需要说话人识别和云端级准确度时再用。';
+  String get onDeviceSaveLiveHoursSubtitle => '升级到 Pro，获得说话人分离和更高准确度';
 
   @override
   String get onDeviceOnThisPhone => '本机';

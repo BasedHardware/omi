@@ -13333,8 +13333,7 @@ class AppLocalizationsBe extends AppLocalizations {
       'Працуе, калі тэлефон зараджаецца, таму амаль не расходуе батарэю. Стэнаграмы з\'явяцца пасля падключэння да зарадкі.';
 
   @override
-  String get onDeviceUpgradeBody =>
-      'Больш гадзін у рэальным часе ў гэтым месяцы, з імёнамі суразмоўцаў і дакладнасцю воблака.';
+  String get onDeviceUpgradeBody => 'Перайдзіце на Pro для падзелу суразмоўцаў і большай дакладнасці';
 
   @override
   String get onDeviceAtCapFooter =>
@@ -13520,7 +13519,7 @@ class AppLocalizationsBe extends AppLocalizations {
   String get onDeviceRedoWithCloud => 'Перарабіць у Omi Cloud';
 
   @override
-  String get onDeviceRedoHint => 'Больш дэталяў і імёны суразмоўцаў. Расходуе гадзіны ў рэальным часе.';
+  String get onDeviceRedoHint => 'Перайдзіце на Pro для падзелу суразмоўцаў і большай дакладнасці';
 
   @override
   String get onDeviceKeepEverything => 'Захоўваць усё на гэтым тэлефоне';
@@ -13563,8 +13562,7 @@ class AppLocalizationsBe extends AppLocalizations {
   String get onDeviceSaveLiveHours => 'Транскрыбаваць на гэтым тэлефоне, каб эканоміць гадзіны ў рэальным часе';
 
   @override
-  String get onDeviceSaveLiveHoursSubtitle =>
-      'Гадзіны ў рэальным часе застануцца для выпадкаў, калі патрэбныя імёны суразмоўцаў і дакладнасць воблака.';
+  String get onDeviceSaveLiveHoursSubtitle => 'Перайдзіце на Pro для падзелу суразмоўцаў і большай дакладнасці';
 
   @override
   String get onDeviceOnThisPhone => 'На гэтым тэлефоне';

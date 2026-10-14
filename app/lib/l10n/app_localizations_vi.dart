@@ -13296,8 +13296,7 @@ class AppLocalizationsVi extends AppLocalizations {
       'Chạy khi điện thoại đang sạc nên hầu như không tốn pin. Bản ghi sẽ xuất hiện sau khi bạn cắm sạc.';
 
   @override
-  String get onDeviceUpgradeBody =>
-      'Thêm giờ trực tiếp trong tháng này, kèm tên người nói và độ chính xác của đám mây.';
+  String get onDeviceUpgradeBody => 'Nâng cấp lên Pro để phân biệt người nói và tăng độ chính xác';
 
   @override
   String get onDeviceAtCapFooter => 'Chọn cách nào cũng không mất gì. Bạn có thể thay đổi trong Cài đặt › Phiên âm.';
@@ -13480,7 +13479,7 @@ class AppLocalizationsVi extends AppLocalizations {
   String get onDeviceRedoWithCloud => 'Làm lại với Omi Cloud';
 
   @override
-  String get onDeviceRedoHint => 'Chi tiết hơn và có tên người nói. Dùng giờ trực tiếp.';
+  String get onDeviceRedoHint => 'Nâng cấp lên Pro để phân biệt người nói và tăng độ chính xác';
 
   @override
   String get onDeviceKeepEverything => 'Giữ mọi thứ trên điện thoại này';
@@ -13523,8 +13522,7 @@ class AppLocalizationsVi extends AppLocalizations {
   String get onDeviceSaveLiveHours => 'Phiên âm trên điện thoại này để tiết kiệm giờ trực tiếp';
 
   @override
-  String get onDeviceSaveLiveHoursSubtitle =>
-      'Giờ trực tiếp được để dành cho lúc bạn cần tên người nói và độ chính xác của đám mây.';
+  String get onDeviceSaveLiveHoursSubtitle => 'Nâng cấp lên Pro để phân biệt người nói và tăng độ chính xác';
 
   @override
   String get onDeviceOnThisPhone => 'Trên điện thoại này';

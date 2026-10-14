@@ -13338,8 +13338,7 @@ class AppLocalizationsEs extends AppLocalizations {
       'Funciona mientras el teléfono se carga, así que apenas gasta batería. Las transcripciones aparecen después de conectarlo.';
 
   @override
-  String get onDeviceUpgradeBody =>
-      'Más horas en vivo este mes, con nombres de los hablantes y la precisión de la nube.';
+  String get onDeviceUpgradeBody => 'Mejora a Pro para separar a los hablantes y obtener mayor precisión';
 
   @override
   String get onDeviceAtCapFooter =>
@@ -13525,7 +13524,7 @@ class AppLocalizationsEs extends AppLocalizations {
   String get onDeviceRedoWithCloud => 'Rehacer con Omi Cloud';
 
   @override
-  String get onDeviceRedoHint => 'Más detalle y nombres de los hablantes. Usa horas en vivo.';
+  String get onDeviceRedoHint => 'Mejora a Pro para separar a los hablantes y obtener mayor precisión';
 
   @override
   String get onDeviceKeepEverything => 'Guardar todo en este teléfono';
@@ -13568,8 +13567,7 @@ class AppLocalizationsEs extends AppLocalizations {
   String get onDeviceSaveLiveHours => 'Transcribir en este teléfono para ahorrar horas en vivo';
 
   @override
-  String get onDeviceSaveLiveHoursSubtitle =>
-      'Guarda las horas en vivo para cuando quieras nombres de hablantes y la precisión de la nube.';
+  String get onDeviceSaveLiveHoursSubtitle => 'Mejora a Pro para separar a los hablantes y obtener mayor precisión';
 
   @override
   String get onDeviceOnThisPhone => 'En este teléfono';

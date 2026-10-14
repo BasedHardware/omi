@@ -13205,7 +13205,7 @@ class AppLocalizationsHe extends AppLocalizations {
       'פועל בזמן שהטלפון בטעינה, כך שכמעט לא צורך סוללה. התמלולים יופיעו אחרי שתחבר לטעינה.';
 
   @override
-  String get onDeviceUpgradeBody => 'יותר שעות חיות החודש, עם שמות דוברים ודיוק של הענן.';
+  String get onDeviceUpgradeBody => 'שדרגו ל-Pro להפרדה בין דוברים ולדיוק גבוה יותר';
 
   @override
   String get onDeviceAtCapFooter => 'שום דבר לא הולך לאיבוד בכל מקרה. אפשר לשנות זאת בהגדרות › תמלול.';
@@ -13386,7 +13386,7 @@ class AppLocalizationsHe extends AppLocalizations {
   String get onDeviceRedoWithCloud => 'ביצוע מחדש עם Omi Cloud';
 
   @override
-  String get onDeviceRedoHint => 'יותר פרטים ושמות דוברים. צורך שעות חיות.';
+  String get onDeviceRedoHint => 'שדרגו ל-Pro להפרדה בין דוברים ולדיוק גבוה יותר';
 
   @override
   String get onDeviceKeepEverything => 'לשמור הכול בטלפון הזה';
@@ -13429,7 +13429,7 @@ class AppLocalizationsHe extends AppLocalizations {
   String get onDeviceSaveLiveHours => 'תמלול בטלפון הזה כדי לחסוך שעות חיות';
 
   @override
-  String get onDeviceSaveLiveHoursSubtitle => 'השעות החיות נשמרות לפעמים שבהן תרצה שמות דוברים ודיוק של הענן.';
+  String get onDeviceSaveLiveHoursSubtitle => 'שדרגו ל-Pro להפרדה בין דוברים ולדיוק גבוה יותר';
 
   @override
   String get onDeviceOnThisPhone => 'בטלפון הזה';

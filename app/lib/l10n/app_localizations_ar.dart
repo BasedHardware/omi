@@ -13225,7 +13225,7 @@ class AppLocalizationsAr extends AppLocalizations {
       'يعمل أثناء شحن هاتفك، لذا بالكاد يستهلك البطارية. تظهر النصوص بعد توصيله بالشاحن.';
 
   @override
-  String get onDeviceUpgradeBody => 'ساعات مباشرة أكثر هذا الشهر، مع أسماء المتحدثين ودقة السحابة.';
+  String get onDeviceUpgradeBody => 'قم بالترقية إلى Pro لفصل المتحدثين ودقة أعلى';
 
   @override
   String get onDeviceAtCapFooter => 'لن يضيع شيء في الحالتين. يمكنك تغيير ذلك من الإعدادات › النسخ.';
@@ -13407,7 +13407,7 @@ class AppLocalizationsAr extends AppLocalizations {
   String get onDeviceRedoWithCloud => 'إعادة المعالجة عبر Omi Cloud';
 
   @override
-  String get onDeviceRedoHint => 'تفاصيل أكثر وأسماء المتحدثين. يستهلك الساعات المباشرة.';
+  String get onDeviceRedoHint => 'قم بالترقية إلى Pro لفصل المتحدثين ودقة أعلى';
 
   @override
   String get onDeviceKeepEverything => 'الاحتفاظ بكل شيء على هذا الهاتف';
@@ -13450,7 +13450,7 @@ class AppLocalizationsAr extends AppLocalizations {
   String get onDeviceSaveLiveHours => 'النسخ على هذا الهاتف لتوفير الساعات المباشرة';
 
   @override
-  String get onDeviceSaveLiveHoursSubtitle => 'تبقى الساعات المباشرة لحين تحتاج إلى أسماء المتحدثين ودقة السحابة.';
+  String get onDeviceSaveLiveHoursSubtitle => 'قم بالترقية إلى Pro لفصل المتحدثين ودقة أعلى';
 
   @override
   String get onDeviceOnThisPhone => 'على هذا الهاتف';

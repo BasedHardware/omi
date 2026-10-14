@@ -13232,7 +13232,7 @@ class AppLocalizationsTh extends AppLocalizations {
       'ทำงานขณะชาร์จโทรศัพท์ จึงแทบไม่ใช้แบตเตอรี่ บันทึกคำพูดจะแสดงหลังจากเสียบชาร์จ';
 
   @override
-  String get onDeviceUpgradeBody => 'ชั่วโมงแบบสดเพิ่มขึ้นในเดือนนี้ พร้อมระบุชื่อผู้พูดและความแม่นยำระดับคลาวด์';
+  String get onDeviceUpgradeBody => 'อัปเกรดเป็น Pro เพื่อแยกผู้พูดและเพิ่มความแม่นยำ';
 
   @override
   String get onDeviceAtCapFooter => 'ไม่ว่าเลือกแบบไหนก็ไม่มีอะไรสูญหาย คุณเปลี่ยนได้ที่ การตั้งค่า › การถอดเสียง';
@@ -13414,7 +13414,7 @@ class AppLocalizationsTh extends AppLocalizations {
   String get onDeviceRedoWithCloud => 'ทำใหม่ด้วย Omi Cloud';
 
   @override
-  String get onDeviceRedoHint => 'รายละเอียดมากขึ้นและระบุชื่อผู้พูด ใช้ชั่วโมงแบบสด';
+  String get onDeviceRedoHint => 'อัปเกรดเป็น Pro เพื่อแยกผู้พูดและเพิ่มความแม่นยำ';
 
   @override
   String get onDeviceKeepEverything => 'เก็บทุกอย่างไว้บนโทรศัพท์เครื่องนี้';
@@ -13457,8 +13457,7 @@ class AppLocalizationsTh extends AppLocalizations {
   String get onDeviceSaveLiveHours => 'ถอดเสียงบนโทรศัพท์เครื่องนี้เพื่อประหยัดชั่วโมงแบบสด';
 
   @override
-  String get onDeviceSaveLiveHoursSubtitle =>
-      'เก็บชั่วโมงแบบสดไว้ใช้เมื่อต้องการระบุชื่อผู้พูดและความแม่นยำระดับคลาวด์';
+  String get onDeviceSaveLiveHoursSubtitle => 'อัปเกรดเป็น Pro เพื่อแยกผู้พูดและเพิ่มความแม่นยำ';
 
   @override
   String get onDeviceOnThisPhone => 'บนโทรศัพท์เครื่องนี้';

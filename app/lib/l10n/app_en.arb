@@ -15990,7 +15990,7 @@
     "@onDeviceOptionChargingBody": {
         "description": "Explains the on-phone transcription option"
     },
-    "onDeviceUpgradeBody": "More live hours this month, with named speakers and cloud accuracy.",
+    "onDeviceUpgradeBody": "Upgrade to Pro for speaker separation and higher accuracy",
     "@onDeviceUpgradeBody": {
         "description": "Explains what upgrading the plan gives"
     },
@@ -16250,7 +16250,7 @@
     "@onDeviceRedoWithCloud": {
         "description": "Button: transcribe and summarize this conversation again in Omi's cloud"
     },
-    "onDeviceRedoHint": "More detail and named speakers. Uses live hours.",
+    "onDeviceRedoHint": "Upgrade to Pro for speaker separation and higher accuracy",
     "@onDeviceRedoHint": {
         "description": "Hint under the Redo with Omi Cloud button"
     },
@@ -16315,7 +16315,7 @@
     "@onDeviceSaveLiveHours": {
         "description": "Setting for paid users: use on-phone transcription even before hours run out"
     },
-    "onDeviceSaveLiveHoursSubtitle": "Live hours stay for when you want named speakers and cloud accuracy.",
+    "onDeviceSaveLiveHoursSubtitle": "Upgrade to Pro for speaker separation and higher accuracy",
     "@onDeviceSaveLiveHoursSubtitle": {
         "description": "Subtitle of the save-live-hours setting"
     },
