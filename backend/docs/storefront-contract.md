@@ -114,9 +114,17 @@ zero price with headline `$0`. No amount is copied out of env or `proposed_price
 `months_free` is `floor(12 − annual/monthly)` when that value is at least 1.
 `yearly_toggle_label` uses the smallest such value across tiers, or null. It
 is also null while a non-legacy paid cancellation is scheduled.
-Yearly headlines are the annual amount divided by 12, half-up to cents,
-except the same-tier monthly-to-yearly switch card, whose headline stays the
-current monthly price.
+Yearly headlines are the annual amount divided by 12, half-up to the
+currency's minor unit (USD: cents), except the same-tier monthly-to-yearly
+switch card, whose headline stays the current monthly price.
+
+Every price, saving, subline, and current line uses one formatter. USD is
+`$` plus the amount; other currencies keep a trailing ISO code. Thousands
+separators always apply. A whole major unit omits a trailing `.00`
+(`$199/month`, `$1,990 billed yearly`, `save $398`,
+`You're on Architect · $199/mo`). A non-zero fraction keeps its decimals
+(`$19.99`, `$16.66`, `$39.98`, `$499.90`). Zero-decimal currencies (JPY and
+Stripe's other zero-decimal codes) are not divided by 100. Free stays `$0`.
 
 Recording hours are `floor_to_nice(budget × 0.85 / 130)`. Free is fixed at 15.
 Budgets are the plan-catalog usage units when the catalog declares them, and

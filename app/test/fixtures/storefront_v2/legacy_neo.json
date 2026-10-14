@@ -123,7 +123,7 @@
           "interval": "month",
           "amount_minor": 19900,
           "currency": "usd",
-          "headline": "$199.00/month",
+          "headline": "$199/month",
           "subline": null,
           "renewal_line": "Renews monthly until you cancel. Cancel anytime in settings."
         },
@@ -133,7 +133,7 @@
           "amount_minor": 199000,
           "currency": "usd",
           "headline": "$165.83/month",
-          "subline": "$1990.00 billed yearly · 2 months free",
+          "subline": "$1,990 billed yearly · 2 months free",
           "renewal_line": "Renews yearly until you cancel. Cancel anytime in settings.",
           "months_free": 2
         }

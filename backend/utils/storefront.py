@@ -162,7 +162,7 @@ def _prices_for(
         if switch_yearly and interval == 'year' and monthly_minor is not None:
             # The toggle can still read Monthly. Keep the headline on the price
             # the user pays; the subline and CTA carry the yearly offer.
-            payload['headline'] = monthly_headline(monthly_minor, locale)
+            payload['headline'] = monthly_headline(monthly_minor, locale, currency=row['currency'])
             payload['cta_label'] = yearly_switch_label(
                 monthly_minor=monthly_minor,
                 annual_minor=row['unit_amount'],
@@ -243,10 +243,14 @@ def build_storefront(
     current_row = _retrieve(retrieve_price, current_price_id)
     current_interval = None
     current_amount = None
+    current_currency = 'usd'
     if current_row and (current_row.get('recurring') or {}).get('interval') in {'month', 'year'}:
         current_interval = current_row['recurring']['interval']
         if type(current_row.get('unit_amount')) is int:
             current_amount = current_row['unit_amount']
+        price_currency = current_row.get('currency')
+        if isinstance(price_currency, str) and price_currency.strip():
+            current_currency = price_currency
     resubscribe_only = cancel_resubscribe_only(
         current_plan=current_plan, legacy=legacy, cancel=subscription.cancel_at_period_end
     )
@@ -390,6 +394,7 @@ def build_storefront(
         cancel=subscription.cancel_at_period_end,
         legacy=legacy,
         locale=locale,
+        currency=current_currency,
     )
     return StorefrontResponse(
         catalog_revision=catalog_revision,

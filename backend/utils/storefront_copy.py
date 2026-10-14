@@ -13,6 +13,32 @@ import config.plan_catalog_generated as plan_catalog
 # evidence/2026-10-12-unit-economics-and-usage.md §1/§3. Replace with shadow-ledger p50 (#21369).
 _MONTHS = ('Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec')
 
+# Stripe zero-decimal currencies: unit_amount is already the major unit
+# (500 JPY is ¥500, not ¥5.00). https://docs.stripe.com/currencies#zero-decimal
+# UGX is omitted: Stripe still sends it as two-decimal (500 is 5 UGX), like ISK.
+_ZERO_DECIMAL_CURRENCIES = frozenset(
+    {
+        'bif',
+        'clp',
+        'djf',
+        'gnf',
+        'jpy',
+        'kmf',
+        'krw',
+        'mga',
+        'pyg',
+        'rwf',
+        'vnd',
+        'vuv',
+        'xaf',
+        'xof',
+        'xpf',
+    }
+)
+
+# Stripe three-decimal currencies: unit_amount counts thousandths.
+_THREE_DECIMAL_CURRENCIES = frozenset({'bhd', 'jod', 'kwd', 'omr', 'tnd'})
+
 
 @lru_cache(maxsize=1)
 def load_copy() -> dict[str, Any]:
@@ -194,16 +220,38 @@ def reset_parts(reset_at: int) -> tuple[str, str]:
     return f'{period.year:04d}-{period.month:02d}', reset_label
 
 
+def _minor_exponent(currency: str) -> int:
+    code = currency.strip().lower()
+    if code in _ZERO_DECIMAL_CURRENCIES:
+        return 0
+    if code in _THREE_DECIMAL_CURRENCIES:
+        return 3
+    return 2
+
+
 def money(amount_minor: int) -> str:
     return format_money(amount_minor, 'usd')
 
 
 def format_money(amount_minor: int, currency: str) -> str:
-    """Format a minor-unit amount in its price currency. USD uses the dollar sign."""
-    amount = (Decimal(amount_minor) / Decimal(100)).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
-    if currency.lower() == 'usd':
-        return f'${amount:.2f}'
-    return f'{amount:.2f} {currency.upper()}'
+    """Format a minor-unit amount in its price currency.
+
+    USD uses a dollar sign. Other currencies keep a trailing ISO code.
+    Thousands separators always apply. A whole major unit drops a trailing
+    ``.00`` (or ``.000``); a non-zero fraction keeps the currency's decimals
+    (``$499.90``). Zero-decimal currencies such as JPY are not divided by 100.
+    """
+    code = currency.strip()
+    exponent = _minor_exponent(code)
+    quantizer = Decimal('1') if exponent == 0 else Decimal(10) ** -exponent
+    amount = (Decimal(amount_minor) / (Decimal(10) ** exponent)).quantize(quantizer, rounding=ROUND_HALF_UP)
+    if exponent == 0 or amount == amount.to_integral_value():
+        rendered = f'{int(amount):,}'
+    else:
+        rendered = format(amount, f',.{exponent}f')
+    if code.lower() == 'usd':
+        return f'${rendered}'
+    return f'{rendered} {code.upper()}'
 
 
 def months_free_phrase(count: int, locale: str | None = None) -> str:
@@ -243,6 +291,7 @@ def current_line(
     cancel: bool,
     legacy: bool,
     locale: str | None = None,
+    currency: str = 'usd',
 ) -> tuple[str, str | None]:
     text = copy_for(locale)['current']
     note = text['legacy_note'] if legacy else None
@@ -253,12 +302,13 @@ def current_line(
     # Legacy keeps the previous "ends {date}" line; resubscribe is not offered.
     if cancel and not legacy and amount_minor is not None and interval in {'month', 'year'}:
         period = 'mo' if interval == 'month' else 'yr'
-        return text['cancel'].format(plan=plan_name_text, price=money(amount_minor), period=period), note
+        price = format_money(amount_minor, currency)
+        return text['cancel'].format(plan=plan_name_text, price=price, period=period), note
     if cancel and date:
         return text['cancel_ends'].format(plan=plan_name_text, date=date), note
     if amount_minor is not None and interval in {'month', 'year'}:
         period = 'mo' if interval == 'month' else 'yr'
-        price = money(amount_minor)
+        price = format_money(amount_minor, currency)
         if date:
             return text['paid'].format(plan=plan_name_text, price=price, period=period, date=date), note
         return text['paid_no_date'].format(plan=plan_name_text, price=price, period=period), note
@@ -280,12 +330,12 @@ def cta_label(*, action: str, tier_plan: str, current_plan: str, locale: str | N
     return None
 
 
-def monthly_headline(amount_minor: int, locale: str | None = None) -> str:
+def monthly_headline(amount_minor: int, locale: str | None = None, currency: str = 'usd') -> str:
     """Monthly price line. Free is "$0"; a paid month is "{amount}/month"."""
     text = copy_for(locale)['prices']
     if amount_minor == 0:
         return text['headline_free']
-    return text['headline_month'].format(amount=money(amount_minor))
+    return text['headline_month'].format(amount=format_money(amount_minor, currency))
 
 
 def render_price(
@@ -299,12 +349,12 @@ def render_price(
 ) -> dict[str, Any]:
     text = copy_for(locale)['prices']
     if interval == 'year':
-        equivalent = (Decimal(amount_minor) / Decimal(100) / Decimal(12)).quantize(
-            Decimal('0.01'), rounding=ROUND_HALF_UP
-        )
-        headline = text['headline_year'].format(amount=f'${equivalent:.2f}')
+        # Half-up in minor units. USD cents: 19990 → 1666 → $16.66.
+        # Zero-decimal currencies stay whole major units (no /100).
+        equivalent_minor = int((Decimal(amount_minor) / Decimal(12)).quantize(Decimal('1'), rounding=ROUND_HALF_UP))
+        headline = text['headline_year'].format(amount=format_money(equivalent_minor, currency))
         free = months_free(monthly_minor, amount_minor) if monthly_minor else None
-        annual = money(amount_minor)
+        annual = format_money(amount_minor, currency)
         if free is not None:
             subline = text['subline_year'].format(amount=annual, free=months_free_phrase(free, locale))
         else:
@@ -325,7 +375,7 @@ def render_price(
         'interval': 'month',
         'amount_minor': amount_minor,
         'currency': currency,
-        'headline': monthly_headline(amount_minor, locale),
+        'headline': monthly_headline(amount_minor, locale, currency=currency),
         'subline': None,
         'renewal_line': text['renewal_month'] if amount_minor else None,
         'months_free': None,
