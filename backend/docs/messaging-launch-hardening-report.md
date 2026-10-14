@@ -3,7 +3,7 @@
 Repository: public `BasedHardware/omi`. Worktree:
 `/Volumes/Ephemeral/scratch/worktrees/omi/omi-lane-msg-launch-hardening-upstream-keep-clean`.
 Branch: `lane/msg-launch-hardening`; supplied base `f0d1b5496582`.
-Implementation validated through `983d8f636036`. All changes are local commits.
+Implementation validated through `e59307d83f67`. All changes are local commits.
 No push, PR, merge, deployment, provider call, production account access, gcloud,
 secret read, force push, stash or new GitHub workflow was performed.
 The existing untracked `.agent-req-Q.json` was preserved.
@@ -18,13 +18,15 @@ The existing untracked `.agent-req-Q.json` was preserved.
   central index registry stays at its original size under the repository ratchet.
 - **D — `983d8f636036`**: app awareness for either channel policy, additional tests,
   durable suite manifests and operations clarifications.
-- This report is committed separately; it changes no serving behavior.
+- **E — `d1496e85de4d`**: initial detailed report.
+- **F — `e59307d83f67`**: reject explicit null iMessage plan sets/seat caps; additional fail-closed policy regressions.
+- This report is updated separately; it changes no serving behavior.
 
 ## Per-item result
 
 | Item | Status and behavior | Owning files / commits | Validation |
 | --- | --- | --- | --- |
-| 1. Channel admission | **Done.** JSON policy is authoritative; malformed config denies. Telegram can admit every valid paid user. iMessage defaults Operator/Architect, with configurable cohort/plans/cap. Absent JSON retains legacy env admission. Optional Firestore kill document is cached <=60s and fails closed. App awareness admits either eligible channel. | `backend/config/messaging.py`, `utils/messaging/access.py`, `app_awareness.py`, `adapters/runtime.py`, `routers/messaging.py`; A, B, D | Plan/cohort/legacy/malformed policy, remote-cache/failure and iMessage-only app tests; V1, V2, V4 |
+| 1. Channel admission | **Done.** JSON policy is authoritative; malformed config (including null iMessage constraints) denies. Telegram can admit every valid paid user. iMessage defaults Operator/Architect, with configurable cohort/plans/cap. Absent JSON retains legacy env admission. Optional Firestore kill document is cached <=60s and fails closed. App awareness admits either eligible channel. | `backend/config/messaging.py`, `utils/messaging/access.py`, `app_awareness.py`, `adapters/runtime.py`, `routers/messaging.py`; A, B, D, F | Plan/cohort/legacy/malformed policy, remote-cache/failure and iMessage-only app tests; V1, V2, V4 |
 | 2. iMessage seats | **Done for required cap.** Atomic redemption counts distinct linked users, including dormant users. Multiple identities share one seat; last unlink/deletion releases it. Mint returns typed HTTP 409 and stores a waitlist when full; redemption races are authoritative. Uninitialized counters deny. **Optional dormancy release skipped:** retaining links is conservative and preserves the prohibition on proactive sends. No dormant-user notices or auto-promotions are sent. | `database/messaging.py`, `routers/messaging.py`, `utils/messaging/access.py`, `gateway.py`; A, D | Real last-seat contention, second identity/relink, unlink/deletion, waitlist erasure and typed HTTP error tests; V1, V2 |
 | 3. Pending recovery | **Done.** Recovery queries the inbox collection group by status/channel/provider, ordered and limited. Per-turn pending reads filter status and cap 100; unlink queries only associated sessions/messages. A one-time metadata preparation preserves legacy pending rows. | `database/messaging.py`, `messaging_queries.py`, `firestore_index_registry.py`, query-driver registry, root `firestore.indexes.json`; A, C | Emulator query/recovery and legacy metadata tests; generated index/query guard; V2, V4 |
 | 4. Event ceiling | **Done.** Awareness reads a forty-event tail. Replay fences use deterministic hashed document IDs and survive pruning. Events carry numeric sequence; legacy fences migrate once before compaction. Huge awareness text is clipped while authoritative messages stay in shared chat storage. No 500 KB hard failure. `/new` / `new chat` rotates the surface session pointer under its lease. | `database/messaging.py`, `gateway.py`, Telegram/Linq parsers; A | Tail pruning, repeated old event, legacy fence retention, fresh session and command-without-model tests; V1, V2 |
@@ -42,24 +44,24 @@ All backend test executions used `backend/test.sh` with Google application crede
 unset. Suite lists below are committed; run from the worktree root. These are local
 fixtures/emulators, not live provider or production acceptance and not GitHub CI.
 
-**V1 — focused backend + prescribed compatibility suites:** **469 passed, 7 skipped**
+**V1 — focused backend + prescribed compatibility suites:** **471 passed, 7 skipped**
 (the skipped cases require explicitly requested loopback Firestore/Redis).
 
 ```sh
 env -u GOOGLE_APPLICATION_CREDENTIALS BACKEND_UNIT_TEST_FILE_LIST="$PWD/backend/testing/messaging/launch-unit-files.txt" bash backend/test.sh
 ```
 
-Final log: `/tmp/q-backend-complete.log`.
+Final log: `/tmp/q-backend-closed-policy.log`.
 
-**V2 — real loopback Firestore transactions + two local Redis clients:** **54 passed**.
+**V2 — real loopback Firestore transactions + two local Redis clients:** **57 passed**.
 The emulator and Redis were started only for this task, on 127.0.0.1 with no persistence
-or cloud credentials. The subsequent iMessage-only app-policy test is covered by V1.
+or cloud credentials. The same run also covers the final iMessage-only app policy and null-constraint regressions.
 
 ```sh
 env -u GOOGLE_APPLICATION_CREDENTIALS MESSAGING_TEST_REDIS_HOST=127.0.0.1:16389 MESSAGING_TEST_FIRESTORE_HOST=127.0.0.1:18885 BACKEND_UNIT_TEST_FILE_LIST="$PWD/backend/testing/messaging/launch-emulator-files.txt" bash backend/test.sh
 ```
 
-Final log: `/tmp/q-emulator-complete.log`. Standalone query-shape/outside-caller run:
+Final log: `/tmp/q-emulator-closed-policy.log`. Standalone query-shape/outside-caller run:
 **494 passed, 1 deselected**, `/tmp/q-index-final.log`. Full seven-file index guard also
 passed within preflight, including the updated field-count fixture.
 
@@ -83,14 +85,23 @@ scripts/pr-preflight --pr-body-file /tmp/q-pr-body.md
 env -u GOOGLE_APPLICATION_CREDENTIALS OMI_PR_BODY_FILE=/tmp/q-pr-body.md make preflight
 ```
 
-Logs: `/tmp/q-pr-metadata.log`, `/tmp/q-preflight-complete.log`.
+Logs: `/tmp/q-pr-metadata.log`, `/tmp/q-preflight-complete.log`. Those initial 44-check runs preceded the final null guard. The final source `e59307d83f67` also passed **all 44 checks** in 156.85s with the same shared runner pinned to the supplied base:
+
+```sh
+env -u GOOGLE_APPLICATION_CREDENTIALS python3 .github/scripts/pr_preflight.py --lane local --base f0d1b5496582 --pr-body-file /tmp/q-pr-body.md
+```
+
+Final source preflight log: `/tmp/q-preflight-pinned-final.log`. Pinning selects the
+user-supplied base; it skips no checks and avoids treating subsequently fetched upstream
+commits as this lane's edits.
+
 Architecture advisory warnings remain for the large gateway and existing large tests;
 all mandatory checks passed. The first attempts exposed a fixed field-count expectation,
 the central registry size ratchet and missing local UI metadata; these were resolved.
 
 **V5 — scheduler/artifact checks:** Helm lint passed (one chart, zero failed);
 enabled template rendered with synthetic bindings; generated indexes and whitespace
-checks passed. Alert rules are a checked-in PrometheusRule, not a deployed alert.
+checks passed. Alert rules are a checked-in PrometheusRule, not a deployed alert. The task-owned Redis and Firestore processes were stopped after testing.
 
 ```sh
 helm lint backend/charts/messaging-maintenance
