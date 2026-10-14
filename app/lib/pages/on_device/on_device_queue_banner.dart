@@ -24,8 +24,9 @@ void openOnDeviceUpgrade(BuildContext context) => unawaited(_openOnDeviceUpgrade
 
 Future<void> _openOnDeviceUpgrade(BuildContext context) async {
   if (await openContextualPlans(context, source: 'on_device_overflow', trigger: 'usage_budget')) return;
-  if (context.mounted)
+  if (context.mounted) {
     await routeToPage(context, const UsagePage(showUpgradeDialog: true, paywallSource: 'on_device_overflow'));
+  }
 }
 
 /// The conversations list's banner for recordings waiting on this phone. Renders nothing unless the

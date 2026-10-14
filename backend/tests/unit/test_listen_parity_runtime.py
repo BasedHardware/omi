@@ -178,6 +178,12 @@ def _install_runtime_fakes(monkeypatch, runtime, stt_sockets, blocking_calls):
 
 
 @pytest.fixture
+def runtime_session():
+    websocket = _FakeWebSocket(audio=_AUDIO)
+    return ListenSessionRuntime(ListenRequest(websocket=websocket, uid=_PRINCIPAL, codec='pcm16', sample_rate=16000))
+
+
+@pytest.fixture
 def parity_export_module():
     import routers.listen.parity_pack_export as export_module
 
@@ -187,7 +193,7 @@ def parity_export_module():
 @pytest.mark.asyncio
 @pytest.mark.parametrize('fail_usage', [False, True], ids=['normal-close', 'teardown-persistence-failure'])
 async def test_listen_runtime_persists_and_exports_capture_exactly_once_after_close(
-    tmp_path, monkeypatch, caplog, fail_usage, parity_export_module
+    tmp_path, monkeypatch, caplog, fail_usage, parity_export_module, runtime_session
 ):
     """Bootstrap, real receiver callback attachment, audio, close, persist, export."""
     export_module = parity_export_module
@@ -233,8 +239,7 @@ async def test_listen_runtime_persists_and_exports_capture_exactly_once_after_cl
     monkeypatch.setattr(export_module, 'ensure_reconcile_loop', lambda *, environ=None: reconcile_calls.append(environ))
     monkeypatch.setattr(export_module, '_storage_client', lambda: FakeClient())
 
-    websocket = _FakeWebSocket(audio=_AUDIO)
-    runtime = ListenSessionRuntime(ListenRequest(websocket=websocket, uid=_PRINCIPAL, codec='pcm16', sample_rate=16000))
+    runtime = runtime_session
     runtime.persistence = cast(Any, _FakePersistence(fail_usage=fail_usage))
     stt_sockets = []
     blocking_calls = []

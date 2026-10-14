@@ -1,0 +1,40 @@
+{
+  "version": 1,
+  "images": [
+    {
+      "file": "001-mobile-ios-at-cap-choice.png",
+      "platform": "mobile-ios",
+      "description": "Integrated ladder cap: backend copy, monthly preference and on-device choice",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "002-mobile-ios-yearly-confirmation.png",
+      "platform": "mobile-ios",
+      "description": "Actual mobile annual confirmation: backend lines and CTA before billing",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "003-web-yearly-confirmation-390.png",
+      "platform": "web",
+      "description": "Web annual confirmation at 390px, actual StorefrontPanel using backend golden",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "004-web-pro-budget-eighty.png",
+      "platform": "web",
+      "description": "Pro 80% backend golden, Architect absent",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "005-desktop-macos-pro-budget-eighty.png",
+      "platform": "desktop-macos",
+      "description": "SwiftUI ImageRenderer of Pro 80% with Architect absent",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    }
+  ]
+}
