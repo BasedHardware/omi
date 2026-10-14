@@ -822,6 +822,30 @@
         "dev and prod use named regional internal addresses, disjoint path prefixes and native health checks",
         "batch diarization has no Ingress and preserves its isolated capacity and 900 second timeout"
       ]
+    },
+    {
+      "id": "audio_path_fleet",
+      "risk": "high",
+      "sources": [
+        "backend/charts/backend-listen/**",
+        "backend/charts/pusher/**",
+        "backend/charts/parakeet/**",
+        "backend/charts/deepgram-self-hosted/**",
+        "backend/scripts/audit_audio_fleet_callers.py",
+        "backend/scripts/qualify_parakeet_route.py",
+        "backend/scripts/fixtures/parakeet_route_synthetic.*"
+      ],
+      "tests": [
+        "tests/unit/test_audio_fleet_helm.py",
+        "tests/unit/test_qualify_parakeet_route.py"
+      ],
+      "checks": [],
+      "invariants": [
+        "CPU scheduling stays unchanged and current pools remain eligible under stockouts",
+        "Parakeet retains 2 request and 35 percent GPU scale-out triggers, floor 3 and cap 12 with a latency guard",
+        "Self-hosted teardown is blocked by any caller or unresolved runtime binding",
+        "Gateway qualification uses served clients and synthetic speech; refusals and protocol failures block qualification"
+      ]
     }
   ]
 }

@@ -183,6 +183,11 @@ LISTEN_ONLY_ALLOWED: dict[str, frozenset[str]] = {
     | _DEMAND_LISTEN_ONLY,
     "prod": frozenset(
         {
+            # Only listen's runtime reads these to advertise mobile control-channel
+            # admission. Pusher never grants permission; sync archives unconditionally.
+            "MOBILE_STANDARD_BATCH_ENABLED",
+            "MOBILE_STANDARD_BATCH_PERCENT",
+            "MOBILE_STANDARD_BATCH_UIDS",
             # Managed listen-only STT rollout; pusher is not a live audio receiver.
             "PARAKEET_BATCH_PRESSURE_MIN_REPLICAS",
             "PARAKEET_BATCH_PRESSURE_POOL_HOST",
@@ -283,8 +288,8 @@ LISTEN_ONLY_ALLOWED: dict[str, frozenset[str]] = {
     | _DEMAND_LISTEN_ONLY,
 }
 
-# Pusher owns the process-local final-pass worker; backend-listen dispatches
-# finalization and must not widen this batch-only David experiment. Validate
+# Pusher owns the process-local shadow worker; sync/backfill also runs the
+# authoritative final pass from stage B. Backend-listen must stay excluded. Validate
 # exact literals below as well as names, rather than exempting arbitrary values.
 PROD_FINAL_PASS_SHADOW_VALUES = {
     "HOSTED_DIARIZATION_API_URL": ("http://172.16.160.20/diarizer-batch", None),
@@ -292,21 +297,16 @@ PROD_FINAL_PASS_SHADOW_VALUES = {
     "TRANSCRIPTION_FINAL_PASS_BACKEND": ("pyannote", None),
     "TRANSCRIPTION_FINAL_PASS_UID_ALLOWLIST": ("vi7SA9ckQCe4ccobWNxlbdcNdC23", None),
     "TRANSCRIPTION_FINAL_PASS_PERCENT": ("0", None),
-    "TRANSCRIPTION_FINAL_PASS_AUTHORITATIVE": ("false", None),
-    "TRANSCRIPTION_FINAL_PASS_SYNC_ENABLED": ("false", None),
+    "TRANSCRIPTION_FINAL_PASS_AUTHORITATIVE": ("true", None),
+    "TRANSCRIPTION_FINAL_PASS_SYNC_ENABLED": ("true", None),
 }
 
 PUSHER_ONLY_ALLOWED: dict[str, frozenset[str]] = {
     "dev": frozenset({"GOOGLE_CLIENT_ID", "REDIS_DB_HOST", "TYPESENSE_HOST"}),
-    # DEEPGRAM_API_KEY: pusher reaches self-hosted dg.omi.me with it; the
-    # backend-listen managed (cloud) credential was retired 2026-09-18 — no
-    # streaming session selects Deepgram cloud, and a spent managed key made
-    # the fallback hops dial a 402 account for days (FC-deterministic-provider-
-    # rejection-burns-connect-retries).
+    # Pusher retains its cloud/BYOK credential; listen has no managed cloud key.
     "prod": frozenset(
         {
             "DEEPGRAM_API_KEY",
-            "DEEPGRAM_SELF_HOSTED_URL",
             # Late identity retries are scheduled only by prod pusher audio drain.
             "OWNER_IDENTITY_RETRY_COALESCE_ENABLED",
             "REDIS_DB_HOST",
@@ -340,7 +340,7 @@ SHARED_VALUE_DIFF_ALLOWED: dict[str, frozenset[str]] = {
     ),
     # The 1% windowed-TDT canary is listen-only. Pusher retains its streaming
     # and prerecorded policy while allocated listen sessions may lead with TDT.
-    "prod": frozenset({"BUCKET_SPEECH_PROFILES", "DD_SERVICE", "DEEPGRAM_SELF_HOSTED_ENABLED", "STT_SERVICE_MODELS"}),
+    "prod": frozenset({"BUCKET_SPEECH_PROFILES", "DD_SERVICE", "STT_SERVICE_MODELS"}),
 }
 
 DEV_SHADOW_VALUES = {
@@ -531,7 +531,9 @@ def validate_preflight(root: Path = ROOT) -> list[str]:
                 ),
                 None,
             )
-            if selected is not None:
+            if selected is None:
+                errors.append("[prod] shadow scope must match a complete reviewed stage")
+            else:
                 prod_scope = {name: (value, prod_scope[name][1]) for name, value in selected.items()}
         for name, (expected_pusher, expected_listen) in (DEV_SHADOW_VALUES if env == "dev" else prod_scope).items():
             actual_pusher = pusher_env[name].value if name in pusher_env else None

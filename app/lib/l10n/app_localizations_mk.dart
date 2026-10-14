@@ -13336,4 +13336,21 @@ class AppLocalizationsMk extends AppLocalizations {
 
   @override
   String get syncDetailsCopy => 'Копирај ги деталите за поддршка';
+
+  @override
+  String get chatAppsChannelPlanRequired => 'Достапно со Operator и Architect';
+
+  @override
+  String chatAppsAtCapacity(String app) {
+    return '$app е пополнет';
+  }
+
+  @override
+  String get chatAppsJoinWaitlist => 'Приклучи се на листата на чекање';
+
+  @override
+  String get chatAppsOnWaitlist => 'Вие сте на листата на чекање';
+
+  @override
+  String get chatAppsWaitlistJoined => 'Вие сте на листата на чекање. Ќе ве известиме кога ќе има место.';
 }

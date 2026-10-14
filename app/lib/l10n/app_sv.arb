@@ -4075,5 +4075,10 @@
     "syncDetailsForSupport": "För support",
     "syncDetailsAudioFiles": "Ljudfiler",
     "syncDetailsServerJobs": "Serverjobb (klara / totalt)",
-    "syncDetailsCopy": "Kopiera information för support"
+    "syncDetailsCopy": "Kopiera information för support",
+    "chatAppsChannelPlanRequired": "Tillgängligt med Operator och Architect",
+    "chatAppsAtCapacity": "{app} är fullt",
+    "chatAppsJoinWaitlist": "Gå med i väntelistan",
+    "chatAppsOnWaitlist": "Du står på väntelistan",
+    "chatAppsWaitlistJoined": "Du står på väntelistan. Vi hör av oss när det finns plats."
 }

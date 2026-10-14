@@ -3188,7 +3188,12 @@ def test_transcription_shadow_prod_scope_matches_generated_manifest_overlay_and_
         selected = {key: pusher[key]['value'] for key in controls}
         assert selected in stages.values()
         for scope, env in _manifest_env_blocks(source):
-            if scope in ('gke/pusher', 'cloud_run/backend', 'cloud_run/backend-sync'):
+            if scope in (
+                'gke/pusher',
+                'cloud_run/backend',
+                'cloud_run/backend-sync',
+                'cloud_run/backend-sync-backfill',
+            ):
                 assert {key: env[key]['value'] for key in controls} == selected, scope
             else:
                 assert all(key not in env for key in controls), scope

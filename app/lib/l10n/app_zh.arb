@@ -4075,5 +4075,10 @@
     "syncDetailsForSupport": "供支持团队使用",
     "syncDetailsAudioFiles": "音频文件",
     "syncDetailsServerJobs": "服务器任务 (已完成 / 总数)",
-    "syncDetailsCopy": "复制详情以供支持团队使用"
+    "syncDetailsCopy": "复制详情以供支持团队使用",
+    "chatAppsChannelPlanRequired": "Operator 和 Architect 套餐可用",
+    "chatAppsAtCapacity": "{app} 名额已满",
+    "chatAppsJoinWaitlist": "加入候补名单",
+    "chatAppsOnWaitlist": "你已在候补名单中",
+    "chatAppsWaitlistJoined": "你已在候补名单中。有名额时我们会通知你。"
 }

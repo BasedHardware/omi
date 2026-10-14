@@ -13094,4 +13094,21 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get syncDetailsCopy => '지원팀용 상세 정보 복사';
+
+  @override
+  String get chatAppsChannelPlanRequired => 'Operator 및 Architect에서 사용 가능';
+
+  @override
+  String chatAppsAtCapacity(String app) {
+    return '$app 정원이 찼습니다';
+  }
+
+  @override
+  String get chatAppsJoinWaitlist => '대기자 명단 등록';
+
+  @override
+  String get chatAppsOnWaitlist => '대기자 명단에 등록되었습니다';
+
+  @override
+  String get chatAppsWaitlistJoined => '대기자 명단에 등록되었습니다. 자리가 나면 알려 드릴게요.';
 }

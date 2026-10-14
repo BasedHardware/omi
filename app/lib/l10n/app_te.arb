@@ -11501,5 +11501,10 @@
     "syncDetailsForSupport": "సపోర్ట్ కోసం",
     "syncDetailsAudioFiles": "ఆడియో ఫైళ్లు",
     "syncDetailsServerJobs": "సర్వర్ జాబ్‌లు (పూర్తైనవి / మొత్తం)",
-    "syncDetailsCopy": "సపోర్ట్ కోసం వివరాలను కాపీ చేయండి"
+    "syncDetailsCopy": "సపోర్ట్ కోసం వివరాలను కాపీ చేయండి",
+    "chatAppsChannelPlanRequired": "Operator మరియు Architect లో అందుబాటులో ఉంది",
+    "chatAppsAtCapacity": "{app} నిండిపోయింది",
+    "chatAppsJoinWaitlist": "వెయిట్‌లిస్ట్‌లో చేరండి",
+    "chatAppsOnWaitlist": "మీరు వెయిట్‌లిస్ట్‌లో ఉన్నారు",
+    "chatAppsWaitlistJoined": "మీరు వెయిట్‌లిస్ట్‌లో ఉన్నారు. స్థలం దొరికినప్పుడు మీకు తెలియజేస్తాము."
 }

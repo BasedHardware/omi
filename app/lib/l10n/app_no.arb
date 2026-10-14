@@ -4075,5 +4075,10 @@
     "syncDetailsForSupport": "Til kundestøtte",
     "syncDetailsAudioFiles": "Lydfiler",
     "syncDetailsServerJobs": "Serverjobber (ferdig / totalt)",
-    "syncDetailsCopy": "Kopier detaljer til kundestøtte"
+    "syncDetailsCopy": "Kopier detaljer til kundestøtte",
+    "chatAppsChannelPlanRequired": "Tilgjengelig med Operator og Architect",
+    "chatAppsAtCapacity": "{app} er fullt",
+    "chatAppsJoinWaitlist": "Sett meg på ventelisten",
+    "chatAppsOnWaitlist": "Du står på ventelisten",
+    "chatAppsWaitlistJoined": "Du står på ventelisten. Vi gir beskjed når det er plass."
 }

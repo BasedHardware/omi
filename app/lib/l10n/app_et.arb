@@ -4075,5 +4075,10 @@
     "syncDetailsForSupport": "Klienditoele",
     "syncDetailsAudioFiles": "Helifailid",
     "syncDetailsServerJobs": "Serveri tööd (valmis / kokku)",
-    "syncDetailsCopy": "Kopeeri üksikasjad klienditoele"
+    "syncDetailsCopy": "Kopeeri üksikasjad klienditoele",
+    "chatAppsChannelPlanRequired": "Saadaval paketiga Operator ja Architect",
+    "chatAppsAtCapacity": "{app} on täis",
+    "chatAppsJoinWaitlist": "Liitu ootenimekirjaga",
+    "chatAppsOnWaitlist": "Oled ootenimekirjas",
+    "chatAppsWaitlistJoined": "Oled ootenimekirjas. Anname teada, kui koht vabaneb."
 }

@@ -4075,5 +4075,10 @@
     "syncDetailsForSupport": "للدعم",
     "syncDetailsAudioFiles": "ملفات صوتية",
     "syncDetailsServerJobs": "مهام الخادم (المكتملة / الإجمالي)",
-    "syncDetailsCopy": "نسخ التفاصيل للدعم"
+    "syncDetailsCopy": "نسخ التفاصيل للدعم",
+    "chatAppsChannelPlanRequired": "متاح في Operator وArchitect",
+    "chatAppsAtCapacity": "{app} وصل إلى الحد الأقصى",
+    "chatAppsJoinWaitlist": "انضم إلى قائمة الانتظار",
+    "chatAppsOnWaitlist": "أنت في قائمة الانتظار",
+    "chatAppsWaitlistJoined": "أنت في قائمة الانتظار. سنُعلمك عندما يتوفر مكان."
 }

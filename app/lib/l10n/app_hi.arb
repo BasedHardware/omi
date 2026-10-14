@@ -4075,5 +4075,10 @@
     "syncDetailsForSupport": "सपोर्ट के लिए",
     "syncDetailsAudioFiles": "ऑडियो फ़ाइलें",
     "syncDetailsServerJobs": "सर्वर जॉब (पूर्ण / कुल)",
-    "syncDetailsCopy": "सपोर्ट के लिए विवरण कॉपी करें"
+    "syncDetailsCopy": "सपोर्ट के लिए विवरण कॉपी करें",
+    "chatAppsChannelPlanRequired": "Operator और Architect पर उपलब्ध",
+    "chatAppsAtCapacity": "{app} की क्षमता पूरी हो गई है",
+    "chatAppsJoinWaitlist": "प्रतीक्षा सूची में शामिल हों",
+    "chatAppsOnWaitlist": "आप प्रतीक्षा सूची में हैं",
+    "chatAppsWaitlistJoined": "आप प्रतीक्षा सूची में हैं। जगह होने पर हम आपको बताएंगे।"
 }

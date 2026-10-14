@@ -13304,4 +13304,21 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get syncDetailsCopy => 'Kopēt informāciju atbalstam';
+
+  @override
+  String get chatAppsChannelPlanRequired => 'Pieejams ar Operator un Architect';
+
+  @override
+  String chatAppsAtCapacity(String app) {
+    return '$app ir pilns';
+  }
+
+  @override
+  String get chatAppsJoinWaitlist => 'Pievienoties gaidīšanas sarakstam';
+
+  @override
+  String get chatAppsOnWaitlist => 'Jūs esat gaidīšanas sarakstā';
+
+  @override
+  String get chatAppsWaitlistJoined => 'Jūs esat gaidīšanas sarakstā. Mēs paziņosim, kad būs vieta.';
 }

@@ -220,7 +220,7 @@ typing_extensions==4.15.0
 tzdata==2024.1
 umap-learn==0.5.6
 uritemplate==4.1.1
-urllib3==2.7.0
+urllib3==2.8.0
 uvicorn==0.30.5
 uvloop==0.20.0; sys_platform != "win32"
 watchdog==4.0.2

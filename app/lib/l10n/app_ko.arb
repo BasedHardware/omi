@@ -4075,5 +4075,10 @@
     "syncDetailsForSupport": "지원팀용",
     "syncDetailsAudioFiles": "오디오 파일",
     "syncDetailsServerJobs": "서버 작업 (완료 / 전체)",
-    "syncDetailsCopy": "지원팀용 상세 정보 복사"
+    "syncDetailsCopy": "지원팀용 상세 정보 복사",
+    "chatAppsChannelPlanRequired": "Operator 및 Architect에서 사용 가능",
+    "chatAppsAtCapacity": "{app} 정원이 찼습니다",
+    "chatAppsJoinWaitlist": "대기자 명단 등록",
+    "chatAppsOnWaitlist": "대기자 명단에 등록되었습니다",
+    "chatAppsWaitlistJoined": "대기자 명단에 등록되었습니다. 자리가 나면 알려 드릴게요."
 }

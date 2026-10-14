@@ -13310,4 +13310,21 @@ class AppLocalizationsBe extends AppLocalizations {
 
   @override
   String get syncDetailsCopy => 'Скапіяваць дэталі для падтрымкі';
+
+  @override
+  String get chatAppsChannelPlanRequired => 'Даступна ў Operator і Architect';
+
+  @override
+  String chatAppsAtCapacity(String app) {
+    return '$app цалкам запоўнены';
+  }
+
+  @override
+  String get chatAppsJoinWaitlist => 'Далучыцца да спісу чакання';
+
+  @override
+  String get chatAppsOnWaitlist => 'Вы ў спісе чакання';
+
+  @override
+  String get chatAppsWaitlistJoined => 'Вы ў спісе чакання. Мы паведамім, калі з\'явіцца месца.';
 }

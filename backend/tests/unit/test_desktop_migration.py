@@ -112,6 +112,7 @@ usage_tracker_stub.track_usage = MagicMock()
 
 # Stub google.cloud.firestore sentinels
 firestore_stub = sys.modules["google.cloud.firestore"]
+firestore_stub.DELETE_FIELD = "__delete_field__"
 firestore_stub.Increment = lambda x: f"__increment_{x}__"
 firestore_stub.ArrayRemove = lambda values: ("__array_remove__", tuple(values))
 firestore_stub.Query = MagicMock()
@@ -1067,8 +1068,11 @@ class TestSaveMessageSessionBehavior:
         assert result['created'] is False
         assert result['updated'] is True
         assert result['journal_revision'] == 11
-        patched_db.transaction.return_value.update.assert_called_once()
-        update = patched_db.transaction.return_value.update.call_args.args[1]
+        assert patched_db.transaction.return_value.update.call_count == 3
+        assert patched_db.transaction.return_value.update.call_args_list[2].args[1] == {
+            'chat_context_generation': firestore_stub.Increment(1)
+        }
+        update = patched_db.transaction.return_value.update.call_args_list[1].args[1]
         assert update['metadata'] == enriched_metadata
         assert update['content_blocks'] == [
             {'type': 'agentSpawn', 'id': 'spawn-1'},
@@ -1183,7 +1187,10 @@ class TestSaveMessageSessionBehavior:
 
         assert result['updated'] is True
         assert result['journal_revision'] == 3
-        patched_db.transaction.return_value.update.assert_called_once()
+        assert patched_db.transaction.return_value.update.call_count == 3
+        assert patched_db.transaction.return_value.update.call_args_list[2].args[1] == {
+            'chat_context_generation': firestore_stub.Increment(1)
+        }
 
     def test_client_message_id_fingerprint_distinguishes_omitted_from_explicit_session(self):
         payload_hash = chat_db._message_idempotency_payload_hash(
@@ -1427,9 +1434,13 @@ class TestDeleteMessagesCount:
 
         assert result == 2
         mock_delete_query.limit.assert_called_with(chat_db.DELETE_MESSAGES_BATCH_LIMIT)
-        mock_batch.update.assert_called_once_with(
+        assert mock_batch.update.call_count == 2
+        mock_batch.update.assert_any_call(mock_user_ref, {'chat_context_generation': firestore_stub.Increment(1)})
+        mock_batch.update.assert_any_call(
             mock_session_ref,
             {
+                'shaped_context': firestore_stub.DELETE_FIELD,
+                'shaped_context_revision': firestore_stub.Increment(1),
                 'message_ids': firestore_stub.ArrayRemove(['logical-1', 'logical-2']),
                 'message_count': firestore_stub.Increment(-2),
                 'preview': None,

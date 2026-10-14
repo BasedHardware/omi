@@ -11501,5 +11501,10 @@
     "syncDetailsForSupport": "За поддршка",
     "syncDetailsAudioFiles": "Аудио датотеки",
     "syncDetailsServerJobs": "Задачи на серверот (завршени / вкупно)",
-    "syncDetailsCopy": "Копирај ги деталите за поддршка"
+    "syncDetailsCopy": "Копирај ги деталите за поддршка",
+    "chatAppsChannelPlanRequired": "Достапно со Operator и Architect",
+    "chatAppsAtCapacity": "{app} е пополнет",
+    "chatAppsJoinWaitlist": "Приклучи се на листата на чекање",
+    "chatAppsOnWaitlist": "Вие сте на листата на чекање",
+    "chatAppsWaitlistJoined": "Вие сте на листата на чекање. Ќе ве известиме кога ќе има место."
 }

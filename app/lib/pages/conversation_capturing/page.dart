@@ -1,3 +1,6 @@
+import 'package:omi/utils/other/temp.dart';
+import 'package:omi/ui/components/local_stt_recovery_notice.dart';
+import 'package:omi/pages/settings/transcription_settings_page.dart';
 import 'dart:async';
 
 import 'package:omi/utils/platform/platform_manager.dart';
@@ -134,6 +137,7 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> {
   /// is Paused, capture recovering on its own (a dropped socket, a mic stall) is Reconnecting, a
   /// terminal transcription failure or offline buffering is named as such, otherwise Listening.
   CaptureDisplayState _displayState(CaptureProvider provider, {required bool capturingPhotos}) {
+    if (provider.localSttFailure != null) return CaptureDisplayState.recording;
     final interruption = captureInterruption(
       interrupted: provider.recordingState == RecordingState.interrupted,
       readerPaused: provider.isPaused,
@@ -143,7 +147,7 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> {
       audioInterrupted: interruption == CaptureInterruption.micTaken,
       reconnecting: interruption == CaptureInterruption.recovering,
       paused: provider.isPaused || provider.isCallActive,
-      transcriptionUnavailable: provider.terminalTranscriptionFailure != null,
+      transcriptionUnavailable: provider.terminalTranscriptionFailure != null || provider.localSttFailure != null,
       bufferingFor: provider.customSttBufferingDuration,
       capturingPhotos: capturingPhotos,
     );
@@ -177,6 +181,11 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> {
           body: Column(
             children: [
               const CaptureRecoveryBanner(),
+              if (provider.localSttFailure case final failure?)
+                LocalSttRecoveryNotice(
+                    failure: failure,
+                    onRetry: provider.retryLocalTranscription,
+                    onSetup: () => routeToPage(context, const TranscriptionSettingsPage())),
               _buildUnsyncedWalIndicator(provider),
               Expanded(
                 child: provider.segments.isEmpty && provider.photos.isEmpty
@@ -661,6 +670,7 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> {
     required bool transcriptionInterrupted,
   }) {
     if (!provider.pendantCaptureVerified) return '';
+    if (provider.localSttFailure != null) return context.l10n.transcriptionUnavailableRecordingSaved;
     if (usage.isOutOfCredits) return context.l10n.transcriptionUnavailableRecordingSaved;
     if (provider.terminalTranscriptionFailure != null) {
       return context.l10n.transcriptionUnavailableRecordingContinues;

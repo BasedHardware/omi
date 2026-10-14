@@ -13277,4 +13277,21 @@ class AppLocalizationsNo extends AppLocalizations {
 
   @override
   String get syncDetailsCopy => 'Kopier detaljer til kundestøtte';
+
+  @override
+  String get chatAppsChannelPlanRequired => 'Tilgjengelig med Operator og Architect';
+
+  @override
+  String chatAppsAtCapacity(String app) {
+    return '$app er fullt';
+  }
+
+  @override
+  String get chatAppsJoinWaitlist => 'Sett meg på ventelisten';
+
+  @override
+  String get chatAppsOnWaitlist => 'Du står på ventelisten';
+
+  @override
+  String get chatAppsWaitlistJoined => 'Du står på ventelisten. Vi gir beskjed når det er plass.';
 }

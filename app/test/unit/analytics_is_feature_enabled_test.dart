@@ -44,6 +44,10 @@ class _FlagAdapter implements AnalyticsAdapter, AnalyticsIdentityAdapter, Analyt
   }
 
   final variantReads = <Completer<String?>>[];
+  int reloads = 0;
+
+  @override
+  Future<void> reloadFeatureFlags() async => reloads++;
 
   @override
   Future<String?> getFeatureFlagVariant(String key) {
