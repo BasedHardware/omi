@@ -4676,9 +4676,10 @@ PCM remains available in dual-write. READ prefers complete, checksum-verified
 raw spans; STOP_PCM skips a batch only when committed raw reconstructs every
 PCM range, verified by capture-PCM hash or byte-identical decode. Missing spans,
 checksum failures or identity mismatches keep today's
-path. Persisted raw/regionally migrated renditions stay readable on rollback.
-Regional cache routing never relocates canonical capture, and account deletion
-purges live and noncurrent generations across all configured buckets.
+path. Rollback STOP_PCM first; retain READ for raw-only history until verified
+PCM regeneration. Archive tail flushing runs after STT drain, outside its deadline.
+Regional cache routing never relocates canonical capture. Account and conversation
+deletion purge live and noncurrent generations across configured buckets.
 
 The [archive runbook](runbooks/sync-ingest-archive.md) owns flag phases, bucket
 provisioning, C023 estimates, playback/byte/deletion canaries and David's
