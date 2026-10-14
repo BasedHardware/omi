@@ -1,5 +1,3 @@
-import 'dart:ui';
-
 import 'package:flutter/material.dart';
 
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
@@ -52,6 +50,110 @@ class MemoryItem extends StatelessWidget {
     final provenanceLabel = _resolveProvenanceLabel(context, provenanceType);
     final temporalLabel = _temporalLabel(context, memory);
     final editable = memoryIsEditable(memory);
+    final rowContent = Row(
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  if (memory.isKnowledgeLedger) ...[
+                    Padding(
+                      padding: const EdgeInsets.only(top: 2, right: 8),
+                      child: Icon(
+                        _ledgerIcon(memory),
+                        size: 15,
+                        color: memory.isHistoricalKnowledgeLedgerRow
+                            ? OmiColors.textPrimary.withValues(alpha: 0.6)
+                            : OmiColors.textPrimary,
+                      ),
+                    ),
+                  ],
+                  Expanded(
+                    child: Text(memory.content.decodeString, style: OmiType.subhead.copyWith(height: 1.4)),
+                  ),
+                  if (editable)
+                    Padding(
+                      padding: const EdgeInsetsDirectional.only(start: 12),
+                      child: Icon(
+                        Icons.edit_outlined,
+                        size: 16,
+                        color: OmiColors.textTertiary,
+                        semanticLabel: context.l10n.editMemoryTitle,
+                      ),
+                    ),
+                ],
+              ),
+              if (memory.ledgerSlot != null && memory.ledgerSlot!.trim().isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.only(top: 4),
+                  child: Text(
+                    memory.ledgerSlot!,
+                    style: OmiType.caption.copyWith(color: OmiColors.textTertiary),
+                  ),
+                ),
+              if (memory.isLedgerPlaybook && (memory.ledgerBody ?? '').trim().isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.only(top: 6),
+                  child: Text(
+                    memory.ledgerBody!.trim(),
+                    maxLines: 3,
+                    overflow: TextOverflow.ellipsis,
+                    style: OmiType.footnote.copyWith(color: OmiColors.textSecondary),
+                  ),
+                ),
+              if (provenanceLabel != null)
+                Padding(
+                  padding: const EdgeInsets.only(top: 4),
+                  child: Text(provenanceLabel, style: OmiType.caption.copyWith(color: OmiColors.textTertiary)),
+                ),
+              if (temporalLabel != null)
+                Padding(
+                  padding: const EdgeInsets.only(top: 4),
+                  child: Text(temporalLabel, style: OmiType.caption.copyWith(color: OmiColors.textTertiary)),
+                ),
+            ],
+          ),
+        ),
+        const SizedBox(width: AppStyles.spacingM),
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (memory.isBaseline) ...[
+              Icon(
+                Icons.flag,
+                color: OmiColors.textSecondary,
+                size: 20,
+                semanticLabel: context.l10n.baselineMemory,
+              ),
+              const SizedBox(width: AppStyles.spacingS),
+            ],
+            if (memory.conversationId != null) ...[
+              _buildConversationLinkButton(context),
+              const SizedBox(width: AppStyles.spacingS),
+            ],
+            if (_canReviewLedgerRow(memory)) ...[
+              _buildReviewButton(context, accepted: true),
+              const SizedBox(width: AppStyles.spacingS),
+              _buildReviewButton(context, accepted: false),
+              const SizedBox(width: AppStyles.spacingS),
+            ],
+            if (provider.memoryBeliefEnabled && _canSetMemoryUse(memory)) ...[
+              _buildMemoryUseButton(context),
+              const SizedBox(width: AppStyles.spacingS),
+            ],
+            if (provider.canRevertSupersededFact(memory)) ...[
+              _buildRevertButton(context),
+              const SizedBox(width: AppStyles.spacingS),
+            ],
+            // _buildVisibilityButton(context),
+          ],
+        ),
+      ],
+    );
     final Widget memoryWidget = GestureDetector(
       // Every memory opens: editable ones into the edit sheet, the rest read-only.
       onTap:
@@ -67,149 +169,22 @@ class MemoryItem extends StatelessWidget {
           borderRadius: OmiRadius.xlAll,
           boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.1), blurRadius: 4, offset: const Offset(0, 2))],
         ),
-        child: Stack(
-          children: [
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.center,
-              children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          if (memory.isKnowledgeLedger) ...[
-                            Padding(
-                              padding: const EdgeInsets.only(top: 2, right: 8),
-                              child: Icon(
-                                _ledgerIcon(memory),
-                                size: 15,
-                                color: memory.isHistoricalKnowledgeLedgerRow
-                                    ? OmiColors.textPrimary.withValues(alpha: 0.6)
-                                    : OmiColors.textPrimary,
-                              ),
-                            ),
-                          ],
-                          Expanded(
-                            child: Text(memory.content.decodeString, style: OmiType.subhead.copyWith(height: 1.4)),
-                          ),
-                          if (editable)
-                            Padding(
-                              padding: const EdgeInsetsDirectional.only(start: 12),
-                              child: Icon(
-                                Icons.edit_outlined,
-                                size: 16,
-                                color: OmiColors.textTertiary,
-                                semanticLabel: context.l10n.editMemoryTitle,
-                              ),
-                            ),
-                        ],
-                      ),
-                      if (memory.ledgerSlot != null && memory.ledgerSlot!.trim().isNotEmpty)
-                        Padding(
-                          padding: const EdgeInsets.only(top: 4),
-                          child: Text(
-                            memory.ledgerSlot!,
-                            style: OmiType.caption.copyWith(color: OmiColors.textTertiary),
-                          ),
-                        ),
-                      if (memory.isLedgerPlaybook && (memory.ledgerBody ?? '').trim().isNotEmpty)
-                        Padding(
-                          padding: const EdgeInsets.only(top: 6),
-                          child: Text(
-                            memory.ledgerBody!.trim(),
-                            maxLines: 3,
-                            overflow: TextOverflow.ellipsis,
-                            style: OmiType.footnote.copyWith(color: OmiColors.textSecondary),
-                          ),
-                        ),
-                      if (provenanceLabel != null)
-                        Padding(
-                          padding: const EdgeInsets.only(top: 4),
-                          child: Text(provenanceLabel, style: OmiType.caption.copyWith(color: OmiColors.textTertiary)),
-                        ),
-                      if (temporalLabel != null)
-                        Padding(
-                          padding: const EdgeInsets.only(top: 4),
-                          child: Text(temporalLabel, style: OmiType.caption.copyWith(color: OmiColors.textTertiary)),
-                        ),
-                    ],
-                  ),
-                ),
-                const SizedBox(width: AppStyles.spacingM),
-                Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    if (memory.isBaseline) ...[
-                      Icon(
-                        Icons.flag,
-                        color: OmiColors.textSecondary,
-                        size: 20,
-                        semanticLabel: context.l10n.baselineMemory,
-                      ),
-                      const SizedBox(width: AppStyles.spacingS),
-                    ],
-                    if (memory.conversationId != null) ...[
-                      _buildConversationLinkButton(context),
-                      const SizedBox(width: AppStyles.spacingS),
-                    ],
-                    if (_canReviewLedgerRow(memory)) ...[
-                      _buildReviewButton(context, accepted: true),
-                      const SizedBox(width: AppStyles.spacingS),
-                      _buildReviewButton(context, accepted: false),
-                      const SizedBox(width: AppStyles.spacingS),
-                    ],
-                    if (provider.memoryBeliefEnabled && _canSetMemoryUse(memory)) ...[
-                      _buildMemoryUseButton(context),
-                      const SizedBox(width: AppStyles.spacingS),
-                    ],
-                    if (provider.canRevertSupersededFact(memory)) ...[
-                      _buildRevertButton(context),
-                      const SizedBox(width: AppStyles.spacingS),
-                    ],
-                    // _buildVisibilityButton(context),
-                  ],
-                ),
-              ],
-            ),
-            if (memory.isLocked)
-              Positioned.fill(
-                child: ClipRRect(
-                  child: BackdropFilter(
-                    filter: ImageFilter.blur(sigmaX: 2.0, sigmaY: 2.0),
-                    child: GestureDetector(
-                      onTap: () {
-                        if (!context.read<UsageProvider>().showSubscriptionUI) {
-                          // No upgrade path to offer: still let the reader open what is visible.
-                          showMemoryQuickEditSheet(context, memory, provider, readOnly: true);
-                          return;
-                        }
-                        routeToPage(context, const UsagePage());
-                        return;
-                      },
-                      child: Container(
-                        alignment: Alignment.center,
-                        decoration: BoxDecoration(
-                          color: Colors.black.withValues(alpha: 0.01),
-                          borderRadius: OmiRadius.smAll,
-                        ),
-                        child: context.watch<UsageProvider>().showSubscriptionUI
-                            ? Column(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Text(context.l10n.statusPending, style: OmiType.subhead),
-                                  Text(context.l10n.paywallComparePlans, style: OmiType.headline),
-                                ],
-                              )
-                            : const SizedBox.shrink(),
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-          ],
-        ),
+        child: memory.isLocked
+            ? OmiLockedPreview(
+                status: context.l10n.statusPending,
+                label: context.watch<UsageProvider>().showSubscriptionUI
+                    ? context.l10n.paywallComparePlans
+                    : context.l10n.saved,
+                onPressed: () {
+                  if (!context.read<UsageProvider>().showSubscriptionUI) {
+                    showMemoryQuickEditSheet(context, memory, provider, readOnly: true);
+                    return;
+                  }
+                  routeToPage(context, const UsagePage());
+                },
+                child: rowContent,
+              )
+            : rowContent,
       ),
     );
 
