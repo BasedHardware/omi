@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import subprocess
 import sys
 from pathlib import Path
 from typing import Sequence
@@ -188,6 +189,40 @@ class TestDoctor:
         ios = report["checks"][0]
         assert ios["check"] == "ios.tooling"
         assert ios["status"] == "operator-action-needed"
+        assert "sudo xcodebuild -runFirstLaunch" in ios["remedy"]
+
+    def test_real_xcrun_timeout_diagnosis_flows_through_doctor_as_operator_action(
+        self, env: dict, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """End-to-end: the runner's actual timeout diagnosis drives the doctor.
+
+        An xcrun hang whose first-launch probe reports pending produces the
+        shared marker via ms._default_device_runner; IosTooling surfaces it as
+        a DeviceRunnerError; device_doctor must classify it as
+        operator-action-needed. This pins the wording coupling between the two
+        modules: editing the diagnosis or the marker fails here.
+        """
+
+        class Probe:
+            returncode = 1  # first launch pending
+
+        def run(command: Sequence[str], **_kwargs: object):
+            if command[0] == "xcrun":
+                raise subprocess.TimeoutExpired(cmd=list(command), timeout=25)
+            if command[0] == "xcodebuild":
+                return Probe()
+            raise AssertionError(f"unexpected command: {command}")
+
+        monkeypatch.setattr(ms.subprocess, "run", run)
+        report = dr.device_doctor(
+            REPO_ROOT,
+            ios=dr.IosTooling(ms._default_device_runner),
+            env=env,
+        )
+        ios = report["checks"][0]
+        assert ios["check"] == "ios.tooling"
+        assert ios["status"] == "operator-action-needed"
+        assert dr.XCODE_FIRST_LAUNCH_PENDING_MARKER in ios["detail"]
         assert "sudo xcodebuild -runFirstLaunch" in ios["remedy"]
 
 

@@ -372,26 +372,14 @@ def test_resolver_probes_homebrew_prefix_when_path_is_stripped(
     repo.mkdir()
     stripped = os.pathsep.join(("/usr/bin", "/bin"))
     resolved = _resolve_python(repo, monkeypatch, path=stripped)
-    real_prefix = Path("/opt/homebrew/opt/python@3.14/bin/python3.14")
-    if resolved.startswith("/"):
-        # Host-adaptive contract for the absolute prefix probe. When the pick
-        # can import the cheap-gate deps, a newer prefix interpreter without
-        # them must not have shadowed it (the resolver prefers import-capable
-        # candidates; on hosts where 3.14 has the deps the pick IS 3.14 and
-        # this assertion is vacuous). A floor-only fallback stays valid when
-        # no import-capable candidate exists at all.
-        if (
-            subprocess.run([resolved, "-c", "import dotenv, yaml"], capture_output=True, timeout=10, check=False).returncode
-            == 0
-            and real_prefix.is_file()
-            and resolved != str(real_prefix)
-            and subprocess.run([str(real_prefix), "-c", "import dotenv, yaml"], capture_output=True, timeout=10, check=False).returncode
-            != 0
-        ):
-            pytest.fail(
-                "resolver picked the import-incapable newer Homebrew prefix over "
-                f"an import-capable candidate: {resolved}"
-            )
+    # Host-adaptive contract for the absolute prefix probe: accept every
+    # documented outcome (floor-qualified absolute prefix path, relative PATH
+    # name such as `python3.12` on Linux, or bare `python3`) and reject only a
+    # below-floor pick. Whether an import-capable candidate shadows a newer
+    # prefix interpreter depends on host state the test cannot enumerate; that
+    # preference contract is pinned deterministically by
+    # test_resolver_prefers_import_capable_python_over_newer_import_bare_one
+    # with stubbed probes.
     _assert_floor_qualified_or_documented_fallback(resolved)
 
 

@@ -1100,6 +1100,8 @@ def _default_device_runner(command: Sequence[str], timeout: float = 180.0) -> tu
             " Android: adb server, USB connection, SDK tooling)."
         )
         if tool == "xcrun":
+            from .device_runner import XCODE_FIRST_LAUNCH_PENDING_MARKER
+
             first_launch = "pending"
             try:
                 probe = subprocess.run(
@@ -1113,12 +1115,11 @@ def _default_device_runner(command: Sequence[str], timeout: float = 180.0) -> tu
             except (OSError, subprocess.TimeoutExpired):
                 first_launch = "unknown"
             if first_launch == "pending":
-                # Keep the marker in sync with
-                # device_runner.XCODE_FIRST_LAUNCH_PENDING_MARKER:
-                # device_doctor classifies this diagnosis as an operator action.
+                # Shared marker: device_runner.device_doctor classifies this
+                # diagnosis as operator-action-needed (admin-only work).
                 diagnosis += (
-                    " Xcode first launch is pending; completing it requires admin"
-                    " rights (operator action):"
+                    f" {XCODE_FIRST_LAUNCH_PENDING_MARKER}; completing it requires"
+                    " admin rights (operator action):"
                     " `sudo xcodebuild -runFirstLaunch && sudo xcodebuild -license accept`"
                     " (or open Xcode.app and finish the prompt)."
                 )
@@ -1131,9 +1132,10 @@ def _default_device_runner(command: Sequence[str], timeout: float = 180.0) -> tu
             else:
                 diagnosis += (
                     " Xcode first-launch state could not be probed"
-                    " (`xcodebuild -checkFirstLaunchStatus` failed); if first"
-                    " launch is actually pending, completing it requires admin"
-                    " rights (operator action):"
+                    " (`xcodebuild -checkFirstLaunchStatus` failed); run it once"
+                    " manually to check: if it exits non-zero, first launch is"
+                    " pending and completing it requires admin rights (operator"
+                    " action):"
                     " `sudo xcodebuild -runFirstLaunch && sudo xcodebuild -license accept`."
                 )
         return 124, diagnosis
