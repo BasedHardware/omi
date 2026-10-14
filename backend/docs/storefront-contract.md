@@ -163,3 +163,11 @@ than a speech cap labelled as the shared budget.
 
 The v1 payment endpoints are unchanged. This route does not write Stripe or
 grant entitlements.
+
+## Flagged ladder cutover additions
+
+The configuration-backed six lookup-key bindings and additive `at_cap` copy
+payload are defined in [ladder-v1-cutover.md](ladder-v1-cutover.md). The field is
+absent on the dark path. Clients render it verbatim and continue using the
+existing `usage_budget` trigger at 80% and 100%. Daily API nudge/reset metadata
+uses `mcp_daily_cap`; no new trigger enum is required.

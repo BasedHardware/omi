@@ -67,6 +67,7 @@ from utils.mcp_server.versions import (
     unsupported_version_error,
 )
 from utils.other.endpoints import check_rate_limit_context, check_rate_limit_inline
+from utils.ladder_v1 import enforce_daily_cap, enforce_budget
 
 logger = logging.getLogger(__name__)
 
@@ -197,12 +198,20 @@ def _handle_tool_call(
     started_at = time.monotonic()
     tool_error: Optional[ToolExecutionError] = None
     result: Optional[Dict[str, Any]] = None
+    daily: dict | None = None
     try:
         require_tool_scope(auth_context, tool_name)
+        enforce_budget(auth_context.uid)
+        daily = enforce_daily_cap(auth_context.uid)
         result = execute_tool(auth_context.uid, tool_name, arguments, auth_context=auth_context.memory_context)
     except ToolExecutionError as e:
         tool_error = e
     except HTTPException as exc:
+        detail: Any = exc.detail
+        if isinstance(detail, dict) and detail.get('error') in {'mcp_daily_cap', 'usage_budget_exhausted'}:
+            payload = _tool_error_payload(detail['error'], str(detail))
+            payload['_meta'] = {'omi_usage': detail}
+            return create_mcp_response(msg_id, _complete_result(payload, effective_version))
         tool_error = tool_error_from_http(exc)
     except Exception:
         logger.exception("hosted MCP tool call failed tool=%s", mcp_tool_enum(tool_name))
@@ -317,7 +326,10 @@ def _handle_tool_call(
         result_count=result_count_for_tool_result(tool_name, result or {}),
         effective_version=effective_version,
     )
-    return create_mcp_response(msg_id, _complete_result(_tool_result_payload(result or {}), effective_version))
+    payload = _tool_result_payload(result or {})
+    if daily is not None and daily['state'] == 'nudge':
+        payload['_meta'] = dict(payload.get('_meta') or {}, omi_usage={**daily, 'trigger': 'mcp_daily_cap'})
+    return create_mcp_response(msg_id, _complete_result(payload, effective_version))
 
 
 def _envelope_error(message: Dict[str, Any]) -> Optional[Tuple[int, str, Any]]:

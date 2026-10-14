@@ -1,3 +1,4 @@
+from config.plan_catalog import configured_ladder_prices, validate_ladder_price
 import os
 from datetime import datetime, timezone
 
@@ -607,6 +608,11 @@ def _validate_price_id(price_id: str) -> None:
         raise HTTPException(status_code=400, detail="price_id is required")
     if not is_purchasable_price_id(price_id):
         raise HTTPException(status_code=400, detail="Unknown price_id")
+    if price_id in configured_ladder_prices():
+        try:
+            validate_ladder_price(price_id, stripe.Price.retrieve(price_id).to_dict_recursive())
+        except Exception as error:
+            raise HTTPException(status_code=503, detail='Ladder price unavailable') from error
 
 
 @router.post(

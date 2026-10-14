@@ -12,6 +12,7 @@ from typing import Any, Mapping
 from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter
 from config.plan_catalog import resolve_subscription_entitlements
+from config.ladder_v1 import enabled
 from config.rate_card import (
     budget_units,
     normalize_transcription_provider,
@@ -132,7 +133,25 @@ def hourly_shadow(updates: Mapping[str, Any], metadata: Mapping[str, Any] | None
     leaf['legacy_counter_seconds'] = firestore.Increment(elapsed or 0)
     if 'accepted_speech_seconds' in priced:
         leaf['accepted_speech_seconds'] = firestore.Increment(priced['accepted_speech_seconds'])
-    return {'shadow_v1': {'rate_card': 'v1', 'features': {'transcription': {'funding': {funding: leaf}}}}}
+    lane = (
+        'on_device'
+        if funding == 'on_device'
+        else (
+            'live'
+            if source == 'listen'
+            else 'batch' if source in {'sync_v1', 'sync_v2', 'parakeet_proxy'} else 'unknown'
+        )
+    )
+    shadow: dict[str, Any] = {'rate_card': 'v1', 'features': {'transcription': {'funding': {funding: leaf}}}}
+    if enabled('LADDER_V1_LANE_METERING_ENABLED'):
+        shadow['lanes'] = {
+            lane: {
+                'micro_units': firestore.Increment(int(priced['micro_units'])),
+                'speech_seconds': firestore.Increment(priced.get('accepted_speech_seconds', 0)),
+                'accepted_events': firestore.Increment(1 if 'accepted_speech_seconds' in priced else 0),
+            }
+        }
+    return {'shadow_v1': shadow}
 
 
 def gateway_shadow(data: Mapping[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]:
@@ -220,6 +239,9 @@ def get_usage_units(
     missing_days = 0
     missing_attempts = 0
     missing_seconds = 0.0
+    lane_totals: dict[str, int] = {}
+    lane_seconds: dict[str, float] = {}
+    lane_accepted: dict[str, int] = {}
 
     def consume(features: Mapping[str, Any]) -> None:
         for feature, feature_data in features.items():
@@ -244,6 +266,10 @@ def get_usage_units(
         if isinstance(shadow, Mapping):
             features = shadow.get('features', {})
             consume(features)
+            for lane, values in shadow.get('lanes', {}).items():
+                lane_totals[lane] = lane_totals.get(lane, 0) + int(values.get('micro_units', 0))
+                lane_seconds[lane] = lane_seconds.get(lane, 0) + float(values.get('speech_seconds', 0))
+                lane_accepted[lane] = lane_accepted.get(lane, 0) + int(values.get('accepted_events', 0))
             covered = sum(
                 float(leaf.get('legacy_counter_seconds', 0))
                 for leaf in features.get('transcription', {}).get('funding', {}).values()
@@ -280,11 +306,41 @@ def get_usage_units(
         if residual:
             missing_days += 1
             missing_attempts += residual
+        # New daily API quantities are priced separately from tool/model attempts.
+        if entitlements['entitlement_version'] == 'ladder_v1':
+            api = (
+                user.collection('ladder_v1_api_days')
+                .document(day.date().isoformat())
+                .get(['micro_units', 'requests'])
+                .to_dict()
+                or {}
+            )
+            if api.get('micro_units'):
+                consume(
+                    {
+                        'mcp_api': {
+                            'funding': {
+                                'omi': {
+                                    'micro_units': api['micro_units'],
+                                    'status_counts': {'provisional': api.get('requests', 0)},
+                                }
+                            }
+                        }
+                    }
+                )
         day += timedelta(days=1)
     return {
         'used_units': float(Decimal(sum(totals.values())) / 1_000_000),
         'budget_units': budget_units(entitlements),
         'by_feature': {k: float(Decimal(v) / 1_000_000) for k, v in totals.items()},
+        'by_lane': {
+            k: {
+                'units': float(Decimal(v) / 1_000_000),
+                'speech_seconds': lane_seconds.get(k, 0),
+                'live_hours': lane_seconds.get(k, 0) / 3600 if k == 'live' and lane_accepted.get(k, 0) else None,
+            }
+            for k, v in lane_totals.items()
+        },
         'by_funding': {k: float(Decimal(v) / 1_000_000) for k, v in funding_totals.items()},
         'completeness': {
             'status': 'partial',

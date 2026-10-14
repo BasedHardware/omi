@@ -1441,7 +1441,12 @@ _PLAN_GATED_PROXY_FEATURE = 'screen_frame_judge'
 
 def _plan_gate_detail(decision: Decision) -> dict[str, str]:
     plan_type = decision.plan.value if decision.plan is not None else 'basic'
-    return {'error': 'plan_gated', 'plan_type': plan_type, 'reason': decision.reason}
+    detail = {'error': 'plan_gated', 'plan_type': plan_type, 'reason': decision.reason}
+    if decision.reason == 'ladder_pro_required':
+        detail.update(trigger='screen_context', upgrade_plan='operator')
+    elif decision.reason == 'usage_budget_exhausted':
+        detail.update(trigger='usage_budget')
+    return detail
 
 
 async def _enforce_managed_plan_gate(uid: str, path: str) -> None:

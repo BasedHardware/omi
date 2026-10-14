@@ -376,6 +376,7 @@ def validate_catalog(catalog: Mapping[str, Any]) -> list[str]:
     expected_root_keys = {
         'entitlement_versions',
         'ladder_v1_stripe_prices',
+        'ladder_v1_price_bindings',
         'proactivity_v2_budget',
         'schema_version',
         'catalog_revision',
@@ -830,6 +831,7 @@ def render_generated(catalog: Mapping[str, Any]) -> str:
 from __future__ import annotations
 
 from enum import Enum
+import os
 from typing import Any, Final
 
 
@@ -838,6 +840,8 @@ class PlanType(str, Enum):
 
     @classmethod
     def _missing_(cls, value: object):
+        if value == 'pro' and os.getenv('LADDER_V1_RETIRE_PRO_ALIAS_ENABLED', 'false') == 'true':
+            return None
         return WIRE_PLAN_ALIASES.get(value) if isinstance(value, str) else None
 
 
@@ -851,6 +855,7 @@ CATALOG_AUTHORITY: Final = {_python_literal(catalog['authority'])}
 OPEN_PLAN_DECISIONS: Final = {_python_literal(catalog['open_decisions'])}
 PROACTIVITY_V2_BUDGET: Final[dict[str, Any]] = {_python_literal(catalog.get('proactivity_v2_budget', {}))}
 ENTITLEMENT_VERSIONS: Final[dict[str, Any]] = {_python_literal(catalog['entitlement_versions'])}
+LADDER_V1_PRICE_BINDINGS: Final[dict[str, Any]] = {_python_literal(catalog['ladder_v1_price_bindings'])}
 LADDER_V1_STRIPE_PRICES: Final[list[str]] = {_python_literal(catalog['ladder_v1_stripe_prices'])}
 RECOGNIZED_STRIPE_ENTITLEMENT_VERSIONS: Final[dict[str, Any]] = {_python_literal({entry['price_id']: entry['entitlement_version'] for entry in catalog['recognized_stripe_prices']})}
 MEASUREMENT_CONTRACTS: Final = {_python_literal(catalog['measurement_contracts'])}
@@ -886,6 +891,7 @@ PHONE_CALL_PROFILE_DEFAULTS: Final[dict[str, dict[str, Any]]] = {_python_literal
 __all__ = [
     'ENTITLEMENT_VERSIONS',
     'LADDER_V1_STRIPE_PRICES',
+    'LADDER_V1_PRICE_BINDINGS',
     'RECOGNIZED_STRIPE_ENTITLEMENT_VERSIONS',
     'BILLING_ENV_VAR_PLAN_TYPES',
     'CATALOG_AUTHORITY',

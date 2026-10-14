@@ -1541,7 +1541,7 @@ def get_user_chat_usage_quota(
         percent=percent,
         allowed=snapshot['allowed'],
         reset_at=snapshot['reset_at'],
-        is_overage_plan=plan_uses_overage(plan),
+        is_overage_plan=snapshot.get('is_overage_plan', plan_uses_overage(plan)),
     )
 
 

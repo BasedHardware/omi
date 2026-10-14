@@ -4997,6 +4997,15 @@ export interface StoreRecordingPermissionResponse {
   store_recording_permission: boolean;
 }
 
+export interface StorefrontCapChoice {
+  body: string;
+  dont_ask_again_label: string;
+  on_device_label: string;
+  on_device_upgrade_line: string;
+  title: string;
+  upgrade_label: string;
+}
+
 export interface StorefrontCurrent {
   cancel_at_period_end?: boolean;
   interval?: "month" | "year" | null;
@@ -5021,6 +5030,7 @@ export interface StorefrontPrice {
 }
 
 export interface StorefrontResponse {
+  at_cap?: StorefrontCapChoice | null;
   catalog_revision: number;
   current?: StorefrontCurrent | null;
   header?: string | null;
@@ -6713,6 +6723,7 @@ export interface OmiApiSchemas {
   "StoreMeetingRequest": StoreMeetingRequest;
   "StoreMeetingResponse": StoreMeetingResponse;
   "StoreRecordingPermissionResponse": StoreRecordingPermissionResponse;
+  "StorefrontCapChoice": StorefrontCapChoice;
   "StorefrontCurrent": StorefrontCurrent;
   "StorefrontPrice": StorefrontPrice;
   "StorefrontResponse": StorefrontResponse;

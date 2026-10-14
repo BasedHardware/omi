@@ -1,3 +1,4 @@
+from utils import ladder_v1
 from utils.observability.sync_phases import sync_attempt, set_sync_metrics_lane
 import asyncio
 import json
@@ -599,14 +600,20 @@ async def sync_local_files(
             base_headers=_V1_DEPRECATION_HEADERS,
         )
 
-    # Check credits: if exhausted, still process but lock the conversation so user can pay to unlock.
+    await run_blocking(db_executor, ladder_v1.enforce_budget, uid)
+
+    # Legacy exhaustion retains the installed-client path below.
+
     # A lookup failure must not durably lock: unlike gating the live listen socket, nothing
     # routinely re-checks is_locked later, so a transient blip would paywall it forever (#15232).
     has_credits = await run_blocking(critical_executor, has_transcription_credits, uid)
     should_lock = False
     if not has_credits:
         allowance = await run_blocking(critical_executor, resolve_transcription_allowance, uid)
-        should_lock = allowance.reason not in TRANSCRIPTION_ALLOWANCE_TRANSIENT_REASONS
+        should_lock = (
+            allowance.reason not in TRANSCRIPTION_ALLOWANCE_TRANSIENT_REASONS
+            and allowance.reason != 'usage_budget_exhausted'
+        )
 
     # Detect source from filenames
     source = detect_source_from_filenames([f.filename for f in files])
@@ -1024,13 +1031,18 @@ async def sync_local_files_v2(
                 cloud_trace_context=x_cloud_trace_context if isinstance(x_cloud_trace_context, str) else None,
             )
 
+    await run_blocking(db_executor, ladder_v1.enforce_budget, uid)
+
     # A lookup failure must not durably lock: unlike gating the live listen socket, nothing
     # routinely re-checks is_locked later, so a transient blip would paywall it forever (#15232).
     has_credits = await run_blocking(critical_executor, has_transcription_credits, uid)
     should_lock = False
     if not has_credits:
         allowance = await run_blocking(critical_executor, resolve_transcription_allowance, uid)
-        should_lock = allowance.reason not in TRANSCRIPTION_ALLOWANCE_TRANSIENT_REASONS
+        should_lock = (
+            allowance.reason not in TRANSCRIPTION_ALLOWANCE_TRANSIENT_REASONS
+            and allowance.reason != 'usage_budget_exhausted'
+        )
 
     # Detect source
     source = detect_source_from_filenames([f.filename for f in files])

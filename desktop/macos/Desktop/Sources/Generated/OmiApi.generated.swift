@@ -5047,6 +5047,44 @@ public enum OmiAPI {
   }
 
 
+  public struct StorefrontCapChoice: Codable {
+    public let body: String
+    public let dontAskAgainLabel: String
+    public let onDeviceLabel: String
+    public let onDeviceUpgradeLine: String
+    public let title: String
+    public let upgradeLabel: String
+
+    private enum CodingKeys: String, CodingKey {
+      case body
+      case dontAskAgainLabel = "dont_ask_again_label"
+      case onDeviceLabel = "on_device_label"
+      case onDeviceUpgradeLine = "on_device_upgrade_line"
+      case title
+      case upgradeLabel = "upgrade_label"
+    }
+
+    public init(from decoder: Decoder) throws {
+      let c = try decoder.container(keyedBy: CodingKeys.self)
+      body = try c.decode(String.self, forKey: .body)
+      dontAskAgainLabel = try c.decode(String.self, forKey: .dontAskAgainLabel)
+      onDeviceLabel = try c.decode(String.self, forKey: .onDeviceLabel)
+      onDeviceUpgradeLine = try c.decode(String.self, forKey: .onDeviceUpgradeLine)
+      title = try c.decode(String.self, forKey: .title)
+      upgradeLabel = try c.decode(String.self, forKey: .upgradeLabel)
+    }
+
+    public init(body: String, dontAskAgainLabel: String, onDeviceLabel: String, onDeviceUpgradeLine: String, title: String, upgradeLabel: String) {
+      self.body = body
+      self.dontAskAgainLabel = dontAskAgainLabel
+      self.onDeviceLabel = onDeviceLabel
+      self.onDeviceUpgradeLine = onDeviceUpgradeLine
+      self.title = title
+      self.upgradeLabel = upgradeLabel
+    }
+  }
+
+
   public struct StorefrontCurrent: Codable {
     public let cancelAtPeriodEnd: Bool?
     public let interval: String?
@@ -5144,6 +5182,7 @@ public enum OmiAPI {
 
 
   public struct StorefrontResponse: Codable {
+    public let atCap: StorefrontCapChoice?
     public let catalogRevision: Int
     public let current: StorefrontCurrent?
     public let header: String?
@@ -5154,6 +5193,7 @@ public enum OmiAPI {
     public let yearlyToggleLabel: String?
 
     private enum CodingKeys: String, CodingKey {
+      case atCap = "at_cap"
       case catalogRevision = "catalog_revision"
       case current
       case header
@@ -5166,6 +5206,7 @@ public enum OmiAPI {
 
     public init(from decoder: Decoder) throws {
       let c = try decoder.container(keyedBy: CodingKeys.self)
+      atCap = try c.decodeIfPresent(StorefrontCapChoice.self, forKey: .atCap)
       catalogRevision = try c.decode(Int.self, forKey: .catalogRevision)
       current = try c.decodeIfPresent(StorefrontCurrent.self, forKey: .current)
       header = try c.decodeIfPresent(String.self, forKey: .header)
@@ -5176,7 +5217,8 @@ public enum OmiAPI {
       yearlyToggleLabel = try c.decodeIfPresent(String.self, forKey: .yearlyToggleLabel)
     }
 
-    public init(catalogRevision: Int, current: StorefrontCurrent? = nil, header: String? = nil, schemaVersion: Int? = nil, showSubscriptionUi: Bool? = nil, tiers: [StorefrontTier]? = nil, usage: StorefrontUsage? = nil, yearlyToggleLabel: String? = nil) {
+    public init(atCap: StorefrontCapChoice? = nil, catalogRevision: Int, current: StorefrontCurrent? = nil, header: String? = nil, schemaVersion: Int? = nil, showSubscriptionUi: Bool? = nil, tiers: [StorefrontTier]? = nil, usage: StorefrontUsage? = nil, yearlyToggleLabel: String? = nil) {
+      self.atCap = atCap
       self.catalogRevision = catalogRevision
       self.current = current
       self.header = header

@@ -65,6 +65,15 @@ class StorefrontUsage(BaseModel):
     pro_gates: list[str] = Field(default_factory=list)
 
 
+class StorefrontCapChoice(BaseModel):
+    title: str
+    body: str
+    upgrade_label: str
+    on_device_label: str
+    dont_ask_again_label: str
+    on_device_upgrade_line: str
+
+
 class StorefrontResponse(BaseModel):
     schema_version: Literal[2] = 2
     catalog_revision: int
@@ -74,3 +83,11 @@ class StorefrontResponse(BaseModel):
     usage: StorefrontUsage = Field(default_factory=StorefrontUsage)
     tiers: list[StorefrontTier] = Field(default_factory=list)
     yearly_toggle_label: str | None = None
+    at_cap: StorefrontCapChoice | None = None
+
+    @model_serializer(mode='wrap')
+    def _omit_inactive_cap(self, handler):
+        data = handler(self)
+        if self.at_cap is None:
+            data.pop('at_cap', None)
+        return data

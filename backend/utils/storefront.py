@@ -5,7 +5,9 @@ from pathlib import Path
 import json
 from typing import Any, Callable, Literal
 
+from config import ladder_v1 as ladder_policy
 from models.storefront import (
+    StorefrontCapChoice,
     StorefrontCurrent,
     StorefrontPrice,
     StorefrontResponse,
@@ -14,6 +16,7 @@ from models.storefront import (
 )
 from models.users import Subscription
 from utils.storefront_copy import (
+    copy_for,
     blocked_line,
     bullets,
     cta_label,
@@ -453,7 +456,18 @@ def build_storefront(
         locale=locale,
         currency=current_currency,
     )
+    at_cap = None
+    if (
+        ladder_policy.enabled('LADDER_V1_BUDGET_ENFORCEMENT_ENABLED')
+        and not legacy
+        and usage.kind == 'usage_budget'
+        and usage.percent is not None
+        and usage.percent >= 100
+    ):
+        at_cap = dict(copy_for(locale)['at_cap'])
+        at_cap['body'] = at_cap['body'].format(date=(usage.reset_label or '').removeprefix('resets '))
     return StorefrontResponse(
+        at_cap=StorefrontCapChoice(**at_cap) if at_cap is not None else None,
         catalog_revision=catalog_revision,
         header=header(
             legacy=legacy,

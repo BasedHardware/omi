@@ -13,6 +13,7 @@ from typing import Any, Awaitable, Callable, Dict, List, Optional, cast
 from fastapi.websockets import WebSocketDisconnect
 from starlette.websockets import WebSocketState
 
+from config.ladder_v1 import enabled as ladder_enabled
 from database import conversation_tombstones
 from database.firestore_read_metrics import FirestoreReadSite
 from database.live_language_profile import get_live_language_sessions
@@ -830,6 +831,7 @@ class ListenSessionRuntime:
         if not self.state.last_usage_record_timestamp:
             return 0
         speech_seconds = 0
+        speech_ms = 0
         if self.receiver.vad_gate is not None:
             speech_ms = self.receiver.vad_gate.consume_speech_ms_delta()
             speech_seconds = speech_ms // 1000
@@ -859,6 +861,14 @@ class ListenSessionRuntime:
         )
         words = self.state.words_transcribed_since_last_record
         self.state.words_transcribed_since_last_record = 0
+        usage_metadata: Dict[str, Any] = live_usage_metadata(self)
+        if (
+            ladder_enabled('LADDER_V1_LANE_METERING_ENABLED')
+            and managed_chain_enabled(self)
+            and self.receiver.vad_gate is not None
+        ):
+            # The managed session consumes only speech from accepted sends, excluding replay.
+            usage_metadata = dict(usage_metadata, accepted_speech_seconds=speech_ms / 1000)
         if seconds or words or speech_seconds:
             await self.persistence.call(
                 record_usage,
@@ -866,7 +876,7 @@ class ListenSessionRuntime:
                 transcription_seconds=seconds,
                 words_transcribed=words,
                 speech_seconds=speech_seconds,
-                usage_metadata=live_usage_metadata(self),
+                usage_metadata=usage_metadata,
             )
         if not final:
             self.state.last_usage_record_timestamp = now

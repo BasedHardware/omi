@@ -30363,6 +30363,44 @@
         "title": "StoreRecordingPermissionResponse",
         "type": "object"
       },
+      "StorefrontCapChoice": {
+        "properties": {
+          "body": {
+            "title": "Body",
+            "type": "string"
+          },
+          "dont_ask_again_label": {
+            "title": "Dont Ask Again Label",
+            "type": "string"
+          },
+          "on_device_label": {
+            "title": "On Device Label",
+            "type": "string"
+          },
+          "on_device_upgrade_line": {
+            "title": "On Device Upgrade Line",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "upgrade_label": {
+            "title": "Upgrade Label",
+            "type": "string"
+          }
+        },
+        "required": [
+          "title",
+          "body",
+          "upgrade_label",
+          "on_device_label",
+          "dont_ask_again_label",
+          "on_device_upgrade_line"
+        ],
+        "title": "StorefrontCapChoice",
+        "type": "object"
+      },
       "StorefrontCurrent": {
         "properties": {
           "cancel_at_period_end": {
@@ -30522,6 +30560,16 @@
       },
       "StorefrontResponse": {
         "properties": {
+          "at_cap": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/StorefrontCapChoice"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "catalog_revision": {
             "title": "Catalog Revision",
             "type": "integer"

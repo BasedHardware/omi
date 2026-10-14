@@ -15,6 +15,12 @@ from utils.storefront import _valid_price_rows, build_storefront, load_ladder
 from utils.storefront_copy import months_free
 
 
+@pytest.fixture(autouse=True)
+def offline_usage_projection(monkeypatch):
+    # The new facade exists in cutover; presentation tests must not reach the ledger.
+    monkeypatch.setattr(route.subscription_utils, 'get_usage_units', lambda uid: {})
+
+
 def price(identifier, amount, interval='month', **overrides):
     return {
         'id': identifier,
