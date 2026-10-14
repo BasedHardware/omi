@@ -513,6 +513,9 @@ class SimpleConversation(BaseModel):
     language: Optional[str] = None
     apps_results: List[AppResult] = []
     match_snippets: List[TranscriptMatchSnippet] = []
+    participants_included: bool = False
+    participants: List[dict] = Field(default_factory=list)
+    person_ids: List[str] = Field(default_factory=list)
 
 
 class FullConversation(SimpleConversation):

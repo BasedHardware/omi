@@ -1674,29 +1674,6 @@
         "title": "AnnouncementType",
         "type": "string"
       },
-      "AnnualSavings": {
-        "properties": {
-          "amount_minor": {
-            "title": "Amount Minor",
-            "type": "integer"
-          },
-          "formatted": {
-            "title": "Formatted",
-            "type": "string"
-          },
-          "percent": {
-            "title": "Percent",
-            "type": "number"
-          }
-        },
-        "required": [
-          "amount_minor",
-          "percent",
-          "formatted"
-        ],
-        "title": "AnnualSavings",
-        "type": "object"
-      },
       "App": {
         "description": "Full App model - includes large/internal fields for detail views.",
         "properties": {
@@ -10001,6 +9978,38 @@
         "title": "ConversationSearchItem",
         "type": "object"
       },
+      "ConversationSearchResponse": {
+        "properties": {
+          "conversations": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Conversations",
+            "type": "array"
+          },
+          "message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Message"
+          },
+          "search_coverage": {
+            "title": "Search Coverage",
+            "type": "string"
+          }
+        },
+        "required": [
+          "search_coverage"
+        ],
+        "title": "ConversationSearchResponse",
+        "type": "object"
+      },
       "ConversationSource": {
         "enum": [
           "friend",
@@ -12813,6 +12822,26 @@
             ],
             "title": "Language"
           },
+          "participants": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Participants",
+            "type": "array"
+          },
+          "participants_included": {
+            "default": false,
+            "title": "Participants Included",
+            "type": "boolean"
+          },
+          "person_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Person Ids",
+            "type": "array"
+          },
           "source": {
             "anyOf": [
               {
@@ -12838,6 +12867,11 @@
           },
           "structured": {
             "$ref": "#/components/schemas/DeveloperConversationStructured"
+          },
+          "transcript_included": {
+            "default": false,
+            "title": "Transcript Included",
+            "type": "boolean"
           },
           "transcript_segments": {
             "anyOf": [
@@ -13408,6 +13442,11 @@
             "title": "Archive Default Visible",
             "type": "boolean"
           },
+          "effective_limit": {
+            "default": 20,
+            "title": "Effective Limit",
+            "type": "integer"
+          },
           "items": {
             "items": {
               "$ref": "#/components/schemas/DeveloperMemoryVectorItem"
@@ -13415,12 +13454,28 @@
             "title": "Items",
             "type": "array"
           },
+          "message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Message"
+          },
           "policy": {
             "$ref": "#/components/schemas/DeveloperMemoryVectorPolicy"
           },
           "returned_count": {
             "title": "Returned Count",
             "type": "integer"
+          },
+          "search_coverage": {
+            "default": "eligible_indexed_memories",
+            "title": "Search Coverage",
+            "type": "string"
           }
         },
         "required": [
@@ -14010,7 +14065,7 @@
             "type": "string"
           },
           "target": {
-            "description": "Supplied record ref to edit. One spelling edit fixes every occurrence in this target.",
+            "description": "Supplied record ref to edit, optionally with #segment-id or #start-seconds. One spelling edit fixes every occurrence in its target; with a fragment, only that transcript segment is changed.",
             "title": "Target",
             "type": "string"
           }
@@ -16255,6 +16310,26 @@
               "$ref": "#/components/schemas/routers__mcp__TranscriptMatchSnippet"
             },
             "title": "Match Snippets",
+            "type": "array"
+          },
+          "participants": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Participants",
+            "type": "array"
+          },
+          "participants_included": {
+            "default": false,
+            "title": "Participants Included",
+            "type": "boolean"
+          },
+          "person_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Person Ids",
             "type": "array"
           },
           "started_at": {
@@ -21315,6 +21390,43 @@
         "title": "MemorySearchPolicyPayload",
         "type": "object"
       },
+      "MemorySearchResponse": {
+        "properties": {
+          "effective_limit": {
+            "default": 20,
+            "title": "Effective Limit",
+            "type": "integer"
+          },
+          "memories": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Memories",
+            "type": "array"
+          },
+          "message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Message"
+          },
+          "search_coverage": {
+            "title": "Search Coverage",
+            "type": "string"
+          }
+        },
+        "required": [
+          "search_coverage"
+        ],
+        "title": "MemorySearchResponse",
+        "type": "object"
+      },
       "MemorySubjectScope": {
         "enum": [
           "primary_user",
@@ -23317,6 +23429,20 @@
         "title": "PendingSyncResponse",
         "type": "object"
       },
+      "PeopleResponse": {
+        "properties": {
+          "people": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "People",
+            "type": "array"
+          }
+        },
+        "title": "PeopleResponse",
+        "type": "object"
+      },
       "Person": {
         "properties": {
           "auto_conversation_count": {
@@ -23721,29 +23847,6 @@
           "numbers"
         ],
         "title": "PhoneNumbersResponse",
-        "type": "object"
-      },
-      "PlanFeature": {
-        "properties": {
-          "included": {
-            "default": true,
-            "title": "Included",
-            "type": "boolean"
-          },
-          "key": {
-            "title": "Key",
-            "type": "string"
-          },
-          "label": {
-            "title": "Label",
-            "type": "string"
-          }
-        },
-        "required": [
-          "key",
-          "label"
-        ],
-        "title": "PlanFeature",
         "type": "object"
       },
       "PlanIdentitySubscription": {
@@ -24858,6 +24961,64 @@
           "app_context"
         ],
         "title": "ProductRolloutObservability",
+        "type": "object"
+      },
+      "ProfileResponse": {
+        "properties": {
+          "data_sources_used": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Data Sources Used"
+          },
+          "generated_at": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Generated At"
+          },
+          "message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Message"
+          },
+          "profile": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Profile"
+          },
+          "profile_text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Profile Text"
+          }
+        },
+        "title": "ProfileResponse",
         "type": "object"
       },
       "ProgressExtractRequest": {
@@ -26868,6 +27029,38 @@
           "truncated"
         ],
         "title": "ScreenActivityCoverage",
+        "type": "object"
+      },
+      "ScreenActivityResponse": {
+        "properties": {
+          "has_more": {
+            "title": "Has More",
+            "type": "boolean"
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Cursor"
+          },
+          "screen_activity": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Screen Activity",
+            "type": "array"
+          }
+        },
+        "required": [
+          "has_more"
+        ],
+        "title": "ScreenActivityResponse",
         "type": "object"
       },
       "ScreenActivityRow": {
@@ -28941,6 +29134,26 @@
             "title": "Match Snippets",
             "type": "array"
           },
+          "participants": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Participants",
+            "type": "array"
+          },
+          "participants_included": {
+            "default": false,
+            "title": "Participants Included",
+            "type": "boolean"
+          },
+          "person_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Person Ids",
+            "type": "array"
+          },
           "started_at": {
             "anyOf": [
               {
@@ -30042,11 +30255,50 @@
         "title": "StoreRecordingPermissionResponse",
         "type": "object"
       },
-      "StorefrontCurrentPlan": {
+      "StorefrontCurrent": {
         "properties": {
+          "cancel_at_period_end": {
+            "default": false,
+            "title": "Cancel At Period End",
+            "type": "boolean"
+          },
+          "interval": {
+            "anyOf": [
+              {
+                "enum": [
+                  "month",
+                  "year"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Interval"
+          },
           "legacy": {
             "title": "Legacy",
             "type": "boolean"
+          },
+          "legacy_note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Legacy Note"
+          },
+          "line": {
+            "title": "Line",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
           },
           "plan_id": {
             "title": "Plan Id",
@@ -30066,9 +30318,11 @@
         },
         "required": [
           "plan_id",
-          "legacy"
+          "name",
+          "legacy",
+          "line"
         ],
-        "title": "StorefrontCurrentPlan",
+        "title": "StorefrontCurrent",
         "type": "object"
       },
       "StorefrontPrice": {
@@ -30077,22 +30331,23 @@
             "title": "Amount Minor",
             "type": "integer"
           },
-          "annual_savings": {
+          "cta_label": {
             "anyOf": [
               {
-                "$ref": "#/components/schemas/AnnualSavings"
+                "type": "string"
               },
               {
                 "type": "null"
               }
-            ]
+            ],
+            "title": "Cta Label"
           },
           "currency": {
             "title": "Currency",
             "type": "string"
           },
-          "formatted_amount": {
-            "title": "Formatted Amount",
+          "headline": {
+            "title": "Headline",
             "type": "string"
           },
           "interval": {
@@ -30103,9 +30358,16 @@
             "title": "Interval",
             "type": "string"
           },
-          "monthly_equivalent": {
-            "title": "Monthly Equivalent",
-            "type": "string"
+          "months_free": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Months Free"
           },
           "price_id": {
             "anyOf": [
@@ -30117,14 +30379,35 @@
               }
             ],
             "title": "Price Id"
+          },
+          "renewal_line": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Renewal Line"
+          },
+          "subline": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Subline"
           }
         },
         "required": [
           "interval",
-          "currency",
           "amount_minor",
-          "formatted_amount",
-          "monthly_equivalent"
+          "currency",
+          "headline"
         ],
         "title": "StorefrontPrice",
         "type": "object"
@@ -30138,14 +30421,14 @@
           "current": {
             "anyOf": [
               {
-                "$ref": "#/components/schemas/StorefrontCurrentPlan"
+                "$ref": "#/components/schemas/StorefrontCurrent"
               },
               {
                 "type": "null"
               }
             ]
           },
-          "next_offer_tier_id": {
+          "header": {
             "anyOf": [
               {
                 "type": "string"
@@ -30154,11 +30437,11 @@
                 "type": "null"
               }
             ],
-            "title": "Next Offer Tier Id"
+            "title": "Header"
           },
           "schema_version": {
-            "const": 1,
-            "default": 1,
+            "const": 2,
+            "default": 2,
             "title": "Schema Version",
             "type": "integer"
           },
@@ -30176,6 +30459,17 @@
           },
           "usage": {
             "$ref": "#/components/schemas/StorefrontUsage"
+          },
+          "yearly_toggle_label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Yearly Toggle Label"
           }
         },
         "required": [
@@ -30188,33 +30482,59 @@
         "properties": {
           "action": {
             "enum": [
+              "checkout",
               "current",
-              "upgrade",
-              "downgrade_not_offered",
-              "contact"
+              "none"
             ],
             "title": "Action",
             "type": "string"
           },
-          "display_name": {
-            "title": "Display Name",
-            "type": "string"
+          "blocked_line": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Blocked Line"
           },
-          "entitlement_version": {
-            "title": "Entitlement Version",
-            "type": "string"
-          },
-          "features": {
+          "bullets": {
             "items": {
-              "$ref": "#/components/schemas/PlanFeature"
+              "type": "string"
             },
-            "title": "Features",
+            "title": "Bullets",
             "type": "array"
           },
-          "legacy": {
+          "compact": {
             "default": false,
-            "title": "Legacy",
+            "title": "Compact",
             "type": "boolean"
+          },
+          "cta_label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cta Label"
+          },
+          "hours_line": {
+            "title": "Hours Line",
+            "type": "string"
+          },
+          "is_current": {
+            "default": false,
+            "title": "Is Current",
+            "type": "boolean"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
           },
           "plan_id": {
             "title": "Plan Id",
@@ -30232,10 +30552,6 @@
             "title": "Recommended",
             "type": "boolean"
           },
-          "tagline": {
-            "title": "Tagline",
-            "type": "string"
-          },
           "tier_id": {
             "title": "Tier Id",
             "type": "string"
@@ -30244,40 +30560,50 @@
         "required": [
           "tier_id",
           "plan_id",
-          "entitlement_version",
-          "display_name",
-          "tagline",
-          "features",
-          "prices",
-          "action"
+          "name",
+          "hours_line",
+          "bullets",
+          "action",
+          "prices"
         ],
         "title": "StorefrontTier",
         "type": "object"
       },
       "StorefrontUsage": {
         "properties": {
-          "budget_percent": {
-            "anyOf": [
-              {
-                "type": "number"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Budget Percent"
-          },
           "kind": {
             "default": "unavailable",
             "enum": [
-              "transcription",
               "usage_budget",
+              "transcription",
               "unavailable"
             ],
             "title": "Kind",
             "type": "string"
           },
-          "reset_at": {
+          "meter_line": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Meter Line"
+          },
+          "nudge_line": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Nudge Line"
+          },
+          "percent": {
             "anyOf": [
               {
                 "type": "integer"
@@ -30286,7 +30612,36 @@
                 "type": "null"
               }
             ],
-            "title": "Reset At"
+            "title": "Percent"
+          },
+          "period_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Period Id"
+          },
+          "pro_gates": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Pro Gates",
+            "type": "array"
+          },
+          "reset_label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reset Label"
           }
         },
         "title": "StorefrontUsage",
@@ -50108,7 +50463,7 @@
         ]
       },
       "post": {
-        "description": "Create a new Developer API key with optional scopes.\n\n- **name**: Descriptive name for the key\n- **scopes**: Optional list of scopes. If not provided, defaults to read-only access.\n  Available scopes:\n  - conversations:read\n  - conversations:write\n  - memories:read\n  - memories:write\n  - action_items:read\n  - action_items:write\n  - goals:read\n  - goals:write",
+        "description": "Create a new Developer API key with optional scopes.\n\n- **name**: Descriptive name for the key\n- **scopes**: Optional list of scopes. If not provided, defaults to read-only access.\n  Available scopes:\n  - conversations:read\n  - conversations:write\n  - memories:read\n  - memories:write\n  - action_items:read\n  - action_items:write\n  - goals:read\n  - goals:write\n  - people:read (explicit opt-in)\n  - profile:read (explicit opt-in)\n  - screen_activity:read (explicit opt-in)",
         "operationId": "createApiKey",
         "requestBody": {
           "content": {
@@ -50665,6 +51020,22 @@
               ],
               "title": "Starred"
             }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cursor"
+            }
           }
         ],
         "responses": {
@@ -50800,6 +51171,104 @@
           }
         ],
         "summary": "Create Conversation From Segments",
+        "tags": [
+          "Conversations"
+        ]
+      }
+    },
+    "/v1/dev/user/conversations/search": {
+      "get": {
+        "operationId": "searchConversations",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "query",
+            "required": true,
+            "schema": {
+              "maxLength": 2000,
+              "minLength": 1,
+              "title": "Query",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 10,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "start_date",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "date-time",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Start Date"
+            }
+          },
+          {
+            "in": "query",
+            "name": "end_date",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "date-time",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "End Date"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConversationSearchResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Search Conversations",
         "tags": [
           "Conversations"
         ]
@@ -51766,6 +52235,70 @@
         ]
       }
     },
+    "/v1/dev/user/memories/search": {
+      "get": {
+        "operationId": "searchMemories",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "query",
+            "required": true,
+            "schema": {
+              "maxLength": 2000,
+              "minLength": 1,
+              "title": "Query",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 10,
+              "maximum": 20,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MemorySearchResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Search Memories",
+        "tags": [
+          "Memories"
+        ]
+      }
+    },
     "/v1/dev/user/memories/vector/search": {
       "get": {
         "description": "Search developer-readable default memory memory through hydrated vector candidates.\n\nThis narrow developer API vector endpoint fails closed unless the authenticated\nDeveloper API app/key has a verified memories.read scope and a persisted app/key\ndefault-read grant. Vector hits are hydrated through the universal repository\nagainst authoritative\n`users/{uid}/memory_items` before returning results, so stale Short-term and\nArchive remain unavailable by default.",
@@ -51943,6 +52476,181 @@
         "summary": "Update Memory",
         "tags": [
           "Memories"
+        ]
+      }
+    },
+    "/v1/dev/user/people": {
+      "get": {
+        "operationId": "listPeople",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PeopleResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Get People",
+        "tags": [
+          "People"
+        ]
+      }
+    },
+    "/v1/dev/user/profile": {
+      "get": {
+        "operationId": "getUserProfile",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProfileResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Get Profile",
+        "tags": [
+          "Profile"
+        ]
+      }
+    },
+    "/v1/dev/user/screen-activity": {
+      "get": {
+        "operationId": "listScreenActivity",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "start_date",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Start Date"
+            }
+          },
+          {
+            "in": "query",
+            "name": "end_date",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "End Date"
+            }
+          },
+          {
+            "in": "query",
+            "name": "app",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "App"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 100,
+              "maximum": 1000,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cursor"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScreenActivityResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Get Screen Activity",
+        "tags": [
+          "Screen Activity"
         ]
       }
     },
@@ -78797,6 +79505,24 @@
                 }
               ],
               "title": "Trigger"
+            }
+          },
+          {
+            "description": "BCP 47 tag. Unknown locales fall back to en.",
+            "in": "query",
+            "name": "locale",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "BCP 47 tag. Unknown locales fall back to en.",
+              "title": "Locale"
             }
           },
           {

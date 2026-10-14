@@ -211,6 +211,10 @@ app.add_middleware(
     allow_methods=['*'],
     allow_headers=['*'],
     expose_headers=[
+        'X-Omi-Effective-Limit',
+        'X-Omi-Has-More',
+        'X-Omi-Next-Offset',
+        'X-Omi-Next-Cursor',
         'X-Next-Cursor',
         'X-Scan-Truncated',
         'X-Omi-Memory-As-Of',

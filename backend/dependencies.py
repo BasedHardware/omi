@@ -7,7 +7,13 @@ from firebase_admin import auth
 
 import database.mcp_api_key as mcp_api_key_db
 import database.dev_api_key as dev_api_key_db
-from utils.api_key_families import DEV_FAMILY, MCP_FAMILY, wrong_key_family_detail
+from utils.api_key_families import (
+    DEV_FAMILY,
+    MCP_FAMILY,
+    wrong_key_family_detail,
+    malformed_api_key_detail,
+    unknown_api_key_detail,
+)
 from utils.executors import ExecutorSaturatedError, critical_executor, db_executor, run_blocking
 from utils.log_sanitizer import sanitize
 from utils.observability.api_keys import record_api_key_repairs
@@ -99,15 +105,18 @@ async def get_uid_from_mcp_api_key(
             detail="Missing or invalid Authorization header. Must be 'Bearer API_KEY'",
         )
 
-    token = api_key.replace("Bearer ", "")
+    token = api_key[7:]
     mismatch = wrong_key_family_detail(token, MCP_FAMILY)
     if mismatch:
         raise HTTPException(status_code=401, detail=mismatch)
+    malformed = malformed_api_key_detail(token, MCP_FAMILY)
+    if malformed:
+        raise HTTPException(status_code=401, detail=malformed)
     auth_result = await run_blocking(db_executor, mcp_api_key_db.get_api_key_auth_result, token)
     record_api_key_repairs(key_kind="mcp", operation="auth", repairs=auth_result.repairs, log=logger)
     user_data = auth_result.context
     if not user_data:
-        raise HTTPException(status_code=401, detail="Invalid API Key")
+        raise HTTPException(status_code=401, detail=unknown_api_key_detail(MCP_FAMILY))
     user_id = user_data["user_id"]
     _enforce_jit_qa_http_access(user_id)
     await _enforce_account_deletion_access(user_id)
@@ -138,15 +147,18 @@ async def get_mcp_api_key_auth(
             detail="Missing or invalid Authorization header. Must be 'Bearer API_KEY'",
         )
 
-    token = api_key.replace("Bearer ", "")
+    token = api_key[7:]
     mismatch = wrong_key_family_detail(token, MCP_FAMILY)
     if mismatch:
         raise HTTPException(status_code=401, detail=mismatch)
+    malformed = malformed_api_key_detail(token, MCP_FAMILY)
+    if malformed:
+        raise HTTPException(status_code=401, detail=malformed)
     auth_result = await run_blocking(db_executor, mcp_api_key_db.get_api_key_auth_result, token)
     record_api_key_repairs(key_kind="mcp", operation="auth", repairs=auth_result.repairs, log=logger)
     user_data = auth_result.context
     if not user_data:
-        raise HTTPException(status_code=401, detail="Invalid API Key")
+        raise HTTPException(status_code=401, detail=unknown_api_key_detail(MCP_FAMILY))
 
     _enforce_jit_qa_http_access(user_data["user_id"])
     await _enforce_account_deletion_access(user_data["user_id"])
@@ -265,16 +277,19 @@ async def get_api_key_auth(
             detail="Missing or invalid Authorization header. Must be 'Bearer API_KEY'",
         )
 
-    token = api_key.replace("Bearer ", "")
+    token = api_key[7:]
     mismatch = wrong_key_family_detail(token, DEV_FAMILY)
     if mismatch:
         raise HTTPException(status_code=401, detail=mismatch)
+    malformed = malformed_api_key_detail(token, DEV_FAMILY)
+    if malformed:
+        raise HTTPException(status_code=401, detail=malformed)
     auth_result = await run_blocking(db_executor, dev_api_key_db.get_api_key_auth_result, token)
     record_api_key_repairs(key_kind="dev", operation="auth", repairs=auth_result.repairs, log=logger)
     user_data = auth_result.context
 
     if not user_data:
-        raise HTTPException(status_code=401, detail="Invalid API Key")
+        raise HTTPException(status_code=401, detail=unknown_api_key_detail(DEV_FAMILY))
 
     _enforce_jit_qa_http_access(user_data["user_id"])
     await _enforce_account_deletion_access(user_data["user_id"])
@@ -355,7 +370,7 @@ async def _check_api_key_rate_limit_async(
     )
 
 
-async def _check_dev_api_key_rate_limit_async(
+async def check_developer_api_key_rate_limit(
     *,
     request: Optional[Request],
     auth: ApiKeyAuth,
@@ -390,8 +405,8 @@ async def _check_conversation_read_budgets_async(
     per-route policy would hand each key a fresh bucket and raise the total number of
     conversation reads it can make -- the opposite of what these limits are for.
     """
-    await _check_dev_api_key_rate_limit_async(request=request, auth=auth, policy_name="dev:conversation_reads_total")
-    await _check_dev_api_key_rate_limit_async(request=request, auth=auth, policy_name=route_policy_name)
+    await check_developer_api_key_rate_limit(request=request, auth=auth, policy_name="dev:conversation_reads_total")
+    await check_developer_api_key_rate_limit(request=request, auth=auth, policy_name=route_policy_name)
 
 
 async def get_auth_with_conversations_read(
@@ -430,7 +445,7 @@ async def get_uid_with_conversations_read_ask(
     a leaked or overused key can't turn it into an unbounded billable endpoint.
     """
     _require_conversations_read_scope(auth)
-    await _check_dev_api_key_rate_limit_async(request=request, auth=auth, policy_name="dev:ask")
+    await check_developer_api_key_rate_limit(request=request, auth=auth, policy_name="dev:ask")
     return auth.uid
 
 
@@ -475,7 +490,7 @@ async def get_uid_with_conversations_from_segments_write(
     can never raise the aggregate conversation-write limit. Failure logging
     includes remote IP and user agent: this route is a scripted-abuse target.
     """
-    await _check_dev_api_key_rate_limit_async(
+    await check_developer_api_key_rate_limit(
         request=request,
         auth=auth,
         policy_name="dev:conversations_from_segments",

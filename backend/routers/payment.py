@@ -18,7 +18,7 @@ from database import (
 )
 from database.locked_content import has_recoverable_locked_content
 from database.redis_db import set_credits_invalidation_signal
-from config.plan_catalog import plan_uses_overage
+from config.plan_catalog import _paid_period_still_open, plan_uses_overage
 from utils.subscription_state_machine import (
     project_subscription,
     preserves_current_paid_subscription,
@@ -1031,16 +1031,21 @@ async def _handle_stripe_event(event: dict, background_tasks: BackgroundTasks | 
                         )
 
             persisted = await run_blocking(stripe_executor, _update_subscription_from_session, uid, session)
-            if persisted is False and webhook_ledger_enabled():
-                return RetryableBillingSkip(status='success')
             await run_blocking(db_executor, set_credits_invalidation_signal, uid)
             await run_blocking(db_executor, clear_trial_paywall_cache, uid)
-            subscription = await run_blocking(db_executor, users_db.get_user_subscription, uid)
-            if subscription and is_paid_plan(subscription.plan):
+            # A stored paid label with a missing, zero, or past period is Basic
+            # on get_user_valid_subscription. Unlock only an open paid period.
+            subscription = await run_blocking(db_executor, users_db.get_user_valid_subscription, uid)
+            period_open = subscription is not None and _paid_period_still_open(
+                subscription.current_period_end, datetime.fromtimestamp(time.time(), tz=timezone.utc)
+            )
+            if subscription and is_paid_plan(subscription.plan) and period_open:
                 await run_blocking(db_executor, conversations_db.unlock_all_conversations, uid)
                 await run_blocking(db_executor, memories_db.unlock_all_memories, uid)
                 await run_blocking(db_executor, action_items_db.unlock_all_action_items, uid)
                 await run_blocking(db_executor, clear_fair_use_on_upgrade, uid)
+            if persisted is False and webhook_ledger_enabled():
+                return RetryableBillingSkip(status='success')
             subscription_id = session.get('subscription')
             if subscription_id:
                 try:

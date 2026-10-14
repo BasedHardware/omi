@@ -9,7 +9,7 @@ import asyncio
 import json
 from datetime import datetime, timedelta, timezone
 from functools import partial
-from uuid import uuid4
+from uuid import uuid4, uuid5, NAMESPACE_URL
 from unittest.mock import Mock
 from concurrent.futures import ThreadPoolExecutor
 
@@ -18,7 +18,7 @@ from google.auth.credentials import AnonymousCredentials
 from google.cloud import firestore
 
 from config.dream_agent import Caps
-from database import _client, conversations, dream_store, dream_history
+from database import _client, conversations, dream_store, dream_history, review_store
 from utils import dream_reads, dream_agent, dream_cleanup, dream_context
 from utils.dream_diagnostics import path_count
 from utils.llm.shaped_agent import Turn
@@ -63,6 +63,60 @@ def test_budget_settlement_user_isolation_and_duplicate_finish(monkeypatch):
     assert dream_store.own_state(uids[0], firestore_client=database)['lease'] is None
     dream_store.finish(uids[1], second, {'tokens': 10, 'usage_unknown': True}, success=False, firestore_client=database)
     assert second_spend.get().to_dict()['reserved_usd'] == pytest.approx(caps.reservation_usd)
+
+
+def test_fragment_spelling_round_trip_and_undo_preserve_other_segments(monkeypatch):
+    from database import review_store, review_changes
+    from utils import dream_tools
+
+    host = os.environ.get('FIRESTORE_EMULATOR_HOST', '')
+    if not host.startswith(('127.0.0.1:', 'localhost:')):
+        pytest.skip('local Firestore emulator required')
+    database = firestore.Client(project='demo-dream-coalesce', credentials=AnonymousCredentials())
+    monkeypatch.setattr(_client, '_firestore_client', database)
+    monkeypatch.setenv('REVIEW_SURFACE_MODE', 'on')
+    uid = 'synthetic-fragment-' + str(uuid4())
+    row = {
+        'id': 'synthetic',
+        'data_protection_level': 'enhanced',
+        'structured': {'title': 'Alise meeting'},
+        'transcript_segments': [
+            {'id': 's1', 'start': 12.5, 'end': 15, 'text': 'Alise met Alise.'},
+            {'id': 's2', 'start': 20, 'end': 22, 'text': 'Alise elsewhere.'},
+        ],
+    }
+    document = database.collection('users').document(uid).collection('conversations').document('synthetic')
+    original = conversations.encode_conversation_for_write(uid, row, 'enhanced')
+    document.set(original)
+    records = {'conversations/synthetic': row}
+    edit = Edit(
+        kind='spelling',
+        target='conversations/synthetic#s1',
+        before='Alise',
+        after='Alice',
+        reason='Synthetic correction',
+        evidence=['conversations/synthetic#s1'],
+    )
+    assert dream_tools.apply_edit(uid, edit, records) == 'applied'
+    current = conversations.prepare_conversation_for_read(document.get().to_dict(), uid)
+    assert current['transcript_segments'][0]['text'] == 'Alice met Alice.'
+    assert current['transcript_segments'][1] == row['transcript_segments'][1]
+    assert current['structured'] == row['structured']
+    change_id = str(uuid5(NAMESPACE_URL, uid + ':' + dream_tools.edit_key(edit, records)))
+    journal = review_store.decode_doc(
+        uid,
+        review_store.user(uid).collection('review_changes').document(review_store.safe_id(change_id)).get().to_dict(),
+    )
+    assert journal['edits'][0]['document_id'] == 'synthetic'
+    assert journal['change']['refs'][0]['label'] == 'Conversation #s1'
+    review_changes.set_undone(uid, change_id, True)
+    restored = conversations.prepare_conversation_for_read(document.get().to_dict(), uid)
+    assert restored['transcript_segments'] == row['transcript_segments']
+    assert restored['structured'] == row['structured']
+    assert (
+        dream_tools.apply_edit(uid, edit.model_copy(update={'target': 'conversations/synthetic#12.5'}), records)
+        == 'suppressed'
+    )
 
 
 @pytest.fixture(autouse=True)
@@ -633,3 +687,80 @@ def test_older_seed_context_and_deferral_settle_with_full_inspection_window(monk
     )
     assert not selected
     hydration.assert_not_called()
+
+
+@pytest.mark.parametrize('context', ['full', 'bounded'])
+@pytest.mark.parametrize('legacy', [False, True])
+def test_stale_reclamation_contended_admission_and_late_finish(monkeypatch, context, legacy):
+    host = os.environ.get('FIRESTORE_EMULATOR_HOST', '')
+    if not host.startswith(('127.0.0.1:', 'localhost:')):
+        pytest.skip('local Firestore emulator required')
+    database = firestore.Client(project='demo-dream-coalesce', credentials=AnonymousCredentials())
+    uid = 'synthetic-abandoned-' + str(uuid4())
+    monkeypatch.setenv('DREAM_AGENT_MODE', 'shadow')
+    monkeypatch.setenv('DREAM_AGENT_UID_ALLOWLIST', uid)
+    monkeypatch.setenv('DREAM_AGENT_BACKFILL_SHARE', '0')
+    old_time = datetime(2026, 10, 14, 23, 0, tzinfo=timezone.utc)
+    now = old_time + timedelta(days=1)
+    caps = Caps(context_mode=context, passes=24, daily_usd=250)
+    database.collection('users').document(uid).set({})
+    dream_store.mark_dirty(uid, [('conversations', 'synthetic')], firestore_client=database)
+    old = dream_store.acquire(uid, caps, now=old_time, firestore_client=database)
+    state = dream_store.state_ref(database, uid)
+    old_spend = dream_store.spend_ref(database, uid, old['day'])
+    if legacy:
+        old.pop('spend_scope')
+        old.pop('context_mode')
+        state.update({'lease': old})
+        shared = database.collection('dream_spend').document(old['day'])
+        shared.set(old_spend.get().to_dict())
+        old_spend.delete()
+        old_spend = shared
+    # A retained lease with known partial usage must become fully charged again.
+    dream_store.finish(
+        uid,
+        old,
+        {'tokens': 100, 'usage_unknown': False},
+        success=False,
+        release=False,
+        now=old_time,
+        firestore_client=database,
+    )
+    assert old_spend.get().to_dict()['reserved_usd'] == pytest.approx(0.001)
+    pending = [s.to_dict() for s in dream_store.dirty_refs(uid, firestore_client=database)]
+    reclaimed = [{}, {}]
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        leases = list(
+            pool.map(
+                lambda i: dream_store.acquire(uid, caps, now=now, firestore_client=database, reclaim_sink=reclaimed[i]),
+                range(2),
+            )
+        )
+    winners = [lease for lease in leases if lease is not None]
+    assert len(winners) == 1
+    new = winners[0]
+    outcomes = [value for value in reclaimed if value]
+    assert outcomes == [{'age_s': int((now - old_time).total_seconds()), 'context_mode': 'full' if legacy else context}]
+    current = state.get().to_dict()
+    assert current['lease']['run_id'] == new['run_id'] and current['abandoned_passes'] == 1
+    assert current['passes'] == 1  # New UTC day, one admission despite contention.
+    assert old_spend.get().to_dict()['reserved_usd'] == pytest.approx(caps.reservation_usd)
+    new_spend = dream_store.spend_ref(database, uid, new['day'])
+    assert new_spend.get().to_dict()['reserved_usd'] == pytest.approx(caps.reservation_usd)
+    assert [s.to_dict() for s in dream_store.dirty_refs(uid, firestore_client=database)] == pending
+    report = review_store.decode_doc(uid, dream_store.own_run(uid, old['run_id'], firestore_client=database))
+    assert report['source']['usage_unknown'] is True and report['source']['reason'] == 'abandoned'
+    assert report['source']['budget_charge_usd'] == pytest.approx(caps.reservation_usd)
+    with pytest.raises(RuntimeError, match='dream_lease_lost'):
+        dream_store.finish(
+            uid,
+            old,
+            {'tokens': 1, 'usage_unknown': False},
+            success=True,
+            consumed=pending,
+            now=now,
+            firestore_client=database,
+        )
+    assert state.get().to_dict() == current
+    assert new_spend.get().to_dict()['reserved_usd'] == pytest.approx(caps.reservation_usd)
+    assert [s.to_dict() for s in dream_store.dirty_refs(uid, firestore_client=database)] == pending

@@ -109,6 +109,7 @@ entries are exempt: they are queued for removal, not running.
 | `MEMORY_OWNER_JEV_SHADOW_PERCENT` | dazheng | [backend/docs/experiments/EXP-004-jev-relevance-owner-ramp.md](../../backend/docs/experiments/EXP-004-jev-relevance-owner-ramp.md) | 2026-10-21 |
 | `SPEAKER_GROUPING_SHADOW` | dazheng | [backend/docs/listen_pusher_pipeline.mdx](../../backend/docs/listen_pusher_pipeline.mdx) | 2026-11-08 |
 | `exp-002-desktop-identity-v1` | unowned | [backend/docs/experiments/EXP-002-desktop-identity-memory-v1.md](../../backend/docs/experiments/EXP-002-desktop-identity-memory-v1.md) | 2026-10-26 |
+| `paywall-variant` | nik | [product/experiments/paywall-variant.md](../../product/experiments/paywall-variant.md) | 2026-11-12 |
 
 ## Overdue for a decision
 
@@ -151,6 +152,7 @@ and an explicit empty literal renders as `''`.
 | `MEMORY_OWNER_JEV_SHADOW_PERCENT` | Candidate-hash percentage for advisory owner measurement | backend | env | closed | — | 0 (cloud_run/backend-sync, cloud_run/backend-sync-backfill); 100 (backend-listen (chart), cloud_run/backend, gke/backend-listen, gke/pusher, pusher (chart)) | 100 (backend-listen (chart), cloud_run/backend, cloud_run/backend-sync, cloud_run/backend-sync-backfill, gke/backend-listen, gke/pusher, pusher (chart)) | — | pending | 2026-10-21 | dazheng |
 | `SPEAKER_GROUPING_SHADOW` | off\|owner\|cohort; default off; prod cached-evidence comparison at 10 percent; never changes transcript labels | backend | env | closed | — | — | cohort (backend-listen (chart), pusher (chart)); {value: 'cohort', category: rollout} (cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, gke/backend-listen, gke/pusher) | — | pending | 2026-11-08 | dazheng |
 | `exp-002-desktop-identity-v1` | EXP-002 memory_v1 desktop identity arm enrollment | backend, macos | posthog | closed | — | — | — | expected (enable) | pending | 2026-10-26 | unowned |
+| `paywall-variant` | Mobile paywall A/B test: control (current PlansSheet) / outline (PR #21412 soft paywall, native) / web (webview paywall whose page is the variant). Client-evaluated multivariate flag; control collapses to the shipped sheet, paid readers and App Review builds never see a variant | mobile | posthog | closed | — | — | — | expected (exposure) | pending | 2026-11-12 | nik |
 
 ### rollout
 
@@ -247,6 +249,9 @@ and an explicit empty literal renders as `''`.
 | `SYNC_LINEAGE_S1_REQUIRED` | Require valid S1 upload claims before per-segment lineage binding (default gated) | backend | env | closed | {value: 'true', category: rollout} | {value: 'true', category: rollout} | {value: 'true', category: rollout} | — | pending | 2026-11-02 | dazheng |
 | `SYNC_SAFETY_WAL_DEDUPE_ENABLED` | Fleet server safety-WAL interval-confirmed coverage cuts and corroborated transcript dedupe | backend | env | open | {value: 'true', category: rollout} | {value: 'true', category: rollout} | {value: 'true', category: rollout} | — | pending | 2026-11-12 | dazheng |
 | `SYNC_WAL_AUDIO_COVERAGE_ENABLED` | Trim safety-WAL frames positively proven live-received by shared source-frame identity before VAD/STT (default on) | backend | env | open | true | true | true | — | pending | 2026-11-02 | dazheng |
+| `TRANSCRIPTION_FINAL_PASS_AUTHORITATIVE` | Revision-fenced speaker-only promotion preserving stored text | backend | env | closed | — | — | — | — | pending | 2026-11-12 | dazheng |
+| `TRANSCRIPTION_FINAL_PASS_PERCENT` | Shared diarization cohort percentage | backend | env | closed | — | — | — | — | pending | 2026-11-12 | dazheng |
+| `TRANSCRIPTION_FINAL_PASS_SYNC_ENABLED` | Shared diarization and centroid naming for sync and safety WAL | backend | env | closed | — | — | — | — | pending | 2026-11-12 | dazheng |
 | `TRANSCRIPTION_SHADOW_ENABLED` | Run the stored-audio Parakeet final pass in shadow | backend | env | closed | — | false (backend-listen (chart), cloud_run/backend-sync, gke/backend-listen); true (gke/pusher, pusher (chart)) | true (gke/pusher, pusher (chart)) | — | pending | 2026-10-26 | dazheng |
 | `TRANSCRIPTION_SHADOW_PERCENT` | Allocate UIDs to the Parakeet final-pass shadow | backend | env | closed | — | 0 (backend-listen (chart), cloud_run/backend-sync, gke/backend-listen, gke/pusher, pusher (chart)) | 0 (gke/pusher, pusher (chart)) | — | pending | 2026-10-26 | dazheng |
 | `TRANSLATION_DEMAND_LEASE_V1_ENABLED` | Accept lease-v1 demand semantics from opted-in clients | backend | env | closed | {value: 'true', category: rollout} | true (backend-listen (chart)); {value: 'true', category: rollout} (cloud_run/backend, gke/backend-listen) | true (backend-listen (chart)); {value: 'true', category: rollout} (cloud_run/backend, gke/backend-listen) | — | pending | 2026-10-29 | dazheng |
@@ -261,11 +266,14 @@ and an explicit empty literal renders as `''`.
 | `free-tier-cohort-v1` | Free-tier exposure cohort, never direct admission | backend | posthog | closed | — | — | — | absent (exposure) | pending | 2026-10-23 | unowned |
 | `jit-processing-v1` | JIT processing admission cohort | backend | posthog | closed | — | — | — | expected (enable) | graduate | 2026-10-23 | dazheng |
 | `mobile-chat-apps` | Mobile Chat apps entry on Integrations (connect Telegram/iMessage); client-evaluated, default off. The payload carries each channel's provider id and address (Telegram bot username, iMessage number); the backend OMI_MESSAGING_CHANNELS cohort and paid-plan entitlement remain the authority | mobile | posthog | closed | — | — | — | absent (enable) | pending | 2026-11-09 | dazheng |
+| `mobile-contextual-upsells` | Mobile 80% budget banner and backend-decided Pro gate entry; default off; legacy access unchanged; requires mobile-plan-storefront | mobile | posthog | closed | — | — | — | absent (enable) | pending | 2026-11-12 | dazheng |
+| `mobile-plan-storefront` | Mobile backend-driven plans sheet; default off; existing payment rails and App Review hiding unchanged | mobile | posthog | closed | — | — | — | absent (enable) | pending | 2026-11-12 | dazheng |
 | `negative_feedback_remediation` | Enable negative-feedback remediation on stable | macos | posthog | closed | — | — | — | absent (enable) | pending | 2026-10-23 | unowned |
 | `negative_feedback_remediation_kill` | Beta negative-feedback remediation stop | macos | posthog | inverted | — | — | — | expected (kill) | pending | 2026-10-23 | unowned |
 | `on_device_meeting_identity` | Enable on-device meeting identity on stable | macos | posthog | closed | — | — | — | absent (enable) | graduate | 2026-10-23 | dazheng |
 | `on_device_meeting_identity_kill` | Beta on-device meeting identity stop | macos | posthog | inverted | — | — | — | expected (kill) | pending | 2026-10-23 | unowned |
 | `onboarding-setup-rating-prompt` | Mobile onboarding Setting up your Omi page with the store-rating pre-prompt before the completion screen; client-evaluated, default off so the flow is unchanged and store review never sees it | mobile | posthog | closed | — | — | — | expected (enable) | pending | 2026-11-05 | nik |
+| `onboarding-webview` | Mobile first-run onboarding rendered from a web page after sign-in and consent (OTA); off = native steps unchanged; the page never owns completion | mobile | posthog | closed | — | — | — | expected (enable) | pending | 2026-11-12 | nik |
 | `proactivity_v2` | Server v2 proactivity admission; absent or unknown denies | backend, llm-gateway | posthog | closed | — | — | — | expected (enable) | pending | 2026-11-03 | dazheng |
 | `screen_activity_lossless_sync` | Enable lossless screen sync on stable | macos | posthog | closed | — | — | — | absent (enable) | pending | 2026-10-22 | unowned |
 | `screen_activity_lossless_sync_kill` | Beta lossless screen sync stop | macos | posthog | inverted | — | — | — | expected (kill) | pending | 2026-10-22 | unowned |
@@ -330,6 +338,7 @@ and an explicit empty literal renders as `''`.
 | `COMMITMENT_FOLLOWUP_TASKS_HANDLER_URL` | One-shot commitment due callback transport; absent disables scheduling | backend | env | closed | — | — | — | — | keep | — | dazheng |
 | `COMMITMENT_FOLLOWUP_TASKS_INVOKER_SA` | One-shot commitment due callback transport; absent disables scheduling | backend | env | closed | — | — | — | — | keep | — | dazheng |
 | `COMMITMENT_FOLLOWUP_TASKS_QUEUE` | One-shot commitment due callback transport; absent disables scheduling | backend | env | closed | — | — | — | — | keep | — | dazheng |
+| `DIARIZATION_V2_ENABLED` | Enable the separate batch-only diarizer app; default false; startup loads models before readiness | backend | env | closed | — | — | — | — | keep | — | dazheng |
 | `DREAM_AGENT_BACKFILL_SHARE` | Fraction of eligible Dream passes attempting older cleanup; default 0.1 | backend | env | closed | — | — | — | — | pending | — | dazheng |
 | `DREAM_AGENT_CANARY_UID` | Dedicated synthetic UID in dream-canary- namespace; unset disables canary | backend | env | closed | — | — | {value: 'dream-canary-prod-01', category: rollout} | — | pending | — | dazheng |
 | `DREAM_AGENT_CONCURRENCY` | Parallel Dream workers and shared reserved background slots; default 2; bounded 1 to 8 | backend | env | closed | — | — | — | — | pending | — | dazheng |
@@ -380,6 +389,8 @@ and an explicit empty literal renders as `''`.
 | `SYNC_DISPATCH_MODE` | Select sync dispatch lane | backend | env | closed | — | — | — | — | keep | — | unowned |
 | `SYNC_LEDGER_FENCE_MODE` | Select sync ledger fence authority | backend | env | closed | env_var | env_var | env_var | — | keep | — | unowned |
 | `SYNC_PHASE_METRICS_EXPORT_ENABLED` | Export aggregate sync phase histograms through a bounded background flush; default off, enabled by reviewed deploy overlays | backend | env | closed | — | {value: 'true', category: telemetry} | {value: 'true', category: telemetry} | — | keep | — | dazheng |
+| `TRANSCRIPTION_FINAL_PASS_BACKEND` | Select pyannote, legacy AHC or contract-compatible Nemotron | backend | env | closed | — | — | — | — | keep | — | dazheng |
+| `TRANSCRIPTION_FINAL_PASS_DIARIZER` | Default-off shared final-pass diarization admission | backend | env | closed | — | — | — | — | keep | — | dazheng |
 | `TYPESENSE_CONVERSATION_INDEX_WRITES` | Write conversations to Typesense index | backend | env | closed | — | — | — | — | keep | — | unowned |
 | `USE_VERTEX_AI` | Select Vertex AI model route | backend | env | closed | true | true (backend-listen (chart), cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, desktop-backend, gke/backend-listen) | true (backend-listen (chart), cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, desktop-backend, gke/backend-listen) | — | keep | — | unowned |
 | `VAD_GATE_MODE` | Select off, shadow, or active server VAD gate | backend, mobile | env | closed | — | active (backend-listen (chart)) | active (backend-listen (chart)) | — | keep | — | unowned |
@@ -409,6 +420,7 @@ their code default (`fail` tells you which way a missing value resolves).
 - `CONVERSATION_SPEAKER_RESOLUTION_ENABLED` — Incident stop for conversation-wide speaker resolution (fail: open)
 - `CONVERSATION_STORED_MEETING_CONTEXT_ENABLED` — Incident stop for stored meeting context lookup (fail: open)
 - `DESKTOP_LOOP_WATCHDOG_ENABLED` — Desktop event-loop stall warning and liveness signal; default on, false disables both (fail: open)
+- `DIARIZATION_V2_ENABLED` — Enable the separate batch-only diarizer app; default false; startup loads models before readiness (fail: closed)
 - `DREAM_AGENT_BACKFILL_SHARE` — Fraction of eligible Dream passes attempting older cleanup; default 0.1 (fail: closed)
 - `DREAM_AGENT_CONCURRENCY` — Parallel Dream workers and shared reserved background slots; default 2; bounded 1 to 8 (fail: closed)
 - `DREAM_AGENT_FULL_COMPLETION_TOKENS` — Full Dream total completion ceiling including thinking; default 32768; maximum 32768 (fail: closed)
@@ -463,6 +475,11 @@ their code default (`fail` tells you which way a missing value resolves).
 - `SYNC_BACKFILL_ROUTING_ENABLED` — Route eligible sync work to backfill lane (fail: closed)
 - `SYNC_DISPATCH_MODE` — Select sync dispatch lane (fail: closed)
 - `SYNC_LINEAGE_RESOLVE_ENABLED` — Bind each segment of a recording-id safety-WAL upload to the live rollover generation that owns its audio, and stamp live generations with their origin recording id (default on) (fail: open)
+- `TRANSCRIPTION_FINAL_PASS_AUTHORITATIVE` — Revision-fenced speaker-only promotion preserving stored text (fail: closed)
+- `TRANSCRIPTION_FINAL_PASS_BACKEND` — Select pyannote, legacy AHC or contract-compatible Nemotron (fail: closed)
+- `TRANSCRIPTION_FINAL_PASS_DIARIZER` — Default-off shared final-pass diarization admission (fail: closed)
+- `TRANSCRIPTION_FINAL_PASS_PERCENT` — Shared diarization cohort percentage (fail: closed)
+- `TRANSCRIPTION_FINAL_PASS_SYNC_ENABLED` — Shared diarization and centroid naming for sync and safety WAL (fail: closed)
 - `TRANSLATION_OUTPUT_GUARD_ENABLED` — Reject conservative same-language translation rewrites (fail: open)
 - `TRANSLATION_PROFILE_GATE_ENABLED` — Defer short out-of-profile translation guesses (fail: open)
 - `TYPESENSE_CONVERSATION_INDEX_WRITES` — Write conversations to Typesense index (fail: closed)

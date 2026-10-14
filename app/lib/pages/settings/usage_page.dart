@@ -21,7 +21,9 @@ import 'package:omi/models/subscription.dart';
 import 'package:omi/models/user_usage.dart';
 import 'package:omi/pages/settings/fair_use_page.dart';
 import 'package:omi/pages/settings/transcription_settings_page.dart';
+import 'package:omi/pages/paywall/paywall_router.dart';
 import 'package:omi/pages/settings/widgets/plans_sheet.dart';
+import 'package:omi/pages/settings/widgets/plans/contextual_plans.dart';
 import 'package:omi/pages/settings/widgets/usage/usage_chart.dart';
 import 'package:omi/pages/settings/widgets/usage/usage_stat_tile.dart';
 import 'package:omi/providers/usage_provider.dart';
@@ -43,10 +45,15 @@ class UsagePage extends StatefulWidget {
   final DateTime? debugNow;
   @visibleForTesting
   final int? debugTooltipIndex;
+
+  /// Skip the paywall experiment and open the plans sheet itself: the web variant's fallback
+  /// path, so a dead page never loops back into itself.
+  final bool forceNativePaywall;
   const UsagePage({
     super.key,
     this.showUpgradeDialog = false,
     this.paywallSource = 'usage_page',
+    this.forceNativePaywall = false,
     this.debugSkipFetch = false,
     this.debugNow,
     this.debugTooltipIndex,
@@ -541,16 +548,23 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin, Wi
     );
   }
 
-  void _showPlansSheet({required String source, required bool trackOpen}) {
+  Future<void> _showPlansSheet({required String source, required bool trackOpen}) async {
     if (!context.read<UsageProvider>().showSubscriptionUI) {
       return;
     }
+    if (!widget.forceNativePaywall && await PaywallRouter.openVariant(context, source: source, trackOpen: trackOpen)) {
+      return;
+    }
+    if (!mounted) return;
     if (trackOpen) {
       final plan = context.read<UsageProvider>().subscription?.subscription.plan.wireName ?? 'unknown';
       PlatformManager.instance.analytics.paywallOpened(source, currentPlan: plan);
     }
+    final title = await plansSheetTitle(context);
+    if (!mounted || !context.read<UsageProvider>().showSubscriptionUI) return;
     showOmiSheet(
       context: context,
+      title: title,
       padding: EdgeInsets.zero,
       builder: (context) => PlansSheet(
         waveController: _waveController,
@@ -657,6 +671,7 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin, Wi
             padding: const EdgeInsets.fromLTRB(OmiSpacing.md, OmiSpacing.md, OmiSpacing.md, OmiSpacing.xl),
             children: [
               _buildSubscriptionInfo(context, provider),
+              const BudgetUpsellBanner(),
               _buildFairUseBanner(),
               if (stats == null)
                 const OmiLoadingState()

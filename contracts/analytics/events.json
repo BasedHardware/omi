@@ -184,6 +184,42 @@
       "correlation": null
     },
     {
+      "id": "deviceConnectFailureShown",
+      "wire_name": "Device Connect Failure Shown",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {
+        "failureReason": {
+          "type": "enum",
+          "wire_name": "failure_reason",
+          "values": [
+            "bluetooth_off",
+            "bluetooth_permission_denied",
+            "nearby_devices_denied",
+            "location_permission_missing",
+            "not_found_or_dropped",
+            "stale_bond",
+            "unknown"
+          ]
+        },
+        "platform": {
+          "type": "enum",
+          "wire_name": "platform",
+          "values": [
+            "ios",
+            "android",
+            "other"
+          ]
+        }
+      },
+      "consumers": [
+        "onboarding-activation-funnel"
+      ],
+      "correlation": null
+    },
+    {
       "id": "deviceConnectFailed",
       "wire_name": "Device Connect Failed",
       "status": "active",
@@ -3604,7 +3640,13 @@
             "web_plans",
             "macos_settings_view",
             "windows_settings_view",
-            "unknown"
+            "unknown",
+            "budget_100_percent",
+            "proactive_agent_gate",
+            "screen_context_gate",
+            "mcp_daily_cap",
+            "budget_80",
+            "onboarding"
           ]
         },
         "currentPlan": {
@@ -3676,7 +3718,13 @@
             "web_plans",
             "macos_settings_view",
             "windows_settings_view",
-            "unknown"
+            "unknown",
+            "budget_100_percent",
+            "proactive_agent_gate",
+            "screen_context_gate",
+            "mcp_daily_cap",
+            "budget_80",
+            "onboarding"
           ]
         }
       },
@@ -4126,6 +4174,139 @@
         "mobile-instrumentation-presence"
       ],
       "correlation": null
+    },
+    {
+      "id": "paywallVariantShown",
+      "wire_name": "Paywall Variant Shown",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {
+        "variant": {
+          "type": "enum",
+          "wire_name": "variant",
+          "values": [
+            "control",
+            "outline",
+            "web"
+          ]
+        },
+        "source": {
+          "type": "enum",
+          "wire_name": "source",
+          "values": [
+            "chat_quota_exceeded",
+            "freemium_switch",
+            "locked_conversation",
+            "locked_memory",
+            "chat_apps",
+            "usage_page",
+            "transcription_settings",
+            "unlimited_deeplink",
+            "macos_billing",
+            "macos_usage_limit",
+            "macos_chat_quota_banner",
+            "windows_billing",
+            "windows_usage_limit",
+            "web_plans",
+            "macos_settings_view",
+            "windows_settings_view",
+            "unknown",
+            "budget_100_percent",
+            "proactive_agent_gate",
+            "screen_context_gate",
+            "mcp_daily_cap",
+            "budget_80",
+            "onboarding"
+          ]
+        }
+      },
+      "consumers": [
+        "mobile-instrumentation-presence"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "paywallVariantFallback",
+      "wire_name": "Paywall Variant Fallback",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {
+        "variant": {
+          "type": "enum",
+          "wire_name": "variant",
+          "values": [
+            "control",
+            "outline",
+            "web"
+          ]
+        },
+        "reason": {
+          "type": "enum",
+          "wire_name": "reason",
+          "values": [
+            "load_error",
+            "timeout",
+            "page_requested"
+          ]
+        }
+      },
+      "consumers": [
+        "mobile-instrumentation-presence"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "onboardingWebviewShown",
+      "wire_name": "Onboarding Webview Shown",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {},
+      "consumers": [
+        "mobile-instrumentation-presence"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "onboardingWebviewCompleted",
+      "wire_name": "Onboarding Webview Completed",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {},
+      "consumers": [
+        "mobile-instrumentation-presence"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "onboardingWebviewFallback",
+      "wire_name": "Onboarding Webview Fallback",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {
+        "reason": {
+          "type": "enum",
+          "wire_name": "reason",
+          "values": [
+            "load_error",
+            "timeout",
+            "page_requested"
+          ]
+        }
+      },
+      "consumers": [
+        "mobile-instrumentation-presence"
+      ],
+      "correlation": null
     }
-  ]
+]
 }

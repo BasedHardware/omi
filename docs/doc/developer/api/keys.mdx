@@ -446,3 +446,8 @@ You can also manage API keys in the Omi mobile app (the web
 <Info>
 Keys created in the app and via the API are the same - you can manage them from either place.
 </Info>
+
+Additional opt-in read scopes are `people:read`, `profile:read`, and
+`screen_activity:read`. Include them in `scopes` when creating a Developer key
+with `POST /v1/dev/keys`. Omitted scopes retain the existing read-only defaults
+and do not include these new capabilities.

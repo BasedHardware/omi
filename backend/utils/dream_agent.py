@@ -2,6 +2,7 @@
 
 import asyncio
 from functools import partial
+from dataclasses import replace
 from typing import Any
 from collections import Counter
 
@@ -17,26 +18,32 @@ from config.dream_agent import (
     full_context_enabled,
     FULL_PASS_SECONDS,
     FULL_DRAIN_SECONDS,
+    FULL_MODEL_SECONDS,
+    PASS_TIMEOUT_SECONDS,
+    FINISH_MARGIN_SECONDS,
+    DRAIN_TIMEOUT_SECONDS,
 )
 from database import dream_scheduler, dream_store, dream_feedback, review_changes, review_store
 from database.dream_dirty import dream_writing
 from models.dream_agent import Triage, Plan
-from models.dream_refs import base_ref, has_ref
+from models.dream_refs import base_ref, has_ref, cited_value
 from utils import dream_capacity, dream_reads, dream_tools, dream_transport, dream_guards
 from utils.dream_consensus import majority
 from utils.dream_context import EvidenceRecords, target_refs, cluster_hints, REASONING_TARGET_LIMIT
 from utils.dream_grounding import spelling_grounding_rejection, spelling_question
 from utils.executors import db_executor, postprocess_executor, run_blocking
 from utils.llm.shaped_agent import run_loop
-from utils.dream_metrics import record_pass
+from utils.dream_metrics import record_pass, error_code, record_reclaimed
 from utils.dream_diagnostics import initialize, counts_only
 
 from utils.dream_prompt import mount, evidence_message, evidence_chars, person_names, TRIAGE_INSTRUCTIONS, triage_budget
 from utils.dream_prompt import full_mount, full_evidence_message, select_full_records
 
 
-async def plan_pass(uid, records, caps, *, turn=None, usage_sink=None, vocabulary=None):
+async def plan_pass(uid, records, caps, *, turn=None, usage_sink=None, vocabulary=None, deadline=None, clock=None):
     caps = caps.for_uid(uid)
+    clock = asyncio.get_running_loop().time if clock is None else clock
+    deadline = deadline if deadline is not None else clock() + FULL_PASS_SECONDS
 
     async def invoke(uid, lane, mount, messages):
         if usage_sink is not None:
@@ -78,6 +85,7 @@ async def plan_pass(uid, records, caps, *, turn=None, usage_sink=None, vocabular
         if usage_sink is not None:
             usage_sink.update(
                 context_mode='full',
+                samples_requested=caps.samples,
                 targets=len(selected.targets),
                 records=len(selected),
                 input_tokens_estimate=dream_transport.input_estimate(
@@ -112,7 +120,13 @@ async def plan_pass(uid, records, caps, *, turn=None, usage_sink=None, vocabular
                     sink['usage_unknown'] = previous_unknown
                     raise
 
-            result = await run_loop(active_mount, messages, sample_turn)
+            # A capacity retry can follow a billed malformed response. Carry its
+            # usage into the retry's remaining token budget; do not purchase a third
+            # full sample budget under the same worst-case reservation.
+            remaining_mount = replace(
+                active_mount, budget=replace(active_mount.budget, tokens=active_mount.budget.tokens - sink['tokens'])
+            )
+            result = await run_loop(remaining_mount, messages, sample_turn)
             if result.reason != 'stopped':
                 raise ValueError('dream_reasoning_budget')
             if not isinstance(result.value, Plan):
@@ -120,15 +134,40 @@ async def plan_pass(uid, records, caps, *, turn=None, usage_sink=None, vocabular
             sink['returned'] = True
             return result.value
 
+        results = []
         try:
-            results = await asyncio.gather(*(sample(sink) for sink in sample_usage), return_exceptions=True)
+            for sink in sample_usage:
+                if deadline - clock() < FULL_MODEL_SECONDS:
+                    break
+                sink['attempted'] = True
+                for attempt in range(2):
+                    try:
+                        results.append(await sample(sink))
+                        break
+                    except dream_transport.CapacityWait as exc:
+                        sink['capacity_wait'] = True
+                        if attempt == 0 and await dream_capacity.wait_for_capacity(
+                            deadline, FULL_MODEL_SECONDS, clock=clock
+                        ):
+                            sink['capacity_retries'] = 1
+                            continue
+                        results.append(exc)
+                        break
+                    except Exception as exc:
+                        results.append(exc)
+                        break
         finally:
             if usage_sink is not None:
                 usage_sink['samples_requested'] = caps.samples
                 usage_sink['samples_returned'] = sum(sink['returned'] for sink in sample_usage)
                 usage_sink['samples_failed'] = caps.samples - usage_sink['samples_returned']
+                usage_sink['samples_attempted'] = sum(bool(sink.get('attempted')) for sink in sample_usage)
+                usage_sink['samples_capacity_wait'] = sum(bool(sink.get('capacity_wait')) for sink in sample_usage)
+                usage_sink['capacity_retries'] = sum(sink.get('capacity_retries', 0) for sink in sample_usage)
                 usage_sink['reasoning_attempted'] = any(sink.get('reasoning_attempted') for sink in sample_usage)
-                usage_sink['reasoning_evidence_chars'] = caps.samples * evidence_chars(messages)
+                usage_sink['reasoning_evidence_chars'] = sum(
+                    bool(sink.get('reasoning_attempted')) for sink in sample_usage
+                ) * evidence_chars(messages)
                 usage_sink['tokens'] += sum(sink['tokens'] for sink in sample_usage)
                 usage_sink['usage_unknown'] = any(sink['usage_unknown'] for sink in sample_usage)
                 usage_sink['response_retries'] = sum(sink.get('response_retries', 0) for sink in sample_usage)
@@ -143,7 +182,9 @@ async def plan_pass(uid, records, caps, *, turn=None, usage_sink=None, vocabular
             usage_sink['samples_returned'] = len(plans)
             usage_sink['samples_failed'] = caps.samples - len(plans)
         if not plans:
-            raise next(result for result in results if isinstance(result, BaseException))
+            if any(isinstance(result, dream_transport.CapacityWait) for result in results) or not results:
+                raise dream_transport.CapacityWait('dream_capacity_wait')
+            raise next(result for result in results if isinstance(result, Exception))
         plan = majority(plans, usage_sink=usage_sink)
         if usage_sink is not None:
             usage_sink['raw_plan'] = plan.model_dump(mode='python')
@@ -267,7 +308,7 @@ async def dry_run(uid, records, *, targets=None, caps=None, turn=None, vocabular
         if reason == 'ungrounded_spelling':
             sink.setdefault('rejected', {}).setdefault(reason, 0)
             sink['rejected'][reason] += 1
-            if not dream_guards.verbatim_quote(edit.before, evidence[edit.target]):
+            if not dream_guards.verbatim_quote(edit.before, cited_value(edit.target, evidence)):
                 sink['rejected']['invalid_question_evidence'] = sink['rejected'].get('invalid_question_evidence', 0) + 1
             elif len(proposed['questions']) < 3:
                 proposed['questions'].append(spelling_question(edit).model_dump(mode='python'))
@@ -291,7 +332,9 @@ async def dry_run(uid, records, *, targets=None, caps=None, turn=None, vocabular
     return result
 
 
-async def run_pass(uid, *, caps=None, turn=None, trigger='schedule', canary=False, timeout_seconds=None, progress=None):
+async def run_pass(
+    uid, *, caps=None, turn=None, trigger='schedule', canary=False, timeout_seconds=None, progress=None
+) -> dict[str, Any]:
     caps = (caps or Caps.from_env()).for_uid(uid)
     maximum = FULL_PASS_SECONDS if caps.context_mode == 'full' else 180
     timeout_seconds = maximum if timeout_seconds is None else min(timeout_seconds, maximum)
@@ -302,9 +345,18 @@ async def run_pass(uid, *, caps=None, turn=None, trigger='schedule', canary=Fals
         else await dream_capacity.claim(concurrency()) if turn is None else None
     )
     if turn is None and slot is None:
-        report = {'status': 'waiting', 'reason': 'reserved_capacity'}
+        report = {
+            'status': 'waiting',
+            'reason': 'reserved_capacity',
+            'context_mode': caps.context_mode,
+            'samples_requested': caps.samples if caps.context_mode == 'full' else 0,
+        }
+        if caps.context_mode == 'bounded':
+            report.pop('context_mode')
+            report.pop('samples_requested')
         record_pass(report)
         return report
+    progress = {} if progress is None else progress
     try:
         report = await _run_admitted_pass(
             uid,
@@ -320,10 +372,18 @@ async def run_pass(uid, *, caps=None, turn=None, trigger='schedule', canary=Fals
         if slot is not None:
             await dream_capacity.release(slot)
         raise
-    except Exception:
+    except Exception as exc:
         if slot is not None:
             await dream_capacity.release(slot)
-        raise
+        # A completed model pass must keep its counts if settlement fails.
+        if 'report' not in progress:
+            raise
+        report = progress['report']
+        report.pop('admitted_records', None)
+        report.pop('raw_plan', None)
+        report.update(status='failed', error_type=type(exc).__name__, error_code=error_code(exc))
+        record_pass(report)
+        return report
     except BaseException:
         # Cancellation may leave synchronous IO running; retain the TTL fence.
         raise
@@ -336,7 +396,15 @@ async def _run_admitted_pass(
     uid, *, caps=None, turn=None, trigger='schedule', canary=False, timeout_seconds=180, progress=None
 ):
     caps = caps or Caps.from_env()
-    lease = await run_blocking(db_executor, dream_store.acquire, uid, caps, trigger=trigger, canary=canary)
+    reclaimed: dict[str, Any] = {}
+    try:
+        lease = await run_blocking(
+            db_executor, dream_store.acquire, uid, caps, trigger=trigger, canary=canary, reclaim_sink=reclaimed
+        )
+    finally:
+        # Admission can be denied after a reclamation commits. Count that outcome too.
+        if reclaimed:
+            record_reclaimed(**reclaimed)
     if lease is None:
         report = {'status': 'not_admitted'}
         record_pass(report)
@@ -355,11 +423,15 @@ async def _run_admitted_pass(
         'reasoning_evidence_chars': 0,
         'cost_usd': 0.0,
         'context_mode': caps.context_mode,
+        'samples_requested': caps.samples if caps.context_mode == 'full' else 0,
         'input_tokens_estimate': 0,
         'targets': 0,
         'records': 0,
     }
     initialize(report)
+    if progress is not None:
+        progress['report'] = report
+    deadline = asyncio.get_running_loop().time() + timeout_seconds
     consumed = []
     reviewed = set()
     seeded = set()
@@ -406,8 +478,12 @@ async def _run_admitted_pass(
                 for key in ('name', 'label', 'organization', 'title'):
                     if isinstance(row.get(key), str):
                         names.append({'spelling': row[key]})
-            plan, tokens = await plan_pass(uid, records, caps, turn=turn, usage_sink=report, vocabulary=vocabulary)
+            plan, tokens = await plan_pass(
+                uid, records, caps, turn=turn, usage_sink=report, vocabulary=vocabulary, deadline=deadline
+            )
             records = report.pop('admitted_records', records)
+            inspected = {item['collection'] + '/' + item['id'] for item in [*consumed, *unavailable]}
+            seeded.update(set(records) - inspected)  # Retrieval-only refs have no inspected dirty version.
             report.pop('raw_plan', None)  # Raw private feedback is only returned to the dry-run caller.
             plan = dream_guards.filter_plan(plan, records, targets=target_refs(records), usage_sink=report)
             report.update(
@@ -477,13 +553,13 @@ async def _run_admitted_pass(
                 for edit in plan.edits:
                     key = dream_tools.edit_key(edit, records)
                     if grounding[key] == 'ungrounded_spelling' and not dream_guards.verbatim_quote(
-                        edit.before, records[edit.target]
+                        edit.before, cited_value(edit.target, records)
                     ):
                         report.setdefault('rejected', {}).setdefault('invalid_question_evidence', 0)
                         report['rejected']['invalid_question_evidence'] += 1
                         outcomes.append({'key': key, 'status': 'invalid_question_evidence'})
                         continue
-                    if edit.target not in records or any(not has_ref(ref, records) for ref in edit.evidence):
+                    if not has_ref(edit.target, records) or any(not has_ref(ref, records) for ref in edit.evidence):
                         outcomes.append({'key': key, 'status': 'invalid_evidence'})
                         continue
                     try:
@@ -517,7 +593,7 @@ async def _run_admitted_pass(
                             if is_question and status in {'suggestion_cap', 'already_suggested', 'suppressed'}:
                                 remaining += 1
                             if is_question and status == 'suggestion_cap':
-                                deferred.add(edit.target)
+                                deferred.add(base_ref(edit.target))
                         except (ValueError, review_store.ReviewConflict, review_store.ReviewNotFound):
                             status = 'invalid_evidence'
                     outcomes.append({'key': key, 'status': status, 'policy': edit_policies[key]})
@@ -568,7 +644,7 @@ async def _run_admitted_pass(
     except Exception as exc:
         report.pop('admitted_records', None)
         report.pop('raw_plan', None)
-        report.update(status='failed', error_type=type(exc).__name__)
+        report.update(status='failed', error_type=type(exc).__name__, error_code=error_code(exc))
         if isinstance(exc, dream_transport.CapacityWait):
             report.update(status='waiting', reason='reserved_capacity')
         if isinstance(exc, ValidationError):
@@ -610,11 +686,6 @@ async def _run_admitted_pass(
     return report
 
 
-PASS_TIMEOUT_SECONDS = 180
-FINISH_MARGIN_SECONDS = 30
-DRAIN_TIMEOUT_SECONDS = PASS_TIMEOUT_SECONDS + FINISH_MARGIN_SECONDS + 30
-
-
 async def drain(*, limit=100):
     if mode() == 'off' or limit <= 0:
         return []
@@ -646,7 +717,12 @@ async def drain(*, limit=100):
                         report = await run_pass(uid)
                     except Exception as exc:
                         # Owner-local acquire/finish faults must not cancel siblings.
-                        report = {'status': 'failed', 'error_type': type(exc).__name__}
+                        report = {
+                            'status': 'failed',
+                            'error_type': type(exc).__name__,
+                            'error_code': error_code(exc),
+                            'context_mode': context_mode(uid),
+                        }
                         record_pass(report)
                     results.append(report)
                     if report.get('status') == 'waiting':

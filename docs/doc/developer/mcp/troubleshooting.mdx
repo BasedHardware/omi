@@ -144,3 +144,14 @@ description: "Debug and fix common MCP connection issues"
     Report bugs or request features
   </Card>
 </CardGroup>
+
+### Key family and unavailable recall
+
+Use `omi_mcp_` keys for `/v1/mcp` and `omi_dev_` keys for `/v1/dev`. Hosted MCP
+now explains the mismatch and preserves the OAuth discovery challenge. Missing,
+malformed, unknown, or revoked credentials are rejected; unknown and revoked
+credentials share a response to avoid exposing credential existence. If a newly
+created key fails, verify the family and that the full secret was copied. A key
+prefix shown in a key list is not the usable secret. Empty search results mean
+no indexed eligible matches, not that matching content is absent; use dated
+conversation lists or memory lists to inspect unindexed records.

@@ -13,6 +13,7 @@ Source: events.json. Presence is not task success. Existing SDK provenance/ident
 | onboardingPermissionResult | Onboarding Permission Result | permission, granted, permanently_denied, services_disabled | active | onboarding-activation-funnel |
 | devicePairingBlocked | Device Pairing Blocked | reason, android_sdk, ios_version | active | onboarding-activation-funnel |
 | deviceScanEmpty | Device Scan Empty | after_seconds | active | onboarding-activation-funnel |
+| deviceConnectFailureShown | Device Connect Failure Shown | failure_reason, platform | active | onboarding-activation-funnel |
 | deviceConnectFailed | Device Connect Failed | error_class | active | onboarding-activation-funnel |
 | phoneMicRecordingStarted | Phone Mic Recording Started | none | active | mobile-instrumentation-presence |
 | phoneMicRecordingStopped | Phone Mic Recording Stopped | none | active | mobile-instrumentation-presence |
@@ -186,6 +187,11 @@ Source: events.json. Presence is not task success. Existing SDK provenance/ident
 | onboardingFirstCaptureEmptyResult | Onboarding First Capture Empty Result | none | active | mobile-instrumentation-presence |
 | onboardingFirstCaptureSkipped | Onboarding First Capture Skipped | none | active | mobile-instrumentation-presence |
 | onboardingStepCompleted | Onboarding Step Completed | step, index, elapsed_ms, skipped, platform, exit_reason | active | mobile-instrumentation-presence |
+| paywallVariantShown | Paywall Variant Shown | variant, source | active | mobile-instrumentation-presence |
+| paywallVariantFallback | Paywall Variant Fallback | variant, reason | active | mobile-instrumentation-presence |
+| onboardingWebviewShown | Onboarding Webview Shown | none | active | mobile-instrumentation-presence |
+| onboardingWebviewCompleted | Onboarding Webview Completed | none | active | mobile-instrumentation-presence |
+| onboardingWebviewFallback | Onboarding Webview Fallback | reason | active | mobile-instrumentation-presence |
 
 ## App Review Opportunity decisions
 

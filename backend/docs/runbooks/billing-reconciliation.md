@@ -21,8 +21,10 @@ backend/.venv/bin/python backend/scripts/billing_reconcile.py \
 
 The default price map comes from the committed recognized-price catalog. An
 optional `--price-map /path/prices.json` supplies price-id-to-plan-id bindings for
-fixtures or operator-reviewed additional retained prices. Unknown prices are
-reported as uncertainty; they cannot prove paid or reverse drift.
+fixtures or operator-reviewed additional retained prices. Restating a catalog
+price id in that file aborts the run: exit 2, a stderr message, and no JSON
+report. Unknown prices are reported as uncertainty; they cannot prove paid or
+reverse drift.
 
 ## David's operator command (not executed by agents)
 
@@ -36,7 +38,10 @@ access or application authentication is involved.
 ```bash
 source ~/.local/bin/gcp-agent-env.sh ro-prod
 printf 'Read-only restricted Stripe key: ' >&2
-IFS= read -r -s STRIPE_RECONCILE_READ_ONLY_KEY
+# Default read trims leading and trailing whitespace. Do not set IFS empty:
+# a pasted restricted key often keeps those spaces, and the script would
+# then reject the key.
+read -r -s STRIPE_RECONCILE_READ_ONLY_KEY
 printf '\n' >&2
 export STRIPE_RECONCILE_READ_ONLY_KEY
 backend/.venv/bin/python backend/scripts/billing_reconcile.py \
@@ -48,6 +53,8 @@ unset STRIPE_RECONCILE_READ_ONLY_KEY
 Do not enable shell tracing. Output is aggregate counts; no UID, customer id,
 subscription payload, key or provider exception body is printed. The script does
 not load `.env` files. Provider failures produce a nonzero exit and no report.
+A `--price-map` that restates a catalog price id does the same: exit 2, stderr,
+and no JSON report.
 Snapshot reads are sequential, not a distributed Stripe/Firestore snapshot;
 recent mutations can produce transient drift. Repeat the comparison before an
 operator decides to repair anything, through a separately authorized workflow.
@@ -63,14 +70,19 @@ operator decides to repair anything, through a separately authorized workflow.
   projection omits it; it is not evidence of a wrong price.
 
 Organization admin one-time grants carry `subscription_id=pi_...`. They are
-reported separately as `manual_payment_entitlement`, not reverse subscription
-drift; the restricted subscription reader cannot validate PaymentIntents. No
-organization grant is changed or reinterpreted.
+reported separately as `manual_payment_entitlement`, and that bucket is exempt
+from reverse subscription drift only when that uid has no active or trialing
+Stripe subscription. When Stripe still has an entitled subscription for the
+uid, wrong plan, stale period, and paid-in-Stripe drift are still counted. The
+restricted subscription reader cannot validate PaymentIntents. No organization
+grant is changed or reinterpreted.
 
 Unexpired claimed desktop referrals with no Stripe or PaymentIntent id are
-reported as `referral_trial_entitlement`, never reverse drift. A missing legacy
-`current_period_start` is not drift; a present mismatched start still is.
-Ambiguous customer ownership cannot establish reverse drift.
+reported as `referral_trial_entitlement`, and that bucket is exempt from reverse
+drift only when that uid has no active or trialing Stripe subscription. An
+entitled Stripe subscription for the same uid is compared as ordinary drift. A
+missing legacy `current_period_start` is not drift; a present mismatched start
+still is. Ambiguous customer ownership cannot establish reverse drift.
 
 Categories can overlap. Multiple subscriptions are compared using the stored id
 when possible; the command does not pick a winner arbitrarily. JPY amounts and

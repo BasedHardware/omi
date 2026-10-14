@@ -15773,6 +15773,46 @@
             }
         }
     },
+    "paywallRecommended": "Recommended",
+    "@paywallRecommended": {
+        "description": "Backend recommended tier badge; highlights a recommendation without preselecting checkout."
+    },
+    "paywallNoPlans": "Plans aren't available right now. Try again in a minute.",
+    "@paywallNoPlans": {
+        "description": "Empty state when the plans list has no tiers."
+    },
+    "paywallOtherPlans": "See all plans",
+    "@paywallOtherPlans": {
+        "description": "Collapsed section that reveals the rest of the plan ladder."
+    },
+    "paywallComparePlans": "See plans",
+    "@paywallComparePlans": {
+        "description": "Primary button on the usage banner."
+    },
+    "paywallYourPlan": "Your plan",
+    "@paywallYourPlan": {
+        "description": "Badge on the tier card for the plan the person already has."
+    },
+    "paywallNotNow": "Not now",
+    "@paywallNotNow": {
+        "description": "Secondary button on the usage banner."
+    },
+    "paywallTryAgain": "Try again",
+    "@paywallTryAgain": {
+        "description": "Retry button when the plans sheet fails to load."
+    },
+    "paywallManageBilling": "Manage billing",
+    "@paywallManageBilling": {
+        "description": "Button that opens billing management."
+    },
+    "paywallLoadError": "Couldn't load plans. Check your connection and try again.",
+    "@paywallLoadError": {
+        "description": "Plans sheet error copy. The retry button is separate."
+    },
+    "paywallPlans": "Plans",
+    "@paywallPlans": {
+        "description": "Title of the new plans sheet. The previous sheet keeps Plans & Billing."
+    },
     "firstCaptureTitle": "How will you capture?",
     "firstCaptureDescription": "Choose how you want to capture your first conversation.",
     "firstCaptureOmi": "I Have an Omi",
@@ -15788,6 +15828,17 @@
     "firstCaptureProcessing": "Creating your first conversation…",
     "firstCaptureResult": "Your first conversation",
     "firstCaptureEmpty": "I didn't catch enough speech, try again with a few sentences",
+    "watchCaptureTitle": "Record from your Apple Watch",
+    "watchCaptureOpen": "Open Omi on your Apple Watch.",
+    "watchCaptureRecord": "Tap Record. Allow microphone access if asked.",
+    "watchCaptureSync": "Your recording syncs to Omi on this phone.",
+    "pairingBluetoothOff": "Turn on Bluetooth on your phone, then try again.",
+    "pairingBluetoothPermission": "Allow Bluetooth access for Omi in Settings, then try again.",
+    "pairingNearbyPermission": "Allow Nearby devices access for Omi in Settings, then try again.",
+    "pairingLocationPermission": "Allow location access for Omi in Settings so this phone can find your device, then try again.",
+    "pairingNotFoundOrDropped": "Couldn't reach your Omi. Make sure it's charged, close to your phone, and its light is blinking, then try again.",
+    "pairingBondRecovery": "Forget Omi in your phone’s Bluetooth settings, then try pairing again.",
+    "pairingHowTo": "How to pair",
     "firstCaptureWatchInstructions": "Open Omi on your Apple Watch and tap Record. Allow microphone access if asked. Your capture will sync to Omi on this phone.",
     "firstCaptureWatchInstall": "In the Watch app on your iPhone, install Omi on your Apple Watch. Then open Omi on your watch and tap Record.",
     "firstCaptureWatchPair": "Pair your Apple Watch with this iPhone using the Watch app, then install and open Omi on your watch.",
@@ -15799,6 +15850,14 @@
     "firstCaptureCancelTitle": "Leave This Recording?",
     "firstCaptureCancelWarning": "Going back stops this recording. Keep talking to give Omi a few more sentences.",
     "firstCaptureSiriTip": "Tip: Enable Omi in Shortcuts → Siri.",
+    "paywallOutlineHeadline": "Never miss a word again.",
+    "@paywallOutlineHeadline": {
+        "description": "Headline of the Outline paywall variant (mobile paywall A/B test)"
+    },
+    "paywallCancelAnytime": "Cancel anytime.",
+    "@paywallCancelAnytime": {
+        "description": "Caption under the upgrade button on the Outline paywall variant"
+    },
     "connectAnAgent": "Connect an Agent",
     "@connectAnAgent": {
         "description": "Settings row that opens the web developer home, where users get copy-paste setup prompts and keys for AI agents (Claude, ChatGPT, Codex, ...)"

@@ -4406,3 +4406,61 @@ on-device continuation are implemented and verified. In particular, staged sync
 audio expires after one day and is not a safe month-long hold store. Client WAL
 custody must survive a hold until successful processing, within the existing
 retention contract. No new client capability is advertised by this foundation.
+
+### Flagged shared batch diarization
+
+`TRANSCRIPTION_FINAL_PASS_DIARIZER=legacy` preserves the current shadow and sync
+paths. `pyannote_shadow` admits only `TRANSCRIPTION_FINAL_PASS_UID_ALLOWLIST` or
+`TRANSCRIPTION_FINAL_PASS_PERCENT`. `TRANSCRIPTION_FINAL_PASS_BACKEND` selects
+`pyannote` (default), `legacy_ahc`, or the contract-compatible `nemotron` HTTP
+adapter. The latter requires its own serving endpoint and qualification.
+
+The shadow worker retains the already decoded registered PCM with exact silence
+padding between capture chunks; it sends no second storage download. Anonymous
+turns, overlaps, centroid evidence, embedding-space identity and provider version
+travel through one `DiarizationResult`. Community-1 exclusive turns determine each
+word by maximum overlap; midpoint breaks a tie and gaps abstain. Centroids use the
+same pinned WeSpeaker v2 space as enrollments; incompatible spaces abstain from
+naming. The roster builder preserves person entitlements. Centroid naming keeps
+conversation-resolution thresholds, evidence minimum and owner arbitration;
+public provenance uses `speaker_label_provenance.project_source`.
+
+A sufficiently covered AHC result containing exactly one evidenced voice skips
+pyannote and uses the same assignment/naming stage. Missing/partial evidence never
+qualifies for this shortcut. V1 comparisons remain in `transcription_shadow_results/v1`;
+v2 scalar outcomes/comparisons are separate. No private text or vectors enter metrics.
+
+`TRANSCRIPTION_FINAL_PASS_SYNC_ENABLED=false` independently gates sync/WAL cutover.
+When enabled for the same cohort, sync reuses its matching/storage WAV download
+and passes absolute provider word clocks through the same triage, diarizer and naming seam.
+Persisted sync segments use the legacy first-word origin and two-decimal clocks.
+Failure retains legacy matching; manual owner reservations remain authoritative.
+Live matching enters through an adapter preserving its clip policy unchanged.
+
+`TRANSCRIPTION_FINAL_PASS_AUTHORITATIVE=false` independently gates record replacement.
+Promotion requires complete audio and a current completed, unlocked conversation
+revision. A transaction rechecks rollout, deletion and revision, verifies segment
+correspondence, and changes only speaker fields on stored segments. Stored text,
+IDs, clocks, translations and structured source IDs remain unchanged. Manual
+receipts are resolved to the retained IDs; person edits and either direction of a
+bare legacy `is_user` disagreement are protected. Conflicting speakers within a
+stored segment, unsafe mappings, translation materializations and app/note derived
+references block promotion. The existing encryption boundary protects the write.
+This background speaker update does not rerun downstream memory
+or summary jobs; authoritative rollout must qualify that integration before enablement.
+
+Deploy the additive diarizer image first, then a separate batch Helm release
+(`batch_main:app`, `DIARIZATION_V2_ENABLED=true`) on its own GPUs, then backend
+and pusher with all cutover flags off, then a separately reviewed cohort flag PR.
+The default embedding/v1 app eagerly warms its models before TCP readiness and
+keeps concurrent legacy routes without the batch lock. The batch app warms its
+models before listening; failures abort startup. `/v2/diarization` uses the batch
+separate internal ingress (`diarizer-batch.omi.me`), not the embedding ingress.
+Cloud Run cannot use ClusterIP DNS. The batch release has a dedicated tainted
+L4 pool, a one-pod David-only floor, and a direct per-pod Prometheus queue scrape
+and adapter rule. Exact install/metric/cohort gates: `scripts/diarization_eval/batch_install.md`. See `scripts/diarization_eval/capacity.md`
+for routing and the opt-in release overlay; verify caller reachability before
+cohort enablement.
+Rollback: disable authoritative/sync flags first, set mode to `legacy`, then restore
+previous backend and diarizer image digests if needed. No stored-history reversal
+is automatic. Shared scorer instructions: `scripts/diarization_eval/README.md`.
