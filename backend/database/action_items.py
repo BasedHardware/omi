@@ -977,6 +977,13 @@ def update_action_item(
     # Prepare data
     update_data = _prepare_action_item_for_write(update_data, partial=True)
 
+    # A settled export clears the pending-sync flag — the single-item PATCH
+    # path must match batch_sync_update_action_items, else every device
+    # export leaves sync_requested=True and the pending-sync fallback (a
+    # limit-50 query) starves under settled rows.
+    if update_data.get('exported') is True:
+        update_data['sync_requested'] = False
+
     user_ref = db.collection('users').document(uid)
     action_item_ref = user_ref.collection(action_items_collection).document(action_item_id)
 
