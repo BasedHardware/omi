@@ -329,12 +329,12 @@ def test_http_adapter_stream_contract_and_remaining_deadline(monkeypatch):
         calls.append((url, kwargs))
         return SimpleNamespace(raise_for_status=lambda: None, json=result.model_dump)
 
-    monkeypatch.setenv('HOSTED_DIARIZATION_API_URL', 'http://fixture.invalid/')
+    monkeypatch.setenv('HOSTED_DIARIZATION_API_URL', 'http://fixture.invalid/diarizer-batch/')
     monkeypatch.setattr(diarization.httpx, 'post', post)
     output = diarization.HttpDiarizer('pyannote').diarize(b'\x01\x00', deadline=time.monotonic() + 10)
     assert output == result
     url, request = calls[0]
-    assert url == 'http://fixture.invalid/v2/diarization'
+    assert url == 'http://fixture.invalid/diarizer-batch/v2/diarization'
     assert request['content'] == b'\x01\x00'
     assert request['headers'] == {'Content-Type': 'audio/pcm'}
     assert 0 < request['timeout'].read <= 10

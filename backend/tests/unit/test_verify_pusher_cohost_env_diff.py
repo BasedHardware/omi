@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import json
+import re
 import runpy
 import shutil
 from pathlib import Path
@@ -17,6 +19,7 @@ WORKFLOWS = (
 )
 
 FIXTURE_FILES = (
+    "config/diarization-cohort-stages.json",
     "backend/charts/pusher/dev_omi_pusher_values.yaml",
     "backend/charts/pusher/prod_omi_pusher_values.yaml",
     "backend/charts/backend-listen/dev_omi_backend_listen_values.yaml",
@@ -36,6 +39,15 @@ def chart_fixture(tmp_path: Path) -> Path:
         destination = tmp_path / relative
         destination.parent.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(source, destination)
+    # Mutation fixtures always start at A, even when the checked-in rollout advances.
+    path = tmp_path / 'backend/charts/pusher/prod_omi_pusher_values.yaml'
+    stages = json.loads((tmp_path / 'config/diarization-cohort-stages.json').read_text())
+    text = path.read_text()
+    for name, value in stages['A'].items():
+        text = re.sub(
+            r'(  - name: ' + name + r'\n    value: )"[^"\n]*"', lambda match: match[1] + json.dumps(value), text
+        )
+    path.write_text(text)
     return tmp_path
 
 
@@ -206,3 +218,33 @@ def test_deploy_workflows_invoke_the_gate() -> None:
     for workflow in WORKFLOWS:
         text = workflow.read_text(encoding="utf-8")
         assert "backend/scripts/verify_pusher_cohost_env_diff.py" in text, workflow
+
+
+@pytest.mark.parametrize(
+    'name,value',
+    [
+        ('TRANSCRIPTION_FINAL_PASS_UID_ALLOWLIST', 'synthetic-outsider'),
+        ('TRANSCRIPTION_FINAL_PASS_PERCENT', '1'),
+        ('TRANSCRIPTION_FINAL_PASS_AUTHORITATIVE', 'TRUE'),
+        ('TRANSCRIPTION_FINAL_PASS_SYNC_ENABLED', 'true'),
+        ('HOSTED_DIARIZATION_API_URL', 'http://diarizer.omi.me:80'),
+    ],
+)
+def test_batch_cohort_rejects_scope_or_route_drift(gate, chart_fixture, name, value):
+    path = chart_fixture / 'backend/charts/pusher/prod_omi_pusher_values.yaml'
+    expected = gate.PROD_FINAL_PASS_SHADOW_VALUES[name][0]
+    replace_once(path, f'  - name: {name}\n    value: "{expected}"\n', f'  - name: {name}\n    value: "{value}"\n')
+    assert any(f'shadow scope {name}' in error for error in gate.validate_preflight(chart_fixture))
+
+
+@pytest.mark.parametrize('stage', ['A', 'B', 'C', 'D'])
+def test_complete_reviewed_ramp_stage_passes(gate, chart_fixture, stage):
+    stages = json.loads((chart_fixture / 'config/diarization-cohort-stages.json').read_text())
+    path = chart_fixture / 'backend/charts/pusher/prod_omi_pusher_values.yaml'
+    for name, value in stages[stage].items():
+        expected = stages['A'][name]
+        if value != expected:
+            replace_once(
+                path, f'  - name: {name}\n    value: "{expected}"\n', f'  - name: {name}\n    value: "{value}"\n'
+            )
+    assert gate.validate_preflight(chart_fixture) == []

@@ -2170,8 +2170,15 @@ can lose events, and clients that replace metadata can reduce coverage. See
 qualification experiment.
 Offline sync on Cloud Run calls the same Embedding API through
 `HOSTED_SPEAKER_EMBEDDING_API_URL`. That binding must be the diarizer
-GCE-internal ILB hostname used by GKE backend-listen and pusher — not the
+reachable internal HTTP endpoint used by GKE backend-listen and pusher — not the
 in-cluster `*.svc.cluster.local` URL that only in-cluster Parakeet can reach.
+The optional [shared model Gateway](../charts/internal-gateway/README.md) adds
+`/diarizer`, `/diarizer-batch`, `/parakeet`, `/vad` and `/nllb` routes through
+separate Services while preserving existing Ingresses. This chart change leaves
+caller URLs unchanged; the lead switches one service at a time, including every
+speaker-ID host together. VAD requires the full `/vad/v1/vad` URL. Batch uses its
+own isolated release and `/diarizer-batch/v2/diarization`; Parakeet WebSocket and
+window paths retain their base prefix through the rewrite.
 
 `is_user` remains the compatibility projection, while
 `speaker_identity_status` preserves its evidence state: `user`, `not_user`,
@@ -4512,6 +4519,10 @@ retention contract. No new client capability is advertised by this foundation.
 
 ### Flagged shared batch diarization
 
+Production stage A binds David-only shadow on backend, backend-sync and pusher
+through the shared Gateway `/diarizer-batch` prefix. Exact env stages, caps,
+acceptance gates and rollback: [batch cohort ramp](diarizer-batch-cohort.md).
+
 `TRANSCRIPTION_FINAL_PASS_DIARIZER=legacy` preserves the current shadow and sync
 paths. `pyannote_shadow` admits only `TRANSCRIPTION_FINAL_PASS_UID_ALLOWLIST` or
 `TRANSCRIPTION_FINAL_PASS_PERCENT`. `TRANSCRIPTION_FINAL_PASS_BACKEND` selects
@@ -4557,11 +4568,11 @@ Deploy the additive diarizer image first, then a separate batch Helm release
 and pusher with all cutover flags off, then a separately reviewed cohort flag PR.
 The default embedding/v1 app eagerly warms its models before TCP readiness and
 keeps concurrent legacy routes without the batch lock. The batch app warms its
-models before listening; failures abort startup. `/v2/diarization` uses the batch
-separate internal ingress (`diarizer-batch.omi.me`), not the embedding ingress.
-Cloud Run cannot use ClusterIP DNS. The batch release has a dedicated tainted
-L4 pool, a one-pod David-only floor, and a direct per-pod Prometheus queue scrape
-and adapter rule. Exact install/metric/cohort gates: `scripts/diarization_eval/batch_install.md`. See `scripts/diarization_eval/capacity.md`
+models before listening; failures abort startup. `/v2/diarization` is reached
+only through the shared internal Gateway `/diarizer-batch` prefix. Cloud Run
+cannot use ClusterIP DNS. Production batch runs on the dedicated tainted T4
+`diarizer-batch-pool`, with a one-pod David-only floor; qualify the direct per-pod
+Prometheus queue scrape and adapter rule before ramping. Exact install/metric/cohort gates: `scripts/diarization_eval/batch_install.md`. See `scripts/diarization_eval/capacity.md`
 for routing and the opt-in release overlay; verify caller reachability before
 cohort enablement.
 Rollback: disable authoritative/sync flags first, set mode to `legacy`, then restore
@@ -4594,3 +4605,13 @@ unchanged. Deploy archive acceptance on backend-sync before advertising permissi
 on listen; rollback revokes new batching but continues accepting pending files.
 Policy, storage-parity evidence, bounds, VAD benchmark and lead-owned 5%/12-hour
 ramp: [mobile Standard batch](../../app/docs/mobile-standard-batch.md).
+
+### Shared Gateway caller routes
+
+NLLB, VAD and every speaker-embedding host (including Parakeet fallback) use
+the environment-specific shared Gateway paths. Parakeet STT retains its legacy
+hostname. Dev uses `172.16.48.49`; prod uses `172.16.160.20`. Qualify Gateway
+programming and caller reachability before deploying.
+
+Caller deploy order, route requirements and independent rollback are documented
+in [the Gateway caller runbook](internal-gateway-callers.md).

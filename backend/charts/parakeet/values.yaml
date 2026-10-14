@@ -182,3 +182,13 @@ tolerations: []
 affinity: {}
 
 topologySpreadConstraints: []
+
+# Shared internal Gateway is opt-in; old Service/Ingress remain rollback paths.
+gateway:
+  enabled: false
+  name: ""
+  listenerName: http
+  pathPrefix: /parakeet
+  healthCheckPath: /health
+  timeoutSeconds: 120
+  connectionDrainingSeconds: 130
