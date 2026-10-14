@@ -292,7 +292,12 @@ export function BudgetUpsellBanner({
       {showMeter && <StorefrontUsageMeter usage={data.usage} />}
       {(nudge || exhausted) && (
         <div className="flex flex-wrap items-center gap-3 rounded-2xl bg-bg-tertiary p-4">
-          {nudge && <p className="min-w-0 flex-1 text-sm text-text-secondary">{nudge}</p>}
+          {/* At 100% there is no nudge line; the exhausted header is the backend's words. */}
+          {(nudge ?? (exhausted ? data.header : null)) && (
+            <p className="min-w-0 flex-1 text-sm text-text-secondary">
+              {nudge ?? data.header}
+            </p>
+          )}
           <div className="ml-auto flex gap-2">
             <button
               onClick={() => setSheetOpen(true)}

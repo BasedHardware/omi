@@ -206,6 +206,7 @@ describe('BudgetUpsellBanner', () => {
     render(
       <BudgetUpsellBanner readGate={async () => true} onSubscriptionUpdate={vi.fn()} />,
     );
+    expect(await screen.findByText("You've used all of this month's usage")).toBeTruthy();
     fireEvent.click(await screen.findByRole('button', { name: 'See plans' }));
     expect(
       await screen.findByRole('button', { name: 'Upgrade to Architect' }),
