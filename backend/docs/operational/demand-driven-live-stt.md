@@ -33,10 +33,11 @@ registered socket is reconciled within one second, plus bounded consumer reads.
 
 Real-time app and developer webhook state comes from the same authorities as
 listen/pusher fanout. Consumer reads refresh every five seconds, with a two-second
-wall deadline; failed reads require vendors. An enabled mentor cohort producer
-is conservatively treated as active for every user because there is no per-user
-active-producer lease. This limits savings when `MENTOR_PIPELINE=cohort`; it must
-not be disabled merely to make this gate save money.
+wall deadline; failed reads require vendors. Mentor uses the existing
+per-user frequency opt-out and paid admission; admitted users count as active
+even while context is buffering or cohort/flag state is uncertain. Consumers
+must not be disabled merely to make this gate save money. Cheap admission
+rechecks shared presence and consumers after dialing, before retiring the vendor.
 
 A healthy handover dials under existing circuits/admission while the old leg
 serves. Only after acceptance does it fence old callbacks and transfer capture

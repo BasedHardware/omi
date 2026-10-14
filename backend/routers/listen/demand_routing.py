@@ -101,6 +101,24 @@ class LiveDemandRouting:
                 self.receiver.host.request.uid, self.socket_id, 'close' if self.closed else self.policy.state
             )
 
+    async def can_admit_window(self) -> bool:
+        # Recheck after the potentially slow candidate dial, while the old
+        # vendor still owns delivery. Another client's report/consumer may
+        # have changed since the periodic policy snapshot.
+        visible = await self.publish()
+        try:
+            self.consumer = await asyncio.wait_for(realtime_consumer_active(self.receiver.host.request.uid), timeout=2)
+        except Exception:
+            self.consumer = None
+        return (
+            self.policy.decide(
+                enabled=resolve_live_demand().admits(self.receiver.host.request.uid),
+                visible=visible,
+                consumer=self.consumer,
+            )
+            == 'parakeet'
+        )
+
     def meter(self) -> None:
         if self.eligible:
             self.receiver.lane_meter.flush(reason=self.policy.reason)

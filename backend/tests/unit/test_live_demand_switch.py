@@ -10,6 +10,7 @@ from tests.unit.test_parakeet_window_live import runtime, Client  # noqa: F401
 from tests.unit.test_live_replay_provider_pairs import setup_receiver, stop, until
 from tests.unit.test_live_cost_router import controls  # noqa: F401
 from routers.listen.demand_routing import LiveDemandRouting
+from routers.listen import demand_routing
 from utils.stt import streaming as st, parakeet_window as window, live_session
 from utils.stt.recovery_state import RecoveryState
 from utils.stt.resilient_stream import ResilientAudio
@@ -25,6 +26,8 @@ async def demand_receiver(monkeypatch):
     actual._window_replay_started = True
     demand = LiveDemandRouting(actual, eligible=True)
     actual.live_demand = demand
+    monkeypatch.setattr(demand, 'publish', AsyncMock(return_value=False))
+    monkeypatch.setattr(demand_routing, 'realtime_consumer_active', AsyncMock(return_value=False))
     monkeypatch.setenv('STT_LIVE_DEMAND_ENABLED', 'true')
     monkeypatch.setenv('STT_LIVE_DEMAND_PERCENT', '100')
     demand.policy.observe({'foreground': False, 'transcript_visible': False})
@@ -163,6 +166,26 @@ async def test_vendor_candidate_failure_keeps_window_and_audio(monkeypatch):
         assert not await actual._switch_live_demand('vendor')
         assert actual.stt_socket is cheap and not cheap.retired_for_replay
         assert actual.host.stt_model == 'parakeet-window'
+    finally:
+        actual.stt_socket.finish()
+        await stop(raws)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('late_demand', ['other_client', 'consumer', 'rollback'])
+async def test_demand_rechecked_before_retiring_vendor(monkeypatch, late_demand):
+    actual, _, raws, _, _ = await demand_receiver(monkeypatch)
+    old = actual.stt_socket
+    if late_demand == 'other_client':
+        monkeypatch.setattr(actual.live_demand, 'publish', AsyncMock(return_value=True))
+    elif late_demand == 'consumer':
+        monkeypatch.setattr(demand_routing, 'realtime_consumer_active', AsyncMock(return_value=True))
+    else:
+        monkeypatch.setenv('STT_LIVE_DEMAND_ENABLED', 'false')
+    try:
+        assert not await actual._switch_live_demand('parakeet')
+        assert actual.stt_socket is old and not old.retired_for_replay
+        assert actual.host.stt_service == st.STTService.soniox
     finally:
         actual.stt_socket.finish()
         await stop(raws)

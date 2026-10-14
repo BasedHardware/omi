@@ -4,15 +4,20 @@ import os
 
 
 async def realtime_consumer_active(uid: str) -> bool:
-    # The cohort resolver can perform remote flag IO. Until a per-user active
-    # producer lease exists, an enabled mentor producer is conservatively active.
-    if os.getenv('MENTOR_PIPELINE') == 'cohort':
-        return True
     from database.redis_db import get_user_webhook_db, user_webhook_status_db
     from models.users import WebhookType, webhook_url_from_setting
     from utils.apps import get_available_apps
     from utils.executors import db_executor, run_blocking
 
+    if os.getenv('MENTOR_PIPELINE') == 'cohort':
+        from database.notifications import get_mentor_notification_frequency
+        from utils.mentor_admission import mentor_plan_allows_evaluation
+
+        frequency = await run_blocking(db_executor, get_mentor_notification_frequency, uid)
+        # Match the producer's opt-out and paid admission. Buffered context
+        # and cohort/flag uncertainty must never be mistaken for inactivity.
+        if frequency != 0 and await run_blocking(db_executor, mentor_plan_allows_evaluation, uid):
+            return True
     apps = await run_blocking(db_executor, get_available_apps, uid)
     if any(app.enabled and (app.triggers_realtime() or app.triggers_realtime_audio_bytes()) for app in apps):
         return True

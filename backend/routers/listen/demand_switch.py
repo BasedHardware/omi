@@ -87,6 +87,7 @@ async def switch_live_demand(receiver, lane: str) -> bool:
             not demand.window_permitted
             or demand.policy.state != 'hidden'
             or not resolve_live_demand().admits(host.request.uid)
+            or not await demand.can_admit_window()
         ):
             raw.retire_for_replay()
             await abort_replay_socket(raw)
