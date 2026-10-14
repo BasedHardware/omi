@@ -6,6 +6,7 @@ from typing import Any
 from database._client import get_firestore_client
 from google.cloud.firestore_v1 import transactional
 
+from database.account_deletion_marker import _validate_uid
 from database.account_deletion_policy import account_deletion_blocks_access, normalize_account_deletion_status
 
 
@@ -16,8 +17,7 @@ def read_agent_vm_migration_journals(uid: str) -> list[dict[str, Any]]:
     during an Agent VM migration.  Callers must validate each returned record
     against the provider before issuing destructive requests.
     """
-    if not uid.strip():
-        raise ValueError('uid is required')
+    _validate_uid(uid)
     client = get_firestore_client()
     migration_ref = client.collection('users').document(uid).collection('agentVmMigrations')
     journals: list[dict[str, Any]] = []
