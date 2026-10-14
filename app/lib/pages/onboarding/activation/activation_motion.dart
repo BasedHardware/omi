@@ -574,3 +574,85 @@ class _SummaryRevealState extends State<SummaryReveal> with SingleTickerProvider
     );
   }
 }
+
+/// One line of a summary: a heading (`## …`), a bullet (`- …`), or plain text.
+@visibleForTesting
+typedef SummaryLine = ({String text, bool heading, bool bullet});
+
+/// Omi's notes arrive as light markdown; the onboarding card shows them as text: headings become
+/// short bold lines, `-`/`*` items become bullets, emphasis markers go, blank lines collapse.
+@visibleForTesting
+List<SummaryLine> summaryLines(String markdown) {
+  final out = <SummaryLine>[];
+  for (final raw in markdown.split('\n')) {
+    var line = raw.trim();
+    if (line.isEmpty) continue;
+    line = line.replaceAll('**', '').replaceAll('__', '');
+    final heading = RegExp(r'^#{1,6}\s+').firstMatch(line);
+    final bullet = RegExp(r'^([-*•]|\d+[.)])\s+').firstMatch(line);
+    if (heading != null) {
+      out.add((text: line.substring(heading.end).trim(), heading: true, bullet: false));
+    } else if (bullet != null) {
+      out.add((text: line.substring(bullet.end).trim(), heading: false, bullet: true));
+    } else {
+      out.add((text: line, heading: false, bullet: false));
+    }
+  }
+  return out;
+}
+
+/// The summary in the onboarding card, written in word by word ([t] 0→1) across its lines, in a
+/// box that never grows past [maxHeight]: longer notes scroll inside it, with a fade at the bottom.
+class SummaryText extends StatelessWidget {
+  const SummaryText({super.key, required this.text, required this.t, required this.style, this.maxHeight = 190});
+
+  final String text;
+  final double t;
+  final TextStyle style;
+  final double maxHeight;
+
+  @override
+  Widget build(BuildContext context) {
+    final lines = summaryLines(text);
+    final total = lines.fold<int>(0, (n, l) => n + l.text.split(' ').length);
+    final shown = (total * t).ceil();
+    var index = 0;
+    final children = <Widget>[];
+    for (var k = 0; k < lines.length; k++) {
+      final line = lines[k];
+      final lineStyle = line.heading ? style.copyWith(fontWeight: FontWeight.w600) : style;
+      final words = line.text.split(' ');
+      final spans = <TextSpan>[
+        if (line.bullet)
+          TextSpan(text: '•  ', style: lineStyle.copyWith(color: index < shown ? null : Colors.transparent)),
+        for (var i = 0; i < words.length; i++)
+          TextSpan(
+            text: i == words.length - 1 ? words[i] : '${words[i]} ',
+            style: lineStyle.copyWith(
+              color: index + i < shown ? lineStyle.color : lineStyle.color?.withValues(alpha: 0),
+            ),
+          ),
+      ];
+      index += words.length;
+      children.add(Padding(
+        padding: EdgeInsets.only(top: k == 0 ? 0 : (line.heading ? OmiSpacing.md : OmiSpacing.xs)),
+        child: Text.rich(TextSpan(children: spans)),
+      ));
+    }
+    final column =
+        Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: children);
+    return ConstrainedBox(
+      constraints: BoxConstraints(maxHeight: maxHeight),
+      child: ShaderMask(
+        blendMode: BlendMode.dstIn,
+        shaderCallback: (bounds) => LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: const [Colors.black, Colors.black, Colors.transparent],
+          stops: [0, bounds.height >= maxHeight - 1 ? 0.82 : 1, 1],
+        ).createShader(bounds),
+        child: SingleChildScrollView(physics: const ClampingScrollPhysics(), child: column),
+      ),
+    );
+  }
+}

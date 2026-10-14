@@ -898,7 +898,7 @@ class _SummaryCardState extends State<_SummaryCard> {
                 ),
               ),
               const SizedBox(height: OmiSpacing.md),
-              WordReveal(text: _summary, t: segment(t, 0.3, 0.9, Curves.linear), style: bodyStyle),
+              SummaryText(text: _summary, t: segment(t, 0.3, 0.9, Curves.linear), style: bodyStyle),
               if (_words.isNotEmpty) ...[
                 const SizedBox(height: OmiSpacing.md),
                 rise(segment(t, 0.88, 1), _transcriptToggle(l10n), distance: 6),
