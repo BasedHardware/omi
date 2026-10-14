@@ -474,7 +474,6 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
       child: KeyedSubtree(
         key: const ValueKey('omi.action_items.empty'),
         child: OmiEmptyState(
-          icon: Icons.task_alt_rounded,
           title: context.l10n.noTasksYet,
           titleLayoutReference: context.l10n.noConversationsYet,
           message: context.l10n.tasksEmptyStateMessage,

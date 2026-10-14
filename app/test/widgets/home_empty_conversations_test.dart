@@ -44,7 +44,7 @@ void main() {
       final icon = find.byIcon(Icons.forum_rounded);
       expect(title, findsOneWidget);
       expect(hint, findsNothing);
-      expect(icon, findsOneWidget);
+      expect(icon, findsNothing);
       expect(find.text(l10n.tasksEmptyStateMessage), findsNothing);
       expect(find.bySemanticsLabel(l10n.tasksEmptyStateMessage), findsNothing);
       expect(find.bySemanticsLabel(l10n.noConversationsHeroMessage), findsNothing);
@@ -57,7 +57,7 @@ void main() {
       expect(find.byKey(const ValueKey('omi.conversations.empty')), findsOneWidget);
       expect(title, findsOneWidget);
       expect(hint, findsNothing);
-      expect(icon, findsOneWidget);
+      expect(icon, findsNothing);
       expect(tester.getRect(title), initialTitleRect);
       expect(tester.widget<Text>(title).style!.color, OmiColors.textPrimary);
       expect(IconTheme.of(tester.element(icon)).color, OmiColors.textTertiary);
@@ -73,7 +73,7 @@ void main() {
       await tester.tap(find.text(l10n.retry));
       await tester.pump();
       expect(provider.apiViewState.phase, ApiViewPhase.empty);
-      expect(icon, findsOneWidget);
+      expect(icon, findsNothing);
       expect(hint, findsNothing);
       expect(tester.getRect(title), initialTitleRect);
 
