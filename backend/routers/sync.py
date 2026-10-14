@@ -55,6 +55,7 @@ from utils.other import endpoints as auth
 from utils.account_cutover.access import should_skip_background_account_mutation
 from utils.other.storage import (
     archive_mobile_batch_raw_files,
+    link_archive_captures,
     get_playback_artifact_signed_url,
     upload_playback_artifact,
     mark_playback_unavailable,
@@ -643,6 +644,18 @@ async def sync_local_files(
     try:
         try:
             paths = await run_blocking(sync_executor, retrieve_file_paths, files, uid)
+            archive_paths = await run_blocking(
+                sync_executor,
+                archive_mobile_batch_raw_files,
+                link_archive_captures,
+                uid,
+                paths,
+                {
+                    'app_version': client_device_context.app_version,
+                    'firmware': request.headers.get('x-omi-firmware-version'),
+                    'device_model': request.headers.get('x-omi-device-model'),
+                },
+            )
             wav_paths = await run_blocking(sync_executor, decode_files_to_wav, paths)
         except HTTPException as e:
             raise HTTPException(status_code=e.status_code, detail=e.detail, headers=_V1_DEPRECATION_HEADERS)
@@ -815,6 +828,15 @@ async def sync_local_files(
             except Exception as e:
                 logger.error(f'sync: DG usage record error for {uid}: {e}')
 
+        if archive_paths:
+            await run_blocking(
+                storage_executor,
+                link_archive_captures,
+                uid,
+                archive_paths,
+                sorted(set(response['new_memories']) | set(response['updated_memories'])),
+            )
+
         # Build JSON-serializable response
         result = {
             'new_memories': sorted(response['new_memories']),
@@ -904,6 +926,8 @@ async def sync_local_files_v2(
     x_cloud_trace_context: Optional[str] = Header(None, alias='X-Cloud-Trace-Context'),
     x_omi_sync_capture_manifest: Optional[str] = Header(None, alias='X-Omi-Sync-Capture-Manifest'),
     x_omi_capture_evidence: Optional[str] = Header(None, alias='X-Omi-Capture-Evidence', include_in_schema=False),
+    x_omi_firmware_version: Optional[str] = Header(None, alias='X-Omi-Firmware-Version'),
+    x_omi_device_model: Optional[str] = Header(None, alias='X-Omi-Device-Model'),
     x_omi_conversation_geolocation: Optional[str] = Header(None, alias='X-Omi-Conversation-Geolocation'),
 ):
     """
@@ -1074,7 +1098,20 @@ async def sync_local_files_v2(
 
         # Keep original bytes before any 202, content-cache hit, decode or VAD.
         # An archive failure leaves the client responsible for retrying its WAL.
-        await run_blocking(sync_executor, archive_mobile_batch_raw_files, uid, paths)
+        archive_paths = await run_blocking(
+            sync_executor,
+            archive_mobile_batch_raw_files,
+            link_archive_captures,
+            uid,
+            paths,
+            {
+                'app_version': client_device_context.app_version,
+                'firmware': x_omi_firmware_version if isinstance(x_omi_firmware_version, str) else None,
+                'device_model': x_omi_device_model if isinstance(x_omi_device_model, str) else None,
+                'conversation_id': conversation_id if isinstance(conversation_id, str) else None,
+                'sync_job_id': job_id,
+            },
+        )
 
         content_id = await run_blocking(sync_executor, compute_sync_content_id, uid, paths)
 
@@ -1252,6 +1289,7 @@ async def sync_local_files_v2(
                 'job_id': job_id,
                 'uid': uid,
                 'raw_blob_paths': owned_paths,
+                **({'raw_capture_paths': archive_paths} if archive_paths else {}),
                 **({'capture_evidence_claims': capture_claims} if capture_claims else {}),
                 'source': source.value,
                 'should_lock': should_lock,
@@ -1505,6 +1543,7 @@ async def sync_local_files_v2(
                             inline_run_lock_token=inline_run_lock_token,
                             content_run_bound=ledger_fence_active,
                             ledger_fence_active=ledger_fence_active,
+                            **({'raw_capture_paths': archive_paths} if archive_paths else {}),
                             **({'capture_evidence_claims': capture_claims} if capture_claims else {}),
                             recording_session_id=recording_session_id,
                             audio_start_seconds=audio_start_seconds,
@@ -1944,6 +1983,16 @@ async def _run_sync_job_body(request: Request, task_retry_count: int):
         )
         client_device_id = payload.get('client_device_id')
         client_platform = payload.get('client_platform')
+        raw_capture_paths = payload.get('raw_capture_paths') or []
+        if (
+            not isinstance(raw_capture_paths, list)
+            or len(raw_capture_paths) > 20
+            or any(
+                not isinstance(path, str) or not path.startswith((f'raw-sync/{uid}/', f'raw-mobile-batch/{uid}/'))
+                for path in raw_capture_paths
+            )
+        ):
+            raise HTTPException(status_code=400, detail='Invalid raw capture linkage')
         capture_claims = payload.get('capture_evidence_claims')
         if not isinstance(capture_claims, dict) or len(capture_claims) > 20:
             capture_claims = {}
@@ -2115,6 +2164,7 @@ async def _run_sync_job_body(request: Request, task_retry_count: int):
                 run_lock_token=lock_token if ledger_fence_active else None,
                 content_run_bound=ledger_fence_active,
                 ledger_fence_active=ledger_fence_active,
+                **({'raw_capture_paths': raw_capture_paths} if raw_capture_paths else {}),
                 **({'capture_evidence_claims': capture_claims} if capture_claims else {}),
                 recording_session_id=recording_session_id,
                 audio_start_seconds=audio_start_seconds,

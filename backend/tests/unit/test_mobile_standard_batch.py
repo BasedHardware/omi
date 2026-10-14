@@ -178,7 +178,7 @@ async def test_upload_acceptance_requires_archive_before_receipt_or_dispatch(arc
     try:
         calls = []
 
-        def archive(uid, paths):
+        def archive(uid, paths, metadata=None):
             calls.append(('archive', uid, list(paths)))
             if archive_fails:
                 raise OSError('archive unavailable')
