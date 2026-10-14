@@ -17,6 +17,7 @@ import android.bluetooth.BluetoothDevice
  * Defaults to ADDRESS_TYPE_RANDOM if parsing fails to preserve autoConnect behavior for
  * unbonded Omi DevKit pendants after Bluetooth toggle.
  */
+// Determines whether a BLE device uses a Random or Public address type per Core Spec.
 fun determineBleAddressType(address: String): Int {
     val firstOctetStr = address.trim().split(":", "-").firstOrNull()
     val firstOctet = firstOctetStr?.toIntOrNull(16)
