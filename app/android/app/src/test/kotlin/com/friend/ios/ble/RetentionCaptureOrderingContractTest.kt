@@ -100,15 +100,21 @@ class RetentionCaptureOrderingContractTest {
     }
 
     @Test
-    fun `the post-clock-sync re-probe is bounded to one per connection`() {
+    fun `the post-clock-sync re-probe is bounded and bound to its originating link`() {
         val service = serviceSource()
         assertTrue(
             "re-probe scheduling must be guarded by the per-link budget",
-            service.contains("managed.retentionReprobes < 1"),
+            service.contains("attempt <= RETENTION_MAX_REPROBES"),
         )
         assertTrue(
             "scheduling a re-probe must consume the budget",
-            service.contains("managed.retentionReprobes += 1"),
+            service.contains("managed.retentionReprobes = attempt"),
+        )
+        // A stale callback must not fire on a successor GATT: the scheduled
+        // probe checks the current connection against the originating GATT.
+        assertTrue(
+            "re-probe must be bound to its originating GATT",
+            service.contains("if (bleManager.connectedGatts[addr] !== gatt) return@postDelayed"),
         )
     }
 }

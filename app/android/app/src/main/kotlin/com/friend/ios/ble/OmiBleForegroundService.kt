@@ -49,10 +49,11 @@ class OmiBleForegroundService : Service() {
         private const val STABILITY_TIMER_MS = 60_000L
         private const val RETENTION_PROBE_TIMEOUT_MS = 10_000L
 
-        /** Dart performs performSyncTime after onDeviceReady; one re-probe after
-         *  this window covers a factory-reset pendant whose first probe failed
-         *  only on RTC validity. Bounded: a single delayed run per failed probe. */
+        /** Dart performs performSyncTime after onDeviceReady; re-probes after
+         *  this window cover a factory-reset pendant whose first probe failed
+         *  only on RTC validity. Bounded chain per link, reset on new GATT. */
         private const val RETENTION_REPROBE_DELAY_MS = 20_000L
+        private const val RETENTION_MAX_REPROBES = 3
         // Base delay for CCCD-timeout recovery. Ordinary out-of-range retries use
         // reconnectBackoff so a fixed 3s loop cannot spin the radio forever.
         private const val RECONNECT_DELAY_MS = 3_000L
@@ -461,16 +462,18 @@ class OmiBleForegroundService : Service() {
                     Log.i(TAG, "Verified runtime offline retention for $address (storage status nonzero)")
                 } else {
                     val payload = result.getOrNull()
+                    val attempt = synchronized(managed) { managed.retentionReprobes + 1 }
                     if (payload != null && BleReconnectBackoff.storageStatusHasDataWithoutClock(payload) &&
-                        managed.retentionReprobes < 1
+                        attempt <= RETENTION_MAX_REPROBES
                     ) {
                         // Mounted storage with an unsynced clock: Dart performs
                         // performSyncTime after onDeviceReady, so the same link
-                        // can legitimately gain a valid RTC. One bounded re-probe
-                        // after that sync window keeps the schedule reachable for
-                        // factory-reset devices without weakening the RTC gate.
-                        managed.retentionReprobes += 1
-                        scheduleRetentionReprobe(address)
+                        // can legitimately gain a valid RTC. Bounded chain of
+                        // re-probes on THIS link covers a factory-reset pendant
+                        // whose connect-time work outruns the first window,
+                        // without weakening the RTC gate.
+                        synchronized(managed) { managed.retentionReprobes = attempt }
+                        scheduleRetentionReprobe(address, gatt, attempt)
                     }
                     Log.w(TAG, "Runtime offline retention unverified for $address; keeping flat retry cadence: " +
                         (result.exceptionOrNull()?.message ?: "invalid or all-zero storage status"))
@@ -503,12 +506,20 @@ class OmiBleForegroundService : Service() {
         }
     }
 
-    /** One re-probe on the CURRENT link after Dart's post-ready clock sync.
-     *  Replaced links are ignored: the guard inside probeRetentionRuntime
-     *  rejects a GATT that no longer matches, and a new link probes fresh. */
-    private fun scheduleRetentionReprobe(address: String) {
+    /** Re-probe on the link that scheduled it. Replaced links are rejected
+     *  (a stale callback must not capture a successor GATT or clear its fresh
+     *  proof), and the chain self-limits: each cycle arms only when the probe
+     *  again sees the mounted-storage-without-clock shape, up to
+     *  RETENTION_MAX_REPROBES per link, reset on each new GATT connection. */
+    private fun scheduleRetentionReprobe(address: String, gatt: android.bluetooth.BluetoothGatt, attempt: Int) {
+        if (attempt > RETENTION_MAX_REPROBES) return
         handler.postDelayed({
-            val managed = managedDevices[address.uppercase()] ?: return@postDelayed
+            val addr = address.uppercase()
+            val managed = managedDevices[addr] ?: return@postDelayed
+            if (bleManager.connectedGatts[addr] !== gatt) return@postDelayed
+            synchronized(managed) {
+                if (managed.retentionReprobes < attempt) return@postDelayed
+            }
             probeRetentionRuntime(address)
         }, RETENTION_REPROBE_DELAY_MS)
     }
