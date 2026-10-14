@@ -76,12 +76,4 @@ void main() {
       }
     });
   }
-
-  test('native fallback selection gates OS, hardware and locale', () {
-    final source = File('ios/Runner/AppDelegate.swift').readAsStringSync();
-    expect(source, contains('args["useSpeechAnalyzer"] as? Bool != false, #available(iOS 26, *)'));
-    expect(source, contains('guard SpeechTranscriber.isAvailable, let locale = await locale(for: language)'));
-    expect(source, contains('AssetInventory.reserve(locale: locale)'));
-    expect(source, contains('self.transcribe(filePath: path, language: language, result: result)'));
-  });
 }

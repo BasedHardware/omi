@@ -8,6 +8,8 @@ import 'package:whisper_flutter_new/whisper_flutter_new.dart';
 
 import 'package:omi/models/stt_result.dart';
 import 'package:omi/utils/audio/wav_bytes.dart';
+import 'package:omi/utils/audio/whisper_pcm.dart';
+import 'package:omi/services/sockets/local_stt_failure.dart';
 import 'package:omi/services/custom_stt_log_service.dart';
 import 'package:omi/services/sockets/on_device_transcript_quality_gate.dart';
 import 'package:omi/services/sockets/pure_polling.dart';
@@ -25,7 +27,7 @@ class OnDeviceWhisperProvider implements ISttProvider {
     if (_isInitialized) return;
     try {
       if (!await File(modelPath).exists()) {
-        throw Exception('Model file not found at $modelPath');
+        throw const LocalSttFailure('model_missing');
       }
 
       final dir = p.dirname(modelPath);
@@ -134,10 +136,11 @@ class OnDeviceWhisperProvider implements ISttProvider {
     double audioOffsetSeconds = 0,
     String? language,
   }) async {
+    final normalized = WhisperPcm.normalize(audioData);
     final segments = <SttSegment>[];
     final text = <String>[];
     var offset = audioOffsetSeconds;
-    for (final chunk in boundedAudioChunks(audioData)) {
+    for (final chunk in boundedAudioChunks(normalized.wav)) {
       final result = await transcribeChunk(chunk, audioOffsetSeconds: offset, language: language);
       if (result != null) {
         segments.addAll(result.segments);
@@ -145,8 +148,8 @@ class OnDeviceWhisperProvider implements ISttProvider {
       }
       offset += audioDurationSeconds(chunk);
     }
-    if (segments.isEmpty && text.isEmpty) return null;
-    return SttTranscriptionResult(segments: segments, rawText: text.join(' '));
+    return SttTranscriptionResult(
+        segments: segments, rawText: text.join(' '), audioEndSeconds: audioOffsetSeconds + normalized.duration);
   }
 
   @visibleForTesting
@@ -207,7 +210,10 @@ class OnDeviceWhisperProvider implements ISttProvider {
       }
     } catch (e) {
       CustomSttLogService.instance.error('OnDeviceWhisper', 'Transcription error: $e');
-      rethrow; // Keep the complete polling buffer for retry on a failed chunk.
+      final message = e.toString();
+      if (message.contains('OMI_STT_PERMANENT_INPUT:')) throw const LocalSttFailure('invalid_audio');
+      if (message.contains('OMI_STT_MODEL_UNAVAILABLE:')) throw const LocalSttFailure('model_invalid');
+      rethrow; // Transient decoder failures retain the complete polling buffer.
     }
   }
 

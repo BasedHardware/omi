@@ -171,6 +171,7 @@ class Wal {
   String device;
   String? deviceModel;
 
+  bool onDeviceOnly;
   WalStatus status;
   WalStorage storage;
 
@@ -336,6 +337,7 @@ class Wal {
     required this.seconds,
     this.sampleRate = 16000,
     this.channel = 1,
+    this.onDeviceOnly = false,
     this.status = WalStatus.inProgress,
     this.storage = WalStorage.mem,
     this.filePath,
@@ -404,6 +406,7 @@ class Wal {
       jobId: json['job_id'],
       uploadedAt: json['uploaded_at'] ?? 0,
       syncedAt: json['synced_at'] ?? 0,
+      onDeviceOnly: json['on_device_only'] == true,
       keptForTranscriptRecovery: json['kept_for_transcript_recovery'] == true,
     );
   }
@@ -441,6 +444,7 @@ class Wal {
       'job_id': jobId,
       'uploaded_at': uploadedAt,
       'synced_at': syncedAt,
+      'on_device_only': onDeviceOnly,
       if (keptForTranscriptRecovery) 'kept_for_transcript_recovery': true,
     };
   }
