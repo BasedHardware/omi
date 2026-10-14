@@ -1,4 +1,4 @@
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 from typing import Optional, List, Dict, Any
 from enum import Enum
 from datetime import datetime, timezone
@@ -13,8 +13,14 @@ def _serialize_datetime(value: datetime) -> str:
 
 
 class ConversationTimestampRange(BaseModel):
-    start: int
-    end: int
+    start: int = Field(ge=0, description="Start timestamp (must be non-negative)")
+    end: int = Field(ge=0, description="End timestamp (must be non-negative)")
+
+    @model_validator(mode="after")
+    def validate_range(self) -> "ConversationTimestampRange":
+        if self.start > self.end:
+            raise ValueError("start timestamp must not exceed end timestamp")
+        return self
 
 
 class ScreenPipeCreateConversation(BaseModel):
@@ -31,11 +37,21 @@ class ExternalIntegrationMemorySource(str, Enum):
 
 
 class ExternalIntegrationMemory(BaseModel):
-    content: str = Field(description="The content of the memory (fact)")
+    content: str = Field(min_length=1, description="The content of the memory (fact)")
     tags: Optional[List[str]] = Field(description="Tags associated with the memory (fact)", default=None)
     source_id: Optional[str] = Field(description="External source object id for provenance", default=None)
     source_url: Optional[str] = Field(description="External source URL for provenance", default=None)
     artifact_ref: Optional[Dict[str, Any]] = Field(description="Source-specific provenance pointer", default=None)
+
+    @field_validator("content", mode="before")
+    @classmethod
+    def _validate_content(cls, value: Any) -> str:
+        if not isinstance(value, str):
+            raise TypeError("content must be a string")
+        value = value.strip()
+        if not value:
+            raise ValueError("content must not be blank")
+        return value
 
 
 class ExternalIntegrationCreateMemory(BaseModel):
@@ -78,21 +94,41 @@ class MemoriesResponse(BaseModel):
 
 
 class ActionItem(BaseModel):
-    description: str = Field(description="The action item to be completed")
+    description: str = Field(min_length=1, description="The action item to be completed")
     completed: bool = False
     exported: bool = False
     export_date: Optional[datetime] = None
     export_platform: Optional[str] = None
 
+    @field_validator("description", mode="before")
+    @classmethod
+    def _validate_description(cls, value: Any) -> str:
+        if not isinstance(value, str):
+            raise TypeError("description must be a string")
+        value = value.strip()
+        if not value:
+            raise ValueError("description must not be blank")
+        return value
+
 
 class Event(BaseModel):
-    title: str = Field(description="The title of the event")
+    title: str = Field(min_length=1, description="The title of the event")
     description: str = Field(description="A brief description of the event", default='')
     start: datetime = Field(description="The start date and time of the event")
-    duration: int = Field(description="The duration of the event in minutes", default=30)
+    duration: int = Field(ge=0, description="The duration of the event in minutes", default=30)
     created: bool = False
 
-    def as_dict_cleaned_dates(self) -> dict[str, Any]:
+    @field_validator("title", mode="before")
+    @classmethod
+    def _validate_title(cls, value: Any) -> str:
+        if not isinstance(value, str):
+            raise TypeError("event title must be a string")
+        value = value.strip()
+        if not value:
+            raise ValueError("event title must not be blank")
+        return value
+
+    def as_dict_cleaned_dates(self) -> Dict[str, Any]:
         event_dict = self.model_dump()
         start_time = event_dict['start']
         if start_time.tzinfo is None:
@@ -113,8 +149,8 @@ class ConversationItemStructured(BaseModel):
 
 class ConversationItemGeolocation(BaseModel):
     google_place_id: Optional[str] = None
-    latitude: float
-    longitude: float
+    latitude: float = Field(ge=-90.0, le=90.0)
+    longitude: float = Field(ge=-180.0, le=180.0)
     address: Optional[str] = None
     location_type: Optional[str] = None
 
@@ -152,9 +188,9 @@ class ConversationsResponse(BaseModel):
 
 class SearchConversationsResponse(BaseModel):
     conversations: List[ConversationItem] = Field(description="List of user conversations")
-    total_pages: int = Field(description="Total number of pages")
-    current_page: int = Field(description="Current page number")
-    per_page: int = Field(description="Number of items per page")
+    total_pages: int = Field(ge=0, description="Total number of pages")
+    current_page: int = Field(ge=0, description="Current page number")
+    per_page: int = Field(ge=1, description="Number of items per page")
 
 
 class TaskItem(BaseModel):
