@@ -57,6 +57,13 @@ class DeviceRunnerError(RuntimeError):
     """Refusal/blocked device-runner operation (exit code 2 at the CLI)."""
 
 
+# Diagnosis marker emitted by mobile_session._default_device_runner when an
+# xcrun timeout coincides with a pending Xcode first launch. Completing that
+# launch needs admin rights, so device_doctor must classify it as
+# operator-action-needed (MOBILE_SESSIONS.md "Doctor"), never agent-remediable.
+XCODE_FIRST_LAUNCH_PENDING_MARKER = "Xcode first launch is pending"
+
+
 @dataclass
 class Step:
     name: str
@@ -280,12 +287,27 @@ def device_doctor(
         try:
             devices = ios.connected()
         except DeviceRunnerError as exc:
-            check(
-                "ios.tooling",
-                "agent-remediable",
-                str(exc),
-                "install Xcode and ensure `xcrun devicectl list devices` works",
-            )
+            detail = str(exc)
+            if XCODE_FIRST_LAUNCH_PENDING_MARKER in detail:
+                # Completing a pending Xcode first launch requires admin
+                # rights (sudo runFirstLaunch + license accept). That is an
+                # operator action per MOBILE_SESSIONS.md ("Doctor"); only the
+                # unprivileged parts (retry, daemon restart) are agent work.
+                check(
+                    "ios.tooling",
+                    "operator-action-needed",
+                    detail,
+                    "complete the pending Xcode first launch with admin rights once: "
+                    "`sudo xcodebuild -runFirstLaunch && sudo xcodebuild -license accept` "
+                    "(or open Xcode.app and finish the prompt), then rerun `mobile-session device doctor`",
+                )
+            else:
+                check(
+                    "ios.tooling",
+                    "agent-remediable",
+                    detail,
+                    "install Xcode and ensure `xcrun devicectl list devices` works",
+                )
         else:
             if devices:
                 for device in devices:

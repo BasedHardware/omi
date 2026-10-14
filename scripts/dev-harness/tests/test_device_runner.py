@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import sys
 from pathlib import Path
+from typing import Sequence
 
 import pytest
 
@@ -167,6 +168,27 @@ class TestDoctor:
         ios = next(c for c in report["checks"] if c["check"] == "ios.tooling")
         assert ios["status"] == "agent-remediable"
         assert "xcrun" in ios["detail"] or "devicectl" in ios["detail"]
+
+    def test_pending_xcode_first_launch_is_operator_action_not_agent_remediable(self, env: dict) -> None:
+        """Privileged install/license work is an operator action per contract.
+
+        The CLI default runner diagnoses a pending Xcode first launch inside an
+        xcrun timeout with the shared marker; device_doctor must classify that
+        as operator-action-needed, not the blanket agent-remediable remedy.
+        """
+
+        def hung(_command: Sequence[str]) -> tuple[int, str]:
+            raise dr.DeviceRunnerError(
+                "devicectl list devices timed out after 180s. "
+                f"{dr.XCODE_FIRST_LAUNCH_PENDING_MARKER}; completing it requires"
+                " admin rights (operator action)."
+            )
+
+        report = dr.device_doctor(REPO_ROOT, ios=dr.IosTooling(hung), env=env)
+        ios = report["checks"][0]
+        assert ios["check"] == "ios.tooling"
+        assert ios["status"] == "operator-action-needed"
+        assert "sudo xcodebuild -runFirstLaunch" in ios["remedy"]
 
 
 class TestRun:

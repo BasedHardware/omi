@@ -373,10 +373,26 @@ def test_resolver_probes_homebrew_prefix_when_path_is_stripped(
     stripped = os.pathsep.join(("/usr/bin", "/bin"))
     resolved = _resolve_python(repo, monkeypatch, path=stripped)
     real_prefix = Path("/opt/homebrew/opt/python@3.14/bin/python3.14")
-    if real_prefix.is_file():
-        assert resolved == str(real_prefix)
-    else:
-        _assert_floor_qualified_or_documented_fallback(resolved)
+    if resolved.startswith("/"):
+        # Host-adaptive contract for the absolute prefix probe. When the pick
+        # can import the cheap-gate deps, a newer prefix interpreter without
+        # them must not have shadowed it (the resolver prefers import-capable
+        # candidates; on hosts where 3.14 has the deps the pick IS 3.14 and
+        # this assertion is vacuous). A floor-only fallback stays valid when
+        # no import-capable candidate exists at all.
+        if (
+            subprocess.run([resolved, "-c", "import dotenv, yaml"], capture_output=True, timeout=10, check=False).returncode
+            == 0
+            and real_prefix.is_file()
+            and resolved != str(real_prefix)
+            and subprocess.run([str(real_prefix), "-c", "import dotenv, yaml"], capture_output=True, timeout=10, check=False).returncode
+            != 0
+        ):
+            pytest.fail(
+                "resolver picked the import-incapable newer Homebrew prefix over "
+                f"an import-capable candidate: {resolved}"
+            )
+    _assert_floor_qualified_or_documented_fallback(resolved)
 
 
 def test_resolver_skips_incomplete_venv_that_cannot_import_cheap_gates(

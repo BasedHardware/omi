@@ -429,6 +429,60 @@ def test_default_device_runner_xcrun_timeout_diagnoses_xcode_first_launch(monkey
     assert "Xcode first launch is pending" in out
 
 
+def test_default_device_runner_xcrun_timeout_keeps_generic_diagnosis_when_first_launch_complete(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """First launch already complete: no admin remedy, just the tooling-hang step.
+
+    The diagnosis must keep the generic retry/daemon guidance (PHYSICAL_DEVICES
+    promises the smallest applicable step) and must not send the operator to
+    redo an already-finished first launch.
+    """
+
+    class Probe:
+        returncode = 0  # first launch complete
+
+    def hung(command: Sequence[str], **_kwargs: object) -> object:
+        if command[0] == "xcrun":
+            raise subprocess.TimeoutExpired(cmd=list(command), timeout=180)
+        if command[0] == "xcodebuild":
+            return Probe()
+        raise AssertionError(f"unexpected command: {command}")
+
+    monkeypatch.setattr(ms.subprocess, "run", hung)
+    code, out = ms._default_device_runner(["xcrun", "devicectl", "list", "devices"])
+    assert code == 124
+    assert "xcrun timed out" in out
+    assert "Xcode first launch is complete" in out
+    assert "runFirstLaunch" not in out
+
+
+def test_default_device_runner_xcrun_timeout_marks_pending_first_launch_as_operator_action(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A pending first launch needs admin rights, so the diagnosis is explicit
+    operator-action guidance (the doctor classifies on the pending marker)."""
+
+    class Probe:
+        returncode = 1  # first launch pending
+
+    def hung(command: Sequence[str], **_kwargs: object) -> object:
+        if command[0] == "xcrun":
+            raise subprocess.TimeoutExpired(cmd=list(command), timeout=180)
+        if command[0] == "xcodebuild":
+            return Probe()
+        raise AssertionError(f"unexpected command: {command}")
+
+    monkeypatch.setattr(ms.subprocess, "run", hung)
+    code, out = ms._default_device_runner(["xcrun", "devicectl", "list", "devices"])
+    assert code == 124
+    # The literal marker is the shared contract: device_doctor keys its
+    # operator-action-needed classification on this exact text.
+    assert "Xcode first launch is pending" in out
+    assert "admin" in out
+    assert "operator action" in out
+
+
 def _android_sdk(tmp_path: Path, *, emulator: bool = True, sdkmanager: bool = True, image: bool = False) -> Path:
     home = tmp_path / "android-sdk"
     if emulator:

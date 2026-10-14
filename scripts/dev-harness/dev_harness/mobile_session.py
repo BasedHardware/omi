@@ -1112,12 +1112,30 @@ def _default_device_runner(command: Sequence[str], timeout: float = 180.0) -> tu
                 first_launch = "pending" if probe.returncode != 0 else "complete"
             except (OSError, subprocess.TimeoutExpired):
                 first_launch = "unknown"
-            diagnosis = (
-                f"{tool} timed out after {timeout:g}s; Xcode first launch is {first_launch}. "
-                "If pending, complete it once with admin rights: "
-                "`sudo xcodebuild -runFirstLaunch && sudo xcodebuild -license accept` "
-                "(or open Xcode.app and finish the prompt)."
-            )
+            if first_launch == "pending":
+                # Keep the marker in sync with
+                # device_runner.XCODE_FIRST_LAUNCH_PENDING_MARKER:
+                # device_doctor classifies this diagnosis as an operator action.
+                diagnosis += (
+                    " Xcode first launch is pending; completing it requires admin"
+                    " rights (operator action):"
+                    " `sudo xcodebuild -runFirstLaunch && sudo xcodebuild -license accept`"
+                    " (or open Xcode.app and finish the prompt)."
+                )
+            elif first_launch == "complete":
+                diagnosis += (
+                    " Xcode first launch is complete; the hang is in the Xcode"
+                    " tooling stack (CoreDevice/devicectl) — retry, and if it"
+                    " persists restart the tooling daemons or the host."
+                )
+            else:
+                diagnosis += (
+                    " Xcode first-launch state could not be probed"
+                    " (`xcodebuild -checkFirstLaunchStatus` failed); if first"
+                    " launch is actually pending, completing it requires admin"
+                    " rights (operator action):"
+                    " `sudo xcodebuild -runFirstLaunch && sudo xcodebuild -license accept`."
+                )
         return 124, diagnosis
     return completed.returncode, (completed.stdout or "") + (completed.stderr or "")
 
