@@ -39,10 +39,45 @@ typedef CreateActionItemRequest = Future<ActionItemWithMetadata?> Function({
   String? conversationId,
   bool completed,
 });
-typedef UpdateDueDateRequest = Future<ActionItemWithMetadata?> Function(String id, {DateTime? dueAt, bool clearDueAt});
+typedef UpdateDueDateRequest = Future<ActionItemWithMetadata?> Function(
+  String id, {
+  DateTime? dueAt,
+  bool clearDueAt,
+});
 
-typedef UpdateActionItemRequest = Future<ActionItemWithMetadata?> Function(String id,
-    {String? description, bool? completed, DateTime? dueAt});
+typedef UpdateActionItemRequest = Future<ActionItemWithMetadata?> Function(
+  String id, {
+  String? description,
+  bool? completed,
+  DateTime? dueAt,
+});
+
+typedef BatchUpdateActionItemsRequest = Future<bool> Function(List<Map<String, dynamic>> items);
+
+/// An optimistic create that was included in a multi-selection bulk delete
+/// while its server request was still in flight. The bulk endpoint cannot
+/// delete a temp id, so the row is hidden and tombstoned immediately, kept out
+/// of the bulk request, and the deletion completes with a single follow-up
+/// delete of the confirmed server id once the create settles. A failed create
+/// or a failed bulk request dissolves the capture and restores the row.
+class _CapturedBulkDeleteCreate {
+  _CapturedBulkDeleteCreate({
+    required this.tempId,
+    required this.index,
+    required this.homeIndex,
+  });
+
+  final String tempId;
+
+  /// Position snapshots so a failed bulk request can restore the row where
+  /// the user expected it.
+  final int index;
+  final int homeIndex;
+
+  /// Set when the create settles; the follow-up delete targets this id.
+  String? serverId;
+  ActionItemWithMetadata? settledRow;
+}
 
 class ActionItemsProvider extends ChangeNotifier {
   ActionItemsProvider({
@@ -53,12 +88,14 @@ class ActionItemsProvider extends ChangeNotifier {
     CreateActionItemRequest? createActionItemRequest,
     UpdateDueDateRequest? updateDueDateRequest,
     api.ActionItemsApi? actionItemsApi,
+    BatchUpdateActionItemsRequest? batchUpdateActionItemsRequest,
   })  : _getActionItems = getActionItems ?? api.tryGetActionItems,
         _deleteActionItemRequest = deleteActionItemRequest ?? api.deleteActionItem,
         _updateActionItemRequest = updateActionItemRequest ?? api.updateActionItem,
         _bulkDeleteActionItemsRequest = bulkDeleteActionItemsRequest ?? api.bulkDeleteActionItems,
         _createActionItemRequest = createActionItemRequest ?? api.createActionItem,
         _updateDueDateRequest = updateDueDateRequest ?? api.updateActionItem,
+        _batchUpdateActionItemsRequest = batchUpdateActionItemsRequest ?? api.batchUpdateActionItems,
         _actionItemsApi = actionItemsApi;
 
   final ActionItemsFetcher _getActionItems;
@@ -67,6 +104,7 @@ class ActionItemsProvider extends ChangeNotifier {
   final BulkDeleteActionItemsRequest _bulkDeleteActionItemsRequest;
   final CreateActionItemRequest _createActionItemRequest;
   final UpdateDueDateRequest _updateDueDateRequest;
+  final BatchUpdateActionItemsRequest _batchUpdateActionItemsRequest;
   final api.ActionItemsApi? _actionItemsApi;
   ApiViewState<List<ActionItemWithMetadata>> _listViewState = const ApiViewState(phase: ApiViewPhase.data);
   Future<void>? _initialLoad;
@@ -130,6 +168,13 @@ class ActionItemsProvider extends ChangeNotifier {
   // of the pagination offset until the server confirms them, so loadMore never
   // skips a server row.
   final Set<String> _preservedCreateIds = {};
+  // Local sort-order/indent-level changes that the server has not confirmed
+  // yet. While an entry is uncommitted (pendingThreats == null) every wholesale
+  // replacement re-applies it: any fetch response received before the batch
+  // write lands can predate it. Once the write commits, the entry survives only
+  // the fetches that were in flight at commit time (their reads may predate
+  // the write); later fetches see the layout server-side and win.
+  final Map<String, ({int? sortOrder, int? indentLevel, Set<int>? pendingThreats})> _uncommittedLayout = {};
   int _wholesaleListFetchOrdinal = 0;
   final Set<int> _wholesaleFetchesInFlight = {};
 
@@ -141,10 +186,12 @@ class ActionItemsProvider extends ChangeNotifier {
       return _actionItems.length;
     }
     return _actionItems
-        .where((item) =>
-            !_pendingCreates.containsKey(item.id) &&
-            !_fetchShadowedCreates.containsKey(item.id) &&
-            !_preservedCreateIds.contains(item.id))
+        .where(
+          (item) =>
+              !_pendingCreates.containsKey(item.id) &&
+              !_fetchShadowedCreates.containsKey(item.id) &&
+              !_preservedCreateIds.contains(item.id),
+        )
         .length;
   }
 
@@ -186,11 +233,24 @@ class ActionItemsProvider extends ChangeNotifier {
         for (final entry in _pendingCreates.entries)
           if (!fetchedIds.contains(entry.key) && !hidden.contains(entry.key)) entry.value,
       ];
-      _fetchShadowedCreates.updateAll((_, shadow) => (shadow.$1, shadow.$2.intersection(stillThreatening)));
+      _fetchShadowedCreates.updateAll(
+        (_, shadow) => (shadow.$1, shadow.$2.intersection(stillThreatening)),
+      );
       _fetchShadowedCreates.removeWhere((_, shadow) => shadow.$2.isEmpty);
       merged = [...preserved, ...fetched];
     }
-    return _withFetchShadowedEdits(merged, fetchOrdinal: fetchOrdinal, stillThreatening: stillThreatening);
+    // Layout reapply must run after edit shadows: a shadow row (settled
+    // completion/description edit) may itself carry a pre-layout-write
+    // sortOrder/indentLevel, and the user's live layout wins over both.
+    return _withUncommittedLayout(
+      _withFetchShadowedEdits(
+        merged,
+        fetchOrdinal: fetchOrdinal,
+        stillThreatening: stillThreatening,
+      ),
+      fetchOrdinal: fetchOrdinal,
+      stillThreatening: stillThreatening,
+    );
   }
 
   /// Re-applies settled edits over [rows]. A wholesale replacement whose fetch
@@ -211,7 +271,9 @@ class ActionItemsProvider extends ChangeNotifier {
         reapplied[i] = shadow.$1;
       }
     }
-    _fetchShadowedEdits.updateAll((_, shadow) => (shadow.$1, shadow.$2.intersection(stillThreatening)));
+    _fetchShadowedEdits.updateAll(
+      (_, shadow) => (shadow.$1, shadow.$2.intersection(stillThreatening)),
+    );
     _fetchShadowedEdits.removeWhere((_, shadow) => shadow.$2.isEmpty);
     return reapplied;
   }
@@ -225,6 +287,94 @@ class ActionItemsProvider extends ChangeNotifier {
     _fetchShadowedEdits[row.id] = (row, {..._wholesaleFetchesInFlight});
   }
 
+  /// Re-applies not-yet-confirmed sort-order/indent-level changes over [rows],
+  /// after edit shadows. Drag-reorder and indent mutations update the visible
+  /// rows immediately but only reach the server after the debounce; a fetch
+  /// response predating the write holds the old layout and would snap the
+  /// hierarchy back. Runs after [_withFetchShadowedEdits] because a shadow row
+  /// (settled completion/description edit) may itself carry a pre-layout-write
+  /// sortOrder/indentLevel; the user's live layout wins over both.
+  List<ActionItemWithMetadata> _withUncommittedLayout(
+    List<ActionItemWithMetadata> rows, {
+    required int fetchOrdinal,
+    required Set<int> stillThreatening,
+  }) {
+    if (_uncommittedLayout.isEmpty) return rows;
+    final reapplied = List<ActionItemWithMetadata>.of(rows);
+    for (var i = 0; i < reapplied.length; i++) {
+      final row = reapplied[i];
+      final entry = _uncommittedLayout[row.id];
+      if (entry == null) continue;
+      // An uncommitted entry (null threats) applies to every replacement: any
+      // fetch response received before the batch write lands can predate it.
+      // A settled entry applies only to the fetches in flight at commit time.
+      if (entry.pendingThreats != null && !entry.pendingThreats!.contains(fetchOrdinal)) {
+        continue;
+      }
+      if (row.sortOrder == entry.sortOrder && row.indentLevel == entry.indentLevel) {
+        continue;
+      }
+      reapplied[i] = row.copyWith(
+        sortOrder: entry.sortOrder,
+        indentLevel: entry.indentLevel,
+      );
+    }
+    // This replacement has applied, and any ordinal no longer in flight either
+    // applied or aborted without replacing the list; neither can revert the
+    // layout anymore. Fetches still in flight remain threats.
+    _uncommittedLayout.updateAll((id, entry) {
+      final threats = entry.pendingThreats;
+      if (threats == null) return entry;
+      final remaining = threats.intersection(stillThreatening);
+      if (remaining.length == threats.length) return entry;
+      return (
+        sortOrder: entry.sortOrder,
+        indentLevel: entry.indentLevel,
+        pendingThreats: remaining,
+      );
+    });
+    _uncommittedLayout.removeWhere(
+      (_, entry) => entry.pendingThreats != null && entry.pendingThreats!.isEmpty,
+    );
+    return reapplied;
+  }
+
+  /// Marks [id]'s layout fields as unconfirmed so wholesale fetch replacements
+  /// predating the debounced batch write cannot revert them. Values already in
+  /// the visible rows carry over unchanged (null keeps them via copyWith).
+  void _stageUncommittedLayout(String id, {int? sortOrder, int? indentLevel}) {
+    final existing = _uncommittedLayout[id];
+    _uncommittedLayout[id] = (
+      sortOrder: sortOrder ?? existing?.sortOrder,
+      indentLevel: indentLevel ?? existing?.indentLevel,
+      pendingThreats: null,
+    );
+  }
+
+  /// The batch write for [ids] settled. Success: later fetches see the layout
+  /// server-side, so the entries survive only the fetches still in flight
+  /// (their reads may predate the write) and then retire. Failure: the server
+  /// kept the old layout, but the local rows already show what the user
+  /// arranged — retire without re-applying so a later refresh restores truth.
+  void _settleUncommittedLayout(
+    Iterable<String> ids, {
+    required bool committed,
+  }) {
+    for (final id in ids) {
+      final entry = _uncommittedLayout[id];
+      if (entry == null) continue;
+      if (!committed || _wholesaleFetchesInFlight.isEmpty) {
+        _uncommittedLayout.remove(id);
+      } else {
+        _uncommittedLayout[id] = (
+          sortOrder: entry.sortOrder,
+          indentLevel: entry.indentLevel,
+          pendingThreats: {..._wholesaleFetchesInFlight},
+        );
+      }
+    }
+  }
+
   /// Drops [ordinal] from every shadow's threat set. An aborted wholesale
   /// fetch (e.g. a Home preview that lost the navigation race) never runs its
   /// `_withPendingCreates` replacement, so its ordinal must be pruned by the
@@ -232,12 +382,31 @@ class ActionItemsProvider extends ChangeNotifier {
   /// server-confirmed row from `_serverBackedRowCount` forever.
   void _dropFetchShadowOrdinal(int ordinal) {
     if (_fetchShadowedCreates.isNotEmpty) {
-      _fetchShadowedCreates.updateAll((_, shadow) => (shadow.$1, shadow.$2.difference({ordinal})));
+      _fetchShadowedCreates.updateAll(
+        (_, shadow) => (shadow.$1, shadow.$2.difference({ordinal})),
+      );
       _fetchShadowedCreates.removeWhere((_, shadow) => shadow.$2.isEmpty);
     }
     if (_fetchShadowedEdits.isNotEmpty) {
-      _fetchShadowedEdits.updateAll((_, shadow) => (shadow.$1, shadow.$2.difference({ordinal})));
+      _fetchShadowedEdits.updateAll(
+        (_, shadow) => (shadow.$1, shadow.$2.difference({ordinal})),
+      );
       _fetchShadowedEdits.removeWhere((_, shadow) => shadow.$2.isEmpty);
+    }
+    if (_uncommittedLayout.isNotEmpty) {
+      _uncommittedLayout.updateAll((_, entry) {
+        final threats = entry.pendingThreats;
+        if (threats == null) return entry;
+        final remaining = threats.difference({ordinal});
+        return (
+          sortOrder: entry.sortOrder,
+          indentLevel: entry.indentLevel,
+          pendingThreats: remaining,
+        );
+      });
+      _uncommittedLayout.removeWhere(
+        (_, entry) => entry.pendingThreats != null && entry.pendingThreats!.isEmpty,
+      );
     }
   }
 
@@ -250,6 +419,12 @@ class ActionItemsProvider extends ChangeNotifier {
   // id, so undo/commit resolve through this alias to reach the transferred
   // staged delete.
   final Map<String, String> _stagedDeleteAliasIds = {};
+
+  // Optimistic creates captured by an in-flight bulk delete while still on
+  // their temp id. The bulk endpoint cannot delete a temp id, so the captured
+  // rows are excluded from the bulk request and deleted by follow-up single
+  // deletes of their confirmed server ids once the creates settle.
+  final Map<String, _CapturedBulkDeleteCreate> _bulkDeleteCaptures = {};
 
   // Search state — lexical client-side filter over already-loaded items.
   // Backend vector search will replace the filter implementation behind
@@ -282,7 +457,10 @@ class ActionItemsProvider extends ChangeNotifier {
 
   /// Home preview: due-window rows plus any first-page matches, so an empty
   /// due-window response cannot hide a task already on the global first page.
-  List<ActionItemWithMetadata> todayPreviewTasks({DateTime? now, int limit = 3}) {
+  List<ActionItemWithMetadata> todayPreviewTasks({
+    DateTime? now,
+    int limit = 3,
+  }) {
     final clock = now ?? DateTime.now();
     final byId = <String, ActionItemWithMetadata>{};
     for (final item in filterTodayTasks(_actionItems, now: clock)) {
@@ -296,7 +474,10 @@ class ActionItemsProvider extends ChangeNotifier {
     return byId.values.take(limit).toList();
   }
 
-  static List<ActionItemWithMetadata> filterTodayTasks(List<ActionItemWithMetadata> items, {required DateTime now}) {
+  static List<ActionItemWithMetadata> filterTodayTasks(
+    List<ActionItemWithMetadata> items, {
+    required DateTime now,
+  }) {
     final startOfTomorrow = DateTime(now.year, now.month, now.day + 1);
     final sevenDaysAgo = now.subtract(const Duration(days: 7));
     return items.where((item) {
@@ -394,7 +575,14 @@ class ActionItemsProvider extends ChangeNotifier {
   /// or authoritative Siri reconciliation. Freshness has its own cooldown.
   Future<void> ensureHomeWidgetPreviewLoaded() {
     if (_initialLoad != null) return _initialLoad!;
-    if (_initialLoadCompleted) return Future.value();
+    if (_initialLoadCompleted) {
+      // Once the Tasks screen has loaded, the preview fetch can no longer
+      // apply its replacement (it yields to screen initialization), so a
+      // resume-time freshness call must not dead-end here: refresh the
+      // authoritative list under the shared 30 s cooldown instead. The
+      // publisher listens to this provider, so the widget follows.
+      return refreshActionItems();
+    }
     if (_homeWidgetLoad != null) return _homeWidgetLoad!;
     final refreshedAt = _homeWidgetRefreshedAt;
     if (refreshedAt != null && DateTime.now().difference(refreshedAt) < _refreshCooldown) {
@@ -416,7 +604,9 @@ class ActionItemsProvider extends ChangeNotifier {
     try {
       final response = await _fetchActionItemsPage(limit: 100, offset: 0);
       // Navigation wins if Tasks was visited while this optional read was pending.
-      if (generation != _sessionGeneration || _initialLoad != null || _initialLoadCompleted) return;
+      if (generation != _sessionGeneration || _initialLoad != null || _initialLoadCompleted) {
+        return;
+      }
       if (response == null) return;
       _actionItems = _withPendingCreates(
         response.actionItems.where((item) => !_pendingDeletionIds.contains(item.id)).take(100).toList(),
@@ -449,9 +639,11 @@ class ActionItemsProvider extends ChangeNotifier {
     if (existing != null) return existing;
     if (_homeDayLoaded) return Future.value();
 
-    final load = _fetchHomeTodayTasks(now: now ?? DateTime.now()).whenComplete(() {
-      _homeTodayLoad = null;
-    });
+    final load = _fetchHomeTodayTasks(now: now ?? DateTime.now()).whenComplete(
+      () {
+        _homeTodayLoad = null;
+      },
+    );
     _homeTodayLoad = load;
     return load;
   }
@@ -590,8 +782,11 @@ class ActionItemsProvider extends ChangeNotifier {
       );
       if (response != null && generation == _sessionGeneration) {
         _loadedPageSetComplete = decodedPageIsComplete && !response.truncated && _pendingDeletionIds.isEmpty;
-        await _applyFetchedActionItems(response,
-            decodedPageIsComplete: decodedPageIsComplete, fetchOrdinal: fetchOrdinal);
+        await _applyFetchedActionItems(
+          response,
+          decodedPageIsComplete: decodedPageIsComplete,
+          fetchOrdinal: fetchOrdinal,
+        );
         if (generation != _sessionGeneration) return false;
         await _migrateCategoryOrderFromPrefs();
         if (generation != _sessionGeneration) return false;
@@ -626,8 +821,13 @@ class ActionItemsProvider extends ChangeNotifier {
   void _projectTypedList(ApiResult<ActionItemsResponse> result) {
     _listViewState = presentApiResult(
       switch (result) {
-        ApiSuccess(:final data, :final rejectedRows) => ApiSuccess(data.actionItems, rejectedRows: rejectedRows),
-        ApiFailure(:final problem) => ApiFailure<List<ActionItemWithMetadata>>(problem),
+        ApiSuccess(:final data, :final rejectedRows) => ApiSuccess(
+            data.actionItems,
+            rejectedRows: rejectedRows,
+          ),
+        ApiFailure(:final problem) => ApiFailure<List<ActionItemWithMetadata>>(
+            problem,
+          ),
       },
       previous: _actionItems.isNotEmpty ? _actionItems : null,
       isEmpty: (rows) => rows.isEmpty,
@@ -663,7 +863,9 @@ class ActionItemsProvider extends ChangeNotifier {
         _includeCompleted &&
         decodedPageIsComplete &&
         !response.truncated) {
-      _pendingDeletionIds.removeWhere((id) => !_stagedDeletes.containsKey(id) && !serverIds.contains(id));
+      _pendingDeletionIds.removeWhere(
+        (id) => !_stagedDeletes.containsKey(id) && !serverIds.contains(id),
+      );
     }
     _hasMore = response.hasMore;
     // The Siri/Spotlight mirror never sees optimistic temp rows: their final
@@ -675,7 +877,10 @@ class ActionItemsProvider extends ChangeNotifier {
     // A rejected wire row or a staged delete is still present on the server.
     // Neither can be interpreted as an authoritative absence in Spotlight.
     if (!_hasMore && !hasActiveFilter && _loadedPageSetComplete && !response.truncated && _pendingDeletionIds.isEmpty) {
-      SiriIntegration.current.queueReconcileTasks(indexableRows, includeCompleted: _includeCompleted);
+      SiriIntegration.current.queueReconcileTasks(
+        indexableRows,
+        includeCompleted: _includeCompleted,
+      );
     } else {
       SiriIntegration.current.queueUpsertTasks(indexableRows);
     }
@@ -715,12 +920,16 @@ class ActionItemsProvider extends ChangeNotifier {
         // _withPendingCreates retirement. Without this, a create ordered beyond
         // the initial page stays excluded from the offset forever and can stall
         // pagination on already-visible rows.
-        _preservedCreateIds.removeWhere(response.actionItems.map((item) => item.id).toSet().contains);
+        _preservedCreateIds.removeWhere(
+          response.actionItems.map((item) => item.id).toSet().contains,
+        );
         // An optimistic delete shortens the visible list before the server removes the row.
         // Its length can therefore request an overlapping page; keep each server ID once.
         final seenIds = _actionItems.map((item) => item.id).toSet();
         final filtered = response.actionItems
-            .where((item) => !_pendingDeletionIds.contains(item.id) && seenIds.add(item.id))
+            .where(
+              (item) => !_pendingDeletionIds.contains(item.id) && seenIds.add(item.id),
+            )
             .toList();
         _actionItems.addAll(filtered);
         _hasMore = response.hasMore;
@@ -729,7 +938,10 @@ class ActionItemsProvider extends ChangeNotifier {
             _loadedPageSetComplete &&
             !response.truncated &&
             _pendingDeletionIds.isEmpty) {
-          SiriIntegration.current.queueReconcileTasks(_actionItems, includeCompleted: _includeCompleted);
+          SiriIntegration.current.queueReconcileTasks(
+            _actionItems,
+            includeCompleted: _includeCompleted,
+          );
         } else {
           SiriIntegration.current.queueUpsertTasks(filtered);
         }
@@ -749,7 +961,10 @@ class ActionItemsProvider extends ChangeNotifier {
   }
 
   /// Returns whether the change reached the server; the caller decides what to tell the user.
-  Future<bool> updateActionItemState(ActionItemWithMetadata item, bool newState) async {
+  Future<bool> updateActionItemState(
+    ActionItemWithMetadata item,
+    bool newState,
+  ) async {
     final generation = _sessionGeneration;
     final attempt = ProductTelemetry.instance.start(
       ProductJourney.taskMutation,
@@ -762,7 +977,10 @@ class ActionItemsProvider extends ChangeNotifier {
         notifyListeners();
       }
 
-      final success = await _updateActionItemRequest(item.id, completed: newState);
+      final success = await _updateActionItemRequest(
+        item.id,
+        completed: newState,
+      );
       if (generation != _sessionGeneration) {
         attempt.complete(ProductOutcome.cancelled);
         return false;
@@ -772,12 +990,25 @@ class ActionItemsProvider extends ChangeNotifier {
         _findAndUpdateItemState(item.id, !newState);
         notifyListeners();
         Logger.debug('Failed to update action item state on server');
-        attempt.complete(ProductOutcome.failure, failure: ProductFailure.server);
+        attempt.complete(
+          ProductOutcome.failure,
+          failure: ProductFailure.server,
+        );
         return false;
       }
       // The mutation is committed server-side; wholesale fetches still in
       // flight predate it and would revert this row in their replacement.
       _registerFetchShadowedEdit(success);
+      // A wholesale fetch that already applied while this mutation was
+      // awaiting its response retired its ordinal before the shadow could be
+      // registered, so the visible row may still hold the pre-mutation state.
+      // Splice the confirmed server row back in — the same settle behavior
+      // the description and due-date edits already have.
+      final settledIndex = _actionItems.indexWhere((i) => i.id == success.id);
+      if (settledIndex != -1) {
+        _actionItems[settledIndex] = success;
+        notifyListeners();
+      }
       SiriIntegration.current.queueUpsertTasks([success]);
       // Cancel notification if the action item is marked as completed
       if (newState == true) {
@@ -812,7 +1043,10 @@ class ActionItemsProvider extends ChangeNotifier {
   }
 
   /// Returns whether the change reached the server; the caller decides what to tell the user.
-  Future<bool> updateActionItemDescription(ActionItemWithMetadata item, String newDescription) async {
+  Future<bool> updateActionItemDescription(
+    ActionItemWithMetadata item,
+    String newDescription,
+  ) async {
     final generation = _sessionGeneration;
     try {
       final itemInList = _findAndUpdateItemDescription(item.id, newDescription);
@@ -820,7 +1054,10 @@ class ActionItemsProvider extends ChangeNotifier {
         notifyListeners();
       }
 
-      final updatedItem = await _updateActionItemRequest(item.id, description: newDescription);
+      final updatedItem = await _updateActionItemRequest(
+        item.id,
+        description: newDescription,
+      );
       if (generation != _sessionGeneration) return false;
 
       if (updatedItem == null) {
@@ -851,7 +1088,10 @@ class ActionItemsProvider extends ChangeNotifier {
   }
 
   /// Returns whether the change reached the server; the caller decides what to tell the user.
-  Future<bool> updateActionItemDueDate(ActionItemWithMetadata item, DateTime? dueDate) async {
+  Future<bool> updateActionItemDueDate(
+    ActionItemWithMetadata item,
+    DateTime? dueDate,
+  ) async {
     final generation = _sessionGeneration;
     // Optimistic update: update locally first for instant UI feedback
     final index = _actionItems.indexWhere((i) => i.id == item.id);
@@ -878,7 +1118,11 @@ class ActionItemsProvider extends ChangeNotifier {
     }
 
     try {
-      final updatedItem = await _updateDueDateRequest(item.id, dueAt: dueDate, clearDueAt: dueDate == null);
+      final updatedItem = await _updateDueDateRequest(
+        item.id,
+        dueAt: dueDate,
+        clearDueAt: dueDate == null,
+      );
       if (generation != _sessionGeneration) return false;
 
       if (updatedItem != null) {
@@ -946,7 +1190,10 @@ class ActionItemsProvider extends ChangeNotifier {
     int successCount = 0;
     for (final item in itemsToClear) {
       try {
-        final updatedItem = await _updateDueDateRequest(item.id, clearDueAt: true);
+        final updatedItem = await _updateDueDateRequest(
+          item.id,
+          clearDueAt: true,
+        );
         if (generation != _sessionGeneration) return successCount;
 
         final index = _actionItems.indexWhere((i) => i.id == item.id);
@@ -991,7 +1238,9 @@ class ActionItemsProvider extends ChangeNotifier {
     _pendingDeletionIds.add(item.id);
 
     // Remove immediately to prevent dismissed Dismissible from being rebuilt
-    final index = _actionItems.indexWhere((actionItem) => actionItem.id == item.id);
+    final index = _actionItems.indexWhere(
+      (actionItem) => actionItem.id == item.id,
+    );
     _actionItems.removeWhere((actionItem) => actionItem.id == item.id);
     notifyListeners();
 
@@ -1046,13 +1295,21 @@ class ActionItemsProvider extends ChangeNotifier {
     if (staged == null) return false;
     _pendingDeletionIds.remove(resolvedId);
     if (!_actionItems.any((i) => i.id == resolvedId)) {
-      _actionItems.insert((staged.index == -1 ? 0 : staged.index).clamp(0, _actionItems.length), staged.item);
+      _actionItems.insert(
+        (staged.index == -1 ? 0 : staged.index).clamp(0, _actionItems.length),
+        staged.item,
+      );
     }
     if (staged.homeIndex != -1 && !_homeDayItems.any((i) => i.id == resolvedId)) {
-      _homeDayItems.insert(staged.homeIndex.clamp(0, _homeDayItems.length), staged.item);
+      _homeDayItems.insert(
+        staged.homeIndex.clamp(0, _homeDayItems.length),
+        staged.item,
+      );
     }
     notifyListeners();
-    SiriIntegration.current.queueUpsertTasks([staged.item], restoreDeleted: true);
+    SiriIntegration.current.queueUpsertTasks([
+      staged.item,
+    ], restoreDeleted: true);
     return true;
   }
 
@@ -1076,7 +1333,10 @@ class ActionItemsProvider extends ChangeNotifier {
       _pendingDeletionIds.remove(resolvedId);
       _restoreDeletedItem(staged.item, staged.index);
       if (staged.homeIndex != -1 && !_homeDayItems.any((i) => i.id == resolvedId)) {
-        _homeDayItems.insert(staged.homeIndex.clamp(0, _homeDayItems.length), staged.item);
+        _homeDayItems.insert(
+          staged.homeIndex.clamp(0, _homeDayItems.length),
+          staged.item,
+        );
         notifyListeners();
       }
     } else {
@@ -1089,7 +1349,9 @@ class ActionItemsProvider extends ChangeNotifier {
   bool isDeleteStaged(String id) => _stagedDeletes.containsKey(id);
 
   void _restoreDeletedItem(ActionItemWithMetadata item, int index) {
-    if (index == -1 || _actionItems.any((actionItem) => actionItem.id == item.id)) return;
+    if (index == -1 || _actionItems.any((actionItem) => actionItem.id == item.id)) {
+      return;
+    }
     _actionItems.insert(index.clamp(0, _actionItems.length), item);
     notifyListeners();
   }
@@ -1131,6 +1393,24 @@ class ActionItemsProvider extends ChangeNotifier {
 
       if (newItem != null) {
         _settlePendingCreate(optimisticItem.id, newItem);
+        // A bulk delete captured this create while it was still a temp row.
+        // The bulk endpoint cannot delete a temp id, so the capture was kept
+        // out of the bulk request; transfer the deletion intent to the
+        // confirmed server id and complete it with a single follow-up delete.
+        // Without this the code below would reinsert the confirmed row — the
+        // task reappears even though the user bulk-deleted it.
+        final capture = _bulkDeleteCaptures.remove(optimisticItem.id);
+        if (capture != null) {
+          _pendingDeletionIds
+            ..remove(optimisticItem.id)
+            ..add(newItem.id);
+          _actionItems.removeWhere((item) => item.id == newItem.id);
+          _homeDayItems.removeWhere((item) => item.id == newItem.id);
+          _selectedItems.remove(newItem.id);
+          notifyListeners();
+          unawaited(_completeCapturedDelete(newItem, capture));
+          return newItem;
+        }
         // The user staged a delete of the temp row while the create was in
         // flight (D5 undo toast). Do not resurrect what the user deleted:
         // transfer the staged deletion to the confirmed server id so Undo
@@ -1173,8 +1453,12 @@ class ActionItemsProvider extends ChangeNotifier {
         // concurrent list response may have observed the committed row before
         // this create settled, so drop any earlier copy of the same server id
         // instead of leaving a duplicate.
-        _actionItems.removeWhere((item) => item.id == newItem.id && item.id != optimisticItem.id);
-        final index = _actionItems.indexWhere((item) => item.id == optimisticItem.id);
+        _actionItems.removeWhere(
+          (item) => item.id == newItem.id && item.id != optimisticItem.id,
+        );
+        final index = _actionItems.indexWhere(
+          (item) => item.id == optimisticItem.id,
+        );
         if (index != -1) {
           _actionItems[index] = newItem;
         } else {
@@ -1217,6 +1501,45 @@ class ActionItemsProvider extends ChangeNotifier {
     if (staged != null) {
       _pendingDeletionIds.remove(tempId);
     }
+    // A bulk delete captured the temp row. The create never reached the
+    // server, so there is no confirmed row to follow up on: the capture and
+    // its tombstone dissolve, and the row stays hidden — the user's delete
+    // intent stands (the task never existed).
+    if (_bulkDeleteCaptures.remove(tempId) != null) {
+      _pendingDeletionIds.remove(tempId);
+    }
+  }
+
+  /// Completes a bulk-deleted optimistic create after its create settled: the
+  /// bulk request never saw the temp id, so the confirmed server row is
+  /// deleted directly. On failure the row is restored where the user deleted
+  /// it from and the tombstone retires, matching deleteActionItem's behavior.
+  Future<void> _completeCapturedDelete(
+    ActionItemWithMetadata row,
+    _CapturedBulkDeleteCreate capture,
+  ) async {
+    final generation = _sessionGeneration;
+    _deleteAppleReminderIfLinked(row);
+    var success = false;
+    try {
+      success = await _deleteActionItemRequest(row.id);
+    } catch (e) {
+      Logger.debug('Error deleting captured create: $e');
+    }
+    if (generation != _sessionGeneration) return;
+    if (!success) {
+      _pendingDeletionIds.remove(row.id);
+      _restoreDeletedItem(row, capture.index);
+      if (capture.homeIndex != -1 && !_homeDayItems.any((i) => i.id == row.id)) {
+        _homeDayItems.insert(
+          capture.homeIndex.clamp(0, _homeDayItems.length),
+          row,
+        );
+      }
+      notifyListeners();
+    } else {
+      SiriIntegration.current.queueDelete('task', row.id);
+    }
   }
 
   /// Settles an optimistic create. [settledRow] is the confirmed server row,
@@ -1232,7 +1555,9 @@ class ActionItemsProvider extends ChangeNotifier {
     // A server page has contained the row: it is server-backed immediately
     // and must not be excluded from the pagination offset until some later
     // page happens to retire it.
-    final alreadyObserved = _actionItems.any((item) => item.id == settledRow.id);
+    final alreadyObserved = _actionItems.any(
+      (item) => item.id == settledRow.id,
+    );
     if (!alreadyObserved) {
       // The settled row stays out of the pagination offset until a server page
       // response has contained it: the pages the demand load fetched may not
@@ -1246,7 +1571,10 @@ class ActionItemsProvider extends ChangeNotifier {
     // drop it. Deletion intent is enforced at replacement time inside
     // _withPendingCreates via _pendingDeletionIds, so a committed delete never
     // resurrects the row while an Undo before the fetch returns re-arms it.
-    _fetchShadowedCreates[settledRow.id] = (settledRow, {..._wholesaleFetchesInFlight});
+    _fetchShadowedCreates[settledRow.id] = (
+      settledRow,
+      {..._wholesaleFetchesInFlight},
+    );
   }
 
   /// Directly create an Apple Reminder without waiting for FCM roundtrip.
@@ -1274,7 +1602,9 @@ class ActionItemsProvider extends ChangeNotifier {
             exportPlatform: 'apple_reminders',
             appleReminderId: calendarItemId,
           );
-          PlatformManager.instance.analytics.appleReminderDirectSync(actionItemId: item.id);
+          PlatformManager.instance.analytics.appleReminderDirectSync(
+            actionItemId: item.id,
+          );
         }
       } catch (e) {
         Logger.debug('Direct Apple Reminders sync failed: $e');
@@ -1283,7 +1613,12 @@ class ActionItemsProvider extends ChangeNotifier {
   }
 
   /// Push a field update to the linked Apple Reminder immediately.
-  void _pushUpdateToAppleReminder(ActionItemWithMetadata item, {bool? completed, String? title, DateTime? dueDate}) {
+  void _pushUpdateToAppleReminder(
+    ActionItemWithMetadata item, {
+    bool? completed,
+    String? title,
+    DateTime? dueDate,
+  }) {
     if (!PlatformService.isApple) return;
     if (item.appleReminderId == null || item.appleReminderId!.isEmpty) return;
 
@@ -1301,7 +1636,9 @@ class ActionItemsProvider extends ChangeNotifier {
     if (item.appleReminderId == null || item.appleReminderId!.isEmpty) return;
 
     AppleRemindersService().deleteReminderById(item.appleReminderId!);
-    PlatformManager.instance.analytics.appleReminderDeleted(actionItemId: item.id);
+    PlatformManager.instance.analytics.appleReminderDeleted(
+      actionItemId: item.id,
+    );
   }
 
   // Sort order and indent level persistence
@@ -1309,13 +1646,17 @@ class ActionItemsProvider extends ChangeNotifier {
   void _updateItemInPlace(String id, {int? sortOrder, int? indentLevel}) {
     final index = _actionItems.indexWhere((item) => item.id == id);
     if (index != -1) {
-      _actionItems[index] = _actionItems[index].copyWith(sortOrder: sortOrder, indentLevel: indentLevel);
+      _actionItems[index] = _actionItems[index].copyWith(
+        sortOrder: sortOrder,
+        indentLevel: indentLevel,
+      );
     }
   }
 
   void updateItemSortOrder(String id, int sortOrder) {
     _updateItemInPlace(id, sortOrder: sortOrder);
     _pendingSortUpdates[id] = sortOrder;
+    _stageUncommittedLayout(id, sortOrder: sortOrder);
     notifyListeners();
     _sortDebounce?.cancel();
     _sortDebounce = Timer(const Duration(milliseconds: 500), _flushSortUpdates);
@@ -1324,15 +1665,20 @@ class ActionItemsProvider extends ChangeNotifier {
   void updateItemIndentLevel(String id, int indentLevel) {
     _updateItemInPlace(id, indentLevel: indentLevel);
     _pendingIndentUpdates[id] = indentLevel;
+    _stageUncommittedLayout(id, indentLevel: indentLevel);
     notifyListeners();
     _indentDebounce?.cancel();
-    _indentDebounce = Timer(const Duration(milliseconds: 500), _flushIndentUpdates);
+    _indentDebounce = Timer(
+      const Duration(milliseconds: 500),
+      _flushIndentUpdates,
+    );
   }
 
   void batchUpdateSortOrders(Map<String, int> updates) {
     for (final entry in updates.entries) {
       _updateItemInPlace(entry.key, sortOrder: entry.value);
       _pendingSortUpdates[entry.key] = entry.value;
+      _stageUncommittedLayout(entry.key, sortOrder: entry.value);
     }
     notifyListeners();
     _sortDebounce?.cancel();
@@ -1345,7 +1691,8 @@ class ActionItemsProvider extends ChangeNotifier {
     _pendingSortUpdates.clear();
 
     final items = updates.entries.map((e) => {'id': e.key, 'sort_order': e.value}).toList();
-    await api.batchUpdateActionItems(items);
+    final committed = await _batchUpdateActionItemsRequest(items);
+    _settleUncommittedLayout(updates.keys, committed: committed);
   }
 
   Future<void> _flushIndentUpdates() async {
@@ -1354,28 +1701,41 @@ class ActionItemsProvider extends ChangeNotifier {
     _pendingIndentUpdates.clear();
 
     final items = updates.entries.map((e) => {'id': e.key, 'indent_level': e.value}).toList();
-    await api.batchUpdateActionItems(items);
+    final committed = await _batchUpdateActionItemsRequest(items);
+    _settleUncommittedLayout(updates.keys, committed: committed);
   }
 
-  ActionItemWithMetadata? _findAndUpdateItemState(String itemId, bool newState) {
+  ActionItemWithMetadata? _findAndUpdateItemState(
+    String itemId,
+    bool newState,
+  ) {
     ActionItemWithMetadata? updated;
     final mainIndex = _actionItems.indexWhere((item) => item.id == itemId);
     if (mainIndex != -1) {
-      _actionItems[mainIndex] = _actionItems[mainIndex].copyWith(completed: newState);
+      _actionItems[mainIndex] = _actionItems[mainIndex].copyWith(
+        completed: newState,
+      );
       updated = _actionItems[mainIndex];
     }
     final homeIndex = _homeDayItems.indexWhere((item) => item.id == itemId);
     if (homeIndex != -1) {
-      _homeDayItems[homeIndex] = _homeDayItems[homeIndex].copyWith(completed: newState);
+      _homeDayItems[homeIndex] = _homeDayItems[homeIndex].copyWith(
+        completed: newState,
+      );
       updated ??= _homeDayItems[homeIndex];
     }
     return updated;
   }
 
-  ActionItemWithMetadata? _findAndUpdateItemDescription(String itemId, String newDescription) {
+  ActionItemWithMetadata? _findAndUpdateItemDescription(
+    String itemId,
+    String newDescription,
+  ) {
     final mainIndex = _actionItems.indexWhere((item) => item.id == itemId);
     if (mainIndex != -1) {
-      _actionItems[mainIndex] = _actionItems[mainIndex].copyWith(description: newDescription);
+      _actionItems[mainIndex] = _actionItems[mainIndex].copyWith(
+        description: newDescription,
+      );
       return _actionItems[mainIndex];
     }
 
@@ -1408,7 +1768,9 @@ class ActionItemsProvider extends ChangeNotifier {
   Future<void> refreshActionItems() async {
     final now = DateTime.now();
     if (_lastRefreshTime != null && now.difference(_lastRefreshTime!) < _refreshCooldown) {
-      Logger.debug('Skipping action items refresh - too soon since last refresh');
+      Logger.debug(
+        'Skipping action items refresh - too soon since last refresh',
+      );
       return;
     }
 
@@ -1446,7 +1808,10 @@ class ActionItemsProvider extends ChangeNotifier {
   /// Cascades the toggle to [cascadeIds] — typically the parent's visible
   /// descendants computed at the call site (the page has the category-grouped
   /// display order; the provider does not). Pass an empty list for a leaf row.
-  void toggleItemSelection(String itemId, {Iterable<String> cascadeIds = const []}) {
+  void toggleItemSelection(
+    String itemId, {
+    Iterable<String> cascadeIds = const [],
+  }) {
     final wasSelected = _selectedItems.contains(itemId);
     if (wasSelected) {
       _selectedItems.remove(itemId);
@@ -1523,10 +1888,12 @@ class ActionItemsProvider extends ChangeNotifier {
     _selectedItems = {};
     _stagedDeletes.clear();
     _stagedDeleteAliasIds.clear();
+    _bulkDeleteCaptures.clear();
     _pendingCreates.clear();
     _fetchShadowedCreates.clear();
     _fetchShadowedEdits.clear();
     _preservedCreateIds.clear();
+    _uncommittedLayout.clear();
     // Wholesale fetches from the signed-out generation may still resolve
     // later; their ordinals are dead threats. Clear them so a create in the
     // successor account never records a stale ordinal as a fetch threat —
@@ -1552,8 +1919,28 @@ class ActionItemsProvider extends ChangeNotifier {
     final ids = itemsToDelete.map((item) => item.id).toList(growable: false);
     // Snapshot positions so a failed bulk delete can re-insert the rows
     // back where the user expected them, instead of dumping them at the end.
-    final snapshot = <int, ActionItemWithMetadata>{for (final item in itemsToDelete) _actionItems.indexOf(item): item};
+    final snapshot = <int, ActionItemWithMetadata>{
+      for (final item in itemsToDelete) _actionItems.indexOf(item): item,
+    };
     final wasInSelection = _isSelectionMode;
+
+    // Optimistic temp rows among the selection cannot go through the bulk
+    // endpoint (it only deletes real ids). Capture them: hide + tombstone now,
+    // and delete the confirmed server id with a follow-up single delete once
+    // the create settles. The bulk request below only carries real ids.
+    for (final item in itemsToDelete) {
+      if (!item.id.startsWith('temp_')) continue;
+      final homeIndex = _homeDayItems.indexWhere((i) => i.id == item.id);
+      _bulkDeleteCaptures[item.id] = _CapturedBulkDeleteCreate(
+        tempId: item.id,
+        index: _actionItems.indexOf(item),
+        homeIndex: homeIndex,
+      );
+    }
+    final bulkIds = [
+      for (final id in ids)
+        if (!_bulkDeleteCaptures.containsKey(id)) id,
+    ];
 
     // Dismiss UI immediately — don't wait for API
     _actionItems.removeWhere((item) => _selectedItems.contains(item.id));
@@ -1570,21 +1957,35 @@ class ActionItemsProvider extends ChangeNotifier {
       _deleteAppleReminderIfLinked(item);
     }
 
-    final deleted = await _bulkDeleteActionItemsRequest(ids);
+    if (bulkIds.isEmpty) {
+      // Everything selected was a pending create; each capture settles through
+      // its own create request. The bulk request would carry no real ids.
+      return true;
+    }
+
+    final deleted = await _bulkDeleteActionItemsRequest(bulkIds);
     if (generation != _sessionGeneration) return false;
     if (deleted == null) {
-      Logger.debug('bulkDeleteActionItems returned null — rolling back local list');
+      Logger.debug(
+        'bulkDeleteActionItems returned null — rolling back local list',
+      );
       // Clear tombstones on rollback so future refreshes don't filter the
       // re-inserted items.
-      _pendingDeletionIds.removeAll(ids);
+      _pendingDeletionIds.removeAll(bulkIds);
+      // Captured creates never joined this request and stay hidden/tombstoned
+      // (a pending create settles through its own follow-up delete; a failed
+      // create dissolves; an already-settled one now lives under its real id).
+      // Nothing here may resurrect a row the user bulk-deleted, so rollback
+      // re-inserts only the real ids that were part of this request.
       // Re-insert rows at their original positions, oldest index first.
-      final entries = snapshot.entries.toList()..sort((a, b) => a.key.compareTo(b.key));
+      final entries = snapshot.entries.where((entry) => !entry.value.id.startsWith('temp_')).toList()
+        ..sort((a, b) => a.key.compareTo(b.key));
       for (final entry in entries) {
         final idx = entry.key.clamp(0, _actionItems.length);
         _actionItems.insert(idx, entry.value);
       }
       _isSelectionMode = wasInSelection;
-      _selectedItems = ids.toSet();
+      _selectedItems = bulkIds.toSet();
       notifyListeners();
 
       if (context != null && context.mounted) {
@@ -1596,23 +1997,30 @@ class ActionItemsProvider extends ChangeNotifier {
     for (final id in deletedIDs) {
       SiriIntegration.current.queueDelete('task', id);
     }
-    if (deletedIDs.length != ids.length) {
-      _pendingDeletionIds.removeAll(ids.where((id) => !deletedIDs.contains(id)));
+    if (deletedIDs.length != bulkIds.length) {
+      _pendingDeletionIds.removeAll(
+        bulkIds.where((id) => !deletedIDs.contains(id)),
+      );
       final entries = snapshot.entries.where((entry) => !deletedIDs.contains(entry.value.id)).toList()
         ..sort((a, b) => a.key.compareTo(b.key));
       for (final entry in entries) {
-        _actionItems.insert(entry.key.clamp(0, _actionItems.length), entry.value);
+        _actionItems.insert(
+          entry.key.clamp(0, _actionItems.length),
+          entry.value,
+        );
       }
       notifyListeners();
     }
-    return deleted.length == ids.length;
+    return deleted.length == bulkIds.length;
   }
 
   Future<bool> clearCompletedItems() async {
     final completed = _actionItems.where((item) => item.completed).toList();
     if (completed.isEmpty) return true;
 
-    final results = await Future.wait(completed.map((item) => deleteActionItem(item)));
+    final results = await Future.wait(
+      completed.map((item) => deleteActionItem(item)),
+    );
     return results.every((success) => success);
   }
 
@@ -1638,7 +2046,10 @@ class ActionItemsProvider extends ChangeNotifier {
 
   /// Fan-out export of every currently selected item to [platform].
   /// Snackbar feedback is posted via [context]; selection mode exits when done.
-  Future<void> bulkExportSelected(BuildContext context, TaskIntegrationApp platform) async {
+  Future<void> bulkExportSelected(
+    BuildContext context,
+    TaskIntegrationApp platform,
+  ) async {
     if (_selectedItems.isEmpty) return;
 
     final ids = _selectedItems.toList(growable: false);
@@ -1657,7 +2068,9 @@ class ActionItemsProvider extends ChangeNotifier {
 
     OmiFeedback.progress(context, context.l10n.bulkExportInProgress);
 
-    final results = await Future.wait(items.map((i) => ActionItemExportService.export(i, platform)));
+    final results = await Future.wait(
+      items.map((i) => ActionItemExportService.export(i, platform)),
+    );
     final successCount = results.where((r) => r == ExportResult.success).length;
 
     // Refresh from server so newly-flipped `exported`/`exportPlatform` fields surface.
@@ -1668,9 +2081,19 @@ class ActionItemsProvider extends ChangeNotifier {
       return;
     }
     if (successCount == total) {
-      OmiFeedback.confirm(context, context.l10n.bulkExportSuccess(successCount, platform.displayName));
+      OmiFeedback.confirm(
+        context,
+        context.l10n.bulkExportSuccess(successCount, platform.displayName),
+      );
     } else {
-      OmiFeedback.error(context, context.l10n.bulkExportPartial(successCount, total, platform.displayName));
+      OmiFeedback.error(
+        context,
+        context.l10n.bulkExportPartial(
+          successCount,
+          total,
+          platform.displayName,
+        ),
+      );
     }
   }
 

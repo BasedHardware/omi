@@ -910,4 +910,253 @@ void main() {
       provider.dispose();
     });
   });
+
+  group('round 4 review races', () {
+    test('a completion that settles after an intervening list response still lands', () async {
+      final typed = _HeldListApi();
+      final provider = ActionItemsProvider(
+        actionItemsApi: typed,
+        updateActionItemRequest: (id, {description, completed, dueAt}) async {
+          // The mutation response is slow: the wholesale fetch settles first.
+          await Future<void>.delayed(const Duration(milliseconds: 5));
+          return _row(id).copyWith(completed: completed ?? false, description: 'settled $id');
+        },
+      );
+
+      typed.result = ApiSuccess(ActionItemsResponse(actionItems: [_row('a'), _row('b')], hasMore: false));
+      final preview = provider.ensureHomeWidgetPreviewLoaded();
+      await Future<void>.delayed(Duration.zero);
+      typed.resolve();
+      await preview;
+
+      final load = provider.ensureLoaded(showShimmer: true);
+      await Future<void>.delayed(Duration.zero);
+
+      // The user completes a preview row; the mutation is still awaiting its
+      // response while the demand load completes and replaces the list.
+      final mutation = provider.updateActionItemState(provider.actionItems.firstWhere((i) => i.id == 'a'), true);
+      await Future<void>.delayed(Duration.zero);
+      typed.result = ApiSuccess(ActionItemsResponse(actionItems: [_row('a'), _row('b')], hasMore: false));
+      typed.resolve();
+      await load;
+      await mutation;
+      await Future<void>.delayed(Duration.zero);
+
+      final completed = provider.actionItems.firstWhere((item) => item.id == 'a');
+      expect(completed.completed, isTrue,
+          reason: 'the settled completion must replace the pre-mutation row the intervening fetch restored');
+      expect(completed.description, 'settled a',
+          reason: 'the visible row is the server-confirmed settled row, not the stale list copy');
+      provider.dispose();
+    });
+
+    test('pending reorder survives the wholesale list replacement', () async {
+      final typed = _HeldListApi();
+      final provider = ActionItemsProvider(
+        actionItemsApi: typed,
+        batchUpdateActionItemsRequest: (items) async => true,
+      );
+
+      typed.result = ApiSuccess(
+        ActionItemsResponse(
+          actionItems: [
+            _row('a').copyWith(sortOrder: 1),
+            _row('b').copyWith(sortOrder: 2),
+          ],
+          hasMore: false,
+        ),
+      );
+      final load = provider.ensureLoaded(showShimmer: true);
+      await Future<void>.delayed(Duration.zero);
+
+      // The user drags a/b; the debounced batch write has not fired yet.
+      provider.batchUpdateSortOrders({'a': 2, 'b': 1});
+      await Future<void>.delayed(Duration.zero);
+
+      typed.resolve();
+      await load;
+      await Future<void>.delayed(Duration.zero);
+
+      final a = provider.actionItems.firstWhere((item) => item.id == 'a');
+      final b = provider.actionItems.firstWhere((item) => item.id == 'b');
+      expect(a.sortOrder, 2, reason: 'the pending reorder must survive the replacement that predates its write');
+      expect(b.sortOrder, 1);
+      provider.dispose();
+    });
+
+    test('pending indent survives the wholesale list replacement', () async {
+      final typed = _HeldListApi();
+      final provider = ActionItemsProvider(
+        actionItemsApi: typed,
+        batchUpdateActionItemsRequest: (items) async => true,
+      );
+
+      typed.result = ApiSuccess(ActionItemsResponse(actionItems: [_row('a')], hasMore: false));
+      final load = provider.ensureLoaded(showShimmer: true);
+      await Future<void>.delayed(Duration.zero);
+
+      provider.updateItemIndentLevel('a', 2);
+      await Future<void>.delayed(Duration.zero);
+
+      typed.resolve();
+      await load;
+      await Future<void>.delayed(Duration.zero);
+
+      final a = provider.actionItems.firstWhere((item) => item.id == 'a');
+      expect(a.indentLevel, 2, reason: 'the pending indent must survive the replacement that predates its write');
+      provider.dispose();
+    });
+
+    test('a settled layout write stops shadowing later fetches', () async {
+      final typed = _HeldListApi();
+      final provider = ActionItemsProvider(
+        actionItemsApi: typed,
+        batchUpdateActionItemsRequest: (items) async => true,
+      );
+
+      typed.result = ApiSuccess(ActionItemsResponse(actionItems: [_row('a').copyWith(sortOrder: 1)], hasMore: false));
+      final load = provider.ensureLoaded(showShimmer: true);
+      await Future<void>.delayed(Duration.zero);
+
+      provider.updateItemSortOrder('a', 5);
+      await Future<void>.delayed(Duration.zero);
+
+      typed.resolve();
+      await load;
+      await Future<void>.delayed(Duration.zero);
+
+      // The debounce fires after the threat fetch applied: the write commits
+      // with no fetches in flight, so the entry retires and a later fetch's
+      // authoritative sortOrder wins.
+      await Future<void>.delayed(const Duration(milliseconds: 600));
+      typed.result = ApiSuccess(
+        ActionItemsResponse(
+            actionItems: [_row('a').copyWith(sortOrder: 9, description: 'authoritative')], hasMore: false),
+      );
+      final refreshed = provider.fetchActionItems();
+      await Future<void>.delayed(Duration.zero);
+      typed.completeAt(0, typed.result);
+      await refreshed;
+
+      final a = provider.actionItems.firstWhere((item) => item.id == 'a');
+      expect(a.sortOrder, 9, reason: 'a fetch that started after the layout write committed must be authoritative');
+      provider.dispose();
+    });
+
+    test('bulk-deleting a slow optimistic create deletes the confirmed row, not the temp id', () async {
+      final typed = _HeldListApi();
+      final deletedIds = <String>[];
+      final createReleased = Completer<void>();
+      final provider = ActionItemsProvider(
+        actionItemsApi: typed,
+        createActionItemRequest: ({required description, dueAt, conversationId, completed = false}) async {
+          await createReleased.future;
+          return _row('server-9');
+        },
+        deleteActionItemRequest: (id) async {
+          deletedIds.add(id);
+          return true;
+        },
+        bulkDeleteActionItemsRequest: (ids) async => ids.where((id) => !id.startsWith('temp_')).toList(),
+      );
+
+      // One real row loads so the screen is initialized.
+      typed.result = ApiSuccess(ActionItemsResponse(actionItems: [_row('real-1')], hasMore: false));
+      final load = provider.ensureLoaded(showShimmer: true);
+      await Future<void>.delayed(Duration.zero);
+      typed.resolve();
+      await load;
+
+      // A slow create lands in the list; the user selects it plus a real row
+      // and bulk-deletes while the create request is still in flight.
+      final created = provider.createActionItem(description: 'slow task');
+      await Future<void>.delayed(Duration.zero);
+      final tempId = provider.actionItems.firstWhere((i) => i.id.startsWith('temp_')).id;
+      provider.startSelectionWithItem(tempId);
+      provider.selectItem('real-1');
+
+      final bulk = provider.deleteSelectedItems();
+      await Future<void>.delayed(Duration.zero);
+      createReleased.complete();
+      await created;
+      final ok = await bulk;
+
+      expect(ok, isTrue);
+      expect(deletedIds, contains('server-9'),
+          reason: 'the confirmed row must be deleted by a follow-up single delete of its server id');
+      expect(provider.actionItems.any((i) => i.id == 'server-9'), isFalse,
+          reason: 'the confirmed row must not be reinserted by the create settle');
+      provider.dispose();
+    });
+
+    test('a failed bulk request restores real rows but not captured temp creates', () async {
+      final typed = _HeldListApi();
+      final createReleased = Completer<void>();
+      final provider = ActionItemsProvider(
+        actionItemsApi: typed,
+        createActionItemRequest: ({required description, dueAt, conversationId, completed = false}) async {
+          await createReleased.future;
+          return _row('server-7');
+        },
+        bulkDeleteActionItemsRequest: (ids) async => null,
+      );
+
+      typed.result = ApiSuccess(ActionItemsResponse(actionItems: [_row('real-1')], hasMore: false));
+      final load = provider.ensureLoaded(showShimmer: true);
+      await Future<void>.delayed(Duration.zero);
+      typed.resolve();
+      await load;
+
+      final created = provider.createActionItem(description: 'slow task');
+      await Future<void>.delayed(Duration.zero);
+      final tempId = provider.actionItems.firstWhere((i) => i.id.startsWith('temp_')).id;
+      provider.startSelectionWithItem(tempId);
+      provider.selectItem('real-1');
+
+      final bulk = provider.deleteSelectedItems();
+      await Future<void>.delayed(Duration.zero);
+      createReleased.complete();
+      await created;
+      final ok = await bulk;
+
+      expect(ok, isFalse);
+      expect(provider.actionItems.any((i) => i.id == 'real-1'), isTrue,
+          reason: 'rollback re-inserts the real rows that were part of the failed request');
+      expect(provider.actionItems.any((i) => i.id.startsWith('temp_')), isFalse,
+          reason: 'rollback must not resurrect the captured temp row whose delete intent stands');
+      provider.dispose();
+    });
+
+    test('home widget freshness refreshes after the Tasks screen has loaded', () async {
+      final typed = _HeldListApi();
+      final provider = ActionItemsProvider(actionItemsApi: typed);
+
+      typed.result = ApiSuccess(ActionItemsResponse(actionItems: [_row('a')], hasMore: false));
+      final load = provider.ensureLoaded(showShimmer: true);
+      await Future<void>.delayed(Duration.zero);
+      typed.resolve();
+      await load;
+      expect(provider.screenLoaded, isTrue);
+
+      // Resume-time freshness: a changed server row must reach the visible
+      // list even though the Tasks screen already initialized once.
+      typed.result = ApiSuccess(
+        ActionItemsResponse(actionItems: [_row('a').copyWith(description: 'refreshed elsewhere')], hasMore: false),
+      );
+      final refreshed = provider.ensureHomeWidgetPreviewLoaded();
+      // refreshActionItems debounces 500 ms before its fetch is held in flight.
+      await Future<void>.delayed(const Duration(milliseconds: 600));
+      expect(typed.requestedOffsets.length, greaterThanOrEqualTo(2),
+          reason: 'the freshness path must hit the server again after screen load');
+      typed.completeAt(0, typed.result);
+      await refreshed;
+      await Future<void>.delayed(Duration.zero);
+      await Future<void>.delayed(Duration.zero);
+
+      final a = provider.actionItems.firstWhere((item) => item.id == 'a');
+      expect(a.description, 'refreshed elsewhere',
+          reason: 'post-load widget freshness must flow through the authoritative refresh');
+      provider.dispose();
+    });
+  });
 }
