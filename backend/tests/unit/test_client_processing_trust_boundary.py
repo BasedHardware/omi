@@ -633,6 +633,11 @@ PINNED_CONVERSATION_FIELDS: FrozenSet[str] = frozenset(
         # Retained by persistence/transcript-edit sinks and app views; explicitly
         # stripped as private capture metadata by the integration redactor.
         'capture_coverage',
+        # Server-authored projection of the manual speaker receipt's still-
+        # winning whole-voice not_a_person exclusions. First-party capture
+        # reconciliation signal, not client-authored display; stripped by the
+        # integration redactor like capture_coverage.
+        'excluded_speakers',
         'transcript_segments',
         'transcript_segments_compressed',
         'geolocation',

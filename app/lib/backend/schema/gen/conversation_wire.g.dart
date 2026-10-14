@@ -955,6 +955,7 @@ class GeneratedConversation {
   final String? dataProtectionLevel;
   final bool deferred;
   final bool discarded;
+  final List<int>? excludedSpeakers;
   final Map<String, dynamic>? externalData;
   final DateTime? finishedAt;
   final String? folderId;
@@ -1009,6 +1010,7 @@ class GeneratedConversation {
     this.dataProtectionLevel,
     this.deferred = false,
     this.discarded = false,
+    this.excludedSpeakers,
     this.externalData,
     required this.finishedAt,
     this.folderId,
@@ -1065,6 +1067,7 @@ class GeneratedConversation {
       dataProtectionLevel: _readFieldValue<String>(_readField(json, const ["data_protection_level"]), "data_protection_level", _readString, requiredField: false, nullable: true),
       deferred: _required(_readFieldValue<bool>(_readField(json, const ["deferred"]), "deferred", _readBool, requiredField: false, nullable: false, defaultValue: false), "deferred"),
       discarded: _required(_readFieldValue<bool>(_readField(json, const ["discarded"]), "discarded", _readBool, requiredField: false, nullable: false, defaultValue: false), "discarded"),
+      excludedSpeakers: _readFieldValue<List<int>>(_readField(json, const ["excluded_speakers"]), "excluded_speakers", _readIntList, requiredField: false, nullable: true),
       externalData: _readFieldValue<Map<String, dynamic>>(_readField(json, const ["external_data"]), "external_data", _readMap, requiredField: false, nullable: true),
       finishedAt: _readFieldValue<DateTime>(_readField(json, const ["finished_at"]), "finished_at", _readDateTime, requiredField: true, nullable: true),
       folderId: _readFieldValue<String>(_readField(json, const ["folder_id"]), "folder_id", _readString, requiredField: false, nullable: true),
@@ -1122,6 +1125,7 @@ class GeneratedConversation {
       'data_protection_level': dataProtectionLevel,
       'deferred': deferred,
       'discarded': discarded,
+      'excluded_speakers': excludedSpeakers,
       'external_data': externalData,
       'finished_at': finishedAt?.toUtc().toIso8601String(),
       'folder_id': folderId,
@@ -1367,6 +1371,7 @@ class GeneratedConversationSearchItem {
   final String? dataProtectionLevel;
   final bool deferred;
   final bool discarded;
+  final List<int>? excludedSpeakers;
   final Map<String, dynamic>? externalData;
   final DateTime? finishedAt;
   final String? folderId;
@@ -1422,6 +1427,7 @@ class GeneratedConversationSearchItem {
     this.dataProtectionLevel,
     this.deferred = false,
     this.discarded = false,
+    this.excludedSpeakers,
     this.externalData,
     required this.finishedAt,
     this.folderId,
@@ -1479,6 +1485,7 @@ class GeneratedConversationSearchItem {
       dataProtectionLevel: _readFieldValue<String>(_readField(json, const ["data_protection_level"]), "data_protection_level", _readString, requiredField: false, nullable: true),
       deferred: _required(_readFieldValue<bool>(_readField(json, const ["deferred"]), "deferred", _readBool, requiredField: false, nullable: false, defaultValue: false), "deferred"),
       discarded: _required(_readFieldValue<bool>(_readField(json, const ["discarded"]), "discarded", _readBool, requiredField: false, nullable: false, defaultValue: false), "discarded"),
+      excludedSpeakers: _readFieldValue<List<int>>(_readField(json, const ["excluded_speakers"]), "excluded_speakers", _readIntList, requiredField: false, nullable: true),
       externalData: _readFieldValue<Map<String, dynamic>>(_readField(json, const ["external_data"]), "external_data", _readMap, requiredField: false, nullable: true),
       finishedAt: _readFieldValue<DateTime>(_readField(json, const ["finished_at"]), "finished_at", _readDateTime, requiredField: true, nullable: true),
       folderId: _readFieldValue<String>(_readField(json, const ["folder_id"]), "folder_id", _readString, requiredField: false, nullable: true),
@@ -1537,6 +1544,7 @@ class GeneratedConversationSearchItem {
       'data_protection_level': dataProtectionLevel,
       'deferred': deferred,
       'discarded': discarded,
+      'excluded_speakers': excludedSpeakers,
       'external_data': externalData,
       'finished_at': finishedAt?.toUtc().toIso8601String(),
       'folder_id': folderId,

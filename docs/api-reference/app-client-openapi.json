@@ -8410,6 +8410,20 @@
             "title": "Discarded",
             "type": "boolean"
           },
+          "excluded_speakers": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "integer"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Excluded Speakers"
+          },
           "external_data": {
             "anyOf": [
               {
@@ -9657,6 +9671,20 @@
             "default": false,
             "title": "Discarded",
             "type": "boolean"
+          },
+          "excluded_speakers": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "integer"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Excluded Speakers"
           },
           "external_data": {
             "anyOf": [

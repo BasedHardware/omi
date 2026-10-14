@@ -3562,28 +3562,35 @@ class CaptureController extends ChangeNotifier
     if (_conversation != null) {
       segments = _conversation!.transcriptSegments;
       if (isSameConversation) {
-        // A persisted manual positive label only retires the exclusion when it
-        // carries whole-voice authority: another surface replaced the exclusion
-        // (the receipt projects exclusions as unlabeled, never as manual), and
-        // a whole-voice positive decision labels EVERY segment of the speaker.
-        // A range-only decision deliberately does neither: the backend marks it
-        // segment_only, the whole-voice not_a_person rejection stays
-        // authoritative for the voice, and segments outside the range project
-        // as unlabeled. Retiring on any single positive segment would drop the
-        // speaker-wide exclusion while the server still considers the voice
-        // excluded (suggestions reappearing, other segments unblanked), so
-        // require the positive to cover the whole cluster in this snapshot.
-        // Only a refresh that *started* after the exclusion's acknowledgement
-        // may retire it: one requested earlier can still be carrying the
-        // pre-exclusion manual label when it installs.
+        // A persisted positive label only retires the exclusion when it
+        // carries whole-voice authority. The server's `excluded_speakers`
+        // projection IS that authority: it mirrors the manual receipt's
+        // still-winning whole-voice not_a_person set, which alone distinguishes
+        // a range-only positive (segment_only; the exclusion stands — its
+        // in-range manual label must not drop the speaker-wide exclusion) from
+        // a selected-segment superseder (bulk assign; the receipt already
+        // retired the exclusion even though only its segments project a
+        // manual label). Only a refresh that *started* after the exclusion's
+        // acknowledgement may retire it: one requested earlier can still be
+        // carrying the pre-exclusion manual label when it installs.
+        // Older servers without the projection fall back to the whole-cluster
+        // projection heuristic: a whole-voice positive labels EVERY segment of
+        // the speaker, so requiring full coverage never retires on a range-only
+        // label; it just cannot see selected-segment superseders.
+        final receiptExcluded = _conversation?.excludedSpeakers;
         for (final speakerId in List<int>.of(_excludedSpeakers)) {
-          final cluster = segments.where((segment) => segment.speakerId == speakerId).toList();
-          final wholeVoicePositive = cluster.isNotEmpty &&
-              cluster.every((segment) =>
-                  segment.speakerLabelSource == 'manual' &&
-                  (segment.isUser || (segment.personId?.isNotEmpty ?? false))) &&
-              startedAt > (_excludedAtEpoch[speakerId] ?? 0);
-          if (wholeVoicePositive) {
+          if (startedAt <= (_excludedAtEpoch[speakerId] ?? 0)) continue;
+          bool retire;
+          if (receiptExcluded != null) {
+            retire = !receiptExcluded.contains(speakerId);
+          } else {
+            final cluster = segments.where((segment) => segment.speakerId == speakerId).toList();
+            retire = cluster.isNotEmpty &&
+                cluster.every((segment) =>
+                    segment.speakerLabelSource == 'manual' &&
+                    (segment.isUser || (segment.personId?.isNotEmpty ?? false)));
+          }
+          if (retire) {
             _excludedSpeakers.remove(speakerId);
             _excludedAtEpoch.remove(speakerId);
           }

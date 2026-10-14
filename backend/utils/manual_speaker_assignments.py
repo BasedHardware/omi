@@ -18,6 +18,7 @@ from config.audio_timeline import (
 )
 from models.capture_window_proof import CaptureWindowProof
 from database.read_boundary import parse_payload_strict
+from models.speaker_exclusion import receipt_rejected_speakers
 from models.speaker_label_provenance import project_source
 from models.transcript_segment import TranscriptSegment, legacy_conversation_segment_id
 
@@ -143,37 +144,11 @@ def apply_manual_assignments(segments: list[dict], receipt: dict) -> list[dict]:
 def manual_rejected_speakers(receipt: Mapping) -> dict:
     """speaker_id -> its winning rejection decision, per the manual receipt.
 
-    Speaker entries carry the speaker id in their key; selected-segment
-    rejections carry the voice they were written against in ``speaker_id``.
-    A rejection only stands while no newer explicit positive decision
-    (an entry without ``rejection``) covers the same voice.
+    Thin alias: the walker is shared with the ``Conversation`` wire projection
+    (``models.speaker_exclusion``) so writers and clients can never disagree on
+    which voices a receipt still excludes.
     """
-    decisions: dict = {}
-    for key, entry in _receipt_section(receipt, 'speakers').items():
-        if not isinstance(entry, dict):
-            continue
-        try:
-            speaker_id = int(key)
-        except (TypeError, ValueError):
-            continue
-        decisions.setdefault(speaker_id, []).append(entry)
-    for entry in _receipt_section(receipt, 'segments').values():
-        if isinstance(entry, dict) and not entry.get('segment_only') and isinstance(entry.get('speaker_id'), int):
-            decisions.setdefault(entry['speaker_id'], []).append(entry)
-    rejected: dict = {}
-    for speaker_id, entries in decisions.items():
-        rejection = None
-        positive = -1
-        for entry in entries:
-            generation = entry.get('generation', 0)
-            if entry.get('rejection'):
-                if rejection is None or generation >= rejection.get('generation', 0):
-                    rejection = entry
-            else:
-                positive = max(positive, generation)
-        if rejection is not None and positive <= rejection.get('generation', 0):
-            rejected[speaker_id] = rejection
-    return rejected
+    return receipt_rejected_speakers(receipt)
 
 
 def remap_absorbed_receipt(receipt: dict, absorbed_into: dict[str, str]) -> dict:

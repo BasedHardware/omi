@@ -2213,6 +2213,15 @@ persistence failure fails open with shared fallback telemetry
 (`omi_fallback_total{component="speaker_assignments"}`).
 A segment's `speaker_label_source` projects provenance:
 `manual`/`carried` under a winning decision, `auto` for match-only evidence.
+The `Conversation` payload carries `excluded_speakers`: the receipt's
+still-winning whole-voice `not_a_person` voices (`models/speaker_exclusion.py`,
+the same walker the marker helpers use). Clients reconcile live exclusions
+against it rather than against label projections: a range-only positive is
+`segment_only` and leaves the exclusion standing, while a selected-segment
+bulk assign retires it even though only its segments project a manual label —
+identical projections the receipt alone distinguishes. Absent (`null`) on
+conversations with no manual speaker decision, and never part of the
+integration contract.
 
 The same transaction keeps each person's `label_evidence` tally
 (`models/person_confidence.py`, `utils/person_evidence.py`): hand labels, card confirms and picks,

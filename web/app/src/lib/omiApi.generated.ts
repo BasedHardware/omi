@@ -1330,6 +1330,7 @@ export interface Conversation {
   data_protection_level?: string | null;
   deferred?: boolean;
   discarded?: boolean;
+  excluded_speakers?: Array<number> | null;
   external_data?: Record<string, unknown> | null;
   finished_at: string | null;
   folder_id?: string | null;
@@ -1528,6 +1529,7 @@ export interface ConversationSearchItem {
   data_protection_level?: string | null;
   deferred?: boolean;
   discarded?: boolean;
+  excluded_speakers?: Array<number> | null;
   external_data?: Record<string, unknown> | null;
   finished_at: string | null;
   folder_id?: string | null;

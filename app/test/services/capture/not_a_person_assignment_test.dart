@@ -806,4 +806,118 @@ void main() {
     // label); a later snapshot re-installs normally.
     expect(controller.segments.every((s) => !s.isUser && s.personId == null), isTrue);
   });
+
+  test('receipt authority retires the exclusion for a selected-segment superseder', () async {
+    final controller = CaptureController(
+      externalActions: _Actions(),
+      bleListeners: _Ble(),
+      connectivity: CaptureConnectivityBoundary(
+        initiallyConnected: true,
+        changes: const Stream.empty(),
+        isConnected: () => true,
+      ),
+      excludeSpeaker: (id, ids) async => true,
+    );
+    addTearDown(() async {
+      controller.dispose();
+      await controller.lifetime.close();
+    });
+    controller.applyInProgressConversation(
+      ServerConversation(
+        id: 'c',
+        createdAt: DateTime(2026),
+        structured: Structured('TV', 'TV'),
+        transcriptSegments: [_segment('s1'), _segment('s2')],
+      ),
+    );
+    expect(await controller.assignSpeakerToConversation(4, '', '', ['s1'], notAPerson: true), isTrue);
+
+    // Another surface supersedes the exclusion by assigning only selected
+    // segment ids (bulk assign). The receipt retires the whole-voice exclusion
+    // even though only the selected segments project a manual label — the
+    // partial projection is identical to a range-only label, so only the
+    // server's `excluded_speakers` receipt projection can decide. It no longer
+    // lists the speaker: the exclusion must retire and the valid assignment
+    // must survive.
+    controller.applyInProgressConversation(
+      ServerConversation(
+        id: 'c',
+        createdAt: DateTime(2026),
+        structured: Structured('TV', 'TV'),
+        excludedSpeakers: const [],
+        transcriptSegments: [
+          _segment('s1')
+            ..isUser = false
+            ..personId = 'p1'
+            ..speakerLabelSource = 'manual',
+          _segment('s2'),
+        ],
+      ),
+    );
+
+    final assigned = controller.segments.firstWhere((s) => s.id == 's1');
+    expect(assigned.personId, 'p1');
+    expect(assigned.speakerLabelSource, 'manual');
+    // Suggestions for the speaker are eligible again.
+    controller.onSegmentReceived([_segment('s3')..isUser = false]);
+    final suggestion = SpeakerLabelSuggestionEvent(speakerId: 4, personId: '', personName: 'Sam', segmentId: 's3');
+    controller.onMessageEventReceived(suggestion);
+    expect(controller.suggestionsBySegmentId, isNotEmpty);
+  });
+
+  test('receipt authority keeps the exclusion for a range-only label', () async {
+    final controller = CaptureController(
+      externalActions: _Actions(),
+      bleListeners: _Ble(),
+      connectivity: CaptureConnectivityBoundary(
+        initiallyConnected: true,
+        changes: const Stream.empty(),
+        isConnected: () => true,
+      ),
+      excludeSpeaker: (id, ids) async => true,
+    );
+    addTearDown(() async {
+      controller.dispose();
+      await controller.lifetime.close();
+    });
+    controller.applyInProgressConversation(
+      ServerConversation(
+        id: 'c',
+        createdAt: DateTime(2026),
+        structured: Structured('TV', 'TV'),
+        transcriptSegments: [_segment('s1'), _segment('s2')],
+      ),
+    );
+    expect(await controller.assignSpeakerToConversation(4, '', '', ['s1'], notAPerson: true), isTrue);
+
+    // A range-only positive is deliberately segment_only: the whole-voice
+    // rejection stays authoritative, so the receipt projection still lists the
+    // speaker and the local exclusion survives even though one segment carries
+    // a manual label.
+    controller.applyInProgressConversation(
+      ServerConversation(
+        id: 'c',
+        createdAt: DateTime(2026),
+        structured: Structured('TV', 'TV'),
+        excludedSpeakers: const [4],
+        transcriptSegments: [
+          _segment('s1'),
+          _segment('s2')
+            ..isUser = false
+            ..personId = 'p1'
+            ..speakerLabelSource = 'manual',
+        ],
+      ),
+    );
+
+    // The exclusion still owns the voice: the in-range label is blanked and
+    // suggestions stay suppressed.
+    final inRange = controller.segments.firstWhere((s) => s.id == 's2');
+    expect(inRange.isUser, isFalse);
+    expect(inRange.personId, isNull);
+    expect(inRange.speakerLabelSource, isNull);
+    final suggestion = SpeakerLabelSuggestionEvent(speakerId: 4, personId: '', personName: 'Sam', segmentId: 's1');
+    controller.onMessageEventReceived(suggestion);
+    expect(controller.suggestionsBySegmentId, isEmpty);
+  });
 }
