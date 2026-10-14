@@ -244,16 +244,16 @@ class _OutlinePaywallPageState extends State<OutlinePaywallPage> {
 
 /// Graphite tokens from the prototype: pure black, white and nothing else.
 abstract final class _Graphite {
-  static const background = Color(0xFF000000);
-  static const surface = Color(0xFF1C1C1E);
-  static const surface2 = Color(0xFF2C2C2E);
-  static const border = Color(0xFF38383A);
-  static const text = Color(0xFFFFFFFF);
-  static const textSecondary = Color(0xFFAEAEB2);
-  static const textTertiary = Color(0xFF8E8E93);
-  static const accent = Color(0xFFFFFFFF);
-  static const onAccent = Color(0xFF000000);
-  static const success = Color(0xFF30D158);
+  static const background = Color(0xFF000000); // omi-ux-allow: color-literal -- fixed black design canvas
+  static const surface = Color(0xFF1C1C1E); // omi-ux-allow: color-literal -- fixed black design canvas
+  static const surface2 = Color(0xFF2C2C2E); // omi-ux-allow: color-literal -- fixed black design canvas
+  static const border = Color(0xFF38383A); // omi-ux-allow: color-literal -- fixed black design canvas
+  static const text = Color(0xFFFFFFFF); // omi-ux-allow: color-literal -- fixed black design canvas
+  static const textSecondary = Color(0xFFAEAEB2); // omi-ux-allow: color-literal -- fixed black design canvas
+  static const textTertiary = Color(0xFF8E8E93); // omi-ux-allow: color-literal -- fixed black design canvas
+  static const accent = Color(0xFFFFFFFF); // omi-ux-allow: color-literal -- fixed black design canvas
+  static const onAccent = Color(0xFF000000); // omi-ux-allow: color-literal -- fixed black design canvas
+  static const success = Color(0xFF30D158); // omi-ux-allow: color-literal -- fixed black design canvas
   static const double buttonRadius = 14;
 
   static TextStyle headline(double size) => TextStyle(
@@ -298,11 +298,7 @@ class _Button extends StatelessWidget {
             height: 54,
             child: Center(
               child: busy
-                  ? const SizedBox(
-                      width: 22,
-                      height: 22,
-                      child: CircularProgressIndicator(strokeWidth: 2, color: _Graphite.onAccent),
-                    )
+                  ? const OmiSpinner(size: OmiSpinnerSize.small, color: _Graphite.onAccent)
                   : Text(
                       label,
                       style: _Graphite.label(
@@ -353,7 +349,7 @@ class _PlanOption extends StatelessWidget {
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
           decoration: BoxDecoration(
             color: _Graphite.surface,
-            borderRadius: BorderRadius.circular(16),
+            borderRadius: OmiRadius.lgAll,
             border: Border.all(color: selected ? _Graphite.accent : _Graphite.border, width: selected ? 2 : 1),
           ),
           child: Row(
@@ -382,10 +378,7 @@ class _PlanOption extends StatelessWidget {
                         if (badge != null)
                           Container(
                             padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
-                            decoration: BoxDecoration(
-                              borderRadius: BorderRadius.circular(6),
-                              color: _Graphite.success,
-                            ),
+                            decoration: const BoxDecoration(borderRadius: OmiRadius.smAll, color: _Graphite.success),
                             child: Text(
                               badge.toUpperCase(),
                               style: _Graphite.label(size: 10, weight: FontWeight.w700, color: _Graphite.onAccent),
@@ -422,6 +415,6 @@ class _Skeleton extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Container(
         height: height,
-        decoration: BoxDecoration(color: _Graphite.surface, borderRadius: BorderRadius.circular(16)),
+        decoration: const BoxDecoration(color: _Graphite.surface, borderRadius: OmiRadius.lgAll),
       );
 }

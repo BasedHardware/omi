@@ -9,6 +9,7 @@ import 'package:webview_flutter/webview_flutter.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/pages/onboarding/permissions/onboarding_permissions_panel.dart';
 import 'package:omi/providers/onboarding_provider.dart';
+import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/analytics/registry/events.g.dart';
 import 'package:omi/utils/analytics/registry/typed_events.dart';
 import 'package:omi/utils/logger.dart';
@@ -164,7 +165,7 @@ class _WebOnboardingPageState extends State<WebOnboardingPage> {
         body: Stack(
           children: [
             if (controller != null) Positioned.fill(child: WebViewWidget(controller: controller)),
-            if (!_ready) const Center(child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white)),
+            if (!_ready) const Center(child: OmiSpinner(color: Colors.white)),
           ],
         ),
       ),

@@ -242,7 +242,7 @@ class _WebPaywallPageState extends State<WebPaywallPage> {
         body: Stack(
           children: [
             if (controller != null) Positioned.fill(child: WebViewWidget(controller: controller)),
-            if (!_ready) const Center(child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white)),
+            if (!_ready) const Center(child: OmiSpinner(color: Colors.white)),
             Positioned(
               top: MediaQuery.paddingOf(context).top + 4,
               left: 4,
