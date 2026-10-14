@@ -6,25 +6,31 @@ import 'package:flutter/services.dart' show MethodChannel;
 import 'package:path_provider/path_provider.dart';
 
 import 'package:omi/models/stt_result.dart';
+import 'package:omi/services/experiments/apple_speech_analyzer_gate.dart';
 import 'package:omi/services/custom_stt_log_service.dart';
 import 'package:omi/services/sockets/on_device_transcript_quality_gate.dart';
 import 'package:omi/services/sockets/pure_polling.dart';
 
 class OnDeviceAppleProvider implements ISttProvider {
   final String language;
+  final Future<bool> Function()? useSpeechAnalyzer;
   static const MethodChannel _channel = MethodChannel('com.omi.ios/speech');
   final OnDeviceTranscriptQualityGate _qualityGate = OnDeviceTranscriptQualityGate();
 
-  OnDeviceAppleProvider({this.language = 'en'});
+  OnDeviceAppleProvider({this.language = 'en', this.useSpeechAnalyzer});
 
   /// Whether iOS has an on-device recognizer (language model installed, not
   /// network-backed) for [language]. Bare codes like "en" are resolved
   /// natively to an installed full locale such as en-US. Returns false on any
   /// channel error so callers treat "unknown" as "unavailable".
-  static Future<bool> isOnDeviceAvailable(String language) async {
-    if (!Platform.isIOS) return false;
+  static Future<bool> isOnDeviceAvailable(String language,
+      {Future<bool> Function()? useSpeechAnalyzer, bool? isIOS}) async {
+    if (!(isIOS ?? Platform.isIOS)) return false;
     try {
-      final available = await _channel.invokeMethod<bool>('onDeviceAvailable', {'language': language});
+      final available = await _channel.invokeMethod<bool>('onDeviceAvailable', {
+        'language': language,
+        'useSpeechAnalyzer': await (useSpeechAnalyzer ?? AppleSpeechAnalyzerGate.useNewEngine)()
+      });
       return available ?? false;
     } catch (e) {
       CustomSttLogService.instance.error('OnDeviceApple', 'Availability check failed: $e');
@@ -54,6 +60,7 @@ class OnDeviceAppleProvider implements ISttProvider {
         final String? result = await _channel.invokeMethod('transcribe', {
           'filePath': tempFile.path,
           'language': effectiveLanguage,
+          'useSpeechAnalyzer': await (useSpeechAnalyzer ?? AppleSpeechAnalyzerGate.useNewEngine)(),
         });
 
         if (result == null || result.isEmpty) {

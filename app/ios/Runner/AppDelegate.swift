@@ -1030,6 +1030,7 @@ enum SpeechAnalyzerTranscription {
     /// Installs the model for `locale` if it is not already on the device.
     /// Concurrent callers wait on the same download.
     static func ensureModel(for locale: Locale) async throws {
+        _ = try await AssetInventory.reserve(locale: locale)
         if await isInstalled(locale) { return }
         let key = locale.identifier(.bcp47)
         let task: Task<Void, Error>
@@ -1058,7 +1059,7 @@ enum SpeechAnalyzerTranscription {
     /// too; it continues in the background and transcribe() waits for it.
     /// Only a failed download (no network, unsupported locale) reports false.
     static func isAvailable(language: String, installWait: Double = 8) async -> Bool {
-        guard let locale = await locale(for: language) else {
+        guard SpeechTranscriber.isAvailable, let locale = await locale(for: language) else {
             NSLog("[SpeechAnalyzer] no supported locale for language %@", language)
             return false
         }
@@ -1081,7 +1082,7 @@ enum SpeechAnalyzerTranscription {
     /// Transcribes a whole audio file (the Dart side writes 16 kHz mono WAV
     /// clips) and returns the text, empty when no speech was recognized.
     static func transcribe(fileURL: URL, language: String) async throws -> String {
-        guard let locale = await locale(for: language) else {
+        guard SpeechTranscriber.isAvailable, let locale = await locale(for: language) else {
             throw TranscriptionError.unsupportedLanguage(language)
         }
         let installed: Result<Void, Error> = await SpeechDeadline.run(seconds: 20, operation: {
@@ -1143,7 +1144,7 @@ class SpeechRecognitionHandler: NSObject {
             }
             
             let language = args["language"] as? String ?? "en-US"
-            if #available(iOS 26, *) {
+            if args["useSpeechAnalyzer"] as? Bool != false, #available(iOS 26, *) {
                 // SpeechAnalyzer needs no Dictation setting; fall back to
                 // SFSpeechRecognizer only if it cannot handle this clip.
                 Task {
@@ -1164,7 +1165,7 @@ class SpeechRecognitionHandler: NSObject {
         } else if call.method == "onDeviceAvailable" {
             let args = call.arguments as? [String: Any]
             let language = args?["language"] as? String ?? "en-US"
-            if #available(iOS 26, *) {
+            if args?["useSpeechAnalyzer"] as? Bool != false, #available(iOS 26, *) {
                 Task {
                     if await SpeechAnalyzerTranscription.isAvailable(language: language) {
                         DispatchQueue.main.async { result(true) }

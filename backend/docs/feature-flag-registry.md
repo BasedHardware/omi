@@ -331,6 +331,7 @@ and an explicit empty literal renders as `''`.
 | `exp-002-desktop-identity-kill-v1` | EXP-002 desktop identity arm emergency stop | backend, macos | posthog | inverted | — | — | — | expected (kill) | keep | — | unowned |
 | `free-tier-kill-switch-v1` | Remote free-tier stop | backend | posthog | inverted | — | — | — | expected (kill) | keep | — | unowned |
 | `jit-processing-kill-switch-v1` | JIT remote kill for allowlisted accounts | backend | posthog | inverted | — | — | — | expected (kill) | keep | — | unowned |
+| `mobile-speech-analyzer-disabled` | Force existing iOS freemium fallback to SFSpeech; false or absent selects SpeechAnalyzer on supported iOS 26 devices/locales | mobile | posthog | inverted | — | — | — | expected (enable) | keep | — | dazheng |
 
 ### config_switch
 
