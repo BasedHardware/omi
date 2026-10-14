@@ -469,12 +469,18 @@ async def get_google_calendar_events(
         )
         events.extend(data.get('items', []))
 
-        if len(events) >= max_results:
+        # For normal/upcoming event queries without search_query, return earliest-first
+        if not search_query and len(events) >= max_results:
             return events[:max_results]
 
         page = data.get('nextPageToken')
-        if not page:
+        if not page or (search_query and len(events) >= 2500):
             break
+
+    # When search_query is provided, the window was padded backwards from time_max.
+    # Return the max_results events nearest time_max (the most recent meetings/requested week).
+    if search_query:
+        return events[-max_results:]
 
     return events[:max_results]
 
