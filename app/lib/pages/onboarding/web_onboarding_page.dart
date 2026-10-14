@@ -106,8 +106,8 @@ class _WebOnboardingPageState extends State<WebOnboardingPage> {
     if (decoded is! Map) return;
     switch (decoded['type']) {
       case 'ready':
-        _ready = true;
         _timeout?.cancel();
+        if (mounted && !_ready) setState(() => _ready = true);
       case 'set_name':
         final name = decoded['name'];
         if (name is String && name.trim().isNotEmpty) SharedPreferencesUtil().givenName = name.trim();

@@ -68,6 +68,10 @@ class OnboardingWrapper extends StatefulWidget {
   @visibleForTesting
   static int resumeStepForTesting(int saved) => _OnboardingWrapperState.resolveResumeStep(saved);
 
+  /// Debug builds with `--dart-define=OMI_ONBOARDING_RERUN=1` walk onboarding again on a
+  /// signed-in account; startup routing honours it so the reader lands in the wrapper.
+  static bool get rerunForTesting => _OnboardingWrapperState._rerunForTesting;
+
   @override
   State<OnboardingWrapper> createState() => _OnboardingWrapperState();
 }

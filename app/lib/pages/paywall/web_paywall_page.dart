@@ -145,8 +145,8 @@ class _WebPaywallPageState extends State<WebPaywallPage> {
     if (decoded is! Map) return;
     switch (decoded['type']) {
       case 'ready':
-        _ready = true;
         _timeout?.cancel();
+        if (mounted && !_ready) setState(() => _ready = true);
       case 'checkout':
         await _checkout(decoded['interval'] == 'month' ? 'month' : 'year');
       case 'free':
