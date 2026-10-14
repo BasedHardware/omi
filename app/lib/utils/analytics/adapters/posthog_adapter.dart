@@ -19,6 +19,7 @@ class PostHogAnalyticsAdapter
     this.debug = false,
     http.Client? client,
     Future<String?> Function()? distinctIdReader,
+    this.personPropertiesForFlags,
     DateTime Function()? clock,
   })  : _client = client,
         _distinctIdReader = distinctIdReader,
@@ -26,6 +27,10 @@ class PostHogAnalyticsAdapter
 
   final http.Client? _client;
   final Future<String?> Function()? _distinctIdReader;
+
+  /// Person properties sent with a verified fetch so property-targeted flags match a just-created
+  /// identity before PostHog has ingested its `\$set` (a fresh account's email, for one).
+  final Map<String, Object?> Function()? personPropertiesForFlags;
   final DateTime Function() _clock;
 
   /// How long a verified fetch outranks the SDK cache. Long enough for the read that asked for it
@@ -205,11 +210,16 @@ class PostHogAnalyticsAdapter
     try {
       final distinctId = await (_distinctIdReader ?? Posthog().getDistinctId)();
       if (distinctId == null || distinctId.isEmpty) return false;
+      final personProperties = {...?personPropertiesForFlags?.call()}..removeWhere((_, v) => v == null || v == '');
       final response = await client
           .post(
             Uri.parse('$host/decide/?v=3'),
             headers: const {'Content-Type': 'application/json'},
-            body: jsonEncode({'api_key': apiKey, 'distinct_id': distinctId}),
+            body: jsonEncode({
+              'api_key': apiKey,
+              'distinct_id': distinctId,
+              if (personProperties.isNotEmpty) 'person_properties': personProperties,
+            }),
           )
           .timeout(const Duration(seconds: 4));
       if (response.statusCode != 200) return false;
