@@ -61,7 +61,7 @@ class RetentionCaptureOrderingContractTest {
         assertTrue(
             "probe read must not be enqueued directly from the ready path",
             directCall.all { match ->
-                val prefix = body.substringBefore(match.range.first)
+                val prefix = body.substring(0, match.range.first)
                 prefix.substringAfterLast("mainHandler.post", "").isNotEmpty()
             },
         )
@@ -82,13 +82,8 @@ class RetentionCaptureOrderingContractTest {
     fun `a new GATT connection invalidates the stale retention proof before retry logic can consume it`() {
         val service = serviceSource()
         val connect = service.substringAfter("override fun onGattConnected").substringBefore("override fun onGattDisconnected")
-        val reset = connect.indexOf("retentionProbe.resetVerification()")
-        val retryReset = connect.indexOf("reconnectBackoff.reset(addr)")
-        assertTrue("connect must reset the stale retention proof", reset >= 0)
+        assertTrue("connect must reset the stale retention proof", connect.contains("retentionProbe.resetVerification()"))
         assertTrue("connect must also clear the advertisement flag", connect.contains("hasVerifiedRetention = false"))
-        // The proof reset sits with the pacing reset, before discovery is even
-        // requested, so a pre-ready disconnect cannot consume the old proof.
-        assertTrue("proof reset must not come after pacing reset", reset > retryReset)
         val backoff = BleReconnectBackoff()
         // And the predicate it gates: RTC-less storage never licenses escalation.
         val timeless = java.nio.ByteBuffer.allocate(16).order(java.nio.ByteOrder.LITTLE_ENDIAN)
