@@ -404,6 +404,7 @@ class TestAppsV2LimitBoundary:
 class _CountDoc:
     def __init__(self, data):
         self._data = dict(data)
+        self.id = self._data.get('id')
 
     def to_dict(self):
         return dict(self._data)
@@ -665,6 +666,36 @@ class TestConversationsCountRealHelper:
 
         assert record[0]['count'] == 7
         assert result == 6
+
+    def test_dream_duplicates_subtract_from_product_counts_but_not_export_counts(self, monkeypatch):
+        docs = [
+            {'id': 'plain', 'created_at': _T1, 'discarded': False, 'status': 'completed', 'source': 'omi'},
+            {
+                'id': 'dup',
+                'created_at': _T2,
+                'discarded': False,
+                'status': 'completed',
+                'source': 'omi',
+                'dream_duplicate_of': 'plain',
+                'dream_duplicate': True,
+            },
+            {
+                'id': 'tomb-and-dup',
+                'created_at': _T2,
+                'discarded': False,
+                'status': 'completed',
+                'source': 'omi',
+                'dream_duplicate_of': 'plain',
+                'dream_duplicate': True,
+                'deleted': True,
+            },
+        ]
+        product, _ = _real_count(monkeypatch, docs=docs)
+        assert product == 1, 'duplicate captures and tombstones must both subtract, a row with both once'
+        export, _ = _real_count(monkeypatch, docs=docs, include_discarded=True)
+        assert export == 2, 'export counts keep duplicate captures and subtract only tombstones'
+        dated, _ = _real_count(monkeypatch, docs=docs, start_date=_T1, end_date=_T1)
+        assert dated == 1, 'duplicates outside the range never subtract from bounded counts'
 
     @pytest.mark.parametrize(
         ('kwargs', 'raw', 'expected'),

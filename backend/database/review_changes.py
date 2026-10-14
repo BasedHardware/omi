@@ -44,6 +44,7 @@ ALLOWED_FIELDS = {
         'transcript_segments',
         'manual_speaker_assignments',
         'dream_duplicate_of',
+        'dream_duplicate',
         'language',
     },
     'action_items': {'status', 'completed', 'completed_at', 'deleted', 'superseded_by', 'updated_at'},
@@ -108,6 +109,7 @@ def record_agent_change(
     expected_records: dict | None = None,
     entity_merge: tuple[str, str] | None = None,
     exact_undo: bool = False,
+    witness_records: dict | None = None,
 ) -> ReviewChange:
     """Apply and journal a supported edit exactly once, keyed by change_id.
 
@@ -180,7 +182,7 @@ def record_agent_change(
             'entity_merge': list(entity_merge) if entity_merge else None,
         }
         if exact_undo:
-            journal.update(review_exact_undo.journal_fences(edits, rows, expected_records))
+            journal.update(review_exact_undo.journal_fences(edits, rows, expected_records, witnesses=witness_records))
         mutations = (
             [memory_ledger.merge_entities(*entity_merge, evidence={'review_change_id': change.change_id})]
             if entity_merge
@@ -204,6 +206,12 @@ def record_agent_change(
         )
     except _Unchanged:
         pass
+    if edits and any(edit.collection == 'action_items' for edit in edits):
+        # Cleanup writes action_items outside database.action_items; cached
+        # /v1/action-items pages are invalidated only through this counter.
+        from database.action_items_cache import bump_action_items_list_version
+
+        bump_action_items_list_version(uid)
     return _wire(result)
 
 
@@ -314,6 +322,17 @@ def set_undone(uid: str, change_id: str, undone: bool, *, now: datetime | None =
             raise _Unchanged
         expected, destination = ('after', 'before') if undone else ('before', 'after')
         review_exact_undo.validate_generation(uid, tx, data)
+        if not undone:
+            # Merge cleanups hide the target behind a surviving row; Redo must
+            # not resurrect superseded_by/dream_duplicate_of links pointing at
+            # a survivor that changed or disappeared after Undo.
+            for survivor_path, expected_fence in (data.get('witness_fences') or {}).items():
+                survivor_collection, survivor_id = survivor_path.split('/', 1)
+                survivor = (
+                    store.user(uid).collection(survivor_collection).document(survivor_id).get(transaction=tx).to_dict()
+                )
+                if survivor is None or store.fingerprint(survivor) != expected_fence:
+                    raise store.ReviewConflict('Cleanup survivor has a newer edit')
         rows = []
         exact_restores = {}
         for edit in data['edits']:
@@ -370,6 +389,10 @@ def set_undone(uid: str, change_id: str, undone: bool, *, now: datetime | None =
         )
     except _Unchanged:
         pass
+    if any(edit.get('collection') == 'action_items' for edit in result.get('edits', [])):
+        from database.action_items_cache import bump_action_items_list_version
+
+        bump_action_items_list_version(uid)
     return _wire(result)
 
 

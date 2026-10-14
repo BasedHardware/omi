@@ -198,7 +198,9 @@ export interface AgentProposalItem {
   edit?: Edit | null;
   harness_edit?: HarnessEdit | null;
   memory_hygiene?: MemoryHygieneEdit | null;
+  other_content?: string | null;
   other_label?: string | null;
+  target_content?: string | null;
   target_label?: string;
   vocabulary?: Term | null;
 }
@@ -2842,6 +2844,7 @@ export interface HTTPValidationError {
 export interface HarnessEdit {
   after?: string;
   before?: string;
+  effective_from?: string;
   evidence: Array<string>;
   kind: "spelling" | "title" | "overview" | "memory" | "entity_summary" | "close_task" | "merge_memories" | "retire_memory" | "supersede_memory" | "dismiss_person" | "merge_people" | "merge_tasks" | "retire_task" | "merge_conversations" | "set_language";
   other?: string;
@@ -3402,6 +3405,7 @@ export interface MemoryGlobalReadGateObservability {
 export interface MemoryHygieneEdit {
   after?: string;
   before?: string;
+  effective_from?: string;
   evidence: Array<string>;
   kind: "retire_memory" | "supersede_memory";
   other?: string;

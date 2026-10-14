@@ -779,9 +779,8 @@ def is_visible_conversation(conversation: Optional[Mapping[str, Any]], *, includ
     if is_soft_deleted(conversation):
         return False
     if not include_discarded:
-        # Dream duplicate captures are folded out of product reads but the
-        # recordings are intentionally preserved: export/compliance readers
-        # (include_discarded=True) must still see them, like discarded rows.
+        # Dream duplicate captures are folded out of product reads, but the
+        # preserved recordings stay visible to export/compliance readers.
         if (
             conversation.get('dream_duplicate_of')
             or conversation.get('discarded')
@@ -838,27 +837,39 @@ def _count_matching_tombstones(
     folder_id: Optional[str] = None,
     starred: Optional[bool] = None,
 ) -> int:
-    """Count `deleted==True` rows that would have matched the list query.
+    """Count rows the aggregation counted but the corresponding list cannot render.
 
-    Equality on `deleted` only matches documents that have the field, so
-    pre-#15193 conversations (no `deleted` field) are not subtracted. Tombstones
-    per user are few; this avoids a composite index on every list-filter combo.
+    `deleted==True` tombstones are hidden from every read. Dream duplicate
+    captures are folded out of product reads while remaining visible to
+    export/compliance readers, so they subtract only when ``include_discarded``
+    is false. Both markers are rare per user; each streams through its automatic
+    single-field index, and a row carrying both markers subtracts once.
     """
+    markers = [FieldFilter('deleted', '==', True)]
+    if not include_discarded:
+        markers.append(FieldFilter('dream_duplicate', '==', True))
+    seen: set[str] = set()
     matching = 0
-    for doc in collection.where(filter=FieldFilter('deleted', '==', True)).stream():
-        data = doc.to_dict() or {}
-        if _conversation_matches_list_predicates(
-            data,
-            include_discarded=include_discarded,
-            statuses=statuses,
-            sources=sources,
-            start_date=start_date,
-            end_date=end_date,
-            categories=categories,
-            folder_id=folder_id,
-            starred=starred,
-        ):
-            matching += 1
+    for marker in markers:
+        for doc in collection.where(filter=marker).stream():
+            if doc.id in seen:
+                continue
+            seen.add(doc.id)
+            data = doc.to_dict() or {}
+            if not (data.get('deleted') or (data.get('dream_duplicate') and not include_discarded)):
+                continue
+            if _conversation_matches_list_predicates(
+                data,
+                include_discarded=include_discarded,
+                statuses=statuses,
+                sources=sources,
+                start_date=start_date,
+                end_date=end_date,
+                categories=categories,
+                folder_id=folder_id,
+                starred=starred,
+            ):
+                matching += 1
     return matching
 
 

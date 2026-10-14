@@ -51,6 +51,14 @@ class HarnessEdit(Strict):
             'Empty for retirement, dismissal and task/conversation/person merges: preserve the survivor.'
         ),
     )
+    effective_from: str = Field(
+        default='',
+        max_length=40,
+        description=(
+            'For supersede_memory without other: optional ISO 8601 timestamp (with timezone) when the '
+            'replacement became true per the cited evidence. Omit to use the apply time.'
+        ),
+    )
     reason: str = Field(min_length=1, max_length=1000, description='Explain the defect and cited evidence.')
     evidence: list[str] = Field(
         min_length=1,

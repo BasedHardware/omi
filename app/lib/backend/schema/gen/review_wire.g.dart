@@ -429,6 +429,7 @@ class GeneratedEdit {
 class GeneratedMemoryHygieneEdit {
   final String after;
   final String before;
+  final String effectiveFrom;
   final List<String> evidence;
   final String kind;
   final String other;
@@ -438,6 +439,7 @@ class GeneratedMemoryHygieneEdit {
   const GeneratedMemoryHygieneEdit({
     this.after = "",
     this.before = "",
+    this.effectiveFrom = "",
     required this.evidence,
     required this.kind,
     this.other = "",
@@ -449,6 +451,7 @@ class GeneratedMemoryHygieneEdit {
     return GeneratedMemoryHygieneEdit(
       after: _required(_readFieldValue<String>(_readField(json, const ["after"]), "after", _readString, requiredField: false, nullable: false, defaultValue: ""), "after"),
       before: _required(_readFieldValue<String>(_readField(json, const ["before"]), "before", _readString, requiredField: false, nullable: false, defaultValue: ""), "before"),
+      effectiveFrom: _required(_readFieldValue<String>(_readField(json, const ["effective_from"]), "effective_from", _readString, requiredField: false, nullable: false, defaultValue: ""), "effective_from"),
       evidence: _required(_readFieldValue<List<String>>(_readField(json, const ["evidence"]), "evidence", _readStringList, requiredField: true, nullable: false), "evidence"),
       kind: _required(_readFieldValue<String>(_readField(json, const ["kind"]), "kind", _readString, requiredField: true, nullable: false), "kind"),
       other: _required(_readFieldValue<String>(_readField(json, const ["other"]), "other", _readString, requiredField: false, nullable: false, defaultValue: ""), "other"),
@@ -461,6 +464,7 @@ class GeneratedMemoryHygieneEdit {
     return {
       'after': after,
       'before': before,
+      'effective_from': effectiveFrom,
       'evidence': evidence,
       'kind': kind,
       'other': other,
@@ -473,6 +477,7 @@ class GeneratedMemoryHygieneEdit {
 class GeneratedHarnessEdit {
   final String after;
   final String before;
+  final String effectiveFrom;
   final List<String> evidence;
   final String kind;
   final String other;
@@ -484,6 +489,7 @@ class GeneratedHarnessEdit {
   const GeneratedHarnessEdit({
     this.after = "",
     this.before = "",
+    this.effectiveFrom = "",
     required this.evidence,
     required this.kind,
     this.other = "",
@@ -497,6 +503,7 @@ class GeneratedHarnessEdit {
     return GeneratedHarnessEdit(
       after: _required(_readFieldValue<String>(_readField(json, const ["after"]), "after", _readString, requiredField: false, nullable: false, defaultValue: ""), "after"),
       before: _required(_readFieldValue<String>(_readField(json, const ["before"]), "before", _readString, requiredField: false, nullable: false, defaultValue: ""), "before"),
+      effectiveFrom: _required(_readFieldValue<String>(_readField(json, const ["effective_from"]), "effective_from", _readString, requiredField: false, nullable: false, defaultValue: ""), "effective_from"),
       evidence: _required(_readFieldValue<List<String>>(_readField(json, const ["evidence"]), "evidence", _readStringList, requiredField: true, nullable: false), "evidence"),
       kind: _required(_readFieldValue<String>(_readField(json, const ["kind"]), "kind", _readString, requiredField: true, nullable: false), "kind"),
       other: _required(_readFieldValue<String>(_readField(json, const ["other"]), "other", _readString, requiredField: false, nullable: false, defaultValue: ""), "other"),
@@ -511,6 +518,7 @@ class GeneratedHarnessEdit {
     return {
       'after': after,
       'before': before,
+      'effective_from': effectiveFrom,
       'evidence': evidence,
       'kind': kind,
       'other': other,
@@ -558,7 +566,9 @@ class GeneratedAgentProposalItem {
   final GeneratedEdit? edit;
   final GeneratedHarnessEdit? harnessEdit;
   final GeneratedMemoryHygieneEdit? memoryHygiene;
+  final String? otherContent;
   final String? otherLabel;
+  final String? targetContent;
   final String targetLabel;
   final GeneratedTerm? vocabulary;
 
@@ -566,7 +576,9 @@ class GeneratedAgentProposalItem {
     this.edit,
     this.harnessEdit,
     this.memoryHygiene,
+    this.otherContent,
     this.otherLabel,
+    this.targetContent,
     this.targetLabel = "",
     this.vocabulary,
   });
@@ -576,7 +588,9 @@ class GeneratedAgentProposalItem {
       edit: _readFieldValue<GeneratedEdit>(_readField(json, const ["edit"]), "edit", (value) => _readObject(value, GeneratedEdit.fromJson), requiredField: false, nullable: true),
       harnessEdit: _readFieldValue<GeneratedHarnessEdit>(_readField(json, const ["harness_edit"]), "harness_edit", (value) => _readObject(value, GeneratedHarnessEdit.fromJson), requiredField: false, nullable: true),
       memoryHygiene: _readFieldValue<GeneratedMemoryHygieneEdit>(_readField(json, const ["memory_hygiene"]), "memory_hygiene", (value) => _readObject(value, GeneratedMemoryHygieneEdit.fromJson), requiredField: false, nullable: true),
+      otherContent: _readFieldValue<String>(_readField(json, const ["other_content"]), "other_content", _readString, requiredField: false, nullable: true),
       otherLabel: _readFieldValue<String>(_readField(json, const ["other_label"]), "other_label", _readString, requiredField: false, nullable: true),
+      targetContent: _readFieldValue<String>(_readField(json, const ["target_content"]), "target_content", _readString, requiredField: false, nullable: true),
       targetLabel: _required(_readFieldValue<String>(_readField(json, const ["target_label"]), "target_label", _readString, requiredField: false, nullable: false, defaultValue: ""), "target_label"),
       vocabulary: _readFieldValue<GeneratedTerm>(_readField(json, const ["vocabulary"]), "vocabulary", (value) => _readObject(value, GeneratedTerm.fromJson), requiredField: false, nullable: true),
     );
@@ -587,7 +601,9 @@ class GeneratedAgentProposalItem {
       'edit': edit?.toJson(),
       'harness_edit': harnessEdit?.toJson(),
       'memory_hygiene': memoryHygiene?.toJson(),
+      'other_content': otherContent,
       'other_label': otherLabel,
+      'target_content': targetContent,
       'target_label': targetLabel,
       'vocabulary': vocabulary?.toJson(),
     };

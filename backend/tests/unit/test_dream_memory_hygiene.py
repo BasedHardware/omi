@@ -121,14 +121,31 @@ def test_apply_undo_redo_exactness(hygiene, operation):
     change_id = data['change']['change_id']
     after = deepcopy(db.rows[('users', UID, 'memory_items', 'old')])
     assert review_changes.set_undone(UID, change_id, True).undone
-    assert db.rows[('users', UID, 'memory_items', 'old')] == before
+    restored = db.rows[('users', UID, 'memory_items', 'old')]
+
+    def sans_stamps(row):
+        return {key: value for key, value in row.items() if key not in {'ledger_commit_id', 'ledger_sequence'}}
+
+    # Undo restores every prior field, but the restored row must carry the
+    # reversal commit: its outbox events are stamped with that commit and
+    # vector hydration rejects rows whose stamp differs from the projection.
+    assert sans_stamps(restored) == sans_stamps(before)
+    assert restored['ledger_commit_id'] != after['ledger_commit_id']
+    journal_doc = review_store.decode_doc(
+        UID, next(row for path, row in db.rows.items() if path[-2] == 'review_changes')
+    )
+    assert journal_doc
+    journal = journal_doc['memory_hygiene']
+    assert restored['ledger_commit_id'] == journal['undone_rows']['old']['ledger_commit_id']
     assert db.rows[('users', UID, 'memory_items', 'new')] == newer
     assert not review_changes.agent_change_allowed(UID, dream_tools.edit_key(operation, records()[0]))
     if operation.after:
         tails = [row for path, row in db.rows.items() if path[-2] == 'memory_items' and path[-1] not in {'old', 'new'}]
         assert len(tails) == 1 and tails[0]['status'] == 'superseded'
     assert not review_changes.set_undone(UID, change_id, False).undone
-    assert db.rows[('users', UID, 'memory_items', 'old')] == after
+    redone = db.rows[('users', UID, 'memory_items', 'old')]
+    assert sans_stamps(redone) == sans_stamps(after)
+    assert redone['ledger_commit_id'] not in {after['ledger_commit_id'], restored['ledger_commit_id']}
     assert len([path for path in db.rows if path[-2] == 'memory_commits']) == 3
     events = [row for path, row in db.rows.items() if path[-2] == 'memory_outbox']
     assert {row['payload']['action'] for row in events} == {'upsert', 'delete'}
@@ -271,6 +288,100 @@ def test_undo_conflicts_with_later_edit(hygiene):
     db.rows[('users', UID, 'memory_items', 'old')]['content'] = 'A later synthetic correction.'
     with pytest.raises(review_store.ReviewConflict):
         review_changes.set_undone(UID, data['change']['change_id'], True)
+
+
+def tail_row(db):
+    return next(row for path, row in db.rows.items() if path[-2] == 'memory_items' and path[-1] not in {'old', 'new'})
+
+
+def decoded(db, collection):
+    data = review_store.decode_doc(UID, next(row for path, row in db.rows.items() if path[-2] == collection))
+    assert data
+    return data
+
+
+def test_replacement_binds_every_cited_conversation_as_source(hygiene):
+    """The new active fact must join each cited conversation's source cohort."""
+    db, _ = hygiene
+    operation = edit('supersede_memory', after='Since January, lives in New Toytown.')
+    report = run([FullPlan(edits=[operation])] * 3)
+    assert report['outcomes'][0]['status'] == 'applied'
+    item = MemoryItem.model_validate(tail_row(db))
+    # Canonical evidence carries the bare conversation id: source-cohort
+    # discovery probes source_ids with array_contains on the raw id.
+    assert 'toy' in item.source_ids
+    evidence_rows = [row for path, row in db.rows.items() if path[-2] == 'memory_evidence']
+    assert len(evidence_rows) == 1
+    assert evidence_rows[0]['conversation_id'] == 'toy'
+
+
+def test_secret_shaped_replacement_content_is_restricted(hygiene):
+    """Free-form replacements never inherit unrestricted labels blindly."""
+    db, _ = hygiene
+    operation = edit('supersede_memory', after='Leaked key sk-ABCDEFGHIJKLMNOPQRSTUVWX in the transcript.')
+    report = run([FullPlan(edits=[operation])] * 3)
+    assert report['outcomes'][0]['status'] == 'applied'
+    assert 'credential' in tail_row(db)['sensitivity_labels']
+
+
+def test_background_tail_uses_reconciliation_reason_review_accept_does_not(hygiene):
+    db, _ = hygiene
+    operation = edit('supersede_memory', after='Since January, lives in New Toytown.')
+    report = run([FullPlan(edits=[operation])] * 3)
+    assert report['outcomes'][0]['status'] == 'applied'
+    # The scheduled effect loop (dream_writing set) is the reconciliation
+    # channel; its conclusions must not outrank the sweep's later corrections.
+    assert tail_row(db)['write_reason'] == 'daily_reconciliation'
+    # A user-accepted Review proposal applies outside the effect loop and
+    # keeps the request-serving agent-conclusion reason.
+    db.rows[('users', UID, 'memory_items', 'new')]['write_reason'] = 'direct_user_statement'
+    accepted = edit('supersede_memory', target=NREF, after='Now lives in Futurtown for good.')
+    report = run([FullPlan(edits=[accepted])] * 3)
+    assert report['outcomes'][0]['status'] == 'suggested'
+    proposal = decoded(db, 'review_proposals')
+    from models.review import AgentProposalItem as Wire
+
+    assert dream_tools.answer_proposal(
+        UID, Wire.model_validate(proposal['item']['agent_proposal']), proposal['source'], 'accept'
+    )
+    tails = [row for path, row in db.rows.items() if path[-2] == 'memory_items' and path[-1] not in {'old', 'new'}]
+    assert tails[-1]['write_reason'] == 'agent_reusable_conclusion'
+
+
+def test_hygiene_proposal_carries_full_fact_contents(hygiene):
+    db, _ = hygiene
+    db.rows[('users', UID, 'memory_items', 'old')]['write_reason'] = 'direct_user_statement'
+    run([FullPlan(edits=[edit('supersede_memory', other=NREF)])] * 3)
+    wire = decoded(db, 'review_proposals')['item']['agent_proposal']
+    assert wire['target_content'] == 'Lives in Toytown.'
+    assert wire['other_content'] == 'Since January, lives in New Toytown.'
+
+
+def test_replacement_effective_time_comes_from_evidence(hygiene):
+    from utils.dream_guards import timestamp
+
+    db, _ = hygiene
+    since = (NOW - timedelta(days=3)).isoformat()
+    operation = edit('supersede_memory', after='Since January, lives in New Toytown.', effective_from=since)
+    report = run([FullPlan(edits=[operation])] * 3)
+    assert report['outcomes'][0]['status'] == 'applied'
+    tail = tail_row(db)
+    valid_from, expected = timestamp(tail['valid_from']), timestamp(since)
+    assert valid_from is not None and valid_from == expected
+    closed_at = timestamp(db.rows[('users', UID, 'memory_items', 'old')]['valid_to'])
+    assert closed_at is not None and closed_at > valid_from
+
+
+def test_future_effective_time_falls_back_to_apply_time(hygiene):
+    from utils.dream_guards import timestamp
+
+    db, _ = hygiene
+    future = (datetime.now(timezone.utc) + timedelta(days=30)).isoformat()
+    operation = edit('supersede_memory', after='Will move to Futurtown.', effective_from=future)
+    report = run([FullPlan(edits=[operation])] * 3)
+    assert report['outcomes'][0]['status'] == 'applied'
+    valid_from, future_at = timestamp(tail_row(db)['valid_from']), timestamp(future)
+    assert valid_from is not None and future_at is not None and valid_from < future_at
 
 
 def test_context_includes_active_memories_within_budget(monkeypatch):

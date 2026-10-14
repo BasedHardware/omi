@@ -91,9 +91,14 @@ def commit_review_memory_items(
         operation_ref=db_client.document(f'{collections.memory_operations}/{operation.operation_id}'),
         result=result,
     )
-    if new_evidence is not None:
+    evidence_items = (
+        []
+        if new_evidence is None
+        else (list(new_evidence) if isinstance(new_evidence, (list, tuple)) else [new_evidence])
+    )
+    for evidence in evidence_items:
         transaction.set(
-            db_client.document(f'{collections.memory_evidence}/{new_evidence.evidence_id}'),
-            canonical.firestore_data(new_evidence),
+            db_client.document(f'{collections.memory_evidence}/{evidence.evidence_id}'),
+            canonical.firestore_data(evidence),
         )
     return control.source_generation, [canonical.firestore_data(item) for item in items]

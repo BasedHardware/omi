@@ -117,9 +117,11 @@ def test_later_user_edit_generation_or_deletion_prevents_cleanup_reversal(store,
     seen = records(store)
     dream_tools.apply_edit(UID, operation, seen, expected_records=dream_tools.proposal_fences(UID, {'records': seen}))
     change = next(
-        review_store.decode_doc(UID, row)['change']
-        for key, row in store.rows.items()
-        if key[2:3] == ('review_changes',)
+        decoded['change']
+        for decoded in (
+            review_store.decode_doc(UID, row) for key, row in store.rows.items() if key[2:3] == ('review_changes',)
+        )
+        if decoded
     )
     if changed == 'row':
         store.rows[('users', UID, 'action_items', 'one')]['description'] = 'A later user edit'
@@ -172,6 +174,7 @@ def test_cleanup_retains_audio_and_survivor_and_never_hard_deletes(store):
     dream_tools.apply_edit(UID, edit('merge_conversations', other='conversations/two'), seen)
     assert store.rows[path]['audio_files'] == [{'id': 'synthetic-audio'}]
     assert store.rows[path]['dream_duplicate_of'] == 'two'
+    assert store.rows[path]['dream_duplicate'] is True
     assert 'discarded' not in store.rows[path] and store.rows[path]['status'] == 'completed'
     # Folded out of product reads, but the preserved capture stays in the
     # exhaustive export/compliance stream (include_discarded=True).
@@ -213,3 +216,64 @@ def test_undo_suppression_keys_ignore_merge_direction_and_optional_before_text(s
     retirement = edit('retire_task')
     quoted = retirement.model_copy(update={'before': seen[retirement.target]['description']})
     assert dream_tools.edit_key(retirement, seen) == dream_tools.edit_key(quoted, seen)
+
+
+def test_redo_rejects_a_changed_or_deleted_merge_survivor(store):
+    """After Undo, Redo must not restore links to a moved/removed survivor."""
+    operation = edit('merge_tasks', other='action_items/two')
+    seen = records(store)
+    dream_tools.apply_edit(UID, operation, seen, expected_records=dream_tools.proposal_fences(UID, {'records': seen}))
+    change = next(
+        decoded['change']
+        for decoded in (
+            review_store.decode_doc(UID, row) for key, row in store.rows.items() if key[2:3] == ('review_changes',)
+        )
+        if decoded
+    )
+    review_changes.set_undone(UID, change['change_id'], True)
+    store.rows[('users', UID, 'action_items', 'two')]['description'] = 'Edited while undone'
+    before = deepcopy(store.rows[('users', UID, 'action_items', 'one')])
+    with pytest.raises(review_store.ReviewConflict, match='survivor'):
+        review_changes.set_undone(UID, change['change_id'], False)
+    assert store.rows[('users', UID, 'action_items', 'one')] == before
+    # Restoring the survivor lets Redo proceed.
+    store.rows[('users', UID, 'action_items', 'two')]['description'] = seen['action_items/two']['description']
+    review_changes.set_undone(UID, change['change_id'], False)
+    assert store.rows[('users', UID, 'action_items', 'one')]['superseded_by'] == 'two'
+
+
+def test_redo_rejects_a_deleted_merge_survivor(store):
+    operation = edit('merge_conversations', other='conversations/two')
+    seen = records(store)
+    dream_tools.apply_edit(UID, operation, seen)
+    change = next(
+        decoded['change']
+        for decoded in (
+            review_store.decode_doc(UID, row) for key, row in store.rows.items() if key[2:3] == ('review_changes',)
+        )
+        if decoded
+    )
+    review_changes.set_undone(UID, change['change_id'], True)
+    del store.rows[('users', UID, 'conversations', 'two')]
+    with pytest.raises(review_store.ReviewConflict, match='survivor'):
+        review_changes.set_undone(UID, change['change_id'], False)
+
+
+def test_task_cleanup_and_reversal_bump_the_action_items_list_cache(store, monkeypatch):
+    from database import action_items_cache
+
+    calls = []
+    monkeypatch.setattr(action_items_cache, 'bump_action_items_list_version', lambda uid: calls.append(uid))
+    operation = edit('merge_tasks', other='action_items/two')
+    seen = records(store)
+    dream_tools.apply_edit(UID, operation, seen, expected_records=dream_tools.proposal_fences(UID, {'records': seen}))
+    change = next(
+        decoded['change']
+        for decoded in (
+            review_store.decode_doc(UID, row) for key, row in store.rows.items() if key[2:3] == ('review_changes',)
+        )
+        if decoded
+    )
+    review_changes.set_undone(UID, change['change_id'], True)
+    review_changes.set_undone(UID, change['change_id'], False)
+    assert calls == [UID, UID, UID]

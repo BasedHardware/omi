@@ -481,7 +481,9 @@ def suggest_spelling(uid, edit, records, run_id):
     source: dict[str, Any] = {
         'records': {base_ref(ref): records[base_ref(ref)] for ref in {edit.target, *edit.evidence}},
         'edit_key': edit_key(edit, records),
-        'spelling_edit': edit.model_dump(mode='python', exclude={'value'}),
+        # FullEdit's hygiene-only effective_from is not part of the bounded
+        # spelling wire schema and must not leak into the journaled question.
+        'spelling_edit': edit.model_dump(mode='python', exclude={'value', 'effective_from'}),
     }
     source['speaker_names'] = question_source(spelling_question(edit), records).get('speaker_names', {})
     source['fences'] = proposal_fences(uid, source)
@@ -657,6 +659,18 @@ def suggest_edit(uid, edit, records, *, run_id=None):
         raise review_store.ReviewConflict('Dream task generation changed')
     target_label = proposal_label(records[base_ref(edit.target)])
     other_label = proposal_label(records[base_ref(edit.other)]) if edit.other else None
+    # Hygiene cards substitute labels for absent before/after; the full fact
+    # contents ride along so clients can show exactly what would be retired or
+    # replaced, not a 180-character label prefix.
+    is_hygiene = edit.kind in {'retire_memory', 'supersede_memory'}
+    hygiene_contents = (
+        {
+            'target_content': str(records[base_ref(edit.target)].get('content') or ''),
+            'other_content': str(records[base_ref(edit.other)].get('content') or '') if edit.other else None,
+        }
+        if is_hygiene
+        else {}
+    )
     proposal = (
         AgentProposalItem(harness_edit=edit, target_label=target_label, other_label=other_label)
         if isinstance(edit, HarnessEdit)
@@ -665,10 +679,14 @@ def suggest_edit(uid, edit, records, *, run_id=None):
                 memory_hygiene=MemoryHygieneEdit.model_validate(edit.model_dump(exclude={'value'})),
                 target_label=target_label,
                 other_label=other_label,
+                target_content=hygiene_contents.get('target_content'),
+                other_content=hygiene_contents.get('other_content'),
             )
-            if edit.kind in {'retire_memory', 'supersede_memory'}
+            if is_hygiene
             else AgentProposalItem(
-                edit=Edit.model_validate(edit.model_dump(exclude={'value'})),
+                # FullEdit carries effective_from for hygiene supersessions;
+                # the bounded Edit wire schema does not know that field.
+                edit=Edit.model_validate(edit.model_dump(exclude={'value', 'effective_from'})),
                 target_label=target_label,
                 other_label=other_label,
             )

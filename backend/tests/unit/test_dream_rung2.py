@@ -187,7 +187,7 @@ def test_bounded_owner_cannot_use_unanimity_or_full_policy(store, monkeypatch):
     item = majority([FullPlan(edits=[edit()])] * 3).edits[0]
     with pytest.raises(ValueError, match='ungrounded_spelling'):
         dream_tools.apply_unanimous_edit(UID, item, {REF: ROW})
-    bounded = Edit.model_validate(edit().model_dump(exclude={'value'}))
+    bounded = Edit.model_validate(edit().model_dump(exclude={'value', 'effective_from'}))
     report = run([Plan(edits=[bounded])])
     assert report['status'] == 'complete' and report['proposed']['edits'][0]['policy'] == 'suggest'
     assert 'auto_applied_unanimous' not in report

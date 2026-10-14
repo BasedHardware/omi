@@ -113,6 +113,11 @@ class MemoryHygieneEdit(Strict):
         max_length=2000,
         description='For supersede_memory without other, the newer time-scoped fact text supported by conversations. Empty for retire_memory.',
     )
+    effective_from: str = Field(
+        default='',
+        max_length=40,
+        description='Optional ISO 8601 timestamp (with timezone) when the replacement fact became true according to the cited evidence, e.g. "Since January". Omit to use the apply time; never invent a time the evidence does not state.',
+    )
     reason: str = Field(
         min_length=1,
         max_length=1000,
@@ -164,6 +169,11 @@ class FullEdit(Strict):
         default='',
         description='Corrected text for text edits; newer time-scoped fact for supersede_memory without other. Empty for retire_memory.',
     )
+    effective_from: str = Field(
+        default='',
+        max_length=40,
+        description='For supersede_memory without other: optional ISO 8601 timestamp (with timezone) when the replacement became true per the cited evidence. Omit to use the apply time.',
+    )
 
     reason: str = Field(
         min_length=1,
@@ -185,7 +195,9 @@ class FullEdit(Strict):
             self.after = self.after.strip()
             MemoryHygieneEdit.model_validate(self.model_dump(exclude={'value'}))
         else:
-            Edit.model_validate(self.model_dump(exclude={'value'}))
+            # The bounded wire schema has no effective_from; only hygiene
+            # supersessions may carry it, so drop it from this round-trip.
+            Edit.model_validate(self.model_dump(exclude={'value', 'effective_from'}))
         return self
 
     value: int | None = Field(default=None, ge=1, le=5, description=QUESTION_VALUE_DESCRIPTION)

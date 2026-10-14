@@ -327,12 +327,12 @@ class AgentProposalItem {
         targetLabel: targetLabel,
         otherLabel: _str(json['other_label']),
         before: (harness != null || hygiene != null) && (_str(edit['before']) ?? '').isEmpty
-            ? targetLabel
+            ? _str(json['target_content']) ?? targetLabel
             : _str(edit['before']) ?? '',
         after: (harness != null || hygiene != null) &&
                 (_str(edit['after']) ?? '').isEmpty &&
                 {'supersede_memory', 'merge_people', 'merge_tasks', 'merge_conversations'}.contains(kind)
-            ? _str(json['other_label']) ?? ''
+            ? _str(json['other_content']) ?? _str(json['other_label']) ?? ''
             : _str(edit['after']) ?? '',
         reason: _str(edit['reason']),
       );

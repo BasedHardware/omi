@@ -1495,6 +1495,17 @@
               }
             ]
           },
+          "other_content": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Other Content"
+          },
           "other_label": {
             "anyOf": [
               {
@@ -1505,6 +1516,17 @@
               }
             ],
             "title": "Other Label"
+          },
+          "target_content": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target Content"
           },
           "target_label": {
             "default": "",
@@ -17712,6 +17734,13 @@
             "title": "Before",
             "type": "string"
           },
+          "effective_from": {
+            "default": "",
+            "description": "For supersede_memory without other: optional ISO 8601 timestamp (with timezone) when the replacement became true per the cited evidence. Omit to use the apply time.",
+            "maxLength": 40,
+            "title": "Effective From",
+            "type": "string"
+          },
           "evidence": {
             "description": "Fully read owner refs, with segment ids for speech when available. Cited evidence must support this change; do not invent refs or use the old memory itself as retirement support.",
             "items": {
@@ -21349,6 +21378,13 @@
             "default": "",
             "description": "Exact wrong text as it appears in the target, including its capitalization. For spelling, one edit fixes every occurrence of this text.",
             "title": "Before",
+            "type": "string"
+          },
+          "effective_from": {
+            "default": "",
+            "description": "Optional ISO 8601 timestamp (with timezone) when the replacement fact became true according to the cited evidence, e.g. \"Since January\". Omit to use the apply time; never invent a time the evidence does not state.",
+            "maxLength": 40,
+            "title": "Effective From",
             "type": "string"
           },
           "evidence": {

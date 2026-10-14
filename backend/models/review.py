@@ -102,6 +102,10 @@ class SpellingItem(SpellingQuestionPayload):
 class AgentProposalItem(BaseModel):
     target_label: str = ''
     other_label: Optional[str] = None
+    # Validated full fact contents for hygiene proposals so approval surfaces
+    # show the real row, not the 180-character label prefix. None = not sent.
+    target_content: Optional[str] = None
+    other_content: Optional[str] = None
     edit: Optional[Edit] = None
     memory_hygiene: Optional[MemoryHygieneEdit] = None
     harness_edit: Optional[HarnessEdit] = None
@@ -110,10 +114,9 @@ class AgentProposalItem(BaseModel):
     @model_serializer(mode='wrap')
     def preserve_existing_wire(self, handler):
         data = handler(self)
-        if self.memory_hygiene is None:
-            data.pop('memory_hygiene', None)
-        if self.harness_edit is None:
-            data.pop('harness_edit', None)
+        for field in ('memory_hygiene', 'harness_edit', 'target_content', 'other_content'):
+            if getattr(self, field) is None:
+                data.pop(field, None)
         return data
 
     @model_validator(mode='after')
