@@ -275,6 +275,43 @@ class ManifestContractTests(unittest.TestCase):
             validate_manifest(invalid, REPO_ROOT),
         )
 
+    def test_explicit_trigger_path_tracked_at_head_satisfies_sparse_worktree(self) -> None:
+        # Cone-mode sparse checkouts do not materialise out-of-cone paths, so
+        # a real trigger path can be absent from the working tree. Validation
+        # must accept anything tracked at HEAD, or every sparse checkout fails
+        # pre-push at manifest resolution.
+        manifest = load_manifest(MANIFEST_PATH)
+        first = manifest.checks[0]
+        tracked_but_sparse = "web/app/Dockerfile"
+        malformed = Check(
+            first.id,
+            first.command,
+            (*first.triggers, tracked_but_sparse),
+            first.lanes,
+            first.reason,
+        )
+        valid = type(manifest)((malformed, *manifest.checks[1:]), manifest.exempt)
+        self.assertFalse(any(
+            "explicit trigger path does not exist" in error
+            for error in validate_manifest(valid, REPO_ROOT)
+        ))
+
+    def test_command_path_tracked_at_head_satisfies_sparse_worktree(self) -> None:
+        manifest = load_manifest(MANIFEST_PATH)
+        first = manifest.checks[0]
+        malformed = Check(
+            first.id,
+            ("python3", "mcp/tests/test_date_filters.py"),
+            first.triggers,
+            first.lanes,
+            first.reason,
+        )
+        valid = type(manifest)((malformed, *manifest.checks[1:]), manifest.exempt)
+        self.assertFalse(any(
+            "command path does not exist" in error
+            for error in validate_manifest(valid, REPO_ROOT)
+        ))
+
     def test_workflow_checks_are_registered_or_exempt(self) -> None:
         manifest = load_manifest(MANIFEST_PATH)
         registered = registered_script_paths()
