@@ -1,5 +1,21 @@
+diff --git a/backend/charts/pusher/prod_omi_pusher_values.yaml b/backend/charts/pusher/prod_omi_pusher_values.yaml
+index 68696b22d9d3..8ba57a17a36c 100644
+--- a/backend/charts/pusher/prod_omi_pusher_values.yaml
++++ b/backend/charts/pusher/prod_omi_pusher_values.yaml
+@@ -277,9 +277,9 @@ env:
+   - name: TRANSCRIPTION_FINAL_PASS_PERCENT
+     value: "0"
+   - name: TRANSCRIPTION_FINAL_PASS_AUTHORITATIVE
+-    value: "true"
++    value: "false"
+   - name: TRANSCRIPTION_FINAL_PASS_SYNC_ENABLED
+-    value: "true"
++    value: "false"
+   # Phase-1 final-pass shadow runs only for the owner UID on this pusher.
+   - name: TRANSCRIPTION_SHADOW_ENABLED
+     value: "true"
 diff --git a/backend/database/legal_holds.py b/backend/database/legal_holds.py
-index 55adc9e0d0c5..552b0489f8e7 100644
+index 55adc9e0d0c5..1e5d426c311d 100644
 --- a/backend/database/legal_holds.py
 +++ b/backend/database/legal_holds.py
 @@ -9,6 +9,7 @@ outcome is known. User-facing routes never write either authority document.
@@ -19,7 +35,18 @@ index 55adc9e0d0c5..552b0489f8e7 100644
  LEGAL_HOLDS_COLLECTION = "legal_holds"
  LEGAL_HOLD_DELETION_GATES_COLLECTION = "legal_hold_deletion_gates"
  LEGAL_HOLD_SCHEMA_VERSION = "legal_hold.v1"
-@@ -108,12 +111,12 @@ def _validated_gate(snapshot: Any) -> dict[str, Any] | None:
+@@ -51,6 +54,10 @@ class DestructiveOperationInProgress(RuntimeError):
+     """Another destructive operation owns the account gate."""
+ 
+ 
++class DestructiveGateTakeover(RuntimeError):
++    """The active holder lost its authority and must stop destructive work."""
++
++
+ def _document(client: Any, path: str) -> Any:
+     collection_name, document_id = path.split("/", 1)
+     document = getattr(client, "document", None)
+@@ -108,12 +115,12 @@ def _validated_gate(snapshot: Any) -> dict[str, Any] | None:
      return payload
  
  
@@ -35,7 +62,7 @@ index 55adc9e0d0c5..552b0489f8e7 100644
          return False
      return (now - gate["started_at"]).total_seconds() < GATE_STALE_AFTER_SECONDS
  
-@@ -213,10 +216,10 @@ def _acquire_destructive_operation_transaction(
+@@ -213,10 +220,10 @@ def _acquire_destructive_operation_transaction(
      if gate is not None and gate["state"] == "running":
          if gate["uid"] == uid and gate["kind"] == kind and gate["token"] == token:
              return
@@ -49,7 +76,7 @@ index 55adc9e0d0c5..552b0489f8e7 100644
      transaction.set(
          gate_ref,
          {
-@@ -258,10 +261,15 @@ def _finish_destructive_operation_transaction(
+@@ -258,10 +265,15 @@ def _finish_destructive_operation_transaction(
  ) -> None:
      gate_ref = _document(client, f"{LEGAL_HOLD_DELETION_GATES_COLLECTION}/{uid}")
      gate = _validated_gate(gate_ref.get(transaction=transaction))
@@ -66,11 +93,83 @@ index 55adc9e0d0c5..552b0489f8e7 100644
              return
          raise LegalHoldAuthorityUnavailable("destructive operation gate is already terminal")
      transaction.set(gate_ref, {**gate, "state": outcome, "finished_at": now})
+@@ -284,6 +296,30 @@ def finish_destructive_operation(
+     )
+ 
+ 
++def assert_destructive_gate_still_ours(
++    uid: str,
++    kind: str,
++    *,
++    token: str | None = None,
++    firestore_client: Any | None = None,
++) -> None:
++    """Re-read gate authority immediately before each destructive chunk."""
++    active_token = current_destructive_operation_token(uid, kind=kind) if token is None else token
++    if not uid or not kind.strip() or not active_token.strip():
++        raise LegalHoldAuthorityUnavailable("destructive operation identity is invalid")
++    try:
++        client = account_deletion_firestore_client(firestore_client=firestore_client)
++        gate = _validated_gate(_document(client, f"{LEGAL_HOLD_DELETION_GATES_COLLECTION}/{uid}").get())
++        if gate is None or gate["uid"] != uid:
++            raise LegalHoldAuthorityUnavailable("destructive operation gate is missing or mismatched")
++        if gate["kind"] != kind or gate["token"] != active_token or gate["state"] != "running":
++            raise DestructiveGateTakeover("destructive operation gate was taken over or finished")
++    except (DestructiveGateTakeover, LegalHoldAuthorityUnavailable):
++        raise
++    except Exception as exc:
++        raise LegalHoldAuthorityUnavailable("destructive operation gate authority unavailable") from exc
++
++
+ def assert_destructive_operation_transaction(
+     transaction: Any,
+     client: Any,
+@@ -410,11 +446,13 @@ __all__ = [
+     "LEGAL_HOLD_SCHEMA_VERSION",
+     "LEGAL_HOLD_DELETION_GATE_SCHEMA_VERSION",
+     "DestructiveOperationInProgress",
++    "DestructiveGateTakeover",
+     "LegalHoldActive",
+     "LegalHoldAuthorityUnavailable",
+     "acquire_destructive_operation",
+     "assert_account_deletion_permitted",
+     "assert_destructive_operation_transaction",
++    "assert_destructive_gate_still_ours",
+     "assert_no_destructive_operation_transaction",
+     "current_destructive_operation_token",
+     "destructive_operation_gate",
 diff --git a/backend/database/memory_apply_store.py b/backend/database/memory_apply_store.py
-index 2017bdcbc4a4..def7a174b88c 100644
+index 2017bdcbc4a4..e8ca789166a1 100644
 --- a/backend/database/memory_apply_store.py
 +++ b/backend/database/memory_apply_store.py
-@@ -3316,6 +3316,8 @@ def cleanup_expired_memory_deletion_receipts(
+@@ -8,6 +8,7 @@ from enum import Enum
+ from functools import wraps
+ import hashlib
+ import hmac
++import logging
+ import os
+ from typing import Any, Callable, Dict, Iterable, List, Optional, Tuple, TypeVar, TypedDict, cast
+ 
+@@ -23,6 +24,9 @@ except ImportError:  # pragma: no cover - local unit tests mock Firestore.
+ from database._client import data_plane_db as db
+ from database.account_deletion_policy import account_deletion_blocks_access, normalize_account_deletion_status
+ from database.legal_holds import (
++    DestructiveGateTakeover,
++    LegalHoldAuthorityUnavailable,
++    assert_destructive_gate_still_ours,
+     assert_destructive_operation_transaction,
+     assert_no_destructive_operation_transaction,
+     destructive_operation_gate,
+@@ -73,6 +77,8 @@ from models.product_memory import (
+ from models.memory_state_head import trusted_memory_state_head_fields
+ from utils.memory.memory_use import MemoryUseConflict, build_memory_use_patch
+ 
++logger = logging.getLogger(__name__)
++
+ 
+ class MemoryFirestoreApplyError(Exception):
+     pass
+@@ -3316,6 +3322,8 @@ def cleanup_expired_memory_deletion_receipts(
          rows = list(query.stream())
      except Exception:
          return 0
@@ -79,6 +178,656 @@ index 2017bdcbc4a4..def7a174b88c 100644
      try:
          # Legal hold and retention cleanup share the same account-wide
          # linearization gate. A hold that wins first preserves every receipt;
+@@ -3326,7 +3334,7 @@ def cleanup_expired_memory_deletion_receipts(
+             firestore_client=db_client,
+         ):
+             deleted = 0
+-            for row in rows:
++            for index, row in enumerate(rows):
+                 try:
+                     payload = row.to_dict()
+                     if not isinstance(payload, dict):
+@@ -3343,6 +3351,7 @@ def cleanup_expired_memory_deletion_receipts(
+                         and expires_at.utcoffset() is not None
+                         and expires_at <= cutoff
+                     ):
++                        assert_destructive_gate_still_ours(uid, "retention_cleanup", firestore_client=db_client)
+                         row.reference.delete()
+                         deleted += 1
+                         continue
+@@ -3392,8 +3401,18 @@ def cleanup_expired_memory_deletion_receipts(
+                             break
+                     if not items_match:
+                         continue
++                    assert_destructive_gate_still_ours(uid, "retention_cleanup", firestore_client=db_client)
+                     row.reference.delete()
+                     deleted += 1
++                except DestructiveGateTakeover:
++                    logger.info(
++                        "receipt cleanup stopped after takeover deleted=%d skipped-after-takeover=%d",
++                        deleted,
++                        len(rows) - index,
++                    )
++                    return deleted
++                except LegalHoldAuthorityUnavailable:
++                    return deleted
+                 except Exception:
+                     continue
+             return deleted
+diff --git a/backend/deploy/runtime_env.yaml b/backend/deploy/runtime_env.yaml
+index 0a0586020bb7..059cc369c335 100644
+--- a/backend/deploy/runtime_env.yaml
++++ b/backend/deploy/runtime_env.yaml
+@@ -2086,8 +2086,8 @@ environments:
+           TRANSCRIPTION_FINAL_PASS_BACKEND: {value: pyannote, category: rollout}
+           TRANSCRIPTION_FINAL_PASS_UID_ALLOWLIST: {value: vi7SA9ckQCe4ccobWNxlbdcNdC23, category: rollout}
+           TRANSCRIPTION_FINAL_PASS_PERCENT: {value: '0', category: rollout}
+-          TRANSCRIPTION_FINAL_PASS_AUTHORITATIVE: {value: 'true', category: rollout}
+-          TRANSCRIPTION_FINAL_PASS_SYNC_ENABLED: {value: 'true', category: rollout}
++          TRANSCRIPTION_FINAL_PASS_AUTHORITATIVE: {value: 'false', category: rollout}
++          TRANSCRIPTION_FINAL_PASS_SYNC_ENABLED: {value: 'false', category: rollout}
+           TRANSCRIPTION_SHADOW_ENABLED: {value: 'true', category: rollout}
+           TRANSCRIPTION_SHADOW_KILL_SWITCH: {value: 'false', category: rollout}
+           TRANSCRIPTION_SHADOW_UID_ALLOWLIST: {value: vi7SA9ckQCe4ccobWNxlbdcNdC23, category: rollout}
+@@ -2446,8 +2446,8 @@ environments:
+             TRANSCRIPTION_FINAL_PASS_BACKEND: {value: pyannote, category: rollout}
+             TRANSCRIPTION_FINAL_PASS_UID_ALLOWLIST: {value: vi7SA9ckQCe4ccobWNxlbdcNdC23, category: rollout}
+             TRANSCRIPTION_FINAL_PASS_PERCENT: {value: '0', category: rollout}
+-            TRANSCRIPTION_FINAL_PASS_AUTHORITATIVE: {value: 'true', category: rollout}
+-            TRANSCRIPTION_FINAL_PASS_SYNC_ENABLED: {value: 'true', category: rollout}
++            TRANSCRIPTION_FINAL_PASS_AUTHORITATIVE: {value: 'false', category: rollout}
++            TRANSCRIPTION_FINAL_PASS_SYNC_ENABLED: {value: 'false', category: rollout}
+             TRANSCRIPTION_SHADOW_ENABLED: {value: 'true', category: rollout}
+             TRANSCRIPTION_SHADOW_KILL_SWITCH: {value: 'false', category: rollout}
+             TRANSCRIPTION_SHADOW_UID_ALLOWLIST: {value: vi7SA9ckQCe4ccobWNxlbdcNdC23, category: rollout}
+@@ -2724,8 +2724,8 @@ environments:
+             TRANSCRIPTION_FINAL_PASS_BACKEND: {value: pyannote, category: rollout}
+             TRANSCRIPTION_FINAL_PASS_UID_ALLOWLIST: {value: vi7SA9ckQCe4ccobWNxlbdcNdC23, category: rollout}
+             TRANSCRIPTION_FINAL_PASS_PERCENT: {value: '0', category: rollout}
+-            TRANSCRIPTION_FINAL_PASS_AUTHORITATIVE: {value: 'true', category: rollout}
+-            TRANSCRIPTION_FINAL_PASS_SYNC_ENABLED: {value: 'true', category: rollout}
++            TRANSCRIPTION_FINAL_PASS_AUTHORITATIVE: {value: 'false', category: rollout}
++            TRANSCRIPTION_FINAL_PASS_SYNC_ENABLED: {value: 'false', category: rollout}
+             TRANSCRIPTION_SHADOW_ENABLED: {value: 'true', category: rollout}
+             TRANSCRIPTION_SHADOW_KILL_SWITCH: {value: 'false', category: rollout}
+             TRANSCRIPTION_SHADOW_UID_ALLOWLIST: {value: vi7SA9ckQCe4ccobWNxlbdcNdC23, category: rollout}
+@@ -2954,20 +2954,6 @@ environments:
+             MEMORY_TYPESENSE_COLLECTION:
+               value: canonical_memory_atoms
+               category: memory_rollout
+-            HOSTED_DIARIZATION_API_URL:
+-              value: http://172.16.160.20/diarizer-batch
+-              category: service_discovery
+-            TRANSCRIPTION_FINAL_PASS_DIARIZER: {value: pyannote_shadow, category: rollout}
+-            TRANSCRIPTION_FINAL_PASS_BACKEND: {value: pyannote, category: rollout}
+-            TRANSCRIPTION_FINAL_PASS_UID_ALLOWLIST: {value: vi7SA9ckQCe4ccobWNxlbdcNdC23, category: rollout}
+-            TRANSCRIPTION_FINAL_PASS_PERCENT: {value: '0', category: rollout}
+-            TRANSCRIPTION_FINAL_PASS_AUTHORITATIVE: {value: 'true', category: rollout}
+-            TRANSCRIPTION_FINAL_PASS_SYNC_ENABLED: {value: 'true', category: rollout}
+-            TRANSCRIPTION_SHADOW_ENABLED: {value: 'true', category: rollout}
+-            TRANSCRIPTION_SHADOW_KILL_SWITCH: {value: 'false', category: rollout}
+-            TRANSCRIPTION_SHADOW_UID_ALLOWLIST: {value: vi7SA9ckQCe4ccobWNxlbdcNdC23, category: rollout}
+-            TRANSCRIPTION_SHADOW_PERCENT: {value: '0', category: rollout}
+-            TRANSCRIPTION_SHADOW_DAILY_AUDIO_HOURS: {value: '1', category: rollout}
+             OMI_SHAPED_AGENT_MODE: {value: 'on', category: rollout}
+             DREAM_AGENT_MODE: {value: 'on', category: rollout}
+             DREAM_AGENT_UID_ALLOWLIST: {value: '9OqYLlKJv4hmeYpIhwJcHBR975i2,vi7SA9ckQCe4ccobWNxlbdcNdC23', category: rollout}
+diff --git a/backend/deploy/runtime_env/prod.overlay.yaml b/backend/deploy/runtime_env/prod.overlay.yaml
+index 464a68ab6732..27de7ff20f5c 100644
+--- a/backend/deploy/runtime_env/prod.overlay.yaml
++++ b/backend/deploy/runtime_env/prod.overlay.yaml
+@@ -285,7 +285,7 @@ overlay:
+           category: rollout
+     pusher:
+       env:
+-        <<: &batch_cohort {"HOSTED_DIARIZATION_API_URL": {"value": "http://172.16.160.20/diarizer-batch", "category": "service_discovery"}, "TRANSCRIPTION_FINAL_PASS_DIARIZER": {"value": "pyannote_shadow", "category": "rollout"}, "TRANSCRIPTION_FINAL_PASS_BACKEND": {"value": "pyannote", "category": "rollout"}, "TRANSCRIPTION_FINAL_PASS_UID_ALLOWLIST": {"value": "vi7SA9ckQCe4ccobWNxlbdcNdC23", "category": "rollout"}, "TRANSCRIPTION_FINAL_PASS_PERCENT": {"value": "0", "category": "rollout"}, "TRANSCRIPTION_FINAL_PASS_AUTHORITATIVE": {"value": "true", "category": "rollout"}, "TRANSCRIPTION_FINAL_PASS_SYNC_ENABLED": {"value": "true", "category": "rollout"}, "TRANSCRIPTION_SHADOW_ENABLED": {"value": "true", "category": "rollout"}, "TRANSCRIPTION_SHADOW_KILL_SWITCH": {"value": "false", "category": "rollout"}, "TRANSCRIPTION_SHADOW_UID_ALLOWLIST": {"value": "vi7SA9ckQCe4ccobWNxlbdcNdC23", "category": "rollout"}, "TRANSCRIPTION_SHADOW_PERCENT": {"value": "0", "category": "rollout"}, "TRANSCRIPTION_SHADOW_DAILY_AUDIO_HOURS": {"value": "1", "category": "rollout"}}
++        <<: &batch_cohort {"HOSTED_DIARIZATION_API_URL": {"value": "http://172.16.160.20/diarizer-batch", "category": "service_discovery"}, "TRANSCRIPTION_FINAL_PASS_DIARIZER": {"value": "pyannote_shadow", "category": "rollout"}, "TRANSCRIPTION_FINAL_PASS_BACKEND": {"value": "pyannote", "category": "rollout"}, "TRANSCRIPTION_FINAL_PASS_UID_ALLOWLIST": {"value": "vi7SA9ckQCe4ccobWNxlbdcNdC23", "category": "rollout"}, "TRANSCRIPTION_FINAL_PASS_PERCENT": {"value": "0", "category": "rollout"}, "TRANSCRIPTION_FINAL_PASS_AUTHORITATIVE": {"value": "false", "category": "rollout"}, "TRANSCRIPTION_FINAL_PASS_SYNC_ENABLED": {"value": "false", "category": "rollout"}, "TRANSCRIPTION_SHADOW_ENABLED": {"value": "true", "category": "rollout"}, "TRANSCRIPTION_SHADOW_KILL_SWITCH": {"value": "false", "category": "rollout"}, "TRANSCRIPTION_SHADOW_UID_ALLOWLIST": {"value": "vi7SA9ckQCe4ccobWNxlbdcNdC23", "category": "rollout"}, "TRANSCRIPTION_SHADOW_PERCENT": {"value": "0", "category": "rollout"}, "TRANSCRIPTION_SHADOW_DAILY_AUDIO_HOURS": {"value": "1", "category": "rollout"}}
+         DREAM_AGENT_MODE: {value: 'on', category: rollout}
+         DREAM_AGENT_UID_ALLOWLIST: {value: '9OqYLlKJv4hmeYpIhwJcHBR975i2,vi7SA9ckQCe4ccobWNxlbdcNdC23', category: rollout}
+         CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE: {value: 'shadow', category: rollout}
+@@ -936,7 +936,6 @@ overlay:
+         - BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH
+         - BASIC_TIER_MEMORIES_CREATED_LIMIT_PER_MONTH
+         env:
+-          <<: *batch_cohort
+           OMI_SHAPED_AGENT_MODE:
+             value: 'on'
+             category: rollout
+diff --git a/backend/diarizer/requirements.txt b/backend/diarizer/requirements.txt
+index 4d94574ff23b..5eea63947331 100644
+--- a/backend/diarizer/requirements.txt
++++ b/backend/diarizer/requirements.txt
+@@ -110,7 +110,7 @@ tqdm==4.67.1
+ triton==3.4.0
+ typing-extensions==4.15.0
+ tzdata==2025.3
+-urllib3==2.8.0
++urllib3==2.7.0
+ uvicorn==0.40.0
+ uvloop==0.20.0
+ yarl==1.22.0
+diff --git a/backend/docs/diarizer-batch-cohort.md b/backend/docs/diarizer-batch-cohort.md
+index 9dad800ca6a8..6c24dabefb46 100644
+--- a/backend/docs/diarizer-batch-cohort.md
++++ b/backend/docs/diarizer-batch-cohort.md
+@@ -1,6 +1,6 @@
+ # Shared Gateway batch cohort ramp
+ 
+-Lead owns merges, deployments and ramp decisions. The current binding is complete stage B, David authoritative including sync/backfill.
++Lead owns merges, deployments and ramp decisions. This change ships stage A only.
+ The reserved prod Gateway is `172.16.160.20`; reservation is not serving readiness.
+ Follow [Gateway installation and route probes](../charts/internal-gateway/README.md)
+ before deploying callers. The pyannote adapter appends `/v2/diarization`, yielding
+@@ -9,13 +9,14 @@ before deploying callers. The pyannote adapter appends `/v2/diarization`, yieldi
+ ## Stages (data only)
+ 
+ Exact complete env sets are in [`diarization-cohort-stages.json`](../../config/diarization-cohort-stages.json).
+-All stages retain these values on backend, backend-sync, backend-sync-backfill and pusher:
++All stages retain these values on backend, backend-sync and pusher:
+ 
+ ```text
+ HOSTED_DIARIZATION_API_URL=http://172.16.160.20/diarizer-batch
+ TRANSCRIPTION_FINAL_PASS_DIARIZER=pyannote_shadow
+ TRANSCRIPTION_FINAL_PASS_BACKEND=pyannote
+ TRANSCRIPTION_FINAL_PASS_UID_ALLOWLIST=vi7SA9ckQCe4ccobWNxlbdcNdC23
++TRANSCRIPTION_FINAL_PASS_SYNC_ENABLED=false
+ TRANSCRIPTION_SHADOW_ENABLED=true
+ TRANSCRIPTION_SHADOW_KILL_SWITCH=false
+ TRANSCRIPTION_SHADOW_UID_ALLOWLIST=vi7SA9ckQCe4ccobWNxlbdcNdC23
+@@ -23,48 +24,29 @@ TRANSCRIPTION_SHADOW_UID_ALLOWLIST=vi7SA9ckQCe4ccobWNxlbdcNdC23
+ 
+ Combine those constants with the following exact values (all strings):
+ 
+-| Stage | FINAL_PASS_PERCENT | SHADOW_PERCENT | FINAL_PASS_AUTHORITATIVE | FINAL_PASS_SYNC_ENABLED | SHADOW_DAILY_AUDIO_HOURS |
+-| --- | ---: | ---: | --- | --- | ---: |
+-| A David shadow / sync legacy | 0 | 0 | false | false | 1 |
+-| B David authoritative including sync | 0 | 0 | true | true | 1 |
+-| C 1% authoritative + David | 1 | 1 | true | true | 80 |
+-| D 5% authoritative + David | 5 | 5 | true | true | 400 |
++| Stage | FINAL_PASS_PERCENT | SHADOW_PERCENT | FINAL_PASS_AUTHORITATIVE | SHADOW_DAILY_AUDIO_HOURS | One-line overlay edit |
++| --- | ---: | ---: | --- | ---: | --- |
++| A David shadow | 0 | 0 | false | 1 | `&batch_cohort` line: both percentages `"0"`, authoritative `"false"`, hours `"1"` |
++| B David authoritative | 0 | 0 | true | 1 | Same line: authoritative `"true"` |
++| C 1% authoritative + David | 1 | 1 | true | 80 | Same line: both percentages `"1"`, hours `"80"` |
++| D 5% authoritative + David | 5 | 5 | true | 400 | Same line: both percentages `"5"`, hours `"400"` |
+ 
+ Column names abbreviate the `TRANSCRIPTION_` prefix. Edit only the single
+-`<<: &batch_cohort {...}` line in `deploy/runtime_env/prod.overlay.yaml`; the three
++`<<: &batch_cohort {...}` line in `deploy/runtime_env/prod.overlay.yaml`; the two
+ Cloud Run hosts inherit that exact mapping. Recompose with
+ `backend/.venv/bin/python backend/deploy/compose_runtime_env.py`, copy the selected
+ stage's literal values to pusher's prod chart env, and run preflight. The co-host
+ gate accepts only a complete reviewed stage; mixed percentages or scope drift fail.
+-Redeploy pusher, backend, backend-sync and backend-sync-backfill through their
+-owning workflows. Verify the effective values agree on all four before starting
+-the observation window. Integration, dev and backend-listen remain excluded.
+-Backfill retains inert stage-A bindings on rollback: sync=false prevents its
+-final pass, even though the shared cohort mapping remains present.
++Redeploy pusher and backend/backend-sync through their owning workflows, and
++verify the rendered and running values agree on all three before starting the
++observation window. No backfill, integration, dev or backend-listen cohort expansion.
++Sync/WAL promotion remains disabled throughout A–D.
+ 
+ Never exceed 5% in this plan. Wait at least 12 hours of data at D before proposing
+ any expansion; hold each earlier stage until all gates below have enough samples.
+ An empty series is not a passing gate. Lead records sample counts, baseline,
+ p95 values and acceptance decision before advancing.
+ 
+-## Why David starts at B
+-
+-Lead observed David's offline uploads on `lane=backfill`, processed by
+-backend-sync-backfill. Pusher shadow admission never sees those recordings.
+-The sync final pass has no shadow mode: `sync_enabled_for` gates a direct speaker
+-assignment replacement, with legacy identification on failure. Setting only
+-AUTHORITATIVE=false does not stop sync; SYNC_ENABLED must also be false.
+-David approved authoritative stage B. Lead-supplied hand labels measured pyannote
+-94% versus production 37% per word; this PR does not rerun that quality evaluation.
+-
+-`POST /v2/sync-jobs/run` → `_run_sync_job_body` →
+-`_run_full_pipeline_background_async(sync_lane=backfill)` → `process_segment` →
+-`run_sync_final_pass` uses the same code/image for fresh and historical lanes.
+-`deploy-backend-stack` passes `backend_sync_backfill_env_vars` into
+-`sync-backfill-lifecycle`'s ENV_OVERLAY; `render_cloud_run_clone_env` preserves all
+-names except its explicit removal list, which contains no cohort names. No action
+-allowlist change is needed. A renderer/clone regression test covers every binding.
+-
+ ## Gates at every stage A, B, C and D
+ 
+ - Failure rate: `omi_transcription_final_pass_total` outcomes `failed:service`,
+@@ -95,27 +77,18 @@ allowlist change is needed. A renderer/clone regression test covers every bindin
+ 
+ Histograms expose `_bucket`, `_sum`, `_count`. See
+ [shadow PromQL and scalar-result semantics](transcription-shadow.md).
+-Metrics have no UID labels. For offline David, require `event=sync_final_pass`
+-outcomes and scoped review of persisted speaker assignments against the hand
+-labels. Shadow-only owner/remap metrics and v2 receipts do not cover this sync
+-path; missing samples are not acceptance evidence. Check manual owner/person
+-assignments, clocks, translations and source references on the actual sync output.
++Metrics have no UID labels; use scoped scalar receipts for David's acceptance.
+ 
+ ## Capacity and limits
+ 
+ The daily cap is already configurable through `TRANSCRIPTION_SHADOW_DAILY_AUDIO_HOURS`
+-and reserved atomically in shared Redis across shadow workers before provider work. It
++and reserved atomically in shared Redis across hosts, before provider work. It
+ charges **all** selected stored audio, even single-speaker triage skips. At the
+ planning load of 6,300 audio-h/day, C selects ~63 h and D ~315 h; 80/400 h provide
+ headroom. At D, ~140 multi-speaker audio-h/day × supplied T4 RTF 0.06 is **8.4 GPU-h/day**
+ (~35% average occupancy). These are planning assumptions, not a T4 load-test receipt.
+ At the same ~45% multi-speaker share, spending the entire 400 h cap is ~10.8 GPU-h.
+ Bursts, extra ASR work and retries still require queue/latency gates.
+-**Sync bypasses this shadow cap.** Backfill has its own global speech allowance
+-(`SYNC_BACKFILL_GLOBAL_DAILY_HOURS`, default 555), not a diarization-specific cap.
+-The 8.4 GPU-h estimate above covers the original shadow planning load, not combined
+-shadow plus fresh/backfill sync work. B stays David-only; do not advance C/D until
+-combined GPU demand, queueing, sync volume and latency are qualified.
+ 
+ The worker and batch API both cap individual calls at **7,200 seconds** (about
+ 230.4 MB PCM16). Keep this bounded limit: longer conversations do not receive
+@@ -125,27 +98,21 @@ report the excluded duration share rather than claiming coverage of longer audio
+ At RTF .06 a two-hour call needs ~432s inference, inside the worker's default
+ 600s deadline and Gateway's 900s timeout, but decoding, ASR and queuing consume
+ that same worker budget. Hold the ramp if long-call timeouts rise; do not silently
+-raise limits. Stored-audio opt-in remains required for the shadow worker; sync
+-reuses its uploaded matching WAV, including when private-cloud storage is disabled.
++raise limits. Stored-audio opt-in remains required.
+ 
+ Cloud Run's process-local shadow task is not durable after request completion;
+ shipping equal env does not establish Cloud Run shadow completion. Check receipts
+ per host; a reliable Cloud Run shadow ramp still needs durable dispatch as described
+-in the shadow runbook. Sync/backfill executes in its existing Cloud Task pipeline;
+-it does not depend on that process-local shadow task.
++in the shadow runbook. Sync remains false, avoiding additional unbudgeted sync work.
+ 
+ ## Cohort deploy order and rollback
+ 
+ 1. Lead qualifies isolated batch digest, T4 pool, shared Gateway programmed route,
+    health and synthetic PCM probes from GKE and Cloud Run per the Gateway runbook.
+-2. Deploy complete B to backend, backend-sync, backend-sync-backfill and pusher;
+-   confirm David's actual backfill jobs log `event=sync_final_pass` and inspect output.
+-3. Hold B for acceptance, then advance C/D only after the gates and combined-load
+-   qualification. Redeploy all four for each data edit.
+-4. Roll back to complete A: set AUTHORITATIVE=false and SYNC_ENABLED=false in the
+-   shared overlay anchor and pusher chart, recompose `runtime_env.yaml`, and redeploy
+-   backend, backend-sync, backend-sync-backfill and pusher. This restores legacy
+-   sync speaker identification and stops live promotion while retaining David shadow.
++2. Deploy A bindings to all three hosts; confirm effective env and David receipts.
++3. Advance A → B → C → D only after the gates; redeploy all three for each data edit.
++4. Roll back the cohort commit alone and redeploy pusher/backend/backend-sync, or
++   return the overlay/chart to stage A to stop promotion while retaining shadow.
+    An incident stop sets `TRANSCRIPTION_SHADOW_KILL_SWITCH=true` and
+    `TRANSCRIPTION_FINAL_PASS_DIARIZER=legacy` on all hosts; restore reviewed data
+    after recovery. Disable callers before removing batch capacity. Existing
+diff --git a/backend/docs/feature-flag-registry.md b/backend/docs/feature-flag-registry.md
+index 55124542b6a0..ab5ac5eaf7d0 100644
+--- a/backend/docs/feature-flag-registry.md
++++ b/backend/docs/feature-flag-registry.md
+@@ -208,9 +208,6 @@ and an explicit empty literal renders as `''`.
+ | `MEMORY_DAILY_MEMORY_SWEEP_MODEL_ENABLED` | Allow model calls during daily memory sweep | backend | env | closed | declared | true | false | — | pending | 2026-10-23 | unowned |
+ | `MEMORY_DAILY_MEMORY_SWEEP_TIMEZONE_RECONCILIATION_ENABLED` | Reconcile sweep timezone selection | backend | env | closed | declared | true | false | — | pending | 2026-10-23 | unowned |
+ | `MEMORY_OWNER_JEV_FLIP_ENABLED` | Switch memory owner decisions to Jev | backend | env | closed | — | true (backend-listen (chart), cloud_run/backend, cloud_run/backend-sync, gke/backend-listen, gke/pusher, pusher (chart)) | — | — | pending | 2026-10-23 | unowned |
+-| `MOBILE_STANDARD_BATCH_ENABLED` | Authorize hidden mobile Standard pendant capture to batch via existing WAL sync | backend, mobile | env | closed | — | — | — | — | pending | 2026-11-14 | dazheng |
+-| `MOBILE_STANDARD_BATCH_PERCENT` | Stable UID percentage for mobile Standard batch, default zero | backend | env | closed | — | — | — | — | pending | 2026-11-14 | dazheng |
+-| `MOBILE_STANDARD_BATCH_UIDS` | Comma-separated UID allowlist for mobile Standard batch, default empty | backend | env | closed | — | — | — | — | pending | 2026-11-14 | dazheng |
+ | `NOTES_TIER_ESCALATION_ENABLED` | Escalate shaped notes to xhigh effort for long meetings with at least five screen frames; enabled on the 1 percent episode cohort (2026-10-09) | backend | env | closed | — | — | true (backend-listen (chart), cloud_run/backend, cloud_run/backend-sync, cloud_run/backend-sync-backfill, gke/backend-listen, gke/pusher, pusher (chart)) | — | pending | 2026-11-08 | dazheng |
+ | `OMI_IMESSAGE_CONTACT_CARD` | Default-off sharing of a preconfigured Linq contact card. | backend | env | closed | — | — | — | — | keep | 2026-11-09 | dazheng |
+ | `OMI_IMESSAGE_ENABLED` | Default-off registration of the iMessage provider adapter. | backend | env | closed | — | — | {value: 'on', category: rollout} | — | keep | 2026-11-09 | dazheng |
+@@ -257,11 +254,11 @@ and an explicit empty literal renders as `''`.
+ | `SYNC_LINEAGE_S1_REQUIRED` | Require valid S1 upload claims before per-segment lineage binding (default gated) | backend | env | closed | {value: 'true', category: rollout} | {value: 'true', category: rollout} | {value: 'true', category: rollout} | — | pending | 2026-11-02 | dazheng |
+ | `SYNC_SAFETY_WAL_DEDUPE_ENABLED` | Fleet server safety-WAL interval-confirmed coverage cuts and corroborated transcript dedupe | backend | env | open | {value: 'true', category: rollout} | {value: 'true', category: rollout} | {value: 'true', category: rollout} | — | pending | 2026-11-12 | dazheng |
+ | `SYNC_WAL_AUDIO_COVERAGE_ENABLED` | Trim safety-WAL frames positively proven live-received by shared source-frame identity before VAD/STT (default on) | backend | env | open | true | true | true | — | pending | 2026-11-02 | dazheng |
+-| `TRANSCRIPTION_FINAL_PASS_AUTHORITATIVE` | Revision-fenced speaker-only promotion preserving stored text | backend | env | closed | — | — | true (cloud_run/backend, cloud_run/backend-sync, cloud_run/backend-sync-backfill, gke/pusher, pusher (chart)) | — | pending | 2026-11-12 | dazheng |
+-| `TRANSCRIPTION_FINAL_PASS_PERCENT` | Shared diarization cohort percentage | backend | env | closed | — | — | 0 (cloud_run/backend, cloud_run/backend-sync, cloud_run/backend-sync-backfill, gke/pusher, pusher (chart)) | — | pending | 2026-11-12 | dazheng |
+-| `TRANSCRIPTION_FINAL_PASS_SYNC_ENABLED` | Shared diarization and centroid naming for sync and safety WAL | backend | env | closed | — | — | true (cloud_run/backend, cloud_run/backend-sync, cloud_run/backend-sync-backfill, gke/pusher, pusher (chart)) | — | pending | 2026-11-12 | dazheng |
+-| `TRANSCRIPTION_SHADOW_ENABLED` | Run the stored-audio Parakeet final pass in shadow | backend | env | closed | — | false (backend-listen (chart), cloud_run/backend-sync, gke/backend-listen); true (gke/pusher, pusher (chart)) | true (cloud_run/backend, cloud_run/backend-sync, cloud_run/backend-sync-backfill, gke/pusher, pusher (chart)) | — | pending | 2026-10-26 | dazheng |
+-| `TRANSCRIPTION_SHADOW_PERCENT` | Allocate UIDs to the Parakeet final-pass shadow | backend | env | closed | — | 0 (backend-listen (chart), cloud_run/backend-sync, gke/backend-listen, gke/pusher, pusher (chart)) | 0 (cloud_run/backend, cloud_run/backend-sync, cloud_run/backend-sync-backfill, gke/pusher, pusher (chart)) | — | pending | 2026-10-26 | dazheng |
++| `TRANSCRIPTION_FINAL_PASS_AUTHORITATIVE` | Revision-fenced speaker-only promotion preserving stored text | backend | env | closed | — | — | false (cloud_run/backend, cloud_run/backend-sync, gke/pusher, pusher (chart)) | — | pending | 2026-11-12 | dazheng |
++| `TRANSCRIPTION_FINAL_PASS_PERCENT` | Shared diarization cohort percentage | backend | env | closed | — | — | 0 (cloud_run/backend, cloud_run/backend-sync, gke/pusher, pusher (chart)) | — | pending | 2026-11-12 | dazheng |
++| `TRANSCRIPTION_FINAL_PASS_SYNC_ENABLED` | Shared diarization and centroid naming for sync and safety WAL | backend | env | closed | — | — | false (cloud_run/backend, cloud_run/backend-sync, gke/pusher, pusher (chart)) | — | pending | 2026-11-12 | dazheng |
++| `TRANSCRIPTION_SHADOW_ENABLED` | Run the stored-audio Parakeet final pass in shadow | backend | env | closed | — | false (backend-listen (chart), cloud_run/backend-sync, gke/backend-listen); true (gke/pusher, pusher (chart)) | true (cloud_run/backend, cloud_run/backend-sync, gke/pusher, pusher (chart)) | — | pending | 2026-10-26 | dazheng |
++| `TRANSCRIPTION_SHADOW_PERCENT` | Allocate UIDs to the Parakeet final-pass shadow | backend | env | closed | — | 0 (backend-listen (chart), cloud_run/backend-sync, gke/backend-listen, gke/pusher, pusher (chart)) | 0 (cloud_run/backend, cloud_run/backend-sync, gke/pusher, pusher (chart)) | — | pending | 2026-10-26 | dazheng |
+ | `TRANSLATION_DEMAND_LEASE_V1_ENABLED` | Accept lease-v1 demand semantics from opted-in clients | backend | env | closed | {value: 'true', category: rollout} | true (backend-listen (chart)); {value: 'true', category: rollout} (cloud_run/backend, gke/backend-listen) | true (backend-listen (chart)); {value: 'true', category: rollout} (cloud_run/backend, gke/backend-listen) | — | pending | 2026-10-29 | dazheng |
+ | `TRANSLATION_DEMAND_SHADOW_ENABLED` | Measure would-be demand admission without changing translation behavior | backend | env | closed | {value: 'false', category: rollout} | false (backend-listen (chart)); {value: 'false', category: rollout} (cloud_run/backend, gke/backend-listen) | false (backend-listen (chart)); {value: 'false', category: rollout} (cloud_run/backend, gke/backend-listen) | — | pending | 2026-10-29 | dazheng |
+ | `TRANSLATION_ONDEMAND_COHORT_PERCENT` | Percentage of eligible UIDs admitted to on-demand translation (100 = all eligible) | backend | env | closed | {value: '100', category: rollout} | 100 (backend-listen (chart)); {value: '100', category: rollout} (cloud_run/backend, gke/backend-listen) | 100 (backend-listen (chart)); {value: '100', category: rollout} (cloud_run/backend, gke/backend-listen) | — | pending | 2026-10-29 | dazheng |
+@@ -330,7 +327,7 @@ and an explicit empty literal renders as `''`.
+ | `SCREEN_TASK_STOP` | Stop screen-task gate and flagged extraction admission; default false; clients poll every 30 seconds with a 55-second lease | backend | env | inverted | — | — | — | — | keep | — | dazheng |
+ | `SYNC_BACKFILL_ENABLED` | Emergency stop for accepting sync backfill | backend | env | open | true | true | true | — | keep | — | unowned |
+ | `SYNC_BACKFILL_ROUTING_ENABLED` | Route eligible sync work to backfill lane | backend | env | closed | — | — | — | — | keep | — | unowned |
+-| `TRANSCRIPTION_SHADOW_KILL_SWITCH` | Stop Parakeet final-pass shadow admission | backend | env | inverted | — | false (backend-listen (chart), cloud_run/backend-sync, gke/backend-listen, gke/pusher, pusher (chart)) | false (cloud_run/backend, cloud_run/backend-sync, cloud_run/backend-sync-backfill, gke/pusher, pusher (chart)) | — | keep | — | dazheng |
++| `TRANSCRIPTION_SHADOW_KILL_SWITCH` | Stop Parakeet final-pass shadow admission | backend | env | inverted | — | false (backend-listen (chart), cloud_run/backend-sync, gke/backend-listen, gke/pusher, pusher (chart)) | false (cloud_run/backend, cloud_run/backend-sync, gke/pusher, pusher (chart)) | — | keep | — | dazheng |
+ | `TRANSLATION_DEMAND_GATE_ENABLED` | Gate live translation on transcript-view demand (on-demand rollout; false restores legacy always-translate) | backend | env | closed | {value: 'true', category: rollout} | true (backend-listen (chart)); {value: 'true', category: rollout} (cloud_run/backend, gke/backend-listen) | true (backend-listen (chart)); {value: 'true', category: rollout} (cloud_run/backend, gke/backend-listen) | — | keep | — | dazheng |
+ | `WAKE_WORD_ADJUDICATION_ENABLED` | Incident stop for wake-word adjudication | backend | env | open | true | true (backend-listen (chart), cloud_run/backend, gke/backend-listen) | true (backend-listen (chart), cloud_run/backend, gke/backend-listen) | — | keep | — | unowned |
+ | `client_telemetry_posthog_retirement` | Kill switch that stops moved infrastructure telemetry on PostHog after parity; desktop_health_event and connection-balance events are structurally exempt | macos | posthog | inverted | — | — | — | absent (enable) | pending | — | dazheng |
+@@ -400,8 +397,8 @@ and an explicit empty literal renders as `''`.
+ | `SYNC_DISPATCH_MODE` | Select sync dispatch lane | backend | env | closed | — | — | — | — | keep | — | unowned |
+ | `SYNC_LEDGER_FENCE_MODE` | Select sync ledger fence authority | backend | env | closed | env_var | env_var | env_var | — | keep | — | unowned |
+ | `SYNC_PHASE_METRICS_EXPORT_ENABLED` | Export aggregate sync phase histograms through a bounded background flush; default off, enabled by reviewed deploy overlays | backend | env | closed | — | {value: 'true', category: telemetry} | {value: 'true', category: telemetry} | — | keep | — | dazheng |
+-| `TRANSCRIPTION_FINAL_PASS_BACKEND` | Select pyannote, legacy AHC or contract-compatible Nemotron | backend | env | closed | — | — | pyannote (cloud_run/backend, cloud_run/backend-sync, cloud_run/backend-sync-backfill, gke/pusher, pusher (chart)) | — | keep | — | dazheng |
+-| `TRANSCRIPTION_FINAL_PASS_DIARIZER` | Default-off shared final-pass diarization admission | backend | env | closed | — | — | pyannote_shadow (cloud_run/backend, cloud_run/backend-sync, cloud_run/backend-sync-backfill, gke/pusher, pusher (chart)) | — | keep | — | dazheng |
++| `TRANSCRIPTION_FINAL_PASS_BACKEND` | Select pyannote, legacy AHC or contract-compatible Nemotron | backend | env | closed | — | — | pyannote (cloud_run/backend, cloud_run/backend-sync, gke/pusher, pusher (chart)) | — | keep | — | dazheng |
++| `TRANSCRIPTION_FINAL_PASS_DIARIZER` | Default-off shared final-pass diarization admission | backend | env | closed | — | — | pyannote_shadow (cloud_run/backend, cloud_run/backend-sync, gke/pusher, pusher (chart)) | — | keep | — | dazheng |
+ | `TYPESENSE_CONVERSATION_INDEX_WRITES` | Write conversations to Typesense index | backend | env | closed | — | — | — | — | keep | — | unowned |
+ | `USE_VERTEX_AI` | Select Vertex AI model route | backend | env | closed | true | true (backend-listen (chart), cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, desktop-backend, gke/backend-listen) | true (backend-listen (chart), cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, desktop-backend, gke/backend-listen) | — | keep | — | unowned |
+ | `VAD_GATE_MODE` | Select off, shadow, or active server VAD gate | backend, mobile | env | closed | — | active (backend-listen (chart)) | active (backend-listen (chart)) | — | keep | — | unowned |
+@@ -460,9 +457,6 @@ their code default (`fail` tells you which way a missing value resolves).
+ - `MEMORY_IMPORT_BODY_STORAGE_MODE` — Select memory import body storage mode (fail: closed)
+ - `MEMORY_IMPORT_WRITE_BLOCK_MODE` — Block memory import writes during incident (fail: inverted)
+ - `MEMORY_TYPESENSE_READINESS_REQUIRED` — Require Typesense projection readiness for memory reads (fail: closed)
+-- `MOBILE_STANDARD_BATCH_ENABLED` — Authorize hidden mobile Standard pendant capture to batch via existing WAL sync (fail: closed)
+-- `MOBILE_STANDARD_BATCH_PERCENT` — Stable UID percentage for mobile Standard batch, default zero (fail: closed)
+-- `MOBILE_STANDARD_BATCH_UIDS` — Comma-separated UID allowlist for mobile Standard batch, default empty (fail: closed)
+ - `OMI_GEMINI_OVERFLOW_ENABLED` — Enable overflow routing to Gemini (fail: open)
+ - `OMI_IMESSAGE_CONTACT_CARD` — Default-off sharing of a preconfigured Linq contact card. (fail: closed)
+ - `OMI_LLM_GATEWAY_OBSERVABILITY_LOGS_ENABLED` — Enable gateway observability logs (fail: closed)
+diff --git a/backend/docs/listen_pusher_pipeline.mdx b/backend/docs/listen_pusher_pipeline.mdx
+index ef99e83752df..a2c790a04a0e 100644
+--- a/backend/docs/listen_pusher_pipeline.mdx
++++ b/backend/docs/listen_pusher_pipeline.mdx
+@@ -4562,11 +4562,8 @@ retention contract. No new client capability is advertised by this foundation.
+ 
+ ### Flagged shared batch diarization
+ 
+-Production stage B binds David-only authoritative diarization on backend,
+-backend-sync, backend-sync-backfill and pusher through the shared Gateway
+-`/diarizer-batch` prefix. Sync is enabled from B onward; A disables both sync
+-and live authoritative promotion. David's offline/backfill recordings bypass
+-pusher shadow admission, so acceptance checks the sync pipeline output. Exact env stages, caps,
++Production stage A binds David-only shadow on backend, backend-sync and pusher
++through the shared Gateway `/diarizer-batch` prefix. Exact env stages, caps,
+ acceptance gates and rollback: [batch cohort ramp](diarizer-batch-cohort.md).
+ 
+ `TRANSCRIPTION_FINAL_PASS_DIARIZER=legacy` preserves the current shadow and sync
+@@ -4625,33 +4622,6 @@ Rollback: disable authoritative/sync flags first, set mode to `legacy`, then res
+ previous backend and diarizer image digests if needed. No stored-history reversal
+ is automatic. Shared scorer instructions: `scripts/diarization_eval/README.md`.
+ 
+-### Mobile Standard batch admission (default off)
+-
+-New Flutter clients reuse `client_state` visibility and add
+-`mobile_batch_capability_v1: true` to request authorization on the existing listen
+-control channel (renewed every 60 seconds). Listen's `service_status` events
+-`ready` and `mobile_batch_admission` carry the optional boolean
+-`mobile_standard_batch`; absent/false means normal streaming. Permission expires
+-on the client after two minutes without renewal and on every socket close.
+-`MOBILE_STANDARD_BATCH_ENABLED`, `MOBILE_STANDARD_BATCH_PERCENT` and
+-`MOBILE_STANDARD_BATCH_UIDS` default to off/0/empty. Admission also requires
+-private-cloud sync, ordinary STT and no enabled integrations or developer audio/
+-realtime-transcript webhook. Inventory reads are limited to once per 30 seconds;
+-unknown inventory keeps streaming. Transcript visibility and voice commands
+-win per packet on the phone.
+-
+-Batch-owned pendant frames never enter the socket or streaming safety WAL. Every
+-original Opus frame, including silence and padding, is journaled using the
+-existing WAL framing and sealed files enter normal `/v2/sync-local-files` recovery.
+-The sync upload path archives originals under `raw-mobile-batch/{uid}/` in the
+-private-cloud bucket before acceptance or decoding. Enhanced protection encrypts
+-unchanged bytes; the account-deletion storage gate/purge owns this prefix. It has
+-no application TTL. Sync playback and backend VAD's conversation assignment stay
+-unchanged. Deploy archive acceptance on backend-sync before advertising permission
+-on listen; rollback revokes new batching but continues accepting pending files.
+-Policy, storage-parity evidence, bounds, VAD benchmark and lead-owned 5%/12-hour
+-ramp: [mobile Standard batch](../../app/docs/mobile-standard-batch.md).
+-
+ ### Shared Gateway caller routes
+ 
+ NLLB, VAD and every speaker-embedding host (including Parakeet fallback) use
+diff --git a/backend/docs/transcription-architecture.md b/backend/docs/transcription-architecture.md
+deleted file mode 100644
+index 42b4f7ceea6e..000000000000
+--- a/backend/docs/transcription-architecture.md
++++ /dev/null
+@@ -1,109 +0,0 @@
+-# Transcription architecture map
+-
+-A reader's map of how audio becomes a finished conversation: live STT,
+-finalization, the batch final pass, speaker identification, and storage. It is
+-descriptive only. The owning modules and their docs remain authoritative.
+-
+-**Verified at:** `origin/main` `aa8227f29e0de975446d4edb79b8b83271b5befe`
+-(2026-10-14). File:line references and prod flag values are pinned to that SHA;
+-re-check them with `git grep` before relying on a line number. Prod values come
+-from `backend/deploy/runtime_env.yaml` and the prod chart values at that SHA.
+-
+-## Current flow
+-
+-```mermaid
+-flowchart LR
+-  P[device / phone socket] --> L[listen: live STT]
+-  W[WAL / SD / desktop / mobile batch] --> S[backend-sync / backend-sync-backfill]
+-  L -->|request_finalization; dispatch mode unset = inline| PU[pusher: utils/pusher_finalization.py]
+-  R[REST POST /v1/conversations/id/finalize] -->|require_cloud_tasks| CT[backend: routers/conversation_finalization.py]
+-  PU --> FZ[finalizer.finalize_persisted_conversation]
+-  CT --> FZ
+-  FZ -->|TRANSCRIPTION_SHADOW_*| SH[transcription_shadow.maybe_start_shadow]
+-  SH -->|TRANSCRIPTION_FINAL_PASS_AUTHORITATIVE| DZ[diarizer-batch]
+-  S -->|TRANSCRIPTION_FINAL_PASS_SYNC_ENABLED| SF[final_pass_sync.run_sync_final_pass]
+-  SF --> DZ
+-  S --> PC[process_conversation]
+-  FZ --> PC
+-```
+-
+-Three facts that the code does not make obvious:
+-
+-1. **Live finalization runs on pusher.** `request_finalization` chooses the
+-   Cloud Tasks route only when `LISTEN_FINALIZATION_DISPATCH_MODE=cloud_tasks`
+-   (`utils/cloud_tasks.py:220-222`). That value is set only on the Cloud Run
+-   services (`runtime_env.yaml:2493,2768,2977`), not on listen, so live
+-   sessions take the `pusher` route. The Cloud Tasks worker serves the REST
+-   finalize endpoint, which rejects BYOK requests.
+-2. **Sync does not use the finalizer.** The sync pipeline calls
+-   `process_conversation` directly (`utils/sync/pipeline.py:1107`) and runs its
+-   own final pass. Conversations that arrive only through sync never reach the
+-   transcription shadow.
+-3. **The final pass has two gate families.** `TRANSCRIPTION_SHADOW_*` admits a
+-   conversation to the shadow job. `TRANSCRIPTION_FINAL_PASS_*` selects the
+-   diarizer and decides whether a result is authoritative (live) or runs at all
+-   (sync). Both must agree for one cohort.
+-
+-## Entry points
+-
+-| Stage | Entry points (file:line) | Prod flags at the pinned SHA |
+-|---|---|---|
+-| Live STT | `utils/stt/live_chain.py` (`RejectedStream` :98, paid admission :395-436); `utils/stt/live_session.py` (window vs RNNT selection :118-135); `live_router.py`; `live_rollout.py`; `live_health.py`; `recovery_state.py`; `language_policy.py`; `config/live_demand.py`; `routers/listen/demand_routing.py`; `utils/stt/demand_presence.py`, `demand_consumers.py` | `STT_SERVICE_MODELS=parakeet-window,modulate-velma-2,soniox,dg-nova-3`; `STT_ROUTING_MODE=on`, `STT_ROUTING_ON_PERCENT=100`; `STT_FAILOVER_RECOVERY_ENABLED`, `STT_NO_TEXT_RESCUE_ENABLED`, `STT_LEARNED_LANGUAGE_PROFILE` true; `STT_NON_EN_MULTI_PREFER_HINTABLE_PERCENT=100`; `PARAKEET_WINDOW_ALLOCATION_PERCENT=100`; `STT_LIVE_DEMAND_ENABLED=false` |
+-| Finalization | `utils/conversations/lifecycle.py:861` (`request_finalization`); listen caller `routers/listen/conversations.py:295`; REST finalize `routers/conversations.py:617`; reprocess `routers/conversations.py:747`; pusher worker `utils/pusher_finalization.py:203`; Cloud Tasks worker `routers/conversation_finalization.py:104`; shared `utils/conversations/finalizer.py:111` | `LISTEN_FINALIZATION_DISPATCH_MODE=cloud_tasks` on Cloud Run only; `LISTEN_FINALIZATION_TASKS_MAX_ATTEMPTS=5`. Both workers count retries in `LISTEN_FINALIZATION_RETRIES_TOTAL` |
+-| Final pass | policy `config/transcription_final_pass.py:7-21`; finalizer pre-gate `finalizer.py:57-69` (called at :230); shadow gate `utils/conversations/transcription_shadow.py:101-115`, admission :118, 7200 s audio cap :295, authoritative commit :498; sync `utils/sync/pipeline.py:1386-1411` → `utils/conversations/final_pass_sync.py`; shared assignment `final_pass_assignment.py` | cohort stages in `config/diarization-cohort-stages.json`, applied through the `&batch_cohort` anchor in `deploy/runtime_env/prod.overlay.yaml:288`. At this SHA: stage A, single-uid allowlist, `AUTHORITATIVE=false`, `SYNC_ENABLED=false`, `TRANSCRIPTION_SHADOW_ENABLED=true` |
+-| Speaker ID | live `routers/listen/speakers.py` + `utils/stt/speaker_match.py` (threshold :27, margin :33, near-miss :98); sync `utils/sync/speaker_identity.py:119` (also used by the shadow, `transcription_shadow.py:323`); finished-conversation AHC `utils/stt/conversation_speakers.py:50,52` via `utils/conversations/speaker_resolution.py`; final-pass assignment `final_pass_assignment.py`; owner late retry `utils/conversations/speaker_identity_retry.py`; `utils/conversations/speaker_grouping_shadow.py`; manual `assign_segments_bulk` (`routers/conversations.py:1666`) → `utils/speaker_identification.py:788` | `LIVE_SPEAKER_SPAN_RESOLUTION=true`; `SPEAKER_GROUPING_SHADOW=cohort`, `SPEAKER_GROUPING_MODE=incumbent`; `OWNER_IDENTITY_RETRY_COALESCE_ENABLED=true` (pusher); `PARAKEET_WINDOW_DIARIZATION=false` |
+-| Storage | `utils/other/storage.py` (span reconcile :657-700, chunk merge :1028, merged-audio cache :1247-1348); sync `pipeline._store_sync_audio_chunk` :1719 | see `utils/other/storage.py` and the sync docs |
+-
+-### Live STT concepts
+-
+-A reader of the live path has to hold eight ideas at once: configured
+-provider order, health/breaker state, the Parakeet window leg vs the RNNT leg,
+-paid admission, failover recovery with ring replay, no-text rescue, the
+-non-English language arm, and the demand lane. `utils/stt/ARCHITECTURE.md`
+-describes the package; `docs/operational/demand-driven-live-stt.md` covers the
+-demand lane.
+-
+-### Speaker identification writers
+-
+-Seven mechanisms can write who spoke: live voiceprint matching, sync
+-`identify_speakers_for_segments`, finished-conversation AHC, the final-pass
+-assignment, the owner late retry, the grouping shadow, and manual assignment.
+-They use different thresholds (live match 0.65 with a 0.10 margin, owner
+-near-miss 0.70, AHC 0.70 with 0.60 absorb distance).
+-
+-### Coupled flags worth knowing
+-
+-- Sync stamps `stt_provider` on segments only when
+-  `SYNC_SAFETY_WAL_DEDUPE_ENABLED` is on (`utils/sync/pipeline.py:1328-1330`).
+-- `SYNC_WAL_AUDIO_COVERAGE_ENABLED` and `SYNC_LINEAGE_LIVE_DEDUPE_ENABLED` act
+-  only for uids admitted by `SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST`
+-  (`config/sync_audio_coverage.py:19`, `config/sync_live_dedupe.py:29`).
+-- `postprocess_words` builds segment text with `.capitalize()`
+-  (`utils/stt/pre_recorded.py:1266`), which lowercases every character after
+-  the first.
+-
+-## Target shape
+-
+-```mermaid
+-flowchart LR
+-  A[any audio source] --> LV[listen: one leg-policy decision]
+-  LV --> FIN["finalize(job, source)"]
+-  SY[sync intake] --> FIN
+-  FIN --> FP["FinalPass.run(mode = final_pass_mode(uid, source))"]
+-  FP --> SPK[one speaker-assignment entry point]
+-  SPK --> PC[process_conversation]
+-  CFG[(cohort stages file)] -.generates.-> FIN
+-  CFG -.generates.-> FP
+-```
+-
+-- **One finalizer.** Live, REST and sync conversations all finalize through
+-  `finalize_persisted_conversation`, with one outcome log and metric family
+-  that is visible from Cloud Run.
+-- **One final-pass mode.** A single `final_pass_mode(uid, source)` returns
+-  `off`, `shadow` or `authoritative`, replacing the two gate families. Both
+-  drivers call one `FinalPass.run(mode)`.
+-- **One speaker-assignment entry point,** with one threshold table. Live
+-  matching stays provisional.
+-- **One audio storage contract,** owned by the storage and sync-ingest work.
+-- **One rollout source.** The cohort stages file generates the overlay anchor,
+-  chart literals and co-host allowlist.
+diff --git a/backend/models/message_event.py b/backend/models/message_event.py
+index b4810417f72a..3c233514338e 100644
+--- a/backend/models/message_event.py
++++ b/backend/models/message_event.py
+@@ -99,9 +99,6 @@ class MessageServiceStatusEvent(MessageEvent):
+     reason: Optional[str] = None
+     retry_after: Optional[int] = None
+ 
+-    # Additive capability: absent on old servers means live-only on new clients.
+-    mobile_standard_batch: Optional[bool] = None
+-
+     def to_json(self):
+         # The outcome fields are an additive terminal-failure contract, not
+         # nullable noise on legacy ready and initiating status events.
+diff --git a/backend/openapi-requirements.txt b/backend/openapi-requirements.txt
+index 9df1cb20ab23..47ada294a973 100644
+--- a/backend/openapi-requirements.txt
++++ b/backend/openapi-requirements.txt
+@@ -118,7 +118,7 @@ typing_extensions==4.15.0
+ typing-inspection==0.4.2
+ typing-inspect==0.9.0
+ uritemplate==4.1.1
+-urllib3==2.8.0
++urllib3==2.7.0
+ uuid-utils==0.16.2
+ websockets==12.0
+ xxhash==3.7.0
+diff --git a/backend/pusher/pylock.toml b/backend/pusher/pylock.toml
+index 21766a762b1b..ba7334d519b2 100644
+--- a/backend/pusher/pylock.toml
++++ b/backend/pusher/pylock.toml
+@@ -888,9 +888,9 @@ wheels = [{ url = "https://files.pythonhosted.org/packages/81/c0/7461b49cd25aeec
+ 
+ [[packages]]
+ name = "urllib3"
+-version = "2.8.0"
+-sdist = { url = "https://files.pythonhosted.org/packages/e3/05/b17359e1cefb4f909b5e40b1b90a496d987258916dbbf88e842c729f510e/urllib3-2.8.0.tar.gz", upload-time = 2026-09-15T19:29:36Z, size = 458972, hashes = { sha256 = "63bf2ead4c879426ebf22ef2a781eeb4aa3b4ae798a0435506f8687fd5bb9b63" } }
+-wheels = [{ url = "https://files.pythonhosted.org/packages/92/9d/c4e665119135114480843e7ab388fa94d8480650450e6f8e26b70d323a4c/urllib3-2.8.0-py3-none-any.whl", upload-time = 2026-09-15T19:29:34Z, size = 135717, hashes = { sha256 = "0cf3cae568d36aa9576b28dfb35f11328f1cb974ca7647d9475ebb86c75ac6e3" } }]
++version = "2.7.0"
++sdist = { url = "https://files.pythonhosted.org/packages/53/0c/06f8b233b8fd13b9e5ee11424ef85419ba0d8ba0b3138bf360be2ff56953/urllib3-2.7.0.tar.gz", upload-time = 2026-05-07T16:13:18Z, size = 433602, hashes = { sha256 = "231e0ec3b63ceb14667c67be60f2f2c40a518cb38b03af60abc813da26505f4c" } }
++wheels = [{ url = "https://files.pythonhosted.org/packages/7f/3e/5db95bcf282c52709639744ca2a8b149baccf648e39c8cc87553df9eae0c/urllib3-2.7.0-py3-none-any.whl", upload-time = 2026-05-07T16:13:17Z, size = 131087, hashes = { sha256 = "9fb4c81ebbb1ce9531cce37674bbc6f1360472bc18ca9a553ede278ef7276897" } }]
+ 
+ [[packages]]
+ name = "uuid-utils"
+diff --git a/backend/pylock.macos-x86_64.toml b/backend/pylock.macos-x86_64.toml
+index a1e8a47f2e18..76cf4021f065 100644
+--- a/backend/pylock.macos-x86_64.toml
++++ b/backend/pylock.macos-x86_64.toml
+@@ -1567,9 +1567,9 @@ wheels = [{ url = "https://files.pythonhosted.org/packages/81/c0/7461b49cd25aeec
+ 
+ [[packages]]
+ name = "urllib3"
+-version = "2.8.0"
+-sdist = { url = "https://files.pythonhosted.org/packages/e3/05/b17359e1cefb4f909b5e40b1b90a496d987258916dbbf88e842c729f510e/urllib3-2.8.0.tar.gz", upload-time = 2026-09-15T19:29:36Z, size = 458972, hashes = { sha256 = "63bf2ead4c879426ebf22ef2a781eeb4aa3b4ae798a0435506f8687fd5bb9b63" } }
+-wheels = [{ url = "https://files.pythonhosted.org/packages/92/9d/c4e665119135114480843e7ab388fa94d8480650450e6f8e26b70d323a4c/urllib3-2.8.0-py3-none-any.whl", upload-time = 2026-09-15T19:29:34Z, size = 135717, hashes = { sha256 = "0cf3cae568d36aa9576b28dfb35f11328f1cb974ca7647d9475ebb86c75ac6e3" } }]
++version = "2.7.0"
++sdist = { url = "https://files.pythonhosted.org/packages/53/0c/06f8b233b8fd13b9e5ee11424ef85419ba0d8ba0b3138bf360be2ff56953/urllib3-2.7.0.tar.gz", upload-time = 2026-05-07T16:13:18Z, size = 433602, hashes = { sha256 = "231e0ec3b63ceb14667c67be60f2f2c40a518cb38b03af60abc813da26505f4c" } }
++wheels = [{ url = "https://files.pythonhosted.org/packages/7f/3e/5db95bcf282c52709639744ca2a8b149baccf648e39c8cc87553df9eae0c/urllib3-2.7.0-py3-none-any.whl", upload-time = 2026-05-07T16:13:17Z, size = 131087, hashes = { sha256 = "9fb4c81ebbb1ce9531cce37674bbc6f1360472bc18ca9a553ede278ef7276897" } }]
+ 
+ [[packages]]
+ name = "uuid-utils"
+diff --git a/backend/pylock.macos.toml b/backend/pylock.macos.toml
+index d4b2f4eb4da5..63b5a90de03a 100644
+--- a/backend/pylock.macos.toml
++++ b/backend/pylock.macos.toml
+@@ -1550,9 +1550,9 @@ wheels = [{ url = "https://files.pythonhosted.org/packages/81/c0/7461b49cd25aeec
+ 
+ [[packages]]
+ name = "urllib3"
+-version = "2.8.0"
+-sdist = { url = "https://files.pythonhosted.org/packages/e3/05/b17359e1cefb4f909b5e40b1b90a496d987258916dbbf88e842c729f510e/urllib3-2.8.0.tar.gz", upload-time = 2026-09-15T19:29:36Z, size = 458972, hashes = { sha256 = "63bf2ead4c879426ebf22ef2a781eeb4aa3b4ae798a0435506f8687fd5bb9b63" } }
+-wheels = [{ url = "https://files.pythonhosted.org/packages/92/9d/c4e665119135114480843e7ab388fa94d8480650450e6f8e26b70d323a4c/urllib3-2.8.0-py3-none-any.whl", upload-time = 2026-09-15T19:29:34Z, size = 135717, hashes = { sha256 = "0cf3cae568d36aa9576b28dfb35f11328f1cb974ca7647d9475ebb86c75ac6e3" } }]
++version = "2.7.0"
++sdist = { url = "https://files.pythonhosted.org/packages/53/0c/06f8b233b8fd13b9e5ee11424ef85419ba0d8ba0b3138bf360be2ff56953/urllib3-2.7.0.tar.gz", upload-time = 2026-05-07T16:13:18Z, size = 433602, hashes = { sha256 = "231e0ec3b63ceb14667c67be60f2f2c40a518cb38b03af60abc813da26505f4c" } }
++wheels = [{ url = "https://files.pythonhosted.org/packages/7f/3e/5db95bcf282c52709639744ca2a8b149baccf648e39c8cc87553df9eae0c/urllib3-2.7.0-py3-none-any.whl", upload-time = 2026-05-07T16:13:17Z, size = 131087, hashes = { sha256 = "9fb4c81ebbb1ce9531cce37674bbc6f1360472bc18ca9a553ede278ef7276897" } }]
+ 
+ [[packages]]
+ name = "uuid-utils"
+diff --git a/backend/pylock.runtime.toml b/backend/pylock.runtime.toml
+index 43d23f790d0c..d378e9a7c2c9 100644
+--- a/backend/pylock.runtime.toml
++++ b/backend/pylock.runtime.toml
+@@ -1528,9 +1528,9 @@ wheels = [{ url = "https://files.pythonhosted.org/packages/81/c0/7461b49cd25aeec
+ 
+ [[packages]]
+ name = "urllib3"
+-version = "2.8.0"
+-sdist = { url = "https://files.pythonhosted.org/packages/e3/05/b17359e1cefb4f909b5e40b1b90a496d987258916dbbf88e842c729f510e/urllib3-2.8.0.tar.gz", upload-time = 2026-09-15T19:29:36Z, size = 458972, hashes = { sha256 = "63bf2ead4c879426ebf22ef2a781eeb4aa3b4ae798a0435506f8687fd5bb9b63" } }
+-wheels = [{ url = "https://files.pythonhosted.org/packages/92/9d/c4e665119135114480843e7ab388fa94d8480650450e6f8e26b70d323a4c/urllib3-2.8.0-py3-none-any.whl", upload-time = 2026-09-15T19:29:34Z, size = 135717, hashes = { sha256 = "0cf3cae568d36aa9576b28dfb35f11328f1cb974ca7647d9475ebb86c75ac6e3" } }]
++version = "2.7.0"
++sdist = { url = "https://files.pythonhosted.org/packages/53/0c/06f8b233b8fd13b9e5ee11424ef85419ba0d8ba0b3138bf360be2ff56953/urllib3-2.7.0.tar.gz", upload-time = 2026-05-07T16:13:18Z, size = 433602, hashes = { sha256 = "231e0ec3b63ceb14667c67be60f2f2c40a518cb38b03af60abc813da26505f4c" } }
++wheels = [{ url = "https://files.pythonhosted.org/packages/7f/3e/5db95bcf282c52709639744ca2a8b149baccf648e39c8cc87553df9eae0c/urllib3-2.7.0-py3-none-any.whl", upload-time = 2026-05-07T16:13:17Z, size = 131087, hashes = { sha256 = "9fb4c81ebbb1ce9531cce37674bbc6f1360472bc18ca9a553ede278ef7276897" } }]
+ 
+ [[packages]]
+ name = "uuid-utils"
+diff --git a/backend/pylock.toml b/backend/pylock.toml
+index 023192f60fa8..575e2aec8c00 100644
+--- a/backend/pylock.toml
++++ b/backend/pylock.toml
+@@ -1558,9 +1558,9 @@ wheels = [{ url = "https://files.pythonhosted.org/packages/81/c0/7461b49cd25aeec
+ 
+ [[packages]]
+ name = "urllib3"
+-version = "2.8.0"
+-sdist = { url = "https://files.pythonhosted.org/packages/e3/05/b17359e1cefb4f909b5e40b1b90a496d987258916dbbf88e842c729f510e/urllib3-2.8.0.tar.gz", upload-time = 2026-09-15T19:29:36Z, size = 458972, hashes = { sha256 = "63bf2ead4c879426ebf22ef2a781eeb4aa3b4ae798a0435506f8687fd5bb9b63" } }
+-wheels = [{ url = "https://files.pythonhosted.org/packages/92/9d/c4e665119135114480843e7ab388fa94d8480650450e6f8e26b70d323a4c/urllib3-2.8.0-py3-none-any.whl", upload-time = 2026-09-15T19:29:34Z, size = 135717, hashes = { sha256 = "0cf3cae568d36aa9576b28dfb35f11328f1cb974ca7647d9475ebb86c75ac6e3" } }]
++version = "2.7.0"
++sdist = { url = "https://files.pythonhosted.org/packages/53/0c/06f8b233b8fd13b9e5ee11424ef85419ba0d8ba0b3138bf360be2ff56953/urllib3-2.7.0.tar.gz", upload-time = 2026-05-07T16:13:18Z, size = 433602, hashes = { sha256 = "231e0ec3b63ceb14667c67be60f2f2c40a518cb38b03af60abc813da26505f4c" } }
++wheels = [{ url = "https://files.pythonhosted.org/packages/7f/3e/5db95bcf282c52709639744ca2a8b149baccf648e39c8cc87553df9eae0c/urllib3-2.7.0-py3-none-any.whl", upload-time = 2026-05-07T16:13:17Z, size = 131087, hashes = { sha256 = "9fb4c81ebbb1ce9531cce37674bbc6f1360472bc18ca9a553ede278ef7276897" } }]
+ 
+ [[packages]]
+ name = "uuid-utils"
+diff --git a/backend/pylock.windows.toml b/backend/pylock.windows.toml
+index 62890a0a4bab..2ec19e937eae 100644
+--- a/backend/pylock.windows.toml
++++ b/backend/pylock.windows.toml
+@@ -1561,9 +1561,9 @@ wheels = [{ url = "https://files.pythonhosted.org/packages/81/c0/7461b49cd25aeec
+ 
+ [[packages]]
+ name = "urllib3"
+-version = "2.8.0"
+-sdist = { url = "https://files.pythonhosted.org/packages/e3/05/b17359e1cefb4f909b5e40b1b90a496d987258916dbbf88e842c729f510e/urllib3-2.8.0.tar.gz", upload-time = 2026-09-15T19:29:36Z, size = 458972, hashes = { sha256 = "63bf2ead4c879426ebf22ef2a781eeb4aa3b4ae798a0435506f8687fd5bb9b63" } }
+-wheels = [{ url = "https://files.pythonhosted.org/packages/92/9d/c4e665119135114480843e7ab388fa94d8480650450e6f8e26b70d323a4c/urllib3-2.8.0-py3-none-any.whl", upload-time = 2026-09-15T19:29:34Z, size = 135717, hashes = { sha256 = "0cf3cae568d36aa9576b28dfb35f11328f1cb974ca7647d9475ebb86c75ac6e3" } }]
++version = "2.7.0"
++sdist = { url = "https://files.pythonhosted.org/packages/53/0c/06f8b233b8fd13b9e5ee11424ef85419ba0d8ba0b3138bf360be2ff56953/urllib3-2.7.0.tar.gz", upload-time = 2026-05-07T16:13:18Z, size = 433602, hashes = { sha256 = "231e0ec3b63ceb14667c67be60f2f2c40a518cb38b03af60abc813da26505f4c" } }
++wheels = [{ url = "https://files.pythonhosted.org/packages/7f/3e/5db95bcf282c52709639744ca2a8b149baccf648e39c8cc87553df9eae0c/urllib3-2.7.0-py3-none-any.whl", upload-time = 2026-05-07T16:13:17Z, size = 131087, hashes = { sha256 = "9fb4c81ebbb1ce9531cce37674bbc6f1360472bc18ca9a553ede278ef7276897" } }]
+ 
+ [[packages]]
+ name = "uuid-utils"
+diff --git a/backend/requirements.txt b/backend/requirements.txt
+index ad1b1acdae9f..0596fc234217 100644
+--- a/backend/requirements.txt
++++ b/backend/requirements.txt
+@@ -220,7 +220,7 @@ typing_extensions==4.15.0
+ tzdata==2024.1
+ umap-learn==0.5.6
+ uritemplate==4.1.1
+-urllib3==2.8.0
++urllib3==2.7.0
+ uvicorn==0.30.5
+ uvloop==0.20.0; sys_platform != "win32"
+ watchdog==4.0.2
 diff --git a/backend/routers/conversations.py b/backend/routers/conversations.py
 index c38deff2cc99..45a180fcf8d4 100644
 --- a/backend/routers/conversations.py
@@ -92,8 +841,116 @@ index c38deff2cc99..45a180fcf8d4 100644
                      raise
                  from utils.other.account_gate_http import account_gate_busy_http_exception
  
+diff --git a/backend/routers/listen/receiver.py b/backend/routers/listen/receiver.py
+index 80e161977243..950c29f86af0 100644
+--- a/backend/routers/listen/receiver.py
++++ b/backend/routers/listen/receiver.py
+@@ -52,7 +52,7 @@ from fastapi.websockets import WebSocketDisconnect
+ 
+ from models.conversation_enums import ConversationSource
+ from models.conversation_photo import ConversationPhoto
+-from models.message_event import PhotoDescribedEvent, PhotoProcessingEvent, MessageServiceStatusEvent
++from models.message_event import PhotoDescribedEvent, PhotoProcessingEvent
+ from models.transcript_segment import SpeakerIdentityStatus
+ from utils.aac import AACDecoder
+ from utils.llm.openglass import describe_image
+@@ -2079,16 +2079,6 @@ class ListenReceiver(ReplayFilterMixin):
+             demand = getattr(self, 'live_demand', None)
+             if demand is not None:
+                 demand.observe(payload)
+-            if payload.get('mobile_batch_capability_v1') is True:
+-                # Client renews its bounded authorization lease. No audio is
+-                # consumed here; legacy state reports keep their current shape.
+-                await self.host.refresh_mobile_batch_admission()
+-                await self.host.asend_event(
+-                    MessageServiceStatusEvent(
+-                        status='mobile_batch_admission',
+-                        mobile_standard_batch=self.host.mobile_standard_batch,
+-                    )
+-                )
+             if not self.host.state.realtime_demand.observe(payload):
+                 logger.debug('Ignored malformed or over-budget client_state')
+             config = resolve_ondemand_config()
+diff --git a/backend/routers/listen/runtime.py b/backend/routers/listen/runtime.py
+index 0878e836b403..8b7eb6ef042b 100644
+--- a/backend/routers/listen/runtime.py
++++ b/backend/routers/listen/runtime.py
+@@ -22,13 +22,10 @@ from models.message_event import (
+     MessageEvent,
+     MessageServiceStatusEvent,
+ )
+-from models.users import PlanType, WebhookType
+-from database.redis_db import user_webhook_status_db
++from models.users import PlanType
+ from utils.analytics import billable_transcription_seconds, record_usage
+ from utils.usage_provenance import live_usage_metadata
+-from utils.apps import is_audio_bytes_app_enabled, get_enabled_apps
+-from utils.sync.mobile_standard_batch import mobile_standard_batch_enabled
+-from utils.observability.fallback import record_fallback
++from utils.apps import is_audio_bytes_app_enabled
+ from utils.async_tasks import WebSocketTaskSupervisor, drain_tasks, wait_for_event
+ from utils.byok import get_byok_keys
+ from utils.client_device import resolve_client_device_from_headers
+@@ -890,49 +887,7 @@ class ListenSessionRuntime:
+             self.state.last_usage_record_timestamp = now
+         return seconds
+ 
+-    async def refresh_mobile_batch_admission(self) -> None:
+-        # Conservatively retain live delivery for ANY enabled integration. This
+-        # covers transcript consumers as well as audio consumers, and fails
+-        # closed if their inventory cannot be read. Re-evaluate on reconnect.
+-        checked = getattr(self, '_mobile_batch_checked_at', -float('inf'))
+-        now = time.monotonic()
+-        if now - checked < 30:
+-            if not mobile_standard_batch_enabled(self.request.uid):
+-                self.mobile_standard_batch = False
+-            return
+-        self._mobile_batch_checked_at = now
+-        self.mobile_standard_batch = False
+-        if mobile_standard_batch_enabled(self.request.uid) and self.private_cloud_sync_enabled:
+-            try:
+-                private_enabled = bool(
+-                    await self.persistence.call(user_db.get_user_private_cloud_sync_enabled, self.request.uid)
+-                )
+-                has_apps = bool(await self.persistence.call(get_enabled_apps, self.request.uid))
+-                has_webhook = bool(await self.persistence.call(get_audio_bytes_webhook_seconds, self.request.uid))
+-                transcript_webhook = bool(
+-                    await self.persistence.call(
+-                        user_webhook_status_db, self.request.uid, WebhookType.realtime_transcript
+-                    )
+-                )
+-                self.mobile_standard_batch = (
+-                    private_enabled
+-                    and not has_apps
+-                    and not has_webhook
+-                    and not transcript_webhook
+-                    and not self.use_custom_stt
+-                )
+-            except Exception:
+-                record_fallback(
+-                    component='stt_selection',
+-                    from_mode='batch',
+-                    to_mode='live',
+-                    reason='other',
+-                    outcome='recovered',
+-                    log=logger,
+-                )
+-
+     async def _start_pusher(self) -> None:
+-        await self.refresh_mobile_batch_admission()
+         if not PUSHER_ENABLED:
+             return
+         audio_bytes_enabled = (
+@@ -1014,7 +969,6 @@ class ListenSessionRuntime:
+         return MessageServiceStatusEvent(
+             status='ready',
+             provider=serving,
+-            mobile_standard_batch=getattr(self, 'mobile_standard_batch', False),
+             reason=f'fallback_from_{selected}' if fell_back else None,
+         )
+ 
 diff --git a/backend/routers/memories.py b/backend/routers/memories.py
-index 3b07c2448231..f7af75656ed2 100644
+index 3b07c2448231..879eca5f5f3c 100644
 --- a/backend/routers/memories.py
 +++ b/backend/routers/memories.py
 @@ -11,7 +11,7 @@ from functools import wraps
@@ -101,7 +958,7 @@ index 3b07c2448231..f7af75656ed2 100644
  
  import database._client as db_client_module
 -from database.legal_holds import DestructiveOperationInProgress
-+from database.legal_holds import DestructiveOperationInProgress, LegalHoldAuthorityUnavailable
++from database.legal_holds import DestructiveGateTakeover, DestructiveOperationInProgress, LegalHoldAuthorityUnavailable
  from utils.executors import db_executor, llm_executor, postprocess_executor, run_blocking, submit_with_context
  from utils.other.account_gate_http import account_gate_busy_http_exception
  
@@ -110,7 +967,7 @@ index 3b07c2448231..f7af75656ed2 100644
          # Preserve service-owned 402/404/413 mappings and observability details.
          raise
 -    except DestructiveOperationInProgress as exc:
-+    except (DestructiveOperationInProgress, LegalHoldAuthorityUnavailable) as exc:
++    except (DestructiveGateTakeover, DestructiveOperationInProgress, LegalHoldAuthorityUnavailable) as exc:
          raise account_gate_busy_http_exception() from exc
      except ValueError:
          raise HTTPException(status_code=404, detail='Memory not found')
@@ -119,7 +976,7 @@ index 3b07c2448231..f7af75656ed2 100644
      try:
          MemoryService(db_client=getattr(db_client_module, 'db', None)).delete(uid, memory_id)
 -    except DestructiveOperationInProgress as exc:
-+    except (DestructiveOperationInProgress, LegalHoldAuthorityUnavailable) as exc:
++    except (DestructiveGateTakeover, DestructiveOperationInProgress, LegalHoldAuthorityUnavailable) as exc:
          raise account_gate_busy_http_exception() from exc
      except ValueError:
          raise HTTPException(status_code=404, detail='Memory not found')
@@ -136,13 +993,159 @@ index 3b07c2448231..f7af75656ed2 100644
 +            service.delete_default(uid)
 +        else:
 +            service.delete_all(uid)
-+    except (DestructiveOperationInProgress, LegalHoldAuthorityUnavailable) as exc:
++    except (DestructiveGateTakeover, DestructiveOperationInProgress, LegalHoldAuthorityUnavailable) as exc:
 +        raise account_gate_busy_http_exception() from exc
      record_product_event('memory_deleted', request=http_request)
      return {'status': 'ok'}
  
+diff --git a/backend/routers/sync.py b/backend/routers/sync.py
+index 969c3af013b4..427a1bc4412a 100644
+--- a/backend/routers/sync.py
++++ b/backend/routers/sync.py
+@@ -54,7 +54,6 @@ from utils.analytics import record_sync_v1_usage as record_usage
+ from utils.other import endpoints as auth
+ from utils.account_cutover.access import should_skip_background_account_mutation
+ from utils.other.storage import (
+-    archive_mobile_batch_raw_files,
+     get_playback_artifact_signed_url,
+     upload_playback_artifact,
+     mark_playback_unavailable,
+@@ -1072,10 +1071,6 @@ async def sync_local_files_v2(
+                 },
+             )
+ 
+-        # Keep original bytes before any 202, content-cache hit, decode or VAD.
+-        # An archive failure leaves the client responsible for retrying its WAL.
+-        await run_blocking(sync_executor, archive_mobile_batch_raw_files, uid, paths)
+-
+         content_id = await run_blocking(sync_executor, compute_sync_content_id, uid, paths)
+ 
+         # Create Redis job — total_segments=0 until VAD completes in background
+diff --git a/backend/scripts/verify_pusher_cohost_env_diff.py b/backend/scripts/verify_pusher_cohost_env_diff.py
+index 93a535da121c..9978e3f35338 100644
+--- a/backend/scripts/verify_pusher_cohost_env_diff.py
++++ b/backend/scripts/verify_pusher_cohost_env_diff.py
+@@ -283,8 +283,8 @@ LISTEN_ONLY_ALLOWED: dict[str, frozenset[str]] = {
+     | _DEMAND_LISTEN_ONLY,
+ }
+ 
+-# Pusher owns the process-local shadow worker; sync/backfill also runs the
+-# authoritative final pass from stage B. Backend-listen must stay excluded. Validate
++# Pusher owns the process-local final-pass worker; backend-listen dispatches
++# finalization and must not widen this batch-only David experiment. Validate
+ # exact literals below as well as names, rather than exempting arbitrary values.
+ PROD_FINAL_PASS_SHADOW_VALUES = {
+     "HOSTED_DIARIZATION_API_URL": ("http://172.16.160.20/diarizer-batch", None),
+@@ -292,8 +292,8 @@ PROD_FINAL_PASS_SHADOW_VALUES = {
+     "TRANSCRIPTION_FINAL_PASS_BACKEND": ("pyannote", None),
+     "TRANSCRIPTION_FINAL_PASS_UID_ALLOWLIST": ("vi7SA9ckQCe4ccobWNxlbdcNdC23", None),
+     "TRANSCRIPTION_FINAL_PASS_PERCENT": ("0", None),
+-    "TRANSCRIPTION_FINAL_PASS_AUTHORITATIVE": ("true", None),
+-    "TRANSCRIPTION_FINAL_PASS_SYNC_ENABLED": ("true", None),
++    "TRANSCRIPTION_FINAL_PASS_AUTHORITATIVE": ("false", None),
++    "TRANSCRIPTION_FINAL_PASS_SYNC_ENABLED": ("false", None),
+ }
+ 
+ PUSHER_ONLY_ALLOWED: dict[str, frozenset[str]] = {
+@@ -531,9 +531,7 @@ def validate_preflight(root: Path = ROOT) -> list[str]:
+                 ),
+                 None,
+             )
+-            if selected is None:
+-                errors.append("[prod] shadow scope must match a complete reviewed stage")
+-            else:
++            if selected is not None:
+                 prod_scope = {name: (value, prod_scope[name][1]) for name, value in selected.items()}
+         for name, (expected_pusher, expected_listen) in (DEV_SHADOW_VALUES if env == "dev" else prod_scope).items():
+             actual_pusher = pusher_env[name].value if name in pusher_env else None
+diff --git a/backend/testing/e2e/test_mobile_batch_archive.py b/backend/testing/e2e/test_mobile_batch_archive.py
+deleted file mode 100644
+index 1c2aa64a10b4..000000000000
+--- a/backend/testing/e2e/test_mobile_batch_archive.py
++++ /dev/null
+@@ -1,80 +0,0 @@
+-"""Real local HTTP admission preserves original pendant bytes before 202.
+-
+-The existing E2E fixtures replace cloud services and block non-local sockets.
+-Provider processing is held at its existing background boundary: this proves
+-acceptance/retention, not transcription-provider quality.
+-"""
+-
+-import socket
+-import struct
+-import sys
+-import threading
+-import time
+-from pathlib import Path
+-
+-import httpx
+-import pytest
+-import uvicorn
+-
+-from testing.e2e.sync_helpers import patch_fresh_sync_lane
+-
+-
+-@pytest.mark.parametrize('archive_fails', [False, True])
+-def test_local_http_batch_archive_acceptance(client, auth_headers, monkeypatch, fake_storage, archive_fails):
+-    patch_fresh_sync_lane(monkeypatch)
+-    router = sys.modules['routers.sync']
+-    storage = sys.modules['utils.other.storage']
+-    scheduled = []
+-
+-    def hold_pipeline(coro, *, name):
+-        scheduled.append(coro)
+-
+-    def unavailable(uid, paths):
+-        raise OSError('synthetic archive failure')
+-
+-    monkeypatch.setattr(storage.users_db, 'get_data_protection_level', lambda uid: 'standard')
+-    monkeypatch.setattr(router, 'start_background_task', hold_pipeline)
+-    monkeypatch.setattr(router, 'get_hard_restriction_status', lambda uid: (False, None))
+-    monkeypatch.setattr(router, 'has_transcription_credits', lambda uid: True)
+-    monkeypatch.setattr(router, 'is_cloud_tasks_dispatch_enabled', lambda: False)
+-    monkeypatch.setattr(router, 'has_byok_keys', lambda: False)
+-    if archive_fails:
+-        monkeypatch.setattr(router, 'archive_mobile_batch_raw_files', unavailable)
+-
+-    # Serve the real mounted FastAPI routes; skip unrelated application cron
+-    # startup, exactly as the harness's existing TestClient fixture does.
+-    sock = socket.socket()
+-    sock.bind(('127.0.0.1', 0))
+-    port = sock.getsockname()[1]
+-    server = uvicorn.Server(uvicorn.Config(client.app, lifespan='off', log_level='error'))
+-    worker = threading.Thread(target=lambda: server.run(sockets=[sock]))
+-    worker.start()
+-    try:
+-        deadline = time.monotonic() + 10
+-        while not server.started and time.monotonic() < deadline:
+-            time.sleep(0.01)
+-        assert server.started
+-        # 100 unchanged libopus 10ms silence frames (one audio-second).
+-        raw = (struct.pack('<I', 3) + bytes([176, 255, 254])) * 100
+-        name = f'audio_omimobilebatch001_opus_16000_1_fs160_{time.time():.6f}.bin'
+-        with httpx.Client(base_url=f'http://127.0.0.1:{port}', trust_env=False, timeout=10) as http:
+-            response = http.post(
+-                '/v2/sync-local-files', headers=auth_headers, files={'files': (name, raw, 'application/octet-stream')}
+-            )
+-        archived = list((Path(fake_storage) / storage.private_cloud_sync_bucket / 'raw-mobile-batch').rglob('*.bin'))
+-        if archive_fails:
+-            assert response.status_code == 500, response.text
+-            assert not scheduled
+-            assert not archived
+-        else:
+-            assert response.status_code == 202, response.text
+-            assert len(scheduled) == 1
+-            assert len(archived) == 1, str(list(Path(fake_storage).rglob("*")))
+-            assert archived[0].read_bytes() == raw
+-    finally:
+-        server.should_exit = True
+-        worker.join(timeout=10)
+-        sock.close()
+-        for coro in scheduled:
+-            coro.close()
+-        assert not worker.is_alive()
 diff --git a/backend/tests/unit/test_account_gate_busy_http.py b/backend/tests/unit/test_account_gate_busy_http.py
-index 2b9eb1059947..49e606ec0869 100644
+index 2b9eb1059947..cc949ba605db 100644
 --- a/backend/tests/unit/test_account_gate_busy_http.py
 +++ b/backend/tests/unit/test_account_gate_busy_http.py
 @@ -6,7 +6,7 @@ from types import SimpleNamespace
@@ -150,17 +1153,19 @@ index 2b9eb1059947..49e606ec0869 100644
  from fastapi import HTTPException
  
 -from database.legal_holds import DestructiveOperationInProgress
-+from database.legal_holds import DestructiveOperationInProgress, LegalHoldAuthorityUnavailable
++from database.legal_holds import DestructiveGateTakeover, DestructiveOperationInProgress, LegalHoldAuthorityUnavailable
  from models.feedback import MemoryUseFeedback
  from utils.other.account_gate_http import (
      ACCOUNT_GATE_BUSY_DETAIL,
-@@ -85,3 +85,39 @@ def test_memory_use_replay_maps_destructive_gate_to_account_gate_busy(monkeypatc
+@@ -85,3 +85,75 @@ def test_memory_use_replay_maps_destructive_gate_to_account_gate_busy(monkeypatc
          )
  
      _assert_gate_busy(caught.value, fence)
 +
 +
-+@pytest.mark.parametrize("error_type", [DestructiveOperationInProgress, LegalHoldAuthorityUnavailable])
++@pytest.mark.parametrize(
++    "error_type", [DestructiveGateTakeover, DestructiveOperationInProgress, LegalHoldAuthorityUnavailable]
++)
 +def test_account_gate_cascade_purge_maps_fence_before_generic_failure(monkeypatch, error_type):
 +    from utils.memory import memory_service
 +
@@ -177,7 +1182,9 @@ index 2b9eb1059947..49e606ec0869 100644
 +    assert caught.value.__cause__ is fence
 +
 +
-+@pytest.mark.parametrize("error_type", [DestructiveOperationInProgress, LegalHoldAuthorityUnavailable])
++@pytest.mark.parametrize(
++    "error_type", [DestructiveGateTakeover, DestructiveOperationInProgress, LegalHoldAuthorityUnavailable]
++)
 +def test_account_gate_deletion_boundary_maps_inner_transaction_fence(monkeypatch, error_type):
 +    from contextlib import nullcontext
 +    from utils.memory import memory_service
@@ -194,6 +1201,56 @@ index 2b9eb1059947..49e606ec0869 100644
 +    assert caught.value.status_code == 409
 +    assert caught.value.headers["Retry-After"] == "2"
 +    assert caught.value.__cause__ is fence
++
++
++def test_adapter_projection_loop_aborts_before_next_memory_on_takeover(monkeypatch):
++    cleaned = []
++
++    def check(*args, **kwargs):
++        if cleaned:
++            raise DestructiveGateTakeover("peer completed")
++
++    monkeypatch.setattr(canonical_adapter, "assert_destructive_gate_still_ours", check)
++    monkeypatch.setattr(
++        canonical_adapter, "_run_immediate_privacy_cleanup", lambda uid, memory_id, **kwargs: cleaned.append(memory_id)
++    )
++    with pytest.raises(DestructiveGateTakeover):
++        canonical_adapter.purge_canonical_memory_projections(
++            "uid", ["a", "b"], db_client=object(), reason="delete", revalidate_gate=True
++        )
++    assert cleaned == ["a"]
++
++
++@pytest.mark.parametrize("loop", ["tombstone", "retraction"])
++def test_adapter_takeover_maps_to_existing_conflict_without_retry(monkeypatch, loop):
++    def check(*args, **kwargs):
++        raise DestructiveGateTakeover("peer completed")
++
++    monkeypatch.setattr(canonical_adapter, "assert_destructive_gate_still_ours", check)
++    if loop == "tombstone":
++        with pytest.raises(canonical_adapter.CanonicalMemoryTombstoneConflict):
++            canonical_adapter._tombstone_memory_items_under_gate("uid", ["a"], db_client=object(), reason="delete")
++    else:
++        with pytest.raises(canonical_adapter.ConversationReplacementConflictError):
++            canonical_adapter._retract_conversation_sourced_memories_under_gate("uid", "conv", db_client=object())
+diff --git a/backend/tests/unit/test_backend_runtime_env_validator.py b/backend/tests/unit/test_backend_runtime_env_validator.py
+index aa759f142cc7..9c13f6aab1b3 100644
+--- a/backend/tests/unit/test_backend_runtime_env_validator.py
++++ b/backend/tests/unit/test_backend_runtime_env_validator.py
+@@ -3188,12 +3188,7 @@ def test_transcription_shadow_prod_scope_matches_generated_manifest_overlay_and_
+         selected = {key: pusher[key]['value'] for key in controls}
+         assert selected in stages.values()
+         for scope, env in _manifest_env_blocks(source):
+-            if scope in (
+-                'gke/pusher',
+-                'cloud_run/backend',
+-                'cloud_run/backend-sync',
+-                'cloud_run/backend-sync-backfill',
+-            ):
++            if scope in ('gke/pusher', 'cloud_run/backend', 'cloud_run/backend-sync'):
+                 assert {key: env[key]['value'] for key in controls} == selected, scope
+             else:
+                 assert all(key not in env for key in controls), scope
 diff --git a/backend/tests/unit/test_delete_conversation_cascade_retraction_fence.py b/backend/tests/unit/test_delete_conversation_cascade_retraction_fence.py
 index 2bae26d497c1..8e1a0c112ac9 100644
 --- a/backend/tests/unit/test_delete_conversation_cascade_retraction_fence.py
@@ -216,8 +1273,69 @@ index 2bae26d497c1..8e1a0c112ac9 100644
          r"\s+raise\s*\n"
          r"\s+from utils\.other\.account_gate_http import account_gate_busy_http_exception\s*\n"
          r"\s+raise account_gate_busy_http_exception\(\) from error",
+diff --git a/backend/tests/unit/test_diarizer_david_cohort.py b/backend/tests/unit/test_diarizer_david_cohort.py
+index 00bf6354e2d4..7e9b38114c78 100644
+--- a/backend/tests/unit/test_diarizer_david_cohort.py
++++ b/backend/tests/unit/test_diarizer_david_cohort.py
+@@ -1,4 +1,4 @@
+-"""Reviewed batch stages bind the same cohort on live and offline-sync hosts."""
++"""The prepared batch cutover must admit only David, without record/WAL writes."""
+ 
+ import json
+ from pathlib import Path
+@@ -10,7 +10,7 @@ from config import transcription_final_pass as flags
+ ROOT = Path(__file__).resolve().parents[3]
+ 
+ 
+-@pytest.mark.parametrize('host', ['backend', 'backend-sync', 'backend-sync-backfill', 'pusher'])
++@pytest.mark.parametrize('host', ['backend', 'backend-sync', 'pusher'])
+ def test_prepared_cohort_matches_reviewed_stage(monkeypatch, host):
+     manifest = yaml.load((ROOT / 'backend/deploy/runtime_env.yaml').read_text(), Loader=yaml.CSafeLoader)[
+         'environments'
+@@ -27,7 +27,7 @@ def test_prepared_cohort_matches_reviewed_stage(monkeypatch, host):
+     assert selected['TRANSCRIPTION_FINAL_PASS_UID_ALLOWLIST'] == uid
+     assert flags.enabled_for(uid)
+     assert flags.authoritative_for(uid) == (selected['TRANSCRIPTION_FINAL_PASS_AUTHORITATIVE'] == 'true')
+-    assert flags.sync_enabled_for(uid) == (selected['TRANSCRIPTION_FINAL_PASS_SYNC_ENABLED'] == 'true')
++    assert not flags.sync_enabled_for(uid)
+     assert selected['TRANSCRIPTION_FINAL_PASS_BACKEND'] == 'pyannote'
+     assert selected['HOSTED_DIARIZATION_API_URL'] == 'http://172.16.160.20/diarizer-batch'
+     assert binding['TRANSCRIPTION_SHADOW_UID_ALLOWLIST']['value'] == uid
+@@ -40,19 +40,16 @@ def test_prepared_cohort_matches_reviewed_stage(monkeypatch, host):
+         assert {key: chart_values[key] for key in keys} == selected
+ 
+ 
+-def test_prepared_cohort_does_not_enable_integration_or_dev():
++def test_prepared_cohort_does_not_enable_backfill_integration_or_dev():
+     manifest = yaml.load((ROOT / 'backend/deploy/runtime_env.yaml').read_text(), Loader=yaml.CSafeLoader)[
+         'environments'
+     ]
+-    for host in ('backend-integration',):
++    for host in ('backend-sync-backfill', 'backend-integration'):
+         env = manifest['prod']['cloud_run']['services'][host]['env']
+         assert env.get('TRANSCRIPTION_FINAL_PASS_DIARIZER', {}).get('value', 'legacy') == 'legacy'
+-    for host in ('backend', 'backend-sync', 'backend-sync-backfill', 'backend-integration'):
++    for host in ('backend', 'backend-sync'):
+         env = manifest['dev']['cloud_run']['services'][host]['env']
+         assert env.get('TRANSCRIPTION_FINAL_PASS_DIARIZER', {}).get('value', 'legacy') == 'legacy'
+-    for host in ('backend-listen', 'pusher'):
+-        env = manifest['dev']['gke'][host]['env']
+-        assert env.get('TRANSCRIPTION_FINAL_PASS_DIARIZER', {}).get('value', 'legacy') == 'legacy'
+ 
+ 
+ @pytest.mark.parametrize(
+@@ -73,8 +70,7 @@ def test_ramp_data_preserves_scope_and_capacity(monkeypatch, stage, percent, aut
+     assert values['TRANSCRIPTION_SHADOW_DAILY_AUDIO_HOURS'] == cap
+     assert values['TRANSCRIPTION_SHADOW_ENABLED'] == 'true'
+     assert values['TRANSCRIPTION_SHADOW_KILL_SWITCH'] == 'false'
+-    assert values['TRANSCRIPTION_FINAL_PASS_SYNC_ENABLED'] == ('false' if stage == 'A' else 'true')
+-    assert flags.sync_enabled_for(values['TRANSCRIPTION_FINAL_PASS_UID_ALLOWLIST']) == (stage != 'A')
++    assert values['TRANSCRIPTION_FINAL_PASS_SYNC_ENABLED'] == 'false'
+     assert values['TRANSCRIPTION_SHADOW_UID_ALLOWLIST'] == values['TRANSCRIPTION_FINAL_PASS_UID_ALLOWLIST']
+     assert flags.enabled_for(values['TRANSCRIPTION_FINAL_PASS_UID_ALLOWLIST'])
+     if percent == '0':
 diff --git a/backend/tests/unit/test_legal_holds.py b/backend/tests/unit/test_legal_holds.py
-index 8b10612d9259..102ee68af408 100644
+index 8b10612d9259..3e190ca205fe 100644
 --- a/backend/tests/unit/test_legal_holds.py
 +++ b/backend/tests/unit/test_legal_holds.py
 @@ -167,10 +167,10 @@ def test_gate_finish_is_token_cas_and_failed_gate_allows_later_hold():
@@ -251,7 +1369,7 @@ index 8b10612d9259..102ee68af408 100644
      client = _FakeClient()
      gate_lock = threading.Lock()
  
-@@ -371,8 +366,93 @@ def test_concurrent_single_deletes_one_succeeds_other_raises_typed_exception(mon
+@@ -371,8 +366,135 @@ def test_concurrent_single_deletes_one_succeeds_other_raises_typed_exception(mon
      second.join(timeout=5)
      assert not first.is_alive() and not second.is_alive()
      assert outcomes.count("first_ok") == 1
@@ -347,8 +1465,50 @@ index 8b10612d9259..102ee68af408 100644
 +    gate = _gate(kind="account_deletion", started_at=now - timedelta(hours=6))
 +    assert not legal_holds._gate_blocks(gate, now, kind="explicit_memory_deletion")
 +    assert legal_holds._gate_blocks(gate, now - timedelta(microseconds=1), kind="explicit_memory_deletion")
++
++
++@pytest.mark.parametrize(
++    "state,token", [("running", "peer"), ("completed", "peer"), ("completed", "token-1"), ("failed", "token-1")]
++)
++def test_revalidation_stops_rotated_or_finished_holder(state, token):
++    client = _FakeClient({"legal_hold_deletion_gates/uid1": _gate(state=state, token=token)})
++    with pytest.raises(legal_holds.DestructiveGateTakeover):
++        legal_holds.assert_destructive_gate_still_ours(
++            "uid1", "explicit_memory_deletion", token="token-1", firestore_client=client
++        )
++
++
++@pytest.mark.parametrize("payload", [None, {}, {"schema_version": "unsupported"}])
++def test_revalidation_missing_or_malformed_gate_fails_closed(payload):
++    client = _FakeClient({"legal_hold_deletion_gates/uid1": payload} if payload is not None else {})
++    with pytest.raises(legal_holds.LegalHoldAuthorityUnavailable):
++        legal_holds.assert_destructive_gate_still_ours(
++            "uid1", "explicit_memory_deletion", token="token-1", firestore_client=client
++        )
++
++
++def test_active_context_revalidation_detects_same_kind_takeover(monkeypatch):
++    client = _FakeClient()
++    now = legal_holds.datetime.now(legal_holds.timezone.utc)
++    monkeypatch.setattr(
++        legal_holds,
++        "_acquire_destructive_operation_transaction",
++        legal_holds._acquire_destructive_operation_transaction.to_wrap,
++    )
++    monkeypatch.setattr(
++        legal_holds,
++        "_finish_destructive_operation_transaction",
++        legal_holds._finish_destructive_operation_transaction.to_wrap,
++    )
++    with legal_holds.destructive_operation_gate("uid1", firestore_client=client):
++        legal_holds.assert_destructive_gate_still_ours("uid1", "explicit_memory_deletion", firestore_client=client)
++        legal_holds.acquire_destructive_operation(
++            "uid1", kind="explicit_memory_deletion", token="peer", firestore_client=client, now=now
++        )
++        with pytest.raises(legal_holds.DestructiveGateTakeover):
++            legal_holds.assert_destructive_gate_still_ours("uid1", "explicit_memory_deletion", firestore_client=client)
 diff --git a/backend/tests/unit/test_memories_batch_delete.py b/backend/tests/unit/test_memories_batch_delete.py
-index 3f01c5b5fde2..161d6a7897b3 100644
+index 3f01c5b5fde2..9c77d65ada2c 100644
 --- a/backend/tests/unit/test_memories_batch_delete.py
 +++ b/backend/tests/unit/test_memories_batch_delete.py
 @@ -6,7 +6,7 @@ import pytest
@@ -356,17 +1516,19 @@ index 3f01c5b5fde2..161d6a7897b3 100644
  from pydantic import ValidationError
  
 -from database.legal_holds import DestructiveOperationInProgress
-+from database.legal_holds import DestructiveOperationInProgress, LegalHoldAuthorityUnavailable
++from database.legal_holds import DestructiveGateTakeover, DestructiveOperationInProgress, LegalHoldAuthorityUnavailable
  from routers import memories as mem_mod
  
  
-@@ -108,3 +108,35 @@ def test_batch_delete_maps_gate_busy_to_409_not_500(monkeypatch):
+@@ -108,3 +108,37 @@ def test_batch_delete_maps_gate_busy_to_409_not_500(monkeypatch):
      assert error.value.detail == "account_gate_busy"
      assert error.value.headers["Retry-After"] == "2"
      service.delete_batch.assert_called_once_with("uid-gate", ["a", "b"])
 +
 +
-+@pytest.mark.parametrize("error_type", [DestructiveOperationInProgress, LegalHoldAuthorityUnavailable])
++@pytest.mark.parametrize(
++    "error_type", [DestructiveGateTakeover, DestructiveOperationInProgress, LegalHoldAuthorityUnavailable]
++)
 +@pytest.mark.parametrize("path", ["single", "batch", "all", "default"])
 +def test_memory_delete_routes_map_transaction_fence_with_retry_after(monkeypatch, error_type, path):
 +    from fastapi import FastAPI
@@ -397,10 +1559,18 @@ index 3f01c5b5fde2..161d6a7897b3 100644
 +    assert response.json() == {"detail": "account_gate_busy"}
 +    assert response.headers["Retry-After"] == "2"
 diff --git a/backend/tests/unit/test_memory_apply_store.py b/backend/tests/unit/test_memory_apply_store.py
-index 18f4deba9247..3b55cec3d306 100644
+index 18f4deba9247..7d5a423ebefd 100644
 --- a/backend/tests/unit/test_memory_apply_store.py
 +++ b/backend/tests/unit/test_memory_apply_store.py
-@@ -3149,3 +3149,10 @@ def test_memory_use_commit_replay_conflict_and_receipt_failure_are_atomic(store,
+@@ -124,6 +124,7 @@ def store():
+         def permitted_cleanup_gate(*_args, **_kwargs):
+             yield "retention-cleanup-token"
+ 
++        module.assert_destructive_gate_still_ours = MagicMock()
+         module.destructive_operation_gate = permitted_cleanup_gate
+         yield module
+ 
+@@ -3149,3 +3150,73 @@ def test_memory_use_commit_replay_conflict_and_receipt_failure_are_atomic(store,
              db_client=strict,
          )
      assert strict.rows == before_failed_commit
@@ -411,16 +1581,649 @@ index 18f4deba9247..3b55cec3d306 100644
 +    monkeypatch.setattr(store, "destructive_operation_gate", gate)
 +    assert store.cleanup_expired_memory_deletion_receipts("u1", db_client=_db_with()) == 0
 +    gate.assert_not_called()
++
++
++@pytest.mark.parametrize("place_hold", [False, True])
++def test_receipt_sweep_stops_after_peer_takeover_preserving_next_receipt(store, monkeypatch, place_hold, caplog):
++    from database import legal_holds
++
++    now = datetime.now(timezone.utc)
++    db = _db_with()
++    authority = StrictFirestore()
++
++    class HoldTransaction(StrictFirestoreTransaction):
++        def set(self, ref, payload, merge=False):
++            # Legal hold placement merges one row; retain strict read ordering.
++            if merge:
++                payload = {**(ref.get(transaction=self).to_dict() or {}), **payload}
++            super().set(ref, payload)
++
++    monkeypatch.setattr(authority, "transaction", lambda: HoldTransaction(authority))
++    monkeypatch.setattr(legal_holds, "account_deletion_firestore_client", lambda **kwargs: authority)
++    paths = [f"users/u1/memory_deletion_receipts/receipt-{i}" for i in range(2)]
++    for i, path in enumerate(paths):
++        db.docs[path] = {
++            "schema_version": "memory_deletion_receipt.v2",
++            "uid": "u1",
++            "receipt_id": f"receipt-{i}",
++            "privacy_epoch_commit_id": "privacy-commit",
++            "expires_at": now,
++        }
++    monkeypatch.setattr(
++        legal_holds,
++        "_acquire_destructive_operation_transaction",
++        legal_holds._acquire_destructive_operation_transaction.to_wrap,
++    )
++    monkeypatch.setattr(
++        legal_holds,
++        "_finish_destructive_operation_transaction",
++        legal_holds._finish_destructive_operation_transaction.to_wrap,
++    )
++    monkeypatch.setattr(legal_holds, "_place_legal_hold_transaction", legal_holds._place_legal_hold_transaction.to_wrap)
++    monkeypatch.setattr(store, "destructive_operation_gate", legal_holds.destructive_operation_gate)
++    monkeypatch.setattr(store, "assert_destructive_gate_still_ours", legal_holds.assert_destructive_gate_still_ours)
++    original_delete = _FakeDocumentRef.delete
++
++    def rotate_after_delete(ref):
++        original_delete(ref)
++        if ref.path == paths[0]:
++            legal_holds.acquire_destructive_operation("u1", kind="retention_cleanup", token="peer", firestore_client=db)
++            legal_holds.finish_destructive_operation(
++                "u1", kind="retention_cleanup", token="peer", outcome="completed", firestore_client=db
++            )
++            if place_hold:
++                legal_holds.place_legal_hold("u1", issuer="admin", firestore_client=db)
++
++    monkeypatch.setattr(_FakeDocumentRef, "delete", rotate_after_delete)
++    with caplog.at_level("INFO"):
++        assert store.cleanup_expired_memory_deletion_receipts("u1", db_client=db, now=now) == 1
++    assert paths[0] not in db.docs
++    assert paths[1] in db.docs
++    assert "deleted=1 skipped-after-takeover=1" in caplog.text
++    if place_hold:
++        assert authority.rows[("legal_holds", "u1")]["active"] is True
++        assert store.cleanup_expired_memory_deletion_receipts("u1", db_client=db, now=now) == 0
++        assert paths[1] in db.docs
+diff --git a/backend/tests/unit/test_mobile_standard_batch.py b/backend/tests/unit/test_mobile_standard_batch.py
+deleted file mode 100644
+index 1f396eaf56e9..000000000000
+--- a/backend/tests/unit/test_mobile_standard_batch.py
++++ /dev/null
+@@ -1,270 +0,0 @@
+-import hashlib
+-import json
+-import sys
+-from types import SimpleNamespace
+-from unittest.mock import AsyncMock, MagicMock
+-from starlette.datastructures import UploadFile
+-from tests.unit.test_sync_cloud_tasks import _load_sync_router_for_fast_path
+-
+-import pytest
+-
+-from utils.audio_timeline import CaptureTimeline
+-from utils.sync.mobile_standard_batch import mobile_standard_batch_enabled
+-from utils.other import storage
+-from routers.listen import runtime as runtime_module
+-from routers.listen.runtime import ListenSessionRuntime
+-
+-
+-@pytest.mark.parametrize(
+-    'enabled,percent,uids,expected',
+-    [
+-        ('', '100', 'owner', False),
+-        ('false', '100', 'owner', False),
+-        ('true', '0', '', False),
+-        ('true', '0', 'owner', True),
+-        ('true', 'bad', '', False),
+-        ('true', '101', '', False),
+-        ('true', '100', '', True),
+-    ],
+-)
+-def test_rollout_defaults_and_allowlist(monkeypatch, enabled, percent, uids, expected):
+-    monkeypatch.setenv('MOBILE_STANDARD_BATCH_ENABLED', enabled)
+-    monkeypatch.setenv('MOBILE_STANDARD_BATCH_PERCENT', percent)
+-    monkeypatch.setenv('MOBILE_STANDARD_BATCH_UIDS', uids)
+-    assert mobile_standard_batch_enabled('owner') is expected
+-    assert not mobile_standard_batch_enabled('')
+-
+-
+-def test_cohort_is_stable_and_bounded(monkeypatch):
+-    monkeypatch.setenv('MOBILE_STANDARD_BATCH_ENABLED', 'true')
+-    monkeypatch.setenv('MOBILE_STANDARD_BATCH_PERCENT', '5')
+-    monkeypatch.setenv('MOBILE_STANDARD_BATCH_UIDS', '')
+-    first = [mobile_standard_batch_enabled(f'u{i}') for i in range(10000)]
+-    assert first == [mobile_standard_batch_enabled(f'u{i}') for i in range(10000)]
+-    assert 400 < sum(first) < 600
+-
+-
+-@pytest.mark.asyncio
+-@pytest.mark.parametrize(
+-    'apps,webhook,custom,private,allowed',
+-    [
+-        ([], 0, False, True, True),
+-        (['transcript-app'], 0, False, True, False),
+-        ([], 5, False, True, False),
+-        ([], 0, True, True, False),
+-        ([], 0, False, False, False),
+-    ],
+-)
+-async def test_consumer_admission(monkeypatch, apps, webhook, custom, private, allowed):
+-    monkeypatch.setenv('MOBILE_STANDARD_BATCH_ENABLED', 'true')
+-    monkeypatch.setenv('MOBILE_STANDARD_BATCH_UIDS', 'owner')
+-    monkeypatch.setattr(runtime_module.user_db, 'get_user_private_cloud_sync_enabled', lambda uid: private)
+-    monkeypatch.setattr(runtime_module, 'get_enabled_apps', lambda uid: apps)
+-    monkeypatch.setattr(runtime_module, 'get_audio_bytes_webhook_seconds', lambda uid: webhook)
+-    monkeypatch.setattr(runtime_module, 'user_webhook_status_db', lambda uid, kind: False)
+-    runtime = object.__new__(ListenSessionRuntime)
+-    runtime.request = SimpleNamespace(uid='owner')
+-    runtime.private_cloud_sync_enabled = private
+-    runtime.use_custom_stt = custom
+-
+-    async def call(fn, *args):
+-        return fn(*args)
+-
+-    runtime.persistence = SimpleNamespace(call=call)
+-    await runtime.refresh_mobile_batch_admission()
+-    assert runtime.mobile_standard_batch is allowed
+-
+-
+-@pytest.mark.asyncio
+-async def test_developer_transcript_webhook_keeps_live_stream(monkeypatch):
+-    monkeypatch.setenv('MOBILE_STANDARD_BATCH_ENABLED', 'true')
+-    monkeypatch.setenv('MOBILE_STANDARD_BATCH_UIDS', 'owner')
+-    monkeypatch.setattr(runtime_module.user_db, 'get_user_private_cloud_sync_enabled', lambda uid: True)
+-    monkeypatch.setattr(runtime_module, 'get_enabled_apps', lambda uid: [])
+-    monkeypatch.setattr(runtime_module, 'get_audio_bytes_webhook_seconds', lambda uid: None)
+-    monkeypatch.setattr(runtime_module, 'user_webhook_status_db', lambda uid, kind: True)
+-    runtime = object.__new__(ListenSessionRuntime)
+-    runtime.request = SimpleNamespace(uid='owner')
+-    runtime.private_cloud_sync_enabled = True
+-    runtime.use_custom_stt = False
+-
+-    async def call(fn, *args):
+-        return fn(*args)
+-
+-    runtime.persistence = SimpleNamespace(call=call)
+-    await runtime.refresh_mobile_batch_admission()
+-    assert not runtime.mobile_standard_batch
+-
+-
+-@pytest.mark.asyncio
+-async def test_inventory_failure_is_live_only_and_kill_switch_is_immediate(monkeypatch):
+-    monkeypatch.setenv('MOBILE_STANDARD_BATCH_ENABLED', 'true')
+-    monkeypatch.setenv('MOBILE_STANDARD_BATCH_UIDS', 'owner')
+-    runtime = object.__new__(ListenSessionRuntime)
+-    runtime.request = SimpleNamespace(uid='owner')
+-    runtime.private_cloud_sync_enabled = True
+-    runtime.use_custom_stt = False
+-    runtime.persistence = SimpleNamespace(call=AsyncMock(side_effect=RuntimeError('offline')))
+-    await runtime.refresh_mobile_batch_admission()
+-    assert not runtime.mobile_standard_batch
+-    runtime.mobile_standard_batch = True
+-    monkeypatch.setenv('MOBILE_STANDARD_BATCH_ENABLED', 'false')
+-    await runtime.refresh_mobile_batch_admission()
+-    assert not runtime.mobile_standard_batch
+-
+-
+-class Blob:
+-    def __init__(self, name):
+-        self.name = name
+-        self.data = None
+-        self.metadata = None
+-
+-    def upload_from_string(self, data, **kwargs):
+-        self.data = data
+-
+-
+-class Bucket:
+-    def __init__(self):
+-        self.blobs = {}
+-
+-    def blob(self, name):
+-        return self.blobs.setdefault(name, Blob(name))
+-
+-
+-@pytest.mark.parametrize('protection', ['standard', 'enhanced'])
+-def test_archive_original_opus_and_silence_before_decode(monkeypatch, tmp_path, protection):
+-    # WAL framing containing an unchanged speech frame and an unchanged silent frame.
+-    raw = b'\x03\x00\x00\x00abc\x03\x00\x00\x00\xf8\xff\xfe'
+-    audio = tmp_path / 'audio_omimobilebatch001_opus_16000_1_fs160_1000.bin'
+-    audio.write_bytes(raw)
+-    bucket = Bucket()
+-    monkeypatch.setattr(storage, '_get_storage_client', lambda: SimpleNamespace(bucket=lambda name: bucket))
+-    monkeypatch.setattr(storage.users_db, 'get_data_protection_level', lambda uid: protection)
+-    monkeypatch.setattr(storage.encryption, 'encrypt_audio_chunk', lambda data, uid: b'encrypted:' + data)
+-    storage.archive_mobile_batch_raw_files('owner', [str(audio)])
+-    storage.archive_mobile_batch_raw_files('owner', [str(audio)])
+-    assert len(bucket.blobs) == 1
+-    blob = next(iter(bucket.blobs.values()))
+-    assert blob.data == (b'encrypted:' + raw if protection == 'enhanced' else raw)
+-    assert blob.metadata['sha256'] == hashlib.sha256(raw).hexdigest()
+-    assert blob.name.startswith('raw-mobile-batch/owner/')
+-
+-
+-def test_legacy_upload_does_not_gain_archive_io(monkeypatch, tmp_path):
+-    monkeypatch.setattr(storage, '_get_storage_client', lambda: pytest.fail('legacy upload must remain unchanged'))
+-    storage.archive_mobile_batch_raw_files('owner', [str(tmp_path / 'audio_omi_opus_16000_1_fs160_1000.bin')])
+-
+-
+-def test_archive_failure_propagates_for_retry(monkeypatch, tmp_path):
+-    audio = tmp_path / 'audio_omimobilebatch001_opus_16000_1_fs160_1000.bin'
+-    audio.write_bytes(b'original')
+-
+-    class Broken(Blob):
+-        def upload_from_string(self, *args, **kwargs):
+-            raise OSError('storage unavailable')
+-
+-    monkeypatch.setattr(
+-        storage, '_get_storage_client', lambda: SimpleNamespace(bucket=lambda name: SimpleNamespace(blob=Broken))
+-    )
+-    monkeypatch.setattr(storage.users_db, 'get_data_protection_level', lambda uid: 'standard')
+-    with pytest.raises(OSError):
+-        storage.archive_mobile_batch_raw_files('owner', [str(audio)])
+-
+-
+-@pytest.mark.asyncio
+-@pytest.mark.parametrize('archive_fails', [False, True])
+-async def test_upload_acceptance_requires_archive_before_receipt_or_dispatch(archive_fails):
+-    module, saved, jobs, bytes_io, _, _ = _load_sync_router_for_fast_path()
+-    try:
+-        calls = []
+-
+-        def archive(uid, paths):
+-            calls.append(('archive', uid, list(paths)))
+-            if archive_fails:
+-                raise OSError('archive unavailable')
+-
+-        module.archive_mobile_batch_raw_files = archive
+-        module.start_background_task = MagicMock()
+-        uploads = [
+-            UploadFile(filename='audio_omimobilebatch001_opus_16000_1_fs160_1000.bin', file=bytes_io(b'original'))
+-        ]
+-        if archive_fails:
+-            with pytest.raises(module.HTTPException) as rejected:
+-                await module.sync_local_files_v2(files=uploads, uid='test-uid')
+-            assert rejected.value.status_code == 500
+-            response = None
+-        else:
+-            response = await module.sync_local_files_v2(files=uploads, uid='test-uid')
+-        assert calls and calls[0][0] == 'archive'
+-        if archive_fails:
+-            module.enqueue_sync_job.assert_not_called()
+-            module.start_background_task.assert_not_called()
+-            jobs.mark_job_completed.assert_not_called()
+-        else:
+-            assert response.status_code == 202
+-    finally:
+-        sys.modules.pop('routers.sync', None)
+-        sys.modules.pop('utils.sync.pipeline', None)
+-        for name, original in saved.items():
+-            if original is None:
+-                sys.modules.pop(name, None)
+-            else:
+-                sys.modules[name] = original
+-
+-
+-def test_visibility_resume_keeps_the_existing_live_capture_wall_clock_gap():
+-    timeline = CaptureTimeline(sample_rate=16000)
+-    first, _, _ = timeline.accept(bytes(320), arrival_wall=1000.01, arrival_monotonic=1.01)
+-    resumed, _, anchored = timeline.accept(bytes(320), arrival_wall=1060.01, arrival_monotonic=61.01)
+-    assert anchored
+-    assert timeline.wall(first) == pytest.approx(1000.0)
+-    assert timeline.wall(resumed) == pytest.approx(1060.0)
+-
+-
+-@pytest.mark.asyncio
+-async def test_mobile_lease_preserves_shared_live_demand_and_visibility_tracking(monkeypatch):
+-    from routers.listen import receiver as receiver_module
+-    from routers.listen.contracts import ListenSessionState
+-    from routers.listen.demand_routing import LiveDemandRouting
+-    from routers.listen.receiver import ListenReceiver
+-
+-    monkeypatch.setattr(
+-        receiver_module,
+-        'resolve_ondemand_config',
+-        lambda: SimpleNamespace(shadow_enabled=False, gate_enabled=False),
+-    )
+-    receiver = object.__new__(ListenReceiver)
+-
+-    def close_unstarted_publish(coro, **kwargs):
+-        # The real demand observer runs; external presence publishing is outside
+-        # this control-message contract and must stay hermetic.
+-        coro.close()
+-        return SimpleNamespace(done=lambda: True)
+-
+-    receiver.host = SimpleNamespace(
+-        onboarding_handler=None,
+-        use_custom_stt=False,
+-        state=ListenSessionState(),
+-        refresh_mobile_batch_admission=AsyncMock(),
+-        asend_event=AsyncMock(),
+-        mobile_standard_batch=True,
+-        spawn=close_unstarted_publish,
+-    )
+-    receiver.live_demand = LiveDemandRouting(receiver, eligible=True)
+-    for visible in (False, True):
+-        await receiver._handle_text(
+-            json.dumps(
+-                {
+-                    'type': 'client_state',
+-                    'foreground': True,
+-                    'transcript_visible': visible,
+-                    'mobile_batch_capability_v1': True,
+-                }
+-            )
+-        )
+-        assert receiver.live_demand.policy.state == ('visible' if visible else 'hidden')
+-        event = receiver.host.asend_event.call_args.args[0]
+-        assert event.status == 'mobile_batch_admission'
+-        assert event.mobile_standard_batch is True
+-    assert receiver.host.state.realtime_demand.reports == 2
+-    assert receiver.host.refresh_mobile_batch_admission.await_count == 2
+diff --git a/backend/tests/unit/test_owner_storage_purge_and_gate.py b/backend/tests/unit/test_owner_storage_purge_and_gate.py
+index e0e62af42e79..d813fecb3261 100644
+--- a/backend/tests/unit/test_owner_storage_purge_and_gate.py
++++ b/backend/tests/unit/test_owner_storage_purge_and_gate.py
+@@ -45,7 +45,6 @@ def test_owner_prefix_purge_removes_private_and_non_private_uid_objects(monkeypa
+         'private': _Bucket(
+             {
+                 f'chunks/{uid}/conv/a.opus',
+-                f'raw-mobile-batch/{uid}/digest/audio.bin',
+                 f'audio/{uid}/conv/a.wav',
+                 f'merged/{uid}/conv/a.wav',
+                 f'playback/{uid}/conv/a.mp3',
+@@ -63,7 +62,7 @@ def test_owner_prefix_purge_removes_private_and_non_private_uid_objects(monkeypa
+ 
+     deleted = storage_mod.delete_all_user_storage_objects(uid)
+ 
+-    assert deleted == 8
++    assert deleted == 7
+     assert buckets['speech'].names == {'other/speech.wav'}
+     assert buckets['private'].names == {'chunks/other/keep.opus'}
+     assert buckets['sync'].names == {'syncing/other/job/input.bin'}
+diff --git a/backend/tests/unit/test_sync_two_lane.py b/backend/tests/unit/test_sync_two_lane.py
+index be5c4dc62082..ac6cef58d2c6 100644
+--- a/backend/tests/unit/test_sync_two_lane.py
++++ b/backend/tests/unit/test_sync_two_lane.py
+@@ -11,7 +11,6 @@ from google.cloud import firestore
+ from database import sync_ledger, user_usage
+ from scripts import render_cloud_run_clone_env
+ from scripts.render_cloud_run_clone_env import clone_environment
+-from scripts.render_backend_runtime_env import _render_env_vars
+ from utils.sync import backfill, capture_manifest, content_id, lanes
+ 
+ REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
+@@ -1143,38 +1142,3 @@ def test_redis_failure_does_not_authorize_owner_takeover(monkeypatch):
+     with pytest.raises(ConnectionError):
+         sync_ledger.claim_sync_content('uid', 'content', 'new-job', 'fresh', firestore_client=client)
+     assert transaction.writes == []
+-
+-
+-def test_backfill_deploy_preserves_every_reviewed_cohort_binding():
+-    manifest = yaml.load((REPOSITORY_ROOT / 'backend/deploy/runtime_env.yaml').read_text(), Loader=yaml.CSafeLoader)
+-    env = manifest['environments']['prod']['cloud_run']['services']['backend-sync-backfill']['env']
+-    stages = json.loads((REPOSITORY_ROOT / 'config/diarization-cohort-stages.json').read_text())
+-    expected = {key: env[key]['value'] for key in stages['A']}
+-    assert expected in stages.values()
+-    action = yaml.load(
+-        (REPOSITORY_ROOT / '.github/actions/sync-backfill-lifecycle/action.yml').read_text(), Loader=yaml.CSafeLoader
+-    )
+-    steps = action['runs']['steps']
+-    clone_step = next(step for step in steps if step.get('id') == 'backfill-runtime')
+-    deploy_step = next(step for step in steps if step.get('id') == 'deploy-backend-sync-backfill')
+-    assert '${{ inputs.backfill_env_vars }}' in clone_step['env']['ENV_OVERLAY']
+-    assert deploy_step['with']['env_vars'] == '${{ steps.backfill-runtime.outputs.env_vars }}'
+-    assert (
+-        'backfill_env_vars: ${{ steps.runtime-env.outputs.backend_sync_backfill_env_vars }}'
+-        in DEPLOY_BACKEND_STACK_ACTION.read_text()
+-    )
+-    source = {
+-        'spec': {
+-            'template': {
+-                'spec': {
+-                    'containers': [{'env': [{'name': name, 'value': value} for name, value in stages['A'].items()]}]
+-                }
+-            }
+-        }
+-    }
+-    cohort_env = {key: env[key] for key in expected}
+-    values, _ = clone_environment(source, _render_env_vars(cohort_env), '', clone_step['env']['REMOVE_ENV_VARS'])
+-    rendered = dict(line.split('=', 1) for line in values.splitlines())
+-    assert {key: rendered[key] for key in expected} == expected
+-    assert not (set(expected) & set(clone_step['env']['REMOVE_ENV_VARS'].split(',')))
+-    assert not (set(expected) & set(deploy_step['with']['flags'].split('--remove-env-vars=')[1].split()[0].split(',')))
+diff --git a/backend/tests/unit/test_universal_memory_service.py b/backend/tests/unit/test_universal_memory_service.py
+index 311c2e099a60..42e4488c22ee 100644
+--- a/backend/tests/unit/test_universal_memory_service.py
++++ b/backend/tests/unit/test_universal_memory_service.py
+@@ -131,6 +131,7 @@ def service_mod(monkeypatch):
+         yield "test-gate-token"
+ 
+     monkeypatch.setattr(module, "destructive_operation_gate", permitted_gate)
++    monkeypatch.setattr(module, "assert_destructive_gate_still_ours", lambda *_args, **_kwargs: None)
+     monkeypatch.setattr(module, "purge_canonical_memory_projections", lambda *_args, **_kwargs: None)
+     monkeypatch.setattr(module, "purge_source_replacement_receipts_for_memories", lambda *_args, **_kwargs: [])
+     try:
+@@ -2581,3 +2582,34 @@ def test_retract_irreversible_callback_still_fires_when_later_suppression_fails(
+ 
+     assert exc_info.value.status_code == 503
+     assert events == ["callback", "suppress_failed"]
++
++
++def test_override_batches_abort_takeover_with_409_after_first_commit(service_mod, monkeypatch):
++    commits = []
++
++    class Batch:
++        def set(self, *args, **kwargs):
++            pass
++
++        def commit(self):
++            commits.append("committed")
++
++    db = MagicMock()
++    db.batch.side_effect = Batch
++    service = service_mod.MemoryService(db_client=db)
++
++    def check(*args, **kwargs):
++        if commits:
++            raise service_mod.DestructiveGateTakeover("peer finished")
++
++    monkeypatch.setattr(service_mod, "assert_destructive_gate_still_ours", check)
++
++    @service_mod._legal_hold_gated_deletion
++    def delete_chunks(self, uid):
++        self._write_historical_overrides(uid, ["a", "b"], service_mod.MemoryItemStatus.tombstoned, batch_size=1)
++
++    with pytest.raises(service_mod.HTTPException) as caught:
++        delete_chunks(service, "uid-test")
++    assert caught.value.status_code == 409
++    assert caught.value.headers["Retry-After"] == "2"
++    assert commits == ["committed"]
+diff --git a/backend/tests/unit/test_verify_pusher_cohost_env_diff.py b/backend/tests/unit/test_verify_pusher_cohost_env_diff.py
+index b1f5147e2953..cd6ba6fad869 100644
+--- a/backend/tests/unit/test_verify_pusher_cohost_env_diff.py
++++ b/backend/tests/unit/test_verify_pusher_cohost_env_diff.py
+@@ -232,10 +232,9 @@ def test_deploy_workflows_invoke_the_gate() -> None:
+ )
+ def test_batch_cohort_rejects_scope_or_route_drift(gate, chart_fixture, name, value):
+     path = chart_fixture / 'backend/charts/pusher/prod_omi_pusher_values.yaml'
+-    stages = json.loads((chart_fixture / 'config/diarization-cohort-stages.json').read_text())
+-    expected = stages['A'][name]
++    expected = gate.PROD_FINAL_PASS_SHADOW_VALUES[name][0]
+     replace_once(path, f'  - name: {name}\n    value: "{expected}"\n', f'  - name: {name}\n    value: "{value}"\n')
+-    assert any('shadow scope' in error for error in gate.validate_preflight(chart_fixture))
++    assert any(f'shadow scope {name}' in error for error in gate.validate_preflight(chart_fixture))
+ 
+ 
+ @pytest.mark.parametrize('stage', ['A', 'B', 'C', 'D'])
+@@ -249,26 +248,3 @@ def test_complete_reviewed_ramp_stage_passes(gate, chart_fixture, stage):
+                 path, f'  - name: {name}\n    value: "{expected}"\n', f'  - name: {name}\n    value: "{value}"\n'
+             )
+     assert gate.validate_preflight(chart_fixture) == []
+-
+-
+-@pytest.mark.parametrize(
+-    'stage,name,value',
+-    [
+-        ('A', 'TRANSCRIPTION_FINAL_PASS_AUTHORITATIVE', 'true'),
+-        ('A', 'TRANSCRIPTION_FINAL_PASS_SYNC_ENABLED', 'true'),
+-        ('B', 'TRANSCRIPTION_FINAL_PASS_AUTHORITATIVE', 'false'),
+-        ('B', 'TRANSCRIPTION_FINAL_PASS_SYNC_ENABLED', 'false'),
+-    ],
+-)
+-def test_partial_sync_authority_stage_is_rejected(gate, chart_fixture, stage, name, value):
+-    stages = json.loads((chart_fixture / 'config/diarization-cohort-stages.json').read_text())
+-    path = chart_fixture / 'backend/charts/pusher/prod_omi_pusher_values.yaml'
+-    for key, expected in stages[stage].items():
+-        previous = stages['A'][key]
+-        if expected != previous:
+-            replace_once(
+-                path, f'  - name: {key}\n    value: "{previous}"\n', f'  - name: {key}\n    value: "{expected}"\n'
+-            )
+-    expected = stages[stage][name]
+-    replace_once(path, f'  - name: {name}\n    value: "{expected}"\n', f'  - name: {name}\n    value: "{value}"\n')
+-    assert gate.validate_preflight(chart_fixture)
+diff --git a/backend/utils/memory/canonical_memory_adapter.py b/backend/utils/memory/canonical_memory_adapter.py
+index 405221f1cf13..123ca2f06783 100644
+--- a/backend/utils/memory/canonical_memory_adapter.py
++++ b/backend/utils/memory/canonical_memory_adapter.py
+@@ -59,6 +59,8 @@ from database.memory_apply_store import (
+     privacy_deletion_receipt_id,
+ )
+ from database.legal_holds import (
++    DestructiveGateTakeover,
++    assert_destructive_gate_still_ours,
+     DestructiveOperationInProgress,
+     LegalHoldAuthorityUnavailable,
+     assert_account_deletion_permitted,
+@@ -2736,6 +2738,7 @@ def replace_conversation_sourced_memories(
+         db_client=client,
+         reason="conversation_reprocess_retract",
+         preserve_source_replacement_receipts=True,
++        revalidate_gate=bool(not items and claim_destructive_gate),
+     )
+     if belief_model_enabled() and result.committed_memory_ids:
+         from utils.memory.belief_evidence import admit_committed_claims
+@@ -3408,6 +3411,7 @@ def resolve_canonical_memory_review(
+                 db_client=client,
+                 reason=f"canonical_review_{decision}",
+                 include_review_queue=False,
++                revalidate_gate=True,
+             )
+             resolved = tombstoned[0]
+             return {
+@@ -3610,6 +3614,10 @@ def _tombstone_memory_items_under_gate(
+     last_conflict: Optional[CanonicalMemoryTombstoneConflict] = None
+     planned_items = authoritative_items
+     for _attempt in range(3):
++        try:
++            assert_destructive_gate_still_ours(uid, "explicit_memory_deletion", firestore_client=db_client)
++        except DestructiveGateTakeover as exc:
++            raise CanonicalMemoryTombstoneConflict("privacy tombstone gate was taken over") from exc
+         observed_control = _read_replacement_control(uid, db_client=db_client)
+         all_items = (
+             planned_items
+@@ -3652,6 +3660,10 @@ def _tombstone_memory_items_under_gate(
+         ):
+             last_conflict = CanonicalMemoryTombstoneConflict("memory control changed during privacy source scan")
+             continue
++        try:
++            assert_destructive_gate_still_ours(uid, "explicit_memory_deletion", firestore_client=db_client)
++        except DestructiveGateTakeover as exc:
++            raise CanonicalMemoryTombstoneConflict("privacy tombstone gate was taken over") from exc
+         try:
+             result = tombstone_memory_items_firestore(
+                 uid=uid,
+@@ -3742,12 +3754,15 @@ def purge_canonical_memory_projections(
+     db_client: Any,
+     reason: str,
+     include_review_queue: bool = True,
++    revalidate_gate: bool = False,
+     preserve_source_replacement_receipts: bool = False,
+ ) -> None:
+     """Fail closed until every content-bearing canonical projection is gone."""
+ 
+     unique_ids = list(dict.fromkeys(memory_id for memory_id in memory_ids if memory_id))
+     for memory_id in unique_ids:
++        if revalidate_gate:
++            assert_destructive_gate_still_ours(uid, "explicit_memory_deletion", firestore_client=db_client)
+         _run_immediate_privacy_cleanup(
+             uid,
+             memory_id,
+@@ -3756,6 +3771,8 @@ def purge_canonical_memory_projections(
+             include_review_queue=False,
+             preserve_source_replacement_receipts=preserve_source_replacement_receipts,
+         )
++    if revalidate_gate:
++        assert_destructive_gate_still_ours(uid, "explicit_memory_deletion", firestore_client=db_client)
+     if include_review_queue and unique_ids:
+         purge_stale_review_conflicts_for_memories(
+             uid,
+@@ -3768,6 +3785,8 @@ def purge_canonical_memory_projections(
+     invalidate_kg_for_memory_retraction(uid, unique_ids, db_client=db_client)
+     from database.memory_ledger import finalize_canonical_privacy_tombstones
+ 
++    if revalidate_gate:
++        assert_destructive_gate_still_ours(uid, "explicit_memory_deletion", firestore_client=db_client)
+     finalize_canonical_privacy_tombstones(
+         uid,
+         unique_ids,
+@@ -3940,6 +3959,11 @@ def _retract_conversation_sourced_memories_under_gate(
+     client = db_client if db_client is not None else default_db_client
+     last_conflict: Optional[ConversationReplacementConflictError] = None
+     for attempt in range(_RETRACT_CONFLICT_ATTEMPTS):
++        if claim_destructive_gate:
++            try:
++                assert_destructive_gate_still_ours(uid, "explicit_memory_deletion", firestore_client=client)
++            except DestructiveGateTakeover as exc:
++                raise ConversationReplacementConflictError("conversation retraction gate was taken over") from exc
+         try:
+             return replace_conversation_sourced_memories(
+                 uid,
+@@ -4032,6 +4056,7 @@ def _delete_canonical_memory_under_gate(uid: str, memory_id: str, *, db_client:
+         lineage_ids,
+         db_client=client,
+         reason="canonical_memory_delete",
++        revalidate_gate=True,
+     )
+     return lineage_ids
+ 
+@@ -4079,6 +4104,7 @@ def _delete_canonical_memories_batch_under_gate(
+         lineage_ids,
+         db_client=client,
+         reason="canonical_memory_delete_batch",
++        revalidate_gate=True,
+     )
+     return lineage_ids
+ 
+@@ -4132,6 +4158,7 @@ def _delete_canonical_memories_matching(
+             sorted(cleanup_ids),
+             db_client=client,
+             reason=reason,
++            revalidate_gate=True,
+         )
+ 
+ 
 diff --git a/backend/utils/memory/memory_service.py b/backend/utils/memory/memory_service.py
-index 25600ed16f05..9d5eed77bc37 100644
+index 25600ed16f05..245e42a3c1c7 100644
 --- a/backend/utils/memory/memory_service.py
 +++ b/backend/utils/memory/memory_service.py
-@@ -34,7 +34,11 @@ from database._client import db as default_db_client
+@@ -1,5 +1,7 @@
+ """Memory routing seam — surfaces route reads/writes/search through MemoryService (WS-L)."""
+ 
++from contextvars import ContextVar
++
+ import hashlib
+ import json
+ import logging
+@@ -34,7 +36,13 @@ from database._client import db as default_db_client
  from database.memory_collections import MemoryCollections
  from database.memory_apply_store import EvidenceIdentityConflict, privacy_deletion_receipt_id
  from database.memory_ledger import purge_source_replacement_receipts_for_memories
 -from database.legal_holds import destructive_operation_gate
 +from database.legal_holds import (
++    DestructiveGateTakeover,
++    assert_destructive_gate_still_ours,
 +    DestructiveOperationInProgress,
 +    LegalHoldAuthorityUnavailable,
 +    destructive_operation_gate,
@@ -428,7 +2231,7 @@ index 25600ed16f05..9d5eed77bc37 100644
  from database.review_queue import purge_stale_review_conflicts_for_memories
  from database.vector_db import delete_memory_vector
  from models.memories import MemoryDB
-@@ -58,6 +62,7 @@ from models.product_memory import (
+@@ -58,6 +66,7 @@ from models.product_memory import (
      SourceState,
  )
  from utils.log_sanitizer import sanitize, sanitize_validation_error
@@ -436,7 +2239,22 @@ index 25600ed16f05..9d5eed77bc37 100644
  from utils.other.list_budget import ListReadBudget, ListReadBudgetExhausted, budgeted_get_all
  from utils.other.portability_read import check_portability_read
  from utils.memory.canonical_visibility_filter import batch_canonical_expiry_observations
-@@ -158,14 +163,17 @@ def _legal_hold_gated_deletion(method: Callable[..., Any]) -> Callable[..., Any]
+@@ -149,6 +158,14 @@ MAX_LEDGER_REVERT_CHAIN_LENGTH = 64
+ _LEDGER_QUERY_TOKEN_RE = re.compile(r"[a-z0-9][a-z0-9']{1,63}")
+ 
+ 
++_EXPLICIT_DELETION_ACTIVE: ContextVar[bool] = ContextVar("memory_service_explicit_deletion", default=False)
++
++
++def _revalidate_explicit_deletion(uid: str, *, db_client: Any) -> None:
++    if _EXPLICIT_DELETION_ACTIVE.get():
++        assert_destructive_gate_still_ours(uid, "explicit_memory_deletion", firestore_client=db_client)
++
++
+ def _legal_hold_gated_deletion(method: Callable[..., Any]) -> Callable[..., Any]:
+     """Hold one server-owned deletion gate across legacy and canonical layers."""
+ 
+@@ -158,14 +175,21 @@ def _legal_hold_gated_deletion(method: Callable[..., Any]) -> Callable[..., Any]
          # derived data for a row the assignment transaction already tombstoned.
          # It must not take the exclusive account gate reserved for genuinely
          # destructive work; callers pass claim_destructive_gate=False.
@@ -456,92 +2274,223 @@ index 25600ed16f05..9d5eed77bc37 100644
 +                kind="explicit_memory_deletion",
 +                firestore_client=self.db_client,
 +            ):
-+                return method(self, uid, *args, **kwargs)
-+        except (DestructiveOperationInProgress, LegalHoldAuthorityUnavailable) as exc:
++                reset = _EXPLICIT_DELETION_ACTIVE.set(True)
++                try:
++                    return method(self, uid, *args, **kwargs)
++                finally:
++                    _EXPLICIT_DELETION_ACTIVE.reset(reset)
++        except (DestructiveGateTakeover, DestructiveOperationInProgress, LegalHoldAuthorityUnavailable) as exc:
 +            raise account_gate_busy_http_exception() from exc
  
      return wrapped
  
-@@ -199,6 +207,10 @@ def _purge_required_canonical_projections(
+@@ -197,8 +221,13 @@ def _purge_required_canonical_projections(
+             db_client=db_client,
+             reason=reason,
              include_review_queue=False,
++            revalidate_gate=_EXPLICIT_DELETION_ACTIVE.get(),
              preserve_source_replacement_receipts=preserve_source_replacement_receipts,
          )
-+    except (DestructiveOperationInProgress, LegalHoldAuthorityUnavailable) as exc:
++    except (DestructiveGateTakeover, DestructiveOperationInProgress, LegalHoldAuthorityUnavailable) as exc:
 +        raise account_gate_busy_http_exception() from exc
 +    except HTTPException:
 +        raise
      except Exception as exc:
          raise HTTPException(
              status_code=503,
-@@ -4132,6 +4144,8 @@ class MemoryService:
+@@ -212,6 +241,7 @@ def _delete_historical_privacy_overrides(uid: str, memory_ids: List[str], *, db_
+     client = db_client if db_client is not None else default_db_client
+     collections = MemoryCollections(uid=uid)
+     for memory_id in dict.fromkeys(memory_id for memory_id in memory_ids if memory_id):
++        _revalidate_explicit_deletion(uid, db_client=client)
+         client.document(f"{collections.memory_historical_overrides}/{memory_id}").delete()
+ 
+ 
+@@ -1218,6 +1248,7 @@ class HistoricalMemoryAdapter:
+         therefore its retry identity) intact. Suppression/tombstones prevent
+         resurrection while the caller retries the failed request.
+         """
++        _revalidate_explicit_deletion(uid, db_client=db_client)
+         failures: List[str] = []
+         if delete_vector:
+             # The legacy vector helper no-ops when no vector store is
+@@ -1239,7 +1270,10 @@ class HistoricalMemoryAdapter:
+             raise HTTPException(status_code=503, detail="Historical memory privacy cleanup incomplete")
+         try:
+             kwargs = {"firestore_client": db_client} if db_client is not None else {}
++            _revalidate_explicit_deletion(uid, db_client=db_client)
+             memories_db.delete_memory(uid, memory_id, **kwargs)
++        except (DestructiveGateTakeover, LegalHoldAuthorityUnavailable):
++            raise
+         except Exception:
+             failures.append("content")
+             logger.exception("historical memory cleanup failed uid=%s memory_id=%s", uid, memory_id)
+@@ -2458,9 +2492,12 @@ class MemoryService:
+         try:
+             ref = client.document(path)
+             try:
++                _revalidate_explicit_deletion(uid, db_client=client)
+                 ref.set(payload, merge=True)
+             except TypeError:
+                 ref.set(payload)
++        except (DestructiveGateTakeover, LegalHoldAuthorityUnavailable):
++            raise
+         except Exception as exc:
+             raise HTTPException(status_code=503, detail="Canonical memory suppression unavailable") from exc
+ 
+@@ -2500,7 +2537,10 @@ class MemoryService:
+                         batch.set(ref, payload, merge=True)
+                     except TypeError:
+                         batch.set(ref, payload)
++                _revalidate_explicit_deletion(uid, db_client=client)
+                 batch.commit()
++            except (DestructiveGateTakeover, LegalHoldAuthorityUnavailable):
++                raise
+             except Exception as exc:
+                 raise HTTPException(status_code=503, detail="Canonical memory suppression unavailable") from exc
+ 
+@@ -4132,6 +4172,8 @@ class MemoryService:
                          db_client=self.db_client,
                          include_legacy_commits=True,
                      )
-+                except (DestructiveOperationInProgress, LegalHoldAuthorityUnavailable) as exc:
++                except (DestructiveGateTakeover, DestructiveOperationInProgress, LegalHoldAuthorityUnavailable) as exc:
 +                    raise account_gate_busy_http_exception() from exc
                  except Exception as exc:
                      raise HTTPException(
                          status_code=503,
-@@ -4186,6 +4200,8 @@ class MemoryService:
+@@ -4186,6 +4228,8 @@ class MemoryService:
                  db_client=self.db_client,
                  include_legacy_commits=True,
              )
-+        except (DestructiveOperationInProgress, LegalHoldAuthorityUnavailable) as exc:
++        except (DestructiveGateTakeover, DestructiveOperationInProgress, LegalHoldAuthorityUnavailable) as exc:
 +            raise account_gate_busy_http_exception() from exc
          except Exception as exc:
              raise HTTPException(
                  status_code=503,
-@@ -4227,6 +4243,8 @@ class MemoryService:
+@@ -4227,6 +4271,12 @@ class MemoryService:
                  if getattr(canonical_item, "status", None) == MemoryItemStatus.tombstoned:
                      try:
                          historical_ids.extend(canonical_memory_lineage_ids(uid, [memory_id], db_client=self.db_client))
-+                    except (DestructiveOperationInProgress, LegalHoldAuthorityUnavailable) as exc:
++                    except (
++                        DestructiveGateTakeover,
++                        DestructiveOperationInProgress,
++                        LegalHoldAuthorityUnavailable,
++                    ) as exc:
 +                        raise account_gate_busy_http_exception() from exc
                      except Exception as exc:
                          raise HTTPException(
                              status_code=503,
-@@ -4305,6 +4323,8 @@ class MemoryService:
+@@ -4305,6 +4355,8 @@ class MemoryService:
                  db_client=self.db_client,
                  include_legacy_commits=True,
              )
-+        except (DestructiveOperationInProgress, LegalHoldAuthorityUnavailable) as exc:
++        except (DestructiveGateTakeover, DestructiveOperationInProgress, LegalHoldAuthorityUnavailable) as exc:
 +            raise account_gate_busy_http_exception() from exc
          except Exception as exc:
              raise HTTPException(
                  status_code=503,
-@@ -4339,6 +4359,8 @@ class MemoryService:
+@@ -4339,6 +4391,8 @@ class MemoryService:
                  db_client=self.db_client,
                  include_legacy_commits=True,
              )
-+        except (DestructiveOperationInProgress, LegalHoldAuthorityUnavailable) as exc:
++        except (DestructiveGateTakeover, DestructiveOperationInProgress, LegalHoldAuthorityUnavailable) as exc:
 +            raise account_gate_busy_http_exception() from exc
          except Exception as exc:
              raise HTTPException(
                  status_code=503,
-@@ -4375,6 +4397,8 @@ class MemoryService:
+@@ -4375,6 +4429,8 @@ class MemoryService:
                  db_client=self.db_client,
                  include_legacy_commits=True,
              )
-+        except (DestructiveOperationInProgress, LegalHoldAuthorityUnavailable) as exc:
++        except (DestructiveGateTakeover, DestructiveOperationInProgress, LegalHoldAuthorityUnavailable) as exc:
 +            raise account_gate_busy_http_exception() from exc
          except Exception as exc:
              raise HTTPException(
                  status_code=503,
-@@ -4441,6 +4465,8 @@ class MemoryService:
+@@ -4441,6 +4497,8 @@ class MemoryService:
                      include_legacy_commits=True,
                      preserve_source_replacement_receipts=True,
                  )
-+            except (DestructiveOperationInProgress, LegalHoldAuthorityUnavailable) as exc:
++            except (DestructiveGateTakeover, DestructiveOperationInProgress, LegalHoldAuthorityUnavailable) as exc:
 +                raise account_gate_busy_http_exception() from exc
              except Exception as exc:
                  raise HTTPException(
                      status_code=503,
-@@ -4456,6 +4482,8 @@ class MemoryService:
+@@ -4456,6 +4514,8 @@ class MemoryService:
                      retracted_ids,
                      firestore_client=self.db_client,
                  )
-+            except (DestructiveOperationInProgress, LegalHoldAuthorityUnavailable) as exc:
++            except (DestructiveGateTakeover, DestructiveOperationInProgress, LegalHoldAuthorityUnavailable) as exc:
 +                raise account_gate_busy_http_exception() from exc
              except Exception as exc:
                  raise HTTPException(
                      status_code=503,
+diff --git a/backend/utils/other/storage.py b/backend/utils/other/storage.py
+index 4a4135d35914..7230ced44347 100644
+--- a/backend/utils/other/storage.py
++++ b/backend/utils/other/storage.py
+@@ -197,8 +197,7 @@ def delete_all_user_storage_objects(uid: str) -> int:
+         (
+             private_cloud_sync_bucket,
+             tuple(
+-                f'{prefix}/{uid}/'
+-                for prefix in ('chunks', 'audio', 'merged', PLAYBACK_ARTIFACT_PREFIX, 'diagnostics', 'raw-mobile-batch')
++                f'{prefix}/{uid}/' for prefix in ('chunks', 'audio', 'merged', PLAYBACK_ARTIFACT_PREFIX, 'diagnostics')
+             ),
+         ),
+         (syncing_local_bucket, (f'syncing/{uid}/',)),
+@@ -2048,28 +2047,3 @@ def screen_frame_object_paths(uid: str, conversation_id: str, frame_id: str) ->
+         _screen_frame_blob_path(uid, conversation_id, frame_id),
+         _screen_frame_thumbnail_blob_path(uid, conversation_id, frame_id),
+     ]
+-
+-
+-def archive_mobile_batch_raw_files(uid: str, paths: List[str]) -> None:
+-    """Retain original length-prefixed pendant Opus, including all silence.
+-
+-    This is an upload acceptance prerequisite, not best-effort playback.
+-    Content-addressing makes retries idempotent. No application TTL; account
+-    deletion owns the prefix. Enhanced protection encrypts the unchanged bytes.
+-    Ordinary legacy sync uploads remain unchanged.
+-    """
+-    selected = [p for p in paths if Path(p).name.startswith('audio_omimobilebatch')]
+-    if not selected:
+-        return
+-    bucket = _get_storage_client().bucket(private_cloud_sync_bucket)
+-    protection = users_db.get_data_protection_level(uid)
+-    for path in selected:
+-        raw = Path(path).read_bytes()
+-        digest = hashlib.sha256(raw).hexdigest()
+-        encrypted = protection == 'enhanced'
+-        payload = encryption.encrypt_audio_chunk(raw, uid) if encrypted else raw
+-        suffix = '.enc' if encrypted else ''
+-        blob = bucket.blob(f'raw-mobile-batch/{uid}/{digest}/{Path(path).name}{suffix}')
+-        blob.metadata = {'sha256': digest, 'format': 'omi-wal-uint32le-opus-v1'}
+-        with owner_storage_write_gate(uid, bucket):
+-            blob.upload_from_string(payload, content_type='application/octet-stream')
+diff --git a/backend/utils/sync/mobile_standard_batch.py b/backend/utils/sync/mobile_standard_batch.py
+deleted file mode 100644
+index acdf483bfd83..000000000000
+--- a/backend/utils/sync/mobile_standard_batch.py
++++ /dev/null
+@@ -1,20 +0,0 @@
+-"""Admission for the mobile Standard batch lane; every switch defaults off."""
+-
+-import hashlib
+-import os
+-
+-
+-def mobile_standard_batch_enabled(uid: str) -> bool:
+-    if os.getenv('MOBILE_STANDARD_BATCH_ENABLED', '').lower() != 'true' or not uid:
+-        return False
+-    allowlist = {value.strip() for value in os.getenv('MOBILE_STANDARD_BATCH_UIDS', '').split(',') if value.strip()}
+-    if uid in allowlist:
+-        return True
+-    try:
+-        percent = int(os.getenv('MOBILE_STANDARD_BATCH_PERCENT', '0'))
+-    except ValueError:
+-        return False
+-    if not 0 <= percent <= 100:
+-        return False
+-    bucket = int(hashlib.sha256(f'mobile-standard-batch:{uid}'.encode()).hexdigest()[:8], 16) % 10000
+-    return bucket < percent * 100
