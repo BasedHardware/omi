@@ -630,10 +630,11 @@ def update_action_item_tool(
         return "Error: User ID not found in configuration"
 
     # Check if action item exists
-    action_item_id, ref_error = resolve_edit_ref(configurable, 'tasks', action_item_id, parameter='action_item_id')
+    resolved_id, ref_error = resolve_edit_ref(configurable, 'tasks', action_item_id, parameter='action_item_id')
     if ref_error:
         return ref_error
-    assert action_item_id is not None
+    assert resolved_id is not None
+    action_item_id = resolved_id
     existing_item = action_items_db.get_action_item(uid, action_item_id)
     if not existing_item:
         return f"Error: Action item with ID '{action_item_id}' not found. Please use get_action_items_tool first to get the correct ID."

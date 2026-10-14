@@ -19,6 +19,7 @@ from utils.retrieval import agentic
 from utils.retrieval.chat_mount import EDIT_GUARDRAIL
 from utils.retrieval.chat_scope import build_chat_scope
 from utils.retrieval.tools import conversation_tools, edit_tools, memory_tools, action_item_tools
+from utils.retrieval.tools import entity_timeline_tools as timeline_tools
 from utils.retrieval.tools.conversation_jit import format_active_jit_conversations
 from utils.retrieval.turn_refs import initialize_turn_refs, register_record_ref, resolve_edit_ref
 
@@ -179,6 +180,44 @@ def test_reusable_registry_distinguishes_domains():
     target, error = resolve_edit_ref(cfg, 'memories', 'same-id', parameter='memory_id')
     assert target is None and json.loads(error)['error']['code'] == 'unseen_record_ref'
     assert resolve_edit_ref(cfg, 'people', 'people/same-id', parameter='person_id') == ('same-id', None)
+
+
+@pytest.mark.parametrize('owned', [False, True])
+def test_owned_person_timeline_read_registers_only_verified_person_ref(monkeypatch, owned):
+    cfg = _config()
+    monkeypatch.setattr(timeline_tools.database_client, 'get_firestore_client', lambda: object())
+    monkeypatch.setattr(
+        timeline_tools,
+        '_resolve_entity_aliases',
+        lambda uid, entity, **kwargs: timeline_tools.EntityAliases(entity=entity, resolved=owned),
+    )
+    monkeypatch.setattr(timeline_tools, '_iter_authoritative_items', lambda *args, **kwargs: iter(()))
+    result = timeline_tools.get_entity_timeline_tool.invoke(
+        {'entity': 'person:person-1', 'sources': ['ledger']}, config={'configurable': cfg}
+    )
+    assert ('ref: people/person-1' in result) is owned
+    assert (('people', 'person-1') in cfg['turn_refs'].seen) is owned
+
+
+def test_timeline_registry_admission_follows_output_budget(monkeypatch):
+    entries = tuple(
+        timeline_tools.TimelineEntry(
+            source=timeline_tools.TimelineSource.conversations,
+            record_id=f'record-{i}',
+            content='Example summary ' * 10,
+            occurred_at=datetime(2026, 10, 1, tzinfo=timezone.utc),
+        )
+        for i in range(3)
+    )
+    timeline = timeline_tools.EntityTimeline(
+        entity=timeline_tools.EntityReference(kind='user', identifier='user'), entries=entries
+    )
+    monkeypatch.setattr(timeline_tools, 'MAX_TIMELINE_RESULT_CHARS', 400)
+    included = []
+    result = timeline_tools.format_entity_timeline(timeline, included_entries=included)
+    assert len(included) == 1
+    assert 'ref: conversations/record-0' in result
+    assert 'ref: conversations/record-1' not in result
 
 
 def test_shaped_scope_is_trusted_quoted_and_after_cache_prefix(monkeypatch):

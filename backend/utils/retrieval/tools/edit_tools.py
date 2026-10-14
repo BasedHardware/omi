@@ -93,10 +93,11 @@ def rename_person(person_id: str, name: str, *, config: RunnableConfig) -> str:
     retaining the previous name as an alias. Undo restores the prior name and aliases.
     """
     uid = owner(config)
-    person_id, error = resolve_edit_ref(config.get('configurable', {}), 'people', person_id, parameter='person_id')
+    resolved_id, error = resolve_edit_ref(config.get('configurable', {}), 'people', person_id, parameter='person_id')
     if error:
         return error
-    assert person_id is not None
+    assert resolved_id is not None
+    person_id = resolved_id
     if not users.get_person(uid, person_id):
         return 'Error: person not found.'
     before = chat_edits.snapshot(uid, 'person', person_id)
@@ -116,10 +117,11 @@ def edit_memory(memory_id: str, content: str, *, config: RunnableConfig) -> str:
     preserving canonical correction history. Returns a structured undo receipt.
     """
     uid = owner(config)
-    memory_id, error = resolve_edit_ref(config.get('configurable', {}), 'memories', memory_id, parameter='memory_id')
+    resolved_id, error = resolve_edit_ref(config.get('configurable', {}), 'memories', memory_id, parameter='memory_id')
     if error:
         return error
-    assert memory_id is not None
+    assert resolved_id is not None
+    memory_id = resolved_id
     if not content.strip() or len(content) > 20000:
         return 'Error: memory content must contain 1 to 20000 characters.'
     db = get_data_plane_firestore_client()
@@ -147,10 +149,11 @@ def delete_memory(memory_id: str, *, config: RunnableConfig) -> str:
     controls for permanent erasure. Returns a structured undo receipt.
     """
     uid = owner(config)
-    memory_id, error = resolve_edit_ref(config.get('configurable', {}), 'memories', memory_id, parameter='memory_id')
+    resolved_id, error = resolve_edit_ref(config.get('configurable', {}), 'memories', memory_id, parameter='memory_id')
     if error:
         return error
-    assert memory_id is not None
+    assert resolved_id is not None
+    memory_id = resolved_id
     db = get_data_plane_firestore_client()
     before = read_canonical_memory_item(uid, memory_id, db_client=db)
     if before is None or before.uid != uid or (before.promotion or {}).get('chat_deleted'):
