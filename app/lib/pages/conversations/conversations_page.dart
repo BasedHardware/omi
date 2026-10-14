@@ -10,6 +10,7 @@ import 'package:visibility_detector/visibility_detector.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/pages/capture/widgets/widgets.dart';
 import 'package:omi/pages/conversations/widgets/capture_recovery_banner.dart';
+import 'package:omi/pages/on_device/on_device_queue_banner.dart';
 import 'package:omi/pages/conversations/widgets/processing_capture.dart';
 import 'package:omi/pages/conversations/widgets/speaker_tag_prompt_card.dart';
 import 'package:omi/pages/review/widgets/review_entry_card.dart';
@@ -545,6 +546,8 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
               // Review absorbs the voice prompts; the old card shows only while Review is off.
               const SliverToBoxAdapter(child: ReviewEntryCard(fallback: SpeakerTagPromptCard())),
               const SliverToBoxAdapter(child: CaptureRecoveryBanner()),
+              // Recordings waiting on this phone; nothing while the on-device flag is off.
+              const SliverToBoxAdapter(child: OnDeviceQueueBanner()),
               SliverToBoxAdapter(
                 child: widget.loadRecaps == null
                     ? HomeDailyRecaps(key: _recapsKey)

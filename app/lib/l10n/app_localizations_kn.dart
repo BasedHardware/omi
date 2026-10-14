@@ -13314,4 +13314,300 @@ class AppLocalizationsKn extends AppLocalizations {
 
   @override
   String get syncDetailsCopy => 'ಬೆಂಬಲಕ್ಕಾಗಿ ವಿವರಗಳನ್ನು ನಕಲಿಸಿ';
+
+  @override
+  String get onDeviceAtCapTitle => 'ಈ ತಿಂಗಳ ಲೈವ್ ಪ್ರತಿಲೇಖನವನ್ನು ನೀವು ಬಳಸಿದ್ದೀರಿ';
+
+  @override
+  String get onDeviceAtCapBody =>
+      'Omi ಇನ್ನೂ ರೆಕಾರ್ಡ್ ಮಾಡುತ್ತಿದೆ. ತಿಂಗಳ ಉಳಿದ ಅವಧಿಯ ಪ್ರತಿಲೇಖನ ಹೇಗೆ ಆಗಬೇಕು ಎಂದು ಆಯ್ಕೆಮಾಡಿ.';
+
+  @override
+  String onDeviceLiveHoursReturn(String date) {
+    return 'ಲೈವ್ ಗಂಟೆಗಳು $date ರಂದು ಮರಳುತ್ತವೆ.';
+  }
+
+  @override
+  String get onDeviceTranscribeOnPhone => 'ಈ ಫೋನ್‌ನಲ್ಲೇ ಪ್ರತಿಲೇಖಿಸಿ';
+
+  @override
+  String get onDeviceIncluded => 'ಒಳಗೊಂಡಿದೆ';
+
+  @override
+  String get onDeviceOptionChargingBody =>
+      'ಫೋನ್ ಚಾರ್ಜ್ ಆಗುತ್ತಿರುವಾಗ ಚಲಿಸುತ್ತದೆ, ಆದ್ದರಿಂದ ಬ್ಯಾಟರಿ ಬಹುತೇಕ ಖರ್ಚಾಗುವುದಿಲ್ಲ. ಚಾರ್ಜರ್ ಸಂಪರ್ಕಿಸಿದ ನಂತರ ಪ್ರತಿಲಿಪಿಗಳು ಕಾಣಿಸುತ್ತವೆ.';
+
+  @override
+  String get onDeviceUpgradeBody => 'ಮಾತನಾಡುವವರನ್ನು ಪ್ರತ್ಯೇಕಿಸಲು ಮತ್ತು ಹೆಚ್ಚಿನ ನಿಖರತೆಗಾಗಿ Pro ಗೆ ಅಪ್‌ಗ್ರೇಡ್ ಮಾಡಿ';
+
+  @override
+  String get onDeviceAtCapFooter =>
+      'ಯಾವುದೇ ಆಯ್ಕೆಯಲ್ಲೂ ಏನೂ ಕಳೆದುಹೋಗುವುದಿಲ್ಲ. ಇದನ್ನು ಸೆಟ್ಟಿಂಗ್‌ಗಳು › ಪ್ರತಿಲಿಪಿ ನಲ್ಲಿ ಬದಲಾಯಿಸಬಹುದು.';
+
+  @override
+  String onDeviceStepOf(int step, int total) {
+    return 'ಹಂತ $step / $total';
+  }
+
+  @override
+  String get onDeviceSetupBody =>
+      'Omi ಒಂದು ಬಾರಿ ಸ್ಪೀಚ್ ಮಾದರಿಯನ್ನು ಡೌನ್‌ಲೋಡ್ ಮಾಡುತ್ತದೆ. ಅದರ ನಂತರ, ನಿಮ್ಮ ಲೈವ್ ಗಂಟೆಗಳನ್ನು ಬಳಸದೆ ನಿಮ್ಮ ರೆಕಾರ್ಡಿಂಗ್‌ಗಳು ಇಲ್ಲಿಯೇ ಪಠ್ಯವಾಗಿ ಬದಲಾಗುತ್ತವೆ.';
+
+  @override
+  String get onDeviceSpeechModel => 'ಸ್ಪೀಚ್ ಮಾದರಿ';
+
+  @override
+  String onDeviceMegabytes(String size) {
+    return '$size MB';
+  }
+
+  @override
+  String onDeviceDownloadingWifi(int percent) {
+    return 'Wi-Fi ನಲ್ಲಿ ಡೌನ್‌ಲೋಡ್ ಆಗುತ್ತಿದೆ · $percent%';
+  }
+
+  @override
+  String onDeviceDownloadingPercent(int percent) {
+    return 'ಡೌನ್‌ಲೋಡ್ ಆಗುತ್ತಿದೆ · $percent%';
+  }
+
+  @override
+  String onDeviceTimeLeft(String time) {
+    return 'ಸುಮಾರು $time ಬಾಕಿ';
+  }
+
+  @override
+  String get onDeviceWaitingForWifi => 'Wi-Fi ಗಾಗಿ ಕಾಯುತ್ತಿದೆ';
+
+  @override
+  String get onDeviceDownloadFailed => 'ಡೌನ್‌ಲೋಡ್ ಪೂರ್ಣಗೊಂಡಿಲ್ಲ';
+
+  @override
+  String get onDeviceModelNotDownloaded => 'ಡೌನ್‌ಲೋಡ್ ಆಗಿಲ್ಲ';
+
+  @override
+  String onDeviceModelInstalled(String size) {
+    return 'ಸ್ಥಾಪಿಸಲಾಗಿದೆ · $size';
+  }
+
+  @override
+  String get onDeviceModelUnsupported => 'ಈ ಫೋನ್‌ನಲ್ಲಿ ಇನ್ನೂ ಲಭ್ಯವಿಲ್ಲ';
+
+  @override
+  String get onDeviceSetupKeepRecording => 'ಡೌನ್‌ಲೋಡ್ ಆಗುವಾಗಲೂ ರೆಕಾರ್ಡಿಂಗ್ ಮುಂದುವರಿಸಿ. ಯಾವುದೂ ಇದಕ್ಕಾಗಿ ಕಾಯುವುದಿಲ್ಲ.';
+
+  @override
+  String get onDeviceSetupAudioStays => 'ಪ್ರತಿಲೇಖನ ಆಗುವವರೆಗೆ ಆಡಿಯೋ ನಿಮ್ಮ ಫೋನ್‌ನಲ್ಲೇ ಇರುತ್ತದೆ.';
+
+  @override
+  String get onDeviceWifiOnly => 'Wi-Fi ನಲ್ಲಿ ಮಾತ್ರ ಡೌನ್‌ಲೋಡ್ ಮಾಡಿ';
+
+  @override
+  String get onDeviceDownloadModel => 'ಸ್ಪೀಚ್ ಮಾದರಿ ಡೌನ್‌ಲೋಡ್ ಮಾಡಿ';
+
+  @override
+  String get onDeviceScheduleTitle => 'ಯಾವಾಗ ಪ್ರತಿಲೇಖಿಸಬೇಕು';
+
+  @override
+  String get onDeviceScheduleHeadline => 'Omi ಯಾವಾಗ ಪ್ರತಿಲೇಖಿಸಬೇಕು?';
+
+  @override
+  String get onDeviceScheduleBody =>
+      'ಗುಂಪುಗಳಲ್ಲಿ ಪ್ರತಿಲೇಖಿಸುವುದರಿಂದ ಬ್ಯಾಟರಿ ಉಳಿಯುತ್ತದೆ. ಇದನ್ನು ಯಾವಾಗ ಬೇಕಾದರೂ ಬದಲಾಯಿಸಬಹುದು.';
+
+  @override
+  String get onDeviceScheduleCharging => 'ಚಾರ್ಜ್ ಆಗುವಾಗ';
+
+  @override
+  String get onDeviceScheduleChargingBody =>
+      'ಚಾರ್ಜರ್ ಸಂಪರ್ಕಿಸಿದ ನಂತರ ಪ್ರತಿಲಿಪಿಗಳು ಕಾಣಿಸುತ್ತವೆ, ಸಾಮಾನ್ಯವಾಗಿ ರಾತ್ರಿಯಿಡೀ.';
+
+  @override
+  String get onDeviceBatteryAlmostNone => 'ಬ್ಯಾಟರಿ: ಬಹುತೇಕ ಇಲ್ಲ';
+
+  @override
+  String get onDeviceScheduleHours => 'ಕೆಲವು ಗಂಟೆಗಳಿಗೊಮ್ಮೆ';
+
+  @override
+  String get onDeviceScheduleHoursBody =>
+      'ಬ್ಯಾಟರಿಯಲ್ಲಿ ಸಣ್ಣ ಅವಧಿಗಳಲ್ಲಿ ಬಾಕಿ ಕೆಲಸ ಮುಗಿಸುತ್ತದೆ, ಆದ್ದರಿಂದ ಪ್ರತಿಲಿಪಿಗಳು ಕೆಲವು ಗಂಟೆಗಳಿಗಿಂತ ಹೆಚ್ಚು ತಡವಾಗುವುದು ಅಪರೂಪ.';
+
+  @override
+  String onDeviceBatteryPerDay(int percent) {
+    return 'ಬ್ಯಾಟರಿ: ದಿನಕ್ಕೆ ಸುಮಾರು $percent%';
+  }
+
+  @override
+  String get onDeviceScheduleLive => 'ನೀವು ಮಾತನಾಡುವಾಗ';
+
+  @override
+  String get onDeviceScheduleLiveBody => 'Omi ತೆರೆದಿರುವಾಗ ನಿಯಮಿತವಾಗಿ ಪ್ರತಿಲೇಖಿಸುತ್ತದೆ.';
+
+  @override
+  String onDeviceBatteryPerHour(int percent) {
+    return 'ಬ್ಯಾಟರಿ: ಸಂಭಾಷಣೆಯ ಪ್ರತಿ ಗಂಟೆಗೆ ಸುಮಾರು $percent%';
+  }
+
+  @override
+  String onDeviceQueueWaiting(String duration) {
+    return '$duration ಪ್ರತಿಲೇಖನಕ್ಕಾಗಿ ಕಾಯುತ್ತಿದೆ';
+  }
+
+  @override
+  String get onDeviceQueueChargingBody =>
+      'ನಿಮ್ಮ ಫೋನ್ ಅನ್ನು ಚಾರ್ಜರ್‌ಗೆ ಸಂಪರ್ಕಿಸಿದ ನಂತರ ಅವು ಸಿದ್ಧವಾಗುತ್ತವೆ. ರೆಕಾರ್ಡಿಂಗ್ ಎಂದಿನಂತೆ ಮುಂದುವರಿಯುತ್ತದೆ.';
+
+  @override
+  String get onDeviceQueueHoursBody =>
+      'Omi ಕೆಲವು ಗಂಟೆಗಳಿಗೊಮ್ಮೆ ಬಾಕಿ ಕೆಲಸ ಮುಗಿಸುತ್ತದೆ. ರೆಕಾರ್ಡಿಂಗ್ ಎಂದಿನಂತೆ ಮುಂದುವರಿಯುತ್ತದೆ.';
+
+  @override
+  String get onDeviceQueueLowBatteryBody =>
+      'ಬ್ಯಾಟರಿ ಕಡಿಮೆ ಇರುವುದರಿಂದ ಚಾರ್ಜರ್‌ಗಾಗಿ ಕಾಯುತ್ತಿದೆ. ರೆಕಾರ್ಡಿಂಗ್ ಎಂದಿನಂತೆ ಮುಂದುವರಿಯುತ್ತದೆ.';
+
+  @override
+  String get onDeviceTranscribeNow => 'ಈಗ ಪ್ರತಿಲೇಖಿಸಿ';
+
+  @override
+  String get onDeviceUsesBattery => 'ಬ್ಯಾಟರಿ ಬಳಸುತ್ತದೆ';
+
+  @override
+  String get onDeviceTranscribing => 'ಪ್ರತಿಲೇಖಿಸಲಾಗುತ್ತಿದೆ…';
+
+  @override
+  String get onDeviceWaitingForCharger => 'ಚಾರ್ಜರ್‌ಗಾಗಿ ಕಾಯುತ್ತಿದೆ';
+
+  @override
+  String get onDeviceWaitingToTranscribe => 'ಪ್ರತಿಲೇಖನಕ್ಕಾಗಿ ಕಾಯುತ್ತಿದೆ';
+
+  @override
+  String get onDeviceWaitingForSetup => 'ಉಳಿಸಲಾಗಿದೆ, ಸೆಟಪ್‌ಗಾಗಿ ಕಾಯುತ್ತಿದೆ';
+
+  @override
+  String get onDeviceTranscribedOnIphone => 'ಈ iPhone ನಲ್ಲಿ ಪ್ರತಿಲೇಖಿಸಲಾಗಿದೆ';
+
+  @override
+  String get onDeviceTranscribedOnPhone => 'ಈ ಫೋನ್‌ನಲ್ಲಿ ಪ್ರತಿಲೇಖಿಸಲಾಗಿದೆ';
+
+  @override
+  String get onDeviceTranscribedSummarizedOnIphone => 'ಈ iPhone ನಲ್ಲಿ ಪ್ರತಿಲೇಖಿಸಿ ಸಾರಾಂಶಗೊಳಿಸಲಾಗಿದೆ';
+
+  @override
+  String get onDeviceSummarizedByCloud => 'Omi Cloud ಸಾರಾಂಶಗೊಳಿಸಿದೆ';
+
+  @override
+  String get onDeviceWhyPhoneTitle => 'ಇದನ್ನು ನಿಮ್ಮ ಫೋನ್‌ನಲ್ಲಿ ಏಕೆ ಮಾಡಲಾಯಿತು';
+
+  @override
+  String get onDeviceWhyLiveHoursUsed =>
+      'ನೀವು ಈ ತಿಂಗಳ ಲೈವ್ ಗಂಟೆಗಳನ್ನು ಬಳಸಿದ್ದೀರಿ, ಆದ್ದರಿಂದ Omi ಈ ಸಂಭಾಷಣೆಯನ್ನು ಈ ಫೋನ್‌ನಲ್ಲಿ ಪ್ರತಿಲೇಖಿಸಿದೆ.';
+
+  @override
+  String get onDeviceWhySavingLiveHours =>
+      'ಲೈವ್ ಗಂಟೆಗಳನ್ನು ಉಳಿಸಲು ನೀವು ಈ ಫೋನ್‌ನಲ್ಲಿ ಪ್ರತಿಲೇಖಿಸುವುದನ್ನು ಆಯ್ಕೆಮಾಡಿದ್ದೀರಿ.';
+
+  @override
+  String get onDeviceWhySummaryOnPhone => 'ಸಾರಾಂಶವನ್ನೂ ಈ iPhone ನಲ್ಲೇ ಬರೆಯಲಾಗಿದೆ.';
+
+  @override
+  String get onDeviceWhyNoSummary => 'ನೀವು ಎಲ್ಲವನ್ನೂ ಈ ಫೋನ್‌ನಲ್ಲೇ ಇರಿಸುತ್ತೀರಿ, ಆದ್ದರಿಂದ ಸಾರಾಂಶ ಇಲ್ಲ.';
+
+  @override
+  String get onDeviceWhyCloudTitle => 'Omi Cloud ಈ ಸಾರಾಂಶವನ್ನು ಏಕೆ ಬರೆಯಿತು';
+
+  @override
+  String get onDeviceWhyCloudIphone =>
+      'ಈ iPhone ಸ್ವತಃ ಸಾರಾಂಶ ಮಾಡಲು ಸಾಧ್ಯವಿಲ್ಲ (ಅದಕ್ಕೆ iPhone 15 Pro ಅಥವಾ ನಂತರದ ಮಾದರಿ ಬೇಕು). ಪ್ರತಿಲಿಪಿಯನ್ನು ನಿಮ್ಮ ಫೋನ್‌ನಲ್ಲಿ ಮಾಡಲಾಗಿದೆ, ಮತ್ತು ಸಾರಾಂಶಕ್ಕಾಗಿ ಅದರ ಪಠ್ಯವನ್ನು ಮಾತ್ರ Omi ಗೆ ಕಳುಹಿಸಲಾಗಿದೆ. ಇದು ನಿಮ್ಮ ಲೈವ್ ಗಂಟೆಗಳನ್ನು ಬಳಸುವುದಿಲ್ಲ.';
+
+  @override
+  String get onDeviceWhyCloudPhone =>
+      'ಈ ಫೋನ್ ಸ್ವತಃ ಸಾರಾಂಶ ಮಾಡಲು ಸಾಧ್ಯವಿಲ್ಲ. ಪ್ರತಿಲಿಪಿಯನ್ನು ನಿಮ್ಮ ಫೋನ್‌ನಲ್ಲಿ ಮಾಡಲಾಗಿದೆ, ಮತ್ತು ಸಾರಾಂಶಕ್ಕಾಗಿ ಅದರ ಪಠ್ಯವನ್ನು ಮಾತ್ರ Omi ಗೆ ಕಳುಹಿಸಲಾಗಿದೆ. ಇದು ನಿಮ್ಮ ಲೈವ್ ಗಂಟೆಗಳನ್ನು ಬಳಸುವುದಿಲ್ಲ.';
+
+  @override
+  String get onDeviceRedoWithCloud => 'Omi Cloud ಮೂಲಕ ಮತ್ತೆ ಮಾಡಿ';
+
+  @override
+  String get onDeviceRedoHint => 'ಮಾತನಾಡುವವರನ್ನು ಪ್ರತ್ಯೇಕಿಸಲು ಮತ್ತು ಹೆಚ್ಚಿನ ನಿಖರತೆಗಾಗಿ Pro ಗೆ ಅಪ್‌ಗ್ರೇಡ್ ಮಾಡಿ';
+
+  @override
+  String get onDeviceKeepEverything => 'ಎಲ್ಲವನ್ನೂ ಈ ಫೋನ್‌ನಲ್ಲೇ ಇರಿಸಿ';
+
+  @override
+  String get onDeviceKeepEverythingSubtitle => 'ಪ್ರತಿಲಿಪಿಗಳು ಮಾತ್ರ, ಸಾರಾಂಶಗಳಿಲ್ಲ';
+
+  @override
+  String get onDeviceLiveHours => 'ಲೈವ್ ಗಂಟೆಗಳು';
+
+  @override
+  String onDeviceLiveHoursUsed(String used, String limit) {
+    return '$used/$limit ಗಂಟೆಗಳು ಬಳಕೆಯಾಗಿವೆ';
+  }
+
+  @override
+  String onDeviceResets(String date) {
+    return '$date ರಂದು ಮರುಹೊಂದಿಸುತ್ತದೆ';
+  }
+
+  @override
+  String get onDeviceGetMoreLiveHours => 'ಹೆಚ್ಚು ಲೈವ್ ಗಂಟೆಗಳನ್ನು ಪಡೆಯಿರಿ';
+
+  @override
+  String get onDeviceAfterLiveHours => 'ಲೈವ್ ಗಂಟೆಗಳು ಮುಗಿದ ನಂತರ';
+
+  @override
+  String get onDeviceWhen => 'ಯಾವಾಗ';
+
+  @override
+  String get onDeviceSummaries => 'ಸಾರಾಂಶಗಳು';
+
+  @override
+  String get onDeviceSummariesOnIphone => 'ಈ iPhone ನಲ್ಲಿ';
+
+  @override
+  String get onDeviceSummariesCloud => 'Omi Cloud ಮೂಲಕ';
+
+  @override
+  String get onDeviceSaveLiveHours => 'ಲೈವ್ ಗಂಟೆಗಳನ್ನು ಉಳಿಸಲು ಈ ಫೋನ್‌ನಲ್ಲಿ ಪ್ರತಿಲೇಖಿಸಿ';
+
+  @override
+  String get onDeviceSaveLiveHoursSubtitle =>
+      'ಮಾತನಾಡುವವರನ್ನು ಪ್ರತ್ಯೇಕಿಸಲು ಮತ್ತು ಹೆಚ್ಚಿನ ನಿಖರತೆಗಾಗಿ Pro ಗೆ ಅಪ್‌ಗ್ರೇಡ್ ಮಾಡಿ';
+
+  @override
+  String get onDeviceOnThisPhone => 'ಈ ಫೋನ್‌ನಲ್ಲಿ';
+
+  @override
+  String get onDeviceAudioWaiting => 'ಫೋನ್‌ನಲ್ಲಿ ಕಾಯುತ್ತಿರುವ ಆಡಿಯೋ';
+
+  @override
+  String get onDeviceRemoveModel => 'ಸ್ಪೀಚ್ ಮಾದರಿ ತೆಗೆದುಹಾಕಿ';
+
+  @override
+  String get onDeviceRemoveModelTitle => 'ಸ್ಪೀಚ್ ಮಾದರಿಯನ್ನು ತೆಗೆದುಹಾಕಬೇಕೆ?';
+
+  @override
+  String get onDeviceRemoveModelMessage =>
+      'ನೀವು ಅದನ್ನು ಮತ್ತೆ ಡೌನ್‌ಲೋಡ್ ಮಾಡುವವರೆಗೆ ಅಥವಾ ಲೈವ್ ಗಂಟೆಗಳು ಮರಳುವವರೆಗೆ ರೆಕಾರ್ಡಿಂಗ್‌ಗಳು ಈ ಫೋನ್‌ನಲ್ಲಿ ಕಾಯುತ್ತವೆ.';
+
+  @override
+  String get onDeviceRemove => 'ತೆಗೆದುಹಾಕಿ';
+
+  @override
+  String get onDeviceFinishSetupTitle => 'ನಿಮ್ಮ ಪ್ರತಿಲಿಪಿಗಳನ್ನು ನೋಡಲು ಸೆಟಪ್ ಪೂರ್ಣಗೊಳಿಸಿ';
+
+  @override
+  String get onDeviceFinishSetupBody =>
+      'ನೀವು ಈ ತಿಂಗಳ ಲೈವ್ ಗಂಟೆಗಳನ್ನು ಬಳಸಿದ್ದೀರಿ. Omi ಇನ್ನೂ ರೆಕಾರ್ಡ್ ಮಾಡುತ್ತಿದೆ ಮತ್ತು ಆಡಿಯೋವನ್ನು ನಿಮ್ಮ ಫೋನ್‌ನಲ್ಲಿ ಉಳಿಸುತ್ತಿದೆ. ಸ್ಪೀಚ್ ಮಾದರಿಯನ್ನು ಡೌನ್‌ಲೋಡ್ ಮಾಡಿ, ಬಾಕಿ ಕೆಲಸ ಪೂರ್ಣಗೊಳ್ಳುತ್ತದೆ.';
+
+  @override
+  String onDeviceDownloadSize(String size) {
+    return '$size ಡೌನ್‌ಲೋಡ್';
+  }
+
+  @override
+  String get onDeviceUnsupportedBody =>
+      'ಈ ಫೋನ್ ಇನ್ನೂ ಸ್ಪೀಚ್ ಮಾದರಿಯನ್ನು ಚಲಾಯಿಸಲು ಸಾಧ್ಯವಿಲ್ಲ. ಲೈವ್ ಗಂಟೆಗಳು ಮರಳುವವರೆಗೆ ಅಥವಾ ನೀವು ಅಪ್‌ಗ್ರೇಡ್ ಮಾಡುವವರೆಗೆ ಆಡಿಯೋ ಉಳಿಸಲ್ಪಟ್ಟಿರುತ್ತದೆ.';
+
+  @override
+  String get onDeviceEntrySubtitle => 'ಲೈವ್ ಗಂಟೆಗಳು ಮುಗಿದಾಗ, ಈ ಫೋನ್‌ನಲ್ಲಿ ಪ್ರತಿಲೇಖಿಸಿ';
 }

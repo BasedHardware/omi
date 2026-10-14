@@ -1,3 +1,8 @@
+import 'package:omi/providers/usage_provider.dart';
+import 'package:omi/services/on_device/on_device_runner.dart';
+import 'package:omi/services/on_device/on_device_transcription_controller.dart';
+import 'package:omi/services/services.dart';
+import 'package:omi/services/wals/local_wal_sync.dart';
 import 'dart:async';
 import 'dart:io';
 
@@ -152,6 +157,9 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
   final Set<int> _scheduledPageInitializations = <int>{};
 
   // Freemium switch handler for auto-switch dialogs
+  OnDeviceRunner? _onDeviceRunner;
+  UsageProvider? _overflowUsage;
+  VoidCallback? _overflowEntitlementListener;
   final FreemiumSwitchHandler _freemiumHandler = FreemiumSwitchHandler();
 
   // Holds startup prompts while recording, on a call or during a firmware update.
@@ -696,6 +704,34 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
 
       _captureProvider = Provider.of<CaptureProvider>(context, listen: false);
       _captureProvider!.addListener(_onCaptureProviderChanged);
+      final onDevice = OnDeviceTranscriptionController.instance;
+      final usage = context.read<UsageProvider>();
+      void updateEntitlement() => onDevice.updateEntitlement(
+          atCap: usage.isOutOfCredits, paid: usage.subscription?.subscription.plan.isPaid ?? false);
+      updateEntitlement();
+      _overflowUsage = usage;
+      _overflowEntitlementListener = () {
+        updateEntitlement();
+        if (mounted) _freemiumHandler.checkAndShowPaywall(context, _captureProvider!);
+      };
+      usage.addListener(_overflowEntitlementListener!);
+      onDevice.ensureLoaded().then((_) {
+        if (!mounted || !onDevice.isActive) return;
+        updateEntitlement();
+        final sync = ServiceManager.instance().wal.getSyncs().phone;
+        if (sync is LocalWalSyncImpl) {
+          _onDeviceRunner = OnDeviceRunner(
+              sync: sync,
+              controller: onDevice,
+              publish: (row) {
+                if (!mounted) return;
+                context.read<ConversationProvider>().upsertConversation(row);
+                unawaited(context.read<LocalRecordingsProvider>().refresh());
+              },
+              recordings: () => context.read<LocalRecordingsProvider>().recordings);
+          unawaited(_onDeviceRunner!.start());
+        }
+      });
       // Connect freemium session reset callback
       _captureProvider!.onFreemiumSessionReset = () {
         _freemiumHandler.resetDialogFlag();
@@ -1082,6 +1118,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
     QuickActionsService.instance.reset();
     _homeWidgets?.dispose();
     // Clean up freemium handler
+    if (_overflowEntitlementListener != null) _overflowUsage?.removeListener(_overflowEntitlementListener!);
+    _onDeviceRunner?.dispose();
     _freemiumHandler.dispose();
     // Remove foreground task callback to prevent memory leak
     FlutterForegroundTask.removeTaskDataCallback(_onReceiveTaskData);

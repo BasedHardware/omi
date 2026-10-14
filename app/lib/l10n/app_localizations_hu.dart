@@ -13327,4 +13327,296 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get syncDetailsCopy => 'Részletek másolása az ügyfélszolgálatnak';
+
+  @override
+  String get onDeviceAtCapTitle => 'Elhasználtad az e havi élő átírást';
+
+  @override
+  String get onDeviceAtCapBody =>
+      'Az Omi továbbra is rögzít. Válaszd ki, hogyan legyen átírva a hónap hátralévő része.';
+
+  @override
+  String onDeviceLiveHoursReturn(String date) {
+    return 'Az élő órák ekkor térnek vissza: $date.';
+  }
+
+  @override
+  String get onDeviceTranscribeOnPhone => 'Átírás ezen a telefonon';
+
+  @override
+  String get onDeviceIncluded => 'Benne van';
+
+  @override
+  String get onDeviceOptionChargingBody =>
+      'Töltés közben fut, így alig terheli az akkumulátort. Az átiratok a töltő csatlakoztatása után jelennek meg.';
+
+  @override
+  String get onDeviceUpgradeBody => 'Válts Pro-ra a beszélők elkülönítéséhez és a nagyobb pontosságért';
+
+  @override
+  String get onDeviceAtCapFooter => 'Egyik esetben sem vész el semmi. Ezt itt módosíthatod: Beállítások › Átírás.';
+
+  @override
+  String onDeviceStepOf(int step, int total) {
+    return '$step/$total. lépés';
+  }
+
+  @override
+  String get onDeviceSetupBody =>
+      'Az Omi egyszer letölt egy beszédmodellt. Ezután a felvételeid itt helyben alakulnak szöveggé, az élő órák felhasználása nélkül.';
+
+  @override
+  String get onDeviceSpeechModel => 'Beszédmodell';
+
+  @override
+  String onDeviceMegabytes(String size) {
+    return '$size MB';
+  }
+
+  @override
+  String onDeviceDownloadingWifi(int percent) {
+    return 'Letöltés Wi-Fin · $percent%';
+  }
+
+  @override
+  String onDeviceDownloadingPercent(int percent) {
+    return 'Letöltés · $percent%';
+  }
+
+  @override
+  String onDeviceTimeLeft(String time) {
+    return 'Kb. $time van hátra';
+  }
+
+  @override
+  String get onDeviceWaitingForWifi => 'Várakozás Wi-Fire';
+
+  @override
+  String get onDeviceDownloadFailed => 'A letöltés nem fejeződött be';
+
+  @override
+  String get onDeviceModelNotDownloaded => 'Nincs letöltve';
+
+  @override
+  String onDeviceModelInstalled(String size) {
+    return 'Telepítve · $size';
+  }
+
+  @override
+  String get onDeviceModelUnsupported => 'Ezen a telefonon még nem érhető el';
+
+  @override
+  String get onDeviceSetupKeepRecording => 'A letöltés alatt is folytathatod a rögzítést. Semmi sem vár erre.';
+
+  @override
+  String get onDeviceSetupAudioStays => 'A hang a telefonodon marad, amíg át nem írják.';
+
+  @override
+  String get onDeviceWifiOnly => 'Letöltés csak Wi-Fin';
+
+  @override
+  String get onDeviceDownloadModel => 'Beszédmodell letöltése';
+
+  @override
+  String get onDeviceScheduleTitle => 'Átírás ideje';
+
+  @override
+  String get onDeviceScheduleHeadline => 'Mikor írjon át az Omi?';
+
+  @override
+  String get onDeviceScheduleBody => 'A kötegelt átírás kíméli az akkumulátort. Ezt bármikor módosíthatod.';
+
+  @override
+  String get onDeviceScheduleCharging => 'Töltés közben';
+
+  @override
+  String get onDeviceScheduleChargingBody =>
+      'Az átiratok a töltő csatlakoztatása után jelennek meg, általában éjszaka.';
+
+  @override
+  String get onDeviceBatteryAlmostNone => 'Akkumulátor: szinte semmi';
+
+  @override
+  String get onDeviceScheduleHours => 'Néhány óránként';
+
+  @override
+  String get onDeviceScheduleHoursBody =>
+      'Rövid szakaszokban, akkumulátorról pótolja a lemaradást, így az átiratok ritkán késnek néhány óránál többet.';
+
+  @override
+  String onDeviceBatteryPerDay(int percent) {
+    return 'Akkumulátor: kb. napi $percent%';
+  }
+
+  @override
+  String get onDeviceScheduleLive => 'Beszéd közben';
+
+  @override
+  String get onDeviceScheduleLiveBody => 'Rendszeresen átír, amíg az Omi nyitva van.';
+
+  @override
+  String onDeviceBatteryPerHour(int percent) {
+    return 'Akkumulátor: kb. $percent% beszélgetésóránként';
+  }
+
+  @override
+  String onDeviceQueueWaiting(String duration) {
+    return '$duration vár átírásra';
+  }
+
+  @override
+  String get onDeviceQueueChargingBody =>
+      'Amint töltőre teszed a telefont, elkészülnek. A rögzítés a szokásos módon folytatódik.';
+
+  @override
+  String get onDeviceQueueHoursBody =>
+      'Az Omi néhány óránként pótolja a lemaradást. A rögzítés a szokásos módon folytatódik.';
+
+  @override
+  String get onDeviceQueueLowBatteryBody =>
+      'Töltőre vár, mert alacsony az akkumulátor töltöttsége. A rögzítés a szokásos módon folytatódik.';
+
+  @override
+  String get onDeviceTranscribeNow => 'Átírás most';
+
+  @override
+  String get onDeviceUsesBattery => 'Akkumulátort használ';
+
+  @override
+  String get onDeviceTranscribing => 'Átírás…';
+
+  @override
+  String get onDeviceWaitingForCharger => 'Töltőre vár';
+
+  @override
+  String get onDeviceWaitingToTranscribe => 'Átírásra vár';
+
+  @override
+  String get onDeviceWaitingForSetup => 'Mentve, beállításra vár';
+
+  @override
+  String get onDeviceTranscribedOnIphone => 'Átírva ezen az iPhone-on';
+
+  @override
+  String get onDeviceTranscribedOnPhone => 'Átírva ezen a telefonon';
+
+  @override
+  String get onDeviceTranscribedSummarizedOnIphone => 'Átírva és összefoglalva ezen az iPhone-on';
+
+  @override
+  String get onDeviceSummarizedByCloud => 'Összefoglalta: Omi Cloud';
+
+  @override
+  String get onDeviceWhyPhoneTitle => 'Miért a telefonodon készült';
+
+  @override
+  String get onDeviceWhyLiveHoursUsed =>
+      'Elhasználtad az e havi élő órákat, ezért az Omi ezen a telefonon írta át ezt a beszélgetést.';
+
+  @override
+  String get onDeviceWhySavingLiveHours => 'Úgy döntöttél, hogy ezen a telefonon írsz át, hogy élő órákat spórolj.';
+
+  @override
+  String get onDeviceWhySummaryOnPhone => 'Az összefoglaló is ezen az iPhone-on készült.';
+
+  @override
+  String get onDeviceWhyNoSummary => 'Mindent ezen a telefonon tartasz, ezért nincs összefoglaló.';
+
+  @override
+  String get onDeviceWhyCloudTitle => 'Miért az Omi Cloud készítette ezt az összefoglalót';
+
+  @override
+  String get onDeviceWhyCloudIphone =>
+      'Ez az iPhone önállóan nem tud összefoglalni (ehhez iPhone 15 Pro vagy újabb kell). Az átirat a telefonodon készült, és csak a szövegét küldtük el az Ominak összefoglalásra. Ez nem használ élő órákat.';
+
+  @override
+  String get onDeviceWhyCloudPhone =>
+      'Ez a telefon önállóan nem tud összefoglalni. Az átirat a telefonodon készült, és csak a szövegét küldtük el az Ominak összefoglalásra. Ez nem használ élő órákat.';
+
+  @override
+  String get onDeviceRedoWithCloud => 'Újra az Omi Clouddal';
+
+  @override
+  String get onDeviceRedoHint => 'Válts Pro-ra a beszélők elkülönítéséhez és a nagyobb pontosságért';
+
+  @override
+  String get onDeviceKeepEverything => 'Minden maradjon ezen a telefonon';
+
+  @override
+  String get onDeviceKeepEverythingSubtitle => 'Csak átiratok, összefoglalók nélkül';
+
+  @override
+  String get onDeviceLiveHours => 'Élő órák';
+
+  @override
+  String onDeviceLiveHoursUsed(String used, String limit) {
+    return '$used/$limit óra felhasználva';
+  }
+
+  @override
+  String onDeviceResets(String date) {
+    return 'Visszaáll: $date';
+  }
+
+  @override
+  String get onDeviceGetMoreLiveHours => 'Több élő óra';
+
+  @override
+  String get onDeviceAfterLiveHours => 'Ha elfogynak az élő órák';
+
+  @override
+  String get onDeviceWhen => 'Mikor';
+
+  @override
+  String get onDeviceSummaries => 'Összefoglalók';
+
+  @override
+  String get onDeviceSummariesOnIphone => 'Ezen az iPhone-on';
+
+  @override
+  String get onDeviceSummariesCloud => 'Omi Clouddal';
+
+  @override
+  String get onDeviceSaveLiveHours => 'Átírás ezen a telefonon az élő órák spórolásához';
+
+  @override
+  String get onDeviceSaveLiveHoursSubtitle => 'Válts Pro-ra a beszélők elkülönítéséhez és a nagyobb pontosságért';
+
+  @override
+  String get onDeviceOnThisPhone => 'Ezen a telefonon';
+
+  @override
+  String get onDeviceAudioWaiting => 'Telefonon váró hang';
+
+  @override
+  String get onDeviceRemoveModel => 'Beszédmodell eltávolítása';
+
+  @override
+  String get onDeviceRemoveModelTitle => 'Eltávolítod a beszédmodellt?';
+
+  @override
+  String get onDeviceRemoveModelMessage =>
+      'A felvételek ezen a telefonon várakoznak, amíg újra le nem töltöd, vagy vissza nem térnek az élő órák.';
+
+  @override
+  String get onDeviceRemove => 'Eltávolítás';
+
+  @override
+  String get onDeviceFinishSetupTitle => 'Fejezd be a beállítást az átiratok megtekintéséhez';
+
+  @override
+  String get onDeviceFinishSetupBody =>
+      'Elhasználtad az e havi élő órákat. Az Omi továbbra is rögzít, és a telefonodra menti a hangot. Töltsd le a beszédmodellt, és pótolja a lemaradást.';
+
+  @override
+  String onDeviceDownloadSize(String size) {
+    return '$size letöltés';
+  }
+
+  @override
+  String get onDeviceUnsupportedBody =>
+      'Ez a telefon még nem tudja futtatni a beszédmodellt. A hang mentve marad, amíg vissza nem térnek az élő órák, vagy amíg nem váltasz magasabb csomagra.';
+
+  @override
+  String get onDeviceEntrySubtitle => 'Ha elfogynak az élő órák, átírás ezen a telefonon';
 }

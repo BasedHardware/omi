@@ -1176,6 +1176,7 @@ class UpdateConversationRequest(BaseModel):
 
 
 class DevTranscriptSegment(BaseModel):
+    stt_provider: Optional[str] = Field(default=None, max_length=120)
     model_config = ConfigDict(title='CreateConversationTranscriptSegment')
 
     text: str = Field(description="The text spoken in this segment")

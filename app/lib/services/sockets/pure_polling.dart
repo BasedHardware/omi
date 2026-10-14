@@ -176,8 +176,9 @@ class PurePollingSocket implements IPureSocket {
       if (generation != _connectionGeneration) return;
       _bufferingSince = null;
       _consecutiveFailures = 0;
+      if (result?.audioEndSeconds != null) _audioOffsetSeconds = result!.audioEndSeconds!;
       if (result != null && result.isNotEmpty) {
-        if (result.segments.isNotEmpty) {
+        if (result.audioEndSeconds == null && result.segments.isNotEmpty) {
           _audioOffsetSeconds = result.segments.last.end;
         }
         final segmentsJson =

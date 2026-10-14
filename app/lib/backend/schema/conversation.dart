@@ -366,6 +366,8 @@ class ConversationAudioInfo {
 
 class ServerConversation {
   final String id;
+  final Map<String, dynamic>? onDeviceProvenance;
+  final Map<String, dynamic>? clientProcessing;
   final DateTime createdAt;
   final DateTime? startedAt;
   final DateTime? finishedAt;
@@ -423,6 +425,8 @@ class ServerConversation {
   ServerConversation({
     required this.id,
     required this.createdAt,
+    this.onDeviceProvenance,
+    this.clientProcessing,
     required this.structured,
     this.startedAt,
     this.finishedAt,
@@ -489,6 +493,9 @@ class ServerConversation {
       siriVisibilityValid: json['siri_visibility_valid'] != false &&
           (json['visibility'] == null || const ['private', 'shared', 'public'].contains(json['visibility'])),
       matchSnippets: snippets,
+      onDeviceProvenance:
+          json['on_device_provenance'] is Map ? Map<String, dynamic>.from(json['on_device_provenance']) : null,
+      clientProcessing: json['client_processing'] is Map ? Map<String, dynamic>.from(json['client_processing']) : null,
     );
   }
 
@@ -499,10 +506,14 @@ class ServerConversation {
     bool deleted = false,
     bool siriVisibilityValid = true,
     List<TranscriptMatchSnippet>? matchSnippets,
+    Map<String, dynamic>? onDeviceProvenance,
+    Map<String, dynamic>? clientProcessing,
   }) {
     final snippets = matchSnippets ?? const <TranscriptMatchSnippet>[];
     return ServerConversation(
       id: generated.id,
+      onDeviceProvenance: onDeviceProvenance,
+      clientProcessing: clientProcessing ?? generated.clientProcessing?.toJson(),
       createdAt: generated.createdAt,
       structured: structured ?? Structured.fromGenerated(generated.structured),
       startedAt: generated.startedAt,
@@ -547,6 +558,8 @@ class ServerConversation {
   Map<String, dynamic> toJson() {
     return {
       'id': id,
+      if (onDeviceProvenance != null) 'on_device_provenance': onDeviceProvenance,
+      if (clientProcessing != null) 'client_processing': clientProcessing,
       'created_at': createdAt.toUtc().toIso8601String(),
       'structured': structured.toJson(),
       'started_at': startedAt?.toUtc().toIso8601String(),

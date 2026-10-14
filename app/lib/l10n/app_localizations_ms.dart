@@ -13306,4 +13306,296 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get syncDetailsCopy => 'Salin butiran untuk sokongan';
+
+  @override
+  String get onDeviceAtCapTitle => 'Anda telah menggunakan transkripsi langsung bulan ini';
+
+  @override
+  String get onDeviceAtCapBody => 'Omi masih merakam. Pilih cara baki bulan ini ditranskripsikan.';
+
+  @override
+  String onDeviceLiveHoursReturn(String date) {
+    return 'Jam langsung kembali pada $date.';
+  }
+
+  @override
+  String get onDeviceTranscribeOnPhone => 'Transkripsi pada telefon ini';
+
+  @override
+  String get onDeviceIncluded => 'Termasuk';
+
+  @override
+  String get onDeviceOptionChargingBody =>
+      'Berjalan semasa telefon anda dicas, jadi hampir tidak menggunakan bateri. Transkrip muncul selepas anda memasang pengecas.';
+
+  @override
+  String get onDeviceUpgradeBody => 'Naik taraf ke Pro untuk pemisahan penutur dan ketepatan lebih tinggi';
+
+  @override
+  String get onDeviceAtCapFooter => 'Tiada apa yang hilang. Anda boleh menukar ini dalam Tetapan › Transkripsi.';
+
+  @override
+  String onDeviceStepOf(int step, int total) {
+    return 'Langkah $step daripada $total';
+  }
+
+  @override
+  String get onDeviceSetupBody =>
+      'Omi memuat turun model pertuturan sekali sahaja. Selepas itu, rakaman anda ditukar kepada teks terus di sini, tanpa menggunakan jam langsung anda.';
+
+  @override
+  String get onDeviceSpeechModel => 'Model pertuturan';
+
+  @override
+  String onDeviceMegabytes(String size) {
+    return '$size MB';
+  }
+
+  @override
+  String onDeviceDownloadingWifi(int percent) {
+    return 'Memuat turun melalui Wi-Fi · $percent%';
+  }
+
+  @override
+  String onDeviceDownloadingPercent(int percent) {
+    return 'Memuat turun · $percent%';
+  }
+
+  @override
+  String onDeviceTimeLeft(String time) {
+    return 'Lebih kurang $time lagi';
+  }
+
+  @override
+  String get onDeviceWaitingForWifi => 'Menunggu Wi-Fi';
+
+  @override
+  String get onDeviceDownloadFailed => 'Muat turun tidak selesai';
+
+  @override
+  String get onDeviceModelNotDownloaded => 'Belum dimuat turun';
+
+  @override
+  String onDeviceModelInstalled(String size) {
+    return 'Dipasang · $size';
+  }
+
+  @override
+  String get onDeviceModelUnsupported => 'Belum tersedia pada telefon ini';
+
+  @override
+  String get onDeviceSetupKeepRecording => 'Teruskan merakam semasa ia dimuat turun. Tiada apa yang perlu menunggu.';
+
+  @override
+  String get onDeviceSetupAudioStays => 'Audio kekal pada telefon anda sehingga ditranskripsikan.';
+
+  @override
+  String get onDeviceWifiOnly => 'Muat turun melalui Wi-Fi sahaja';
+
+  @override
+  String get onDeviceDownloadModel => 'Muat turun model pertuturan';
+
+  @override
+  String get onDeviceScheduleTitle => 'Masa transkripsi';
+
+  @override
+  String get onDeviceScheduleHeadline => 'Bilakah Omi patut membuat transkripsi?';
+
+  @override
+  String get onDeviceScheduleBody =>
+      'Transkripsi secara berkelompok menjimatkan bateri. Anda boleh menukar ini pada bila-bila masa.';
+
+  @override
+  String get onDeviceScheduleCharging => 'Semasa mengecas';
+
+  @override
+  String get onDeviceScheduleChargingBody =>
+      'Transkrip muncul selepas anda memasang pengecas, biasanya pada waktu malam.';
+
+  @override
+  String get onDeviceBatteryAlmostNone => 'Bateri: hampir tiada';
+
+  @override
+  String get onDeviceScheduleHours => 'Setiap beberapa jam';
+
+  @override
+  String get onDeviceScheduleHoursBody =>
+      'Mengejar ketinggalan dalam sesi pendek menggunakan bateri, jadi transkrip jarang tertinggal lebih daripada beberapa jam.';
+
+  @override
+  String onDeviceBatteryPerDay(int percent) {
+    return 'Bateri: kira-kira $percent% sehari';
+  }
+
+  @override
+  String get onDeviceScheduleLive => 'Semasa anda bercakap';
+
+  @override
+  String get onDeviceScheduleLiveBody => 'Mentranskripsikan secara berkala semasa Omi dibuka.';
+
+  @override
+  String onDeviceBatteryPerHour(int percent) {
+    return 'Bateri: kira-kira $percent% sejam perbualan';
+  }
+
+  @override
+  String onDeviceQueueWaiting(String duration) {
+    return '$duration menunggu transkripsi';
+  }
+
+  @override
+  String get onDeviceQueueChargingBody =>
+      'Ia akan sedia selepas anda mengecas telefon. Rakaman diteruskan seperti biasa.';
+
+  @override
+  String get onDeviceQueueHoursBody =>
+      'Omi mengejar ketinggalan setiap beberapa jam. Rakaman diteruskan seperti biasa.';
+
+  @override
+  String get onDeviceQueueLowBatteryBody => 'Menunggu pengecas kerana bateri lemah. Rakaman diteruskan seperti biasa.';
+
+  @override
+  String get onDeviceTranscribeNow => 'Transkripsi sekarang';
+
+  @override
+  String get onDeviceUsesBattery => 'Menggunakan bateri';
+
+  @override
+  String get onDeviceTranscribing => 'Mentranskripsi…';
+
+  @override
+  String get onDeviceWaitingForCharger => 'Menunggu pengecas';
+
+  @override
+  String get onDeviceWaitingToTranscribe => 'Menunggu transkripsi';
+
+  @override
+  String get onDeviceWaitingForSetup => 'Disimpan, menunggu persediaan';
+
+  @override
+  String get onDeviceTranscribedOnIphone => 'Ditranskripsi pada iPhone ini';
+
+  @override
+  String get onDeviceTranscribedOnPhone => 'Ditranskripsi pada telefon ini';
+
+  @override
+  String get onDeviceTranscribedSummarizedOnIphone => 'Ditranskripsi dan diringkaskan pada iPhone ini';
+
+  @override
+  String get onDeviceSummarizedByCloud => 'Diringkaskan oleh Omi Cloud';
+
+  @override
+  String get onDeviceWhyPhoneTitle => 'Mengapa ini dilakukan pada telefon anda';
+
+  @override
+  String get onDeviceWhyLiveHoursUsed =>
+      'Anda telah menggunakan jam langsung bulan ini, jadi Omi mentranskripsi perbualan ini pada telefon ini.';
+
+  @override
+  String get onDeviceWhySavingLiveHours =>
+      'Anda memilih untuk mentranskripsi pada telefon ini bagi menjimatkan jam langsung.';
+
+  @override
+  String get onDeviceWhySummaryOnPhone => 'Ringkasan juga ditulis pada iPhone ini.';
+
+  @override
+  String get onDeviceWhyNoSummary => 'Anda menyimpan semuanya pada telefon ini, jadi tiada ringkasan.';
+
+  @override
+  String get onDeviceWhyCloudTitle => 'Mengapa Omi Cloud menulis ringkasan ini';
+
+  @override
+  String get onDeviceWhyCloudIphone =>
+      'iPhone ini tidak dapat meringkaskan sendiri (ia memerlukan iPhone 15 Pro atau lebih baharu). Transkrip dibuat pada telefon anda, dan hanya teksnya dihantar kepada Omi untuk diringkaskan. Ia tidak menggunakan jam langsung anda.';
+
+  @override
+  String get onDeviceWhyCloudPhone =>
+      'Telefon ini tidak dapat meringkaskan sendiri. Transkrip dibuat pada telefon anda, dan hanya teksnya dihantar kepada Omi untuk diringkaskan. Ia tidak menggunakan jam langsung anda.';
+
+  @override
+  String get onDeviceRedoWithCloud => 'Buat semula dengan Omi Cloud';
+
+  @override
+  String get onDeviceRedoHint => 'Naik taraf ke Pro untuk pemisahan penutur dan ketepatan lebih tinggi';
+
+  @override
+  String get onDeviceKeepEverything => 'Simpan semuanya pada telefon ini';
+
+  @override
+  String get onDeviceKeepEverythingSubtitle => 'Transkrip sahaja, tanpa ringkasan';
+
+  @override
+  String get onDeviceLiveHours => 'Jam langsung';
+
+  @override
+  String onDeviceLiveHoursUsed(String used, String limit) {
+    return '$used daripada $limit jam digunakan';
+  }
+
+  @override
+  String onDeviceResets(String date) {
+    return 'Ditetapkan semula pada $date';
+  }
+
+  @override
+  String get onDeviceGetMoreLiveHours => 'Dapatkan lebih banyak jam langsung';
+
+  @override
+  String get onDeviceAfterLiveHours => 'Selepas jam langsung habis';
+
+  @override
+  String get onDeviceWhen => 'Bila';
+
+  @override
+  String get onDeviceSummaries => 'Ringkasan';
+
+  @override
+  String get onDeviceSummariesOnIphone => 'Pada iPhone ini';
+
+  @override
+  String get onDeviceSummariesCloud => 'Oleh Omi Cloud';
+
+  @override
+  String get onDeviceSaveLiveHours => 'Transkripsi pada telefon ini untuk menjimatkan jam langsung';
+
+  @override
+  String get onDeviceSaveLiveHoursSubtitle => 'Naik taraf ke Pro untuk pemisahan penutur dan ketepatan lebih tinggi';
+
+  @override
+  String get onDeviceOnThisPhone => 'Pada telefon ini';
+
+  @override
+  String get onDeviceAudioWaiting => 'Audio menunggu pada telefon';
+
+  @override
+  String get onDeviceRemoveModel => 'Alih keluar model pertuturan';
+
+  @override
+  String get onDeviceRemoveModelTitle => 'Alih keluar model pertuturan?';
+
+  @override
+  String get onDeviceRemoveModelMessage =>
+      'Rakaman akan menunggu pada telefon ini sehingga anda memuat turunnya semula atau jam langsung kembali.';
+
+  @override
+  String get onDeviceRemove => 'Alih keluar';
+
+  @override
+  String get onDeviceFinishSetupTitle => 'Selesaikan persediaan untuk melihat transkrip anda';
+
+  @override
+  String get onDeviceFinishSetupBody =>
+      'Anda telah menggunakan jam langsung bulan ini. Omi masih merakam dan menyimpan audio pada telefon anda. Muat turun model pertuturan dan ia akan mengejar semua ketinggalan.';
+
+  @override
+  String onDeviceDownloadSize(String size) {
+    return 'Muat turun $size';
+  }
+
+  @override
+  String get onDeviceUnsupportedBody =>
+      'Telefon ini belum dapat menjalankan model pertuturan. Audio kekal disimpan sehingga jam langsung kembali atau anda naik taraf.';
+
+  @override
+  String get onDeviceEntrySubtitle => 'Apabila jam langsung habis, transkripsi pada telefon ini';
 }

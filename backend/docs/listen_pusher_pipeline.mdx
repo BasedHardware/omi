@@ -4578,3 +4578,19 @@ WALs. `LADDER_V1_LANE_METERING_ENABLED` (default OFF) attributes hourly shadow
 writes to live, batch, on-device or unknown lanes without double-charging the
 feature total. See [ladder cutover](ladder-v1-cutover.md) for ramp prerequisites,
 partial-coverage limits, the choice API and rollback.
+### Flagged mobile on-device overflow
+
+`mobile-on-device-overflow` is default off. Mobile phone-only WAL records
+exclude audio from automatic and manual cloud drains; native batch files use
+`omibatchoverflow` in the existing recordings directory. The runner decodes
+bounded 30-second windows without diarization and submits transcript text to
+`POST /v1/conversations/from-segments` with a stable `client_session_id`.
+`stt_provider=on_device:<engine>` survives the canonical ingest seam. Identity
+remains one unnamed voice; the engine token is provenance, not a speaker claim.
+Optional Foundation Models summaries use the existing hash-bound
+`client_processing` display projection (`runtime=local`). Unsupported devices
+submit text for ordinary cloud processing; this path does not send audio to live
+STT or charge live transcription hours. Phone-only mode submits nothing and
+keeps transcript-only conversations in the account-owned local WAL index.
+`/reprocess` processes the existing transcript and does not re-transcribe audio;
+mobile therefore hides the cloud re-transcription action for these recordings.

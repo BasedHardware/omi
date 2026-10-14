@@ -13182,4 +13182,289 @@ class AppLocalizationsHe extends AppLocalizations {
 
   @override
   String get syncDetailsCopy => 'העתקת פרטים לתמיכה';
+
+  @override
+  String get onDeviceAtCapTitle => 'ניצלת את התמלול החי של החודש';
+
+  @override
+  String get onDeviceAtCapBody => 'Omi עדיין מקליט. בחר איך לתמלל את שאר החודש.';
+
+  @override
+  String onDeviceLiveHoursReturn(String date) {
+    return 'השעות החיות יחזרו ב-$date.';
+  }
+
+  @override
+  String get onDeviceTranscribeOnPhone => 'תמלול בטלפון הזה';
+
+  @override
+  String get onDeviceIncluded => 'כלול';
+
+  @override
+  String get onDeviceOptionChargingBody =>
+      'פועל בזמן שהטלפון בטעינה, כך שכמעט לא צורך סוללה. התמלולים יופיעו אחרי שתחבר לטעינה.';
+
+  @override
+  String get onDeviceUpgradeBody => 'שדרגו ל-Pro להפרדה בין דוברים ולדיוק גבוה יותר';
+
+  @override
+  String get onDeviceAtCapFooter => 'שום דבר לא הולך לאיבוד בכל מקרה. אפשר לשנות זאת בהגדרות › תמלול.';
+
+  @override
+  String onDeviceStepOf(int step, int total) {
+    return 'שלב $step מתוך $total';
+  }
+
+  @override
+  String get onDeviceSetupBody =>
+      'Omi מוריד מודל דיבור פעם אחת. לאחר מכן ההקלטות שלך הופכות לטקסט כאן, בלי להשתמש בשעות החיות שלך.';
+
+  @override
+  String get onDeviceSpeechModel => 'מודל דיבור';
+
+  @override
+  String onDeviceMegabytes(String size) {
+    return '$size MB';
+  }
+
+  @override
+  String onDeviceDownloadingWifi(int percent) {
+    return 'מוריד ב-Wi-Fi · $percent%';
+  }
+
+  @override
+  String onDeviceDownloadingPercent(int percent) {
+    return 'מוריד · $percent%';
+  }
+
+  @override
+  String onDeviceTimeLeft(String time) {
+    return 'נותרו כ-$time';
+  }
+
+  @override
+  String get onDeviceWaitingForWifi => 'ממתין ל-Wi-Fi';
+
+  @override
+  String get onDeviceDownloadFailed => 'ההורדה לא הושלמה';
+
+  @override
+  String get onDeviceModelNotDownloaded => 'לא הורד';
+
+  @override
+  String onDeviceModelInstalled(String size) {
+    return 'מותקן · $size';
+  }
+
+  @override
+  String get onDeviceModelUnsupported => 'עדיין לא זמין בטלפון הזה';
+
+  @override
+  String get onDeviceSetupKeepRecording => 'אפשר להמשיך להקליט בזמן ההורדה. שום דבר לא מחכה לזה.';
+
+  @override
+  String get onDeviceSetupAudioStays => 'האודיו נשאר בטלפון שלך עד שהוא מתומלל.';
+
+  @override
+  String get onDeviceWifiOnly => 'הורדה ב-Wi-Fi בלבד';
+
+  @override
+  String get onDeviceDownloadModel => 'הורדת מודל הדיבור';
+
+  @override
+  String get onDeviceScheduleTitle => 'מתי לתמלל';
+
+  @override
+  String get onDeviceScheduleHeadline => 'מתי Omi צריך לתמלל?';
+
+  @override
+  String get onDeviceScheduleBody => 'תמלול באצוות חוסך סוללה. אפשר לשנות זאת בכל עת.';
+
+  @override
+  String get onDeviceScheduleCharging => 'בזמן טעינה';
+
+  @override
+  String get onDeviceScheduleChargingBody => 'התמלולים מופיעים אחרי שמחברים לטעינה, בדרך כלל במהלך הלילה.';
+
+  @override
+  String get onDeviceBatteryAlmostNone => 'סוללה: כמעט כלום';
+
+  @override
+  String get onDeviceScheduleHours => 'כל כמה שעות';
+
+  @override
+  String get onDeviceScheduleHoursBody =>
+      'משלים את הפער בפרצים קצרים על סוללה, כך שהתמלולים כמעט אף פעם לא מפגרים ביותר מכמה שעות.';
+
+  @override
+  String onDeviceBatteryPerDay(int percent) {
+    return 'סוללה: כ-$percent% ביום';
+  }
+
+  @override
+  String get onDeviceScheduleLive => 'תוך כדי דיבור';
+
+  @override
+  String get onDeviceScheduleLiveBody => 'מתמלל באופן קבוע כל עוד Omi פתוח.';
+
+  @override
+  String onDeviceBatteryPerHour(int percent) {
+    return 'סוללה: כ-$percent% לשעת שיחה';
+  }
+
+  @override
+  String onDeviceQueueWaiting(String duration) {
+    return '$duration של הקלטות ממתינות לתמלול';
+  }
+
+  @override
+  String get onDeviceQueueChargingBody => 'הן יהיו מוכנות אחרי שתחבר את הטלפון לטעינה. ההקלטה ממשיכה כרגיל.';
+
+  @override
+  String get onDeviceQueueHoursBody => 'Omi משלים את הפער כל כמה שעות. ההקלטה ממשיכה כרגיל.';
+
+  @override
+  String get onDeviceQueueLowBatteryBody => 'ממתין למטען כי הסוללה חלשה. ההקלטה ממשיכה כרגיל.';
+
+  @override
+  String get onDeviceTranscribeNow => 'תמלול עכשיו';
+
+  @override
+  String get onDeviceUsesBattery => 'צורך סוללה';
+
+  @override
+  String get onDeviceTranscribing => 'מתמלל…';
+
+  @override
+  String get onDeviceWaitingForCharger => 'ממתין למטען';
+
+  @override
+  String get onDeviceWaitingToTranscribe => 'ממתין לתמלול';
+
+  @override
+  String get onDeviceWaitingForSetup => 'נשמר, ממתין להגדרה';
+
+  @override
+  String get onDeviceTranscribedOnIphone => 'תומלל ב-iPhone הזה';
+
+  @override
+  String get onDeviceTranscribedOnPhone => 'תומלל בטלפון הזה';
+
+  @override
+  String get onDeviceTranscribedSummarizedOnIphone => 'תומלל וסוכם ב-iPhone הזה';
+
+  @override
+  String get onDeviceSummarizedByCloud => 'סוכם על ידי Omi Cloud';
+
+  @override
+  String get onDeviceWhyPhoneTitle => 'למה זה נעשה בטלפון שלך';
+
+  @override
+  String get onDeviceWhyLiveHoursUsed => 'ניצלת את השעות החיות של החודש, ולכן Omi תמלל את השיחה הזו בטלפון הזה.';
+
+  @override
+  String get onDeviceWhySavingLiveHours => 'בחרת לתמלל בטלפון הזה כדי לחסוך שעות חיות.';
+
+  @override
+  String get onDeviceWhySummaryOnPhone => 'גם הסיכום נכתב ב-iPhone הזה.';
+
+  @override
+  String get onDeviceWhyNoSummary => 'אתה שומר הכול בטלפון הזה, ולכן אין סיכום.';
+
+  @override
+  String get onDeviceWhyCloudTitle => 'למה Omi Cloud כתב את הסיכום הזה';
+
+  @override
+  String get onDeviceWhyCloudIphone =>
+      'ה-iPhone הזה לא יכול לסכם בעצמו (נדרש iPhone 15 Pro ואילך). התמלול נעשה בטלפון שלך, ורק הטקסט שלו נשלח ל-Omi לסיכום. זה לא צורך את השעות החיות שלך.';
+
+  @override
+  String get onDeviceWhyCloudPhone =>
+      'הטלפון הזה לא יכול לסכם בעצמו. התמלול נעשה בטלפון שלך, ורק הטקסט שלו נשלח ל-Omi לסיכום. זה לא צורך את השעות החיות שלך.';
+
+  @override
+  String get onDeviceRedoWithCloud => 'ביצוע מחדש עם Omi Cloud';
+
+  @override
+  String get onDeviceRedoHint => 'שדרגו ל-Pro להפרדה בין דוברים ולדיוק גבוה יותר';
+
+  @override
+  String get onDeviceKeepEverything => 'לשמור הכול בטלפון הזה';
+
+  @override
+  String get onDeviceKeepEverythingSubtitle => 'תמלולים בלבד, בלי סיכומים';
+
+  @override
+  String get onDeviceLiveHours => 'שעות חיות';
+
+  @override
+  String onDeviceLiveHoursUsed(String used, String limit) {
+    return 'נוצלו $used מתוך $limit שעות';
+  }
+
+  @override
+  String onDeviceResets(String date) {
+    return 'מתאפס ב-$date';
+  }
+
+  @override
+  String get onDeviceGetMoreLiveHours => 'קבלת שעות חיות נוספות';
+
+  @override
+  String get onDeviceAfterLiveHours => 'אחרי שהשעות החיות נגמרות';
+
+  @override
+  String get onDeviceWhen => 'מתי';
+
+  @override
+  String get onDeviceSummaries => 'סיכומים';
+
+  @override
+  String get onDeviceSummariesOnIphone => 'ב-iPhone הזה';
+
+  @override
+  String get onDeviceSummariesCloud => 'על ידי Omi Cloud';
+
+  @override
+  String get onDeviceSaveLiveHours => 'תמלול בטלפון הזה כדי לחסוך שעות חיות';
+
+  @override
+  String get onDeviceSaveLiveHoursSubtitle => 'שדרגו ל-Pro להפרדה בין דוברים ולדיוק גבוה יותר';
+
+  @override
+  String get onDeviceOnThisPhone => 'בטלפון הזה';
+
+  @override
+  String get onDeviceAudioWaiting => 'אודיו שממתין בטלפון';
+
+  @override
+  String get onDeviceRemoveModel => 'הסרת מודל הדיבור';
+
+  @override
+  String get onDeviceRemoveModelTitle => 'להסיר את מודל הדיבור?';
+
+  @override
+  String get onDeviceRemoveModelMessage => 'ההקלטות ימתינו בטלפון הזה עד שתוריד אותו שוב או שהשעות החיות יחזרו.';
+
+  @override
+  String get onDeviceRemove => 'הסרה';
+
+  @override
+  String get onDeviceFinishSetupTitle => 'סיים את ההגדרה כדי לראות את התמלולים';
+
+  @override
+  String get onDeviceFinishSetupBody =>
+      'ניצלת את השעות החיות של החודש. Omi עדיין מקליט ושומר את האודיו בטלפון שלך. הורד את מודל הדיבור והוא ישלים את הפער.';
+
+  @override
+  String onDeviceDownloadSize(String size) {
+    return 'הורדה של $size';
+  }
+
+  @override
+  String get onDeviceUnsupportedBody =>
+      'הטלפון הזה עדיין לא יכול להריץ את מודל הדיבור. האודיו נשאר שמור עד שהשעות החיות יחזרו או שתשדרג.';
+
+  @override
+  String get onDeviceEntrySubtitle => 'כשהשעות החיות נגמרות, לתמלל בטלפון הזה';
 }

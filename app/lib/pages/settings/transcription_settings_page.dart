@@ -18,6 +18,7 @@ import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/models/custom_stt_config.dart';
 import 'package:omi/models/stt_provider.dart';
+import 'package:omi/pages/on_device/on_device_settings_page.dart';
 import 'package:omi/pages/settings/transcription/json_editor_page.dart';
 import 'package:omi/pages/settings/transcription/stt_language.dart';
 import 'package:omi/pages/settings/transcription/transcription_dialogs.dart';
@@ -700,6 +701,8 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  // On-device transcription after live hours run out; nothing while its flag is off.
+                  const OnDeviceSettingsEntry(),
                   _buildSourceSelector(),
                   const SizedBox(height: OmiSpacing.xl),
                   if (_useCustomStt) ...[

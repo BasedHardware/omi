@@ -15,6 +15,7 @@ import 'package:omi/pages/conversation_detail/page.dart';
 import 'package:omi/widgets/conversation_bottom_bar.dart' show ConversationTab;
 import 'package:omi/pages/conversations/conversation_action_analytics.dart';
 import 'package:omi/pages/conversations/conversation_actions.dart';
+import 'package:omi/pages/on_device/on_device_provenance_section.dart';
 import 'package:omi/pages/settings/usage_page.dart';
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/providers/usage_provider.dart';
@@ -510,6 +511,7 @@ class _ConversationListItemState extends State<ConversationListItem> {
                       ],
                       const SizedBox(height: 3),
                       _buildMetaRow(context),
+                      OnDeviceProvenanceChip(conversationId: widget.conversation.id),
                       if (widget.conversation.showsSummaryRetry) ...[
                         const SizedBox(height: 8),
                         _buildSummaryRetry(context),

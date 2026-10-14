@@ -1,4 +1,4 @@
-<!-- feature-flag-registry as-of: 2026-10-13 -->
+<!-- feature-flag-registry as-of: 2026-10-14 -->
 
 # Feature-flag authority registry
 
@@ -113,7 +113,7 @@ entries are exempt: they are queued for removal, not running.
 
 ## Overdue for a decision
 
-None as of 2026-10-13.
+None as of 2026-10-14.
 
 ## Flags
 
@@ -277,6 +277,7 @@ and an explicit empty literal renders as `''`.
 | `jit-processing-v1` | JIT processing admission cohort | backend | posthog | closed | — | — | — | expected (enable) | graduate | 2026-10-23 | dazheng |
 | `mobile-chat-apps` | Mobile Chat apps entry on Integrations (connect Telegram/iMessage); client-evaluated, default off. The payload carries each channel's provider id and address (Telegram bot username, iMessage number); the backend OMI_MESSAGING_CHANNELS cohort and paid-plan entitlement remain the authority | mobile | posthog | closed | — | — | — | absent (enable) | pending | 2026-11-09 | dazheng |
 | `mobile-contextual-upsells` | Mobile 80% budget banner and backend-decided Pro gate entry; default off; legacy access unchanged; requires mobile-plan-storefront | mobile | posthog | closed | — | — | — | absent (enable) | pending | 2026-11-12 | dazheng |
+| `mobile-on-device-overflow` | Mobile on-device transcription after live hours run out: at-cap choice sheet, model setup, schedule, conversations queue banner, provenance and settings; default off; existing at-cap plans flow unchanged | mobile | posthog | closed | — | — | — | absent (enable) | pending | 2026-11-13 | dazheng |
 | `mobile-plan-storefront` | Mobile backend-driven plans sheet; default off; existing payment rails and App Review hiding unchanged | mobile | posthog | closed | — | — | — | absent (enable) | pending | 2026-11-12 | dazheng |
 | `negative_feedback_remediation` | Enable negative-feedback remediation on stable | macos | posthog | closed | — | — | — | absent (enable) | pending | 2026-10-23 | unowned |
 | `negative_feedback_remediation_kill` | Beta negative-feedback remediation stop | macos | posthog | inverted | — | — | — | expected (kill) | pending | 2026-10-23 | unowned |
