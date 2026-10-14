@@ -14,17 +14,26 @@ import XCTest
 final class MemoriesCacheReconcilePruneTests: XCTestCase {
   private var userDir: URL?
   private var authSnapshot: RewindStorageTestIsolation.AuthSnapshot?
+  private var testUserId: String?
 
   override func setUp() async throws {
     authSnapshot = RewindStorageTestIsolation.captureAuthSnapshot()
     let fixture = try await RewindStorageTestIsolation.setUp(userIdPrefix: "memories-reconcile-prune")
     userDir = fixture.userDir
+    testUserId = fixture.testUserId
     RewindStorageTestIsolation.signInForTests(userId: fixture.testUserId)
+    // Align the process-global owner authority with this throwaway user, the
+    // way a real signed-in session does, so the reconcile's owner fence
+    // (capture → isAuthorizationCurrent) observes a stable owner.
+    RuntimeOwnerAuthorizationAuthority.shared.beginTransition()
+    RuntimeOwnerAuthorizationAuthority.shared.endTransition(ownerID: fixture.testUserId)
   }
 
   override func tearDown() async throws {
     if let authSnapshot {
       RewindStorageTestIsolation.restoreAuthSnapshot(authSnapshot)
+      RuntimeOwnerAuthorizationAuthority.shared.beginTransition()
+      RuntimeOwnerAuthorizationAuthority.shared.endTransition(ownerID: authSnapshot.userId)
     }
     if let userDir {
       await RewindStorageTestIsolation.tearDown(userDir: userDir)
@@ -33,11 +42,12 @@ final class MemoriesCacheReconcilePruneTests: XCTestCase {
 
   private func page(
     _ memories: [ServerMemory],
+    nextCursor: String? = nil,
     truncated: Bool = false
   ) -> APIClient.MemoryListPage {
     APIClient.MemoryListPage(
       memories: memories,
-      nextCursor: nil,
+      nextCursor: nextCursor,
       canonicalLifecycleExposed: false,
       deviceScopeSupported: true,
       defaultMemoryDeleteSupported: true,
@@ -157,5 +167,55 @@ final class MemoriesCacheReconcilePruneTests: XCTestCase {
       unsynced.count, 1,
       "a local-only row must never be pruned by the reconcile, even against an empty account")
     XCTAssertEqual(unsynced.first?.deleted, false)
+  }
+
+  /// An owner switch between the pull and the prune must fence the prune: the
+  /// keep-set belongs to the owner that pulled it, and `databasePool()` reopens
+  /// for the new owner — so pruning with the stale keep-set (worst case: empty,
+  /// an apparently wiped account) would tombstone the new owner's synced rows.
+  /// The aborted reconcile must also not latch, so the new owner's own
+  /// reconcile runs clean.
+  func testOwnerChangeBetweenPullAndPruneSkipsPruneAndDoesNotLatch() async throws {
+    let synced = makeMemory(id: "new-owner-row", tier: .longTerm)
+    try await MemoryStorage.shared.syncServerMemories([synced])
+
+    var fetches = 0
+    let viewModel = MemoriesViewModel()
+    viewModel.reconcilePageFetch = { [self] _, cursor, _ in
+      fetches += 1
+      if cursor == nil {
+        // First page is empty but continues; the owner switches before the
+        // terminal page, i.e. between the pull loop and the prune.
+        return page([], nextCursor: "switch-after-this-page")
+      }
+      RuntimeOwnerAuthorizationAuthority.shared.beginTransition()
+      RuntimeOwnerAuthorizationAuthority.shared.endTransition(ownerID: "reconcile-other-owner")
+      return page([])
+    }
+
+    await viewModel.reconcileCacheIfNeeded()
+
+    XCTAssertEqual(fetches, 2)
+    let stillThere = try await MemoryStorage.shared.getMemoryByBackendId("new-owner-row")
+    XCTAssertEqual(
+      stillThere?.deleted, false,
+      "the new owner's rows must not be judged by the previous owner's keep-set")
+
+    // No latch: with this user's authority restored, the reconcile must run
+    // again from the top instead of returning before its first fetch.
+    guard let testUserId else { return }
+    RuntimeOwnerAuthorizationAuthority.shared.beginTransition()
+    RuntimeOwnerAuthorizationAuthority.shared.endTransition(ownerID: testUserId)
+    viewModel.reconcilePageFetch = { [self] _, _, _ in
+      fetches += 1
+      return page([])
+    }
+    await viewModel.reconcileCacheIfNeeded()
+
+    XCTAssertEqual(fetches, 3, "the aborted reconcile must not latch its user")
+    let pruned = try await MemoryStorage.shared.getMemoryByBackendId("new-owner-row")
+    XCTAssertEqual(
+      pruned?.deleted, true,
+      "the clean reconcile still treats a verifiably empty account as authoritative")
   }
 }

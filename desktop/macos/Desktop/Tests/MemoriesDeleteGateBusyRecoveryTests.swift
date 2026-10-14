@@ -221,6 +221,178 @@ final class MemoriesDeleteGateBusyRecoveryTests: XCTestCase {
     XCTAssertEqual(viewModel.deferredDeleteRetry.retryCount, 0)
   }
 
+  /// Deleting a second memory during a first memory's retry window must not
+  /// cancel the first memory's retry: the scheduler held a single slot, so the
+  /// second schedule silently dropped the first row's only server delete and
+  /// the next refresh resurrected the row the user had confirmed.
+  func testOverlappingGateBusyDeletesKeepBothRetries() async throws {
+    let first = makeServerMemory(id: "gate-busy-first")
+    let second = makeServerMemory(id: "gate-busy-second")
+    try await MemoryStorage.shared.syncServerMemories([first, second])
+
+    let attemptsPerID = Locked<[String: Int]>([:])
+    let parked = Locked<[CheckedContinuation<Void, Never>]>([])
+    let viewModel = MemoriesViewModel(
+      deleteMemoryRequest: { id in
+        // First attempt per id is gate-busy; the deferred retry succeeds.
+        let count = (attemptsPerID.value[id] ?? 0) + 1
+        attemptsPerID.value[id] = count
+        if count == 1 {
+          throw APIError.memoryDeleteGateBusy(retryAfterSeconds: nil)
+        }
+      },
+      deferredRetrySleeper: { _ in
+        await withCheckedContinuation { continuation in
+          parked.value.append(continuation)
+        }
+      }
+    )
+
+    await deleteImmediately(first, on: viewModel)
+    await deleteImmediately(second, on: viewModel)
+    for _ in 0..<1_000 where parked.value.count < 2 { await Task.yield() }
+    XCTAssertEqual(parked.value.count, 2, "both deletes must arm their own retry")
+    XCTAssertEqual(viewModel.deferredDeleteRetry.pendingCount, 2)
+    XCTAssertTrue(viewModel.deferredDeleteRetry.hasPendingRetry(for: first.id))
+    XCTAssertTrue(viewModel.deferredDeleteRetry.hasPendingRetry(for: second.id))
+
+    for continuation in parked.value { continuation.resume() }
+    parked.value = []
+    let bothRetried = { attemptsPerID.value[first.id] == 2 && attemptsPerID.value[second.id] == 2 }
+    for _ in 0..<1_000 where !bothRetried() { await Task.yield() }
+    await settleAsyncWork()
+
+    XCTAssertEqual(
+      [attemptsPerID.value[first.id], attemptsPerID.value[second.id]], [2, 2],
+      "each row got its initial attempt plus its own deferred retry")
+    XCTAssertEqual(viewModel.deferredDeleteRetry.retryCount, 2)
+    XCTAssertEqual(viewModel.deferredDeleteRetry.pendingCount, 0)
+    let firstRecord = try await MemoryStorage.shared.getMemoryByBackendId(first.id)
+    XCTAssertEqual(firstRecord?.deleted, true, "the first row's retry still completed")
+    let secondRecord = try await MemoryStorage.shared.getMemoryByBackendId(second.id)
+    XCTAssertEqual(secondRecord?.deleted, true)
+  }
+
+  /// Undo during a pending retry: the retry is cancelled before the row is
+  /// restored, so the armed 409 retry can no longer delete the server row the
+  /// user just put back.
+  func testUndoDuringPendingRetryCancelsItAndKeepsTheRow() async throws {
+    let memory = makeServerMemory(id: "undo-with-pending-retry")
+    try await MemoryStorage.shared.syncServerMemories([memory])
+
+    let attempts = Locked(0)
+    let parked = Locked<CheckedContinuation<Void, Never>?>(nil)
+    let viewModel = MemoriesViewModel(
+      deleteMemoryRequest: { _ in
+        attempts.value += 1
+        throw APIError.memoryDeleteGateBusy(retryAfterSeconds: nil)
+      },
+      deferredRetrySleeper: { _ in
+        await withCheckedContinuation { continuation in
+          parked.value = continuation
+        }
+      }
+    )
+
+    await deleteImmediately(memory, on: viewModel)
+    for _ in 0..<1_000 where parked.value == nil { await Task.yield() }
+    XCTAssertNotNil(parked.value, "the gate-busy delete armed its deferred retry")
+    XCTAssertTrue(viewModel.deferredDeleteRetry.hasPendingRetry(for: memory.id))
+
+    // Re-open the undo window the way `deleteMemory(_:)` holds it between
+    // finalizing a previous pending delete (which arms the retry) and
+    // installing the new pending row: there, `pendingDeleteMemory` still
+    // names the row whose retry was just armed.
+    viewModel.pendingDeleteMemory = memory
+    viewModel.undoDelete()
+
+    XCTAssertFalse(
+      viewModel.deferredDeleteRetry.hasPendingRetry(for: memory.id),
+      "undo must clear the row's pending retry from the map")
+    parked.value?.resume()
+    parked.value = nil
+    await settleAsyncWork()
+
+    XCTAssertEqual(attempts.value, 1, "no server delete after the undo")
+    XCTAssertEqual(viewModel.deferredDeleteRetry.retryCount, 0)
+    let record = try await MemoryStorage.shared.getMemoryByBackendId(memory.id)
+    XCTAssertEqual(record?.deleted, false, "the row stays restored after undo")
+  }
+
+  /// Session reset (sign-out / owner switch) cancels every pending retry, not
+  /// just the most recent one.
+  func testResetSessionStateCancelsAllPendingRetries() async throws {
+    let first = makeServerMemory(id: "reset-cancels-first")
+    let second = makeServerMemory(id: "reset-cancels-second")
+    try await MemoryStorage.shared.syncServerMemories([first, second])
+
+    let attempts = Locked(0)
+    let parked = Locked<[CheckedContinuation<Void, Never>]>([])
+    let viewModel = MemoriesViewModel(
+      deleteMemoryRequest: { _ in
+        attempts.value += 1
+        throw APIError.memoryDeleteGateBusy(retryAfterSeconds: nil)
+      },
+      deferredRetrySleeper: { _ in
+        await withCheckedContinuation { continuation in
+          parked.value.append(continuation)
+        }
+      }
+    )
+
+    await deleteImmediately(first, on: viewModel)
+    await deleteImmediately(second, on: viewModel)
+    for _ in 0..<1_000 where parked.value.count < 2 { await Task.yield() }
+    XCTAssertEqual(viewModel.deferredDeleteRetry.pendingCount, 2)
+
+    viewModel.resetSessionState()
+
+    XCTAssertEqual(viewModel.deferredDeleteRetry.pendingCount, 0)
+    XCTAssertFalse(viewModel.deferredDeleteRetry.hasPendingRetry(for: first.id))
+    XCTAssertFalse(viewModel.deferredDeleteRetry.hasPendingRetry(for: second.id))
+    for continuation in parked.value { continuation.resume() }
+    parked.value = []
+    await settleAsyncWork()
+    XCTAssertEqual(attempts.value, 2, "no deferred retry fired after the reset")
+    XCTAssertEqual(viewModel.deferredDeleteRetry.retryCount, 0)
+  }
+
+  /// Pending retries are bounded: beyond the cap the oldest pending retry is
+  /// evicted (FIFO), and re-arming an already-pending id replaces its own slot
+  /// instead of evicting another row's.
+  func testPendingRetriesAreCappedByEvictingTheOldest() async {
+    let parked = Locked<[CheckedContinuation<Void, Never>]>([])
+    let scheduler = MemoryDeleteRetryScheduler(
+      sleeper: { _ in
+        await withCheckedContinuation { continuation in
+          parked.value.append(continuation)
+        }
+      }
+    )
+
+    for index in 0..<MemoryDeleteRetryScheduler.maxPendingRetries {
+      scheduler.schedule(after: 1, memoryID: "memory-\(index)") {}
+    }
+    scheduler.schedule(after: 1, memoryID: "memory-new") {}
+
+    XCTAssertEqual(scheduler.pendingCount, MemoryDeleteRetryScheduler.maxPendingRetries)
+    XCTAssertFalse(
+      scheduler.hasPendingRetry(for: "memory-0"), "the oldest pending retry is evicted first")
+    XCTAssertTrue(scheduler.hasPendingRetry(for: "memory-1"))
+    XCTAssertTrue(scheduler.hasPendingRetry(for: "memory-new"))
+
+    // Re-scheduling a pending id replaces its own slot, not another row's.
+    scheduler.schedule(after: 2, memoryID: "memory-1") {}
+    XCTAssertTrue(scheduler.hasPendingRetry(for: "memory-2"))
+    XCTAssertEqual(scheduler.pendingCount, MemoryDeleteRetryScheduler.maxPendingRetries)
+    XCTAssertEqual(
+      scheduler.pendingDelay, 2, "the most recently armed retry reports its delay")
+
+    for continuation in parked.value { continuation.resume() }
+    parked.value = []
+    scheduler.cancelAll()
+  }
+
   /// Lets already-started tasks (the retry scheduler hop) drain without a
   /// wall-clock wait before asserting no further work appeared.
   private func settleAsyncWork() async {
