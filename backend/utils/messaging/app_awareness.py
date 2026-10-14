@@ -2,8 +2,8 @@
 
 from database.messaging import MessagingStore
 from utils.executors import db_executor, run_blocking
-from utils.messaging.access import require_access
-from utils.messaging.history import append_digest, history_tool
+from utils.messaging.access import require_app_access as require_access
+from utils.messaging.history import history_tool
 from utils.messaging.projection import SurfaceRuntime
 
 
@@ -17,21 +17,12 @@ async def prepare(uid, session, messages, principal, *, store=None, token=None):
     token = token or await run_blocking(db_executor, store.acquire, uid, 'app')
     if token is None:
         raise RuntimeError('App surface already has an active turn')
-    events = await run_blocking(db_executor, store.events, uid, session.id)
-    if not events:
-        for message in messages[:-1]:
-            await record(store, uid, session.id, message)
-        events = await run_blocking(db_executor, store.events, uid, session.id)
-    await append_digest(store, uid, {'id': session.id}, events)
-    if messages:
-        await record(store, uid, session.id, messages[-1])
-    events = await run_blocking(db_executor, store.events, uid, session.id)
     runtime = SurfaceRuntime(
         'app',
         '',
         principal,
         (history_tool(uid),),
-        tuple({'role': e['role'], 'content': e['content']} for e in events),
+        (),
         session_id=session.id,
     )
     return runtime, store, token

@@ -23642,6 +23642,36 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Copy details for support'**
   String get syncDetailsCopy;
+
+  /// Chat apps row subtitle when the channel (iMessage) needs the Operator or Architect plan; plan names are not translated
+  ///
+  /// In en, this message translates to:
+  /// **'Available on Operator and Architect'**
+  String get chatAppsChannelPlanRequired;
+
+  /// Chat apps row subtitle when all seats for the channel are taken; app is iMessage or Telegram
+  ///
+  /// In en, this message translates to:
+  /// **'{app} is at capacity'**
+  String chatAppsAtCapacity(String app);
+
+  /// Chat apps chip to join the waitlist for a full channel
+  ///
+  /// In en, this message translates to:
+  /// **'Join Waitlist'**
+  String get chatAppsJoinWaitlist;
+
+  /// Chat apps row subtitle once the person is on the channel waitlist
+  ///
+  /// In en, this message translates to:
+  /// **'You\'re on the waitlist'**
+  String get chatAppsOnWaitlist;
+
+  /// Confirmation after joining a chat app channel waitlist
+  ///
+  /// In en, this message translates to:
+  /// **'You\'re on the waitlist. We\'ll let you know when there\'s room.'**
+  String get chatAppsWaitlistJoined;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

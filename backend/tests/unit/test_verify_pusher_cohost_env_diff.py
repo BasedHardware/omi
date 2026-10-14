@@ -232,9 +232,10 @@ def test_deploy_workflows_invoke_the_gate() -> None:
 )
 def test_batch_cohort_rejects_scope_or_route_drift(gate, chart_fixture, name, value):
     path = chart_fixture / 'backend/charts/pusher/prod_omi_pusher_values.yaml'
-    expected = gate.PROD_FINAL_PASS_SHADOW_VALUES[name][0]
+    stages = json.loads((chart_fixture / 'config/diarization-cohort-stages.json').read_text())
+    expected = stages['A'][name]
     replace_once(path, f'  - name: {name}\n    value: "{expected}"\n', f'  - name: {name}\n    value: "{value}"\n')
-    assert any(f'shadow scope {name}' in error for error in gate.validate_preflight(chart_fixture))
+    assert any('shadow scope' in error for error in gate.validate_preflight(chart_fixture))
 
 
 @pytest.mark.parametrize('stage', ['A', 'B', 'C', 'D'])
@@ -248,3 +249,26 @@ def test_complete_reviewed_ramp_stage_passes(gate, chart_fixture, stage):
                 path, f'  - name: {name}\n    value: "{expected}"\n', f'  - name: {name}\n    value: "{value}"\n'
             )
     assert gate.validate_preflight(chart_fixture) == []
+
+
+@pytest.mark.parametrize(
+    'stage,name,value',
+    [
+        ('A', 'TRANSCRIPTION_FINAL_PASS_AUTHORITATIVE', 'true'),
+        ('A', 'TRANSCRIPTION_FINAL_PASS_SYNC_ENABLED', 'true'),
+        ('B', 'TRANSCRIPTION_FINAL_PASS_AUTHORITATIVE', 'false'),
+        ('B', 'TRANSCRIPTION_FINAL_PASS_SYNC_ENABLED', 'false'),
+    ],
+)
+def test_partial_sync_authority_stage_is_rejected(gate, chart_fixture, stage, name, value):
+    stages = json.loads((chart_fixture / 'config/diarization-cohort-stages.json').read_text())
+    path = chart_fixture / 'backend/charts/pusher/prod_omi_pusher_values.yaml'
+    for key, expected in stages[stage].items():
+        previous = stages['A'][key]
+        if expected != previous:
+            replace_once(
+                path, f'  - name: {key}\n    value: "{previous}"\n', f'  - name: {key}\n    value: "{expected}"\n'
+            )
+    expected = stages[stage][name]
+    replace_once(path, f'  - name: {name}\n    value: "{expected}"\n', f'  - name: {name}\n    value: "{value}"\n')
+    assert gate.validate_preflight(chart_fixture)

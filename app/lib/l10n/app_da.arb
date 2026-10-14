@@ -4117,5 +4117,10 @@
     "syncDetailsForSupport": "Til support",
     "syncDetailsAudioFiles": "Lydfiler",
     "syncDetailsServerJobs": "Serverjobs (færdige / i alt)",
-    "syncDetailsCopy": "Kopiér detaljer til support"
+    "syncDetailsCopy": "Kopiér detaljer til support",
+    "chatAppsChannelPlanRequired": "Tilgængelig med Operator og Architect",
+    "chatAppsAtCapacity": "{app} er fuldt",
+    "chatAppsJoinWaitlist": "Skriv dig på ventelisten",
+    "chatAppsOnWaitlist": "Du er på ventelisten",
+    "chatAppsWaitlistJoined": "Du er på ventelisten. Vi giver besked, når der er plads."
 }

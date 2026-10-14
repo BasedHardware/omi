@@ -11501,5 +11501,10 @@
     "syncDetailsForSupport": "ಬೆಂಬಲಕ್ಕಾಗಿ",
     "syncDetailsAudioFiles": "ಆಡಿಯೊ ಫೈಲ್‌ಗಳು",
     "syncDetailsServerJobs": "ಸರ್ವರ್ ಜಾಬ್‌ಗಳು (ಪೂರ್ಣ / ಒಟ್ಟು)",
-    "syncDetailsCopy": "ಬೆಂಬಲಕ್ಕಾಗಿ ವಿವರಗಳನ್ನು ನಕಲಿಸಿ"
+    "syncDetailsCopy": "ಬೆಂಬಲಕ್ಕಾಗಿ ವಿವರಗಳನ್ನು ನಕಲಿಸಿ",
+    "chatAppsChannelPlanRequired": "Operator ಮತ್ತು Architect ನಲ್ಲಿ ಲಭ್ಯವಿದೆ",
+    "chatAppsAtCapacity": "{app} ಸಾಮರ್ಥ್ಯ ತುಂಬಿದೆ",
+    "chatAppsJoinWaitlist": "ಕಾಯುವ ಪಟ್ಟಿಗೆ ಸೇರಿ",
+    "chatAppsOnWaitlist": "ನೀವು ಕಾಯುವ ಪಟ್ಟಿಯಲ್ಲಿದ್ದೀರಿ",
+    "chatAppsWaitlistJoined": "ನೀವು ಕಾಯುವ ಪಟ್ಟಿಯಲ್ಲಿದ್ದೀರಿ. ಸ್ಥಳ ಲಭ್ಯವಾದಾಗ ತಿಳಿಸುತ್ತೇವೆ."
 }

@@ -13315,4 +13315,21 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get syncDetailsCopy => 'Copiar detalles para soporte';
+
+  @override
+  String get chatAppsChannelPlanRequired => 'Disponible en Operator y Architect';
+
+  @override
+  String chatAppsAtCapacity(String app) {
+    return '$app está completo';
+  }
+
+  @override
+  String get chatAppsJoinWaitlist => 'Unirme a la lista de espera';
+
+  @override
+  String get chatAppsOnWaitlist => 'Estás en la lista de espera';
+
+  @override
+  String get chatAppsWaitlistJoined => 'Estás en la lista de espera. Te avisaremos cuando haya sitio.';
 }

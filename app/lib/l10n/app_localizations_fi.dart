@@ -13280,4 +13280,21 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get syncDetailsCopy => 'Kopioi tiedot tukea varten';
+
+  @override
+  String get chatAppsChannelPlanRequired => 'Saatavilla Operator- ja Architect-tilauksissa';
+
+  @override
+  String chatAppsAtCapacity(String app) {
+    return '$app on täynnä';
+  }
+
+  @override
+  String get chatAppsJoinWaitlist => 'Liity jonotuslistalle';
+
+  @override
+  String get chatAppsOnWaitlist => 'Olet jonotuslistalla';
+
+  @override
+  String get chatAppsWaitlistJoined => 'Olet jonotuslistalla. Kerromme, kun tilaa vapautuu.';
 }

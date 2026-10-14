@@ -52,7 +52,7 @@ from fastapi.websockets import WebSocketDisconnect
 
 from models.conversation_enums import ConversationSource
 from models.conversation_photo import ConversationPhoto
-from models.message_event import PhotoDescribedEvent, PhotoProcessingEvent
+from models.message_event import PhotoDescribedEvent, PhotoProcessingEvent, MessageServiceStatusEvent
 from models.transcript_segment import SpeakerIdentityStatus
 from utils.aac import AACDecoder
 from utils.llm.openglass import describe_image
@@ -2079,6 +2079,16 @@ class ListenReceiver(ReplayFilterMixin):
             demand = getattr(self, 'live_demand', None)
             if demand is not None:
                 demand.observe(payload)
+            if payload.get('mobile_batch_capability_v1') is True:
+                # Client renews its bounded authorization lease. No audio is
+                # consumed here; legacy state reports keep their current shape.
+                await self.host.refresh_mobile_batch_admission()
+                await self.host.asend_event(
+                    MessageServiceStatusEvent(
+                        status='mobile_batch_admission',
+                        mobile_standard_batch=self.host.mobile_standard_batch,
+                    )
+                )
             if not self.host.state.realtime_demand.observe(payload):
                 logger.debug('Ignored malformed or over-budget client_state')
             config = resolve_ondemand_config()

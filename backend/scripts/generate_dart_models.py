@@ -274,6 +274,11 @@ def dart_literal(value: Any) -> str:
         return json.dumps(value)
     if isinstance(value, list):
         return 'const []'
+    if isinstance(value, dict):
+        # Constructor defaults must be constant expressions.
+        if value:
+            raise ValueError('non-empty map defaults are unsupported')
+        return 'const {}'
     return str(value)
 
 

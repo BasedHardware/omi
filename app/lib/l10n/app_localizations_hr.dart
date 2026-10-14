@@ -13309,4 +13309,21 @@ class AppLocalizationsHr extends AppLocalizations {
 
   @override
   String get syncDetailsCopy => 'Kopiraj detalje za podršku';
+
+  @override
+  String get chatAppsChannelPlanRequired => 'Dostupno uz Operator i Architect';
+
+  @override
+  String chatAppsAtCapacity(String app) {
+    return '$app je popunjen';
+  }
+
+  @override
+  String get chatAppsJoinWaitlist => 'Pridruži se listi čekanja';
+
+  @override
+  String get chatAppsOnWaitlist => 'Na listi čekanja ste';
+
+  @override
+  String get chatAppsWaitlistJoined => 'Na listi čekanja ste. Javit ćemo vam kad bude mjesta.';
 }

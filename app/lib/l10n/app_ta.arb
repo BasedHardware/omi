@@ -11501,5 +11501,10 @@
     "syncDetailsForSupport": "ஆதரவுக்காக",
     "syncDetailsAudioFiles": "ஆடியோ கோப்புகள்",
     "syncDetailsServerJobs": "சர்வர் பணிகள் (முடிந்தவை / மொத்தம்)",
-    "syncDetailsCopy": "ஆதரவுக்காக விவரங்களை நகலெடுக்கவும்"
+    "syncDetailsCopy": "ஆதரவுக்காக விவரங்களை நகலெடுக்கவும்",
+    "chatAppsChannelPlanRequired": "Operator மற்றும் Architect இல் கிடைக்கும்",
+    "chatAppsAtCapacity": "{app} நிரம்பியுள்ளது",
+    "chatAppsJoinWaitlist": "காத்திருப்புப் பட்டியலில் சேர்",
+    "chatAppsOnWaitlist": "நீங்கள் காத்திருப்புப் பட்டியலில் உள்ளீர்கள்",
+    "chatAppsWaitlistJoined": "நீங்கள் காத்திருப்புப் பட்டியலில் உள்ளீர்கள். இடம் கிடைத்ததும் தெரிவிப்போம்."
 }

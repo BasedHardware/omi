@@ -4075,5 +4075,10 @@
     "syncDetailsForSupport": "За поддръжката",
     "syncDetailsAudioFiles": "Аудиофайлове",
     "syncDetailsServerJobs": "Задачи на сървъра (готови / общо)",
-    "syncDetailsCopy": "Копиране на данните за поддръжката"
+    "syncDetailsCopy": "Копиране на данните за поддръжката",
+    "chatAppsChannelPlanRequired": "Достъпно в Operator и Architect",
+    "chatAppsAtCapacity": "{app} е запълнен",
+    "chatAppsJoinWaitlist": "Запиши се в списъка",
+    "chatAppsOnWaitlist": "Вие сте в списъка с чакащи",
+    "chatAppsWaitlistJoined": "Вие сте в списъка с чакащи. Ще ви уведомим, когато има място."
 }

@@ -9,7 +9,7 @@ provider or database IO. See `backend/docs/messaging-channels.md` for Stage A an
   artifacts, capabilities, principals and provider-neutral protocols.
 - `access.py`, `identity.py`: existing entitlement/cohort admission and stable identity keys.
 - `gateway.py`: durable admission, leases, media preparation, commands, shared turns,
-  typing lifecycle, append-only history, and fenced deferred replies.
+  typing lifecycle, bounded awareness history, and fenced deferred replies.
 - `outbound.py`, `delivery_context.py`: one reply policy and per-sink sequencing,
   retry guards, rendering metadata, artifacts and surface actions.
 - `projection.py`: one catalog projection for advertisement and execution; channels
@@ -28,6 +28,7 @@ provider or database IO. See `backend/docs/messaging-channels.md` for Stage A an
 - `adapters/transport.py`: bounded, redacted provider IO and retry semantics.
 - `adapters/media.py`: Omi's existing chat file store and prerecorded STT bridge.
 - `adapters/delivery.py`: content-free provider receipts and atomic send/receive guard.
+- `metrics.py`, `pacing.py`, `maintenance.py`: content-free instrumentation, shared Redis Telegram scheduling and bounded hourly retention.
 - `adapters/runtime.py`: explicit opt-in registration and pending-only recovery.
 
 Storage authority remains `database/messaging.py`, task codecs/inverses remain in
@@ -35,3 +36,12 @@ Storage authority remains `database/messaging.py`, task codecs/inverses remain i
 `MemoryService`. No adapter can select a different user or accept arbitrary remote URLs
 from tools. Test contracts, transport doubles and the manual live dev listener are under
 `backend/testing/messaging`; executable suites are under `backend/tests/unit`.
+
+Shaped context assembly is owned by `utils/retrieval/shaped_chat.py` and
+`context.py`: shared 10–17-message epochs, encrypted rolling summary before history,
+volatile digest/scope/clock in the final user turn, eligible stable explicit boundaries.
+`database/chat_context.py` owns source paging, generation invalidation and CAS state.
+Channel events remain bounded audit/fence data; only the current runtime event supplements
+authoritative message history. Optional context reads are deadline-bounded and fail open to plain history.
+Summaries refresh after turns in tracked, budgeted background jobs. See the rollout
+runbook for index readiness and fallback operations.

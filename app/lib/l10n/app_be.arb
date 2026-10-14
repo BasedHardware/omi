@@ -11501,5 +11501,10 @@
     "syncDetailsForSupport": "Для падтрымкі",
     "syncDetailsAudioFiles": "Аўдыяфайлы",
     "syncDetailsServerJobs": "Заданні сервера (гатова / усяго)",
-    "syncDetailsCopy": "Скапіяваць дэталі для падтрымкі"
+    "syncDetailsCopy": "Скапіяваць дэталі для падтрымкі",
+    "chatAppsChannelPlanRequired": "Даступна ў Operator і Architect",
+    "chatAppsAtCapacity": "{app} цалкам запоўнены",
+    "chatAppsJoinWaitlist": "Далучыцца да спісу чакання",
+    "chatAppsOnWaitlist": "Вы ў спісе чакання",
+    "chatAppsWaitlistJoined": "Вы ў спісе чакання. Мы паведамім, калі з'явіцца месца."
 }

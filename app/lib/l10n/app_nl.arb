@@ -4075,5 +4075,10 @@
     "syncDetailsForSupport": "Voor support",
     "syncDetailsAudioFiles": "Audiobestanden",
     "syncDetailsServerJobs": "Serverjobs (klaar / totaal)",
-    "syncDetailsCopy": "Details kopiëren voor support"
+    "syncDetailsCopy": "Details kopiëren voor support",
+    "chatAppsChannelPlanRequired": "Beschikbaar met Operator en Architect",
+    "chatAppsAtCapacity": "{app} zit vol",
+    "chatAppsJoinWaitlist": "Op de wachtlijst",
+    "chatAppsOnWaitlist": "Je staat op de wachtlijst",
+    "chatAppsWaitlistJoined": "Je staat op de wachtlijst. We laten het je weten zodra er plek is."
 }
