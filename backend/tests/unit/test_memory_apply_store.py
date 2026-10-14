@@ -3149,3 +3149,10 @@ def test_memory_use_commit_replay_conflict_and_receipt_failure_are_atomic(store,
             db_client=strict,
         )
     assert strict.rows == before_failed_commit
+
+
+def test_deletion_receipt_cleanup_empty_query_never_acquires_gate(store, monkeypatch):
+    gate = MagicMock(side_effect=AssertionError("empty sweep must not acquire gate"))
+    monkeypatch.setattr(store, "destructive_operation_gate", gate)
+    assert store.cleanup_expired_memory_deletion_receipts("u1", db_client=_db_with()) == 0
+    gate.assert_not_called()

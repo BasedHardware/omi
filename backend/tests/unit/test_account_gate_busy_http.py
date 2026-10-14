@@ -6,7 +6,7 @@ from types import SimpleNamespace
 import pytest
 from fastapi import HTTPException
 
-from database.legal_holds import DestructiveOperationInProgress
+from database.legal_holds import DestructiveOperationInProgress, LegalHoldAuthorityUnavailable
 from models.feedback import MemoryUseFeedback
 from utils.other.account_gate_http import (
     ACCOUNT_GATE_BUSY_DETAIL,
@@ -85,3 +85,39 @@ def test_memory_use_replay_maps_destructive_gate_to_account_gate_busy(monkeypatc
         )
 
     _assert_gate_busy(caught.value, fence)
+
+
+@pytest.mark.parametrize("error_type", [DestructiveOperationInProgress, LegalHoldAuthorityUnavailable])
+def test_account_gate_cascade_purge_maps_fence_before_generic_failure(monkeypatch, error_type):
+    from utils.memory import memory_service
+
+    fence = error_type("canonical mutation blocked by destructive operation")
+
+    def blocked(*args, **kwargs):
+        raise fence
+
+    monkeypatch.setattr(memory_service, "purge_canonical_memory_projections", blocked)
+    with pytest.raises(HTTPException) as caught:
+        memory_service._purge_required_canonical_projections("uid", ["mem"], db_client=object(), reason="delete")
+    assert caught.value.status_code == 409
+    assert caught.value.headers["Retry-After"] == "2"
+    assert caught.value.__cause__ is fence
+
+
+@pytest.mark.parametrize("error_type", [DestructiveOperationInProgress, LegalHoldAuthorityUnavailable])
+def test_account_gate_deletion_boundary_maps_inner_transaction_fence(monkeypatch, error_type):
+    from contextlib import nullcontext
+    from utils.memory import memory_service
+
+    fence = error_type("canonical mutation blocked by destructive operation")
+    monkeypatch.setattr(memory_service, "destructive_operation_gate", lambda *args, **kwargs: nullcontext("token"))
+
+    @memory_service._legal_hold_gated_deletion
+    def deletion(self, uid):
+        raise fence
+
+    with pytest.raises(HTTPException) as caught:
+        deletion(SimpleNamespace(db_client=object()), "uid")
+    assert caught.value.status_code == 409
+    assert caught.value.headers["Retry-After"] == "2"
+    assert caught.value.__cause__ is fence

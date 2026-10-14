@@ -3316,6 +3316,8 @@ def cleanup_expired_memory_deletion_receipts(
         rows = list(query.stream())
     except Exception:
         return 0
+    if not rows:
+        return 0
     try:
         # Legal hold and retention cleanup share the same account-wide
         # linearization gate. A hold that wins first preserves every receipt;

@@ -9,6 +9,7 @@ outcome is known. User-facing routes never write either authority document.
 
 from __future__ import annotations
 
+import logging
 from contextlib import contextmanager
 from contextvars import ContextVar
 from datetime import datetime, timezone
@@ -19,6 +20,8 @@ from google.cloud.firestore_v1 import transactional
 
 from database.account_deletion_marker import account_deletion_firestore_client
 from database.account_deletion_policy import account_deletion_blocks_access, normalize_account_deletion_status
+
+logger = logging.getLogger(__name__)
 
 LEGAL_HOLDS_COLLECTION = "legal_holds"
 LEGAL_HOLD_DELETION_GATES_COLLECTION = "legal_hold_deletion_gates"
@@ -108,12 +111,12 @@ def _validated_gate(snapshot: Any) -> dict[str, Any] | None:
     return payload
 
 
-def _gate_blocks(gate: dict[str, Any] | None, now: datetime) -> bool:
-    """True when a validated gate row represents a live destructive operation."""
+def _gate_blocks(gate: dict[str, Any] | None, now: datetime, *, kind: str | None = None) -> bool:
+    """Block live work of a different kind; untyped fences stay conservative."""
 
     if gate is None or gate["state"] != "running":
         return False
-    if gate["kind"] == _OBSOLETE_WRITER_GATE_KIND:
+    if gate["kind"] == _OBSOLETE_WRITER_GATE_KIND or (kind is not None and gate["kind"] == kind):
         return False
     return (now - gate["started_at"]).total_seconds() < GATE_STALE_AFTER_SECONDS
 
@@ -213,10 +216,10 @@ def _acquire_destructive_operation_transaction(
     if gate is not None and gate["state"] == "running":
         if gate["uid"] == uid and gate["kind"] == kind and gate["token"] == token:
             return
-        if _gate_blocks(gate, now):
+        if _gate_blocks(gate, now, kind=kind):
             raise DestructiveOperationInProgress("another destructive operation owns the account gate")
-        # Abandoned gate (holder crashed, or an obsolete writer-kind row):
-        # take it over rather than leaving the account permanently blocked.
+        # Same-kind peers replace the token; abandoned and obsolete gates
+        # also allow takeover. Transactional deletion still checks the token.
     transaction.set(
         gate_ref,
         {
@@ -258,10 +261,15 @@ def _finish_destructive_operation_transaction(
 ) -> None:
     gate_ref = _document(client, f"{LEGAL_HOLD_DELETION_GATES_COLLECTION}/{uid}")
     gate = _validated_gate(gate_ref.get(transaction=transaction))
-    if gate is None or gate["uid"] != uid or gate["kind"] != kind or gate["token"] != token:
+    if gate is None or gate["uid"] != uid or gate["kind"] != kind:
         raise LegalHoldAuthorityUnavailable("destructive operation gate ownership changed")
+    if gate["token"] != token:
+        # A same-kind peer owns this row now. Never finish its operation.
+        logger.info("destructive operation finish skipped after same-kind takeover")
+        return
     if gate["state"] != "running":
         if gate["state"] == outcome:
+            logger.info("destructive operation finish already recorded")
             return
         raise LegalHoldAuthorityUnavailable("destructive operation gate is already terminal")
     transaction.set(gate_ref, {**gate, "state": outcome, "finished_at": now})

@@ -34,7 +34,11 @@ from database._client import db as default_db_client
 from database.memory_collections import MemoryCollections
 from database.memory_apply_store import EvidenceIdentityConflict, privacy_deletion_receipt_id
 from database.memory_ledger import purge_source_replacement_receipts_for_memories
-from database.legal_holds import destructive_operation_gate
+from database.legal_holds import (
+    DestructiveOperationInProgress,
+    LegalHoldAuthorityUnavailable,
+    destructive_operation_gate,
+)
 from database.review_queue import purge_stale_review_conflicts_for_memories
 from database.vector_db import delete_memory_vector
 from models.memories import MemoryDB
@@ -58,6 +62,7 @@ from models.product_memory import (
     SourceState,
 )
 from utils.log_sanitizer import sanitize, sanitize_validation_error
+from utils.other.account_gate_http import account_gate_busy_http_exception
 from utils.other.list_budget import ListReadBudget, ListReadBudgetExhausted, budgeted_get_all
 from utils.other.portability_read import check_portability_read
 from utils.memory.canonical_visibility_filter import batch_canonical_expiry_observations
@@ -158,14 +163,17 @@ def _legal_hold_gated_deletion(method: Callable[..., Any]) -> Callable[..., Any]
         # derived data for a row the assignment transaction already tombstoned.
         # It must not take the exclusive account gate reserved for genuinely
         # destructive work; callers pass claim_destructive_gate=False.
-        if not kwargs.get("claim_destructive_gate", True):
-            return method(self, uid, *args, **kwargs)
-        with destructive_operation_gate(
-            uid,
-            kind="explicit_memory_deletion",
-            firestore_client=self.db_client,
-        ):
-            return method(self, uid, *args, **kwargs)
+        try:
+            if not kwargs.get("claim_destructive_gate", True):
+                return method(self, uid, *args, **kwargs)
+            with destructive_operation_gate(
+                uid,
+                kind="explicit_memory_deletion",
+                firestore_client=self.db_client,
+            ):
+                return method(self, uid, *args, **kwargs)
+        except (DestructiveOperationInProgress, LegalHoldAuthorityUnavailable) as exc:
+            raise account_gate_busy_http_exception() from exc
 
     return wrapped
 
@@ -199,6 +207,10 @@ def _purge_required_canonical_projections(
             include_review_queue=False,
             preserve_source_replacement_receipts=preserve_source_replacement_receipts,
         )
+    except (DestructiveOperationInProgress, LegalHoldAuthorityUnavailable) as exc:
+        raise account_gate_busy_http_exception() from exc
+    except HTTPException:
+        raise
     except Exception as exc:
         raise HTTPException(
             status_code=503,
@@ -4132,6 +4144,8 @@ class MemoryService:
                         db_client=self.db_client,
                         include_legacy_commits=True,
                     )
+                except (DestructiveOperationInProgress, LegalHoldAuthorityUnavailable) as exc:
+                    raise account_gate_busy_http_exception() from exc
                 except Exception as exc:
                     raise HTTPException(
                         status_code=503,
@@ -4186,6 +4200,8 @@ class MemoryService:
                 db_client=self.db_client,
                 include_legacy_commits=True,
             )
+        except (DestructiveOperationInProgress, LegalHoldAuthorityUnavailable) as exc:
+            raise account_gate_busy_http_exception() from exc
         except Exception as exc:
             raise HTTPException(
                 status_code=503,
@@ -4227,6 +4243,8 @@ class MemoryService:
                 if getattr(canonical_item, "status", None) == MemoryItemStatus.tombstoned:
                     try:
                         historical_ids.extend(canonical_memory_lineage_ids(uid, [memory_id], db_client=self.db_client))
+                    except (DestructiveOperationInProgress, LegalHoldAuthorityUnavailable) as exc:
+                        raise account_gate_busy_http_exception() from exc
                     except Exception as exc:
                         raise HTTPException(
                             status_code=503,
@@ -4305,6 +4323,8 @@ class MemoryService:
                 db_client=self.db_client,
                 include_legacy_commits=True,
             )
+        except (DestructiveOperationInProgress, LegalHoldAuthorityUnavailable) as exc:
+            raise account_gate_busy_http_exception() from exc
         except Exception as exc:
             raise HTTPException(
                 status_code=503,
@@ -4339,6 +4359,8 @@ class MemoryService:
                 db_client=self.db_client,
                 include_legacy_commits=True,
             )
+        except (DestructiveOperationInProgress, LegalHoldAuthorityUnavailable) as exc:
+            raise account_gate_busy_http_exception() from exc
         except Exception as exc:
             raise HTTPException(
                 status_code=503,
@@ -4375,6 +4397,8 @@ class MemoryService:
                 db_client=self.db_client,
                 include_legacy_commits=True,
             )
+        except (DestructiveOperationInProgress, LegalHoldAuthorityUnavailable) as exc:
+            raise account_gate_busy_http_exception() from exc
         except Exception as exc:
             raise HTTPException(
                 status_code=503,
@@ -4441,6 +4465,8 @@ class MemoryService:
                     include_legacy_commits=True,
                     preserve_source_replacement_receipts=True,
                 )
+            except (DestructiveOperationInProgress, LegalHoldAuthorityUnavailable) as exc:
+                raise account_gate_busy_http_exception() from exc
             except Exception as exc:
                 raise HTTPException(
                     status_code=503,
@@ -4456,6 +4482,8 @@ class MemoryService:
                     retracted_ids,
                     firestore_client=self.db_client,
                 )
+            except (DestructiveOperationInProgress, LegalHoldAuthorityUnavailable) as exc:
+                raise account_gate_busy_http_exception() from exc
             except Exception as exc:
                 raise HTTPException(
                     status_code=503,

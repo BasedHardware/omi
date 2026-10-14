@@ -1323,7 +1323,7 @@ def delete_conversation(
                 ) from error
             except RuntimeError as error:
                 # Isolated router tests stub database/utils.other at import time.
-                if type(error).__name__ != "DestructiveOperationInProgress":
+                if type(error).__name__ not in {"DestructiveOperationInProgress", "LegalHoldAuthorityUnavailable"}:
                     raise
                 from utils.other.account_gate_http import account_gate_busy_http_exception
 
