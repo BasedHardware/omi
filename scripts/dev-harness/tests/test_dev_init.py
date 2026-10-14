@@ -436,8 +436,6 @@ def test_dev_init_refuses_a_foreign_checkout_venv_override(tmp_path: Path) -> No
     assert not any(line.startswith("FOREIGNVENV -m pip") for line in calls), calls
 
 
-
-
 def test_dev_init_bootstraps_the_pinned_311_when_discoverable(tmp_path: Path) -> None:
     """Bootstrap must prefer the repo-pinned 3.11 over the floor pick.
 
@@ -516,6 +514,56 @@ def test_dev_init_refuses_an_existing_below_floor_venv(tmp_path: Path) -> None:
     )
 
     assert result.returncode == 1, result.stdout
-    assert "not usable by the dev harness" in result.stdout, result.stdout
+    assert "below the 3.10 floor" in result.stdout, result.stdout
     assert "make lane-bootstrap" in result.stdout, result.stdout
     assert "refusing to install requirements into it" in result.stdout, result.stdout
+
+
+def test_dev_init_completes_an_interrupted_install_in_an_existing_venv(
+    tmp_path: Path,
+) -> None:
+    """A floor-OK venv missing cheap-gate packages is completable, not refused.
+
+    An interrupted first run leaves backend/.venv at exactly this shape (the
+    venv was created, the requirements install did not finish). Refusing it
+    would deadlock: the only tool allowed to finish the install is the one
+    that refuses. dev-init must complete the install instead (Oracle review
+    follow-up on the Codex P1).
+    """
+    repo = _fixture_repo(tmp_path)
+    # Script the fixture venv python to log its non-probe calls (the pip
+    # install) while still reporting its sys.prefix — floor OK, import probe
+    # passes, i.e. exactly the interrupted-first-run shape. dev-init must
+    # proceed to the pip install rather than refuse.
+    log = tmp_path / "resume-calls.log"
+    venv_python = repo / "backend/.venv/bin/python"
+    venv_python.write_text(
+        "#!/usr/bin/env bash\n"
+        f'LOG="{log}"\n'
+        'if [ "${1:-}" = "-c" ] && [ "${2:-}" = "import sys; print(sys.prefix)" ]; then\n'
+        '  d="$(cd "$(dirname "$0")/.." && pwd -P)"\n'
+        "  printf '%s\\n' \"$d\"\n"
+        "  exit 0\n"
+        "fi\n"
+        "printf 'VENV %s\\n' \"$*\" >> \"$LOG\"\n"
+        "exit 0\n",
+        encoding="utf-8",
+    )
+    venv_python.chmod(venv_python.stat().st_mode | 0o755)
+
+    env = _clean_env()
+    result = subprocess.run(
+        [_bash(), "scripts/dev-harness/dev-init.sh"],
+        cwd=repo,
+        env=env,
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        timeout=120,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stdout
+    assert "below the 3.10 floor" not in result.stdout, result.stdout
+    calls = log.read_text(encoding="utf-8").splitlines()
+    assert any(line.startswith("VENV -m pip install") for line in calls), calls

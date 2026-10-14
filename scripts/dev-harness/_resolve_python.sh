@@ -28,8 +28,11 @@ dev_harness_python_floor_ok() {
 # toolchain — the same runtime `make lane-backend` / `make lane-bootstrap`
 # provision.
 dev_harness_backend_pinned_python() {
+  # Strict 3.11 predicate: the backend pylock declares `>=3.11,<3.12`, so a
+  # 3.12+ interpreter is as unusable for the backend venv as a 3.10 one.
+  local pinned_check='import sys; raise SystemExit(0 if (3, 11) <= sys.version_info[:2] < (3, 12) else 1)'
   if command -v python3.11 >/dev/null 2>&1 \
-    && dev_harness_python_floor_ok python3.11; then
+    && python3.11 -c "$pinned_check" >/dev/null 2>&1; then
     printf '%s\n' python3.11
     return 0
   fi
@@ -37,7 +40,12 @@ dev_harness_backend_pinned_python() {
   uv_bin="$(command -v uv 2>/dev/null)" || return 1
   candidate="$("$uv_bin" python find 3.11 2>/dev/null)" || return 1
   [ -n "$candidate" ] || return 1
-  if [ -x "$candidate" ] && dev_harness_python_floor_ok "$candidate"; then
+  # Git Bash: `uv python find` prints a native Windows path, which the bash
+  # `[ -x ]` probe cannot execute until converted to the POSIX form.
+  if command -v cygpath >/dev/null 2>&1; then
+    candidate="$(cygpath -u "$candidate" 2>/dev/null || printf '%s' "$candidate")"
+  fi
+  if [ -x "$candidate" ] && "$candidate" -c "$pinned_check" >/dev/null 2>&1; then
     printf '%s\n' "$candidate"
     return 0
   fi
