@@ -15,17 +15,29 @@ else
   echo "Keeping existing $secrets_file (not overwritten)"
 fi
 
-# Any missing venv gets created from bare `python3` (best available bootstrap
-# interpreter); the resolver is re-run afterwards, so a floor-qualified
-# versioned/Homebrew interpreter no longer prevents venv creation (a fresh
-# checkout with python3.12 but no backend/.venv must still get the venv, and
-# the requirements install must never hit the global interpreter).
+# Bootstrap the venv with the resolver's pick BEFORE it exists: with no venv,
+# dev_harness_python returns a floor-qualified interpreter when one exists
+# (python3.12/Homebrew prefix), so the created venv satisfies the 3.10 floor.
+# Creation keys on the venv's absence (a floor-qualified fallback on a fresh
+# checkout must not skip it — Codex P1), and the install below runs only
+# through the venv, never a global interpreter (Codex/Oracle follow-up: a
+# 3.9-only host must not have its requirements installed globally either).
 if [ ! -x "backend/.venv/bin/python" ] && [ ! -x "backend/.venv/Scripts/python.exe" ]; then
-  python3 -m venv backend/.venv
-  echo "Created backend/.venv"
+  BOOTSTRAP_PY="$(dev_harness_python)"
+  "$BOOTSTRAP_PY" -m venv backend/.venv
+  echo "Created backend/.venv (with $BOOTSTRAP_PY)"
 fi
 
 PYTHON_BIN="$(dev_harness_python)"
+case "$PYTHON_BIN" in
+  *backend/.venv/*) ;;
+  *)
+    echo "dev-init: resolved interpreter '$PYTHON_BIN' is not backend/.venv; refusing to install requirements outside the venv." >&2
+    echo "The venv is missing or below the 3.10 floor. Run: make lane-bootstrap (Python 3.11 venv)," >&2
+    echo "or install Python >= 3.10 and re-run dev-init." >&2
+    exit 1
+    ;;
+esac
 if ! "$PYTHON_BIN" -m pip --version >/dev/null; then
   echo "${PYTHON_BIN%/bin/python} is incomplete; recreate it with: python3 -m venv backend/.venv" >&2
   exit 1

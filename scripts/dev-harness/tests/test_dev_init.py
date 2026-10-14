@@ -250,3 +250,113 @@ def test_dev_init_creates_the_venv_even_with_a_floor_qualified_fallback(
     # interpreter.
     assert any(line.startswith("VENV -m pip --version") for line in calls), calls
     assert any(line.startswith("VENV -m pip install") for line in calls), calls
+
+
+def _write_logging_bootstrap_stub(directory: Path, name: str, log: Path, *, floor_ok: bool) -> None:
+    """A fake interpreter whose probes are scripted and whose `venv` subcommand
+    materializes a stub venv whose python logs its invocations."""
+    stub = directory / name
+    stub.write_text(
+        "#!/usr/bin/env bash\n"
+        f'LOG="{log}"\n'
+        f'FLOOR_OK="{1 if floor_ok else 0}"\n'
+        'if [ "${1:-}" = "-m" ] && [ "${2:-}" = "venv" ]; then\n'
+        '  target="$3"\n'
+        '  mkdir -p "$target/bin"\n'
+        "  cat > \"$target/bin/python\" <<'INNER'\n"
+        "#!/usr/bin/env bash\n"
+        f'printf \'VENV %s\\n\' "$*" >> "{log}"\n'
+        "exit 0\n"
+        "INNER\n"
+        '  chmod +x "$target/bin/python"\n'
+        f'printf \'%s %s\\n\' "{name}" "$*" >> "{log}"\n'
+        "  exit 0\n"
+        "fi\n"
+        'case "$2" in\n'
+        "  *version_info*) exit $((1 - FLOOR_OK)) ;;\n"
+        "  *) exit 0 ;;\n"
+        "esac\n"
+        f'printf \'%s %s\\n\' "{name}" "$*" >> "{log}"\n'
+        "exit 0\n",
+        encoding="utf-8",
+    )
+    stub.chmod(stub.stat().st_mode | stat.S_IXUSR)
+
+
+def test_dev_init_bootstraps_the_venv_with_a_floor_qualified_interpreter(
+    tmp_path: Path,
+) -> None:
+    """The bootstrap interpreter is the resolver's floor-qualified pick.
+
+    With python3.12 (floor-qualified) ahead of a 3.9 `python3` on PATH, the
+    created venv must come from python3.12 — creating it from the 3.9 host
+    interpreter would produce a below-floor venv that the resolver then
+    rejects (Oracle follow-up on the Codex P1).
+    """
+    repo = _fixture_repo(tmp_path)
+    (repo / "backend/.venv/bin/python").unlink()
+    log = tmp_path / "bootstrap-calls.log"
+    stub_bin = tmp_path / "bootstrap-stub-bin"
+    stub_bin.mkdir()
+    _write_logging_bootstrap_stub(stub_bin, "python3.12", log, floor_ok=True)
+    _write_logging_bootstrap_stub(stub_bin, "python3", log, floor_ok=False)
+
+    env = _clean_env()
+    env["PATH"] = os.pathsep.join((str(stub_bin), "/usr/bin", "/bin"))
+    result = subprocess.run(
+        [_bash(), "scripts/dev-harness/dev-init.sh"],
+        cwd=repo,
+        env=env,
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        timeout=120,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stdout
+    assert "Created backend/.venv (with python3.12)" in result.stdout, result.stdout
+    calls = log.read_text(encoding="utf-8").splitlines()
+    assert any(line.startswith("python3.12 -m venv backend/.venv") for line in calls), calls
+    assert any(line.startswith("VENV -m pip install") for line in calls), calls
+
+
+def test_dev_init_refuses_to_install_outside_the_venv(tmp_path: Path) -> None:
+    """The requirements install must never run outside backend/.venv.
+
+    When the resolver's final pick is not the repo venv (here: an explicit
+    PYTHON override, the same seam the resolver documents), dev-init must
+    refuse with lane-bootstrap guidance instead of pip-installing into a
+    global/foreign interpreter (Oracle follow-up on the Codex P1).
+    """
+    repo = _fixture_repo(tmp_path)
+    log = tmp_path / "refusal-calls.log"
+    stub_bin = tmp_path / "refusal-stub-bin"
+    stub_bin.mkdir()
+    foreign = stub_bin / "foreign-python"
+    foreign.write_text(
+        "#!/usr/bin/env bash\n"
+        f'printf \'FOREIGN %s\\n\' "$*" >> "{log}"\n'
+        "exit 0\n",
+        encoding="utf-8",
+    )
+    foreign.chmod(foreign.stat().st_mode | stat.S_IXUSR)
+
+    env = _clean_env()
+    env["PYTHON"] = str(foreign)
+    result = subprocess.run(
+        [_bash(), "scripts/dev-harness/dev-init.sh"],
+        cwd=repo,
+        env=env,
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        timeout=120,
+        check=False,
+    )
+
+    assert result.returncode == 1, result.stdout
+    assert "refusing to install requirements outside the venv" in result.stdout, result.stdout
+    assert "make lane-bootstrap" in result.stdout, result.stdout
+    calls = log.read_text(encoding="utf-8").splitlines() if log.exists() else []
+    assert not any(line.startswith("FOREIGN -m pip") for line in calls), calls
