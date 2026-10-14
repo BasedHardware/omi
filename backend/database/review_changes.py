@@ -17,11 +17,11 @@ from pydantic import BaseModel, ConfigDict, Field
 from database import (
     entities,
     memory_ledger,
-    review_exact_undo,
     review_memory_hygiene,
     review_queries,
     review_store as store,
 )
+from database import review_exact_undo
 from database.read_boundary import parse_payload_strict
 from models.review import ReviewChange, ReviewChangesResponse
 

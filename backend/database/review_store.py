@@ -266,7 +266,7 @@ def release_failed_answer(uid: str, item_id: str) -> None:
     release(client().transaction())
 
 
-_CONTENT_FIELDS = {'item', 'source', 'change', 'edits', 'before', 'memory_edit', 'summary'}
+_CONTENT_FIELDS = {'item', 'source', 'change', 'edits', 'before', 'memory_edit', 'memory_hygiene', 'summary'}
 
 
 def _json_default(value):
