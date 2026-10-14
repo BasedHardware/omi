@@ -3,7 +3,7 @@
 import asyncio
 from types import SimpleNamespace
 
-from models.dream_harness import Verification, VerificationBatch
+from models.agent_tools import Verification, VerificationBatch
 from utils.dream_verify import verify, disposition, batches
 from utils.llm.shaped_agent import Turn
 

@@ -24,6 +24,23 @@ VERIFY_LANE = 'omi:auto:dream-verify'
 CONTEXT_BYTES = 1048576
 
 
+def accounted_usage(turn, aggregate, ceiling):
+    unknown = aggregate.get('unknown_attempts', 0)
+    reported = aggregate.get('unknown_reported_tokens', 0)
+    if (
+        type(unknown) is not int
+        or not 0 <= unknown <= 2
+        or type(reported) is not int
+        or not 0 <= reported <= turn.tokens
+    ):
+        raise ValueError('dream_invalid_usage')
+    charged = turn.tokens + unknown * ceiling - reported
+    if charged < turn.tokens or charged > 2 * ceiling:
+        raise ValueError('dream_invalid_usage')
+    turn.accounted_tokens = charged
+    return unknown
+
+
 def input_bytes(messages, mount):
     payload = {
         'messages': messages,
@@ -99,9 +116,8 @@ async def model_turn(
         )
         aggregate = error_body.get('dream_usage')
         if isinstance(aggregate, dict):
-            unknown = aggregate.get('unknown_attempts', 2)
             paid = usage_turn(aggregate)
-            paid.accounted_tokens = paid.tokens + unknown * (ceiling + completion)
+            unknown = accounted_usage(paid, aggregate, ceiling + completion)
             if on_usage is not None:
                 await on_usage(paid)
             known_zero = unknown == 0 and paid.tokens == 0
@@ -131,9 +147,7 @@ async def model_turn(
         turn.cache_unreported_tokens = unreported
     else:
         turn = usage_turn(body.get('usage') or {})
-    turn.accounted_tokens = turn.tokens + unknown * (ceiling + completion)
-    if turn.accounted_tokens > 2 * (ceiling + completion):
-        raise ValueError('dream_invalid_usage')
+    accounted_usage(turn, aggregate or {}, ceiling + completion)
     if usage_sink is not None:
         usage_sink['usage_unknown'] = unknown > 0
     # Account before parsing so a billed malformed verifier response is paid.

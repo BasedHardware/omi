@@ -118,10 +118,10 @@ env:
   # Bounded, process-local late identity repair coalescing; rollback with false.
   - name: OWNER_IDENTITY_RETRY_COALESCE_ENABLED
     value: "true"
-  - name: DREAM_AGENT_MODE
-    value: 'on'
-  - name: DREAM_AGENT_UID_ALLOWLIST
-    value: '9OqYLlKJv4hmeYpIhwJcHBR975i2,vi7SA9ckQCe4ccobWNxlbdcNdC23'
+  - name: DREAM_AGENT_ENABLED
+    value: 'true'
+  - name: DREAM_AGENT_ELIGIBILITY
+    value: 'all'
   # Public client token for v2 cohort reads only; shared backend PostHog stays disabled.
   - name: PROACTIVITY_V2_POSTHOG_TOKEN
     value: "phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y"

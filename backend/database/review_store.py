@@ -86,6 +86,9 @@ def enqueue_review_proposal(
 
     @firestore.transactional
     def enqueue(tx):
+        from utils.dream_effect_fence import assert_active
+
+        assert_active(uid, tx)
         budget = (budget_ref.get(transaction=tx).to_dict() or {}) if is_agent or dream_run_id else {}
         current = decode_doc(uid, ref.get(transaction=tx).to_dict()) or {}
         if marker is not None and marker.get(transaction=tx).exists:
@@ -142,6 +145,9 @@ def enqueue_review_proposal(
 
 def validate_records(uid: str, tx, expected_records: dict | None) -> None:
     """Fence the offered target/evidence snapshots in the edit's transaction."""
+    from utils.dream_effect_fence import assert_active
+
+    assert_active(uid, tx)
     for path, expected in (expected_records or {}).items():
         collection, key = path.split('/', 1)
         current = user(uid).collection(collection).document(key).get(transaction=tx).to_dict()
@@ -266,7 +272,17 @@ def release_failed_answer(uid: str, item_id: str) -> None:
     release(client().transaction())
 
 
-_CONTENT_FIELDS = {'item', 'source', 'change', 'edits', 'before', 'memory_edit', 'memory_hygiene', 'summary'}
+_CONTENT_FIELDS = {
+    'item',
+    'source',
+    'change',
+    'edits',
+    'before',
+    'memory_edit',
+    'memory_hygiene',
+    'summary',
+    'transcript_overlay',
+}
 
 
 def _json_default(value):

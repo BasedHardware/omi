@@ -1,3 +1,4 @@
+from database import conversation_visibility_counts
 import copy
 import hashlib
 import json
@@ -336,6 +337,10 @@ def _prepare_conversation_for_write(data: Dict[str, Any], uid: str, level: str) 
         else:
             data.pop(owner_diagnostics.FIELD, None)
     segments = data.get('transcript_segments')
+    if isinstance(segments, list) and any('original_text' in segment for segment in segments):
+        from utils.agent_capabilities.transcripts import originals
+
+        segments = data['transcript_segments'] = originals(segments)
     try:
         _reveal_match_scores_for_read(data, uid)
         if isinstance(segments, list):
@@ -599,7 +604,9 @@ def prepare_conversation_for_read(conversation_data: Optional[Dict[str, Any]], u
     level = data.get('data_protection_level')
 
     if level == 'enhanced':
-        return _decrypt_conversation_data(data, uid)
+        from utils.agent_capabilities.transcripts import project
+
+        return project(uid, _decrypt_conversation_data(data, uid))
 
     # Handle standard level with potential compression
     if data.get('transcript_segments_compressed'):
@@ -617,7 +624,9 @@ def prepare_conversation_for_read(conversation_data: Optional[Dict[str, Any]], u
         reveal_segments(segments, uid)
     _reveal_manual_speaker_assignments_for_read(data, uid)
     _reveal_match_scores_for_read(data, uid)
-    return data
+    from utils.agent_capabilities.transcripts import project
+
+    return project(uid, data)
 
 
 def document_data_with_revision(document) -> Optional[Dict[str, Any]]:
@@ -782,77 +791,6 @@ def is_visible_conversation(conversation: Optional[Mapping[str, Any]], *, includ
         if conversation.get('discarded') or is_completed_rule_discard(conversation):
             return False
     return True
-
-
-def _conversation_matches_list_predicates(
-    data: Mapping[str, Any],
-    *,
-    include_discarded: bool,
-    statuses: Optional[List[str]] = None,
-    sources: Optional[List[str]] = None,
-    start_date: Optional[datetime] = None,
-    end_date: Optional[datetime] = None,
-    categories: Optional[List[str]] = None,
-    folder_id: Optional[str] = None,
-    starred: Optional[bool] = None,
-    date_field: str = 'created_at',
-) -> bool:
-    if not include_discarded and data.get('discarded'):
-        return False
-    if statuses and data.get('status') not in statuses:
-        return False
-    if sources and data.get('source') not in sources:
-        return False
-    if categories:
-        structured = data.get('structured') if isinstance(data.get('structured'), dict) else {}
-        if (structured or {}).get('category') not in categories:
-            return False
-    if folder_id is not None and data.get('folder_id') != folder_id:
-        return False
-    if starred is not None and bool(data.get('starred')) != starred:
-        return False
-    stamp = data.get(date_field)
-    if start_date is not None and (stamp is None or stamp < start_date):
-        return False
-    if end_date is not None and (stamp is None or stamp > end_date):
-        return False
-    return True
-
-
-def _count_matching_tombstones(
-    collection: Any,
-    *,
-    include_discarded: bool,
-    statuses: Optional[List[str]] = None,
-    sources: Optional[List[str]] = None,
-    start_date: Optional[datetime] = None,
-    end_date: Optional[datetime] = None,
-    categories: Optional[List[str]] = None,
-    folder_id: Optional[str] = None,
-    starred: Optional[bool] = None,
-) -> int:
-    """Count `deleted==True` rows that would have matched the list query.
-
-    Equality on `deleted` only matches documents that have the field, so
-    pre-#15193 conversations (no `deleted` field) are not subtracted. Tombstones
-    per user are few; this avoids a composite index on every list-filter combo.
-    """
-    matching = 0
-    for doc in collection.where(filter=FieldFilter('deleted', '==', True)).stream():
-        data = doc.to_dict() or {}
-        if _conversation_matches_list_predicates(
-            data,
-            include_discarded=include_discarded,
-            statuses=statuses,
-            sources=sources,
-            start_date=start_date,
-            end_date=end_date,
-            categories=categories,
-            folder_id=folder_id,
-            starred=starred,
-        ):
-            matching += 1
-    return matching
 
 
 # Legacy completed rule-discards still match ``discarded == False``. Skip at
@@ -1493,7 +1431,7 @@ def get_conversations_count(
         conversations_ref = conversations_ref.order_by('created_at', direction=firestore.Query.DESCENDING)
     result = conversations_ref.count().get()
     matching = int(result[0][0].value)
-    matching -= _count_matching_tombstones(
+    matching -= conversation_visibility_counts.count_hidden(
         db.collection('users').document(uid).collection(conversations_collection),
         include_discarded=include_discarded,
         statuses=statuses,

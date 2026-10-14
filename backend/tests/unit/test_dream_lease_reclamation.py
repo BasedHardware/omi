@@ -36,7 +36,7 @@ def db(monkeypatch):
 
 
 def caps(context='bounded', **kw):
-    return Caps(passes=24, daily_usd=250, global_daily_usd=1000, **kw)
+    return Caps(tokens=24000, passes=24, daily_usd=250, global_daily_usd=1000, **kw)
 
 
 def acquire(db, at=NOW, context='bounded', **kw):
@@ -114,7 +114,7 @@ def test_unknown_usage_restores_full_reservation_only_on_original_day_ledger(db,
         'status': 'failed',
         'reason': 'abandoned',
         'usage_unknown': True,
-        'context_mode': 'bounded',
+        'size_bucket': 'light',
         'abandoned': 1,
         'tokens': 0,
         'records_queued_after': 1,
@@ -174,9 +174,10 @@ def test_idle_reclamation_preserves_watermark_and_score(db):
     del db.rows[DIRTY]
     db.rows[('dream_users', UID)]['score'] = 0
     before = deepcopy(db.rows[('dream_users', UID)])
-    assert acquire(db, NOW + timedelta(seconds=deadline('bounded') + 1)) is None
+    replacement = acquire(db, NOW + timedelta(seconds=deadline('bounded') + 1))
+    assert replacement and replacement['hunt']
     state = db.rows[('dream_users', UID)]
-    assert state['lease'] is None and state['score'] == 0
+    assert state['lease']['run_id'] == replacement['run_id'] and state['score'] == 0
     assert state.get('watermark') == before.get('watermark')
     assert old['run_id'] in {path[-1] for path in db.rows if 'dream_runs' in path}
 
@@ -185,7 +186,7 @@ def test_reclaim_details_return_only_for_the_committed_claim(db):
     acquire(db)
     reclaimed = {}
     acquire(db, NOW + timedelta(seconds=deadline('bounded') + 1), reclaim_sink=reclaimed)
-    assert reclaimed == {'age_s': 301, 'context_mode': 'bounded'}
+    assert reclaimed == {'age_s': 1741, 'size_bucket': 'light'}
     next_reclaimed = {}
     assert acquire(db, NOW + timedelta(seconds=deadline('bounded') + 2), reclaim_sink=next_reclaimed) is None
     assert next_reclaimed == {}
@@ -197,8 +198,8 @@ def test_reclaim_details_return_even_when_manual_admission_is_denied(db):
     state['manual_runs'] = caps().manual_runs
     reclaimed = {}
     with pytest.raises(dream_store.AdmissionDenied):
-        acquire(db, NOW + timedelta(seconds=301), trigger='manual', reclaim_sink=reclaimed)
-    assert reclaimed == {'age_s': 301, 'context_mode': 'bounded'}
+        acquire(db, NOW + timedelta(seconds=1741), trigger='manual', reclaim_sink=reclaimed)
+    assert reclaimed == {'age_s': 1741, 'size_bucket': 'light'}
     assert db.rows[('dream_users', UID)]['lease'] is None
 
 
@@ -215,5 +216,5 @@ def test_failed_commit_does_not_publish_reclaim_details(db, monkeypatch):
 
     monkeypatch.setattr(dream_store.firestore, 'transactional', fail_commit)
     with pytest.raises(RuntimeError, match='synthetic commit failure'):
-        acquire(db, NOW + timedelta(seconds=301), reclaim_sink=reclaimed)
+        acquire(db, NOW + timedelta(seconds=1741), reclaim_sink=reclaimed)
     assert reclaimed == {}

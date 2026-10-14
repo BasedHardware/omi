@@ -7,7 +7,7 @@ import pytest
 
 from database import review_changes, review_memory_changes, review_memory_merges as merges, review_store
 from models.product_memory import MemoryItem, MemoryTier
-from utils import dream_reads
+from utils.agent_capabilities import reads as dream_reads
 from models.review import ReviewChange
 from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
 
@@ -143,7 +143,12 @@ def test_review_change_routes_duplicate_fact_edit_to_merge_journal(monkeypatch):
 
 def test_review_change_routes_merge_undo_to_merge_journal(monkeypatch):
     change = ReviewChange(change_id='synthetic-change', kind='merge_memories', title='Merge duplicates', created_at=NOW)
-    data = {'created_at': NOW, 'memory_edit': {'memory_id': 'one'}, 'memory_merge': True}
+    data = {
+        'created_at': NOW,
+        'change': change.model_dump(mode='python'),
+        'memory_edit': {'memory_id': 'one'},
+        'memory_merge': True,
+    }
 
     class Ref:
         def get(self):

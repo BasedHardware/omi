@@ -3,10 +3,10 @@
 from collections import Counter
 
 from database import dream_history, vector_db
-from models.dream_refs import base_ref
-from utils import dream_reads
+from models.agent_refs import base_ref
+from utils.agent_capabilities import reads as dream_reads
 from utils.conversations.search import keyword_search_conversation_ids
-from utils.dream_guards import timestamp
+from utils.agent_capabilities.guards import timestamp
 from utils.executors import db_executor, llm_executor, run_blocking
 from utils.memory.memory_service import MemoryService
 from utils.observability.fallback import record_fallback
@@ -82,6 +82,8 @@ class OwnerSearch:
                         cursors[collection] = 'lexical:' + str(page + 1)
                 elif collection == 'conversations' and query and request.mode == 'semantic':
                     counts['embedding_token_upper_bound'] += len(query.encode()) * 3
+                    if vector_db.index is None:
+                        raise RuntimeError('dream_search_unconfigured')
                     ids = await run_blocking(
                         llm_executor,
                         vector_db.query_vectors,

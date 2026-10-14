@@ -5,11 +5,11 @@ from copy import deepcopy
 import json
 
 from config.dream_session import SessionLimits
-from models.dream_refs import base_ref
+from models.agent_refs import base_ref
 from tests.unit.test_dream_cleanup_edits import store, records, UID
-from utils import dream_tools
-from utils.dream_context import EvidenceRecords
-from utils.dream_session import Session
+from utils.agent_capabilities import tools as dream_tools
+from utils.agent_capabilities.evidence import EvidenceRecords
+from utils.agent_capabilities.session import Session
 from utils.llm.shaped_agent import Turn
 
 
@@ -53,7 +53,14 @@ def session(db, monkeypatch, *, limits=None, seed_records=True):
     source = Source(db)
     monkeypatch.setattr(dream_tools, 'proposal_record', lambda uid, ref, snapshot: records(db).get(base_ref(ref)))
     seen = EvidenceRecords(records(db)) if seed_records else EvidenceRecords()
-    return Session(UID, source, limits or SessionLimits(), {'targets': list(seen), 'vocabulary': []}, records=seen)
+    return Session(
+        UID,
+        source,
+        limits or SessionLimits(),
+        {'targets': list(seen), 'vocabulary': []},
+        authority='dream',
+        records=seen,
+    )
 
 
 def test_missing_evidence_is_returned_and_successful_resubmission_is_counted_without_writes(store, monkeypatch):

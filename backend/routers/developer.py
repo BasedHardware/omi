@@ -1,3 +1,4 @@
+from models.developer_transcript import SimpleTranscriptSegment
 import json
 import uuid
 from datetime import datetime, timezone, timedelta
@@ -1100,17 +1101,6 @@ class SimpleStructured(BaseModel):
     category: CategoryEnum
     action_items: List[ActionItem] = []
     events: List[Event] = []
-
-
-class SimpleTranscriptSegment(BaseModel):
-    model_config = ConfigDict(title='DeveloperTranscriptSegment')
-
-    id: Optional[str] = None
-    text: str
-    speaker_id: Optional[int] = None
-    speaker_name: Optional[str] = None
-    start: float
-    end: float
 
 
 class Conversation(BaseModel):

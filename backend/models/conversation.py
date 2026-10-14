@@ -233,6 +233,7 @@ class SharedTranscriptSegment(BaseModel):
 
     id: Optional[str] = None
     text: str
+    original_text: Optional[str] = None
     speaker: Optional[str] = 'SPEAKER_00'
     speaker_id: Optional[int] = None
     is_user: bool

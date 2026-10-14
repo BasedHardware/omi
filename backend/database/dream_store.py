@@ -180,6 +180,8 @@ def acquire(
         manual_runs = int(data.get('manual_runs', 0)) if data.get('day') == day else 0
         if trigger == 'manual' and data.get('lease'):
             raise AdmissionDenied('dream_run_in_progress')
+        if trigger == 'manual' and manual_runs >= caps.manual_runs:
+            raise AdmissionDenied('dream_manual_limit')
         last_pass = data.get('last_attempt_at') or data.get('last_pass_at') or EPOCH
         interval = timedelta(hours=6 if data.get('size_bucket') == 'heavy' else 24)
         hunt_due = not canary and (not isinstance(last_pass, datetime) or now - last_pass >= interval)
@@ -239,10 +241,9 @@ def acquire(
         started = abandoned.get('started_at')
         if isinstance(started, datetime) and started.tzinfo is None:
             started = started.replace(tzinfo=timezone.utc)
-        # Pre-context-mode leases may have been full; use the longer fence.
-        context = abandoned.get('context_mode', 'full')
-        context = 'bounded' if context == 'bounded' else 'full'
         duration = DRAIN_TIMEOUT_SECONDS + LEASE_RECLAIM_MARGIN_SECONDS
+        bucket = abandoned.get('size_bucket', 'light')
+        bucket = bucket if bucket in {'empty', 'light', 'medium', 'heavy'} else 'light'
         age_s = (now - started).total_seconds() if isinstance(started, datetime) else 0
         reclaimed = None
         old_spend = None
@@ -265,8 +266,13 @@ def acquire(
                     global_budget = old_global_budget
             if old_spend.path == spend.path:
                 budget = old_budget
-            data = {**data, 'lease': None, 'abandoned_passes': int(data.get('abandoned_passes', 0)) + 1}
-            reclaimed = (int(age_s), context)
+            data = {
+                **data,
+                'lease': None,
+                'last_attempt_at': data.get('last_pass_at') or EPOCH,
+                'abandoned_passes': int(data.get('abandoned_passes', 0)) + 1,
+            }
+            reclaimed = (int(age_s), bucket)
         queued_count = dirty_count(uid, transaction=tx, firestore_client=database) if reclaimed else None
         denial = None
         try:
@@ -280,7 +286,7 @@ def acquire(
                 'status': 'failed',
                 'reason': 'abandoned',
                 'usage_unknown': True,
-                'context_mode': context,
+                'size_bucket': bucket,
                 'abandoned': 1,
                 'tokens': 0,
                 'records_queued_after': queued_count,
@@ -319,7 +325,7 @@ def acquire(
 
     lease, reclaimed, denial = claim(database.transaction())
     if reclaimed and reclaim_sink is not None:
-        reclaim_sink.update(age_s=reclaimed[0], context_mode=reclaimed[1])
+        reclaim_sink.update(age_s=reclaimed[0], size_bucket=reclaimed[1])
     if denial:
         raise AdmissionDenied(denial)
     return lease

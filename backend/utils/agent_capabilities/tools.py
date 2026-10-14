@@ -4,34 +4,33 @@ import copy
 import hashlib
 import json
 import re
+from types import SimpleNamespace
 from datetime import datetime, timezone
 from uuid import uuid5, NAMESPACE_URL
 from typing import Any, Literal, cast
 
-from database import candidates, conversations, frame_requests, review_changes, review_store
+from database import conversations, review_changes, review_store
 from database.review_changes import AgentEdit
 from database.review_memory_changes import MemoryEdit
 from database.task_intelligence_control import get_task_workflow_control
-from models.action_item import EvidenceRef, EvidenceKind, EvidenceScope, TaskCreatePayload
-from models.candidate import CandidateCreate, TaskCreateCandidate
 from models.review import AgentProposalItem, ChangeRef, ReviewChange, ReviewItem, ReviewItemV2
-from models.dream_refs import base_ref, has_ref, cited_value
+from models.agent_refs import base_ref, has_ref, cited_value
 from models.dream_edit import Edit, MemoryHygieneEdit
-from models.dream_harness_edit import HarnessEdit
-from models.dream_harness import ProposeEdit
+from models.agent_edit import HarnessEdit
+from models.agent_tools import ProposeEdit
 from database import review_memory_hygiene
 from utils.entity_pages import resolve_entity
 from models.review_context import question_source
-from utils.dream_guards import (
+from utils.agent_capabilities.guards import (
     spelling_rejection,
     summary_rejection,
     task_rejection,
     vocabulary_rejection,
     verbatim_quote,
 )
-from utils.dream_context import EvidenceRecords
-from utils.dream_grounding import spelling_grounding_rejection, spelling_question
-from utils import dream_cleanup_edits, dream_change_view
+from utils.agent_capabilities.evidence import EvidenceRecords
+from utils.agent_capabilities import change_view as dream_change_view
+from utils.agent_capabilities import cleanup_edits as dream_cleanup_edits
 
 
 def edit_key(edit, records=None):
@@ -115,6 +114,7 @@ def _replace_tree(value: Any, before: str, after: str) -> Any:
                     'items',
                     'heading',
                     'body_markdown',
+                    'note_claims',
                 }
                 else v
             )
@@ -123,11 +123,18 @@ def _replace_tree(value: Any, before: str, after: str) -> Any:
     return value
 
 
-def validate_summary_edit(edit, row, *, full=False):
+def validate_summary_edit(edit, row, *, full=False, authority='dream'):
     if edit.kind not in {'title', 'overview'}:
         return
     if row.get('is_locked') or not conversations.is_visible_conversation(row):
         raise review_store.ReviewConflict('Dream conversation unavailable')
+    if authority == 'user' and isinstance(edit, HarnessEdit):
+        current = row.get('user_title') if edit.kind == 'title' and row.get('user_title') else (row.get('structured') or {}).get(edit.kind, '')
+        if edit.before != current:
+            raise review_store.ReviewConflict('Agent summary changed')
+        if not edit.after.strip():
+            raise ValueError('agent_empty_summary')
+        return
     if edit.kind == 'title' and row.get('user_title'):
         raise review_store.ReviewConflict('Dream title was set by the user')
     if edit.before != ((row.get('structured') or {}).get(edit.kind) or ''):
@@ -137,7 +144,7 @@ def validate_summary_edit(edit, row, *, full=False):
         raise ValueError('dream_summary_' + reason)
 
 
-def validate_edit(edit, records):
+def validate_edit(edit, records, *, authority='dream'):
     if isinstance(edit, HarnessEdit):
         # model_copy updates are not validated by Pydantic. Re-enter the tool
         # contract at this shared boundary, including Review acceptance.
@@ -147,6 +154,24 @@ def validate_edit(edit, records):
         raise ValueError('dream_' + reason)
     if not has_ref(edit.target, records) or any(not has_ref(ref, records) for ref in edit.evidence):
         raise ValueError('dream_unknown_evidence')
+    if isinstance(edit, HarnessEdit) and edit.kind == 'spelling':
+        row = records[base_ref(edit.target)]
+        collection = base_ref(edit.target).partition('/')[0]
+        if '#' in edit.target:
+            values = [(cited_value(edit.target, records) or {}).get('text', '')]
+        elif collection == 'people':
+            values = [row.get('name', '')]
+        elif collection in {'memory_items', 'memories'}:
+            values = [row.get('content', '')]
+        else:
+            generated = {key: value for key, value in (row.get('structured') or {}).items()
+                         if key in {'title', 'overview', 'sections', 'note_claims'}}
+            changed = _replace_tree(generated, edit.before, edit.after)
+            values = [segment.get('text', '') for segment in row.get('transcript_segments') or []]
+            if generated != changed:
+                values.append(edit.before)
+        if not any(isinstance(value, str) and replace_term(value, edit.before, edit.after) != value for value in values):
+            raise ValueError('dream_invalid_target')
     if (
         edit.kind == 'spelling'
         and '#' in edit.target
@@ -160,7 +185,7 @@ def validate_edit(edit, records):
     if reason:
         raise ValueError('dream_' + reason)
     row = records[base_ref(edit.target)]
-    validate_summary_edit(edit, row, full=True)
+    validate_summary_edit(edit, row, full=True, authority=authority)
     if edit.kind == 'spelling' and (not edit.before or not edit.after or len(edit.before) > 50 or len(edit.after) > 50):
         raise ValueError('dream_invalid_spelling')
     collection, separator, key_id = base_ref(edit.target).partition('/')
@@ -240,8 +265,10 @@ def validate_memory_hygiene(edit, records):
         raise ValueError('dream_unknown_evidence')
 
 
-def apply_edit(uid, edit, records, *, expected_records=None):
-    validate_edit(edit, records)
+def apply_edit(uid, edit, records, *, expected_records=None, authority='user'):
+    if authority not in {'user', 'dream'}:
+        raise ValueError('agent_invalid_authority')
+    validate_edit(edit, records, authority=authority)
     key = edit_key(edit, records)
     if not review_changes.agent_change_allowed(uid, key):
         return 'suppressed'
@@ -332,8 +359,10 @@ def apply_edit(uid, edit, records, *, expected_records=None):
             or current.get('user_title') != row.get('user_title')
         ):
             raise review_store.ReviewConflict('Dream conversation changed')
-        validate_summary_edit(edit, current, full=True)
-        patch = {'structured.' + edit.kind: edit.after}
+        validate_summary_edit(edit, current, full=True, authority=authority)
+        patch: dict[str, Any] = {'structured.' + edit.kind: edit.after}
+        if authority == 'user' and isinstance(edit, HarnessEdit) and edit.kind == 'title' and current.get('user_title'):
+            patch = {'user_title': edit.after}
         if edit.kind == 'overview':
             # Clients compose notes from sections when present. Clear stale projections
             # in the same journal entry so undo restores them with the previous overview.
@@ -357,9 +386,6 @@ def apply_edit(uid, edit, records, *, expected_records=None):
                 'structured'
             ) != row.get('structured'):
                 raise review_store.ReviewConflict('Dream conversation changed')
-            selected_segment = (
-                cited_value(edit.target, {base_ref(edit.target): current}) if '#' in edit.target else None
-            )
             structured = current.get('structured') or {}
             if '#' not in edit.target:
                 structured = _replace_tree(structured, edit.before, edit.after)
@@ -367,25 +393,11 @@ def apply_edit(uid, edit, records, *, expected_records=None):
             if structured.get('title') != (current.get('structured') or {}).get('title'):
                 patch['structured.title'] = structured['title']
             if isinstance(edit, HarnessEdit) and '#' not in edit.target:
-                for field in ('overview', 'sections'):
+                for field in ('overview', 'sections', 'note_claims'):
                     if structured.get(field) != (current.get('structured') or {}).get(field):
                         patch['structured.' + field] = structured[field]
             if not isinstance(edit, HarnessEdit) and '#' not in edit.target and current.get('user_title'):
                 patch['user_title'] = replace_term(current['user_title'], edit.before, edit.after)
-            segments = copy.deepcopy(current.get('transcript_segments') or [])
-            changed_ids = []
-            for segment in segments:
-                if '#' in edit.target and segment != selected_segment:
-                    continue
-                text = replace_term(segment.get('text', ''), edit.before, edit.after)
-                if text != segment.get('text'):
-                    segment['text'] = text
-                    changed_ids.append(segment.get('id'))
-            if changed_ids:
-                encoded = conversations.encode_conversation_for_write(
-                    uid, {'transcript_segments': segments}, current.get('data_protection_level', 'standard')
-                )
-                patch['transcript_segments'] = encoded['transcript_segments']
             change.refs = [
                 ChangeRef(
                     type='conversation',
@@ -393,6 +405,13 @@ def apply_edit(uid, edit, records, *, expected_records=None):
                     label='Conversation' + (' #' + edit.target.partition('#')[2] if '#' in edit.target else ''),
                 )
             ]
+            from utils.agent_capabilities import transcripts
+            corrections = transcripts.entries(edit, current, authority=authority, change_id=change.change_id)
+            if corrections:
+                from database.review_transcript_changes import record_change
+                record_change(uid, change, patch, corrections, edit_key=key,
+                              expected_records=expected_records, expected_document=raw)
+                return 'applied'
         else:
             raise ValueError('dream_unsupported_spelling_target')
     else:
@@ -419,60 +438,22 @@ def apply_edit(uid, edit, records, *, expected_records=None):
     return 'applied'
 
 
-def apply_grounded_edit(uid, edit, records):
-    """Automatic spelling alone requires current independent support and fences.
-
-    Explicit user acceptance keeps using apply_edit through the Review path.
-    """
-    validate_edit(edit, records)
-    sources = {base_ref(ref): records[base_ref(ref)] for ref in {edit.target, *edit.evidence}}
-    fences = proposal_fences(uid, {'records': sources})
-    raw_vocabulary = review_store.user(uid).collection('dream_vocabulary').document('current').get().to_dict()
-    revalidate_proposal(uid, {'records': sources})
-    vocabulary = (review_store.decode_doc(uid, raw_vocabulary) or {}).get('source', [])
-    reason = spelling_grounding_rejection(edit, sources, vocabulary)
-    if reason:
-        raise ValueError('dream_' + reason)
-    # Fence the current vocabulary snapshot too; a concurrent removal must win.
-    fences['dream_vocabulary/current'] = raw_vocabulary
-    return apply_edit(uid, edit, sources, expected_records=fences)
 
 
-def apply_verified_edit(uid, edit, records, *, expected_records):
+def apply_verified_edit(uid, edit, records, *, expected_records, authority):
     """The harness alone selects this boundary after independent verification.
 
     User acceptance retains apply_edit. Verification never relaxes schema,
     current evidence, source/account fences, or durable Undo suppression.
     """
-    validate_edit(edit, records)
+    validate_edit(edit, records, authority=authority)
     refs = {base_ref(ref) for ref in [edit.target, *edit.evidence, *([edit.other] if edit.other else [])]}
     sources = EvidenceRecords({ref: records[ref] for ref in refs})
     revalidate_proposal(uid, {'records': sources})
     validate_canonical_proposal(uid, edit)
-    return apply_edit(uid, edit, sources, expected_records=expected_records)
+    return apply_edit(uid, edit, sources, expected_records=expected_records, authority=authority)
 
 
-def suggest_spelling(uid, edit, records, run_id):
-    validate_edit(edit, records)
-    if not verbatim_quote(edit.before, cited_value(edit.target, records)):
-        raise ValueError('dream_invalid_question_evidence')
-    source: dict[str, Any] = {
-        'records': {base_ref(ref): records[base_ref(ref)] for ref in {edit.target, *edit.evidence}},
-        'edit_key': edit_key(edit, records),
-        'spelling_edit': edit.model_dump(mode='python', exclude={'value'}),
-    }
-    source['speaker_names'] = question_source(spelling_question(edit), records).get('speaker_names', {})
-    source['fences'] = proposal_fences(uid, source)
-    revalidate_proposal(uid, source)
-    validate_canonical_proposal(uid, edit)
-    return review_store.enqueue_review_proposal(
-        uid,
-        ReviewItem.model_validate(spelling_question(edit).model_dump()),
-        edit_key=edit_key(edit, records),
-        source=source,
-        dream_run_id=run_id,
-        evidence_version=review_store.fingerprint(source),
-    )
 
 
 def answer_spelling(uid, source, value):
@@ -496,7 +477,7 @@ def answer_spelling(uid, source, value):
 
 
 def proposal_record(uid, ref, snapshot):
-    from utils import dream_reads
+    from utils.agent_capabilities import reads as dream_reads
 
     if ref.startswith('entity/'):
         entity_id = ref.removeprefix('entity/')
@@ -674,7 +655,7 @@ def vocabulary_key(term):
     )
 
 
-def apply_vocabulary(uid, terms, *, expected_records=None, user_accepted=False, verified=False):
+def apply_vocabulary(uid, terms, *, expected_records=None, user_accepted=False, verified=False, records=None):
     if not user_accepted and not verified:
         raise ValueError('dream_vocabulary_requires_acceptance')
     status = 'unchanged'
@@ -707,6 +688,15 @@ def apply_vocabulary(uid, terms, *, expected_records=None, user_accepted=False, 
             after=term.spelling,
             created_at=datetime.now(timezone.utc),
         )
+        if records:
+            ref = next((ref for ref in term.evidence if base_ref(ref) in records), '')
+            if ref:
+                evidence_edit = SimpleNamespace(kind='vocabulary', target=ref,
+                    other='', before='', after=term.spelling, reason=change.title, evidence=term.evidence)
+                viewed = dream_change_view.edit_change(uid, evidence_edit, records, key)
+                change.context = viewed.context
+                change.refs = [ChangeRef(type='conversation', id=base_ref(ref).partition('/')[2],
+                                        label=proposal_label(records[base_ref(ref)]))] if ref.startswith('conversations/') else []
         review_changes.record_agent_change(
             uid,
             change,
@@ -803,58 +793,3 @@ def ask(uid, item, records, *, run_id=None):
 
 def ask_ranked(uid, item, records, run_id):
     return ask(uid, item, records, run_id=run_id)
-
-
-def request_frame(uid, question, records):
-    screen = records.get(base_ref(question.screen_ref))
-    if not screen or not question.screen_ref.startswith('screen/') or not screen.get('captureEligible'):
-        raise ValueError('dream_frame_evidence')
-    frame_requests.enqueue_frame_request(
-        uid,
-        device_id=screen['clientDeviceId'],
-        screenshot_id=screen.get('localScreenshotId') or screen['id'],
-        dedupe_key=review_store.fingerprint([question.screen_ref, question.question]),
-        account_generation=screen.get('accountGeneration', 0),
-        requested_ttl_seconds=300,
-        device_retention_seconds=screen.get('deviceRetentionSeconds'),
-    )
-
-
-def propose_task(uid, task, records):
-    evidence = []
-    for ref in task.evidence:
-        if not has_ref(ref, records):
-            raise ValueError('dream_task_evidence')
-        collection, key = base_ref(ref).split('/', 1)
-        kind = {'conversations': 'conversation', 'memory_items': 'memory_item', 'memories': 'memory_item'}.get(
-            collection
-        )
-        if kind:
-            selected = cited_value(ref, records) if '#' in ref else None
-            if '#' in ref and selected is None:
-                raise ValueError('dream_task_evidence')
-            evidence.append(
-                EvidenceRef(
-                    kind=EvidenceKind(kind),
-                    id=key,
-                    scope=EvidenceScope.canonical,
-                    transcript_segment_ids=[selected['id']] if selected and selected.get('id') else None,
-                    start_seconds=selected.get('start') if selected else None,
-                    end_seconds=selected.get('end') if selected else None,
-                )
-            )
-    if not evidence:
-        raise ValueError('dream_task_evidence')
-    proposal = CandidateCreate(
-        TaskCreateCandidate(
-            capture_confidence=0.8,
-            ownership_confidence=0.8,
-            source_surface='dream_agent',
-            evidence_refs=evidence,
-            task_change=TaskCreatePayload(description=task.description),
-        )
-    )
-    generation = get_task_workflow_control(uid).account_generation
-    candidates.create_candidate(
-        uid, proposal, idempotency_key=review_store.fingerprint(task.model_dump()), account_generation=generation
-    )

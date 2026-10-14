@@ -1,4 +1,4 @@
-"""Standalone additive Dream v2 edit contract for planner and Review."""
+"""Shared reversible edit contract, additive to the released Review edit arm."""
 
 from typing import Literal
 from pydantic import Field, model_validator

@@ -7,10 +7,10 @@ from typing import Literal, cast
 from database import conversations, review_changes, review_store
 from database.action_item_refresh_policy import protected_donor
 from database.task_intelligence_control import get_task_workflow_control
-from models.dream_refs import base_ref, has_ref
+from models.agent_refs import base_ref, has_ref
 from models.review import ChangeRef
 from utils.conversations.fragment_visibility import is_user_curated
-from utils.dream_guards import timestamp
+from utils.agent_capabilities.guards import timestamp
 
 KINDS = frozenset({'dismiss_person', 'merge_tasks', 'retire_task', 'merge_conversations', 'set_language'})
 
@@ -68,7 +68,7 @@ def validate_cleanup(edit, records):
         if collection != 'people':
             raise ValueError('dream_invalid_person')
         if any(
-            row.get(field) for field in ('speech_samples', 'speaker_embedding', 'user_confirmed', 'is_user_created')
+            row.get(field) for field in ('speech_samples', 'speaker_embedding', 'user_confirmed', 'is_user_created', 'pinned', 'label_evidence')
         ):
             raise ValueError('dream_person_user_protected')
         if edit.before and edit.before != row.get('name'):

@@ -1,10 +1,11 @@
 """Independent, history-free batched verification of immutable staged evidence."""
 
 import json
+import asyncio
 
-from models.dream_harness import VerificationBatch
-from models.dream_refs import cited_value
-from utils.dream_session import serialized_bytes
+from models.agent_tools import VerificationBatch
+from models.agent_refs import cited_value
+from utils.agent_capabilities.session import serialized_bytes
 from utils.llm.shaped_agent import Budget, Mount, run_loop
 
 INSTRUCTIONS = (
@@ -41,22 +42,24 @@ def batches(staged, byte_limit=24000):
         yield batch
 
 
-async def verify(staged, model_turn, *, tokens, deadline_seconds, completion_tokens=4096):
+async def verify(staged, model_turn, *, tokens, deadline_seconds, completion_tokens=4096, verifier_seconds=120):
     support = {item.id: [] for item in staged}
     used = 0
     calls = 0
+    deadline = asyncio.get_running_loop().time() + deadline_seconds
     for batch in batches(staged, byte_limit=max(1024, min(24000, tokens // 8))):
         ids = {row['id'] for row in batch}
         seed = [{'role': 'user', 'content': 'UNTRUSTED VERIFICATION DATA\n' + json.dumps(batch, default=str)}]
         # Each invocation has a freshly framed mount, with no response from the
         # other verifier. Sequential execution also bounds reserved concurrency.
         for _ in range(2):
-            if tokens - used < 1024:
+            remaining_seconds = deadline - asyncio.get_running_loop().time()
+            if tokens - used < 1024 or remaining_seconds <= 0:
                 break
             mount = Mount(
                 instructions=INSTRUCTIONS,
                 schema=VerificationBatch,
-                budget=Budget(turns=1, tokens=tokens - used, deadline_seconds=deadline_seconds),
+                budget=Budget(turns=1, tokens=tokens - used, deadline_seconds=min(verifier_seconds, remaining_seconds)),
             )
 
             async def invoke(active, messages):

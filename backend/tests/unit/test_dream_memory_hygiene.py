@@ -1,7 +1,6 @@
 """Full-owner memory hygiene through canonical commits and the real Review seam."""
 
 from copy import deepcopy
-from dataclasses import replace
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 import json
@@ -9,20 +8,28 @@ import json
 import pytest
 from pydantic import ValidationError
 
-from config.dream_agent import Caps, auto_apply_kinds
+from config.dream_agent import Caps
 from database import memory_apply_store, review_changes, review_store
 from database.memory_collections import MemoryCollections
-from models.dream_agent import Plan, FullPlan
-from models.dream_edit import Edit, FullEdit, MemoryHygieneEdit
+from models.dream_edit import Edit, MemoryHygieneEdit
+from models.agent_edit import HarnessEdit
+from models.agent_tools import VerificationBatch, Verification
+from config.dream_session import SessionLimits
+from utils.llm.shaped_agent import Turn
 from models.memory_apply import MemoryControlState, WriterMode, memory_content_hash
 from models.product_memory import MemoryItem
 from models.review import AgentProposalItem
-from tests.unit.test_dream_rung2 import store, run, UID, REF, REAL_DEMOTED_TYPES
-from utils import dream_agent, dream_reads, dream_tools, dream_metrics
-from utils.dream_consensus import majority, unanimous_memory_hygiene
-from utils.dream_context import EvidenceRecords
-from utils.dream_decisions import edit_decisions
-from utils.dream_prompt import fits_full
+from tests.unit.test_dream_harness_runtime import runtime, store, UID
+from tests.unit.test_dream_cleanup_edits import records as cleanup_records
+from tests.unit.test_dream_session import call, turn as tool_turn
+from database import dream_store
+from utils import dream_seed
+
+REF = "conversations/one"
+REAL_DEMOTED_TYPES = dream_store.demoted_types
+from utils.agent_capabilities import tools as dream_tools
+from utils import dream_agent
+from utils.agent_capabilities.evidence import EvidenceRecords
 
 NOW = datetime(2026, 1, 10, tzinfo=timezone.utc)
 MREF = 'memory_items/old'
@@ -60,13 +67,14 @@ def memory(key, content, when=NOW):
 
 
 def edit(kind='retire_memory', **kw):
-    return FullEdit.model_validate(
+    return HarnessEdit.model_validate(
         {'kind': kind, 'target': MREF, 'reason': 'Synthetic contradictory fact', 'evidence': [REF], 'value': 5, **kw}
     )
 
 
 @pytest.fixture
-def hygiene(store, monkeypatch):
+def hygiene(runtime, monkeypatch):
+    store = runtime
     monkeypatch.setenv('MEMORY_ENABLED', 'on')
     monkeypatch.setattr(memory_apply_store, '_firestore_transactional', lambda fn: fn)
     store.rows[('users', UID, 'memory_state', 'apply_control')] = MemoryControlState(
@@ -76,22 +84,55 @@ def hygiene(store, monkeypatch):
     store.rows[('users', UID, 'memory_items', 'new')] = memory(
         'new', 'Since January, lives in New Toytown.', NOW + timedelta(days=1)
     )
-    original = dream_agent.dream_reads.read_changes
 
-    def records(*args, **kw):
-        evidence, consumed = original(*args, **kw)
+    def records():
+        evidence = EvidenceRecords(cleanup_records(store))
         evidence.update(
             {
                 MREF: deepcopy(store.rows[('users', UID, 'memory_items', 'old')]),
                 NREF: deepcopy(store.rows[('users', UID, 'memory_items', 'new')]),
             }
         )
-        evidence.context_mode = 'full'
-        return evidence, consumed
+        return evidence, []
 
-    monkeypatch.setattr(dream_agent.dream_reads, 'read_changes', records)
+    monkeypatch.setattr(
+        dream_seed,
+        'load',
+        lambda uid, caps: ({'targets': list(records()[0]), 'vocabulary': []}, records()[0], [], SessionLimits()),
+    )
     monkeypatch.setattr(dream_tools, 'proposal_record', lambda uid, ref, snapshot: records()[0][ref])
     return store, records
+
+
+def run(operation, *, caps=None, votes=(True, True), trigger='schedule'):
+    import asyncio
+    from utils.dream_harness_transport import MAIN_LANE
+
+    index = 0
+
+    async def model(uid, lane, mount, messages):
+        nonlocal index
+        if lane == MAIN_LANE:
+            return tool_turn(
+                [
+                    call('propose_edit', {'edit': operation.model_dump(mode='json')}),
+                    call('finish', {'summary': 'Checked synthetic facts'}, 2),
+                ]
+            )
+        batch = json.loads(messages[-1]['content'].split('\n', 1)[1])
+        agree = votes[index]
+        index += 1
+        return Turn(
+            tokens=10,
+            value=VerificationBatch(
+                decisions=[
+                    Verification(id=row['id'], agree=agree, reason='Synthetic independent verification')
+                    for row in batch
+                ]
+            ),
+        )
+
+    return asyncio.run(dream_agent.run_pass(UID, turn=model, caps=caps, trigger=trigger))
 
 
 @pytest.mark.parametrize(
@@ -108,7 +149,7 @@ def test_apply_undo_redo_exactness(hygiene, operation):
     db.rows[('users', UID, 'memory_items', 'old')].pop('belief_class')
     before = deepcopy(db.rows[('users', UID, 'memory_items', 'old')])
     newer = deepcopy(db.rows[('users', UID, 'memory_items', 'new')])
-    report = run([FullPlan(edits=[operation])] * 3)
+    report = run(operation)
     assert report['outcomes'][0]['status'] == 'applied'
     assert db.rows[('users', UID, 'memory_items', 'old')]['status'] == 'superseded'
     assert db.rows[('users', UID, 'memory_items', 'old')]['future_metadata'] == {'synthetic': True}
@@ -135,68 +176,6 @@ def test_apply_undo_redo_exactness(hygiene, operation):
 
 
 @pytest.mark.parametrize(
-    'kind,kw',
-    [
-        ('retire_memory', {}),
-        ('supersede_memory', {'other': NREF}),
-        ('merge_memories', {'other': NREF, 'after': 'Since January, lives in New Toytown.'}),
-    ],
-)
-def test_majority_offers_value_ranked_review(hygiene, kind, kw):
-    db, _ = hygiene
-    operation = edit(kind, **kw)
-    report = run([FullPlan(edits=[operation]), FullPlan(edits=[operation]), FullPlan()])
-    assert report['outcomes'][0]['status'] == 'suggested'
-    assert report['questions_offered'] == 1 and report['suggested_majority'] == 1
-    assert db.rows[('users', UID, 'memory_items', 'old')]['status'] == 'active'
-    assert len([path for path in db.rows if path[-2] == 'review_proposals']) == 1
-
-
-def test_demoted_unanimous_and_low_value(hygiene, monkeypatch):
-    monkeypatch.setattr(dream_agent.dream_store, 'demoted_types', lambda *a: {'retire_memory'})
-    report = run([FullPlan(edits=[edit()])] * 3)
-    assert report['outcomes'][0]['status'] == 'suggested'
-    assert report['auto_applied_unanimous'] == 0
-    low = edit().model_copy(update={'value': 2})
-    report = run([FullPlan(edits=[low]), FullPlan(edits=[low]), FullPlan()])
-    assert report['questions_offered'] == 0
-    assert report['questions_dropped_low_value'] == 1
-
-
-def test_consensus_other_ref_and_single_sample():
-    one, two = edit('supersede_memory', other=NREF), edit('supersede_memory', other='memory_items/different')
-    assert majority([FullPlan(edits=[one]), FullPlan(edits=[two]), FullPlan()]).edits == []
-    survivor = majority([FullPlan(edits=[one])]).edits[0]
-    assert not unanimous_memory_hygiene(survivor)
-
-
-def test_nonallowlisted_and_bounded_cannot_auto_apply(hygiene, monkeypatch):
-    _, records = hygiene
-    assert {'merge_memories', 'retire_memory', 'supersede_memory'} <= auto_apply_kinds(UID)
-    assert not {'merge_memories', 'retire_memory', 'supersede_memory'} & auto_apply_kinds('synthetic-outsider')
-    operation = majority([FullPlan(edits=[edit()])] * 3).edits[0]
-    with pytest.raises(ValueError):
-        dream_tools.apply_unanimous_edit('synthetic-outsider', operation, records()[0])
-    bounded = EvidenceRecords(records()[0])
-    bounded.context_mode = 'bounded'
-    with pytest.raises(ValueError):
-        dream_tools.validate_edit(operation, bounded)
-    _, policies = edit_decisions(FullPlan(edits=[operation]), records()[0], [], auto_apply_kinds(UID), set(), False, {})
-    assert set(policies.values()) == {'suggest'}
-    assert Plan.model_json_schema()['$defs']['Edit']['properties']['kind']['enum'] == [
-        'spelling',
-        'title',
-        'overview',
-        'memory',
-        'merge_people',
-        'entity_summary',
-        'close_task',
-        'retire_task',
-        'merge_memories',
-    ]
-
-
-@pytest.mark.parametrize(
     'kw',
     [
         dict(kind='retire_memory', after='Text'),
@@ -217,63 +196,16 @@ def test_schema_rejects_invalid_hygiene(kw):
 
 def test_undo_conflicts_with_later_edit(hygiene):
     db, _ = hygiene
-    run([FullPlan(edits=[edit()])] * 3)
+    run(edit())
     data = review_store.decode_doc(UID, next(row for path, row in db.rows.items() if path[-2] == 'review_changes'))
     db.rows[('users', UID, 'memory_items', 'old')]['content'] = 'A later synthetic correction.'
     with pytest.raises(review_store.ReviewConflict):
         review_changes.set_undone(UID, data['change']['change_id'], True)
 
 
-def test_context_includes_active_memories_within_budget(monkeypatch):
-    calls = []
-    monkeypatch.setattr(
-        dream_reads,
-        'MemoryService',
-        lambda: SimpleNamespace(
-            read=lambda uid, **kw: calls.append(kw) or [SimpleNamespace(id='huge'), SimpleNamespace(id='small')]
-        ),
-    )
-    monkeypatch.setattr(dream_reads, 'context_candidates', lambda *a, **kw: iter(()))
-    records = EvidenceRecords({REF: {'id': 'toy', 'transcript_segments': [{'text': 'Synthetic evidence.'}]}})
-    records.context_mode = 'full'
-    caps = replace(Caps(), context_mode='full', tokens=20000, completion_tokens=1000)
-    rows = {
-        'memory_items/huge': {'content': 'a' * 100000},
-        'memory_items/small': {'id': 'small', 'content': 'Lives in Toytown.'},
-    }
-    diagnostics = {}
-    admitted = dream_reads.retrieve_context(
-        UID, records, caps, read=lambda uid, ref: rows[ref], diagnostics=diagnostics
-    )
-    assert 'memory_items/small' in admitted and 'memory_items/huge' not in admitted
-    assert fits_full(admitted, caps)
-    assert calls == [{'limit': 100, 'authoritative': True}]
-    assert diagnostics['memory_context_counts'] == {'found': 2, 'failed': 0, 'admitted': 1}
-
-
-def test_metrics_counts_by_kind(monkeypatch):
-    observed = {}
-
-    class Metric:
-        def labels(self, kind, disposition):
-            return SimpleNamespace(inc=lambda count: observed.__setitem__((kind, disposition), count))
-
-    monkeypatch.setattr(dream_metrics, 'MEMORY_EDITS', Metric())
-    dream_metrics.record_pass(
-        {
-            'context_mode': 'full',
-            'status': 'complete',
-            'proposed': {'edits': [{'kind': 'retire_memory'}]},
-            'outcomes': [{'key': 'dream:retire_memory:opaque', 'status': 'applied'}],
-        }
-    )
-    assert observed[('retire_memory', 'proposed')] == observed[('retire_memory', 'auto_applied')] == 1
-    assert observed[('retire_memory', 'suggested')] == 0
-
-
 def test_real_undo_rate_demotes_each_hygiene_kind(hygiene, monkeypatch):
     db, _ = hygiene
-    run([FullPlan(edits=[edit()])] * 3)
+    run(edit())
     path, raw = next((path, raw) for path, raw in db.rows.items() if path[-2] == 'review_changes')
     change = review_store.decode_doc(UID, raw)
     review_changes.set_undone(UID, change['change']['change_id'], True)
@@ -285,7 +217,7 @@ def test_real_undo_rate_demotes_each_hygiene_kind(hygiene, monkeypatch):
     query_db = SimpleNamespace(
         collection=lambda name: SimpleNamespace(document=lambda uid: SimpleNamespace(collection=lambda name: query))
     )
-    caps = Caps(undo_min_samples=1, undo_rate=0.2)
+    caps = Caps(undo_min_samples=1, undo_rate=0.2, passes=10)
     assert REAL_DEMOTED_TYPES(UID, caps, firestore_client=query_db) == {'retire_memory'}
     monkeypatch.setattr(
         dream_agent.dream_store,
@@ -293,7 +225,7 @@ def test_real_undo_rate_demotes_each_hygiene_kind(hygiene, monkeypatch):
         lambda uid, caps: REAL_DEMOTED_TYPES(uid, caps, firestore_client=query_db),
     )
     another = edit(target=NREF)
-    report = run([FullPlan(edits=[another])] * 3, caps=caps)
+    report = run(another, caps=caps, trigger='manual')
     assert report['outcomes'][0]['status'] == 'suggested'
     assert db.rows[('users', UID, 'memory_items', 'new')]['status'] == 'active'
 
@@ -311,9 +243,9 @@ def test_hygiene_requires_other_memory_or_conversation_evidence(hygiene, kw):
 
 def test_hygiene_attention_admission_checks_live_lease(hygiene):
     db, records = hygiene
-    db.rows[('dream_users', UID)]['lease'] = {'run_id': 'newer-run', 'mode': 'on'}
+    db.rows.setdefault(('dream_users', UID), {})['lease'] = {'run_id': 'newer-run', 'mode': 'on'}
     with pytest.raises(review_store.ReviewConflict, match='dream_lease_lost'):
-        dream_tools.suggest_hygiene(UID, edit(), records()[0], 'synthetic-run')
+        dream_tools.suggest_hygiene(UID, edit(), records()[0], 'stale-synthetic-run')
     assert not any(path[-2] == 'review_proposals' for path in db.rows)
 
 
@@ -334,7 +266,7 @@ def test_existing_review_proposal_wire_is_unchanged():
 @pytest.mark.parametrize('fence', ['source_generation', 'account_generation', 'deletion'])
 def test_undo_preserves_changed_generation_and_deletion_authority(hygiene, fence):
     db, _ = hygiene
-    run([FullPlan(edits=[edit()])] * 3)
+    run(edit())
     data = review_store.decode_doc(UID, next(row for path, row in db.rows.items() if path[-2] == 'review_changes'))
     before = deepcopy(db.rows[('users', UID, 'memory_items', 'old')])
     if fence == 'deletion':
@@ -344,20 +276,3 @@ def test_undo_preserves_changed_generation_and_deletion_authority(hygiene, fence
     with pytest.raises(review_store.ReviewConflict):
         review_changes.set_undone(UID, data['change']['change_id'], True)
     assert db.rows[('users', UID, 'memory_items', 'old')] == before
-
-
-def test_bounded_merge_vote_identity_stays_unchanged():
-    first = Edit(
-        kind='merge_memories',
-        target=MREF,
-        other=NREF,
-        after='Synthetic merged fact.',
-        reason='Synthetic duplicate.',
-        evidence=[REF],
-    )
-    second = first.model_copy(update={'other': 'memory_items/different'})
-    bounded = [Plan(edits=[first]), Plan(edits=[second]), Plan()]
-    result = majority(bounded)
-    assert len(result.edits) == 1 and result.edits[0].other == NREF
-    full = [FullPlan.model_validate(plan.model_dump()) for plan in bounded]
-    assert majority(full).edits == []

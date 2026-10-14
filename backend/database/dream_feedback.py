@@ -13,7 +13,7 @@ from google.cloud import firestore
 
 from database._client import get_firestore_client
 from models.dream_agent import Feedback
-from utils.dream_guards import feedback_rejection
+from utils.agent_capabilities.guards import feedback_rejection
 
 
 def words(text):

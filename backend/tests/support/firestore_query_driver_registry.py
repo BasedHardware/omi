@@ -847,7 +847,7 @@ _add(
 )
 _add(
     CoveredByEntry(
-        'database.conversations._count_matching_tombstones',
+        'database.conversation_visibility_counts.count_hidden',
         covered_by=('database.conversations.get_conversations_count',),
         reason='tombstone count query invoked by the count driver on every combo',
     )

@@ -13536,6 +13536,17 @@
             ],
             "title": "Id"
           },
+          "original_text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Original Text"
+          },
           "speaker_id": {
             "anyOf": [
               {
@@ -29088,6 +29099,17 @@
             "title": "Is User",
             "type": "boolean"
           },
+          "original_text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Original Text"
+          },
           "person_id": {
             "anyOf": [
               {
@@ -29479,6 +29501,17 @@
               }
             ],
             "title": "Id"
+          },
+          "original_text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Original Text"
           },
           "speaker_id": {
             "anyOf": [
@@ -33755,6 +33788,18 @@
           "is_user": {
             "title": "Is User",
             "type": "boolean"
+          },
+          "original_text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Immutable captured text when text includes active corrections.",
+            "title": "Original Text"
           },
           "person_id": {
             "anyOf": [

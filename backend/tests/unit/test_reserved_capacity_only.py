@@ -33,7 +33,7 @@ from llm_gateway.gateway.resolver import is_lkg_eligible, resolve_chat_completio
 from llm_gateway.gateway.schemas import CredentialMode, FailureClass, ProviderRef
 from llm_gateway.main import app
 from llm_gateway.routers import dependencies
-from models.dream_agent import Plan
+from models.agent_tools import VerificationBatch as Plan
 from llm_gateway.routers.openai_compatible import _prepared_streaming_iterator, _stream_with_terminal_metrics
 from utils.llm import vertex_pt_routing as ptr
 from tests.support.vertex_contract import assert_local_references, assert_vertex_subset
@@ -432,23 +432,18 @@ async def test_reserved_schema_translation_runs_through_local_http_endpoint(monk
         seen.append(request)
         assert request.headers[ptr.REQUEST_TYPE_HEADER] == 'dedicated'
         schema = json.loads(request.content)['generationConfig']['responseJsonSchema']
-        assert schema['properties']['questions']['items'] == {'$ref': '#/$defs/DreamReviewItem'}
+        assert schema['properties']['decisions']['items'] == {'$ref': '#/$defs/Verification'}
         assert_vertex_subset(schema)
         assert_local_references(schema)
         original = Plan.model_json_schema()
-        question = schema['$defs']['DreamReviewItem']
-        assert {'source_ref', 'quote'} <= set(question['required'])
-        for field in ('source_ref', 'quote'):
-            assert question['properties'][field]['type'] == 'string'
-            assert question['properties'][field]['description'] == (
-                original['$defs']['DreamReviewItem']['properties'][field]['description']
-            )
-        for field in ('before', 'after', 'other'):
-            assert schema['$defs']['Edit']['properties'][field]['description'] == (
-                original['$defs']['Edit']['properties'][field]['description']
-            )
+        decision = schema['$defs']['Verification']
+        assert {'id', 'agree', 'reason'} <= set(decision['required'])
+        assert (
+            decision['properties']['reason']['description']
+            == original['$defs']['Verification']['properties']['reason']['description']
+        )
         return httpx.Response(
-            200, json={'candidates': [{'content': {'parts': [{'text': '{}'}]}, 'finishReason': 'STOP'}]}
+            200, json={'candidates': [{'content': {'parts': [{'text': '{"decisions":[]}'}]}, 'finishReason': 'STOP'}]}
         )
 
     async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as upstream:
@@ -475,7 +470,7 @@ async def test_reserved_schema_translation_runs_through_local_http_endpoint(monk
             app.dependency_overrides.clear()
     assert response.status_code == 200
     assert response.json()['model'] == 'omi:auto:dream-reasoning'
-    assert Plan.model_validate_json(response.json()['choices'][0]['message']['content']) == Plan()
+    assert Plan.model_validate_json(response.json()['choices'][0]['message']['content']) == Plan(decisions=[])
     assert len(seen) == 1
 
 

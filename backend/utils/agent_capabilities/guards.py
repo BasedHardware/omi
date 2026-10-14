@@ -7,7 +7,7 @@ from pathlib import Path
 import re
 import unicodedata
 
-from models.dream_refs import base_ref
+from models.agent_refs import base_ref
 
 # Code-configurable threshold; no rollout/environment switch changes admission.
 MIN_SUMMARY_TRANSCRIPT_WORDS = 40
@@ -77,7 +77,7 @@ def spelling_rejection(edit):
 
 @lru_cache(maxsize=1)
 def common_words():
-    return frozenset((Path(__file__).parent / 'data' / 'common_english_words.txt').read_text(encoding='utf-8').split())
+    return frozenset((Path(__file__).parent.parent / 'data' / 'common_english_words.txt').read_text(encoding='utf-8').split())
 
 
 def vocabulary_rejection(term):

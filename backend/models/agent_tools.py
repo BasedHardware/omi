@@ -1,4 +1,4 @@
-"""Dream v2 tool contracts. All identifiers must come from this owner's session."""
+"""Owner-scoped agent tools; the authenticated mount supplies authority."""
 
 from datetime import datetime, timezone
 from typing import Literal
@@ -6,7 +6,7 @@ from typing import Literal
 from pydantic import Field, model_validator
 
 from models.dream_edit import Strict, Term
-from models.dream_harness_edit import HarnessEdit
+from models.agent_edit import HarnessEdit
 from models.review import SamePersonItem, SpellingQuestionPayload
 from models.dream_edit import QUESTION_VALUE_DESCRIPTION
 
@@ -92,7 +92,7 @@ class LearnTerm(Strict):
 
 class Finish(Strict):
     summary: str = Field(
-        max_length=1000, description='What was checked and staged; no claims that staged changes were applied.'
+        max_length=1000, description='What was checked and the tool-reported outcomes; never claim staging is application.'
     )
     notes: str = Field(
         default='',
@@ -125,13 +125,14 @@ TOOLS = {
         Read,
     ),
     'propose_edit': (
-        'Validate and stage one reversible edit. Rejection feedback lets you correct and resubmit; no writes.',
+        'Validate a reversible edit with precise guard feedback. Autonomous authority stages it; '
+        'a signed-in owner request applies it with a journal and Undo. Correct and resubmit rejections.',
         ProposeEdit,
     ),
     'ask': ('Stage a valuable evidence-backed Review question (value 1–5); no offer is written yet.', Ask),
     'learn_term': ('Stage evidenced vocabulary; it cannot ground another change in this session.', LearnTerm),
     'finish': (
-        'Finish hunting and send staged work to independent verification, including on budget exhaustion.',
+        'Finish the bounded session with outcomes and optional notes. Autonomous staged work is independently verified.',
         Finish,
     ),
 }

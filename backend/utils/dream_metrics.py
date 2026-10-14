@@ -47,7 +47,7 @@ ERROR_TYPES = {
 
 
 # An exact allowlist, rather than logging arbitrary messages beginning with dream_.
-DREAM_VALUE_ERROR_CODES = frozenset(
+LEGACY_ERROR_CODES = frozenset(
     {
         'dream_reasoning_budget',
         'dream_sample_plan',
@@ -104,7 +104,7 @@ def error_code(exc):
     return code if isinstance(code, str) and code in DREAM_VALUE_ERROR_CODES else None
 
 
-DREAM_VALUE_ERROR_CODES |= frozenset(
+DREAM_VALUE_ERROR_CODES = LEGACY_ERROR_CODES | frozenset(
     [
         'dream_argument_budget',
         'dream_capacity_wait',
@@ -223,7 +223,7 @@ def record_pass(report):
     )
 
 
-def record_reclaimed(age_s, context_mode=None):
+def record_reclaimed(age_s, size_bucket=None):
     ABANDONED.inc()
     logger.info('Dream lease reclaimed age_s=%d', age_s)
 

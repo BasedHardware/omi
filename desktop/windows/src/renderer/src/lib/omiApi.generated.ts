@@ -2145,6 +2145,7 @@ export interface DeveloperSuccessResponse {
 export interface DeveloperTranscriptSegment {
   end: number;
   id?: string | null;
+  original_text?: string | null;
   speaker_id?: number | null;
   speaker_name?: string | null;
   start: number;
@@ -4759,6 +4760,7 @@ export interface SharedTranscriptSegment {
   end: number;
   id?: string | null;
   is_user: boolean;
+  original_text?: string | null;
   person_id?: string | null;
   speaker?: string | null;
   speaker_id?: number | null;
@@ -4823,6 +4825,7 @@ export interface SimpleStructured {
 export interface SimpleTranscriptSegment {
   end: number;
   id?: string | null;
+  original_text?: string | null;
   speaker_id?: number | null;
   speaker_name?: string | null;
   start: number;
@@ -5521,6 +5524,7 @@ export interface TranscriptSegment {
   end: number;
   id?: string | null;
   is_user: boolean;
+  original_text?: string | null;
   person_id?: string | null;
   speaker?: string | null;
   speaker_id?: number | null;

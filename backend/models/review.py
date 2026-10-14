@@ -6,7 +6,7 @@ from typing import Literal, Optional
 from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, model_validator, model_serializer
 
 from models.dream_edit import Edit, MemoryHygieneEdit, Term
-from models.dream_harness_edit import HarnessEdit
+from models.agent_edit import HarnessEdit
 
 EntityType = Literal['person', 'organization', 'project']
 ReviewKind = Literal['speaker', 'task', 'same_person', 'spelling']

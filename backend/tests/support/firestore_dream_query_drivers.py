@@ -9,7 +9,9 @@ from tests.support.firestore_query_drivers import DriverEntry, SHAPE_UID as UID
 
 
 def producer_mode(client):
-    return patch.dict('os.environ', {'DREAM_AGENT_MODE': 'shadow', 'DREAM_AGENT_UID_ALLOWLIST': UID})
+    return patch.dict(
+        'os.environ', {'DREAM_AGENT_ENABLED': 'true', 'DREAM_AGENT_ELIGIBILITY': 'all', 'REVIEW_SURFACE_MODE': 'on'}
+    )
 
 
 def trim_overflow(client):
@@ -48,18 +50,9 @@ def admission_state(client, args, trial):
 def entries():
     return (
         DriverEntry(
-            'database.dream_context_reads.subject_memory_refs', base={'uid': UID, 'subject': 'person:synthetic'}
-        ),
-        DriverEntry(
-            'database.dream_context_reads.temporal_neighbours',
-            base={
-                'uid': UID,
-                'start': datetime(2026, 10, 9, tzinfo=timezone.utc),
-                'anchor': datetime(2026, 10, 9, 1, tzinfo=timezone.utc),
-                'end': datetime(2026, 10, 9, 2, tzinfo=timezone.utc),
-            },
-            domains={'collection': ['conversations', 'screen_activity']},
-            neutrals={'excluded_ids': ((), 'post-query exclusion within a fixed 12-row scan per side')},
+            'utils.dream_seed.load',
+            base={'uid': UID},
+            neutrals={'caps': (Caps(), 'seed size and model ceilings; no filter changes')},
         ),
         DriverEntry(
             'database.dream_history.history_page',
@@ -85,6 +78,7 @@ def entries():
         ),
         DriverEntry(
             'database.dream_scheduler.candidates',
+            patchers=(producer_mode,),
             domains={'limit': [1, 100]},
             neutrals={'now': (datetime(2026, 10, 12, tzinfo=timezone.utc), 'post-query priority only')},
         ),

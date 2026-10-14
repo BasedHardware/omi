@@ -9,11 +9,12 @@ import pytest
 from config.dream_agent import Caps
 from config.dream_session import SessionLimits
 from database import dream_store, dream_turns, review_store, review_changes
-from models.dream_harness import VerificationBatch, Verification
+from models.agent_tools import VerificationBatch, Verification
 from tests.unit.test_dream_cleanup_edits import store, records, UID
 from tests.unit.test_dream_session import call, turn
-from utils import dream_agent, dream_tools, dream_seed, dream_capacity
-from utils.dream_context import EvidenceRecords
+from utils.agent_capabilities import tools as dream_tools
+from utils import dream_agent, dream_seed, dream_capacity
+from utils.agent_capabilities.evidence import EvidenceRecords
 from utils.dream_harness_transport import MAIN_LANE, VERIFY_LANE
 from utils.llm.shaped_agent import Turn
 

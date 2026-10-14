@@ -23,6 +23,7 @@ from database import (
 )
 from database import review_exact_undo
 from utils.dream_metrics import record_undo
+from utils.review_projection import sync_conversations
 from database.read_boundary import parse_payload_strict
 from models.review import ReviewChange, ReviewChangesResponse
 
@@ -64,7 +65,7 @@ class AgentEdit(BaseModel):
     patch: dict
 
 
-def _get(data: dict, path: str) -> dict:
+def read_field_state(data: dict, path: str) -> dict:
     value = data
     for key in path.split('.'):
         if not isinstance(value, dict) or key not in value:
@@ -73,7 +74,7 @@ def _get(data: dict, path: str) -> dict:
     return {'present': True, 'value': copy.deepcopy(value)}
 
 
-def _patch_value(value: dict):
+def write_field_state(value: dict):
     return value['value'] if value['present'] else firestore.DELETE_FIELD
 
 
@@ -169,7 +170,7 @@ def record_agent_change(
                 {
                     'collection': edit.collection,
                     'document_id': edit.document_id,
-                    'before': {k: _get(data, k) for k in edit.patch},
+                    'before': {k: read_field_state(data, k) for k in edit.patch},
                     'after': {k: {'present': True, 'value': v} for k, v in edit.patch.items()},
                 }
             )
@@ -205,6 +206,7 @@ def record_agent_change(
         )
     except _Unchanged:
         pass
+    sync_conversations(uid, edits, firestore_client=store.client())
     return _wire(result)
 
 
@@ -298,6 +300,12 @@ def set_undone(uid: str, change_id: str, undone: bool, *, now: datetime | None =
         if data['created_at'] < now - WINDOW:
             raise store.ReviewNotFound('Change is outside the 30-day undo window')
         return tracked(review_memory_hygiene.set_undone(uid, change_id, undone))
+    if data and data.get('transcript_overlay'):
+        if data['created_at'] < now - WINDOW:
+            raise store.ReviewNotFound('Change is outside the 30-day undo window')
+        from database.review_transcript_changes import set_undone as set_transcript_undone
+
+        return tracked(set_transcript_undone(uid, change_id, undone))
     if data and data.get('memory_edit'):
         if data['created_at'] < now - WINDOW:
             raise store.ReviewNotFound('Change is outside the 30-day undo window')
@@ -331,13 +339,13 @@ def set_undone(uid: str, change_id: str, undone: bool, *, now: datetime | None =
                 not exact and (current.get('deleted') or current.get('is_dismissed') or current.get('discarded'))
             ):
                 raise store.ReviewConflict('Edit target no longer available')
-            if any(_get(current, key) != value for key, value in edit[expected].items()):
+            if any(read_field_state(current, key) != value for key, value in edit[expected].items()):
                 raise store.ReviewConflict('Target has a newer edit')
             if exact:
                 # A full-row fence permits exact replacement without DELETE_FIELD
                 # transforms. Missing fields stay missing, including after Redo.
                 exact_restores[target.path] = review_exact_undo.restored_row(current, edit[destination])
-            rows.append((target, {key: _patch_value(value) for key, value in edit[destination].items()}, current))
+            rows.append((target, {key: write_field_state(value) for key, value in edit[destination].items()}, current))
         change = dict(data['change'], undone=undone)
         result['change'] = change
         merge = data.get('entity_merge')
@@ -377,6 +385,7 @@ def set_undone(uid: str, change_id: str, undone: bool, *, now: datetime | None =
         )
     except _Unchanged:
         return _wire(result)
+    sync_conversations(uid, result['edits'], firestore_client=store.client())
     return tracked(_wire(result))
 
 

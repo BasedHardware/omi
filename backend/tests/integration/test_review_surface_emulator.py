@@ -653,8 +653,8 @@ def test_real_spelling_fact_has_authority_600(harness):
 
 @pytest.mark.parametrize('kind', ['title', 'overview'])
 def test_dream_summary_edits_apply_undo_redo_and_suppress(harness, kind):
-    from models.dream_agent import Edit
-    from utils import dream_tools
+    from models.dream_edit import Edit
+    from utils.agent_capabilities import tools as dream_tools
 
     client, uid, user, db = harness
     before = {
@@ -698,8 +698,8 @@ def test_dream_summary_edits_apply_undo_redo_and_suppress(harness, kind):
 
 
 def test_dream_title_and_overview_in_same_pass_share_evidence(harness):
-    from models.dream_agent import Edit
-    from utils import dream_tools
+    from models.dream_edit import Edit
+    from utils.agent_capabilities import tools as dream_tools
 
     client, uid, user, db = harness
     before = {
@@ -732,8 +732,9 @@ def test_dream_title_and_overview_in_same_pass_share_evidence(harness):
 
 
 def dream_task_proposal(harness, *, kind='retire_task', index=1):
-    from models.dream_agent import Edit
-    from utils import dream_reads, dream_tools
+    from models.dream_edit import Edit
+    from utils.agent_capabilities import reads as dream_reads
+    from utils.agent_capabilities import tools as dream_tools
 
     client, uid, user, db = harness
     task_id = f'dream-task-{index}'
@@ -768,7 +769,7 @@ def dream_task_proposal(harness, *, kind='retire_task', index=1):
 
 @pytest.mark.parametrize('kind', ['close_task', 'retire_task'])
 def test_dream_suggestion_accept_journals_undo_and_exact_retry(harness, kind):
-    from utils import dream_tools
+    from utils.agent_capabilities import tools as dream_tools
 
     client, uid, user, db = harness
     edit, records, status, item_id = dream_task_proposal(harness, kind=kind)
@@ -796,7 +797,7 @@ def test_dream_suggestion_accept_journals_undo_and_exact_retry(harness, kind):
 
 
 def test_dream_dismiss_is_durable_across_versions(harness):
-    from utils import dream_tools
+    from utils.agent_capabilities import tools as dream_tools
 
     client, uid, user, db = harness
     edit, records, status, item_id = dream_task_proposal(harness)
@@ -840,7 +841,7 @@ def test_dream_attention_cap_is_atomic_and_idempotent(harness):
     with ThreadPoolExecutor(max_workers=6) as pool:
         proposals = list(pool.map(lambda index: dream_task_proposal(harness, index=index), range(6)))
     assert sorted(row[2] for row in proposals) == ['suggested'] * 3 + ['suggestion_cap'] * 3
-    from utils import dream_tools
+    from utils.agent_capabilities import tools as dream_tools
 
     for edit, records, status, item_id in proposals:
         assert dream_tools.suggest_edit(uid, edit, records) == (
@@ -851,8 +852,8 @@ def test_dream_attention_cap_is_atomic_and_idempotent(harness):
 
 
 def test_dream_entity_summary_and_vocabulary_journal_roundtrip(harness):
-    from models.dream_agent import Edit, Term
-    from utils import dream_tools
+    from models.dream_edit import Edit, Term
+    from utils.agent_capabilities import tools as dream_tools
 
     client, uid, user, db = harness
     user.collection('knowledge_nodes').document('org').set(
@@ -915,9 +916,10 @@ def test_dream_accept_fences_evidence_in_actual_journal_transaction(harness, mon
 
 @pytest.mark.parametrize('kind', ['memory', 'merge_memories'])
 def test_dream_canonical_memory_suggestion_accept_and_undo(harness, monkeypatch, kind):
-    from models.dream_agent import Edit
+    from models.dream_edit import Edit
     from models.product_memory import LedgerWriteReason, MemorySubjectScope
-    from utils import dream_reads, dream_tools
+    from utils.agent_capabilities import reads as dream_reads
+    from utils.agent_capabilities import tools as dream_tools
     from utils.memory.knowledge_ledger import LedgerProvenance, save_fact
     from utils.memory.memory_service import MemoryService
 
@@ -971,8 +973,8 @@ def test_dream_canonical_memory_suggestion_accept_and_undo(harness, monkeypatch,
 
 
 def test_dream_people_merge_suggestion_accept_and_undo(harness):
-    from models.dream_agent import Edit
-    from utils import dream_tools
+    from models.dream_edit import Edit
+    from utils.agent_capabilities import tools as dream_tools
 
     client, uid, user, db = harness
     for key, name in [('a', 'Toy Mira'), ('b', 'Toy Meera')]:

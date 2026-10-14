@@ -1,12 +1,13 @@
 """Bounded read-only seed: no intake, migration, materialization or control writes."""
 
 from typing import Any
+from models.person_confidence import evidence_count, MANUAL_LABELS, CARD_CONFIRMS, CARD_PICKS, AUTO_CONFIRMED
 
 from database import dream_history, dream_store, review_store, users
 from config.dream_session import SessionLimits
-from utils.dream_context import EvidenceRecords
-from utils.dream_session import serialized_bytes
-from utils.dream_reads import read_record
+from utils.agent_capabilities.evidence import EvidenceRecords
+from utils.agent_capabilities.session import serialized_bytes
+from utils.agent_capabilities.reads import read_record, unavailable_is_transient
 
 
 def load(uid, caps):
@@ -41,12 +42,18 @@ def load(uid, caps):
     # Read a bounded projected page, never every person's voice embedding.
     for snapshot in (
         people.order_by('__name__')
-        .select(['name', 'user_confirmed', 'is_user_created', 'is_dismissed'])
+        .select(['name', 'user_confirmed', 'is_user_created', 'is_dismissed', 'label_evidence', 'pinned'])
         .limit(32)
         .stream()
     ):
         row = snapshot.to_dict() or {}
-        if not row.get('is_dismissed') and (row.get('user_confirmed') or row.get('is_user_created')):
+        confirmed = any(
+            evidence_count(row.get('label_evidence') or {}, key)
+            for key in (MANUAL_LABELS, CARD_CONFIRMS, CARD_PICKS, AUTO_CONFIRMED)
+        )
+        if not row.get('is_dismissed') and (
+            row.get('user_confirmed') or row.get('is_user_created') or row.get('pinned') or confirmed
+        ):
             append('confirmed_people', {'ref': 'people/' + snapshot.id, 'name': row.get('name', '')})
     dirty = [snapshot.to_dict() for snapshot in dream_store.dirty_refs(uid, limit=32, newest=False)]
     for item in dirty:
@@ -73,14 +80,27 @@ def load(uid, caps):
         if isinstance(notes, str) and len(notes) <= 2000:
             seed['previous_notes'] = notes
     records = EvidenceRecords()
+    unavailable = {}
     initial = 2 if limits.bucket in {'empty', 'light'} else 4 if limits.bucket == 'medium' else 8
     for ref in seed['targets'][:initial]:
         try:
             row = read_record(uid, ref)
+            if row is None:
+                unavailable[ref] = False
             if row and serialized_bytes(records) + serialized_bytes({ref: row}) <= min(16000, limits.read_bytes // 4):
                 records[ref] = row
-        except Exception:
+        except Exception as error:
             # Search/read tools explicitly retry unavailable sources; never
             # acknowledge an unread dirty version from seed construction.
-            continue
+            unavailable[ref] = unavailable_is_transient(error)
+    seed['unavailable_targets'] = unavailable
+    while serialized_bytes(seed) > ceiling:
+        if seed['previous_notes']:
+            seed['previous_notes'] = seed['previous_notes'][: len(seed['previous_notes']) // 2]
+        elif seed['recent_feedback']:
+            seed['recent_feedback'].pop()
+        elif seed['vocabulary']:
+            seed['vocabulary'].pop()
+        else:
+            raise ValueError('dream_seed_byte_budget')
     return seed, records, dirty, limits

@@ -110,7 +110,7 @@ class TestConversationsCount:
         assert "FieldFilter('created_at', '>=', start_date)" in source
         assert "FieldFilter('created_at', '<=', end_date)" in source
         assert "order_by('created_at', direction=firestore.Query.DESCENDING)" in source
-        assert "FieldFilter('deleted', '==', True)" in source
+        assert "conversation_visibility_counts.count_hidden(" in source
         assert '.count().get()' in source
         assert 'result[0][0].value' in source
 
@@ -421,6 +421,8 @@ def _count_filter_match(data, filt):
         return actual == value
     if op == 'in':
         return actual in value
+    if op == '>':
+        return actual > value
     if op == '>=':
         return actual >= value
     if op == '<=':

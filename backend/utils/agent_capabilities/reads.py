@@ -30,6 +30,16 @@ class DreamTranscriptReadError(RuntimeError):
     """A stored speech blob cannot be verified; never mistake it for empty speech."""
 
 
+def unavailable_is_transient(error=None):
+    if error is None:
+        return False
+    if isinstance(error, HTTPException) and error.status_code in {402, 404}:
+        return False
+    if type(error) is ValueError and str(error) == 'Invalid dream read reference':
+        return False
+    return True
+
+
 def read_record(uid, ref, *, control_cache=None, diagnostics=None):
     control_cache = {} if control_cache is None else control_cache
     collection, separator, key = ref.partition('/')

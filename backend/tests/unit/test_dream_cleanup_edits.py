@@ -7,9 +7,10 @@ import pytest
 from pydantic import ValidationError
 
 from database import memory_ledger, review_changes, review_store, task_intelligence_control
-from models.dream_harness import HarnessEdit, Search, tool_schemas
+from models.agent_tools import HarnessEdit, Search, tool_schemas
 from tests.support.dream_firestore import DreamFirestore
-from utils import dream_tools, dream_cleanup_edits
+from utils.agent_capabilities import tools as dream_tools
+from utils.agent_capabilities import cleanup_edits as dream_cleanup_edits
 
 UID = 'synthetic-harness-cleanup-owner'
 NOW = datetime.now(timezone.utc)

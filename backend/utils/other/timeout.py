@@ -86,7 +86,11 @@ class TimeoutMiddleware(BaseHTTPMiddleware):
         timeout = (
             path_timeout if path_timeout is not None else self.methods_timeout.get(request.method, self.default_timeout)
         )
-        if request.method == 'POST' and request.url.path in {'/v2/dream-agent/sweep', '/v1/dream/runs'} and enabled():
+        if (
+            request.method == 'POST'
+            and request.url.path in {'/v2/dream-agent/sweep', '/v2/dream-agent/canary', '/v1/dream/runs'}
+            and enabled()
+        ):
             timeout = max(timeout, HTTP_TIMEOUT_SECONDS)
         # Stamp the monotonic request start so request-scoped read budgets
         # (utils.other.list_budget) can derive an internal deadline that leaves

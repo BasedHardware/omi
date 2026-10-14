@@ -9,17 +9,29 @@ from typing import Any
 from config.dream_agent import Caps, auto_apply_kinds, enabled, concurrency, PASS_TIMEOUT_SECONDS, DRAIN_TIMEOUT_SECONDS
 from database import dream_scheduler, dream_store, dream_turns, review_store
 from database.dream_dirty import dream_writing
-from models.dream_harness import HarnessQuestion
-from models.dream_harness_edit import HarnessEdit
-from utils import dream_capacity, dream_tools, dream_harness_transport, dream_seed, dream_verify
-from utils.dream_search import OwnerSearch
-from utils.dream_session import Session
-from utils.dream_metrics import record_pass, error_code
+from models.agent_tools import HarnessQuestion
+from models.agent_edit import HarnessEdit
+from utils.agent_capabilities import tools as dream_tools
+from utils import dream_capacity, dream_harness_transport, dream_seed, dream_verify
+from utils.agent_capabilities.search import OwnerSearch
+from utils.agent_capabilities.session import Session
+from utils.dream_metrics import record_pass, error_code, record_reclaimed
+from utils.dream_effect_fence import ACTIVE_RUN
 from utils.executors import db_executor, run_blocking
 
 
 async def run_session(
-    uid, seed, records, limits, *, turn=None, lease=None, caps=None, dry_run=False, timeout_seconds=PASS_TIMEOUT_SECONDS
+    uid,
+    seed,
+    records,
+    limits,
+    *,
+    turn=None,
+    lease=None,
+    caps=None,
+    dry_run=False,
+    timeout_seconds=PASS_TIMEOUT_SECONDS,
+    bootstrap_tools=None,
 ):
     caps = caps or Caps.from_env()
     started = asyncio.get_running_loop().time()
@@ -40,7 +52,7 @@ async def run_session(
         'model_lanes': [],
         'dry_run': dry_run,
     }
-    session = Session(uid, OwnerSearch(uid), limits, seed, records=records)
+    session = Session(uid, OwnerSearch(uid), limits, seed, authority='dream', records=records)
 
     async def active():
         if not enabled():
@@ -113,10 +125,15 @@ async def run_session(
         async with asyncio.timeout(timeout_seconds):
             await active()
             try:
-                result = await session.run(
-                    partial(invoke, dream_harness_transport.MAIN_LANE), deadline_seconds=max(1, timeout_seconds - 300)
-                )
-                report['stop_reason'] = result.reason
+                if bootstrap_tools is not None:
+                    await session.execute(bootstrap_tools)
+                    report['stop_reason'] = 'synthetic_tools'
+                else:
+                    result = await session.run(
+                        partial(invoke, dream_harness_transport.MAIN_LANE),
+                        deadline_seconds=max(1, timeout_seconds - 300),
+                    )
+                    report['stop_reason'] = result.reason
             except Exception as exc:
                 # Already staged work survives model/budget exhaustion. The live
                 # kill/lease boundary is rechecked before verification and effects.
@@ -129,14 +146,21 @@ async def run_session(
                 staged,
                 partial(invoke, dream_harness_transport.VERIFY_LANE),
                 tokens=min(limits.verification_tokens, max(0, limits.tokens - report['accounted_tokens'])),
-                deadline_seconds=min(limits.verifier_seconds, max(1, deadline - asyncio.get_running_loop().time())),
+                deadline_seconds=max(0, deadline - asyncio.get_running_loop().time() - min(60, timeout_seconds / 10)),
+                verifier_seconds=limits.verifier_seconds,
                 completion_tokens=limits.verifier_completion_tokens,
             )
             report['verifier_calls'] = calls
+            report['verifier_valid_responses'] = sum(
+                isinstance(vote, bool) for votes in support.values() for vote in votes
+            )
             decisions = Counter()
             demoted = await run_blocking(db_executor, dream_store.demoted_types, uid, caps)
             automatic = auto_apply_kinds(uid) - demoted
             offered = []
+            if not dry_run and lease is None:
+                raise ValueError('dream_lease_required')
+            effect_scope = ACTIVE_RUN.set((uid, lease['run_id']) if lease else None)
             token = dream_writing.set(True)
             try:
                 for item in staged:
@@ -147,7 +171,13 @@ async def run_session(
                         if isinstance(item.operation, HarnessQuestion)
                         else 'edits' if isinstance(item.operation, HarnessEdit) else 'vocabulary'
                     )
-                    report['proposed'][category].append(item.operation.model_dump(mode='python'))
+                    report['proposed'][category].append(
+                        {
+                            **item.operation.model_dump(mode='python'),
+                            'key': item.key,
+                            'policy': 'auto' if decision == 'agree' and item.kind in automatic else 'suggest',
+                        }
+                    )
                     if decision == 'disagree':
                         report['outcomes'].append({'key': item.key, 'kind': item.kind, 'status': 'verifier_disagree'})
                     elif (
@@ -162,6 +192,7 @@ async def run_session(
                                     item.operation,
                                     item.records,
                                     expected_records=item.fences,
+                                    authority='dream',
                                 )
                             else:
                                 status = await effect(
@@ -169,6 +200,7 @@ async def run_session(
                                     [item.operation],
                                     expected_records=item.fences,
                                     verified=True,
+                                    records=item.records,
                                 )
                         except (ValueError, review_store.ReviewConflict, review_store.ReviewNotFound):
                             status = 'invalid_evidence'
@@ -201,6 +233,7 @@ async def run_session(
                     report['outcomes'].append({'key': item.key, 'kind': item.kind, 'status': status})
             finally:
                 dream_writing.reset(token)
+                ACTIVE_RUN.reset(effect_scope)
             report['verifier_outcomes'] = dict(decisions)
             report.update(
                 status='complete',
@@ -235,35 +268,73 @@ async def run_pass(
     canary=False,
     timeout_seconds=PASS_TIMEOUT_SECONDS,
     progress=None,
-    dry_run=False
+    dry_run=False,
+    bootstrap_tools=None,
 ):
     if not enabled():
-        return {'status': 'not_admitted', 'reason': 'disabled'}
+        report = {'status': 'not_admitted', 'reason': 'disabled'}
+        if not dry_run:
+            record_pass(report)
+        return report
     caps = caps or Caps.from_env()
+    if bootstrap_tools is not None and not canary:
+        raise ValueError('dream_bootstrap_requires_synthetic_canary')
     slot = await dream_capacity.claim(concurrency(), slot_seconds=timeout_seconds + 120) if not dry_run else None
     if not dry_run and slot is None:
-        return {'status': 'waiting', 'reason': 'reserved_capacity'}
+        report = {'status': 'waiting', 'reason': 'reserved_capacity'}
+        record_pass(report)
+        return report
     lease = None
     release_slot = False
     try:
         seed, records, dirty, limits = await run_blocking(db_executor, dream_seed.load, uid, caps)
+        limits = replace(
+            limits,
+            completion_tokens=min(limits.completion_tokens, caps.completion_tokens),
+            verifier_completion_tokens=min(limits.verifier_completion_tokens, caps.completion_tokens),
+        )
         caps = replace(caps, tokens=limits.tokens)
         if not dry_run:
-            lease = await run_blocking(db_executor, dream_store.acquire, uid, caps, trigger=trigger, canary=canary)
+            reclaimed = {}
+            try:
+                lease = await run_blocking(
+                    db_executor, dream_store.acquire, uid, caps, trigger=trigger, canary=canary, reclaim_sink=reclaimed
+                )
+            finally:
+                if reclaimed:
+                    record_reclaimed(**reclaimed)
             if lease is None:
                 release_slot = True
-                return {'status': 'not_admitted'}
-        report, session = await run_session(
-            uid,
-            seed,
-            records,
-            limits,
-            turn=turn,
-            lease=lease,
-            caps=caps,
-            dry_run=dry_run or canary,
-            timeout_seconds=timeout_seconds,
-        )
+                report = {'status': 'not_admitted'}
+                record_pass(report)
+                return report
+        if limits.bucket == 'empty' and not seed.get('targets'):
+            report: dict[str, Any] = {
+                'status': 'not_admitted',
+                'reason': 'idle',
+                'tokens': 0,
+                'accounted_tokens': 0,
+                'usage_unknown': False,
+                'usage_complete': True,
+                'size_bucket': 'empty',
+                'mode': 'on',
+                'proposed': {'edits': [], 'questions': [], 'vocabulary': []},
+                'outcomes': [],
+            }
+            session = Session(uid, OwnerSearch(uid), limits, seed, authority='dream', records=records)
+        else:
+            report, session = await run_session(
+                uid,
+                seed,
+                records,
+                limits,
+                turn=turn,
+                lease=lease,
+                caps=caps,
+                dry_run=dry_run or canary,
+                timeout_seconds=timeout_seconds,
+                bootstrap_tools=bootstrap_tools,
+            )
         if progress is not None:
             progress['report'] = report
         if lease is not None:
@@ -271,18 +342,26 @@ async def run_pass(
                 run_id=lease['run_id'], trigger=trigger, mode=lease['mode'], cost_usd_reserved=caps.reservation_usd
             )
             consumed = [item for item in dirty if item['collection'] + '/' + item['id'] in session.records]
+            unavailable = [
+                {**item, 'transient': session.unavailable[item['collection'] + '/' + item['id']]}
+                for item in dirty
+                if item['collection'] + '/' + item['id'] in session.unavailable
+            ]
             await run_blocking(
                 db_executor,
                 dream_store.finish,
                 uid,
                 lease,
                 report,
-                success=report['status'] == 'complete',
+                success=report['status'] == 'complete' or report.get('reason') == 'idle',
                 consumed=consumed,
+                unavailable=unavailable,
                 reviewed=set(session.records),
                 refund=report['tokens'] == 0 and not report['usage_unknown'],
                 release=report.get('error_type') != 'TimeoutError',
             )
+        if report.get('reason') == 'idle':
+            report.pop('run_id', None)
         if not dry_run:
             record_pass(report)
         release_slot = report.get('error_type') != 'TimeoutError'
@@ -307,7 +386,9 @@ async def drain(*, limit=100):
     try:
         async with asyncio.timeout(DRAIN_TIMEOUT_SECONDS):
             if await dream_capacity.available_model() is None:
-                return [{'status': 'waiting', 'reason': 'reserved_capacity'}]
+                report = {'status': 'waiting', 'reason': 'reserved_capacity'}
+                record_pass(report)
+                return [report]
             page = await run_blocking(db_executor, dream_scheduler.candidates, limit=min(limit, 100))
             owners = iter(page)
 

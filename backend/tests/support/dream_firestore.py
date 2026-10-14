@@ -48,6 +48,9 @@ class Document(StrictFirestoreDocument):
     def set(self, data, merge=False):
         self._database.rows[self.path] = merged(self._database.rows.get(self.path, {}), data, merge)
 
+    def delete(self):
+        self._database.rows.pop(self.path, None)
+
 
 class Query:
     def __init__(self, database, path, *, order=None, descending=False, bound=None):
@@ -96,6 +99,21 @@ class Query:
 
 
 class Transaction(StrictFirestoreTransaction):
+    def update(self, ref, data):
+        # Firestore dotted field paths mutate nested maps; the base fixture's
+        # literal-key updates cannot witness summary spelling or its Undo.
+        super().update(ref, data)
+        row = self._database.rows[ref.path]
+        for field, value in data.items():
+            if '.' not in field:
+                continue
+            row.pop(field)
+            parent = row
+            parts = field.split('.')
+            for part in parts[:-1]:
+                parent = parent.setdefault(part, {})
+            parent[parts[-1]] = deepcopy(value)
+
     def set(self, ref, data, merge=False):
         super().set(ref, merged(self._database.rows.get(ref.path, {}), data, merge))
 

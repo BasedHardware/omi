@@ -1,28 +1,11 @@
 """Typed edits shared by Dream planning and the Review proposal contract."""
 
 from typing import Literal
-from pydantic import BaseModel, ConfigDict, Field, PrivateAttr, model_validator
-from models.dream_refs import base_ref
+from pydantic import BaseModel, ConfigDict, Field, model_validator
+from models.agent_refs import base_ref
 
 
-class ConsensusItem(BaseModel):
-    # Server-only votes: never accepted from the model or added to client DTOs.
-    _agreement: int = PrivateAttr(default=0)
-    _samples: int = PrivateAttr(default=0)
-
-    @property
-    def agreement(self):
-        return self._agreement
-
-    @property
-    def samples(self):
-        return self._samples
-
-    def set_agreement(self, agreement: int, samples: int) -> None:
-        self._agreement, self._samples = agreement, samples
-
-
-class Strict(ConsensusItem):
+class Strict(BaseModel):
     model_config = ConfigDict(extra='forbid')
 
 
@@ -133,52 +116,3 @@ class MemoryHygieneEdit(Strict):
         if not self.reason.strip():
             raise ValueError('Memory hygiene requires a reason')
         return self
-
-
-class FullEdit(Strict):
-    kind: Literal[
-        'spelling',
-        'title',
-        'overview',
-        'memory',
-        'merge_people',
-        'entity_summary',
-        'close_task',
-        'retire_task',
-        'merge_memories',
-        'retire_memory',
-        'supersede_memory',
-    ] = Field(
-        description='Use retire_memory for garbage, misattribution from another speaker, or contradiction; never for low importance. Use supersede_memory for a newer time-scoped fact about the same attribute, never age alone.'
-    )
-    target: str = Field(description=Edit.model_fields['target'].description)
-    before: str = Field(default='', description=Edit.model_fields['before'].description)
-    other: str = Field(
-        default='',
-        description='Second supplied ref for merges, or the newer memory for supersede_memory. Supersede chooses exactly one of other or after.',
-    )
-    after: str = Field(
-        default='',
-        description='Corrected text for text edits; newer time-scoped fact for supersede_memory without other. Empty for retire_memory.',
-    )
-
-    reason: str = Field(
-        min_length=1,
-        max_length=1000,
-        description='Why this edit improves the data. Memory hygiene must explain duplicate identity, garbage (not low importance), another speaker attribution, contradiction, or a newer fact about the same attribute.',
-    )
-    evidence: list[str] = Field(
-        min_length=1,
-        max_length=10,
-        description='Supplied supporting refs. Retire/supersede use conversations or other memories; the target alone is not support.',
-    )
-
-    @model_validator(mode='after')
-    def full_hygiene(self):
-        if self.kind in {'retire_memory', 'supersede_memory'}:
-            MemoryHygieneEdit.model_validate(self.model_dump(exclude={'value'}))
-        else:
-            Edit.model_validate(self.model_dump(exclude={'value'}))
-        return self
-
-    value: int | None = Field(default=None, ge=1, le=5, description=QUESTION_VALUE_DESCRIPTION)

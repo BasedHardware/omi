@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 from types import SimpleNamespace
 from uuid import NAMESPACE_URL, uuid5
 
-from models.dream_refs import base_ref, cited_value
+from models.agent_refs import base_ref, cited_value
 from models.review import ReviewChange
 from models.review_context import build_context, question_source
 
@@ -48,6 +48,11 @@ def edit_change(uid, edit, records, key):
     )
     item = SimpleNamespace(kind='spelling', source_ref=source_ref, quote=quote)
     source = question_source(item, records)
+    context = build_context(item, source)
+    if (context is None or context.quote_start is None) and edit.kind == 'spelling' and edit.after:
+        # Summary-only typos may already be spelled correctly in the speech.
+        # Show that actual sentence instead of fabricating a transcript quote.
+        context = build_context(SimpleNamespace(kind='spelling', source_ref=source_ref, quote=edit.after), source)
     return ReviewChange(
         change_id=str(uuid5(NAMESPACE_URL, uid + ':' + key)),
         kind='other',
@@ -56,6 +61,6 @@ def edit_change(uid, edit, records, key):
         edit_kind=edit.kind,
         before=before[:4000],
         after=after[:4000],
-        context=build_context(item, source),
+        context=context,
         created_at=datetime.now(timezone.utc),
     )
