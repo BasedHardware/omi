@@ -13241,4 +13241,10 @@ class AppLocalizationsHr extends AppLocalizations {
 
   @override
   String get paywallCancelAnytime => 'Otkažite bilo kada.';
+
+  @override
+  String get connectAnAgent => 'Povežite agenta';
+
+  @override
+  String get connectAnAgentSubtitle => 'Preuzmite upit za postavljanje za Claude, ChatGPT, Codex ili bilo kojeg agenta';
 }

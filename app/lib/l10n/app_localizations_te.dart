@@ -13259,4 +13259,10 @@ class AppLocalizationsTe extends AppLocalizations {
 
   @override
   String get paywallCancelAnytime => 'ఎప్పుడైనా రద్దు చేసుకోవచ్చు.';
+
+  @override
+  String get connectAnAgent => 'ఏజెంట్‌ను కనెక్ట్ చేయండి';
+
+  @override
+  String get connectAnAgentSubtitle => 'Claude, ChatGPT, Codex లేదా ఏ ఏజెంట్‌కైనా సెటప్ ప్రాంప్ట్ పొందండి';
 }

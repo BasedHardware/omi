@@ -4055,5 +4055,7 @@
     "firstCaptureCancelWarning": "Going back stops this recording. Keep talking to give Omi a few more sentences.",
     "firstCaptureSiriTip": "Tip: Enable Omi in Shortcuts → Siri.",
     "paywallOutlineHeadline": "Älä enää koskaan missaa sanaakaan.",
-    "paywallCancelAnytime": "Peruuta milloin tahansa."
+    "paywallCancelAnytime": "Peruuta milloin tahansa.",
+    "connectAnAgent": "Yhdistä agentti",
+    "connectAnAgentSubtitle": "Hae asetuskehote Claudelle, ChatGPT:lle, Codexille tai mille tahansa agentille"
 }

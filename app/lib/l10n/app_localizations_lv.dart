@@ -13236,4 +13236,10 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get paywallCancelAnytime => 'Atcelt jebkurā laikā.';
+
+  @override
+  String get connectAnAgent => 'Pievienot aģentu';
+
+  @override
+  String get connectAnAgentSubtitle => 'Iegūstiet iestatīšanas uzvedni Claude, ChatGPT, Codex vai jebkuram aģentam';
 }

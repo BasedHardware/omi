@@ -13134,4 +13134,10 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get paywallCancelAnytime => 'يمكنك الإلغاء في أي وقت.';
+
+  @override
+  String get connectAnAgent => 'ربط وكيل';
+
+  @override
+  String get connectAnAgentSubtitle => 'احصل على موجّه إعداد لـ Claude أو ChatGPT أو Codex أو أي وكيل';
 }

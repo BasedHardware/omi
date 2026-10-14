@@ -13262,4 +13262,10 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get paywallCancelAnytime => 'Anulează oricând.';
+
+  @override
+  String get connectAnAgent => 'Conectează un agent';
+
+  @override
+  String get connectAnAgentSubtitle => 'Obține un prompt de configurare pentru Claude, ChatGPT, Codex sau orice agent';
 }

@@ -13021,4 +13021,10 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get paywallCancelAnytime => 'いつでもキャンセルできます。';
+
+  @override
+  String get connectAnAgent => 'エージェントを接続';
+
+  @override
+  String get connectAnAgentSubtitle => 'Claude、ChatGPT、Codex などのエージェント用セットアップ用プロンプトを取得';
 }

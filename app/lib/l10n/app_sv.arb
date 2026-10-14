@@ -4055,5 +4055,7 @@
     "firstCaptureCancelWarning": "Going back stops this recording. Keep talking to give Omi a few more sentences.",
     "firstCaptureSiriTip": "Tip: Enable Omi in Shortcuts → Siri.",
     "paywallOutlineHeadline": "Missa aldrig ett ord igen.",
-    "paywallCancelAnytime": "Avsluta när som helst."
+    "paywallCancelAnytime": "Avsluta när som helst.",
+    "connectAnAgent": "Anslut en agent",
+    "connectAnAgentSubtitle": "Hämta en installationsprompt för Claude, ChatGPT, Codex eller valfri agent"
 }

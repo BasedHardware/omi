@@ -13208,4 +13208,11 @@ class AppLocalizationsNo extends AppLocalizations {
 
   @override
   String get paywallCancelAnytime => 'Avbryt når som helst.';
+
+  @override
+  String get connectAnAgent => 'Koble til en agent';
+
+  @override
+  String get connectAnAgentSubtitle =>
+      'Få en oppsettsprompt for Claude, ChatGPT, Codex eller en hvilken som helst agent';
 }

@@ -13255,4 +13255,10 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String get paywallCancelAnytime => 'Отказ по всяко време.';
+
+  @override
+  String get connectAnAgent => 'Свържете агент';
+
+  @override
+  String get connectAnAgentSubtitle => 'Вземете подкана за настройка за Claude, ChatGPT, Codex или друг агент';
 }
