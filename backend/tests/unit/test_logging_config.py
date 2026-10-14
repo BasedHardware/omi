@@ -4,6 +4,7 @@ import logging
 import pytest
 
 from utils.logging_config import (
+    CloudRunAccessFilter,
     SuccessfulHealthAccessFilter,
     configure_health_access_logging,
     configure_split_stream_logging,
@@ -104,5 +105,45 @@ def test_health_filter_installs_once_and_operates_on_emitting_logger():
         )
         assert not logger.filter(healthy)
         assert logger.filter(failed)
+    finally:
+        logger.filters[:] = saved_filters
+
+
+def _access_record(status: int = 200, name: str = 'uvicorn.access') -> logging.LogRecord:
+    return logging.LogRecord(
+        name, logging.INFO, '', 0, 'access', ('127.0.0.1', 'GET', '/v2/sync-local-files/x', '1.1', status), None
+    )
+
+
+def test_cloud_run_drops_every_access_record(monkeypatch):
+    monkeypatch.setenv('K_SERVICE', 'backend')
+    logger = logging.getLogger('uvicorn.access')
+    saved_filters = list(logger.filters)
+    try:
+        logger.filters.clear()
+        configure_health_access_logging()
+        configure_health_access_logging()
+        assert sum(isinstance(item, CloudRunAccessFilter) for item in logger.filters) == 1
+        assert not logger.filter(_access_record(200))
+        assert not logger.filter(_access_record(429))
+        assert not logger.filter(_access_record(500))
+        assert CloudRunAccessFilter().filter(_access_record(200, name='application'))
+    finally:
+        logger.filters[:] = saved_filters
+
+
+@pytest.mark.parametrize('value', [None, '', '  '])
+def test_outside_cloud_run_access_records_are_kept(monkeypatch, value):
+    if value is None:
+        monkeypatch.delenv('K_SERVICE', raising=False)
+    else:
+        monkeypatch.setenv('K_SERVICE', value)
+    logger = logging.getLogger('uvicorn.access')
+    saved_filters = list(logger.filters)
+    try:
+        logger.filters.clear()
+        configure_health_access_logging()
+        assert not any(isinstance(item, CloudRunAccessFilter) for item in logger.filters)
+        assert logger.filter(_access_record(200))
     finally:
         logger.filters[:] = saved_filters

@@ -12,6 +12,7 @@ while preserving the default ``levelname:name:message`` format.
 """
 
 import logging
+import os
 import sys
 from typing import Optional, TextIO
 
@@ -33,11 +34,30 @@ class SuccessfulHealthAccessFilter(logging.Filter):
         return not (method in ('GET', 'HEAD') and path in ('/v1/health', '/health', '/ready') and status == 200)
 
 
+class CloudRunAccessFilter(logging.Filter):
+    """Drop every Uvicorn access record on Cloud Run.
+
+    Cloud Run already writes one ``run.googleapis.com/requests`` entry per
+    request, with status, latency and URL, so the stdout access line is a
+    duplicate. GKE services (listen, pusher) have no such platform log and keep
+    their access lines.
+    """
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        return record.name != 'uvicorn.access'
+
+
+def running_on_cloud_run() -> bool:
+    return bool(os.environ.get('K_SERVICE', '').strip())
+
+
 def configure_health_access_logging() -> None:
     """Install once on the emitting logger, independent of its handlers."""
     logger = logging.getLogger('uvicorn.access')
     if not any(isinstance(item, SuccessfulHealthAccessFilter) for item in logger.filters):
         logger.addFilter(SuccessfulHealthAccessFilter())
+    if running_on_cloud_run() and not any(isinstance(item, CloudRunAccessFilter) for item in logger.filters):
+        logger.addFilter(CloudRunAccessFilter())
 
 
 class _MaxLevelFilter(logging.Filter):
