@@ -88,6 +88,15 @@ class GoalConflictError(GoalStoreError):
     pass
 
 
+class GoalValidationError(GoalStoreError):
+    """A patch whose merged value is invalid (e.g. min_value > stored max).
+
+    Raised at the db seam when a released alias patch builds a GoalMetric the
+    schema rejects — the router maps it to 422, not a 500 that looks like an
+    outage to the client.
+    """
+
+
 def _get_db(firestore_client: Any = None) -> Any:
     if firestore_client is not None:
         return firestore_client
@@ -596,14 +605,19 @@ def update_goal(
         metric = GoalMetric.model_validate(metric_value) if metric_value is not None else None
     elif any(key in patch for key in legacy_metric_keys):
         current_metric = _metric_from_storage(current) or GoalMetric(type=GoalType.scale, current=0, target=0)
-        metric = GoalMetric(
-            type=GoalType(patch.get('goal_type', current_metric.type.value)),
-            current=float(patch.get('current_value', current_metric.current)),
-            target=float(patch.get('target_value', current_metric.target)),
-            min=patch.get('min_value', current_metric.min),
-            max=patch.get('max_value', current_metric.max),
-            unit=patch.get('unit', current_metric.unit),
-        )
+        try:
+            metric = GoalMetric(
+                type=GoalType(patch.get('goal_type', current_metric.type.value)),
+                current=float(patch.get('current_value', current_metric.current)),
+                target=float(patch.get('target_value', current_metric.target)),
+                min=patch.get('min_value', current_metric.min),
+                max=patch.get('max_value', current_metric.max),
+                unit=patch.get('unit', current_metric.unit),
+            )
+        except ValidationError as exc:
+            # A released client edits one field at a time; min_value:30 against a
+            # stored max of 20 is a bad patch, not a server fault — surface 422.
+            raise GoalValidationError(exc.errors()[0].get('msg', 'invalid metric patch')) from exc
     else:
         metric = _metric_from_storage(current)
     if 'metric' in patch or clear_metric or any(key in patch for key in legacy_metric_keys):

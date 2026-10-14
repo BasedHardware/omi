@@ -226,7 +226,14 @@ def update_goal(goal_id: str, updates: GoalUpdate, uid: str = Depends(auth.get_c
     if not update_data:
         raise HTTPException(status_code=400, detail="No updates provided")
 
-    updated_goal = goals_db.update_goal(uid, goal_id, update_data)
+    try:
+        updated_goal = goals_db.update_goal(uid, goal_id, update_data)
+    except goals_db.GoalValidationError as exc:
+        # A patch whose merged value is invalid is a bad request, not a 500 —
+        # the client can tell the user why instead of seeing an outage.
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except goals_db.GoalNotFoundError:
+        updated_goal = None
 
     if not updated_goal:
         raise HTTPException(status_code=404, detail="Goal not found")
