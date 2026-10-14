@@ -265,6 +265,8 @@ and an explicit empty literal renders as `''`.
 | `X-Omi-Memory-Belief-Enabled` | Expose belief processing capability to memory clients | backend, macos | server_capability | closed | — | — | — | — | pending | 2026-10-23 | unowned |
 | `X-Omi-Memory-Canonical-Lifecycle-Exposed` | Compatibility header for older macOS and Windows memory clients | backend, macos, windows | server_capability | closed | — | — | — | — | kill | 2026-11-08 | dazheng |
 | `client_telemetry_transport_shadow` | Default-off shadow transport mirroring client reliability telemetry to the frozen backend collector; PostHog stays the source of record until parity | macos | posthog | closed | — | — | — | absent (enable) | pending | 2026-11-12 | dazheng |
+| `desktop-contextual-upsells` | macOS budget meter, 80% nudge and backend-decided Pro gate / MCP cap entry to the plans sheet; default off; requires desktop-plan-storefront | macos | posthog | closed | — | — | — | absent (enable) | pending | 2026-11-13 | dazheng |
+| `desktop-plan-storefront` | macOS backend-driven ladder-v1 plans section in Settings > Plan & Usage; default off; existing checkout and upgrade rails unchanged | macos | posthog | closed | — | — | — | absent (enable) | pending | 2026-11-13 | dazheng |
 | `free-tier-cohort-v1` | Free-tier exposure cohort, never direct admission | backend | posthog | closed | — | — | — | absent (exposure) | pending | 2026-10-23 | unowned |
 | `jit-processing-v1` | JIT processing admission cohort | backend | posthog | closed | — | — | — | expected (enable) | graduate | 2026-10-23 | dazheng |
 | `mobile-chat-apps` | Mobile Chat apps entry on Integrations (connect Telegram/iMessage); client-evaluated, default off. The payload carries each channel's provider id and address (Telegram bot username, iMessage number); the backend OMI_MESSAGING_CHANNELS cohort and paid-plan entitlement remain the authority | mobile | posthog | closed | — | — | — | absent (enable) | pending | 2026-11-09 | dazheng |
@@ -282,6 +284,8 @@ and an explicit empty literal renders as `''`.
 | `screen_task_jev_gate` | Default-off screen dedupe, Jev OCR gate and one-call extraction; privacy approval required | macos | posthog | closed | — | — | — | absent (enable) | pending | 2026-11-01 | dazheng |
 | `system_calendar_meeting_context` | Enable system calendar meeting context on stable | macos | posthog | closed | — | — | — | absent (enable) | graduate | 2026-10-23 | dazheng |
 | `system_calendar_meeting_context_kill` | Beta system calendar meeting context stop | macos | posthog | inverted | — | — | — | expected (kill) | pending | 2026-10-23 | unowned |
+| `web-contextual-upsells` | Web budget meter, 80% nudge and exhausted-budget entry to the plans sheet; default off; requires web-plan-storefront | web-app | posthog | closed | — | — | — | absent (enable) | pending | 2026-11-13 | dazheng |
+| `web-plan-storefront` | Web backend-driven ladder-v1 plans sheet in Settings > Plan; default off; existing checkout and upgrade rails unchanged | web-app | posthog | closed | — | — | — | absent (enable) | pending | 2026-11-13 | dazheng |
 
 ### ops_kill
 

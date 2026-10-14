@@ -2,6 +2,11 @@ import { getIdToken } from './firebase';
 import { version as webAppVersion } from '../../package.json';
 import { getWebDeviceIdHash } from './clientDevice';
 import {
+  parseStorefront,
+  type PlanStorefront,
+  type StorefrontTrigger,
+} from './planStorefront';
+import {
   invalidateCache,
   invalidationPatterns,
   fetchWithCache,
@@ -1958,6 +1963,22 @@ export async function getAvailablePlans(): Promise<AvailablePlansResponse | null
     console.error('getAvailablePlans error:', error);
     return null;
   }
+}
+
+/**
+ * Ladder-v1 plans sheet payload (`GET /v2/payments/plans`). Throws on any
+ * failure so the sheet shows its error state; there is no fallback catalog.
+ */
+export async function getStorefront(params: {
+  source: string;
+  trigger?: StorefrontTrigger | null;
+  locale?: string;
+}): Promise<PlanStorefront> {
+  const query = new URLSearchParams({ source: params.source });
+  if (params.trigger) query.set('trigger', params.trigger);
+  if (params.locale) query.set('locale', params.locale);
+  const raw = await fetchWithAuth<unknown>(`/v2/payments/plans?${query.toString()}`);
+  return parseStorefront(raw);
 }
 
 /**
