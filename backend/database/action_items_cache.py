@@ -82,6 +82,17 @@ def _version_key(uid: str) -> str:
     return f'{_VERSION_KEY_PREFIX}:{uid}'
 
 
+def _client():
+    """The Redis client, or ``None`` when it is unavailable/uninitialized.
+
+    ``redis_db.r`` can be ``None`` during cold init, local dev, or test mocks.
+    Accessing a method on it then raises ``AttributeError`` — not a
+    ``RedisError`` — which escapes the fail-open contract, so every helper gates
+    on this instead of assuming a live client.
+    """
+    return getattr(redis_db, 'r', None)
+
+
 def bump_action_items_list_version(uid: str) -> None:
     """Invalidate every cached list page for ``uid``.
 
@@ -91,9 +102,12 @@ def bump_action_items_list_version(uid: str) -> None:
     """
     if not uid:
         return
+    client = _client()
+    if client is None:
+        return
     try:
         key = _version_key(uid)
-        pipe = redis_db.r.pipeline()
+        pipe = client.pipeline()
         pipe.incr(key)
         pipe.expire(key, _VERSION_TTL_SECONDS)
         pipe.execute()
@@ -107,8 +121,11 @@ def get_action_items_list_version(uid: str) -> Optional[int]:
     ``None`` means "do not use the cache for this request" — it is not the same
     as version 0, which is a legitimate never-written-yet user.
     """
+    client = _client()
+    if client is None:
+        return None
     try:
-        raw = redis_db.r.get(_version_key(uid))
+        raw = client.get(_version_key(uid))
     except redis_pkg.exceptions.RedisError as e:  # type: ignore[attr-defined]
         logger.warning('action-items list cache: version read failed uid=%s: %s', uid, e)
         return None
@@ -136,8 +153,11 @@ def compute_etag(body: Dict[str, Any]) -> str:
 
 def read_cached_list(key: str) -> Optional[Dict[str, Any]]:
     """Return ``{"etag": str, "body": dict}`` or ``None``. Never raises."""
+    client = _client()
+    if client is None:
+        return None
     try:
-        raw = redis_db.r.get(key)
+        raw = client.get(key)
     except redis_pkg.exceptions.RedisError as e:  # type: ignore[attr-defined]
         logger.warning('action-items list cache: read failed: %s', e)
         return None
@@ -154,10 +174,17 @@ def read_cached_list(key: str) -> Optional[Dict[str, Any]]:
 
 def write_cached_list(key: str, *, body: Dict[str, Any], etag: str, ttl: int) -> None:
     """Store one list page. Never raises; a failed write just means a later miss."""
-    if ttl <= 0:
+    client = _client()
+    if client is None:
         return
+    # Clamp the TTL: a non-positive value skips the write, and an oversized or
+    # non-int value is bounded to the documented max so a live key can't be held
+    # far past a fresh page.
+    if isinstance(ttl, bool) or not isinstance(ttl, int) or ttl <= 0:
+        return
+    ttl = min(ttl, _TTL_MAX_SECONDS)
     try:
-        redis_db.r.set(key, json.dumps({'etag': etag, 'body': body}, default=str), ex=ttl)
+        client.set(key, json.dumps({'etag': etag, 'body': body}, default=str), ex=ttl)
     except redis_pkg.exceptions.RedisError as e:  # type: ignore[attr-defined]
         logger.warning('action-items list cache: write failed: %s', e)
     except (TypeError, ValueError) as e:
