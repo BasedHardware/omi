@@ -302,7 +302,7 @@ and an explicit empty literal renders as `''`.
 | `CONVERSATION_SPEAKER_RESOLUTION_ENABLED` | Incident stop for conversation-wide speaker resolution | backend | env | open | — | — | — | — | keep | — | unowned |
 | `CONVERSATION_STORED_MEETING_CONTEXT_ENABLED` | Incident stop for stored meeting context lookup | backend | env | open | — | — | — | — | keep | — | unowned |
 | `DAY3_REENGAGEMENT_EMAIL_KILL_SWITCH` | Stop day-three re-engagement email | backend | env | inverted | false | false | false | — | keep | — | unowned |
-| `DEEPGRAM_SELF_HOSTED_ENABLED` | Select self-hosted Deepgram filler-word policy on pusher | backend | env | closed | — | false (backend-listen (chart)) | false (backend-listen (chart)); true (pusher (chart)) | — | keep | — | unowned |
+| `DEEPGRAM_SELF_HOSTED_ENABLED` | Select self-hosted Deepgram filler-word policy on pusher | backend | env | closed | — | false (backend-listen (chart)) | false (backend-listen (chart), pusher (chart)) | — | keep | — | unowned |
 | `DESKTOP_LOOP_WATCHDOG_ENABLED` | Desktop event-loop stall warning and liveness signal; default on, false disables both | backend | env | open | — | — | — | — | keep | — | dazheng |
 | `DESKTOP_UPDATE_POINTERS_MODE` | Fall back to legacy desktop update pointers | backend | env | open | primary | primary (backend-listen (chart), cloud_run/backend, gke/backend-listen) | primary (backend-listen (chart), cloud_run/backend, gke/backend-listen) | — | keep | — | unowned |
 | `FAIR_USE_KILL_SWITCH` | Emergency stop for fair-use enforcement | backend | env | inverted | — | false (backend-listen (chart)) | false (backend-listen (chart)) | — | keep | — | unowned |

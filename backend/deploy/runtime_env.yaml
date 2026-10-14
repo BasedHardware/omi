@@ -564,6 +564,8 @@ environments:
       services:
         backend:
           forbidden_env:
+          - DEEPGRAM_SELF_HOSTED_ENABLED
+          - DEEPGRAM_SELF_HOSTED_URL
           - BASIC_TIER_MINUTES_LIMIT_PER_MONTH
           - BASIC_TIER_WORDS_TRANSCRIBED_LIMIT_PER_MONTH
           - BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH
@@ -771,6 +773,14 @@ environments:
             CAPTURE_JEV_SHADOW_UID_ALLOWLIST: {value: vi7SA9ckQCe4ccobWNxlbdcNdC23, category: rollout}
             CAPTURE_JEV_SHADOW_PERCENT: {value: '0', category: rollout}
         backend-sync:
+          forbidden_env:
+          - DEEPGRAM_SELF_HOSTED_ENABLED
+          - DEEPGRAM_SELF_HOSTED_URL
+          - HOSTED_PUSHER_API_URL
+          - BASIC_TIER_MINUTES_LIMIT_PER_MONTH
+          - BASIC_TIER_WORDS_TRANSCRIBED_LIMIT_PER_MONTH
+          - BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH
+          - BASIC_TIER_MEMORIES_CREATED_LIMIT_PER_MONTH
           capabilities:
           - conversation.finalize.persisted
           - memory.canonical.mutate
@@ -976,13 +986,15 @@ environments:
             CAPTURE_JEV_SHADOW_ENABLED: {value: 'true', category: rollout}
             CAPTURE_JEV_SHADOW_UID_ALLOWLIST: {value: vi7SA9ckQCe4ccobWNxlbdcNdC23, category: rollout}
             CAPTURE_JEV_SHADOW_PERCENT: {value: '0', category: rollout}
+        backend-sync-backfill:
           forbidden_env:
+          - DEEPGRAM_SELF_HOSTED_ENABLED
+          - DEEPGRAM_SELF_HOSTED_URL
           - HOSTED_PUSHER_API_URL
           - BASIC_TIER_MINUTES_LIMIT_PER_MONTH
           - BASIC_TIER_WORDS_TRANSCRIBED_LIMIT_PER_MONTH
           - BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH
           - BASIC_TIER_MEMORIES_CREATED_LIMIT_PER_MONTH
-        backend-sync-backfill:
           secrets:
             GOOGLE_CLIENT_SECRET:
               secret: GOOGLE_CLIENT_SECRET
@@ -1155,13 +1167,15 @@ environments:
             CAPTURE_JEV_SHADOW_UID_ALLOWLIST: {value: vi7SA9ckQCe4ccobWNxlbdcNdC23, category: rollout}
             CAPTURE_JEV_SHADOW_PERCENT: {value: '0', category: rollout}
           provisional: true
+        backend-integration:
           forbidden_env:
+          - DEEPGRAM_SELF_HOSTED_ENABLED
+          - DEEPGRAM_SELF_HOSTED_URL
           - HOSTED_PUSHER_API_URL
           - BASIC_TIER_MINUTES_LIMIT_PER_MONTH
           - BASIC_TIER_WORDS_TRANSCRIBED_LIMIT_PER_MONTH
           - BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH
           - BASIC_TIER_MEMORIES_CREATED_LIMIT_PER_MONTH
-        backend-integration:
           secrets:
             GOOGLE_CLIENT_SECRET:
               secret: GOOGLE_CLIENT_SECRET
@@ -1294,12 +1308,6 @@ environments:
             OMI_PARITY_PACK_EXPORT_INTERVAL_SECONDS:
               value: '3600'
               category: replay_capture
-          forbidden_env:
-          - HOSTED_PUSHER_API_URL
-          - BASIC_TIER_MINUTES_LIMIT_PER_MONTH
-          - BASIC_TIER_WORDS_TRANSCRIBED_LIMIT_PER_MONTH
-          - BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH
-          - BASIC_TIER_MEMORIES_CREATED_LIMIT_PER_MONTH
       jobs:
         notifications-job:
           flags:
@@ -2264,6 +2272,8 @@ environments:
       services:
         backend:
           forbidden_env:
+          - DEEPGRAM_SELF_HOSTED_ENABLED
+          - DEEPGRAM_SELF_HOSTED_URL
           - BASIC_TIER_MINUTES_LIMIT_PER_MONTH
           - BASIC_TIER_WORDS_TRANSCRIBED_LIMIT_PER_MONTH
           - BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH
@@ -2568,6 +2578,13 @@ environments:
             SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST: {value: vi7SA9ckQCe4ccobWNxlbdcNdC23, category: rollout}
           service_account: backend-runtime@based-hardware.iam.gserviceaccount.com
         backend-sync:
+          forbidden_env:
+          - DEEPGRAM_SELF_HOSTED_ENABLED
+          - DEEPGRAM_SELF_HOSTED_URL
+          - BASIC_TIER_MINUTES_LIMIT_PER_MONTH
+          - BASIC_TIER_WORDS_TRANSCRIBED_LIMIT_PER_MONTH
+          - BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH
+          - BASIC_TIER_MEMORIES_CREATED_LIMIT_PER_MONTH
           capabilities:
           - conversation.finalize.persisted
           - memory.canonical.mutate
@@ -2824,12 +2841,14 @@ environments:
             CAPTURE_JEV_SHADOW_PERCENT: {value: '0', category: rollout}
             SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST: {value: vi7SA9ckQCe4ccobWNxlbdcNdC23, category: rollout}
           service_account: backend-runtime@based-hardware.iam.gserviceaccount.com
+        backend-sync-backfill:
           forbidden_env:
+          - DEEPGRAM_SELF_HOSTED_ENABLED
+          - DEEPGRAM_SELF_HOSTED_URL
           - BASIC_TIER_MINUTES_LIMIT_PER_MONTH
           - BASIC_TIER_WORDS_TRANSCRIBED_LIMIT_PER_MONTH
           - BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH
           - BASIC_TIER_MEMORIES_CREATED_LIMIT_PER_MONTH
-        backend-sync-backfill:
           secrets:
             GOOGLE_CLIENT_SECRET:
               secret: GOOGLE_CLIENT_SECRET
@@ -3048,12 +3067,14 @@ environments:
             SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST: {value: vi7SA9ckQCe4ccobWNxlbdcNdC23, category: rollout}
           provisional: true
           service_account: backend-runtime@based-hardware.iam.gserviceaccount.com
+        backend-integration:
           forbidden_env:
+          - DEEPGRAM_SELF_HOSTED_ENABLED
+          - DEEPGRAM_SELF_HOSTED_URL
           - BASIC_TIER_MINUTES_LIMIT_PER_MONTH
           - BASIC_TIER_WORDS_TRANSCRIBED_LIMIT_PER_MONTH
           - BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH
           - BASIC_TIER_MEMORIES_CREATED_LIMIT_PER_MONTH
-        backend-integration:
           secrets:
             GOOGLE_CLIENT_SECRET:
               secret: GOOGLE_CLIENT_SECRET
@@ -3197,11 +3218,6 @@ environments:
             OMI_LLM_GATEWAY_ALLOW_PROD_FEATURE_MODE: {value: 'true', category: rollout}
             SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST: {value: vi7SA9ckQCe4ccobWNxlbdcNdC23, category: rollout}
           service_account: backend-runtime@based-hardware.iam.gserviceaccount.com
-          forbidden_env:
-          - BASIC_TIER_MINUTES_LIMIT_PER_MONTH
-          - BASIC_TIER_WORDS_TRANSCRIBED_LIMIT_PER_MONTH
-          - BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH
-          - BASIC_TIER_MEMORIES_CREATED_LIMIT_PER_MONTH
       jobs:
         notifications-job:
           flags:
