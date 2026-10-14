@@ -286,6 +286,20 @@ class ProviderGraphTests(unittest.TestCase):
         text = "  void setFoo(FooProvider? p) {\n    if (p == null) return;\n    foo = p;\n    notifyListeners();\n  }\n"
         self.assertEqual(len(hook_violations("setFoo", {"app/lib/x.dart": text})), 1)
 
+    def test_an_unrelated_return_does_not_borrow_an_equality_check(self) -> None:
+        text = (
+            "  void setFoo(FooProvider p) {\n    if (foo == p) log('same');\n    if (disposed) return;\n"
+            "    foo = p;\n    notifyListeners();\n  }\n"
+        )
+        self.assertEqual(len(hook_violations("setFoo", {"app/lib/x.dart": text})), 1)
+
+    def test_compound_unchanged_guard_passes(self) -> None:
+        text = (
+            "  void setFoo(FooProvider p, BarProvider b) {\n"
+            "    if (identical(foo, p) && identical(bar, b)) return;\n    foo = p;\n    notifyListeners();\n  }\n"
+        )
+        self.assertEqual(hook_violations("setFoo", {"app/lib/x.dart": text}), [])
+
     def test_a_graph_with_no_recognised_hooks_fails(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

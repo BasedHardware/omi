@@ -293,28 +293,37 @@ def _opens_control_block(body: str, brace: int) -> bool:
     return False
 
 
-def _top_level_return_before(body: str, limit: int) -> bool:
-    """True when a `return` before [limit] belongs to the hook itself.
-
-    A return inside if/else/loop/try blocks counts (`if (same) { return; }`); one inside a
-    closure or other nested function body does not.
-    """
+def _in_hook_scope(body: str, position: int) -> bool:
+    """True when [position] is in the hook's own body or its if/else/loop/try blocks, not a closure."""
     stack: list[bool] = []
-    for match in re.finditer(r"[{}]|\breturn\b", body[:limit]):
-        token = match.group(0)
-        if token == "{":
+    for match in re.finditer(r"[{}]", body[:position]):
+        if match.group(0) == "{":
             stack.append(_opens_control_block(body, match.start()))
-        elif token == "}":
-            if stack:
-                stack.pop()
-        elif all(stack):
+        elif stack:
+            stack.pop()
+    return all(stack)
+
+
+UNCHANGED_TEST = re.compile(r"\bidentical\s*\(|==(?!\s*null\b)")
+
+
+def _guarded_before(body: str, limit: int) -> bool:
+    """True when, before [limit], an `if` whose condition is an identical/== test returns.
+
+    The return must be that `if`'s own branch (`if (same) return;` or `if (same) { return; }`),
+    so an unrelated equality check next to an unrelated `return` does not count.
+    """
+    prefix = body[:limit]
+    for match in re.finditer(r"\bif\s*\(", prefix):
+        if not _in_hook_scope(body, match.start()):
+            continue
+        open_paren = match.end() - 1
+        close = _matching(prefix, open_paren, "(", ")")
+        if close >= len(prefix) or not UNCHANGED_TEST.search(prefix[open_paren + 1 : close]):
+            continue
+        if re.match(r"\s*(?:\{\s*)?return\b", prefix[close + 1 :]):
             return True
     return False
-
-
-def _compares_before(body: str, limit: int) -> bool:
-    """The early return must test for "unchanged" (identity or equality), not only for null."""
-    return re.search(r"\bidentical\s*\(|==(?!\s*null\b)", body[:limit]) is not None
 
 
 def hook_violations(name: str, sources: dict[str, str]) -> list[str]:
@@ -343,7 +352,7 @@ def hook_violations(name: str, sources: dict[str, str]) -> list[str]:
             notify = body.find("notifyListeners()")
             if notify == -1:
                 continue
-            if not is_arrow and _top_level_return_before(body, notify) and _compares_before(body, notify):
+            if not is_arrow and _guarded_before(body, notify):
                 continue
             line = text.count("\n", 0, match.start()) + 1
             problems.append(
