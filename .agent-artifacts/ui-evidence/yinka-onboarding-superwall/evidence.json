@@ -133,6 +133,34 @@
       "description": "Control arm: today's guided voice introduction, unchanged",
       "captured_by": "agent",
       "source": "screencapture"
+    },
+    {
+      "file": "020-mobile-ios-activation-outline-paywall.png",
+      "platform": "mobile-ios",
+      "description": "End of the activation through #21450's router, Outline arm (OMI_PAYWALL_VARIANT=outline; local server has no plan catalog, so prices don't load)",
+      "captured_by": "agent",
+      "source": "screencapture"
+    },
+    {
+      "file": "021-mobile-ios-activation-control-plans-sheet.png",
+      "platform": "mobile-ios",
+      "description": "End of the activation, control arm (no overrides): the onboarding plans sheet; closing it goes straight to Home, no second paywall",
+      "captured_by": "agent",
+      "source": "screencapture"
+    },
+    {
+      "file": "022-mobile-ios-paywall-reask-on-resume.png",
+      "platform": "mobile-ios",
+      "description": "Paywall re-ask on returning to the app (OMI_PAYWALL_REASK=test, OMI_PAYWALL_REASK_NOW=true to make it due now)",
+      "captured_by": "agent",
+      "source": "screencapture"
+    },
+    {
+      "file": "023-mobile-ios-settings-upgrade-outline.png",
+      "platform": "mobile-ios",
+      "description": "Settings > Upgrade through the router, Outline arm",
+      "captured_by": "agent",
+      "source": "screencapture"
     }
   ]
 }
