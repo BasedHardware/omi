@@ -9,6 +9,7 @@
 * [`agent_quickstart.es.md`](agent_quickstart.es.md) — guía para agentes de
   omi-cli en español (Spanish agent guide).
 * [`agent_quickstart.ja.md`](agent_quickstart.ja.md) — エージェントのための
+* [`agent_quickstart.de.md`](agent_quickstart.de.md) — omi-cli für Agenten (German Agent Quickstart).
   omi-cli ガイド (Japanese agent guide).
 * [`agent_quickstart.fr.md`](agent_quickstart.fr.md) — guide omi-cli pour les
   agents (French agent guide).
