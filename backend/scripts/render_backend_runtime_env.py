@@ -163,6 +163,7 @@ def main() -> int:
                     (f'{output_prefix}_secrets', _render_secrets(service_config.get('secrets', {}))),
                     (f'{output_prefix}_secret_names', _render_secret_names(service_config.get('secrets', {}))),
                     (f'{output_prefix}_identity_flags', _render_identity_flags(service, service_config)),
+                    (f'{output_prefix}_forbidden_env_names', ','.join(sorted(service_config.get('forbidden_env', [])))),
                 )
             )
     for job, raw_job_config in selected_jobs.items():
