@@ -144,6 +144,8 @@ void main() {
     final synced = [for (final w in _tooOldAfternoon()) w..status = WalStatus.synced];
     await _pump(tester, synced);
 
+    await tester.tap(find.text('Synced'));
+    await tester.pump();
     await tester.tap(find.textContaining('30m'));
     await tester.pump(const Duration(milliseconds: 500));
 

@@ -203,7 +203,7 @@ def test_unset_salt_shadow_persists_complete_report_without_user_effects(store, 
         ('dream_users', UID),
         ('dream_users', UID, 'dirty', 'fixture'),
         ('dream_users', UID, 'reviews', dream_history.review_id('conversations/c1')),
-        ('dream_spend', datetime.now(timezone.utc).date().isoformat()),
+        ('dream_users', UID, 'spend', datetime.now(timezone.utc).date().isoformat()),
         ('users', UID, 'dream_runs', result['run_id']),
     }
 
@@ -288,7 +288,7 @@ def test_prod_scheduler_and_writer_env_contract():
     )
     assert dream['target']['oidc'] == sequencer['target']['oidc']
     assert dream['retry'] == sequencer['retry']
-    assert dream['attempt_deadline'] == '720s'
+    assert dream['attempt_deadline'] == '1740s'
     assert FULL_DRAIN_SECONDS + 30 < int(dream['attempt_deadline'][:-1])
     assert (
         dream_agent.PASS_TIMEOUT_SECONDS + dream_agent.FINISH_MARGIN_SECONDS
@@ -346,7 +346,7 @@ def test_prod_scheduler_and_writer_env_contract():
     for name in ('backend-sync', 'backend'):
         for key, value in dogfood_caps.items():
             assert services[name]['env'][key]['value'] == (
-                '250' if name == 'backend-sync' and key == 'DREAM_AGENT_DAILY_USD' else value
+                '320' if name == 'backend-sync' and key == 'DREAM_AGENT_DAILY_USD' else value
             )
         assert services[name]['secrets']['DREAM_AGENT_FEEDBACK_SALT'] == {
             'secret': 'DREAM_AGENT_FEEDBACK_SALT',

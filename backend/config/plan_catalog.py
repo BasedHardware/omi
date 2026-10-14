@@ -13,6 +13,7 @@ import os
 import logging
 from copy import deepcopy
 from datetime import datetime, timezone
+from decimal import Decimal, ROUND_FLOOR
 from typing import Any, Mapping, Optional
 
 from config.rate_card import budget_units as entitlement_budget_units
@@ -210,6 +211,28 @@ def get_entitlement_version(plan: PlanType | str, version: str = 'legacy') -> di
     }
 
 
+# Spec §4 / evidence §6 (W0 §5). Break-even variable budget is
+# price − (Stripe 2.9% + $0.30) − fixed per-user cost. Architect's fixed cost
+# is the 2026-09-22..2026-10-09 mean of SUM(shared_headcount)*30/18 over the
+# 21 cost-active architect users ($3.465491536615313). One unit is $0.001.
+# Floor so the dormant cap never rounds above break-even. Plus ($16.36 →
+# 16360) and Pro ($44.09 → 44090) are ratified inputs; this is the same rule
+# at the $199 Architect price.
+_ARCHITECT_MONTHLY_PRICE_USD = Decimal('199')
+_ARCHITECT_FIXED_COST_USD = Decimal('3.465491536615313')
+_STRIPE_FEE_RATE = Decimal('0.029')
+_STRIPE_FEE_FIXED_USD = Decimal('0.30')
+_LADDER_UNIT_USD = Decimal('0.001')
+
+
+def architect_ladder_v1_budget_units() -> int:
+    """Units for the dormant Architect ladder at the §4 break-even rule."""
+    price = _ARCHITECT_MONTHLY_PRICE_USD
+    stripe_fee = price * _STRIPE_FEE_RATE + _STRIPE_FEE_FIXED_USD
+    variable_usd = price - stripe_fee - _ARCHITECT_FIXED_COST_USD
+    return int((variable_usd / _LADDER_UNIT_USD).to_integral_value(rounding=ROUND_FLOOR))
+
+
 def resolve_price_entitlements(price_id: str, environ: Mapping[str, str] | None = None) -> dict[str, Any]:
     plan = resolve_stripe_price_plan(price_id, environ)
     # Unretained env-configured prices preserve legacy semantics; env cannot activate ladder v1.
@@ -217,10 +240,19 @@ def resolve_price_entitlements(price_id: str, environ: Mapping[str, str] | None 
     return get_entitlement_version(plan, version)
 
 
+def _paid_period_still_open(period_end: Any, now: datetime) -> bool:
+    """Mirror get_user_valid_subscription: missing, zero, or past is not paid."""
+    if not period_end:
+        return False
+    return datetime.fromtimestamp(period_end, tz=timezone.utc) >= now
+
+
 def resolve_subscription_entitlements(subscription: Any, environ: Mapping[str, str] | None = None) -> dict[str, Any]:
     """Resolve shadow metadata without remote reads; never use for live admission.
 
     Ladder v1 budgets remain dormant until its policy shape is complete.
+    Paid rows follow get_user_valid_subscription: a missing, zero, or past
+    current_period_end resolves to basic even when status is active or trialing.
     """
 
     def field(name: str, default: Any = None) -> Any:
@@ -234,12 +266,10 @@ def resolve_subscription_entitlements(subscription: Any, environ: Mapping[str, s
     plan = PlanType.basic if raw_plan == 'free' else PlanType(raw_plan)
     status = field('status', 'active')
     period_end = field('current_period_end')
-    inactive_paid_period = (
-        status == 'inactive'
-        and plan in PAID_PLAN_TYPES
-        and period_end is not None
-        and period_end >= datetime.now(timezone.utc).timestamp()
-    )
+    period_open = _paid_period_still_open(period_end, datetime.now(timezone.utc))
+    inactive_paid_period = status == 'inactive' and plan in PAID_PLAN_TYPES and period_open
+    if plan in PAID_PLAN_TYPES and status in ('active', 'trialing') and not period_open:
+        return get_entitlement_version(PlanType.basic)
     if status not in ('active', 'trialing') and not inactive_paid_period:
         return get_entitlement_version(PlanType.basic)
     price = field('current_price_id')

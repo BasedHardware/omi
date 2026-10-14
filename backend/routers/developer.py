@@ -91,6 +91,7 @@ from utils.conversations.meeting_receipt import (
     record_finalized_meeting_receipt,
 )
 from utils.executors import postprocess_executor
+from utils.external_read_contract import ignore_unknown_query, pagination_headers, utc_window
 from utils.request_validation import HistoryDays
 from utils.llm.memories import identify_category_for_memory
 from utils.memory.developer_memory_list import read_developer_memories
@@ -300,6 +301,9 @@ class DeveloperMemoryVectorSearchResponse(BaseModel):
     items: List[DeveloperMemoryVectorItem] = Field(default_factory=list)
     returned_count: int
     archive_default_visible: bool
+    effective_limit: int = 20
+    search_coverage: str = "eligible_indexed_memories"
+    message: Optional[str] = None
     policy: DeveloperMemoryVectorPolicy
 
 
@@ -354,6 +358,7 @@ def get_memories(
     request: Request = None,  # type: ignore[assignment]
     response: Response = None,  # type: ignore[assignment]
 ):
+    ignore_unknown_query(request, {"limit", "offset", "categories"}, response)
     uid = auth_context.uid
     # Clamp pagination so a negative value cannot reach Firestore (which raises -> HTTP 500) and an
     # oversized limit cannot stream the whole collection. Mirrors the GET /v3/memories hardening.
@@ -385,18 +390,31 @@ def get_memories(
 
     service = MemoryService(db_client=db)
     allowed = {category.value for category in category_list} if category_list else None
+    if offset + limit > 5000:
+        raise HTTPException(status_code=413, detail="Memory pagination window exceeded")
+    read_limit = min(limit + 1, 5000 - offset)
     memories = read_developer_memories(
         service,
         uid,
-        limit=limit,
+        limit=read_limit,
         offset=offset,
         allowed=allowed,
         budget=budget,
         response_model=CleanerMemory,
         logger=logger,
     )
+    if offset + limit == 5000 and len(memories) == limit:
+        # The compatibility reader cannot probe beyond this window. Signal
+        # incomplete coverage without introducing a newly failing lookahead.
+        budget.mark_exhausted('documents')
     finish_list_budget(response, budget)
-    return memories
+    pagination_headers(
+        response,
+        limit=limit,
+        has_more=len(memories) > limit or budget.truncated,
+        next_offset=offset + min(len(memories), limit) if memories and offset + len(memories) < 5000 else None,
+    )
+    return memories[:limit]
 
 
 @router.get(
@@ -450,6 +468,11 @@ def search_memories_vector(
     ]
     return {
         'items': items,
+        'effective_limit': min(limit, 20),
+        'search_coverage': 'eligible_indexed_memories',
+        'message': (
+            'No eligible indexed matches; use the memory list to inspect unindexed content.' if not items else None
+        ),
         'returned_count': len(items),
         'archive_default_visible': False,
         'policy': {
@@ -1101,6 +1124,10 @@ class Conversation(BaseModel):
     language: Optional[str] = None
     source: Optional[str] = None
     transcript_segments: Optional[List[SimpleTranscriptSegment]] = None
+    transcript_included: bool = False
+    participants_included: bool = False
+    participants: List[dict] = Field(default_factory=list)
+    person_ids: List[str] = Field(default_factory=list)
     geolocation: Optional[Geolocation] = None
     folder_id: Optional[str] = None
     folder_name: Optional[str] = None
@@ -1479,6 +1506,12 @@ def ask_conversations(request: DeveloperAskRequest, uid: str = Depends(get_uid_w
     return DeveloperAskResponse(answer=answer, sources=sources)
 
 
+# Register named read routes before the conversation-id catch-all.
+from routers.developer_read import router as developer_read_router
+
+router.include_router(developer_read_router)
+
+
 @router.get(
     "/v1/dev/user/conversations",
     response_model=List[Conversation],
@@ -1496,6 +1529,8 @@ def get_conversations(
     starred: Optional[bool] = None,
     uid: ApiKeyAuth = Depends(get_auth_with_conversations_read),
     request: Request = None,
+    response: Response = None,
+    cursor: Optional[str] = None,
 ):
     """
     Get conversations with optional transcript inclusion.
@@ -1504,6 +1539,22 @@ def get_conversations(
     - **folder_id**: Filter by folder ID (must be a non-empty string if provided)
     - **starred**: Filter by starred status (true/false)
     """
+    ignore_unknown_query(
+        request,
+        {
+            "start_date",
+            "end_date",
+            "categories",
+            "limit",
+            "offset",
+            "include_transcript",
+            "folder_id",
+            "starred",
+            "cursor",
+        },
+        response,
+    )
+    start_date, end_date = utc_window(start_date, end_date)
     auth = uid
     uid = auth.uid
     status = 500
@@ -1523,21 +1574,60 @@ def get_conversations(
             logger.error(f"Invalid category in developer conversations: {type(e).__name__}")
             raise HTTPException(status_code=400, detail="Invalid category. Please provide a valid category.")
 
-        conversations = conversations_db.get_conversations(
-            uid,
-            limit,
-            offset,
-            include_discarded=False,
-            statuses=["completed"],
-            start_date=start_date,
-            end_date=end_date,
-            categories=[c.value for c in category_list],
-            folder_id=folder_id,
-            starred=starred,
+        from utils.mcp_server.handlers.conversations import conversation_cards_page_core
+        from utils.mcp_server.errors import ToolExecutionError
+        from utils.mcp_server.helpers import conversation_participants
+
+        next_cursor = None
+        if not include_transcript and folder_id is None and starred is None:
+            try:
+                conversations, next_cursor = conversation_cards_page_core(
+                    uid,
+                    limit=limit,
+                    offset=offset,
+                    cursor_token=cursor,
+                    start_dt=start_date,
+                    end_dt=end_date,
+                    categories=[c.value for c in category_list],
+                    cursor_kind="developer_conversations",
+                    extra_field_paths=["structured", "source", "geolocation", "folder_id"],
+                )
+            except ToolExecutionError as exc:
+                raise HTTPException(status_code=exc.http_status or 400, detail=exc.message) from exc
+            has_more = next_cursor is not None
+        else:
+            if cursor:
+                raise HTTPException(
+                    status_code=400, detail="cursor requires include_transcript=false and no folder/starred filter"
+                )
+            conversations = conversations_db.get_conversations_without_photos(
+                uid,
+                limit + 1,
+                offset,
+                include_discarded=False,
+                statuses=["completed"],
+                start_date=start_date,
+                end_date=end_date,
+                categories=[c.value for c in category_list],
+                folder_id=folder_id,
+                starred=starred,
+            )
+            has_more = len(conversations) > limit
+            conversations = conversations[:limit]
+        pagination_headers(
+            response,
+            limit=limit,
+            has_more=has_more,
+            next_offset=offset + len(conversations) if next_cursor is None else None,
+            next_cursor=next_cursor,
         )
 
         # Filter out locked conversations completely
         unlocked_conversations = [conv for conv in conversations if not conv.get('is_locked', False)]
+
+        for conv in unlocked_conversations:
+            conv.update(conversation_participants(conv))
+            conv['transcript_included'] = include_transcript
 
         # Remove transcript_segments if not requested
         if not include_transcript:
@@ -1672,6 +1762,7 @@ def get_conversation_endpoint(
     include_transcript: bool = False,
     uid: ApiKeyAuth = Depends(get_auth_with_conversation_detail_read),
     request: Request = None,
+    response: Response = None,  # type: ignore[assignment]
 ):
     """
     Get a single conversation by ID.
@@ -1679,6 +1770,7 @@ def get_conversation_endpoint(
     - **conversation_id**: The ID of the conversation to retrieve
     - **include_transcript**: If True, includes full transcript_segments in the response
     """
+    ignore_unknown_query(request, {"include_transcript"}, response)
     auth = uid
     uid = auth.uid
     status = 500
@@ -1691,13 +1783,18 @@ def get_conversation_endpoint(
         if not conversation:
             status = 404
             returned_count = 0
-            raise HTTPException(status_code=404, detail="Conversation not found")
+            raise HTTPException(status_code=404, detail="Conversation ID not found or unknown conversation sub-route")
 
         # Filter out locked conversations
         if conversation.get('is_locked', False):
             status = 404
             returned_count = 0
-            raise HTTPException(status_code=404, detail="Conversation not found")
+            raise HTTPException(status_code=404, detail="Conversation ID not found or unknown conversation sub-route")
+
+        from utils.mcp_server.helpers import conversation_participants
+
+        conversation.update(conversation_participants(conversation))
+        conversation['transcript_included'] = include_transcript
 
         # Remove transcript_segments if not requested
         if not include_transcript:

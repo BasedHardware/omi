@@ -90,6 +90,10 @@ extension TaskAssistant {
     // Exactly one content-free terminal event, including rejects, skips and cancelled/revoked work.
     let properties = metrics.properties(
       captureToTerminalMS: (ProcessInfo.processInfo.systemUptime - frame.capturedUptime) * 1000)
+    // Exact collector copy is taken from the terminal properties before any later
+    // diagnostic sampling. Deferred delivery receipts do not rewrite this value.
+    ClientTelemetryShadow.captureScreenTaskTerminal(
+      ownerID: frame.taskBinding?.authorization.ownerID, properties: properties)
     await MainActor.run {
       PostHogManager.shared.screenTaskFrameTerminal(
         ownerID: frame.taskBinding?.authorization.ownerID, properties: properties)

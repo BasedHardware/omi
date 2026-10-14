@@ -6,7 +6,7 @@ import unicodedata
 from datetime import datetime, timezone
 
 from models.review import SpellingItem
-from models.dream_agent import DreamReviewItem
+from models.dream_agent import DreamReviewItem, FullReviewItem
 from models.dream_refs import base_ref, has_ref, cited_value
 from utils.conversations.summary_selection import render_sections_markdown
 
@@ -53,7 +53,8 @@ def spelling_grounding_rejection(edit, records, vocabulary=()):
         or edit.before.strip() == edit.after.strip()
     ):
         return 'invalid_spelling'
-    target = records.get(edit.target)
+    target_ref = base_ref(edit.target)
+    target = records.get(target_ref)
     if target is None or any(not has_ref(ref, records) for ref in edit.evidence):
         return 'invalid_evidence'
     sources = source_conversations(edit.target, target)
@@ -67,7 +68,7 @@ def spelling_grounding_rejection(edit, records, vocabulary=()):
             if not isinstance(ref, str):
                 continue
             ref = base_ref(ref)
-            if ref == edit.target or ref.split('/', 1)[-1] == edit.target.split('/', 1)[-1]:
+            if ref == target_ref or ref.split('/', 1)[-1] == target_ref.split('/', 1)[-1]:
                 return True
             if ref not in records:
                 return True
@@ -79,7 +80,7 @@ def spelling_grounding_rejection(edit, records, vocabulary=()):
 
     for ref in edit.evidence:
         base = base_ref(ref)
-        if base == edit.target or base.split('/', 1)[-1] == edit.target.split('/', 1)[-1]:
+        if base == target_ref or base.split('/', 1)[-1] == target_ref.split('/', 1)[-1]:
             continue
         row = records[base]
         if sources & source_conversations(ref, row) or traces_target(row):
@@ -98,14 +99,31 @@ def spelling_grounding_rejection(edit, records, vocabulary=()):
     return 'ungrounded_spelling'
 
 
-def spelling_question(edit, *, now=None):
+def spelling_question(edit, *, now=None, full=False):
     key = hashlib.sha256((edit.target + '\0' + edit.before + '\0' + edit.after).encode()).hexdigest()
-    return DreamReviewItem(
-        item_id='spelling:' + key,
-        kind='spelling',
-        title='Which spelling is correct?',
-        quote=edit.before,
-        source_ref=edit.target,
-        created_at=now or datetime.now(timezone.utc),
-        spelling=SpellingItem(term_id=key, options=[edit.before, edit.after], allow_custom=True),
-    )
+    model = FullReviewItem if full else DreamReviewItem
+    payload = {
+        'item_id': 'spelling:' + key,
+        'kind': 'spelling',
+        'title': 'Which spelling is correct?',
+        'quote': edit.before,
+        'source_ref': edit.target,
+        'created_at': now or datetime.now(timezone.utc),
+        'spelling': SpellingItem(term_id=key, options=[edit.before, edit.after], allow_custom=True),
+    }
+    if full:
+        payload.update(
+            value=getattr(edit, 'value', None) or 1, why_it_matters='Clarifies future use of this name or term.'
+        )
+    item = model.model_validate(payload)
+    item.set_agreement(edit.agreement, edit.samples)
+    return item
+
+
+def rank_questions(items, *, usage_sink=None):
+    retained = [item for item in items if getattr(item, 'value', 1) > 2]
+    if usage_sink is not None:
+        usage_sink['questions_dropped_low_value'] = (
+            usage_sink.get('questions_dropped_low_value', 0) + len(items) - len(retained)
+        )
+    return sorted(retained, key=lambda item: (item.agreement, item.value), reverse=True)

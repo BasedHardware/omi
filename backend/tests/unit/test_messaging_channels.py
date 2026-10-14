@@ -76,60 +76,28 @@ def test_all_core_tools_are_in_projection():
     assert set(projection.registry) == {t.name for t in CORE_TOOLS}
 
 
-def test_digest_append_only_and_byte_prefix_stable(monkeypatch):
-    store = MemoryStore()
-    session = {'id': 'session'}
-    store.append_event(
-        'u',
-        'session',
-        {'id': 'old', 'at': '2026-01-01T00:00:00+00:00', 'role': 'user', 'content': 'unchanged earlier request'},
-    )
-    old = store.events('u', 'session')
-    rows = [
-        {
-            'id': 'other',
-            'chat_session_id': 'elsewhere',
-            'text': 'verbatim activity',
-            'sender': 'human',
-            'created_at': datetime.now(timezone.utc),
-        }
+def test_digest_is_volatile_and_does_not_rewrite_history():
+    from utils.messaging.context import assemble
+
+    messages = [
+        {'role': 'user', 'content': 'old'},
+        {'role': 'assistant', 'content': 'answer'},
+        {'role': 'user', 'content': 'current'},
     ]
-    monkeypatch.setattr(history, 'recent_activity', lambda uid, since="", exclude_session=None: rows)
-    mount = Mount(instructions='stable', skills=('channel skill',), cache_breakpoint=True)
-    before = mount.messages([{'role': e['role'], 'content': e['content']} for e in old])
-    asyncio.run(history.append_digest(store, 'u', session, old))
-    current = store.events('u', 'session')
-    after = mount.messages([{'role': e['role'], 'content': e['content']} for e in current])
-    assert json.dumps(after[: len(before)]).encode() == json.dumps(before).encode()
-    assert current[: len(old)] == old
-    assert 'verbatim activity' in current[-1]['content']
-    assert current[-1]['kind'] == 'digest'
+    one = assemble(messages, digest='Activity elsewhere: first')
+    two = assemble(messages, digest='Activity elsewhere: second')
+    assert one[:-1] == two[:-1]
+    assert 'first' in one[-1]['content'] and 'second' in two[-1]['content']
+    assert messages[-1]['content'] == 'current'
 
 
-def test_long_digest_uses_summary_once(monkeypatch):
-    store = MemoryStore()
-    monkeypatch.setattr(
-        history,
-        'recent_activity',
-        lambda uid, since="", exclude_session=None: [
-            {
-                'id': 'other',
-                'chat_session_id': 'elsewhere',
-                'text': 'word ' * 1500,
-                'sender': 'human',
-                'created_at': datetime.now(timezone.utc),
-            }
-        ],
-    )
-    calls = []
+def test_large_digest_is_capped_without_a_per_turn_summary_model():
+    from utils.messaging.context import digest_text, DIGEST_CHARS
 
-    async def summary(uid, text):
-        calls.append(text)
-        return 'short digest'
-
-    asyncio.run(history.append_digest(store, 'u', {'id': 's'}, [], summary=summary))
-    assert len(calls) == 1
-    assert store.events('u', 's')[0]['content'].endswith('short digest')
+    rows = [{'text': 'word ' * 1500, 'sender': 'human', 'created_at': datetime.now(timezone.utc)}]
+    result = digest_text(rows)
+    assert len(result) <= DIGEST_CHARS
+    assert 'search_chat_history' in result
 
 
 def test_gateway_serializes_same_user_surface_and_reentry(monkeypatch, adapter):
@@ -155,7 +123,7 @@ def test_gateway_serializes_same_user_surface_and_reentry(monkeypatch, adapter):
 
         return stream()
 
-    gateway = Gateway(adapter, store=store, turn=turn, admission=lambda uid: None)
+    gateway = Gateway(adapter, store=store, turn=turn, admission=lambda uid, channel: None, rate_limit=lambda uid: None)
 
     async def run():
         nonlocal entered, proceed
@@ -241,35 +209,21 @@ def test_real_shaped_executor_uses_advertised_surface_projection(monkeypatch):
     assert captured[1][-1]['role'] == 'tool'
 
 
-def test_app_return_appends_channel_activity_without_rewriting_prefix(monkeypatch):
+def test_app_awareness_does_not_override_authoritative_message_window(monkeypatch):
     from types import SimpleNamespace
     from utils.messaging import app_awareness
 
     store = MemoryStore()
-    monkeypatch.setattr(app_awareness, 'MessagingStore', lambda: store)
     monkeypatch.setattr(app_awareness, 'require_access', lambda uid: None)
-    other = []
-    monkeypatch.setattr(history, 'recent_activity', lambda uid, since="", exclude_session=None: other)
     first = SimpleNamespace(id='human1', text='first', sender='human', created_at=datetime.now(timezone.utc))
 
     async def run():
-        one, _, lease = await app_awareness.prepare('u', SimpleNamespace(id='app-session'), [first], Principal('u'))
-        store.release('u', 'app', lease)
-        other.append(
-            {
-                'id': 'channel-answer',
-                'chat_session_id': 'channel',
-                'text': 'elsewhere',
-                'sender': 'ai',
-                'created_at': datetime.now(timezone.utc),
-            }
+        runtime, _, lease = await app_awareness.prepare(
+            'u', SimpleNamespace(id='app'), [first], Principal('u'), store=store
         )
-        second = SimpleNamespace(id='human2', text='second', sender='human', created_at=datetime.now(timezone.utc))
-        two, _, lease = await app_awareness.prepare(
-            'u', SimpleNamespace(id='app-session'), [first, second], Principal('u')
-        )
-        assert two.evidence[: len(one.evidence)] == one.evidence
-        assert 'elsewhere' in two.evidence[-2]['content']
+        assert runtime.evidence == ()
+        assert runtime.tools[0].name == 'search_chat_history'
+        assert not store.logs
         store.release('u', 'app', lease)
 
     asyncio.run(run())
@@ -434,7 +388,7 @@ def test_channel_retrieval_drops_private_and_restricted_memories():
 def test_invalid_link_proof_completes_without_a_distinct_reply(adapter):
     store = MemoryStore()
     body, headers = adapter.signed(link_proof='not-a-real-proof', text='/start not-a-real-proof')
-    gateway = Gateway(adapter, store=store, admission=lambda uid: None)
+    gateway = Gateway(adapter, store=store, admission=lambda uid, channel: None, rate_limit=lambda uid: None)
 
     async def run():
         path = (await gateway.webhook(body, headers))['jobs'][0]
@@ -463,7 +417,7 @@ def test_history_search_uses_the_closed_over_owner(monkeypatch):
     assert seen == ['owner']
 
 
-def test_history_scans_beyond_first_page_and_stops_at_watermark(monkeypatch):
+def test_explicit_history_search_scans_beyond_first_page(monkeypatch):
     from datetime import timedelta
 
     now = datetime.now(timezone.utc)
@@ -472,5 +426,44 @@ def test_history_scans_beyond_first_page_and_stops_at_watermark(monkeypatch):
         for i in range(160)
     ]
     monkeypatch.setattr(history.chat_db, 'iter_all_messages', lambda uid, batch_size: iter(rows))
-    assert len(history.recent_activity('u', rows[150]['created_at'].isoformat())) == 150
     assert history.search_history('u', 'needle')[0]['id'] == '140'
+
+
+def test_link_availability_reports_reason_per_channel(monkeypatch):
+    from routers import messaging as router
+    from utils.messaging.access import AccessDenied
+
+    def require_access(uid, channel):
+        if channel == 'imessage':
+            raise AccessDenied('channel_plan', 'Operator or Architect plan required for iMessage')
+
+    class Store:
+        def seat_state(self, uid, channel):
+            return None
+
+        def waitlisted(self, uid, channel):
+            raise AssertionError('only read for a full channel')
+
+    monkeypatch.setattr(router, 'require_access', require_access)
+    assert router._availability(Store(), 'uid') == {
+        'telegram': {'available': True, 'reason': None, 'waitlisted': False},
+        'imessage': {'available': False, 'reason': 'channel_plan', 'waitlisted': False},
+    }
+
+
+def test_link_availability_seat_cap_waitlist_and_failures(monkeypatch):
+    from routers import messaging as router
+
+    class Store:
+        def seat_state(self, uid, channel):
+            if channel == 'telegram':
+                raise RuntimeError('firestore down')
+            return 'seat_cap'
+
+        def waitlisted(self, uid, channel):
+            return True
+
+    monkeypatch.setattr(router, 'require_access', lambda uid, channel: None)
+    result = router._availability(Store(), 'uid')
+    assert result['telegram'] == {'available': False, 'reason': 'unavailable', 'waitlisted': False}
+    assert result['imessage'] == {'available': False, 'reason': 'seat_cap', 'waitlisted': True}

@@ -1,11 +1,28 @@
 """Typed edits shared by Dream planning and the Review proposal contract."""
 
 from typing import Literal
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, PrivateAttr, model_validator
 from models.dream_refs import base_ref
 
 
-class Strict(BaseModel):
+class ConsensusItem(BaseModel):
+    # Server-only votes: never accepted from the model or added to client DTOs.
+    _agreement: int = PrivateAttr(default=0)
+    _samples: int = PrivateAttr(default=0)
+
+    @property
+    def agreement(self):
+        return self._agreement
+
+    @property
+    def samples(self):
+        return self._samples
+
+    def set_agreement(self, agreement: int, samples: int) -> None:
+        self._agreement, self._samples = agreement, samples
+
+
+class Strict(ConsensusItem):
     model_config = ConfigDict(extra='forbid')
 
 
@@ -24,7 +41,7 @@ class Edit(Strict):
         description='Spelling corrects a misheard or misspelled name or term. Never rewrite grammar, remove filler, or guess unclear speech.'
     )
     target: str = Field(
-        description='Supplied record ref to edit. One spelling edit fixes every occurrence in this target.'
+        description='Supplied record ref to edit, optionally with #segment-id or #start-seconds. One spelling edit fixes every occurrence in its target; with a fragment, only that transcript segment is changed.'
     )
     other: str = Field(
         default='',
@@ -57,7 +74,7 @@ class Edit(Strict):
             collection, separator, key = self.target.partition('/')
             if collection != 'conversations' or not separator or not key or '/' in key:
                 raise ValueError('Summary edits require a conversation target')
-            if self.target not in {base_ref(ref) for ref in self.evidence} or self.other:
+            if base_ref(self.target) not in {base_ref(ref) for ref in self.evidence} or self.other:
                 raise ValueError('Summary edits require their conversation as evidence and no other target')
             limit = 120 if self.kind == 'title' else 1000
             if not self.after.strip() or len(self.after) > limit or self.before == self.after:
@@ -70,3 +87,13 @@ class Term(Strict):
     spelling: str = Field(min_length=1, max_length=50)
     aliases: list[str] = Field(default_factory=list, max_length=5)
     evidence: list[str] = Field(min_length=1, max_length=10)
+
+
+QUESTION_VALUE_DESCRIPTION = (
+    "how much the answer changes what future agents should believe about this person's people, projects or vocabulary; "
+    'trivial acronym casing is 1'
+)
+
+
+class FullEdit(Edit):
+    value: int | None = Field(default=None, ge=1, le=5, description=QUESTION_VALUE_DESCRIPTION)

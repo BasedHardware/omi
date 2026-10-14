@@ -684,7 +684,8 @@ class SyncRateLimitedException implements Exception {
   final SyncRateLimitKind kind;
   final int? retryAfterSeconds;
   final String? reasonCode;
-  SyncRateLimitedException({required this.kind, this.retryAfterSeconds, this.reasonCode});
+  final int? statusCode;
+  SyncRateLimitedException({required this.kind, this.retryAfterSeconds, this.reasonCode, this.statusCode});
 
   @override
   String toString() => 'SyncRateLimitedException(kind=$kind, retryAfter=$retryAfterSeconds, reason=$reasonCode)';
@@ -898,6 +899,7 @@ Future<UploadFilesResult> uploadLocalFilesV2(
       kind: syncRateLimitKindForResponse(response),
       retryAfterSeconds: _parseRetryAfterSeconds(response),
       reasonCode: syncRateLimitReasonCode(response),
+      statusCode: response.statusCode,
     );
   } else if (isSyncRecoveryWindowExceededResponse(response)) {
     throw const SyncRecoveryWindowExceededException();

@@ -6,7 +6,7 @@ import json
 import re
 from datetime import datetime, timezone
 from uuid import uuid5, NAMESPACE_URL
-from typing import Any
+from typing import Any, Literal, cast
 
 from database import candidates, conversations, frame_requests, review_changes, review_store
 from database.review_changes import AgentEdit
@@ -16,7 +16,10 @@ from models.action_item import EvidenceRef, EvidenceKind, EvidenceScope, TaskCre
 from models.candidate import CandidateCreate, TaskCreateCandidate
 from models.review import AgentProposalItem, ChangeRef, ReviewChange, ReviewItem, ReviewItemV2
 from models.dream_refs import base_ref, has_ref, cited_value
+from config.dream_agent import context_mode
+from utils.dream_consensus import unanimous_spelling
 from utils.entity_pages import resolve_entity
+from models.review_context import question_source
 from utils.dream_guards import (
     spelling_rejection,
     summary_rejection,
@@ -31,14 +34,19 @@ from utils.dream_grounding import spelling_grounding_rejection, spelling_questio
 def edit_key(edit, records=None):
     # Semantic key excludes run id and prose. Undo cannot be bypassed next pass.
     kind = edit.kind
-    value = [edit.target, edit.other, edit.before.casefold(), edit.after.casefold()]
+    target_key: Any = edit.target
+    if records and edit.kind == 'spelling' and '#' in edit.target:
+        segment = cited_value(edit.target, records)
+        if segment is not None:
+            target_key = [base_ref(edit.target), segment.get('id') or segment.get('segment_id') or segment.get('start')]
+    value = [target_key, edit.other, edit.before.casefold(), edit.after.casefold()]
     if (
         records
-        and edit.target in records
+        and has_ref(edit.target, records)
         and edit.target.split('/')[0] in {'memories', 'memory_items'}
         and edit.kind in {'memory', 'spelling'}
     ):
-        row = records[edit.target]
+        row = records[base_ref(edit.target)]
         after = replace_term(row['content'], edit.before, edit.after) if edit.kind == 'spelling' else edit.after
         # Undo appends a tail with another id. Suppress the same semantic edit
         # even if a later plan chooses the other memory-correction tool kind.
@@ -52,8 +60,8 @@ def edit_key(edit, records=None):
             row.get('visibility'),
         ]
 
-    if edit.kind == 'merge_memories' and records and edit.target in records and edit.other in records:
-        rows = [records[edit.target], records[edit.other]]
+    if edit.kind == 'merge_memories' and records and has_ref(edit.target, records) and has_ref(edit.other, records):
+        rows = [records[base_ref(edit.target)], records[base_ref(edit.other)]]
         value = sorted(
             [
                 json.dumps([row.get('content'), row.get('subject_entity_id'), row.get('slot')], sort_keys=True)
@@ -116,16 +124,22 @@ def validate_edit(edit, records):
     reason = spelling_rejection(edit)
     if reason:
         raise ValueError('dream_' + reason)
-    if edit.target not in records or any(not has_ref(ref, records) for ref in edit.evidence):
+    if not has_ref(edit.target, records) or any(not has_ref(ref, records) for ref in edit.evidence):
         raise ValueError('dream_unknown_evidence')
-    reason = task_rejection(edit, records[edit.target], records)
+    if (
+        edit.kind == 'spelling'
+        and '#' in edit.target
+        and not verbatim_quote(edit.before, cited_value(edit.target, records))
+    ):
+        raise ValueError('dream_invalid_target')
+    reason = task_rejection(edit, records[base_ref(edit.target)], records)
     if reason:
         raise ValueError('dream_' + reason)
-    row = records[edit.target]
+    row = records[base_ref(edit.target)]
     validate_summary_edit(edit, row, full=getattr(records, 'context_mode', 'bounded') == 'full')
     if edit.kind == 'spelling' and (not edit.before or not edit.after or len(edit.before) > 50 or len(edit.after) > 50):
         raise ValueError('dream_invalid_spelling')
-    collection, separator, key_id = edit.target.partition('/')
+    collection, separator, key_id = base_ref(edit.target).partition('/')
     if not separator or not key_id or '/' in key_id:
         raise ValueError('dream_invalid_target')
     if row.get('is_locked') or row.get('deleted') or row.get('discarded') or row.get('is_dismissed'):
@@ -140,10 +154,10 @@ def validate_edit(edit, records):
         if edit.kind == 'memory' and edit.before and edit.before != row.get('content'):
             raise review_store.ReviewConflict('Dream memory changed')
         if edit.kind == 'merge_memories':
-            other = records.get(edit.other)
+            other = records.get(base_ref(edit.other))
             if (
                 not other
-                or edit.other == edit.target
+                or base_ref(edit.other) == base_ref(edit.target)
                 or edit.other.partition('/')[0] not in {'memories', 'memory_items'}
             ):
                 raise ValueError('dream_missing_duplicate')
@@ -158,7 +172,7 @@ def validate_edit(edit, records):
         if edit.kind == 'entity_summary' and (not edit.after.strip() or len(edit.after) > 16000):
             raise ValueError('dream_invalid_entity_summary')
         if edit.kind == 'merge_people':
-            other = records.get(edit.other)
+            other = records.get(base_ref(edit.other))
             if (
                 not other
                 or row.get('type') != 'person'
@@ -173,7 +187,7 @@ def apply_edit(uid, edit, records, *, expected_records=None):
     key = edit_key(edit, records)
     if not review_changes.agent_change_allowed(uid, key):
         return 'suppressed'
-    row = records[edit.target]
+    row = records[base_ref(edit.target)]
     change = ReviewChange(
         change_id=str(uuid5(NAMESPACE_URL, uid + ":" + key)),
         kind='other',
@@ -201,7 +215,7 @@ def apply_edit(uid, edit, records, *, expected_records=None):
         )
         return 'applied'
     if edit.kind == 'merge_people':
-        other = records.get(edit.other)
+        other = records.get(base_ref(edit.other))
         if not other or row.get('type') != 'person' or other.get('type') != 'person':
             raise ValueError('dream_invalid_person_merge')
         review_changes.merge_review_entities(
@@ -212,7 +226,11 @@ def apply_edit(uid, edit, records, *, expected_records=None):
         edit.kind == 'spelling' and edit.target.split('/')[0] in {'memories', 'memory_items'}
     ):
         content = edit.after if edit.kind != 'spelling' else replace_term(row['content'], edit.before, edit.after)
-        duplicate = edit.other.split('/')[-1] if edit.kind == 'merge_memories' and edit.other in records else None
+        duplicate = (
+            base_ref(edit.other).split('/')[-1]
+            if edit.kind == 'merge_memories' and has_ref(edit.other, records)
+            else None
+        )
         if edit.kind == 'merge_memories' and not duplicate:
             raise ValueError('dream_missing_duplicate')
         review_changes.record_agent_change(
@@ -222,11 +240,11 @@ def apply_edit(uid, edit, records, *, expected_records=None):
             edit_key=key,
             expected_records=expected_records,
             memory_edit=MemoryEdit(
-                memory_id=edit.target.split('/')[-1], content=content, duplicate_memory_id=duplicate
+                memory_id=base_ref(edit.target).split('/')[-1], content=content, duplicate_memory_id=duplicate
             ),
         )
         return 'applied'
-    collection, key_id = edit.target.split('/', 1)
+    collection, key_id = base_ref(edit.target).split('/', 1)
     raw = review_store.user(uid).collection(collection).document(key_id).get().to_dict()
     if not raw or raw.get('is_locked'):
         raise review_store.ReviewConflict('Dream target unavailable')
@@ -281,15 +299,22 @@ def apply_edit(uid, edit, records, *, expected_records=None):
                 'structured'
             ) != row.get('structured'):
                 raise review_store.ReviewConflict('Dream conversation changed')
-            structured = _replace_tree(current.get('structured') or {}, edit.before, edit.after)
+            selected_segment = (
+                cited_value(edit.target, {base_ref(edit.target): current}) if '#' in edit.target else None
+            )
+            structured = current.get('structured') or {}
+            if '#' not in edit.target:
+                structured = _replace_tree(structured, edit.before, edit.after)
             patch = {}
             if structured.get('title') != (current.get('structured') or {}).get('title'):
                 patch['structured.title'] = structured['title']
-            if current.get('user_title'):
+            if '#' not in edit.target and current.get('user_title'):
                 patch['user_title'] = replace_term(current['user_title'], edit.before, edit.after)
             segments = copy.deepcopy(current.get('transcript_segments') or [])
             changed_ids = []
             for segment in segments:
+                if '#' in edit.target and segment != selected_segment:
+                    continue
                 text = replace_term(segment.get('text', ''), edit.before, edit.after)
                 if text != segment.get('text'):
                     segment['text'] = text
@@ -299,6 +324,13 @@ def apply_edit(uid, edit, records, *, expected_records=None):
                     uid, {'transcript_segments': segments}, current.get('data_protection_level', 'standard')
                 )
                 patch['transcript_segments'] = encoded['transcript_segments']
+            change.refs = [
+                ChangeRef(
+                    type='conversation',
+                    id=key_id,
+                    label='Conversation' + (' #' + edit.target.partition('#')[2] if '#' in edit.target else ''),
+                )
+            ]
         else:
             raise ValueError('dream_unsupported_spelling_target')
     else:
@@ -306,7 +338,18 @@ def apply_edit(uid, edit, records, *, expected_records=None):
     review_changes.record_agent_change(
         uid,
         change,
-        [AgentEdit(collection=collection, document_id=key_id, patch=patch)],
+        [
+            AgentEdit(
+                collection=cast(
+                    Literal[
+                        'knowledge_nodes', 'people', 'conversations', 'action_items', 'entity_pages', 'dream_vocabulary'
+                    ],
+                    collection,
+                ),
+                document_id=key_id,
+                patch=patch,
+            )
+        ],
         edit_key=key,
         expected_documents={key_id: raw},
         expected_records=expected_records,
@@ -333,15 +376,27 @@ def apply_grounded_edit(uid, edit, records):
     return apply_edit(uid, edit, sources, expected_records=fences)
 
 
+def apply_unanimous_edit(uid, edit, records):
+    """Full-owner consensus replaces independent spelling support, preserving fences."""
+    if context_mode(uid) != 'full' or not unanimous_spelling(edit):
+        raise ValueError('dream_ungrounded_spelling')
+    validate_edit(edit, records)
+    sources = {base_ref(ref): records[base_ref(ref)] for ref in {edit.target, *edit.evidence}}
+    fences = proposal_fences(uid, {'records': sources})
+    revalidate_proposal(uid, {'records': sources})
+    return apply_edit(uid, edit, sources, expected_records=fences)
+
+
 def suggest_spelling(uid, edit, records, run_id):
     validate_edit(edit, records)
-    if not verbatim_quote(edit.before, records[edit.target]):
+    if not verbatim_quote(edit.before, cited_value(edit.target, records)):
         raise ValueError('dream_invalid_question_evidence')
     source: dict[str, Any] = {
         'records': {base_ref(ref): records[base_ref(ref)] for ref in {edit.target, *edit.evidence}},
         'edit_key': edit_key(edit, records),
-        'spelling_edit': edit.model_dump(mode='python'),
+        'spelling_edit': edit.model_dump(mode='python', exclude={'value'}),
     }
+    source['speaker_names'] = question_source(spelling_question(edit), records).get('speaker_names', {})
     source['fences'] = proposal_fences(uid, source)
     revalidate_proposal(uid, source)
     validate_canonical_proposal(uid, edit)
@@ -454,13 +509,15 @@ def proposal_fences(uid, source):
 
 def validate_canonical_proposal(uid, edit):
     if edit.kind not in {'memory', 'merge_memories'} and not (
-        edit.kind == 'spelling' and edit.target.partition('/')[0] in {'memories', 'memory_items'}
+        edit.kind == 'spelling' and base_ref(edit.target).partition('/')[0] in {'memories', 'memory_items'}
     ):
         return
     from utils.memory.canonical_memory_adapter import read_canonical_memory_item
 
     refs = [edit.target, *([edit.other] if edit.kind == 'merge_memories' else [])]
-    sources = [read_canonical_memory_item(uid, ref.split('/', 1)[1], db_client=review_store.client()) for ref in refs]
+    sources = [
+        read_canonical_memory_item(uid, base_ref(ref).split('/', 1)[1], db_client=review_store.client()) for ref in refs
+    ]
     if any(
         row is None
         or row.status.value != 'active'
@@ -497,7 +554,7 @@ def suggest_edit(uid, edit, records):
     if getattr(records, 'context_mode', 'bounded') == 'full':
         source['context_mode'] = 'full'
     if edit.kind == 'entity_summary':
-        entity_id = records[edit.target]['entity_id']
+        entity_id = records[base_ref(edit.target)]['entity_id']
         raw = review_store.user(uid).collection('entity_pages').document(entity_id).get().to_dict()
         if edit.before != (review_store.decode_doc(uid, raw) or {}).get('summary', ''):
             raise review_store.ReviewConflict('Dream entity summary changed')
@@ -507,7 +564,8 @@ def suggest_edit(uid, edit, records):
     validate_canonical_proposal(uid, edit)
     if (
         edit.kind in {'close_task', 'retire_task'}
-        and records[edit.target].get('account_generation', 0) != get_task_workflow_control(uid).account_generation
+        and records[base_ref(edit.target)].get('account_generation', 0)
+        != get_task_workflow_control(uid).account_generation
     ):
         raise review_store.ReviewConflict('Dream task generation changed')
     item = ReviewItemV2(
@@ -517,8 +575,8 @@ def suggest_edit(uid, edit, records):
         created_at=datetime.now(timezone.utc),
         agent_proposal=AgentProposalItem(
             edit=edit,
-            target_label=proposal_label(records[edit.target]),
-            other_label=proposal_label(records[edit.other]) if edit.other else None,
+            target_label=proposal_label(records[base_ref(edit.target)]),
+            other_label=proposal_label(records[base_ref(edit.other)]) if edit.other else None,
         ),
     )
     return review_store.enqueue_review_proposal(
@@ -624,16 +682,16 @@ def answer_proposal(uid, proposal, source, decision):
     return status == 'applied'
 
 
-def ask(uid, item, records):
+def ask(uid, item, records, *, run_id=None):
     if item.kind not in {'same_person', 'spelling'}:
         raise ValueError('dream_question_kind')
     if not has_ref(item.source_ref, records) or not verbatim_quote(item.quote, cited_value(item.source_ref, records)):
         raise ValueError('dream_invalid_question_evidence')
-    review_store.enqueue_review_proposal(
+    result = review_store.enqueue_review_proposal(
         uid,
         ReviewItem.model_validate(
             {
-                **item.model_dump(),
+                **item.model_dump(exclude={'value', 'why_it_matters'}),
                 'item_id': item.kind
                 + ':'
                 + str(
@@ -643,7 +701,15 @@ def ask(uid, item, records):
             }
         ),
         evidence_version=review_store.fingerprint(records),
+        source=question_source(item, records),
+        **({'dream_run_id': run_id} if run_id is not None else {}),
     )
+    if run_id is not None:
+        return result
+
+
+def ask_ranked(uid, item, records, run_id):
+    return ask(uid, item, records, run_id=run_id)
 
 
 def request_frame(uid, question, records):

@@ -6865,18 +6865,6 @@
     "@downloadingFromSdCard": {
         "description": "Progress label when downloading from SD card"
     },
-    "processingProgress": "Processing {current}/{total}",
-    "@processingProgress": {
-        "description": "Progress label showing current/total items",
-        "placeholders": {
-            "current": {
-                "type": "int"
-            },
-            "total": {
-                "type": "int"
-            }
-        }
-    },
     "conversationsCreated": "{count} conversations created",
     "@conversationsCreated": {
         "description": "Success message showing number of conversations created",
@@ -10819,18 +10807,6 @@
             }
         }
     },
-    "syncCardProgressOf": "{current} of {total}",
-    "@syncCardProgressOf": {
-        "description": "Top status card: secondary progress line under the phase title.",
-        "placeholders": {
-            "current": {
-                "type": "int"
-            },
-            "total": {
-                "type": "int"
-            }
-        }
-    },
     "syncStatusOnDevice": "On your device",
     "@syncStatusOnDevice": {
         "description": "Row subtitle for a recording still on the Omi device (SD-card or flash page) that has not been downloaded to the phone yet."
@@ -10838,10 +10814,6 @@
     "syncStatusDownloadingFromDevice": "Downloading from your device",
     "@syncStatusDownloadingFromDevice": {
         "description": "Row subtitle for a recording currently being transferred from the Omi device to the phone."
-    },
-    "newestFirst": "Newest first",
-    "@newestFirst": {
-        "description": "Subtle sort-order indicator next to the recordings list header so the user knows the newest items are at the top."
     },
     "noSyncedRecordingsYet": "No synced recordings yet",
     "@noSyncedRecordingsYet": {
@@ -14311,7 +14283,6 @@
     "autoRemoveSyncedCopiesTitle": "Auto-Remove Synced Copies",
     "autoRemoveSyncedCopiesDays": "Synced copies deleted after {days} days",
     "autoRemoveSyncedCopiesDescription": "Deletes local copies {days} days after sync. Cloud copies are kept.",
-    "localCopiesSection": "Local Copies",
     "@autoRemoveSyncedCopiesTitle": {
         "description": "Settings row title: automatically remove synced phone-local recording copies"
     },
@@ -14332,9 +14303,6 @@
                 "example": "30"
             }
         }
-    },
-    "@localCopiesSection": {
-        "description": "Section header above the auto-remove synced copies setting"
     },
     "speakerLabelLinesLabeled": "{count, plural, =1{Labeled 1 line} other{Labeled {count} lines}}",
     "@speakerLabelLinesLabeled": {
@@ -14737,6 +14705,10 @@
                 "type": "String"
             }
         }
+    },
+    "reviewSpellingContext": "Conversation context",
+    "@reviewSpellingContext": {
+        "description": "Heading above the speech around a spelling question in Review."
     },
     "reviewQuestionSpelling": "How is this spelled?",
     "@reviewQuestionSpelling": {
@@ -15772,5 +15744,247 @@
                 "type": "int"
             }
         }
+    },
+    "paywallRecommended": "Recommended",
+    "@paywallRecommended": {
+        "description": "Backend recommended tier badge; highlights a recommendation without preselecting checkout."
+    },
+    "paywallNoPlans": "Plans aren't available right now. Try again in a minute.",
+    "@paywallNoPlans": {
+        "description": "Empty state when the plans list has no tiers."
+    },
+    "paywallOtherPlans": "See all plans",
+    "@paywallOtherPlans": {
+        "description": "Collapsed section that reveals the rest of the plan ladder."
+    },
+    "paywallComparePlans": "See plans",
+    "@paywallComparePlans": {
+        "description": "Primary button on the usage banner."
+    },
+    "paywallYourPlan": "Your plan",
+    "@paywallYourPlan": {
+        "description": "Badge on the tier card for the plan the person already has."
+    },
+    "paywallNotNow": "Not now",
+    "@paywallNotNow": {
+        "description": "Secondary button on the usage banner."
+    },
+    "paywallTryAgain": "Try again",
+    "@paywallTryAgain": {
+        "description": "Retry button when the plans sheet fails to load."
+    },
+    "paywallManageBilling": "Manage billing",
+    "@paywallManageBilling": {
+        "description": "Button that opens billing management."
+    },
+    "paywallLoadError": "Couldn't load plans. Check your connection and try again.",
+    "@paywallLoadError": {
+        "description": "Plans sheet error copy. The retry button is separate."
+    },
+    "paywallPlans": "Plans",
+    "@paywallPlans": {
+        "description": "Title of the new plans sheet. The previous sheet keeps Plans & Billing."
+    },
+    "firstCaptureTitle": "How will you capture?",
+    "firstCaptureDescription": "Choose how you want to capture your first conversation.",
+    "firstCaptureOmi": "I Have an Omi",
+    "firstCapturePhone": "This Phone",
+    "firstCaptureWatch": "Apple Watch",
+    "firstCaptureSkip": "Skip for Now",
+    "firstCapturePrompt": "Tell Omi what you're working on today, or what's on your mind. Talk for about 30 seconds.",
+    "firstCaptureKeepGoing": "Keep going… 30 seconds is ideal.",
+    "firstCaptureReady": "You can finish now, or keep talking.",
+    "firstCaptureStart": "Start Recording",
+    "firstCaptureFinish": "Finish Recording",
+    "firstCaptureListening": "Listening… your words will appear here.",
+    "firstCaptureProcessing": "Creating your first conversation…",
+    "firstCaptureResult": "Your first conversation",
+    "firstCaptureEmpty": "I didn't catch enough speech, try again with a few sentences",
+    "watchCaptureTitle": "Record from your Apple Watch",
+    "watchCaptureOpen": "Open Omi on your Apple Watch.",
+    "watchCaptureRecord": "Tap Record. Allow microphone access if asked.",
+    "watchCaptureSync": "Your recording syncs to Omi on this phone.",
+    "pairingBluetoothOff": "Turn on Bluetooth on your phone, then try again.",
+    "pairingBluetoothPermission": "Allow Bluetooth access for Omi in Settings, then try again.",
+    "pairingNearbyPermission": "Allow Nearby devices access for Omi in Settings, then try again.",
+    "pairingLocationPermission": "Allow location access for Omi in Settings so this phone can find your device, then try again.",
+    "pairingNotFoundOrDropped": "Couldn't reach your Omi. Make sure it's charged, close to your phone, and its light is blinking, then try again.",
+    "pairingBondRecovery": "Forget Omi in your phone’s Bluetooth settings, then try pairing again.",
+    "pairingHowTo": "How to pair",
+    "firstCaptureWatchInstructions": "Open Omi on your Apple Watch and tap Record. Allow microphone access if asked. Your capture will sync to Omi on this phone.",
+    "firstCaptureWatchInstall": "In the Watch app on your iPhone, install Omi on your Apple Watch. Then open Omi on your watch and tap Record.",
+    "firstCaptureWatchPair": "Pair your Apple Watch with this iPhone using the Watch app, then install and open Omi on your watch.",
+    "firstCaptureUnavailable": "Recording could not start. Check microphone access and your connection, then try again.",
+    "firstCaptureDelayed": "Your recording is taking longer to process. You can check your conversations on Home or try again.",
+    "firstCaptureEmptyTitle": "Let's try that again",
+    "firstCaptureShortTitle": "Finish This Recording?",
+    "firstCaptureShortWarning": "A few more sentences help Omi understand you. About 30 seconds is ideal.",
+    "firstCaptureCancelTitle": "Leave This Recording?",
+    "firstCaptureCancelWarning": "Going back stops this recording. Keep talking to give Omi a few more sentences.",
+    "firstCaptureSiriTip": "Tip: Enable Omi in Shortcuts → Siri.",
+    "paywallOutlineHeadline": "Never miss a word again.",
+    "@paywallOutlineHeadline": {
+        "description": "Headline of the Outline paywall variant (mobile paywall A/B test)"
+    },
+    "paywallCancelAnytime": "Cancel anytime.",
+    "@paywallCancelAnytime": {
+        "description": "Caption under the upgrade button on the Outline paywall variant"
+    },
+    "connectAnAgent": "Connect an Agent",
+    "@connectAnAgent": {
+        "description": "Settings row that opens the web developer home, where users get copy-paste setup prompts and keys for AI agents (Claude, ChatGPT, Codex, ...)"
+    },
+    "connectAnAgentSubtitle": "Get a setup prompt for Claude, ChatGPT, Codex, or any agent",
+    "@connectAnAgentSubtitle": {
+        "description": "Subtitle of the Connect an Agent settings row"
+    },
+    "syncCardSyncingAmount": "Syncing {amount} of audio",
+    "@syncCardSyncingAmount": {
+        "description": "Offline Sync status card title while a sync runs; amount is a compact audio length like 18m.",
+        "placeholders": {
+            "amount": {
+                "type": "String"
+            }
+        }
+    },
+    "syncCardSyncingTitle": "Syncing your recordings",
+    "@syncCardSyncingTitle": {
+        "description": "Offline Sync status card title while a sync runs and the amount of audio is not known yet."
+    },
+    "syncStepDownloadingAmount": "Downloading from your Omi · {done} of {total}",
+    "@syncStepDownloadingAmount": {
+        "description": "Offline Sync status card subtitle: audio moved from the Omi device to the phone so far, as compact lengths.",
+        "placeholders": {
+            "done": {
+                "type": "String"
+            },
+            "total": {
+                "type": "String"
+            }
+        }
+    },
+    "syncStepUploadingAmount": "Uploading · {done} of {total}",
+    "@syncStepUploadingAmount": {
+        "description": "Offline Sync status card subtitle: audio uploaded from the phone to Omi so far, as compact lengths.",
+        "placeholders": {
+            "done": {
+                "type": "String"
+            },
+            "total": {
+                "type": "String"
+            }
+        }
+    },
+    "syncCardTranscribingAmount": "Turning {amount} into conversations",
+    "@syncCardTranscribingAmount": {
+        "description": "Offline Sync status card title while the server transcribes uploaded audio; amount is a compact audio length.",
+        "placeholders": {
+            "amount": {
+                "type": "String"
+            }
+        }
+    },
+    "syncCardTranscribedOf": "{done} of {total} done · you can leave this screen",
+    "@syncCardTranscribedOf": {
+        "description": "Offline Sync status card subtitle while the server transcribes: compact audio lengths done and total.",
+        "placeholders": {
+            "done": {
+                "type": "String"
+            },
+            "total": {
+                "type": "String"
+            }
+        }
+    },
+    "syncCardReadyAmount": "{amount} ready to sync",
+    "@syncCardReadyAmount": {
+        "description": "Offline Sync status card title when recordings wait for a manual sync; amount is a compact audio length.",
+        "placeholders": {
+            "amount": {
+                "type": "String"
+            }
+        }
+    },
+    "syncStepLabelDownload": "Omi → phone",
+    "@syncStepLabelDownload": {
+        "description": "Tiny label under the first of three Offline Sync progress segments: moving audio from the Omi device to the phone."
+    },
+    "syncStepLabelUpload": "Upload",
+    "@syncStepLabelUpload": {
+        "description": "Tiny label under the second of three Offline Sync progress segments: uploading to Omi."
+    },
+    "syncStepLabelTranscribe": "Transcribe",
+    "@syncStepLabelTranscribe": {
+        "description": "Tiny label under the third of three Offline Sync progress segments: server transcription."
+    },
+    "syncDetailsTitle": "Sync details",
+    "@syncDetailsTitle": {
+        "description": "Title of the Offline Sync diagnostics sheet and the link on the status card that opens it."
+    },
+    "syncDetailsRightNow": "Right now",
+    "@syncDetailsRightNow": {
+        "description": "Section header in Sync details: where unsynced audio is at this moment."
+    },
+    "syncDetailsYourOmi": "Your Omi",
+    "@syncDetailsYourOmi": {
+        "description": "Sync details row label for the Omi device; the value is Connected or Disconnected."
+    },
+    "syncDetailsTransferSpeed": "Transfer speed",
+    "@syncDetailsTransferSpeed": {
+        "description": "Sync details row label for the Bluetooth transfer speed, e.g. 50 KB/s."
+    },
+    "syncDetailsWaitingOnOmi": "Waiting on your Omi",
+    "@syncDetailsWaitingOnOmi": {
+        "description": "Sync details row label: audio still stored on the Omi device."
+    },
+    "syncDetailsWaitingOnPhone": "Waiting on this phone",
+    "@syncDetailsWaitingOnPhone": {
+        "description": "Sync details row label: audio on the phone that has not been uploaded yet."
+    },
+    "syncDetailsTranscribing": "Transcribing on Omi",
+    "@syncDetailsTranscribing": {
+        "description": "Sync details row label: audio uploaded and still being transcribed by Omi."
+    },
+    "syncDetailsForSupport": "For support",
+    "@syncDetailsForSupport": {
+        "description": "Sync details section header for raw technical counts meant for customer support."
+    },
+    "syncDetailsAudioFiles": "Audio files",
+    "@syncDetailsAudioFiles": {
+        "description": "Sync details row label: number of raw audio files the app holds."
+    },
+    "syncDetailsServerJobs": "Server jobs (done / total)",
+    "@syncDetailsServerJobs": {
+        "description": "Sync details row label: server processing jobs, shown as done / total."
+    },
+    "syncDetailsCopy": "Copy details for support",
+    "@syncDetailsCopy": {
+        "description": "Sync details button that copies the diagnostics text to the clipboard."
+    },
+    "chatAppsChannelPlanRequired": "Available on Operator and Architect",
+    "@chatAppsChannelPlanRequired": {
+        "description": "Chat apps row subtitle when the channel (iMessage) needs the Operator or Architect plan; plan names are not translated"
+    },
+    "chatAppsAtCapacity": "{app} is at capacity",
+    "@chatAppsAtCapacity": {
+        "description": "Chat apps row subtitle when all seats for the channel are taken; app is iMessage or Telegram",
+        "placeholders": {
+            "app": {
+                "type": "String",
+                "example": "iMessage"
+            }
+        }
+    },
+    "chatAppsJoinWaitlist": "Join Waitlist",
+    "@chatAppsJoinWaitlist": {
+        "description": "Chat apps chip to join the waitlist for a full channel"
+    },
+    "chatAppsOnWaitlist": "You're on the waitlist",
+    "@chatAppsOnWaitlist": {
+        "description": "Chat apps row subtitle once the person is on the channel waitlist"
+    },
+    "chatAppsWaitlistJoined": "You're on the waitlist. We'll let you know when there's room.",
+    "@chatAppsWaitlistJoined": {
+        "description": "Confirmation after joining a chat app channel waitlist"
     }
 }

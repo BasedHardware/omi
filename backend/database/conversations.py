@@ -59,6 +59,7 @@ from utils.other.portability_read import (
     iter_portability_guarded,
     verified_encrypted_read,
 )
+from config.transcription_final_pass import authoritative_for
 import config.speaker_match_scores as match_scores
 import config.owner_recognition_diagnostics as owner_diagnostics
 import utils.firestore_document_size as document_size
@@ -98,8 +99,14 @@ _PUBLIC_TRANSCRIPT_MAX_SEGMENTS = 4096
 _PUBLIC_TRANSCRIPT_MAX_SEGMENT_TEXT_CHARS = 24_000
 MCP_CONVERSATION_CARD_FIELD_PATHS = (
     'id',
+    'status',
     'discarded',
     'deleted',
+    'relevance_decision',
+    'sync_relevance_user_kept',
+    'has_photos',
+    'starred',
+    'folder_user_set',
     'created_at',
     'started_at',
     'finished_at',
@@ -3867,13 +3874,12 @@ def get_closest_conversation_to_timestamps(uid: str, start_timestamp: int, end_t
     )
 
     conversations = [doc.to_dict() for doc in query.stream()]
-    logger.info(f'get_closest_conversation_to_timestamps len(conversations) {len(conversations)}')
+    logger.debug(f'get_closest_conversation_to_timestamps len(conversations) {len(conversations)}')
     if not conversations:
         return None
 
-    logger.info('get_closest_conversation_to_timestamps found:')
     for conversation in conversations:
-        logger.info(f"- {conversation['id']} {conversation['started_at']} {conversation['finished_at']}")
+        logger.debug("- %s %s %s", conversation['id'], conversation['started_at'], conversation['finished_at'])
 
     closest_conversation = select_closest_conversation(conversations, start_timestamp, end_timestamp)
     if closest_conversation is None:
@@ -3900,3 +3906,73 @@ def get_last_completed_conversation(uid: str) -> Optional[dict]:
             conversations.append(data)
     conversation = conversations[0] if conversations else None
     return conversation
+
+
+def promote_final_pass_if_current(
+    uid, conversation_id, segments, *, expected_updated_at, clock_offset, firestore_client=None
+):
+    """Revision-fenced speaker-only promotion preserving the stored transcript."""
+    if expected_updated_at is None or not authoritative_for(uid):
+        return False
+    from utils.conversations.final_pass_remap import remap_final_record
+
+    client = firestore_client if firestore_client is not None else get_firestore_client()
+    parent = client.collection('users').document(uid).collection(conversations_collection).document(conversation_id)
+    deletion = client.collection('account_deletions').document(uid)
+
+    @firestore.transactional
+    def commit(transaction):
+        if not authoritative_for(uid):
+            return False
+        snapshot = parent.get(transaction=transaction)
+        deleting = deletion.get(transaction=transaction)
+        current = snapshot.to_dict() or {}
+        if (
+            not snapshot.exists
+            or deleting.exists
+            or is_soft_deleted(current)
+            or current.get('is_locked')
+            or current.get('discarded')
+            or current.get('status') != 'completed'
+            or firestore_revision_datetime(snapshot.update_time) != expected_updated_at
+        ):
+            return False
+        old = decode_transcript_segments_verified(
+            uid, current.get('transcript_segments', []), bool(current.get('transcript_segments_compressed'))
+        )
+        receipt = decode_manual_speaker_assignments(
+            uid, current.get('manual_speaker_assignments'), bool(current.get('manual_speaker_assignments_compressed'))
+        )
+        readable = prepare_conversation_for_read(copy.deepcopy(current), uid)
+        if readable is None:
+            return False
+        patch = remap_final_record(
+            old, [s.model_dump() for s in segments], receipt, readable.get('structured', {}), clock_offset=clock_offset
+        )
+        # Derived references/materializations outside structured have their own
+        # contracts. Refuse promotion until those consumers support remapping.
+        if current.get('translation_materializations') or current.get('apps_results') or current.get('note_claims'):
+            return False
+        # The owning write boundary reapplies the current, remapped receipt.
+        patch['transcript_segments'] = apply_manual_assignments(
+            patch['transcript_segments'], patch['manual_speaker_assignments']
+        )
+        patch['speaker_resolution'] = {
+            'status': 'resolved',
+            'participant_speaker_ids': sorted(
+                {
+                    s['speaker_id']
+                    for s in patch['transcript_segments']
+                    if s.get('speaker_id') is not None and s['speaker_id'] >= 0
+                }
+            ),
+        }
+        prepared = encode_conversation_for_write(uid, patch, current.get('data_protection_level') or 'standard')
+        _guard_match_score_size(prepared, current, getattr(parent, 'path', None))
+        transaction.update(parent, prepared)
+        return True
+
+    written = run_transactional(client, commit)
+    if written:
+        invalidate_people_stats_cache(uid)
+    return bool(written)

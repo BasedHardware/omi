@@ -12,7 +12,7 @@ import pytest
 
 from config.dream_agent import Caps, context_mode, FULL_CONTEXT_WINDOW, FULL_PASS_SECONDS, FULL_DRAIN_SECONDS
 from database import dream_store, review_store
-from models.dream_agent import Plan, Edit, Feedback
+from models.dream_agent import Plan, FullPlan, Edit, Feedback
 from utils import (
     dream_agent,
     dream_context,
@@ -34,6 +34,7 @@ def full(monkeypatch):
     monkeypatch.setenv('DREAM_AGENT_CONTEXT_MODE', 'full')
     monkeypatch.setenv('DREAM_AGENT_FULL_SAMPLES', '1')
     monkeypatch.setenv('DREAM_AGENT_FULL_CONTEXT_UIDS', ' someone-else, ' + UID + ', ')
+    monkeypatch.setattr(dream_agent.dream_capacity, 'wait_for_capacity', AsyncMock(return_value=False))
     return Caps().for_uid(UID)
 
 
@@ -93,7 +94,7 @@ def test_whole_records_and_one_reasoning_turn(full):
     calls = []
 
     async def turn(uid, lane, mount, messages):
-        assert lane == dream_transport.MAIN_LANE and mount.schema is Plan
+        assert lane == dream_transport.MAIN_LANE and mount.schema is FullPlan
         assert mount.budget.deadline_seconds == 480
         payload = json.loads(messages[-1]['content'])
         assert 'roles' not in payload
@@ -128,7 +129,7 @@ def test_whole_records_and_one_reasoning_turn(full):
     assert records == before
     assert len(result['plan']['edits']) == 1
     assert result['plan']['edits'][0]['policy'] == 'suggest'
-    assert len(result['plan']['questions']) == 1
+    assert len(result['plan']['questions']) == 0  # Missing value cannot spend full-mode attention.
     assert 'context_target' not in result['guard_decisions']
     assert result['raw_plan']['edits'][0]['target'] == 'people/p'
     assert result['input_tokens_estimate'] > 1000

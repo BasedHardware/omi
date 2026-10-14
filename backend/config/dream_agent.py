@@ -14,11 +14,17 @@ SUGGESTIONS_PER_DAY = 3
 # The reserved Dream models have a 1M input window. Keep completion headroom
 # inside that window too, even when an operator requests a larger budget.
 FULL_CONTEXT_WINDOW = 1048576
-FULL_PASS_SECONDS = 600
+# K=3 sequential 480s calls, one 120s cooldown and 60s effect headroom.
+# Extra retries/samples use survivors when this request-wide deadline cannot fit them.
+FULL_PASS_SECONDS = 1620
 FULL_MODEL_SECONDS = 480
 FULL_COMPLETION_TOKENS = 32768
 FULL_THINKING_TOKENS = 16384
 FULL_DRAIN_SECONDS = FULL_PASS_SECONDS + 60
+PASS_TIMEOUT_SECONDS = 180
+FINISH_MARGIN_SECONDS = 30
+DRAIN_TIMEOUT_SECONDS = PASS_TIMEOUT_SECONDS + FINISH_MARGIN_SECONDS + 30
+LEASE_RECLAIM_MARGIN_SECONDS = 60
 
 
 def context_mode(uid: str) -> str:
@@ -36,7 +42,7 @@ def full_context_enabled() -> bool:
     )
 
 
-def auto_apply_kinds() -> frozenset[str]:
+def auto_apply_kinds(uid: str | None = None) -> frozenset[str]:
     """An override may narrow safe automation; risky operations always require Review."""
     value = os.getenv('DREAM_AGENT_AUTO_APPLY_KINDS')
     if value is None:
@@ -49,7 +55,8 @@ def auto_apply_kinds() -> frozenset[str]:
 
         POLICY_WARNINGS.inc(len(ignored))
         logging.getLogger(__name__).warning('Dream auto-apply policy ignored kinds count=%d', len(ignored))
-    return frozenset(requested & AUTO)
+    effective = frozenset(requested & AUTO)
+    return effective | {'spelling'} if uid is not None and context_mode(uid) == 'full' else effective
 
 
 def apply_policy(kind: str, automatic: frozenset[str]) -> str:

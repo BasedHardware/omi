@@ -5553,11 +5553,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String get downloadingFromSdCard => '正在从 SD 卡下载';
 
   @override
-  String processingProgress(int current, int total) {
-    return '正在处理 $current/$total';
-  }
-
-  @override
   String conversationsCreated(int count) {
     return '已创建 $count 个对话';
   }
@@ -8949,18 +8944,10 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
-  String syncCardProgressOf(int current, int total) {
-    return '第 $current 项,共 $total 项';
-  }
-
-  @override
   String get syncStatusOnDevice => '在你的设备上';
 
   @override
   String get syncStatusDownloadingFromDevice => '正在从你的设备下载';
-
-  @override
-  String get newestFirst => '最新优先';
 
   @override
   String get noSyncedRecordingsYet => '还没有已同步的录音';
@@ -11802,9 +11789,6 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
-  String get localCopiesSection => '本地副本';
-
-  @override
   String speakerLabelLinesLabeled(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,
@@ -12119,6 +12103,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String reviewQuestionSamePerson(String name) {
     return '和“$name”是同一个人吗？';
   }
+
+  @override
+  String get reviewSpellingContext => '对话上下文';
 
   @override
   String get reviewQuestionSpelling => '这个怎么拼写？';
@@ -12846,4 +12833,258 @@ class AppLocalizationsZh extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get paywallRecommended => 'Recommended';
+
+  @override
+  String get paywallNoPlans => 'Plans aren\'t available right now. Try again in a minute.';
+
+  @override
+  String get paywallOtherPlans => 'See all plans';
+
+  @override
+  String get paywallComparePlans => 'See plans';
+
+  @override
+  String get paywallYourPlan => 'Your plan';
+
+  @override
+  String get paywallNotNow => 'Not now';
+
+  @override
+  String get paywallTryAgain => 'Try again';
+
+  @override
+  String get paywallManageBilling => 'Manage billing';
+
+  @override
+  String get paywallLoadError => 'Couldn\'t load plans. Check your connection and try again.';
+
+  @override
+  String get paywallPlans => 'Plans';
+
+  @override
+  String get firstCaptureTitle => 'How will you capture?';
+
+  @override
+  String get firstCaptureDescription => 'Choose how you want to capture your first conversation.';
+
+  @override
+  String get firstCaptureOmi => 'I Have an Omi';
+
+  @override
+  String get firstCapturePhone => 'This Phone';
+
+  @override
+  String get firstCaptureWatch => 'Apple Watch';
+
+  @override
+  String get firstCaptureSkip => 'Skip for Now';
+
+  @override
+  String get firstCapturePrompt =>
+      'Tell Omi what you\'re working on today, or what\'s on your mind. Talk for about 30 seconds.';
+
+  @override
+  String get firstCaptureKeepGoing => 'Keep going… 30 seconds is ideal.';
+
+  @override
+  String get firstCaptureReady => 'You can finish now, or keep talking.';
+
+  @override
+  String get firstCaptureStart => 'Start Recording';
+
+  @override
+  String get firstCaptureFinish => 'Finish Recording';
+
+  @override
+  String get firstCaptureListening => 'Listening… your words will appear here.';
+
+  @override
+  String get firstCaptureProcessing => 'Creating your first conversation…';
+
+  @override
+  String get firstCaptureResult => 'Your first conversation';
+
+  @override
+  String get firstCaptureEmpty => 'I didn\'t catch enough speech, try again with a few sentences';
+
+  @override
+  String get watchCaptureTitle => 'Record from your Apple Watch';
+
+  @override
+  String get watchCaptureOpen => 'Open Omi on your Apple Watch.';
+
+  @override
+  String get watchCaptureRecord => 'Tap Record. Allow microphone access if asked.';
+
+  @override
+  String get watchCaptureSync => 'Your recording syncs to Omi on this phone.';
+
+  @override
+  String get pairingBluetoothOff => 'Turn on Bluetooth on your phone, then try again.';
+
+  @override
+  String get pairingBluetoothPermission => 'Allow Bluetooth access for Omi in Settings, then try again.';
+
+  @override
+  String get pairingNearbyPermission => 'Allow Nearby devices access for Omi in Settings, then try again.';
+
+  @override
+  String get pairingLocationPermission =>
+      'Allow location access for Omi in Settings so this phone can find your device, then try again.';
+
+  @override
+  String get pairingNotFoundOrDropped =>
+      'Couldn\'t reach your Omi. Make sure it\'s charged, close to your phone, and its light is blinking, then try again.';
+
+  @override
+  String get pairingBondRecovery => 'Forget Omi in your phone’s Bluetooth settings, then try pairing again.';
+
+  @override
+  String get pairingHowTo => 'How to pair';
+
+  @override
+  String get firstCaptureWatchInstructions =>
+      'Open Omi on your Apple Watch and tap Record. Allow microphone access if asked. Your capture will sync to Omi on this phone.';
+
+  @override
+  String get firstCaptureWatchInstall =>
+      'In the Watch app on your iPhone, install Omi on your Apple Watch. Then open Omi on your watch and tap Record.';
+
+  @override
+  String get firstCaptureWatchPair =>
+      'Pair your Apple Watch with this iPhone using the Watch app, then install and open Omi on your watch.';
+
+  @override
+  String get firstCaptureUnavailable =>
+      'Recording could not start. Check microphone access and your connection, then try again.';
+
+  @override
+  String get firstCaptureDelayed =>
+      'Your recording is taking longer to process. You can check your conversations on Home or try again.';
+
+  @override
+  String get firstCaptureEmptyTitle => 'Let\'s try that again';
+
+  @override
+  String get firstCaptureShortTitle => 'Finish This Recording?';
+
+  @override
+  String get firstCaptureShortWarning => 'A few more sentences help Omi understand you. About 30 seconds is ideal.';
+
+  @override
+  String get firstCaptureCancelTitle => 'Leave This Recording?';
+
+  @override
+  String get firstCaptureCancelWarning =>
+      'Going back stops this recording. Keep talking to give Omi a few more sentences.';
+
+  @override
+  String get firstCaptureSiriTip => 'Tip: Enable Omi in Shortcuts → Siri.';
+
+  @override
+  String get paywallOutlineHeadline => '再也不错过任何一句话。';
+
+  @override
+  String get paywallCancelAnytime => '随时取消。';
+
+  @override
+  String get connectAnAgent => '连接智能体';
+
+  @override
+  String get connectAnAgentSubtitle => '获取适用于 Claude、ChatGPT、Codex 或任何智能体的设置提示词';
+
+  @override
+  String syncCardSyncingAmount(String amount) {
+    return '正在同步 $amount 的音频';
+  }
+
+  @override
+  String get syncCardSyncingTitle => '正在同步你的录音';
+
+  @override
+  String syncStepDownloadingAmount(String done, String total) {
+    return '正在从 Omi 下载 · $done / $total';
+  }
+
+  @override
+  String syncStepUploadingAmount(String done, String total) {
+    return '正在上传 · $done / $total';
+  }
+
+  @override
+  String syncCardTranscribingAmount(String amount) {
+    return '正在将 $amount 转为对话';
+  }
+
+  @override
+  String syncCardTranscribedOf(String done, String total) {
+    return '已完成 $done / $total · 你可以离开此屏幕';
+  }
+
+  @override
+  String syncCardReadyAmount(String amount) {
+    return '$amount 可同步';
+  }
+
+  @override
+  String get syncStepLabelDownload => 'Omi → 手机';
+
+  @override
+  String get syncStepLabelUpload => '上传';
+
+  @override
+  String get syncStepLabelTranscribe => '转录';
+
+  @override
+  String get syncDetailsTitle => '同步详情';
+
+  @override
+  String get syncDetailsRightNow => '当前状态';
+
+  @override
+  String get syncDetailsYourOmi => '你的 Omi';
+
+  @override
+  String get syncDetailsTransferSpeed => '传输速度';
+
+  @override
+  String get syncDetailsWaitingOnOmi => '等待 Omi 传输';
+
+  @override
+  String get syncDetailsWaitingOnPhone => '等待此手机上传';
+
+  @override
+  String get syncDetailsTranscribing => 'Omi 正在转录';
+
+  @override
+  String get syncDetailsForSupport => '供支持团队使用';
+
+  @override
+  String get syncDetailsAudioFiles => '音频文件';
+
+  @override
+  String get syncDetailsServerJobs => '服务器任务 (已完成 / 总数)';
+
+  @override
+  String get syncDetailsCopy => '复制详情以供支持团队使用';
+
+  @override
+  String get chatAppsChannelPlanRequired => 'Operator 和 Architect 套餐可用';
+
+  @override
+  String chatAppsAtCapacity(String app) {
+    return '$app 名额已满';
+  }
+
+  @override
+  String get chatAppsJoinWaitlist => '加入候补名单';
+
+  @override
+  String get chatAppsOnWaitlist => '你已在候补名单中';
+
+  @override
+  String get chatAppsWaitlistJoined => '你已在候补名单中。有名额时我们会通知你。';
 }

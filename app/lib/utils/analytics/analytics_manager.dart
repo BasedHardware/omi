@@ -28,6 +28,8 @@ import 'package:omi/utils/speech_profile_enroll_events.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:uuid/uuid.dart';
 import 'package:omi/utils/debugging/crashlytics_manager.dart';
+import 'package:omi/services/telemetry/client_telemetry.dart';
+import 'package:omi/services/telemetry/client_telemetry_flags.dart';
 import 'package:omi/utils/analytics/background_checkpoint_store.dart';
 
 enum ProductErrorKind { flutterFramework, uncaughtDart, startup }
@@ -117,6 +119,7 @@ class AnalyticsManager {
   /// Fence synchronously, before any SDK identify/reset operation is scheduled.
   void bindIdentity(String? identity) {
     if (_identityKnown && _boundIdentity == identity) return;
+    final previousOwner = _identityKnown ? _boundIdentity : null;
     final hadSession = _eventContext.containsKey('app_session_id');
     _identityResetNeeded = _identityResetNeeded || !_identityKnown || _boundIdentity != null;
     // Preserve a durable epoch across relaunch of the same account so native
@@ -129,6 +132,7 @@ class AnalyticsManager {
     _identityEpoch++;
     _boundIdentity = identity;
     _identityChanges.value = _identityEpoch;
+    ClientTelemetry.instance.onOwnerChanged(previous: previousOwner, next: identity);
     _droppedEvents += _queuedEvents.length;
     _queuedEvents.clear();
     _pendingTimedEvents.clear();
@@ -550,43 +554,43 @@ class AnalyticsManager {
     _setUserPropertiesBatch({'\$name': _preferences.fullName, '\$email': _preferences.email});
   }
 
-  Future<bool> isFeatureEnabled(String key) async {
+  /// One fenced read for every flag value: no adapter, no settled identity, tracking off, or an
+  /// identity switch while the read is in flight all yield null (callers map null to "off").
+  Future<T?> _readFlag<T>(Future<T> Function(AnalyticsFeatureFlagAdapter adapter) read) async {
     final adapter = _adapter;
-    if (adapter == null || !adapter.isInitialized || !_trackingEnabled || _settledDistinctId == null) {
-      return false;
-    }
-    if (adapter is! AnalyticsFeatureFlagAdapter) return false;
+    if (adapter == null || !adapter.isInitialized || !_trackingEnabled || _settledDistinctId == null) return null;
+    if (adapter is! AnalyticsFeatureFlagAdapter) return null;
     final epoch = _identityEpoch;
     final identity = _settledDistinctId;
     try {
-      final enabled = await (adapter as AnalyticsFeatureFlagAdapter).isFeatureEnabled(key).timeout(_initTimeout);
-      if (epoch != _identityEpoch || !identical(identity, _settledDistinctId) || !_trackingEnabled) {
-        return false;
-      }
-      return enabled;
+      final value = await read(adapter as AnalyticsFeatureFlagAdapter).timeout(_initTimeout);
+      if (epoch != _identityEpoch || !identical(identity, _settledDistinctId) || !_trackingEnabled) return null;
+      return value;
     } catch (_) {
-      return false;
+      return null;
     }
   }
 
-  Future<Object?> getFeatureFlagPayload(String key) async {
-    final adapter = _adapter;
-    if (adapter == null ||
-        !adapter.isInitialized ||
-        !_trackingEnabled ||
-        _settledDistinctId == null ||
-        adapter is! AnalyticsFeatureFlagAdapter) {
-      return null;
-    }
-    final epoch = _identityEpoch;
+  Future<bool> isFeatureEnabled(String key) async => await _readFlag((a) => a.isFeatureEnabled(key)) ?? false;
+
+  Future<Object?> getFeatureFlagPayload(String key) => _readFlag<Object?>((a) => a.getFeatureFlagPayload(key));
+
+  /// The multivariate arm for [key]; null when the flag is off, not multivariate, or unresolved.
+  Future<String?> getFeatureFlagVariant(String key) => _readFlag<String?>((a) => a.getFeatureFlagVariant(key));
+
+  String? get settledDistinctId => _settledDistinctId; // null until an identity settles
+
+  final Set<String> _recordedFlagExposures = {};
+
+  /// PostHog Experiments exposure (`$feature_flag_called`), once per identity, flag and arm (the
+  /// SDK's own exposure events are off); also registers `$feature/<key>`. False when nothing was sent.
+  bool recordFeatureFlagExposure(String key, String variant) {
     final identity = _settledDistinctId;
-    try {
-      final payload = await (adapter as AnalyticsFeatureFlagAdapter).getFeatureFlagPayload(key).timeout(_initTimeout);
-      if (epoch != _identityEpoch || !identical(identity, _settledDistinctId) || !_trackingEnabled) return null;
-      return payload;
-    } catch (_) {
-      return null;
-    }
+    if (identity == null || !_trackingEnabled) return false;
+    if (!_recordedFlagExposures.add('$identity:$key:$variant')) return false;
+    _adapter?.registerSuperProperties({'\$feature/$key': variant});
+    track(r'$feature_flag_called', properties: {r'$feature_flag': key, r'$feature_flag_response': variant});
+    return true;
   }
 
   void track(String eventName, {Map<String, dynamic>? properties}) =>
@@ -1182,6 +1186,7 @@ class AnalyticsManager {
   }
 
   void deviceSessionEnded({required BtDevice device, required Duration duration, String? reason, int? hciReasonCode}) {
+    if (ClientTelemetryFlags.posthogRetirementEnabled) return;
     final properties = <String, Object>{
       'duration_seconds': duration.inMilliseconds / Duration.millisecondsPerSecond,
       'reason': _knownDeviceValue(reason ?? ''),

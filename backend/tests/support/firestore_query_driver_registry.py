@@ -139,6 +139,8 @@ BODY_DIGEST = {
     'database.sync_backfill_sequencer._pending_for_uid': '0215df28fdc7128cc68bf0abf087e4f98854698851b22821008460b68b699ea9',
     'database.workstreams.import_task_goal_links': 'd0c7c57d032067c3d72829663dd6f249073e6438ec7adac966b617fe3eaf1c56',
     'database.smart_merge.absorb_conversation': '811401edfa2d83ca8201f5275840c7f948580e6c6bd859bc9e6c7e879dbdbc22',
+    'database.client_telemetry.recent_owner_ids': '65fe8200d7ad9418b793ccb0fa53a172b2576a80bba644caa3b36cdb53b74510',
+    'database.client_telemetry_ops.purge_expired_observations': '8526c30b11ad8548356a136220232a607937bc464628c0eb5326e0a2e928897f',
 }
 
 DRIVERS: dict[str, DriverEntry] = {}
@@ -461,6 +463,19 @@ _add(
 )
 _add(
     DriverEntry(
+        'database.candidate_integration_outbox.list_candidate_integration_sweep_rows',
+        domains={'status': ['failed', 'pending', 'processing']},
+        neutrals={
+            'limit': _LIMIT,
+            'start_after_path': (
+                None,
+                'document-name cursor is absent on the first page and does not add a filter',
+            ),
+        },
+    )
+)
+_add(
+    DriverEntry(
         'database.candidates.list_candidates',
         base={'uid': UID},
         neutrals={'limit': _LIMIT, 'offset': _OFFSET},
@@ -545,7 +560,7 @@ _add(
 )
 _add(
     DriverEntry(
-        'database.chat.get_cache_aligned_messages',
+        'database.chat_context_reads.get_cache_aligned_messages',
         base={'uid': UID},
         domains={'app_id': [None, 'app-1'], 'chat_session_id': [None, 'sess-1']},
     )
@@ -2335,6 +2350,7 @@ _add(
     DriverEntry(
         'database.person_aliases.list_people',
         base={'uid': UID},
+        domains={'limit': [None, 200]},
         neutrals={
             'include_dismissed': (False, 'post-read visibility filter; does not alter the Firestore query shape')
         },
@@ -2629,6 +2645,26 @@ _add(
     )
 )
 
+_add(
+    SkipEntry(
+        'database.client_telemetry.recent_owner_ids',
+        reason='Ops helper streams the rate-limit collection by document id only '
+        '(no query filters); the ingest path is the registered driver via '
+        'database.client_telemetry.accept_batch.',
+        body_digest='65fe8200d7ad9418b793ccb0fa53a172b2576a80bba644caa3b36cdb53b74510',
+    )
+)
+
+_add(
+    SkipEntry(
+        'database.client_telemetry_ops.purge_expired_observations',
+        reason='Ops retention cleanup streams whole collections and deletes by '
+        'reference (expires_at checked in Python, not as a Firestore filter); '
+        'cron-invoked via the admin purge endpoint, not a serving query path.',
+        body_digest='8526c30b11ad8548356a136220232a607937bc464628c0eb5326e0a2e928897f',
+    )
+)
+
 
 # Messaging FIFO admission owns a declared status/created_at index; remaining queries are scans.
 def _messaging_cleanup(client):
@@ -2637,6 +2673,11 @@ def _messaging_cleanup(client):
 
 def _messaging_identity(client, combo, trial):
     client.documents['channel_identities/link'] = {'uid': UID, 'active': True}
+
+
+def _messaging_session(client, combo, trial):
+    client.documents['users/' + UID + '/chat_sessions/session'] = {'channel_events_migrated': True}
+    client.documents['users/' + UID] = {'name': 'synthetic'}
 
 
 def _messaging_claim(client, combo, trial):
@@ -2657,6 +2698,12 @@ _messaging_store = MessagingStore()
 for method, base, setup in (
     ('links', {'uid': UID}, None),
     ('events', {'uid': UID, 'session_id': 'session'}, None),
+    ('migrate_event_fences', {'uid': UID, 'session_id': 'session'}, None),
+    (
+        'append_event',
+        {'uid': UID, 'session_id': 'session', 'event': {'id': 'new', 'at': '', 'content': 'synthetic'}},
+        _messaging_session,
+    ),
     ('pending', {'message': SimpleNamespace(channel='loopback', provider='fake', external_user_id='external')}, None),
     ('unlink', {'uid': UID, 'link_id': 'link'}, _messaging_identity),
     ('delete_account', {'uid': UID}, None),
@@ -2666,6 +2713,7 @@ for method, base, setup in (
             'database.messaging.MessagingStore.' + method,
             base={'self': _messaging_store, **base},
             setup=setup,
+            domains={'limit': [1, 40]} if method == 'events' else {},
             patchers=(_messaging_cleanup, _messaging_decryption),
         )
     )
@@ -2686,6 +2734,30 @@ _add(
         'database.messaging.MessagingStore.pending_jobs',
         base={'self': _messaging_store, 'channel': 'loopback', 'provider': 'fake'},
         domains={'limit': [1, 100]},
+    )
+)
+
+_add(
+    DriverEntry(
+        'database.messaging.MessagingStore.claim_expired',
+        base={'self': _messaging_store, 'channel': 'telegram', 'provider': 'telegram'},
+        domains={'limit': [1, 20]},
+    )
+)
+_add(
+    DriverEntry(
+        'database.messaging.MessagingStore.prepare_launch',
+        base={'self': _messaging_store},
+        neutrals={'now': _NOW},
+        patchers=(lambda client: unittest.mock.patch('config.messaging.channel_enabled', lambda channel: False),),
+    )
+)
+_add(
+    DriverEntry(
+        'database.messaging.MessagingStore.cleanup',
+        base={'self': _messaging_store},
+        neutrals={'now': _NOW},
+        domains={'limit': [1, 100], 'retention_days': [7, 30]},
     )
 )
 
@@ -2719,5 +2791,34 @@ _add(
             'database.memories.unlock_all_memories',
         ),
         reason='Shared batch mechanics and bounded projection exercised by upgrade/reset unlock drivers',
+    )
+)
+
+
+from database.chat_context import ChatContextStore
+
+_context_store = ChatContextStore(messaging=_messaging_store)
+
+
+def _context_boundary(client, combo, trial):
+    client.documents['users/' + UID] = {'name': 'synthetic'}
+    client.documents['users/' + UID + '/chat_sessions/session'] = {'id': 'session'}
+    client.documents['users/' + UID + '/messages/boundary'] = {'chat_session_id': 'session', 'created_at': T0}
+
+
+_add(
+    DriverEntry(
+        'database.chat_context.ChatContextStore.source_page',
+        base={'self': _context_store, 'uid': UID, 'session_id': 'session', 'before_id': 'boundary'},
+        domains={'limit': [1, 40], 'cursor': [None, {'id': 'previous', 'at': T0.isoformat()}]},
+        setup=_context_boundary,
+    )
+)
+
+_add(
+    DriverEntry(
+        'database.chat_context_reads.get_recent_activity',
+        base={'uid': UID},
+        domains={'since': ['', T0.isoformat()], 'exclude_session': [None, 'session']},
     )
 )

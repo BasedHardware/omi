@@ -17,6 +17,8 @@ import 'package:omi/services/audio_sources/audio_source.dart';
 import 'package:omi/services/devices/connectors/device_connection.dart';
 import 'package:omi/services/services.dart';
 import 'package:omi/services/wals/wal_frame_encoder.dart';
+import 'package:omi/services/telemetry/client_telemetry.dart';
+import 'package:omi/utils/analytics/analytics_manager.dart';
 import 'package:omi/services/wals/pendant_ring_custody.dart';
 import 'package:omi/services/wals/wal.dart';
 import 'package:omi/services/wals/wal_interfaces.dart';
@@ -26,7 +28,6 @@ import 'package:omi/services/wals/sync_job_policy.dart';
 import 'package:omi/services/wals/sync_upload_batch.dart';
 import 'package:omi/services/wals/sync_upload_gate.dart';
 import 'package:omi/services/wals/wal_evidence_runs.dart';
-import 'package:omi/utils/analytics/analytics_manager.dart';
 import 'package:omi/utils/debug_log_manager.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/wal_file_manager.dart';
@@ -1350,6 +1351,11 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
 
   String _durableKey(Wal wal) => '${wal.id}|${wal.filePath ?? wal.getFileName()}';
 
+  String _uploadTelemetrySource(List<Wal> wals) => ClientTelemetry.uploadSourceForBatch([
+        for (final wal in wals)
+          (storage: wal.storage.name, originalStorage: wal.originalStorage?.name, device: wal.device),
+      ]);
+
   /// In the `upload` phase [kept] holds only the members an upload accepted (HTTP 200/202).
   void _emitWalTranscriptCoverage({
     required int generation,
@@ -1377,7 +1383,6 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
       return;
     }
     DebugLogManager.logEvent('wal_transcript_coverage', fields);
-    AnalyticsManager().trackEvent('wal_transcript_coverage', properties: fields);
   }
 
   bool _fileReferencedByOtherWal(Wal wal, String fileName) {
@@ -2071,6 +2076,7 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
           audioEndSeconds: audioBounds.end,
           claimLiveCapture: claimLiveCapture,
           geolocation: batchWals.first.geolocation,
+          telemetrySource: _uploadTelemetrySource(batchWals),
         );
 
         if (result.completed != null) {
@@ -2314,6 +2320,7 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
         audioEndSeconds: audioBounds.end,
         claimLiveCapture: claimLiveCapture,
         geolocation: walToSync.geolocation,
+        telemetrySource: _uploadTelemetrySource([walToSync]),
       );
 
       if (result.completed != null) {
@@ -2564,6 +2571,11 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
                 'newConversations': s.result?.newConversationIds.length ?? 0,
                 'updatedConversations': s.result?.updatedConversationIds.length ?? 0,
               });
+              try {
+                ClientTelemetry.instance.observeUploadDurableCompleted(jobId: jobId, confirmedAt: _now());
+              } catch (_) {
+                // Completion telemetry must not change WAL acknowledgement.
+              }
               for (final w in members) {
                 if ((s.result?.newConversationIds.length ?? 0) == 0 &&
                     (s.result?.updatedConversationIds.length ?? 0) == 0) {

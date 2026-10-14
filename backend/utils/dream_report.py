@@ -8,6 +8,7 @@ from config.dream_agent import Caps, eligible, mode, self_report_enabled
 from database import dream_store, review_store
 from database._client import get_firestore_client
 from models.dream_report import DreamRun, DreamRunsResponse
+from models.dream_refs import base_ref
 from utils import dream_reads
 
 
@@ -47,7 +48,7 @@ def project_run(uid, run_id, doc):
     outcomes = source.get('outcomes') or []
     records = {}
     for edit in proposed.get('edits', []):
-        ref = edit['target']
+        ref = base_ref(edit['target'])
         if ref in records:
             continue
         try:
@@ -85,7 +86,7 @@ def project_run(uid, run_id, doc):
                 'policy': edit.get(
                     'policy', 'auto' if edit['kind'] in {'title', 'overview', 'spelling'} else 'suggest'
                 ),
-                'target_label': target_label(edit['target'], records.get(edit['target'])),
+                'target_label': target_label(edit['target'], records.get(base_ref(edit['target']))),
                 'before': edit.get('before', ''),
                 'after': edit.get('after', ''),
                 'reason': edit.get('reason', ''),

@@ -1031,7 +1031,7 @@
       "component": "live-transcription",
       "impact": "product"
     },
-    "isPaused": false,
+    "isPaused": true,
     "notification_settings": {
       "receiver": "Omi - Services Alerting (Telegram)",
       "group_by": ["alertname"], "group_wait": "5m", "group_interval": "1h", "repeat_interval": "24h"
@@ -1179,7 +1179,7 @@
       "component": "live-transcription",
       "impact": "infrastructure"
     },
-    "isPaused": false,
+    "isPaused": true,
     "notification_settings": {
       "receiver": "Omi - Services Alerting (Telegram)",
       "group_by": ["alertname"], "group_wait": "5m", "group_interval": "1h", "repeat_interval": "24h"
@@ -1449,6 +1449,128 @@
     "notification_settings": {
       "receiver": "Omi - Services Alerting (Telegram)",
       "group_by": ["alertname"], "group_wait": "30s", "group_interval": "5m", "repeat_interval": "4h"
+    },
+    "record": null
+  },
+  {
+    "id": 86,
+    "uid": "omi-listen-audio-decode-failures",
+    "orgID": 1,
+    "folderUID": "betdycdziadc0e",
+    "ruleGroup": "Transcription Services",
+    "title": "Transcription Service Error Rate: undecodable audio frames",
+    "condition": "D",
+    "data": [
+      {
+        "refId": "A",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 900,
+          "to": 0
+        },
+        "datasourceUid": "prometheus",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(increase(omi_listen_audio_decode_failures_total{job=\"backend-listen-metrics\"}[15m])) or vector(0)",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "A"
+        }
+      },
+      {
+        "refId": "C",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "$A > 0",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "C",
+          "type": "math"
+        }
+      },
+      {
+        "refId": "D",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "D"
+                ]
+              },
+              "reducer": {
+                "params": [],
+                "type": "last"
+              },
+              "type": "query"
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "C",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "D",
+          "type": "reduce"
+        }
+      }
+    ],
+    "updated": "2026-10-14T00:00:00Z",
+    "noDataState": "OK",
+    "execErrState": "Error",
+    "for": "5m",
+    "keep_firing_for": "0s",
+    "annotations": {
+      "__dashboardUid__": "6d3d0897-c5a8-4f7b-b034-a3718c52a63b",
+      "__panelId__": "63",
+      "summary": "Transcription service alert: audio frames the transcription path cannot decode.",
+      "user_impact": "No confirmed user impact yet; sessions that keep sending undecodable frames may lose their transcript, one-off frames self-heal on reconnect.",
+      "scope": "backend-listen omi_listen_audio_decode_failures_total summed across job=backend-listen-metrics over 15m; metric replacement for the paused raw-line Loki rule df2a40h2fbjswe (corrupted stream).",
+      "verification": "Verify in the linked panel that corrupted-stream log lines are still arriving, and check backend-listen readiness before intervention.",
+      "safe_next_action": "Inspect backend-listen readiness and the codec or client_platform labels on the counter before intervening; use the documented scaling or rollback path only if the condition persists.",
+      "threshold": "sum(increase(omi_listen_audio_decode_failures_total{job=\"backend-listen-metrics\"}[15m])) or vector(0) > 0",
+      "evaluated_bad": "Synthetic contract: at least one undecodable audio frame in the rolling 15m window fires after the 5m pending period.",
+      "evaluated_good": "Synthetic contract: zero undecodable audio frames in the rolling 15m window stays healthy."
+    },
+    "labels": {
+      "instatus_component": "live-transcription",
+      "severity": "ticket",
+      "alert_identity": "omi-listen-audio-decode-failures",
+      "component": "live-transcription",
+      "impact": "infrastructure"
+    },
+    "isPaused": false,
+    "notification_settings": {
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": ["alertname"], "group_wait": "5m", "group_interval": "1h", "repeat_interval": "24h"
     },
     "record": null
   }

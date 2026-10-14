@@ -1,5 +1,32 @@
 # Dream agent phase 1
 
+## Consensus automation and valuable Review (rung 2a)
+
+Only the full-context owner gets the full planner schema: Review questions require
+`value` (1–5) and a short generic `why_it_matters`; spelling edits may supply
+`value` for a possible Review question. The bounded planner schema and behavior
+stay unchanged. Consensus assigns server-only `agreement` and `samples` to every
+survivor; these counts are included in the full-mode private pass report.
+
+A spelling edit agreed by every returned sample, with at least two returned,
+may apply without independent-record grounding. The full-context UID gains
+`spelling` in its effective auto kinds even when the service override omits it.
+Grounded spelling retains its existing automatic path. Majority-only ungrounded
+spelling becomes a Review question; a single survivor cannot authorize the new
+automatic path. Titles and overviews keep their existing policy.
+
+The consensus path still validates current evidence, fences all cited snapshots,
+and uses the existing segment-scoped journal writer and Undo. Suppression, per-pass
+edit limits, the kill switch, and kind demotion after the configured Undo rate
+remain authoritative. Demotion is applied after the full-owner policy expansion.
+
+Surviving direct questions and spelling questions compete in one descending
+`(agreement, value)` order. Values 1–2, including unscored spelling questions,
+never spend attention. New offers atomically share the existing three-question
+UTC-day allowance; duplicates and suppression do not spend it. Counts-only
+metrics report `auto_applied_unanimous`, `suggested_majority`, `questions_offered`,
+and `questions_dropped_low_value`.
+
 ## Opt-in full context (rung 1)
 
 `DREAM_AGENT_CONTEXT_MODE=bounded` is the default. `full` applies only to the
@@ -11,7 +38,7 @@ The prod `cloud_run/backend-sync` runtime overlay selects full mode and K=3 for 
 configuration, so the full-mode subset follows the same mechanism. Deployment still occurs through the
 ordinary release workflow after this PR lands.
 
-Full mode bypasses triage and runs `DREAM_AGENT_FULL_SAMPLES` independent reasoning samples concurrently
+Full mode bypasses triage and runs `DREAM_AGENT_FULL_SAMPLES` independent reasoning samples sequentially
 (default 3, range 1–8). Each sample uses one reasoning turn in the existing `run_loop`, with the same complete
 context and prompt. A failed sample does not cancel siblings. Successful samples vote with a strict majority
 (`returned // 2 + 1`): two of three, both of two, or the only survivor. Repeated items inside one sample count
@@ -30,16 +57,57 @@ less than the configured estimate, especially for multibyte text; the gateway
 has no count-tokens surface. Neither estimate is represented as observed usage.
 See [the provider model
 limits](https://cloud.google.com/vertex-ai/generative-ai/docs/models/gemini/2-5-flash).
-The existing reservation/USD accounting reserves the combined input/completion
-budget plus one malformed-response retry **for every sample**: `2 * K * (400000 + 32768)`. At K=3 this
-reserves 2596608 tokens, or $25.96608 at the existing $0.00001/token upper-bound rate. The prod `backend-sync` cap is $250, intended to cover 24 hourly passes at roughly $8.2 settled usage
-(~$200) plus one ~$26 reservation of headroom. The current ledger is shared by day and retains successful
-reservations; it therefore admits at most nine full passes at this reservation size, before other spend.
-Per-user settlement is required for that intended hourly cadence. The bounded-mode report host retains $60. At 253000 input
-tokens, three unretried calls plus their maximum completions use at most 857304 tokens ($8.57304 at that
-upper-bound rate). Actual observed usage includes thinking and both attempts of any retried sample. Unknown
-usage from a failed sample stays unknown even when survivors produce a successful plan; admission remains
-reserved. Daily USD and per-user caps remain authoritative.
+The existing reservation/USD accounting reserves the combined input/completion budget plus one
+malformed-response retry **for every sample**: `2 * K * (400000 + 32768)`. At K=3 this reserves 2596608
+tokens, or $25.96608 at the existing $0.00001/token upper-bound rate. The prod `backend-sync` cap is $320,
+intended to cover 24 hourly passes at roughly $12.1 settled usage (~$290.4) plus one ~$26 reservation of
+headroom. Admission and settlement now use `dream_users/<uid>/spend/<UTC date>`. The ledger is shared only by
+that user's scheduled/manual passes and service hosts; another user or the synthetic canary cannot exhaust it.
+Finishing a pass atomically replaces its reservation with actual aggregate tokens times the accounting rate
+captured at admission, including every sample and retry. Known billable failures settle too; an unknown or
+missing usage outcome keeps the full reservation. At 820000 tokens per full pass, 24 passes settle to $196.80;
+the final admission needs $214.56608 including its temporary reservation, below $320. Settlement uses the
+admission UTC day across midnight and tracks the current charge on a retained lease so repeated recovery
+cannot deduct a reservation twice. New user ledgers do not import the historical shared total. A pre-change
+in-flight lease remains attached to `dream_spend/<day>`; without its captured accounting rate it retains the
+old reservation, unless an explicit known-zero refund is authorized. The bounded-mode report host retains $60.
+At 253000 input tokens, three unretried calls plus their maximum completions use at most 857304 tokens
+($8.57304 at that upper-bound rate). Actual observed usage includes thinking and both attempts of any retried
+sample. Unknown usage from a failed sample stays unknown even when survivors produce a successful plan;
+admission remains reserved. Daily USD and per-user caps remain authoritative.
+
+Rung 1.3 runs samples sequentially, with one request in flight per pass. Each capacity-rejected sample
+waits the existing 120-second cooldown and retries once only if its full 480-second model window fits
+inside the remaining pass deadline. The cooldown is rechecked against shared/local reservation state.
+Other sample failures do not prevent later samples; majority uses only returned plans. If no plan returns
+and any sample is capacity-rejected, the pass waits without advancing the dirty-record failure circuit.
+The 1620-second pass accommodates three 480-second sample windows, one 120-second cooldown and
+60 seconds for effects; observed 200–265 second calls also leave room for more cooldown retries.
+The drain is 1680 seconds, HTTP middleware 1710 seconds, and production Scheduler attempt deadline
+1740 seconds (below Scheduler's 1800-second HTTP ceiling). Larger K or extra retries use survivors
+when another complete call cannot fit; the pass never starts one just to cancel it at the deadline.
+
+A synthetic mixed-capacity replay (two CapacityWait samples, one returned plan) reproduced
+`dream_settlement_limit` when that plan deferred a retrieval-only context record after the 32 dirty
+inspection slots were filled. Retrieval-only refs now use review metadata without adding uninspected
+dirty keys to settlement. Generic acquire/finish faults preserve the original pass counts and mode;
+logs emit only exact allowlisted internal `dream_*` ValueError codes, never exception text.
+This reproduces the failure path locally; the old logs did not carry a code proving that exact live trigger.
+
+Target refs and evidence refs may carry `#segment-id` or `#start-seconds`. Authorization, document
+lookup and independent-grounding comparisons use the base record. A spelling target fragment must
+resolve uniquely and contain the quoted wrong term; replacement touches only that segment, leaving
+other segments, titles and summaries unchanged. The encoded transcript before/after is journaled for
+Undo and the fragment is retained on the change label. Equivalent ID/time selectors share suppression.
+
+Explicit Gemini context caching is supported with Provisioned Throughput in Preview and cached input
+reduces reservation burndown. The [provider guide](https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/provisioned-throughput/measure-provisioned-throughput)
+describes this, and the [model table](https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/provisioned-throughput/supported-models)
+lists 0.1 input-cache burndown for the declared Gemini 3.8 Flash route. Our reserved adapter converts
+OpenAI-shaped requests in `llm_gateway/gateway/vertex_wire.py` and has no `cachedContent` forwarding
+or cache create/delete lifecycle. Adding a private per-pass cache needs model/location binding across
+reserved-model recovery, TTL/deletion, tenant isolation and usage accounting; it is not a small toggle.
+No explicit caching is built in this rung, no cache hit is assumed, and no PAYG route is added.
 
 Dirty targets have first priority in oldest-first inspection order, then history
 seeds, then existing linked/lexical/semantic/temporal retrieval order. All fitting
@@ -73,14 +141,14 @@ which still rehydrates and fences current evidence. Bounded proposals keep their
 existing policy.
 
 Full model/HTTP read deadlines are 480 seconds (connect 3, write 60, pool 5).
-Passes, including full-mode manual runs, allow 600 seconds; drain/manual outer
-bounds and capacity-slot cancellation fences allow 660 seconds, including a
+Passes, including full-mode manual runs, allow 1620 seconds; drain/manual outer
+bounds and capacity-slot cancellation fences allow 1680 seconds, including a
 30-second settlement margin. The HTTP middleware gives the sweep/manual paths
-690 seconds only when full mode is configured with a nonempty allowlist; their
+1710 seconds only when full mode is configured with a nonempty allowlist; their
 handlers still enforce each UID's own mode. Bounded model/pass/drain/manual/slot deadlines are
 unchanged. Owner leases already have no timed expiry and remain conservative
 on ambiguous cancellation. `deploy/scheduler/jobs.yaml` sets the prod sweep
-attempt deadline to 720 seconds, above the 690-second HTTP bound. Prod and dev
+attempt deadline to 1740 seconds, above the 1710-second HTTP bound. Prod and dev
 canary jobs retain 180 seconds (their handler has a 90-second bound); dev canary
 stays paused, and no dev sweep is declared.
 
@@ -98,13 +166,13 @@ Reservation exhaustion and provider 429 become `CapacityWait`; when no sample re
 Bounded requests keep the existing size-safe Luna recovery. No shared/pay-as-you-go Gemini route is added.
 
 Cloud Run timeout metadata was read only via managed `ro-prod`/`ro-dev` service
-accounts on 2026-10-13: `backend-sync` in `us-central1` is 3600 seconds in prod
-and 300 seconds in dev. Prod covers the required 690 seconds; dev does not.
+accounts on 2026-10-13 (prod reconfirmed 2026-10-14): `backend-sync` in `us-central1` is 31620 seconds in prod
+and 300 seconds in dev. Prod covers the required 1710 seconds; dev does not.
 The timeout is not declared in `deploy/runtime_env/_base.yaml` or the env overlays.
 The existing deploy action consumes the rendered common flags without `--timeout`,
 so it preserves the live setting; `scripts/verify_backend_release_vector.py`
 currently enforces only a 300-second minimum. Before enabling full mode on the
-dev HTTP host, raise its request timeout to at least 690 seconds (900 recommended).
+dev HTTP host, raise its request timeout to at least 1710 seconds (1800 recommended).
 The code change does not alter live Cloud Run settings or enable full mode.
 
 Rung 1.1 makes the output interface self-describing: `Edit.before` is the exact
@@ -145,7 +213,7 @@ No live high-thinking inference has been used to validate quality/latency.
 
 On `finish_reason=length`/`max_tokens` or invalid model-content JSON, full mode
 retries the identical request once inside the existing shaped-loop 480-second
-wall deadline and 600-second pass deadline. It does not replay partial edits
+wall deadline and 1620-second pass deadline. It does not replay partial edits
 or add malformed text to the prompt. Schema item failures remain isolated
 item rejections, not retries; capacity/HTTP failures retain their existing
 semantics. Both attempts' known usage contributes to settlement and returned
@@ -391,7 +459,7 @@ fixtures only and does not access production customer records.
 The worker defaults off in code. The production runtime declarations enable shadow
 for David's two allowlisted UIDs only; TestFlight stays disabled. Prod backend and
 backend-sync declare 24 scheduled passes/user/day, 20 manual runs/user/day and a
-$60 global daily reservation ceiling. Other budget knobs keep their defaults.
+$250 per-user daily accounting cap on backend-sync ($60 on the bounded report host). Other budget knobs keep their defaults.
 Review API #20966 supplies the effect ledger; #20960 supplies
 the dedicated-only reservation policy. Declaring runtime configuration does not
 deploy it or change cloud resources.
@@ -419,9 +487,9 @@ Production uses the existing `backend-sync` Cloud Run service and internal
 the same `verify_cloud_tasks_oidc` dependency, sync task audience and invoker
 identity as the sequencer sweep; Firebase user tokens cannot invoke it.
 `deploy/scheduler/jobs.yaml` declares `dream-agent-sweep-hourly` for prod at
-`0 * * * *` UTC, with a 180-second attempt deadline. The drain itself has a
-120-second wall-clock bound including queue reads, admission and report writes;
-the route middleware allows 150 seconds. Responses contain only complete, failed,
+`0 * * * *` UTC, with a 1740-second attempt deadline. Full drain and middleware
+bounds are 1680 and 1710 seconds; bounded drain is 240 seconds including queue
+reads, admission and report writes. Responses contain only complete, failed,
 not-admitted and deadline counts. Off performs no Firestore reads.
 
 There is no dev Scheduler entry: dev shares prod Firestore. The existing dev
@@ -519,7 +587,7 @@ All knobs are declared in `config/feature-flags.yaml`:
 | `DREAM_AGENT_TOKENS_PER_PASS` | 24,000 across both stages |
 | `DREAM_AGENT_PASSES_PER_DAY` | 2 per user, UTC; billable/ambiguous failed and shadow admissions count |
 | `DREAM_AGENT_EDITS_PER_PASS` | 10, shared with slow task proposals and vocabulary |
-| `DREAM_AGENT_DAILY_USD` | $20 global daily reservation ceiling |
+| `DREAM_AGENT_DAILY_USD` | $20 per-user daily accounting cap (default) |
 | `DREAM_AGENT_MAX_USD_PER_TOKEN` | $0.00001 conservative upper bound |
 | `DREAM_AGENT_UNDO_RATE` | 0.2; strictly above demotes that type |
 | `DREAM_AGENT_UNDO_MIN_SAMPLES` | 10 in a bounded 30-day journal window |
@@ -543,12 +611,23 @@ At most 83 default admissions fit the daily reservation ceiling. Set the token
 cost ceiling at or above all admitted route rates before operating a different
 model policy.
 
-Leases are persistent and cannot be stolen. A timeout retains the lease because
-an offloaded storage operation may still be completing. For a crashed or timed
-out worker, an operator must prove the worker has exited and any write outcome
-has settled before clearing `dream_users/{uid}.lease`. Do not clear a live lease.
-This safety choice can strand a user until recovery; it prevents overlapping
-passes after expiry or process failure. No recovery automation is included.
+A timeout retains the lease while work may still be completing. Admission
+transactionally reclaims a lease only when its `started_at` is older than its
+context mode's drain timeout plus a 60-second margin: full **1740s** (1680 + 60),
+bounded **300s** (240 + 60). New leases persist `context_mode`; legacy leases
+without it use the conservative full fence even if today's cohort mode changed.
+Reclamation records a failed, abandoned run with unknown usage and keeps the
+full reservation on the admission day's ledger, including the old global
+`dream_spend/{day}` ledger for leases without `spend_scope=user`. Previously
+reduced charges return to the full reservation. It leaves all dirty versions,
+failure streaks, review metadata, score and watermark unchanged. The same
+transaction clears the old lease and performs normal admission, which may still
+be denied by the daily caps. A late finish is rejected by the run ID fence.
+State counts `abandoned_passes`; after commit, counters increment
+`omi_dream_pass_total{status=failed,error_type=LeaseAbandoned}` and
+`omi_dream_abandoned_total{context_mode=full|bounded}`. The content-free log is
+`Dream lease reclaimed age_s=<n> mode=<m>`. No operator account-data mutation is
+needed after this code is deployed and a later admission attempt runs.
 
 Live edits call the Review ledger/journal seams. Transcript name fixes retain
 storage encryption/compression and clear stale evidence references and
@@ -618,16 +697,16 @@ Evidence refs, document IDs, frame requests, reproductions, usage ambiguity and
 reserved spend never enter this wire projection.
 
 POST accepts `{}` and uses the same persistent lease, mode, token/edit limits
-and global spend reservation as scheduled passes. `DREAM_AGENT_MANUAL_RUNS_PER_DAY`
+and per-user UTC-day spend reservation as scheduled passes. `DREAM_AGENT_MANUAL_RUNS_PER_DAY`
 defaults to 3 and uses a separate UTC counter; it never consumes scheduled passes.
 A held lease returns 409 `dream_run_in_progress`; exhausted manual allowance
 returns 429 `dream_manual_limit`. Empty queues return an empty `idle` run without
 admission. Invisible/deleted-only evidence refunds the provisional manual count.
-Unavailable global spend or invalid admission budgets return 503
+Unavailable per-user spend or invalid admission budgets return 503
 `dream_budget_unavailable`. The request has an 85-second application deadline
 and a 90-second middleware deadline, including admission/report reads; its worker
 has a 70-second planning bound. A deadline returns a `deadline` run and retains
-ambiguous leases/reservations for the existing operator recovery procedure.
+ambiguous leases/reservations until the stale-lease admission fence permits reclamation.
 When report settlement itself times out, its empty run ID indicates that no
 settled report could be retrieved; query GET after storage settles.
 
@@ -672,8 +751,8 @@ always shadow, including when global mode is on. No product effects execute.
 The maximum pass cap is 16,000 tokens (or a smaller global per-pass cap), with
 at most 256 completion tokens per lane and a 65-second worker bound. Its 96/day
 synthetic admission allowance permits the half-hour schedule and bounded retries;
-all reservations count toward the same global daily USD ceiling. At defaults,
-48 checks reserve at most $7.68/day; observed token-price cost is much smaller.
+its reservations and actual usage count only toward the synthetic canary UID's daily ledger. At defaults,
+48 checks temporarily reserve at most $7.68/day; known usage settles to actual token-price cost.
 The schema's conservative byte ceiling explains the input cap. The 88-second
 route bound includes a three-second durable health-write attempt.
 
@@ -710,7 +789,7 @@ These are offline checks; a deployed canary remains separate acceptance evidence
 
 User-serving hosts should declare the same `DREAM_AGENT_PASSES_PER_DAY` as the
 sweep host (currently 24 in the production source declarations), along with the
-same global spend/token-price limits, so GET presents the scheduler's allowance.
+same per-user daily spend cap and token accounting rate, so GET presents the scheduler's allowance.
 
 ## Response validation and bounded failed-record retries
 
@@ -848,9 +927,9 @@ Older targets join before retrieval and must fit the 70% target slice with at mo
 
 The drain selects bounded 100-owner document-ID pages, then ranks by usage weight × age since successful pass (paid weight 2, paid ties first). Priority is page-local: bounded Firestore reads and deterministic page rotation are preferable to scanning every owner or synchronizing a stale global entitlement score. Under continuing capacity and repeated sweeps, advancing only past a contiguous attempted prefix reaches all owners; there is no permanent top-100 cutoff. A capacity wait stops new work and retains untried owners. Current subscription plans are projected outside transactions; cursor completion is compare-and-set on the prior cursor.
 
-Workers catch ordinary acquire/run/finish errors independently. Drain is 240 seconds, passes 180 seconds, finish margin 30 seconds; no new pass starts without that remaining budget. Scheduler attempt deadline is 720 seconds in the checked-in contract; full drains require a backend-sync Cloud Run request timeout of at least 690 seconds (prod is 3600; dev is 300 and must be raised before full-mode HTTP enablement). Cancellation retains conservative lease/slot fences, while ordinary exceptions release provider slots. Both backend (manual runs) and backend-sync (scheduled drains) declare OMI_VERTEX_RESERVATION_PROJECT as the compute project, matching gateway keys in dev and prod.
+Workers catch ordinary acquire/run/finish errors independently. Drain is 240 seconds, passes 180 seconds, finish margin 30 seconds; no new pass starts without that remaining budget. Scheduler attempt deadline is 1740 seconds in the checked-in contract; full drains require a backend-sync Cloud Run request timeout of at least 1710 seconds (prod is 3600; dev is 300 and must be raised before full-mode HTTP enablement). Cancellation retains conservative lease/slot fences, while ordinary exceptions release provider slots. Both backend (manual runs) and backend-sync (scheduled drains) declare OMI_VERTEX_RESERVATION_PROJECT as the compute project, matching gateway keys in dev and prod.
 
-Shared Redis slots default to two (env bound 1–8), expire in 240 seconds, and release by matching token. Reservation evidence is advisory: unknown evidence or an unavailable reservation store admits through the existing gateway route. Explicit 120-second cooldowns and occupied slots still wait. During Redis outages, bounded local slots retain the 240-second cancellation fence and locally observed cooldowns retain their expiry; distributed concurrency evidence is unavailable. Reserved-only Gemini reasoning cannot use provider/LKG fallback for capacity errors. Global USD, per-user caps and owner leases remain authoritative. Runtime-contract tests compare computed reservation keys across backend and gateway envs, including compute project and reservation location.
+Shared Redis slots default to two (env bound 1–8), expire in 240 seconds, and release by matching token. Reservation evidence is advisory: unknown evidence or an unavailable reservation store admits through the existing gateway route. Explicit 120-second cooldowns and occupied slots still wait. During Redis outages, bounded local slots retain the 240-second cancellation fence and locally observed cooldowns retain their expiry; distributed concurrency evidence is unavailable. Reserved-only Gemini reasoning cannot use provider/LKG fallback for capacity errors. Per-user daily USD caps and owner leases remain authoritative. Runtime-contract tests compare computed reservation keys across backend and gateway envs, including compute project and reservation location.
 
 Production scheduled drains need `DREAM_AGENT_MODE=on`, the intended `DREAM_AGENT_UID_ALLOWLIST`, existing pass/USD caps, and the gateway URL/service token. These are declared for backend-sync in `runtime_env.yaml`. `OMI_VERTEX_RESERVATION_PROJECT=based-hardware` is declared on both backend and backend-sync. `DREAM_AGENT_CONCURRENCY` is optional and is not explicitly declared; its default is two.
 

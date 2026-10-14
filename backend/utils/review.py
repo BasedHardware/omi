@@ -5,6 +5,7 @@ from typing import Sequence
 
 from database import candidates, conversations, review_changes, review_store as store
 from models.action_item import TaskCreatePayload
+from models.review_context import enrich_spelling
 from models.candidate import CandidateAction, CandidateStatus, CandidateSubjectKind
 from models.review import (
     ChangeRef,
@@ -174,6 +175,7 @@ def get_items(uid: str, *, include_agent_proposals: bool = False):
         for item, source, version in _sources(uid):
             if item.kind == 'agent_proposal' and not include_agent_proposals:
                 continue
+            item = enrich_spelling(item, source, load_conversation=lambda key: conversations.get_conversation(uid, key))
             if store.offer_item(uid, item, source, version):
                 eligible.append(item)
     ranked = rank_review_items(eligible, remaining)

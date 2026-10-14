@@ -692,6 +692,8 @@ curl -s -X POST -H "Authorization: Bearer $PROD_GRAFANA_TOKEN" \
 
 Alerting is configured through Grafana unified alerting (not Prometheus AlertManager rules directly). Alert screenshots are disabled: renders call back into Grafana and stalled it under load (2026-10-13). Notifications link to the dashboard panel instead.
 
+Alert rules never query a log datasource (Cloud Logging or Loki) for raw lines. Each 60s tick re-scans raw lines, exceeds the 30s datasource timeout, drops evaluation ticks, and has twice loaded the alerting plane into 502s: 2026-10-13 via Cloud Logging (#21390) and 2026-10-14 via Loki (`{namespace="prod-omi-backend"}` regex scans; one rule alone failed 196 times in 3h). `test_live_alert_rules_never_query_log_datasources` rejects any unpaused rule that tries. Held rules stay paused via `metric-inventory.prod.json` `admission_holds`; re-admit only on a bounded counter (a Cloud Monitoring log-based metric or an exported Prometheus counter). The paused corrupted-stream rule's signal lives on `omi_listen_audio_decode_failures_total`, replaced by `omi-listen-audio-decode-failures`; the listen-429, ASGI-handshake and direct-OpenAI-quota signals have no counter yet — tracked in #21461.
+
 Loki ruler is configured to send alerts to AlertManager at `http://prod-kube-prometheus-stack-alertmanager:9093`.
 
 ### Telegram notification quality
@@ -998,14 +1000,37 @@ helm -n prod-omi-monitoring --kube-context "$PROD_CONTEXT" upgrade --install pro
   -f prometheus-stackdriver-exporter/prod_omi_cloud_run_metrics_exporter.yaml
 ```
 
+**Apply monitoring-stack changes off-peak.** A stack rollout restarts the
+Prometheus pod, which replays its WAL (~700k–980k head series) before serving;
+during replay the adapter serves stale custom metrics and the
+pusher/listen/parakeet/VAD/diarizer HPAs freeze (2026-10-14: pusher deploys
+also failed Grafana alert provisioning while evaluation was backed up). The
+rollout also carries whatever main carries beyond the values change: the
+2026-10-14 rollout ships #21448's `diarizer-batch-metrics` scrape job and
+adapter rule, which are inert until batch pods exist (no
+`prod-omi-diarizer-batch` pods run yet), and the Loki values change rolls the
+Loki read path onto its new requests.
+
 ### Production kube-prometheus-stack review and rollback
 
 The production values file is the source for the Prometheus CR: 10d retention,
 1 CPU / 2Gi memory requests, 2 CPU / 8Gi memory limits, and a 100Gi
-`standard-rwo` claim. It preserves the scrape configuration from deployed
-revision 14 and does not drop `app_build`; the backend now emits the fixed
-`unknown` value, so that extra label does not help bound cardinality and dropping
-it would blank the fixed value.
+`standard-rwo` claim. The CPU limit stays at 2 deliberately (2026-10-14
+review): Prometheus load is sustained, not bursty — 1.5–2.2 cores across 14h
+with the node pinned near its 1930m allocatable, 0% CFS throttling, and the
+apparent ~2.9-core spikes were an artifact of kubelet scrapes timing out
+mid-sample. A lower cap would throttle evaluation of the already
+timeout-prone Prometheus-backed rules (`omi-stt-fallback-leg-dead`,
+`omi-stt-leg-lifecycle-gap`) and stall the adapter's custom-metrics reads
+behind every HPA. The 2026-10-14 starvation fix is requests, not a lower
+limit: Grafana (250m), the operator (50m) and the adapter (100m, adapter
+values file) carry explicit requests, and the Loki read path carries modest
+requests in `loki/prod_omi_loki_values.yaml` (ingester/querier 50m,
+index-gateway/ruler 20m each) with the node arithmetic in that file. The
+2-vCPU pool itself is undersized for ~592k head series — the durable fix is
+the pool resize runbook below. The values file does not drop `app_build`; the
+backend now emits the fixed `unknown` value, so that extra label does not help
+bound cardinality and dropping it would blank the fixed value.
 
 Before an upgrade, render the pinned chart with the same API capabilities as
 the cluster, then diff the normal (non-hook) resources. The EndpointSlice API
@@ -1032,13 +1057,12 @@ helm template "$PROD_RELEASE" prometheus-community/kube-prometheus-stack \
 ```
 
 This is a read-only preflight: `helm template` renders locally and
-`kubectl diff` compares the rendered objects without applying them. Against the
-current production release (revision 14, chart 75.15.1), the values file renders
-to no object changes: `kubectl diff` exits 0 with empty output. Re-run this
-preflight against live state before every release; if it prints any diff, inspect
-it before deciding whether an upgrade is intended. An empty diff means there is
-no Kubernetes manifest change to apply; do not create a Helm revision just to
-sync these already-matching values.
+`kubectl diff` compares the rendered objects without applying them. Re-run it
+against live state before every release and inspect anything it prints: the
+diff must contain exactly the object changes the values change intended
+(after the 2026-10-14 requests change: the Grafana/operator resource requests,
+and nothing else). An empty diff means there is no Kubernetes manifest change
+to apply; do not create a Helm revision just to sync already-matching values.
 
 `--skip-crds` is required for upgrades. The chart's ten Prometheus Operator
 CRDs are not updated by Helm during an upgrade; review a CRD migration as a
@@ -1047,17 +1071,68 @@ their hook-only RBAC objects from `kubectl diff`. Helm runs those Jobs as
 pre/post-upgrade hooks and removes successful Jobs per their hook delete
 policy. Do not apply rendered CRDs or manage those Jobs with `kubectl apply`.
 
-Helm rollback creates a new revision. Revision 14 is the current known-good
-baseline with the live 8Gi / 100Gi values. Revision 13 records 4Gi / 50Gi and
-must not be used as the rollback target. Before a future rollback, inspect
-`helm history` and choose the appropriate deployed baseline:
+Helm rollback creates a new revision. Never roll back to a hard-coded
+revision number: immediately before an apply, record the revision the release
+is on (`helm history "$PROD_RELEASE" --namespace "$PROD_NAMESPACE"
+--kube-context "$PROD_CONTEXT"` — the highest deployed revision), and roll
+back to that recorded revision. The 2026-10-14 baseline (revision 14 at the
+time) is already several intentional changes behind live: rolling back to it
+would also revert #21306, #21389, #21358 and #21409. #21389 is the
+screenshots-off fix — reverting it turns alert screenshots back on and
+recreates the 2026-10-13 Grafana 502s.
 
 ```bash
-helm rollback "$PROD_RELEASE" 14 \
+helm rollback "$PROD_RELEASE" <pre-apply-revision> \
   --namespace "$PROD_NAMESPACE" \
   --kube-context "$PROD_CONTEXT" \
   --wait --timeout 10m
 ```
+
+#### Monitoring node-pool resize runbook (4 vCPU; owner: lead — not automated)
+
+The monitoring pool `monitoring-pool` is `e2-highmem-2`, zonal
+`us-central1-a`, labeled `env=prod,service=monitoring`, no taints,
+autoscaling 1–10 with 2 nodes live. ~592k head series and sustained 1.5–2.2
+core Prometheus load do not fit two 1930m-allocatable nodes; the durable fix
+is a 4-vCPU replacement pool. `e2-highmem-4` doubles both CPU and memory
+(Prometheus previously OOM-killed replaying 2.56M head series at the 4Gi
+limit); `e2-standard-4` is the CPU-only alternative. Grafana's and
+Prometheus's `standard-rwo` PVCs are zonal to `us-central1-a`, so the
+replacement pool must stay in that single zone or the PVCs cannot reattach.
+
+```bash
+gcloud container node-pools create monitoring-pool-v2 \
+  --cluster=prod-omi-gke --location=us-central1 \
+  --machine-type=e2-highmem-4 --num-nodes=2 \
+  --node-locations=us-central1-a \
+  --node-labels=env=prod,service=monitoring \
+  --disk-type=pd-balanced --disk-size=100GB \
+  --enable-autoscaling --min-nodes=1 --max-nodes=10 \
+  --location-policy=BALANCED
+```
+
+Then, off-peak, drain the old pool node by node and delete it once the
+monitoring workloads have moved (same labels select them; there are no
+taints to replicate):
+
+```bash
+for NODE in $(kubectl --context "$PROD_CONTEXT" get nodes \
+    -l cloud.google.com/gke-nodepool=monitoring-pool -o name); do
+  kubectl --context "$PROD_CONTEXT" cordon "$NODE"
+  kubectl --context "$PROD_CONTEXT" drain "$NODE" \
+    --ignore-daemonsets --delete-emptydir-data --timeout=30m
+done
+gcloud container node-pools delete monitoring-pool \
+  --cluster=prod-omi-gke --location=us-central1 --quiet
+```
+
+The drain evicts Grafana and Prometheus; their PVCs reattach in the same
+zone. Prometheus restarts and replays its WAL (~700k–980k head series) —
+during replay the adapter serves stale custom metrics and the
+pusher/listen/parakeet/VAD/diarizer HPAs freeze, so run this off-peak (see
+the WAL-replay note under the prod deploy commands). The Loki memcached
+caches restart cold. If a PodDisruptionBudget blocks a drain, inspect the
+PDB before forcing with `--disable-eviction`.
 
 **Dev** (note: kube-prometheus-stack release name is `dev-kube-prometheus-stack`, not `dev-omi-kube-prometheus-stack`):
 ```bash
@@ -1087,6 +1162,11 @@ helm -n dev-omi-monitoring --kube-context "$DEV_CONTEXT" upgrade --install dev-o
 ```
 
 ## Troubleshooting
+
+**Many scrape targets down at once (2026-10-14: 109 of 286, including 34 stale kubelet endpoints):**
+while the prometheus operator crash-loops it cannot reconcile ServiceMonitor/PodMonitor
+objects, so their targets go stale faster than they age out. Expected to clear on its own
+once the operator stays running; verify `up` converges upward before chasing individual targets.
 
 **Metric not appearing in Prometheus:**
 1. Check the pod exposes `/metrics` and returns valid Prometheus format

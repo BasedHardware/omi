@@ -1,10 +1,10 @@
 {
   "caps": {
     "internal_time_to_signal_minutes": 49,
-    "pr_linux_minutes_per_day": 13550,
+    "pr_linux_minutes_per_day": 13620,
     "pr_macos_minutes_per_day": 1600
   },
-  "caps_rationale": "#21237 six-shard rebalance follows run 38168319908: 1727 files, four shard contract walls 710/472/772/651s, and only 17s of Dream file spans on the failing shard. The 720-second per-shard regression budget stays unchanged. Forecast 8 minutes per runner over six runners versus the prior 9 over four adds 1428 Linux minutes/day at the existing 119 runs/day; inventory totals become 13506.2 Linux minutes/day. Set the forecast cap to 13550. The inventory's conservative matrix-multiplied dependency-path forecast becomes 49 minutes, so its cap follows that value; actual six shards execute in parallel. macOS cap is unchanged. Re-seed from terminal executions in the next weekly audit.",
+  "caps_rationale": "#21237 six-shard rebalance follows run 38168319908: 1727 files, four shard contract walls 710/472/772/651s, and only 17s of Dream file spans on the failing shard. The 720-second per-shard regression budget stays unchanged. Forecast 8 minutes per runner over six runners versus the prior 9 over four adds 1428 Linux minutes/day at the existing 119 runs/day, yielding 13506.2 Linux minutes/day before fork Dart coverage. The 2026-10-13 contributor audit adds four fork Dart PR runs/day at the retained 17-minute p50 (+68), yielding 13574.2 Linux minutes/day. Set the Linux cap to 13620 to cover that forecast. The conservative matrix-multiplied dependency-path forecast and cap remain 49 minutes; actual shards execute in parallel. The macOS cap remains 1600 minutes/day. Nightly Dart is outside the PR cap. Re-seed from terminal executions in the next weekly audit.",
   "jobs": {
     "backend-checks.yml/changes": {
       "budget_p50_minutes": 2,
@@ -1991,13 +1991,13 @@
       "budget_p50_minutes": 17,
       "display_name": "Dart Analyze & Tests",
       "expected_runs_class": "sampled-pr-day",
-      "expected_runs_per_day": 25.1,
-      "if": "needs.changes.outputs.full_ci == 'true' && needs.changes.outputs.has_app_dart == 'true'",
+      "expected_runs_per_day": 29.1,
+      "if": "github.event_name == 'schedule' || needs.changes.outputs.has_app_dart == 'true'",
       "matrix": {},
       "matrix_size": 1,
       "needs": "changes",
       "owner": "CI maintainers",
-      "rationale": "Post-#19593 PR estimate: fork tier + narrowed PR paths applied to the 2026-09-26 internal share; re-seed from the weekly audit after 2026-10-05. Manual admission is conservatively budgeted at 0.1 run/day (folded into the four-run increase for compile/JVM and the 12-run emulator forecast); conditionally selected jobs also retain an allowance.",
+      "rationale": "2026-10-13 contributor audit: 59 fork app PRs in 15 days, about four/day. Run secret-free analyzer and Flutter tests without ci:full; retain 17-minute p50, add four PR runs/day (68 Linux minutes/day; 120 at the 30-minute timeout). Nightly adds one regular suite run/day outside PR caps.",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -2187,6 +2187,7 @@
       "matrix_size": 1,
       "needs": [
         "changes",
+        "analyze-and-test",
         "journeys-hermetic",
         "android-compile-smoke",
         "android-unit-tests",
@@ -2194,7 +2195,7 @@
         "dart-tests-kiritimati"
       ],
       "owner": "CI maintainers",
-      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder Include Android emulator acceptance in the existing main/nightly failure issue aggregation.. Manual admission is conservatively budgeted at 0.1 run/day (folded into the four-run increase for compile/JVM and the 12-run emulator forecast); conditionally selected jobs also retain an allowance.",
+      "rationale": "Reconcile regular Dart analyzer/tests alongside existing main/nightly suites, closing each matching failure issue on success. Existing five-minute budget and non-PR execution frequency remain sufficient; PR sentinel retained for inventory accounting.",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -4887,13 +4888,8 @@
     "mobile_daily_train.yml": {
       "name": "Mobile daily train",
       "owner": "CI maintainers",
-      "rationale": "Register the daily mobile train workflow that landed on main without an inventory row.",
+      "rationale": "Daily mobile train dispatch is owned by the operator-side release gate (audits candidates against the live baseline, dispatches only on a green verdict; see .github/agent-docs/mobile-release-process.md). The fixed 14:00 UTC schedule was removed 2026-10-14 so an ungated train can no longer fire on a bad candidate; manual workflow_dispatch (dry_run) remains.",
       "triggers": {
-        "schedule": [
-          {
-            "cron": "0 14 * * *"
-          }
-        ],
         "workflow_dispatch": {
           "inputs": {
             "dry_run": {

@@ -206,8 +206,7 @@ final conversationsScenarios = <AuditScenario>[
     run: (a) async {
       await a.pump(const AutoSyncPage(),
           providers: [ChangeNotifierProvider<SyncProvider>(create: (_) => _HistorySyncProvider())]);
-      await a.tap(find.text('All'));
-      await a.scrollSeries('Open Offline Sync, choose All and scroll the recordings');
+      await a.scrollSeries('Open Offline Sync and scroll the recordings still to sync');
     },
   ),
   AuditScenario(
@@ -218,7 +217,7 @@ final conversationsScenarios = <AuditScenario>[
     run: (a) async {
       await a.pump(const AutoSyncPage(),
           providers: [ChangeNotifierProvider<SyncProvider>(create: (_) => _HistorySyncProvider())]);
-      await a.tap(find.text('All'));
+      await a.tap(find.text('Synced'));
       await a.tap(find.textContaining('12:56'));
       await a.shot('Tap a recording to see the files it is made of');
     },

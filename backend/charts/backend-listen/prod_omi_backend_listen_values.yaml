@@ -296,9 +296,9 @@ env:
         name: prod-omi-backend-secrets
         key: GROQ_API_KEY
   - name: HOSTED_VAD_API_URL
-    value: "http://vad.omi.me:80/v1/vad"
+    value: "http://172.16.160.20/vad/v1/vad"
   - name: HOSTED_SPEAKER_EMBEDDING_API_URL
-    value: "http://diarizer.omi.me:80"
+    value: "http://172.16.160.20/diarizer"
   - name: PINECONE_API_KEY
     valueFrom:
       secretKeyRef:
@@ -444,6 +444,14 @@ env:
     value: "false"
   - name: STT_RESILIENT_RECONNECT
     value: "false"
+  - name: STT_LIVE_DEMAND_ENABLED
+    value: "false"
+  - name: STT_LIVE_DEMAND_PERCENT
+    value: "0"
+  - name: STT_LIVE_DEMAND_UID_ALLOWLIST
+    value: ""
+  - name: STT_LIVE_DEMAND_MIN_DWELL_SECONDS
+    value: "15"
   - name: STT_FAILOVER_RECOVERY_ENABLED
     value: "true"
   - name: SONIOX_IDLE_CLOSE_SECONDS
@@ -509,7 +517,7 @@ env:
   - name: STT_SERVICE_MODELS
     value: "parakeet-window,modulate-velma-2,soniox,dg-nova-3"
   - name: HOSTED_TRANSLATION_API_URL
-    value: "http://nllb.omi.me"
+    value: "http://172.16.160.20/nllb"
   - name: TRANSLATION_SERVICE_MODELS
     value: "nllb,gemini"
   - name: TRANSLATION_DEMAND_SHADOW_ENABLED

@@ -30,6 +30,19 @@ kubelet:
 
 grafana:
   enabled: true
+  # 2026-10-14: Grafana ran with no requests/limits (BestEffort) on the ~1.93
+  # allocatable-core monitoring node while Prometheus sustained 1.5-2.2 cores
+  # and pinned it for hours, so kubelet probes and Grafana's own HTTP server
+  # starved: /api/health returned 502 externally and alert provisioning timed
+  # out. Requests give the alerting UI a guaranteed CPU share; sized from
+  # measured peaks (214m CPU, 241Mi during the 2026-10-14 evaluation storm).
+  resources:
+    requests:
+      cpu: 250m
+      memory: 384Mi
+    limits:
+      cpu: "1"
+      memory: 1Gi
   serviceAccount:
     create: true
     annotations:
@@ -90,6 +103,20 @@ grafana:
                 values:
                   - prod
 
+# 2026-10-14: the operator ran BestEffort on the monitoring node and was
+# SIGTERM-killed by its own liveness probe 48 times in 31h whenever Prometheus
+# pinned the node's CPU. Requests buy it a guaranteed share (measured use:
+# 2-25m CPU, 25Mi). Probe timeout stays at the chart default. The chart key is
+# prometheusOperator; a top-level "operator:" key is silently ignored.
+prometheusOperator:
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      cpu: 250m
+      memory: 256Mi
+
 prometheus:
   enabled: true
   prometheusSpec:
@@ -105,6 +132,17 @@ prometheus:
         cpu: "1"
         memory: 2G
       limits:
+        # 2026-10-14 review: keep "2". Prometheus load is sustained, not
+        # bursty - 1.5-2.2 cores across 14h with the node pinned near its
+        # 1930m allocatable, 0% CFS throttling, and the apparent ~2.9-core
+        # spikes were an artifact of kubelet scrapes timing out mid-sample.
+        # A lower cap (1600m was attempted and reverted in review) would
+        # throttle evaluation of the already-timeout-prone Prometheus-backed
+        # rules (omi-stt-fallback-leg-dead, omi-stt-leg-lifecycle-gap) and
+        # stall the adapter's custom-metrics reads behind every HPA. Node
+        # starvation is fixed with requests (Grafana/operator below, adapter
+        # and Loki read path in their values files) plus the 4-vCPU pool
+        # resize runbook in the monitoring README - not by shrinking this.
         cpu: "2"
         # 2026-09-28: Prometheus restored 2.56M head series from 24 WAL segments,
         # then OOM-killed shortly after replay completed at the 4Gi limit. The
@@ -121,6 +159,29 @@ prometheus:
               # Match the already-expanded production PVC and StatefulSet claim.
               storage: 100Gi
     additionalScrapeConfigs:
+      # HPA adapter reads THIS Prometheus, not GMP. Scrape each batch pod once
+      # and carry the Kubernetes resource labels expected by custom.metrics.
+      - job_name: diarizer-batch-metrics
+        scrape_interval: 15s
+        metrics_path: /metrics
+        kubernetes_sd_configs:
+          - role: pod
+            namespaces:
+              names: [prod-omi-backend]
+        relabel_configs:
+          - source_labels: [__meta_kubernetes_pod_label_app_kubernetes_io_instance]
+            regex: prod-omi-diarizer-batch
+            action: keep
+          - source_labels: [__meta_kubernetes_pod_container_port_name]
+            regex: http
+            action: keep
+          - source_labels: [__meta_kubernetes_pod_phase]
+            regex: Running
+            action: keep
+          - source_labels: [__meta_kubernetes_namespace]
+            target_label: namespace
+          - source_labels: [__meta_kubernetes_pod_name]
+            target_label: pod
       # Additional scrape configs for Deepgram Engine metrics
       - job_name: "dg_engine_metrics"
         scrape_interval: "2s"
