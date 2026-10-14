@@ -398,6 +398,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
                 excludeFromSemantics: true,
                 onTap: () {},
                 child: RefreshIndicator(
+                  notificationPredicate: OmiRefreshControl.materialPredicate,
                   onRefresh: () async {
                     OmiHaptics.medium();
                     return provider.forceRefreshActionItems();
@@ -409,6 +410,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
                               controller: _scrollController,
                               physics: const AlwaysScrollableScrollPhysics(),
                               slivers: [
+                                if (OmiRefreshControl.supported) OmiRefreshControl(onRefresh: _pullRefresh),
                                 SliverFillRemaining(
                                   hasScrollBody: false,
                                   child: Center(child: ActionItemsApiStatus(provider: provider)),
@@ -432,6 +434,9 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
     );
   }
 
+  /// The iOS pull-to-refresh ([OmiRefreshControl]); Android keeps the Material indicator.
+  Future<void> _pullRefresh() => context.read<ActionItemsProvider>().forceRefreshActionItems();
+
   Widget _buildLoadingState() {
     return CustomScrollView(
       controller: _scrollController,
@@ -448,7 +453,10 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
     return CustomScrollView(
       controller: _scrollController,
       physics: const AlwaysScrollableScrollPhysics(),
-      slivers: [SliverFillRemaining(hasScrollBody: false, child: Center(child: _buildEmptyTasksContent()))],
+      slivers: [
+        if (OmiRefreshControl.supported) OmiRefreshControl(onRefresh: _pullRefresh),
+        SliverFillRemaining(hasScrollBody: false, child: Center(child: _buildEmptyTasksContent())),
+      ],
     );
   }
 
@@ -478,6 +486,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
       controller: _scrollController,
       physics: const AlwaysScrollableScrollPhysics(),
       slivers: [
+        if (OmiRefreshControl.supported) OmiRefreshControl(onRefresh: _pullRefresh),
         const SliverPadding(padding: EdgeInsets.only(top: 8)),
         SliverToBoxAdapter(child: _buildPageHeader(provider)),
 

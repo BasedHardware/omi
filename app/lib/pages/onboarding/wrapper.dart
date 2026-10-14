@@ -242,8 +242,14 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
       SharedPreferencesUtil().permissionsCompleted = true;
     }
     if (context.mounted) {
-      routeToPage(context, const HomePageWrapper(), replace: true);
+      _goHome();
     }
+  }
+
+  /// Onboarding is over: Home replaces everything, fading in (a slide would show it moving over
+  /// the app root, which may already be redrawing as Home underneath: a double Home).
+  void _goHome() {
+    Navigator.of(context).pushAndRemoveUntil(omiRootRoute<void>(builder: (_) => const HomePageWrapper()), (_) => false);
   }
 
   /// Starts looking for the reader's Omi in the background so "Connect your Omi" can show it at once.
@@ -319,7 +325,7 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
     PaintingBinding.instance.imageCache.clear();
     await _maybeShowOnboardingPaywall();
     if (!mounted) return true;
-    routeToPage(context, const HomePageWrapper(), replace: true);
+    _goHome();
     return true;
   }
 

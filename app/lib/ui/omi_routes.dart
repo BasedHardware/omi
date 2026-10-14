@@ -40,3 +40,18 @@ Route<T> omiPageRoute<T>({
       );
   }
 }
+
+/// Replaces the whole navigator stack with [builder]'s page by fading it in: for hand-offs that
+/// leave nothing to go back to (onboarding done → Home). A slide there shows the incoming page
+/// moving over whatever the old root is redrawing underneath (often the same page), which reads
+/// as a double. Use with `pushAndRemoveUntil(..., (_) => false)`; never for an ordinary push.
+Route<T> omiRootRoute<T>({required WidgetBuilder builder, RouteSettings? settings}) {
+  return PageRouteBuilder<T>(
+    settings: settings,
+    transitionDuration: const Duration(milliseconds: 260),
+    reverseTransitionDuration: const Duration(milliseconds: 200),
+    pageBuilder: (context, animation, secondaryAnimation) => builder(context),
+    transitionsBuilder: (context, animation, secondaryAnimation, child) =>
+        FadeTransition(opacity: CurvedAnimation(parent: animation, curve: Curves.easeOut), child: child),
+  );
+}

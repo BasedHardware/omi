@@ -10,6 +10,7 @@ import 'package:omi/backend/preferences.dart';
 import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/pages/home/widgets/home_tab_switcher.dart';
 import 'package:omi/pages/onboarding/activation/activation_capture.dart';
+import 'package:omi/pages/onboarding/activation/activation_motion.dart';
 import 'package:omi/pages/onboarding/activation/activation_visuals.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
@@ -207,15 +208,19 @@ class _ActivationFlowState extends State<ActivationFlow> {
       ActivationStage.writing => _Stage(
           key: const ValueKey('writing'),
           title: l10n.onboardingActWriting,
-          body: _ReadingCard(text: _heard),
-          bottom: const _WorkingControl(),
+          // The dictation's subtitle keeps its space (unseen), so the card doesn't move between the two.
+          subtitle:
+              widget.hasDevice && !_phoneInstead ? l10n.onboardingActDictateBodyOmi : l10n.onboardingActDictateBody,
+          subtitleHidden: true,
+          body: CompactingCard(text: _heard, style: _wordsStyle),
+          bottom: const CondensingControl(),
           bottomHeight: _kControlHeight,
         ),
       ActivationStage.summary => _Stage(
           key: const ValueKey('summary'),
           eyebrow: l10n.onboardingActRemembers,
           title: _result!.hasNotes ? l10n.onboardingActNotesLabel : l10n.onboardingActYourWords,
-          body: _SummaryCard(result: _result!, heard: _heard),
+          body: SummaryReveal(child: _SummaryCard(result: _result!, heard: _heard)),
           bottom: _ContinueButton(
             stage: 'summary',
             onPressed: () => _go(
@@ -262,6 +267,7 @@ class _Stage extends StatelessWidget {
     required this.title,
     this.eyebrow,
     this.subtitle,
+    this.subtitleHidden = false,
     required this.body,
     this.bottom,
     this.topRight,
@@ -274,6 +280,9 @@ class _Stage extends StatelessWidget {
   /// A quiet line above the title.
   final String? eyebrow;
   final String? subtitle;
+
+  /// Keeps the subtitle's space without showing it, so the body sits where it did on the step before.
+  final bool subtitleHidden;
   final Widget body;
   final Widget? bottom;
   final Widget? topRight;
@@ -306,10 +315,13 @@ class _Stage extends StatelessWidget {
             Semantics(header: true, child: Text(title, style: OmiType.title1, textAlign: TextAlign.center)),
             if (subtitle != null) ...[
               const SizedBox(height: OmiSpacing.xs),
-              Text(
-                subtitle!,
-                style: OmiType.subhead.copyWith(color: OmiColors.textSecondary),
-                textAlign: TextAlign.center,
+              Opacity(
+                opacity: subtitleHidden ? 0 : 1,
+                child: Text(
+                  subtitle!,
+                  style: OmiType.subhead.copyWith(color: OmiColors.textSecondary),
+                  textAlign: TextAlign.center,
+                ),
               ),
             ],
             Expanded(
@@ -575,15 +587,14 @@ class _DictationStepState extends State<_DictationStep> {
           title: l10n.onboardingActDictateTitle,
           subtitle: widget.throughOmi ? l10n.onboardingActDictateBodyOmi : l10n.onboardingActDictateBody,
           topRight: _QuietSkip(label: l10n.skip, onTap: _skip),
-          body: AnimatedSize(
-            duration: const Duration(milliseconds: 200),
-            child: _WordsCard(
-              key: const Key('activation_dictation_card'),
-              child: Text(
-                heard ? text : l10n.onboardingActDictateExample,
-                style: _wordsStyle.copyWith(color: heard ? OmiColors.textPrimary : OmiColors.textTertiary),
-              ),
-            ),
+          body: ReadAlongCard(
+            key: const Key('activation_dictation_card'),
+            script: l10n.onboardingActDictateExample,
+            live: widget.capture.liveText,
+            level: widget.capture.level,
+            listening: _started && !_failed,
+            levelDriven: !widget.capture.usesDevice,
+            style: _wordsStyle,
           ),
           // Words that arrive late still bring the ✓ back.
           bottom: !heard && (_failed || _stuck)
@@ -780,108 +791,6 @@ class _LevelMeter extends StatelessWidget {
           ],
         ),
       ),
-    );
-  }
-}
-
-/// Where the ✓ was: the same circle, now a sparkle that breathes while Omi reads the words.
-class _WorkingControl extends StatefulWidget {
-  const _WorkingControl();
-
-  @override
-  State<_WorkingControl> createState() => _WorkingControlState();
-}
-
-class _WorkingControlState extends State<_WorkingControl> with SingleTickerProviderStateMixin {
-  late final AnimationController _pulse = AnimationController(vsync: this, duration: const Duration(milliseconds: 1100))
-    ..repeat(reverse: true);
-
-  @override
-  void dispose() {
-    _pulse.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final reduce = OmiMotion.of(context).emphasized == Duration.zero;
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        SizedBox(
-          width: 140,
-          height: 140,
-          child: Stack(
-            alignment: Alignment.center,
-            children: [
-              ScanningRippleWidget(isScanning: true, size: 140, color: OmiColors.textTertiary),
-              AnimatedBuilder(
-                animation: _pulse,
-                builder: (context, child) => Transform.scale(
-                  scale: reduce ? 1 : 1 + 0.06 * Curves.easeInOut.transform(_pulse.value),
-                  child: child,
-                ),
-                child: Container(
-                  width: 68,
-                  height: 68,
-                  decoration: BoxDecoration(color: OmiColors.accent, shape: BoxShape.circle),
-                  child: Icon(Icons.auto_awesome_rounded, size: 30, color: OmiColors.onAccent),
-                ),
-              ),
-            ],
-          ),
-        ),
-        // Keeps the circle level with the ✓ it replaces (which has a status line under it).
-        const SizedBox(height: OmiSpacing.xs + 20),
-      ],
-    );
-  }
-}
-
-/// The reader's words in their card, with a light sweeping across them: Omi reading.
-class _ReadingCard extends StatefulWidget {
-  const _ReadingCard({required this.text});
-
-  final String text;
-
-  @override
-  State<_ReadingCard> createState() => _ReadingCardState();
-}
-
-class _ReadingCardState extends State<_ReadingCard> with SingleTickerProviderStateMixin {
-  late final AnimationController _sweep = AnimationController(vsync: this, duration: const Duration(milliseconds: 1300))
-    ..repeat();
-
-  @override
-  void dispose() {
-    _sweep.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final reduce = OmiMotion.of(context).emphasized == Duration.zero;
-    final text = Text(widget.text, style: _wordsStyle.copyWith(color: Colors.white));
-    return _WordsCard(
-      child: reduce
-          ? Text(widget.text, style: _wordsStyle.copyWith(color: OmiColors.textSecondary))
-          : AnimatedBuilder(
-              animation: _sweep,
-              builder: (context, child) {
-                final x = -1.0 + 3.0 * _sweep.value;
-                return ShaderMask(
-                  blendMode: BlendMode.srcIn,
-                  shaderCallback: (bounds) => LinearGradient(
-                    begin: Alignment(x - 1, -0.3),
-                    end: Alignment(x + 1, 0.3),
-                    colors: [OmiColors.textTertiary, OmiColors.textPrimary, OmiColors.textTertiary],
-                    stops: const [0.3, 0.5, 0.7],
-                  ).createShader(bounds),
-                  child: child,
-                );
-              },
-              child: text,
-            ),
     );
   }
 }
