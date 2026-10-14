@@ -203,15 +203,21 @@ class AndroidChecks(unittest.TestCase):
         client.edits().commit.assert_called_once_with(packageName="com.friend.ios", editId="edit-id")
         self.assertFalse(client.edits().bundles.upload.called)
 
-    def test_draft_status_is_the_only_alternative_to_completed(self):
+    def test_staged_and_halted_are_the_alternatives_to_completed(self):
         client = Mock()
         promote.submit_android(client, "edit-id", "1.2.3", "23", "New line", status="draft")
         body = client.edits().tracks().update.call_args.kwargs["body"]
         self.assertEqual(body["releases"][0]["status"], "draft")
         self.assertEqual(body["releases"][0]["versionCodes"], ["23"])
         client.edits().commit.assert_called_once()
+        # staged rollout: inProgress WITH a fraction is legal; without one it is not
+        promote.submit_android(Mock(), "edit-id", "1.2.3", "23", "New line", status="inProgress", user_fraction=0.05)
         with self.assertRaises(promote.PromotionError):
             promote.submit_android(Mock(), "edit-id", "1.2.3", "23", "New line", status="inProgress")
+        with self.assertRaises(promote.PromotionError):
+            promote.submit_android(Mock(), "edit-id", "1.2.3", "23", "New line", status="reclaimed")
+        with self.assertRaises(promote.PromotionError):
+            promote.submit_android(Mock(), "edit-id", "1.2.3", "23", "New line", status="completed", user_fraction=0.05)
 
 
 if __name__ == "__main__":
