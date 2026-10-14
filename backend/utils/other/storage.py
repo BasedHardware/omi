@@ -741,12 +741,17 @@ def upload_audio_chunks_batch(
                 encryption.encrypt_audio_chunk(raw, uid) if encrypted else raw,
                 format='encrypted-pcm16le' if encrypted else 'pcm16le',
                 provenance={
-                    'capture_day': datetime.datetime.fromtimestamp(float(chunks[0]['timestamp']), datetime.timezone.utc)
+                    'capture_day': datetime.datetime.fromtimestamp(
+                        float(min(c['timestamp'] for c in chunks)), datetime.timezone.utc
+                    )
                     .date()
                     .isoformat(),
                     'producer': 'pusher',
                     'sample_rate': sample_rate,
                     'encrypted': encrypted,
+                    'encryption_envelope': 'uint32le-nonce12-aes256gcm-hkdf-v1' if encrypted else None,
+                    'channels': 1,
+                    'bit_depth': 16,
                     'plaintext_sha256': hashlib.sha256(raw).hexdigest(),
                 },
                 conversation_ranges=[

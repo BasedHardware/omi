@@ -188,3 +188,24 @@ def test_account_wipe_removes_packs_intents_and_receipts_with_flag_off(monkeypat
     )
     assert storage_mod.delete_all_user_storage_objects('uid1') == 4
     assert canonical.names == other
+
+
+def test_new_mobile_capture_routes_unchanged_bytes_to_canonical_bucket(monkeypatch, tmp_path):
+    monkeypatch.setenv('AUDIO_CANONICAL_PACKING_ENABLED', 'true')
+    canonical = _Bucket(set())
+    monkeypatch.setattr(storage_mod, '_canonical_audio_bucket', lambda: canonical)
+    monkeypatch.setattr(storage_mod, '_get_storage_client', lambda: _Client({'private': _Bucket(set())}))
+    monkeypatch.setattr(storage_mod, 'private_cloud_sync_bucket', 'private')
+    monkeypatch.setattr(storage_mod.users_db, 'get_data_protection_level', lambda uid: 'standard')
+    archive = MagicMock()
+    monkeypatch.setattr(storage_mod.audio_packs, 'archive_capture', archive)
+    path = tmp_path / 'audio_omimobilebatch001_opus_16000_1_fs160_1600000000.bin'
+    raw = b'\x03\x00\x00\x00abc\x03\x00\x00\x00\xf8\xff\xfe'
+    path.write_bytes(raw)
+    storage_mod.archive_mobile_batch_raw_files('uid1', [str(path)])
+    assert archive.call_args.args == (canonical, 'uid1', raw)
+    metadata = archive.call_args.kwargs
+    assert metadata['format'] == 'omi-wal-uint32le-opus-v1'
+    assert metadata['provenance']['capture_day'] == '2020-09-13'
+    assert metadata['provenance']['capture_start'] == 1600000000
+    assert metadata['identity'].startswith(path.name)

@@ -252,7 +252,7 @@ def delete_conversation(bucket: Any, uid: str, conversation_id: str) -> None:
         return any(r.get('conversation_id') == conversation_id for r in entry['conversation_ranges'])
 
     for index in bucket.list_blobs(prefix=owner_prefix(INDEX_PREFIX, uid)):
-        if '/captures/' in index.name:
+        if index.name.startswith(f'{owner_prefix(INDEX_PREFIX, uid)}captures/'):
             continue
         manifest = json.loads(index.download_as_bytes(if_generation_match=int(index.generation)))
         _validate_owner(manifest, uid)
@@ -305,6 +305,7 @@ def _finish_rewrite(bucket: Any, index: Any, manifest: dict, data: bytes | None 
                     payloads.append(member.read())
             data = _tar(manifest['entries'], payloads)
         verify_pack(data, manifest)
+        pack.storage_class = 'STANDARD'
         pack.upload_from_string(data, content_type='application/x-tar', if_generation_match=int(pack.generation))
         current = pack.download_as_bytes(if_generation_match=int(pack.generation))
     verify_pack(current, manifest)
