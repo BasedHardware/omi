@@ -33,10 +33,10 @@ not expose the sheet.
   `percent`, nullable `period_id`, nullable `reset_label`, nullable
   `meter_line`, nullable `nudge_line`, `pro_gates`. Never raw unit amounts.
 - `tiers[]` in display order (recommended first, then ascending rank; while a
-  cancellation is scheduled, the current tier is first and nothing is
-  recommended): `tier_id`, `plan_id`, `name`, `recommended`, `is_current`,
-  `hours_line`, `bullets`, `action`, nullable `cta_label`, nullable
-  `blocked_line`, `compact`, `prices`.
+  cancellation is scheduled, the current tier is first, then the other ladder
+  tiers by rank, and nothing is recommended): `tier_id`, `plan_id`, `name`,
+  `recommended`, `is_current`, `hours_line`, `bullets`, `action`, nullable
+  `cta_label`, nullable `blocked_line`, `compact`, `prices`.
 - `prices[]`: nullable `price_id`, `interval`, `amount_minor`, `currency`,
   `headline`, nullable `subline`, nullable `renewal_line`, `months_free` only
   when the live yearly price gives at least one free month, and `cta_label`
@@ -70,23 +70,39 @@ headline while the interval toggle reads Monthly. Same tier, annual: the
 monthly price is never offered, the card stays `action: current`, and there
 is no price CTA.
 
-`compact` is true only when the current card has no tier button and no price
-CTA.
+`compact` is true when the current card has no tier button and no price CTA.
+It is also true for the Free card on a cancel-scheduled paid sheet (plain
+card: no bullets, no CTA).
 
 `cancel_at_period_end` on a non-legacy paid plan offers checkout only on the
 current tier, with tier `cta_label` `Resubscribe` and only that tier's current
 `price_id`. `yearly_toggle_label` is null. There is no switch-to-yearly
-label, no recommended badge, and the current tier is first. The sheet lists
-that current card and higher tiers only. Every other tier is `action: none`,
-`cta_label: null`, and `blocked_line: "Resubscribe first to change plans"`.
+label, no recommended badge, and the current tier is first. The sheet then
+lists every other ladder tier by rank, lower and higher, including Free.
+Every non-current tier is `action: none`, `cta_label: null`, and
+`blocked_line: "Resubscribe first to change plans"`. Free is that plain card:
+`compact: true`, `bullets: []`, `action: none`, and the same blocked line.
 The header is `Your {Plan} plan ends {date}` and the current line is
 `You're on {Plan} · {$price}/mo` (yearly: `{$price}/yr`). Free cancellation
-does not open checkout. Legacy cancellation still has no checkout anywhere.
+does not open checkout. Legacy cancellation still has no checkout anywhere
+and still omits Free. Neo and Unlimited are unchanged.
 
-Paid plans, including cancel-scheduled, annual, and legacy, omit the Free
-tier from `tiers`. Free is not sent with `action: none` or a blocked line.
-A Free subscriber still receives Free as the current card. Its price headline
-is `$0`.
+Paid plans that are not cancel-scheduled, including annual and legacy, omit
+the Free tier from `tiers`. Free is not sent to them with `action: none` or
+a blocked line. A Free subscriber still receives Free as the current card.
+Its price headline is `$0`.
+
+Pro (`operator`) omits Architect on settings, on the 80% budget surface, and
+on every other trigger. The exhausted surface is the existing budget state:
+`trigger=usage_budget` with usage percent at least 100, the same split that
+selects the header `You've used all of this month's usage`. Below 100, or
+with no percent, that trigger is the 80% surface and Architect stays hidden.
+There is no separate cap trigger. On the exhausted surface Architect is
+`recommended` and `action: checkout` (`Upgrade to Architect`). A Pro user
+whose usage is already at 100 still does not see Architect when the sheet
+was opened from another trigger. Plus keeps Pro as the recommended tier and
+still lists Architect. Cancel-scheduled Pro lists Architect as a blocked
+card, not as checkout. Legacy Pro never receives that checkout.
 
 If the current card has no prices, including when the current Stripe price
 cannot be retrieved, `action` is `current` and `cta_label` is null. That card
@@ -100,16 +116,19 @@ price.
 otherwise, in both the yearly subline and `yearly_toggle_label`.
 
 Pro-only triggers recommend Pro, including for Free. Free budget and MCP-cap
-callers recommend Plus. Other paid callers below Pro recommend Pro. Pro and
-Architect receive no badge. Unknown sources use the default header. Invalid
+callers recommend Plus. Other paid callers below Pro recommend Pro. Architect
+receives no badge. Pro receives a badge only on the exhausted surface above,
+and the badge is Architect. Unknown sources use the default header. Invalid
 triggers return 422. A legacy subscriber's header is always `Your plan`.
 
 ## Prices, hours, and usage
 
 Only active USD recurring month/year prices with `interval_count` 1 are sold.
 The current archived price is still shown. With no usable ladder price, Plus
-and Pro are hidden and Architect stays visible with `action: none`. Free is the
-zero price with headline `$0`. No amount is copied out of env or `proposed_prices`.
+and Pro are hidden. Architect stays visible with `action: none`, except a Pro
+subscriber who is not cancel-scheduled and not on the exhausted surface: that
+sheet omits Architect entirely. Free is the zero price with headline `$0`.
+No amount is copied out of env or `proposed_prices`.
 
 `months_free` is `floor(12 − annual/monthly)` when that value is at least 1.
 `yearly_toggle_label` uses the smallest such value across tiers, or null. It

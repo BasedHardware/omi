@@ -38,8 +38,8 @@ class StorefrontTier(BaseModel):
     action: Literal['checkout', 'current', 'none']
     cta_label: str | None = None
     blocked_line: str | None = None
-    # True when this is the current plan and it has no purchase button.
-    # Current cards send bullets: [] whether or not compact is true.
+    # True when the card has no bullets and no purchase button: the current
+    # plan without a CTA, and Free shown to a cancel-scheduled paid subscriber.
     compact: bool = False
     prices: list[StorefrontPrice]
 

@@ -14,7 +14,8 @@ from models.storefront import StorefrontUsage
 from models.users import PlanType, Subscription
 from utils.storefront import (
     build_storefront,
-    is_higher_offer,
+    include_architect_card,
+    is_budget_cap_surface,
     is_legacy_plan,
     load_ladder,
     offered_intervals,
@@ -319,11 +320,21 @@ def test_built_sheets_match_the_policy_matrix():
         assert is_legacy_plan(plan, price_id, set(base_rows)) is legacy
         assert built.current.legacy is legacy
         assert not (legacy and any(tier.action == 'checkout' for tier in built.tiers))
-        if plan != 'basic':
-            assert all(tier.plan_id != 'basic' for tier in built.tiers)
         resubscribe_only = cancel and not legacy and plan in LADDER and plan != 'basic'
+        if plan != 'basic' and not resubscribe_only:
+            assert all(tier.plan_id != 'basic' for tier in built.tiers)
+        if plan == 'operator' and not resubscribe_only:
+            assert all(tier.plan_id != 'architect' for tier in built.tiers)
         if resubscribe_only:
-            assert all(tier.is_current or is_higher_offer(plan, tier.plan_id) for tier in built.tiers)
+            ids = [tier.plan_id for tier in built.tiers]
+            assert ids[0] == plan
+            assert set(ids) == set(LADDER)
+            rank = {'basic': 0, 'plus': 1, 'operator': 2, 'architect': 3}
+            assert ids[1:] == sorted(ids[1:], key=lambda item: (rank[item], item))
+            free = next(tier for tier in built.tiers if tier.plan_id == 'basic')
+            assert free.action == 'none' and free.cta_label is None and free.compact is True
+            assert free.bullets == [] and free.blocked_line == 'Resubscribe first to change plans'
+            assert free.prices[0].headline == '$0'
         switching = not legacy and not cancel and interval == 'month' and plan in LADDER and plan != 'basic'
         for tier in built.tiers:
             expected = expected_action(plan, tier.plan_id, legacy, cancel)
@@ -361,7 +372,9 @@ def test_built_sheets_match_the_policy_matrix():
                 else:
                     assert tier.action == 'none' and tier.cta_label is None
                     assert tier.blocked_line == 'Resubscribe first to change plans'
-                    assert tier.compact is False
+                    assert tier.compact is (tier.plan_id == 'basic')
+                    if tier.plan_id == 'basic':
+                        assert tier.bullets == []
         elif not legacy and plan in {'plus', 'operator', 'architect'}:
             current_tier = next(tier for tier in built.tiers if tier.is_current)
             if interval == 'month':
@@ -379,6 +392,159 @@ def test_built_sheets_match_the_policy_matrix():
                 assert all(item.cta_label is None for item in current_tier.prices)
         if plan == 'basic':
             assert next(tier for tier in built.tiers if tier.is_current).compact is True
+
+
+@pytest.mark.parametrize('plan', ('plus', 'operator', 'architect'))
+@pytest.mark.parametrize('interval', INTERVALS)
+def test_cancel_scheduled_sheet_lists_every_ladder_tier(plan, interval):
+    rows, recognized = ladder_catalog()
+    built = sheet_for(
+        plan,
+        price_id=f'price_{plan}_{interval}',
+        rows=rows,
+        bindings=list(rows),
+        recognized=recognized,
+        cancel=True,
+        period_end=PERIOD_END,
+    )
+    ids = [tier.plan_id for tier in built.tiers]
+    rank = {'basic': 0, 'plus': 1, 'operator': 2, 'architect': 3}
+    assert ids[0] == plan
+    assert set(ids) == set(LADDER)
+    assert ids[1:] == sorted(ids[1:], key=lambda item: (rank[item], item))
+    assert built.yearly_toggle_label is None
+    assert not any(tier.recommended for tier in built.tiers)
+    for tier in built.tiers:
+        if tier.is_current:
+            assert tier.action == 'checkout' and tier.cta_label == 'Resubscribe'
+            assert [item.price_id for item in tier.prices] == [f'price_{plan}_{interval}']
+            assert tier.blocked_line is None
+            continue
+        assert tier.action == 'none' and tier.cta_label is None
+        assert tier.blocked_line == 'Resubscribe first to change plans'
+        if tier.plan_id == 'basic':
+            assert tier.compact is True and tier.bullets == []
+            assert tier.prices[0].headline == '$0'
+        else:
+            assert tier.compact is False and tier.bullets
+
+
+@pytest.mark.parametrize(
+    'trigger,percent,source',
+    [
+        (None, None, 'settings'),
+        ('usage_budget', 80, None),
+        ('usage_budget', 99, None),
+        ('usage_budget', None, None),
+        ('proactive_agent', 100, None),
+        ('screen_context', 100, None),
+        ('mcp_daily_cap', 100, None),
+        (None, 100, 'settings'),
+    ],
+)
+def test_pro_omits_architect_off_the_cap_surface(trigger, percent, source):
+    rows, recognized = ladder_catalog()
+    assert is_budget_cap_surface(trigger=trigger, percent=percent) is False
+    assert (
+        include_architect_card(current_plan='operator', resubscribe_only=False, trigger=trigger, percent=percent)
+        is False
+    )
+    built = sheet_for(
+        'operator',
+        price_id='price_operator_month',
+        rows=rows,
+        bindings=list(rows),
+        recognized=recognized,
+        trigger=trigger,
+        source=source,
+        percent=percent,
+        period_end=PERIOD_END,
+    )
+    assert all(tier.plan_id != 'architect' for tier in built.tiers)
+    assert all(tier.plan_id != 'basic' for tier in built.tiers)
+    assert not any(tier.recommended for tier in built.tiers)
+
+
+@pytest.mark.parametrize('percent', (100, 140))
+def test_pro_budget_cap_recommends_architect_checkout(percent):
+    rows, recognized = ladder_catalog()
+    assert is_budget_cap_surface(trigger='usage_budget', percent=percent) is True
+    built = sheet_for(
+        'operator',
+        price_id='price_operator_month',
+        rows=rows,
+        bindings=list(rows),
+        recognized=recognized,
+        trigger='usage_budget',
+        percent=percent,
+        period_end=PERIOD_END,
+    )
+    architect = next(tier for tier in built.tiers if tier.plan_id == 'architect')
+    assert built.tiers[0].plan_id == 'architect'
+    assert architect.recommended and architect.action == 'checkout'
+    assert architect.cta_label == 'Upgrade to Architect'
+    assert [tier.plan_id for tier in built.tiers if tier.recommended] == ['architect']
+    assert all(tier.plan_id != 'basic' for tier in built.tiers)
+
+
+def test_cancel_scheduled_pro_at_cap_blocks_architect_instead_of_checkout():
+    rows, recognized = ladder_catalog()
+    built = sheet_for(
+        'operator',
+        price_id='price_operator_month',
+        rows=rows,
+        bindings=list(rows),
+        recognized=recognized,
+        trigger='usage_budget',
+        percent=100,
+        cancel=True,
+        period_end=PERIOD_END,
+    )
+    assert [tier.plan_id for tier in built.tiers] == ['operator', 'basic', 'plus', 'architect']
+    architect = next(tier for tier in built.tiers if tier.plan_id == 'architect')
+    assert architect.action == 'none' and architect.recommended is False
+    assert architect.blocked_line == 'Resubscribe first to change plans'
+    assert next(tier for tier in built.tiers if tier.is_current).cta_label == 'Resubscribe'
+
+
+def test_legacy_plans_still_list_architect_without_checkout():
+    rows, recognized = ladder_catalog()
+    for plan, amount in (('unlimited', 1999), ('unlimited_v2', 2999)):
+        price_id = f'price_legacy_{plan}'
+        priced = dict(rows)
+        priced[price_id] = price(price_id, amount)
+        built = sheet_for(
+            plan,
+            price_id=price_id,
+            rows=priced,
+            bindings=list(rows),
+            recognized=recognized,
+            period_end=PERIOD_END,
+        )
+        architect = next(tier for tier in built.tiers if tier.plan_id == 'architect')
+        assert architect.action == 'none' and architect.recommended is False
+        assert 'basic' not in {tier.plan_id for tier in built.tiers}
+        assert not any(tier.action == 'checkout' for tier in built.tiers)
+
+
+@pytest.mark.parametrize('trigger', [None, 'proactive_agent', 'screen_context', 'usage_budget', 'mcp_daily_cap'])
+@pytest.mark.parametrize('percent', [None, 80, 100])
+def test_plus_keeps_pro_recommended_and_lists_architect(trigger, percent):
+    rows, recognized = ladder_catalog()
+    built = sheet_for(
+        'plus',
+        price_id='price_plus_month',
+        rows=rows,
+        bindings=list(rows),
+        recognized=recognized,
+        trigger=trigger,
+        percent=percent,
+        period_end=PERIOD_END,
+    )
+    assert [tier.plan_id for tier in built.tiers if tier.recommended] == ['operator']
+    architect = next(tier for tier in built.tiers if tier.plan_id == 'architect')
+    assert architect.action == 'checkout' and architect.recommended is False
+    assert all(tier.plan_id != 'basic' for tier in built.tiers)
 
 
 @pytest.mark.parametrize(
@@ -414,7 +580,9 @@ def test_cancel_scheduled_failed_price_retrieve_is_current_without_checkout(plan
     assert current.action == 'current'
     assert current.cta_label is None
     assert current.prices == []
-    assert all(tier.plan_id != 'basic' for tier in built.tiers)
+    free = next(tier for tier in built.tiers if tier.plan_id == 'basic')
+    assert free.action == 'none' and free.compact is True and free.bullets == []
+    assert free.blocked_line == 'Resubscribe first to change plans'
     assert not any(tier.action == 'checkout' and not tier.prices for tier in built.tiers)
     assert not any(tier.action == 'checkout' for tier in built.tiers)
 
@@ -495,6 +663,8 @@ def _scenario(name):
         return sheet_for('plus', price_id='price_plus_year', source='settings', **common)
     if name == 'pro_settings':
         return sheet_for('operator', price_id='price_operator_month', source='settings', **common)
+    if name == 'pro_budget_cap':
+        return sheet_for('operator', price_id='price_operator_month', trigger='usage_budget', percent=100, **common)
     if name == 'architect_settings':
         return sheet_for('architect', price_id='price_architect_month', source='settings', **common)
     if name == 'legacy_unlimited':
@@ -523,6 +693,8 @@ def _scenario(name):
         )
     if name == 'cancel_scheduled_plus':
         return sheet_for('plus', price_id='price_plus_month', cancel=True, source='settings', **common)
+    if name == 'cancel_scheduled_pro':
+        return sheet_for('operator', price_id='price_operator_month', cancel=True, source='settings', **common)
     raise AssertionError(name)
 
 
@@ -536,10 +708,12 @@ SCENARIOS = (
     'plus_monthly_yearly_toggle',
     'plus_annual_current',
     'pro_settings',
+    'pro_budget_cap',
     'architect_settings',
     'legacy_unlimited',
     'legacy_neo',
     'cancel_scheduled_plus',
+    'cancel_scheduled_pro',
 )
 
 
@@ -586,7 +760,19 @@ def test_golden_storefront_scenarios():
     assert plus_month.prices[0].subline == '$199.90 billed yearly · 2 months free'
     assert plus_month.prices[0].cta_label == 'Switch to yearly · save $39.98'
     assert all(tier.plan_id != 'basic' for tier in switched.tiers)
-    assert rendered['pro_settings'].current.line == "You're on Pro · $49.99/mo · renews Nov 1"
+    pro_settings = rendered['pro_settings']
+    assert pro_settings.current.line == "You're on Pro · $49.99/mo · renews Nov 1"
+    assert [tier.plan_id for tier in pro_settings.tiers] == ['plus', 'operator']
+    assert all(tier.plan_id != 'architect' for tier in pro_settings.tiers)
+    capped = rendered['pro_budget_cap']
+    assert capped.header == "You've used all of this month's usage"
+    assert capped.usage.percent == 100
+    assert capped.usage.meter_line == '100% used · about 0 hours of recording left · resets Nov 1'
+    assert [tier.plan_id for tier in capped.tiers] == ['architect', 'plus', 'operator']
+    architect = next(tier for tier in capped.tiers if tier.plan_id == 'architect')
+    assert architect.recommended and architect.action == 'checkout'
+    assert architect.cta_label == 'Upgrade to Architect' and architect.blocked_line is None
+    assert not any(tier.recommended for tier in capped.tiers if tier.plan_id != 'architect')
     assert rendered['architect_settings'].current.line == "You're on Architect · $199/mo · renews Nov 1"
     legacy = rendered['legacy_unlimited']
     assert legacy.header == 'Your plan'
@@ -611,8 +797,21 @@ def test_golden_storefront_scenarios():
     cancelled = rendered['cancel_scheduled_plus']
     assert cancelled.header == 'Your Plus plan ends Nov 1'
     assert cancelled.current.line == "You're on Plus · $19.99/mo"
-    assert [tier.plan_id for tier in cancelled.tiers] == ['plus', 'operator', 'architect']
+    assert [tier.plan_id for tier in cancelled.tiers] == ['plus', 'basic', 'operator', 'architect']
     assert not any(tier.recommended for tier in cancelled.tiers)
+    cancelled_free = next(tier for tier in cancelled.tiers if tier.plan_id == 'basic')
+    assert cancelled_free.compact is True and cancelled_free.bullets == [] and cancelled_free.action == 'none'
+    assert cancelled_free.blocked_line == 'Resubscribe first to change plans'
+    cancelled_pro = rendered['cancel_scheduled_pro']
+    assert cancelled_pro.header == 'Your Pro plan ends Nov 1'
+    assert [tier.plan_id for tier in cancelled_pro.tiers] == ['operator', 'basic', 'plus', 'architect']
+    assert not any(tier.recommended for tier in cancelled_pro.tiers)
+    assert next(tier for tier in cancelled_pro.tiers if tier.is_current).cta_label == 'Resubscribe'
+    assert all(
+        tier.action == 'none' and tier.cta_label is None and tier.blocked_line == 'Resubscribe first to change plans'
+        for tier in cancelled_pro.tiers
+        if tier.plan_id in {'basic', 'plus', 'architect'}
+    )
     current_plus = next(tier for tier in cancelled.tiers if tier.is_current)
     assert current_plus.action == 'checkout' and current_plus.cta_label == 'Resubscribe'
     assert current_plus.blocked_line is None and current_plus.compact is False and current_plus.bullets == []
@@ -628,7 +827,7 @@ def test_golden_storefront_scenarios():
     assert all(
         rendered[name].yearly_toggle_label == 'Yearly · 2 months free'
         for name in SCENARIOS
-        if name != 'cancel_scheduled_plus'
+        if name not in {'cancel_scheduled_plus', 'cancel_scheduled_pro'}
     )
     french = sheet_for('basic', locale='fr-FR', rows={}, bindings=[], recognized=[])
     assert french.header == 'Choose your plan'

@@ -80,10 +80,53 @@ def is_higher_offer(current_plan: str, tier_plan: str) -> bool:
     return tier_rank > current_rank
 
 
-def recommended_plan_id(current_plan: str, trigger: str | None) -> str | None:
-    """Badge only. Pro and Architect are never badged; a badge is not a selection."""
-    if current_plan in {'operator', 'architect'}:
+def is_budget_cap_surface(*, trigger: str | None, percent: float | int | None) -> bool:
+    """Exhausted monthly budget. ``usage_budget`` below 100 is the 80% surface.
+
+    Header copy already splits that one trigger: percent >= 100 is
+    ``budget_100``, otherwise ``budget_80``. There is no second trigger.
+    Other triggers, including settings (no trigger), are not budget surfaces.
+    """
+    if trigger != 'usage_budget' or isinstance(percent, bool) or type(percent) not in {int, float}:
+        return False
+    return percent >= 100
+
+
+def include_architect_card(
+    *,
+    current_plan: str,
+    resubscribe_only: bool,
+    trigger: str | None,
+    percent: float | int | None,
+) -> bool:
+    """Pro omits Architect except when the monthly budget is exhausted.
+
+    Cancel-scheduled Pro still lists Architect, blocked, because that sheet
+    shows every ladder tier and the only purchase is Resubscribe.
+    """
+    if current_plan != 'operator' or resubscribe_only:
+        return True
+    return is_budget_cap_surface(trigger=trigger, percent=percent)
+
+
+def recommended_plan_id(
+    current_plan: str,
+    trigger: str | None,
+    *,
+    budget_cap: bool = False,
+    legacy: bool = False,
+) -> str | None:
+    """Badge only. A badge is not a selection.
+
+    Pro is badged Architect only on the exhausted surface, and only when that
+    card can check out. Legacy Pro never checks out, so it is not badged.
+    """
+    if current_plan == 'architect':
         return None
+    if current_plan == 'operator':
+        if legacy or not budget_cap:
+            return None
+        return 'architect'
     if trigger in {'proactive_agent', 'screen_context'} or current_plan != 'basic':
         return 'operator'
     return 'plus'
@@ -254,7 +297,10 @@ def build_storefront(
     resubscribe_only = cancel_resubscribe_only(
         current_plan=current_plan, legacy=legacy, cancel=subscription.cancel_at_period_end
     )
-    badge = None if resubscribe_only else recommended_plan_id(current_plan, trigger)
+    cap_surface = is_budget_cap_surface(trigger=trigger, percent=usage.percent)
+    badge = (
+        None if resubscribe_only else recommended_plan_id(current_plan, trigger, budget_cap=cap_surface, legacy=legacy)
+    )
     blocked = blocked_line(locale) if resubscribe_only else None
     raw_currency = ladder.get('currency')
     currency = raw_currency if isinstance(raw_currency, str) else 'usd'
@@ -263,11 +309,16 @@ def build_storefront(
         plan = tier['plan_id']
         if legacy and plan == current_plan:
             continue
-        # Paid users never see a Free card. Cancel-scheduled keeps the current
-        # card and higher tiers only; lower paid tiers are omitted, not blocked.
-        if plan == 'basic' and current_plan != 'basic':
+        # Paid users who are not cancel-scheduled never see Free. A scheduled
+        # cancellation lists every ladder tier, lower and higher, plus Free.
+        if plan == 'basic' and current_plan != 'basic' and not resubscribe_only:
             continue
-        if resubscribe_only and plan != current_plan and not is_higher_offer(current_plan, plan):
+        if plan == 'architect' and not include_architect_card(
+            current_plan=current_plan,
+            resubscribe_only=resubscribe_only,
+            trigger=trigger,
+            percent=usage.percent,
+        ):
             continue
         rows: list[dict[str, Any]] = []
         for registration in recognized:
@@ -322,6 +373,9 @@ def build_storefront(
         # on a cancel-scheduled current card stays "current" with no CTA.
         if is_current and action == 'checkout' and not prices:
             action = 'current'
+        # Free, while a paid cancellation is scheduled, is a plain card: no
+        # bullets and no CTA, with the same blocked line as the other tiers.
+        plain_free = resubscribe_only and plan == 'basic'
         tiers.append(
             StorefrontTier(
                 tier_id=f'{plan}:ladder_v1',
@@ -330,7 +384,7 @@ def build_storefront(
                 recommended=bool(badge) and plan == badge and is_higher_offer(current_plan, plan),
                 is_current=is_current,
                 hours_line=hours_line(plan, locale),
-                bullets=[] if is_current else bullets(plan, trigger, locale),
+                bullets=[] if is_current or plain_free else bullets(plan, trigger, locale),
                 action=action,
                 cta_label=(
                     None
@@ -338,7 +392,7 @@ def build_storefront(
                     else cta_label(action=action, tier_plan=plan, current_plan=current_plan, locale=locale)
                 ),
                 blocked_line=None if is_current or blocked is None else blocked,
-                compact=_compact(is_current=is_current, action=action, prices=prices),
+                compact=plain_free or _compact(is_current=is_current, action=action, prices=prices),
                 prices=prices,
             )
         )
