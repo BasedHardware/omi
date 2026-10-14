@@ -111,6 +111,7 @@ class OmiBleManager private constructor(private val application: Application) {
     val mainHandler = Handler(Looper.getMainLooper())
 
     val connectedGatts = ConcurrentHashMap<String, BluetoothGatt>()
+    val discoveredDevices = ConcurrentHashMap<String, BluetoothDevice>()
     private val readCompletions = ConcurrentHashMap<String, (Result<ByteArray>) -> Unit>()
     private val writeCompletions = ConcurrentHashMap<String, (Result<Unit>) -> Unit>()
 
@@ -197,25 +198,41 @@ class OmiBleManager private constructor(private val application: Application) {
 
     // ── Scanning ──
 
+    private fun reportScanBlocked(reason: String) {
+        Log.w(TAG, "startScan blocked: $reason")
+        if (!isFlutterAlive) return
+        mainHandler.post { flutterApi?.onScanBlocked(reason) {} }
+    }
+
     fun startScan(timeout: Int, serviceUuids: List<String>) {
         val state = getBluetoothState()
         Log.i(TAG, "startScan called, state=$state, timeout=$timeout, serviceUuids=$serviceUuids")
 
-        val adapter = bluetoothAdapter ?: return
+        val adapter = bluetoothAdapter
+        if (adapter == null) {
+            reportScanBlocked("no_adapter")
+            return
+        }
         if (!adapter.isEnabled) {
             Log.w(TAG, "Bluetooth not enabled, cannot scan")
+            reportScanBlocked("bluetooth_off")
             return
         }
 
         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S &&
             ContextCompat.checkSelfPermission(application, android.Manifest.permission.BLUETOOTH_SCAN) != PackageManager.PERMISSION_GRANTED) {
             Log.w(TAG, "BLUETOOTH_SCAN permission not granted, cannot scan")
+            reportScanBlocked("nearby_devices_denied")
             return
         }
 
         stopScan()
 
-        val scanner = adapter.bluetoothLeScanner ?: return
+        val scanner = adapter.bluetoothLeScanner
+        if (scanner == null) {
+            reportScanBlocked("scanner_unavailable")
+            return
+        }
 
         val filters = if (serviceUuids.isNotEmpty()) {
             serviceUuids.map { uuid ->
@@ -235,6 +252,7 @@ class OmiBleManager private constructor(private val application: Application) {
             override fun onScanResult(callbackType: Int, result: ScanResult) {
                 val device = result.device
                 val address = device.address.uppercase()
+                discoveredDevices[address] = device
                 val record = result.scanRecord
                 val name = discoveredPeripheralName(
                     advertisedName = record?.deviceName,
@@ -294,8 +312,9 @@ class OmiBleManager private constructor(private val application: Application) {
         val addr = address.uppercase()
         val adapter = bluetoothAdapter ?: return null
         // Use getRemoteLeDevice with ADDRESS_TYPE_RANDOM to specify the correct address type.
-        val device = if (android.os.Build.VERSION.SDK_INT >= 34) {
-            adapter.getRemoteLeDevice(addr, BluetoothDevice.ADDRESS_TYPE_RANDOM)
+        val device = discoveredDevices[addr] ?: if (android.os.Build.VERSION.SDK_INT >= 34) {
+            val addressType = determineBleAddressType(addr)
+            adapter.getRemoteLeDevice(addr, addressType)
         } else {
             adapter.getRemoteDevice(addr)
         }
