@@ -15,6 +15,7 @@ import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:omi/widgets/connection_guide_sheet.dart';
 import 'package:omi/widgets/device_widget.dart';
 import 'package:omi/widgets/scanning_ripple.dart';
+import 'package:omi/pages/onboarding/widgets/onboarding_card.dart';
 
 /// What the reader told the connect step about their Omi. Sent as `choice` on
 /// `Onboarding Device Choice`.
@@ -226,7 +227,7 @@ class _ConnectOmiStepState extends State<ConnectOmiStep> with SingleTickerProvid
 
         return SafeArea(
           child: Padding(
-            padding: const EdgeInsets.fromLTRB(OmiSpacing.xl, 0, OmiSpacing.xl, OmiSpacing.sm),
+            padding: const EdgeInsets.fromLTRB(OmiSpacing.xl, 0, OmiSpacing.xl, kOnboardingButtonBottomGap),
             child: Column(
               children: [
                 Expanded(

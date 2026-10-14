@@ -15,6 +15,7 @@ import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:omi/widgets/scanning_ripple.dart';
+import 'package:omi/pages/onboarding/widgets/onboarding_card.dart';
 
 /// Height of the row above every title: Skip sits in it on the dictation step.
 const double _kTopRowHeight = 44;
@@ -278,7 +279,7 @@ class _Stage extends StatelessWidget {
   Widget build(BuildContext context) {
     return SafeArea(
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(OmiSpacing.xl, 0, OmiSpacing.xl, OmiSpacing.sm),
+        padding: const EdgeInsets.fromLTRB(OmiSpacing.xl, 0, OmiSpacing.xl, kOnboardingButtonBottomGap),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
@@ -1299,9 +1300,14 @@ class _RatingAskState extends State<_RatingAsk> with WidgetsBindingObserver {
       await widget.requestReview();
     } catch (_) {}
     _asked = true;
-    // iOS returns before its pop-up is on screen, and may decide not to show it at all.
-    _offerContinue = Timer(const Duration(milliseconds: 1500), () {
-      if (mounted) setState(() => _canContinue = true);
+    // iOS gives no callback when its pop-up closes (and on many builds the app never goes
+    // inactive under it), so don't wait for it: once it is up, move on underneath it. Closing it
+    // then lands on the paywall instead of back on this screen.
+    _offerContinue = Timer(const Duration(milliseconds: 900), () {
+      if (!mounted) return;
+      // Continue stays as the way on if leaving fails (a failed save is retried from here).
+      setState(() => _canContinue = true);
+      _leave();
     });
   }
 

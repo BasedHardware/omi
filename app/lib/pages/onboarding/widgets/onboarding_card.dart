@@ -6,6 +6,10 @@ import 'package:omi/env/environment_profile.dart';
 import 'package:omi/ui/omi_tokens.dart';
 import 'package:omi/ui/ui.dart';
 
+/// Space between every onboarding step's primary button and the bottom safe area: high enough to
+/// sit under the thumb, the same on every step so the button never moves between steps.
+const double kOnboardingButtonBottomGap = OmiSpacing.xl;
+
 /// The bottom block of a first-run step (title, text, buttons), pinned to the bottom of the step.
 /// No card: it sits straight on the onboarding surface, under the Omi pendant.
 ///
@@ -21,7 +25,8 @@ class OnboardingCard extends StatelessWidget {
     super.key,
     required this.content,
     this.footer = const [],
-    this.padding = const EdgeInsets.fromLTRB(OmiSpacing.xxl, OmiSpacing.xxl, OmiSpacing.xxl, OmiSpacing.xs),
+    this.padding =
+        const EdgeInsets.fromLTRB(OmiSpacing.xxl, OmiSpacing.xxl, OmiSpacing.xxl, kOnboardingButtonBottomGap),
     this.crossAxisAlignment = CrossAxisAlignment.center,
     this.reserveBottomInset = true,
   });
@@ -99,7 +104,7 @@ abstract final class OnboardingHero {
 
 /// Sign-in and data & privacy: the hero (pendant or film) above, [headline] centred in the space
 /// between it and the buttons, and [buttons] pinned exactly where every other step's Continue sits
-/// (24pt in, 48pt tall, ending 8pt above the safe area) with [legal] in the space below.
+/// (24pt in, 48pt tall, ending [kOnboardingButtonBottomGap] above the safe area) with [legal] in the space below.
 class OnboardingHeroStep extends StatelessWidget {
   const OnboardingHeroStep({super.key, required this.headline, required this.buttons, required this.legal});
 
@@ -110,7 +115,7 @@ class OnboardingHeroStep extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final media = MediaQuery.of(context);
-    final belowButton = media.padding.bottom + OmiSpacing.sm < 40 ? 40.0 : media.padding.bottom + OmiSpacing.sm;
+    final belowButton = media.padding.bottom + kOnboardingButtonBottomGap;
     // The pendant's body ends around 40% down; the film fills the screen, so its type sits lower.
     final heroBottom = media.size.height * (OnboardingHero.video ? 0.46 : 0.42);
     return Padding(

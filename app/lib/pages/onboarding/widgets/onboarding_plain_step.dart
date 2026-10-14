@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'package:omi/ui/ui.dart';
+import 'package:omi/pages/onboarding/widgets/onboarding_card.dart';
 
 const _thumbShadow = BoxShadow(
     color: Color(0x26000000), // omi-ux-allow: color-literal -- switch thumb shadow
@@ -68,7 +69,7 @@ class OnboardingPlainStep extends StatelessWidget {
     );
     return SafeArea(
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(OmiSpacing.xl, OmiSpacing.lg, OmiSpacing.xl, OmiSpacing.sm),
+        padding: const EdgeInsets.fromLTRB(OmiSpacing.xl, OmiSpacing.lg, OmiSpacing.xl, kOnboardingButtonBottomGap),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [

@@ -169,7 +169,7 @@ void main() {
     expect(run.events, ['review', 'paywall', 'finished']);
   });
 
-  testWidgets('rating: when iOS sends no lifecycle cue, the first tap after the pop-up moves on', (tester) async {
+  testWidgets('rating: once the App Store pop-up is up, it moves on to the paywall by itself', (tester) async {
     final run = await pump(tester);
     await tester.pump(const Duration(seconds: 4));
     run.capture.live.value = 'Remind me to send the deck';
@@ -185,16 +185,11 @@ void main() {
     expect(run.events, isEmpty);
 
     await tester.pump(const Duration(seconds: 2));
-    expect(run.events, ['review']);
-    // Nor a tap just after asking: the pop-up may not be on screen yet.
-    await tester.tapAt(tester.getCenter(find.text('Enjoying Omi so far?')));
-    await tester.pump(const Duration(milliseconds: 50));
-    expect(run.events, ['review']);
+    expect(run.events, ['review'], reason: 'the pop-up is asked for, not yet on screen');
 
-    await tester.pump(const Duration(seconds: 2));
-    await tester.tapAt(tester.getCenter(find.text('Enjoying Omi so far?')));
-    await tester.pump(const Duration(milliseconds: 50)); // The cue runs once the tap is handled.
-    expect(run.events, ['review', 'paywall', 'finished'], reason: 'the closed pop-up leads to the paywall');
+    // iOS gives no cue when its pop-up closes: the paywall opens underneath it instead.
+    await tester.pump(const Duration(seconds: 1));
+    expect(run.events, ['review', 'paywall', 'finished']);
   });
 
   testWidgets('Omi owners go straight to the intro (how to wear it is the button tutorial before it)', (tester) async {
@@ -310,9 +305,8 @@ void main() {
     await tester.pump();
     expect(run.events, ['review'], reason: 'Continue waits for the App Store prompt');
     await tester.pump(const Duration(seconds: 2));
+    expect(run.events, ['review', 'paywall', 'finished'], reason: 'moves on by itself; the first save fails');
 
-    await tapKey(tester, 'activation_continue_rating');
-    expect(run.events, ['review', 'paywall', 'finished'], reason: 'first save fails');
     await tapKey(tester, 'activation_continue_rating');
     expect(run.events, ['review', 'paywall', 'finished', 'finished'], reason: 'retried without a second paywall');
     expect(attempts, 2);
