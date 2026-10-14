@@ -1,6 +1,6 @@
 """Index requirements owned by durable channel inbox admission."""
 
-from database.firestore_query_types import FirestoreIndexField, FirestoreIndexRequirement
+from database.firestore_query_types import FieldIndexRequirement, FirestoreIndexField, FirestoreIndexRequirement
 
 MESSAGING_INDEX_REQUIREMENTS = (
     FirestoreIndexRequirement(
@@ -36,4 +36,8 @@ MESSAGING_INDEX_REQUIREMENTS = (
         'COLLECTION',
         tuple(FirestoreIndexField(name, order='ASCENDING') for name in ('active', 'last_inbound_at', '__name__')),
     ),
+)
+
+MESSAGING_FIELD_REQUIREMENTS = (
+    FieldIndexRequirement('messaging_waitlist_expiry', 'channel_waitlist', 'expires_at', ('ASCENDING',)),
 )
