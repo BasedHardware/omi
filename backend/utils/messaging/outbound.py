@@ -177,16 +177,9 @@ class ChannelReplySink:
         from utils.messaging.adapters.rendering import source_phrases, linked_items
         from utils.messaging.delivery_context import send_markup
 
+        # Follow-up suggestions are not rendered on channels: a one-line provider
+        # button truncates the question, and typing the next message is just as fast.
         markup = None
-        if hasattr(self.adapter, 'buttons'):
-            suggestions = response.get('follow_up_suggestions', ())
-            if not suggestions:
-                suggestions = [
-                    block.get('text', '')
-                    for block in response.get('content_blocks', ())
-                    if block.get('type') == 'followUp'
-                ]
-            markup = self.adapter.buttons(suggestions)
         items = linked_items(response)
         text = source_phrases(response['text'])
         card = None

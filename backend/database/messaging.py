@@ -91,18 +91,28 @@ class MessagingStore:
             {'channel': channel, 'updated_at': now, 'expires_at': now + timedelta(days=30)}
         )
 
-    def check_capacity(self, uid, channel, *, now=None):
+    def seat_state(self, uid, channel):
+        """Read-only seat answer for display: None (no cap or seat available), 'seat_cap', or 'unavailable'."""
         cap = channel_policy(channel).get('seat_cap')
         if cap is None:
-            return
+            return None
         capacity = self.capacity(channel)
         member = capacity.collection('members').document(uid).get().to_dict() or {}
-        row = capacity.get().to_dict() or {}
         if member.get('link_ids'):
-            return
+            return None
+        row = capacity.get().to_dict() or {}
         if row.get('initialized') is not True:
+            return 'unavailable'
+        return 'seat_cap' if row.get('count', 0) >= cap else None
+
+    def waitlisted(self, uid, channel):
+        return self.user(uid).collection('channel_waitlist').document(channel).get().exists
+
+    def check_capacity(self, uid, channel, *, now=None):
+        state = self.seat_state(uid, channel)
+        if state == 'unavailable':
             raise PermissionError('Seat counter needs reconciliation')
-        if row.get('count', 0) >= cap:
+        if state == 'seat_cap':
             self.waitlist(uid, channel, now=now)
             raise SeatFull()
 

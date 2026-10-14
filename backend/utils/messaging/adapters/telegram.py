@@ -273,13 +273,6 @@ class TelegramAdapter(BaseAdapter):
     def item_buttons(self, items):
         return item_buttons(items)
 
-    def buttons(self, suggestions):
-        rows = []
-        for suggestion in suggestions[:3]:
-            if isinstance(suggestion, str) and len(('ask:' + suggestion).encode()) <= 64:
-                rows.append([{'text': suggestion, 'callback_data': 'ask:' + suggestion}])
-        return {'inline_keyboard': rows} if rows else None
-
     def receipt_buttons(self, receipt):
         if receipt.reversible:
             return {'inline_keyboard': [[{'text': 'Undo', 'callback_data': 'undo:' + receipt.id}]]}

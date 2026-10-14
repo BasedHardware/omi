@@ -23,6 +23,22 @@ from utils.messaging.undo import UndoStore
 from utils.observability.fallback import record_fallback
 
 
+def help_text(channel):
+    """What Omi can do here, in the channel's own command words."""
+    imessage = channel == 'imessage'
+    new, unlink, undo = ('new chat', 'unlink', 'undo') if imessage else ('/new', '/unlink', 'the Undo button')
+    return (
+        'Ask me anything about your conversations, tasks and memories. For example:\n'
+        '• What did I talk about with Sam yesterday?\n'
+        '• What are my tasks for this week?\n'
+        '• Remind me to call the dentist tomorrow at 9\n'
+        '• Remember that my passport expires in March\n\n'
+        'You can send photos, files and voice notes too. '
+        'Changes I make are confirmed in the chat; use ' + undo + ' to reverse one.\n\n'
+        'Send ' + new + ' to start a fresh chat, or ' + unlink + ' to disconnect Omi.'
+    )
+
+
 class ChannelTurnError(RuntimeError):
     def __init__(self, reason):
         super().__init__('Channel turn failed')
@@ -338,11 +354,7 @@ class Gateway:
                     await run_blocking(db_executor, self.store.reset_session, uid, message, link)
                     await sink.finish('New chat started.')
                 elif message.command == 'help':
-                    await sink.finish(
-                        'Chat with your Omi agent about your memories, tasks and files. '
-                        'Supported actions have their own confirmation and Undo control. '
-                        'Use /unlink to disconnect. Messages are used only to serve your chat.'
-                    )
+                    await sink.finish(help_text(self.adapter.channel))
                 elif message.command == 'undo':
                     # Adapters with inline controls require an action-specific ID;
                     # old generic buttons/text cannot reverse an unrelated later action.

@@ -11,7 +11,7 @@ from models.messaging import (
     ChannelLinkReceipt,
 )
 from config.messaging import public_link_fields
-from utils.messaging.access import require_access, SeatFull
+from utils.messaging.access import require_access, SeatFull, AccessDenied
 from utils.other.endpoints import get_current_user_uid, with_rate_limit
 
 router = APIRouter()
@@ -42,7 +42,27 @@ def mint_link_proof(
 @router.get('/v1/messaging/links', response_model=ChannelLinksResponse, tags=['messaging'])
 def list_links(uid: str = Depends(get_current_user_uid)):
     # Revocation remains available after entitlement loss or a kill switch.
-    return {'links': MessagingStore().links(uid)}
+    store = MessagingStore()
+    return {'links': store.links(uid), 'availability': _availability(store, uid)}
+
+
+def _availability(store, uid):
+    result = {}
+    for channel in ('telegram', 'imessage'):
+        try:
+            require_access(uid, channel)
+            reason = store.seat_state(uid, channel)
+        except AccessDenied as error:
+            reason = error.reason
+        except Exception:
+            # Display only; minting re-checks admission authoritatively.
+            reason = 'unavailable'
+        try:
+            waitlisted = reason == 'seat_cap' and store.waitlisted(uid, channel)
+        except Exception:
+            waitlisted = False
+        result[channel] = {'available': reason is None, 'reason': reason, 'waitlisted': waitlisted}
+    return result
 
 
 @router.delete('/v1/messaging/links/{link_id}', response_model=ChannelLinkReceipt, tags=['messaging'])

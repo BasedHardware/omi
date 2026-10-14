@@ -428,3 +428,43 @@ def test_history_scans_beyond_first_page_and_stops_at_watermark(monkeypatch):
     monkeypatch.setattr(history.chat_db, 'iter_all_messages', lambda uid, batch_size: iter(rows))
     assert len(history.recent_activity('u', rows[150]['created_at'].isoformat())) == 20
     assert history.search_history('u', 'needle')[0]['id'] == '140'
+
+
+def test_link_availability_reports_reason_per_channel(monkeypatch):
+    from routers import messaging as router
+    from utils.messaging.access import AccessDenied
+
+    def require_access(uid, channel):
+        if channel == 'imessage':
+            raise AccessDenied('channel_plan', 'Operator or Architect plan required for iMessage')
+
+    class Store:
+        def seat_state(self, uid, channel):
+            return None
+
+        def waitlisted(self, uid, channel):
+            raise AssertionError('only read for a full channel')
+
+    monkeypatch.setattr(router, 'require_access', require_access)
+    assert router._availability(Store(), 'uid') == {
+        'telegram': {'available': True, 'reason': None, 'waitlisted': False},
+        'imessage': {'available': False, 'reason': 'channel_plan', 'waitlisted': False},
+    }
+
+
+def test_link_availability_seat_cap_waitlist_and_failures(monkeypatch):
+    from routers import messaging as router
+
+    class Store:
+        def seat_state(self, uid, channel):
+            if channel == 'telegram':
+                raise RuntimeError('firestore down')
+            return 'seat_cap'
+
+        def waitlisted(self, uid, channel):
+            return True
+
+    monkeypatch.setattr(router, 'require_access', lambda uid, channel: None)
+    result = router._availability(Store(), 'uid')
+    assert result['telegram'] == {'available': False, 'reason': 'unavailable', 'waitlisted': False}
+    assert result['imessage'] == {'available': False, 'reason': 'seat_cap', 'waitlisted': True}
