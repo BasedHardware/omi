@@ -321,4 +321,109 @@ void main() {
     expect(autoLabeled.isUser, isFalse);
     expect(autoLabeled.personId, isNull);
   });
+
+  test('a refresh requested before the exclusion acknowledgement cannot retire it', () async {
+    final controller = CaptureController(
+      externalActions: _Actions(),
+      bleListeners: _Ble(),
+      connectivity: CaptureConnectivityBoundary(
+        initiallyConnected: true,
+        changes: const Stream.empty(),
+        isConnected: () => true,
+      ),
+      excludeSpeaker: (id, ids) async => true,
+    );
+    addTearDown(() async {
+      controller.dispose();
+      await controller.lifetime.close();
+    });
+    controller.applyInProgressConversation(
+      ServerConversation(
+        id: 'c',
+        createdAt: DateTime(2026),
+        structured: Structured('TV', 'TV'),
+        transcriptSegments: [_segment('s1')],
+      ),
+    );
+    // The refresh's HTTP request starts *before* the exclusion is
+    // acknowledged: its response may still carry the pre-exclusion manual
+    // label when it installs later.
+    final requestEpoch = controller.debugSnapshotEpoch;
+    expect(await controller.assignSpeakerToConversation(4, '', '', ['s1'], notAPerson: true), isTrue);
+    expect(controller.debugSnapshotEpoch, greaterThan(requestEpoch));
+
+    controller.applyInProgressConversation(
+      ServerConversation(
+        id: 'c',
+        createdAt: DateTime(2026),
+        structured: Structured('TV', 'TV'),
+        transcriptSegments: [
+          _segment('s1')
+            ..isUser = false
+            ..personId = 'p1'
+            ..speakerLabelSource = 'manual',
+        ],
+      ),
+      requestEpoch: requestEpoch,
+    );
+
+    // The stale request's snapshot may not resurrect the retired label: the
+    // exclusion survives and re-blanks it.
+    final segment = controller.segments.single;
+    expect(segment.isUser, isFalse);
+    expect(segment.personId, isNull);
+    expect(segment.speakerLabelSource, isNull);
+    final suggestion = SpeakerLabelSuggestionEvent(speakerId: 4, personId: '', personName: 'Sam', segmentId: 's1');
+    controller.onMessageEventReceived(suggestion);
+    expect(controller.suggestionsBySegmentId, isEmpty);
+  });
+
+  test('a session change during the reconcile delay cancels the refresh install', () async {
+    var loads = 0;
+    late final CaptureController controller;
+    controller = CaptureController(
+      externalActions: _Actions(),
+      bleListeners: _Ble(),
+      connectivity: CaptureConnectivityBoundary(
+        initiallyConnected: true,
+        changes: const Stream.empty(),
+        isConnected: () => true,
+      ),
+      excludeSpeaker: (id, ids) async => true,
+      inProgressConversationLoader: () async {
+        loads++;
+      },
+    );
+    addTearDown(() async {
+      CaptureController.exclusionReconcileDelay = const Duration(milliseconds: 300);
+      controller.dispose();
+      await controller.lifetime.close();
+    });
+    CaptureController.exclusionReconcileDelay = Duration.zero;
+    controller.testSessionStartSeconds = 1000; // an active capture session
+    controller.applyInProgressConversation(
+      ServerConversation(
+        id: 'c',
+        createdAt: DateTime(2026),
+        structured: Structured('TV', 'TV'),
+        transcriptSegments: [_segment('s1')],
+      ),
+    );
+    expect(await controller.assignSpeakerToConversation(4, '', '', ['s1'], notAPerson: true), isTrue);
+
+    // A manual-positive socket flush schedules the reconcile refresh, then
+    // the capture session ends before the delay elapses.
+    controller.onSegmentReceived([
+      _segment('s1')
+        ..isUser = false
+        ..personId = 'p1'
+        ..speakerLabelSource = 'manual',
+    ]);
+    controller.testSessionStartSeconds = 0; // session rolled: no active capture.
+    await Future<void>.delayed(Duration.zero);
+    await Future<void>.delayed(Duration.zero);
+
+    // The cancelled reconcile must not have run its load.
+    expect(loads, 0);
+  });
 }

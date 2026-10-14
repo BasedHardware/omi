@@ -9,7 +9,7 @@ import logging
 import time
 import uuid
 
-from utils.manual_speaker_assignments import acknowledged_teaching
+from utils.manual_speaker_assignments import acknowledged_teaching, manual_rejected_speakers
 from collections import OrderedDict, deque
 from typing import Any, Dict, List, Optional, Tuple, cast
 
@@ -2088,6 +2088,20 @@ class ListenReceiver(ReplayFilterMixin):
         by_id = {segment.get('id'): segment for segment in conversation.get('transcript_segments') or []}
         speakers = receipt.get('speakers') or {}
         overrides = receipt.get('segments') or {}
+        # A winning whole-voice rejection (e.g. "Not a person") must retire the
+        # speaker-wide inference map for the rejected voice: leaving it intact
+        # relabels every newly arriving segment of that speaker from the stale
+        # map after the exclusion, and process_speaker_assigned_segments falls
+        # back to speaker_to_person for segments without an explicit override.
+        rejected_speakers = manual_rejected_speakers(receipt)
+        for rejected in rejected_speakers:
+            self.host.speakers.speaker_to_person.pop(rejected, None)
+            self.host.speakers.voice_identity_status.pop(rejected, None)
+            self.host.speakers.segment_identity_status = {
+                sid: status
+                for sid, status in self.host.speakers.segment_identity_status.items()
+                if not (by_id.get(sid, {}) or {}).get('speaker_id') == rejected
+            }
         for sid in segment_ids:
             segment = by_id.get(sid) or {}
             override = overrides.get(sid)

@@ -657,3 +657,52 @@ def test_merged_donor_range_selects_using_original_offsets(world):
     assert ids == ['s1']
     assert raw['transcript_segments'][0]['person_id'] is None
     assert raw['transcript_segments'][1]['person_id'] == 'new'
+
+
+def test_socket_rejection_clears_speaker_wide_inference_map(world):
+    """A winning not_a_person exclusion must retire speaker_to_person.
+
+    Otherwise process_speaker_assigned_segments falls back to the stale map
+    for each newly arriving segment of the rejected speaker, relabeling
+    future media speech after the exclusion.
+    """
+    import asyncio
+    from types import SimpleNamespace
+    from unittest.mock import AsyncMock
+    from routers.listen.receiver import ListenReceiver
+
+    async def exercise():
+        receiver = object.__new__(ListenReceiver)
+
+        def spawn_task(coro, **kwargs):
+            raise AssertionError('no task may spawn for a rejection')
+
+        receiver.host = SimpleNamespace(
+            state=SimpleNamespace(current_conversation_id='c', speaker_map_dirty=False),
+            speakers=SimpleNamespace(
+                speaker_to_person={4: ('old', 'Old Name')},
+                voice_identity_status={},
+                segment_identity_status={'s0': object(), 's1': object()},
+                segment_assignments={},
+            ),
+            transcripts=SimpleNamespace(cache=SimpleNamespace(get=AsyncMock(return_value=read(world)))),
+            private_cloud_sync_enabled=True,
+            send_speaker_sample_request=AsyncMock(),
+            spawn=spawn_task,
+        )
+        # The speaker was already recognized earlier in the live session, then
+        # the user excluded the voice ("Not a person") from another surface.
+        db.assign_conversation_speaker('u', 'c', speaker_id=4, rejection={'kind': 'not_a_person', 'person_id': None})
+        receiver.host.transcripts.cache.get.return_value = read(world)
+
+        await receiver._handle_speaker_assigned(dict(person_id=None, segment_ids=['s1'], assign_type='not_a_person'))
+
+        assert 4 not in receiver.host.speakers.speaker_to_person
+        assert 4 not in receiver.host.speakers.voice_identity_status
+        # Segment-level status for the rejected speaker's segments is dropped
+        # (s0/s1 both belong to speaker 4), not left stale.
+        assert 's0' not in receiver.host.speakers.segment_identity_status
+        assert 's1' not in receiver.host.speakers.segment_identity_status
+        assert receiver.host.state.speaker_map_dirty
+
+    asyncio.run(exercise())

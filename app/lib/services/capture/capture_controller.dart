@@ -879,6 +879,22 @@ class CaptureController extends ChangeNotifier
   Map<String, SpeakerLabelSuggestionEvent> suggestionsBySegmentId = {};
   final Map<int, String> _manualSpeakerDefaults = {};
   final Set<int> _excludedSpeakers = {};
+
+  /// Monotonic decision epoch: bumped on every in-progress refresh request
+  /// start, every snapshot install, and every exclusion acknowledgement.
+  /// Exclusions record the epoch at their acknowledgement and each REST
+  /// refresh records the epoch at its request start, so a refresh whose
+  /// request predates the exclusion (its stale payload may still carry the
+  /// old manual label) can never retire it: only a refresh that started
+  /// after the acknowledgement — and therefore saw the committed exclusion
+  /// server-side — may retire it.
+  int _snapshotEpoch = 0;
+  final Map<int, int> _excludedAtEpoch = {};
+
+  /// Decision epoch as of now; lets hermetic scenarios construct installs
+  /// whose request predates a given exclusion acknowledgement.
+  @visibleForTesting
+  int get debugSnapshotEpoch => _snapshotEpoch;
   List<String> taggingSegmentIds = [];
 
   bool hasTranscripts = false;
@@ -3317,23 +3333,35 @@ class CaptureController extends ChangeNotifier
 
   /// One authoritative in-progress snapshot when the socket path cannot order
   /// a decision by generation. Coalesced: a burst of segments triggers one
-  /// refresh, and a queued refresh never stacks behind itself.
+  /// refresh, and a queued refresh never stacks behind itself. Bound to the
+  /// capture lifetime: a stop/replace/dispose during the delay or the load
+  /// cancels the reconcile instead of installing into a later session.
   @visibleForTesting
   static Duration exclusionReconcileDelay = const Duration(milliseconds: 300);
 
   void _scheduleExclusionReconcileRefresh() {
     if (_exclusionReconcileRefresh != null) return;
+    var cancelled = false;
+    final owned = lifetime.own(() => cancelled = true);
+    // Session generation at schedule time: a stop/replace/dispose during the
+    // delay or the load must not install into a later capture session.
+    final sessionId = activeCaptureSessionId;
+    bool stillCurrent() => !cancelled && !lifetime.isClosed && activeCaptureSessionId == sessionId;
     _exclusionReconcileRefresh = Future<void>(() async {
       // Give the in-flight decision writes a moment to settle, then let the
       // persisted snapshot reconcile the local exclusion.
       await Future<void>.delayed(exclusionReconcileDelay);
-      await _loadInProgressConversation();
+      if (!stillCurrent()) return;
+      await _loadInProgressConversation(stillCurrent: stillCurrent);
     }).catchError((Object error, StackTrace stack) {
       // The reconcile is best-effort: a failed refresh leaves the exclusion
       // standing, which is the safe default; never surface it as a capture
       // error.
       Logger.debug('Exclusion reconcile refresh failed: ${error.runtimeType}');
-    }).whenComplete(() {
+    }).whenComplete(() async {
+      // The reconcile finished on its own: stop tracking this cancellation
+      // so one-shot entries do not accumulate in the lifetime ledger.
+      await owned.release();
       _exclusionReconcileRefresh = null;
     });
   }
@@ -3448,24 +3476,38 @@ class CaptureController extends ChangeNotifier
     }
   }
 
-  Future _loadInProgressConversation() async {
+  Future _loadInProgressConversation({bool Function()? stillCurrent}) async {
     if (_inProgressConversationLoader != null) {
       await _inProgressConversationLoader!();
       return;
     }
+    // Record the epoch at request start: a refresh whose request predates an
+    // exclusion acknowledgement may carry the old manual label, so its install
+    // must not retire that exclusion even though it lands later.
+    final requestEpoch = ++_snapshotEpoch;
     final convos = await getConversations(statuses: [ConversationStatus.in_progress], limit: 1);
-    applyInProgressConversation(convos.isNotEmpty ? convos.first : null);
+    // The request may have straddled a stop/replace: installing a snapshot
+    // that landed after the session ended would mutate a later session's
+    // state, so the caller's session guard decides.
+    if (stillCurrent != null && !stillCurrent()) return;
+    applyInProgressConversation(convos.isNotEmpty ? convos.first : null, requestEpoch: requestEpoch);
   }
 
   /// Install an acknowledged server snapshot. Shared by REST refresh and
   /// hermetic capture scenarios that control the conversation boundary.
-  void applyInProgressConversation(ServerConversation? nextConversation) {
+  /// [requestEpoch] is the decision epoch observed when the refresh's HTTP
+  /// request started; a null value means a direct install that began now
+  /// (hermetic scenario / test seam) and is treated as fresh.
+  void applyInProgressConversation(ServerConversation? nextConversation, {int? requestEpoch}) {
     final isSameConversation = _conversation?.id == nextConversation?.id;
     if (_conversation?.id != nextConversation?.id) {
       suggestionsBySegmentId.clear();
       _manualSpeakerDefaults.clear();
       _excludedSpeakers.clear();
+      _excludedAtEpoch.clear();
     }
+    _snapshotEpoch++;
+    final startedAt = requestEpoch ?? _snapshotEpoch;
     _conversation = nextConversation;
     if (_conversation != null) {
       segments = _conversation!.transcriptSegments;
@@ -3474,12 +3516,15 @@ class CaptureController extends ChangeNotifier
           // A persisted manual positive label for an excluded speaker means a
           // newer authoritative assignment won (another surface replaced the
           // exclusion; the receipt projects exclusions as unlabeled, never as
-          // manual). Retire the local exclusion instead of blanking the label
-          // below — same rule as incremental socket segments.
+          // manual). Only a refresh that *started* after the exclusion's
+          // acknowledgement may retire it: one requested earlier can still be
+          // carrying the pre-exclusion manual label when it installs.
           if (_excludedSpeakers.contains(segment.speakerId) &&
               segment.speakerLabelSource == 'manual' &&
-              (segment.isUser || (segment.personId?.isNotEmpty ?? false))) {
+              (segment.isUser || (segment.personId?.isNotEmpty ?? false)) &&
+              startedAt > (_excludedAtEpoch[segment.speakerId] ?? 0)) {
             _excludedSpeakers.remove(segment.speakerId);
+            _excludedAtEpoch.remove(segment.speakerId);
           }
         }
         for (final segment in segments) {
@@ -3995,9 +4040,15 @@ class CaptureController extends ChangeNotifier
       if (_conversation?.id != conversationId || activeCaptureSessionId != sessionId) return true;
       if (notAPerson) {
         _excludedSpeakers.add(speakerId);
+        // The acknowledgement is itself a decision event: bump the epoch so
+        // any refresh that starts afterwards is strictly newer and may retire
+        // this exclusion, while one already in flight (requestEpoch recorded
+        // earlier) stays fenced.
+        _excludedAtEpoch[speakerId] = ++_snapshotEpoch;
         _manualSpeakerDefaults.remove(speakerId);
       } else {
         _excludedSpeakers.remove(speakerId);
+        _excludedAtEpoch.remove(speakerId);
       }
       if (applyToSpeaker && !notAPerson) {
         _manualSpeakerDefaults[speakerId] = finalPersonId!;
