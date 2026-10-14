@@ -1106,10 +1106,19 @@ def get_chat_quota_snapshot(
     desktop callers can be paywalled; mobile callers fall through to the
     real plan logic.
     """
+    # Flagged quota display and admission share the same authority, including
+    # Free accounts whose older desktop trial status is exhausted.
+    enforcing = ladder_policy.budget_enforcement_enabled()
+    subscription = None
+    shared_budget = None
+    if enforcing:
+        subscription = users_db.get_user_valid_subscription(uid, firestore_client=firestore_client, provision=provision)
+        shared_budget = ladder_v1.budget_snapshot(uid, subscription, firestore_client=firestore_client)
+
     # Paywall test override — surface as exhausted Free-plan quota so the
     # client renders the same over-limit popup it shows for normal users
     # past 30/mo.
-    if is_trial_paywalled(
+    if shared_budget is None and is_trial_paywalled(
         uid,
         platform,
         firestore_client=firestore_client,
@@ -1129,9 +1138,10 @@ def get_chat_quota_snapshot(
             'reset_at': usage['reset_at'],
         }
 
-    subscription = users_db.get_user_valid_subscription(uid, firestore_client=firestore_client, provision=provision)
+    if not enforcing:
+        subscription = users_db.get_user_valid_subscription(uid, firestore_client=firestore_client, provision=provision)
+        shared_budget = ladder_v1.budget_snapshot(uid, subscription, firestore_client=firestore_client)
     plan = subscription.plan if subscription else PlanType.basic
-    shared_budget = ladder_v1.budget_snapshot(uid, subscription, firestore_client=firestore_client)
     limits = get_plan_limits(plan)
     usage = user_usage_db.get_monthly_chat_usage(uid, firestore_client=firestore_client)
 
@@ -1164,6 +1174,10 @@ def get_chat_quota_snapshot(
         result['allowed'] = shared_budget['budget_percent'] < 100
         result['reset_at'] = shared_budget['reset_at']
         result['is_overage_plan'] = False
+        if not result['allowed']:
+            from utils.storefront_copy import chat_at_cap
+
+            result['chat_at_cap'] = chat_at_cap(shared_budget['plan_id'], shared_budget['reset_at'])
     return result
 
 
@@ -1178,7 +1192,8 @@ def enforce_chat_quota(
 ) -> None:
     """Block or allow a chat request based on the user's plan + usage.
 
-    - BYOK users with an LLM key attached: always allowed, no Omi-side cost —
+    - Flagged ladder/Free shared budgets pause chat at 100%, including BYOK.
+    - Otherwise BYOK users with an LLM key attached: allowed, no Omi-side cost —
       unless ``byok_exempt`` is False, for surfaces that only ever spend Omi's
       own key regardless of the user's (the realtime hub mints platform tokens).
     - Plans whose catalog exhaustion policy is overage: ALLOWED — the call is
@@ -1191,6 +1206,10 @@ def enforce_chat_quota(
     # all — never paywall it, or the gate hard-blocks its own deploys once the
     # probe's turns exhaust the Free cap.
     if uid == RELEASE_PROBE_UID:
+        return
+
+    # The flagged shared budget pauses chat on every ladder tier, including Free.
+    if ladder_v1.enforce_chat_budget(uid, firestore_client=firestore_client):
         return
 
     # Paywall test override — bypass BYOK + plan checks so the same 402
@@ -1231,9 +1250,6 @@ def enforce_chat_quota(
         request_has_byok_provider(required_llm_provider) if required_llm_provider else _request_has_llm_byok_key()
     )
     if byok_exempt and users_db.is_byok_active(uid, firestore_client=firestore_client) and has_exempt_llm:
-        return
-
-    if ladder_v1.enforce_budget(uid, firestore_client=firestore_client):
         return
 
     snapshot = get_chat_quota_snapshot(

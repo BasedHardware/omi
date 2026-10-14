@@ -9,6 +9,7 @@
  */
 import type {
   StorefrontCurrent,
+  ChatAtCap,
   StorefrontPrice,
   StorefrontResponse,
   StorefrontTier,
@@ -76,6 +77,7 @@ export interface PlanStorefrontUsage {
 }
 
 export interface PlanStorefront {
+  chatAtCap?: ChatAtCap | null;
   catalogRevision: number;
   showSubscriptionUi: boolean;
   header: string | null;
@@ -213,6 +215,10 @@ export function parseStorefront(raw: unknown): PlanStorefront {
     }
   }
   return {
+    chatAtCap:
+      json.chat_at_cap?.state === 'paused' && json.chat_at_cap.trigger === 'usage_budget'
+        ? json.chat_at_cap
+        : null,
     catalogRevision: json.catalog_revision as number,
     showSubscriptionUi: json.show_subscription_ui === true,
     header: text(json.header),

@@ -68,6 +68,24 @@ def enforce_budget(uid: str, *, firestore_client: Any = None) -> bool:
     return True
 
 
+def enforce_chat_budget(uid: str, *, firestore_client: Any = None) -> bool:
+    snapshot = budget_snapshot(uid, firestore_client=firestore_client)
+    if snapshot is None:
+        return False
+    if snapshot['budget_percent'] >= 100:
+        from utils.storefront_copy import chat_at_cap
+
+        raise HTTPException(
+            status_code=402,
+            detail={
+                'error': 'usage_budget_exhausted',
+                'trigger': 'usage_budget',
+                'chat_at_cap': chat_at_cap(snapshot['plan_id'], snapshot['reset_at']),
+            },
+        )
+    return True
+
+
 def feature_allowed(uid: str, feature: str, subscription: Any = _UNRESOLVED) -> bool | None:
     if not policy.enabled('LADDER_V1_PRO_GATES_ENABLED'):
         return None

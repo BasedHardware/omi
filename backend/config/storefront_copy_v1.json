@@ -122,6 +122,12 @@
         "plus": "About {hours} hours of recording a month · Enough for casual daily use",
         "operator": "About {hours} hours of recording a month · Enough to wear it 24/7",
         "architect": "About {hours} hours of recording a month · 24/7 on more than one device"
+      },
+      "chat_at_cap": {
+        "title": "Chat is paused",
+        "body": "You’ve used this month’s budget. Capture, saved content and on-device transcription and summaries continue.",
+        "reset_line": "Chat is back on {date}.",
+        "upgrade_label": "Upgrade to {plan}"
       }
     }
   }

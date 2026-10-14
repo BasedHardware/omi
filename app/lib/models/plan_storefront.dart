@@ -12,6 +12,7 @@ class PlanStorefront {
   final String? yearlyToggleLabel;
   final bool showSubscriptionUi;
   final GeneratedStorefrontCapChoice? atCap;
+  final ChatAtCap? chatAtCap;
 
   const PlanStorefront({
     required this.catalogRevision,
@@ -22,6 +23,7 @@ class PlanStorefront {
     this.yearlyToggleLabel,
     required this.showSubscriptionUi,
     this.atCap,
+    this.chatAtCap,
   });
 
   /// Current and usage snapshots must both permit a nonblocking budget nudge.
@@ -59,6 +61,7 @@ class PlanStorefront {
       throw const FormatException('Invalid yearly toggle label');
     }
     return PlanStorefront(
+      chatAtCap: json['chat_at_cap'] == null ? null : ChatAtCap.fromJson(_object(json['chat_at_cap'])),
       atCap: json['at_cap'] == null ? null : GeneratedStorefrontCapChoice.fromJson(_object(json['at_cap'])),
       catalogRevision: revision,
       tiers: List.unmodifiable(tiers),
@@ -436,4 +439,25 @@ bool _boolean(Map<String, dynamic> json, String key) {
   final value = json[key];
   if (value is! bool) throw FormatException('Missing storefront $key');
   return value;
+}
+
+/// Backend-owned composer state. Never inferred from a local tier or message count.
+class ChatAtCap {
+  final String title, body, resetLine;
+  final int resetAt;
+  final String? upgradeLabel;
+  const ChatAtCap(
+      {required this.title, required this.body, required this.resetLine, required this.resetAt, this.upgradeLabel});
+  factory ChatAtCap.fromJson(Map<String, dynamic> json) {
+    if (json['state'] != 'paused' || json['trigger'] != 'usage_budget' || json['reset_at'] is! int) {
+      throw const FormatException('Invalid chat pause state');
+    }
+    return ChatAtCap(
+        title: _text(json, 'title'),
+        body: _text(json, 'body'),
+        resetLine: _text(json, 'reset_line'),
+        resetAt: json['reset_at'] as int,
+        upgradeLabel: json['upgrade_label'] as String?);
+  }
+  bool get active => DateTime.now().millisecondsSinceEpoch < resetAt * 1000;
 }

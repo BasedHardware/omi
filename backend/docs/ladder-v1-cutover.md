@@ -59,9 +59,13 @@ In-flight work can finish; projection admission is not a prepaid reservation.
 
 `/v1/users/budget-choice` recognizes ladder exhaustion and persists the existing
 monthly choice record. Upgrade intent grants no entitlement. Ask-once semantics
-and choice reset are unchanged. On-device processing and summary/chat fallback
-remain owned by the on-device lane (#21466); integrate that lane before enabling
-budget enforcement. Its cheap-chat model/cap still requires David's ruling.
+and choice reset are unchanged. Capture, held content, on-device transcription and
+on-device summaries continue. Chat pauses at 100% until the monthly reset or an
+upgrade on every ladder tier, including Free (David ruling October 14 evening).
+The existing budget-enforcement flag gates this policy; legacy prices retain their
+existing behavior. There is no fallback chat model or fallback chat allowance.
+The additive `chat_at_cap` payload owns the pause, reset-date and upgrade copy;
+clients display it at the composer and open plans with `trigger=usage_budget`.
 
 The additive v2 `at_cap` payload is emitted only when enforcement is on and a
 non-legacy account is exhausted. It owns title/body/buttons/checkbox and
@@ -148,8 +152,6 @@ an approved new versioned card (and pin its digest); live capacity stays separat
 Plus switches bands at 240 hours, Pro at 720, Architect at 1,440 (two full devices).
 Below these thresholds, the existing per-day copy remains. This is presentation capacity,
 not a new independent live budget or a completeness claim about the usage ledger.
-
-Cheap fallback chat model/cap at the shared budget remains OPEN for David's ruling.
 
 Supported capacity thresholds survive nice rounding: if actual capacity supports
 720 hours, the headline and remaining-hours meter both show 720 rather than rounding

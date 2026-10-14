@@ -455,3 +455,21 @@ def present_usage(
         if 80 <= shown < 100:
             payload['nudge_line'] = text['meter']['nudge_80'].format(reset=payload['reset_label'])
     return payload
+
+
+def chat_at_cap(plan_id: str, reset_at: int, locale: str | None = None) -> dict[str, Any]:
+    """One backend-owned pause state shared by admission, quota and storefront."""
+    text = copy_for(locale)['chat_at_cap']
+    upgrade = {'basic': ('plus', 'Plus'), 'plus': ('operator', 'Pro'), 'operator': ('architect', 'Architect')}.get(
+        plan_id
+    )
+    return {
+        'state': 'paused',
+        'title': text['title'],
+        'body': text['body'],
+        'reset_at': reset_at,
+        'reset_line': text['reset_line'].format(date=format_date(reset_at)),
+        'trigger': 'usage_budget',
+        'upgrade_plan': upgrade[0] if upgrade else None,
+        'upgrade_label': text['upgrade_label'].format(plan=upgrade[1]) if upgrade else None,
+    }

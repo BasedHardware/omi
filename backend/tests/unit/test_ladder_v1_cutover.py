@@ -378,3 +378,106 @@ def test_flag_off_cold_import_never_resolves_database(monkeypatch):
         assert cold.budget_snapshot('u') is None
         assert cold.feature_allowed('u', 'screen_context') is None
         assert cold.enforce_daily_cap('u') is None
+
+
+@pytest.mark.parametrize(
+    'plan,key,upgrade',
+    [
+        ('basic', None, 'plus'),
+        ('plus', 'ladder_v1_plus_month', 'operator'),
+        ('operator', 'ladder_v1_pro_month', 'architect'),
+        ('architect', 'ladder_v1_architect_month', None),
+    ],
+)
+def test_chat_stops_at_shared_budget_and_reset_unblocks(monkeypatch, bindings, plan, key, upgrade):
+    monkeypatch.setenv('LADDER_V1_BUDGET_ENFORCEMENT_ENABLED', 'true')
+    sub = subscription(plan, 'price_' + key if key else None)
+    monkeypatch.setattr(ladder, 'account', lambda *a, **k: policy.entitlements(sub))
+    from database import usage_units
+
+    now = datetime(2026, 10, 31, 23, 59, tzinfo=timezone.utc)
+
+    class Clock:
+        @staticmethod
+        def now(tz):
+            return now
+
+        def __new__(cls, *args, **kwargs):
+            return datetime(*args, **kwargs)
+
+    monkeypatch.setattr(ladder, 'datetime', Clock)
+    monkeypatch.setattr(
+        usage_units,
+        'get_usage_units',
+        lambda uid, date, **kw: {
+            'budget_units': 100,
+            'used_units': 100 if date.month == 10 else 0,
+        },
+    )
+    with pytest.raises(HTTPException) as error:
+        ladder.enforce_chat_budget('u')
+    assert error.value.status_code == 402
+    pause = error.value.detail['chat_at_cap']
+    assert pause['state'] == 'paused'
+    assert pause['title'] == 'Chat is paused'
+    assert pause['trigger'] == 'usage_budget'
+    assert pause['upgrade_plan'] == upgrade
+    assert pause['reset_line'] == 'Chat is back on Nov 1.'
+    now = datetime(2026, 11, 1, tzinfo=timezone.utc)
+    assert ladder.enforce_chat_budget('u') is True
+
+
+def test_chat_dark_path_and_legacy_do_not_read_ledger(monkeypatch):
+    def forbidden(*a, **k):
+        pytest.fail('dark or legacy path read ledger')
+
+    monkeypatch.delenv('LADDER_V1_BUDGET_ENFORCEMENT_ENABLED', raising=False)
+    monkeypatch.setattr(ladder, 'usage_snapshot', forbidden)
+    assert ladder.enforce_chat_budget('u') is False
+    monkeypatch.undo()
+    monkeypatch.setenv('LADDER_V1_BUDGET_ENFORCEMENT_ENABLED', 'true')
+    price = next(p for p, plan in catalog.RECOGNIZED_STRIPE_PRICE_PLAN_TYPES.items() if plan.value == 'plus')
+    monkeypatch.setattr(ladder, 'account', lambda *a, **k: policy.entitlements(subscription('plus', price)))
+    from database import usage_units
+
+    monkeypatch.setattr(usage_units, 'get_usage_units', forbidden)
+    assert ladder.enforce_chat_budget('u') is False
+
+
+@pytest.mark.parametrize(
+    'plan,upgrade', [('basic', 'plus'), ('plus', 'operator'), ('operator', 'architect'), ('architect', None)]
+)
+def test_chat_pause_payload_is_only_flagged_exhausted_ladder(monkeypatch, cap_presentation, plan, upgrade):
+    sheet_for, ladder_catalog = cap_presentation
+    rows, recognized = ladder_catalog()
+    kwargs = dict(
+        price_id=None if plan == 'basic' else 'price_' + plan + '_month',
+        rows=rows,
+        recognized=recognized,
+        bindings=list(rows),
+        trigger='usage_budget',
+    )
+    monkeypatch.delenv('LADDER_V1_BUDGET_ENFORCEMENT_ENABLED', raising=False)
+    assert 'chat_at_cap' not in sheet_for(plan, percent=100, **kwargs).model_dump(mode='json')
+    monkeypatch.setenv('LADDER_V1_BUDGET_ENFORCEMENT_ENABLED', 'true')
+    assert sheet_for(plan, percent=99.99, **kwargs).chat_at_cap is None
+    payload = sheet_for(plan, percent=100, **kwargs).model_dump(mode='json')
+    assert payload['chat_at_cap']['upgrade_plan'] == upgrade
+    import os
+
+    if os.environ.get('UPDATE_CHAT_CAP_GOLDENS') == '1':
+        Path(__file__).parents[1].joinpath('fixtures', f'chat_at_cap_{plan}.json').write_text(
+            json.dumps(payload['chat_at_cap'], ensure_ascii=False, indent=2) + '\n'
+        )
+    expected = json.loads(Path(__file__).parents[1].joinpath('fixtures', f'chat_at_cap_{plan}.json').read_text())
+    assert payload['chat_at_cap'] == expected
+    legacy = sheet_for(
+        'plus', price_id='price_legacy_plus', percent=100, rows=rows, recognized=recognized, bindings=list(rows)
+    )
+    assert legacy.chat_at_cap is None
+
+
+@pytest.mark.parametrize('percent', [0, 80, 99.99])
+def test_chat_below_shared_budget_still_allowed(monkeypatch, percent):
+    monkeypatch.setattr(ladder, 'budget_snapshot', lambda *a, **k: {'budget_percent': percent})
+    assert ladder.enforce_chat_budget('u') is True

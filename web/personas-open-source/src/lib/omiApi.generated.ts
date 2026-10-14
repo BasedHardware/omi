@@ -1140,6 +1140,17 @@ export interface ChartDataset {
   label: string;
 }
 
+export interface ChatAtCap {
+  body: string;
+  reset_at: number;
+  reset_line: string;
+  state?: "paused";
+  title: string;
+  trigger?: "usage_budget";
+  upgrade_label?: string | null;
+  upgrade_plan?: string | null;
+}
+
 export interface ChatEvidenceEnvelope {
   references?: Array<ChatEvidenceReference>;
   request_id?: string | null;
@@ -1208,6 +1219,7 @@ export interface ChatTool {
 
 export interface ChatUsageQuota {
   allowed?: boolean;
+  chat_at_cap?: ChatAtCap | null;
   is_overage_plan?: boolean;
   limit?: number | null;
   percent?: number;
@@ -5041,6 +5053,7 @@ export interface StorefrontPrice {
 export interface StorefrontResponse {
   at_cap?: StorefrontCapChoice | null;
   catalog_revision: number;
+  chat_at_cap?: ChatAtCap | null;
   current?: StorefrontCurrent | null;
   header?: string | null;
   schema_version?: 2;
@@ -6220,6 +6233,7 @@ export interface OmiApiSchemas {
   "ChartData": ChartData;
   "ChartDataPoint": ChartDataPoint;
   "ChartDataset": ChartDataset;
+  "ChatAtCap": ChatAtCap;
   "ChatEvidenceEnvelope": ChatEvidenceEnvelope;
   "ChatEvidenceReference": ChatEvidenceReference;
   "ChatFirstSubject": ChatFirstSubject;

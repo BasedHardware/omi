@@ -1121,6 +1121,17 @@ export async function sendMessageStream(
 
   if (!response.ok) {
     const errorText = await response.text().catch(() => 'No error body');
+    if (response.status === 402) {
+      try {
+        const pause = JSON.parse(errorText)?.detail?.chat_at_cap;
+        if (pause?.state === 'paused' && pause.trigger === 'usage_budget') {
+          window.dispatchEvent(new CustomEvent('omi-chat-paused', { detail: pause }));
+          throw new Error(pause.title);
+        }
+      } catch (error) {
+        if (error instanceof Error && !(error instanceof SyntaxError)) throw error;
+      }
+    }
     console.error('Send message error:', response.status, errorText);
     throw new Error(`Failed to send message: ${response.status}`);
   }

@@ -1,3 +1,4 @@
+from models.storefront import ChatAtCap
 from datetime import datetime, timezone
 from enum import Enum
 from typing import Optional, List
@@ -103,6 +104,7 @@ class ChatQuotaUnit(str, Enum):
 
 
 class ChatUsageQuota(BaseModel):
+    chat_at_cap: ChatAtCap | None = None
     plan: str  # display name: "Free", "Plus", "Architect"
     plan_type: str  # internal id: "basic" | "unlimited" | "architect"
     unit: ChatQuotaUnit

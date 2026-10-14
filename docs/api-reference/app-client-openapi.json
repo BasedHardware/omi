@@ -7252,6 +7252,68 @@
         "title": "ChartDataset",
         "type": "object"
       },
+      "ChatAtCap": {
+        "properties": {
+          "body": {
+            "title": "Body",
+            "type": "string"
+          },
+          "reset_at": {
+            "title": "Reset At",
+            "type": "integer"
+          },
+          "reset_line": {
+            "title": "Reset Line",
+            "type": "string"
+          },
+          "state": {
+            "const": "paused",
+            "default": "paused",
+            "title": "State",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "trigger": {
+            "const": "usage_budget",
+            "default": "usage_budget",
+            "title": "Trigger",
+            "type": "string"
+          },
+          "upgrade_label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Upgrade Label"
+          },
+          "upgrade_plan": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Upgrade Plan"
+          }
+        },
+        "required": [
+          "title",
+          "body",
+          "reset_at",
+          "reset_line"
+        ],
+        "title": "ChatAtCap",
+        "type": "object"
+      },
       "ChatEvidenceEnvelope": {
         "description": "Versioned transport envelope for supplemental chat evidence.",
         "properties": {
@@ -7703,6 +7765,16 @@
             "default": true,
             "title": "Allowed",
             "type": "boolean"
+          },
+          "chat_at_cap": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ChatAtCap"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "is_overage_plan": {
             "default": false,
@@ -30637,6 +30709,16 @@
           "catalog_revision": {
             "title": "Catalog Revision",
             "type": "integer"
+          },
+          "chat_at_cap": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ChatAtCap"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "current": {
             "anyOf": [

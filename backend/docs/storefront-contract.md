@@ -182,3 +182,17 @@ Mobile's 80% banner sends `trigger=usage_budget`; `budget_80` remains a source/k
 The `pro_budget80` golden pins Architect's absence at 80% across clients.
 Mobile renders `at_cap` strings verbatim, reads/writes the capability-gated monthly
 choice, then enables on-device processing or opens the usage-budget upgrade surface.
+
+With `LADDER_V1_BUDGET_ENFORCEMENT_ENABLED`, exhausted Free and ladder-v1
+accounts receive additive `chat_at_cap` in the v2 storefront and chat-quota
+payloads. Chat admission returns the same state in a 402 detail. It contains
+`state=paused`, backend-owned `title`, `body`, `reset_line`, Unix-seconds
+`reset_at`, `trigger=usage_budget`, and nullable `upgrade_plan`/`upgrade_label`.
+Free offers Plus, Plus offers Pro, Pro offers Architect only at the cap, and
+Architect waits for reset. Clients render these strings at the composer and
+open the contextual plans sheet with `usage_budget`. Expiry or a fresh payload
+without this state releases the composer; the server independently admits every
+send. Legacy prices and disabled enforcement do not emit the storefront state.
+Capture, held content and on-device transcription/summaries continue. There is
+no fallback chat model or capped fallback allowance (David's October 14 evening
+ruling supersedes ladder decision 7).

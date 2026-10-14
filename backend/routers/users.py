@@ -1498,8 +1498,13 @@ def get_user_chat_usage_quota(
     # Match enforce_desktop_chat_quota: only the provider actually used by
     # desktop chat can exempt it. Other enrolled keys still use managed chat.
     customer_client = get_customer_firestore_client()
-    if users_db.is_byok_active(uid, firestore_client=customer_client) and request_has_byok_provider(
-        DESKTOP_CHAT_BYOK_PROVIDER
+    from utils import ladder_v1
+
+    shared_budget = ladder_v1.budget_snapshot(uid, firestore_client=customer_client)
+    if (
+        shared_budget is None
+        and users_db.is_byok_active(uid, firestore_client=customer_client)
+        and request_has_byok_provider(DESKTOP_CHAT_BYOK_PROVIDER)
     ):
         return ChatUsageQuota(
             plan='Free (BYOK)',
@@ -1542,6 +1547,7 @@ def get_user_chat_usage_quota(
         allowed=snapshot['allowed'],
         reset_at=snapshot['reset_at'],
         is_overage_plan=snapshot.get('is_overage_plan', plan_uses_overage(plan)),
+        chat_at_cap=snapshot.get('chat_at_cap'),
     )
 
 

@@ -85,6 +85,17 @@ class StorefrontCapChoice(BaseModel):
     on_device_upgrade_line: str
 
 
+class ChatAtCap(BaseModel):
+    state: Literal['paused'] = 'paused'
+    title: str
+    body: str
+    reset_at: int
+    reset_line: str
+    trigger: Literal['usage_budget'] = 'usage_budget'
+    upgrade_plan: str | None = None
+    upgrade_label: str | None = None
+
+
 class StorefrontResponse(BaseModel):
     schema_version: Literal[2] = 2
     catalog_revision: int
@@ -95,10 +106,13 @@ class StorefrontResponse(BaseModel):
     tiers: list[StorefrontTier] = Field(default_factory=list)
     yearly_toggle_label: str | None = None
     at_cap: StorefrontCapChoice | None = None
+    chat_at_cap: ChatAtCap | None = None
 
     @model_serializer(mode='wrap')
     def _omit_inactive_cap(self, handler):
         data = handler(self)
+        if self.chat_at_cap is None:
+            data.pop('chat_at_cap', None)
         if self.at_cap is None:
             data.pop('at_cap', None)
         return data

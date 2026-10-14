@@ -1490,6 +1490,52 @@ public enum OmiAPI {
   }
 
 
+  public struct ChatAtCap: Codable {
+    public let body: String
+    public let resetAt: Int
+    public let resetLine: String
+    public let state: String?
+    public let title: String
+    public let trigger: String?
+    public let upgradeLabel: String?
+    public let upgradePlan: String?
+
+    private enum CodingKeys: String, CodingKey {
+      case body
+      case resetAt = "reset_at"
+      case resetLine = "reset_line"
+      case state
+      case title
+      case trigger
+      case upgradeLabel = "upgrade_label"
+      case upgradePlan = "upgrade_plan"
+    }
+
+    public init(from decoder: Decoder) throws {
+      let c = try decoder.container(keyedBy: CodingKeys.self)
+      body = try c.decode(String.self, forKey: .body)
+      resetAt = try c.decode(Int.self, forKey: .resetAt)
+      resetLine = try c.decode(String.self, forKey: .resetLine)
+      state = try c.decodeIfPresent(String.self, forKey: .state)
+      title = try c.decode(String.self, forKey: .title)
+      trigger = try c.decodeIfPresent(String.self, forKey: .trigger)
+      upgradeLabel = try c.decodeIfPresent(String.self, forKey: .upgradeLabel)
+      upgradePlan = try c.decodeIfPresent(String.self, forKey: .upgradePlan)
+    }
+
+    public init(body: String, resetAt: Int, resetLine: String, state: String? = nil, title: String, trigger: String? = nil, upgradeLabel: String? = nil, upgradePlan: String? = nil) {
+      self.body = body
+      self.resetAt = resetAt
+      self.resetLine = resetLine
+      self.state = state
+      self.title = title
+      self.trigger = trigger
+      self.upgradeLabel = upgradeLabel
+      self.upgradePlan = upgradePlan
+    }
+  }
+
+
   public struct ChunkSpan: Codable {
     public let end: Double
     public let start: Double
@@ -5188,6 +5234,7 @@ public enum OmiAPI {
   public struct StorefrontResponse: Codable {
     public let atCap: StorefrontCapChoice?
     public let catalogRevision: Int
+    public let chatAtCap: ChatAtCap?
     public let current: StorefrontCurrent?
     public let header: String?
     public let schemaVersion: Int?
@@ -5199,6 +5246,7 @@ public enum OmiAPI {
     private enum CodingKeys: String, CodingKey {
       case atCap = "at_cap"
       case catalogRevision = "catalog_revision"
+      case chatAtCap = "chat_at_cap"
       case current
       case header
       case schemaVersion = "schema_version"
@@ -5212,6 +5260,7 @@ public enum OmiAPI {
       let c = try decoder.container(keyedBy: CodingKeys.self)
       atCap = try c.decodeIfPresent(StorefrontCapChoice.self, forKey: .atCap)
       catalogRevision = try c.decode(Int.self, forKey: .catalogRevision)
+      chatAtCap = try c.decodeIfPresent(ChatAtCap.self, forKey: .chatAtCap)
       current = try c.decodeIfPresent(StorefrontCurrent.self, forKey: .current)
       header = try c.decodeIfPresent(String.self, forKey: .header)
       schemaVersion = try c.decodeIfPresent(Int.self, forKey: .schemaVersion)
@@ -5221,9 +5270,10 @@ public enum OmiAPI {
       yearlyToggleLabel = try c.decodeIfPresent(String.self, forKey: .yearlyToggleLabel)
     }
 
-    public init(atCap: StorefrontCapChoice? = nil, catalogRevision: Int, current: StorefrontCurrent? = nil, header: String? = nil, schemaVersion: Int? = nil, showSubscriptionUi: Bool? = nil, tiers: [StorefrontTier]? = nil, usage: StorefrontUsage? = nil, yearlyToggleLabel: String? = nil) {
+    public init(atCap: StorefrontCapChoice? = nil, catalogRevision: Int, chatAtCap: ChatAtCap? = nil, current: StorefrontCurrent? = nil, header: String? = nil, schemaVersion: Int? = nil, showSubscriptionUi: Bool? = nil, tiers: [StorefrontTier]? = nil, usage: StorefrontUsage? = nil, yearlyToggleLabel: String? = nil) {
       self.atCap = atCap
       self.catalogRevision = catalogRevision
+      self.chatAtCap = chatAtCap
       self.current = current
       self.header = header
       self.schemaVersion = schemaVersion
