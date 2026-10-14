@@ -1,3 +1,21 @@
+diff --git a/desktop/macos/CHANGELOG.json b/desktop/macos/CHANGELOG.json
+index 6ffe464c0837..4531c7b8a02d 100644
+--- a/desktop/macos/CHANGELOG.json
++++ b/desktop/macos/CHANGELOG.json
+@@ -1,13 +1,6 @@
+ {
+   "unreleased": [],
+   "releases": [
+-    {
+-      "version": "0.12.485",
+-      "date": "2026-10-14",
+-      "changes": [
+-        "Saved conversations waiting on your allowance show a waiting state instead of a padlock"
+-      ]
+-    },
+     {
+       "version": "0.12.484",
+       "date": "2026-10-14",
 diff --git a/desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeHubSessionPolicies.swift b/desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeHubSessionPolicies.swift
 index e60bf96c10b9..5d1255d88907 100644
 --- a/desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeHubSessionPolicies.swift
@@ -12,6 +30,69 @@ index e60bf96c10b9..5d1255d88907 100644
          return .backendClientRejected
        }
      }
+diff --git a/desktop/macos/Desktop/Sources/MainWindow/Components/ConversationRowView.swift b/desktop/macos/Desktop/Sources/MainWindow/Components/ConversationRowView.swift
+index 044a001bb0b7..0ea0bbce235d 100644
+--- a/desktop/macos/Desktop/Sources/MainWindow/Components/ConversationRowView.swift
++++ b/desktop/macos/Desktop/Sources/MainWindow/Components/ConversationRowView.swift
+@@ -387,15 +387,11 @@ struct ConversationRowView: View {
+       // Title + metadata below
+       VStack(alignment: .leading, spacing: OmiSpacing.hairline) {
+         HStack(spacing: OmiSpacing.sm) {
+-          // The locked badge already says "Saved and waiting"; the title slot
+-          // stays quiet so the pill isn't duplicated beside itself.
+-          if conversation.displayState != .locked {
+-            Text(conversation.displayTitle)
+-              .scaledFont(size: OmiType.body, weight: .medium)
+-              .foregroundColor(titleColor)
+-              .lineLimit(1)
+-              .help(conversation.displayTitle)
+-          }
++          Text(conversation.displayTitle)
++            .scaledFont(size: OmiType.body, weight: .medium)
++            .foregroundColor(titleColor)
++            .lineLimit(1)
++            .help(conversation.displayTitle)
+ 
+           statusCluster(phase: phase)
+ 
+@@ -437,14 +433,11 @@ struct ConversationRowView: View {
+       // Title + time/duration below
+       VStack(alignment: .leading, spacing: OmiSpacing.hairline) {
+         HStack(spacing: OmiSpacing.sm) {
+-          // The locked badge carries the waiting copy; no duplicate title.
+-          if conversation.displayState != .locked {
+-            Text(conversation.displayTitle)
+-              .scaledFont(size: OmiType.subheading, weight: .medium)
+-              .foregroundColor(titleColor)
+-              .lineLimit(1)
+-              .help(conversation.displayTitle)
+-          }
++          Text(conversation.displayTitle)
++            .scaledFont(size: OmiType.subheading, weight: .medium)
++            .foregroundColor(titleColor)
++            .lineLimit(1)
++            .help(conversation.displayTitle)
+ 
+           statusCluster(phase: phase)
+ 
+diff --git a/desktop/macos/Desktop/Sources/MainWindow/Components/ConversationStatusBadge.swift b/desktop/macos/Desktop/Sources/MainWindow/Components/ConversationStatusBadge.swift
+index f829c381a8b8..f6744d87e978 100644
+--- a/desktop/macos/Desktop/Sources/MainWindow/Components/ConversationStatusBadge.swift
++++ b/desktop/macos/Desktop/Sources/MainWindow/Components/ConversationStatusBadge.swift
+@@ -23,10 +23,10 @@ struct ConversationStatusBadge: View {
+       )
+     case .locked:
+       Pill(
+-        icon: "hourglass",
+-        text: "Saved and waiting",
++        icon: "lock.fill",
++        text: "Locked",
+         color: PageGlass.warning,
+-        help: "This conversation is saved. Check your plan and usage to see when processing is available."
++        help: "This conversation is locked until your subscription is active."
+       )
+     case .failed:
+       Pill(
 diff --git a/desktop/macos/Desktop/Sources/MainWindow/Components/UserFacingErrorPresentation.swift b/desktop/macos/Desktop/Sources/MainWindow/Components/UserFacingErrorPresentation.swift
 index 4b5c9ff05bf3..3caa86a3caa6 100644
 --- a/desktop/macos/Desktop/Sources/MainWindow/Components/UserFacingErrorPresentation.swift
@@ -28,8 +109,36 @@ index 4b5c9ff05bf3..3caa86a3caa6 100644
        case .syncRateLimited:
          return "Omi is busy right now. Try again in a moment."
        case .unsupportedTierScopedBulkMutation:
+diff --git a/desktop/macos/Desktop/Sources/MainWindow/Pages/ConversationDetailHeader.swift b/desktop/macos/Desktop/Sources/MainWindow/Pages/ConversationDetailHeader.swift
+index 5134ee297be9..0c43ca90f746 100644
+--- a/desktop/macos/Desktop/Sources/MainWindow/Pages/ConversationDetailHeader.swift
++++ b/desktop/macos/Desktop/Sources/MainWindow/Pages/ConversationDetailHeader.swift
+@@ -123,16 +123,13 @@ struct ConversationDetailHeader<BannerInset: View, Recordings: View, Trailing: V
+         Text(conversation.structured.emoji)
+           .scaledFont(size: OmiType.heading)
+       }
+-      // The locked badge carries the waiting copy; no duplicate title beside it.
+-      if conversation.displayState != .locked {
+-        Text(conversation.displayTitle)
+-          .scaledFont(size: OmiType.heading, weight: .semibold)
+-          .foregroundColor(titleColor)
+-          .lineLimit(2)
+-          .truncationMode(.tail)
+-          .help(conversation.displayTitle)
+-          .layoutPriority(1)
+-      }
++      Text(conversation.displayTitle)
++        .scaledFont(size: OmiType.heading, weight: .semibold)
++        .foregroundColor(titleColor)
++        .lineLimit(2)
++        .truncationMode(.tail)
++        .help(conversation.displayTitle)
++        .layoutPriority(1)
+       // Fixed so a narrow window truncates the title, never wraps the badge.
+       ConversationStatusBadge(state: conversation.displayState)
+         .fixedSize()
 diff --git a/desktop/macos/Desktop/Sources/MainWindow/Pages/MemoriesPage.swift b/desktop/macos/Desktop/Sources/MainWindow/Pages/MemoriesPage.swift
-index df6ab609002b..ee18208d584c 100644
+index df6ab609002b..2a72698b8875 100644
 --- a/desktop/macos/Desktop/Sources/MainWindow/Pages/MemoriesPage.swift
 +++ b/desktop/macos/Desktop/Sources/MainWindow/Pages/MemoriesPage.swift
 @@ -570,12 +570,17 @@ class MemoriesViewModel: ObservableObject {
@@ -51,7 +160,17 @@ index df6ab609002b..ee18208d584c 100644
      // Owner fencing: an in-place account switch posts only
      // .runtimeOwnerDidChange (never .userDidSignOut), so without this reset the
      // previous owner's memories keep rendering until the container's deferred
-@@ -1363,10 +1368,11 @@ class MemoriesViewModel: ObservableObject {
+@@ -698,6 +703,9 @@ class MemoriesViewModel: ObservableObject {
+   func resetSessionState() {
+     deleteTask?.cancel()
+     deleteTask = nil
++    // A retry armed under the previous owner must never delete the next
++    // owner's server rows after the switch reopens the session.
++    deferredDeleteRetry.cancelAll()
+     // Fence late cache/API completions from the previous signed-in owner.
+     bumpScopeGeneration()
+     memories = []
+@@ -1363,10 +1371,11 @@ class MemoriesViewModel: ObservableObject {
  
      isLoading = false
  
@@ -64,7 +183,7 @@ index df6ab609002b..ee18208d584c 100644
      }
    }
  
-@@ -1391,8 +1397,11 @@ class MemoriesViewModel: ObservableObject {
+@@ -1391,8 +1400,18 @@ class MemoriesViewModel: ObservableObject {
    /// population. `softDeleteSyncedOrphans` only touches rows with a non-nil
    /// backendId, so local-only memories that were never synced are never pruned.
    ///
@@ -75,10 +194,44 @@ index df6ab609002b..ee18208d584c 100644
 +  /// and never reaches the prune; a truncated pull returns early above. An
 +  /// empty complete pull means the account is empty, and an empty keep-set is
 +  /// what clears zombie rows a wiped account keeps rendering from the cache.
++  ///
++  /// Every write is fenced to the owner that captured the authorization
++  /// snapshot: an account switch mid-pull reopens `databasePool()` for the new
++  /// owner, so an unfenced sync or prune would write the previous owner's rows
++  /// into — or tombstone them out of — the new owner's store. A fence mismatch
++  /// aborts without pruning and without latching, so the new owner's own
++  /// reconcile runs clean.
    ///
    /// Runs once per launch rather than once per user: a delete on another device
    /// can happen at any time, so a permanent one-shot latch would converge the
-@@ -1438,20 +1447,14 @@ class MemoriesViewModel: ObservableObject {
+@@ -1408,6 +1427,12 @@ class MemoriesViewModel: ObservableObject {
+     let batchSize = 500
+     var backendIds = Set<String>()
+     let authorizationSnapshot = RuntimeOwnerIdentity.captureAuthorizationSnapshot()
++    // A nil snapshot means the owner was mid-transition when the reconcile
++    // started; no owner can then authorize the prune.
++    func ownerStillAuthorized() -> Bool {
++      guard let authorizationSnapshot else { return false }
++      return RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot)
++    }
+ 
+     do {
+       var truncated = false
+@@ -1424,6 +1449,13 @@ class MemoriesViewModel: ObservableObject {
+         }
+         if batch.isEmpty && page.nextCursor == nil { break }
+ 
++        // The fetch awaited: the owner may have switched while it was in
++        // flight. Syncing now would write the previous owner's rows into the
++        // new owner's reopened store.
++        guard ownerStillAuthorized() else {
++          log("MemoriesViewModel: Cache reconcile aborted because the signed-in owner changed mid-pull")
++          return
++        }
+         try await MemoryStorage.shared.syncServerMemories(batch)
+         for memory in batch { backendIds.insert(memory.id) }
+ 
+@@ -1438,20 +1470,22 @@ class MemoriesViewModel: ObservableObject {
          return
        }
  
@@ -87,8 +240,14 @@ index df6ab609002b..ee18208d584c 100644
 -      // the entire local cache. Treat it as no evidence rather than as absence.
 -      guard !backendIds.isEmpty else {
 -        log("MemoriesViewModel: Cache reconcile skipped pruning (no backend memories returned)")
--        return
--      }
++      // The keep-set belongs to the owner that pulled it. Pruning after a
++      // switch would judge the new owner's rows against the previous owner's
++      // keep-set — an empty set would tombstone every synced row the new
++      // account still has.
++      guard ownerStillAuthorized() else {
++        log("MemoriesViewModel: Cache reconcile aborted before pruning because the signed-in owner changed")
+         return
+       }
 -
        let pruned = try await MemoryStorage.shared.softDeleteSyncedOrphans(
          keepingBackendIds: backendIds,
@@ -102,7 +261,7 @@ index df6ab609002b..ee18208d584c 100644
          log("MemoriesViewModel: Cache reconcile pruned \(pruned) memories deleted on another device")
        }
  
-@@ -1467,23 +1470,6 @@ class MemoriesViewModel: ObservableObject {
+@@ -1467,23 +1501,6 @@ class MemoriesViewModel: ObservableObject {
    /// are the risky part of this function, not the transport.
    var reconcilePageFetch: ((Int, String?, RuntimeOwnerAuthorizationSnapshot?) async throws -> APIClient.MemoryListPage)?
  
@@ -126,7 +285,32 @@ index df6ab609002b..ee18208d584c 100644
    /// Reconcile runs once per launch per user; see `reconcileCacheIfNeeded`.
    private static var reconciledUserIDsThisLaunch: Set<String> = []
  
-@@ -1859,7 +1845,7 @@ class MemoriesViewModel: ObservableObject {
+@@ -1769,6 +1786,10 @@ class MemoriesViewModel: ObservableObject {
+     // Cancel any existing pending delete
+     deleteTask?.cancel()
+     if let existingPending = pendingDeleteMemory {
++      // Drop only this row's deferred retry (a gate-busy failure armed while
++      // its undo window was still open); retries pending for other rows keep
++      // their slots. The direct delete below supersedes the retry.
++      deferredDeleteRetry.cancel(memoryID: existingPending.id)
+       // Immediately delete the previous pending memory
+       await performActualDelete(existingPending)
+     }
+@@ -1825,6 +1846,13 @@ class MemoriesViewModel: ObservableObject {
+     deleteTask?.cancel()
+     deleteTask = nil
+ 
++    // Cancel this row's deferred retry before restoring, or a gate-busy retry
++    // would delete the server row the user just put back. If the retry's (or
++    // the confirm's) delete request is already in flight there is nothing to
++    // un-send: the server delete completes and the next server pull
++    // re-aligns the row. Do not attempt an un-delete.
++    deferredDeleteRetry.cancel(memoryID: memory.id)
++
+     OmiMotion.withGated(.easeInOut(duration: 0.2)) {
+       pendingDeleteMemory = nil
+       undoTimeRemaining = 0
+@@ -1859,7 +1887,7 @@ class MemoriesViewModel: ObservableObject {
      }
    }
  
@@ -135,19 +319,20 @@ index df6ab609002b..ee18208d584c 100644
      guard finalizingDeleteMemoryIDs.insert(memory.id).inserted else { return }
      defer { finalizingDeleteMemoryIDs.remove(memory.id) }
  
-@@ -1877,6 +1863,20 @@ class MemoriesViewModel: ObservableObject {
+@@ -1877,6 +1905,21 @@ class MemoriesViewModel: ObservableObject {
        // undo window; decrementing earlier would re-fetch and duplicate it.
        rawBackendOffset = max(0, rawBackendOffset - 1)
      } catch {
 +      // A gate-busy 409 asks for a short backoff, not a refusal: restoring made
 +      // every delete during a retention-cleanup window resurrect seconds after
-+      // confirmation. Keep the row soft-deleted; the initial attempt arms the
-+      // one deferred retry, and a still-busy retry stops without restoring.
++      // confirmation. Keep the row soft-deleted; the initial attempt arms this
++      // row's one deferred retry (keyed by memory id, so another row's delete
++      // cannot cancel it), and a still-busy retry stops without restoring.
 +      if let retryDelay = MemoryDeleteRecovery.retryDelay(for: error) {
 +        logError("MemoriesViewModel: Delete deferred by busy account gate", error: error)
 +        errorMessage = UserFacingErrorPresentation.message(for: error, while: .memoryDeletion)
 +        if allowsDeferredRetry {
-+          deferredDeleteRetry.schedule(after: retryDelay) { [weak self] in
++          deferredDeleteRetry.schedule(after: retryDelay, memoryID: memory.id) { [weak self] in
 +            await self?.performActualDelete(memory, allowsDeferredRetry: false)
 +          }
 +        }
@@ -213,10 +398,10 @@ index 000000000000..0fd3dbd7d8f3
 +}
 diff --git a/desktop/macos/Desktop/Sources/MainWindow/Pages/MemoriesViewModel+DeleteRecovery.swift b/desktop/macos/Desktop/Sources/MainWindow/Pages/MemoriesViewModel+DeleteRecovery.swift
 new file mode 100644
-index 000000000000..ba3e494b7d05
+index 000000000000..efd28c292734
 --- /dev/null
 +++ b/desktop/macos/Desktop/Sources/MainWindow/Pages/MemoriesViewModel+DeleteRecovery.swift
-@@ -0,0 +1,102 @@
+@@ -0,0 +1,154 @@
 +import Foundation
 +
 +/// Classifies a failed server memory delete and bounds its deferred retry.
@@ -258,61 +443,113 @@ index 000000000000..ba3e494b7d05
 +  }
 +}
 +
-+/// Runs the single deferred retry for a gate-busy delete.
++/// Runs the deferred retry for a gate-busy delete, one slot per memory id.
 +///
-+/// Holds at most one pending retry: a new schedule replaces (cancels) the
-+/// previous one, so repeated failures cannot accumulate tasks. The task holds
-+/// the scheduler weakly and the scheduler cancels its task on deinit, so a
-+/// deallocated view model cannot fire a late retry into a fresh instance.
-+/// The sleeper is injected so tests drive the delay deterministically.
++/// Deleting a second memory during a first memory's retry window must not
++/// cancel the first memory's only server delete, so pending retries are keyed
++/// by memory id: a new `schedule` for id X replaces (cancels) only X's
++/// previous retry. Pending retries are bounded (`maxPendingRetries`, evicting
++/// the oldest first) so a pathological loop cannot accumulate unbounded work.
++/// The task holds the scheduler weakly and the scheduler cancels its tasks on
++/// deinit, so a deallocated view model cannot fire a late retry into a fresh
++/// instance. The sleeper is injected so tests drive the delay deterministically.
 +@MainActor
 +final class MemoryDeleteRetryScheduler {
 +  typealias Sleeper = @Sendable (TimeInterval) async throws -> Void
 +
++  /// Bound on concurrently pending retries. Eviction is FIFO: the oldest
++  /// pending retry is cancelled first, which leaves its row soft-deleted —
++  /// exactly the state a still-busy gate already produces.
++  static let maxPendingRetries = 8
++
 +  private let sleeper: Sleeper
-+  private var task: Task<Void, Never>?
++  private var tasks: [String: Task<Void, Never>] = [:]
++  /// Pending ids in schedule order, for FIFO eviction and `pendingDelay`.
++  private var pendingIDs: [String] = []
++  private var pendingDelays: [String: TimeInterval] = [:]
 +
-+  /// Delay of the currently pending retry, or nil when none is scheduled.
-+  private(set) var pendingDelay: TimeInterval?
++  /// Delay of the most recently scheduled pending retry, or nil when none is
++  /// scheduled.
++  var pendingDelay: TimeInterval? {
++    pendingIDs.last.flatMap { pendingDelays[$0] }
++  }
 +
-+  /// How many deferred retries have actually run.
++  /// How many deferred retries have actually run, across all memory ids.
 +  private(set) var retryCount = 0
 +
 +  init(sleeper: Sleeper? = nil) {
 +    self.sleeper = sleeper ?? MemoryDeleteRetryScheduler.taskSleeper
 +  }
 +
-+  /// Schedule one deferred `retry`. A pending retry is cancelled first; when
-+  /// the sleeper throws (cancellation) the retry is dropped without running.
-+  func schedule(after delay: TimeInterval, retry: @escaping @MainActor () async -> Void) {
-+    task?.cancel()
-+    pendingDelay = delay
-+    task = Task { [weak self] in
++  /// Schedule one deferred `retry` for `memoryID`. A pending retry for the
++  /// same memory is cancelled first; retries pending for other memories are
++  /// left alone. When the sleeper throws (cancellation) the retry is dropped
++  /// without running.
++  func schedule(
++    after delay: TimeInterval,
++    memoryID: String,
++    retry: @escaping @MainActor () async -> Void
++  ) {
++    cancel(memoryID: memoryID)
++    if pendingIDs.count >= Self.maxPendingRetries, let oldest = pendingIDs.first {
++      cancel(memoryID: oldest)
++    }
++    pendingIDs.append(memoryID)
++    pendingDelays[memoryID] = delay
++    tasks[memoryID] = Task { [weak self] in
 +      guard let self else { return }
 +      do {
 +        try await self.sleeper(delay)
 +      } catch {
-+        self.pendingDelay = nil
++        self.finishPending(memoryID: memoryID)
 +        return
 +      }
++      // A cancellation that landed during the sleep (undo, session reset, or
++      // replacement by a newer schedule) must never reach the delete.
 +      guard !Task.isCancelled else {
-+        self.pendingDelay = nil
++        self.finishPending(memoryID: memoryID)
 +        return
 +      }
-+      self.pendingDelay = nil
++      self.finishPending(memoryID: memoryID)
 +      self.retryCount += 1
 +      await retry()
 +    }
 +  }
 +
-+  func cancel() {
-+    task?.cancel()
-+    task = nil
-+    pendingDelay = nil
++  /// Cancel `memoryID`'s pending retry only; other ids' retries survive.
++  func cancel(memoryID: String) {
++    tasks.removeValue(forKey: memoryID)?.cancel()
++    finishPending(memoryID: memoryID)
++  }
++
++  /// Cancel every pending retry (sign-out / owner switch).
++  func cancelAll() {
++    for task in tasks.values {
++      task.cancel()
++    }
++    tasks.removeAll()
++    pendingIDs.removeAll()
++    pendingDelays.removeAll()
++  }
++
++  /// Whether `memoryID` still has a retry waiting to fire.
++  func hasPendingRetry(for memoryID: String) -> Bool {
++    tasks[memoryID] != nil
++  }
++
++  /// How many retries are currently pending.
++  var pendingCount: Int { pendingIDs.count }
++
++  private func finishPending(memoryID: String) {
++    tasks.removeValue(forKey: memoryID)
++    pendingIDs.removeAll { $0 == memoryID }
++    pendingDelays.removeValue(forKey: memoryID)
 +  }
 +
 +  deinit {
-+    task?.cancel()
++    for task in tasks.values {
++      task.cancel()
++    }
 +  }
 +
 +  static let taskSleeper: Sleeper = { delay in
@@ -368,6 +605,22 @@ index 000000000000..a98d48d9e866
 +    return purged
 +  }
 +}
+diff --git a/desktop/macos/Desktop/Sources/Services/APIClient/APIClient+ConversationModels.swift b/desktop/macos/Desktop/Sources/Services/APIClient/APIClient+ConversationModels.swift
+index d8fcedfb0ed6..07b7dfdc0891 100644
+--- a/desktop/macos/Desktop/Sources/Services/APIClient/APIClient+ConversationModels.swift
++++ b/desktop/macos/Desktop/Sources/Services/APIClient/APIClient+ConversationModels.swift
+@@ -521,10 +521,7 @@ struct ServerConversation: Codable, Identifiable, Equatable {
+     switch displayState {
+     case .titled(let title): return title
+     case .processing, .awaitingFirstOpen: return provisionalTitle
+-    // Matches the badge's waiting copy; rows/header that show the badge skip
+-    // the title text so the pill is not duplicated beside itself. Plain-string
+-    // callers (Spine tiles, link lists, accessibility) still get honest copy.
+-    case .locked: return "Saved and waiting"
++    case .locked: return "Locked"
+     case .failed: return "Failed to process"
+     case .untitledRecoverable, .untitledEmpty: return "Untitled"
+     }
 diff --git a/desktop/macos/Desktop/Sources/Services/APIClient/APIClient+Memories.swift b/desktop/macos/Desktop/Sources/Services/APIClient/APIClient+Memories.swift
 index 01fe6400a061..9b457bc8deb9 100644
 --- a/desktop/macos/Desktop/Sources/Services/APIClient/APIClient+Memories.swift
@@ -549,11 +802,65 @@ index bc3b617a2a8e..c7f10984fca2 100644
 +    }
 +  }
  }
+diff --git a/desktop/macos/Desktop/Tests/ConversationDisplayStateTests.swift b/desktop/macos/Desktop/Tests/ConversationDisplayStateTests.swift
+index 87f103538f12..55c1ada8811c 100644
+--- a/desktop/macos/Desktop/Tests/ConversationDisplayStateTests.swift
++++ b/desktop/macos/Desktop/Tests/ConversationDisplayStateTests.swift
+@@ -90,7 +90,7 @@ final class ConversationDisplayStateTests: XCTestCase {
+       segments: [segment("plenty of words to look recoverable normally")]
+     )
+     XCTAssertEqual(conv.displayState, .locked)
+-    XCTAssertEqual(conv.displayTitle, "Saved and waiting")
++    XCTAssertEqual(conv.displayTitle, "Locked")
+     XCTAssertFalse(conv.canReprocess, "Reprocess shouldn't be offered while locked")
+   }
+ 
 diff --git a/desktop/macos/Desktop/Tests/MemoriesCacheReconcilePruneTests.swift b/desktop/macos/Desktop/Tests/MemoriesCacheReconcilePruneTests.swift
-index b64042842d51..d52abf60780e 100644
+index b64042842d51..27707da34320 100644
 --- a/desktop/macos/Desktop/Tests/MemoriesCacheReconcilePruneTests.swift
 +++ b/desktop/macos/Desktop/Tests/MemoriesCacheReconcilePruneTests.swift
-@@ -126,7 +126,11 @@ final class MemoriesCacheReconcilePruneTests: XCTestCase {
+@@ -14,17 +14,26 @@ import XCTest
+ final class MemoriesCacheReconcilePruneTests: XCTestCase {
+   private var userDir: URL?
+   private var authSnapshot: RewindStorageTestIsolation.AuthSnapshot?
++  private var testUserId: String?
+ 
+   override func setUp() async throws {
+     authSnapshot = RewindStorageTestIsolation.captureAuthSnapshot()
+     let fixture = try await RewindStorageTestIsolation.setUp(userIdPrefix: "memories-reconcile-prune")
+     userDir = fixture.userDir
++    testUserId = fixture.testUserId
+     RewindStorageTestIsolation.signInForTests(userId: fixture.testUserId)
++    // Align the process-global owner authority with this throwaway user, the
++    // way a real signed-in session does, so the reconcile's owner fence
++    // (capture → isAuthorizationCurrent) observes a stable owner.
++    RuntimeOwnerAuthorizationAuthority.shared.beginTransition()
++    RuntimeOwnerAuthorizationAuthority.shared.endTransition(ownerID: fixture.testUserId)
+   }
+ 
+   override func tearDown() async throws {
+     if let authSnapshot {
+       RewindStorageTestIsolation.restoreAuthSnapshot(authSnapshot)
++      RuntimeOwnerAuthorizationAuthority.shared.beginTransition()
++      RuntimeOwnerAuthorizationAuthority.shared.endTransition(ownerID: authSnapshot.userId)
+     }
+     if let userDir {
+       await RewindStorageTestIsolation.tearDown(userDir: userDir)
+@@ -33,11 +42,12 @@ final class MemoriesCacheReconcilePruneTests: XCTestCase {
+ 
+   private func page(
+     _ memories: [ServerMemory],
++    nextCursor: String? = nil,
+     truncated: Bool = false
+   ) -> APIClient.MemoryListPage {
+     APIClient.MemoryListPage(
+       memories: memories,
+-      nextCursor: nil,
++      nextCursor: nextCursor,
+       canonicalLifecycleExposed: false,
+       deviceScopeSupported: true,
+       defaultMemoryDeleteSupported: true,
+@@ -126,7 +136,11 @@ final class MemoriesCacheReconcilePruneTests: XCTestCase {
        "a truncated pull saw only part of the backend, so absence proves nothing")
    }
  
@@ -566,7 +873,7 @@ index b64042842d51..d52abf60780e 100644
      let existing = makeMemory(id: "existing", tier: .longTerm)
      try await MemoryStorage.shared.syncServerMemories([existing])
  
-@@ -134,7 +138,24 @@ final class MemoriesCacheReconcilePruneTests: XCTestCase {
+@@ -134,7 +148,74 @@ final class MemoriesCacheReconcilePruneTests: XCTestCase {
  
      let record = try await MemoryStorage.shared.getMemoryByBackendId("existing")
      XCTAssertEqual(
@@ -591,14 +898,64 @@ index b64042842d51..d52abf60780e 100644
 +      unsynced.count, 1,
 +      "a local-only row must never be pruned by the reconcile, even against an empty account")
 +    XCTAssertEqual(unsynced.first?.deleted, false)
++  }
++
++  /// An owner switch between the pull and the prune must fence the prune: the
++  /// keep-set belongs to the owner that pulled it, and `databasePool()` reopens
++  /// for the new owner — so pruning with the stale keep-set (worst case: empty,
++  /// an apparently wiped account) would tombstone the new owner's synced rows.
++  /// The aborted reconcile must also not latch, so the new owner's own
++  /// reconcile runs clean.
++  func testOwnerChangeBetweenPullAndPruneSkipsPruneAndDoesNotLatch() async throws {
++    let synced = makeMemory(id: "new-owner-row", tier: .longTerm)
++    try await MemoryStorage.shared.syncServerMemories([synced])
++
++    var fetches = 0
++    let viewModel = MemoriesViewModel()
++    viewModel.reconcilePageFetch = { [self] _, cursor, _ in
++      fetches += 1
++      if cursor == nil {
++        // First page is empty but continues; the owner switches before the
++        // terminal page, i.e. between the pull loop and the prune.
++        return page([], nextCursor: "switch-after-this-page")
++      }
++      RuntimeOwnerAuthorizationAuthority.shared.beginTransition()
++      RuntimeOwnerAuthorizationAuthority.shared.endTransition(ownerID: "reconcile-other-owner")
++      return page([])
++    }
++
++    await viewModel.reconcileCacheIfNeeded()
++
++    XCTAssertEqual(fetches, 2)
++    let stillThere = try await MemoryStorage.shared.getMemoryByBackendId("new-owner-row")
++    XCTAssertEqual(
++      stillThere?.deleted, false,
++      "the new owner's rows must not be judged by the previous owner's keep-set")
++
++    // No latch: with this user's authority restored, the reconcile must run
++    // again from the top instead of returning before its first fetch.
++    guard let testUserId else { return }
++    RuntimeOwnerAuthorizationAuthority.shared.beginTransition()
++    RuntimeOwnerAuthorizationAuthority.shared.endTransition(ownerID: testUserId)
++    viewModel.reconcilePageFetch = { [self] _, _, _ in
++      fetches += 1
++      return page([])
++    }
++    await viewModel.reconcileCacheIfNeeded()
++
++    XCTAssertEqual(fetches, 3, "the aborted reconcile must not latch its user")
++    let pruned = try await MemoryStorage.shared.getMemoryByBackendId("new-owner-row")
++    XCTAssertEqual(
++      pruned?.deleted, true,
++      "the clean reconcile still treats a verifiably empty account as authoritative")
    }
  }
 diff --git a/desktop/macos/Desktop/Tests/MemoriesDeleteGateBusyRecoveryTests.swift b/desktop/macos/Desktop/Tests/MemoriesDeleteGateBusyRecoveryTests.swift
 new file mode 100644
-index 000000000000..6c4d203242bc
+index 000000000000..cc433c6669e9
 --- /dev/null
 +++ b/desktop/macos/Desktop/Tests/MemoriesDeleteGateBusyRecoveryTests.swift
-@@ -0,0 +1,229 @@
+@@ -0,0 +1,401 @@
 +import XCTest
 +
 +@testable import Omi_Computer
@@ -822,6 +1179,178 @@ index 000000000000..6c4d203242bc
 +    XCTAssertEqual(viewModel.deferredDeleteRetry.retryCount, 0)
 +  }
 +
++  /// Deleting a second memory during a first memory's retry window must not
++  /// cancel the first memory's retry: the scheduler held a single slot, so the
++  /// second schedule silently dropped the first row's only server delete and
++  /// the next refresh resurrected the row the user had confirmed.
++  func testOverlappingGateBusyDeletesKeepBothRetries() async throws {
++    let first = makeServerMemory(id: "gate-busy-first")
++    let second = makeServerMemory(id: "gate-busy-second")
++    try await MemoryStorage.shared.syncServerMemories([first, second])
++
++    let attemptsPerID = Locked<[String: Int]>([:])
++    let parked = Locked<[CheckedContinuation<Void, Never>]>([])
++    let viewModel = MemoriesViewModel(
++      deleteMemoryRequest: { id in
++        // First attempt per id is gate-busy; the deferred retry succeeds.
++        let count = (attemptsPerID.value[id] ?? 0) + 1
++        attemptsPerID.value[id] = count
++        if count == 1 {
++          throw APIError.memoryDeleteGateBusy(retryAfterSeconds: nil)
++        }
++      },
++      deferredRetrySleeper: { _ in
++        await withCheckedContinuation { continuation in
++          parked.value.append(continuation)
++        }
++      }
++    )
++
++    await deleteImmediately(first, on: viewModel)
++    await deleteImmediately(second, on: viewModel)
++    for _ in 0..<1_000 where parked.value.count < 2 { await Task.yield() }
++    XCTAssertEqual(parked.value.count, 2, "both deletes must arm their own retry")
++    XCTAssertEqual(viewModel.deferredDeleteRetry.pendingCount, 2)
++    XCTAssertTrue(viewModel.deferredDeleteRetry.hasPendingRetry(for: first.id))
++    XCTAssertTrue(viewModel.deferredDeleteRetry.hasPendingRetry(for: second.id))
++
++    for continuation in parked.value { continuation.resume() }
++    parked.value = []
++    let bothRetried = { attemptsPerID.value[first.id] == 2 && attemptsPerID.value[second.id] == 2 }
++    for _ in 0..<1_000 where !bothRetried() { await Task.yield() }
++    await settleAsyncWork()
++
++    XCTAssertEqual(
++      [attemptsPerID.value[first.id], attemptsPerID.value[second.id]], [2, 2],
++      "each row got its initial attempt plus its own deferred retry")
++    XCTAssertEqual(viewModel.deferredDeleteRetry.retryCount, 2)
++    XCTAssertEqual(viewModel.deferredDeleteRetry.pendingCount, 0)
++    let firstRecord = try await MemoryStorage.shared.getMemoryByBackendId(first.id)
++    XCTAssertEqual(firstRecord?.deleted, true, "the first row's retry still completed")
++    let secondRecord = try await MemoryStorage.shared.getMemoryByBackendId(second.id)
++    XCTAssertEqual(secondRecord?.deleted, true)
++  }
++
++  /// Undo during a pending retry: the retry is cancelled before the row is
++  /// restored, so the armed 409 retry can no longer delete the server row the
++  /// user just put back.
++  func testUndoDuringPendingRetryCancelsItAndKeepsTheRow() async throws {
++    let memory = makeServerMemory(id: "undo-with-pending-retry")
++    try await MemoryStorage.shared.syncServerMemories([memory])
++
++    let attempts = Locked(0)
++    let parked = Locked<CheckedContinuation<Void, Never>?>(nil)
++    let viewModel = MemoriesViewModel(
++      deleteMemoryRequest: { _ in
++        attempts.value += 1
++        throw APIError.memoryDeleteGateBusy(retryAfterSeconds: nil)
++      },
++      deferredRetrySleeper: { _ in
++        await withCheckedContinuation { continuation in
++          parked.value = continuation
++        }
++      }
++    )
++
++    await deleteImmediately(memory, on: viewModel)
++    for _ in 0..<1_000 where parked.value == nil { await Task.yield() }
++    XCTAssertNotNil(parked.value, "the gate-busy delete armed its deferred retry")
++    XCTAssertTrue(viewModel.deferredDeleteRetry.hasPendingRetry(for: memory.id))
++
++    // Re-open the undo window the way `deleteMemory(_:)` holds it between
++    // finalizing a previous pending delete (which arms the retry) and
++    // installing the new pending row: there, `pendingDeleteMemory` still
++    // names the row whose retry was just armed.
++    viewModel.pendingDeleteMemory = memory
++    viewModel.undoDelete()
++
++    XCTAssertFalse(
++      viewModel.deferredDeleteRetry.hasPendingRetry(for: memory.id),
++      "undo must clear the row's pending retry from the map")
++    parked.value?.resume()
++    parked.value = nil
++    await settleAsyncWork()
++
++    XCTAssertEqual(attempts.value, 1, "no server delete after the undo")
++    XCTAssertEqual(viewModel.deferredDeleteRetry.retryCount, 0)
++    let record = try await MemoryStorage.shared.getMemoryByBackendId(memory.id)
++    XCTAssertEqual(record?.deleted, false, "the row stays restored after undo")
++  }
++
++  /// Session reset (sign-out / owner switch) cancels every pending retry, not
++  /// just the most recent one.
++  func testResetSessionStateCancelsAllPendingRetries() async throws {
++    let first = makeServerMemory(id: "reset-cancels-first")
++    let second = makeServerMemory(id: "reset-cancels-second")
++    try await MemoryStorage.shared.syncServerMemories([first, second])
++
++    let attempts = Locked(0)
++    let parked = Locked<[CheckedContinuation<Void, Never>]>([])
++    let viewModel = MemoriesViewModel(
++      deleteMemoryRequest: { _ in
++        attempts.value += 1
++        throw APIError.memoryDeleteGateBusy(retryAfterSeconds: nil)
++      },
++      deferredRetrySleeper: { _ in
++        await withCheckedContinuation { continuation in
++          parked.value.append(continuation)
++        }
++      }
++    )
++
++    await deleteImmediately(first, on: viewModel)
++    await deleteImmediately(second, on: viewModel)
++    for _ in 0..<1_000 where parked.value.count < 2 { await Task.yield() }
++    XCTAssertEqual(viewModel.deferredDeleteRetry.pendingCount, 2)
++
++    viewModel.resetSessionState()
++
++    XCTAssertEqual(viewModel.deferredDeleteRetry.pendingCount, 0)
++    XCTAssertFalse(viewModel.deferredDeleteRetry.hasPendingRetry(for: first.id))
++    XCTAssertFalse(viewModel.deferredDeleteRetry.hasPendingRetry(for: second.id))
++    for continuation in parked.value { continuation.resume() }
++    parked.value = []
++    await settleAsyncWork()
++    XCTAssertEqual(attempts.value, 2, "no deferred retry fired after the reset")
++    XCTAssertEqual(viewModel.deferredDeleteRetry.retryCount, 0)
++  }
++
++  /// Pending retries are bounded: beyond the cap the oldest pending retry is
++  /// evicted (FIFO), and re-arming an already-pending id replaces its own slot
++  /// instead of evicting another row's.
++  func testPendingRetriesAreCappedByEvictingTheOldest() async {
++    let parked = Locked<[CheckedContinuation<Void, Never>]>([])
++    let scheduler = MemoryDeleteRetryScheduler(
++      sleeper: { _ in
++        await withCheckedContinuation { continuation in
++          parked.value.append(continuation)
++        }
++      }
++    )
++
++    for index in 0..<MemoryDeleteRetryScheduler.maxPendingRetries {
++      scheduler.schedule(after: 1, memoryID: "memory-\(index)") {}
++    }
++    scheduler.schedule(after: 1, memoryID: "memory-new") {}
++
++    XCTAssertEqual(scheduler.pendingCount, MemoryDeleteRetryScheduler.maxPendingRetries)
++    XCTAssertFalse(
++      scheduler.hasPendingRetry(for: "memory-0"), "the oldest pending retry is evicted first")
++    XCTAssertTrue(scheduler.hasPendingRetry(for: "memory-1"))
++    XCTAssertTrue(scheduler.hasPendingRetry(for: "memory-new"))
++
++    // Re-scheduling a pending id replaces its own slot, not another row's.
++    scheduler.schedule(after: 2, memoryID: "memory-1") {}
++    XCTAssertTrue(scheduler.hasPendingRetry(for: "memory-2"))
++    XCTAssertEqual(scheduler.pendingCount, MemoryDeleteRetryScheduler.maxPendingRetries)
++    XCTAssertEqual(
++      scheduler.pendingDelay, 2, "the most recently armed retry reports its delay")
++
++    for continuation in parked.value { continuation.resume() }
++    parked.value = []
++    scheduler.cancelAll()
++  }
++
 +  /// Lets already-started tasks (the retry scheduler hop) drain without a
 +  /// wall-clock wait before asserting no further work appeared.
 +  private func settleAsyncWork() async {
@@ -944,6 +1473,46 @@ index 000000000000..d8f8c0cb6d64
 +      unsynced.count, 1, "the second same-launch purge must not run against the latched user")
 +  }
 +}
+diff --git a/desktop/macos/Desktop/Tests/SubscriptionInfoDecoderTests.swift b/desktop/macos/Desktop/Tests/SubscriptionInfoDecoderTests.swift
+index e7683ce77e9c..e83972a9119f 100644
+--- a/desktop/macos/Desktop/Tests/SubscriptionInfoDecoderTests.swift
++++ b/desktop/macos/Desktop/Tests/SubscriptionInfoDecoderTests.swift
+@@ -183,22 +183,4 @@ final class SubscriptionInfoDecoderTests: XCTestCase {
+     let encoded = try JSONEncoder().encode(plan)
+     XCTAssertEqual(String(data: encoded, encoding: .utf8), #""future_plan_123""#)
+   }
+-  func testUnknownPlanInSubscriptionResponseIgnoresAdditiveFields() throws {
+-    let json = Data(
+-      #"""
+-      {
+-        "subscription": {
+-          "plan": "future_plan_123", "status": "active", "features": [],
+-          "cancel_at_period_end": false, "limits": {"future_allowance": 42},
+-          "future_subscription_field": {"enabled": true}
+-        },
+-        "future_response_field": ["safe"]
+-      }
+-      """#.utf8)
+-    let response = try JSONDecoder().decode(UserSubscriptionResponse.self, from: json)
+-    XCTAssertEqual(response.subscription.plan, .unknown("future_plan_123"))
+-    XCTAssertEqual(response.subscription.plan.displayName, "Plan unavailable")
+-    XCTAssertFalse(response.subscription.plan.hasPaidCapability)
+-  }
+-
+ }
+diff --git a/desktop/macos/changelog/releases/0.12.485.json b/desktop/macos/changelog/releases/0.12.485.json
+deleted file mode 100644
+index 9ade7979c7ec..000000000000
+--- a/desktop/macos/changelog/releases/0.12.485.json
++++ /dev/null
+@@ -1,7 +0,0 @@
+-{
+-  "version": "0.12.485",
+-  "date": "2026-10-14",
+-  "changes": [
+-    "Saved conversations waiting on your allowance show a waiting state instead of a padlock"
+-  ]
+-}
 diff --git a/desktop/macos/changelog/unreleased/20261014-memory-deletion-sticks.json b/desktop/macos/changelog/unreleased/20261014-memory-deletion-sticks.json
 new file mode 100644
 index 000000000000..4d419607fb0f
