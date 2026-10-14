@@ -61,6 +61,8 @@ def test_channel_plan_admission(policy, monkeypatch, plan, telegram, imessage):
         '[]',
         '{"telegram":{"enabled":true,"cohort":true}}',
         '{"imessage":{"enabled":true,"cohort":"*","seat_cap":true}}',
+        '{"imessage":{"enabled":true,"cohort":"*","seat_cap":null}}',
+        '{"imessage":{"enabled":true,"cohort":"*","plans":null}}',
     ],
 )
 def test_malformed_policy_fails_closed(monkeypatch, raw):

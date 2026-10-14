@@ -19,6 +19,8 @@ def channel_policy(channel):
         cohort = row.get('cohort', [])
         plans = row.get('plans', ['operator', 'architect'] if channel == 'imessage' else None)
         cap = row.get('seat_cap', 180 if channel == 'imessage' else None)
+        if channel == 'imessage' and (plans is None or cap is None):
+            raise ValueError('iMessage requires a plan set and seat cap')
         if not isinstance(row.get('enabled'), bool) or not (
             cohort == '*' or isinstance(cohort, list) and all(isinstance(v, str) for v in cohort)
         ):
