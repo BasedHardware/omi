@@ -210,14 +210,14 @@ void main() {
   });
 
   List<ServerConversation> lockedRun() => [
-    for (var i = 0; i < 2; i++)
-      ServerConversation(
-        id: 'locked-$i',
-        createdAt: DateTime.utc(2020, 1, 1, 12 - i),
-        structured: Structured('$_title $i', 'Overview', emoji: '📝'),
-        isLocked: true,
-      ),
-  ];
+        for (var i = 0; i < 2; i++)
+          ServerConversation(
+            id: 'locked-$i',
+            createdAt: DateTime.utc(2020, 1, 1, 12 - i),
+            structured: Structured('$_title $i', 'Overview', emoji: '📝'),
+            isLocked: true,
+          ),
+      ];
 
   testWidgets('rows in a locked run keep their own long-press menu', (tester) async {
     final run = lockedRun();
@@ -250,28 +250,22 @@ void main() {
   });
   for (final visible in [true, false]) {
     for (final grouped in [true, false]) {
-      testWidgets('frost tap on ${grouped ? 'grouped' : 'single'} held conversation visibility $visible', (
-        tester,
-      ) async {
+      testWidgets('frost tap on ${grouped ? 'grouped' : 'single'} held conversation visibility $visible',
+          (tester) async {
         usage.dispose();
         usage = _Usage(visible);
         final routes = _Routes();
         final run = lockedRun();
-        await pumpRow(
-          tester,
-          observer: routes,
-          body: grouped ? LockedConversationRun(conversations: run, date: run.first.createdAt) : null,
-        );
-        final rect = tester.getRect(
-          grouped ? find.byKey(const ValueKey('locked_locked-1')) : find.byType(OmiLockedPreview),
-        );
+        await pumpRow(tester,
+            observer: routes,
+            body: grouped ? LockedConversationRun(conversations: run, date: run.first.createdAt) : null);
+        final rect =
+            tester.getRect(grouped ? find.byKey(const ValueKey('locked_locked-1')) : find.byType(OmiLockedPreview));
         await tester.tapAt(Offset(rect.left + 16, rect.center.dy));
         expect(routes.pushed, hasLength(visible ? 2 : 1));
         if (visible) {
-          expect(
-            (routes.pushed.last as MaterialPageRoute).builder(tester.element(find.byType(OmiLockedPreview))),
-            isA<UsagePage>(),
-          );
+          expect((routes.pushed.last as MaterialPageRoute).builder(tester.element(find.byType(OmiLockedPreview))),
+              isA<UsagePage>());
           await tester.pumpWidget(const SizedBox.shrink());
         } else {
           await tester.pumpAndSettle();
@@ -288,20 +282,15 @@ void main() {
       usage = _Usage(visible);
       final routes = _Routes();
       final run = lockedRun();
-      await pumpRow(
-        tester,
-        observer: routes,
-        body: LockedConversationRun(conversations: run, date: run.first.createdAt),
-      );
+      await pumpRow(tester,
+          observer: routes, body: LockedConversationRun(conversations: run, date: run.first.createdAt));
       final first = tester.getRect(find.byKey(const ValueKey('locked_locked-0')));
       final second = tester.getRect(find.byKey(const ValueKey('locked_locked-1')));
       await tester.tapAt(Offset(first.left + 16, (first.bottom + second.top) / 2));
       expect(routes.pushed, hasLength(visible ? 2 : 1));
       if (visible) {
-        expect(
-          (routes.pushed.last as MaterialPageRoute).builder(tester.element(find.byType(LockedConversationRun))),
-          isA<UsagePage>(),
-        );
+        expect((routes.pushed.last as MaterialPageRoute).builder(tester.element(find.byType(LockedConversationRun))),
+            isA<UsagePage>());
         await tester.pumpWidget(const SizedBox.shrink());
       } else {
         await tester.pumpAndSettle();

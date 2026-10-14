@@ -30,35 +30,28 @@ void main() {
     addTearDown(provider.dispose);
     addTearDown(usage.dispose);
     final memory = Memory(
-      id: 'held',
-      uid: 'fixture',
-      content: 'OK',
-      category: MemoryCategory.system,
-      createdAt: DateTime.utc(2026),
-      updatedAt: DateTime.utc(2026),
-      visibility: MemoryVisibility.private,
-      isLocked: true,
-    );
-    await tester.pumpWidget(
-      ChangeNotifierProvider<UsageProvider>.value(
-        value: usage,
-        child: MaterialApp(
-          theme: buildOmiTheme(),
-          localizationsDelegates: AppLocalizations.localizationsDelegates,
-          supportedLocales: const [Locale('en')],
-          builder: (context, child) => MediaQuery(
-            data: MediaQuery.of(context).copyWith(textScaler: const TextScaler.linear(2)),
-            child: child!,
-          ),
-          home: Scaffold(
+        id: 'held',
+        uid: 'fixture',
+        content: 'OK',
+        category: MemoryCategory.system,
+        createdAt: DateTime.utc(2026),
+        updatedAt: DateTime.utc(2026),
+        visibility: MemoryVisibility.private,
+        isLocked: true);
+    await tester.pumpWidget(ChangeNotifierProvider<UsageProvider>.value(
+      value: usage,
+      child: MaterialApp(
+        theme: buildOmiTheme(),
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: const [Locale('en')],
+        builder: (context, child) =>
+            MediaQuery(data: MediaQuery.of(context).copyWith(textScaler: const TextScaler.linear(2)), child: child!),
+        home: Scaffold(
             body: SizedBox(
-              width: 340,
-              child: MemoryItem(memory: memory, provider: provider, showDismissible: false, onTap: (_, __, ___) {}),
-            ),
-          ),
-        ),
+                width: 340,
+                child: MemoryItem(memory: memory, provider: provider, showDismissible: false, onTap: (_, __, ___) {}))),
       ),
-    );
+    ));
     expect(find.text('Pending'), findsOneWidget);
     expect(find.text('View Usage'), findsOneWidget);
     expect(find.byIcon(Icons.lock_outline), findsNothing);
@@ -88,31 +81,25 @@ void main() {
           visibility: MemoryVisibility.private,
           isLocked: true,
         );
-        await tester.pumpWidget(
-          ChangeNotifierProvider<UsageProvider>.value(
-            value: usage,
-            child: MaterialApp(
-              theme: buildOmiTheme(),
-              navigatorObservers: [routes],
-              localizationsDelegates: AppLocalizations.localizationsDelegates,
-              supportedLocales: const [Locale('en')],
-              home: Scaffold(
+        await tester.pumpWidget(ChangeNotifierProvider<UsageProvider>.value(
+          value: usage,
+          child: MaterialApp(
+            theme: buildOmiTheme(),
+            navigatorObservers: [routes],
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            supportedLocales: const [Locale('en')],
+            home: Scaffold(
                 body: Align(
-                  alignment: Alignment.topLeft,
-                  child: SizedBox(
-                    width: 340,
-                    child: MemoryItem(
-                      memory: memory,
-                      provider: provider,
-                      showDismissible: false,
-                      onTap: (_, __, ___) => editCalls++,
-                    ),
-                  ),
-                ),
-              ),
-            ),
+                    alignment: Alignment.topLeft,
+                    child: SizedBox(
+                        width: 340,
+                        child: MemoryItem(
+                            memory: memory,
+                            provider: provider,
+                            showDismissible: false,
+                            onTap: (_, __, ___) => editCalls++)))),
           ),
-        );
+        ));
         final preview = tester.getRect(find.byType(OmiLockedPreview));
         if (target == 'button') {
           await tester.tap(find.byKey(const Key('locked_preview_action')));
@@ -123,9 +110,8 @@ void main() {
         expect(editCalls, 0);
         expect(routes.pushed, hasLength(2));
         if (visible) {
-          final destination = (routes.pushed.last as MaterialPageRoute).builder(
-            tester.element(find.byType(MemoryItem)),
-          );
+          final destination =
+              (routes.pushed.last as MaterialPageRoute).builder(tester.element(find.byType(MemoryItem)));
           expect(destination, isA<UsagePage>());
           expect((destination as UsagePage).showUpgradeDialog, isFalse);
           expect(find.byType(MemoryEditSheet), findsNothing);

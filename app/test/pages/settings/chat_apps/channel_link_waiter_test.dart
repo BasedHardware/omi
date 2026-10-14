@@ -30,12 +30,10 @@ void main() {
     ChannelLinkWaiter.interval = const Duration(milliseconds: 100);
     final backend = FakeMessagingBackend();
     final key = GlobalKey<_WaiterState>();
-    await tester.pumpWidget(
-      ChangeNotifierProvider.value(
-        value: backend.provider(),
-        child: _Waiter(key: key),
-      ),
-    );
+    await tester.pumpWidget(ChangeNotifierProvider.value(
+      value: backend.provider(),
+      child: _Waiter(key: key),
+    ));
     await tester.pump(const Duration(seconds: 1));
     expect(backend.count('GET', 'v1/messaging/links'), 0);
     key.currentState!.startWaiting(until: DateTime.now().add(const Duration(minutes: 10)));

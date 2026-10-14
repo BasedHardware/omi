@@ -71,8 +71,7 @@ class FreemiumTranscriptionService extends ChangeNotifier {
   static String effectiveLanguage({String? language}) {
     final preferences = SharedPreferencesUtil();
     final config = preferences.customSttConfig;
-    final selected =
-        language ??
+    final selected = language ??
         (config.isEnabled && config.provider == SttProvider.onDeviceWhisper
             ? (config.language ?? 'en')
             : preferences.userPrimaryLanguage);
@@ -81,9 +80,8 @@ class FreemiumTranscriptionService extends ChangeNotifier {
 
   Future<FreemiumReadiness> checkReadiness({String? language}) async {
     if (iosOverride ?? Platform.isIOS) {
-      appleReadiness = await (appleReadinessReader ?? OnDeviceAppleProvider.readiness)(
-        effectiveLanguage(language: language),
-      );
+      appleReadiness =
+          await (appleReadinessReader ?? OnDeviceAppleProvider.readiness)(effectiveLanguage(language: language));
       _readiness = appleReadiness!.ready ? FreemiumReadiness.ready : FreemiumReadiness.requiresSetup;
       notifyListeners();
       return _readiness;

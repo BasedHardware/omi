@@ -27,10 +27,7 @@ void main() {
       final primary = _FakeSocket();
       final secondary = _FakeSocket();
       final socket = CompositeTranscriptionSocket(
-        primarySocket: primary,
-        secondarySocket: secondary,
-        forwardRawAudioToSecondary: false,
-      );
+          primarySocket: primary, secondarySocket: secondary, forwardRawAudioToSecondary: false);
       await socket.connect();
       primary.onError(const LocalSttFailure('permission_denied', canProbeRecovery: true), StackTrace.current);
       expect(socket.status, PureSocketStatus.connected);
@@ -133,7 +130,10 @@ void main() {
     });
 
     test('user custom STT still requests a speech profile on the Omi secondary', () {
-      expect(TranscriptSocketServiceFactory.includeSpeechProfileForCustomSecondary('custom:deepgram'), isTrue);
+      expect(
+        TranscriptSocketServiceFactory.includeSpeechProfileForCustomSecondary('custom:deepgram'),
+        isTrue,
+      );
     });
 
     test('factory applies the persisted forwarding setting', () {

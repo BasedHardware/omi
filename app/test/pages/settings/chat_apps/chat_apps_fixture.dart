@@ -41,11 +41,8 @@ const chatAppsOn = ChatAppsConfig(
 final String linkIdTelegram = 'a' * 64;
 final String linkIdIMessage = 'b' * 64;
 
-Map<String, dynamic> availabilityJson({bool available = false, String? reason, bool waitlisted = false}) => {
-  'available': available,
-  'reason': reason,
-  'waitlisted': waitlisted,
-};
+Map<String, dynamic> availabilityJson({bool available = false, String? reason, bool waitlisted = false}) =>
+    {'available': available, 'reason': reason, 'waitlisted': waitlisted};
 
 Map<String, dynamic> linkJson({
   required String id,
@@ -53,14 +50,15 @@ Map<String, dynamic> linkJson({
   String provider = 'telegram',
   String externalId = 'sam',
   bool visible = false,
-}) => {
-  'id': id,
-  'channel': channel,
-  'provider': provider,
-  'external_id': externalId,
-  'visible_in_app': visible,
-  'linked_at': '2026-10-10T12:00:00Z',
-};
+}) =>
+    {
+      'id': id,
+      'channel': channel,
+      'provider': provider,
+      'external_id': externalId,
+      'visible_in_app': visible,
+      'linked_at': '2026-10-10T12:00:00Z',
+    };
 
 /// A scripted `/v1/messaging/*` backend behind the [ApiSend] seam.
 class FakeMessagingBackend {
@@ -105,9 +103,8 @@ class FakeMessagingBackend {
         );
       }
       _minted++;
-      final proof = body['kind'] == 'code'
-          ? '9F2C4A7B1D3E5F6${_minted % 10}0A1B2C3D4E5F6A7B'
-          : 'tok_${_minted}_abcdefghijklmnop';
+      final proof =
+          body['kind'] == 'code' ? '9F2C4A7B1D3E5F6${_minted % 10}0A1B2C3D4E5F6A7B' : 'tok_${_minted}_abcdefghijklmnop';
       return http.Response(
         jsonEncode({
           'proof': proof,
@@ -138,20 +135,20 @@ class FakeMessagingBackend {
       .length;
 
   MessagingChannelsProvider provider({ChatAppsConfig config = chatAppsOn}) => MessagingChannelsProvider(
-    api: MessagingChannelsApi(send: send),
-    readConfig: () async => config,
-  );
+        api: MessagingChannelsApi(send: send),
+        readConfig: () async => config,
+      );
 }
 
 UserSubscriptionResponse subscriptionOn(PlanType plan) => UserSubscriptionResponse(
-  subscription: Subscription(plan: plan, status: SubscriptionStatus.active),
-  transcriptionSecondsUsed: 0,
-  transcriptionSecondsLimit: 0,
-  wordsTranscribedUsed: 0,
-  wordsTranscribedLimit: 0,
-  insightsGainedUsed: 0,
-  insightsGainedLimit: 0,
-);
+      subscription: Subscription(plan: plan, status: SubscriptionStatus.active),
+      transcriptionSecondsUsed: 0,
+      transcriptionSecondsLimit: 0,
+      wordsTranscribedUsed: 0,
+      wordsTranscribedLimit: 0,
+      insightsGainedUsed: 0,
+      insightsGainedLimit: 0,
+    );
 
 class StubConnectivity extends ChangeNotifier implements ConnectivityProvider {
   StubConnectivity({this.online = true});

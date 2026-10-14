@@ -74,53 +74,45 @@ void main() {
   for (final origin in [WalStorage.sdcard, WalStorage.flashPage]) {
     for (final legacyStamp in [false, true]) {
       test(
-        'historical $origin (legacy=$legacyStamp) import while local remains uploadable after route change and explicit retry',
-        () async {
-          final directory = await Directory.systemTemp.createTemp('historical-import');
-          addTearDown(() => directory.delete(recursive: true));
-          TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(
-            const MethodChannel('plugins.flutter.io/path_provider'),
-            (_) async => directory.path,
-          );
-          var uploads = 0;
-          var accept = false;
-          final persisted = <Map<String, dynamic>>[];
-          final local = LocalWalSyncImpl(
-            _MockListener(),
+          'historical $origin (legacy=$legacyStamp) import while local remains uploadable after route change and explicit retry',
+          () async {
+        final directory = await Directory.systemTemp.createTemp('historical-import');
+        addTearDown(() => directory.delete(recursive: true));
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(
+            const MethodChannel('plugins.flutter.io/path_provider'), (_) async => directory.path);
+        var uploads = 0;
+        var accept = false;
+        final persisted = <Map<String, dynamic>>[];
+        final local = LocalWalSyncImpl(_MockListener(),
             loadWals: () async => [],
             persistWals: (wals) async {
               persisted.clear();
               persisted.addAll(wals.map((w) => w.toJson()));
             },
             uploadGate: SyncUploadGate(
-              limiter: SyncRateLimiter.instance,
-              fairUseStatusLoader: () async => null,
-              uploader:
-                  (
-                    files, {
-                    onUploadProgress,
+                limiter: SyncRateLimiter.instance,
+                fairUseStatusLoader: () async => null,
+                uploader: (files,
+                    {onUploadProgress,
                     conversationId,
                     captureEvidence,
                     recordingSessionId,
                     audioStartSeconds,
                     audioEndSeconds,
                     claimLiveCapture = false,
-                    geolocation,
-                  }) async {
-                    uploads++;
-                    if (!accept) throw StateError('synthetic refused upload');
-                    return UploadFilesResult.queued('historical-job');
-                  },
-            ),
-          );
-          addTearDown(local.stop);
-          LocalSttCustody.selectedLocalRoute = true;
-          addTearDown(() => LocalSttCustody.selectedLocalRoute = false);
-          local.start();
-          await local.walReady;
-          const name = 'historical_audio.bin';
-          await File('${directory.path}/$name').writeAsBytes([1, 2, 3]);
-          final imported = Wal(
+                    geolocation}) async {
+                  uploads++;
+                  if (!accept) throw StateError('synthetic refused upload');
+                  return UploadFilesResult.queued('historical-job');
+                }));
+        addTearDown(local.stop);
+        LocalSttCustody.selectedLocalRoute = true;
+        addTearDown(() => LocalSttCustody.selectedLocalRoute = false);
+        local.start();
+        await local.walReady;
+        const name = 'historical_audio.bin';
+        await File('${directory.path}/$name').writeAsBytes([1, 2, 3]);
+        final imported = Wal(
             timerStart: 100,
             codec: BleAudioCodec.pcm16,
             seconds: 1,
@@ -128,33 +120,31 @@ void main() {
             originalStorage: origin,
             onDeviceOnly: legacyStamp,
             filePath: name,
-            status: WalStatus.miss,
-          );
-          final historical = legacyStamp ? Wal.fromJson(imported.toJson()) : imported;
-          await local.addExternalWal(historical, admittedGeneration: local.sessionGeneration);
-          expect(historical.onDeviceOnly, isFalse);
-          LocalSttCustody.selectedLocalRoute = false;
-          expect(isAutoUploadEligible(historical), isTrue);
-          await local.syncAll();
-          expect(uploads, 1);
-          accept = true;
-          await local.syncWal(wal: historical);
-          expect(uploads, 2, reason: 'explicit retry reaches the real uploader after a refused upload');
-          expect(historical.status, WalStatus.uploaded);
-          expect(persisted.single['on_device_only'], isFalse);
-          // Repair a pre-fix persisted stamp without weakening recording-time local consent.
-          final old = historical.toJson()..['on_device_only'] = true;
-          old.remove('captured_on_device_only');
-          final repaired = Wal.fromJson(old);
-          expect(repaired.onDeviceOnly, isFalse);
-          expect(repaired.toJson()['on_device_only'], isFalse);
-          old['captured_on_device_only'] = true;
-          expect(Wal.fromJson(old).onDeviceOnly, isTrue);
-          old.remove('original_storage');
-          old.remove('captured_on_device_only');
-          expect(Wal.fromJson(old).onDeviceOnly, isTrue, reason: 'legacy phone-local custody is preserved');
-        },
-      );
+            status: WalStatus.miss);
+        final historical = legacyStamp ? Wal.fromJson(imported.toJson()) : imported;
+        await local.addExternalWal(historical, admittedGeneration: local.sessionGeneration);
+        expect(historical.onDeviceOnly, isFalse);
+        LocalSttCustody.selectedLocalRoute = false;
+        expect(isAutoUploadEligible(historical), isTrue);
+        await local.syncAll();
+        expect(uploads, 1);
+        accept = true;
+        await local.syncWal(wal: historical);
+        expect(uploads, 2, reason: 'explicit retry reaches the real uploader after a refused upload');
+        expect(historical.status, WalStatus.uploaded);
+        expect(persisted.single['on_device_only'], isFalse);
+        // Repair a pre-fix persisted stamp without weakening recording-time local consent.
+        final old = historical.toJson()..['on_device_only'] = true;
+        old.remove('captured_on_device_only');
+        final repaired = Wal.fromJson(old);
+        expect(repaired.onDeviceOnly, isFalse);
+        expect(repaired.toJson()['on_device_only'], isFalse);
+        old['captured_on_device_only'] = true;
+        expect(Wal.fromJson(old).onDeviceOnly, isTrue);
+        old.remove('original_storage');
+        old.remove('captured_on_device_only');
+        expect(Wal.fromJson(old).onDeviceOnly, isTrue, reason: 'legacy phone-local custody is preserved');
+      });
     }
   }
 
@@ -268,9 +258,8 @@ void main() {
   group('markFrameSynced', () {
     test('local enqueue is not a receipt: audio persists phone-only and cannot cloud-upload', () async {
       LocalSttCustody.selectedLocalRoute = true;
-      await SharedPreferencesUtil().saveCustomSttConfig(
-        const CustomSttConfig(provider: SttProvider.onDeviceWhisper, sendRawAudioToOmi: false),
-      );
+      await SharedPreferencesUtil()
+          .saveCustomSttConfig(const CustomSttConfig(provider: SttProvider.onDeviceWhisper, sendRawAudioToOmi: false));
       addTearDown(() async {
         LocalSttCustody.selectedLocalRoute = false;
         await SharedPreferencesUtil().saveCustomSttConfig(CustomSttConfig.defaultConfig);
@@ -644,12 +633,12 @@ void main() {
 
   group('bounded retained capture WALs', () {
     Wal retained(int timerStart) => Wal(
-      timerStart: timerStart,
-      codec: BleAudioCodec.opus,
-      seconds: 60,
-      storage: WalStorage.disk,
-      status: WalStatus.miss,
-    );
+          timerStart: timerStart,
+          codec: BleAudioCodec.opus,
+          seconds: 60,
+          storage: WalStorage.disk,
+          status: WalStatus.miss,
+        );
 
     test('the count cap warns at the boundary but never deletes pending WALs', () async {
       sync.testWals = List.generate(maxRetainedCaptureWalCount, retained);
@@ -698,14 +687,15 @@ void main() {
       required int syncedAt,
       WalStatus status = WalStatus.synced,
       WalStorage storage = WalStorage.disk,
-    }) => Wal(
-      timerStart: syncedAt - 1000,
-      codec: BleAudioCodec.opus,
-      seconds: 60,
-      storage: storage,
-      status: status,
-      syncedAt: syncedAt,
-    );
+    }) =>
+        Wal(
+          timerStart: syncedAt - 1000,
+          codec: BleAudioCodec.opus,
+          seconds: 60,
+          storage: storage,
+          status: status,
+          syncedAt: syncedAt,
+        );
 
     test('removes synced disk copies past the retention window and keeps the rest', () async {
       SharedPreferencesUtil().autoRemoveSyncedCopies = true;
@@ -1124,11 +1114,11 @@ void main() {
     }
 
     LocalWalSyncImpl build(SyncJobStatusResponse status) => LocalWalSyncImpl(
-      listener,
-      now: () => now,
-      jobStatusFetcher: (jobId) async => SyncJobFetch(SyncJobFetchOutcome.ok, status),
-      staleWalTelemetry: staleReports.add,
-    );
+          listener,
+          now: () => now,
+          jobStatusFetcher: (jobId) async => SyncJobFetch(SyncJobFetchOutcome.ok, status),
+          staleWalTelemetry: staleReports.add,
+        );
 
     SyncJobStatusResponse completed({
       List<String> newIds = const [],
@@ -1136,15 +1126,16 @@ void main() {
       bool missingResult = false,
       int processedSegments = 0,
       String? reasonCode,
-    }) => SyncJobStatusResponse(
-      jobId: 'b4b06584',
-      status: 'completed',
-      processedSegments: processedSegments,
-      reasonCode: reasonCode,
-      result: missingResult
-          ? null
-          : SyncLocalFilesResponse(newConversationIds: newIds, updatedConversationIds: updatedIds),
-    );
+    }) =>
+        SyncJobStatusResponse(
+          jobId: 'b4b06584',
+          status: 'completed',
+          processedSegments: processedSegments,
+          reasonCode: reasonCode,
+          result: missingResult
+              ? null
+              : SyncLocalFilesResponse(newConversationIds: newIds, updatedConversationIds: updatedIds),
+        );
 
     Future<List<Map<String, dynamic>>> readEvents() async {
       final events = <Map<String, dynamic>>[];
@@ -1377,44 +1368,43 @@ void main() {
       Future<void> Function(List<Wal>)? persist,
       SyncUploadGate? uploadGate,
       DateTime? now,
-    }) => LocalWalSyncImpl(
-      listener,
-      now: now == null ? null : () => now,
-      persistWals:
-          persist ??
-          (wals) async {
-            if (persistedSink != null) {
-              persistedSink
-                ..clear()
-                ..addAll(wals);
-            }
-          },
-      loadWals: () async => <Wal>[],
-      uploadGate: uploadGate,
-      coverageTelemetry: telemetry?.add,
-    );
+    }) =>
+        LocalWalSyncImpl(
+          listener,
+          now: now == null ? null : () => now,
+          persistWals: persist ??
+              (wals) async {
+                if (persistedSink != null) {
+                  persistedSink
+                    ..clear()
+                    ..addAll(wals);
+                }
+              },
+          loadWals: () async => <Wal>[],
+          uploadGate: uploadGate,
+          coverageTelemetry: telemetry?.add,
+        );
 
     SyncUploadGate succeedingGate({List<List<String>>? attempted, UploadFilesResult Function()? outcome}) =>
         SyncUploadGate(
           limiter: SyncRateLimiter.instance,
-          uploader:
-              (
-                files, {
-                onUploadProgress,
-                conversationId,
-                captureEvidence,
-                recordingSessionId,
-                audioStartSeconds,
-                audioEndSeconds,
-                claimLiveCapture = false,
-                geolocation,
-              }) async {
-                attempted?.add(files.map((f) => f.path.split(Platform.pathSeparator).last).toList());
-                return outcome?.call() ??
-                    UploadFilesResult.done(
-                      SyncLocalFilesResponse(newConversationIds: ['c1'], updatedConversationIds: []),
-                    );
-              },
+          uploader: (
+            files, {
+            onUploadProgress,
+            conversationId,
+            captureEvidence,
+            recordingSessionId,
+            audioStartSeconds,
+            audioEndSeconds,
+            claimLiveCapture = false,
+            geolocation,
+          }) async {
+            attempted?.add(files.map((f) => f.path.split(Platform.pathSeparator).last).toList());
+            return outcome?.call() ??
+                UploadFilesResult.done(
+                  SyncLocalFilesResponse(newConversationIds: ['c1'], updatedConversationIds: []),
+                );
+          },
           fairUseStatusLoader: () async => null,
         );
 
@@ -1663,9 +1653,12 @@ void main() {
       expect(File('${directory.path}/$name').existsSync(), isTrue);
 
       await local.syncAll();
-      expect(attempted, [
-        [name],
-      ], reason: 'the failed-closed copy uploads on the next pass');
+      expect(
+          attempted,
+          [
+            [name],
+          ],
+          reason: 'the failed-closed copy uploads on the next pass');
       expect(covered.status, WalStatus.synced);
       expect(covered.keptForTranscriptRecovery, isFalse);
     });
@@ -2183,12 +2176,12 @@ void main() {
 
   group('walCoveredByTranscript', () {
     Wal wal(int timerStart, int seconds, {int totalFrames = 0}) => Wal(
-      timerStart: timerStart,
-      codec: BleAudioCodec.opus,
-      seconds: seconds,
-      totalFrames: totalFrames,
-      storage: WalStorage.disk,
-    );
+          timerStart: timerStart,
+          codec: BleAudioCodec.opus,
+          seconds: seconds,
+          totalFrames: totalFrames,
+          storage: WalStorage.disk,
+        );
 
     test('a span inside the WAL does not cover it', () {
       expect(walCoveredByTranscript(wal(100, 60), [(120, 129)], 100), isFalse);
@@ -2274,16 +2267,19 @@ void main() {
 
     test('two minutes of conversation with natural pauses and long silences are covered', () {
       expect(
-        walCoveredByTranscript(wal(100, 120), [
-          (102, 110),
-          (112, 116),
-          (121, 133),
-          (135, 141),
-          (149, 154),
-          (172, 184),
-          (187, 189),
-          (214, 220),
-        ], 100),
+        walCoveredByTranscript(
+            wal(100, 120),
+            [
+              (102, 110),
+              (112, 116),
+              (121, 133),
+              (135, 141),
+              (149, 154),
+              (172, 184),
+              (187, 189),
+              (214, 220),
+            ],
+            100),
         isTrue,
       );
     });
@@ -2410,39 +2406,41 @@ void main() {
       int sampleRate = 16000,
       int channel = 1,
       BleAudioCodec codec = BleAudioCodec.opus,
-    }) => Wal(
-      timerStart: timerStart,
-      codec: codec,
-      seconds: 60,
-      totalFrames: totalFrames,
-      sampleRate: sampleRate,
-      channel: channel,
-      storage: WalStorage.disk,
-      status: WalStatus.miss,
-      conversationId: conversationId,
-      recordingSessionId: recordingSessionId,
-      filePath: filePath,
-      captureRoot: captureRoot,
-      sourceFrameStart: sourceFrameStart,
-      sourceClockEpoch: sourceClockEpoch,
-    );
+    }) =>
+        Wal(
+          timerStart: timerStart,
+          codec: codec,
+          seconds: 60,
+          totalFrames: totalFrames,
+          sampleRate: sampleRate,
+          channel: channel,
+          storage: WalStorage.disk,
+          status: WalStatus.miss,
+          conversationId: conversationId,
+          recordingSessionId: recordingSessionId,
+          filePath: filePath,
+          captureRoot: captureRoot,
+          sourceFrameStart: sourceFrameStart,
+          sourceClockEpoch: sourceClockEpoch,
+        );
 
     Wal legacyWal(
       int timerStart, {
       String? filePath,
       String? conversationId = 'c1',
       String? recordingSessionId = 's1',
-    }) => Wal(
-      timerStart: timerStart,
-      codec: BleAudioCodec.opus,
-      seconds: 60,
-      totalFrames: 6000,
-      storage: WalStorage.disk,
-      status: WalStatus.miss,
-      conversationId: conversationId,
-      recordingSessionId: recordingSessionId,
-      filePath: filePath,
-    );
+    }) =>
+        Wal(
+          timerStart: timerStart,
+          codec: BleAudioCodec.opus,
+          seconds: 60,
+          totalFrames: 6000,
+          storage: WalStorage.disk,
+          status: WalStatus.miss,
+          conversationId: conversationId,
+          recordingSessionId: recordingSessionId,
+          filePath: filePath,
+        );
 
     test('a claimable-newest mixed group uploads only the claimable files', () {
       final claimableNew = claimWal(100, filePath: 'claim_new.bin');
@@ -2454,10 +2452,16 @@ void main() {
 
       if (darkWrite) {
         expect(batch, [claimableNew, claimableOld]);
-        expect(captureEvidenceUploadHeader(batch, [File('claim_new.bin'), File('claim_old.bin')]), isNotNull);
+        expect(
+          captureEvidenceUploadHeader(batch, [File('claim_new.bin'), File('claim_old.bin')]),
+          isNotNull,
+        );
       } else {
         expect(batch, [claimableNew, legacyMid, claimableOld, legacyOld]);
-        expect(captureEvidenceUploadHeader(batch, [for (final _ in batch) File('x.bin')]), isNull);
+        expect(
+          captureEvidenceUploadHeader(batch, [for (final _ in batch) File('x.bin')]),
+          isNull,
+        );
       }
     });
 
@@ -2475,7 +2479,10 @@ void main() {
         final remainder = pending.where((wal) => !first.contains(wal)).toList();
         final second = nextSyncUploadBatch(remainder, now);
         expect(second, [claimableMid, claimableOld]);
-        expect(captureEvidenceUploadHeader(second, [File('claim_mid.bin'), File('claim_old.bin')]), isNotNull);
+        expect(
+          captureEvidenceUploadHeader(second, [File('claim_mid.bin'), File('claim_old.bin')]),
+          isNotNull,
+        );
       } else {
         expect(first, pending);
       }
@@ -2505,7 +2512,10 @@ void main() {
       final file = File('ok.bin');
       expect(captureEvidenceUploadHeader([], []), isNull);
       expect(captureEvidenceUploadHeader([claimWal(100, filePath: 'ok.bin')], []), isNull);
-      expect(captureEvidenceUploadHeader([claimWal(100, filePath: 'ok.bin')], [file, File('extra.bin')]), isNull);
+      expect(
+        captureEvidenceUploadHeader([claimWal(100, filePath: 'ok.bin')], [file, File('extra.bin')]),
+        isNull,
+      );
       final invalid = <Wal>[
         claimWal(100, filePath: 'ok.bin', sampleRate: 0),
         claimWal(100, filePath: 'ok.bin', sampleRate: -16000),
@@ -2571,7 +2581,10 @@ void main() {
         final batch = nextSyncUploadBatch([invalid, claimable], now);
         if (darkWrite) {
           expect(batch, [invalid], reason: 'invalid claim stays a single-file legacy batch');
-          expect(captureEvidenceUploadHeader(batch, [File(invalid.filePath!)]), isNull);
+          expect(
+            captureEvidenceUploadHeader(batch, [File(invalid.filePath!)]),
+            isNull,
+          );
         } else {
           expect(batch, [invalid, claimable]);
         }
@@ -2629,7 +2642,10 @@ void main() {
     test('an oversized claim list still falls back to an unclaimed upload', () {
       if (!darkWrite) return;
       final wals = [for (var i = 0; i < 20; i++) claimWal(200 - i, filePath: '${'a' * 243}_cap_$i.bin')];
-      expect(captureEvidenceUploadHeader(wals, [for (final wal in wals) File(wal.filePath!)]), isNull);
+      expect(
+        captureEvidenceUploadHeader(wals, [for (final wal in wals) File(wal.filePath!)]),
+        isNull,
+      );
     });
   });
 
@@ -2687,30 +2703,30 @@ void main() {
     }
 
     LocalWalSyncImpl buildSync() => LocalWalSyncImpl(
-      listener,
-      now: () => DateTime.fromMillisecondsSinceEpoch(2000000000 * 1000),
-      persistWals: (wals) async {},
-      loadWals: () async => <Wal>[],
-      uploadGate: SyncUploadGate(
-        limiter: SyncRateLimiter.instance,
-        uploader:
-            (
-              files, {
-              onUploadProgress,
-              conversationId,
-              captureEvidence,
-              recordingSessionId,
-              audioStartSeconds,
-              audioEndSeconds,
-              claimLiveCapture = false,
-              geolocation,
-            }) async {
-              uploads.add((files.map((file) => file.uri.pathSegments.last).toList(), captureEvidence));
+          listener,
+          now: () => DateTime.fromMillisecondsSinceEpoch(2000000000 * 1000),
+          persistWals: (wals) async {},
+          loadWals: () async => <Wal>[],
+          uploadGate: SyncUploadGate(
+            limiter: SyncRateLimiter.instance,
+            uploader: (files,
+                {onUploadProgress,
+                conversationId,
+                captureEvidence,
+                recordingSessionId,
+                audioStartSeconds,
+                audioEndSeconds,
+                claimLiveCapture = false,
+                geolocation}) async {
+              uploads.add((
+                files.map((file) => file.uri.pathSegments.last).toList(),
+                captureEvidence,
+              ));
               return UploadFilesResult.queued('job-${uploads.length}');
             },
-        fairUseStatusLoader: () async => null,
-      ),
-    );
+            fairUseStatusLoader: () async => null,
+          ),
+        );
 
     test('a claimable-newest mixed drain sends claims, then the legacy batch goes unclaimed', () async {
       final local = buildSync();
@@ -2775,7 +2791,10 @@ void main() {
 
       if (darkWrite) {
         expect(uploads.length, 2, reason: 'attempted membership uses durable keys, not the colliding wal.id');
-        expect(uploads.map((upload) => upload.$1.single), unorderedEquals(['split_a.bin', 'split_b.bin']));
+        expect(
+          uploads.map((upload) => upload.$1.single),
+          unorderedEquals(['split_a.bin', 'split_b.bin']),
+        );
         for (final upload in uploads) {
           final parsed = jsonDecode(upload.$2!) as Map<String, dynamic>;
           expect((parsed['files'] as List).single['name'], upload.$1.single);
@@ -2866,11 +2885,10 @@ void main() {
 
       if (darkWrite) {
         expect(sync.testWals, hasLength(3));
-        expect(sync.testWals.map((wal) => (wal.captureRoot, wal.sourceFrameStart, wal.totalFrames)).toList(), [
-          (rootA, 0, 10),
-          (null, null, 10),
-          (rootB, 0, 10),
-        ]);
+        expect(
+          sync.testWals.map((wal) => (wal.captureRoot, wal.sourceFrameStart, wal.totalFrames)).toList(),
+          [(rootA, 0, 10), (null, null, 10), (rootB, 0, 10)],
+        );
         for (final wal in sync.testWals) {
           final path = await Wal.getFilePath(wal.filePath!);
           expect(
@@ -2898,11 +2916,10 @@ void main() {
 
       if (darkWrite) {
         expect(sync.testWals, hasLength(3));
-        expect(sync.testWals.map((wal) => (wal.captureRoot, wal.sourceFrameStart, wal.totalFrames)).toList(), [
-          (rootA, 0, 10),
-          (null, null, 10),
-          (rootB, 0, 10),
-        ]);
+        expect(
+          sync.testWals.map((wal) => (wal.captureRoot, wal.sourceFrameStart, wal.totalFrames)).toList(),
+          [(rootA, 0, 10), (null, null, 10), (rootB, 0, 10)],
+        );
         expect(sync.testWals.every((wal) => wal.device == 'dev'), isTrue);
       } else {
         expect(sync.testWals, hasLength(1));
@@ -2914,12 +2931,12 @@ void main() {
     test('an ordinal gap inside one root splits the run', () async {
       SharedPreferencesUtil().unlimitedLocalStorageEnabled = true;
       WalFrame positioned(int position) => WalFrame(
-        payload: [position & 0xFF],
-        syncKey: FrameSyncKey.fromIndex(position),
-        captureRoot: rootA,
-        sourceFramePosition: position,
-        sourceClockEpoch: 0,
-      );
+            payload: [position & 0xFF],
+            syncKey: FrameSyncKey.fromIndex(position),
+            captureRoot: rootA,
+            sourceFramePosition: position,
+            sourceClockEpoch: 0,
+          );
       sync.testFrames.addAll([positioned(0), positioned(1), positioned(5), positioned(6)]);
       sync.testFrameSynced.addAll([false, false, false, false]);
 
@@ -2927,10 +2944,10 @@ void main() {
 
       if (darkWrite) {
         expect(sync.testWals, hasLength(2));
-        expect(sync.testWals.map((wal) => (wal.captureRoot, wal.sourceFrameStart, wal.totalFrames)).toList(), [
-          (rootA, 0, 2),
-          (rootA, 5, 2),
-        ]);
+        expect(
+          sync.testWals.map((wal) => (wal.captureRoot, wal.sourceFrameStart, wal.totalFrames)).toList(),
+          [(rootA, 0, 2), (rootA, 5, 2)],
+        );
       } else {
         expect(sync.testWals, hasLength(1));
         expect(sync.testWals.single.captureRoot, isNull);
@@ -2962,21 +2979,18 @@ void main() {
         loadWals: () async => [oldWal],
         uploadGate: SyncUploadGate(
           limiter: SyncRateLimiter.instance,
-          uploader:
-              (
-                files, {
-                onUploadProgress,
-                conversationId,
-                captureEvidence,
-                recordingSessionId,
-                audioStartSeconds,
-                audioEndSeconds,
-                claimLiveCapture = false,
-                geolocation,
-              }) async {
-                uploads.add((files.map((file) => file.uri.pathSegments.last).toList(), captureEvidence));
-                return UploadFilesResult.queued('job-${uploads.length}');
-              },
+          uploader: (files,
+              {onUploadProgress,
+              conversationId,
+              captureEvidence,
+              recordingSessionId,
+              audioStartSeconds,
+              audioEndSeconds,
+              claimLiveCapture = false,
+              geolocation}) async {
+            uploads.add((files.map((file) => file.uri.pathSegments.last).toList(), captureEvidence));
+            return UploadFilesResult.queued('job-${uploads.length}');
+          },
           fairUseStatusLoader: () async => null,
         ),
       );
@@ -2993,11 +3007,8 @@ void main() {
 
       if (darkWrite) {
         expect(local.testWals, hasLength(2), reason: 'the non-contiguous run must not extend the rooted WAL');
-        expect(
-          (oldWal.captureRoot, oldWal.sourceFrameStart, oldWal.totalFrames),
-          (rootA, 0, 60),
-          reason: 'the prior claim is never cleared',
-        );
+        expect((oldWal.captureRoot, oldWal.sourceFrameStart, oldWal.totalFrames), (rootA, 0, 60),
+            reason: 'the prior claim is never cleared');
         final fresh = local.testWals.firstWhere((wal) => wal != oldWal);
         expect((fresh.captureRoot, fresh.sourceFrameStart, fresh.totalFrames), (rootB, 0, 100));
         expect({oldWal.filePath, fresh.filePath}, hasLength(2));
@@ -3034,20 +3045,17 @@ void main() {
         loadWals: () async => [oldWal],
         uploadGate: SyncUploadGate(
           limiter: SyncRateLimiter.instance,
-          uploader:
-              (
-                files, {
-                onUploadProgress,
-                conversationId,
-                captureEvidence,
-                recordingSessionId,
-                audioStartSeconds,
-                audioEndSeconds,
-                claimLiveCapture = false,
-                geolocation,
-              }) async {
-                return UploadFilesResult.queued('job-1');
-              },
+          uploader: (files,
+              {onUploadProgress,
+              conversationId,
+              captureEvidence,
+              recordingSessionId,
+              audioStartSeconds,
+              audioEndSeconds,
+              claimLiveCapture = false,
+              geolocation}) async {
+            return UploadFilesResult.queued('job-1');
+          },
           fairUseStatusLoader: () async => null,
         ),
       );
@@ -3090,20 +3098,17 @@ void main() {
         loadWals: () async => <Wal>[],
         uploadGate: SyncUploadGate(
           limiter: SyncRateLimiter.instance,
-          uploader:
-              (
-                files, {
-                onUploadProgress,
-                conversationId,
-                captureEvidence,
-                recordingSessionId,
-                audioStartSeconds,
-                audioEndSeconds,
-                claimLiveCapture = false,
-                geolocation,
-              }) async {
-                return UploadFilesResult.queued('job-1');
-              },
+          uploader: (files,
+              {onUploadProgress,
+              conversationId,
+              captureEvidence,
+              recordingSessionId,
+              audioStartSeconds,
+              audioEndSeconds,
+              claimLiveCapture = false,
+              geolocation}) async {
+            return UploadFilesResult.queued('job-1');
+          },
           fairUseStatusLoader: () async => null,
         ),
       );
@@ -3129,44 +3134,41 @@ void main() {
     });
 
     LocalWalSyncImpl pinnedSync(Wal prior) => LocalWalSyncImpl(
-      _MockListener(),
-      now: () => DateTime.fromMillisecondsSinceEpoch((1700000000 + 16) * 1000),
-      persistWals: (wals) async {},
-      loadWals: () async => [prior],
-      uploadGate: SyncUploadGate(
-        limiter: SyncRateLimiter.instance,
-        uploader:
-            (
-              files, {
-              onUploadProgress,
-              conversationId,
-              captureEvidence,
-              recordingSessionId,
-              audioStartSeconds,
-              audioEndSeconds,
-              claimLiveCapture = false,
-              geolocation,
-            }) async {
+          _MockListener(),
+          now: () => DateTime.fromMillisecondsSinceEpoch((1700000000 + 16) * 1000),
+          persistWals: (wals) async {},
+          loadWals: () async => [prior],
+          uploadGate: SyncUploadGate(
+            limiter: SyncRateLimiter.instance,
+            uploader: (files,
+                {onUploadProgress,
+                conversationId,
+                captureEvidence,
+                recordingSessionId,
+                audioStartSeconds,
+                audioEndSeconds,
+                claimLiveCapture = false,
+                geolocation}) async {
               return UploadFilesResult.queued('job-1');
             },
-        fairUseStatusLoader: () async => null,
-      ),
-    );
+            fairUseStatusLoader: () async => null,
+          ),
+        );
 
     Wal rootedMemWal(int syncedOffset, {WalStatus status = WalStatus.miss}) => Wal(
-      timerStart: 1700000000,
-      codec: BleAudioCodec.opus,
-      seconds: 1,
-      totalFrames: 60,
-      storage: WalStorage.mem,
-      status: status,
-      device: 'omi',
-      data: List.generate(60, (_) => [1]),
-      syncedFrameOffset: syncedOffset,
-      captureRoot: rootA,
-      sourceFrameStart: 0,
-      sourceClockEpoch: 0,
-    );
+          timerStart: 1700000000,
+          codec: BleAudioCodec.opus,
+          seconds: 1,
+          totalFrames: 60,
+          storage: WalStorage.mem,
+          status: status,
+          device: 'omi',
+          data: List.generate(60, (_) => [1]),
+          syncedFrameOffset: syncedOffset,
+          captureRoot: rootA,
+          sourceFrameStart: 0,
+          sourceClockEpoch: 0,
+        );
 
     Future<LocalWalSyncImpl> extendOnce(Wal prior, {required int syncedCount}) async {
       final local = pinnedSync(prior);
@@ -3264,20 +3266,17 @@ void main() {
         loadWals: () async => [walA, walB],
         uploadGate: SyncUploadGate(
           limiter: SyncRateLimiter.instance,
-          uploader:
-              (
-                files, {
-                onUploadProgress,
-                conversationId,
-                captureEvidence,
-                recordingSessionId,
-                audioStartSeconds,
-                audioEndSeconds,
-                claimLiveCapture = false,
-                geolocation,
-              }) async {
-                return UploadFilesResult.queued('job-1');
-              },
+          uploader: (files,
+              {onUploadProgress,
+              conversationId,
+              captureEvidence,
+              recordingSessionId,
+              audioStartSeconds,
+              audioEndSeconds,
+              claimLiveCapture = false,
+              geolocation}) async {
+            return UploadFilesResult.queued('job-1');
+          },
           fairUseStatusLoader: () async => null,
         ),
       );
@@ -3293,11 +3292,8 @@ void main() {
       await local.stop();
 
       if (darkWrite) {
-        expect(
-          local.testWals,
-          hasLength(2),
-          reason: 'the contiguous sibling extends; the mismatching one is untouched',
-        );
+        expect(local.testWals, hasLength(2),
+            reason: 'the contiguous sibling extends; the mismatching one is untouched');
         expect((walA.captureRoot, walA.sourceFrameStart, walA.totalFrames), (rootA, 0, 60));
         expect((walB.captureRoot, walB.sourceFrameStart, walB.totalFrames), (rootB, 200, 160));
       } else {
@@ -3318,25 +3314,18 @@ void main() {
         loadWals: () async => <Wal>[],
         uploadGate: SyncUploadGate(
           limiter: SyncRateLimiter.instance,
-          uploader:
-              (
-                files, {
-                onUploadProgress,
-                conversationId,
-                captureEvidence,
-                recordingSessionId,
-                audioStartSeconds,
-                audioEndSeconds,
-                claimLiveCapture = false,
-                geolocation,
-              }) async {
-                bounds.add((
-                  files.map((file) => file.uri.pathSegments.last).toList(),
-                  audioStartSeconds,
-                  audioEndSeconds,
-                ));
-                return UploadFilesResult.queued('job-${bounds.length}');
-              },
+          uploader: (files,
+              {onUploadProgress,
+              conversationId,
+              captureEvidence,
+              recordingSessionId,
+              audioStartSeconds,
+              audioEndSeconds,
+              claimLiveCapture = false,
+              geolocation}) async {
+            bounds.add((files.map((file) => file.uri.pathSegments.last).toList(), audioStartSeconds, audioEndSeconds));
+            return UploadFilesResult.queued('job-${bounds.length}');
+          },
           fairUseStatusLoader: () async => null,
         ),
       );
@@ -3344,12 +3333,12 @@ void main() {
       await local.walReady;
 
       WalFrame positioned(int position, String root) => WalFrame(
-        payload: [position & 0xFF],
-        syncKey: FrameSyncKey.fromIndex(position),
-        captureRoot: root,
-        sourceFramePosition: position,
-        sourceClockEpoch: 0,
-      );
+            payload: [position & 0xFF],
+            syncKey: FrameSyncKey.fromIndex(position),
+            captureRoot: root,
+            sourceFramePosition: position,
+            sourceClockEpoch: 0,
+          );
       local.testFrames.addAll([for (var i = 0; i < 100; i++) positioned(i, i < 60 ? rootA : rootB)]);
       local.testFrameSynced.addAll(List.filled(100, false));
 
@@ -3367,11 +3356,8 @@ void main() {
       expect(first.timerStart, timerStart);
       expect(second.timerStart, timerStart);
       expect(first.filePath, endsWith('_$timerStart.bin'));
-      expect(
-        second.filePath,
-        endsWith('_$timerStart.6.bin'),
-        reason: 'the second run keeps its 0.6s offset in the persisted name',
-      );
+      expect(second.filePath, endsWith('_$timerStart.6.bin'),
+          reason: 'the second run keeps its 0.6s offset in the persisted name');
 
       final reloaded = Wal.fromJson(second.toJson());
       expect(reloaded.filePath, second.filePath, reason: 'the fractional name survives serialization');
@@ -3380,11 +3366,8 @@ void main() {
       expect(bounds, hasLength(1));
       expect(bounds.single.$1, unorderedEquals([first.filePath, second.filePath]));
       expect(bounds.single.$2, timerStart.toDouble());
-      expect(
-        bounds.single.$3,
-        (timerStart + 1).toDouble(),
-        reason: 'run durations sum through the fractional start, not integer seconds',
-      );
+      expect(bounds.single.$3, (timerStart + 1).toDouble(),
+          reason: 'run durations sum through the fractional start, not integer seconds');
 
       final solo = LocalWalSyncImpl(
         _MockListener(),
@@ -3393,25 +3376,18 @@ void main() {
         loadWals: () async => <Wal>[],
         uploadGate: SyncUploadGate(
           limiter: SyncRateLimiter.instance,
-          uploader:
-              (
-                files, {
-                onUploadProgress,
-                conversationId,
-                captureEvidence,
-                recordingSessionId,
-                audioStartSeconds,
-                audioEndSeconds,
-                claimLiveCapture = false,
-                geolocation,
-              }) async {
-                bounds.add((
-                  files.map((file) => file.uri.pathSegments.last).toList(),
-                  audioStartSeconds,
-                  audioEndSeconds,
-                ));
-                return UploadFilesResult.queued('job-${bounds.length}');
-              },
+          uploader: (files,
+              {onUploadProgress,
+              conversationId,
+              captureEvidence,
+              recordingSessionId,
+              audioStartSeconds,
+              audioEndSeconds,
+              claimLiveCapture = false,
+              geolocation}) async {
+            bounds.add((files.map((file) => file.uri.pathSegments.last).toList(), audioStartSeconds, audioEndSeconds));
+            return UploadFilesResult.queued('job-${bounds.length}');
+          },
           fairUseStatusLoader: () async => null,
         ),
       );
@@ -3435,21 +3411,18 @@ void main() {
         loadWals: () async => <Wal>[],
         uploadGate: SyncUploadGate(
           limiter: SyncRateLimiter.instance,
-          uploader:
-              (
-                files, {
-                onUploadProgress,
-                conversationId,
-                captureEvidence,
-                recordingSessionId,
-                audioStartSeconds,
-                audioEndSeconds,
-                claimLiveCapture = false,
-                geolocation,
-              }) async {
-                uploaded.add((files.map((file) => file.uri.pathSegments.last).toList(), captureEvidence));
-                return UploadFilesResult.queued('job-1');
-              },
+          uploader: (files,
+              {onUploadProgress,
+              conversationId,
+              captureEvidence,
+              recordingSessionId,
+              audioStartSeconds,
+              audioEndSeconds,
+              claimLiveCapture = false,
+              geolocation}) async {
+            uploaded.add((files.map((file) => file.uri.pathSegments.last).toList(), captureEvidence));
+            return UploadFilesResult.queued('job-1');
+          },
           fairUseStatusLoader: () async => null,
         ),
       );
@@ -3503,11 +3476,8 @@ void main() {
       expect(second.timerStart, t + 1, reason: 'floor(t + 1.1)');
       expect(first.filePath, endsWith('_$t.4.bin'));
       expect(second.filePath, endsWith('_${t + 1}.1.bin'));
-      expect(
-        Wal.fromJson(second.toJson()).filePath,
-        second.filePath,
-        reason: 'the fractional name survives serialization',
-      );
+      expect(Wal.fromJson(second.toJson()).filePath, second.filePath,
+          reason: 'the fractional name survives serialization');
     }
 
     void expectSubsecondBounds(List<Wal> wals, List<(List<String>, double?, double?)> bounds) {
@@ -3527,39 +3497,33 @@ void main() {
           loadWals: () async => <Wal>[],
           uploadGate: SyncUploadGate(
             limiter: SyncRateLimiter.instance,
-            uploader:
-                (
-                  files, {
-                  onUploadProgress,
-                  conversationId,
-                  captureEvidence,
-                  recordingSessionId,
-                  audioStartSeconds,
-                  audioEndSeconds,
-                  claimLiveCapture = false,
-                  geolocation,
-                }) async {
-                  bounds.add((
-                    files.map((file) => file.uri.pathSegments.last).toList(),
-                    audioStartSeconds,
-                    audioEndSeconds,
-                  ));
-                  return UploadFilesResult.queued('job-${bounds.length}');
-                },
+            uploader: (files,
+                {onUploadProgress,
+                conversationId,
+                captureEvidence,
+                recordingSessionId,
+                audioStartSeconds,
+                audioEndSeconds,
+                claimLiveCapture = false,
+                geolocation}) async {
+              bounds
+                  .add((files.map((file) => file.uri.pathSegments.last).toList(), audioStartSeconds, audioEndSeconds));
+              return UploadFilesResult.queued('job-${bounds.length}');
+            },
             fairUseStatusLoader: () async => null,
           ),
         );
 
     List<WalFrame> splitFrames({FrameSyncKey Function(int index)? keyOf}) => [
-      for (var i = 0; i < 80; i++)
-        WalFrame(
-          payload: [i & 0xFF],
-          syncKey: keyOf?.call(i) ?? FrameSyncKey.fromIndex(i),
-          captureRoot: i < 70 ? rootA : rootB,
-          sourceFramePosition: i,
-          sourceClockEpoch: 0,
-        ),
-    ];
+          for (var i = 0; i < 80; i++)
+            WalFrame(
+              payload: [i & 0xFF],
+              syncKey: keyOf?.call(i) ?? FrameSyncKey.fromIndex(i),
+              captureRoot: i < 70 ? rootA : rootB,
+              sourceFramePosition: i,
+              sourceClockEpoch: 0,
+            ),
+        ];
 
     test('a precise session end keeps subsecond run starts in names and bounds', () async {
       const t = 1735689600;

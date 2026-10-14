@@ -26,16 +26,13 @@ class OnDeviceAppleProvider implements ISttProvider, RecoverableLocalSttProvider
   /// network-backed) for [language]. Bare codes like "en" are resolved
   /// natively to an installed full locale such as en-US. Returns false on any
   /// channel error so callers treat "unknown" as "unavailable".
-  static Future<bool> isOnDeviceAvailable(
-    String language, {
-    Future<bool> Function()? useSpeechAnalyzer,
-    bool? isIOS,
-  }) async {
+  static Future<bool> isOnDeviceAvailable(String language,
+      {Future<bool> Function()? useSpeechAnalyzer, bool? isIOS}) async {
     if (!(isIOS ?? Platform.isIOS)) return false;
     try {
       final available = await _channel.invokeMethod<bool>('onDeviceAvailable', {
         'language': language,
-        'useSpeechAnalyzer': await (useSpeechAnalyzer ?? AppleSpeechAnalyzerGate.useNewEngine)(),
+        'useSpeechAnalyzer': await (useSpeechAnalyzer ?? AppleSpeechAnalyzerGate.useNewEngine)()
       });
       return available ?? false;
     } catch (e) {
@@ -94,7 +91,10 @@ class OnDeviceAppleProvider implements ISttProvider, RecoverableLocalSttProvider
         }
 
         final duration = normalized.duration;
-        final filteredText = _qualityGate.filter(result, audioData: audioData);
+        final filteredText = _qualityGate.filter(
+          result,
+          audioData: audioData,
+        );
         if (filteredText == null) {
           CustomSttLogService.instance.warning('OnDeviceApple', 'Dropped low-quality local transcript: $result');
           return SttTranscriptionResult(audioEndSeconds: audioOffsetSeconds + duration);

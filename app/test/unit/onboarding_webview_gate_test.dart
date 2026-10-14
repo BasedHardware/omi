@@ -15,13 +15,10 @@ void main() {
 
   test('parse accepts only an https URL from a map or a JSON string', () {
     expect(
-      OnboardingWebviewGate.parse(enabled: true, payload: {'url': 'https://omi-paywall.vercel.app/onboarding.html'}),
-      Uri.parse('https://omi-paywall.vercel.app/onboarding.html'),
-    );
-    expect(
-      OnboardingWebviewGate.parse(enabled: true, payload: '{"url":"https://x.example/o"}'),
-      Uri.parse('https://x.example/o'),
-    );
+        OnboardingWebviewGate.parse(enabled: true, payload: {'url': 'https://omi-paywall.vercel.app/onboarding.html'}),
+        Uri.parse('https://omi-paywall.vercel.app/onboarding.html'));
+    expect(OnboardingWebviewGate.parse(enabled: true, payload: '{"url":"https://x.example/o"}'),
+        Uri.parse('https://x.example/o'));
     expect(OnboardingWebviewGate.parse(enabled: true, payload: {'url': 'http://x.example'}), isNull);
     expect(OnboardingWebviewGate.parse(enabled: true, payload: {}), isNull);
     expect(OnboardingWebviewGate.parse(enabled: true, payload: 'garbage'), isNull);
@@ -60,13 +57,9 @@ void main() {
 
   test('flag read error -> native (fail closed)', () async {
     expect(
-      await OnboardingWebviewGate.resolve(
-        settledIdentity: () => 'u',
-        reload: () async {},
-        readFlag: (_) => Future.error(StateError('no sdk')),
-      ),
-      isNull,
-    );
+        await OnboardingWebviewGate.resolve(
+            settledIdentity: () => 'u', reload: () async {}, readFlag: (_) => Future.error(StateError('no sdk'))),
+        isNull);
   });
 
   test('waits for the identity to settle and reloads flags before the first read', () async {

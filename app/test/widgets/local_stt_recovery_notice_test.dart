@@ -14,9 +14,8 @@ void main() {
     SharedPreferences.setMockInitialValues({});
     await SharedPreferencesUtil.init();
     SharedPreferencesUtil().userPrimaryLanguage = 'zz';
-    await SharedPreferencesUtil().saveCustomSttConfig(
-      const CustomSttConfig(provider: SttProvider.onDeviceWhisper, language: 'en'),
-    );
+    await SharedPreferencesUtil()
+        .saveCustomSttConfig(const CustomSttConfig(provider: SttProvider.onDeviceWhisper, language: 'en'));
     final languages = <String>[];
     const channel = MethodChannel('com.omi.ios/speech');
     final messenger = TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
@@ -27,21 +26,16 @@ void main() {
     });
     addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
     var retries = 0;
-    await tester.pumpWidget(
-      MaterialApp(
+    await tester.pumpWidget(MaterialApp(
         localizationsDelegates: AppLocalizations.localizationsDelegates,
         supportedLocales: AppLocalizations.supportedLocales,
         home: Scaffold(
-          body: LocalSttRecoveryNotice(
-            failure: const LocalSttFailure('permission_required'),
-            onRetry: () async {
-              retries++;
-            },
-            onSetup: () {},
-          ),
-        ),
-      ),
-    );
+            body: LocalSttRecoveryNotice(
+                failure: const LocalSttFailure('permission_required'),
+                onRetry: () async {
+                  retries++;
+                },
+                onSetup: () {}))));
     await tester.tap(find.byKey(const ValueKey('local_stt_setup')));
     await tester.pumpAndSettle();
     expect(languages, ['en']);
@@ -57,37 +51,30 @@ void main() {
       tester.view.devicePixelRatio = 2;
       addTearDown(tester.view.resetPhysicalSize);
       addTearDown(tester.view.resetDevicePixelRatio);
-      await tester.pumpWidget(
-        MaterialApp(
+      await tester.pumpWidget(MaterialApp(
           localizationsDelegates: AppLocalizations.localizationsDelegates,
           supportedLocales: AppLocalizations.supportedLocales,
-          builder: (context, child) => MediaQuery(
-            data: MediaQuery.of(context).copyWith(textScaler: const TextScaler.linear(2)),
-            child: child!,
-          ),
+          builder: (context, child) =>
+              MediaQuery(data: MediaQuery.of(context).copyWith(textScaler: const TextScaler.linear(2)), child: child!),
           home: Scaffold(
-            body: SingleChildScrollView(
-              child: LocalSttRecoveryNotice(
-                failure: LocalSttFailure(status, canProbeRecovery: true),
-                onRetry: () async {
-                  retries++;
-                },
-                onSetup: () {
-                  setup++;
-                },
-                openSettings: () async {
-                  settings++;
-                  return true;
-                },
-                preparePermission: () async {
-                  requests++;
-                  return true;
-                },
-              ),
-            ),
-          ),
-        ),
-      );
+              body: SingleChildScrollView(
+                  child: LocalSttRecoveryNotice(
+            failure: LocalSttFailure(status, canProbeRecovery: true),
+            onRetry: () async {
+              retries++;
+            },
+            onSetup: () {
+              setup++;
+            },
+            openSettings: () async {
+              settings++;
+              return true;
+            },
+            preparePermission: () async {
+              requests++;
+              return true;
+            },
+          )))));
       expect(find.text('Transcription is unavailable — recording continues and your audio is saved.'), findsOneWidget);
       await tester.tap(find.byKey(const ValueKey('local_stt_setup')));
       await tester.pumpAndSettle();
