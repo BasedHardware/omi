@@ -2561,6 +2561,9 @@ class AuthService {
     }
     TrialBannerService.shared.stop()
 
+    if let signingOutUserID {
+      await ClientTelemetryTransport.shared.purgeOwner(signingOutUserID)
+    }
     // Notify observers (DesktopHomeView) to reset @AppStorage-backed properties directly.
     // Using removeObject() on @AppStorage properties doesn't work because the cached value
     // in AppState (an ObservableObject, not a View) gets written back immediately.

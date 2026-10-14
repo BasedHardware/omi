@@ -57,8 +57,8 @@ Source: events.json. Presence is not task success. Existing SDK provenance/ident
 | phoneCallDialpadOpened | Phone Call Dialpad Opened | none | active | mobile-instrumentation-presence |
 | phoneCallUpsellUpgradeTapped | Phone Call Upsell Upgrade Tapped | none | active | mobile-instrumentation-presence |
 | phoneCallUpsellDismissed | Phone Call Upsell Dismissed | none | active | mobile-instrumentation-presence |
-| deviceDisconnected | Device Disconnected | none | deprecated | mobile-instrumentation-presence |
-| deviceDisconnectedDetailed | Device Disconnected Detailed | reason, reason_code, app_state | active | mobile-instrumentation-presence |
+| deviceDisconnected | Device Disconnected | none | deprecated | mobile-instrumentation-presence, connection-balance |
+| deviceDisconnectedDetailed | Device Disconnected Detailed | reason, reason_code, app_state | active | mobile-instrumentation-presence, connection-balance |
 | diagnosticsSent | Diagnostics Sent | bundle_bytes, disconnect_count, schema_version | active | mobile-instrumentation-presence |
 | diagnosticsSendFailed | Diagnostics Send Failed | bundle_bytes, disconnect_count, schema_version, failure_stage, status_code | active | mobile-instrumentation-presence |
 | speechProfileCapturePageClicked | Speech Profile Capture Page Clicked | none | active | mobile-instrumentation-presence |
