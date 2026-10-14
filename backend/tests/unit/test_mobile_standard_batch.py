@@ -7,6 +7,7 @@ from tests.unit.test_sync_cloud_tasks import _load_sync_router_for_fast_path
 
 import pytest
 
+from utils.audio_timeline import CaptureTimeline
 from utils.sync.mobile_standard_batch import mobile_standard_batch_enabled
 from utils.other import storage
 from routers.listen import runtime as runtime_module
@@ -208,3 +209,12 @@ async def test_upload_acceptance_requires_archive_before_receipt_or_dispatch(arc
                 sys.modules.pop(name, None)
             else:
                 sys.modules[name] = original
+
+
+def test_visibility_resume_keeps_the_existing_live_capture_wall_clock_gap():
+    timeline = CaptureTimeline(sample_rate=16000)
+    first, _, _ = timeline.accept(bytes(320), arrival_wall=1000.01, arrival_monotonic=1.01)
+    resumed, _, anchored = timeline.accept(bytes(320), arrival_wall=1060.01, arrival_monotonic=61.01)
+    assert anchored
+    assert timeline.wall(first) == pytest.approx(1000.0)
+    assert timeline.wall(resumed) == pytest.approx(1060.0)
