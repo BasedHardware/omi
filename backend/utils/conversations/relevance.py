@@ -11,7 +11,7 @@ Discard is always recoverable (Show discarded, restore). A user's restore is
 recorded as ``sync_relevance_user_kept`` and outranks every later assessment.
 
 With ``CONVERSATION_RELEVANCE_JEV_ENABLED`` the model tier asks the Jev decision
-model (``relevance_jev.py``) instead of ``conv_discard`` for transcript-only
+model (``relevance_jev.py``) before ``conv_discard`` for transcript-only
 conversations, and discards only above ``JEV_DISCARD_THRESHOLD`` (#14835).
 """
 
@@ -23,8 +23,10 @@ from typing import Any, Callable, Iterable, Literal, Mapping, Optional, Sequence
 
 from config.jev_decisions import JEV_MODEL, RelevanceArm
 from utils.conversations.processing_trigger import PROCESSING_MODES, ProcessingTrigger, RelevancePolicy
-from utils.conversations.relevance_rules import RULES_VERSION, deterministic_relevance
+from utils.conversations.relevance_rules import RULES_VERSION, deterministic_relevance, deterministic_tiebreak
 from utils.conversations import relevance_rescue
+
+from utils.observability.fallback import record_fallback
 
 RELEVANCE_DECISION_FIELD = 'relevance_decision'
 
@@ -90,6 +92,31 @@ class RelevanceDecision:
         return record
 
 
+@dataclass(frozen=True)
+class DecisionArm:
+    """Provider-neutral arm: probe without IO, then decide or decline (None)."""
+
+    name: str
+    available: Callable[[], bool]
+    decide: Callable[[], Optional[RelevanceDecision]]
+
+
+def _decision_chain(arms: Sequence[DecisionArm]) -> RelevanceDecision:
+    for index, candidate in enumerate(arms):
+        decision = candidate.decide() if candidate.available() else None
+        if decision is not None:
+            return decision
+        if index + 1 < len(arms):
+            record_fallback(
+                component='conversation_relevance',
+                from_mode=candidate.name,
+                to_mode=arms[index + 1].name,
+                reason='gate_unavailable',
+                outcome='degraded',
+            )
+    raise AssertionError('Relevance chain must end in a total deterministic arm')
+
+
 def find_neighbor(
     rows: Iterable[Mapping[str, Any]],
     *,
@@ -143,20 +170,12 @@ def decide_relevance(
 ) -> RelevanceDecision:
     """Decide keep/discard. Thunks run only when their tier is reached.
 
-    ``model_discards`` receives an error callback; the model tier fails open to
-    keep, and the callback lets the decision record say so. ``None`` means the
-    plan withholds the model (free-tier desktop): the rules still run, and what
-    they cannot settle is kept. ``neighbor`` is looked up only for the model
-    tier: a short fragment is judged as a possible continuation of the adjacent
-    conversation, and a discard links to it instead of standing alone.
-    ``calendar_retains`` is consulted only for a discard verdict: a scrap
-    recorded inside a booked meeting is evidence, never noise (SCA-381).
-
-    ``jev_discard_probability`` replaces ``model_discards`` for the model tier
-    when the caller supplies it (flag on and the conversation is transcript
-    only). It returns P(discard), or ``None`` when Jev gave no answer, which
-    keeps. It inherits the model tier's plan gate: with ``model_discards=None``
-    neither runs.
+    Paid arms share the plan gate, then run in order: Jev (when supplied),
+    legacy nano, deterministic tie-break. A None answer, error callback or
+    model exception advances the chain. The final arm uses only lexicon evidence,
+    never duration or raw length to discard. Photos and trusted wake words
+    keep when no model can assess their content. Calendar protection applies
+    to every discard. keep_all retains its existing nano counterfactual.
     """
 
     def keep(decided_by: DecidedBy, reason: str) -> RelevanceDecision:
@@ -193,13 +212,14 @@ def decide_relevance(
                     return RelevanceDecision('keep', 'jev', f'rescue_{rule}', trigger, jev_p_discard=rescue.score)
             return decision
 
-    if model_discards is None:
-        return keep('policy', 'model_withheld')
-
     def model_decision(decision: RelevanceDecision) -> RelevanceDecision:
         return replace(decision, model_tier_reached=True, arm=arm if record_arm or arm != 'nano' else None)
 
+    if arm == 'keep_all' and model_discards is None:
+        return keep('policy', 'model_withheld')
+
     if arm == 'keep_all':
+        assert model_discards is not None
         # Keep regardless, but still ask nano (as the control path would) so the
         # record carries the verdict nano would have acted on: the counterfactual.
         failed = False
@@ -223,32 +243,60 @@ def decide_relevance(
             ),
         )
 
-    if jev_discard_probability is not None:
+    jev_failed = False
+
+    def jev_decision() -> Optional[RelevanceDecision]:
+        nonlocal jev_failed
+        assert jev_discard_probability is not None
         p_discard = jev_discard_probability()
         if p_discard is None:
-            return model_decision(keep('jev', 'jev_error'))
+            jev_failed = True
+            return None
         if p_discard > JEV_DISCARD_THRESHOLD:
-            return model_decision(discard_unless_calendar('jev', 'jev_discard', p_discard))
-        return model_decision(RelevanceDecision('keep', 'jev', 'jev_keep', trigger, jev_p_discard=p_discard))
+            return discard_unless_calendar('jev', 'jev_discard', p_discard)
+        return RelevanceDecision('keep', 'jev', 'jev_keep', trigger, jev_p_discard=p_discard)
 
-    model_failed = False
+    def nano_decision() -> Optional[RelevanceDecision]:
+        failed = False
 
-    def on_model_error(_error: Exception) -> None:
-        nonlocal model_failed
-        model_failed = True
+        def on_error(_error: Exception) -> None:
+            nonlocal failed
+            failed = True
 
-    adjacent = neighbor()
-    discards = model_discards(on_model_error, adjacent)
-    if model_failed:
-        return model_decision(keep('model', 'model_error'))
-    nano_reason = 'neighbor_fragment' if discards and adjacent else 'model_discard' if discards else 'model_keep'
-    if discards:
-        decision = discard_unless_calendar('model', nano_reason)
-        if adjacent and decision.discard:
-            decision = RelevanceDecision('discard', 'model', 'neighbor_fragment', trigger, adjacent.conversation_id)
-    else:
-        decision = keep('model', 'model_keep')
-    return model_decision(replace(decision, nano_verdict='discard' if discards else 'keep', nano_reason=nano_reason))
+        assert model_discards is not None
+        adjacent = neighbor()
+        try:
+            discards = model_discards(on_error, adjacent)
+        except Exception as error:
+            on_error(error)
+            return None
+        if failed:
+            return None
+        nano_reason = 'neighbor_fragment' if discards and adjacent else 'model_discard' if discards else 'model_keep'
+        reason = 'jev_fallback_model' if jev_failed else nano_reason
+        decision = discard_unless_calendar('model', reason) if discards else keep('model', reason)
+        if discards and adjacent and decision.discard:
+            decision = replace(decision, neighbor_id=adjacent.conversation_id)
+        return replace(decision, nano_verdict='discard' if discards else 'keep', nano_reason=nano_reason)
+
+    def deterministic_decision() -> RelevanceDecision:
+        reason = 'jev_fallback_deterministic' if jev_failed else 'model_fallback_deterministic'
+        # These inputs skipped the rule tier because transcript evidence cannot
+        # judge them. Do not reintroduce transcript-only discards on failure.
+        verdict = 'keep' if has_photos or trusted_wake_word else deterministic_tiebreak(texts)
+        return discard_unless_calendar('rule', reason) if verdict == 'discard' else keep('rule', reason)
+
+    arms: list[DecisionArm] = []
+    if jev_discard_probability is not None:
+        arms.append(DecisionArm('jev', lambda: model_discards is not None, jev_decision))
+    arms.extend(
+        (
+            DecisionArm('model', lambda: model_discards is not None, nano_decision),
+            DecisionArm('deterministic', lambda: True, deterministic_decision),
+        )
+    )
+    decision = model_decision(_decision_chain(arms))
+    return replace(decision, model_tier_reached=model_discards is not None)
 
 
 def final_relevance(decision: Optional[RelevanceDecision], *, discarded: bool) -> Optional[RelevanceDecision]:

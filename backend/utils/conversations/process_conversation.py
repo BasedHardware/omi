@@ -526,7 +526,7 @@ def _get_structured(
         jev_transcript = relevance_transcript(segments)
         if arm == 'jev' and not has_described_photos and not has_wake_word_marker:
             if jev_tier_applies(jev_transcript):
-                jev_discard = lambda: jev_discard_probability(jev_transcript)
+                jev_discard = lambda: jev_discard_probability(jev_transcript, record_outcome=True)
 
         decision = decide_relevance(
             trigger=trigger,

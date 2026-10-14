@@ -20,6 +20,7 @@ from typing import Any, Optional, Sequence
 from models.transcript_segment import TranscriptSegment
 from utils.conversations.relevance_rules import KEEP_WORD_COUNT, transcript_word_count
 from utils.llm.jev_client import ask_jev
+from utils.metrics import record_relevance_scorer_outcome
 
 LANE = 'conversation_relevance'
 QUESTION_VERSION = 'relevance_b1'
@@ -65,9 +66,16 @@ def jev_tier_applies(transcript: str) -> bool:
     return bool(transcript.strip()) and transcript_word_count(transcript) <= KEEP_WORD_COUNT
 
 
-def jev_discard_probability(transcript: str) -> Optional[float]:
+def jev_discard_probability(transcript: str, *, record_outcome: bool = False) -> Optional[float]:
     """P(discard) = 1 - P(worth keeping), or ``None`` when Jev gave no answer."""
-    answers = ask_jev(relevance_state(transcript), QUESTIONS, lane=LANE)
+    # Only live primary decisions contribute: rule-tier rescue calls stay
+    # orthogonal and retain their existing telemetry.
+    if record_outcome:
+        answers = ask_jev(
+            relevance_state(transcript), QUESTIONS, lane=LANE, outcome_observer=record_relevance_scorer_outcome
+        )
+    else:
+        answers = ask_jev(relevance_state(transcript), QUESTIONS, lane=LANE)
     if answers is None:
         return None
     return 1.0 - answers.noul(QUESTION_NAME)
