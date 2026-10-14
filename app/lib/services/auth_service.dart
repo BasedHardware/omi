@@ -86,6 +86,16 @@ Future<ProviderLinkResult> resolveProviderCredentialCollision({
   return ProviderLinkResult(destinationUid: destinationUid, anonymousSourceMigration: anonymousSourceMigration);
 }
 
+/// Presents the native Apple sheet and returns its credential for [nonce].
+typedef AppleCredentialRequest = Future<AuthorizationCredentialAppleID> Function(String nonce);
+
+/// Signs a provider credential in to Firebase, replacing the current user.
+typedef FirebaseCredentialSignIn = Future<UserCredential> Function(AuthCredential credential);
+
+/// Whether [error] is the user closing the Apple sheet rather than a failure.
+bool isAppleSignInCancellation(Object error) =>
+    error is SignInWithAppleAuthorizationException && error.code == AuthorizationErrorCode.canceled;
+
 class AuthService {
   static final AuthService _instance = AuthService._internal();
   static AuthService get instance => _instance;
@@ -97,7 +107,9 @@ class AuthService {
         _recordTelemetry = _recordProductionTelemetry,
         _telemetryContextProvider = _productionTelemetryContext,
         _prepareSiriSignOut = SiriIntegration.current.prepareForSignOut,
-        _siriPreparationTimeout = const Duration(seconds: 2);
+        _siriPreparationTimeout = const Duration(seconds: 2),
+        _requestAppleCredential = _requestNativeAppleCredential,
+        _signInWithCredential = _signInWithFirebaseCredential;
 
   @visibleForTesting
   AuthService.forTesting({
@@ -108,13 +120,17 @@ class AuthService {
     AuthTelemetryContextProvider? telemetryContextProvider,
     Future<void> Function()? prepareSiriSignOut,
     Duration siriPreparationTimeout = const Duration(seconds: 2),
+    AppleCredentialRequest? requestAppleCredential,
+    FirebaseCredentialSignIn? signInWithCredential,
   })  : _tokenGateway = tokenGateway,
         _refreshAttemptTimeout = refreshAttemptTimeout ?? _defaultRefreshAttemptTimeout,
         _refreshDelay = refreshDelay ?? _defaultRefreshDelay,
         _recordTelemetry = recordTelemetry ?? ((eventName, properties) {}),
         _telemetryContextProvider = telemetryContextProvider ?? (() => const {}),
         _prepareSiriSignOut = prepareSiriSignOut ?? (() async {}),
-        _siriPreparationTimeout = siriPreparationTimeout;
+        _siriPreparationTimeout = siriPreparationTimeout,
+        _requestAppleCredential = requestAppleCredential ?? _requestNativeAppleCredential,
+        _signInWithCredential = signInWithCredential ?? _signInWithFirebaseCredential;
 
   /// Replaces the production Firebase token gateway on the **singleton** for
   /// the local hermetic journey lane (SCA-488).
@@ -164,6 +180,17 @@ class AuthService {
   final AuthTelemetryContextProvider _telemetryContextProvider;
   final Future<void> Function() _prepareSiriSignOut;
   final Duration _siriPreparationTimeout;
+  final AppleCredentialRequest _requestAppleCredential;
+  final FirebaseCredentialSignIn _signInWithCredential;
+
+  static Future<AuthorizationCredentialAppleID> _requestNativeAppleCredential(String nonce) =>
+      SignInWithApple.getAppleIDCredential(
+        scopes: [AppleIDAuthorizationScopes.email, AppleIDAuthorizationScopes.fullName],
+        nonce: nonce,
+      );
+
+  static Future<UserCredential> _signInWithFirebaseCredential(AuthCredential credential) =>
+      FirebaseAuth.instance.signInWithCredential(credential);
 
   Future<void> _prepareSiriBestEffort() async {
     try {
@@ -272,19 +299,13 @@ class AuthService {
 
   Future<UserCredential?> signInWithAppleMobile() async {
     try {
-      // Sign out the current user first
-      Logger.debug('Signing out current user...');
-      await signOutForAccountSwitch();
-      Logger.debug('User signed out successfully.');
-
       final rawNonce = generateNonce();
       final nonce = sha256ofString(rawNonce);
 
+      // Get Apple's credential before touching the current session, so a
+      // cancelled or failed sheet leaves the signed-in user as they were.
       Logger.debug('Requesting Apple credential...');
-      final appleCredential = await SignInWithApple.getAppleIDCredential(
-        scopes: [AppleIDAuthorizationScopes.email, AppleIDAuthorizationScopes.fullName],
-        nonce: nonce,
-      );
+      final appleCredential = await _requestAppleCredential(nonce);
 
       if (appleCredential.identityToken == null) {
         throw Exception('Apple Sign In failed - no identity token received.');
@@ -297,9 +318,14 @@ class AuthService {
         accessToken: appleCredential.authorizationCode,
       );
 
+      // Only a real credential replaces the current session.
+      Logger.debug('Signing out current user...');
+      await signOutForAccountSwitch();
+      Logger.debug('User signed out successfully.');
+
       // Sign in the user with Firebase.
       Logger.debug('Attempting to sign in with Firebase...');
-      UserCredential userCred = await FirebaseAuth.instance.signInWithCredential(oauthCredential);
+      UserCredential userCred = await _signInWithCredential(oauthCredential);
       Logger.debug('Firebase sign-in successful.');
 
       // Extract name from Apple credential (only available on first sign-in)
@@ -332,6 +358,9 @@ class AuthService {
       }
       return null;
     } catch (e) {
+      // Closing the sheet is not a failure: rethrow it so callers can tell it
+      // apart from a failed sign-in, which returns null.
+      if (isAppleSignInCancellation(e)) rethrow;
       Logger.debug('Error during Apple Sign In: $e');
       Logger.handle(e, null, message: 'An error occurred while signing in. Please try again later.');
       return null;
