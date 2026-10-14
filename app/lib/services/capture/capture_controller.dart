@@ -136,6 +136,7 @@ class CaptureController extends ChangeNotifier
   final CalendarCaptureGapMonitor? _calendarGapMonitor;
   MobileStandardBatch? _mobileStandardBatch;
   bool _mobileStandardBatchAllowed = false;
+  bool _mobileBatchOwnsSocketAudio = false;
 
   void installMobileStandardBatch(MobileStandardBatch lane) {
     if (_captureControllerDisposed) {
@@ -1720,7 +1721,7 @@ class CaptureController extends ChangeNotifier
     final device = _recordingDevice;
     if (device == null || socket.state != SocketServiceState.connected) return false;
     if (_phoneOwnsCapture || _pendantSuspension != null || isPaused || _preferences.batchModeEnabled) return false;
-    if (socket.onboardingMode || socket.customSttMode) return false;
+    if (_mobileBatchOwnsSocketAudio || socket.onboardingMode || socket.customSttMode) return false;
     final underlying = socket.socket;
     if (underlying is CompositeTranscriptionSocket && !underlying.forwardRawAudioToSecondary) return false;
     return socket.source == _getConversationSourceFromDevice();
@@ -2099,7 +2100,17 @@ class CaptureController extends ChangeNotifier
             geolocation: _sessionGeolocation,
             recordingSessionId: activeRecordingId,
           );
-          if (batched) return;
+          if (batched) {
+            _mobileBatchOwnsSocketAudio = true;
+            final socket = _socket;
+            if (socket != null) _completeWedgeSession(socket, intentional: true);
+            return;
+          }
+          if (_mobileBatchOwnsSocketAudio) {
+            _mobileBatchOwnsSocketAudio = false;
+            final socket = _socket;
+            if (socket?.state == SocketServiceState.connected) _beginWedgeSession(socket!);
+          }
         }
 
         // Local safety copy. A connected socket proves only that send() accepted

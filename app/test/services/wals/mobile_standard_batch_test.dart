@@ -12,6 +12,7 @@ import 'package:omi/services/wals/mobile_standard_batch.dart';
 import 'package:omi/services/wals/wal.dart';
 import 'package:omi/services/wals/wal_frame_encoder.dart';
 import 'package:omi/services/wals/sync_upload_batch.dart';
+import 'package:omi/services/capture/capture_wedge_monitor.dart';
 import '../../support/capture/capture_replay_world.dart';
 import '../../support/capture/scripted_device_connection.dart';
 
@@ -28,6 +29,24 @@ class FakeVad implements MobileBatchVad {
 
   @override
   Future<void> close() async {}
+}
+
+class RecordingWedgeMonitor extends CaptureWedgeMonitor {
+  RecordingWedgeMonitor()
+      : super(
+            featureGate: () async => true,
+            track: (_, __) {},
+            bleRetry: (_) async {},
+            appBuild: () => 'test',
+            platform: () => 'test');
+  int connected = 0;
+  final List<bool> endedIntentionally = [];
+  @override
+  int onCaptureSessionConnected({required String deviceId, required String source}) => ++connected;
+  @override
+  void onCaptureSessionEnded(int handle, {required int binaryBytesSent, bool intentional = false}) {
+    endedIntentionally.add(intentional);
+  }
 }
 
 List<List<int>> readFrames(File file) {
@@ -263,8 +282,12 @@ void main() {
   });
 
   test('real pendant controller selects exactly one WAL / socket owner per packet', () async {
+    final monitor = RecordingWedgeMonitor();
     final world = await CaptureReplayWorld.boot(
-        tempDir: directory, pendantCodec: BleAudioCodec.opus, initialPrefs: {'uid': 'owner'});
+        tempDir: directory,
+        pendantCodec: BleAudioCodec.opus,
+        initialPrefs: {'uid': 'owner'},
+        captureWedgeMonitor: monitor);
     world.deviceConnection = ScriptedDeviceConnection();
     world.controller.installMobileStandardBatch(lane);
     try {
@@ -273,20 +296,26 @@ void main() {
       await world.settle();
       world.socket!.emitServerMessage('{"type":"service_status","status":"ready","mobile_standard_batch":true}');
       await lane.pendingInitialization;
+      final endedBeforeBatch = monitor.endedIntentionally.length;
       world.deviceConnection!.emitAudio(value: 7);
       await world.settle();
       await lane.pendingInference;
+      expect(monitor.endedIntentionally.length, endedBeforeBatch + 1);
+      expect(monitor.endedIntentionally.last, true);
+      final startsDuringBatch = monitor.connected;
       expect(world.socket!.sentBinary, isEmpty);
       expect(world.wal.syncs.phone.testFrames, isEmpty);
       state.capturePageOpened();
       world.deviceConnection!.emitAudio(value: 8);
       await world.settle();
       await buffer.pending;
+      expect(monitor.connected, startsDuringBatch + 1);
       expect(world.socket!.sentBinary.single, List.filled(80, 8));
       expect(world.wal.syncs.phone.testFrames.single.payload, List.filled(80, 8));
       expect(readFrames(File('${directory.path}/${published.single.filePath}')), [List.filled(80, 7)]);
     } finally {
       await world.dispose();
+      monitor.dispose();
     }
   });
 
