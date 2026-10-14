@@ -127,6 +127,32 @@ def test_canary_refuses_existing_unmarked_owner(canary):
     assert db.rows[('users', UID)] == {'name': 'existing synthetic owner'} and not lanes
 
 
+def test_canary_repeats_without_model_target_selection_or_suppression_leak(canary):
+    db, lanes = canary
+    results = [asyncio.run(dream_canary.check()) for _ in range(3)]
+    assert [result['status'] for result in results] == ['pass'] * 3
+    assert lanes == [VERIFY_LANE] * 6
+    assert len(dream_store.own_runs(UID)) == 3
+    assert not any(path[2:3] in [('review_changes',), ('review_do_not_redo',)] for path in db.rows)
+
+
+def test_verifier_disagreement_does_not_decide_pipeline_health(canary, monkeypatch):
+    _, lanes = canary
+    original = dream_agent.dream_harness_transport.model_turn
+
+    async def disagree(uid, lane, mount, messages, **kwargs):
+        result = await original(uid, lane, mount, messages, **kwargs)
+        for decision in result.value.decisions:
+            decision.agree = False
+            decision.reason = 'Synthetic semantic disagreement; the wire is healthy'
+        return result
+
+    monkeypatch.setattr(dream_agent.dream_harness_transport, 'model_turn', disagree)
+    result = asyncio.run(dream_canary.check())
+    assert result['status'] == 'pass', result
+    assert lanes == [VERIFY_LANE, VERIFY_LANE]
+
+
 def test_canary_uses_scheduler_oidc_and_long_declared_deadline():
     app = FastAPI()
     app.include_router(dream_sweep.router)

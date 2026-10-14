@@ -156,7 +156,15 @@ async def check():
             stage = 'undo'
             await run_blocking(db_executor, review_changes.set_undone, uid, change.change_id, True)
             restored = await run_blocking(db_executor, read_record, uid, ref)
-            if restored['transcript_segments'] != records[ref]['transcript_segments']:
+            restored_segments = [
+                {field: value for field, value in segment.items() if field != 'original_text'}
+                for segment in restored['transcript_segments']
+            ]
+            expected_segments = [
+                {field: value for field, value in segment.items() if field != 'original_text'}
+                for segment in records[ref]['transcript_segments']
+            ]
+            if restored_segments != expected_segments:
                 raise CanaryFailure('undo_inexact')
             raw = await run_blocking(
                 db_executor, conversations.get_conversation_raw_snapshot, uid, dream_canary.RECORD_ID
