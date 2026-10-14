@@ -299,9 +299,9 @@ env:
   - name: TRANSCRIPTION_FINAL_PASS_PERCENT
     value: "0"
   - name: TRANSCRIPTION_FINAL_PASS_AUTHORITATIVE
-    value: "false"
+    value: "true"
   - name: TRANSCRIPTION_FINAL_PASS_SYNC_ENABLED
-    value: "false"
+    value: "true"
   # Phase-1 final-pass shadow runs only for the owner UID on this pusher.
   - name: TRANSCRIPTION_SHADOW_ENABLED
     value: "true"
