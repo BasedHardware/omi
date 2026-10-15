@@ -34,7 +34,7 @@ class FakeRunner:
     def __call__(self, command, **_kwargs):
         self.commands.append(command)
         if command[2:4] == ['operations', 'list']:
-            assert '--filter=done:false' in command
+            assert not any(token == '--filter' or token.startswith('--filter=') for token in command)
             assert '--limit=unlimited' in command
             operations = [_operation(group, field) for group, field in self.pending]
             return SimpleNamespace(returncode=0, stdout=json.dumps(operations + self.extra_operations))
@@ -188,12 +188,13 @@ def _operation(group, field):
     }
 
 
-def _apply(runner):
+def _apply(runner, *, sleeper=lambda _seconds: None):
     field_reconciler.apply_field_exemptions(
         project='based-hardware',
         database='(default)',
         exemptions=field_reconciler.expected_field_exemptions(json.loads(MANIFEST_PATH.read_text())),
         runner=runner,
+        sleeper=sleeper,
     )
 
 
@@ -239,8 +240,10 @@ def test_mixed_final_state_reports_disabled_submitted_and_in_flight(capsys):
 
 
 def test_successful_submission_without_disabled_field_or_pending_op_fails():
+    waits = []
     with pytest.raises(RuntimeError, match='neither disabled nor in flight'):
-        _apply(FakeRunner(lost={FIRST}))
+        _apply(FakeRunner(lost={FIRST}), sleeper=waits.append)
+    assert waits == [2, 2]
 
 
 @pytest.mark.parametrize('kind', ['done', 'other-type', 'other-field', 'other-database', 'other-project'])
@@ -274,3 +277,37 @@ def test_check_only_still_fails_with_pending_operations(monkeypatch):
             runner=runner,
         )
     assert all(command[4] == 'describe' for command in runner.commands)
+
+
+def test_running_operation_with_omitted_done_is_found_without_gcloud_filter():
+    runner = FakeRunner(pending={FIRST})
+    assert 'done' not in _operation(*FIRST)
+    assert field_reconciler.in_flight_fields(
+        project='based-hardware',
+        database='(default)',
+        runner=runner,
+    ) == {'projects/based-hardware/databases/(default)/collectionGroups/conversations/fields/' + FIRST[1]}
+    command = runner.commands[0]
+    assert '--limit=unlimited' in command
+    assert not any(token == '--filter' or token.startswith('--filter=') for token in command)
+
+
+@pytest.mark.parametrize('visible_after', [1, 2])
+@pytest.mark.parametrize('final_state', ['pending', 'disabled'])
+def test_post_submit_verification_rechecks_eventual_state(visible_after, final_state, capsys):
+    runner = FakeRunner(lost={FIRST})
+    waits = []
+
+    def advance(seconds):
+        waits.append(seconds)
+        if len(waits) == visible_after:
+            if final_state == 'pending':
+                runner.pending.add(FIRST)
+            else:
+                runner.disabled.add(FIRST)
+
+    _apply(runner, sleeper=advance)
+    assert waits == [2] * visible_after
+    expected_status = 'submitted' if final_state == 'pending' else 'disabled'
+    assert f'conversations.live_transcript_replay_receipt: {expected_status}' in capsys.readouterr().out
+    assert len([command for command in runner.commands if command[4] == 'update']) == 6

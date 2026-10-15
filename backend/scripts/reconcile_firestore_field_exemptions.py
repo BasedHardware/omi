@@ -7,6 +7,7 @@ import argparse
 import json
 import subprocess
 import sys
+import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable, Mapping
@@ -162,9 +163,10 @@ def find_missing_exemptions(
 
 
 def in_flight_fields(*, project: str, database: str, runner: CommandRunner = subprocess.run) -> set[str]:
-    """List pending admin operations, then match only UpdateField metadata locally.
+    """List all admin operations, then match pending UpdateField metadata locally.
 
-    Protobuf JSON omits done=false. Remove gcloud's default 100-operation
+    Protobuf JSON omits done=false, so do not filter done in gcloud.
+    Remove gcloud's default 100-operation
     limit so an older pending field update cannot disappear behind other work.
     """
     result = runner(
@@ -175,7 +177,6 @@ def in_flight_fields(*, project: str, database: str, runner: CommandRunner = sub
             'list',
             f'--project={project}',
             f'--database={database}',
-            '--filter=done:false',
             '--limit=unlimited',
             '--format=json',
         ],
@@ -219,6 +220,7 @@ def apply_field_exemptions(
     database: str,
     exemptions: tuple[FieldExemption, ...],
     runner: CommandRunner = subprocess.run,
+    sleeper: Callable[[float], None] = time.sleep,
 ) -> None:
     missing = find_missing_exemptions(
         project=project,
@@ -249,15 +251,26 @@ def apply_field_exemptions(
         else:
             submitted.add(exemption)
 
-    pending = in_flight_fields(project=project, database=database, runner=runner)
-    remaining = set(
-        find_missing_exemptions(
-            project=project,
-            database=database,
-            exemptions=exemptions,
-            runner=runner,
+    # A newly accepted async operation can take a moment to appear in list.
+    # Re-read both operation and field state, with at most two short waits.
+    for attempt in range(3):
+        pending = in_flight_fields(project=project, database=database, runner=runner)
+        remaining = set(
+            find_missing_exemptions(
+                project=project,
+                database=database,
+                exemptions=exemptions,
+                runner=runner,
+            )
         )
-    )
+        unaccounted = {
+            exemption
+            for exemption in remaining
+            if field_resource(project=project, database=database, exemption=exemption) not in pending
+        }
+        if not unaccounted or attempt == 2:
+            break
+        sleeper(2)
     for exemption in exemptions:
         label = f'{exemption.collection_group}.{exemption.field_path}'
         if exemption not in remaining:
