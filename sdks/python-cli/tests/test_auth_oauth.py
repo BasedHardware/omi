@@ -397,3 +397,31 @@ def test_store_oauth_tokens_without_key_still_nulls_it(config_path) -> None:
     profile = store_oauth_tokens("default", id_token="idt", refresh_token="rt", expires_at=9999.0)
     assert profile.auth_method == "oauth"
     assert profile.api_key is None
+
+
+def test_refresh_rotation_preserves_stored_dev_key(config_path, monkeypatch) -> None:
+    """Regression: when Firebase rotates the refresh token, store_oauth_tokens
+    must carry the co-stored dev key — dropping it silently kills every
+    /v1/dev/user/* call on the next CLI invocation."""
+    store_oauth_tokens(
+        "default",
+        id_token="old_id",
+        refresh_token="refr_old",
+        expires_at=time.time() - 10,
+        api_base="https://api.test.omi.local",
+        api_key="omi_dev_keepme",
+    )
+
+    def fake_post(self, url, **kwargs):  # noqa: ANN001
+        return httpx.Response(
+            200,
+            json={"id_token": "new_id", "refresh_token": "refr_rotated", "expires_in": "3600"},
+        )
+
+    monkeypatch.setattr(httpx.Client, "post", fake_post)
+    oauth.refresh_id_token("default")
+
+    reloaded = cfg.load().get_profile("default")
+    assert reloaded.id_token == "new_id"
+    assert reloaded.refresh_token == "refr_rotated"
+    assert reloaded.api_key == "omi_dev_keepme"  # the minted key survived rotation

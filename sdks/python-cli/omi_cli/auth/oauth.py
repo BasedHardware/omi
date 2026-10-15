@@ -250,6 +250,9 @@ def refresh_id_token(profile_name: str) -> str:
             refresh_token=new_refresh_token,
             expires_at=expires_at,
             api_base=profile.api_base,
+            # Preserve the minted dev key — a rotation that rewrites the
+            # record without it silently drops it on the first refresh.
+            api_key=profile.api_key,
         )
     else:
         update_oauth_id_token(
