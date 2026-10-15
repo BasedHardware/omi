@@ -60,6 +60,9 @@ def implementation_digest(feature: str) -> str:
     root = Path(__file__).resolve().parents[1]
     paths = [
         'conversations/process_conversation.py',
+        'conversations/owner_jev.py',
+        'llm/jev_client.py',
+        '../config/jev_decisions.py',
         'llm/conversation_prompt_context.py',
         'llm/memories.py',
         'llm/working_observations.py',

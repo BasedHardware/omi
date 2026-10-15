@@ -207,3 +207,17 @@ def test_invalid_checkpoint_output_is_a_cache_miss(enabled, monkeypatch):
     monkeypatch.setattr(dedupe, '_stored', lambda *_: {**hashes, 'structured': 'invalid stored shape'})
     assert dedupe.notes('u', enabled, 'input', generate, {}) == 'valid generated output'
     assert generate.call_count == 2
+
+
+def test_owner_adjudication_summary_is_part_of_l1_effective_input(enabled, memory_stack, monkeypatch):
+    pc, conversation, _ = memory_stack
+    row = {}
+    monkeypatch.setattr(pc, 'memory_owner_jev_flip_enabled', lambda: True)
+    monkeypatch.setattr(dedupe, '_stored', lambda *_: row)
+    monkeypatch.setattr(dedupe, 'l1_succeeded', lambda uid, conv, digest: row.update({dedupe.L1_HASH: digest}))
+    extract = Mock(return_value=[])
+    monkeypatch.setattr(pc, 'extract_canonical_l1_memory_candidates', extract)
+    pc._extract_memories_canonical('u', conversation, db_client=Mock())
+    conversation.structured.overview = 'Changed notes context for owner attribution'
+    pc._extract_memories_canonical('u', conversation, db_client=Mock())
+    assert extract.call_count == 2

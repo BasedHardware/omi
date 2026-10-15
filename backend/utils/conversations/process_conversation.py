@@ -1671,6 +1671,15 @@ def _extract_memories_canonical(
                     'content_date': content_date,
                     'rejected_examples': rejected_examples,
                     'belief_model': belief_model_enabled(),
+                    'owner_adjudication': (
+                        {
+                            'title': conversation.structured.title,
+                            'overview': conversation.structured.overview,
+                            'source': conversation.source,
+                        }
+                        if memory_owner_jev_flip_enabled()
+                        else None
+                    ),
                 },
             )
             if matched:
