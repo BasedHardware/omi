@@ -66,6 +66,8 @@ There are exactly two ways out, and they mean different things.
   widget. It owns the top radius (`OmiRadius.xl`), the 36×4 drag handle, the optional title row
   with a trailing `OmiCloseButton`, safe-area and keyboard insets, and `isScrollControlled`. Never
   a raw `showModalBottomSheet` (`raw-bottom-sheet`) and never a hand-drawn handle.
+- The Settings sheet drops the handle band (`showDragHandle: false`): its own header, with the close X,
+  is the top of the sheet, and it still swipes down to close.
 - A sheet nothing may dismiss (a required update) passes `isDismissible: false, enableDrag: false`
   and blocks back with `PopScope`, and has no handle that promises a swipe: `showOmiSheet` drops it
   itself; `showOmiSurfaceSheet` takes `showDragHandle: false`.

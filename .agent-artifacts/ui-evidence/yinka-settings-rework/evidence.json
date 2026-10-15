@@ -11,7 +11,7 @@
     {
       "file": "002-mobile-ios-settings-after-light.png",
       "platform": "mobile-ios",
-      "description": "Settings sheet after, iOS simulator (Free plan, no device): plan card with the plan name large and a compact Upgrade, minutes meter; Account initial; Device (Disconnected) / Recording / Notifications / Privacy first",
+      "description": "Settings sheet after, iOS simulator (card arm, Free plan, no device): no handle band, plan card with the plan name large and a full-width Upgrade, Account initial, Device (Disconnected) / Recording / Notifications / Privacy first",
       "captured_by": "agent",
       "source": "manual"
     }

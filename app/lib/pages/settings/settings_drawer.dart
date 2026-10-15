@@ -33,12 +33,15 @@ class SettingsDrawer extends StatefulWidget {
   /// Opens Settings; resolves when the sheet closes (callers compare settings after that).
   static Future<void> show(BuildContext context) {
     // Settings is a grouped list: surface1 rows on the page colour, so the sheet itself is surface0
-    // (showOmiSheet paints surface1). Same shell otherwise: framework drag handle, own header with
-    // a trailing close X. The surface is read on every rebuild, so switching Light/Dark from a page
+    // (showOmiSheet paints surface1). Same shell otherwise, minus the handle band: its own header
+    // with a trailing close X. The surface is read on every rebuild, so switching Light/Dark from a page
     // opened here repaints the sheet too.
     return showOmiSurfaceSheet<void>(
       context: context,
       surface: () => OmiColors.surface0,
+      // No handle band: the header (with its close X) is the top of the sheet, which still swipes
+      // down to close.
+      showDragHandle: false,
       builder: (context) => const FractionallySizedBox(heightFactor: 0.92, child: SettingsDrawer()),
     );
   }
@@ -354,10 +357,8 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
   @override
   Widget build(BuildContext context) {
     final motion = OmiMotion.of(context);
-    // The framework's drag handle sits in a 48 pt band whose lower half is empty; the header rises
-    // into it so the title sits close under the handle instead of a gap above Settings.
-    return Transform.translate(
-      offset: const Offset(0, -_headerLift),
+    return Padding(
+      padding: const EdgeInsets.only(top: OmiSpacing.sm),
       child: Column(
         children: [
           AnimatedSwitcher(duration: motion.quick, child: _buildHeader(context)),
@@ -375,9 +376,6 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
       ),
     );
   }
-
-  /// How far the header rises into the drag handle's empty band.
-  static const double _headerLift = 16;
 }
 
 /// The signed-in person's initial in a 32 pt circle (an avatar fits a settings row's leading slot);
