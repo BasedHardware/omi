@@ -694,6 +694,11 @@ def _sync_conversation_search_index(uid: str, conversation_id: str) -> None:
         )
 
 
+def sync_conversation_search_index_public(uid: str, conversation_id: str) -> None:
+    """Public alias for the post-write Typesense projection convergence."""
+    _sync_conversation_search_index(uid, conversation_id)
+
+
 def _delete_conversation_search_index(uid: str, conversation_id: str) -> None:
     """Remove one conversation from Typesense after a durable delete (fail-open)."""
     try:

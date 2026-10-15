@@ -33,7 +33,7 @@ def refresh_terminal_visibility_after_commit(operation):
         for uid, conversation_id in pending:
             observers = (
                 (conversations_db.invalidate_people_stats_cache, (uid,)),
-                (conversations_db._sync_conversation_search_index, (uid, conversation_id)),
+                (conversations_db.sync_conversation_search_index_public, (uid, conversation_id)),
             )
             for observer, observer_args in observers:
                 try:

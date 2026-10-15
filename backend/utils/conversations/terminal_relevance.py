@@ -73,8 +73,9 @@ def terminal_decision(
     source = getattr(row.get('source'), 'value', row.get('source'))
     discarded = bool(row.get('discarded'))
     user_restore = bool(row.get('sync_relevance_user_kept')) or path == 'user_restore'
-    if valid_decision(prior) and not (prior['verdict'] == 'discard' and user_restore):
-        return dict(prior)
+    if isinstance(prior, Mapping) and valid_decision(prior) and not (prior['verdict'] == 'discard' and user_restore):
+        prior_entries = {str(k): v for k, v in prior.items()}
+        return prior_entries
     trigger = path
     if not discarded and isinstance(prior, Mapping) and prior.get('verdict') == 'keep':
         prior_trigger = prior.get('trigger')
