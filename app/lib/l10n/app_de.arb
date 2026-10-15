@@ -4123,5 +4123,7 @@
     "activityEmpty": "Noch keine Aktivität",
     "activityNewSemantics": "Aktivität, neue Einträge",
     "activityLoadFailed": "Nicht alle Aktivitäten konnten geladen werden",
-    "activityNewItem": "Neu"
+    "activityNewItem": "Neu",
+    "consentShortMessage": "Omi macht mit KI aus deinen Gesprächen Notizen. Du kannst sie jederzeit löschen.",
+    "consentAiProviders": "Verarbeitet mit {providers}."
 }

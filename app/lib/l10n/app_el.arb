@@ -4123,5 +4123,7 @@
     "activityEmpty": "Δεν υπάρχει δραστηριότητα ακόμα",
     "activityNewSemantics": "Δραστηριότητα, νέα στοιχεία",
     "activityLoadFailed": "Δεν ήταν δυνατή η φόρτωση όλης της δραστηριότητάς σας",
-    "activityNewItem": "Νέο"
+    "activityNewItem": "Νέο",
+    "consentShortMessage": "Το Omi χρησιμοποιεί AI για να μετατρέπει τις συνομιλίες σου σε σημειώσεις. Μπορείς να τις διαγράψεις οποιαδήποτε στιγμή.",
+    "consentAiProviders": "Επεξεργασία μέσω {providers}."
 }

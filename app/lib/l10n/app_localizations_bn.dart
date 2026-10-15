@@ -13422,4 +13422,12 @@ class AppLocalizationsBn extends AppLocalizations {
 
   @override
   String get activityNewItem => 'নতুন';
+
+  @override
+  String get consentShortMessage => 'Omi AI ব্যবহার করে আপনার কথোপকথনকে নোটে পরিণত করে। যেকোনো সময় মুছে ফেলতে পারেন।';
+
+  @override
+  String consentAiProviders(String providers) {
+    return '$providers দিয়ে প্রক্রিয়া করা হয়।';
+  }
 }

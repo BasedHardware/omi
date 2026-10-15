@@ -11549,5 +11549,7 @@
     "activityEmpty": "ఇంకా కార్యాచరణ లేదు",
     "activityNewSemantics": "కార్యాచరణ, కొత్త అంశాలు",
     "activityLoadFailed": "మీ మొత్తం కార్యాచరణను లోడ్ చేయలేకపోయాం",
-    "activityNewItem": "కొత్తది"
+    "activityNewItem": "కొత్తది",
+    "consentShortMessage": "Omi AI సహాయంతో మీ సంభాషణలను నోట్స్‌గా మారుస్తుంది. వాటిని ఎప్పుడైనా తొలగించవచ్చు.",
+    "consentAiProviders": "{providers} ద్వారా ప్రాసెస్ చేయబడుతుంది."
 }

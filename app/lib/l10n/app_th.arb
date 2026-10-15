@@ -4123,5 +4123,7 @@
     "activityEmpty": "ยังไม่มีกิจกรรม",
     "activityNewSemantics": "กิจกรรม, รายการใหม่",
     "activityLoadFailed": "โหลดกิจกรรมทั้งหมดของคุณไม่ได้",
-    "activityNewItem": "ใหม่"
+    "activityNewItem": "ใหม่",
+    "consentShortMessage": "Omi ใช้ AI เปลี่ยนบทสนทนาของคุณเป็นโน้ต คุณลบได้ทุกเมื่อ",
+    "consentAiProviders": "ประมวลผลด้วย {providers}"
 }

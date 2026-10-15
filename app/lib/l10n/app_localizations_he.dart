@@ -13332,4 +13332,12 @@ class AppLocalizationsHe extends AppLocalizations {
 
   @override
   String get activityNewItem => 'חדש';
+
+  @override
+  String get consentShortMessage => 'Omi משתמש בבינה מלאכותית כדי להפוך את השיחות שלך להערות. אפשר למחוק אותן בכל עת.';
+
+  @override
+  String consentAiProviders(String providers) {
+    return 'מעובד באמצעות $providers.';
+  }
 }

@@ -13480,4 +13480,13 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get activityNewItem => 'Nou';
+
+  @override
+  String get consentShortMessage =>
+      'Omi folosește AI pentru a transforma conversațiile tale în notițe. Le poți șterge oricând.';
+
+  @override
+  String consentAiProviders(String providers) {
+    return 'Procesat cu $providers.';
+  }
 }

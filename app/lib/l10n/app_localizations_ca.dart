@@ -13494,4 +13494,13 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get activityNewItem => 'Nou';
+
+  @override
+  String get consentShortMessage =>
+      'Omi fa servir la IA per convertir les teves converses en notes. Les pots esborrar quan vulguis.';
+
+  @override
+  String consentAiProviders(String providers) {
+    return 'Processat amb $providers.';
+  }
 }

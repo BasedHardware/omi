@@ -13454,4 +13454,12 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get activityNewItem => 'Jauns';
+
+  @override
+  String get consentShortMessage => 'Omi ar MI palīdzību pārvērš jūsu sarunas piezīmēs. Tās var izdzēst jebkurā laikā.';
+
+  @override
+  String consentAiProviders(String providers) {
+    return 'Apstrādā $providers.';
+  }
 }

@@ -13473,4 +13473,13 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String get activityNewItem => 'Ново';
+
+  @override
+  String get consentShortMessage =>
+      'Omi използва ИИ, за да превърне разговорите ви в бележки. Можете да ги изтриете по всяко време.';
+
+  @override
+  String consentAiProviders(String providers) {
+    return 'Обработва се с $providers.';
+  }
 }

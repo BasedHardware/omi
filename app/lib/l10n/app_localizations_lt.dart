@@ -13449,4 +13449,13 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get activityNewItem => 'Nauja';
+
+  @override
+  String get consentShortMessage =>
+      'Omi naudoja DI, kad jūsų pokalbius paverstų užrašais. Juos galite ištrinti bet kada.';
+
+  @override
+  String consentAiProviders(String providers) {
+    return 'Apdorojama su $providers.';
+  }
 }

@@ -13237,4 +13237,12 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get activityNewItem => '新着';
+
+  @override
+  String get consentShortMessage => 'OmiはAIで会話をメモにまとめます。メモはいつでも削除できます。';
+
+  @override
+  String consentAiProviders(String providers) {
+    return '$providers で処理されます。';
+  }
 }

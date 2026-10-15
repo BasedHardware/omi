@@ -13456,4 +13456,13 @@ class AppLocalizationsSl extends AppLocalizations {
 
   @override
   String get activityNewItem => 'Novo';
+
+  @override
+  String get consentShortMessage =>
+      'Omi z umetno inteligenco spremeni vaše pogovore v zapiske. Kadar koli jih lahko izbrišete.';
+
+  @override
+  String consentAiProviders(String providers) {
+    return 'Obdelano z $providers.';
+  }
 }

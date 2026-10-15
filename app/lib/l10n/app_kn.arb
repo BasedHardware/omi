@@ -11549,5 +11549,7 @@
     "activityEmpty": "ಇನ್ನೂ ಯಾವುದೇ ಚಟುವಟಿಕೆ ಇಲ್ಲ",
     "activityNewSemantics": "ಚಟುವಟಿಕೆ, ಹೊಸ ಐಟಂಗಳು",
     "activityLoadFailed": "ನಿಮ್ಮ ಎಲ್ಲಾ ಚಟುವಟಿಕೆಯನ್ನು ಲೋಡ್ ಮಾಡಲು ಸಾಧ್ಯವಾಗಲಿಲ್ಲ",
-    "activityNewItem": "ಹೊಸದು"
+    "activityNewItem": "ಹೊಸದು",
+    "consentShortMessage": "Omi AI ಬಳಸಿ ನಿಮ್ಮ ಸಂಭಾಷಣೆಗಳನ್ನು ಟಿಪ್ಪಣಿಗಳಾಗಿ ಮಾಡುತ್ತದೆ. ಯಾವಾಗ ಬೇಕಾದರೂ ಅಳಿಸಬಹುದು.",
+    "consentAiProviders": "{providers} ಮೂಲಕ ಸಂಸ್ಕರಿಸಲಾಗುತ್ತದೆ."
 }

@@ -13461,4 +13461,12 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get activityNewItem => 'Nieuw';
+
+  @override
+  String get consentShortMessage => 'Omi maakt met AI notities van je gesprekken. Je kunt ze altijd verwijderen.';
+
+  @override
+  String consentAiProviders(String providers) {
+    return 'Verwerkt met $providers.';
+  }
 }

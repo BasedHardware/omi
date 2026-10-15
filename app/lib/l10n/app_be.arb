@@ -11549,5 +11549,7 @@
     "activityEmpty": "Пакуль няма актыўнасці",
     "activityNewSemantics": "Актыўнасць, новыя элементы",
     "activityLoadFailed": "Не ўдалося загрузіць усю вашу актыўнасць",
-    "activityNewItem": "Новае"
+    "activityNewItem": "Новае",
+    "consentShortMessage": "Omi з дапамогай ШІ ператварае вашы размовы ў нататкі. Іх можна выдаліць у любы момант.",
+    "consentAiProviders": "Апрацоўка: {providers}."
 }

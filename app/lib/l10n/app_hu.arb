@@ -4219,5 +4219,7 @@
     "activityEmpty": "Még nincs tevékenység",
     "activityNewSemantics": "Tevékenység, új elemek",
     "activityLoadFailed": "Nem sikerült betölteni az összes tevékenységet",
-    "activityNewItem": "Új"
+    "activityNewItem": "Új",
+    "consentShortMessage": "Az Omi mesterséges intelligenciával jegyzetekké alakítja a beszélgetéseidet. Bármikor törölheted őket.",
+    "consentAiProviders": "Feldolgozás: {providers}."
 }

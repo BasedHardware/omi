@@ -4123,5 +4123,7 @@
     "activityEmpty": "Nog geen activiteit",
     "activityNewSemantics": "Activiteit, nieuwe items",
     "activityLoadFailed": "Niet al je activiteit kon worden geladen",
-    "activityNewItem": "Nieuw"
+    "activityNewItem": "Nieuw",
+    "consentShortMessage": "Omi maakt met AI notities van je gesprekken. Je kunt ze altijd verwijderen.",
+    "consentAiProviders": "Verwerkt met {providers}."
 }

@@ -13218,4 +13218,12 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get activityNewItem => '新';
+
+  @override
+  String get consentShortMessage => 'Omi 用 AI 把你的对话整理成笔记。你可以随时删除。';
+
+  @override
+  String consentAiProviders(String providers) {
+    return '由 $providers 处理。';
+  }
 }

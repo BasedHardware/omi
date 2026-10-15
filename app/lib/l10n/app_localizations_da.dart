@@ -13412,4 +13412,13 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String get activityNewItem => 'Ny';
+
+  @override
+  String get consentShortMessage =>
+      'Omi bruger AI til at gøre dine samtaler til noter. Du kan slette dem når som helst.';
+
+  @override
+  String consentAiProviders(String providers) {
+    return 'Behandles med $providers.';
+  }
 }

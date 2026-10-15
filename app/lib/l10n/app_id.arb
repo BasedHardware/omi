@@ -4158,5 +4158,7 @@
     "activityEmpty": "Belum ada aktivitas",
     "activityNewSemantics": "Aktivitas, item baru",
     "activityLoadFailed": "Tidak dapat memuat semua aktivitas Anda",
-    "activityNewItem": "Baru"
+    "activityNewItem": "Baru",
+    "consentShortMessage": "Omi menggunakan AI untuk mengubah percakapanmu menjadi catatan. Kamu bisa menghapusnya kapan saja.",
+    "consentAiProviders": "Diproses dengan {providers}."
 }

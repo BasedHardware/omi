@@ -13420,4 +13420,13 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String get activityNewItem => 'جدید';
+
+  @override
+  String get consentShortMessage =>
+      'Omi با هوش مصنوعی گفتگوهای شما را به یادداشت تبدیل می‌کند. هر زمان بخواهید می‌توانید آن‌ها را حذف کنید.';
+
+  @override
+  String consentAiProviders(String providers) {
+    return 'پردازش با $providers.';
+  }
 }

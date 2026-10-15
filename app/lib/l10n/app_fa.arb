@@ -11549,5 +11549,7 @@
     "activityEmpty": "هنوز فعالیتی نیست",
     "activityNewSemantics": "فعالیت، موارد جدید",
     "activityLoadFailed": "بارگیری همه فعالیت‌های شما ممکن نشد",
-    "activityNewItem": "جدید"
+    "activityNewItem": "جدید",
+    "consentShortMessage": "Omi با هوش مصنوعی گفتگوهای شما را به یادداشت تبدیل می‌کند. هر زمان بخواهید می‌توانید آن‌ها را حذف کنید.",
+    "consentAiProviders": "پردازش با {providers}."
 }

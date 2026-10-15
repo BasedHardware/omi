@@ -4123,5 +4123,7 @@
     "activityEmpty": "暂无活动",
     "activityNewSemantics": "活动，有新内容",
     "activityLoadFailed": "无法加载全部活动",
-    "activityNewItem": "新"
+    "activityNewItem": "新",
+    "consentShortMessage": "Omi 用 AI 把你的对话整理成笔记。你可以随时删除。",
+    "consentAiProviders": "由 {providers} 处理。"
 }

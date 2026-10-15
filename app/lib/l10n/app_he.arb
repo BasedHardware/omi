@@ -11549,5 +11549,7 @@
     "activityEmpty": "אין פעילות עדיין",
     "activityNewSemantics": "פעילות, פריטים חדשים",
     "activityLoadFailed": "לא ניתן היה לטעון את כל הפעילות שלך",
-    "activityNewItem": "חדש"
+    "activityNewItem": "חדש",
+    "consentShortMessage": "Omi משתמש בבינה מלאכותית כדי להפוך את השיחות שלך להערות. אפשר למחוק אותן בכל עת.",
+    "consentAiProviders": "מעובד באמצעות {providers}."
 }

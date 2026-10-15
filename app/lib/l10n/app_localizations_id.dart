@@ -13435,4 +13435,13 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get activityNewItem => 'Baru';
+
+  @override
+  String get consentShortMessage =>
+      'Omi menggunakan AI untuk mengubah percakapanmu menjadi catatan. Kamu bisa menghapusnya kapan saja.';
+
+  @override
+  String consentAiProviders(String providers) {
+    return 'Diproses dengan $providers.';
+  }
 }

@@ -4123,5 +4123,7 @@
     "activityEmpty": "Все още няма активност",
     "activityNewSemantics": "Активност, нови елементи",
     "activityLoadFailed": "Не можахме да заредим цялата ви активност",
-    "activityNewItem": "Ново"
+    "activityNewItem": "Ново",
+    "consentShortMessage": "Omi използва ИИ, за да превърне разговорите ви в бележки. Можете да ги изтриете по всяко време.",
+    "consentAiProviders": "Обработва се с {providers}."
 }

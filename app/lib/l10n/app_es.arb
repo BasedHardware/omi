@@ -4123,5 +4123,7 @@
     "activityEmpty": "Aún no hay actividad",
     "activityNewSemantics": "Actividad, elementos nuevos",
     "activityLoadFailed": "No se pudo cargar toda tu actividad",
-    "activityNewItem": "Nuevo"
+    "activityNewItem": "Nuevo",
+    "consentShortMessage": "Omi usa IA para convertir tus conversaciones en notas. Puedes eliminarlas cuando quieras.",
+    "consentAiProviders": "Procesado con {providers}."
 }

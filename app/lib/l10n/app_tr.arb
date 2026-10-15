@@ -4158,5 +4158,7 @@
     "activityEmpty": "Henüz etkinlik yok",
     "activityNewSemantics": "Etkinlik, yeni öğeler",
     "activityLoadFailed": "Etkinliğinizin tamamı yüklenemedi",
-    "activityNewItem": "Yeni"
+    "activityNewItem": "Yeni",
+    "consentShortMessage": "Omi, konuşmalarını yapay zekâ ile notlara dönüştürür. İstediğin zaman silebilirsin.",
+    "consentAiProviders": "{providers} ile işlenir."
 }

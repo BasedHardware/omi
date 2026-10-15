@@ -11549,5 +11549,7 @@
     "activityEmpty": "Још нема активности",
     "activityNewSemantics": "Активност, нове ставке",
     "activityLoadFailed": "Није могуће учитати сву вашу активност",
-    "activityNewItem": "Ново"
+    "activityNewItem": "Ново",
+    "consentShortMessage": "Omi користи AI да ваше разговоре претвори у белешке. Можете их обрисати у било ком тренутку.",
+    "consentAiProviders": "Обрађује се помоћу {providers}."
 }

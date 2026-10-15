@@ -4123,5 +4123,7 @@
     "activityEmpty": "Tegevusi veel pole",
     "activityNewSemantics": "Tegevus, uued üksused",
     "activityLoadFailed": "Kogu tegevust ei õnnestunud laadida",
-    "activityNewItem": "Uus"
+    "activityNewItem": "Uus",
+    "consentShortMessage": "Omi muudab tehisintellekti abil sinu vestlused märkmeteks. Saad need igal ajal kustutada.",
+    "consentAiProviders": "Töödeldakse teenustega {providers}."
 }

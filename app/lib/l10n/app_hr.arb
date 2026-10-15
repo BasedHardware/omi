@@ -11549,5 +11549,7 @@
     "activityEmpty": "Još nema aktivnosti",
     "activityNewSemantics": "Aktivnost, nove stavke",
     "activityLoadFailed": "Nismo mogli učitati svu vašu aktivnost",
-    "activityNewItem": "Novo"
+    "activityNewItem": "Novo",
+    "consentShortMessage": "Omi koristi AI kako bi vaše razgovore pretvorio u bilješke. Možete ih izbrisati bilo kada.",
+    "consentAiProviders": "Obrađuje se pomoću {providers}."
 }

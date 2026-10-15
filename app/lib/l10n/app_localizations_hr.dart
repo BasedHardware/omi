@@ -13459,4 +13459,13 @@ class AppLocalizationsHr extends AppLocalizations {
 
   @override
   String get activityNewItem => 'Novo';
+
+  @override
+  String get consentShortMessage =>
+      'Omi koristi AI kako bi vaše razgovore pretvorio u bilješke. Možete ih izbrisati bilo kada.';
+
+  @override
+  String consentAiProviders(String providers) {
+    return 'Obrađuje se pomoću $providers.';
+  }
 }

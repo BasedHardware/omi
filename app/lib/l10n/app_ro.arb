@@ -4123,5 +4123,7 @@
     "activityEmpty": "Nicio activitate încă",
     "activityNewSemantics": "Activitate, elemente noi",
     "activityLoadFailed": "Nu am putut încărca toată activitatea ta",
-    "activityNewItem": "Nou"
+    "activityNewItem": "Nou",
+    "consentShortMessage": "Omi folosește AI pentru a transforma conversațiile tale în notițe. Le poți șterge oricând.",
+    "consentAiProviders": "Procesat cu {providers}."
 }

@@ -13359,4 +13359,12 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get activityNewItem => 'ใหม่';
+
+  @override
+  String get consentShortMessage => 'Omi ใช้ AI เปลี่ยนบทสนทนาของคุณเป็นโน้ต คุณลบได้ทุกเมื่อ';
+
+  @override
+  String consentAiProviders(String providers) {
+    return 'ประมวลผลด้วย $providers';
+  }
 }

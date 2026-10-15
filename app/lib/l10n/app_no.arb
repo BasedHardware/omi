@@ -4123,5 +4123,7 @@
     "activityEmpty": "Ingen aktivitet ennå",
     "activityNewSemantics": "Aktivitet, nye elementer",
     "activityLoadFailed": "Kunne ikke laste inn all aktiviteten din",
-    "activityNewItem": "Ny"
+    "activityNewItem": "Ny",
+    "consentShortMessage": "Omi bruker KI til å gjøre samtalene dine om til notater. Du kan slette dem når som helst.",
+    "consentAiProviders": "Behandles med {providers}."
 }

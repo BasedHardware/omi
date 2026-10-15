@@ -11549,5 +11549,7 @@
     "activityEmpty": "Še ni dejavnosti",
     "activityNewSemantics": "Dejavnost, novi elementi",
     "activityLoadFailed": "Ni bilo mogoče naložiti vse vaše dejavnosti",
-    "activityNewItem": "Novo"
+    "activityNewItem": "Novo",
+    "consentShortMessage": "Omi z umetno inteligenco spremeni vaše pogovore v zapiske. Kadar koli jih lahko izbrišete.",
+    "consentAiProviders": "Obdelano z {providers}."
 }

@@ -4123,5 +4123,7 @@
     "activityEmpty": "アクティビティはまだありません",
     "activityNewSemantics": "アクティビティ、新着あり",
     "activityLoadFailed": "アクティビティの一部を読み込めませんでした",
-    "activityNewItem": "新着"
+    "activityNewItem": "新着",
+    "consentShortMessage": "OmiはAIで会話をメモにまとめます。メモはいつでも削除できます。",
+    "consentAiProviders": "{providers} で処理されます。"
 }

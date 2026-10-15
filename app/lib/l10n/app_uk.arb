@@ -4123,5 +4123,7 @@
     "activityEmpty": "Поки немає активності",
     "activityNewSemantics": "Активність, нові елементи",
     "activityLoadFailed": "Не вдалося завантажити всю активність",
-    "activityNewItem": "Нове"
+    "activityNewItem": "Нове",
+    "consentShortMessage": "Omi за допомогою ШІ перетворює ваші розмови на нотатки. Їх можна видалити будь-коли.",
+    "consentAiProviders": "Обробка: {providers}."
 }

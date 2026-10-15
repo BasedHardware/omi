@@ -4123,5 +4123,7 @@
     "activityEmpty": "لا يوجد نشاط بعد",
     "activityNewSemantics": "النشاط، عناصر جديدة",
     "activityLoadFailed": "تعذّر تحميل كل نشاطك",
-    "activityNewItem": "جديد"
+    "activityNewItem": "جديد",
+    "consentShortMessage": "يستخدم Omi الذكاء الاصطناعي لتحويل محادثاتك إلى ملاحظات. يمكنك حذفها في أي وقت.",
+    "consentAiProviders": "تتم المعالجة بواسطة {providers}."
 }

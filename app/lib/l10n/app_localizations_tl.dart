@@ -13530,4 +13530,13 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get activityNewItem => 'Bago';
+
+  @override
+  String get consentShortMessage =>
+      'Ginagamit ng Omi ang AI para gawing notes ang iyong mga usapan. Puwede mo itong burahin anumang oras.';
+
+  @override
+  String consentAiProviders(String providers) {
+    return 'Pinoproseso gamit ang $providers.';
+  }
 }

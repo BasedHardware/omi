@@ -11549,5 +11549,7 @@
     "activityEmpty": "এখনও কোনো কার্যকলাপ নেই",
     "activityNewSemantics": "কার্যকলাপ, নতুন আইটেম",
     "activityLoadFailed": "আপনার সব কার্যকলাপ লোড করা যায়নি",
-    "activityNewItem": "নতুন"
+    "activityNewItem": "নতুন",
+    "consentShortMessage": "Omi AI ব্যবহার করে আপনার কথোপকথনকে নোটে পরিণত করে। যেকোনো সময় মুছে ফেলতে পারেন।",
+    "consentAiProviders": "{providers} দিয়ে প্রক্রিয়া করা হয়।"
 }

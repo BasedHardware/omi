@@ -4158,5 +4158,7 @@
     "activityEmpty": "Brak aktywności",
     "activityNewSemantics": "Aktywność, nowe elementy",
     "activityLoadFailed": "Nie udało się wczytać całej aktywności",
-    "activityNewItem": "Nowe"
+    "activityNewItem": "Nowe",
+    "consentShortMessage": "Omi za pomocą AI zamienia Twoje rozmowy w notatki. Możesz je usunąć w każdej chwili.",
+    "consentAiProviders": "Przetwarzane przez {providers}."
 }

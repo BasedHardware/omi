@@ -4158,5 +4158,7 @@
     "activityEmpty": "Пока нет активности",
     "activityNewSemantics": "Активность, новые элементы",
     "activityLoadFailed": "Не удалось загрузить всю активность",
-    "activityNewItem": "Новое"
+    "activityNewItem": "Новое",
+    "consentShortMessage": "Omi с помощью ИИ превращает ваши разговоры в заметки. Их можно удалить в любой момент.",
+    "consentAiProviders": "Обработка: {providers}."
 }

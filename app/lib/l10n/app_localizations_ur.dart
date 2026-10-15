@@ -13439,4 +13439,13 @@ class AppLocalizationsUr extends AppLocalizations {
 
   @override
   String get activityNewItem => 'نیا';
+
+  @override
+  String get consentShortMessage =>
+      'Omi AI کی مدد سے آپ کی گفتگو کو نوٹس میں بدلتا ہے۔ آپ انہیں کسی بھی وقت حذف کر سکتے ہیں۔';
+
+  @override
+  String consentAiProviders(String providers) {
+    return '$providers کے ذریعے پروسیس کیا جاتا ہے۔';
+  }
 }

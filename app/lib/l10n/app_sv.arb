@@ -4123,5 +4123,7 @@
     "activityEmpty": "Ingen aktivitet än",
     "activityNewSemantics": "Aktivitet, nya objekt",
     "activityLoadFailed": "Kunde inte läsa in all din aktivitet",
-    "activityNewItem": "Ny"
+    "activityNewItem": "Ny",
+    "consentShortMessage": "Omi använder AI för att göra dina samtal till anteckningar. Du kan radera dem när som helst.",
+    "consentAiProviders": "Bearbetas med {providers}."
 }

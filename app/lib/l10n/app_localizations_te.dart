@@ -13477,4 +13477,12 @@ class AppLocalizationsTe extends AppLocalizations {
 
   @override
   String get activityNewItem => 'కొత్తది';
+
+  @override
+  String get consentShortMessage => 'Omi AI సహాయంతో మీ సంభాషణలను నోట్స్‌గా మారుస్తుంది. వాటిని ఎప్పుడైనా తొలగించవచ్చు.';
+
+  @override
+  String consentAiProviders(String providers) {
+    return '$providers ద్వారా ప్రాసెస్ చేయబడుతుంది.';
+  }
 }

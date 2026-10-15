@@ -13455,4 +13455,13 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get activityNewItem => 'Нове';
+
+  @override
+  String get consentShortMessage =>
+      'Omi за допомогою ШІ перетворює ваші розмови на нотатки. Їх можна видалити будь-коли.';
+
+  @override
+  String consentAiProviders(String providers) {
+    return 'Обробка: $providers.';
+  }
 }

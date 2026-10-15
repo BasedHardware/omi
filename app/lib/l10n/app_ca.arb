@@ -4123,5 +4123,7 @@
     "activityEmpty": "Encara no hi ha activitat",
     "activityNewSemantics": "Activitat, elements nous",
     "activityLoadFailed": "No s'ha pogut carregar tota la teva activitat",
-    "activityNewItem": "Nou"
+    "activityNewItem": "Nou",
+    "consentShortMessage": "Omi fa servir la IA per convertir les teves converses en notes. Les pots esborrar quan vulguis.",
+    "consentAiProviders": "Processat amb {providers}."
 }

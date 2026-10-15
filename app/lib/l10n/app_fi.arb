@@ -4123,5 +4123,7 @@
     "activityEmpty": "Ei vielä toimintaa",
     "activityNewSemantics": "Toiminta, uusia kohteita",
     "activityLoadFailed": "Kaikkea toimintaa ei voitu ladata",
-    "activityNewItem": "Uusi"
+    "activityNewItem": "Uusi",
+    "consentShortMessage": "Omi tekee keskusteluistasi muistiinpanoja tekoälyn avulla. Voit poistaa ne milloin tahansa.",
+    "consentAiProviders": "Käsittely: {providers}."
 }

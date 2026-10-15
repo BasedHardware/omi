@@ -4123,5 +4123,7 @@
     "activityEmpty": "Vēl nav aktivitātes",
     "activityNewSemantics": "Aktivitāte, jauni vienumi",
     "activityLoadFailed": "Neizdevās ielādēt visu jūsu aktivitāti",
-    "activityNewItem": "Jauns"
+    "activityNewItem": "Jauns",
+    "consentShortMessage": "Omi ar MI palīdzību pārvērš jūsu sarunas piezīmēs. Tās var izdzēst jebkurā laikā.",
+    "consentAiProviders": "Apstrādā {providers}."
 }

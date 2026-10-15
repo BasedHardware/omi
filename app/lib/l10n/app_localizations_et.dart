@@ -13419,4 +13419,13 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get activityNewItem => 'Uus';
+
+  @override
+  String get consentShortMessage =>
+      'Omi muudab tehisintellekti abil sinu vestlused märkmeteks. Saad need igal ajal kustutada.';
+
+  @override
+  String consentAiProviders(String providers) {
+    return 'Töödeldakse teenustega $providers.';
+  }
 }

@@ -13427,4 +13427,12 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get activityNewItem => 'Nové';
+
+  @override
+  String get consentShortMessage => 'Omi pomocí AI mění vaše konverzace v poznámky. Kdykoli je můžete smazat.';
+
+  @override
+  String consentAiProviders(String providers) {
+    return 'Zpracovává $providers.';
+  }
 }

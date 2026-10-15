@@ -4123,5 +4123,7 @@
     "activityEmpty": "Veiklos dar nėra",
     "activityNewSemantics": "Veikla, nauji elementai",
     "activityLoadFailed": "Nepavyko įkelti visos jūsų veiklos",
-    "activityNewItem": "Nauja"
+    "activityNewItem": "Nauja",
+    "consentShortMessage": "Omi naudoja DI, kad jūsų pokalbius paverstų užrašais. Juos galite ištrinti bet kada.",
+    "consentAiProviders": "Apdorojama su {providers}."
 }
