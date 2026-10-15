@@ -279,3 +279,50 @@ Pause `sync-backfill` in Cloud Tasks or set the global daily allowance to a valu
 ## Release acceptance
 
 Upload a synthetic eight-day backlog and then create a current recording. Verify the current recording reaches a terminal job first, historical jobs never exceed thirty concurrent dispatches, live fair-use totals exclude `sync_backfill`, and replaying the same raw upload returns the durable completed result without new metering.
+
+### Backfill owner repair
+
+Every accepted `sync_backfill_pending` entry has a durable
+`sync_backfill_sequencer` owner. Admission creates missing owners in the same
+transaction, including duplicate admission of a legacy orphan. Completion and
+active retirement clear the active reservation but retain an idle owner and its
+fencing epoch. Idle reconciliation defers its next probe by the heartbeat
+interval, including when the queue is empty. Owners are intentionally retained;
+this trades a small persistent document per participating UID for removing the
+owner-deletion/admission race entirely.
+
+The reconcile job's existing due-pending scan repairs missing owners before
+attempting dispatch, at most one transaction per distinct UID in its bounded
+page (maximum 500 entries per tick). Deferring pending entries rotates the scan
+through the backlog. Repair transactionally rechecks pending presence and never
+overwrites an existing active owner. A repaired owner is immediately due
+(`reconcile_at = now`). Each repair emits `event=sync_backfill_owner_repaired`
+and increments `sync_backfill_owner_repaired_total`; sweep outcomes also count
+`owner_repaired`. The existing cutover guards, run locks and Redis-expiry checks
+still control dispatch and retirement.
+
+An operator can review and run `scripts/repair_sync_backfill_owners.py` from
+`backend/`. It reads only UID projections while paging pending documents by ID,
+then uses the same transactional owner-creation primitive as admission and the
+scheduled sweep. It prints aggregate counts only, caps reads at `--limit`
+(default 1,000,000 entries), and rate-limits UID probes (default 5/second,
+maximum 20). `--page-size` is capped at 500. Dry-run is the default and uses
+read-only Firestore transactions; apply recreates owners but does not dispatch
+tasks or touch Redis, ledgers, audio, or pending payloads. Reruns are idempotent.
+If `scanned_entries` reaches `--limit`, raise the limit for a complete pass.
+Counts cover the selected bounded scan, not a point-in-time fleet snapshot;
+concurrent admission/completion can change them.
+
+Prepared procedure (requires explicit operator review before apply):
+
+```bash
+source ~/.local/bin/gcp-agent-env.sh ro-prod
+OMI_ENV_STAGE=prod PYTHONPATH=. .venv/bin/python scripts/repair_sync_backfill_owners.py --project based-hardware --dry-run
+# After review, select the authorized operator credentials outside the script.
+OMI_ENV_STAGE=prod PYTHONPATH=. .venv/bin/python scripts/repair_sync_backfill_owners.py --project based-hardware --apply
+```
+
+Compare `missing_owners`, `repaired_owners` and `errors`; rerun dry-run after
+apply. A nonzero error count returns a failing exit code without printing
+exception details or identities. The background reconcile job picks up repaired
+owners on subsequent ticks. No one-off repair is part of deploying this code.

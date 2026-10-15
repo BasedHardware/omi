@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "id": "FC-pending-queue-without-dispatch-owner",
+  "violated_contract": "Every durable pending queue entry must retain a discoverable dispatch owner, including across duplicate admission, active completion and expiry retirement. A lost immediate kick must not remove its recovery path.",
+  "canonical_prevention": "Use one transactional owner-creation primitive for admission and repair; retain idle owners and fencing epochs when releasing active work instead of deleting them. Reconcile missing owners from a bounded rotating pending scan, rechecking pending presence and existing ownership transactionally. Cover admission, completion, both retirement paths, real transaction contention, idempotent repair, and flag-off idle-owner behavior.",
+  "canonical_prevention_artifact": [
+    "backend/tests/unit/test_sync_backfill_uid_sequencer.py",
+    "backend/tests/integration/test_sync_backfill_retirement_emulator.py",
+    "backend/tests/unit/test_sync_cloud_tasks.py"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "backend/database/sync_backfill_sequencer.py",
+    "backend/utils/sync/uid_sequencer.py"
+  ],
+  "status": "open"
+}

@@ -14,11 +14,13 @@ from typing import Any, Optional
 
 from google.cloud import firestore
 from google.api_core.exceptions import NotFound
+from prometheus_client import Counter
 
 from database._client import get_firestore_client
 from utils.sync import stage as sync_stage
 
 logger = logging.getLogger(__name__)
+OWNER_REPAIRED = Counter('sync_backfill_owner_repaired', 'Missing backfill owners recreated')
 
 COLLECTION = 'sync_backfill_sequencer'
 PENDING_COLLECTION = 'sync_backfill_pending'
@@ -76,6 +78,62 @@ def is_registered(uid: str, job_id: str, *, firestore_client: Any = None) -> boo
     return _data(_root(client, uid).get()).get('active_job_id') == job_id
 
 
+def _ensure_owner(transaction: Any, root: Any, owner: dict[str, Any], current: datetime) -> bool:
+    """Shared admission/repair primitive; caller must finish all reads first."""
+    if owner:
+        return False
+    transaction.set(root, {'epoch': 0, 'reconcile_at': current, 'updated_at': current})
+    return True
+
+
+def repair_owner(
+    uid: str,
+    *,
+    dry_run: bool = False,
+    firestore_client: Any = None,
+    now: Optional[datetime] = None,
+) -> bool:
+    """Repair only while pending entries still exist for this UID.
+
+    The queue and owner are read together: a stale scan cannot resurrect
+    an empty queue or overwrite a concurrent dispatch. Dry-run uses a read-only
+    transaction and reports whether a repair would be needed.
+    """
+    _require_production()
+    client = firestore_client or get_firestore_client()
+    root = _root(client, uid)
+    current = now or _now()
+
+    @firestore.transactional
+    def commit(transaction: Any) -> bool:
+        owner = _data(root.get(transaction=transaction))
+        if owner:
+            return False
+        if not list(_pending_for_uid(client, uid).limit(1).stream(transaction=transaction)):
+            return False
+        return True if dry_run else _ensure_owner(transaction, root, owner, current)
+
+    repaired = commit(client.transaction(read_only=True) if dry_run else client.transaction())
+    if repaired and not dry_run:
+        OWNER_REPAIRED.inc()
+        logger.info('event=sync_backfill_owner_repaired count=1')
+    return repaired
+
+
+def _release_owner(transaction: Any, root: Any, owner: dict[str, Any], current: datetime) -> None:
+    # Retain idle owners even when the queue appears empty. Deletion would
+    # race admission and reset the fencing epoch; bounded reconciliation
+    # defers idle rows so they cannot monopolize the owner scan.
+    transaction.set(
+        root,
+        {
+            'epoch': max(int(owner.get('epoch') or 0), int(owner.get('active_epoch') or 0)),
+            'reconcile_at': current,
+            'updated_at': current,
+        },
+    )
+
+
 def register_job(
     uid: str,
     job_id: str,
@@ -103,7 +161,9 @@ def register_job(
         existing = _data(pending.get(transaction=transaction))
         owner = _data(root.get(transaction=transaction))
         if existing or owner.get('active_job_id') == job_id:
+            _ensure_owner(transaction, root, owner, accepted_at)
             return False
+        _ensure_owner(transaction, root, owner, accepted_at)
         transaction.set(
             pending,
             {
@@ -190,7 +250,8 @@ def retire_expired(
     """Retire exact unbound work while caller holds its Redis lock and proves absence.
 
     An epoch selects an already-dispatching owner. A worker that began running
-    wins the transaction race. Waiting retirement never changes an owner.
+    wins the transaction race. Waiting retirement can repair a missing idle
+    owner but never releases an active reservation.
     """
     _require_production()
     client = firestore_client or get_firestore_client()
@@ -239,7 +300,11 @@ def retire_expired(
                     'updated_at': current,
                 },
             )
-        transaction.delete(root if epoch is not None else pending)
+        if epoch is not None:
+            _release_owner(transaction, root, owner, current)
+        else:
+            _ensure_owner(transaction, root, owner, current)
+            transaction.delete(pending)
         return True
 
     return commit(client.transaction())
@@ -273,8 +338,9 @@ def claim_next(
         job = _data(pending.get(transaction=transaction))
         if not job:
             return None
-        epoch = int(owner.get('epoch') or 0) + 1
+        epoch = max(int(owner.get('epoch') or 0), int(owner.get('active_epoch') or 0)) + 1
         active = {
+            'epoch': epoch,
             'active_job_id': job['job_id'],
             'active_payload': job['payload'],
             'active_epoch': epoch,
@@ -360,13 +426,14 @@ def finish_job(
     _require_production()
     client = firestore_client or get_firestore_client()
     root = _root(client, uid)
+    current = now or _now()
 
     @firestore.transactional
     def commit(transaction: Any) -> bool:
         owner = _data(root.get(transaction=transaction))
         if owner.get('active_job_id') != job_id or owner.get('active_epoch') != epoch:
             return False
-        transaction.delete(root)
+        _release_owner(transaction, root, owner, current)
         return True
 
     released = commit(client.transaction())
@@ -422,6 +489,7 @@ def redrive_job(
         transaction.update(
             root,
             {
+                'epoch': next_epoch,
                 'active_epoch': next_epoch,
                 'active_state': 'dispatching',
                 'lease_expires_at': current + timedelta(seconds=LEASE_SECONDS),

@@ -1,6 +1,8 @@
 """Real transaction/delete proof. Requires a loopback-only Firestore emulator."""
 
 import os
+from concurrent.futures import ThreadPoolExecutor
+from threading import Barrier
 from datetime import datetime, timezone
 from urllib.parse import urlparse
 from uuid import uuid4
@@ -13,6 +15,7 @@ from google.cloud.firestore_v1.document import DocumentReference
 
 from database import sync_backfill_sequencer as registry
 from utils.sync import uid_sequencer
+from scripts import repair_sync_backfill_owners as repair_script
 
 
 @pytest.fixture
@@ -87,7 +90,8 @@ def test_dispatching_owner_retired_and_next_claimed(state):
     claim = registry.claim_next(uid, firestore_client=client)
     registry.register_job(uid, 'next', {'uid': uid, 'job_id': 'next'}, None, firestore_client=client)
     assert registry.retire_expired(uid, jid, epoch=claim['epoch'], firestore_client=client)
-    assert not client.collection(registry.COLLECTION).document(uid).get().exists
+    assert client.collection(registry.COLLECTION).document(uid).get().exists
+    assert not registry.get_owner(uid, firestore_client=client).get('active_job_id')
     assert ledger.get().to_dict()['status'] == 'retryable'
     assert registry.claim_next(uid, firestore_client=client)['job_id'] == 'next'
 
@@ -95,7 +99,8 @@ def test_dispatching_owner_retired_and_next_claimed(state):
 def test_claim_candidate_identity_fence_uses_the_transactional_head(state):
     client, uid, jid, ledger = state
     assert registry.claim_next(uid, expected_job_id='not-inspected', firestore_client=client) is None
-    assert not client.collection(registry.COLLECTION).document(uid).get().exists
+    assert client.collection(registry.COLLECTION).document(uid).get().exists
+    assert not registry.get_owner(uid, firestore_client=client).get('active_job_id')
     assert client.collection(registry.PENDING_COLLECTION).document(jid).get().exists
     assert registry.claim_next(uid, expected_job_id=jid, firestore_client=client)['job_id'] == jid
 
@@ -111,7 +116,7 @@ def test_claim_path_preserves_refused_head_and_ledger(state, monkeypatch, bindin
     ledger.update(binding)
     before = ledger.get().to_dict()
     assert uid_sequencer._claim_next(uid) is None
-    assert registry.get_owner(uid) == {}
+    assert not registry.get_owner(uid).get('active_job_id')
     assert client.collection(registry.PENDING_COLLECTION).document(jid).get().exists
     assert ledger.get().to_dict() == before
 
@@ -133,5 +138,69 @@ def test_bounded_claim_schedules_wake_for_live_successor(state, monkeypatch):
     assert not uid_sequencer.kick(uid, retire_limit=1)
     wake.assert_called_once()
     assert registry.pending_head(uid)['job_id'] == live
-    assert registry.get_owner(uid) == {}
+    assert not registry.get_owner(uid).get('active_job_id')
     assert uid_sequencer._claim_next(uid)['job_id'] == live
+
+
+def test_duplicate_admission_transactionally_repairs_missing_owner(state):
+    client, uid, jid, ledger = state
+    owner = client.collection(registry.COLLECTION).document(uid)
+    owner.delete()  # Reproduce a legacy orphan, only inside the emulator.
+    assert not registry.register_job(uid, jid, {'ignored': True}, None, firestore_client=client)
+    assert owner.get().exists
+    assert registry.get_owner(uid, firestore_client=client)['reconcile_at'] is not None
+
+
+def test_repair_dry_run_and_stale_scan_are_read_only(state):
+    client, uid, jid, ledger = state
+    owner = client.collection(registry.COLLECTION).document(uid)
+    owner.delete()
+    assert registry.repair_owner(uid, dry_run=True, firestore_client=client)
+    assert not owner.get().exists
+    client.collection(registry.PENDING_COLLECTION).document(jid).delete()
+    assert not registry.repair_owner(uid, firestore_client=client)
+    assert not owner.get().exists
+
+
+@pytest.mark.parametrize('release', ['finish', 'retire'])
+def test_concurrent_admission_and_owner_release_cannot_strand_queue(state, release):
+    # Both transaction orders must preserve ownership. Use the real Firestore
+    # transaction runner: a serialized fake cannot prove contention behavior.
+    client, uid, jid, ledger = state
+    claim = registry.claim_next(uid, firestore_client=client)
+    barrier = Barrier(2)
+    next_job = uuid4().hex
+
+    def admit():
+        barrier.wait(timeout=10)
+        return registry.register_job(uid, next_job, {'uid': uid, 'job_id': next_job}, None, firestore_client=client)
+
+    def finish():
+        barrier.wait(timeout=10)
+        if release == 'finish':
+            return registry.finish_job(uid, jid, claim['epoch'], 'completed', firestore_client=client)
+        return registry.retire_expired(uid, jid, epoch=claim['epoch'], firestore_client=client)
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        admission = pool.submit(admit)
+        completion = pool.submit(finish)
+        assert admission.result(timeout=30)
+        assert completion.result(timeout=30)
+    owner = registry.get_owner(uid, firestore_client=client)
+    assert owner and not owner.get('active_job_id')
+    assert registry.has_pending(uid, firestore_client=client)
+    assert registry.claim_next(uid, firestore_client=client)['job_id'] == next_job
+
+
+def test_operator_repair_real_pagination_is_read_only_then_idempotent(state, monkeypatch):
+    client, uid, jid, ledger = state
+    owner = client.collection(registry.COLLECTION).document(uid)
+    owner.delete()
+    monkeypatch.setattr(repair_script.time, 'sleep', lambda seconds: None)
+    dry = repair_script.repair(client, page_size=1)
+    assert dry['missing_owners'] >= 1 and dry['repaired_owners'] == 0
+    assert not owner.get().exists
+    applied = repair_script.repair(client, apply=True, page_size=1)
+    assert applied['repaired_owners'] >= 1 and applied['errors'] == 0
+    assert owner.get().exists
+    assert repair_script.repair(client, apply=True, page_size=1)['repaired_owners'] == 0
