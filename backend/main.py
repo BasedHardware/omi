@@ -385,6 +385,12 @@ app.add_middleware(FirestoreTierMiddleware)
 app.add_middleware(SyncUploadMetricsMiddleware)
 app.add_middleware(DesktopProxyDeadlineMiddleware)
 
+from utils.llm.desktop_gemini_telemetry import ProxyAdmissionMiddleware
+
+# Added last so this is the outermost hop: the admission stamp must exist
+# before BYOK token verify or any route dependency executes.
+app.add_middleware(ProxyAdmissionMiddleware)
+
 
 @app.on_event("startup")  # type: ignore[reportDeprecated]  # FastAPI on_event still functional; lifespan migration would change app wiring
 async def startup_event():

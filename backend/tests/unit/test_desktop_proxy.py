@@ -1422,6 +1422,116 @@ async def test_streaming_deadline_includes_time_before_the_body(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_streaming_deadline_mid_body_reports_body_phase(monkeypatch):
+    class UpstreamResponse:
+        status_code = 200
+
+        async def aiter_bytes(self):
+            while True:
+                await asyncio.sleep(0.05)
+                yield b'data: {"candidates":[{"content":{"parts":[{"text":"x"}}]}}\n\n'
+
+    class StreamContext:
+        def __init__(self):
+            self.closed = False
+
+        async def __aenter__(self):
+            return UpstreamResponse()
+
+        async def __aexit__(self, *_args):
+            self.closed = True
+
+    class Client:
+        def stream(self, *args, **kwargs):
+            return StreamContext()
+
+    async def meter(_uid, path, _model, _action):
+        return path
+
+    async def route(_path, _model, _action, _query):
+        return desktop_proxy.UpstreamRoute("https://provider.invalid", {}, {}, "vertex_ai", "adc", "us-central1")
+
+    async def await_upstream(_request, awaitable):
+        return await awaitable
+
+    _set_gemini_byok(monkeypatch, 'user-key')
+    monkeypatch.setattr(desktop_proxy.desktop_gemini_gateway, "DESKTOP_STREAM_DEADLINE_SECONDS", 0.1)
+    monkeypatch.setattr(desktop_proxy, "_meter_server_request", meter)
+    monkeypatch.setattr(desktop_proxy, "_upstream", route)
+    monkeypatch.setattr(desktop_proxy, "_cancel_on_disconnect", await_upstream)
+    monkeypatch.setattr(desktop_proxy, "get_desktop_gemini_stream_client", lambda: Client())
+    monkeypatch.setattr(desktop_proxy, "get_desktop_gemini_semaphore", lambda: asyncio.Semaphore(1))
+    output = io.StringIO()
+    monkeypatch.setattr(desktop_proxy.sys, "stdout", output)
+
+    response = await desktop_proxy._proxy(
+        make_request(workload="interactive"), "models/gemini-2.5-flash:streamGenerateContent", True, "user"
+    )
+    received = [chunk async for chunk in response.body_iterator]
+    assert any(b'provider_deadline_exceeded' in chunk for chunk in received)
+    event = json.loads(output.getvalue())
+    assert event["outcome"] == "provider_deadline_exceeded"
+    # Chunks arrived before the deadline hit, so the terminal event must not
+    # claim no first byte ever arrived.
+    assert event["phase"] == "body"
+    assert b'"phase":"body"' in received[-1]
+
+
+@pytest.mark.asyncio
+async def test_stream_deadline_is_anchored_before_route_dependencies(monkeypatch):
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+
+    from utils.llm.desktop_gemini_telemetry import ProxyAdmissionMiddleware
+
+    app = FastAPI()
+    app.include_router(desktop_proxy.router)
+
+    class SlowPreRouterMiddleware:
+        """Stands in for BYOKMiddleware's executor-backed token verify."""
+
+        def __init__(self, inner):
+            self.inner = inner
+
+        async def __call__(self, scope, receive, send):
+            if scope['type'] == 'http':
+                await asyncio.sleep(0.15)
+            await self.inner(scope, receive, send)
+
+    app.add_middleware(SlowPreRouterMiddleware)
+    app.add_middleware(ProxyAdmissionMiddleware)
+    app.dependency_overrides[desktop_proxy.get_current_user_uid] = lambda: 'synthetic-user'
+
+    observed: dict = {}
+
+    async def proxied(request, path, streaming, uid):
+        telemetry = desktop_proxy.get_proxy_telemetry(request, streaming=streaming)
+        observed['telemetry'] = telemetry
+        observed['handler_entry'] = asyncio.get_running_loop().time()
+        return Response(status_code=204)
+
+    async def allow(_uid, _path):
+        return None
+
+    monkeypatch.setattr(desktop_proxy, '_enforce_managed_plan_gate', allow)
+    monkeypatch.setattr(desktop_proxy, '_proxy', proxied)
+    monkeypatch.setattr(desktop_proxy.desktop_gemini_gateway, 'DESKTOP_STREAM_DEADLINE_SECONDS', 0.1)
+
+    response = TestClient(app).post(
+        '/v1/proxy/gemini-stream/models/gemini-2.5-flash:streamGenerateContent',
+        content=b'{"contents":[{"parts":[{"text":"hi"}}]}',
+    )
+    assert response.status_code == 204
+    # Middleware hops before the router (BYOK token verify) must count against
+    # the stream deadline. With the budget pinned to 0.1s and a 0.15s
+    # pre-router hop, the admission deadline must already be expired when the
+    # route body runs; anchoring at telemetry construction would instead grant
+    # a fresh 270s after that hop.
+    deadline = desktop_proxy.desktop_gemini_gateway.admission_deadline(observed['telemetry'])
+    assert deadline <= observed['handler_entry']
+
+
+@pytest.mark.asyncio
 async def test_streaming_error_body_stops_at_the_wall_clock(monkeypatch):
     class UpstreamResponse:
         status_code = 400

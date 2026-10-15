@@ -47,6 +47,7 @@ from utils.metrics import start_metrics_sidecar_server, stop_metrics_sidecar_ser
 from utils.llm.managed_spend_ledger import shutdown_managed_spend_ledger
 from utils.executors import log_executor_health, start_background_task
 from utils.desktop_loop_watchdog import DesktopLoopWatchdog, InFlightRequestsMiddleware
+from utils.llm.desktop_gemini_telemetry import ProxyAdmissionMiddleware
 
 
 def _initialize_firebase_admin() -> None:
@@ -173,6 +174,9 @@ def _build_app() -> FastAPI:
     app.include_router(desktop_deprecated.router)
     app.include_router(metrics.router)
     jit_rollout.validate_jit_rollout_contract(app)
+    # Added last so this is the outermost hop: the admission stamp must exist
+    # before CORS, BYOK token verify, or any route dependency executes.
+    app.add_middleware(ProxyAdmissionMiddleware)
     return app
 
 

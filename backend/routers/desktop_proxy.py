@@ -889,6 +889,7 @@ async def _stream_provider(
             return
         assert upstream is not None
         async for chunk in desktop_gemini_gateway.iter_before_deadline(upstream.aiter_bytes(), deadline):
+            telemetry.phase = 'body'
             usage_observer.feed(chunk)
             yield chunk
         usage_observer.finish()
