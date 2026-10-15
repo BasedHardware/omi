@@ -115,6 +115,15 @@ class ActionItemsProvider extends ChangeNotifier {
   bool _homeDayLoaded = false;
   List<ActionItemWithMetadata> _homeDayItems = [];
 
+  /// Unfiltered snapshot that keeps Home widgets truthful while the Tasks
+  /// screen shows a date-range filter: screen refreshes (which carry the
+  /// filter) replace `_actionItems` with only matching rows, but the iOS
+  /// widget's Up Next entries and its "open in all" count must reflect all
+  /// open tasks, not the current screen query.
+  List<ActionItemWithMetadata>? _unfilteredWidgetSnapshot;
+  DateTime? _unfilteredWidgetRefreshedAt;
+  Future<void>? _unfilteredWidgetLoad;
+
   List<ActionItemWithMetadata> _actionItems = [];
   int _sessionGeneration = 0;
 
@@ -484,6 +493,10 @@ class ActionItemsProvider extends ChangeNotifier {
   /// A bounded snapshot is ready for Home widgets, or the Tasks list has loaded.
   bool get hasLoaded => _initialLoadCompleted || _homeWidgetRefreshedAt != null;
 
+  /// True while the Tasks screen's date-range filter constrains `_actionItems`
+  /// (and therefore [todayPreviewTasks]/[incompleteItems]) to matching rows.
+  bool get _widgetsReadFilteredList => hasActiveFilter;
+
   /// The Tasks screen's own full initialization, separate from [hasLoaded]:
   /// Home's bounded widget preview can complete (zero tasks) without this
   /// screen ever running [ensureLoaded], and the screen must still shimmer
@@ -503,11 +516,16 @@ class ActionItemsProvider extends ChangeNotifier {
     int limit = 3,
   }) {
     final clock = now ?? DateTime.now();
+    // While the Tasks screen filters by date range, `_actionItems` holds only
+    // matching rows; the widgets' Up Next must still draw from the unfiltered
+    // snapshot when one exists (see [incompleteItems]).
+    final source =
+        (_widgetsReadFilteredList && _unfilteredWidgetSnapshot != null) ? _unfilteredWidgetSnapshot! : _actionItems;
     final byId = <String, ActionItemWithMetadata>{};
-    for (final item in filterTodayTasks(_actionItems, now: clock)) {
+    for (final item in filterTodayTasks(source, now: clock)) {
       byId[item.id] = item;
     }
-    if (_homeDayLoaded) {
+    if (_homeDayLoaded && !_widgetsReadFilteredList) {
       for (final item in filterTodayTasks(_homeDayItems, now: clock)) {
         byId[item.id] = item;
       }
@@ -548,7 +566,17 @@ class ActionItemsProvider extends ChangeNotifier {
   }
 
   // Group action items by completion status
-  List<ActionItemWithMetadata> get incompleteItems => _actionItems.where((item) => item.completed == false).toList();
+  /// All open tasks for surfaces that must not inherit the Tasks screen's
+  /// date-range filter (Home widgets' "open in all" count). While a filter is
+  /// active, `_actionItems` holds only matching rows, so the latest unfiltered
+  /// snapshot is preferred when one exists.
+  List<ActionItemWithMetadata> get incompleteItems {
+    final snapshot = _unfilteredWidgetSnapshot;
+    if (_widgetsReadFilteredList && snapshot != null) {
+      return snapshot.where((item) => item.completed == false).toList();
+    }
+    return _actionItems.where((item) => item.completed == false).toList();
+  }
 
   List<ActionItemWithMetadata> get completedItems => _actionItems.where((item) => item.completed == true).toList();
 
@@ -636,9 +664,15 @@ class ActionItemsProvider extends ChangeNotifier {
     if (_initialLoadCompleted) {
       // Once the Tasks screen has loaded, the preview fetch can no longer
       // apply its replacement (it yields to screen initialization), so a
-      // resume-time freshness call must not dead-end here: refresh the
-      // authoritative list under the shared 30 s cooldown instead. The
-      // publisher listens to this provider, so the widget follows.
+      // resume-time freshness call must not dead-end here. With no screen
+      // filter, the screen's own refresh IS unfiltered and authoritative —
+      // share its cooldown. With a filter active, that same refresh would
+      // replace `_actionItems` with only matching rows while the widgets must
+      // stay unfiltered: refresh a widget-only snapshot instead, never
+      // touching the screen's list.
+      if (hasActiveFilter) {
+        return _refreshUnfilteredWidgetSnapshot();
+      }
       return refreshActionItems();
     }
     if (_homeWidgetLoad != null) return _homeWidgetLoad!;
@@ -652,6 +686,40 @@ class ActionItemsProvider extends ChangeNotifier {
     });
     _homeWidgetLoad = load;
     return load;
+  }
+
+  /// Refreshes the unfiltered snapshot that backs Home widgets while the Tasks
+  /// screen shows a date-range filter. Mirrors `_fetchHomeWidgetPreview`'s
+  /// guards (single-flight, cooldown, generation fencing) but never replaces
+  /// `_actionItems`, so the filtered screen list is untouched.
+  Future<void> _refreshUnfilteredWidgetSnapshot() {
+    if (_unfilteredWidgetLoad != null) return _unfilteredWidgetLoad!;
+    final refreshedAt = _unfilteredWidgetRefreshedAt;
+    if (refreshedAt != null && DateTime.now().difference(refreshedAt) < _refreshCooldown) {
+      return Future.value();
+    }
+    final generation = _sessionGeneration;
+    final load = _fetchUnfilteredWidgetSnapshot(generation).whenComplete(() {
+      if (generation == _sessionGeneration) _unfilteredWidgetLoad = null;
+    });
+    _unfilteredWidgetLoad = load;
+    return load;
+  }
+
+  Future<void> _fetchUnfilteredWidgetSnapshot(int generation) async {
+    try {
+      final response = await _fetchActionItemsPage(limit: 100, offset: 0, completed: false);
+      if (generation != _sessionGeneration) return;
+      if (response == null) return;
+      _unfilteredWidgetSnapshot =
+          response.actionItems.where((item) => !_pendingDeletionIds.contains(item.id)).take(100).toList();
+      _unfilteredWidgetRefreshedAt = DateTime.now();
+      // The publisher listens to this provider; widgets re-render from the
+      // snapshot even though the screen's filtered list did not change.
+      notifyListeners();
+    } catch (e) {
+      Logger.debug('Error fetching unfiltered home widget task snapshot: $e');
+    }
   }
 
   Future<void> _fetchHomeWidgetPreview(int generation) async {
@@ -1853,12 +1921,36 @@ class ActionItemsProvider extends ChangeNotifier {
     _startDate = startDate;
     _endDate = endDate;
     fetchActionItems(showShimmer: true);
+    _onScreenFilterChanged(wasFiltered: false);
   }
 
   void clearDateRangeFilter() {
     _startDate = null;
     _endDate = null;
     fetchActionItems(showShimmer: true);
+    _onScreenFilterChanged(wasFiltered: true);
+  }
+
+  /// The widget-facing view flips between the unfiltered snapshot and the
+  /// (now unfiltered again) screen list when the Tasks filter changes; kick a
+  /// background snapshot refresh so widgets never render a stale transition.
+  /// Cheap no-op when the screen has not loaded yet (the preview path owns
+  /// freshness then, and `_actionItems` was unfiltered all along).
+  void _onScreenFilterChanged({required bool wasFiltered}) {
+    if (!_initialLoadCompleted) return;
+    final nowFiltered = hasActiveFilter;
+    if (nowFiltered == wasFiltered) return;
+    if (nowFiltered) {
+      // Widgets are about to read the snapshot; make sure one exists.
+      unawaited(_refreshUnfilteredWidgetSnapshot());
+    } else {
+      // Clearing the filter replaces `_actionItems` with an unfiltered page;
+      // drop the snapshot so widgets read the live screen list immediately
+      // instead of a potentially stale duplicate.
+      _unfilteredWidgetSnapshot = null;
+      _unfilteredWidgetRefreshedAt = null;
+      notifyListeners();
+    }
   }
 
   Future<void> refreshActionItems() async {
@@ -1973,6 +2065,9 @@ class ActionItemsProvider extends ChangeNotifier {
     _initialLoad = null;
     _homeWidgetLoad = null;
     _homeWidgetRefreshedAt = null;
+    _unfilteredWidgetSnapshot = null;
+    _unfilteredWidgetRefreshedAt = null;
+    _unfilteredWidgetLoad = null;
     _homeDayItems = [];
     _homeDayLoaded = false;
     _homeTodayLoad = null;

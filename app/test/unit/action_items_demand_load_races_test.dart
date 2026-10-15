@@ -17,6 +17,7 @@ class _HeldListApi extends api.ActionItemsApi {
   ApiResult<ActionItemsResponse> result = const ApiSuccess(ActionItemsResponse(actionItems: [], hasMore: false));
   final List<Completer<ApiResult<ActionItemsResponse>>> _pending = [];
   final List<int> requestedOffsets = [];
+  final List<Map<String, Object?>> requests = [];
 
   @override
   Future<ApiResult<ActionItemsResponse>> list({
@@ -30,6 +31,13 @@ class _HeldListApi extends api.ActionItemsApi {
     DateTime? dueEndDate,
   }) {
     requestedOffsets.add(offset);
+    requests.add({
+      'completed': completed,
+      'startDate': startDate,
+      'endDate': endDate,
+      'dueStartDate': dueStartDate,
+      'dueEndDate': dueEndDate,
+    });
     final completer = Completer<ApiResult<ActionItemsResponse>>();
     _pending.add(completer);
     return completer.future;
@@ -1437,6 +1445,81 @@ void main() {
         isFalse,
         reason: 'a superseded completion response must not overwrite the newer confirmed state',
       );
+      provider.dispose();
+    });
+  });
+
+  group('round 7 review races', () {
+    test('resume freshness with an active date filter keeps the widget view unfiltered', () async {
+      final typed = _HeldListApi();
+      final provider = ActionItemsProvider(actionItemsApi: typed);
+
+      // Unfiltered screen load: both rows are on the first page.
+      typed.result = ApiSuccess(ActionItemsResponse(actionItems: [_row('a'), _row('b')], hasMore: false));
+      final load = provider.ensureLoaded(showShimmer: true);
+      await Future<void>.delayed(Duration.zero);
+      typed.resolve();
+      await load;
+      expect(provider.screenLoaded, isTrue);
+      expect(provider.incompleteItems.map((i) => i.id), containsAll(['a', 'b']));
+
+      // The Tasks screen applies a date-range filter; the filtered response
+      // contains only row 'a'. Both the screen fetch (filtered) and the
+      // widget snapshot fetch (unfiltered) are now pending.
+      provider.setDateRangeFilter(DateTime(2026, 10, 1), DateTime(2026, 10, 2));
+      await Future<void>.delayed(Duration.zero);
+      expect(typed.requests.length, 3, reason: 'initial load + screen filter fetch + widget snapshot fetch');
+      expect(typed.requests[1]['startDate'], isNotNull, reason: 'the screen fetch carries the filter');
+      expect(typed.requests[2]['startDate'], isNull,
+          reason: 'the widget snapshot fetch must not inherit the screen filter');
+      expect(typed.requests[2]['completed'], isFalse);
+
+      // The filtered screen response lands first: only 'a' matches.
+      typed.completeAt(0, ApiSuccess(ActionItemsResponse(actionItems: [_row('a')], hasMore: false)));
+      await Future<void>.delayed(Duration.zero);
+      expect(provider.actionItems.map((i) => i.id), ['a'], reason: 'the Tasks screen keeps its filtered replacement');
+
+      // The unfiltered snapshot lands with both rows.
+      typed.completeAt(0, ApiSuccess(ActionItemsResponse(actionItems: [_row('a'), _row('b')], hasMore: false)));
+      await Future<void>.delayed(Duration.zero);
+      await Future<void>.delayed(Duration.zero);
+
+      // The screen list stays filtered, but the widget-facing view does not.
+      expect(provider.actionItems.map((i) => i.id), ['a']);
+      expect(provider.incompleteItems.map((i) => i.id), containsAll(['a', 'b']),
+          reason: 'the widget count must not inherit the screen filter');
+      provider.dispose();
+    });
+
+    test('clearing the filter returns widgets to the live screen list', () async {
+      final typed = _HeldListApi();
+      final provider = ActionItemsProvider(actionItemsApi: typed);
+
+      typed.result = ApiSuccess(ActionItemsResponse(actionItems: [_row('a'), _row('b')], hasMore: false));
+      final load = provider.ensureLoaded(showShimmer: true);
+      await Future<void>.delayed(Duration.zero);
+      typed.resolve();
+      await load;
+
+      provider.setDateRangeFilter(DateTime(2026, 10, 1), DateTime(2026, 10, 2));
+      await Future<void>.delayed(Duration.zero);
+      typed.completeAt(0, ApiSuccess(ActionItemsResponse(actionItems: [_row('a')], hasMore: false)));
+      await Future<void>.delayed(Duration.zero);
+      typed.completeAt(0, ApiSuccess(ActionItemsResponse(actionItems: [_row('a'), _row('b')], hasMore: false)));
+      await Future<void>.delayed(Duration.zero);
+      await Future<void>.delayed(Duration.zero);
+      expect(provider.incompleteItems.map((i) => i.id), containsAll(['a', 'b']));
+
+      // Clearing the filter triggers an unfiltered screen fetch; widgets must
+      // read the live list (which includes 'b' again) rather than a snapshot.
+      provider.clearDateRangeFilter();
+      await Future<void>.delayed(Duration.zero);
+      expect(typed.requests.last['startDate'], isNull);
+      typed.completeAt(0, ApiSuccess(ActionItemsResponse(actionItems: [_row('a'), _row('b')], hasMore: false)));
+      await Future<void>.delayed(Duration.zero);
+      await Future<void>.delayed(Duration.zero);
+      expect(provider.actionItems.map((i) => i.id), containsAll(['a', 'b']));
+      expect(provider.incompleteItems.map((i) => i.id), containsAll(['a', 'b']));
       provider.dispose();
     });
   });
