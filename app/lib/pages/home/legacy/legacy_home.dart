@@ -462,7 +462,7 @@ class _LegacyProcessingConversationWidgetState extends State<LegacyProcessingCon
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
         child: Container(
           width: double.maxFinite,
-          decoration: BoxDecoration(color: OmiColors.surface1, borderRadius: BorderRadius.circular(24.0)),
+          decoration: BoxDecoration(color: OmiColors.surface1, borderRadius: BorderRadius.circular(24.0)), // omi-ux-allow: radius-literal -- verbatim copy of today's Home (home-redesign control)
           // Static skeleton - no animation to save CPU/battery
           child: Padding(
             padding: const EdgeInsets.all(16),
@@ -479,7 +479,7 @@ class _LegacyProcessingConversationWidgetState extends State<LegacyProcessingCon
                       height: 24,
                       decoration: BoxDecoration(
                         color: OmiColors.surface2,
-                        borderRadius: BorderRadius.circular(12),
+                        borderRadius: BorderRadius.circular(12), // omi-ux-allow: radius-literal -- verbatim copy of today's Home (home-redesign control)
                       ),
                     ),
                     const SizedBox(width: 8),
@@ -487,7 +487,7 @@ class _LegacyProcessingConversationWidgetState extends State<LegacyProcessingCon
                     Container(
                       decoration: BoxDecoration(
                         color: OmiColors.categorySurface,
-                        borderRadius: BorderRadius.circular(16),
+                        borderRadius: BorderRadius.circular(16), // omi-ux-allow: radius-literal -- verbatim copy of today's Home (home-redesign control)
                       ),
                       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                       child: Text(
@@ -508,13 +508,13 @@ class _LegacyProcessingConversationWidgetState extends State<LegacyProcessingCon
                 Container(
                   width: double.maxFinite,
                   height: 16,
-                  decoration: BoxDecoration(color: OmiColors.surface2, borderRadius: BorderRadius.circular(4)),
+                  decoration: BoxDecoration(color: OmiColors.surface2, borderRadius: BorderRadius.circular(4)), // omi-ux-allow: radius-literal -- verbatim copy of today's Home (home-redesign control)
                 ),
                 if (_timedOut) ...[
                   const SizedBox(height: 12),
                   Text(
                     context.l10n.processingTakingLonger,
-                    style: TextStyle(color: OmiColors.textTertiary, fontSize: 13, height: 1.3),
+                    style: TextStyle(color: OmiColors.textTertiary, fontSize: 13, height: 1.3), // omi-ux-allow: font-size-literal -- verbatim copy of today's Home (home-redesign control)
                   ),
                   const SizedBox(height: 10),
                   Align(
