@@ -25,7 +25,7 @@
   .tick svg { width:14px; height:14px; }
   .benefit b { display:block; font-size:16px; line-height:1.35; font-weight:700; }
   .benefit span { display:block; margin-top:2px; font-size:14px; line-height:1.45; color:var(--text2); }
-  footer { position:fixed; z-index:10; left:0; right:0; bottom:0; background:var(--bg); padding:16px 16px max(34px, env(safe-area-inset-bottom)); }
+  footer { position:fixed; z-index:10; left:0; right:0; bottom:0; background:var(--bg); padding:16px 16px max(24px, env(safe-area-inset-bottom)); }
   footer::before { content:""; position:absolute; top:-48px; left:0; right:0; height:48px; background:linear-gradient(180deg, #ffffff00 0%, #fff 100%); pointer-events:none; }
   .plans { padding-top:10px; display:flex; flex-direction:column; gap:10px; }
   .plan { position:relative; height:64px; border:1px solid var(--line); border-radius:14px; background:#fff; padding:0 56px 0 16px; display:flex; flex-direction:column; justify-content:center; align-items:flex-start; gap:2px; cursor:pointer; transition:all .2s cubic-bezier(.4,0,.2,1); text-align:left; width:100%; }
@@ -42,6 +42,8 @@
   .cta:disabled { opacity:.35; }
   .cta svg { position:absolute; inset:0; width:100%; height:100%; pointer-events:none; }
   .caption { padding-top:12px; text-align:center; font-size:12px; font-weight:500; color:var(--text3); }
+  .legal { display:flex; gap:16px; justify-content:center; padding-top:8px; font-size:12px; }
+  .legal a { color:var(--text2); text-decoration:underline; text-underline-offset:2px; }
   .hidden { display:none !important; }
 </style>
 <script>window.omiTrack = function () {}; // replaced by track.js; the page works without it</script>
@@ -89,6 +91,7 @@
       <svg viewBox="0 0 358 56" preserveAspectRatio="none" aria-hidden="true"><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#fff" stop-opacity="0"/><stop offset=".5" stop-color="#fff" stop-opacity=".32"/><stop offset="1" stop-color="#fff" stop-opacity="0"/></linearGradient></defs><rect y="-20" width="70" height="96" fill="url(#g)" transform="skewX(-20)"><animate attributeName="x" values="-140;-140;460" keyTimes="0;0.45;1" dur="3.2s" repeatCount="indefinite"/></rect></svg>
     </button>
     <div class="caption" id="caption">Billed today. Renews automatically. Cancel anytime.</div>
+    <div class="legal"><a href="https://www.omi.me/pages/terms-of-service">Terms of Service</a><a href="https://www.omi.me/pages/privacy">Privacy Policy</a></div>
   </footer>
 <script>
 (function () {
