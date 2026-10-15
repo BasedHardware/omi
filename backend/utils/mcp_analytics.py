@@ -2,7 +2,8 @@
 
 ``MCP Tool Call`` is the stable PostHog event contract for the hosted
 Streamable HTTP MCP tool boundary, and ``MCP Active`` is the once-per-uid-
-per-day transport-presence diagnostic. The per-POST envelope is NOT a
+per-day transport-presence diagnostic. ``MCP Tool Use Succeeded`` is the
+unsampled qualifying success marker. The per-POST envelope is NOT a
 PostHog event: it is a structured ``mcp_request`` log line emitted for 100%
 of requests so log-based metrics carry the volume PostHog pricing cannot.
 
@@ -21,6 +22,7 @@ import math
 import os
 import sys
 import threading
+import uuid
 from collections import OrderedDict
 from datetime import datetime, timezone
 from typing import Any, List, Mapping, Optional
@@ -371,6 +373,101 @@ def emit_mcp_active(
         "$process_person_profile": False,
     }
     emit_mcp_posthog_event(uid, MCP_ACTIVE, properties)
+
+
+# Dashboard interpretation supplied by the orchestrator, pending owner review:
+# user + unknown qualifies; a scheduled agent must not consume a qualified day.
+# Tightening this one set to {"user"} changes admission without changing dedupe.
+MCP_QUALIFYING_INITIATORS = frozenset({"user", "unknown"})
+MCP_TOOL_USE_SUCCEEDED = "MCP Tool Use Succeeded"
+MCP_SUCCESS_SCHEMA_VERSION = 1
+MCP_SUCCESS_CLAIM_SECONDS = 60
+MCP_SUCCESS_TTL_SECONDS = 172800
+_MCP_SUCCESS_SETTLE = """
+if redis.call('GET', KEYS[1]) ~= ARGV[1] then return 0 end
+if ARGV[2] == 'done' then
+  return redis.call('SET', KEYS[1], 'done', 'EX', ARGV[3])
+end
+return redis.call('DEL', KEYS[1])
+"""
+
+
+def schedule_mcp_tool_use_succeeded(*, uid: str, tool_name: Any, client_name: Any, initiator: str = "unknown") -> None:
+    """Unsampled marker; called only at the application-success boundary.
+
+    No current MCP transport signal verifies initiation, so transport callers
+    use unknown. Never infer user intent from OAuth, tool arguments or names.
+    Scheduled automation remains in diagnostic tool calls and cannot spend
+    the day's qualifying marker before a later user call.
+    """
+    if not uid or uid == MCP_ANONYMOUS_DISTINCT_ID or mcp_tool_enum(tool_name) == "unknown":
+        return
+    initiator = initiator if initiator in {"user", "scheduled_agent", "unknown"} else "unknown"
+    if initiator not in MCP_QUALIFYING_INITIATORS:
+        return
+    occurred_at = datetime.now(timezone.utc)
+    try:
+        submit_with_context(
+            postprocess_executor,
+            emit_mcp_tool_use_succeeded,
+            uid=uid,
+            tool_name=tool_name,
+            client_name=client_name,
+            initiator=initiator,
+            occurred_at=occurred_at,
+        )
+    except Exception as exc:
+        logger.warning("mcp success analytics scheduling failed error=%s", type(exc).__name__)
+        _success_marker_fallback()
+
+
+def _success_marker_fallback() -> None:
+    from utils.observability.fallback import record_fallback
+
+    record_fallback(component='other', from_mode='posthog', to_mode='none', reason='other', outcome='degraded')
+
+
+def emit_mcp_tool_use_succeeded(
+    *, uid: str, tool_name: Any, client_name: Any, initiator: str, occurred_at: datetime
+) -> None:
+    """Worker-only Redis claim -> synchronous capture -> settle.
+
+    Cross-instance SET NX gates concurrent workers. A failed capture releases
+    its claim, and crashed workers expire after 60 seconds. Retries use the
+    same PostHog UUID, including capture-success / Redis-settle-failure races.
+    No claim or network IO is performed at import or on the event loop.
+    """
+    if not uid or uid == MCP_ANONYMOUS_DISTINCT_ID or mcp_tool_enum(tool_name) == "unknown":
+        return
+    if initiator not in MCP_QUALIFYING_INITIATORS:
+        return
+    day = occurred_at.astimezone(timezone.utc).strftime("%Y%m%d")
+    event_uuid = str(uuid.uuid5(uuid.NAMESPACE_URL, f"omi:mcp-success:v1:{day}:{uid}"))
+    key = f"mcp:tool-success:v1:{day}:{hashlib.sha256(uid.encode()).hexdigest()}"
+    claim = str(uuid.uuid4())
+    try:
+        if not redis_db.r.set(key, claim, nx=True, ex=MCP_SUCCESS_CLAIM_SECONDS):
+            return
+        properties = {
+            "surface": "mcp",
+            "tool": mcp_tool_enum(tool_name),
+            "client": client_name if client_name in _MCP_CLIENT_NAMES else "unknown",
+            "initiator": initiator,
+            "schema_version": MCP_SUCCESS_SCHEMA_VERSION,
+            "source_platform": "mcp",
+            "$process_person_profile": False,
+        }
+        accepted = emit_product_event(
+            uid=uid,
+            event=MCP_TOOL_USE_SUCCEEDED,
+            properties=properties,
+            timestamp=occurred_at,
+            event_uuid=event_uuid,
+        )
+        redis_db.r.eval(_MCP_SUCCESS_SETTLE, 1, key, claim, "done" if accepted else "release", MCP_SUCCESS_TTL_SECONDS)
+    except Exception as exc:
+        logger.warning("mcp success marker failed error=%s", type(exc).__name__)
+        _success_marker_fallback()
 
 
 def schedule_mcp_tool_call(

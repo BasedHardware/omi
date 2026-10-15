@@ -1074,10 +1074,6 @@ def extract_memories(uid: str, conversation: Conversation) -> None:
         )
     finally:
         parity_capture.persist()
-    # Product-analytics telemetry (Conversation Memories Extracted): at most one
-    # analytics success per (uid, conversation) across retries — zero-extraction
-    # (count == 0) and persistence exceptions emit nothing; the durable
-    # per-conversation dedup (Redis SET NX EX) is inside emit_*_memories_extracted.
     if result is not None and result.count > 0:
         emit_conversation_memories_extracted(
             uid, conversation.id, result, source_platform=getattr(conversation, 'client_platform', None) or 'unknown'
