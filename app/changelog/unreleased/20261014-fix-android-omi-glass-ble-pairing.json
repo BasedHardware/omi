@@ -1,3 +1,3 @@
 {
-  "change": "Fix Android BLE connection to public-address peripherals such as OMI Glass by preserving scanned device context and determining address type from MAC."
+  "change": "Fix Android BLE connection to public-address peripherals such as OMI Glass by preserving scanned device context when connecting."
 }
