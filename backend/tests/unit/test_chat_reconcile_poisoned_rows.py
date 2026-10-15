@@ -48,7 +48,7 @@ def test_poisoned_rows_are_dropped_not_500(client, monkeypatch):
     assert response.status_code == 200
     body = response.json()
     ids = [m['id'] for m in body['messages']]
-    assert ids == ['m1']  # the m3 row fails model_validate (garbage datetime) too
+    assert ids == ['m1']  # the m3 row's Message() construction raises too (garbage datetime)
     assert body['next_cursor'] == 'cursor-2'
     assert body['has_more'] is True
 
