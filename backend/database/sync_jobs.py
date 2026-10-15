@@ -277,6 +277,11 @@ def _as_redis_text(value: Any) -> str:
     return str(value)
 
 
+def sync_job_key_exists(job_id: str) -> bool:
+    """Raw existence proof: corrupt JSON is present; Redis failures propagate."""
+    return bool(r.exists(_key(f'{JOB_KEY_PREFIX}{job_id}')))
+
+
 def sync_job_run_lock_present(job_id: str) -> bool:
     """Conservatively refuse a replacement dispatch while a worker still owns its run lock."""
     return bool(r.exists(_key(f'{RUN_LOCK_KEY_PREFIX}{job_id}')))
