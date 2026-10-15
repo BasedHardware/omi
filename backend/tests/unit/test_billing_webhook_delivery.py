@@ -145,7 +145,7 @@ def test_trial_to_active_is_not_another_start(captures):
 def isolated_clients(monkeypatch):
     for name in ('POSTHOG_PROJECT_API_KEY', 'POSTHOG_API_KEY', 'POSTHOG_BILLING_API_KEY'):
         monkeypatch.delenv(name, raising=False)
-    monkeypatch.setattr(product_telemetry, '_posthog_client', None)
+    monkeypatch.setattr(product_telemetry, '_posthog_clients', {})
     monkeypatch.setattr(product_telemetry, '_invalid_key_logged', False)
 
 

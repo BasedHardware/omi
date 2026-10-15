@@ -1,11 +1,14 @@
-"""One lazy, fail-open server capture client; no content or raw identity properties.
+"""Shared fail-open server capture seam; no content or raw identity properties.
 
 Credential admission stays family-scoped: product/integration/extraction use
 POSTHOG_PROJECT_API_KEY (legacy POSTHOG_API_KEY only when project is absent),
 billing uses POSTHOG_BILLING_API_KEY, and MCP uses POSTHOG_EVENTS_API_KEY.
 An absent/invalid family key disables that family: no cross-family fallback.
 In particular, project=disabled plus a valid billing key enables billing only.
-One synchronous SDK is shared, with each capture's key bound under a lock.
+At most one lazy SDK per family holds its own immutable capture key. Product
+and MCP use bounded SDK queues; billing stays synchronous in its post-response
+worker so webhook delivery can settle only after capture returns. No capture
+lock spans network I/O. Queued acceptance does not prove ingestion.
 Flag-only clients retain separate credentials and never emit events.
 """
 
@@ -17,13 +20,13 @@ import os
 from contextlib import contextmanager
 from contextvars import ContextVar
 from datetime import datetime
-from threading import BoundedSemaphore, Lock
+from threading import Lock
 from typing import Any, Mapping, Optional
 
 from utils.observability.fallback import record_fallback
 
 logger = logging.getLogger(__name__)
-_posthog_client: Optional[Any] = None
+_posthog_clients: dict[str, Any] = {}
 _injected_client: Optional[Any] = None
 _client_lock = Lock()
 _invalid_key_logged = False
@@ -180,83 +183,37 @@ def _fallback(reason: str = 'other') -> None:
     record_fallback(component='other', from_mode='posthog', to_mode='none', reason=reason, outcome='degraded')
 
 
-class _ServerCaptureClient:
-    """One synchronous SDK, with ordinary capture offloaded to the owned pool.
-
-    Billing and daily MCP markers call capture synchronously from their existing
-    background workers so delivery failures are visible before settling claims.
-    """
-
-    def __init__(self, sdk: Any):
-        self.sdk = sdk
-        self.capture_lock = Lock()
-        self.pending = BoundedSemaphore(1000)
-
-    def _capture_with_key(self, api_key: str, kwargs: Mapping[str, Any]) -> Any:
-        # The pinned SDK's synchronous _enqueue sends with self.api_key before
-        # returning. Serialize binding + capture + restoration; no SDK queue or
-        # flag evaluation may observe another family's credentials.
-        with self.capture_lock:
-            previous_key = self.sdk.api_key
-            try:
-                self.sdk.api_key = api_key
-                return self.sdk.capture(**kwargs)
-            finally:
-                self.sdk.api_key = previous_key
-
-    def capture(self, **kwargs: Any) -> Any:
-        api_key = _capture_project_key(kwargs['event'])
-        if api_key is None:
-            return False
-        if kwargs['event'] in BILLING_EVENTS or kwargs['event'] == 'MCP Tool Use Succeeded':
-            return self._capture_with_key(api_key, kwargs)
-        from utils.executors import postprocess_executor, submit_with_context
-
-        if not self.pending.acquire(blocking=False):
-            _fallback('enqueue_failed')
-            return False
-
-        def deliver() -> None:
-            try:
-                result = self._capture_with_key(api_key, kwargs)
-                if result is False or (isinstance(result, tuple) and result[0] is False):
-                    _fallback()
-            except Exception as error:
-                logger.warning('server telemetry delivery failed error_type=%s', type(error).__name__)
-                _fallback()
-            finally:
-                self.pending.release()
-
-        try:
-            submit_with_context(postprocess_executor, deliver)
-        except Exception:
-            self.pending.release()
-            raise
-        return True
+def _capture_error(error: Exception, batch: Any) -> None:
+    # SDK callbacks receive content-bearing batches; never log or retain them.
+    logger.warning('server telemetry delivery failed error_type=%s', type(error).__name__)
+    _fallback()
 
 
 def get_server_posthog_client(event: str = '') -> Optional[Any]:
-    global _posthog_client
     if _injected_client is not None:
         return _injected_client
+    api_key = _capture_project_key(event)
+    if api_key is None:
+        return None
+    family = 'billing' if event in BILLING_EVENTS else 'mcp' if event in MCP_EVENTS else 'product'
+    if family in _posthog_clients:
+        return _posthog_clients[family]
+    # Construction only: captures and consumer network I/O never hold this lock.
     with _client_lock:
-        api_key = _capture_project_key(event)
-        if api_key is None:
-            return None
-        if _posthog_client is not None:
-            return _posthog_client
-        try:
-            sdk = importlib.import_module('posthog').Posthog(
-                project_api_key=api_key,
-                host=os.getenv('POSTHOG_HOST', 'https://app.posthog.com'),
-                sync_mode=True,
-                timeout=2,
-                max_retries=0,
-            )
-            _posthog_client = _ServerCaptureClient(sdk)
-        except Exception as error:
-            logger.warning('server telemetry unavailable error_type=%s', type(error).__name__)
-        return _posthog_client
+        if family not in _posthog_clients:
+            try:
+                _posthog_clients[family] = importlib.import_module('posthog').Posthog(
+                    project_api_key=api_key,
+                    host=os.getenv('POSTHOG_HOST', 'https://app.posthog.com'),
+                    sync_mode=family == 'billing',
+                    max_queue_size=1000,
+                    on_error=_capture_error,
+                    timeout=2,
+                    max_retries=0,
+                )
+            except Exception as error:
+                logger.warning('server telemetry unavailable error_type=%s', type(error).__name__)
+        return _posthog_clients.get(family)
 
 
 def emit_product_event(
@@ -287,7 +244,10 @@ def emit_product_event(
             if properties.get('occurred_at'):
                 capture_args['timestamp'] = datetime.fromisoformat(properties['occurred_at'].replace('Z', '+00:00'))
         result = client.capture(**capture_args)
-        return not (result is False or (isinstance(result, tuple) and result[0] is False))
+        if result is False or (isinstance(result, tuple) and result[0] is False):
+            _fallback('enqueue_failed')
+            return False
+        return True
     except Exception as error:
         logger.warning('product telemetry emit failed event=%s error_type=%s', event, type(error).__name__)
         _fallback()
@@ -295,7 +255,7 @@ def emit_product_event(
 
 
 def set_product_telemetry_client_for_tests(client: Optional[Any]) -> None:
-    global _posthog_client, _injected_client, _invalid_key_logged
-    _posthog_client = None
+    global _injected_client, _invalid_key_logged
+    _posthog_clients.clear()
     _injected_client = client
     _invalid_key_logged = False
