@@ -18,6 +18,7 @@ Required env (X developer app — confidential client):
 import asyncio
 import base64
 import hashlib
+import json
 import logging
 import os
 import secrets
@@ -112,14 +113,16 @@ def build_authorize_url(uid: str, success_redirect_url: Optional[str] = None) ->
     verifier, challenge = _gen_pkce()
     state = secrets.token_urlsafe(32)
 
-    payload = {'uid': uid, 'verifier': verifier}
-    if success_redirect_url:
-        payload['success_redirect_url'] = success_redirect_url
-    # store as a simple delimited string to avoid json import churn
+    payload = {
+        'uid': uid,
+        'verifier': verifier,
+        'success_redirect_url': success_redirect_url or '',
+    }
+    # store as json to avoid delimiter injection and desync on custom redirect URLs
     redis_db.r.setex(
         f'{_STATE_PREFIX}{state}',
         OAUTH_STATE_TTL,
-        f"{uid}\n{verifier}\n{success_redirect_url or ''}",
+        json.dumps(payload),
     )
 
     params = {
@@ -141,6 +144,20 @@ def consume_oauth_state(state: str) -> Optional[Dict[str, str]]:
     redis_db.r.delete(f'{_STATE_PREFIX}{state}')
     if isinstance(raw, bytes):
         raw = raw.decode('utf-8')
+    # JSON is the primary serialized format; check for JSON-object prefix first.
+    # Note: legacy newline-delimited payloads with a uid starting with '{' are safely
+    # handled by falling back to parts.split('\n') if JSON parsing fails or keys are missing.
+    if raw.startswith('{'):
+        try:
+            parsed = json.loads(raw)
+            if isinstance(parsed, dict) and 'uid' in parsed and 'verifier' in parsed:
+                return {
+                    'uid': str(parsed.get('uid', '')),
+                    'verifier': str(parsed.get('verifier', '')),
+                    'success_redirect_url': str(parsed.get('success_redirect_url', '')),
+                }
+        except Exception:
+            pass
     parts = raw.split('\n')
     if len(parts) < 2:
         return None
