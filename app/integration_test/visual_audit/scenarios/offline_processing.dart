@@ -27,6 +27,8 @@ class _SyncAuditProvider extends ChangeNotifier implements SyncProvider {
   @override
   List<Wal> get allWals => wals;
   @override
+  List<Wal> get displaySortedWals => wals;
+  @override
   List<Wal> get uploadedWals => wals.where((w) => w.status == WalStatus.uploaded).toList();
   @override
   bool get isRateLimited => false;
