@@ -124,6 +124,8 @@ _gu.refresh_google_token = MagicMock()
 
 _ib = _mod("utils.retrieval.tools.integration_base")
 _ib.ensure_capped = lambda val, cap, msg: min(val, cap)
+
+
 def _real_parse(name, value, _hint):
     if value is None:
         return None, None
@@ -155,8 +157,7 @@ ct = _load(
 
 def _event(day_offset, title="evt"):
     d = datetime.now(timezone.utc) + timedelta(days=day_offset)
-    return {"id": f"e{day_offset}", "summary": title,
-            "start": {"dateTime": d.isoformat()}}
+    return {"id": f"e{day_offset}", "summary": title, "start": {"dateTime": d.isoformat()}}
 
 
 class TestCalendarWindowDirection(unittest.IsolatedAsyncioTestCase):
@@ -170,9 +171,9 @@ class TestCalendarWindowDirection(unittest.IsolatedAsyncioTestCase):
             return [_event(5), _event(10)]
 
         now = datetime.now(timezone.utc)
-        with patch.object(ct, "prepare_access",
-                          return_value=("u", {"a": 1}, "tok", None)), \
-             patch.object(ct, "get_google_calendar_events", new=fake_fetch):
+        with patch.object(ct, "prepare_access", return_value=("u", {"a": 1}, "tok", None)), patch.object(
+            ct, "get_google_calendar_events", new=fake_fetch
+        ):
             await ct.get_calendar_events_tool.func(
                 start_date=now.isoformat(),
                 end_date=(now + timedelta(days=60)).isoformat(),
@@ -198,14 +199,12 @@ class TestCalendarSearchKeepsRecent(unittest.IsolatedAsyncioTestCase):
             # ascending — oldest first; give each a marker summary
             return [_event(-300 + i, title=f"match-{i}") for i in range(20)]
 
-        with patch.object(ct, "prepare_access",
-                          return_value=("u", {"a": 1}, "tok", None)), \
-             patch.object(ct, "get_google_calendar_events", new=fake_fetch):
-            out = await ct.get_calendar_events_tool.func(
-                search_query="andy", max_results=10)
+        with patch.object(ct, "prepare_access", return_value=("u", {"a": 1}, "tok", None)), patch.object(
+            ct, "get_google_calendar_events", new=fake_fetch
+        ):
+            out = await ct.get_calendar_events_tool.func(search_query="andy", max_results=10)
 
-        self.assertEqual(captured["max_results"], 250,
-                         "search fetches the API bound, then keeps the newest slice")
+        self.assertEqual(captured["max_results"], 250, "search fetches the API bound, then keeps the newest slice")
         # the newest matches (match-19..match-10) are returned; the
         # oldest (match-0) is the one dropped
         self.assertIn("match-19", out)
