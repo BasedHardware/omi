@@ -95,6 +95,10 @@ void main() {
     owner = 'b';
     seen.observe([yesterday]);
     expect(seen.hasNew.value, isFalse, reason: 'first load for account b is its baseline');
+    owner = 'a';
+    seen.observe([anHourAgo]);
+    owner = 'b';
+    expect(seen.describesCurrentOwner, isFalse, reason: 'a bell built for b hides a\'s dot before b loads');
     expect(stores['a'], yesterday.millisecondsSinceEpoch);
   });
 
@@ -114,6 +118,21 @@ void main() {
   });
 
   group('ActivityPage', () {
+    testWidgets('a failed recap load leaves an unseen recap unseen', (tester) async {
+      final (seen, stored) = _seen(yesterday.millisecondsSinceEpoch);
+      seen.observe([anHourAgo]);
+      await tester.pumpWidget(_app(ActivityPage(
+        seen: seen,
+        probeDreamReport: () async => false,
+        loadRecaps: () async => (items: <DailySummary>[], ok: false),
+        loadChanges: ({cursor}) async => const ApiSuccess(ReviewChangesPage(changes: [])),
+      )));
+      await tester.pumpAndSettle();
+      await tester.pumpWidget(const SizedBox());
+      expect(stored(), yesterday.millisecondsSinceEpoch);
+      expect(seen.hasNew.value, isTrue);
+    });
+
     Widget page(ActivitySeen seen, {bool changesOk = true, ApiProblemKind failure = ApiProblemKind.notFound}) =>
         ActivityPage(
           seen: seen,

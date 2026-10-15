@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import 'package:omi/backend/http/api/review.dart' as review_api;
@@ -68,14 +70,17 @@ class _ActivityPageState extends State<ActivityPage> with WidgetsBindingObserver
   bool _partial = false;
 
   /// When this page last loaded: leaving marks seen only through what it actually showed.
-  DateTime _shownThrough = DateTime.now();
+  /// Null until a recap load succeeds: a failed load must not clear a bell the user never saw.
+  DateTime? _shownThrough;
+  StreamSubscription<void>? _arrivals;
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _previousVisitMs = _seen.seenAtMs;
-    _seen.markSeen(through: _shownThrough);
+    // A daily-summary notification while Activity is on screen shows here, not only on Home.
+    _arrivals = recapArrivals.listen((_) => _refresh());
     _refresh();
   }
 
@@ -88,7 +93,9 @@ class _ActivityPageState extends State<ActivityPage> with WidgetsBindingObserver
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
-    _seen.markSeen(through: _shownThrough);
+    _arrivals?.cancel();
+    final shown = _shownThrough;
+    if (shown != null) _seen.markSeen(through: shown);
     super.dispose();
   }
 
@@ -126,7 +133,8 @@ class _ActivityPageState extends State<ActivityPage> with WidgetsBindingObserver
       _seen.observe(recaps.items.map((r) => r.createdAt));
       _shownThrough = startedAt;
     }
-    _seen.markSeen(through: _shownThrough);
+    final shown = _shownThrough;
+    if (shown != null) _seen.markSeen(through: shown);
     setState(() {
       _loading = false;
       _rebuildItems();

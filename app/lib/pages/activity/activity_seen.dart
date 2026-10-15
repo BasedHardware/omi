@@ -39,6 +39,10 @@ class ActivitySeen {
   }
 
   /// A different account signed in: forget the previous one's in-memory state.
+  /// Whether [hasNew] describes the signed-in account. A bell built after an account switch shows no
+  /// dot until the new account's first load, even when that load fails. Read-only, safe in build.
+  bool get describesCurrentOwner => _ownerSeen != null && _ownerSeen == _owner();
+
   void _syncOwner() {
     final owner = _owner();
     if (owner == _ownerSeen) return;

@@ -79,11 +79,15 @@ class HomeDailyRecapsState extends State<HomeDailyRecaps> with WidgetsBindingObs
     await Future.wait([_refreshRecaps(), if (_forYouKey.currentState != null) _forYouKey.currentState!.refresh()]);
   }
 
+  /// Load, arrival, resume and pull can overlap: only the newest response may land.
+  int _generation = 0;
+
   Future<void> _refreshRecaps() async {
+    final generation = ++_generation;
     if (!mounted) return;
     setState(() => _loading = _recaps.isEmpty);
     final result = await widget.load();
-    if (!mounted) return;
+    if (!mounted || generation != _generation) return;
     // A new recap is the delight that lights Home's Activity bell.
     if (result.ok) ActivitySeen.instance.observe(result.items.map((r) => r.createdAt));
     setState(() {

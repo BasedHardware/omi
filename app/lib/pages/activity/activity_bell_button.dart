@@ -21,7 +21,8 @@ class ActivityBellButton extends StatelessWidget {
     final state = seen ?? ActivitySeen.instance;
     return ValueListenableBuilder<bool>(
       valueListenable: state.hasNew,
-      builder: (context, hasNew, child) {
+      builder: (context, lit, child) {
+        final hasNew = lit && state.describesCurrentOwner;
         final button = HeaderCircleButton(
           key: const ValueKey('home_activity_button'),
           semanticLabel: hasNew ? context.l10n.activityNewSemantics : context.l10n.activity,

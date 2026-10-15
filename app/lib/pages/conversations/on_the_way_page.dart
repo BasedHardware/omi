@@ -37,7 +37,7 @@ class OnTheWayPage extends StatelessWidget {
         final almostReady = <_PendingItem>[
           for (final c in processing)
             _PendingItem(
-              start: c.startedAt ?? c.createdAt,
+              start: (c.startedAt ?? c.createdAt).toLocal(),
               seconds: c.getDurationInSeconds(),
               label: l.processing,
               step: 3,
