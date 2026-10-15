@@ -143,8 +143,11 @@ async def authorize_compute(body: HeartbeatRequest):
 
 
 async def enrichment_response(payload: dict):
+    document_id, token = payload.get('key'), payload.get('task_token')
+    if not isinstance(document_id, str) or not isinstance(token, str):
+        return JSONResponse(status_code=400, content={'status': 'invalid_enrichment_task'})
     try:
-        status = await run_blocking(sync_executor, run_enrichment, payload.get('key'), payload.get('task_token'))
+        status = await run_blocking(sync_executor, run_enrichment, document_id, token)
         return JSONResponse(status_code=200, content={'status': status})
     except (ValueError, TypeError):
         return JSONResponse(status_code=400, content={'status': 'invalid_enrichment_task'})

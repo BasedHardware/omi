@@ -149,3 +149,14 @@ async def test_production_pump_lazily_composes_rpc_authorization_and_completes(a
     assert worker.calls == 1 and len(calls) == 1
     assert store.rows['jobs', 'synthetic']['state'] == 'committed'
     assert store.rows['jobs', 'synthetic']['compute_admission_token'] == store.rows['jobs', 'synthetic']['token']
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('payload', [{}, {'key': None, 'task_token': 'token'}, {'key': 'key', 'task_token': 1}])
+async def test_enrichment_binding_is_validated_before_adapter_or_io(monkeypatch, payload):
+    from unittest.mock import Mock
+
+    adapter = Mock(side_effect=AssertionError('invalid request reached adapter'))
+    monkeypatch.setattr(module, 'run_enrichment', adapter)
+    assert (await module.enrichment_response(payload)).status_code == 400
+    adapter.assert_not_called()
