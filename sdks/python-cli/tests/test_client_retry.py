@@ -540,3 +540,59 @@ def test_main_cli_transport_error_json_mode(authed_profile, respx_mock, monkeypa
     payload = json.loads(captured.err)
     assert payload["error"] == "Connection failed"
     assert "Unable to reach the Omi API" in payload["detail"]
+
+
+def test_oauth_profile_sends_dev_key_on_dev_user_paths(config_path, respx_mock) -> None:
+    """A browser-login profile carries BOTH a Firebase ID token and the minted
+    dev key. ``/v1/dev/user/*`` resolves through ``get_api_key_auth`` — a JWT
+    there 401s — while ``/v2/*`` takes the ID token. The client must pick the
+    bearer per endpoint family, not send one credential for everything."""
+    store_oauth_tokens(
+        "default",
+        id_token="fresh_id_token",
+        refresh_token="refr_x",
+        expires_at=time.time() + 1800,
+        api_base="https://api.test.omi.local",
+        api_key="omi_dev_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    )
+    dev_route = respx_mock.get("/v1/dev/user/memories").respond(json=[])
+    v2_route = respx_mock.get("/v2/conversations").respond(json={"conversations": []})
+    keys_route = respx_mock.post("/v1/dev/keys").respond(json={"key": "k"})
+
+    profile = cfg.load().get_profile("default")
+    with OmiClient(profile) as client:
+        client.get("/v1/dev/user/memories")
+        client.get("/v2/conversations")
+        client.post("/v1/dev/keys", json_body={"name": "cli"})
+
+    assert (
+        dev_route.calls[0].request.headers["Authorization"]
+        == "Bearer omi_dev_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    ), "dev-user endpoints must send the stored omi_dev_ key, not the JWT"
+    assert (
+        v2_route.calls[0].request.headers["Authorization"] == "Bearer fresh_id_token"
+    )
+    assert (
+        keys_route.calls[0].request.headers["Authorization"] == "Bearer fresh_id_token"
+    ), "the keys-mint route authenticates with the ID token, not a dev key"
+
+
+def test_api_key_profile_sends_same_key_everywhere(config_path, respx_mock) -> None:
+    """The api_key path is unchanged — one credential serves every family."""
+    from omi_cli.auth.store import store_api_key
+
+    store_api_key("default", "omi_dev_key123", api_base="https://api.test.omi.local")
+    dev_route = respx_mock.get("/v1/dev/user/goals").respond(json=[])
+    v2_route = respx_mock.get("/v2/conversations").respond(json={"conversations": []})
+
+    profile = cfg.load().get_profile("default")
+    with OmiClient(profile) as client:
+        client.get("/v1/dev/user/goals")
+        client.get("/v2/conversations")
+
+    assert (
+        dev_route.calls[0].request.headers["Authorization"] == "Bearer omi_dev_key123"
+    )
+    assert (
+        v2_route.calls[0].request.headers["Authorization"] == "Bearer omi_dev_key123"
+    )
