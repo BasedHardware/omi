@@ -18,7 +18,12 @@ import 'package:omi/utils/other/temp.dart';
 /// without a progress bar or an hour count above the fold: a long backlog says
 /// "catching up" instead of how much is left.
 class HomePendingRow extends StatelessWidget {
-  const HomePendingRow({super.key, this.syncProvider, this.showTodayHeader = false, this.multiFileSync});
+  const HomePendingRow(
+      {super.key,
+      this.syncProvider,
+      this.showTodayHeader = false,
+      this.multiFileSync,
+      this.processingRowsShown = false});
 
   /// Injectable for tests and the visual audit; defaults to the app provider.
   final SyncProvider? syncProvider;
@@ -29,12 +34,18 @@ class HomePendingRow extends StatelessWidget {
   /// Forwarded to the On the Way page's Sync Details link.
   final bool? multiFileSync;
 
+  /// Home already lists conversations the server is processing: this row then only stands for audio
+  /// not uploaded yet (see [SyncPendingWork.shouldShowOnHome]).
+  final bool processingRowsShown;
+
   @override
   Widget build(BuildContext context) {
     return Consumer<SyncProvider>(
       builder: (context, sync, child) {
         final p = syncProvider ?? sync;
-        if (!SyncPendingWork.shouldShow(p)) return const SizedBox.shrink();
+        if (!SyncPendingWork.shouldShowOnHome(p, processingRowsShown: processingRowsShown)) {
+          return const SizedBox.shrink();
+        }
         final l = context.l10n;
         final title = SyncPendingWork.isLargeBacklog(p) ? l.homePendingCatchingUp : l.homePendingTitle;
         final subtitle = SyncPendingWork.stageLabel(p, l);

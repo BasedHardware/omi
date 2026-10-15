@@ -196,6 +196,24 @@ void main() {
       expect(find.text('Transcribing…'), findsOneWidget);
     });
 
+    testWidgets('split by stage: uploaded audio steps aside while Home lists Processing rows', (tester) async {
+      Future<void> pump(SyncProvider sync) async {
+        await tester.pumpWidget(_app(
+          sync,
+          const Scaffold(
+              body: SingleChildScrollView(child: HomePendingRow(multiFileSync: true, processingRowsShown: true))),
+        ));
+        await tester.pump();
+      }
+
+      // The server is already turning it into a conversation, and Home shows that as a Processing row.
+      await pump(_FakeSync(wals: [_wal('processing', 4, WalStatus.uploaded)]));
+      expect(find.byKey(_row), findsNothing);
+      // Audio not uploaded yet has no Processing row: the pending row still stands for it.
+      await pump(_FakeSync(wals: [_wal('waiting', 4, WalStatus.miss)]));
+      expect(find.byKey(_row), findsOneWidget);
+    });
+
     testWidgets('hides once every recording is a conversation', (tester) async {
       await _pumpRow(tester, _FakeSync(wals: [_wal('done', 15, WalStatus.synced)]));
       expect(find.byKey(_row), findsNothing);

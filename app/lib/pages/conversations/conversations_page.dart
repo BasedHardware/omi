@@ -614,7 +614,8 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
               const SliverToBoxAdapter(child: CaptureRecoveryBanner()),
               // With no list to sit in, the pending row brings its own Today header.
               if (listRows.isEmpty && showPending)
-                const SliverToBoxAdapter(child: HomePendingRow(showTodayHeader: true)),
+                SliverToBoxAdapter(
+                    child: HomePendingRow(showTodayHeader: true, processingRowsShown: hasProcessingConversations)),
               SliverToBoxAdapter(
                 child: widget.loadRecaps == null
                     ? HomeDailyRecaps(key: _recapsKey)
@@ -707,7 +708,10 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
                           isFirst: row.isFirst,
                         );
                       case _ConversationListRowKind.pendingSync:
-                        return HomePendingRow(key: const ValueKey('pending_sync'), showTodayHeader: row.isFirst);
+                        return HomePendingRow(
+                            key: const ValueKey('pending_sync'),
+                            showTodayHeader: row.isFirst,
+                            processingRowsShown: hasProcessingConversations);
                       case _ConversationListRowKind.processing:
                         return ProcessingConversationWidget(
                           key: ValueKey('processing_${row.conversation!.id}'),

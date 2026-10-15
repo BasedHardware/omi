@@ -42,6 +42,12 @@ abstract final class SyncPendingWork {
 
   static bool shouldShow(SyncProvider p) => hasServerJobs(p) || p.allWals.any(isPendingWal);
 
+  /// Home's row, split by stage with the list's own Processing rows: audio still waiting or
+  /// uploading always counts; audio the server is already turning into conversations counts only
+  /// while no Processing row is on Home, so one recording never shows in both places.
+  static bool shouldShowOnHome(SyncProvider p, {required bool processingRowsShown}) =>
+      p.allWals.any(isPendingWal) || (!processingRowsShown && hasServerJobs(p));
+
   /// Ids of device recordings whose phone copy already moved on: lagging
   /// bookkeeping, not audio still on the device.
   static Set<String> movedIds(SyncProvider p) => p.allWals

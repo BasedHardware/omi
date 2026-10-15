@@ -147,7 +147,8 @@ LiveCaptureSummary _summarizeBatch(AppLocalizations l10n, CaptureProvider provid
     copy = CaptureCardCopy(l10n.recording,
         detail: detail.isEmpty ? null : detail, explanation: almostFull ? l10n.pendantStorageAlmostFull : null);
   } else if (storageFull) {
-    copy = CaptureCardCopy(l10n.paused, detail: l10n.capturePhoneStorageFull, explanation: l10n.transcribeLaterStorageFull);
+    copy = CaptureCardCopy(l10n.paused,
+        detail: l10n.capturePhoneStorageFull, explanation: l10n.transcribeLaterStorageFull);
   } else if (muted) {
     copy = CaptureCardCopy(l10n.paused);
   } else if (unverified) {
@@ -158,9 +159,8 @@ LiveCaptureSummary _summarizeBatch(AppLocalizations l10n, CaptureProvider provid
   return LiveCaptureSummary(
     source: source,
     copy: copy,
-    tone: copy.explanation != null
-        ? CaptureTone.attention
-        : (muted || unverified ? CaptureTone.quiet : CaptureTone.live),
+    tone:
+        copy.explanation != null ? CaptureTone.attention : (muted || unverified ? CaptureTone.quiet : CaptureTone.live),
     batch: true,
     readerPaused: muted,
     unverified: unverified,
