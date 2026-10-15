@@ -176,6 +176,23 @@ async def test_landed_reprocess_runtime_fence_precedes_adapter(monkeypatch):
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize('namespace', ['batch_pipeline_dev', 'arbitrary_namespace'])
+async def test_dev_reprocess_is_foreign_runtime_for_any_namespace(monkeypatch, namespace):
+    from unittest.mock import Mock
+
+    monkeypatch.setenv('OMI_ENV_STAGE', 'dev')
+    monkeypatch.setenv('BATCH_PIPELINE_NAMESPACE', namespace)
+    monkeypatch.delenv('FIRESTORE_EMULATOR_HOST', raising=False)
+    adapter = Mock(side_effect=AssertionError('dev runtime must not reach reprocess data'))
+    monkeypatch.setattr(module, 'run_enrichment', adapter)
+
+    response = await module.enrichment_response({'kind': 'sync_reprocess', 'key': 'a' * 64, 'task_token': 'b' * 32})
+
+    assert response.status_code == 200 and b'foreign_runtime' in response.body
+    adapter.assert_not_called()
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize('status,code', [('busy', 503), ('completed', 200)])
 async def test_landed_reprocess_busy_response_remains_retryable(monkeypatch, status, code):
     from unittest.mock import Mock

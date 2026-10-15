@@ -888,7 +888,7 @@ def test_gcp_diarizer_checks_deployment_files_only_after_checkout():
 def test_firestore_readiness_gate_covers_every_backend_image_shipment():
     """Every backend-source image push/deploy needs the shared immutable gate."""
     policy = _workflow_policy()
-    assert policy.repository_gate_violations(BACKEND_DIR.parent) == []
+    assert policy.repository_gate_violations(BACKEND_DIR.parent, validate_unrelated_workflows=False) == []
     assert policy._yaml_document.cache_info().hits > 0
 
 

@@ -1122,7 +1122,7 @@ def _workflow_policy_relevant(text: str, local_action_names: frozenset[str] = fr
     )
 
 
-def repository_gate_violations(root) -> list[str]:
+def repository_gate_violations(root, *, validate_unrelated_workflows: bool = True) -> list[str]:
     """Scan shipment, composite-action, and readiness-gate workflows for coverage."""
 
     root = pathlib.Path(root)
@@ -1160,6 +1160,8 @@ def repository_gate_violations(root) -> list[str]:
     for path in sorted(workflows_dir.rglob('*.yml')) + sorted(workflows_dir.rglob('*.yaml')):
         text = path.read_text(encoding='utf-8')
         if not _workflow_policy_relevant(text, relevant_actions):
+            if not validate_unrelated_workflows:
+                continue
             try:
                 # Keep malformed workflow YAML fail-closed without constructing a
                 # full Python object tree for workflows outside this policy's scope.

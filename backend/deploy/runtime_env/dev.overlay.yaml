@@ -748,7 +748,6 @@ overlay:
           CAPTURE_JEV_SHADOW_PERCENT:
             value: '0'
             category: rollout
-          BATCH_PIPELINE_NAMESPACE: {value: batch_pipeline_dev}
       backend-sync-backfill:
         forbidden_env:
         - DEEPGRAM_SELF_HOSTED_ENABLED
