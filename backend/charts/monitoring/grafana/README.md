@@ -23,6 +23,8 @@ Infinity 4.1.1 and Grafana 13.1.3 are pinned. The board's raw SVG field icons
 require 13.x Canvas resource handling; 12.1.7 returns valid query frames but blank
 cards ([Canvas resource handling](https://github.com/grafana/grafana/blob/v13.1.3/public/app/features/dimensions/resource.ts)).
 Local verification must include visible native cards, not just API200.
+The values use `GF_PLUGINS_PREINSTALL_SYNC=id@version`: chart75's legacy
+`plugins` key emits `GF_INSTALL_PLUGINS`, ignored by13 unless forced.
 The checked-in Python standard-library sidecar binds **127.0.0.1:8899**; it has no
 Service or host port. It accepts only GET `/api/omi/stats/<literal-route>` and
 forwards to the fixed `https://admin.omi.me` origin. It forwards no client headers,
