@@ -137,3 +137,27 @@ These follow the frozen transport contract. Legacy PostHog events stay until the
 | Recording Started / Start Failed, Memory Created, onboarding, chat, purchases, product outcomes | Keep | Existing PostHog consumers |
 
 Chat and product analytics stay on PostHog. The admin reliability reader's replacement flag defaults off (`RELIABILITY_REPLACEMENT_READER=on` plus an explicit `RELIABILITY_REPLACEMENT_CUTOVER` UTC day). Transport shadow and retirement flags are independent and are not read by this reader. Direct BigQuery billing (`lib/services/gcp-billing.ts`) and plan economics (`lib/services/plan-economics.ts`) are unchanged. There is no PostHog GCP aggregate.
+
+
+## Desktop health event sampling
+
+The approved PostHog ingestion sampling transform retains 10% of
+`desktop_health_event`. The ingestion rollout owner must confirm its real enablement
+instant against `DESKTOP_HEALTH_EVENT_SAMPLING_CUTOVER` in
+`lib/telemetry/desktop-health-sampling.ts` before enabling it. The provisional
+cutover is **2026-10-22T00:00:00Z**; this reader change does not enable a transform.
+The common `DESKTOP_HEALTH_EVENT_COUNT_MULTIPLIER` is **10**. This is the transform's
+reader compensation contract, distinct from retiring or replacing PostHog telemetry.
+
+Response-reliability's physical voice SQL and both fallback-triage legacy queries
+weight each event at/after that instant before grouping. Earlier events keep weight
+one, including windows spanning the cutover. Duration sums use the same weight as
+success counts, so mean latency stays a ratio. Success/failure rates remain ratios
+of corrected counts; never multiply a resulting percentage. Chat, legacy floating
+voice and unsampled replacement aggregate rows are unchanged. Legacy fallback rows
+already carry the SQL weight and must not be multiplied again by their tally helper.
+
+Approval and reader audit: 2026-10-15 orchestrator ruling and the dashboard knowledge
+base's `2026-10-15-sampling-reader-receipts.md`, row `desktop_health_event`. The
+external transform's actual enablement/cutover remains the ingestion rollout owner's
+responsibility; this PR performs no PostHog pipeline write.
