@@ -108,11 +108,26 @@ def test_invalid_audio_and_size_are_typed():
 def test_decoded_duration_cap_is_enforced(monkeypatch):
     from utils.messaging.adapters import media
 
-    # Run a real container through FFmpeg with a smaller local test cap.
+    # Exercise the decoded-PCM cap even on a host with no installed decoder.
+    monkeypatch.setattr(media, 'MAX_MEDIA_SECONDS', 0.05)
+    monkeypatch.setattr(media, 'get_media_decoder', lambda: 'fixture-decoder')
+
+    def decoded(command, **kwargs):
+        Path(command[-1]).write_bytes(b'\0' * 1602)
+
+    monkeypatch.setattr(media.subprocess, 'run', decoded)
+    with pytest.raises(MediaPreparationError) as failed:
+        decode_audio(b'container fixture')
+    assert failed.value.reason == 'media_duration' and failed.value.reply == DURATION_REPLY
+
+
+def test_real_decoded_duration_cap_is_enforced(monkeypatch):
+    from utils.messaging.adapters import media
+
     monkeypatch.setattr(media, 'MAX_MEDIA_SECONDS', 0.05)
     with pytest.raises(MediaPreparationError) as failed:
         decode_audio((FIXTURES / 'audio' / 'voice.ogg').read_bytes())
-    assert failed.value.reply == DURATION_REPLY
+    assert failed.value.reason == 'media_duration' and failed.value.reply == DURATION_REPLY
 
 
 @pytest.mark.parametrize('words', [[], [{'text': '', 'timestamp': [0, 0.12], 'speaker': 'SPEAKER_00'}]])

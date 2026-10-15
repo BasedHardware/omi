@@ -493,7 +493,15 @@ provider delivery, or PostHog state. No production reads or writes were performe
 Each turn accepts up to **10 attachments**; each attachment is limited to
 **20,000,000 bytes** (20 MB decimal). Audio and video
 are limited to **600 seconds** (10 minutes), checked both against provider metadata
-and actual decoded PCM. FFmpeg has a 30-second decode deadline, one decoder/filter
+and actual decoded PCM. Channel FFmpeg comes from the pinned `imageio-ffmpeg==0.6.0`
+platform wheel in both the runtime and CI locks; it does not depend on a runner's
+system packages and never downloads executables at runtime. A validated system
+FFmpeg is the fallback, recorded through the shared fallback event. Enabled channel
+startup probes the decoder off the event loop before registering gateways; missing
+or unusable decoders fail startup with `Messaging audio decoder unavailable`.
+Repair by syncing the locked dependencies (`make setup-backend`) or reinstalling
+the existing system FFmpeg package. Disabled channels need no decoder probe.
+FFmpeg has a 30-second decode deadline, one decoder/filter
 thread, an explicit container allowlist (no playlists), and bounds output to cap+1
 before reading it. A loop-owned media semaphore admits at most eight attachment preparations
 (including downloads and image ingestion) per serving process, bounding retained

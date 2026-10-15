@@ -11,6 +11,7 @@ from uuid import uuid4
 
 from utils.executors import run_blocking, storage_executor, db_executor, sync_executor
 from utils.messaging.contracts import Artifact, InboundAttachment
+from utils.messaging.adapters.decoder import get_media_decoder
 
 MAX_MEDIA_BYTES = 20_000_000
 MAX_MEDIA_SECONDS = 600
@@ -81,13 +82,14 @@ def decode_audio(data: bytes) -> bytes:
     """
     if len(data) > MAX_MEDIA_BYTES:
         raise MediaPreparationError('media_size', SIZE_REPLY)
+    executable = get_media_decoder()
     try:
         with tempfile.TemporaryDirectory(prefix='omi-channel-audio-') as directory:
             source, output = Path(directory) / 'input', Path(directory) / 'output.pcm'
             source.write_bytes(data)
             subprocess.run(
                 [
-                    'ffmpeg',
+                    executable,
                     '-nostdin',
                     '-v',
                     'error',
