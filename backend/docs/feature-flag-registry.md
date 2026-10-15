@@ -366,11 +366,12 @@ and an explicit empty literal renders as `''`.
 | `DIARIZATION_V2_ENABLED` | Enable the separate batch-only diarizer app; default false; startup loads models before readiness | backend | env | closed | — | — | — | — | keep | — | dazheng |
 | `DREAM_AGENT_CANARY_UID` | Dedicated synthetic UID in dream-canary- namespace; unset disables canary | backend | env | closed | — | — | {value: 'dream-canary-prod-01', category: rollout} | — | pending | — | dazheng |
 | `DREAM_AGENT_CONCURRENCY` | Parallel Dream workers and shared reserved slots; derived default 334 at 2M TPM and 12k expected tokens; bounded 1 to 512 | backend | env | closed | — | — | — | — | pending | — | dazheng |
-| `DREAM_AGENT_ELIGIBILITY` | Eligible owner policy: all default, paid or allowlist; invalid values fail closed | backend | env | closed | — | — | all (backend-listen (chart), pusher (chart)); {value: 'all', category: rollout} (cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, gke/backend-listen, gke/pusher) | — | keep | — | dazheng |
+| `DREAM_AGENT_ELIGIBILITY` | Eligible owner policy: all default, paid or allowlist; invalid values fail closed. Prod interim is allowlist | backend | env | closed | — | {value: 'allowlist', category: rollout} | allowlist (backend-listen (chart), pusher (chart)); {value: 'allowlist', category: rollout} (cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, gke/backend-listen, gke/pusher) | — | keep | — | dazheng |
 | `DREAM_AGENT_EXPECTED_TOKENS` | Expected session tokens for initial spend holds and derived concurrency; default 12000; actual turn reservations enforce ceilings | backend | env | closed | — | — | — | — | keep | — | dazheng |
-| `DREAM_AGENT_GLOBAL_DAILY_USD` | Global UTC-day conservative reservation ceiling across 64 fixed shards; default 15000 USD | backend | env | closed | — | — | {value: '15000', category: rollout} | — | keep | — | dazheng |
 | `DREAM_AGENT_MANUAL_RUNS_PER_DAY` | Separate manual dream allowance per UTC day; default 3 | backend | env | closed | — | — | {value: '3', category: rollout} | — | pending | — | dazheng |
 | `DREAM_AGENT_TOKENS_PER_MINUTE` | Configured reserved-capacity headroom ceiling; default 2000000 tokens per minute | backend | env | closed | — | — | {value: '2000000', category: rollout} | — | keep | — | dazheng |
+| `DREAM_AGENT_UID_ALLOWLIST` | Comma-separated owner uids admitted when eligibility is allowlist; empty admits nobody | backend | env | closed | — | {value: 'vi7SA9ckQCe4ccobWNxlbdcNdC23', category: rollout} | vi7SA9ckQCe4ccobWNxlbdcNdC23 (backend-listen (chart), pusher (chart)); {value: 'vi7SA9ckQCe4ccobWNxlbdcNdC23', category: rollout} (cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, gke/backend-listen, gke/pusher) | — | keep | — | dazheng |
+| `DREAM_ON_DEMAND_ENABLED` | Gateway and backend gate for allowlisted Dream on-demand capacity; default false; reservation remains the all-user path | backend | env | closed | — | {value: 'true', category: rollout} | true (backend-listen (chart), pusher (chart)); {value: 'true', category: rollout} (cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, gke/backend-listen, gke/pusher) | — | keep | — | dazheng |
 | `FIRESTORE_CACHE_ENABLED` | Enable Firestore response cache | backend | env | closed | — | — | — | — | keep | — | unowned |
 | `LISTEN_FINALIZATION_DISPATCH_MODE` | Select conversation finalization dispatch lane | backend | env | closed | — | — | cloud_tasks | — | keep | — | unowned |
 | `LISTEN_RECONNECT_BUDGET_PER_MIN` | Bound per-user and per-device listen websocket reconnect admissions per minute | backend | env | closed | 6 | 6 (backend-listen (chart), gke/backend-listen) | 6 (backend-listen (chart), gke/backend-listen) | — | keep | — | dazheng |
@@ -581,6 +582,7 @@ admission.
 
 | Key | Retired | Reason |
 | --- | --- | --- |
+| `DREAM_AGENT_GLOBAL_DAILY_USD` | 2026-10-15 | Reservation headroom replaced the $15000 global ceiling and its 64 spend shards. Per-user daily_usd remains. |
 | `MEETING_NOTES_EPISODE_EVIDENCE_ENABLED` | 2026-10-08 | Removed unconsumed episode evidence capture after legacy notes writer deletion |
 | `autoCreateSpeakersEnabled` | 2026-09-26 | Shipped developer preference removed; create_speakers always true |
 | `context_buckets` | 2026-09-24 | Unused nominal enable row; bundle identity owns the active gate |

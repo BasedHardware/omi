@@ -12430,6 +12430,59 @@ class AppLocalizationsCs extends AppLocalizations {
   String get reviewNoChangesBody => 'Až Omi uklidí vaše poznámky, změny se objeví zde.';
 
   @override
+  String get reviewChangesSectionTerms => 'Jména a pojmy';
+
+  @override
+  String get reviewChangesSectionTitles => 'Názvy a shrnutí';
+
+  @override
+  String get reviewChangesSectionOther => 'Další změny';
+
+  @override
+  String reviewChangeConversationCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Konverzací: $count',
+      one: '1 konverzace',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String reviewChangePlaceCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Míst: $count',
+      one: '1 místo',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String reviewChangeShowAll(int count) {
+    return 'Zobrazit vše ($count)';
+  }
+
+  @override
+  String get reviewChangeUndoAll => 'Vrátit vše';
+
+  @override
+  String get reviewChangeSeeEvidence => 'Zobrazit důkazy';
+
+  @override
+  String get reviewChangeViewConversation => 'Zobrazit konverzaci';
+
+  @override
+  String get reviewChangeViewTask => 'Zobrazit úkol';
+
+  @override
+  String reviewChangesUndoPartial(int failed, int total) {
+    return 'Nepodařilo se vrátit $failed z $total. Zkuste to znovu.';
+  }
+
+  @override
   String get reviewShowMore => 'Zobrazit více';
 
   @override

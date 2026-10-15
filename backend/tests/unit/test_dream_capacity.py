@@ -1,4 +1,4 @@
-"""Backend discovery and cooldown work without gateway reservation storage."""
+"""Backend discovery waits for 3.8 reservation evidence before owner admission."""
 
 import asyncio
 import json
@@ -15,7 +15,6 @@ from utils import dream_agent, dream_capacity, dream_harness_transport as dream_
 from utils.dream_metrics import PASSES
 from utils.llm.shaped_agent import Budget, Mount
 from utils.llm.vertex_reservation_state import ReservationState
-from utils.llm.vertex_pt_routing import PT_MODEL_CURRENT
 
 OLD, NEW = 'gemini-2.5-flash', 'gemini-3.8-flash'
 
@@ -40,7 +39,7 @@ async def test_backend_discovery_publishes_shared_evidence_without_gateway(monke
 
     def respond(request):
         requests.append(request)
-        if OLD not in request.url.path:
+        if NEW not in request.url.path:
             return httpx.Response(503, json={'error': {}})
         return httpx.Response(
             200,
@@ -55,19 +54,19 @@ async def test_backend_discovery_publishes_shared_evidence_without_gateway(monke
     async with httpx.AsyncClient(transport=httpx.MockTransport(respond)) as client:
         monkeypatch.setattr(dream_capacity, 'get_desktop_gemini_client', lambda: client)
         try:
-            # Cold discovery is advisory: the first sweep still admits.
-            assert await dream_capacity.available_model() == PT_MODEL_CURRENT
+            # Cold or legacy-only evidence does not admit Dream.
+            assert await dream_capacity.available_model() is None
+            await asyncio.gather(*state._probe_tasks)
+            assert await dream_capacity.available_model() is None
+            await asyncio.gather(*state._probe_tasks)
+            assert await dream_capacity.available_model() == NEW
             slot = await dream_capacity.claim(2)
             assert slot is not None
             await dream_capacity.release(slot)
-            await asyncio.gather(*state._probe_tasks)
-            assert await dream_capacity.available_model() == OLD
-            await asyncio.gather(*state._probe_tasks)
-            assert await dream_capacity.available_model() == OLD
             doc = json.loads(await redis.get(state.key()))
             assert state.key().startswith('vertex-reservations:v1:based-hardware:')
-            assert doc['states'][OLD] == 'active' and doc['evidence'][OLD]['success_at'] > 0
-            assert (await ReservationState(redis).refresh())[OLD] == State.ACTIVE
+            assert doc['states'][NEW] == 'active' and doc['evidence'][NEW]['success_at'] > 0
+            assert (await ReservationState(redis).refresh())[NEW] == State.ACTIVE
             assert len(requests) == 2  # One globally leased probe per declared model.
             for request in requests:
                 assert '/projects/based-hardware/' in request.url.path

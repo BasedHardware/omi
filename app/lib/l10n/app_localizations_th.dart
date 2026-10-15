@@ -12364,6 +12364,59 @@ class AppLocalizationsTh extends AppLocalizations {
   String get reviewNoChangesBody => 'เมื่อ Omi จัดระเบียบบันทึกของคุณ การเปลี่ยนแปลงจะแสดงที่นี่';
 
   @override
+  String get reviewChangesSectionTerms => 'ชื่อและคำศัพท์';
+
+  @override
+  String get reviewChangesSectionTitles => 'ชื่อเรื่องและสรุป';
+
+  @override
+  String get reviewChangesSectionOther => 'การเปลี่ยนแปลงอื่นๆ';
+
+  @override
+  String reviewChangeConversationCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count บทสนทนา',
+      one: '1 บทสนทนา',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String reviewChangePlaceCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count ตำแหน่ง',
+      one: '1 ตำแหน่ง',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String reviewChangeShowAll(int count) {
+    return 'แสดงทั้งหมด $count';
+  }
+
+  @override
+  String get reviewChangeUndoAll => 'เลิกทำทั้งหมด';
+
+  @override
+  String get reviewChangeSeeEvidence => 'ดูหลักฐาน';
+
+  @override
+  String get reviewChangeViewConversation => 'ดูบทสนทนา';
+
+  @override
+  String get reviewChangeViewTask => 'ดูงาน';
+
+  @override
+  String reviewChangesUndoPartial(int failed, int total) {
+    return 'เลิกทำไม่ได้ $failed จาก $total รายการ ลองอีกครั้ง';
+  }
+
+  @override
   String get reviewShowMore => 'แสดงเพิ่มเติม';
 
   @override

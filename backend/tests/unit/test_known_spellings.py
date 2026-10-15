@@ -418,7 +418,13 @@ def test_reused_people_are_capped_and_do_not_leak_between_runs(monkeypatch):
     read.assert_called_once_with('synthetic-client', 'synthetic-owner', limit=200)
 
 
+def test_trusted_people_spellings_is_public():
+    person = {'name': 'Tala Quill', 'speech_samples': ['synthetic/sample.wav']}
+    assert hints.trusted_people_spellings([person]) == [{'name': 'Tala Quill'}]
+    assert hints.trusted_people_spellings([{'name': 'Spanish', 'speech_samples': ['synthetic/sample.wav']}]) == []
+
+
 def test_person_filter_does_not_filter_deliberately_learned_vocabulary():
-    people = hints._trusted_people_spellings([{'name': 'Spanish'}])
+    people = hints.trusted_people_spellings([{'name': 'Spanish'}])
     block = hints.render_known_spellings([{'spelling': 'Spanish', 'aliases': ['Synthetic Alias']}], people)
     assert 'Spanish' in block and 'Synthetic Alias' in block

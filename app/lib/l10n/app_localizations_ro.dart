@@ -12484,6 +12484,59 @@ class AppLocalizationsRo extends AppLocalizations {
   String get reviewNoChangesBody => 'Când Omi îți ordonează notițele, modificările apar aici.';
 
   @override
+  String get reviewChangesSectionTerms => 'Nume și termeni';
+
+  @override
+  String get reviewChangesSectionTitles => 'Titluri și rezumate';
+
+  @override
+  String get reviewChangesSectionOther => 'Alte modificări';
+
+  @override
+  String reviewChangeConversationCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Conversații: $count',
+      one: '1 conversație',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String reviewChangePlaceCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Locuri: $count',
+      one: '1 loc',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String reviewChangeShowAll(int count) {
+    return 'Afișează tot ($count)';
+  }
+
+  @override
+  String get reviewChangeUndoAll => 'Anulează tot';
+
+  @override
+  String get reviewChangeSeeEvidence => 'Vezi dovezile';
+
+  @override
+  String get reviewChangeViewConversation => 'Vezi conversația';
+
+  @override
+  String get reviewChangeViewTask => 'Vezi sarcina';
+
+  @override
+  String reviewChangesUndoPartial(int failed, int total) {
+    return 'Nu s-au putut anula $failed din $total. Încearcă din nou.';
+  }
+
+  @override
   String get reviewShowMore => 'Arată mai multe';
 
   @override

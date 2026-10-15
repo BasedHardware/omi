@@ -12456,6 +12456,59 @@ class AppLocalizationsMs extends AppLocalizations {
   String get reviewNoChangesBody => 'Apabila Omi mengemas nota anda, perubahan akan muncul di sini.';
 
   @override
+  String get reviewChangesSectionTerms => 'Nama dan istilah';
+
+  @override
+  String get reviewChangesSectionTitles => 'Tajuk dan ringkasan';
+
+  @override
+  String get reviewChangesSectionOther => 'Perubahan lain';
+
+  @override
+  String reviewChangeConversationCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count perbualan',
+      one: '1 perbualan',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String reviewChangePlaceCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count tempat',
+      one: '1 tempat',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String reviewChangeShowAll(int count) {
+    return 'Tunjukkan semua $count';
+  }
+
+  @override
+  String get reviewChangeUndoAll => 'Buat asal semua';
+
+  @override
+  String get reviewChangeSeeEvidence => 'Lihat bukti';
+
+  @override
+  String get reviewChangeViewConversation => 'Lihat perbualan';
+
+  @override
+  String get reviewChangeViewTask => 'Lihat tugasan';
+
+  @override
+  String reviewChangesUndoPartial(int failed, int total) {
+    return 'Tidak dapat membuat asal $failed daripada $total. Cuba lagi.';
+  }
+
+  @override
   String get reviewShowMore => 'Tunjuk Lagi';
 
   @override

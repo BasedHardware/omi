@@ -36,7 +36,7 @@ def db(monkeypatch):
 
 
 def caps(context='bounded', **kw):
-    return Caps(tokens=24000, passes=24, daily_usd=250, global_daily_usd=1000, **kw)
+    return Caps(tokens=24000, passes=24, daily_usd=250, **kw)
 
 
 def acquire(db, at=NOW, context='bounded', **kw):
@@ -67,14 +67,13 @@ def test_only_strictly_older_leases_are_reclaimed(db, context, offset):
         assert db.rows[('dream_users', UID)]['lease'] == new
         assert db.rows[DIRTY] == before[DIRTY]
         assert db.rows[('dream_users', UID)]['abandoned_passes'] == 1
-        assert db.rows[('dream_users', UID, 'spend', old['day'])]['reserved_usd'] == caps(context).reservation_usd * 2
+        assert db.rows[('dream_users', UID, 'spend', old['day'])]['reserved_usd'] == pytest.approx(0)
         # One transaction contains the old report, charge and replacement lease.
         paths = {path for path, _ in db.transactions[-1].sets}
         assert paths == {
             ('users', UID, 'dream_runs', old['run_id']),
             ('dream_users', UID),
             ('dream_users', UID, 'spend', old['day']),
-            ('dream_global_spend', old['day'] + '-' + str(old['global_shard'])),
         }
         assert not any('dirty' in path or 'reviews' in path for path in paths)
 
@@ -112,7 +111,7 @@ def test_unknown_usage_restores_full_reservation_only_on_original_day_ledger(db,
     new = acquire(db, later)
     assert new['day'] != old['day']
     assert db.rows[old_path]['reserved_usd'] == pytest.approx(7 + old['reservation_usd'])
-    assert db.rows[today_path]['reserved_usd'] == pytest.approx(11 + caps().reservation_usd)
+    assert db.rows[today_path]['reserved_usd'] == pytest.approx(11)
     assert db.rows[DIRTY] == original_dirty
     run = db.rows[('users', UID, 'dream_runs', old['run_id'])]
     assert run['success'] is False and run['records_queued_after'] == 1
@@ -168,12 +167,11 @@ def test_reclamation_commits_even_when_new_admission_is_denied(db, trigger, reas
 
 def test_reclamation_recharges_same_day_before_applying_daily_cap(db):
     old = acquire(db)
+    db.rows[('dream_users', UID)]['lease']['reservation_usd'] = 1.0
     db.rows[('dream_users', UID)]['lease']['budget_charge_usd'] = 0
-    db.rows[('dream_users', UID, 'spend', old['day'])]['reserved_usd'] = 250 - caps().reservation_usd * 1.5
+    db.rows[('dream_users', UID, 'spend', old['day'])]['reserved_usd'] = 249.5
     assert acquire(db, NOW + timedelta(seconds=deadline('bounded') + 1)) is None
-    assert db.rows[('dream_users', UID, 'spend', old['day'])]['reserved_usd'] == pytest.approx(
-        250 - caps().reservation_usd * 0.5
-    )
+    assert db.rows[('dream_users', UID, 'spend', old['day'])]['reserved_usd'] == pytest.approx(250.5)
     assert db.rows[('dream_users', UID)]['lease'] is None
 
 

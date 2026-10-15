@@ -83,7 +83,7 @@ def suggest_edit(uid, edit, records, *, run_id=None):
     item = ReviewItemV2(
         item_id='agent_proposal:' + review_store.safe_id(key),
         kind='agent_proposal',
-        title=edit.reason,
+        title=edit.kind.replace('_', ' ').capitalize(),
         created_at=datetime.now(timezone.utc),
         agent_proposal=proposal,
     )

@@ -214,9 +214,10 @@ async def test_shared_recovery_policy_matrix_through_gateway(monkeypatch, stream
                 )
         except ProviderFailure:
             assert not active or case in statuses or case in {'empty', 'malformed', 'timeout', 'connection'}
-        expected = ['dedicated'] if active else []
+        expected = ['dedicated']  # UNKNOWN old-order evidence retains 2.5 dedicated.
         assert [r.headers[ptr.REQUEST_TYPE_HEADER] for r in seen] == expected
         assert note_request.call_count == len(seen)
         assert [call.args[1] for call in note_request.call_args_list] == expected
-        assert all(f'/models/{TARGET}:' in str(r.url) for r in seen)
+        expected_model = TARGET if active else ptr.PT_MODEL_CURRENT
+        assert all(f'/models/{expected_model}:' in str(r.url) for r in seen)
         assert (TARGET in store._positive) == (active and case == 'valid')
