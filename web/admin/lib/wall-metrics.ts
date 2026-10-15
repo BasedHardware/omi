@@ -24,6 +24,7 @@ import {
 } from "./wall-mcp";
 import { WallSourceError, wallFailure } from "./wall-source-error";
 import { fetchShopifyWeek } from "./wall-shopify";
+import { WallJobCache } from "./wall-job-cache";
 
 export const WALL_DEFINITIONS = [
   ["growth.wau", "WAU", "people", "Growth"],
@@ -94,6 +95,9 @@ export interface Metric {
   sourceRefreshedAt: string | null;
   definitionVersion: string;
   stale: boolean;
+  /** Controlled source error; only failed nulls may retain last-good values. */
+  retryableFailure?: string;
+  retainedSince?: string;
   partial: boolean;
   windowStart: string | null;
   windowEnd: string | null;
@@ -207,7 +211,8 @@ export function emptyWallMetrics() {
 }
 export async function computeWall(
   sources: WallSources = defaultWallSources,
-  now = new Date()
+  now = new Date(),
+  jobCache?: WallJobCache
 ) {
   const metrics = emptyWallMetrics();
   const end = utcDay(now);
@@ -319,14 +324,28 @@ export async function computeWall(
   const jobs: (() => Promise<void>)[] = [];
   const guarded =
     (ids: MetricId[], source: string, job: () => Promise<void>) => async () => {
+      const restored = jobCache?.restore(ids, metrics, isoDay(end));
+      if (restored) {
+        if (restored === "retryable") retryableFailures++;
+        return;
+      }
       try {
         await job();
+        jobCache?.store(ids, metrics, isoDay(end));
       } catch (error) {
-        if (error instanceof WallSourceError && error.retryable)
-          retryableFailures++;
+        const retryable =
+          (error instanceof WallSourceError && error.retryable) ||
+          (error instanceof Error &&
+            ["TimeoutError", "AbortError"].includes(error.name));
+        if (retryable) retryableFailures++;
         const reason = wallFailure(source, error);
         for (const id of ids)
-          if (metrics[id].value == null) metrics[id].reason = reason;
+          if (metrics[id].value == null) {
+            metrics[id].reason = reason;
+            if (retryable) metrics[id].retryableFailure = reason;
+          }
+        // Configuration/non-retryable failures retain the normal TTL too.
+        jobCache?.store(ids, metrics, isoDay(end), retryable);
         console.warn(
           JSON.stringify({
             event: "wall_source_failed",
@@ -459,6 +478,7 @@ export async function computeWall(
             )
           )
         );
+        if (snapshots[0].status === "rejected") throw snapshots[0].reason;
         for (const [id, key] of [
           ["revenue.hardware_units_week", "units"],
           ["revenue.hardware_usd_week", "hardwareUsd"],
@@ -467,10 +487,7 @@ export async function computeWall(
           const current = snapshots[0],
             previous = snapshots[1];
           const m = metrics[id];
-          if (current.status !== "fulfilled") {
-            m.reason = wallFailure("Shopify orders", current.reason);
-            continue;
-          }
+
           m.value = current.value[key];
           m.prev = previous.status === "fulfilled" ? previous.value[key] : null;
           stamp(
@@ -489,7 +506,7 @@ export async function computeWall(
         }
       }
     )(),
-    guarded(["revenue.mrr", "revenue.arpmau"], "Stripe", async () => {
+    guarded(["revenue.mrr"], "Stripe", async () => {
       const book = await sources.stripe();
       const m = metrics["revenue.mrr"];
       m.fixture = book.fixture === true;
@@ -506,8 +523,6 @@ export async function computeWall(
       m.dataThrough = now.toISOString();
       m.stale = false;
       m.reason = `Live renewal run-rate, not a complete-period snapshot; prior/trend unavailable. ${book.unmappedProducts} unmapped product items, ${book.unsupportedItems} tiered/non-USD items excluded; JPY stays yen, no implicit FX. Shopify cash excluded.`;
-      const a = metrics["revenue.arpmau"];
-      const mau = metrics["engagement.mau"];
       const sameCutoff =
         book.dataThrough === isoDay(shiftDay(end, -1)) &&
         Boolean(book.sourceRefreshedAt);
@@ -521,36 +536,6 @@ export async function computeWall(
           }Omi-plan renewal run-rate snapshot; Shopify cash excluded; USD/approved FX only`,
           book.sourceRefreshedAt
         );
-      }
-      if (mau.value && m.value != null) {
-        a.fixture = book.fixture === true;
-        a.value = m.value / mau.value;
-        a.numerator = m.value;
-        a.denominator = mau.value;
-        a.partial = m.partial || mau.partial || !sameCutoff;
-        a.materialGap = !sameCutoff;
-        stamp(
-          a,
-          shiftDay(end, -30),
-          end,
-          `${book.fixture ? "LOCAL STRIPE FIXTURE numerator · " : ""}${
-            sameCutoff
-              ? "Same-cutoff Omi-plan MRR / qualified MAU. "
-              : `Live MRR / completed MAU through ${isoDay(
-                  shiftDay(end, -1)
-                )}; cutoff mismatch, not the contract same-cutoff close. `
-          }${COVERAGE_REASON}`,
-          mau.sourceRefreshedAt && m.sourceRefreshedAt
-            ? [m.sourceRefreshedAt, mau.sourceRefreshedAt].sort()[0]
-            : null
-        );
-        a.definitionVersion = mau.definitionVersion;
-        a.stale = m.stale || mau.stale;
-      } else {
-        a.reason =
-          mau.value == null || mau.value === 0
-            ? `ARPMAU requires qualified MAU: ${mau.reason}`
-            : `ARPMAU requires MRR: ${m.reason}`;
       }
     })(),
     guarded(["cost.net_day", "cost.per_mau_month"], "Billing", async () => {
@@ -636,10 +621,53 @@ export async function computeWall(
       ).stale;
     })(),
   ]);
+  // Derived units recompute from reused source snapshots without querying Stripe
+  // again when only MAU needs retrying (or vice versa).
+  {
+    const a = metrics["revenue.arpmau"];
+    const m = metrics["revenue.mrr"];
+    const mau = metrics["engagement.mau"];
+    const sameCutoff =
+      m.dataThrough === isoDay(shiftDay(end, -1)) &&
+      Boolean(m.sourceRefreshedAt);
+    if (mau.value && m.value != null) {
+      a.fixture = m.fixture === true;
+      a.value = m.value / mau.value;
+      a.numerator = m.value;
+      a.denominator = mau.value;
+      a.partial = m.partial || mau.partial || !sameCutoff;
+      a.materialGap = !sameCutoff;
+      stamp(
+        a,
+        shiftDay(end, -30),
+        end,
+        `${m.fixture ? "LOCAL STRIPE FIXTURE numerator · " : ""}${
+          sameCutoff
+            ? "Same-cutoff Omi-plan MRR / qualified MAU. "
+            : `Live MRR / completed MAU through ${isoDay(
+                shiftDay(end, -1)
+              )}; cutoff mismatch, not the contract same-cutoff close. `
+        }${COVERAGE_REASON}`,
+        mau.sourceRefreshedAt && m.sourceRefreshedAt
+          ? [m.sourceRefreshedAt, mau.sourceRefreshedAt].sort()[0]
+          : null
+      );
+      a.definitionVersion = mau.definitionVersion;
+      a.stale = m.stale || mau.stale;
+    } else {
+      a.reason =
+        mau.value == null || mau.value === 0
+          ? `ARPMAU requires qualified MAU: ${mau.reason}`
+          : `ARPMAU requires MRR: ${m.reason}`;
+    }
+    if (m.retryableFailure || mau.retryableFailure)
+      a.retryableFailure = m.retryableFailure || mau.retryableFailure;
+  }
   const list = WALL_DEFINITIONS.map(([id]) => metrics[id]);
   return {
     definitionVersion: DEFINITION_VERSION,
     retryableFailures,
+    ...(jobCache ? { sourceRefreshAfter: jobCache.nextRefreshAt() } : {}),
     generatedAt: new Date().toISOString(),
     metrics: list,
     partial: list.some((m) => m.status === "null" || m.partial),

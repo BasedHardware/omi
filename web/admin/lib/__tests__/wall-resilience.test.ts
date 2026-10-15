@@ -8,6 +8,7 @@ import {
 import { queryPosthog, periodQueries } from "../wall-posthog";
 import { WallSourceError } from "../wall-source-error";
 import { wallPresentation } from "../wall-presentation";
+import { WallJobCache } from "../wall-job-cache";
 const now = new Date("2026-10-15T12:00Z");
 function payload(): WallPayload {
   const metrics = Object.values(emptyWallMetrics());
@@ -176,4 +177,105 @@ it("retries partial transient source failures on the next poll instead of freezi
   vi.advanceTimersByTime(30_001);
   await wallPayload(new Date(), compute);
   expect(compute).toHaveBeenCalledTimes(2);
+});
+
+it("merges a failed metric by id, retaining its receipt while other sources succeed and keep their TTL", async () => {
+  const cache = new WallJobCache();
+  let failActivation = false;
+  const query = vi.fn(async (sql: string) => {
+    if (failActivation && sql.includes("maturity7"))
+      throw new WallSourceError(
+        "PostHog execution time limit exceeded (HTTP 504)",
+        true
+      );
+    return Object.assign([[0, "macos", 100, 20, 10, 5, 2, 3, 4]], {
+      sourceRefreshedAt: new Date().toISOString(),
+    });
+  });
+  // Classify the actual cohort SQL below instead of replacing computeWall.
+  const { cohortQuery } = await import("../wall-posthog");
+  const activationSql = new Set(
+    [1, 2].map((n) => cohortQuery(new Date("2026-10-15"), 7, n))
+  );
+  const sourceQuery = vi.fn(async (sql: string) =>
+    query(activationSql.has(sql) ? sql + " maturity7" : sql)
+  );
+  const stripe = vi.fn(async () => ({
+    usd: 1000,
+    partial: false,
+    unmappedProducts: 0,
+    unsupportedItems: 0,
+  }));
+  const shopify = vi.fn(async () => ({
+    units: 7,
+    hardwareUsd: 100,
+    prepayUsd: 20,
+    unmappedLines: 0,
+  }));
+  const billing = vi.fn(async () => null);
+  const compute = (_sources: unknown, at = new Date()) =>
+    computeWall({ query: sourceQuery, stripe, shopify, billing }, at, cache);
+  const retain = vi.fn();
+  const first = await wallPayload(now, compute, retain);
+  const old = first.metrics.find((m) => m.id === "activation.rate")!;
+  expect(old.value).not.toBeNull();
+  vi.advanceTimersByTime(16 * 60_000);
+  failActivation = true;
+  await wallPayload(new Date(), compute, retain);
+  await retain.mock.calls.at(-1)![0];
+  const partial = await wallPayload(new Date(), compute, retain);
+  const held = partial.metrics.find((m) => m.id === old.id)!;
+  expect(held).toMatchObject({
+    value: old.value,
+    sourceRefreshedAt: old.sourceRefreshedAt,
+    stale: true,
+    retryableFailure: expect.stringContaining("504"),
+  });
+  expect(
+    partial.metrics.find((m) => m.id === "growth.wau")?.sourceRefreshedAt
+  ).toBe(new Date().toISOString());
+  expect(
+    wallPresentation(partial, new Date()).tiles.activation_rate
+  ).toMatchObject({ state: "STALE", value: old.value });
+  const successfulCalls = {
+    query: sourceQuery.mock.calls.length,
+    stripe: stripe.mock.calls.length,
+    shopify: shopify.mock.calls.length,
+    billing: billing.mock.calls.length,
+  };
+  for (let i = 0; i < 2; i++) {
+    vi.advanceTimersByTime(30_001);
+    await wallPayload(new Date(), compute, retain);
+    await retain.mock.calls.at(-1)![0];
+    const retry = await wallPayload(new Date(), compute, retain);
+    expect(retry.metrics.find((m) => m.id === old.id)).toEqual(held);
+  }
+  // Only maturity-7 cohort requests repeat; Stripe/Shopify/billing and the other
+  // PostHog jobs retain the receipt from their successful 16-minute refresh.
+  expect(
+    sourceQuery.mock.calls
+      .slice(successfulCalls.query)
+      .every(([sql]) => activationSql.has(sql))
+  ).toBe(true);
+  expect(stripe).toHaveBeenCalledTimes(successfulCalls.stripe);
+  expect(shopify).toHaveBeenCalledTimes(successfulCalls.shopify);
+  expect(billing).toHaveBeenCalledTimes(successfulCalls.billing);
+  failActivation = false;
+  vi.advanceTimersByTime(30_001);
+  await wallPayload(new Date(), compute, retain);
+  await retain.mock.calls.at(-1)![0];
+  const recovered = await wallPayload(new Date(), compute, retain);
+  expect(recovered.retryableFailures).toBe(0);
+  expect(
+    recovered.metrics.find((m) => m.id === old.id)?.retainedSince
+  ).toBeUndefined();
+  expect(
+    recovered.metrics.find((m) => m.id === old.id)?.sourceRefreshedAt
+  ).toBe(new Date().toISOString());
+  // Successful jobs expire at their original 15-minute deadline, even if the
+  // formerly failed job recovered more recently.
+  vi.setSystemTime(new Date(now.getTime() + 31 * 60_000));
+  await wallPayload(new Date(), compute, retain);
+  await retain.mock.calls.at(-1)![0];
+  expect(stripe).toHaveBeenCalledTimes(successfulCalls.stripe + 1);
 });

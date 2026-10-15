@@ -1,7 +1,12 @@
 import { computeWall, emptyWallMetrics, WallPayload } from "./wall-metrics";
 import { DEFINITION_VERSION, isoDay, utcDay } from "./qualified-activity";
+import {
+  WallJobCache,
+  WALL_SOURCE_TTL,
+  WALL_RETRY_COOLDOWN,
+} from "./wall-job-cache";
 
-const TTL = 15 * 60_000;
+const TTL = WALL_SOURCE_TTL;
 const MAX_AGE = 24 * 60 * 60_000;
 const COLD_WAIT = 5_000;
 // Process-local, disposable single flight. The route retains work with after().
@@ -12,6 +17,33 @@ let flight: Promise<WallPayload> | null = null;
 let retryAfter = 0;
 let refreshError: string | undefined;
 let lastFailure: WallPayload | null = null;
+let jobs = new WallJobCache();
+const computeCachedWall: typeof computeWall = (sources, now) =>
+  computeWall(sources, now, jobs);
+
+function keepGoodMetrics(
+  payload: WallPayload,
+  previous: WallPayload | undefined
+) {
+  const prior = new Map(previous?.metrics.map((m) => [m.id, m]));
+  return {
+    ...payload,
+    metrics: payload.metrics.map((m) => {
+      const old = prior.get(m.id);
+      if (!m.retryableFailure || m.value != null || old?.value == null)
+        return m;
+      const retainedSince = old.retainedSince || new Date().toISOString();
+      if (Date.now() - Date.parse(retainedSince) >= MAX_AGE) return m;
+      return {
+        ...old,
+        stale: true,
+        partial: true,
+        retainedSince,
+        retryableFailure: m.retryableFailure,
+      };
+    }),
+  };
+}
 
 function loading(
   reason = "Initial source refresh running; updates automatically"
@@ -31,14 +63,15 @@ function loading(
 }
 export async function wallPayload(
   now = new Date(),
-  compute = computeWall,
+  compute = computeCachedWall,
   retain: (work: Promise<unknown>) => void = () => {}
 ): Promise<WallPayload> {
   const day = isoDay(utcDay(now));
   const age = cached ? now.getTime() - cached.at : Infinity;
   if (
     cached?.day === day &&
-    age < (cached.payload.retryableFailures ? 30_000 : TTL)
+    age < (cached.payload.retryableFailures ? WALL_RETRY_COOLDOWN : TTL) &&
+    now.getTime() < (cached.payload.sourceRefreshAfter ?? Infinity)
   )
     return cached.payload;
   const usable = cached && age < MAX_AGE ? cached : null;
@@ -48,9 +81,10 @@ export async function wallPayload(
         if (payload.metrics.every((m) => m.value == null)) {
           lastFailure = payload;
           refreshError = "All wall aggregate sources failed; retry pending";
-          retryAfter = Date.now() + 30_000;
+          retryAfter = Date.now() + WALL_RETRY_COOLDOWN;
           return payload;
         }
+        payload = keepGoodMetrics(payload, usable?.payload);
         cached = { day, at: Date.now(), payload };
         refreshError = undefined;
         lastFailure = null;
@@ -59,7 +93,7 @@ export async function wallPayload(
       })
       .catch(() => {
         refreshError = "Wall refresh failed; retry pending";
-        retryAfter = Date.now() + 30_000;
+        retryAfter = Date.now() + WALL_RETRY_COOLDOWN;
         return {
           ...(lastFailure || loading(refreshError)),
           refreshing: false,
@@ -106,4 +140,5 @@ export function resetWallCache() {
   retryAfter = 0;
   refreshError = undefined;
   lastFailure = null;
+  jobs = new WallJobCache();
 }

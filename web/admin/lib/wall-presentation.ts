@@ -44,6 +44,7 @@ export function wallPresentation(payload: WallPayload, now = new Date()) {
       ? "daily"
       : "hourly";
     m.stale =
+      Boolean(m.retainedSince) ||
       Boolean(payload.cacheStale) ||
       freshness(m.sourceRefreshedAt, m.dataThrough, cadence, now).stale;
     presented.push(m);

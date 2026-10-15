@@ -15,6 +15,9 @@ All fetches use `hooks/useAuthToken.ts`; never call `getIdToken()`, create auth 
   failure, as explicitly requested for kiosk continuity. It preserves refresh
   receipts and dims previous-day or failed-refresh data; other routes retain the
   clear-on-error rule above.
+  A retryable partial failure retains the last non-null metric by id with its
+  original source receipt. Failed jobs retry after 30 seconds; successful jobs
+  keep their own 15-minute TTL, including across retries of another source.
 - Do not add custom fetchers, `useEffect` token handling, manual-auth `fetch()`, `Promise.all` upstream calls, or zero metrics for upstream failures.
 
 ## Revenue metrics
