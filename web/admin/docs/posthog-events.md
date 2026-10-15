@@ -137,3 +137,32 @@ These follow the frozen transport contract. Legacy PostHog events stay until the
 | Recording Started / Start Failed, Memory Created, onboarding, chat, purchases, product outcomes | Keep | Existing PostHog consumers |
 
 Chat and product analytics stay on PostHog. The admin reliability reader's replacement flag defaults off (`RELIABILITY_REPLACEMENT_READER=on` plus an explicit `RELIABILITY_REPLACEMENT_CUTOVER` UTC day). Transport shadow and retirement flags are independent and are not read by this reader. Direct BigQuery billing (`lib/services/gcp-billing.ts`) and plan economics (`lib/services/plan-economics.ts`) are unchanged. There is no PostHog GCP aggregate.
+
+
+## Desktop health event sampling
+
+The approved PostHog ingestion sampling transform retains 10% of
+`desktop_health_event`. Reader compensation is **disarmed**: the constant
+`DESKTOP_HEALTH_EVENT_SAMPLING_CUTOVER` in
+`lib/telemetry/desktop-health-sampling.ts` is unset (`null`), so all events have
+weight one, including future dates. There is no provisional activation date.
+The ingestion rollout owner must confirm the exact timestamp and ship that
+constant together with the transform enablement: **deploy the constant first,
+then enable the transform at that instant or later**. If enablement is delayed,
+align the constant to the actual boundary before it passes; do not leave an
+armed reader multiplying unsampled events. This change enables no transform.
+The common `DESKTOP_HEALTH_EVENT_COUNT_MULTIPLIER` is **10**. This is the transform's
+reader compensation contract, distinct from retiring or replacing PostHog telemetry.
+
+Response-reliability's physical voice SQL and both fallback-triage legacy queries
+weight each event at/after that instant before grouping. Earlier events keep weight
+one, including windows spanning the cutover. Duration sums use the same weight as
+success counts, so mean latency stays a ratio. Success/failure rates remain ratios
+of corrected counts; never multiply a resulting percentage. Chat, legacy floating
+voice and unsampled replacement aggregate rows are unchanged. Legacy fallback rows
+already carry the SQL weight and must not be multiplied again by their tally helper.
+
+Approval and reader audit: 2026-10-15 orchestrator ruling and the dashboard knowledge
+base's `2026-10-15-sampling-reader-receipts.md`, row `desktop_health_event`. The
+external transform's actual enablement/cutover remains the ingestion rollout owner's
+responsibility; this PR performs no PostHog pipeline write.
