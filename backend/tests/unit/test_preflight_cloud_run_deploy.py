@@ -6,6 +6,7 @@ from pathlib import Path
 import subprocess
 import sys
 from types import SimpleNamespace
+from unittest.mock import Mock
 
 import pytest
 
@@ -31,6 +32,43 @@ def test_preflight_script_imports_without_pythonpath() -> None:
         text=True,
     )
     assert result.returncode == 0, result.stderr
+
+
+@pytest.mark.parametrize('environment', ['dev', 'prod'])
+def test_storage_admission_precedes_all_remote_preflight_work(monkeypatch, environment):
+    preflight = load_preflight()
+    monkeypatch.setattr(preflight, '_cloud_run_service_configs', lambda **kwargs: {'backend': {'env': {}}})
+    operations = [
+        (preflight, 'migrate_legacy_public_bindings'),
+        (preflight, 'check_runtime_bindings'),
+        (preflight, 'check_rendered_secrets'),
+        (preflight.repair_cloud_run_traffic, 'repair_live'),
+    ]
+    calls = []
+    for owner, name in operations:
+        call = Mock()
+        monkeypatch.setattr(owner, name, call)
+        calls.append(call)
+    monkeypatch.setattr(
+        sys,
+        'argv',
+        [
+            str(SCRIPT),
+            '--env',
+            environment,
+            '--project',
+            'hermetic-project',
+            '--check-secrets',
+            '--repair-traffic',
+            '--check-runtime-bindings',
+            '--migrate-legacy-public-binding',
+            'backend',
+        ],
+    )
+    with pytest.raises(SystemExit) as error:
+        preflight.main()
+    assert error.value.code == 2
+    assert all(not call.called for call in calls)
 
 
 def test_check_rendered_secrets_reports_missing(monkeypatch: pytest.MonkeyPatch) -> None:
