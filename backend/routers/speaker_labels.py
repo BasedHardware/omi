@@ -1,4 +1,5 @@
 import logging
+import re
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
@@ -16,10 +17,12 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
+_DOC_ID_PATTERN = r'^[A-Za-z0-9_-]{1,128}$'
+
 
 def _is_safe_firestore_document_id(value: str) -> bool:
-    """Keep released IDs broad while preventing a value from adding path segments."""
-    return bool(value) and '/' not in value
+    """Validate Firestore ids in handlers without narrowing released OpenAPI schemas."""
+    return re.fullmatch(_DOC_ID_PATTERN, value) is not None
 
 
 @router.post(
@@ -34,13 +37,10 @@ def reject_speaker_label(
     background_tasks: BackgroundTasks,
     uid: str = Depends(auth.get_current_user_uid),
 ):
-    # These path parameters were released as an unconstrained string and
-    # integer. Keep that contract; Firestore document() only treats '/' as a
-    # path separator, while FastAPI routes path parameters as one segment.
     if not _is_safe_firestore_document_id(conversation_id):
         raise HTTPException(status_code=422, detail='invalid conversation_id')
-    # The request body's person_id flows into the same document() sink as the
-    # path param; reject only a value that would add Firestore path segments.
+    if not 0 <= speaker_id <= 1_000_000:
+        raise HTTPException(status_code=422, detail='invalid speaker_id')
     if data.person_id is not None and not _is_safe_firestore_document_id(data.person_id):
         raise HTTPException(status_code=400, detail='invalid person_id')
     try:

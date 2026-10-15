@@ -250,31 +250,46 @@ def test_generated_dart_wire_models_cover_contract():
     assert 'class GeneratedVoiceMatchesResponse' in people_dart
 
 
-def test_reject_route_preserves_released_path_parameter_values(client, monkeypatch):
+def test_reject_route_rejects_invalid_conversation_ids(client, monkeypatch):
+    reached = []
+    monkeypatch.setattr(
+        conversations_db,
+        'assign_conversation_speaker',
+        lambda uid, conversation_id, **kwargs: reached.append(conversation_id),
+    )
+
+    for bad in ('.', '..', 'legacy.id', ' padded ', 'a\\b', 'x' * 129):
+        response = client.post(f'/v1/conversations/{bad}/speakers/3/reject', json={'kind': 'not_me'})
+        assert 400 <= response.status_code < 500, (bad, response.status_code)
+        assert response.status_code != 409
+        if bad not in {'.', '..'}:
+            assert response.status_code == 422
+            assert response.json()['detail'] == 'invalid conversation_id'
+    assert reached == []
+
+
+def test_reject_route_bounds_speaker_id(client, monkeypatch):
     reached = []
 
     def raise_lookup(uid, conversation_id, **kwargs):
-        reached.append((conversation_id, kwargs['speaker_id']))
+        reached.append(kwargs['speaker_id'])
         raise LookupError('not found')
 
     monkeypatch.setattr(conversations_db, 'assign_conversation_speaker', raise_lookup)
-    for conversation_id, speaker_id in (('legacy.id', -1), ('a b', 2000000), ('x' * 200, 3)):
-        response = client.post(
-            f'/v1/conversations/{conversation_id}/speakers/{speaker_id}/reject', json={'kind': 'not_me'}
-        )
+    for bad in (-1, 1_000_001, 2_000_000):
+        response = client.post(f'/v1/conversations/conv1/speakers/{bad}/reject', json={'kind': 'not_me'})
+        assert response.status_code == 422
+        assert response.json()['detail'] == 'invalid speaker_id'
+    for boundary in (0, 1_000_000):
+        response = client.post(f'/v1/conversations/conv1/speakers/{boundary}/reject', json={'kind': 'not_me'})
         assert response.status_code == 404
-    assert reached == [('legacy.id', -1), ('a b', 2000000), ('x' * 200, 3)]
-
-    # Encoded separators and dot traversal do not route to a different document.
-    for unroutable in ('a%2Fb', '..'):
-        resp = client.post(f'/v1/conversations/{unroutable}/speakers/3/reject', json={'kind': 'not_me'})
-        assert resp.status_code in (404, 422), unroutable
+    assert reached == [0, 1_000_000]
 
 
 def test_reject_route_rejects_unsafe_body_person_id(client):
     # person_id is only honored for kind='not_person' (the model validator
     # nulls it otherwise), so the guard is exercised on that kind.
-    for bad in ('a/b', '../x'):
+    for bad in ('.', '..', 'a/b', '../x', 'a\\b', ' padded ', 'x' * 129):
         response = client.post(
             '/v1/conversations/conv1/speakers/3/reject', json={'kind': 'not_person', 'person_id': bad}
         )
@@ -312,7 +327,7 @@ def test_reject_route_lookup_miss_returns_sanitized_404(client, monkeypatch):
     assert 'stored doc shape' not in json.dumps(response.json())
 
 
-def test_voice_matches_preserves_released_person_id_values(client, monkeypatch):
+def test_voice_matches_rejects_invalid_person_ids(client, monkeypatch):
     seen = []
 
     async def empty_matches(uid, person_id):
@@ -320,11 +335,14 @@ def test_voice_matches_preserves_released_person_id_values(client, monkeypatch):
         return {'matches': []}
 
     monkeypatch.setattr(speaker_labels_router, 'find_person_voice_matches', empty_matches)
-    for person_id in ('legacy.id', 'a b', 'x' * 200):
-        assert client.get(f'/v1/users/people/{person_id}/voice-matches').status_code == 200
-    assert seen == ['legacy.id', 'a b', 'x' * 200]
-    for unroutable in ('..', 'a%2Fb'):
-        assert client.get(f'/v1/users/people/{unroutable}/voice-matches').status_code in (404, 422)
+    for bad in ('.', '..', 'legacy.id', ' padded ', 'a\\b', 'x' * 129):
+        response = client.get(f'/v1/users/people/{bad}/voice-matches')
+        assert 400 <= response.status_code < 500, (bad, response.status_code)
+        assert response.status_code != 409
+        if bad not in {'.', '..'}:
+            assert response.status_code == 422
+            assert response.json()['detail'] == 'invalid person_id'
+    assert seen == []
 
 
 def test_voice_matches_unexpected_error_returns_sanitized_500(client, monkeypatch):

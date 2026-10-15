@@ -1002,12 +1002,9 @@ def update_action_item(
                 allow_ended_goal=(goal_id, workstream_id) == (current.get('goal_id'), current.get('workstream_id')),
             )
             payload = dict(update_data)
-            # A settled Apple Reminders export clears its pending-sync flag.
-            # Other task integrations must not erase an Apple sync still in flight.
-            if (
-                payload.get('exported') is True
-                and payload.get('export_platform', current.get('export_platform')) == 'apple_reminders'
-            ):
+            # A settled export must leave the capped pending-sync query. Keep
+            # this single-item path aligned with batch_sync_update_action_items.
+            if payload.get('exported') is True:
                 payload['sync_requested'] = False
             # Same preserve as the plain update path below: a re-completion
             # keeps the stored completed_at instead of re-stamping.
@@ -1039,12 +1036,9 @@ def update_action_item(
     # re-stamp when the task was done. Preserve the stored timestamp when
     # the item is already completed.
     existing_data = typed_doc(existing)
-    # A settled Apple Reminders export clears its pending-sync flag. An export
-    # to another task app can overlap a pending Apple sync and must preserve it.
-    if (
-        update_data.get('exported') is True
-        and update_data.get('export_platform', existing_data.get('export_platform')) == 'apple_reminders'
-    ):
+    # A settled export must leave the capped pending-sync query. Keep this
+    # single-item path aligned with batch_sync_update_action_items.
+    if update_data.get('exported') is True:
         update_data['sync_requested'] = False
     if update_data.get('completed') is True and existing_data.get('completed') is True:
         update_data['completed_at'] = existing_data.get('completed_at')
