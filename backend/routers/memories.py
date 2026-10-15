@@ -1039,14 +1039,20 @@ def resolve_memory_review_item(
 ):
     if request.decision not in ('accept', 'reject', 'correct', 'timeout'):
         raise HTTPException(status_code=400, detail='Invalid review decision')
-    result = review_queue.resolve_review_conflict(
-        uid,
-        review_id,
-        request.decision,
-        correction=request.correction,
-        reason=request.reason,
-        current_veracity=request.current_veracity,
-    )
+    try:
+        result = review_queue.resolve_review_conflict(
+            uid,
+            review_id,
+            request.decision,
+            correction=request.correction,
+            reason=request.reason,
+            current_veracity=request.current_veracity,
+        )
+    except (DestructiveGateTakeover, DestructiveOperationInProgress, LegalHoldAuthorityUnavailable) as exc:
+        # A canonical reject/drop revalidates the destructive gate after its
+        # tombstone commit; a concurrent same-kind deletion that rotated the
+        # token must surface as the retryable account-gate response, not 500.
+        raise account_gate_busy_http_exception() from exc
     if result.get('status') == 'not_found':
         raise HTTPException(status_code=404, detail='Review item not found')
     return result

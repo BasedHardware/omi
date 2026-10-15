@@ -271,9 +271,12 @@ def _finish_destructive_operation_transaction(
     if gate is None or gate["uid"] != uid or gate["kind"] != kind:
         raise LegalHoldAuthorityUnavailable("destructive operation gate ownership changed")
     if gate["token"] != token:
-        # A same-kind peer owns this row now. Never finish its operation.
-        logger.info("destructive operation finish skipped after same-kind takeover")
-        return
+        # A same-kind peer owns this row now: only the stale-takeover path can
+        # reach here, and the original holder must not exit reporting success
+        # (or record its outcome on the peer's row). Preserve the peer's row
+        # and fail the caller so it re-maps to the account-gate response.
+        logger.warning("destructive operation finish aborted after same-kind takeover")
+        raise DestructiveGateTakeover("destructive operation gate was taken over by a same-kind peer")
     if gate["state"] != "running":
         if gate["state"] == outcome:
             logger.info("destructive operation finish already recorded")

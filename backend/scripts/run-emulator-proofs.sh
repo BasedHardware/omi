@@ -64,6 +64,8 @@ run_proof() {
 
 run_proof "daily-sweep (crash / deletion / generation / paid-wipe)" \
   "$PYTHON" scripts/daily_memory_sweep_emulator_test.py
+run_proof "destructive gate contention (same-kind block / stale takeover fence)" \
+  "$PYTHON" scripts/destructive_gate_contention_emulator_test.py
 run_proof "ledger correction, revert, standalone reopen, privacy fence" \
   "$PYTHON" scripts/knowledge_ledger_correction_emulator_test.py
 run_proof "direct-user ledger API writes / lifecycle / batch fence" \

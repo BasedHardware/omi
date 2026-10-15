@@ -214,3 +214,26 @@ def test_conversation_delete_route_maps_takeover_to_409(monkeypatch):
     assert response.status_code == 409
     assert response.json() == {"detail": "account_gate_busy"}
     assert response.headers["Retry-After"] == "2"
+
+
+def test_review_resolve_route_maps_takeover_to_409(monkeypatch):
+    """A canonical review resolution whose gate revalidation detects a takeover
+    surfaces as the retryable account-gate response, never an unhandled 500."""
+    from unittest.mock import MagicMock
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+
+    from routers import memories as memory_routes
+
+    review_queue_stub = MagicMock()
+    review_queue_stub.resolve_review_conflict.side_effect = DestructiveGateTakeover(
+        "destructive operation gate was taken over by a same-kind peer"
+    )
+    monkeypatch.setattr(memory_routes, "review_queue", review_queue_stub)
+    app = FastAPI()
+    app.include_router(memory_routes.router)
+    app.dependency_overrides[memory_routes.auth.get_current_user_uid] = lambda: "uid"
+    response = TestClient(app).post("/v3/memories/review-queue/review-1/resolve", json={"decision": "reject"})
+    assert response.status_code == 409
+    assert response.json() == {"detail": "account_gate_busy"}
+    assert response.headers["Retry-After"] == "2"

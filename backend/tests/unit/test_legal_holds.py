@@ -167,9 +167,12 @@ def test_gate_finish_is_token_cas_and_failed_gate_allows_later_hold():
     now = legal_holds.datetime.now(legal_holds.timezone.utc)
     client = _FakeClient({"legal_hold_deletion_gates/uid1": _gate()})
 
-    legal_holds._finish_destructive_operation_transaction.to_wrap(
-        client.transaction(), client, "uid1", "explicit_memory_deletion", "wrong", "failed", now
-    )
+    # Wrong token: finish is still token-CAS (row untouched) and the displaced
+    # holder now learns it lost authority instead of exiting silently.
+    with pytest.raises(legal_holds.DestructiveGateTakeover):
+        legal_holds._finish_destructive_operation_transaction.to_wrap(
+            client.transaction(), client, "uid1", "explicit_memory_deletion", "wrong", "failed", now
+        )
     assert client.docs["legal_hold_deletion_gates/uid1"]["state"] == "running"
 
     legal_holds._finish_destructive_operation_transaction.to_wrap(
@@ -428,9 +431,12 @@ def test_finish_same_kind_takeover_never_mutates_peer(state):
     now = legal_holds.datetime.now(legal_holds.timezone.utc)
     original = _gate(token="peer-token", state=state)
     client = _FakeClient({"legal_hold_deletion_gates/uid1": original})
-    legal_holds._finish_destructive_operation_transaction.to_wrap(
-        client.transaction(), client, "uid1", "explicit_memory_deletion", "old-token", "completed", now
-    )
+    # The displaced holder must not exit reporting success: a same-kind peer
+    # owns the row now, so finish raises the takeover signal and preserves it.
+    with pytest.raises(legal_holds.DestructiveGateTakeover):
+        legal_holds._finish_destructive_operation_transaction.to_wrap(
+            client.transaction(), client, "uid1", "explicit_memory_deletion", "old-token", "completed", now
+        )
     assert client.docs["legal_hold_deletion_gates/uid1"] == original
 
 
@@ -507,11 +513,49 @@ def test_active_context_revalidation_detects_stale_takeover(monkeypatch):
         "_finish_destructive_operation_transaction",
         legal_holds._finish_destructive_operation_transaction.to_wrap,
     )
-    with legal_holds.destructive_operation_gate("uid1", firestore_client=client):
-        legal_holds.assert_destructive_gate_still_ours("uid1", "explicit_memory_deletion", firestore_client=client)
-        future = now + timedelta(seconds=legal_holds.GATE_STALE_AFTER_SECONDS + 1)
-        legal_holds.acquire_destructive_operation(
-            "uid1", kind="explicit_memory_deletion", token="peer", firestore_client=client, now=future
-        )
-        with pytest.raises(legal_holds.DestructiveGateTakeover):
+    # The holder that lost authority mid-flight cannot exit reporting success
+    # either: both its next chunk and its context-manager exit surface takeover.
+    with pytest.raises(legal_holds.DestructiveGateTakeover):
+        with legal_holds.destructive_operation_gate("uid1", firestore_client=client):
             legal_holds.assert_destructive_gate_still_ours("uid1", "explicit_memory_deletion", firestore_client=client)
+            future = now + timedelta(seconds=legal_holds.GATE_STALE_AFTER_SECONDS + 1)
+            legal_holds.acquire_destructive_operation(
+                "uid1", kind="explicit_memory_deletion", token="peer", firestore_client=client, now=future
+            )
+            with pytest.raises(legal_holds.DestructiveGateTakeover):
+                legal_holds.assert_destructive_gate_still_ours(
+                    "uid1", "explicit_memory_deletion", firestore_client=client
+                )
+
+
+def test_stale_holder_exit_cannot_report_success_after_takeover(monkeypatch):
+    """The displaced holder's context-manager exit raises instead of succeeding.
+
+    A stale (6h-bound) gate is rotated by a same-kind peer; the original
+    holder may have already finished its chunks without revalidating, so its
+    ``__exit__`` path must surface the takeover rather than exit cleanly.
+    """
+    client = _FakeClient()
+    now = legal_holds.datetime.now(legal_holds.timezone.utc)
+    monkeypatch.setattr(
+        legal_holds,
+        "_acquire_destructive_operation_transaction",
+        legal_holds._acquire_destructive_operation_transaction.to_wrap,
+    )
+    monkeypatch.setattr(
+        legal_holds,
+        "_finish_destructive_operation_transaction",
+        legal_holds._finish_destructive_operation_transaction.to_wrap,
+    )
+    with pytest.raises(legal_holds.DestructiveGateTakeover):
+        with legal_holds.destructive_operation_gate("uid1", firestore_client=client):
+            # The peer rotates the token past the staleness bound while the
+            # original holder is still inside the gate.
+            future = now + timedelta(seconds=legal_holds.GATE_STALE_AFTER_SECONDS + 1)
+            legal_holds.acquire_destructive_operation(
+                "uid1", kind="explicit_memory_deletion", token="peer", firestore_client=client, now=future
+            )
+    # The stale holder's exit raised DestructiveGateTakeover (never success),
+    # and the peer's running row was preserved untouched.
+    gate = client.docs["legal_hold_deletion_gates/uid1"]
+    assert gate["token"] == "peer" and gate["state"] == "running"

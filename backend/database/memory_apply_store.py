@@ -3324,6 +3324,8 @@ def cleanup_expired_memory_deletion_receipts(
         return 0
     if not rows:
         return 0
+    deleted = 0
+    takeover_aborted = False
     try:
         # Legal hold and retention cleanup share the same account-wide
         # linearization gate. A hold that wins first preserves every receipt;
@@ -3410,12 +3412,18 @@ def cleanup_expired_memory_deletion_receipts(
                         deleted,
                         len(rows) - index,
                     )
+                    takeover_aborted = True
                     return deleted
                 except LegalHoldAuthorityUnavailable:
                     return deleted
                 except Exception:
                     continue
             return deleted
+    except DestructiveGateTakeover:
+        # A same-kind takeover aborted this sweep's gate exit. Deletes that
+        # already ran under valid authority stand: recover the mid-loop count
+        # rather than reporting total failure for work that genuinely happened.
+        return deleted if takeover_aborted else 0
     except Exception:
         # Active/malformed/unavailable legal-hold authority fails closed.
         return 0
