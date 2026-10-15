@@ -50,6 +50,8 @@
 * [`action_items_org.md`](action_items_org.md)
   into an Org-mode file with TODO/DONE headings and agenda DEADLINEs.
 * [`action_items_opml.md`](action_items_opml.md) — convert an action-item JSON export to OPML 2.0 for OmniFocus, Workflowy, and Logseq.
+* [`action_items_digest.md`](action_items_digest.md) — summarise action-item
+  exports into a digest: completion rate, overdue items and upcoming deadlines.
 * [`memories_markdown.pt.md`](memories_markdown.pt.md) — exportar memórias e conhecimento do Omi para Markdown (Portuguese recipe).
 * [`quickstart.th.md`](quickstart.th.md) — คู่มือเริ่มต้นใช้งาน omi-cli
   ฉบับภาษาไทย (Thai Quickstart).
