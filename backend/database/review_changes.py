@@ -754,7 +754,7 @@ def _finish(change: dict, **payload) -> ReviewChangeDiff | None:
     if started is not None:
         body['source_started_at'] = started
     body = {key: value for key, value in body.items() if value not in (None, '')}
-    return ReviewChangeDiff.model_validate(body)
+    return parse_payload_strict(ReviewChangeDiff, body, document_path='review_changes/diff')
 
 
 def _changed_spans(before: str, after: str):
