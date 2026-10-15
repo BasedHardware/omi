@@ -4150,5 +4150,13 @@
     "onboardingNoOmiYet": "Omi'n henüz yok mu?",
     "onboardingOmiNotOrdered": "Henüz sipariş vermedim",
     "onboardingOmiOrdered": "Sipariş verdim",
-    "onboardingPermissionTapToFix": "Düzeltmek için dokunun"
+    "onboardingPermissionTapToFix": "Düzeltmek için dokunun",
+    "homePendingTitle": "Konuşmalar yolda",
+    "homePendingCatchingUp": "Önceki ses işleniyor",
+    "onTheWayTitle": "Yolda",
+    "onTheWayAlmostReady": "Neredeyse hazır",
+    "activityEmpty": "Henüz etkinlik yok",
+    "activityNewSemantics": "Etkinlik, yeni öğeler",
+    "activityLoadFailed": "Etkinliğinizin tamamı yüklenemedi",
+    "activityNewItem": "Yeni"
 }

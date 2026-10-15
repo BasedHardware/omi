@@ -4150,5 +4150,13 @@
     "onboardingNoOmiYet": "Belum punya Omi?",
     "onboardingOmiNotOrdered": "Belum memesan",
     "onboardingOmiOrdered": "Saya sudah memesannya",
-    "onboardingPermissionTapToFix": "Ketuk untuk memperbaiki"
+    "onboardingPermissionTapToFix": "Ketuk untuk memperbaiki",
+    "homePendingTitle": "Percakapan sedang diproses",
+    "homePendingCatchingUp": "Mengejar audio sebelumnya",
+    "onTheWayTitle": "Dalam perjalanan",
+    "onTheWayAlmostReady": "Hampir siap",
+    "activityEmpty": "Belum ada aktivitas",
+    "activityNewSemantics": "Aktivitas, item baru",
+    "activityLoadFailed": "Tidak dapat memuat semua aktivitas Anda",
+    "activityNewItem": "Baru"
 }
