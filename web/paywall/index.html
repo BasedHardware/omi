@@ -5,13 +5,23 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Omi Unlimited</title>
 <style>html,body{margin:0;background:#fff}</style>
+<script>window.omiTrack = function () {}; window.omiVersionFlag = function () { return Promise.resolve(null); };</script>
+<script src="/track.js"></script>
 <script>
-// Picks this reader's paywall version once, remembers it on the device, and opens that page with
-// the app's query parameters. `?v=<version>` previews a version without changing the assignment.
-// To change the split, edit VERSIONS (weights are relative). Readers keep the version they got.
+// Picks the reader's paywall version and opens it with the app's query parameters.
+//
+// The split lives in the PostHog flag `web-paywall-version` (variants `benefits` / `steps`), so it
+// changes over the air and PostHog Experiments can read the result. If PostHog does not answer in
+// time, the reader gets the version they had last time on this device, else DEFAULT_VERSION;
+// those visits are tracked but not counted as experiment exposures. `?v=<version>` previews a
+// version without touching the assignment. Readers with analytics off get a local 50/50 pick.
 (function () {
-  var VERSIONS = { benefits: 50, steps: 50 };
+  var VERSIONS = { benefits: true, steps: true };
+  var PREVIEWS = { benefits: true, steps: true, classic: true };
+  var DEFAULT_VERSION = 'benefits';
+  var FLAG_TIMEOUT_MS = 2500;
   var q = new URLSearchParams(location.search);
+  var started = Date.now();
   function store(key, value) {
     try {
       if (value === undefined) return localStorage.getItem(key);
@@ -19,23 +29,38 @@
     } catch (e) {}
     return null;
   }
-  var version = q.get('v');
-  if (!VERSIONS[version]) {
-    version = store('omi_pw_version');
-    if (!VERSIONS[version]) {
-      var names = Object.keys(VERSIONS), total = 0, i;
-      for (i = 0; i < names.length; i++) total += VERSIONS[names[i]];
-      var roll = Math.random() * total;
-      for (i = 0; i < names.length; i++) { roll -= VERSIONS[names[i]]; if (roll < 0) break; }
-      version = names[Math.min(i, names.length - 1)];
-      store('omi_pw_version', version);
-    }
+  function open(version, how) {
+    q.delete('v');
+    q.set('_pv', version);
+    q.set('_ps', how);
+    // Vercel serves clean URLs (/steps); the local preview server needs the file name.
+    var local = /^(localhost|127\.0\.0\.1)$/.test(location.hostname);
+    location.replace('/' + version + (local ? '.html' : '') + '?' + q.toString());
   }
-  q.delete('v');
-  var search = q.toString();
-  // Vercel serves clean URLs (/steps); the local preview server needs the file name.
-  var local = /^(localhost|127\.0\.0\.1)$/.test(location.hostname);
-  location.replace('/' + version + (local ? '.html' : '') + (search ? '?' + search : ''));
+
+  var preview = q.get('v');
+  if (PREVIEWS[preview]) return open(preview, 'preview');
+
+  if (q.get('analytics') === 'off') {
+    var local = store('omi_pw_version_local');
+    if (local !== 'benefits' && local !== 'steps') { local = Math.random() < 0.5 ? 'benefits' : 'steps'; store('omi_pw_version_local', local); }
+    return open(local, 'local');
+  }
+
+  window.omiVersionFlag(FLAG_TIMEOUT_MS).then(function (variant) {
+    var ms = Date.now() - started;
+    if (VERSIONS[variant]) {
+      store('omi_pw_version', variant);
+      return open(variant, 'flag');
+    }
+    // `false`: PostHog answered and the flag is off for this reader (the kill switch) -> default.
+    // `null`: no answer in time -> the version this device had last time, else the default.
+    var cached = variant === false ? null : store('omi_pw_version');
+    var version = VERSIONS[cached] ? cached : DEFAULT_VERSION;
+    var how = variant === false ? 'flag_off' : (VERSIONS[cached] ? 'cache' : 'fallback');
+    window.omiTrack('Web Paywall Assignment Fallback', { reason: variant === false ? 'flag_off' : (variant == null ? 'no_answer' : 'unknown_variant'), flag_value: String(variant), ms: ms, version: version });
+    open(version, how);
+  });
 })();
 </script>
 </head>

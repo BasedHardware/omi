@@ -108,6 +108,12 @@ class RegistryFixture(unittest.TestCase):
         self.assertIn("desktop/macos/Desktop/Sources/Feature.swift:1", errors)
         self.assertIn("web/admin/src/flags.ts:1", errors)
 
+    def test_webview_page_flag_constant_requires_registry_entry(self) -> None:
+        self.write("web/paywall/track.js", "var OTHER = 1;\nvar VERSION_FLAG_KEY = 'missing-web-paywall-flag';\n")
+        self.assertIn(
+            "web/paywall/track.js:2: unregistered feature flag: missing-web-paywall-flag", "\n".join(self.errors())
+        )
+
     def test_hook_git_environment_does_not_redirect_fixture_git_reads(self) -> None:
         with mock.patch.dict(
             os.environ, {"GIT_DIR": "/nonexistent-outer-git-dir", "GIT_WORK_TREE": "/nonexistent-outer-worktree"}

@@ -46,7 +46,7 @@
   .legal a { color:var(--text2); text-decoration:underline; text-underline-offset:2px; }
   .hidden { display:none !important; }
 </style>
-<script>window.omiTrack = function () {}; // replaced by track.js; the page works without it</script>
+<script>window.omiTrack = window.omiExposure = function () {}; // replaced by track.js; the page works without it</script>
 <script>window.OMI_PAYWALL_VERSION = 'benefits';</script>
 <script src="/track.js"></script>
 </head>
@@ -138,7 +138,7 @@
     send({ type: 'checkout', interval: selected });
   });
   $('free').addEventListener('click', function () {
-    omiTrack('Web Paywall Dismissed', {});
+    omiTrack('Web Paywall Dismissed', { step: 1 });
     send({ type: 'free' });
   });
   window.OmiPaywallHost = {
@@ -149,7 +149,18 @@
     onRestore: function () {}
   };
   render();
-  omiTrack('Web Paywall Viewed', { has_prices: year != null || month != null });
+  Array.prototype.forEach.call(document.querySelectorAll('.legal a'), function (a) {
+    a.addEventListener('click', function () { omiTrack('Web Paywall Legal Tapped', { link: /privacy/.test(a.href) ? 'privacy' : 'terms' }); });
+  });
+  var scrolled = false;
+  window.addEventListener('scroll', function () {
+    if (scrolled || window.scrollY < 40) return;
+    scrolled = true;
+    omiTrack('Web Paywall Scrolled', {});
+  }, { passive: true });
+  window.omiStep = function () { return 1; };
+  omiExposure();
+  omiTrack('Web Paywall Viewed', { has_prices: year != null || month != null, default_interval: selected, load_ms: Math.round(performance.now()) });
   send({ type: 'ready' });
 })();
 </script>
