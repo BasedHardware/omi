@@ -27,6 +27,7 @@ import 'package:omi/pages/onboarding/web_onboarding_page.dart';
 import 'package:omi/pages/onboarding/widgets/onboarding_hero_film.dart';
 import 'package:omi/pages/paywall/paywall_router.dart';
 import 'package:omi/services/experiments/onboarding_variant_gate.dart';
+import 'package:omi/services/experiments/home_redesign.dart';
 import 'package:omi/services/experiments/paywall_experiment.dart';
 import 'package:omi/pages/onboarding/setup_page.dart';
 import 'package:omi/pages/onboarding/speech_profile_widget.dart';
@@ -286,6 +287,8 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
   /// that walk the person through Omi (once per account; never on a failed read, so nobody gets
   /// them on top of real tasks). Every onboarding arm gets them, so the experiment stays fair.
   static Future<void> _addStarterTasks(AppLocalizations l10n, {Future<void> Function()? onAdded}) async {
+    // Part of the redesigned Home (home-redesign experiment).
+    if (!HomeRedesign.on) return;
     final key = 'onboarding/starterTasks/${SharedPreferencesUtil().uid}';
     if (SharedPreferencesUtil().getBool(key)) return;
     // The activation already showed real to-dos (they may still be saving): no starter tasks.
@@ -330,6 +333,8 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
   /// (Reid's web page, Yinka's flow) or the native step the reader left off at. A web page that
   /// falls back lands on that same native step.
   Future<void> _enterSteps() async {
+    // Decide this account's Home (home-redesign experiment) while onboarding runs, before Home shows.
+    unawaited(HomeRedesign.refresh());
     final arm = await OnboardingVariantGate.resolve();
     if (!mounted) return;
     PlatformManager.instance.analytics.track('Onboarding Variant Shown', properties: {

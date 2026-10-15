@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import 'package:omi/services/experiments/home_redesign.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/pages/chat/widgets/chat_entrance.dart';
@@ -25,7 +26,9 @@ abstract final class ChatWelcome {
   static String _key(String uid) => 'chat/welcome/$uid';
 
   /// Still to be answered: the person has not sent a chat message since it was introduced.
-  static bool get pending => SharedPreferencesUtil().getString(_key(SharedPreferencesUtil().uid)) != 'done';
+  /// Only in the redesigned Home (home-redesign experiment); today's chat opens as before.
+  static bool get pending =>
+      HomeRedesign.on && SharedPreferencesUtil().getString(_key(SharedPreferencesUtil().uid)) != 'done';
 
   /// It has been typed in once; later visits show it settled.
   static bool get shown => SharedPreferencesUtil().getString(_key(SharedPreferencesUtil().uid)) != '';

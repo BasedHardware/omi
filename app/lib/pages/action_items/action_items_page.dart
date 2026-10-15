@@ -1,3 +1,4 @@
+import 'package:omi/services/experiments/home_redesign.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:flutter/material.dart';
 
@@ -474,6 +475,8 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
       child: KeyedSubtree(
         key: const ValueKey('omi.action_items.empty'),
         child: OmiEmptyState(
+          // home-redesign: text only; today's Home keeps the icon.
+          icon: HomeRedesign.on ? null : Icons.task_alt_rounded,
           title: context.l10n.noTasksYet,
           titleLayoutReference: context.l10n.noConversationsYet,
           message: context.l10n.tasksEmptyStateMessage,
@@ -1037,7 +1040,8 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
     // The open view drops completed tasks and the completed view drops reopened ones: either way
     // the row is about to leave, so it shows its new state and folds away first.
     final leaves = completing != provider.showCompletedView;
-    final animate = leaves && OmiMotion.of(context).emphasized != Duration.zero;
+    // home-redesign: the row shows its new state and folds away; today's Home just moves it.
+    final animate = HomeRedesign.on && leaves && OmiMotion.of(context).emphasized != Duration.zero;
     if (animate) {
       if (_completing.containsKey(item.id)) return;
       setState(() => _completing[item.id] = completing);

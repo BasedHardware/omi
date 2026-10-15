@@ -1,3 +1,4 @@
+import 'package:omi/services/experiments/home_redesign.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -43,7 +44,7 @@ class _SpeechProfileCardWidgetState extends State<SpeechProfileCardWidget> {
 
   @override
   Widget build(BuildContext context) {
-    if (_dismissed) return const SizedBox();
+    if (_dismissed && HomeRedesign.on) return const SizedBox();
     return Consumer<HomeProvider>(
       builder: (context, provider, child) {
         if (provider.isLoading) return const SizedBox();
@@ -61,7 +62,8 @@ class _SpeechProfileCardWidgetState extends State<SpeechProfileCardWidget> {
                     label: context.l10n.teachOmiYourVoice,
                     // A dot marks a setup step still to do.
                     badge: true,
-                    onDismiss: _dismiss,
+                    // home-redesign: closable; today's Home keeps it until a profile exists.
+                    onDismiss: HomeRedesign.on ? _dismiss : null,
                     onTap: () async {
                       PlatformManager.instance.analytics.pageOpened('Speech Profile Memories');
                       bool hasSpeakerProfile = SharedPreferencesUtil().hasSpeakerProfile;

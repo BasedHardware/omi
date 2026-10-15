@@ -29,6 +29,8 @@ import 'package:omi/pages/conversations/widgets/date_list_item.dart';
 import 'package:omi/pages/conversations/widgets/empty_conversations.dart';
 import 'package:omi/pages/conversations/sync_pending_work.dart';
 import 'package:omi/pages/conversations/widgets/home_pending_row.dart';
+import 'package:omi/pages/home/legacy/legacy_home.dart';
+import 'package:omi/services/experiments/home_redesign.dart';
 import 'package:omi/pages/conversations/widgets/recording_list_item.dart';
 import 'package:omi/pages/home/widgets/home_daily_recaps.dart';
 import 'package:omi/ui/ui.dart';
@@ -326,9 +328,14 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
     });
   }
 
+  void _onHomeRedesign() {
+    if (mounted) setState(() {});
+  }
+
   @override
   void initState() {
     super.initState();
+    HomeRedesign.listenable.addListener(_onHomeRedesign);
     _scheduleDayRollover();
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       if (!mounted) return;
@@ -430,6 +437,7 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
 
   @override
   void dispose() {
+    HomeRedesign.listenable.removeListener(_onHomeRedesign);
     _dayTimer?.cancel();
     for (final timer in _deferred) {
       timer.cancel();
@@ -519,6 +527,8 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
     // Placing the pending row reads the clock: redo it whenever the row appears or goes away, not
     // only when the conversation list changes.
     context.select<SyncProvider, bool>(SyncPendingWork.shouldShow);
+    // home-redesign experiment: the redesigned Home, or today's (control).
+    final redesign = HomeRedesign.on;
     return Selector2<ConversationProvider, LocalRecordingsProvider, _ConversationPageSnapshot>(
       selector: (_, conversationProvider, recordingsProvider) =>
           _conversationPageSnapshot(conversationProvider, recordingsProvider),
@@ -592,7 +602,7 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
         }
 
         return RefreshIndicator(
-          notificationPredicate: OmiRefreshControl.materialPredicate,
+          notificationPredicate: redesign ? OmiRefreshControl.materialPredicate : defaultScrollNotificationPredicate,
           onRefresh: () async {
             HapticFeedback.mediumImpact();
             await refresh();
@@ -603,10 +613,9 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
             controller: _scrollController,
             physics: const AlwaysScrollableScrollPhysics(),
             slivers: [
-              if (OmiRefreshControl.supported) OmiRefreshControl(onRefresh: refresh),
+              if (redesign && OmiRefreshControl.supported) OmiRefreshControl(onRefresh: refresh),
               // The live capture row: recording, a call, or a conversation being captured.
-              const SliverToBoxAdapter(
-                  child: ConversationCaptureWidget(showsCall: true, deviceStatusInBottomBar: true)),
+              SliverToBoxAdapter(child: ConversationCaptureWidget(showsCall: true, deviceStatusInBottomBar: redesign)),
               const SliverToBoxAdapter(child: SpeechProfileCardWidget()),
               const SliverToBoxAdapter(child: UpdateFirmwareCardWidget()),
               // Review absorbs the voice prompts; the old card shows only while Review is off.
@@ -713,10 +722,15 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
                             showTodayHeader: row.isFirst,
                             processingRowsShown: hasProcessingConversations);
                       case _ConversationListRowKind.processing:
-                        return ProcessingConversationWidget(
-                          key: ValueKey('processing_${row.conversation!.id}'),
-                          conversation: row.conversation!,
-                        );
+                        return redesign
+                            ? ProcessingConversationWidget(
+                                key: ValueKey('processing_${row.conversation!.id}'),
+                                conversation: row.conversation!,
+                              )
+                            : LegacyProcessingConversationWidget(
+                                key: ValueKey('processing_${row.conversation!.id}'),
+                                conversation: row.conversation!,
+                              );
                       case _ConversationListRowKind.conversation:
                         // Consecutive locked rows share one frosted card and one upgrade action;
                         // the run's first row draws it and the rest of the run draws nothing.

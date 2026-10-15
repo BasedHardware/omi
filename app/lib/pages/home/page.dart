@@ -26,6 +26,8 @@ import 'package:omi/pages/action_items/widgets/tasks_more_menu.dart';
 import 'package:omi/pages/home/home_content.dart';
 import 'package:omi/pages/home/widgets/home_bottom_controls.dart';
 import 'package:omi/pages/home/widgets/home_page_stack.dart';
+import 'package:omi/pages/home/legacy/legacy_home.dart';
+import 'package:omi/services/experiments/home_redesign.dart';
 import 'package:omi/pages/home/widgets/home_tab_switcher.dart';
 import 'package:omi/pages/home/home_widgets_publisher.dart';
 import 'package:omi/pages/phone_calls/active_call_banner.dart';
@@ -437,6 +439,11 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
       ),
     );
     SharedPreferencesUtil().onboardingCompleted = true;
+    // home-redesign experiment: this account's saved arm now, the flag read in the background, and
+    // the exposure once Home is on screen.
+    HomeRedesign.loadSaved();
+    unawaited(HomeRedesign.refresh());
+    WidgetsBinding.instance.addPostFrameCallback((_) => HomeRedesign.markHomeShown());
     if (!SharedPreferencesUtil().permissionsCompleted) {
       SharedPreferencesUtil().permissionsCompleted = true;
     }
@@ -770,104 +777,121 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
         },
         child: Selector<HomeProvider, int>(
           selector: (_, homeProvider) => homeProvider.selectedIndex,
-          builder: (context, selectedIndex, _) {
-            final onHome = selectedIndex == HomeProvider.homeTab;
-            // D6: Android back on Tasks returns to Home before it leaves the app.
-            return PopScope(
-              canPop: onHome,
-              onPopInvokedWithResult: (didPop, _) {
-                if (didPop || onHome) return;
-                OmiHaptics.selection();
-                context.read<HomeProvider>().setIndex(HomeProvider.homeTab);
-                _schedulePageInitialization(HomeProvider.homeTab);
-              },
-              child: Scaffold(
-                backgroundColor: OmiColors.surface0,
-                resizeToAvoidBottomInset: false,
-                appBar: _buildAppBar(context),
-                body: GestureDetector(
-                  onTap: () => primaryFocus?.unfocus(),
-                  child: Stack(
-                    children: [
-                      Column(
-                        children: [
-                          HomeTabSwitcher(
-                            trailing: _buildPageActions(context, onHome),
-                            onTabTap: (index, isRepeat) {
-                              if (isRepeat) {
-                                _scrollToTop(index);
-                              } else {
-                                // Change pages immediately. If background prewarming has not
-                                // finished, the destination paints a skeleton for one frame.
-                                context.read<HomeProvider>().setIndex(index);
-                                _schedulePageInitialization(index);
-                              }
-                            },
-                          ),
-                          if (onHome)
-                            Selector<ConversationProvider, (DateTime?, DateTime?)>(
-                              selector: (_, provider) => (provider.selectedStartDate, provider.selectedEndDate),
-                              builder: (context, range, _) {
-                                final start = range.$1;
-                                if (start == null) return const SizedBox.shrink();
-                                final provider = context.read<ConversationProvider>();
-                                return Padding(
-                                  padding: const EdgeInsets.fromLTRB(OmiSpacing.md, 0, OmiSpacing.md, OmiSpacing.xs),
-                                  child: Align(
-                                    alignment: Alignment.centerLeft,
-                                    child: OmiDateFilterChip(
-                                      key: const ValueKey('home_date_filter'),
-                                      start: start,
-                                      end: range.$2,
-                                      onClear: () => unawaited(provider.clearDateFilter()),
-                                    ),
-                                  ),
-                                );
+          builder: (context, selectedIndex, _) => ValueListenableBuilder<bool>(
+            // home-redesign experiment: the redesigned Home, or today's (control).
+            valueListenable: HomeRedesign.listenable,
+            builder: (context, redesign, _) {
+              final onHome = selectedIndex == HomeProvider.homeTab;
+              // D6: Android back on Tasks returns to Home before it leaves the app.
+              return PopScope(
+                canPop: onHome,
+                onPopInvokedWithResult: (didPop, _) {
+                  if (didPop || onHome) return;
+                  OmiHaptics.selection();
+                  context.read<HomeProvider>().setIndex(HomeProvider.homeTab);
+                  _schedulePageInitialization(HomeProvider.homeTab);
+                },
+                child: Scaffold(
+                  backgroundColor: OmiColors.surface0,
+                  resizeToAvoidBottomInset: false,
+                  appBar: _buildAppBar(context, showCalendar: !redesign && onHome),
+                  body: GestureDetector(
+                    onTap: () => primaryFocus?.unfocus(),
+                    child: Stack(
+                      children: [
+                        Column(
+                          children: [
+                            HomeTabSwitcher(
+                              // Tasks' menu (select, group, completed, export) sits here in both arms; today's
+                              // Home keeps the calendar in the header instead.
+                              trailing: redesign || !onHome ? _buildPageActions(context, onHome) : null,
+                              onTabTap: (index, isRepeat) {
+                                if (isRepeat) {
+                                  _scrollToTop(index);
+                                } else {
+                                  // Change pages immediately. If background prewarming has not
+                                  // finished, the destination paints a skeleton for one frame.
+                                  context.read<HomeProvider>().setIndex(index);
+                                  _schedulePageInitialization(index);
+                                }
                               },
                             ),
-                          // Home shows an active call in its capture row; Tasks gets the slim bar.
-                          if (!onHome) const ActiveCallTopBar(),
-                          Expanded(
-                            child: HomePageStack(index: selectedIndex, children: _buildPages(selectedIndex)),
-                          ),
-                        ],
-                      ),
-                      if (onHome)
-                        Consumer<HomeProvider>(
-                          builder: (context, home, child) {
-                            if (home.isChatFieldFocused || home.isMemoriesSearchFieldFocused) {
-                              return const SizedBox.shrink();
-                            }
-                            return child!;
-                          },
-                          child: Stack(
-                            children: [
-                              const HomeChatBarBackdrop(),
-                              Positioned(
-                                left: 16,
-                                right: 16,
-                                bottom: homeChatBarOffset(context),
-                                child: Row(
-                                  children: [
-                                    HomeChatButton(onTap: _openChat, onLongPress: () => _openChat(voice: true)),
-                                    const SizedBox(width: 10),
-                                    const Expanded(child: HomeRecordButton()),
-                                  ],
-                                ),
+                            if (onHome)
+                              Selector<ConversationProvider, (DateTime?, DateTime?)>(
+                                selector: (_, provider) => (provider.selectedStartDate, provider.selectedEndDate),
+                                builder: (context, range, _) {
+                                  final start = range.$1;
+                                  if (start == null) return const SizedBox.shrink();
+                                  final provider = context.read<ConversationProvider>();
+                                  return Padding(
+                                    padding: const EdgeInsets.fromLTRB(OmiSpacing.md, 0, OmiSpacing.md, OmiSpacing.xs),
+                                    child: Align(
+                                      alignment: Alignment.centerLeft,
+                                      child: OmiDateFilterChip(
+                                        key: const ValueKey('home_date_filter'),
+                                        start: start,
+                                        end: range.$2,
+                                        onClear: () => unawaited(provider.clearDateFilter()),
+                                      ),
+                                    ),
+                                  );
+                                },
                               ),
-                            ],
-                          ),
+                            // Home shows an active call in its capture row; Tasks gets the slim bar.
+                            if (!onHome) const ActiveCallTopBar(),
+                            Expanded(
+                              child: redesign
+                                  ? HomePageStack(index: selectedIndex, children: _buildPages(selectedIndex))
+                                  : IndexedStack(index: selectedIndex, children: _buildPages(selectedIndex)),
+                            ),
+                          ],
                         ),
-                      // Merge action bar - replaces the chat bar while conversations are selected
-                      if (onHome) const Positioned(left: 0, right: 0, bottom: 0, child: MergeActionBar()),
-                      // Task selection action bar - at the bottom of Tasks while tasks are selected.
-                      if (!onHome) const Positioned(left: 0, right: 0, bottom: 0, child: TaskSelectionActionBar()),
-                    ],
+                        if (onHome)
+                          Consumer<HomeProvider>(
+                            builder: (context, home, child) {
+                              if (home.isChatFieldFocused || home.isMemoriesSearchFieldFocused) {
+                                return const SizedBox.shrink();
+                              }
+                              return child!;
+                            },
+                            child: Stack(
+                              children: [
+                                const HomeChatBarBackdrop(),
+                                Positioned(
+                                  left: 16,
+                                  right: 16,
+                                  bottom: homeChatBarOffset(context),
+                                  child: Row(
+                                    children: redesign
+                                        ? [
+                                            HomeChatButton(onTap: _openChat, onLongPress: () => _openChat(voice: true)),
+                                            const SizedBox(width: 10),
+                                            const Expanded(child: HomeRecordButton()),
+                                          ]
+                                        : [
+                                            Expanded(
+                                              child: LegacyHomeChatBar(
+                                                  onTap: _openChat, onVoice: () => _openChat(voice: true)),
+                                            ),
+                                            const SizedBox(width: 10),
+                                            const LegacyHomeRecordButton(),
+                                          ],
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        // Merge action bar - replaces the chat bar while conversations are selected
+                        if (onHome) const Positioned(left: 0, right: 0, bottom: 0, child: MergeActionBar()),
+                        // Task selection action bar - at the bottom of Tasks while tasks are selected.
+                        if (!onHome) const Positioned(left: 0, right: 0, bottom: 0, child: TaskSelectionActionBar()),
+                      ],
+                    ),
                   ),
                 ),
-              ),
-            );
-          },
+              );
+            },
+          ),
         ),
       ),
     );
@@ -926,7 +950,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
 
   /// The shell header: device, search, Activity and settings, the same on Home and Tasks. Page actions sit
   /// beside the switcher instead (see [_buildPageActions]).
-  PreferredSizeWidget _buildAppBar(BuildContext context) {
+  PreferredSizeWidget _buildAppBar(BuildContext context, {bool showCalendar = false}) {
     return AppBar(
       automaticallyImplyLeading: false,
       backgroundColor: Theme.of(context).colorScheme.surface,
@@ -947,6 +971,17 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
           ),
           Row(
             children: [
+              // home-redesign control: today's Home keeps the calendar in the header.
+              if (showCalendar)
+                HeaderCircleButton(
+                  key: const ValueKey('home_calendar_button'),
+                  semanticLabel: context.l10n.filterByDate,
+                  icon: FaIcon(FontAwesomeIcons.calendar, size: 16, color: OmiColors.textSecondary),
+                  onTap: () {
+                    OmiHaptics.selection();
+                    unawaited(_openCalendar(context));
+                  },
+                ),
               // Search: conversations, recaps, tasks and memories, from any page of the shell.
               HeaderCircleButton(
                 key: const ValueKey('home_search_button'),
