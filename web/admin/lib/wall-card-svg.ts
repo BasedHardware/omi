@@ -160,11 +160,16 @@ export function wallCardSvg(metric: Metric, view: CardView): string {
       500
     );
     const labelY = h >= 200 ? 126 : h >= 170 ? 107 : 94;
-    ["macOS", "Mobile", "Other"].forEach((p, i) => {
-      svg += text(p, 14 + i * 80, labelY, 8.8);
+    const labels =
+      view.splitValues.length === 4
+        ? ["macOS", "Mobile", "Other", "MCP-only"]
+        : ["macOS", "Mobile", "Other"];
+    const spacing = view.splitValues.length === 4 ? 58 : 80;
+    labels.forEach((p, i) => {
+      svg += text(p, 14 + i * spacing, labelY, 8.8);
       svg += text(
         view.splitValues[i],
-        14 + i * 80,
+        14 + i * spacing,
         labelY + 14,
         11.2,
         "#c2cedd",

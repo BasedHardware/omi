@@ -17,6 +17,11 @@ import {
   queryPosthog,
   periodQueries,
 } from "./wall-posthog";
+import {
+  MCP_ACTIVITY_VERSION,
+  MCP_MARKER_MISSING,
+  MCP_MARKER_STATUS_ROW,
+} from "./wall-mcp";
 import { WallSourceError, wallFailure } from "./wall-source-error";
 import { fetchShopifyWeek } from "./wall-shopify";
 
@@ -61,6 +66,8 @@ export interface Split {
   macos: number | null;
   mobile: number | null;
   other: number | null;
+  /** Additive MCP-only people: no qualified app activity in the same window. */
+  mcp?: number | null;
 }
 export interface Metric {
   id: MetricId;
@@ -70,12 +77,15 @@ export interface Metric {
   prev: number | null;
   unit: string;
   split: Split;
+  mcpReason?: string;
   numerator: number | null;
   denominator: number | null;
-  splitCounts: Record<
-    keyof Split,
-    { numerator: number; denominator: number }
-  > | null;
+  splitCounts:
+    | (Record<
+        "macos" | "mobile" | "other",
+        { numerator: number; denominator: number }
+      > & { mcp?: { numerator: number; denominator: number } })
+    | null;
   fixture?: boolean;
   materialGap?: boolean;
   status: "exact" | "proxy" | "null";
@@ -90,7 +100,7 @@ export interface Metric {
   trend: { date: string; value: number | null }[];
 }
 const emptySplit = (): Split => ({ macos: null, mobile: null, other: null });
-const bucket = (p: unknown): keyof Split =>
+const bucket = (p: unknown): "macos" | "mobile" | "other" =>
   p === "macos" ? "macos" : p === "ios" || p === "android" ? "mobile" : "other";
 export interface WallSources {
   query: Query;
@@ -225,8 +235,16 @@ export async function computeWall(
     denominatorIndex?: number
   ) {
     const m = metrics[id];
+    const mcpActivity = [
+      "growth.wau",
+      "engagement.dau",
+      "engagement.mau",
+    ].includes(id);
+    const markerSeen = mcpActivity && rows.some((r) => Number(r[3]) > 0);
     for (let period = 5; period >= 0; period--) {
-      const subset = rows.filter((r) => Number(r[0]) === period);
+      const subset = rows.filter(
+        (r) => Number(r[0]) === period && r[1] !== MCP_MARKER_STATUS_ROW
+      );
       const num = subset.reduce((a, r) => a + Number(r[numeratorIndex]), 0);
       const den =
         denominatorIndex == null
@@ -250,14 +268,22 @@ export async function computeWall(
         macos: { numerator: 0, denominator: 0 },
         mobile: { numerator: 0, denominator: 0 },
         other: { numerator: 0, denominator: 0 },
+        mcp: { numerator: 0, denominator: 0 },
       };
       for (const r of subset) {
-        const b = counts[bucket(r[1])];
+        const b =
+          counts[mcpActivity && r[1] === "integrations" ? "mcp" : bucket(r[1])];
         b.numerator += Number(r[numeratorIndex]);
         b.denominator +=
           denominatorIndex == null ? 0 : Number(r[denominatorIndex]);
       }
-      m.splitCounts = counts;
+      m.splitCounts = {
+        macos: counts.macos,
+        mobile: counts.mobile,
+        other: counts.other,
+        ...(markerSeen ? { mcp: counts.mcp } : {}),
+      };
+      if (mcpActivity) m.split.mcp = markerSeen ? counts.mcp.numerator : null;
       for (const key of ["macos", "mobile", "other"] as const)
         m.split[key] =
           den == null
@@ -276,8 +302,18 @@ export async function computeWall(
           : " Source refresh watermark unavailable."),
       rows.sourceRefreshedAt ?? null
     );
+    if (mcpActivity) {
+      m.definitionVersion = MCP_ACTIVITY_VERSION;
+      m.mcpReason = markerSeen
+        ? "MCP-only: no qualified app activity in window; daily cadence screen (cross-day bursts deferred)"
+        : MCP_MARKER_MISSING;
+      m.reason += ` ${m.mcpReason}.`;
+    }
     if (m.value == null)
-      m.reason = "Zero cohort denominator; " + COVERAGE_REASON;
+      m.reason =
+        (denominatorIndex == null
+          ? "No observed PostHog activity in period; "
+          : "Zero cohort denominator; ") + COVERAGE_REASON;
   }
   let retryableFailures = 0;
   const jobs: (() => Promise<void>)[] = [];
@@ -508,6 +544,7 @@ export async function computeWall(
             ? [m.sourceRefreshedAt, mau.sourceRefreshedAt].sort()[0]
             : null
         );
+        a.definitionVersion = mau.definitionVersion;
         a.stale = m.stale || mau.stale;
       } else {
         a.reason =
@@ -573,6 +610,7 @@ export async function computeWall(
         c.reason = "Zero same-window MAU denominator";
         return;
       }
+      c.definitionVersion = MCP_ACTIVITY_VERSION;
       c.value = costs.reduce((s, d) => s + d.total, 0) / mau;
       c.denominator = mau;
       c.partial = true;

@@ -146,6 +146,13 @@ rather than holding its nulls for 15 minutes. PostHog carries its upstream `last
 execution completion time of our live HogQL aggregate when the API omits it.
 A cached upstream result without a refresh receipt stays unknown. Payload-cache
 reads never advance source refresh timestamps.
+Production background progress requires instance-based CPU: the existing admin
+Cloud Run deploy contract (`config/public-build-contract.json`, prod flags) pins
+`--no-cpu-throttling`. Next's `after()` retains work but does not allocate host CPU.
+Minimum instances remain zero, and caches remain disposable/per-instance; restarts
+or new instances return loading cards again. The 30s poll discovers their results.
+The change takes effect only through the normal authorized deployment.
+
 It performs no Firestore cache writes. Bounded last-good reads are an explicit
 wall-only exception to the general stale-data rule. Source timestamps never advance
 on a cache read. Each PostHog query has classified, secret-safe failure telemetry
@@ -204,7 +211,7 @@ The provisioned board rewrites the proxy URL only in its local copy.
 Run records and screenshots are written only to
 `/Users/dazheng/workspace/omi/data/run-2026-10-14-omi-tv-metrics/`;
 never commit that workspace run directory in the public repository. The local
-verifier uses the `omi-tv-v2-prod-fix-1440.png` / `-1920.png` screenshot names.
+verifier uses the `omi-tv-v2-prod-fix-rev1-1440.png` / `-1920.png` screenshot names.
 Tracked UI-evidence copies belong under `.agent-artifacts/ui-evidence/`.
 
 Deploy prerequisites and limits:
@@ -242,3 +249,30 @@ Validation: `npm test`, `npm run typecheck`, `npm run lint` in `web/admin`,
 `python3 web/admin/grafana/test_build_dashboards.py`, and `make preflight`.
 Opt-in live aggregate smoke checks: `OMI_TV_LIVE_CHECK=1 npm test --
 lib/__tests__/wall-live.test.ts` with the authorized read-only source env loaded.
+
+
+### MCP activity split (2026-10-15 threshold ruling)
+
+WAU, DAU and MAU include UTC days with at least two `MCP Tool Use Succeeded`
+events (per-success, unsampled `schema_version=2`), `initiator=user|unknown`.
+`scheduled_agent`, legacy sampled `MCP Tool Call`, and bare `MCP Active` never count.
+MCP days deduplicate by the same resolved actor key as app activity. The additive
+**MCP-only** split contains people with no qualified app activity in that metric's
+window. People who use both retain their primary app platform, so app + MCP-only
+splits sum to the headline and nobody is counted twice. ARPMAU and cost/MAU use the
+corresponding MCP-inclusive MAU. Cohort, established-retention, saved-creator and
+assistant definitions are unchanged/app-scoped; MCP is not silently added there.
+
+Marker availability is observed independently of qualifying days. Before any v2
+marker rows are present in the bounded observation history the split is **—**,
+with **MCP marker not deployed** in the card and diagnostics. Observed marker rows
+with no qualifying people produce **0**, not an unavailable split. A metadata row
+carries availability even for an empty qualified result and never enters counts.
+
+A bounded daily cadence screen excludes person/client/UTC-day streams with ≥10
+calls, ≥8 positive gaps, ≥2h span, ≥80% one tool, a mean gap of 60–86,400 seconds,
+and gap CV ≤0.15. Calls from unflagged clients may still qualify that person.
+Regularity statistics remain inside HogQL; no raw identities leave the aggregate.
+This is a daily approximation of the threshold evidence. **Cross-day and separated
+burst regularity detection is deferred**; client names alone never establish intent.
+Activity metrics and derived MAU units carry the MCP schema-2 definition revision.

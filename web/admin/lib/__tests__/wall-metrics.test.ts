@@ -53,7 +53,12 @@ describe("wall source and payload contracts", () => {
     const wall = await computeWall(s, now);
     const get = (id: string) => wall.metrics.find((m) => m.id === id)!;
     expect(get("growth.wau").value).toBe(9);
-    expect(get("growth.wau").split).toEqual({ macos: 3, mobile: 6, other: 0 });
+    expect(get("growth.wau").split).toEqual({
+      macos: 3,
+      mobile: 6,
+      other: 0,
+      mcp: null,
+    });
     expect(get("activation.rate").value).toBe(10);
     expect(get("activation.rate").denominator).toBe(60);
     expect(get("activation.rate").split.other).toBe(0);

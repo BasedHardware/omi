@@ -1,3 +1,4 @@
+import { MCP_MARKER_MISSING } from "./wall-mcp";
 import { freshness } from "./qualified-activity";
 import type { Metric, WallPayload } from "./wall-metrics";
 import { formatWallValue, shortDate, wallCardSvg } from "./wall-card-svg";
@@ -108,7 +109,15 @@ export function wallPresentation(payload: WallPayload, now = new Date()) {
       : signal < 0
       ? "#fb923c"
       : "#92a3ba";
-    const splitValues = (["macos", "mobile", "other"] as const).map((p) =>
+    const mcpActivity = [
+      "growth.wau",
+      "engagement.dau",
+      "engagement.mau",
+    ].includes(m.id);
+    const splitKeys: (keyof Metric["split"])[] = mcpActivity
+      ? ["macos", "mobile", "other", "mcp"]
+      : ["macos", "mobile", "other"];
+    const splitValues = splitKeys.map((p) =>
       m.split[p] == null
         ? "—"
         : m.unit === "percent"
@@ -157,6 +166,10 @@ export function wallPresentation(payload: WallPayload, now = new Date()) {
       footnote = `Shopify cash · ${
         through ? `as of ${through}` : "refresh pending"
       }`;
+    if (mcpActivity && m.value != null && m.split.mcp == null)
+      footnote = `${m.mcpReason || MCP_MARKER_MISSING}${
+        m.stale ? " · stale" : through ? ` · ${through}` : ""
+      }`;
     const hardwareUnits =
       m.id === "revenue.hardware_usd_week"
         ? payload.metrics.find((p) => p.id === "revenue.hardware_units_week")
@@ -195,6 +208,9 @@ export function wallPresentation(payload: WallPayload, now = new Date()) {
       macos: splitValues[0],
       mobile: splitValues[1],
       other: splitValues[2],
+      ...(mcpActivity
+        ? { mcp: splitValues[3], mcpReason: m.mcpReason || MCP_MARKER_MISSING }
+        : {}),
       state:
         m.status === "null"
           ? "UNAVAILABLE"
@@ -205,7 +221,9 @@ export function wallPresentation(payload: WallPayload, now = new Date()) {
           : m.partial
           ? "PARTIAL"
           : m.status.toUpperCase(),
-      splitRow: `macOS ${splitValues[0]} · Mobile ${splitValues[1]} · Other ${splitValues[2]}`,
+      splitRow: `macOS ${splitValues[0]} · Mobile ${splitValues[1]} · Other ${
+        splitValues[2]
+      }${mcpActivity ? ` · MCP-only ${splitValues[3]}` : ""}`,
       footnote,
       reason: m.reason || "—",
       scope,

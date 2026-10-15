@@ -127,7 +127,7 @@ def screens():
             diagnostics = page.get_by_text('Diagnostics · definitions and coverage',exact=True)
             if diagnostics.count() and diagnostics.bounding_box()['y'] < height:
                 raise RuntimeError(f'Diagnostics visible above the fold at {width}px')
-            page.screenshot(path=str(out/f'omi-tv-v2-prod-fix-{width}.png'))
+            page.screenshot(path=str(out/f'omi-tv-v2-prod-fix-rev1-{width}.png'))
         browser.close()
 
 

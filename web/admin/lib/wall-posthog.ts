@@ -1,3 +1,4 @@
+import { mcpActivityCtes, MCP_MARKER_STATUS_ROW } from "./wall-mcp";
 import { WallSourceError } from "./wall-source-error";
 import { withRowLimit } from "./posthog";
 import {
@@ -44,17 +45,35 @@ export function activityQuery(
       : "(fg OR cap)";
   const at = kind === "assistant" ? "timestamp" : "qt";
   return `WITH ${raw(start, end)},
-    pd AS (SELECT actor,p,intDiv(dateDiff('second',${at},${sqlTime(end)})-1,${
-    days * 86400
-  }) period,
+    app_pd AS (SELECT actor,p,intDiv(dateDiff('second',${at},${sqlTime(
+    end
+  )})-1,${days * 86400}) period,
       uniqExact(toDate(${at})) days,max(${at}) latest,countIf(cap) captures FROM qualified
       WHERE ${predicate} AND ${at} >= ${sqlTime(start)} AND ${at} < ${sqlTime(
     end
   )} GROUP BY actor,p,period),
-    ranked AS (SELECT *,sum(captures) OVER (PARTITION BY actor,period) saved,row_number() OVER (PARTITION BY actor,period ORDER BY days DESC,latest DESC,${PLATFORM_RANK_SQL} ASC) rn FROM pd)
-    SELECT period,p,count() FROM ranked WHERE rn=1 ${
-      kind === "saved" ? "AND saved>0" : ""
-    } GROUP BY period,p LIMIT 100`;
+    ${kind === "active" ? mcpActivityCtes(start, end) + "," : ""}
+    pd AS (SELECT * FROM app_pd ${
+      kind === "active"
+        ? `UNION ALL SELECT actor,'integrations' p,
+      intDiv(dateDiff('second',mcp_days.latest,${sqlTime(end)})-1,${
+            days * 86400
+          }) period,
+      count() days,max(mcp_days.latest) latest,0 captures FROM mcp_days GROUP BY actor,period`
+        : ""
+    }),
+    ranked AS (SELECT *,sum(captures) OVER (PARTITION BY actor,period) saved,row_number() OVER (PARTITION BY actor,period ORDER BY (p!='integrations') DESC,days DESC,latest DESC,${PLATFORM_RANK_SQL} ASC) rn FROM pd)
+    SELECT period,p,count()${
+      kind === "active" ? ",(SELECT count() FROM mcp_raw) marker_rows" : ""
+    } FROM ranked WHERE rn=1 ${
+    kind === "saved" ? "AND saved>0" : ""
+  } GROUP BY period,p
+    ${
+      kind === "active"
+        ? `UNION ALL SELECT -1,'${MCP_MARKER_STATUS_ROW}',0,(SELECT count() FROM mcp_raw)`
+        : ""
+    }
+    LIMIT 100`;
 }
 
 /** Entry platform is frozen before outcome filtering, retaining zero-qualified-day people. */
