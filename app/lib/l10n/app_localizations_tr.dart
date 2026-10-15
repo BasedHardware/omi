@@ -12441,6 +12441,59 @@ class AppLocalizationsTr extends AppLocalizations {
   String get reviewNoChangesBody => 'Omi notlarınızı düzenlediğinde değişiklikler burada görünür.';
 
   @override
+  String get reviewChangesSectionTerms => 'Adlar ve terimler';
+
+  @override
+  String get reviewChangesSectionTitles => 'Başlıklar ve özetler';
+
+  @override
+  String get reviewChangesSectionOther => 'Diğer değişiklikler';
+
+  @override
+  String reviewChangeConversationCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count konuşma',
+      one: '1 konuşma',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String reviewChangePlaceCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count yer',
+      one: '1 yer',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String reviewChangeShowAll(int count) {
+    return '$count öğenin tümünü göster';
+  }
+
+  @override
+  String get reviewChangeUndoAll => 'Tümünü geri al';
+
+  @override
+  String get reviewChangeSeeEvidence => 'Kanıtı gör';
+
+  @override
+  String get reviewChangeViewConversation => 'Konuşmayı görüntüle';
+
+  @override
+  String get reviewChangeViewTask => 'Görevi görüntüle';
+
+  @override
+  String reviewChangesUndoPartial(int failed, int total) {
+    return 'Geri alınamadı: $failed/$total. Tekrar deneyin.';
+  }
+
+  @override
   String get reviewShowMore => 'Daha fazla göster';
 
   @override
@@ -13414,4 +13467,28 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get onboardingPermissionTapToFix => 'Düzeltmek için dokunun';
+
+  @override
+  String get homePendingTitle => 'Konuşmalar yolda';
+
+  @override
+  String get homePendingCatchingUp => 'Önceki ses işleniyor';
+
+  @override
+  String get onTheWayTitle => 'Yolda';
+
+  @override
+  String get onTheWayAlmostReady => 'Neredeyse hazır';
+
+  @override
+  String get activityEmpty => 'Henüz etkinlik yok';
+
+  @override
+  String get activityNewSemantics => 'Etkinlik, yeni öğeler';
+
+  @override
+  String get activityLoadFailed => 'Etkinliğinizin tamamı yüklenemedi';
+
+  @override
+  String get activityNewItem => 'Yeni';
 }

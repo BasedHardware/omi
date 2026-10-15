@@ -12480,6 +12480,59 @@ class AppLocalizationsTe extends AppLocalizations {
   String get reviewNoChangesBody => 'Omi మీ నోట్స్‌ను చక్కబెట్టినప్పుడు, మార్పులు ఇక్కడ కనిపిస్తాయి.';
 
   @override
+  String get reviewChangesSectionTerms => 'పేర్లు మరియు పదాలు';
+
+  @override
+  String get reviewChangesSectionTitles => 'శీర్షికలు మరియు సారాంశాలు';
+
+  @override
+  String get reviewChangesSectionOther => 'ఇతర మార్పులు';
+
+  @override
+  String reviewChangeConversationCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count సంభాషణలు',
+      one: '1 సంభాషణ',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String reviewChangePlaceCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count చోట్ల',
+      one: '1 చోటు',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String reviewChangeShowAll(int count) {
+    return 'మొత్తం $count చూపించు';
+  }
+
+  @override
+  String get reviewChangeUndoAll => 'అన్నీ రద్దు చేయి';
+
+  @override
+  String get reviewChangeSeeEvidence => 'ఆధారం చూడండి';
+
+  @override
+  String get reviewChangeViewConversation => 'సంభాషణ చూడండి';
+
+  @override
+  String get reviewChangeViewTask => 'పనిని చూడండి';
+
+  @override
+  String reviewChangesUndoPartial(int failed, int total) {
+    return 'రద్దు చేయలేకపోయాం: $failed/$total. మళ్లీ ప్రయత్నించండి.';
+  }
+
+  @override
   String get reviewShowMore => 'మరిన్ని చూపండి';
 
   @override
@@ -13453,4 +13506,28 @@ class AppLocalizationsTe extends AppLocalizations {
 
   @override
   String get onboardingPermissionTapToFix => 'సరిచేయడానికి నొక్కండి';
+
+  @override
+  String get homePendingTitle => 'సంభాషణలు వస్తున్నాయి';
+
+  @override
+  String get homePendingCatchingUp => 'మునుపటి ఆడియో ప్రాసెస్ అవుతోంది';
+
+  @override
+  String get onTheWayTitle => 'మార్గంలో ఉంది';
+
+  @override
+  String get onTheWayAlmostReady => 'దాదాపు సిద్ధం';
+
+  @override
+  String get activityEmpty => 'ఇంకా కార్యాచరణ లేదు';
+
+  @override
+  String get activityNewSemantics => 'కార్యాచరణ, కొత్త అంశాలు';
+
+  @override
+  String get activityLoadFailed => 'మీ మొత్తం కార్యాచరణను లోడ్ చేయలేకపోయాం';
+
+  @override
+  String get activityNewItem => 'కొత్తది';
 }

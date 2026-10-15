@@ -6,6 +6,7 @@ import 'package:omi/widgets/shimmer_with_timeout.dart';
 import 'package:omi/backend/http/api/users.dart';
 import 'package:omi/backend/schema/daily_summary.dart';
 import 'package:omi/pages/settings/daily_summary_detail_page.dart';
+import 'package:omi/services/recap_events.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/other/temp.dart';
@@ -171,6 +172,7 @@ class DailySummariesListState extends State<DailySummariesList> {
     setState(() => _summaries.removeAt(removedIndex));
 
     final ok = await deleteDailySummary(summary.id);
+    if (ok) announceRecapDeleted(summary.id);
     if (!mounted) return ok;
     if (ok) {
       PlatformManager.instance.analytics.dailySummaryDeleted(

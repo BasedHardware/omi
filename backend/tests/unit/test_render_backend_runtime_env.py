@@ -575,7 +575,9 @@ def test_backend_integration_deploy_pins_mcp_serving_capacity():
     # Live prod backend-integration was maxScale=25, minScale=1, concurrency=300
     # on 1 CPU. ChatGPT openai-mcp POSTs then 503 with "no available instance"
     # because I/O-bound MCP work does not trip CPU scale-out. Pin scale-out
-    # here only; do not copy onto backend / backend-sync.
+    # here only; do not copy onto backend.
+    # backend-sync DOES carry --cpu=2 (#21668): its 6-8Gi memory requires >=2
+    # CPU on Cloud Run, and 1-CPU deploys of 8Gi are rejected outright.
     integration_flags = _deploy_backend_stack_step_flags('deploy-backend-integration')
     backend_flags = _deploy_backend_stack_step_flags('deploy-backend')
     sync_flags = _deploy_backend_stack_step_flags('deploy-backend-sync')
@@ -591,9 +593,11 @@ def test_backend_integration_deploy_pins_mcp_serving_capacity():
         assert flag not in backend_flags, flag
         # backend-sync owns its own scale-out cap (see test_sync_two_lane.py);
         # its value may legitimately equal integration's, so only the other
-        # integration-specific flags must stay off it.
-        if not flag.startswith('--max-instances='):
+        # integration-specific flags must stay off it. --cpu=2 is likewise
+        # legitimate on sync (#21668: 8Gi needs >=2 CPU).
+        if not (flag.startswith('--max-instances=') or flag == '--cpu=2'):
             assert flag not in sync_flags, flag
+    assert '--cpu=2' in sync_flags
 
 
 VERTEX_PT_CONTRACT = 'Company-paid Gemini text and vision generation may use only the active model'

@@ -47,6 +47,9 @@ def chat_mount(tool_schemas: list, *, deadline_seconds: float = 150.0) -> Mount:
         skills=(_CHAT_RETRIEVAL_SKILL, _CHAT_TOOL_SKILL, EDIT_GUARDRAIL),
         budget=Budget(turns=12, tool_calls=25, deadline_seconds=deadline_seconds),
         cache_breakpoint=True,
+        # Scope and the current user turn are volatile. Historical chat epochs
+        # own their additional breakpoint in messaging.context.assemble.
+        cache_initial_evidence=False,
     )
 
 

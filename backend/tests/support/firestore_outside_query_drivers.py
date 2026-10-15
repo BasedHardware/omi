@@ -20,6 +20,7 @@ DRIVERS: dict[str, DriverEntry] = {}
 COVERED_BY: dict[str, CoveredByEntry] = {}
 SKIPS: dict[str, SkipEntry] = {}
 BODY_DIGEST = {
+    'routers.fleet_telemetry.read_summary': '3152b3a9ec2e644280e6b176d02ed8174772586d713f314944dd5e305d0942d6',
     'parakeet.stream_handler._NemoRNNTStreamingDecoder.decode_pcm': '37cecadaf2adcc0650d318d4ac7adb316dade33610927e6ac663f9d386c9edd6',
     'utils.llm.desktop_proxy_lifetime.read_body': '2c4a2dc281f1af068e6d0da229683697afbdb29d97fc250628fc03e1955be2b9',
     'utils.multipart._size_limited_stream': '9d743f14fb64633072a7b3e213236643e3bd74825c4bc73221f1fdbd867fc7b6',
@@ -693,6 +694,7 @@ COVERED_BY['utils.memory.canonical_graph._build_canonical_graph_items_query'] = 
     body_digest=BODY_DIGEST['utils.memory.canonical_graph._build_canonical_graph_items_query'],
 )
 for key, reason in {
+    'routers.fleet_telemetry.read_summary': 'AST false positive: Request.stream reads the incoming fleet HTTP body',
     'parakeet.stream_handler._NemoRNNTStreamingDecoder.decode_pcm': 'AST false positive: torch.where selects tensor elements, not a Firestore query',
     'utils.llm.desktop_proxy_lifetime.read_body': 'AST false positive: Request.stream reads the incoming HTTP body',
     'utils.multipart._size_limited_stream': 'AST false positive: Request.stream reads the incoming multipart HTTP body',

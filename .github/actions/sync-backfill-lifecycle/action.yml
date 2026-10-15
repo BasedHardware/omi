@@ -165,7 +165,7 @@ runs:
         image: ${{ inputs.image }}
         no_traffic: true
         flags: >-
-          --revision-suffix=${{ inputs.revision_suffix }}
+          --revision-suffix=${{ inputs.revision_suffix }}-base
           ${{ steps.candidate-tag.outputs.flag }}
           --min-instances=3
           --max-instances=40

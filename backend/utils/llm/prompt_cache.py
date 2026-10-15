@@ -1,4 +1,8 @@
-"""Shared explicit prompt-cache primitives for the GPT-5.6 family.
+"""Shared prompt-cache markings for agent harnesses and gateway providers.
+
+The gateway translates these same boundaries into Vertex cachedContents, with
+owner isolation and model-specific thresholds. The helpers below retain the
+OpenAI-compatible wire contract for existing callers.
 
 The provider only serves a cache READ from a prefix that ends on a message
 boundary or on an explicit ``prompt_cache_breakpoint``. A prompt whose stable
@@ -151,14 +155,15 @@ def bind_explicit_cache(runnable: Any, *, cache_key: str | None = None) -> Any:
     return runnable.bind(**params)
 
 
-def prefix_cache_key(namespace: str, stable_text: str) -> str:
+def prefix_cache_key(namespace: str, stable_text: str, *, owner_uid: str | None = None) -> str:
     """Routing key derived from the prefix bytes themselves.
 
     Same bytes -> same key, so two callers that build an identical prefix land
     on the same cache entry, and an edit to the prefix can never route onto the
     entry its previous wording wrote. Carries no prompt content.
     """
-    return f'{namespace}-{hashlib.sha256(stable_text.encode("utf-8")).hexdigest()[:32]}'
+    identity = stable_text if owner_uid is None else f'{len(owner_uid)}:{owner_uid}{stable_text}'
+    return f'{namespace}-{hashlib.sha256(identity.encode("utf-8")).hexdigest()[:32]}'
 
 
 def content_parts_with_breakpoint(stable_text: str, volatile_text: str) -> list[dict[str, Any]]:

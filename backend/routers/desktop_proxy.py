@@ -512,6 +512,10 @@ def _recovery_plan(
     """
     if get_byok_key('gemini'):
         return []
+    # Paid reservation failures recover through the gateway's Luna route. This
+    # direct adapter must neither spill 2.5 to PayGo nor retry Dream's 3.8 order.
+    if served_model in {ptr.PT_MODEL_CURRENT, ptr.PT_MODEL_TARGET}:
+        return []
     capacity = capacity or ptr.reservation_capacity(
         served_model, _reservation_states(), override=os.getenv(_PT_MODEL_OVERRIDE_ENV, '')
     )

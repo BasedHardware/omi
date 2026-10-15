@@ -34,6 +34,7 @@ from pr_preflight import (
     resolve_pr_metadata,
     run_git,
     run_python_capture,
+    run_local_checks,
     select_checks,
 )
 
@@ -41,6 +42,81 @@ SCRIPT_DIR = Path(__file__).resolve().parent
 RUNNER = SCRIPT_DIR / "preflight_runner.py"
 REPO_ROOT = SCRIPT_DIR.parents[1]
 
+
+class LocalSlotsTests(unittest.TestCase):
+    def test_inactive_gate_preserves_child_argv(self) -> None:
+        command = [sys.executable, "checks.py"]
+        for lane, env in (("local", {}), ("ci", {"OMI_PREFLIGHT_LOCAL_SLOTS": "2"}),
+                          ("local", {"OMI_PREFLIGHT_LOCAL_SLOTS": "2", "GITHUB_ACTIONS": "true"})):
+            with self.subTest(lane=lane, env=env), patch.dict(os.environ, env, clear=True):
+                with patch("pr_preflight.subprocess.run") as run:
+                    run_local_checks(command, REPO_ROOT, lane)
+                run.assert_called_once_with(command, cwd=REPO_ROOT, check=False)
+
+    @unittest.skipIf(os.name == "nt", "flock admission requires POSIX")
+    def test_active_gate_holds_slot_and_wraps_priority(self) -> None:
+        import fcntl
+
+        command = [sys.executable, "checks.py"]
+        with tempfile.TemporaryDirectory() as tmp:
+            env = {"OMI_PREFLIGHT_LOCAL_SLOTS": "1", "OMI_PREFLIGHT_LOCAL_DIR": tmp}
+            def child(argv: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
+                self.assertEqual(argv, ["/usr/bin/taskpolicy", "-b", *command])
+                self.assertEqual(len(kwargs["pass_fds"]), 1)
+                with (Path(tmp) / "0").open("r+") as probe:
+                    with self.assertRaises(BlockingIOError):
+                        fcntl.flock(probe, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                    self.assertEqual(probe.read(), str(os.getpid()))
+                return subprocess.CompletedProcess(argv, 17)
+            with patch.dict(os.environ, env, clear=True), patch("pr_preflight.sys.platform", "darwin"):
+                with patch("pr_preflight.os.access", return_value=True), patch("pr_preflight.subprocess.run", side_effect=child):
+                    self.assertEqual(run_local_checks(command, REPO_ROOT, "local").returncode, 17)
+            with (Path(tmp) / "0").open("r+") as probe:
+                fcntl.flock(probe, fcntl.LOCK_EX | fcntl.LOCK_NB)
+
+    @unittest.skipIf(os.name == "nt", "flock admission requires POSIX")
+    def test_priority_controls_and_missing_binary(self) -> None:
+        command = [sys.executable, "checks.py"]
+        for background, platform, binary, prefix in (
+            ("0", "darwin", True, []),
+            ("true", "darwin", False, []),
+            ("1", "linux", "/usr/bin/nice", ["/usr/bin/nice", "-n", "19"]),
+            ("1", "linux", None, []),
+        ):
+            with self.subTest(background=background, platform=platform, binary=binary), tempfile.TemporaryDirectory() as tmp:
+                env = {"OMI_PREFLIGHT_LOCAL_SLOTS": "1", "OMI_PREFLIGHT_LOCAL_DIR": tmp,
+                       "OMI_PREFLIGHT_BACKGROUND": background}
+                with patch.dict(os.environ, env, clear=True), patch("pr_preflight.sys.platform", platform):
+                    with patch("pr_preflight.os.access", return_value=bool(binary)), patch("pr_preflight.shutil.which", return_value=binary):
+                        with patch("pr_preflight.subprocess.run") as run:
+                            run_local_checks(command, REPO_ROOT, "local")
+                self.assertEqual(run.call_args.args[0], prefix + command)
+                self.assertIn("pass_fds", run.call_args.kwargs)
+
+    @unittest.skipIf(os.name == "nt", "flock admission requires POSIX")
+    def test_exhaustion_fails_without_running_child(self) -> None:
+        import fcntl
+
+        with tempfile.TemporaryDirectory() as tmp:
+            env = {"OMI_PREFLIGHT_LOCAL_SLOTS": "1", "OMI_PREFLIGHT_LOCAL_WAIT": "0", "OMI_PREFLIGHT_LOCAL_DIR": tmp}
+            with (Path(tmp) / "0").open("w") as holder:
+                fcntl.flock(holder, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                output = io.StringIO()
+                with patch.dict(os.environ, env, clear=True), redirect_stderr(output):
+                    with patch("pr_preflight.subprocess.run") as run:
+                        result = run_local_checks(["checks"], REPO_ROOT, "local")
+                run.assert_not_called()
+                self.assertEqual(result.returncode, 75)
+                self.assertIn("OMI_PREFLIGHT_LOCAL_SLOTS", output.getvalue())
+                self.assertIn("OMI_PREFLIGHT_LOCAL_WAIT", output.getvalue())
+
+    def test_invalid_configuration_fails_closed(self) -> None:
+        for slots, wait in (("0", "1"), ("bad", "1"), ("1", "nan"), ("1", "-1")):
+            with self.subTest(slots=slots, wait=wait):
+                with patch.dict(os.environ, {"OMI_PREFLIGHT_LOCAL_SLOTS": slots, "OMI_PREFLIGHT_LOCAL_WAIT": wait}, clear=True):
+                    with patch("pr_preflight.subprocess.run") as run, redirect_stderr(io.StringIO()):
+                        self.assertEqual(run_local_checks(["checks"], REPO_ROOT, "local").returncode, 2)
+                run.assert_not_called()
 
 class FakeResponse(io.BytesIO):
     def __enter__(self) -> "FakeResponse":

@@ -12415,6 +12415,59 @@ class AppLocalizationsEn extends AppLocalizations {
   String get reviewNoChangesBody => 'When Omi tidies your notes, the changes appear here.';
 
   @override
+  String get reviewChangesSectionTerms => 'Names and terms';
+
+  @override
+  String get reviewChangesSectionTitles => 'Titles and summaries';
+
+  @override
+  String get reviewChangesSectionOther => 'Other changes';
+
+  @override
+  String reviewChangeConversationCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count conversations',
+      one: '1 conversation',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String reviewChangePlaceCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count places',
+      one: '1 place',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String reviewChangeShowAll(int count) {
+    return 'Show all $count';
+  }
+
+  @override
+  String get reviewChangeUndoAll => 'Undo all';
+
+  @override
+  String get reviewChangeSeeEvidence => 'See evidence';
+
+  @override
+  String get reviewChangeViewConversation => 'View conversation';
+
+  @override
+  String get reviewChangeViewTask => 'View task';
+
+  @override
+  String reviewChangesUndoPartial(int failed, int total) {
+    return 'Couldn’t undo $failed of $total. Try again.';
+  }
+
+  @override
   String get reviewShowMore => 'Show More';
 
   @override
@@ -13386,4 +13439,28 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get onboardingPermissionTapToFix => 'Tap to fix';
+
+  @override
+  String get homePendingTitle => 'Conversations on the way';
+
+  @override
+  String get homePendingCatchingUp => 'Catching up on earlier audio';
+
+  @override
+  String get onTheWayTitle => 'On the Way';
+
+  @override
+  String get onTheWayAlmostReady => 'Almost ready';
+
+  @override
+  String get activityEmpty => 'No activity yet';
+
+  @override
+  String get activityNewSemantics => 'Activity, new items';
+
+  @override
+  String get activityLoadFailed => 'Couldn\'t load all of your activity';
+
+  @override
+  String get activityNewItem => 'New';
 }

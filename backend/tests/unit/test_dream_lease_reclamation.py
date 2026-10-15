@@ -36,7 +36,7 @@ def db(monkeypatch):
 
 
 def caps(context='bounded', **kw):
-    return Caps(tokens=24000, passes=24, daily_usd=250, global_daily_usd=1000, **kw)
+    return Caps(tokens=24000, passes=24, daily_usd=250, **kw)
 
 
 def acquire(db, at=NOW, context='bounded', **kw):
@@ -67,14 +67,13 @@ def test_only_strictly_older_leases_are_reclaimed(db, context, offset):
         assert db.rows[('dream_users', UID)]['lease'] == new
         assert db.rows[DIRTY] == before[DIRTY]
         assert db.rows[('dream_users', UID)]['abandoned_passes'] == 1
-        assert db.rows[('dream_users', UID, 'spend', old['day'])]['reserved_usd'] == caps(context).reservation_usd * 2
+        assert db.rows[('dream_users', UID, 'spend', old['day'])]['reserved_usd'] == pytest.approx(0)
         # One transaction contains the old report, charge and replacement lease.
         paths = {path for path, _ in db.transactions[-1].sets}
         assert paths == {
             ('users', UID, 'dream_runs', old['run_id']),
             ('dream_users', UID),
             ('dream_users', UID, 'spend', old['day']),
-            ('dream_global_spend', old['day'] + '-' + str(old['global_shard'])),
         }
         assert not any('dirty' in path or 'reviews' in path for path in paths)
 
@@ -112,10 +111,11 @@ def test_unknown_usage_restores_full_reservation_only_on_original_day_ledger(db,
     new = acquire(db, later)
     assert new['day'] != old['day']
     assert db.rows[old_path]['reserved_usd'] == pytest.approx(7 + old['reservation_usd'])
-    assert db.rows[today_path]['reserved_usd'] == pytest.approx(11 + caps().reservation_usd)
+    assert db.rows[today_path]['reserved_usd'] == pytest.approx(11)
     assert db.rows[DIRTY] == original_dirty
     run = db.rows[('users', UID, 'dream_runs', old['run_id'])]
     assert run['success'] is False and run['records_queued_after'] == 1
+    assert run['tokens'] == 0 and run['cost_status'] == 'unpriced' and 'cost_usd' not in run
     assert run['source'] == {
         'status': 'failed',
         'reason': 'abandoned',
@@ -124,10 +124,66 @@ def test_unknown_usage_restores_full_reservation_only_on_original_day_ledger(db,
         'abandoned': 1,
         'tokens': 0,
         'records_queued_after': 1,
-        'budget_charge_usd': old['reservation_usd'],
+        'budget_charge_usd': old['reservation_usd'] if previous_charge is None else previous_charge,
+        'cost_status': 'unpriced',
     }
     if scope == 'legacy':
         assert ('dream_users', UID, 'spend', old['day']) not in db.rows
+
+
+def test_abandoned_run_omits_cost_when_one_settled_turn_is_unpriced(db):
+    old = acquire(db)
+    lease = db.rows[('dream_users', UID)]['lease']
+    lease['turn_receipts'] = [
+        {
+            'tokens': 100,
+            'accounted_tokens': 100,
+            'cached_tokens': 0,
+            'cost_status': 'priced',
+            'cost_micro_usd': 500000,
+        },
+        {'tokens': 40, 'accounted_tokens': 40, 'cached_tokens': 0, 'cost_status': 'unpriced'},
+    ]
+    lease['budget_charge_usd'] = 1.25
+    lease['reservation_usd'] = 1.25
+    assert acquire(db, NOW + timedelta(seconds=deadline('bounded') + 1)) is not None
+    run = db.rows[('users', UID, 'dream_runs', old['run_id'])]
+    assert run['tokens'] == 140 and run['cost_status'] == 'unpriced' and 'cost_usd' not in run
+    assert run['source']['tokens'] == 140
+    assert run['source']['usage_unknown'] is True
+    assert run['source']['cost_status'] == 'unpriced'
+    assert 'cost_usd' not in run['source']
+    assert run['source']['budget_charge_usd'] == pytest.approx(1.25)
+
+
+def test_abandoned_run_includes_cost_when_every_receipt_is_priced(db):
+    old = acquire(db)
+    lease = db.rows[('dream_users', UID)]['lease']
+    lease['turn_receipts'] = [
+        {
+            'tokens': 80,
+            'accounted_tokens': 80,
+            'cached_tokens': 10,
+            'cost_status': 'priced',
+            'cost_micro_usd': 250000,
+        },
+        {
+            'tokens': 20,
+            'accounted_tokens': 20,
+            'cached_tokens': 0,
+            'cost_status': 'priced',
+            'cost_micro_usd': 750000,
+        },
+    ]
+    lease['budget_charge_usd'] = 1.0
+    lease['reservation_usd'] = 1.0
+    assert acquire(db, NOW + timedelta(seconds=deadline('bounded') + 1)) is not None
+    run = db.rows[('users', UID, 'dream_runs', old['run_id'])]
+    assert run['tokens'] == 100 and run['cost_status'] == 'priced'
+    assert run['cost_usd'] == pytest.approx(1.0)
+    assert run['source']['usage_unknown'] is False
+    assert run['source']['cost_usd'] == pytest.approx(1.0)
+    assert run['source']['budget_charge_usd'] == pytest.approx(1.0)
 
 
 def test_late_finish_cannot_clobber_new_lease_spend_report_or_dirty_versions(db):
@@ -168,12 +224,11 @@ def test_reclamation_commits_even_when_new_admission_is_denied(db, trigger, reas
 
 def test_reclamation_recharges_same_day_before_applying_daily_cap(db):
     old = acquire(db)
+    db.rows[('dream_users', UID)]['lease']['reservation_usd'] = 1.0
     db.rows[('dream_users', UID)]['lease']['budget_charge_usd'] = 0
-    db.rows[('dream_users', UID, 'spend', old['day'])]['reserved_usd'] = 250 - caps().reservation_usd * 1.5
+    db.rows[('dream_users', UID, 'spend', old['day'])]['reserved_usd'] = 249.5
     assert acquire(db, NOW + timedelta(seconds=deadline('bounded') + 1)) is None
-    assert db.rows[('dream_users', UID, 'spend', old['day'])]['reserved_usd'] == pytest.approx(
-        250 - caps().reservation_usd * 0.5
-    )
+    assert db.rows[('dream_users', UID, 'spend', old['day'])]['reserved_usd'] == pytest.approx(250.5)
     assert db.rows[('dream_users', UID)]['lease'] is None
 
 

@@ -16,6 +16,7 @@ from database.sync_jobs import is_sync_job_stale
 from utils.sync import uid_sequencer
 from utils.sync import backfill_cutover
 from utils import cloud_tasks
+from scripts import repair_sync_backfill_owners as repair_script
 
 
 class _Snapshot:
@@ -65,15 +66,25 @@ class _Query:
     def limit(self, count):
         return _Query(self.client, self.path, self.field, self.maximum, self.order, count, self.equals)
 
+    def select(self, fields):
+        return self
+
+    def start_after(self, snapshot):
+        self.cursor_id = snapshot.id
+        return self
+
     def stream(self, transaction=None):
         if transaction is not None:
             assert not transaction.wrote, "query after transaction write"
         rows = [(path, value) for path, value in self.client.docs.items() if path[:-1] == self.path]
         if self.field:
-            rows = [(path, value) for path, value in rows if value.get(self.field) <= self.maximum]
+            rows = [(path, value) for path, value in rows if self.field in value and value[self.field] <= self.maximum]
         if self.equals:
             rows = [(path, value) for path, value in rows if value.get(self.equals[0]) == self.equals[1]]
-        rows.sort(key=lambda row: (row[1].get(self.order), row[0]) if self.order else row[0])
+        order = self.order or self.field
+        rows.sort(key=lambda row: (row[1].get(order), row[0]) if order else row[0])
+        if getattr(self, 'cursor_id', None):
+            rows = [(path, value) for path, value in rows if path[-1] > self.cursor_id]
         if self.maximum_results is not None:
             rows = rows[: self.maximum_results]
         return [_Snapshot(path, value) for path, value in rows]
@@ -110,7 +121,7 @@ class _Firestore:
     def collection(self, name):
         return _Collection(self, (name,))
 
-    def transaction(self):
+    def transaction(self, **kwargs):
         return _Transaction(self)
 
     def write(self, path, data, *, merge):
@@ -166,6 +177,7 @@ def test_dev_cannot_read_or_claim_production_registry(db, monkeypatch):
     for operation in (
         lambda: registry.get_owner('shared-user', firestore_client=db),
         lambda: registry.has_pending('shared-user', firestore_client=db),
+        lambda: registry.repair_owner('shared-user', firestore_client=db),
         lambda: registry.claim_next('shared-user', firestore_client=db),
         lambda: registry.begin_job('shared-user', 'prod-job', 1, firestore_client=db),
         lambda: registry.finish_job('shared-user', 'prod-job', 1, 'failed', firestore_client=db),
@@ -318,11 +330,11 @@ def test_polling_cannot_stale_finalize_queued_or_running_sequenced_job():
         )
 
 
-def test_burst_admission_only_writes_append_only_pending_documents(db):
+def test_burst_admission_also_creates_durable_idle_owner(db):
     with ThreadPoolExecutor(max_workers=20) as pool:
         assert all(pool.map(lambda index: _register('heavy', f'job-{index}', index, db=db), range(100)))
-    assert registry.get_owner('heavy', firestore_client=db) == {}
-    assert len(db.docs) == 100
+    assert not registry.get_owner('heavy', firestore_client=db).get('active_job_id')
+    assert len(db.docs) == 101
 
 
 def test_cutover_guard_honors_existing_deadline_and_per_uid_direct_work(db, monkeypatch):
@@ -373,7 +385,7 @@ def test_flag_off_drain_waits_for_new_direct_work_of_same_uid(db, monkeypatch):
     monkeypatch.setattr(uid_sequencer, '_enqueue_wake', lambda *args: wakes.append(args))
     assert not uid_sequencer.kick('heavy')
     assert wakes and wakes[0][0] == 'heavy'
-    assert registry.get_owner('heavy', firestore_client=db) == {}
+    assert not registry.get_owner('heavy', firestore_client=db).get('active_job_id')
 
 
 def test_cutover_wake_uses_existing_sync_queue_and_oidc_route(monkeypatch):
@@ -437,7 +449,7 @@ def test_present_key_and_held_run_lock_never_retire(retirement, monkeypatch):
         monkeypatch.setattr(uid_sequencer, 'try_acquire_job_run_lock', lambda job: None)
         claim = uid_sequencer._claim_next(job_id)
         assert claim is None
-        assert registry.get_owner(job_id) == {}
+        assert not registry.get_owner(job_id).get('active_job_id')
         assert registry.pending_head(job_id)['job_id'] == job_id
     uid_sequencer.release_job_run_lock.assert_not_called()
 
@@ -463,9 +475,9 @@ def test_retirement_loop_is_bounded_and_never_dispatches_expired_51st(retirement
     for index in range(51):
         _register('a', f'old-{index:03}', index, db=retirement)
     assert uid_sequencer._claim_next('a') is None
-    assert len(retirement.docs) == 1
+    assert len(retirement.docs) == 2
     assert registry.pending_head('a')['job_id'] == 'old-050'
-    assert registry.get_owner('a') == {}
+    assert not registry.get_owner('a').get('active_job_id')
 
 
 @pytest.mark.parametrize(
@@ -548,7 +560,7 @@ def test_competing_retirement_cannot_dispatch_an_expired_head(retirement, monkey
         # A competing kick arrives after the first claimant locked the head,
         # before its Firestore retirement transaction has committed.
         assert uid_sequencer._claim_next(uid) is None
-        assert registry.get_owner(uid) == {}
+        assert not registry.get_owner(uid).get('active_job_id')
         interleaved.append(job_id)
         return original_retire(uid, job_id, **kwargs)
 
@@ -583,7 +595,7 @@ def test_new_oldest_head_is_not_dispatched_without_its_redis_proof(retirement, m
     monkeypatch.setattr(registry, 'claim_next', claim)
     # An earlier entry arrives after checking the live head's Redis key.
     assert uid_sequencer._claim_next('a') is None
-    assert registry.get_owner('a') == {}
+    assert not registry.get_owner('a').get('active_job_id')
     assert registry.pending_head('a')['job_id'] == 'new-expired-head'
     # The next kick first proves/retire that expired head, then claims live.
     assert uid_sequencer._claim_next('a')['job_id'] == 'live'
@@ -607,7 +619,7 @@ def test_refused_absent_head_is_never_reserved_or_woken(retirement, monkeypatch,
     assert uid_sequencer._claim_next('a') is None
     assert not uid_sequencer.kick('a')
     assert retirement.docs == before
-    assert registry.get_owner('a') == {}
+    assert not registry.get_owner('a').get('active_job_id')
     wake.assert_not_called()
 
 
@@ -620,7 +632,7 @@ def test_51_expired_heads_schedule_one_continuation(retirement, monkeypatch):
     monkeypatch.setattr(uid_sequencer, '_dispatch', dispatch)
     assert not uid_sequencer.kick('a')
     assert registry.pending_head('a')['job_id'] == 'old-050'
-    assert registry.get_owner('a') == {}
+    assert not registry.get_owner('a').get('active_job_id')
     wake.assert_called_once()
     dispatch.assert_not_called()
 
@@ -676,7 +688,7 @@ def test_expected_head_fence_schedules_continuation(retirement, monkeypatch):
     monkeypatch.setattr(uid_sequencer, '_enqueue_wake', wake)
     assert not uid_sequencer.kick('a')
     assert registry.pending_head('a')['job_id'] == 'earlier'
-    assert registry.get_owner('a') == {}
+    assert not registry.get_owner('a').get('active_job_id')
     wake.assert_called_once()
 
 
@@ -728,3 +740,285 @@ def test_failed_continuation_enqueue_releases_dedupe_claim(retirement, monkeypat
         uid_sequencer.kick('a', retire_limit=0)
     assert not uid_sequencer.kick('a', retire_limit=0)
     assert wake.call_count == 2
+
+
+def test_admission_creates_due_owner_in_same_transaction(db):
+    assert _register('orphan', 'one', 0, db=db)
+    assert registry.get_owner('orphan', firestore_client=db)['reconcile_at'] == NOW
+    assert [owner['uid'] for owner in registry.due_owners(now=NOW)] == ['orphan']
+
+
+def test_duplicate_admission_repairs_legacy_orphan_without_replacing_payload(db):
+    _register('orphan', 'one', 0, db=db)
+    del db.docs[(registry.COLLECTION, 'orphan')]
+    before = copy.deepcopy(db.docs[(registry.PENDING_COLLECTION, 'one')])
+    assert not _register('orphan', 'one', 5, db=db)
+    assert registry.get_owner('orphan')['reconcile_at'] == NOW
+    assert db.docs[(registry.PENDING_COLLECTION, 'one')] == before
+
+
+@pytest.mark.parametrize('release', ['finish', 'retire'])
+def test_releasing_active_owner_keeps_waiting_work_discoverable_without_kick(db, release):
+    _register('a', 'active', 0, db=db)
+    claim = registry.claim_next('a', now=NOW)
+    _register('a', 'waiting', 1, db=db)
+    if release == 'finish':
+        assert registry.finish_job('a', 'active', claim['epoch'], 'completed', now=NOW)
+    else:
+        assert registry.retire_expired('a', 'active', epoch=claim['epoch'], now=NOW)
+    owner = registry.get_owner('a')
+    assert owner and not owner.get('active_job_id')
+    assert owner['reconcile_at'] == NOW
+    assert registry.has_pending('a')
+    assert registry.due_owners(now=NOW)[0]['uid'] == 'a'
+    assert registry.claim_next('a', now=NOW)['epoch'] > claim['epoch']
+
+
+def test_waiting_retirement_repairs_legacy_owner_before_leaving_successor(db):
+    _register('a', 'expired', 0, db=db)
+    _register('a', 'next', 1, db=db)
+    del db.docs[(registry.COLLECTION, 'a')]
+    assert registry.retire_expired('a', 'expired', now=NOW)
+    assert registry.has_pending('a') and registry.get_owner('a')['reconcile_at'] == NOW
+
+
+def test_repair_is_read_only_in_dry_run_and_idempotent_when_applied(db, caplog):
+    _register('orphan', 'one', 0, db=db)
+    del db.docs[(registry.COLLECTION, 'orphan')]
+    before = copy.deepcopy(db.docs)
+    assert registry.repair_owner('orphan', dry_run=True, now=NOW)
+    assert db.docs == before
+    with caplog.at_level('INFO'):
+        assert registry.repair_owner('orphan', now=NOW)
+        assert not registry.repair_owner('orphan', now=NOW)
+    assert caplog.text.count('event=sync_backfill_owner_repaired') == 1
+    assert 'orphan' not in caplog.text
+    assert NOW < registry.get_owner('orphan')['reconcile_at'] <= NOW + timedelta(minutes=30)
+    assert not registry.repair_owner('empty', now=NOW)
+    assert not registry.get_owner('empty')
+
+
+def test_repair_preserves_active_owner(db):
+    _register('a', 'one', 0, db=db)
+    _register('a', 'two', 1, db=db)
+    registry.claim_next('a', now=NOW)
+    before = copy.deepcopy(db.docs)
+    assert not registry.repair_owner('a', now=NOW)
+    assert db.docs == before
+
+
+def test_sweep_repairs_orphans_even_when_dispatch_cannot_progress(db, monkeypatch, caplog):
+    _register('a', 'one', 0, db=db)
+    _register('b', 'two', 0, db=db)
+    del db.docs[(registry.COLLECTION, 'a')]
+    del db.docs[(registry.COLLECTION, 'b')]
+    monkeypatch.setattr(uid_sequencer, 'kick', lambda *args, **kwargs: False)
+    with caplog.at_level('INFO'):
+        outcome = uid_sequencer.sweep(limit=1)
+    assert outcome['owner_repaired'] == 1
+    assert not registry.due_owners()
+    assert registry.has_pending('a') and registry.has_pending('b')
+    assert 'event=sync_backfill_owner_repaired' in caplog.text
+    assert uid_sequencer.sweep(limit=1)['owner_repaired'] == 1
+    assert registry.get_owner('a') and registry.get_owner('b')
+
+
+def test_empty_owner_is_parked_without_losing_epoch(db, monkeypatch):
+    _register('a', 'one', 0, db=db)
+    claim = registry.claim_next('a', now=NOW)
+    registry.finish_job('a', 'one', claim['epoch'], 'completed', now=NOW)
+    before = registry.get_owner('a')
+    assert uid_sequencer.reconcile_uid('a', before, now=NOW) == 'empty'
+    assert not registry.due_owners(now=NOW + timedelta(days=365))
+    assert 'reconcile_at' not in registry.get_owner('a')
+    assert registry.get_owner('a')['epoch'] == claim['epoch']
+
+
+@pytest.mark.parametrize('apply', [False, True])
+def test_operator_repair_pages_deduplicates_and_is_idempotent(db, monkeypatch, apply):
+    _register('private-a', 'one', 0, db=db)
+    _register('private-a', 'two', 1, db=db)
+    _register('private-b', 'three', 0, db=db)
+    del db.docs[(registry.COLLECTION, 'private-a')]
+    del db.docs[(registry.COLLECTION, 'private-b')]
+    before = copy.deepcopy(db.docs)
+    sleeps = []
+    monkeypatch.setattr(repair_script.time, 'monotonic', lambda: 0)
+    monkeypatch.setattr(repair_script.time, 'sleep', lambda seconds: sleeps.append(seconds))
+    counts = repair_script.repair(db, apply=apply, page_size=1)
+    assert counts == {
+        'scanned_entries': 3,
+        'scanned_uids': 2,
+        'missing_owners': 2,
+        'repaired_owners': 2 if apply else 0,
+        'errors': 0,
+    }
+    assert sleeps == [0.2]
+    if apply:
+        assert repair_script.repair(db, apply=True)['repaired_owners'] == 0
+        assert registry.get_owner('private-a') and registry.get_owner('private-b')
+    else:
+        assert db.docs == before
+
+
+def test_operator_repair_is_bounded_and_errors_never_print_identity(db, monkeypatch, capsys):
+    _register('private-a', 'one', 0, db=db)
+    _register('private-b', 'two', 0, db=db)
+    monkeypatch.setattr(registry, 'repair_owner', MagicMock(side_effect=RuntimeError('private-a/private-b')))
+    monkeypatch.setattr(repair_script.firestore, 'Client', lambda **kwargs: db)
+    db.close = MagicMock()
+    assert repair_script.main(['--project', 'demo-test', '--limit', '1']) == 1
+    output = capsys.readouterr().out
+    assert 'private' not in output
+    assert '"errors": 1' in output and '"scanned_entries": 1' in output
+    assert registry.repair_owner.call_args.kwargs['dry_run'] is True
+    db.close.assert_called_once()
+
+
+@pytest.mark.parametrize(
+    'bounds', [{'limit': 0}, {'page_size': 501}, {'rate_per_second': 0}, {'rate_per_second': float('nan')}]
+)
+def test_operator_repair_rejects_invalid_bounds_before_reading(db, bounds):
+    with pytest.raises(ValueError, match='invalid repair bounds'):
+        repair_script.repair(db, **bounds)
+
+
+@pytest.mark.parametrize('failure', ['scan', 'close', 'stage'])
+def test_operator_repair_suppresses_all_cli_exception_payloads(db, monkeypatch, capsys, failure):
+    db.close = MagicMock()
+    monkeypatch.setattr(repair_script.firestore, 'Client', lambda **kwargs: db)
+    run = MagicMock(return_value={'errors': 0})
+    monkeypatch.setattr(repair_script, 'repair', run)
+    if failure == 'scan':
+        run.side_effect = RuntimeError('private-uid-in-exception')
+    elif failure == 'close':
+        db.close.side_effect = RuntimeError('private-uid-in-exception')
+    else:
+        monkeypatch.setenv('OMI_ENV_STAGE', 'dev')
+    assert repair_script.main(['--project', 'demo-test']) == 1
+    output = capsys.readouterr()
+    assert output.out.strip() == '{"errors": 1}'
+    assert 'private' not in output.out + output.err
+    if failure == 'stage':
+        run.assert_not_called()
+
+
+@pytest.mark.parametrize('state', ['dispatching', 'running'])
+def test_301_empty_owners_cannot_crowd_out_stuck_lease_from_one_page(db, monkeypatch, state):
+    current = datetime.now(timezone.utc)
+    for index in range(301):
+        uid = f'empty-{index:03}'
+        _register(uid, uid, 0, db=db)
+        claim = registry.claim_next(uid, now=NOW)
+        assert registry.finish_job(uid, uid, claim['epoch'], 'completed', now=NOW)
+        # Even a stale deferred-owner attempt must not revive a parked row.
+        registry.defer_owner(uid, 120, now=NOW)
+        assert 'reconcile_at' not in registry.get_owner(uid)
+    _register('stuck', 'stuck-job', 0, db=db)
+    claim = registry.claim_next('stuck', now=current - timedelta(hours=2))
+    if state == 'running':
+        assert registry.begin_job('stuck', 'stuck-job', claim['epoch'], now=current - timedelta(hours=2))
+    dispatched = []
+    monkeypatch.setattr(uid_sequencer, '_dispatch', lambda job: dispatched.append(job))
+    monkeypatch.setattr(uid_sequencer, 'sync_job_run_lock_present', lambda jid: False)
+    monkeypatch.setattr(uid_sequencer, 'get_sync_job', lambda jid: {'status': 'queued'})
+    page = registry.due_owners(limit=100)
+    assert [row['uid'] for row in page] == ['stuck']
+    outcomes = uid_sequencer.sweep(limit=100)
+    assert outcomes['lease_expired'] == 1
+    assert len(dispatched) == 1 and dispatched[0]['job_id'] == 'stuck-job'
+    assert dispatched[0]['epoch'] > claim['epoch']
+
+
+@pytest.mark.parametrize('release', ['finish', 'active_retire', 'pending_retire'])
+def test_last_job_parks_owner_and_new_admission_wakes_with_monotonic_epoch(db, release):
+    _register('a', 'one', 0, db=db)
+    if release == 'pending_retire':
+        epoch = 0
+        assert registry.retire_expired('a', 'one', now=NOW)
+    else:
+        claim = registry.claim_next('a', now=NOW)
+        epoch = claim['epoch']
+        if release == 'finish':
+            assert registry.finish_job('a', 'one', epoch, 'completed', now=NOW)
+        else:
+            assert registry.retire_expired('a', 'one', epoch=epoch, now=NOW)
+    assert registry.get_owner('a')['epoch'] == epoch
+    assert 'reconcile_at' not in registry.get_owner('a')
+    assert not registry.due_owners(now=NOW + timedelta(days=365))
+    assert _register('a', 'two', 0, db=db)
+    assert registry.get_owner('a')['reconcile_at'] == NOW
+    assert registry.claim_next('a', now=NOW)['epoch'] > epoch
+
+
+def test_deferral_rechecks_work_and_cannot_park_a_new_active_reservation(db):
+    _register('a', 'one', 0, db=db)
+    stale_idle = registry.get_owner('a')
+    claim = registry.claim_next('a', now=NOW)
+    assert uid_sequencer.reconcile_uid('a', stale_idle, now=NOW) == 'empty'
+    owner = registry.get_owner('a')
+    assert owner['active_job_id'] == 'one' and owner['active_epoch'] == claim['epoch']
+    assert owner['reconcile_at'] == NOW + timedelta(seconds=120)
+
+
+def test_empty_claim_parks_legacy_idle_and_duplicate_admission_wakes_parked_owner(db):
+    db.docs[(registry.COLLECTION, 'a')] = {'epoch': 9, 'reconcile_at': NOW}
+    assert registry.claim_next('a', now=NOW) is None
+    assert registry.get_owner('a') == {'epoch': 9, 'updated_at': NOW}
+    _register('a', 'waiting', 0, db=db)
+    db.docs[(registry.COLLECTION, 'a')].pop('reconcile_at')
+    assert not _register('a', 'waiting', 0, db=db)
+    assert registry.get_owner('a')['epoch'] == 9
+    assert registry.get_owner('a')['reconcile_at'] == NOW
+
+
+def test_repair_staggers_owners_and_pending_fallback_cannot_bypass_deadline(db, monkeypatch):
+    for uid in ('a', 'b'):
+        _register(uid, uid, 0, db=db)
+        del db.docs[(registry.COLLECTION, uid)]
+    offsets = iter([0, 1799])
+    monkeypatch.setattr(registry.secrets, 'randbelow', lambda window: next(offsets))
+    monkeypatch.setattr(registry, '_now', lambda: NOW)
+    assert registry.repair_owner('a', now=NOW)
+    assert registry.repair_owner('b', now=NOW)
+    assert registry.get_owner('a')['reconcile_at'] == NOW + timedelta(seconds=1)
+    assert registry.get_owner('b')['reconcile_at'] == NOW + timedelta(minutes=30)
+    assert not registry.due_owners(now=NOW)
+    assert registry.pending_head('a') is None
+    assert registry.claim_next('a', now=NOW) is None
+    assert not registry.retire_expired('a', 'a', now=NOW)
+    assert not uid_sequencer.kick('a')
+    assert not registry.due_owners(now=NOW)
+    assert registry.claim_next('a', now=NOW + timedelta(seconds=1))['job_id'] == 'a'
+    assert 'repair_not_before' not in registry.get_owner('a')
+
+
+def test_self_heal_uses_shared_window_and_skips_immediate_kick(db, monkeypatch):
+    _register('a', 'a', 0, db=db)
+    del db.docs[(registry.COLLECTION, 'a')]
+    monkeypatch.setenv('SYNC_BACKFILL_OWNER_REPAIR_WINDOW_SECONDS', '600')
+    monkeypatch.setattr(registry.secrets, 'randbelow', lambda window: window - 1)
+    kick = MagicMock(return_value=False)
+    monkeypatch.setattr(uid_sequencer, 'kick', kick)
+    before = datetime.now(timezone.utc)
+    assert uid_sequencer.sweep()['owner_repaired'] == 1
+    owner = registry.get_owner('a')
+    assert before + timedelta(seconds=600) <= owner['reconcile_at']
+    assert owner['repair_not_before'] == owner['reconcile_at']
+    kick.assert_not_called()
+    registry.defer_owner('a', 120, now=before)
+    assert registry.get_owner('a')['reconcile_at'] == owner['reconcile_at']
+
+
+def test_operator_window_option_reaches_shared_helper_and_rejects_zero(db, monkeypatch, capsys):
+    _register('a', 'a', 0, db=db)
+    del db.docs[(registry.COLLECTION, 'a')]
+    monkeypatch.setattr(repair_script.firestore, 'Client', lambda **kwargs: db)
+    db.close = MagicMock()
+    monkeypatch.setattr(registry.secrets, 'randbelow', lambda window: window - 1)
+    before = datetime.now(timezone.utc)
+    assert repair_script.main(['--project', 'demo-test', '--apply', '--repair-window-seconds', '60']) == 0
+    assert registry.get_owner('a')['reconcile_at'] >= before + timedelta(seconds=60)
+    assert '"repaired_owners": 1' in capsys.readouterr().out
+    with pytest.raises(ValueError, match='repair window'):
+        repair_script.repair(db, repair_window=0)

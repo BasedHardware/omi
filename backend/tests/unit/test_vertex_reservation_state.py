@@ -1,6 +1,7 @@
 """Reservation evidence, shared storage, and state policy contracts (no network)."""
 
 import json
+from dataclasses import asdict
 import asyncio
 import time
 import logging
@@ -15,6 +16,73 @@ from utils.llm.vertex_reservation_state import ReservationState, effective_state
 from utils.llm.desktop_reservation_policy import desktop_lane, admission, refusal_body
 
 OLD, NEW = 'gemini-2.5-flash', 'gemini-3.8-flash'
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('outcome', ['inconclusive', 'exception'])
+async def test_non_teaching_probe_preserves_completed_failure_window(monkeypatch, outcome):
+    from unittest.mock import AsyncMock
+
+    monkeypatch.delenv(ptr.PT_MODEL_OVERRIDE_ENV, raising=False)
+    monkeypatch.delenv(vr.STATE_OVERRIDE_ENV, raising=False)
+    client = fakeredis.aioredis.FakeRedis(decode_responses=True)
+    store = ReservationState(client)
+    seconds, micros = await client.time()
+    now = seconds + micros / 1_000_000
+    evidence = {OLD: asdict(failures(now - 2400)), NEW: asdict(vr.Evidence(success_at=now - 100))}
+    await client.set(store.key(), json.dumps({'evidence': evidence}))
+    transact = AsyncMock(wraps=store.transact)
+    monkeypatch.setattr(store, 'transact', transact)
+
+    async def probe(*args):
+        if outcome == 'exception':
+            raise RuntimeError('synthetic inconclusive probe')
+        return outcome
+
+    try:
+        await store._run_probe(OLD, probe, store.key())
+        transact.assert_not_awaited()
+        states, _ = await store.transact(OLD, 'inconclusive')
+        assert states[OLD] == vr.State.INACTIVE
+        assert json.loads(await client.get(store.key()))['evidence'] == evidence
+    finally:
+        await store.aclose()
+        await client.aclose()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('outcome', ['inconclusive', 'exception'])
+async def test_non_teaching_probe_advances_discovery_without_waiting_for_snapshot_expiry(monkeypatch, outcome):
+    monkeypatch.delenv(ptr.PT_MODEL_OVERRIDE_ENV, raising=False)
+    monkeypatch.delenv(vr.STATE_OVERRIDE_ENV, raising=False)
+    client = fakeredis.aioredis.FakeRedis(decode_responses=True)
+    store = ReservationState(client)
+    calls = []
+
+    async def probe(model, location):
+        calls.append(model)
+        if model == OLD:
+            if outcome == 'exception':
+                raise RuntimeError('synthetic inconclusive probe')
+            return outcome
+        return 'dedicated_success'
+
+    try:
+        assert set((await store.refresh(probe, apply_overrides=False)).values()) == {vr.State.UNKNOWN}
+        await asyncio.gather(*store._probe_tasks)
+        # A completed non-teaching probe invalidates the cold snapshot while its
+        # global lease remains held; the next refresh can claim the other model.
+        assert store._snapshot == {}
+        assert (await store.refresh(probe, apply_overrides=False))[NEW] == vr.State.UNKNOWN
+        await asyncio.gather(*store._probe_tasks)
+        assert (await store.refresh(apply_overrides=False))[NEW] == vr.State.ACTIVE
+        assert calls == [OLD, NEW]
+        evidence = json.loads(await client.get(store.key()))['evidence']
+        assert evidence[OLD] == asdict(vr.Evidence())
+        assert evidence[NEW]['success_at'] > 0
+    finally:
+        await store.aclose()
+        await client.aclose()
 
 
 def failures(start=1000):
@@ -77,11 +145,11 @@ def test_expired_evidence_reverts_unknown_and_order_move_back_uses_same_reducer(
 
 
 @pytest.mark.parametrize('state', list(vr.State))
-@pytest.mark.parametrize('lane', list(vr.POLICIES))
+@pytest.mark.parametrize('lane', list(vr.INACTIVE_DESTINATIONS))
 def test_every_lane_disposition(state, lane):
     expected = 'dedicated'
     if state == vr.State.INACTIVE:
-        expected = 'refuse' if lane == 'macos_legacy_tasks' else 'shared'
+        expected = 'refuse' if lane == 'macos_legacy_tasks' else 'luna'
     assert vr.policy(OLD, state, lane=lane).kind == expected
     assert vr.policy(NEW, state, lane=lane).kind == ('dedicated' if state == vr.State.ACTIVE else 'shared')
     assert vr.policy('gemini-2.5-flash-lite', state, lane=lane).kind == 'shared'
@@ -215,10 +283,10 @@ def test_refusal_is_terminal_tool_shape_for_shipped_client_decoders(streaming):
 def test_observe_and_enforce(caplog, monkeypatch):
     monkeypatch.setenv('OMI_VERTEX_LEGACY_TASK_MIN_CAPABLE_MACOS_BUILD', '12435')
     with caplog.at_level(logging.INFO):
-        assert admission(OLD, vr.State.INACTIVE, 'macos_legacy_tasks', 'observe') == 'would_refuse'
+        assert admission(OLD, vr.State.INACTIVE, 'macos_legacy_tasks', 'observe') == 'refuse'
         assert admission(OLD, vr.State.INACTIVE, 'macos_legacy_tasks', 'enforce') == 'refuse'
         assert admission(OLD, vr.State.UNKNOWN, 'macos_legacy_tasks', 'enforce') == 'dedicated'
-    assert 'action=would_refuse' in caplog.text
+    assert 'action=refuse' in caplog.text
 
 
 def test_declaration_change_invalidates_the_evidence_namespace(monkeypatch):
@@ -386,7 +454,8 @@ async def test_owned_store_closes_redis_and_undeclared_models_never_promote(monk
 def test_nonreservation_pin_changes_capacity_but_cannot_fabricate_admission_evidence():
     env = {'OMI_VERTEX_PT_MODEL': 'gemini-3.1-flash-lite'}
     routing = effective_states({}, env)
-    assert ptr.reservation_capacity(OLD, routing, override=env['OMI_VERTEX_PT_MODEL']) == 'shared'
+    with pytest.raises(ValueError, match='gateway Luna'):
+        ptr.reservation_capacity(OLD, routing, override=env['OMI_VERTEX_PT_MODEL'])
     assert effective_states({}, env, admission=True)[OLD] == vr.State.UNKNOWN
     assert effective_states({OLD: vr.State.INACTIVE}, env, admission=True)[OLD] == vr.State.INACTIVE
     env[vr.STATE_OVERRIDE_ENV] = json.dumps({OLD: 'inactive'})

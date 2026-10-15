@@ -45,9 +45,10 @@ Future<ApiResult<ReviewChangesPage>> getReviewChanges({String? cursor}) {
       url: (cursor == null ? url : url.replace(queryParameters: {'cursor': cursor})).toString(),
       method: 'GET',
     ),
-    decode: (body) => ReviewChangesPage.fromGenerated(
-      wire.GeneratedReviewChangesResponse.fromJson(jsonDecode(body, reviver: _objectReviver) as Map<String, dynamic>),
-    ),
+    decode: (body) {
+      final json = jsonDecode(body, reviver: _objectReviver) as Map<String, dynamic>;
+      return ReviewChangesPage.fromGenerated(wire.GeneratedReviewChangesResponse.fromJson(json), raw: json);
+    },
   );
 }
 
@@ -59,9 +60,8 @@ Future<ApiResult<ReviewChange>> setReviewChangeUndone(String changeId, {required
         method: 'POST',
       ),
       decode: (body) {
-        return ReviewChange.fromGenerated(
-          wire.GeneratedReviewChange.fromJson(jsonDecode(body, reviver: _objectReviver) as Map<String, dynamic>),
-        );
+        final json = jsonDecode(body, reviver: _objectReviver) as Map<String, dynamic>;
+        return ReviewChange.fromGenerated(wire.GeneratedReviewChange.fromJson(json), raw: json);
       },
     );
 

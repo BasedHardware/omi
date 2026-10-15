@@ -12417,6 +12417,59 @@ class AppLocalizationsDa extends AppLocalizations {
   String get reviewNoChangesBody => 'Når Omi rydder op i dine noter, vises ændringerne her.';
 
   @override
+  String get reviewChangesSectionTerms => 'Navne og termer';
+
+  @override
+  String get reviewChangesSectionTitles => 'Titler og resuméer';
+
+  @override
+  String get reviewChangesSectionOther => 'Andre ændringer';
+
+  @override
+  String reviewChangeConversationCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count samtaler',
+      one: '1 samtale',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String reviewChangePlaceCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count steder',
+      one: '1 sted',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String reviewChangeShowAll(int count) {
+    return 'Vis alle $count';
+  }
+
+  @override
+  String get reviewChangeUndoAll => 'Fortryd alle';
+
+  @override
+  String get reviewChangeSeeEvidence => 'Se belæg';
+
+  @override
+  String get reviewChangeViewConversation => 'Vis samtale';
+
+  @override
+  String get reviewChangeViewTask => 'Vis opgave';
+
+  @override
+  String reviewChangesUndoPartial(int failed, int total) {
+    return 'Kunne ikke fortryde $failed af $total. Prøv igen.';
+  }
+
+  @override
   String get reviewShowMore => 'Vis mere';
 
   @override
@@ -13388,4 +13441,28 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String get onboardingPermissionTapToFix => 'Tryk for at rette';
+
+  @override
+  String get homePendingTitle => 'Samtaler på vej';
+
+  @override
+  String get homePendingCatchingUp => 'Indhenter tidligere lyd';
+
+  @override
+  String get onTheWayTitle => 'På vej';
+
+  @override
+  String get onTheWayAlmostReady => 'Næsten klar';
+
+  @override
+  String get activityEmpty => 'Ingen aktivitet endnu';
+
+  @override
+  String get activityNewSemantics => 'Aktivitet, nye elementer';
+
+  @override
+  String get activityLoadFailed => 'Kunne ikke indlæse al din aktivitet';
+
+  @override
+  String get activityNewItem => 'Ny';
 }
