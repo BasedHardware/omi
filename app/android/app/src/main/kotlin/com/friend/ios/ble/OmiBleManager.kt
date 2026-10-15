@@ -198,41 +198,25 @@ class OmiBleManager private constructor(private val application: Application) {
 
     // ── Scanning ──
 
-    private fun reportScanBlocked(reason: String) {
-        Log.w(TAG, "startScan blocked: $reason")
-        if (!isFlutterAlive) return
-        mainHandler.post { flutterApi?.onScanBlocked(reason) {} }
-    }
-
     fun startScan(timeout: Int, serviceUuids: List<String>) {
         val state = getBluetoothState()
         Log.i(TAG, "startScan called, state=$state, timeout=$timeout, serviceUuids=$serviceUuids")
 
-        val adapter = bluetoothAdapter
-        if (adapter == null) {
-            reportScanBlocked("no_adapter")
-            return
-        }
+        val adapter = bluetoothAdapter ?: return
         if (!adapter.isEnabled) {
             Log.w(TAG, "Bluetooth not enabled, cannot scan")
-            reportScanBlocked("bluetooth_off")
             return
         }
 
         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S &&
             ContextCompat.checkSelfPermission(application, android.Manifest.permission.BLUETOOTH_SCAN) != PackageManager.PERMISSION_GRANTED) {
             Log.w(TAG, "BLUETOOTH_SCAN permission not granted, cannot scan")
-            reportScanBlocked("nearby_devices_denied")
             return
         }
 
         stopScan()
 
-        val scanner = adapter.bluetoothLeScanner
-        if (scanner == null) {
-            reportScanBlocked("scanner_unavailable")
-            return
-        }
+        val scanner = adapter.bluetoothLeScanner ?: return
 
         val filters = if (serviceUuids.isNotEmpty()) {
             serviceUuids.map { uuid ->
