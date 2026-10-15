@@ -64,3 +64,14 @@ def test_read_contention_default_off_and_non_contention_never_replayed(monkeypat
     with pytest.raises(InvalidArgument):
         store.run(operation)
     assert operation.call_count == 1
+
+
+def test_custom_enrichment_mutation_cannot_bypass_runtime_stage_guard(monkeypatch):
+    from utils.sync import reprocess
+
+    monkeypatch.setenv('OMI_ENV_STAGE', 'dev')
+    monkeypatch.delenv('FIRESTORE_EMULATOR_HOST', raising=False)
+    mutate = Mock()
+    with pytest.raises(RuntimeError, match='production or a Firestore emulator'):
+        reprocess.mark('synthetic-owner', 'conversation', 'en', mutate=mutate)
+    mutate.assert_not_called()

@@ -121,6 +121,8 @@ def mark(
     and privacy fences with this obligation. The default retains the normal
     CAS path; both paths enqueue only after durable persistence.
     """
+    if mutate is not None and not owns_runtime():
+        raise RuntimeError('sync reprocess projection requires production or a Firestore emulator')
     current = time.time() if now is None else now
 
     def update(old: Row | None) -> tuple[Row, tuple[Row, bool]]:
