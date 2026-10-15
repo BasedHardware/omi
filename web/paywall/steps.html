@@ -26,13 +26,10 @@
   h1 { margin:0; font-size:30px; line-height:1.08; letter-spacing:-1px; font-weight:800; text-align:center; }
   .lede { margin:10px 0 0; text-align:center; font-size:16px; line-height:1.45; color:var(--text2); }
 
-  /* Omi dot logo, used as the shape behind the phones */
-  .dots { position:absolute; left:50%; top:50%; transform:translate(-50%,-50%); }
   .phone { position:absolute; border-radius:30px; border:5px solid #111; background:#111; overflow:hidden; box-shadow:0 18px 40px rgba(0,0,0,.25); }
   .phone img { display:block; width:100%; }
 
   .hero { position:relative; height:430px; margin-top:22px; }
-  .hero .dots { width:370px; height:370px; }
   .hero .p1 { width:128px; left:calc(50% - 132px); top:58px; transform:rotate(-8deg); }
   .hero .p2 { width:134px; left:calc(50% + 4px); top:80px; transform:rotate(6deg); }
   .hero .pendant { position:absolute; width:104px; left:calc(50% - 52px); bottom:-6px; filter:drop-shadow(0 14px 18px rgba(0,0,0,.35)); }
@@ -43,8 +40,7 @@
   .slide .caption { text-align:center; font-size:20px; font-weight:600; letter-spacing:-.3px; margin:14px 0 0; }
   .slide .sub { text-align:center; font-size:14px; color:var(--text2); margin:4px 0 0; }
   .slide .stage { position:relative; height:400px; margin-top:12px; }
-  .slide .dots { width:320px; height:320px; }
-  .slide .phone { width:182px; left:calc(50% - 91px); top:6px; }
+  .slide .phone { width:182px; left:calc(50% - 91px); top:6px; box-shadow:0 8px 18px rgba(0,0,0,.16); }
   .indicators { display:flex; justify-content:center; gap:8px; margin-top:0; }
   .slide .stage { margin-bottom:0; } .slide { padding-bottom:28px; }
   .indicators span { width:7px; height:7px; border-radius:50%; background:#d4d4d8; transition:all .2s; }
@@ -92,7 +88,6 @@
   <section class="step" data-step="0">
     <h1>Never forget a conversation again.</h1>
     <div class="hero">
-      <svg class="dots" viewBox="0 0 200 200" aria-hidden="true"></svg>
       <div class="phone p1"><img src="/app-home.webp" alt=""></div>
       <div class="phone p2"><img src="/app-summary.webp" alt=""></div>
       <img class="pendant" src="/omi-pendant-front.webp" alt="">
@@ -106,17 +101,17 @@
       <div class="slide">
         <p class="caption">Every conversation, saved</p>
         <p class="sub">Record without limits. No monthly cap.</p>
-        <div class="stage"><svg class="dots" viewBox="0 0 200 200" aria-hidden="true"></svg><div class="phone"><img src="/app-home.webp" alt=""></div></div>
+        <div class="stage"><div class="phone"><img src="/app-home.webp" alt=""></div></div>
       </div>
       <div class="slide">
         <p class="caption">Notes that write themselves</p>
         <p class="sub">A summary after every conversation.</p>
-        <div class="stage"><svg class="dots" viewBox="0 0 200 200" aria-hidden="true"></svg><div class="phone"><img src="/app-summary.webp" alt=""></div></div>
+        <div class="stage"><div class="phone"><img src="/app-summary.webp" alt=""></div></div>
       </div>
       <div class="slide">
         <p class="caption">To-dos, caught for you</p>
         <p class="sub">Action items land in your tasks.</p>
-        <div class="stage"><svg class="dots" viewBox="0 0 200 200" aria-hidden="true"></svg><div class="phone"><img src="/app-tasks.webp" alt=""></div></div>
+        <div class="stage"><div class="phone"><img src="/app-tasks.webp" alt=""></div></div>
       </div>
     </div>
     <div class="indicators" id="indicators"><span class="on"></span><span></span><span></span></div>
@@ -173,14 +168,6 @@
     try { return new Intl.NumberFormat(q.get('locale') || 'en-US', { style: 'currency', currency: (currency || 'usd').toUpperCase() }).format(minor / 100); }
     catch (e) { return '$' + (minor / 100).toFixed(2); }
   }
-
-  // The Omi dot logo: eight dots on a ring.
-  var dots = '';
-  for (var i = 0; i < 8; i++) {
-    var a = (i / 8) * Math.PI * 2 - Math.PI / 2;
-    dots += '<circle cx="' + (100 + 74 * Math.cos(a)).toFixed(1) + '" cy="' + (100 + 74 * Math.sin(a)).toFixed(1) + '" r="19" fill="#0b0b0c"/>';
-  }
-  document.querySelectorAll('svg.dots').forEach(function (svg) { svg.innerHTML = dots; });
 
   // Prices come from the app (the plan catalog), never from this page.
   var year = q.get('year_amount') ? parseInt(q.get('year_amount'), 10) : null;
