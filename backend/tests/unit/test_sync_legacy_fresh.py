@@ -1,5 +1,7 @@
 """Legacy promotion preserves provenance and closes safely on budget failures."""
 
+import hashlib
+
 from unittest.mock import MagicMock
 from concurrent.futures import ThreadPoolExecutor
 
@@ -16,6 +18,8 @@ def clock(monkeypatch):
     monkeypatch.setenv('SYNC_FRESH_MAX_AGE_SECONDS', '21600')
     monkeypatch.setenv('SYNC_BACKFILL_MAX_AGE_SECONDS', '2592000')
     monkeypatch.delenv('SYNC_LEGACY_FRESH_ENABLED', raising=False)
+    monkeypatch.delenv('SYNC_LEGACY_FRESH_UID_ALLOWLIST', raising=False)
+    monkeypatch.setenv('SYNC_LEGACY_FRESH_PERCENT', '100')
     monkeypatch.delenv('SYNC_LEGACY_FRESH_HOURLY_TOKENS', raising=False)
     monkeypatch.delenv('SYNC_LEGACY_FRESH_BURST_TOKENS', raising=False)
     monkeypatch.setenv('OMI_ENV_STAGE', 'prod')
@@ -29,10 +33,10 @@ def decide(clock, ages, enabled=True, device=None):
 
 
 def test_default_off_and_explicit_flag(clock, monkeypatch):
-    assert not legacy_fresh.enabled()
+    assert not legacy_fresh.enabled_for('synthetic')
     assert decide(clock, [60], enabled=False).reason == 'unbound_capture_time'
     monkeypatch.setenv('SYNC_LEGACY_FRESH_ENABLED', 'true')
-    assert legacy_fresh.enabled()
+    assert legacy_fresh.enabled_for('synthetic')
     promoted = decide(clock, [21600])
     assert promoted.lane == lanes.SyncLane.FRESH
     assert promoted.trust == lanes.CaptureTimeTrust.LEGACY
@@ -172,3 +176,41 @@ def test_budget_client_is_lazy_and_uses_bounded_socket_io(monkeypatch):
     assert legacy_fresh._get_redis_client() is redis
     assert legacy_fresh._get_redis_client() is redis
     create.assert_called_once_with(1.0)
+
+
+@pytest.mark.parametrize('percent', ['0', '', 'invalid', 'nan', 'inf', '-1'])
+def test_cohort_closed_or_invalid_percent(clock, monkeypatch, percent):
+    monkeypatch.setenv('SYNC_LEGACY_FRESH_ENABLED', 'true')
+    monkeypatch.setenv('SYNC_LEGACY_FRESH_PERCENT', percent)
+    assert not legacy_fresh.enabled_for('synthetic-outsider')
+
+
+def test_allowlist_is_exact_and_master_switch_wins(clock, monkeypatch):
+    monkeypatch.setenv('SYNC_LEGACY_FRESH_UID_ALLOWLIST', ' synthetic-one, synthetic-two ,,')
+    monkeypatch.setenv('SYNC_LEGACY_FRESH_PERCENT', '0')
+    assert not legacy_fresh.enabled_for('synthetic-one')
+    monkeypatch.setenv('SYNC_LEGACY_FRESH_ENABLED', 'true')
+    assert legacy_fresh.enabled_for('synthetic-one')
+    assert legacy_fresh.enabled_for('synthetic-two')
+    assert not legacy_fresh.enabled_for('synthetic-on')
+    assert not legacy_fresh.enabled_for('synthetic-outsider')
+    assert not legacy_fresh.enabled_for('')
+
+
+def test_cohort_default_is_closed_and_matches_final_pass_hash(clock, monkeypatch):
+    monkeypatch.setenv('SYNC_LEGACY_FRESH_ENABLED', 'true')
+    monkeypatch.delenv('SYNC_LEGACY_FRESH_PERCENT')
+    assert not legacy_fresh.enabled_for('synthetic')
+    monkeypatch.setenv('SYNC_LEGACY_FRESH_PERCENT', '5')
+    admitted = []
+    for index in range(1000):
+        uid = f'synthetic-{index}'
+        bucket = int.from_bytes(hashlib.sha256(uid.encode()).digest()[:4], 'big') / 2**32 * 100
+        assert legacy_fresh.enabled_for(uid) == (bucket < 5)
+        if legacy_fresh.enabled_for(uid):
+            admitted.append(uid)
+    assert 20 < len(admitted) < 80
+    monkeypatch.setenv('SYNC_LEGACY_FRESH_PERCENT', '100')
+    assert all(legacy_fresh.enabled_for(uid) for uid in admitted)
+    assert legacy_fresh.enabled_for('synthetic-outsider')
+    assert not legacy_fresh.enabled_for('')

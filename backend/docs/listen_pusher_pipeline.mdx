@@ -4793,7 +4793,12 @@ cannot claim the existing immutable manifest either.
 
 `SYNC_LEGACY_FRESH_ENABLED=true` (code/dev/prod default false) lets whole LEGACY
 batches whose oldest capture is within `SYNC_FRESH_MAX_AGE_SECONDS` enter fresh
-capacity after an atomic Redis token reservation. Trust remains LEGACY. Each
+capacity only for an exact UID in `SYNC_LEGACY_FRESH_UID_ALLOWLIST` (default
+empty), or a stable SHA-256 UID bucket in `SYNC_LEGACY_FRESH_PERCENT` (default
+zero). Buckets match transcription final pass; the master flag disables both.
+Malformed/non-finite percentages select nobody beyond the allowlist; finite
+percentages clamp to 0–100. The atomic Redis token reservation still applies to
+every selected account. Existing historical jobs are never moved. Trust remains LEGACY. Each
 request costs `max(1, ceil(actual multipart bytes / MiB))`; defaults refill 60
 tokens/hour with a ten-token burst per account across replicas and devices.
 `SYNC_LEGACY_FRESH_HOURLY_TOKENS` supports 1–120 and
