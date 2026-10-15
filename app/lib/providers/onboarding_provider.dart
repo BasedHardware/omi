@@ -186,6 +186,40 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin implemen
     notifyListeners();
   }
 
+  /// Whether Omi may scan for and connect to Bluetooth devices, read without prompting.
+  Future<bool> readBluetoothPermission() async {
+    final granted = Platform.isIOS
+        ? await Permission.bluetooth.isGranted
+        : await Permission.bluetoothScan.isGranted && await Permission.bluetoothConnect.isGranted;
+    if (granted != hasBluetoothPermission) updateBluetoothPermission(granted);
+    return granted;
+  }
+
+  /// Starts looking for nearby devices in the background, without prompts, when Bluetooth is
+  /// already allowed. "Connect your Omi" then shows the device the moment it opens.
+  Future<void> startQuietDeviceScan() async {
+    if (_isDisposed || isConnected) return;
+    if (!await readBluetoothPermission()) return;
+    // Only when the radio is already on: an off adapter would raise the shared "Enable Bluetooth"
+    // guidance over an unrelated step. "Connect your Omi" handles that case itself.
+    try {
+      if (BluetoothReadiness.parse(await BleHostApi().getBluetoothState()) != BluetoothAdapterState.on) return;
+    } catch (_) {
+      return;
+    }
+    if (_isDisposed) return;
+    ServiceManager.instance().device.subscribe(this, this);
+    await deviceProvider?.initiateConnection('OnboardingEarlyScan');
+  }
+
+  /// Ends a search screen's session: stops scanning and clears "nothing found", so the next search
+  /// screen (onboarding's Connect Omi or the in-app pairing page, which share this provider) starts
+  /// fresh instead of opening on a stale "No Omi Found".
+  void endSearch() {
+    cancelActiveScan();
+    enableInstructions = false;
+  }
+
   Future askForNotificationPermissions() async {
     final attempt = ProductTelemetry.instance.start(
       ProductJourney.permission,

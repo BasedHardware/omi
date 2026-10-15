@@ -387,7 +387,7 @@ app.add_middleware(FirestoreTierMiddleware)
 async def startup_event():
     from utils.messaging.adapters.runtime import start_adapters
 
-    app.state.messaging_runtime = start_adapters(messaging.register_adapter)
+    app.state.messaging_runtime = await start_adapters(messaging.register_adapter)
     start_metrics_sidecar_server()
     start_background_task(live_stt_health.refresh_forever(), name='live_stt_fleet_health')
     batch_pressure.start_from_env()

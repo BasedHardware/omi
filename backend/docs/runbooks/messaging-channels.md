@@ -1,6 +1,6 @@
 # Messaging channels rollout
 
-Telegram paid-user launch and seat-capped iMessage. New channel policies override
+Telegram paid-user launch and David-only iMessage without a seat cap. New channel policies override
 the legacy global switch/cohort below; both modes keep the valid paid-plan gate. This runbook
 does not deploy, merge, or read secret payloads.
 
@@ -62,8 +62,8 @@ subscriptions are rejected. The app uses its existing `plan.isPaid` helper for e
 its existing localized "Omi Pro" marketing copy is unchanged by this logic-only rollout.
 
 The committed prod configuration scopes these settings and the four secret bindings to
-Cloud Run `backend` in `based-hardware`, `us-central1`, with uid
-`vi7SA9ckQCe4ccobWNxlbdcNdC23` only. Adapter wakeups and pending recovery execute in
+Cloud Run `backend` in `based-hardware`, `us-central1`. Telegram admits all valid paid
+users; iMessage retains only `vi7SA9ckQCe4ccobWNxlbdcNdC23`. Adapter wakeups and pending recovery execute in
 that process; no GKE listen/pusher or other worker needs these settings. Prebind
 `TELEGRAM_BOT_TOKEN=TELEGRAM_BOT_TOKEN:latest`,
 `TELEGRAM_WEBHOOK_SECRET=TELEGRAM_WEBHOOK_SECRET:latest`,
@@ -73,7 +73,7 @@ on the live service before deployment preflight. The parent operator owns this s
 ## Register webhooks
 
 Do this after the backend revision that contains the adapters is serving, and
-only for the David cohort environment. Do not print tokens or response bodies
+for the admitted environment. Do not print tokens or response bodies
 that echo them.
 
 Telegram, official Bot API. `secret_token` must equal `TELEGRAM_WEBHOOK_SECRET`.
@@ -285,7 +285,9 @@ The catalog's Operator plan is the $49 tier. Telegram has no seat cap.
 ```
 
 An exact uid array can replace either `cohort`. Adapter enable flags and provider
-secret bindings are still required. Do not enable the new policy before these steps:
+secret bindings are still required. The following seat preparation applies only when
+enabling a numeric iMessage cap. The approved Telegram launch below uses `seat_cap:"off"`
+and does not require `--prepare-launch` or an initialized counter:
 
 1. Apply the generated Firestore indexes and wait until READY. New collection-group
    inbox queries use status/channel/provider/created_at; expiry notices and retention
@@ -305,7 +307,8 @@ secret bindings are still required. Do not enable the new policy before these st
    cap, existing members retain seats and new users enter the waitlist.
 5. Set `OMI_TELEGRAM_SHARED_PACING=on` (runtime default), confirm shared Redis access,
    and prefer `OMI_TELEGRAM_STREAMING=none` for launch/load shedding. Shared pacing
-   fails closed on Redis failure; `off` is safe only with one backend process/instance.
+   records a degraded fallback to local pacing on Redis failure; Telegram 429 responses
+   still enforce provider pacing. `off` is safe only with one backend process/instance.
 6. Install the opt-in `backend/charts/messaging-maintenance` chart using the admitted
    backend image, existing service account and backend secret name, `enabled:true`.
    The hourly job deletes at most 100 records per category per run. Retention is
@@ -397,9 +400,10 @@ Deployment order:
    for `messaging_inbox_fifo` (inbox collection), `messaging_pending_recovery` and
    `messaging_expired_notices` (inbox collection group). With these still building,
    a current admitted reply can work, but queued heads/recovery can stall.
-3. With admissions disabled, run the documented `--prepare-launch` reconciliation
-   for existing inbox metadata and linked-user capacity. Then enable the policy,
-   including iMessage seat cap; an initialized counter is required before cap admission.
+3. Only before enabling a numeric iMessage cap: with admissions disabled, run the
+   documented `--prepare-launch` reconciliation for inbox metadata and linked-user
+   capacity. An initialized counter is required for numeric-cap admission. The
+   approved no-cap David cohort continues without this step.
 4. Before enabling the maintenance Helm job, wait for `messaging_done_retention`
    (inbox group), `messaging_unknown_retention` (identities collection) and the
    `messaging_waitlist_expiry` expires_at field index. The messaging recovery indexes
@@ -430,3 +434,148 @@ attempt. Shared pacing remains preferred; Telegram 429 retry_after remains the
 cross-instance authority during outages. Deliberate full-backlog 429 stays a typed
 admission refusal rather than being treated as a Redis outage. Streaming `none`
 reduces preview traffic while preserving final replies.
+
+
+## Approved all-paid Telegram configuration (Brief S)
+
+The prod overlay and composed manifest contain this exact policy:
+
+```json
+{"telegram":{"enabled":true,"cohort":"*"},"imessage":{"enabled":true,"cohort":["vi7SA9ckQCe4ccobWNxlbdcNdC23"],"seat_cap":"off"}}
+```
+
+`seat_cap:"off"` is the only accepted explicit disable spelling. With this setting,
+omitted `plans` means every valid paid plan, preserving legacy admission. Other
+spellings, null caps, invalid types and malformed policy deny admission. Numeric
+caps still default to Operator/Architect and require initialized capacity. Mint,
+redemption and turn guards perform no capacity reads in no-cap mode. If a previously
+capped environment changes to no-cap, reconcile again before re-enabling its numeric
+cap; do not reuse counts collected while accounting was off.
+
+Prod explicitly sets `OMI_TELEGRAM_STREAMING=none` and
+`OMI_TELEGRAM_SHARED_PACING=on`. The composed backend service inherits existing
+`REDIS_DB_HOST`, `REDIS_DB_PORT` and `REDIS_DB_PASSWORD` bindings. No new Redis
+credentials or endpoint is introduced. Unknown-sender notices are throttled to once
+per hour by default. Linked chat turns, including lightweight acknowledgements, use
+the existing UID `chat:send_message` limit; refusal notices are limited to once per minute.
+
+Manual operator steps (not executed by this change):
+
+1. Deploy the reviewed backend image/config through the existing release path.
+   Verify the existing FIFO/recovery indexes are READY before widening admission;
+   this is an operational prerequisite, not a request to run seat preparation.
+2. Expand the existing PostHog `mobile-chat-apps` entry to the intended paid Telegram
+   audience so users can discover/link the bot. The backend remains authoritative:
+   non-cohort iMessage mint is denied. No client binary change is needed.
+3. Confirm shared Redis connectivity and provider webhook registration with the
+   admitted revision. Source bindings establish configuration, not runtime health.
+4. Install cleanup after its retention indexes are READY. Supply the admitted image,
+   existing Kubernetes backend service account, namespace, and secret *name*:
+
+```sh
+helm upgrade --install messaging-maintenance backend/charts/messaging-maintenance \
+  --namespace "$BACKEND_NAMESPACE" \
+  --set enabled=true \
+  --set-string image="$ADMITTED_BACKEND_IMAGE" \
+  --set-string serviceAccountName="$BACKEND_SERVICE_ACCOUNT" \
+  --set-string secretName="$BACKEND_SECRET_NAME" \
+  --set retentionDays=30
+```
+
+This hourly, bounded job is a separate operator install; it is not required for a
+single admitted reply, but is required for sustained retention/cleanup at launch.
+Apply the existing messaging alert rules and verify scraping as described above.
+This work does not establish live indexes, chart installation, Redis reachability,
+provider delivery, or PostHog state. No production reads or writes were performed.
+
+## Inbound media contract and acceptance
+
+Each turn accepts up to **10 attachments**; each attachment is limited to
+**20,000,000 bytes** (20 MB decimal). Audio and video
+are limited to **600 seconds** (10 minutes), checked both against provider metadata
+and actual decoded PCM. Channel FFmpeg comes from the pinned `imageio-ffmpeg==0.6.0`
+platform wheel in both the runtime and CI locks; it does not depend on a runner's
+system packages and never downloads executables at runtime. A validated system
+FFmpeg is the fallback, recorded through the shared fallback event. Enabled channel
+startup probes the decoder off the event loop; a missing or unusable decoder logs
+ERROR `Messaging audio decoder unavailable` but never blocks API startup — text
+turns continue and voice notes get the typed decode reply.
+Repair by syncing the locked dependencies (`make setup-backend`) or reinstalling
+the existing system FFmpeg package. Disabled channels need no decoder probe.
+FFmpeg has a 30-second decode deadline, one decoder/filter
+thread, an explicit container allowlist (no playlists), and bounds output to cap+1
+before reading it. A loop-owned media semaphore admits at most eight attachment preparations
+(including downloads and image ingestion) per serving process, bounding retained
+buffers as users overlap. The shared STT semaphore also bounds audio work. No provider/model work occurs on the webhook request path.
+
+Audio MIME types or common filename extensions route to audio extraction, including
+Telegram `voice`, `audio`, `video`, `video_note`, audio documents and Linq `media`.
+OGG/Opus, M4A/AAC, CAF, AMR, MP3, WAV, WebM and MOV/MP4 audio tracks become 16 kHz,
+mono, signed 16-bit PCM. The existing prerecorded provider router receives explicit
+`encoding=linear16`, `sample_rate=16000`, `channels=1`, `diarize=False`; its Parakeet
+and Modulate adapters wrap PCM into WAV. Channel audio calls the app's `transcribe_pcm_bytes` helper, including normalized
+`text` postprocessing and user language preferences (default `multi`). Decode/STT
+runs on `sync_executor`, as app voice transcription does, behind the shared STT
+semaphore; it does not hold a GCS/storage thread. `/v2/voice-messages` first decodes Omi's length-prefixed device frames through
+`decode_files_to_wav`; that decoder is not a standard-container decoder and cannot
+be used on OGG/CAF bytes. Channel container decoding supplies that missing boundary.
+
+Empty/STT/decode failure replies: “I couldn't make out that voice note — could you
+try again or type it?” Size, duration, download, image conversion and unsupported
+file failures have their own fixed replies. If every attachment fails and there is no existing readable media, media refusals
+complete the inbox row and release the lease after the fixed reply, without an LLM.
+For partial album failure, successful attachments still reach the agent with a
+specific notice identifying the failed item by its position. The answer can use
+the readable items and briefly mention that failure. Neither case sends the generic
+worker apology. Delivery failures retain the normal reconciliation evidence.
+
+HEIC/HEIF is converted to oriented RGB JPEG before the existing owned file uploader.
+Images sent as Telegram documents use the image path. FileChatTool already supports
+PDF/text/CSV and DOCX/XLSX/PPTX. Locations and contact cards become bounded untrusted
+text evidence; contacts are never automatically saved. Telegram stickers and
+animations, GIFs, emoji-only messages and optional Linq sticker hints get a lightweight “Got it 🙂” without an LLM. Linq documents incoming inline stickers
+as ordinary media and exposes no sticker discriminator in `MediaPartResponse`;
+unmarked sticker images follow the photo path. They cannot be distinguished safely
+from photos with that payload alone. The optional sticker-hint test is defensive
+coverage, not a claim that Linq currently supplies that field. Reactions, polls, dice, games, payments,
+service messages and unknown non-content events are ignored. Unsupported Linq parts
+or file attachments receive one specific supported-format reply.
+
+Telegram albums use one encrypted inbox row with a 1.2-second quiet window, bounded
+by three seconds from first arrival. Per-part content-free dedup tombstones survive
+completion. The existing transactional FIFO claim and surface lease prevent competing
+workers from answering twice. Request handlers schedule a timer without waiting;
+periodic recovery handles process loss. Late parts after running/done are distinct
+FIFO turns, never silently discarded. Other user messages remain separate turns.
+
+Telegram quotes supply bounded provider text. Linq `reply_to.message_id` resolves
+against at most forty encrypted session events, matching only accepted assistant
+delivery IDs or earlier inbound IDs. Older/pre-change/pruned quotes explicitly say
+context is unavailable; no remote history fetch or cross-session search occurs.
+Quotes, files, locations and contacts are evidence, never tool authorization.
+
+### Incident mechanisms and local evidence
+
+The reported deployed SHA was `909bfd7`, with Telegram `ValueError` and Linq
+`UnsupportedChatFileError` on October 14. Source inspection finds two matching bugs:
+Telegram voice passed encoded OGG bytes to `prerecorded_from_bytes` with no encoding;
+Parakeet/Modulate label that unchanged payload `audio.wav`. Empty words then raised
+`ValueError('Voice transcription empty')`. This is an input-format contract failure,
+not proof that every provider assumes raw PCM. Linq classified only `voice_memo`
+parts as voice; documented audio `media` parts instead reached FileChatTool, whose
+allowlist rejects audio. The old Linq voice fixture covered only `voice_memo` and
+hid that branch; it now represents an audio `media` part.
+
+Provider sources: [Linq voice formats and media attachments](https://docs.linqapp.com/channel/imessage/api/resources/chats/methods/send_voicememo/),
+[Linq message parts and reply metadata](https://docs.linqapp.com/channel/imessage/api/resources/chats/),
+[Telegram message fields](https://core.telegram.org/bots/api#message).
+Tests run real FFmpeg on committed synthetic OGG/Opus, M4A, CAF, MP3, WAV, WebM and
+MP4 fixtures; only STT IO is stubbed. HEIC conversion also runs its real decoder.
+The fixtures verify PCM shape, provider kwargs, empty/error handling, worker completion
+and lease release. These reproduce the code-level mechanisms; no production trace,
+provider response or real user audio was read, so exact production causality remains
+an inference from the supplied logs and matching source behavior.
+
+Album parts arriving after the debounced job has left `pending` are separate turns
+and may receive a second answer. The 1.2-second quiet window and 3-second maximum
+wait bound this coalescing; they do not guarantee one answer for arbitrarily late parts.

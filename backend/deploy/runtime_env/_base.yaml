@@ -12,6 +12,17 @@ environment_shared:
       - conversation.finalize.persisted
       - memory.canonical.mutate
       env:
+        AUDIO_ARCHIVE_LIVE_ENABLED: {value: 'false', category: rollout}
+        AUDIO_ARCHIVE_READ_ENABLED: {value: 'false', category: rollout}
+        AUDIO_ARCHIVE_STOP_PCM_ENABLED: {value: 'false', category: rollout}
+        AUDIO_ARCHIVE_SYNC_ENABLED: {value: 'false', category: rollout}
+        AUDIO_ARCHIVE_REGIONAL_CACHE_ENABLED: {value: 'false', category: rollout}
+        AUDIO_ARCHIVE_COALESCE_ENABLED: {value: 'false', category: rollout}
+        AUDIO_ARCHIVE_SEPARATE_MERGE_ENABLED: {value: 'false', category: rollout}
+        AUDIO_ARCHIVE_PERCENT: {value: '0', category: rollout}
+        AUDIO_ARCHIVE_UID_ALLOWLIST: {value: '', category: rollout}
+        BUCKET_AUDIO_DERIVED: {value: '', category: rollout}
+        AUDIO_MERGE_WORKER_URL: {value: '', category: rollout}
         AUDIO_TIMELINE_SPANS: {value: 'false', category: rollout}
         LIVE_SPEAKER_SPAN_RESOLUTION: {value: 'false', category: rollout}
         LIVE_CAPTURE_WINDOW_RETENTION: {value: 'false', category: rollout}
@@ -168,6 +179,12 @@ environment_shared:
         PARAKEET_WINDOW_DIARIZATION:
           value: 'false'
           category: rollout
+        PARAKEET_WINDOW_DEADLINE_CUT_ENABLED:
+          value: 'false'
+          category: rollout
+        PARAKEET_WINDOW_DEADLINE_CUT_POST_LATENCY_SECONDS:
+          value: '1.2'
+          category: reliability
         PARAKEET_WINDOW_PACE_SECONDS:
           value: '6'
           category: rollout
@@ -332,6 +349,17 @@ environment_shared:
       - memory.canonical.mutate
       values_file: backend/charts/pusher/{env}_omi_pusher_values.yaml
       env:
+        AUDIO_ARCHIVE_LIVE_ENABLED: {value: 'false', category: rollout}
+        AUDIO_ARCHIVE_READ_ENABLED: {value: 'false', category: rollout}
+        AUDIO_ARCHIVE_STOP_PCM_ENABLED: {value: 'false', category: rollout}
+        AUDIO_ARCHIVE_SYNC_ENABLED: {value: 'false', category: rollout}
+        AUDIO_ARCHIVE_REGIONAL_CACHE_ENABLED: {value: 'false', category: rollout}
+        AUDIO_ARCHIVE_COALESCE_ENABLED: {value: 'false', category: rollout}
+        AUDIO_ARCHIVE_SEPARATE_MERGE_ENABLED: {value: 'false', category: rollout}
+        AUDIO_ARCHIVE_PERCENT: {value: '0', category: rollout}
+        AUDIO_ARCHIVE_UID_ALLOWLIST: {value: '', category: rollout}
+        BUCKET_AUDIO_DERIVED: {value: '', category: rollout}
+        AUDIO_MERGE_WORKER_URL: {value: '', category: rollout}
         AUDIO_TIMELINE_SPANS: {value: 'false', category: rollout}
         LIVE_SPEAKER_SPAN_RESOLUTION: {value: 'false', category: rollout}
         LIVE_CAPTURE_WINDOW_RETENTION: {value: 'false', category: rollout}
@@ -512,6 +540,17 @@ environment_shared:
             secret: MEMORY_V3_CURSOR_SECRET
             version: latest
         env:
+          AUDIO_ARCHIVE_LIVE_ENABLED: {value: 'false', category: rollout}
+          AUDIO_ARCHIVE_READ_ENABLED: {value: 'false', category: rollout}
+          AUDIO_ARCHIVE_STOP_PCM_ENABLED: {value: 'false', category: rollout}
+          AUDIO_ARCHIVE_SYNC_ENABLED: {value: 'false', category: rollout}
+          AUDIO_ARCHIVE_REGIONAL_CACHE_ENABLED: {value: 'false', category: rollout}
+          AUDIO_ARCHIVE_COALESCE_ENABLED: {value: 'false', category: rollout}
+          AUDIO_ARCHIVE_SEPARATE_MERGE_ENABLED: {value: 'false', category: rollout}
+          AUDIO_ARCHIVE_PERCENT: {value: '0', category: rollout}
+          AUDIO_ARCHIVE_UID_ALLOWLIST: {value: '', category: rollout}
+          BUCKET_AUDIO_DERIVED: {value: '', category: rollout}
+          AUDIO_MERGE_WORKER_URL: {value: '', category: rollout}
           REDIS_DB_PORT:
             value: '13151'
             category: service_discovery
@@ -695,6 +734,17 @@ environment_shared:
             secret: GOOGLE_MAPS_API_KEY
             version: latest
         env:
+          AUDIO_ARCHIVE_LIVE_ENABLED: {value: 'false', category: rollout}
+          AUDIO_ARCHIVE_READ_ENABLED: {value: 'false', category: rollout}
+          AUDIO_ARCHIVE_STOP_PCM_ENABLED: {value: 'false', category: rollout}
+          AUDIO_ARCHIVE_SYNC_ENABLED: {value: 'false', category: rollout}
+          AUDIO_ARCHIVE_REGIONAL_CACHE_ENABLED: {value: 'false', category: rollout}
+          AUDIO_ARCHIVE_COALESCE_ENABLED: {value: 'false', category: rollout}
+          AUDIO_ARCHIVE_SEPARATE_MERGE_ENABLED: {value: 'false', category: rollout}
+          AUDIO_ARCHIVE_PERCENT: {value: '0', category: rollout}
+          AUDIO_ARCHIVE_UID_ALLOWLIST: {value: '', category: rollout}
+          BUCKET_AUDIO_DERIVED: {value: '', category: rollout}
+          AUDIO_MERGE_WORKER_URL: {value: '', category: rollout}
           OMI_VERTEX_RESERVATION_PROJECT:
             value: '{compute_project}'
             category: runtime_identity
@@ -864,6 +914,17 @@ environment_shared:
             secret: OMI_LLM_GATEWAY_SERVICE_TOKEN
             version: latest
         env:
+          AUDIO_ARCHIVE_LIVE_ENABLED: {value: 'false', category: rollout}
+          AUDIO_ARCHIVE_READ_ENABLED: {value: 'false', category: rollout}
+          AUDIO_ARCHIVE_STOP_PCM_ENABLED: {value: 'false', category: rollout}
+          AUDIO_ARCHIVE_SYNC_ENABLED: {value: 'false', category: rollout}
+          AUDIO_ARCHIVE_REGIONAL_CACHE_ENABLED: {value: 'false', category: rollout}
+          AUDIO_ARCHIVE_COALESCE_ENABLED: {value: 'false', category: rollout}
+          AUDIO_ARCHIVE_SEPARATE_MERGE_ENABLED: {value: 'false', category: rollout}
+          AUDIO_ARCHIVE_PERCENT: {value: '0', category: rollout}
+          AUDIO_ARCHIVE_UID_ALLOWLIST: {value: '', category: rollout}
+          BUCKET_AUDIO_DERIVED: {value: '', category: rollout}
+          AUDIO_MERGE_WORKER_URL: {value: '', category: rollout}
           REDIS_DB_PORT:
             value: '13151'
             category: service_discovery
@@ -1021,6 +1082,17 @@ environment_shared:
             secret: OMI_LLM_GATEWAY_SERVICE_TOKEN
             version: latest
         env:
+          AUDIO_ARCHIVE_LIVE_ENABLED: {value: 'false', category: rollout}
+          AUDIO_ARCHIVE_READ_ENABLED: {value: 'false', category: rollout}
+          AUDIO_ARCHIVE_STOP_PCM_ENABLED: {value: 'false', category: rollout}
+          AUDIO_ARCHIVE_SYNC_ENABLED: {value: 'false', category: rollout}
+          AUDIO_ARCHIVE_REGIONAL_CACHE_ENABLED: {value: 'false', category: rollout}
+          AUDIO_ARCHIVE_COALESCE_ENABLED: {value: 'false', category: rollout}
+          AUDIO_ARCHIVE_SEPARATE_MERGE_ENABLED: {value: 'false', category: rollout}
+          AUDIO_ARCHIVE_PERCENT: {value: '0', category: rollout}
+          AUDIO_ARCHIVE_UID_ALLOWLIST: {value: '', category: rollout}
+          BUCKET_AUDIO_DERIVED: {value: '', category: rollout}
+          AUDIO_MERGE_WORKER_URL: {value: '', category: rollout}
           REDIS_DB_PORT:
             value: '13151'
             category: service_discovery
