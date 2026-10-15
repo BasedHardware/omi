@@ -42,7 +42,8 @@ class _TaskServer {
     DateTime? endDate,
     DateTime? dueStartDate,
     DateTime? dueEndDate,
-  }) async => ActionItemsResponse(actionItems: [_task]);
+  }) async =>
+      ActionItemsResponse(actionItems: [_task]);
 
   Future<ActionItemWithMetadata?> update(String id, {String? description, bool? completed, DateTime? dueAt}) async {
     if (!accept) return null;
@@ -143,9 +144,7 @@ void main() {
             localizationsDelegates: AppLocalizations.localizationsDelegates,
             supportedLocales: [Locale('en')],
             home: Scaffold(
-              body: TaskCardBlock(
-                block: TaskCardContentBlock(id: 'block-task', taskId: 'task-1'),
-              ),
+              body: TaskCardBlock(block: TaskCardContentBlock(id: 'block-task', taskId: 'task-1')),
             ),
           ),
         ),

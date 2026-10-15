@@ -69,12 +69,7 @@ void main() {
     await SharedPreferencesUtil.init();
     AnalyticsManager.resetForTesting();
     PackageInfo.setMockInitialValues(
-      appName: 'Omi Test',
-      packageName: 'com.omi.test',
-      version: '1',
-      buildNumber: '1',
-      buildSignature: '',
-    );
+        appName: 'Omi Test', packageName: 'com.omi.test', version: '1', buildNumber: '1', buildSignature: '');
     adapter = RecordingAdapter();
     AnalyticsManager.configure(adapter);
     await AnalyticsManager.init();
@@ -101,9 +96,8 @@ void main() {
     await tester.pump();
   }
 
-  testWidgets('real empty-scan timer retains No Omi Found and never shows or emits a connection failure', (
-    tester,
-  ) async {
+  testWidgets('real empty-scan timer retains No Omi Found and never shows or emits a connection failure',
+      (tester) async {
     await pumpConnect(tester);
     expect(provider.enableInstructions, isFalse);
     await tester.pump(const Duration(seconds: deviceScanEmptyAfterSeconds));
@@ -187,9 +181,8 @@ void main() {
   });
 
   test('saved visible devices clear reachability, but stale-bond recovery is retained', () async {
-    await SharedPreferencesUtil().btDeviceSet(
-      BtDevice(id: 'saved-omi', name: 'Saved Omi', type: DeviceType.omi, rssi: -50),
-    );
+    await SharedPreferencesUtil()
+        .btDeviceSet(BtDevice(id: 'saved-omi', name: 'Saved Omi', type: DeviceType.omi, rssi: -50));
     provider.pairingFailureReason = Reason.notFoundOrDropped;
     provider.onDevices([]);
     expect(provider.visibleDeviceList, isNotEmpty);
@@ -220,9 +213,8 @@ void main() {
         final render = tester.element(find.byKey(boundary)).renderObject! as RenderRepaintBoundary;
         final png = await (await render.toImage(pixelRatio: 3)).toByteData(format: ui.ImageByteFormat.png);
         final tag = platform == TargetPlatform.iOS ? '022-mobile-ios' : '023-mobile-android';
-        File(
-          '../.agent-artifacts/ui-evidence/onb-polish/$tag-connect-empty-scan.png',
-        ).writeAsBytesSync(png!.buffer.asUint8List());
+        File('../.agent-artifacts/ui-evidence/onb-polish/$tag-connect-empty-scan.png')
+            .writeAsBytesSync(png!.buffer.asUint8List());
       });
       await tester.pumpWidget(const SizedBox());
       provider.enableInstructions = false;

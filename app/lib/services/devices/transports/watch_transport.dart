@@ -21,8 +21,8 @@ class WatchTransport extends DeviceTransport {
   static final List<StreamController<List<int>>> _batteryControllers = [];
 
   WatchTransport({WatchRecorderHostAPI? hostAPI})
-    : _hostAPI = hostAPI ?? WatchRecorderHostAPI(),
-      _connectionStateController = StreamController<DeviceTransportState>.broadcast() {
+      : _hostAPI = hostAPI ?? WatchRecorderHostAPI(),
+        _connectionStateController = StreamController<DeviceTransportState>.broadcast() {
     _ensureWatchBridgeSetup();
   }
 
