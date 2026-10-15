@@ -111,7 +111,7 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
   void showDeferredFirmwareUpdatePrompt(BuildContext context) {
     if (!_firmwarePromptDeferred) return;
     _firmwarePromptDeferred = false;
-    if (_havingNewFirmware && context.mounted) showFirmwareUpdateDialog(context);
+    if (havingNewFirmware && context.mounted) showFirmwareUpdateDialog(context);
   }
 
   bool get havingNewFirmware =>

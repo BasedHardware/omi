@@ -434,7 +434,11 @@ class _HomeRecordButtonState extends State<HomeRecordButton> {
         onStop: phoneLive
             ? () {
                 Navigator.pop(sheetContext);
-                if (context.mounted) _startRecording(context);
+                // Only ever finishes: the recording may have ended while the sheet was open, and
+                // the record toggle would then start a new one.
+                if (context.mounted && _phoneOwnsCapture(context.read<CaptureProvider>())) {
+                  _startPhoneRecording(context);
+                }
               }
             : null,
       ),
@@ -445,7 +449,15 @@ class _HomeRecordButtonState extends State<HomeRecordButton> {
     showOmiSheet<void>(
       context: context,
       title: context.l10n.disconnected,
-      builder: (_) => HomeCaptureSheet(explanation: context.l10n.capturePendantDisconnectedDetail, showCard: false),
+      builder: (sheetContext) => HomeCaptureSheet(
+        explanation: context.l10n.capturePendantDisconnectedDetail,
+        showCard: false,
+        // The pendant may be gone for a while: recording with the phone stays one tap away.
+        onRecordWithPhone: () {
+          Navigator.pop(sheetContext);
+          if (context.mounted) _startPhoneRecording(context);
+        },
+      ),
     );
   }
 
@@ -512,7 +524,8 @@ class _HomeRecordButtonState extends State<HomeRecordButton> {
         semanticsLabel: status,
         semanticsHint: healthy ? l10n.liveTranscript : l10n.moreOptions,
         semanticsActions: _stopping ? null : {CustomSemanticsAction(label: l10n.stopRecording): stop},
-        onTap: _stopping
+        // While the microphone is still starting, the transcript opens by itself when it is up.
+        onTap: _stopping || starting
             ? null
             : () {
                 OmiHaptics.selection();
@@ -570,6 +583,9 @@ class _HomeRecordButtonState extends State<HomeRecordButton> {
           OmiHaptics.selection();
           _showDroppedSheet(context);
         },
+        // Holding it records with the phone instead, as + New would.
+        onLongPress: () => _startPhoneRecording(context),
+        longPressHint: l10n.recordWith,
         child: HomeDevicePillContent(device: paired, status: status, live: false, attention: true),
       );
     } else {

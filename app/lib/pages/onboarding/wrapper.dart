@@ -46,6 +46,7 @@ import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/pages/home/widgets/home_tab_switcher.dart' show NewTasksDot;
 import 'package:omi/backend/http/api/action_items.dart' show createActionItem, tryGetActionItems;
 import 'package:omi/utils/logger.dart';
+import 'package:omi/providers/action_items_provider.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/app_globals.dart';
 import 'package:omi/core/app_shell.dart';
@@ -272,7 +273,7 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
     SharedPreferencesUtil().remove(_resumeKey);
     _stepTelemetry.exit();
     _completeOnboardingTelemetry();
-    unawaited(_addStarterTasks(context.l10n));
+    unawaited(_addStarterTasks(context.l10n, onAdded: context.read<ActionItemsProvider>().forceRefreshActionItems));
     PlatformManager.instance.analytics.onboardingCompleted();
     PaintingBinding.instance.imageCache.clear();
     if (!paywallShown) await _maybeShowOnboardingPaywall();
@@ -284,7 +285,7 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
   /// An empty Tasks tab teaches nothing: when onboarding produced no to-dos, add three starter tasks
   /// that walk the person through Omi (once per account; never on a failed read, so nobody gets
   /// them on top of real tasks). Every onboarding arm gets them, so the experiment stays fair.
-  static Future<void> _addStarterTasks(AppLocalizations l10n) async {
+  static Future<void> _addStarterTasks(AppLocalizations l10n, {Future<void> Function()? onAdded}) async {
     final key = 'onboarding/starterTasks/${SharedPreferencesUtil().uid}';
     if (SharedPreferencesUtil().getBool(key)) return;
     // The activation already showed real to-dos (they may still be saving): no starter tasks.
@@ -305,6 +306,8 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
         await createActionItem(description: description);
       }
       NewTasksDot.show();
+      // Home's Tasks list may have loaded before these landed.
+      await onAdded?.call();
     } catch (e) {
       Logger.debug('Starter tasks not added: $e');
     }

@@ -13,12 +13,16 @@ class HomeCaptureSheet extends StatelessWidget {
     this.explanation,
     this.onOpenTranscript,
     this.onStop,
+    this.onRecordWithPhone,
     this.showCard = true,
   });
 
   final String? explanation;
   final VoidCallback? onOpenTranscript;
   final VoidCallback? onStop;
+
+  /// A pendant that dropped: start a phone recording instead.
+  final VoidCallback? onRecordWithPhone;
 
   /// False when the capture is gone (a pendant that dropped): only the explanation is left to show.
   final bool showCard;
@@ -50,6 +54,14 @@ class HomeCaptureSheet extends StatelessWidget {
               expand: true,
             ),
           ],
+          if (onRecordWithPhone != null)
+            OmiButton.secondary(
+              key: const ValueKey('home_capture_sheet_record_phone'),
+              label: l10n.recordWithPhoneInstead,
+              icon: Icons.mic_rounded,
+              onPressed: onRecordWithPhone,
+              expand: true,
+            ),
           if (onStop != null) ...[
             const SizedBox(height: OmiSpacing.sm),
             OmiButton.secondary(

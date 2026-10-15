@@ -82,11 +82,19 @@ class _AiConsentWidgetState extends State<AiConsentWidget> {
       buttons: [
         OnboardingHeroButton(
           key: const Key('ai_consent_agree'),
-          label: l10n.continueButton,
+          label: l10n.agreeAndContinue,
           onPressed: () {
             OmiHaptics.selection();
             widget.onAgree();
           },
+        ),
+        // Signed in with the wrong account: back to sign-in without agreeing first.
+        OmiButton(
+          key: const Key('ai_consent_use_different_account'),
+          variant: OmiButtonVariant.tertiary,
+          label: l10n.useDifferentAccount,
+          labelStyle: OmiType.callout.copyWith(color: p.textSecondary, fontWeight: FontWeight.w600),
+          onPressed: widget.onUseDifferentAccount,
         ),
       ],
       // One quiet line where it fits; long translations wrap to a second line.

@@ -6,6 +6,8 @@ import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:provider/provider.dart';
 
+import 'package:omi/utils/platform/platform_manager.dart';
+
 import 'package:omi/gen/assets.gen.dart';
 import 'package:omi/pages/onboarding/variants/yinka/widgets/onboarding_card.dart';
 import 'package:omi/providers/auth_provider.dart';
@@ -22,6 +24,14 @@ class AuthComponent extends StatefulWidget {
 }
 
 class _AuthComponentState extends State<AuthComponent> {
+  @override
+  void initState() {
+    super.initState();
+    // Sign-in is the first onboarding screen now (the Get started page is gone): the funnel's
+    // welcome step starts here.
+    PlatformManager.instance.analytics.onboardingWelcomeShown();
+  }
+
   @override
   Widget build(BuildContext context) {
     return Consumer<AuthenticationProvider>(

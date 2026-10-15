@@ -643,6 +643,8 @@ void main() {
       await tester.tap(find.byKey(const ValueKey('home_record_pill_dropped')));
       await tester.pumpAndSettle();
       expect(find.text(en.capturePendantDisconnectedDetail), findsOneWidget);
+      // The pendant may be gone a while: the phone stays one tap away.
+      expect(find.byKey(const ValueKey('home_capture_sheet_record_phone')), findsOneWidget);
       await tester.pumpWidget(const SizedBox());
     });
 
