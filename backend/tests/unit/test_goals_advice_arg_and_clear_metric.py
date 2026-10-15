@@ -177,7 +177,9 @@ def test_metric_patch_min_over_max_raises_validation_error():
     Before: GoalMetric raised a pydantic ValidationError inside the db seam,
     uncaught, so the client saw a 500 instead of a validation error.
     """
-    client, chain = _fake_client_with_goal({**_goal_doc(), "max_value": 20, "metric": {"type": "scale", "min": 0, "max": 20, "current": 0, "target": 0}})
+    client, chain = _fake_client_with_goal(
+        {**_goal_doc(), "max_value": 20, "metric": {"type": "scale", "min": 0, "max": 20, "current": 0, "target": 0}}
+    )
 
     with pytest.raises(goals_db.GoalValidationError):
         goals_db.update_goal("u1", "goal_1", {"min_value": 30}, firestore_client=client)
