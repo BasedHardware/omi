@@ -236,6 +236,7 @@ def test_sync_adapter_uses_absolute_audio_evidence_and_rebases_persisted_clock(m
         handle.setframerate(16000)
         handle.writeframes(b'\x01\x00' * 160000)
     monkeypatch.setattr(sync, 'speaker_embedding_configured', lambda: False)
+    monkeypatch.setattr(sync, '_reserve_budget', lambda seconds: True)
     result = DiarizationResult(
         turns=[{'start': start, 'end': end, 'speaker': 'x'}],
         centroids={'x': {'embedding': [1, 0], 'evidence_seconds': 10}},
