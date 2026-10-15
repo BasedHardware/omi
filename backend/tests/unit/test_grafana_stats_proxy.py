@@ -167,18 +167,24 @@ def test_timeout_is_shared_by_all_waiters_then_retried_after_backoff():
 def test_viewer_acceptance_rejects_wrong_scope_before_permission_reads(active_org, role):
     from charts.monitoring.grafana.verify_business import verify_viewer
 
+    viewer_calls = []
+
     class WrongOrg:
         def call(self, method, path):
-            assert path == "/api/user"
+            viewer_calls.append(path)
+            if path != "/api/user":
+                raise RuntimeError("Viewer permission read before scope admission")
             return {"orgId": active_org, "isGrafanaAdmin": False, "login": "sa-negative"}
 
     class Admin:
         def call(self, method, path):
-            assert path == "/api/serviceaccounts/search?perpage=1000"
+            if path != "/api/serviceaccounts/search?perpage=1000":
+                raise RuntimeError("Unexpected Admin API request")
             return {"serviceAccounts": [{"orgId": 2, "login": "sa-negative", "role": role}]}
 
     with pytest.raises(AssertionError):
         verify_viewer(WrongOrg(), 2, Admin())
+    assert viewer_calls == ["/api/user"]
 
 
 def test_viewer_acceptance_requires_same_org_viewer_and_both_denials():

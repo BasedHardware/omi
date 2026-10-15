@@ -106,7 +106,7 @@ environment to create/reuse the isolated org/team and its two service accounts.
 It writes credentials only to 0600 files in a private output directory and prints
 only org/team IDs. Duplicate token receipts fail closed; never retry a partial
 bootstrap with a new receipt without inspecting which credentials were created.
-`verify_business.py` uses Business and non-member Viewer credentials supplied in
+`verify_business.py` uses Business Admin and same-org non-member Viewer service-account tokens supplied in
 environment variables, exercises Infinity's real wall query, and prints only
 status/frame counts. The browser acceptance must use a real signed-in admin and
 confirm the native Canvas cards render correctly on Grafana 13.1.3.
