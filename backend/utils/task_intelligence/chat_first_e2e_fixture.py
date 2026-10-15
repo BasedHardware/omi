@@ -35,6 +35,7 @@ from models.chat_first_e2e import (
     ChatFirstE2EFixtureCase,
     ChatFirstE2EFixtureSnapshot,
 )
+from utils.task_intelligence.chat_first_fixture_capture import capture_payload
 from models.goal import GoalStatus
 from models.task_intelligence import TaskWorkflowControl, TaskWorkflowMode
 
@@ -222,23 +223,6 @@ def _task_payload(*, now: datetime) -> dict[str, Any]:
         'created_at': now,
         'updated_at': now,
         'account_generation': 1,
-    }
-
-
-def _capture_payload(*, now: datetime) -> dict[str, Any]:
-    """The smallest persisted Omi capture shape accepted by the existing archive."""
-
-    return {
-        'id': _CAPTURE_ID,
-        'source': 'omi',
-        'status': 'completed',
-        'discarded': False,
-        'created_at': now,
-        'started_at': now - timedelta(minutes=20),
-        'finished_at': now - timedelta(minutes=5),
-        'structured': {'title': 'E2E fixture capture'},
-        'transcript_segments': [],
-        'data_protection_level': 'standard',
     }
 
 
@@ -446,7 +430,7 @@ def prepare_fixture(
         _goal_payload(goal_id=_SECONDARY_GOAL_ID, title='E2E fixture next goal', focused=False, now=now),
     )
     batch.set(refs['task'], _task_payload(now=now))
-    batch.set(refs['capture'], _capture_payload(now=now))
+    batch.set(refs['capture'], capture_payload(capture_id=_CAPTURE_ID, now=now))
     if fixture_case is ChatFirstE2EFixtureCase.cold_start:
         batch.set(refs['cold_start_intent'], _cold_start_intent(uid, now=now).model_dump(mode='python'))
     elif fixture_case is ChatFirstE2EFixtureCase.question:

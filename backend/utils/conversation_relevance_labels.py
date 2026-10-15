@@ -12,6 +12,7 @@ TERMINAL_PATHS = frozenset(
         'external_text',
         'sync_intake',
         'lifecycle_terminal',
+        'fixture_seed',
     }
 )
 DECISION_TRIGGERS = TERMINAL_PATHS | frozenset(
@@ -42,6 +43,7 @@ TERMINAL_METRIC_TRIGGERS = frozenset(
         'import',
         'external_text',
         'lifecycle_terminal',
+        'fixture_seed',
     }
 )
 TERMINAL_METRIC_REASONS = frozenset(
@@ -56,6 +58,7 @@ TERMINAL_METRIC_REASONS = frozenset(
         'import_default',
         'external_text_default',
         'lifecycle_terminal_default',
+        'fixture_seed_default',
         'already_discarded',
         'restored',
         'calendar_overlap',

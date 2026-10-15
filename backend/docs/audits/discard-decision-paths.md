@@ -33,7 +33,7 @@ threshold, recovery feature flag, client, or deletion contract changes.
 | Smart merge survivor / refresh | Existing survivor completed; refresh processing → completed; donors hidden | Normal survivor decision / `policy/smart_merge` yes | Existing relevance policy and refresh lease/revision fences remain. Generic completion boundary covers absent records. Donor tombstones are untouched. |
 | User discard / restore / deletion | Discard stays hidden; restore makes explicit user keep; deletion never recreated | Existing user-owned contract | Restore now adds user-decision metadata after the unchanged tombstone fence. No deletion/discard semantics change. New helper never turns an existing discard into keep, respects restores, and normal persistence still refuses missing/deleted rows. |
 | Finalization job completion/fanout bookkeeping, audio/segment/photo metadata updates | Do not independently create or terminalize a conversation row | Not a separate decision path | Job completion requires committed fanout; conversation completion is owned by processing. Metadata writes cannot set lifecycle fields through generic update. |
-| Canary/fixture completed creation | Completed | Caller-dependent | Uses the same guarded lifecycle creation API; release-probe normal assessment exemption remains. |
+| Canary and fixed local/offline fixture creation | Completed | Caller-dependent; fixture batch had no decision | Dream canaries use guarded lifecycle creation. Chat-first E2E batch seeding now stores explicit `fixture_seed_default` policy; existing runtime/account guards still prohibit production fixture writes. |
 
 ## Shared terminal decision
 
@@ -80,6 +80,7 @@ an increment; these are not exactly-once row counts.
 - `test_conversation_lifecycle_contract.py`: real lifecycle creation/import and
   existing missing/deleted-row persistence fences; `test_sync_cross_job_assignment.py`:
   real intake survivor promotion records a keep.
+- `test_chat_first_e2e_fixture.py`: fixed local/offline identities cannot be selected in production, and actual fixture seeding stores its explicit keep decision.
 - The full relevance, finalization, and selected sync/lifecycle suites exercise the
   normal decisions alongside these fallback paths. Test results belong in the
   session report; no deployment or production repair is implied.
