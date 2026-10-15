@@ -19,7 +19,6 @@ os.environ.setdefault('ENCRYPTION_SECRET', 'omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7
 
 _STUB = (
     'database',
-    'utils',
     'firebase_admin',
     'google',
     'pusher',
