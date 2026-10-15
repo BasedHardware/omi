@@ -349,12 +349,9 @@ def list_memory_updated_or_created_index(
     candidate_limit = min(needed, _MEMORY_LIST_CANDIDATE_WINDOW_MAX)
     memories: List[Dict[str, Any]] = []
     while True:
-        updated_docs = _stream_memory_list_index_window(
-            memories_ref, 'updated_at', candidate_limit, budget=budget)
-        created_docs = _stream_memory_list_index_window(
-            memories_ref, 'created_at', candidate_limit, budget=budget)
-        memories = _merge_memory_list_index_docs(
-            updated_docs + created_docs, include_invalidated=include_invalidated)
+        updated_docs = _stream_memory_list_index_window(memories_ref, 'updated_at', candidate_limit, budget=budget)
+        created_docs = _stream_memory_list_index_window(memories_ref, 'created_at', candidate_limit, budget=budget)
+        memories = _merge_memory_list_index_docs(updated_docs + created_docs, include_invalidated=include_invalidated)
         if len(memories) >= needed:
             break
         if len(updated_docs) < candidate_limit and len(created_docs) < candidate_limit:
