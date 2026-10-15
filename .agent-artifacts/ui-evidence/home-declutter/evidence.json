@@ -1,0 +1,33 @@
+{
+  "version": 1,
+  "images": [
+    {
+      "file": "001-mobile-android-home-pending-row.png",
+      "platform": "mobile-android",
+      "description": "Home: one pending row in Today instead of the sync card; Activity bell in the header",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "002-mobile-android-home-catching-up-bell-dot.png",
+      "platform": "mobile-android",
+      "description": "Home: a long backlog reads as catching up; the bell's dot for a new recap",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "003-mobile-android-on-the-way.png",
+      "platform": "mobile-android",
+      "description": "On the Way: pending recordings by stage, Sync details with refused recordings",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "004-mobile-android-activity.png",
+      "platform": "mobile-android",
+      "description": "Activity: recaps and changes Omi made, newest first; dot on the new recap",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    }
+  ]
+}
