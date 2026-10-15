@@ -3,7 +3,7 @@ from datetime import datetime, timezone
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel, Field, ValidationError
+from pydantic import BaseModel, Field, ValidationError, field_validator
 
 import database.calendar_meetings as calendar_db
 from models.calendar_context import CalendarMeetingContext, MeetingParticipant
@@ -22,15 +22,27 @@ def _to_utc(dt: datetime) -> datetime:
 class StoreMeetingRequest(BaseModel):
     """Request to store/update a calendar meeting"""
 
-    calendar_event_id: str = Field(description="External calendar system ID (macOS/Google/Outlook event ID)")
-    calendar_source: str = Field(description="Source: 'macos_calendar', 'google_calendar', 'outlook_calendar'")
-    title: str = Field(description="Meeting title")
+    calendar_event_id: str = Field(
+        min_length=1, description="External calendar system ID (macOS/Google/Outlook event ID)"
+    )
+    calendar_source: str = Field(
+        min_length=1, description="Source: 'macos_calendar', 'google_calendar', 'outlook_calendar'"
+    )
+    title: str = Field(min_length=1, description="Meeting title")
     start_time: datetime = Field(description="Meeting start time")
     end_time: datetime = Field(description="Meeting end time")
     platform: Optional[str] = Field(default=None, description="Platform: 'Zoom', 'Teams', 'Google Meet', etc.")
     meeting_link: Optional[str] = Field(default=None, description="URL to join the meeting")
     participants: List[MeetingParticipant] = Field(default_factory=list, description="Meeting participants")
     notes: Optional[str] = Field(default=None, description="Meeting notes/description")
+
+    @field_validator('calendar_event_id', 'calendar_source', 'title')
+    @classmethod
+    def validate_non_empty_strings(cls, v: str) -> str:
+        s = v.strip()
+        if not s:
+            raise ValueError("Must not be empty or whitespace-only")
+        return s
 
 
 class StoreMeetingResponse(BaseModel):
@@ -67,14 +79,17 @@ def store_calendar_meeting(
     )
     meeting_dict = meeting_context.model_dump()
     meeting_dict['end_time'] = end_utc
-    existing_meeting_id = calendar_db.get_meeting_id_by_calendar_event(
-        uid, request.calendar_event_id, request.calendar_source
-    )
-    if existing_meeting_id:
-        calendar_db.update_meeting(uid, existing_meeting_id, meeting_dict)
-        meeting_id = existing_meeting_id
-    else:
-        meeting_id = calendar_db.create_meeting(uid, meeting_dict)
+    try:
+        existing_meeting_id = calendar_db.get_meeting_id_by_calendar_event(
+            uid, request.calendar_event_id, request.calendar_source
+        )
+        if existing_meeting_id:
+            calendar_db.update_meeting(uid, existing_meeting_id, meeting_dict)
+            meeting_id = existing_meeting_id
+        else:
+            meeting_id = calendar_db.create_meeting(uid, meeting_dict)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
     return StoreMeetingResponse(meeting_id=meeting_id, calendar_event_id=request.calendar_event_id)
 
 
@@ -84,7 +99,14 @@ def get_calendar_meeting(
     uid: str = Depends(auth.get_current_user_uid),
 ):
     """Get a calendar meeting by its Firestore document ID"""
-    meeting = calendar_db.get_meeting(uid, meeting_id)
+    clean_meeting_id = meeting_id.strip() if isinstance(meeting_id, str) else ""
+    if not clean_meeting_id or '/' in clean_meeting_id or '\\' in clean_meeting_id:
+        raise HTTPException(status_code=400, detail="Invalid meeting ID format")
+
+    try:
+        meeting = calendar_db.get_meeting(uid, clean_meeting_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
 
     if not meeting:
         raise HTTPException(status_code=404, detail="Meeting not found")

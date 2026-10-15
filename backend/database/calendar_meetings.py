@@ -1,11 +1,15 @@
+import logging
 from datetime import datetime, timezone
 from typing import Any, Callable, Dict, List, Optional, TypeVar, cast
 
+from google.api_core import exceptions
 from google.cloud import firestore
 from google.cloud.firestore_v1 import transactional  # type: ignore[reportUnknownMemberType]  # firestore SDK stub gap
 
 from ._client import db
 from database.document_ids import calendar_meeting_doc_id
+
+logger = logging.getLogger(__name__)
 
 T = TypeVar("T")
 
@@ -20,9 +24,41 @@ def _typed_transactional(func: Callable[..., T]) -> Callable[..., T]:
     return transactional(func)
 
 
-def _get_meetings_collection(uid: str) -> Any:
+def _clean_path_id(val: Any, field_name: str) -> str:
+    """Validate and normalize document path segments (uid, meeting_id)."""
+    if not isinstance(val, str):
+        raise ValueError(f"{field_name} must be a string, got {type(val).__name__}")
+    cleaned = val.strip()
+    if not cleaned:
+        raise ValueError(f"{field_name} cannot be empty or whitespace-only")
+    if '/' in cleaned or '\\' in cleaned or '\x00' in cleaned:
+        raise ValueError(f"{field_name} cannot contain path separator characters")
+    return cleaned
+
+
+def _clean_identifier(val: Any, field_name: str) -> str:
+    """Validate and normalize external identifiers (calendar_event_id, calendar_source).
+    
+    Does not restrict slashes, as external provider event IDs (e.g. Outlook / Microsoft Graph)
+    are frequently base64-derived and legitimately contain slashes.
+    """
+    if not isinstance(val, str):
+        raise ValueError(f"{field_name} must be a string, got {type(val).__name__}")
+    cleaned = val.strip()
+    if not cleaned:
+        raise ValueError(f"{field_name} cannot be empty or whitespace-only")
+    return cleaned
+
+
+# Backward-compatible alias for path segment cleaning
+_clean_id = _clean_path_id
+
+
+def _get_meetings_collection(uid: str, client: Any | None = None) -> Any:
     """Get user's meetings collection reference"""
-    return db.collection('users').document(uid).collection('meetings')
+    clean_uid = _clean_path_id(uid, "uid")
+    firestore_client = client or db
+    return firestore_client.collection('users').document(clean_uid).collection('meetings')
 
 
 @_typed_transactional
@@ -36,36 +72,70 @@ def _upsert_meeting_transaction(transaction: Any, doc_ref: Any, meeting_data: Di
     transaction.set(doc_ref, payload, merge=True)
 
 
-def create_meeting(uid: str, meeting_data: Dict[str, Any]) -> str:
+def _resolve_meetings_col(uid: str, client: Any | None = None) -> Any:
+    if client is not None:
+        return _get_meetings_collection(uid, client)
+    return _get_meetings_collection(uid)
+
+
+def create_meeting(uid: str, meeting_data: Dict[str, Any], db_client: Any | None = None) -> str:
     """
     Create or idempotently upsert a calendar meeting in Firestore.
     Returns the deterministic Firestore document ID.
 
     NOTE: Times should already be in UTC before calling this function.
     """
-    meeting_id = calendar_meeting_doc_id(uid, meeting_data['calendar_source'], meeting_data['calendar_event_id'])
-    doc_ref = _get_meetings_collection(uid).document(meeting_id)
-    transaction = db.transaction()
+    clean_uid = _clean_path_id(uid, "uid")
+    if not isinstance(meeting_data, dict):
+        raise ValueError("meeting_data must be a dictionary")
+
+    source = meeting_data.get('calendar_source')
+    event_id = meeting_data.get('calendar_event_id')
+    clean_source = _clean_identifier(source, "calendar_source")
+    clean_event_id = _clean_identifier(event_id, "calendar_event_id")
+
+    meeting_id = calendar_meeting_doc_id(clean_uid, clean_source, clean_event_id)
+    doc_ref = _resolve_meetings_col(clean_uid, client=db_client).document(meeting_id)
+    client = db_client or db
+    transaction = client.transaction()
     _upsert_meeting_transaction(transaction, doc_ref, meeting_data, datetime.now(timezone.utc))
     return meeting_id
 
 
-def update_meeting(uid: str, meeting_id: str, meeting_data: Dict[str, Any]) -> None:
+def update_meeting(
+    uid: str, meeting_id: str, meeting_data: Dict[str, Any], db_client: Any | None = None
+) -> None:
     """
     Update an existing calendar meeting.
 
     NOTE: Times should already be in UTC before calling this function.
     """
+    clean_uid = _clean_path_id(uid, "uid")
+    clean_meeting_id = _clean_path_id(meeting_id, "meeting_id")
+    if not isinstance(meeting_data, dict):
+        raise ValueError("meeting_data must be a dictionary")
+
     # Update synced_at timestamp (always in UTC for consistent querying)
     meeting_data['synced_at'] = datetime.now(timezone.utc)
 
-    # Update document
-    _get_meetings_collection(uid).document(meeting_id).update(meeting_data)
+    # Update document with NotFound resilience (upsert on concurrency race)
+    doc_ref = _resolve_meetings_col(clean_uid, client=db_client).document(clean_meeting_id)
+    try:
+        doc_ref.update(meeting_data)
+    except exceptions.NotFound:
+        logger.warning(
+            "Calendar meeting doc %s not found on update for user %s; upserting via merge",
+            clean_meeting_id,
+            clean_uid,
+        )
+        doc_ref.set(meeting_data, merge=True)
 
 
-def get_meeting(uid: str, meeting_id: str) -> Optional[Dict[str, Any]]:
+def get_meeting(uid: str, meeting_id: str, db_client: Any | None = None) -> Optional[Dict[str, Any]]:
     """Get a calendar meeting by its Firestore document ID"""
-    doc = _get_meetings_collection(uid).document(meeting_id).get()
+    clean_uid = _clean_path_id(uid, "uid")
+    clean_meeting_id = _clean_path_id(meeting_id, "meeting_id")
+    doc = _resolve_meetings_col(clean_uid, client=db_client).document(clean_meeting_id).get()
 
     if not getattr(doc, "exists", False):
         return None
@@ -76,15 +146,21 @@ def get_meeting(uid: str, meeting_id: str) -> Optional[Dict[str, Any]]:
     return data
 
 
-def get_meeting_id_by_calendar_event(uid: str, calendar_event_id: str, calendar_source: str) -> Optional[str]:
+def get_meeting_id_by_calendar_event(
+    uid: str, calendar_event_id: str, calendar_source: str, db_client: Any | None = None
+) -> Optional[str]:
     """
     Find a meeting by its external calendar event ID and source.
     Returns the Firestore document ID if found, None otherwise.
     """
+    clean_uid = _clean_path_id(uid, "uid")
+    clean_event_id = _clean_identifier(calendar_event_id, "calendar_event_id")
+    clean_source = _clean_identifier(calendar_source, "calendar_source")
+
     query = (
-        _get_meetings_collection(uid)
-        .where('calendar_event_id', '==', calendar_event_id)
-        .where('calendar_source', '==', calendar_source)
+        _resolve_meetings_col(clean_uid, client=db_client)
+        .where('calendar_event_id', '==', clean_event_id)
+        .where('calendar_source', '==', clean_source)
         .limit(1)
     )
 
@@ -95,20 +171,30 @@ def get_meeting_id_by_calendar_event(uid: str, calendar_event_id: str, calendar_
     return None
 
 
-def _to_utc(dt: datetime) -> datetime:
+def _to_utc(dt: Any) -> datetime:
+    """Strictly convert a datetime to UTC. Never silently falls back to current time."""
+    if not isinstance(dt, datetime):
+        raise ValueError(f"Expected datetime instance, got {type(dt).__name__}")
     return dt.replace(tzinfo=timezone.utc) if dt.tzinfo is None else dt.astimezone(timezone.utc)
 
 
 def list_meetings(
-    uid: str, start_date: Optional[datetime] = None, end_date: Optional[datetime] = None, limit: int = 50
+    uid: str,
+    start_date: Optional[datetime] = None,
+    end_date: Optional[datetime] = None,
+    limit: int = 50,
+    db_client: Any | None = None,
 ) -> List[Dict[str, Any]]:
     """List calendar meetings, optionally filtered by date range, sorted by start_time descending."""
-    query: Any = _get_meetings_collection(uid)
+    clean_uid = _clean_id(uid, "uid")
+    clamped_limit = max(1, min(int(limit), 500))
+
+    query: Any = _resolve_meetings_col(clean_uid, client=db_client)
     if start_date:
         query = query.where('start_time', '>=', _to_utc(start_date))
     if end_date:
         query = query.where('start_time', '<=', _to_utc(end_date))
-    query = query.order_by('start_time', direction=firestore.Query.DESCENDING).limit(limit)
+    query = query.order_by('start_time', direction=firestore.Query.DESCENDING).limit(clamped_limit)
 
     meetings: List[Dict[str, Any]] = []
     for doc in query.stream():
@@ -120,17 +206,22 @@ def list_meetings(
     return meetings
 
 
-def delete_meeting(uid: str, meeting_id: str) -> None:
+def delete_meeting(uid: str, meeting_id: str, db_client: Any | None = None) -> None:
     """Delete a calendar meeting"""
-    _get_meetings_collection(uid).document(meeting_id).delete()
+    clean_uid = _clean_id(uid, "uid")
+    clean_meeting_id = _clean_id(meeting_id, "meeting_id")
+    _resolve_meetings_col(clean_uid, client=db_client).document(clean_meeting_id).delete()
 
 
-def delete_old_meetings(uid: str, before_date: datetime) -> int:
+def delete_old_meetings(uid: str, before_date: datetime, db_client: Any | None = None) -> int:
     """Delete meetings that ended before a certain date. Returns the number of meetings deleted."""
-    query = _get_meetings_collection(uid).where('end_time', '<', _to_utc(before_date))
+    clean_uid = _clean_id(uid, "uid")
+    utc_before = _to_utc(before_date)
+    query = _resolve_meetings_col(clean_uid, client=db_client).where('end_time', '<', utc_before)
 
     deleted_count = 0
-    batch = db.batch()
+    client = db_client or db
+    batch = client.batch()
     batch_size = 0
 
     for doc in query.stream():
@@ -139,7 +230,7 @@ def delete_old_meetings(uid: str, before_date: datetime) -> int:
         deleted_count += 1
         if batch_size >= 500:
             batch.commit()
-            batch = db.batch()
+            batch = client.batch()
             batch_size = 0
 
     if batch_size > 0:
@@ -148,12 +239,18 @@ def delete_old_meetings(uid: str, before_date: datetime) -> int:
     return deleted_count
 
 
-def get_meetings_in_time_range(uid: str, start_time: datetime, end_time: datetime) -> List[Dict[str, Any]]:
+def get_meetings_in_time_range(
+    uid: str, start_time: datetime, end_time: datetime, db_client: Any | None = None
+) -> List[Dict[str, Any]]:
     """Find meetings that overlap with the given time range, sorted by start_time ascending."""
+    clean_uid = _clean_id(uid, "uid")
+    start_utc = _to_utc(start_time)
+    end_utc = _to_utc(end_time)
+
     query = (
-        _get_meetings_collection(uid)
-        .where('start_time', '<', _to_utc(end_time))
-        .where('end_time', '>', _to_utc(start_time))
+        _resolve_meetings_col(clean_uid, client=db_client)
+        .where('start_time', '<', end_utc)
+        .where('end_time', '>', start_utc)
         .order_by('start_time', direction=firestore.Query.ASCENDING)
         .limit(10)
     )
