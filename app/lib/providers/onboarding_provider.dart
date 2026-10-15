@@ -150,10 +150,7 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin implemen
   }
 
   Future askForBluetoothPermissions() async {
-    final attempt = ProductTelemetry.instance.start(
-      ProductJourney.permission,
-      surface: ProductSurface.onboarding,
-    );
+    final attempt = ProductTelemetry.instance.start(ProductJourney.permission, surface: ProductSurface.onboarding);
     try {
       if (Platform.isIOS) {
         PermissionStatus bleStatus = await Permission.bluetooth.request();
@@ -221,10 +218,7 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin implemen
   }
 
   Future askForNotificationPermissions() async {
-    final attempt = ProductTelemetry.instance.start(
-      ProductJourney.permission,
-      surface: ProductSurface.onboarding,
-    );
+    final attempt = ProductTelemetry.instance.start(ProductJourney.permission, surface: ProductSurface.onboarding);
     try {
       var isAllowed = await NotificationService.instance.requestNotificationPermissions();
       updateNotificationPermission(isAllowed);
@@ -247,10 +241,7 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin implemen
   }
 
   Future askForBackgroundPermissions() async {
-    final attempt = ProductTelemetry.instance.start(
-      ProductJourney.permission,
-      surface: ProductSurface.onboarding,
-    );
+    final attempt = ProductTelemetry.instance.start(ProductJourney.permission, surface: ProductSurface.onboarding);
     try {
       await FlutterForegroundTask.requestIgnoreBatteryOptimization();
       var isAllowed = await ForegroundUtil().isIgnoringBatteryOptimizations;
@@ -272,10 +263,7 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin implemen
   }
 
   Future<(bool, PermissionStatus)> askForLocationPermissions() async {
-    final attempt = ProductTelemetry.instance.start(
-      ProductJourney.permission,
-      surface: ProductSurface.onboarding,
-    );
+    final attempt = ProductTelemetry.instance.start(ProductJourney.permission, surface: ProductSurface.onboarding);
     try {
       if (await Permission.location.serviceStatus.isDisabled) {
         Logger.debug('Location service is disabled');
@@ -318,10 +306,7 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin implemen
   }
 
   Future askForMicrophonePermissions() async {
-    final attempt = ProductTelemetry.instance.start(
-      ProductJourney.permission,
-      surface: ProductSurface.onboarding,
-    );
+    final attempt = ProductTelemetry.instance.start(ProductJourney.permission, surface: ProductSurface.onboarding);
     try {
       PermissionStatus micStatus = await Permission.microphone.request();
       Logger.debug('micStatus: $micStatus');
@@ -413,8 +398,10 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin implemen
       connectingToDeviceId = null; // Reset the connecting device
       deviceProvider?.setIsConnected(false);
       pairingFailureVersion++;
-      pairingFailureReason =
-          connectFailureReason(e, staleBond: ServiceManager.instance().device.staleBondRecoveryRequired);
+      pairingFailureReason = connectFailureReason(
+        e,
+        staleBond: ServiceManager.instance().device.staleBondRecoveryRequired,
+      );
       PlatformManager.instance.analytics.deviceConnectFailed(classifyDeviceConnectError(e));
       notifyError('DEVICE_CONNECT_FAILED');
       notifyListeners();
@@ -470,6 +457,7 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin implemen
             adapterOff: false,
           ),
         );
+        _armInstructionsTimer(epoch, scanStarted: false);
         onShowDialog();
         return;
       }
@@ -486,6 +474,7 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin implemen
         updateLocationPermission(locationGranted);
         if (!locationGranted) {
           _emitPairingBlocked(DevicePairingBlockedReason.locationPermissionMissing);
+          _armInstructionsTimer(epoch, scanStarted: false);
           onShowLocationDialog?.call();
           return;
         }
@@ -494,22 +483,33 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin implemen
 
     if (!await BluetoothReadiness.instance.ensureReady(BluetoothUse.discovery)) {
       if (_isDisposed || epoch != _scanEpoch) return;
-      _emitPairingBlocked(_pairingBlockForAdapter(BluetoothReadiness.instance.state),
-          adapterState: BluetoothReadiness.instance.state);
+      _emitPairingBlocked(
+        _pairingBlockForAdapter(BluetoothReadiness.instance.state),
+        adapterState: BluetoothReadiness.instance.state,
+      );
+      _armInstructionsTimer(epoch, scanStarted: false);
       return;
     }
     if (_isDisposed || epoch != _scanEpoch) return;
 
+    _armInstructionsTimer(epoch, scanStarted: true);
+
+    await deviceProvider?.initiateConnection("Onboarding");
+  }
+
+  /// Arms the delayed "No Omi Found" help (Scan Again, pairing guide, Contact Support). A blocked
+  /// search arms it too, so the help never depends on discovery having started; only a scan that
+  /// actually ran reports Device Scan Empty (a blocked one already reported Device Pairing Blocked).
+  void _armInstructionsTimer(int epoch, {required bool scanStarted}) {
+    _didNotMakeItTimer?.cancel();
     _didNotMakeItTimer = Timer(const Duration(seconds: deviceScanEmptyAfterSeconds), () {
       if (_isDisposed || epoch != _scanEpoch) return;
-      if (shouldReportEmptyDeviceScan(deviceCount: deviceList.length)) {
+      if (scanStarted && shouldReportEmptyDeviceScan(deviceCount: deviceList.length)) {
         PlatformManager.instance.analytics.deviceScanEmpty(afterSeconds: deviceScanEmptyAfterSeconds);
       }
       enableInstructions = true;
       notifyListeners();
     });
-
-    await deviceProvider?.initiateConnection("Onboarding");
   }
 
   void _recordOnboardingPermission({
@@ -556,12 +556,12 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin implemen
   DevicePairingBlockedReason? _pairingBlockForAdapter(BluetoothAdapterState state) {
     return switch (state) {
       BluetoothAdapterState.unauthorized => pairingBlockBeforeScan(
-          isAndroid: Platform.isAndroid,
-          androidSdk: _osAndroidSdk,
-          bluetoothGranted: hasBluetoothPermission,
-          locationGranted: hasLocationPermission,
-          adapterOff: false,
-        ),
+        isAndroid: Platform.isAndroid,
+        androidSdk: _osAndroidSdk,
+        bluetoothGranted: hasBluetoothPermission,
+        locationGranted: hasLocationPermission,
+        adapterOff: false,
+      ),
       BluetoothAdapterState.on => null,
       _ => DevicePairingBlockedReason.bluetoothOff,
     };

@@ -23,7 +23,7 @@ import os
 import secrets
 from datetime import datetime, timedelta, timezone
 from typing import Any, Callable, Dict, List, Optional, Tuple
-from urllib.parse import urlencode
+from urllib.parse import urlencode, urlsplit
 
 import httpx
 
@@ -103,11 +103,46 @@ def _gen_pkce() -> Tuple[str, str]:
     return verifier, challenge
 
 
+# Schemes a post-OAuth deep link may use: the desktop app's own URL scheme plus
+# a dev build, and plain web redirects. Everything else — javascript:, data:,
+# vbscript:, file:, etc. — is rejected so a crafted success_redirect_url cannot
+# become a stored-XSS or open-redirect vector.
+_ALLOWED_REDIRECT_SCHEMES = frozenset({'omi', 'omi-computer', 'omi-computer-dev', 'http', 'https'})
+_MAX_REDIRECT_URL_LEN = 2048
+
+
+def sanitize_redirect_url(url: Optional[str]) -> Optional[str]:
+    """Return *url* if it is a safe post-OAuth redirect target, else ``None``.
+
+    The URL round-trips through Redis as a ``\\n``-delimited state field, so it
+    must also be free of CR/LF/control characters — a newline there would
+    desynchronize state unpacking.
+    """
+    if not isinstance(url, str):
+        return None
+    url = url.strip()
+    if not url or len(url) > _MAX_REDIRECT_URL_LEN:
+        return None
+    if any(c in url for c in '\r\n\t\x00\x0b\x0c'):
+        return None
+    try:
+        scheme = urlsplit(url).scheme.lower()
+    except ValueError:
+        return None
+    if scheme not in _ALLOWED_REDIRECT_SCHEMES:
+        return None
+    return url
+
+
 def build_authorize_url(uid: str, success_redirect_url: Optional[str] = None) -> str:
     """Create the X authorize URL and stash the PKCE verifier + uid in Redis,
     keyed by the opaque `state` we hand to X."""
     if not is_oauth_configured():
         raise RuntimeError('X OAuth is not configured (missing X_OAUTH_CLIENT_ID/SECRET/REDIRECT_URI)')
+
+    if success_redirect_url is not None and sanitize_redirect_url(success_redirect_url) is None:
+        # Fail closed: refuse to stash (and later emit) a redirect we cannot vouch for.
+        raise ValueError('success_redirect_url is not an allowed redirect target')
 
     verifier, challenge = _gen_pkce()
     state = secrets.token_urlsafe(32)
@@ -115,7 +150,8 @@ def build_authorize_url(uid: str, success_redirect_url: Optional[str] = None) ->
     payload = {'uid': uid, 'verifier': verifier}
     if success_redirect_url:
         payload['success_redirect_url'] = success_redirect_url
-    # store as a simple delimited string to avoid json import churn
+    # store as a simple delimited string to avoid json import churn; the sanitized
+    # URL above is guaranteed newline-free so the third field stays atomic.
     redis_db.r.setex(
         f'{_STATE_PREFIX}{state}',
         OAUTH_STATE_TTL,
@@ -144,10 +180,14 @@ def consume_oauth_state(state: str) -> Optional[Dict[str, str]]:
     parts = raw.split('\n')
     if len(parts) < 2:
         return None
+    # A stored redirect is re-validated on the way out: an older or tampered state
+    # holding a newline, an unsafe scheme, or a control char must not reach the
+    # redirect page.
+    stored_redirect = sanitize_redirect_url(parts[2]) if len(parts) > 2 else None
     return {
         'uid': parts[0],
         'verifier': parts[1],
-        'success_redirect_url': parts[2] if len(parts) > 2 else '',
+        'success_redirect_url': stored_redirect or '',
     }
 
 

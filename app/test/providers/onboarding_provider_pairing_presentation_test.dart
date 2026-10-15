@@ -69,7 +69,12 @@ void main() {
     await SharedPreferencesUtil.init();
     AnalyticsManager.resetForTesting();
     PackageInfo.setMockInitialValues(
-        appName: 'Omi Test', packageName: 'com.omi.test', version: '1', buildNumber: '1', buildSignature: '');
+      appName: 'Omi Test',
+      packageName: 'com.omi.test',
+      version: '1',
+      buildNumber: '1',
+      buildSignature: '',
+    );
     adapter = RecordingAdapter();
     AnalyticsManager.configure(adapter);
     await AnalyticsManager.init();
@@ -96,8 +101,9 @@ void main() {
     await tester.pump();
   }
 
-  testWidgets('real empty-scan timer retains No Omi Found and never shows or emits a connection failure',
-      (tester) async {
+  testWidgets('real empty-scan timer retains No Omi Found and never shows or emits a connection failure', (
+    tester,
+  ) async {
     await pumpConnect(tester);
     expect(provider.enableInstructions, isFalse);
     await tester.pump(const Duration(seconds: deviceScanEmptyAfterSeconds));
@@ -139,9 +145,51 @@ void main() {
     await tester.pumpWidget(const SizedBox());
   });
 
+  // #17851: a blocked search returned before the delayed help was armed, so once the blocked card was
+  // dismissed the page sat on "Searching for devices" with no scan running and no route to support.
+  Future<void> expectDelayedHelpAfterBlockedScan(WidgetTester tester, Reason reason) async {
+    await pumpConnect(tester);
+    expect(provider.pairingFailureReason, reason);
+    expect(find.byType(PairingFailureCard), findsOneWidget);
+    await tester.pump(const Duration(seconds: deviceScanEmptyAfterSeconds));
+    await tester.pump();
+    expect(provider.enableInstructions, isTrue);
+    await tester.ensureVisible(find.byKey(const Key('pairing_failure_dismiss')));
+    await tester.tap(find.byKey(const Key('pairing_failure_dismiss')));
+    await tester.pump();
+    final l10n = AppLocalizationsEn();
+    expect(find.text(l10n.searchingForDevices), findsNothing);
+    expect(find.text(l10n.findDeviceNoneTitle), findsOneWidget);
+    expect(find.byKey(const Key('find_devices_scan_again')), findsOneWidget);
+    expect(find.byKey(const Key('find_devices_contact_support')), findsOneWidget);
+    await AnalyticsManager.flushPending(force: true);
+    expect(adapter.names, contains('Device Pairing Blocked'));
+    // Discovery never ran, so the funnel must not also count it as an empty scan.
+    expect(adapter.names, isNot(contains('Device Scan Empty')));
+    await tester.pumpWidget(const SizedBox());
+  }
+
+  testWidgets('Bluetooth off still arms the delayed help', (tester) async {
+    binding.defaultBinaryMessenger.setMockDecodedMessageHandler<Object?>(bluetoothChannel, (_) async => ['off']);
+    await expectDelayedHelpAfterBlockedScan(tester, Reason.bluetoothOff);
+  });
+
+  testWidgets('denied Bluetooth permission still arms the delayed help', (tester) async {
+    const permissions = MethodChannel('flutter.baseflow.com/permissions/methods');
+    binding.defaultBinaryMessenger.setMockMethodCallHandler(permissions, (call) async {
+      // 0 is PermissionStatus.denied.
+      if (call.method == 'requestPermissions') return {for (final p in call.arguments as List) p as int: 0};
+      return 0;
+    });
+    addTearDown(() => binding.defaultBinaryMessenger.setMockMethodCallHandler(permissions, null));
+    provider.hasBluetoothPermission = false;
+    await expectDelayedHelpAfterBlockedScan(tester, Reason.bluetoothPermissionDenied);
+  });
+
   test('saved visible devices clear reachability, but stale-bond recovery is retained', () async {
-    await SharedPreferencesUtil()
-        .btDeviceSet(BtDevice(id: 'saved-omi', name: 'Saved Omi', type: DeviceType.omi, rssi: -50));
+    await SharedPreferencesUtil().btDeviceSet(
+      BtDevice(id: 'saved-omi', name: 'Saved Omi', type: DeviceType.omi, rssi: -50),
+    );
     provider.pairingFailureReason = Reason.notFoundOrDropped;
     provider.onDevices([]);
     expect(provider.visibleDeviceList, isNotEmpty);
@@ -172,8 +220,9 @@ void main() {
         final render = tester.element(find.byKey(boundary)).renderObject! as RenderRepaintBoundary;
         final png = await (await render.toImage(pixelRatio: 3)).toByteData(format: ui.ImageByteFormat.png);
         final tag = platform == TargetPlatform.iOS ? '022-mobile-ios' : '023-mobile-android';
-        File('../.agent-artifacts/ui-evidence/onb-polish/$tag-connect-empty-scan.png')
-            .writeAsBytesSync(png!.buffer.asUint8List());
+        File(
+          '../.agent-artifacts/ui-evidence/onb-polish/$tag-connect-empty-scan.png',
+        ).writeAsBytesSync(png!.buffer.asUint8List());
       });
       await tester.pumpWidget(const SizedBox());
       provider.enableInstructions = false;
