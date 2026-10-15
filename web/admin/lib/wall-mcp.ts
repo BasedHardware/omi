@@ -5,6 +5,13 @@ export const MCP_MARKER_STATUS_ROW = "__mcp_marker_status";
 export const MCP_MARKER_MISSING = "MCP marker not deployed";
 export const MCP_ACTIVITY_VERSION = "qualified-v2-2026-10-15-mcp-schema2";
 export const MCP_DAILY_MIN_SUCCESSES = 2;
+// Use the same projection for events and event-shaped literal integration tests.
+// HogQL's properties.foo shorthand only resolves on the physical events table;
+// explicit JSON access also works on a literal properties object.
+export const MCP_SUCCESS_SELECT = `coalesce(toString(person_id),distinct_id) actor,timestamp,
+  coalesce(nullIf(JSONExtractString(properties,'client'),''),'unknown') client,
+  coalesce(nullIf(JSONExtractString(properties,'tool'),''),'unknown') tool,
+  JSONExtractString(properties,'initiator') initiator`;
 // Bounded daily approximation of the threshold evidence's cadence screen.
 // Multi-day / separated-burst regularity is deferred, rather than inferred from
 // client labels. Client/person/day statistics remain inside the aggregate query.
@@ -24,10 +31,7 @@ export function mcpActivityCtes(start: Date, end: Date) {
     Math.min(start.getTime(), shiftDay(end, -30).getTime())
   );
   return `mcp_raw AS (
-    SELECT coalesce(toString(person_id),distinct_id) actor,timestamp,
-      coalesce(nullIf(toString(properties.client_name),''),'unknown') client,
-      coalesce(nullIf(toString(properties.tool),''),'unknown') tool,
-      toString(properties.initiator) initiator
+    SELECT ${MCP_SUCCESS_SELECT}
     FROM events WHERE event='${MCP_MARKER}' AND timestamp >= ${sqlTime(
     observedStart
   )} AND timestamp < ${sqlTime(end)}

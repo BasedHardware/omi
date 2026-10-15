@@ -7,6 +7,7 @@ import {
   DESKTOP_HEALTH_EVENT_COUNT_MULTIPLIER,
   DESKTOP_HEALTH_EVENT_SAMPLING_CUTOVER,
   DESKTOP_HEALTH_EVENT_WEIGHT_SQL,
+  desktopHealthEventWeightSql,
 } from "../telemetry/desktop-health-sampling";
 import {
   fallbackObservationsFromLegacy,
@@ -19,7 +20,8 @@ it("weights only the physical PostHog arm and both fallback query volumes at eve
   const { chat, voice } = responseReliabilityQueries(30);
   const [physical, floating] = voice.split("UNION ALL");
   expect(DESKTOP_HEALTH_EVENT_COUNT_MULTIPLIER).toBe(10);
-  expect(DESKTOP_HEALTH_EVENT_SAMPLING_CUTOVER).toBe("2026-10-22T00:00:00Z");
+  expect(DESKTOP_HEALTH_EVENT_SAMPLING_CUTOVER).toBeNull();
+  expect(DESKTOP_HEALTH_EVENT_WEIGHT_SQL).toBe("1");
   expect(physical).toContain(
     `sum(${DESKTOP_HEALTH_EVENT_WEIGHT_SQL}) AS event_count`
   );
@@ -27,7 +29,9 @@ it("weights only the physical PostHog arm and both fallback query volumes at eve
     `duration_ms)) * ${DESKTOP_HEALTH_EVENT_WEIGHT_SQL}`
   );
   for (const query of [chat, floating]) {
-    expect(query).not.toContain(DESKTOP_HEALTH_EVENT_WEIGHT_SQL);
+    expect(query).not.toContain(
+      `sum(${DESKTOP_HEALTH_EVENT_WEIGHT_SQL}) AS event_count`
+    );
     expect(query).toContain("count() AS event_count");
   }
   for (const query of [
@@ -37,9 +41,21 @@ it("weights only the physical PostHog arm and both fallback query volumes at eve
     expect(query).toContain(
       `sum(${DESKTOP_HEALTH_EVENT_WEIGHT_SQL}) AS event_count`
     );
-  expect(DESKTOP_HEALTH_EVENT_WEIGHT_SQL).toContain(
+  expect(desktopHealthEventWeightSql("2026-10-22T00:00:00Z")).toContain(
     "timestamp >= toDateTime('2026-10-22 00:00:00', 'UTC')"
   );
+});
+it("stays disarmed without a confirmed instant and rejects non-UTC/invalid constants", () => {
+  expect(desktopHealthEventWeightSql(null)).toBe("1");
+  for (const value of [
+    "provisional",
+    "2026-10-22",
+    "2026-10-22T00:00:00+01:00",
+    "2026-99-99T00:00:00Z",
+  ])
+    expect(() => desktopHealthEventWeightSql(value)).toThrow(
+      "Invalid desktop health sampling cutover"
+    );
 });
 it("corrected counts flow through volume panels while success ratios and latency remain ratios", () => {
   // Post-cutover query estimates: sampled 2 successes / 1 failure, 4s + 8s latency.

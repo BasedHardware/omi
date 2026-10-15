@@ -1,4 +1,5 @@
 import { expect, it } from "vitest";
+import { readFileSync } from "node:fs";
 import { computeWall } from "../wall-metrics";
 import { wallPresentation } from "../wall-presentation";
 import { activityQuery } from "../wall-posthog";
@@ -80,6 +81,39 @@ it("pins v2 per-success input, UTC day threshold and app-first attribution", () 
     expect(activityQuery(new Date("2026-10-15"), 1, kind)).not.toContain(
       "mcp_raw"
     );
+});
+
+it("reads the schema-2 emitter's closed properties rather than diagnostic client_name", () => {
+  const emitter = readFileSync("../../backend/utils/mcp_analytics.py", "utf8")
+    .split("def emit_mcp_tool_use_succeeded(")[1]
+    .split("def schedule_mcp_tool_call(")[0];
+  const properties = emitter.split("properties={")[1].split("},")[0];
+  const keys = Array.from(properties.matchAll(/^\s*"([^"]+)":/gm)).map(
+    (m) => m[1]
+  );
+  expect(keys.sort()).toEqual([
+    "$process_person_profile",
+    "client",
+    "initiator",
+    "op_type",
+    "schema_version",
+    "source_platform",
+    "surface",
+    "tool",
+  ]);
+  const raw = activityQuery(new Date("2026-10-15"), 1)
+    .split("mcp_raw AS (")[1]
+    .split("FROM events")[0];
+  expect(
+    Array.from(raw.matchAll(/JSONExtractString\(properties,'(\w+)'\)/g))
+      .map((m) => m[1])
+      .sort()
+  ).toEqual(["client", "initiator", "tool"]);
+  expect(raw).not.toContain("client_name");
+  for (const [, key] of Array.from(
+    raw.matchAll(/JSONExtractString\(properties,'(\w+)'\)/g)
+  ))
+    expect(keys).toContain(key);
 });
 
 it("carries marker presence without letting a status-only row enter any period's counts", async () => {

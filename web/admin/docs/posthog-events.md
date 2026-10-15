@@ -142,10 +142,15 @@ Chat and product analytics stay on PostHog. The admin reliability reader's repla
 ## Desktop health event sampling
 
 The approved PostHog ingestion sampling transform retains 10% of
-`desktop_health_event`. The ingestion rollout owner must confirm its real enablement
-instant against `DESKTOP_HEALTH_EVENT_SAMPLING_CUTOVER` in
-`lib/telemetry/desktop-health-sampling.ts` before enabling it. The provisional
-cutover is **2026-10-22T00:00:00Z**; this reader change does not enable a transform.
+`desktop_health_event`. Reader compensation is **disarmed**: the constant
+`DESKTOP_HEALTH_EVENT_SAMPLING_CUTOVER` in
+`lib/telemetry/desktop-health-sampling.ts` is unset (`null`), so all events have
+weight one, including future dates. There is no provisional activation date.
+The ingestion rollout owner must confirm the exact timestamp and ship that
+constant together with the transform enablement: **deploy the constant first,
+then enable the transform at that instant or later**. If enablement is delayed,
+align the constant to the actual boundary before it passes; do not leave an
+armed reader multiplying unsampled events. This change enables no transform.
 The common `DESKTOP_HEALTH_EVENT_COUNT_MULTIPLIER` is **10**. This is the transform's
 reader compensation contract, distinct from retiring or replacing PostHog telemetry.
 
