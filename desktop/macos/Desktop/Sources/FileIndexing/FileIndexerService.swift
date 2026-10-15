@@ -6,9 +6,7 @@ import Foundation
 actor FileIndexerService {
   static let shared = FileIndexerService()
 
-  private var _dbQueue: DatabasePool?
-  /// Shared Rewind pool epoch. `nil` denotes an explicitly injected test pool.
-  private var _dbGeneration: Int?
+  private let repository: RewindRepository
   private var isScanning = false
   private var activeScanOperations = 0
   private var scanCompletionWaiters: [CheckedContinuation<Void, Never>] = []
@@ -18,12 +16,13 @@ actor FileIndexerService {
   private let batchSize: Int
 
   private init() {
+    repository = RewindRepository(owner: "FileIndexerService")
     scanPolicy = .standard
     batchSize = 500
   }
 
   init(databasePool: DatabasePool, scanPolicy: FileIndexScanPolicy = .standard, batchSize: Int = 500) {
-    _dbQueue = databasePool
+    repository = RewindRepository(owner: "FileIndexerService", initialPool: databasePool)
     self.scanPolicy = scanPolicy
     self.batchSize = batchSize
   }
@@ -31,21 +30,10 @@ actor FileIndexerService {
   // MARK: - Database Access
 
   private func ensureDB() async throws -> DatabasePool {
-    if let db = _dbQueue {
-      guard let generation = _dbGeneration else { return db }
-      if await RewindDatabase.shared.poolGeneration() == generation {
-        return db
-      }
-    }
-
-    try await RewindDatabase.shared.initialize()
-    let (queue, generation) = await RewindDatabase.shared.getDatabaseQueueWithGeneration()
-    guard let db = queue else {
+    guard let databasePool = try await repository.databasePool() else {
       throw FileIndexerError.databaseNotInitialized
     }
-    _dbQueue = db
-    _dbGeneration = generation
-    return db
+    return databasePool
   }
 
   func invalidateCache() async {
@@ -54,8 +42,7 @@ actor FileIndexerService {
         scanCompletionWaiters.append(continuation)
       }
     }
-    _dbQueue = nil
-    _dbGeneration = nil
+    await repository.invalidate()
   }
 
   private func finishScanning() {

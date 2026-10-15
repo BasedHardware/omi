@@ -25,9 +25,8 @@ app: non-prod
 #   dynamic tools are absent/un-authorizable and tools/list bytes equal legacy.
 # - backend/tests/unit/test_chat_first_blocks.py proves block validation does
 #   no entity work while disabled.
-# - backend/tests/unit/test_chat_first_proactive_router.py and
-#   backend/tests/unit/test_chat_first_proactive_engine.py prove disabled
-#   materialization and proactive work do no feature-store/provider/metric work.
+# - backend/tests/unit/test_chat_first_proactive_router.py proves retired
+#   materialization does no proactive-store work, including when enabled.
 covers:
   # Each case below drives this root's real sampled-control failure/disabled path.
   - desktop/macos/Desktop/Sources/MainWindow/DesktopHomeView.swift

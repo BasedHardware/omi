@@ -21,6 +21,7 @@ final class MeetingScreenshotsTests: XCTestCase {
   func testDisabledStoreStopsBeforeCandidateSelection() {
     var didSelect = false
     let store = MeetingScreenshotsStore(
+      captureAuthorization: { .forTesting() },
       featureEnabled: { false },
       selectCandidates: { _ in
         didSelect = true
@@ -41,6 +42,7 @@ final class MeetingScreenshotsTests: XCTestCase {
   func testUntrustedWindowFailsClosedBeforeFetchOrSelection() {
     var didSelect = false
     let store = MeetingScreenshotsStore(
+      captureAuthorization: { .forTesting() },
       selectCandidates: { _ in
         didSelect = true
         return MeetingFrameSelector.Outcome()
@@ -69,18 +71,20 @@ final class MeetingScreenshotsTests: XCTestCase {
       adjudicatedAt: Date(),
       selectionFingerprint: "meeting-lifecycle-v0:0:300000")
     let store = MeetingScreenshotsStore(
+      captureAuthorization: { .forTesting() },
       selectCandidates: { _ in
         didSelect = true
         return MeetingFrameSelector.Outcome()
       },
+      adjudicateAndCommit: { _, _, _ in
+        ConversationScreenFrameSet(
+          revision: 1, banner: nil, strip: [], adjudicatedAt: Date(), selectionFingerprint: window.fingerprint)
+      },
       fetchPersistedSet: { _ in oldSet })
 
-    store.load(
+    await store.loadAndWait(
       conversationID: "changed-policy-\(UUID().uuidString)",
       selectionWindow: window)
-    for _ in 0..<100 where !didSelect {
-      await Task.yield()
-    }
 
     XCTAssertTrue(didSelect, "an adjudication from a different window policy must be re-selected")
     XCTAssertEqual(store.phase, .noCapture)
@@ -123,20 +127,20 @@ final class MeetingScreenshotsTests: XCTestCase {
     XCTAssertEqual(outcome.candidates.map(\.id), [2])
   }
 
-  func testLegacyTranscriptWindowAllowsSTTLatencyUpToSixtySeconds() throws {
+  func testLegacyTranscriptWindowAllowsSTTLatencyUpToTheServersThirtySeconds() throws {
     let lifecycleStart = Date(timeIntervalSince1970: 20_000)
     let transcriptEnd = 10 * 60.0
 
     let withinTolerance = MeetingScreenshotSelectionWindow.resolve(
       startedAt: lifecycleStart,
-      finishedAt: lifecycleStart.addingTimeInterval(transcriptEnd - 60),
+      finishedAt: lifecycleStart.addingTimeInterval(transcriptEnd - 30),
       segmentSpans: [(0, transcriptEnd)],
       hasTrustedOrigin: false)
     XCTAssertEqual(withinTolerance?.end, lifecycleStart.addingTimeInterval(transcriptEnd))
 
     let outsideTolerance = MeetingScreenshotSelectionWindow.resolve(
       startedAt: lifecycleStart,
-      finishedAt: lifecycleStart.addingTimeInterval(transcriptEnd - 61),
+      finishedAt: lifecycleStart.addingTimeInterval(transcriptEnd - 31),
       segmentSpans: [(0, transcriptEnd)],
       hasTrustedOrigin: false)
     XCTAssertNil(outsideTolerance)

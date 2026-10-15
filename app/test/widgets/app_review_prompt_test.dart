@@ -13,7 +13,7 @@ import 'package:omi/backend/preferences.dart';
 import 'package:omi/services/app_review_service.dart';
 import 'package:omi/widgets/app_review_prompt.dart';
 
-const _readingDuration = Duration(seconds: 15);
+const _readingDuration = Duration(seconds: 5);
 const _bottomIdleDuration = Duration(seconds: 2);
 
 void main() {
@@ -52,14 +52,16 @@ void main() {
           throw StateError('Reading must not initialize phone calls');
         },
         child: MaterialApp(
-            home: Scaffold(
-                body: AppReviewPrompt(
-          contentId: 'summary-1',
-          moment: AppReviewMoment.dailySummaryRead,
-          enabled: true,
-          service: service,
-          child: const SingleChildScrollView(child: SizedBox(height: 120)),
-        ))),
+          home: Scaffold(
+            body: AppReviewPrompt(
+              contentId: 'summary-1',
+              moment: AppReviewMoment.dailySummaryRead,
+              enabled: true,
+              service: service,
+              child: const SingleChildScrollView(child: SizedBox(height: 120)),
+            ),
+          ),
+        ),
       ),
     );
     await tester.pump();
@@ -74,20 +76,24 @@ void main() {
     addTearDown(capture.dispose);
     var nativeRequests = 0;
     final service = _service(storage, requestNativeReview: () async => nativeRequests++);
-    await tester.pumpWidget(ChangeNotifierProvider<CaptureProvider>.value(
-      value: capture,
-      child: MaterialApp(
+    await tester.pumpWidget(
+      ChangeNotifierProvider<CaptureProvider>.value(
+        value: capture,
+        child: MaterialApp(
           home: Scaffold(
-              body: AppReviewPrompt(
-        contentId: 'summary-1',
-        moment: AppReviewMoment.dailySummaryRead,
-        enabled: true,
-        service: service,
-        child: const SingleChildScrollView(child: SizedBox(height: 120)),
-      ))),
-    ));
+            body: AppReviewPrompt(
+              contentId: 'summary-1',
+              moment: AppReviewMoment.dailySummaryRead,
+              enabled: true,
+              service: service,
+              child: const SingleChildScrollView(child: SizedBox(height: 120)),
+            ),
+          ),
+        ),
+      ),
+    );
     await tester.pump();
-    await tester.pump(const Duration(seconds: 14));
+    await tester.pump(const Duration(seconds: 4));
     capture.pause();
     await tester.pump();
     await _finishReading(tester);
@@ -145,8 +151,12 @@ void main() {
     final signedOutService = _service(storage, requestNativeReview: () async => signedOutRequests++);
     SharedPreferencesUtil().uid = '';
 
-    await _pumpPrompt(tester,
-        service: signedOutService, moment: AppReviewMoment.dailySummaryRead, contentId: 'summary-1');
+    await _pumpPrompt(
+      tester,
+      service: signedOutService,
+      moment: AppReviewMoment.dailySummaryRead,
+      contentId: 'summary-1',
+    );
     await _finishReading(tester);
     expect(signedOutRequests, 0);
 
@@ -299,9 +309,7 @@ Future<void> _pumpPrompt(
           moment: moment,
           enabled: enabled,
           service: service,
-          child: const SingleChildScrollView(
-            child: SizedBox(height: 120, child: Text('A useful reading surface')),
-          ),
+          child: const SingleChildScrollView(child: SizedBox(height: 120, child: Text('A useful reading surface'))),
         ),
       ),
     ),

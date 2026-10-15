@@ -55,7 +55,6 @@ def side_effects(monkeypatch):
         'upsert_action_item_vector',
         'sync_action_item_reminder',
         'record_product_event',
-        '_wake_task_changes',
     ):
         monkeypatch.setattr(action_items_router, name, lambda *args, _name=name, **kwargs: calls.append((_name,)))
     monkeypatch.setattr(action_items_router, 'get_user_display_name', lambda uid: 'Owner')

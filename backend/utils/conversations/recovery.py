@@ -38,6 +38,21 @@ def _field(structured: Any, name: str) -> Any:
     return getattr(structured, name, None)
 
 
+_RECOVERY_SKIP_RULES = frozenset({'empty_transcript', 'filler_only', 'mic_check', 'no_content_words'})
+
+
+def recovery_rule_discard(decision: Any) -> bool:
+    """Only the original content-free rule ids may skip paid recovery notes.
+
+    Deterministic outage decisions and future rule ids are not admission proof.
+    """
+    return (
+        _field(decision, 'verdict') == 'discard'
+        and _field(decision, 'decided_by') == 'rule'
+        and _field(decision, 'reason') in _RECOVERY_SKIP_RULES
+    )
+
+
 def structured_is_rich(structured: Any) -> bool:
     """Whether the structured payload holds model-enriched content.
 
@@ -73,7 +88,7 @@ def verified_recovery_discard(discarded: Any, decision: Any) -> bool:
 def structured_has_protected_content(structured: Any, user_title: Any = None) -> bool:
     """Whether regenerating the row could overwrite content worth keeping.
 
-    Admission-only predicate: unlike ``structured_is_rich`` (which verifies new
+    Admission and discard-commit predicate: unlike ``structured_is_rich`` (which verifies new
     enrichment actually landed), a real ``title`` — set by the user or by an
     earlier successful pass — and the user-authored ``user_title`` field each
     make the row ineligible even with no overview, so recovery never clobbers

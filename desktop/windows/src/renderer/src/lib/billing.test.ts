@@ -93,10 +93,10 @@ describe('resolvePlanTitle', () => {
   it('remaps unlimited to Operator when the price belongs to the Operator catalog plan', () => {
     expect(
       resolvePlanTitle(sub({ plan: 'unlimited', current_price_id: 'price_op_y' }), CATALOG)
-    ).toBe('Operator')
+    ).toBe('Pro')
   })
   it('maps operator to Operator and architect to Architect', () => {
-    expect(resolvePlanTitle(sub({ plan: 'operator' }), CATALOG)).toBe('Operator')
+    expect(resolvePlanTitle(sub({ plan: 'operator' }), CATALOG)).toBe('Pro')
     expect(resolvePlanTitle(sub({ plan: 'architect' }), CATALOG)).toBe('Architect')
   })
   it.each([
@@ -178,13 +178,13 @@ const LIVE_CATALOG: SubscriptionPlan[] = [
 ]
 
 describe('resolvePlanTitle — catalog-first with the live Windows catalog', () => {
-  it('shows the catalog title the user actually bought, not the enum name', () => {
+  it('uses the canonical name when a legacy catalog title differs', () => {
     expect(
       resolvePlanTitle(sub({ plan: 'unlimited', current_price_id: 'price_u_m' }), LIVE_CATALOG)
-    ).toBe('Unlimited Plan')
+    ).toBe('Neo')
     expect(
       resolvePlanTitle(sub({ plan: 'architect', current_price_id: 'price_p_m' }), LIVE_CATALOG)
-    ).toBe('Omi Pro')
+    ).toBe('Architect')
   })
   it('falls back to the enum name when the price id is not in the catalog', () => {
     expect(
@@ -249,7 +249,12 @@ describe('currentPlanSubtitle', () => {
         sub({ plan: 'operator', status: 'active', current_price_id: 'price_op_m' }),
         CATALOG
       )
-    ).toBe('Operator Monthly • $49/mo')
+    ).toBe('Pro Monthly • $49/mo')
+  })
+  it('uses the price owner id despite a stale legacy title', () => {
+    const catalog = CATALOG.map((p) => ({ ...p, title: p.id === 'architect' ? 'Omi Pro' : p.title }))
+    expect(currentPlanSubtitle(sub({ plan: 'architect', status: 'active', current_price_id: 'price_arch_m' }), catalog))
+      .toBe('Architect Monthly • $99/mo')
   })
   it('shows the free-tier line otherwise', () => {
     expect(currentPlanSubtitle(sub({ plan: 'basic' }), CATALOG)).toBe(

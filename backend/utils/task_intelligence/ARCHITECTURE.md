@@ -37,27 +37,30 @@ client claim or cached enablement.
 - `candidate_service.py` owns candidate acceptance, rejection, expiry, and the
   post-commit task-integration handoff. `staged_migration.py` migrates only the
   legacy staged-task representation through that lifecycle.
+- `summary_tasks.py` prepares an explicit conversation-summary gesture as a
+  pending Candidate, reusing the extraction's semantic claim. It never accepts
+  in that request. The separate accept endpoint optionally carries a
+  `SummaryTaskReference`; `database/summary_task_links.py` rereads the stored
+  owner-scoped row inside the Candidate transaction, which commits task,
+  Candidate, and `target_task_id` together. Client titles/due dates are not
+  trusted task input. Replays return the linked task even after it is edited or
+  completed; stale/locked/deleted rows fail without a manual-task fallback.
 - `task_links.py`, `workstream_association.py`, and `workstream_index.py` bind
   validated tasks to canonical goals and workstreams. They may read resolvers
   owned by the database layer but must not become alternate persistence owners.
 
-## Recommendations and proactive Chat-first behavior
+## Recommendations and user-requested Chat blocks
 
 `recommendations.py` produces deterministic task/recommendation snapshots and
 dedupe keys. `live_recommendation_judgment.py` is the injectable structured
 LLM-judgment seam; its output is constrained by the deterministic snapshot.
-
-`proactive_engine.py` owns the eligibility- and generation-fenced proactive
-intent paths. Its agent tier converts post-commit wake triggers into a
-deterministic shortlist, then uses the injectable judge; the empty judge is the
-safe default. Ordinary task completion never creates a follow-up by itself; a
-meaningful, judged trigger may. Its closed deterministic tier persists
-capture-arrival and daily-opener intents, and releases due deferrals before
-agent judgment. A separate generation-bound cold-start path persists its
-deterministic first-run intent. These functions persist intents only; the
-desktop kernel remains the sole owner that materializes a visible Chat row.
 `fixture_runner.py` provides deterministic fixture adapters for those policies
 and must never be bound as production judgment.
+
+Chat no longer prepares or materializes proactive intents. Task/goal mutations,
+capture finalization, daily openers, cold starts, and due deferrals do not create
+Chat rows. Agent-requested rich blocks remain capability-validated replies to
+user turns; historical proactive rows are filtered by provenance.
 
 ## Contract changes
 

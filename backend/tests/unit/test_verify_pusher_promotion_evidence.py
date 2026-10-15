@@ -1025,7 +1025,11 @@ def test_isolated_canary_render_uses_one_proposed_config_map_for_every_reference
         for entry in container["env"]
         if isinstance(entry.get("valueFrom"), dict) and isinstance(entry["valueFrom"].get("configMapKeyRef"), dict)
     }
-    assert explicit_refs == {"REDIS_DB_HOST": config_name, "TYPESENSE_HOST": config_name}
+    assert explicit_refs == {
+        "PROACTIVITY_REDIS_HOST": config_name,
+        "REDIS_DB_HOST": config_name,
+        "TYPESENSE_HOST": config_name,
+    }
 
 
 def test_semantic_probe_attributes_the_durable_finalization_handoff_not_socket_presence() -> None:

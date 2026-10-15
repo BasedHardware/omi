@@ -217,56 +217,39 @@ class _DeleteConfirmStepState extends State<_DeleteConfirmStep> {
       title: context.l10n.deleteFlowConfirmTitle,
       subtitle: context.l10n.deleteFlowConfirmSubtitle,
       canPop: !_isDeleting,
-      body: Column(
+      // Irreversibility is said once, in the subtitle. The typed confirmation sits with the
+      // buttons so it is never hidden behind them, and stays above the keyboard.
+      body: ListView(
+        padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.xl),
         children: [
-          LeaveFlowNotice(
-            icon: FontAwesomeIcons.triangleExclamation,
-            text: context.l10n.cannotBeUndone,
-            color: OmiColors.danger,
+          OmiSettingsGroup(
+            children: [
+              OmiSettingsRow(
+                leading: const FaIcon(FontAwesomeIcons.solidCommentDots),
+                title: context.l10n.allDataErased,
+              ),
+              OmiSettingsRow(leading: const FaIcon(FontAwesomeIcons.puzzlePiece), title: context.l10n.appsDisconnected),
+              OmiSettingsRow(
+                leading: const FaIcon(FontAwesomeIcons.creditCard),
+                title: context.l10n.deleteConsequenceSubscription,
+              ),
+            ],
           ),
           const SizedBox(height: OmiSpacing.md),
-          Expanded(
-            child: ListView(
-              padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.xl),
-              children: [
-                LeaveFlowConsequenceRow(icon: FontAwesomeIcons.solidCommentDots, text: context.l10n.allDataErased),
-                LeaveFlowConsequenceRow(icon: FontAwesomeIcons.puzzlePiece, text: context.l10n.appsDisconnected),
-                LeaveFlowConsequenceRow(
-                  icon: FontAwesomeIcons.creditCard,
-                  text: context.l10n.deleteConsequenceSubscription,
+          OmiSettingsGroup(
+            children: [
+              ValueListenableBuilder<bool>(
+                valueListenable: DataExport.exportInProgress,
+                builder: (context, exporting, _) => OmiSettingsRow(
+                  key: const Key('delete_account_export_row'),
+                  leading: const FaIcon(FontAwesomeIcons.fileArrowDown),
+                  title: context.l10n.exportAllData,
+                  trailing: exporting ? const OmiSpinner(size: OmiSpinnerSize.small) : null,
+                  showChevron: !exporting,
+                  onTap: _isDeleting || exporting ? null : () => DataExport.run(context),
                 ),
-                LeaveFlowConsequenceRow(icon: FontAwesomeIcons.fileArrowDown, text: context.l10n.exportBeforeDelete),
-                // The row above promises an export; this is where it happens.
-                ValueListenableBuilder<bool>(
-                  valueListenable: DataExport.exportInProgress,
-                  builder: (context, exporting, _) => OmiButton.secondary(
-                    label: context.l10n.exportAllData,
-                    leading: const FaIcon(FontAwesomeIcons.fileArrowDown),
-                    size: OmiButtonSize.compact,
-                    expand: true,
-                    isLoading: exporting,
-                    onPressed: _isDeleting ? null : () => DataExport.run(context),
-                  ),
-                ),
-                const SizedBox(height: OmiSpacing.xs),
-                LeaveFlowConsequenceRow(icon: FontAwesomeIcons.ban, text: context.l10n.deleteConsequenceNoRecovery),
-                const SizedBox(height: OmiSpacing.md),
-                Text(
-                  context.l10n.deleteTypeToConfirm,
-                  style: OmiType.footnote.copyWith(color: OmiColors.textSecondary, fontWeight: FontWeight.w600),
-                ),
-                const SizedBox(height: OmiSpacing.xs),
-                TextField(
-                  controller: _flow.confirm,
-                  enabled: !_isDeleting,
-                  textCapitalization: TextCapitalization.characters,
-                  inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[A-Za-z]'))],
-                  style: OmiType.callout.copyWith(fontWeight: FontWeight.w600, letterSpacing: 2),
-                  decoration: leaveFlowInputDecoration(hint: confirmWord, focusColor: OmiColors.danger)
-                      .copyWith(hintStyle: OmiType.callout.copyWith(color: OmiColors.textTertiary, letterSpacing: 2)),
-                ),
-              ],
-            ),
+              ),
+            ],
           ),
         ],
       ),
@@ -276,8 +259,35 @@ class _DeleteConfirmStepState extends State<_DeleteConfirmStep> {
           final canDelete = !_isDeleting && value.text.trim().toUpperCase() == confirmWord;
           return Column(
             mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              OmiButton(
+              Text(
+                context.l10n.deleteTypeToConfirm,
+                style: OmiType.footnote.copyWith(color: OmiColors.textSecondary, fontWeight: FontWeight.w600),
+              ),
+              const SizedBox(height: OmiSpacing.xs),
+              TextField(
+                key: const Key('delete_account_confirm_field'),
+                controller: _flow.confirm,
+                enabled: !_isDeleting,
+                textCapitalization: TextCapitalization.characters,
+                inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[A-Za-z]'))],
+                style: OmiType.callout.copyWith(fontWeight: FontWeight.w600, letterSpacing: 2),
+                decoration: leaveFlowInputDecoration(
+                  hint: confirmWord,
+                  focusColor: OmiColors.danger,
+                ).copyWith(hintStyle: OmiType.callout.copyWith(color: OmiColors.textTertiary, letterSpacing: 2)),
+              ),
+              const SizedBox(height: OmiSpacing.md),
+              // Delete is the primary once the word is typed; until then Keep is the only live action.
+              OmiButton.destructive(
+                label: context.l10n.deleteAccountTitle,
+                expand: true,
+                isLoading: _isDeleting,
+                onPressed: canDelete || _isDeleting ? _confirmDelete : null,
+              ),
+              const SizedBox(height: OmiSpacing.xs),
+              OmiButton.secondary(
                 label: context.l10n.keepMyAccount,
                 expand: true,
                 onPressed: _isDeleting
@@ -286,13 +296,6 @@ class _DeleteConfirmStepState extends State<_DeleteConfirmStep> {
                         PlatformManager.instance.analytics.deleteAccountKeptAccount(step: 3, reason: _flow.reason);
                         _flow.exit.close(context);
                       },
-              ),
-              const SizedBox(height: OmiSpacing.xs),
-              OmiButton.destructive(
-                label: context.l10n.deleteAccountTitle,
-                expand: true,
-                isLoading: _isDeleting,
-                onPressed: canDelete || _isDeleting ? _confirmDelete : null,
               ),
             ],
           );

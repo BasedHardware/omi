@@ -276,6 +276,13 @@ class DesktopSwiftCIContractTests(unittest.TestCase):
         self.assertIn("name: Desktop Swift Build & Tests", self.jobs["desktop-swift"])
         self.assertIn("name: Desktop Swift Release Compile", self.jobs["desktop-swift-release-compile"])
 
+    def test_deferred_fork_aggregate_is_neutral_only_when_heavy_jobs_skip(self):
+        gate = self.jobs["desktop-swift"]
+        self.assertIn("::notice title=Heavy CI deferred::", gate)
+        self.assertIn("Deferred Desktop Swift verification must be skipped", gate)
+        self.assertIn("Deferred Desktop Swift release compile must be skipped", gate)
+        self.assertIn('exit 0', gate)
+
     def test_notification_boundary_runs_targeted_release_regression(self):
         job = self.jobs["desktop-swift-release-compile"]
         for path in (
@@ -345,6 +352,46 @@ class DesktopSwiftCIContractTests(unittest.TestCase):
 
         self.assertEqual(MACOS_JOBS, ["desktop-swift-verify", "desktop-swift-release-compile"])
         self.assertIn("rather than claiming two", workflow)
+
+    def test_compile_only_phase_allocates_and_gates_the_existing_verifier(self):
+        changes = self.jobs["changes"]
+        verify = self.jobs["desktop-swift-verify"]
+        gate = self.jobs["desktop-swift"]
+        self.assertIn("should_test_compile: ${{ steps.changed.outputs.should_test_compile }}", changes)
+        self.assertIn("needs.changes.outputs.should_test_compile == 'true'", verify.split("steps:", 1)[0])
+        self.assertIn("run-swift-ci.sh --test-compile", verify)
+        self.assertIn("COMPILE_OUTCOME: ${{ steps.desktop_swift_test_compile.outcome }}", verify)
+        self.assertIn('require_success "$COMPILE_REQUIRED"', verify)
+        self.assertIn('|| [ "$COMPILE_REQUIRED" = true ]', gate)
+        for name in ("Test desktop Swift app", "Desktop launcher script tests"):
+            block = verify.split(f"- name: {name}\n", 1)[1].split("\n      - name:", 1)[0]
+            condition = block.split("\n", 1)[0]
+            self.assertIn("should_run_tests == 'true'", condition)
+            self.assertNotIn("should_test_compile", condition)
+
+    def test_compile_only_verdict_fails_on_failed_or_skipped_compilation(self):
+        verify = self.jobs["desktop-swift-verify"]
+        block = verify.split("- name: Require independent macOS phase verdicts", 1)[1]
+        script = block.split("        run: |\n", 1)[1]
+        script = "\n".join(line[10:] for line in script.splitlines())
+        for outcome in ("success", "failure", "skipped", "cancelled"):
+            with self.subTest(outcome=outcome):
+                environment = os.environ | {
+                    "STATIC_REQUIRED": "false", "TESTS_REQUIRED": "false", "COMPILE_REQUIRED": "true",
+                    "STATIC_OUTCOME": "skipped", "LAUNCHER_OUTCOME": "skipped", "TEST_OUTCOME": "skipped",
+                    "COMPILE_OUTCOME": outcome,
+                }
+                result = subprocess.run(["bash", "-e", "-c", script], env=environment, capture_output=True, text=True)
+                self.assertEqual(result.returncode == 0, outcome == "success", result.stderr)
+
+    def test_siri_advisory_narrows_only_pr_events(self):
+        advisory = _job_text(_workflow_text(), "desktop-siri-xcode27-advisory")
+        condition = next(line.strip() for line in advisory.splitlines() if line.strip().startswith("if:"))
+        self.assertIn("github.event_name == 'pull_request' && needs.changes.outputs.should_siri_advisory == 'true'", condition)
+        self.assertIn("github.event_name != 'pull_request' && (needs.changes.outputs.should_run_static == 'true' || needs.changes.outputs.should_run_tests == 'true')", condition)
+        self.assertIn("should_siri_advisory: ${{ steps.changed.outputs.should_siri_advisory }}", self.jobs["changes"])
+        self.assertIn("continue-on-error: true", advisory)
+        self.assertNotIn("desktop-siri-xcode27-advisory", self.jobs["desktop-swift"])
 
     def test_independent_macos_phases_publish_native_step_outcomes(self):
         """A static failure must not mask the later independent Swift suite."""
@@ -552,7 +599,10 @@ class DesktopSwiftCIContractTests(unittest.TestCase):
             with self.subTest(source=name):
                 self.assertTrue((root / f"{name}.swift").read_text().startswith("#if compiler(>=6.4)\n"))
         snapshot = (root / "SiriSnapshotStore.swift").read_text()
-        self.assertIn("#if compiler(>=6.4)\nfinal class SiriSnapshotStore", snapshot)
+        compiler_gate = snapshot.index("#if compiler(>=6.4)")
+        snapshot_store = snapshot.index("final class SiriSnapshotStore")
+        self.assertLess(compiler_gate, snapshot_store)
+        self.assertIn("#endif", snapshot[snapshot_store:])
         bridge = (root / "SiriBridge.swift").read_text()
         self.assertIn("#else\nimport Flutter", bridge)
         self.assertIn("final class SiriBridge: SiriIndexApi", bridge.split("#else", 1)[1])
@@ -860,9 +910,9 @@ class DesktopSwiftCIContractTests(unittest.TestCase):
     def test_adversarial_remove_runner_mode_detected(self):
         """The workflow must not retain a toolchain setup while bypassing the shared runner."""
         wf_text = WORKFLOW_PATH.read_text(encoding="utf-8")
-        tampered = wf_text.replace("run-swift-ci.sh --test", "swift-test-suites.sh", 1)
+        tampered = wf_text.replace("run-swift-ci.sh --test\n", "swift-test-suites.sh\n", 1)
         combined = _job_text(tampered, "desktop-swift-verify")
-        self.assertNotIn("run-swift-ci.sh --test", combined)
+        self.assertNotIn("run-swift-ci.sh --test\n", combined)
 
     def test_adversarial_cache_key_weakening_detected(self):
         """A cache key without Package.resolved or toolchain identity is caught."""

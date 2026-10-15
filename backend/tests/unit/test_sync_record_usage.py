@@ -47,7 +47,7 @@ def _extract_function_body(source, func_name):
 class TestRecordUsageImport:
     def test_record_usage_imported(self):
         source = _read_sync_source()
-        assert 'from utils.analytics import record_usage' in source
+        assert 'from utils.analytics import record_sync_v1_usage as record_usage' in source
 
     def test_import_at_module_level(self):
         source = _read_sync_source()

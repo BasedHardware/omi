@@ -58,6 +58,7 @@ def classify_sync_lane(
     *,
     client_device_id: Optional[str],
     now: Optional[float] = None,
+    allow_legacy_fresh: bool = False,
 ) -> SyncLaneDecision:
     """Classify a whole upload batch; mixed batches conservatively become backfill."""
     capture_times: list[float] = []
@@ -112,9 +113,17 @@ def classify_sync_lane(
         )
     if not client_device_id:
         return SyncLaneDecision(
-            lane=SyncLane.BACKFILL,
+            lane=(
+                SyncLane.FRESH
+                if allow_legacy_fresh and effective_now - oldest <= fresh_cutoff_seconds()
+                else SyncLane.BACKFILL
+            ),
             trust=CaptureTimeTrust.LEGACY,
-            reason='unbound_capture_time',
+            reason=(
+                'recent_legacy_capture'
+                if allow_legacy_fresh and effective_now - oldest <= fresh_cutoff_seconds()
+                else 'unbound_capture_time'
+            ),
             oldest_capture_at=oldest,
             newest_capture_at=newest,
             maximum_age_seconds=maximum_age,

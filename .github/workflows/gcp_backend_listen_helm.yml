@@ -200,6 +200,7 @@ jobs:
               exit 1
             fi
           fi
+          echo "BACKEND_LISTEN_SOURCE_SHA=$(git rev-parse "${REQUESTED_TAG}^{commit}")" >> "$GITHUB_ENV"
           RESOLVED_TAG=$(git rev-parse --short=7 "${REQUESTED_TAG}^{commit}")
           if ! gcloud container images describe "gcr.io/${{ vars.GCP_PROJECT_ID }}/backend:${RESOLVED_TAG}" >/dev/null 2>&1; then
             echo "ERROR: gcr.io/${{ vars.GCP_PROJECT_ID }}/backend:${RESOLVED_TAG} does not exist." >&2
@@ -208,6 +209,30 @@ jobs:
           fi
           echo "Deploying image tag ${RESOLVED_TAG} (currently ${RUNNING_TAG:-<none>})"
           echo "BACKEND_LISTEN_IMAGE_TAG=$RESOLVED_TAG" >> "$GITHUB_ENV"
+
+      # Kept and rollback images are already serving and indexes are
+      # create-only, so the rollback lane must not gain new failure modes; the
+      # gate runs only when the explicit deploy path resolved a source SHA.
+      - name: Checkout immutable Firestore gate controls
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.workflow_sha }}
+          path: .github/firestore-workflow
+          persist-credentials: false
+          fetch-depth: 1
+          sparse-checkout: |
+            .github/actions/firestore-readiness
+            backend/scripts
+            backend/database
+        if: ${{ env.BACKEND_LISTEN_SOURCE_SHA != '' }}
+
+      - name: Verify serving Firestore indexes
+        if: ${{ env.BACKEND_LISTEN_SOURCE_SHA != '' }}
+        uses: ./.github/firestore-workflow/.github/actions/firestore-readiness
+        with:
+          source_sha: ${{ env.BACKEND_LISTEN_SOURCE_SHA }}
+          project_id: ${{ vars.RUNTIME_GCP_PROJECT_ID }}
+          credentials_json: ${{ secrets.GCP_FIRESTORE_READONLY_CREDENTIALS }}
 
       - name: Carry forward config this workflow does not own
         if: ${{ (github.event.inputs.mode || 'deploy') == 'deploy' }}

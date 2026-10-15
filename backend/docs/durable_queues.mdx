@@ -63,7 +63,6 @@ cursor), `desktop_dispatches` / `desktop_artifact_deliveries` /
 | `memory_outbox` | `database/memory_outbox_worker.py`, `memory_apply_store.py` | Y — per-event lease | Y — `max_attempts=5`, `dead_letter` + `last_error_code` | P — deterministic `event_id`; no explicit adopt helper | P — FIFO by `available_at` | N | Y |
 | `memory_outbox` / `vector_repair_purge` | `database/memory_vector_repair_outbox.py`, `memory_vector_repair_outbox_worker.py` | Y | P — `max_attempts=3`, `dead_letter` + `last_error`, no typed reason enum, no backoff | Y — `idempotency_key` | N | N | P |
 | `candidate_integration_outbox` | `database/candidates.py`, `utils/task_intelligence/candidate_service.py` | Y — per-item claim | N — `failed` is retried forever; no DL | P — doc id = `candidate_id`; `set` overwrites | N | N | Y |
-| `chat_first_proactive_intents` + `chat_first_dead_letters` | `database/chat_first_intents.py`, `chat_first_delivery_attempts.py`, `routers/chat_first.py` | Y — per-intent txn (PR #12556) | Y — fetch/rejection/deferral budgets + own DL collection | Y — stable `intent_id`; dead letter blocks recreate | Y — meeting notes ahead of capture cards | N — stall is a counter event, not a durable gauge | P — materialize can return HTTP 200 with rejection outcomes |
 | `conversation_finalization_jobs` | `database/conversation_finalization_jobs.py` | Y — per-job lease | Y — Cloud Tasks attempt fence → `dead_letter` + `last_failure_code` | Y — seed `(uid, conversation_id, revision)` | N | Y — `listen_finalization_oldest_nonterminal_age_seconds` (not `omi_queue_*`) | Y |
 | daily-summary hour-group loop | `utils/other/notifications.py` | N — one hour-group exception aborts later hours (#12530) | N | P — per-uid per-day Redis lock | N | N | N — top-level `except` logs and returns |
 | daily memory sweep | `utils/memory/daily_memory_sweep_inventory.py`, `daily_memory_sweep.py` | P — per-UID with page cap (#12533) | P — retry collection, not a typed DL | Y — receipts / invocation fences | P — retries first | N | P |
@@ -74,7 +73,6 @@ cursor), `desktop_dispatches` / `desktop_artifact_deliveries` /
 |---|---|---|
 | `task_recurrence_inbox` | `database/recurrence_inbox.py` | Per-receipt drain; no DL; identity-keyed `receipt_id` |
 | `frame_deletion_outbox` | `database/frame_requests.py` | Per-item cleanup; exponential backoff; unbounded attempts |
-| `projection_repairs` | `database/projection_repair.py` | `max_attempts=3` → `dead_letter` |
 | `sync_jobs` | `database/sync_jobs.py`, Cloud Tasks | Redis job + GCP queue library, not a hand-rolled Firestore batch loop |
 
 Cloud Tasks (`sync-jobs`, `sync-backfill`, `audio-merge`, `account-deletion`,
@@ -125,12 +123,17 @@ Remaining exceptions, called out because they must not change product semantics:
   `blocked_byok`, Cloud Tasks fence, and `reconcile_after_at`. The attempt
   decision in the async pusher helper comes from `decide_attempt` in
   `utils/durable_queue_policy.py`. Age is sampled store-wide on the periodic
-  tick from `get_finalization_job_summary`.
-- `chat_first_proactive_intents` fetch order uses `ready_sort_key` via
-  `database/chat_first_intent_queue.py` so `chat_first_intents.py` does not
-  grow. Materialize keeps HTTP 200 for the client contract; a batch whose
-  every intent is a hard rejection increments `chat_first_proactive_total`
-  `materialize_batch_rejected`.
+  tick from `get_finalization_job_summary`. The existing
+  `listen_finalization_oldest_nonterminal_age_seconds` covers only `queued` and
+  `leased` (system-owned work). User-reconnect waiting is reported separately by
+  `listen_finalization_oldest_blocked_byok_age_seconds`, with no alert. BYOK
+  expired ownership returns transactionally to `blocked_byok`; legacy recovery
+  scans at most 50 rows per active status with rotating cursors and the existing
+  status/created-at index.
+- Chat-first proactive intents and projection repairs are retired from the
+  sampler. Released-client materialization returns empty HTTP 200 responses.
+  Historical rows use the capped, default-dry-run retirement script; the live
+  canonical memory and vector repair queues keep their existing consumers.
 - `frame_deletion_outbox` still retries storage deletes without a hard stop
   (user objects must keep converging). Drain is `drain_isolated`; failures
   record `last_error_text`.
@@ -156,3 +159,13 @@ New queues must import those modules. The oldest-ready gauge is
 `omi-queue-oldest-ready` in `backend/charts/monitoring/alerts/resilience.json`
 with `noDataState: Alerting`. No new Firestore composite indexes. Failure-class
 registry JSON is not edited in this PR.
+
+### Consumer liveness audit
+
+A drain helper in this inventory does not prove a scheduled production consumer.
+Projection repairs and automatic Chat-first materialization are retired. Candidate
+integrations still lack an autonomous retry caller and remain monitored. The
+historical counts, cleanup dry-run and operational boundaries are in
+[`stale-queues-and-desktop-vertex.md`](runbooks/stale-queues-and-desktop-vertex.md).
+Age sampling projects metadata only and excludes future retries and live
+candidate leases; expired leases remain ready so vanished dispatchers still page.

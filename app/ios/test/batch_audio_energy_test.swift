@@ -31,11 +31,66 @@ struct BatchAudioEnergyTests {
         try testCapturePolicyFixture()
         try testCapturePolicyAdmission()
         try testProcessMuteLatch()
+        try testIngressPolicyDecodeEconomy()
         try testRevisionRetiresQueuedBleWrites()
         try testPhoneWriterPolicyAcrossRestart()
         try testConfigChanges()
         try testLocationSnapshot()
         print("PASS: capture policy, revision retirement, single writes, partial failures, config changes, and location lifecycle")
+    }
+
+    // Exercise the same decoder injected into the BLE ingress owner. Authorization
+    // must see every durable change and the deny-only process latch immediately.
+    static func testIngressPolicyDecodeEconomy() throws {
+        let defaults = UserDefaults(suiteName: "ingress-decode-\(UUID().uuidString)")!
+        CaptureAdmissionPolicy.resetProcessLatchForTesting()
+        defer { CaptureAdmissionPolicy.resetProcessLatchForTesting() }
+        var parses = 0
+        let decoder = CaptureAdmissionPolicyDecoder {
+            parses += 1
+            return CaptureAdmissionPolicy.decodeCanonical($0)
+        }
+        let open = "{\"version\":1,\"revision\":7,\"muted\":false}"
+        defaults.set(open, forKey: CaptureAdmissionPolicy.defaultsKey)
+        for _ in 0..<10_000 {
+            check(CaptureAdmissionPolicy.load(from: defaults, decoder: decoder) == .init(muted: false, revision: 7))
+        }
+        check(parses == 1)
+        // Same revision is deliberately insufficient as a cache key.
+        defaults.set("{\"version\":1,\"revision\":7,\"muted\":true}", forKey: CaptureAdmissionPolicy.defaultsKey)
+        check(CaptureAdmissionPolicy.load(from: defaults, decoder: decoder).muted)
+        check(parses == 2)
+        for value: Any in ["{broken", "{\"version\":2,\"revision\":8,\"muted\":false}", 123, String(repeating: "x", count: 4097)] {
+            defaults.set(value, forKey: CaptureAdmissionPolicy.defaultsKey)
+            check(CaptureAdmissionPolicy.load(from: defaults, decoder: decoder).muted)
+        }
+        defaults.removeObject(forKey: CaptureAdmissionPolicy.defaultsKey)
+        defaults.set(true, forKey: "flutter.deviceMuted")
+        check(CaptureAdmissionPolicy.load(from: defaults, decoder: decoder).muted)
+        defaults.set(false, forKey: "flutter.deviceMuted")
+        check(!CaptureAdmissionPolicy.load(from: defaults, decoder: decoder).muted)
+        defaults.set(open, forKey: CaptureAdmissionPolicy.defaultsKey)
+        check(!CaptureAdmissionPolicy.load(from: defaults, decoder: decoder).muted)
+        check(CaptureAdmissionPolicy.applyProcessUpdate(muted: true, revision: 8, defaults: defaults) == .applied)
+        check(CaptureAdmissionPolicy.load(from: defaults, decoder: decoder) == .init(muted: true, revision: 8))
+        check(CaptureAdmissionPolicy.applyProcessUpdate(muted: false, revision: 8, defaults: defaults) == .persistenceNotReady)
+        check(CaptureAdmissionPolicy.load(from: defaults, decoder: decoder).muted)
+        defaults.set("{\"version\":1,\"revision\":8,\"muted\":false}", forKey: CaptureAdmissionPolicy.defaultsKey)
+        check(CaptureAdmissionPolicy.load(from: defaults, decoder: decoder).muted)
+        check(CaptureAdmissionPolicy.applyProcessUpdate(muted: false, revision: 8, defaults: defaults) == .applied)
+        check(!CaptureAdmissionPolicy.load(from: defaults, decoder: decoder).muted)
+
+        if ProcessInfo.processInfo.environment["OMI_POLICY_BENCHMARK"] == "1" {
+            let iterations = 100_000
+            func measure(_ decoder: CaptureAdmissionPolicyDecoder?) -> Double {
+                let start = ProcessInfo.processInfo.systemUptime
+                for _ in 0..<iterations { check(!CaptureAdmissionPolicy.load(from: defaults, decoder: decoder).muted) }
+                return ProcessInfo.processInfo.systemUptime - start
+            }
+            let uncached = measure(nil)
+            let cached = measure(decoder)
+            print("POLICY_BENCHMARK iterations=\(iterations) uncached_seconds=\(uncached) cached_seconds=\(cached)")
+        }
     }
 
     private struct CapturePolicyFixture: Decodable {

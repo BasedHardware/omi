@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:developer';
 import 'dart:io';
 
+import 'package:omi/backend/http/api_result.dart';
 import 'package:omi/backend/http/shared.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/app.dart';
@@ -177,6 +178,27 @@ Future<({List<App> apps, Map<String, dynamic> pagination, Map<String, dynamic>? 
     PlatformManager.instance.crashReporter.reportCrash(e, stackTrace);
     return (apps: <App>[], pagination: {'total': 0, 'count': 0, 'offset': offset, 'limit': limit}, filters: null);
   }
+}
+
+Future<ApiResult<wire.GeneratedAppSearchResponse>> retrieveInstalledChatApps({
+  int offset = 0,
+  int limit = 100,
+  ApiSend? send,
+}) {
+  return executeApi<wire.GeneratedAppSearchResponse>(
+    request: ApiRequest(
+      url: '${Env.apiBaseUrl}v2/apps/search?installed_apps=true&offset=$offset&limit=$limit',
+      method: 'GET',
+    ),
+    // Reject scalar and list bodies before generated decoding so malformed
+    // success replies stay classified as response format errors.
+    decode: (body) {
+      final decoded = jsonDecode(body);
+      if (decoded is Map<String, dynamic>) return wire.GeneratedAppSearchResponse.fromJson(decoded);
+      throw const FormatException('Expected a JSON object for the app search response');
+    },
+    send: send,
+  );
 }
 
 Future<List<App>> retrievePopularApps() async {

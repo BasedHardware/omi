@@ -376,6 +376,9 @@ def _desktop_transcribe_isolation():
             'utils.llm.usage_tracker',
             'utils.llm.gateway_client',
             'utils.llm.gateway_observability',
+            # The shared chat turn imports app awareness at module load. Keep
+            # its persistence adapter isolated in this router harness.
+            'utils.messaging.app_awareness',
             'utils.conversations.process_conversation',
             'utils.notifications',
             'utils.other.storage',
@@ -1411,7 +1414,7 @@ class TestTranscribeStreamWebSocket:
             attempt.fail.side_effect = lambda _issue: setattr(attempt, 'finished', True)
             attempt.cancel.side_effect = lambda: setattr(attempt, 'finished', True)
 
-            dying_socket = MagicMock()
+            dying_socket = MagicMock(leg_outcome=None)
             dying_socket.is_connection_dead = False
             dying_socket.death_reason = 'stream error'
 
@@ -1423,7 +1426,7 @@ class TestTranscribeStreamWebSocket:
             dying_socket.finalize = MagicMock()
             dying_socket.finish = MagicMock()
 
-            replacement_socket = MagicMock()
+            replacement_socket = MagicMock(leg_outcome=None)
             replacement_socket.is_connection_dead = False
             replacement_socket.death_reason = None
             replacement_accept_order = []
@@ -1510,7 +1513,7 @@ class TestTranscribeStreamWebSocket:
             attempt.fail.side_effect = lambda _issue: setattr(attempt, 'finished', True)
             attempt.cancel.side_effect = lambda: setattr(attempt, 'finished', True)
 
-            dying_socket = MagicMock()
+            dying_socket = MagicMock(leg_outcome=None)
             dying_socket.is_connection_dead = False
             dying_socket.death_reason = 'stream error'
 
@@ -1522,7 +1525,7 @@ class TestTranscribeStreamWebSocket:
             dying_socket.finalize = MagicMock()
             dying_socket.finish = MagicMock()
 
-            rejected_socket = MagicMock()
+            rejected_socket = MagicMock(leg_outcome=None)
             rejected_socket.is_connection_dead = True
             rejected_socket.death_reason = 'capacity_full'
             rejected_socket.finish = MagicMock()

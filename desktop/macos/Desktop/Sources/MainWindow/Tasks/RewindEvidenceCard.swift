@@ -53,7 +53,7 @@ enum RewindEvidenceCardPresentationPolicy {
     switch availability {
     case .checking: return "Checking whether this frame is still available locally"
     case .available: return "Opens the matching frame in Rewind"
-    case .unavailable: return "This frame is unavailable locally, possibly because it was pruned"
+    case .unavailable: return "This screenshot is no longer on this Mac. Older ones are removed to save space."
     }
   }
 }

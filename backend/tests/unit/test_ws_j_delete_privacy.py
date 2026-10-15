@@ -1781,8 +1781,10 @@ def test_delete_all_final_rescan_tombstones_concurrent_write(monkeypatch, canoni
         snapshot = original_fetch(**kwargs)
         if not injected:
             injected = True
-            with pytest.raises(RuntimeError, match="destructive operation"):
+            with pytest.raises(Exception, match="account_gate_busy") as caught:
                 write_canonical_extraction_memory(uid, concurrent_payload, db_client=canonical_db)
+            assert getattr(caught.value, "status_code", None) == 409
+            assert "destructive operation" in str(caught.value.__cause__)
             concurrent_write_blocked = True
         return snapshot
 
@@ -2073,3 +2075,81 @@ def test_purge_derived_user_data_wires_canonical_purge_helper():
         node.func.id for node in ast.walk(purge_fn) if isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
     }
     assert "purge_canonical_derived_user_data" in call_names
+
+
+@pytest.mark.parametrize("gate_kind", ["explicit_memory_deletion", "retention_cleanup"])
+@pytest.mark.parametrize(
+    "collection",
+    [
+        "memory_operations",
+        "memory_commits",
+        "memory_outbox",
+        "memory_ledger_reopens",
+        "jit_trigger_feedback",
+        "jit_proactivity_events",
+        "memory_source_replacements",
+    ],
+)
+def test_privacy_history_stops_before_next_delete_on_takeover(monkeypatch, collection, gate_kind):
+    from database.legal_holds import DestructiveGateTakeover
+
+    uid = "uid-history-takeover"
+    paths = [f"users/{uid}/{collection}/{key}" for key in ("a", "b")]
+    db = _FakeDb({path: {"memory_id": "deleted"} for path in paths})
+    checks = []
+
+    def check(checked_uid, kind, *, firestore_client):
+        assert (checked_uid, kind, firestore_client) == (uid, gate_kind, db)
+        checks.append(kind)
+        if paths[0] not in db.docs:
+            raise DestructiveGateTakeover("peer completed before hold")
+
+    monkeypatch.setattr(memory_ledger, "assert_destructive_gate_still_ours", check)
+    with pytest.raises(DestructiveGateTakeover):
+        memory_ledger.purge_canonical_privacy_history_for_memories(
+            uid, ["deleted"], firestore_client=db, revalidate_gate=True, gate_kind=gate_kind
+        )
+    assert len(checks) == 2
+    assert set(db.docs) == {paths[1]}
+
+
+def test_privacy_finalization_takeover_keeps_all_tombstones(monkeypatch):
+    from database.legal_holds import DestructiveGateTakeover
+
+    uid = "uid-finalize-takeover"
+    path = f"users/{uid}/memory_items/deleted"
+    db = _FakeDb({path: {"status": "tombstoned", "evidence": []}})
+
+    def check(*args, **kwargs):
+        raise DestructiveGateTakeover("peer completed before hold")
+
+    monkeypatch.setattr(memory_ledger, "assert_destructive_gate_still_ours", check)
+    with pytest.raises(DestructiveGateTakeover):
+        memory_ledger.finalize_canonical_privacy_tombstones(uid, ["deleted"], firestore_client=db, revalidate_gate=True)
+    assert path in db.docs
+
+
+@pytest.mark.parametrize("gate_kind", ["explicit_memory_deletion", "retention_cleanup"])
+def test_privacy_finalization_transaction_fences_all_deletes(monkeypatch, gate_kind):
+    from database.legal_holds import LegalHoldAuthorityUnavailable
+
+    uid = "uid-finalize-transaction-fence"
+    path = f"users/{uid}/memory_items/deleted"
+    db = _FakeDb({path: {"status": "tombstoned", "evidence": []}})
+    monkeypatch.setattr(memory_ledger, "assert_destructive_gate_still_ours", lambda *args, **kwargs: None)
+    monkeypatch.setattr(memory_ledger, "current_destructive_operation_token", lambda *args, **kwargs: "original")
+    checks = []
+
+    def fence(transaction, client, **kwargs):
+        assert transaction is db.transaction_obj
+        assert client is db
+        checks.append(kwargs)
+        raise LegalHoldAuthorityUnavailable("hold or takeover in transaction")
+
+    monkeypatch.setattr(memory_ledger, "assert_destructive_operation_transaction", fence)
+    with pytest.raises(LegalHoldAuthorityUnavailable):
+        memory_ledger.finalize_canonical_privacy_tombstones(
+            uid, ["deleted"], firestore_client=db, revalidate_gate=True, gate_kind=gate_kind
+        )
+    assert checks == [{"uid": uid, "kind": gate_kind, "token": "original"}]
+    assert path in db.docs

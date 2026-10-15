@@ -11,6 +11,7 @@ class FakeVoiceIO implements GuidedVoiceIO {
   bool goalSuccess = true;
   bool unavailable = false;
   int startCount = 0;
+  bool startFails = false;
   Completer<String>? pendingTranscription;
   final uploads = <Uint8List>[];
   String text = 'My name is Robin and I build bicycles.';
@@ -33,6 +34,7 @@ class FakeVoiceIO implements GuidedVoiceIO {
   @override
   Future<void> start(void Function(Uint8List) callback, VoidCallback interrupted) async {
     startCount++;
+    if (startFails) throw StateError('microphone failed to start');
     audio = callback;
   }
 
@@ -76,21 +78,28 @@ class FakeVoiceIO implements GuidedVoiceIO {
   void speak([int seconds = 6]) => audio!(Uint8List(32000 * seconds));
 }
 
-void main() {
-  Future<void> completeAnswers(FakeVoiceIO io, GuidedVoiceController flow) async {
-    await flow.start();
-    for (var i = 0; i < 4; i++) {
-      io.text = i == 3 ? 'Right now my number one goal is to ship Omi.' : 'Personal detail $i';
-      io.speak();
-      await flow.next();
-    }
+Future<void> _completeAnswers(FakeVoiceIO io, GuidedVoiceController flow) async {
+  await flow.start();
+  for (var i = 0; i < 4; i++) {
+    io.text = i == 3 ? 'Right now my number one goal is to ship Omi.' : 'Personal detail $i';
+    io.speak();
+    await flow.next();
+    await flow.confirmAnswer();
   }
+}
 
+void main() {
+  _registerSaveAndCompletionTests();
+  _registerPromptAndVoiceTests();
+  _registerRecorderAndLifecycleTests();
+}
+
+void _registerSaveAndCompletionTests() {
   test('one save finishes voice, selected memories and cleaned goal; double taps do nothing', () async {
     final io = FakeVoiceIO()..pendingUpload = Completer<bool>();
     final flow = GuidedVoiceController(io);
     addTearDown(flow.dispose);
-    await completeAnswers(io, flow);
+    await _completeAnswers(io, flow);
     flow.setKeep(1, false);
     final saving = flow.saveAll();
     expect(flow.busy, isTrue);
@@ -108,7 +117,7 @@ void main() {
     final io = FakeVoiceIO()..uploadSuccess = false;
     final flow = GuidedVoiceController(io);
     addTearDown(flow.dispose);
-    await completeAnswers(io, flow);
+    await _completeAnswers(io, flow);
     await flow.saveAll();
     expect(flow.stage, IntroductionStage.review);
     expect(flow.voiceError, 'upload');
@@ -125,7 +134,7 @@ void main() {
     final io = FakeVoiceIO()..goalSuccess = false;
     final flow = GuidedVoiceController(io);
     addTearDown(flow.dispose);
-    await completeAnswers(io, flow);
+    await _completeAnswers(io, flow);
     await flow.saveAll();
     expect(flow.error, 'goal');
     expect(flow.voiceSaved, isTrue);
@@ -141,7 +150,7 @@ void main() {
     final io = FakeVoiceIO()..memorySuccess = false;
     final flow = GuidedVoiceController(io);
     addTearDown(flow.dispose);
-    await completeAnswers(io, flow);
+    await _completeAnswers(io, flow);
     await flow.saveAll();
     expect(flow.goalSaved, isTrue);
     expect(flow.voiceSaved, isTrue);
@@ -156,7 +165,7 @@ void main() {
   test('disposed combined save does not start subsequent memory or goal requests', () async {
     final io = FakeVoiceIO()..pendingUpload = Completer<bool>();
     final flow = GuidedVoiceController(io);
-    await completeAnswers(io, flow);
+    await _completeAnswers(io, flow);
     final saving = flow.saveAll();
     flow.dispose();
     io.pendingUpload!.complete(true);
@@ -164,7 +173,9 @@ void main() {
     expect(io.remembered, isEmpty);
     expect(io.goals, isEmpty);
   });
+}
 
+void _registerPromptAndVoiceTests() {
   test('backgrounding during transcription prevents automatic microphone restart', () async {
     final io = FakeVoiceIO();
     final flow = GuidedVoiceController(io);
@@ -177,6 +188,7 @@ void main() {
     await flow.pause();
     io.pendingTranscription!.complete('My first answer');
     await next;
+    await flow.confirmAnswer();
     expect(flow.promptIndex, 1);
     expect(flow.stage, IntroductionStage.ready);
     expect(io.startCount, 1);
@@ -191,6 +203,7 @@ void main() {
       io.text = i == 3 ? 'Ship my project' : 'Personal detail $i';
       io.speak();
       await flow.next();
+      await flow.confirmAnswer();
     }
     expect(io.startCount, 4);
     expect(flow.stage, IntroductionStage.review);
@@ -222,6 +235,7 @@ void main() {
     await flow.start();
     io.speak();
     await flow.next();
+    await flow.confirmAnswer();
     flow.setKeep(0, false);
     await flow.saveMemories();
     expect(io.goals, isEmpty);
@@ -235,6 +249,7 @@ void main() {
     await flow.start();
     io.speak();
     await flow.next();
+    await flow.confirmAnswer();
     for (var i = 0; i < 3; i++) {
       await flow.skipPrompt();
     }
@@ -254,6 +269,7 @@ void main() {
     expect(flow.progress, 0);
     expect(io.uploads, isEmpty);
     await flow.next();
+    await flow.confirmAnswer();
     expect(flow.progress, closeTo(1 / 4, .001));
     expect(flow.answers.single.text, io.text);
     expect(flow.active, isTrue);
@@ -283,7 +299,9 @@ void main() {
     await flow.saveMemories();
     expect(io.remembered, isEmpty);
   });
+}
 
+void _registerRecorderAndLifecycleTests() {
   test('transcription failure preserves audio for retry and does not advance', () async {
     final io = FakeVoiceIO()..transcriptionFails = true;
     final flow = GuidedVoiceController(io);
@@ -291,11 +309,13 @@ void main() {
     await flow.start();
     io.speak();
     await flow.next();
+    await flow.confirmAnswer();
     expect(flow.stage, IntroductionStage.paused);
     expect(flow.promptIndex, 0);
     expect(flow.canFinish, isTrue);
     io.transcriptionFails = false;
     await flow.next();
+    await flow.confirmAnswer();
     expect(flow.promptIndex, 1);
   });
 
@@ -306,6 +326,7 @@ void main() {
     await flow.start();
     io.speak();
     await flow.next();
+    await flow.confirmAnswer();
     await flow.skipPrompt();
     await flow.skipPrompt();
     await flow.skipPrompt();
@@ -325,6 +346,7 @@ void main() {
     await flow.start();
     io.speak(1);
     await flow.next();
+    await flow.confirmAnswer();
     await flow.skipPrompt();
     await flow.skipPrompt();
     await flow.skipPrompt();
@@ -335,6 +357,7 @@ void main() {
     await flow.start();
     io.speak(6);
     await flow.next();
+    await flow.confirmAnswer();
     await flow.saveVoice();
     expect(flow.answers, hasLength(2));
     expect(flow.voiceSaved, isTrue);
@@ -349,6 +372,7 @@ void main() {
       io.speak();
       io.text = 'Answer $i';
       await flow.next();
+      await flow.confirmAnswer();
     }
     flow.edit(0, 'Corrected first answer');
     flow.setKeep(1, false);
@@ -376,6 +400,7 @@ void main() {
     await flow.start();
     io.speak(3);
     await flow.next();
+    await flow.confirmAnswer();
     expect(flow.answers.single.audio.length, 5 * 32000);
   });
 
@@ -395,6 +420,7 @@ void main() {
     await flow.start();
     io.speak();
     await flow.next();
+    await flow.confirmAnswer();
     await flow.skipPrompt();
     await flow.skipPrompt();
     await flow.skipPrompt();
@@ -403,5 +429,60 @@ void main() {
     io.pendingUpload!.complete(true);
     await saving;
     expect(flow.voiceSaved, isFalse);
+  });
+
+  test('recorder start failure sets microphone error and pauses without recording forever', () async {
+    final io = FakeVoiceIO()..startFails = true;
+    final flow = GuidedVoiceController(io);
+    addTearDown(flow.dispose);
+    await flow.start();
+    expect(flow.stage, IntroductionStage.paused);
+    expect(flow.error, 'engine_start_failed');
+    expect(flow.active, isFalse);
+    expect(flow.busy, isFalse);
+  });
+
+  test('failed or unacknowledged memory saves lock answers and preserve content on retry (#20792)', () async {
+    final io = FakeVoiceIO()..memorySuccess = false;
+    final flow = GuidedVoiceController(io);
+    addTearDown(flow.dispose);
+    await flow.start();
+    for (var i = 0; i < 4; i++) {
+      io.text = i == 3 ? 'Goal $i' : 'Personal memory $i';
+      io.speak();
+      await flow.next();
+      await flow.confirmAnswer();
+    }
+    expect(flow.stage, IntroductionStage.review);
+    // Before save, answers are not locked: user can edit and toggle keep
+    expect(flow.answers[0].locked, isFalse);
+    flow.edit(0, 'Edited personal memory 0');
+    expect(flow.answers[0].text, 'Edited personal memory 0');
+
+    // First save: memory saving fails (e.g. readback 503 or transient network failure)
+    await flow.saveMemories();
+    expect(flow.error, 'memories');
+    expect(flow.answers[0].saved, isFalse);
+    // FakeVoiceIO.remember returns before recording when memorySuccess is false.
+    expect(io.remembered, isEmpty);
+
+    // Once attempted, memory answers must be locked against edits and unchecking
+    expect(flow.answers[0].locked, isTrue);
+    expect(flow.answers[1].locked, isTrue);
+    expect(flow.answers[2].locked, isTrue);
+
+    // Attempting to edit or uncheck locked answers is ignored
+    flow.edit(0, 'Mutated text that must not be saved');
+    expect(flow.answers[0].text, 'Edited personal memory 0');
+    flow.setKeep(0, false);
+    expect(flow.answers[0].keep, isTrue);
+
+    // Retry with memorySuccess = true
+    io.memorySuccess = true;
+    await flow.saveMemories();
+    expect(flow.allMemoriesSaved, isTrue);
+    expect(flow.stage, IntroductionStage.done);
+    // Retried writes must preserve the original confirmed content so backend dedupes
+    expect(io.remembered, ['Edited personal memory 0', 'Personal memory 1', 'Personal memory 2']);
   });
 }

@@ -11,6 +11,7 @@ import { PostHogManager } from '@/lib/analytics/posthog';
 import { TextSwap } from '@/components/ui/TextSwap';
 import { replayErrorShake } from '@/lib/transitionsDev';
 import { isFirebaseAuthConfigured } from '@/lib/firebase';
+import { safeNextPath } from '@/lib/loginNext';
 import {
   claimReferralTrial,
   navigateToDesktopDownload,
@@ -77,6 +78,7 @@ export function LoginClient() {
   const referralCode = searchParams.get('referral');
   const referralEnvironment = parseReferralEnvironment(searchParams.get('environment'));
   const isReferralFlow = Boolean(referralCode && referralEnvironment);
+  const afterLogin = safeNextPath(searchParams.get('next'));
   const signInUnavailable = !isFirebaseAuthConfigured;
   const statusMessage =
     error ??
@@ -122,10 +124,10 @@ export function LoginClient() {
       if (isReferralFlow) {
         void finishReferral();
       } else {
-        router.push('/home');
+        router.push(afterLogin);
       }
     }
-  }, [user, loading, router, isReferralFlow, finishReferral]);
+  }, [user, loading, router, isReferralFlow, finishReferral, afterLogin]);
 
   const handleGoogleSignIn = async () => {
     setIsSigningIn('google');
@@ -133,7 +135,7 @@ export function LoginClient() {
     clearRedirectSignInError();
     try {
       await signInWithGoogle();
-      if (!isReferralFlow) router.push('/home');
+      if (!isReferralFlow) router.push(afterLogin);
     } catch (err) {
       setError(getAuthErrorMessage(err, 'Google'));
       console.error(err);
@@ -148,7 +150,7 @@ export function LoginClient() {
     clearRedirectSignInError();
     try {
       await signInWithApple();
-      if (!isReferralFlow) router.push('/home');
+      if (!isReferralFlow) router.push(afterLogin);
     } catch (err) {
       setError(getAuthErrorMessage(err, 'Apple'));
       console.error(err);
@@ -257,7 +259,7 @@ export function LoginClient() {
               transition={{ duration: 0.3, delay: 0.1 }}
               className="mb-1 text-center font-display text-2xl font-semibold text-text-primary"
             >
-              {isReferralFlow ? 'One free month of Operator' : 'Omi'}
+              {isReferralFlow ? 'One free month of Pro' : 'Omi'}
             </motion.h1>
 
             {/* Tagline */}

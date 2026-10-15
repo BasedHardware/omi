@@ -202,6 +202,7 @@ export interface CancelRunResult {
 
 export interface ListSessionsInput {
   ownerId?: string;
+  sessionId?: string;
   status?: AgentSession["status"];
   surfaceKind?: string;
   executionRole?: AgentExecutionRole;

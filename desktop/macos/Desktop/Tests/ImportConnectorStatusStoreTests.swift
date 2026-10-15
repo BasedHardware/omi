@@ -1,3 +1,4 @@
+import Combine
 import XCTest
 
 @testable import Omi_Computer
@@ -172,6 +173,54 @@ final class ImportConnectorStatusStoreTests: XCTestCase {
     let reloadedUserAStore = ImportConnectorStatusStore(defaults: defaults, sessionUserID: "user-a")
     XCTAssertTrue(reloadedUserAStore.snapshot(for: connector).isConnected)
     XCTAssertEqual(reloadedUserAStore.snapshot(for: connector).primaryText, "12 emails")
+  }
+
+  func testMarkDisconnectedClearsPersistedCalendarConnectionMetrics() {
+    let testDefaults = makeDefaults()
+    let defaults = testDefaults.defaults
+    defer { defaults.removePersistentDomain(forName: testDefaults.suiteName) }
+    guard let connector = ImportConnector.all.first(where: { $0.id == "calendar" }) else {
+      XCTFail("calendar connector is not registered")
+      return
+    }
+    let store = ImportConnectorStatusStore(defaults: defaults, sessionUserID: "test-user")
+    var didEmitSync = false
+    let cancellable = store.connectorDidSync.sink { _ in didEmitSync = true }
+    store.markSynced(
+      connectorID: "calendar",
+      sourceCount: 178,
+      memoryCount: 192,
+      lastDeltaCount: 178
+    )
+    didEmitSync = false
+
+    store.markDisconnected(connectorID: "calendar")
+
+    let immediate = store.snapshot(for: connector)
+    let reloaded = ImportConnectorStatusStore(defaults: defaults, sessionUserID: "test-user").snapshot(
+      for: connector)
+    XCTAssertFalse(immediate.isConnected)
+    XCTAssertEqual(immediate.actionTitle, "Connect")
+    XCTAssertEqual(immediate.primaryText, "Not connected")
+    XCTAssertFalse(reloaded.isConnected)
+    XCTAssertEqual(reloaded.primaryText, "Not connected")
+    XCTAssertFalse(didEmitSync, "disconnect must not masquerade as a successful sync")
+    _ = cancellable
+  }
+
+  func testCalendarDisconnectRemainsAvailableForBackendGrantWithoutLocalSync() {
+    XCTAssertTrue(
+      ImportConnectorSheet.shouldShowCalendarDisconnect(
+        localSyncConnected: false,
+        backendGrantConnected: true))
+    XCTAssertTrue(
+      ImportConnectorSheet.shouldShowCalendarDisconnect(
+        localSyncConnected: true,
+        backendGrantConnected: false))
+    XCTAssertFalse(
+      ImportConnectorSheet.shouldShowCalendarDisconnect(
+        localSyncConnected: false,
+        backendGrantConnected: false))
   }
 
   private func makeDefaults() -> (defaults: UserDefaults, suiteName: String) {

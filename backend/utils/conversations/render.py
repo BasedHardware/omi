@@ -12,9 +12,18 @@ from models.other import Person
 
 from models.client_processing import PROJECTION_FAMILY_FIELDS
 from models.conversation import Conversation
+from models.note_claims import current_note_claims
+from models.transcript_segment import TranscriptSegment, strip_grouping_internal_fields
 from utils.conversations.summary_selection import select_primary_summary
 
 logger = logging.getLogger(__name__)
+
+
+def _omit_list_note_claims(conv: Dict[str, Any]) -> Dict[str, Any]:
+    if isinstance(conv.get('structured'), dict) and 'note_claims' in conv['structured']:
+        conv['structured'] = dict(conv['structured'])
+        conv['structured'].pop('note_claims', None)
+    return conv
 
 
 def resolve_display_tz(tz: Optional[str]) -> Any:
@@ -127,10 +136,23 @@ def populate_folder_names(uid: str, conversations: List[Dict[str, Any]]) -> None
 # sinks (persist strip, transcript-edit clear, in-memory drop) still hardcode
 # a single name today; the trust-boundary suite requires they actually clear
 # every member of this set.
+def _strip_match_scores(conv: Dict[str, Any]) -> Dict[str, Any]:
+    """Voice calibration evidence stays inside backend persistence and processing."""
+    conv.pop('speaker_match_scores', None)
+    conv.pop('owner_recognition_diagnostics', None)
+    for segment in conv.get('transcript_segments') or []:
+        if isinstance(segment, dict):
+            segment.pop('speaker_match_scores', None)
+            strip_grouping_internal_fields(segment)
+    return conv
+
+
 def redact_conversation_for_list(conv: Dict[str, Any]) -> Dict[str, Any]:
     """Standard list-view redaction: strip detail fields, keep title/overview."""
+    _strip_match_scores(conv)
     if not conv.get('is_locked', False):
-        return conv
+        return _omit_list_note_claims(conv)
+    _omit_list_note_claims(conv)
     if 'structured' in conv:
         conv['structured'] = (
             dict(conv['structured']) if not isinstance(conv['structured'], dict) else conv['structured']
@@ -143,7 +165,7 @@ def redact_conversation_for_list(conv: Dict[str, Any]) -> Dict[str, Any]:
     conv['transcript_segments'] = []
     # Search may attach transcript match_snippets before list redaction; never leak evidence for locked rows.
     conv['match_snippets'] = []
-    return conv
+    return _omit_list_note_claims(conv)
 
 
 def redact_conversation_for_integration(conv: Dict[str, Any]) -> Dict[str, Any]:
@@ -164,9 +186,18 @@ def redact_conversation_for_integration(conv: Dict[str, Any]) -> Dict[str, Any]:
     # Geolocation is private capture metadata and is not part of the public
     # integration contract. Strip it before either locked or unlocked data is
     # serialized into an integration response.
+    _strip_match_scores(conv)
     conv.pop('geolocation', None)
+    # Server-computed capture badge stays on app views, outside the integration contract.
+    conv.pop('capture_coverage', None)
     for field in PROJECTION_FAMILY_FIELDS:
         conv.pop(field, None)
+    # Where the live receiver heard each segment is internal placement evidence, not transcript.
+    for segment in conv.get('transcript_segments') or []:
+        if isinstance(segment, dict):
+            segment.pop('audio_capture_start', None)
+            segment.pop('audio_capture_end', None)
+            segment.pop('audio_source', None)
     if not conv.get('is_locked', False):
         return conv
     if 'structured' in conv:
@@ -177,6 +208,8 @@ def redact_conversation_for_integration(conv: Dict[str, Any]) -> Dict[str, Any]:
         conv['structured']['overview'] = ''
         conv['structured']['action_items'] = []
         conv['structured']['events'] = []
+        if isinstance(conv['structured'].get('note_claims'), list):
+            conv['structured']['note_claims'] = current_note_claims(conv['structured'])
     conv['apps_results'] = []
     conv['plugins_results'] = []
     conv['suggested_summarization_apps'] = []
@@ -207,6 +240,8 @@ def conversations_to_string(
     people: Optional[List[Person]] = None,
     user_name: Optional[str] = None,
     tz: Optional[str] = None,
+    include_refs: bool = False,
+    index_start: int = 1,
 ) -> str:
     """Format a sequence of Conversation objects into a human-readable string.
 
@@ -225,8 +260,9 @@ def conversations_to_string(
             _as_utc(conversation.created_at).astimezone(display_tz).strftime("%d %b %Y at %H:%M") + f" {tz_label}"
         )
         conversation_str = (
-            f"Conversation #{i + 1}\n"
-            f"{formatted_date} ({str(conversation.structured.category.value).capitalize()})\n"
+            f"Conversation #{i + index_start}\n"
+            + (f"ref: conversations/{conversation.id}\n" if include_refs else '')
+            + f"{formatted_date} ({str(conversation.structured.category.value).capitalize()})\n"
         )
 
         # Add started_at and finished_at if available
@@ -249,7 +285,11 @@ def conversations_to_string(
         if people_map:
             conv_person_ids = set(conversation.get_person_ids())
             if conv_person_ids:
-                attendees_names = [people_map[pid].name for pid in conv_person_ids if pid in people_map]
+                attendees_names = [
+                    people_map[pid].name + (f' (ref: people/{pid})' if include_refs else '')
+                    for pid in sorted(conv_person_ids)
+                    if pid in people_map
+                ]
                 if attendees_names:
                     attendees = ", ".join(attendees_names)
                     conversation_str += f"Attendees: {attendees}\n"
@@ -265,7 +305,20 @@ def conversations_to_string(
                 conversation_str += f"- {event.title} ({event.start} - {event.duration} minutes)\n"
 
         if use_transcript:
-            conversation_str += f"\nTranscript:\n{conversation.get_transcript(include_timestamps=include_timestamps, people=people, user_name=user_name)}\n"  # type: ignore[reportArgumentType]  # conversation.py reverted to main; people/user_name may be Optional
+            if include_refs:
+                show_timestamps = include_timestamps and TranscriptSegment.can_display_seconds(
+                    conversation.transcript_segments
+                )
+                transcript = '\n\n'.join(
+                    f'#{segment.id} '
+                    + TranscriptSegment.segments_as_string(
+                        [segment], include_timestamps=show_timestamps, people=people, user_name=user_name
+                    )
+                    for segment in conversation.transcript_segments
+                )
+            else:
+                transcript = conversation.get_transcript(include_timestamps=include_timestamps, people=people, user_name=user_name)  # type: ignore[reportArgumentType]
+            conversation_str += f"\nTranscript:\n{transcript}\n"
             # photos
             photo_descriptions = conversation.get_photos_descriptions(include_timestamps=include_timestamps)
             if photo_descriptions != 'None':
@@ -291,7 +344,7 @@ def serialize_datetimes(obj: Any) -> Any:
 
 def conversation_to_dict(conversation: Conversation) -> Dict[str, Any]:
     """Convert a Conversation to a JSON-safe dict with ISO datetime strings."""
-    return serialize_datetimes(conversation.model_dump())
+    return _strip_match_scores(serialize_datetimes(conversation.model_dump()))
 
 
 # Allowlisted citation-card fields. A denylist cannot protect a field added

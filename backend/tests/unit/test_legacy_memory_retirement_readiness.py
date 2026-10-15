@@ -137,7 +137,9 @@ def test_daily_manual_deploy_is_main_only_admitted_and_reconciles_scheduler_mani
         assert "github.event.workflow_run.run_attempt == 1" in admitted_workflow
         assert "release-eligibility.yml" in admitted_workflow
         assert "--require-first-attempt" in admitted_workflow
-        assert '"$DEPLOY_SHA" == "$main_sha"' in admitted_workflow
+        # The workflow rejects a superseded SHA through the mismatch branch.
+        assert '"$DEPLOY_SHA" != "$main_sha"' in admitted_workflow
+        assert 'Superseded: main advanced' in admitted_workflow
         assert "ref: ${{ steps.admitted_source.outputs.admitted_sha }}" in admitted_workflow
         assert "Recheck admitted main before image publication" in admitted_workflow
         assert "Recheck admitted main before Cloud Run deployment" in admitted_workflow

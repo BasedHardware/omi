@@ -3,6 +3,7 @@ from __future__ import annotations
 import importlib.util
 import io
 import json
+import re
 import sys
 from pathlib import Path
 
@@ -594,3 +595,57 @@ def test_billing_snapshot_converter_requires_explicit_scope_for_mobile_join():
     assert events[0]["client_app_profile"] == "production"
     assert events[0]["app_build"] == "1.0.0"
     assert events[0]["properties"]["billing_scope"] == "mobile_join"
+
+
+def test_recording_request_preserves_silent_attempt_denominator_and_deduplicates_started():
+    factory = scorecard_module.Event.from_mapping
+    events = [
+        factory({"event_id": "req-quiet", "event_name": "Recording Requested", "user_id": "u", "occurred_at": "2026-09-01T00:00:00Z", "properties": {"recording_id": "quiet"}}),
+        factory({"event_id": "failed", "event_name": "Recording Start Failed", "user_id": "u", "occurred_at": "2026-09-01T00:00:30Z", "properties": {"recording_id": "quiet"}}),
+        factory({"event_id": "req-live", "event_name": "Recording Requested", "user_id": "u", "occurred_at": "2026-09-01T00:00:00Z", "properties": {"recording_id": "live"}}),
+        factory({"event_id": "start", "event_name": "Recording Started", "user_id": "u", "occurred_at": "2026-09-01T00:00:01Z", "properties": {"recording_id": "live"}}),
+    ]
+    result = scorecard_module.journey_metrics(events, as_of=scorecard_module._parse_time("2026-09-02T00:00:00Z"))
+    assert result["journey_reliability"]["denominator"] == 2
+    assert result["journey_reliability"]["orphan_outcomes"] == 0
+
+
+@pytest.mark.parametrize("reverse", [False, True])
+def test_scorecard_export_counts_requested_and_anchors_before_started(reverse):
+    # Apply the checked-in export's actual IN filter before exercising consumers.
+    root = Path(__file__).parents[2] / "contracts/product-telemetry"
+    query = (root / "posthog/journey-scorecard.hogql").read_text()
+    names = set(re.findall(r"'([^']+)'", query.split("WHERE event IN (", 1)[1].split(")", 1)[0]))
+    rows = [
+        ("quiet-request", "Recording Requested", "quiet", 0, {}),
+        ("quiet-failure", "Recording Start Failed", "quiet", 5, {}),
+        ("live-request", "Recording Requested", "live", 0, {}),
+        ("live-start", "Recording Started", "live", 10, {}),
+        ("live-result", "Product Journey First Result", "live", 12, {}),
+        ("live-audio", "Recording Observation", "live", 11, {"stage": "audio"}),
+    ]
+    events = [
+        scorecard_module.Event.from_mapping({
+            "event_id": identity, "event_name": name, "user_id": "u",
+            "occurred_at": f"2026-09-01T00:00:{second:02d}Z",
+            "properties": {"recording_id": recording, **extra},
+        })
+        for identity, name, recording, second, extra in (reversed(rows) if reverse else rows)
+        if name in names
+    ]
+    as_of = scorecard_module._parse_time("2026-09-02T00:00:00Z")
+    result = scorecard_module.journey_metrics(events, as_of=as_of)
+    assert result["journey_reliability"]["denominator"] == 2
+    assert result["journey_reliability"]["orphan_outcomes"] == 0
+    assert result["time_to_first_result_ms"]["value"] == 12000
+    observation = scorecard_module.operational_observation_metrics(events)
+    assert observation["capture_audio_observation_rate"]["denominator"] == 2
+    assert observation["capture_audio_observation_rate"]["numerator"] == 1
+
+    historical = [event for event in events if event.name != "Recording Requested"]
+    fallback = scorecard_module.journey_metrics(historical, as_of=as_of)
+    assert fallback["journey_reliability"]["denominator"] == 1
+    assert fallback["time_to_first_result_ms"]["value"] == 2000
+    definitions = (root / "metric-definitions.json").read_text()
+    for metric in ["capture_audio_observation_rate", "capture_transcript_observation_rate"]:
+        assert "Recording Requested" in json.loads(definitions)["metrics"][metric]["definition"]

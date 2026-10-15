@@ -1,0 +1,13 @@
+{
+  "schema_version": 1,
+  "id": "FC-translation-drops-placeholder",
+  "violated_contract": "A simple (non-plural, non-select) translated message must render every runtime value its English source renders. gen-l10n accepts a translation that omits an English placeholder, so the locale silently hides the ETA, app name, count or error the English string shows.",
+  "canonical_prevention": "scripts/l10n.py check rejects a simple translation whose placeholder set is missing any English placeholder (plural/select messages, which locales legitimately restructure, stay exempt) and runs as a manifest check on every ARB change; hermetic fixtures keep a rejected and an exempt case.",
+  "canonical_prevention_artifact": [
+    "app/scripts/l10n.py",
+    "app/scripts/test_l10n_placeholders.py"
+  ],
+  "evidence_prs": [],
+  "scope_hints": ["app/lib/l10n/", "app/scripts/l10n.py"],
+  "status": "open"
+}

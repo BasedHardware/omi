@@ -20,25 +20,46 @@ extract rather than excuse.
 """
 
 import copy
+import re
 from datetime import datetime, timezone
-from typing import List, Dict, Any
+from typing import Any, Dict, Iterable, List, Optional
 
 from google.cloud import firestore
 
 from utils import encryption
 from ._client import db, get_firestore_client
-from .conversations import conversations_collection
+from .conversations import conversations_collection, prepare_conversation_for_read
 from .helpers import set_data_protection_level, prepare_for_write, prepare_for_read
 
 screen_frames_subcollection = 'screen_frames'
+_ENCRYPTED_TEXT_FIELDS = ('caption', 'screen_summary')
 
 
 def _prepare_screen_frame_for_write(data: Dict[str, Any], uid: str, level: str) -> Dict[str, Any]:
     data = copy.deepcopy(data)
     data['data_protection_level'] = level
-    if level == 'enhanced' and 'caption' in data and isinstance(data['caption'], str):
-        data['caption'] = encryption.encrypt(data['caption'], uid)
+    if level == 'enhanced':
+        # screen_summary and visible_participant_names are the notes evidence the
+        # judge read off the pixels; they get the caption's protection.
+        for field in _ENCRYPTED_TEXT_FIELDS:
+            if isinstance(data.get(field), str):
+                data[field] = encryption.encrypt(data[field], uid)
+        if isinstance(data.get('visible_participant_names'), list):
+            data['visible_participant_names'] = [
+                encryption.encrypt(name, uid) if isinstance(name, str) else name
+                for name in data['visible_participant_names']
+            ]
     return data
+
+
+def _decrypt_tolerant(value: Any, uid: str) -> Any:
+    if not isinstance(value, str):
+        return value
+    try:
+        return encryption.decrypt(value, uid)
+    except Exception:
+        # Already decrypted, or never encrypted — same tolerance as _prepare_photo_for_read.
+        return value
 
 
 def _prepare_screen_frame_for_read(frame_data: Dict[str, Any], uid: str) -> Dict[str, Any]:
@@ -51,12 +72,14 @@ def _prepare_screen_frame_for_read(frame_data: Dict[str, Any], uid: str) -> Dict
         return frame_data
     data = copy.deepcopy(frame_data)
     level = data.get('data_protection_level')
-    if level == 'enhanced' and 'caption' in data and isinstance(data['caption'], str):
-        try:
-            data['caption'] = encryption.decrypt(data['caption'], uid)
-        except Exception:
-            # Already decrypted, or never encrypted — same tolerance as _prepare_photo_for_read.
-            pass
+    if level == 'enhanced':
+        for field in _ENCRYPTED_TEXT_FIELDS:
+            if field in data:
+                data[field] = _decrypt_tolerant(data[field], uid)
+        if isinstance(data.get('visible_participant_names'), list):
+            data['visible_participant_names'] = [
+                _decrypt_tolerant(name, uid) for name in data['visible_participant_names']
+            ]
     return data
 
 
@@ -153,28 +176,125 @@ def delete_conversation_screen_frame_docs(uid: str, conversation_id: str) -> int
     return deleted_count
 
 
-def bump_conversation_screen_frames_revision(uid: str, conversation_id: str) -> int:
-    """Atomically increment and return the ConversationScreenFrameSet revision
-    counter. Called once per enforcement pass (contract §7) — never per read.
+# ---------------------------------------------------------------------------
+# Per-environment frame state.
+#
+# Dev and prod backends share this Firestore but write screen-frame bytes to
+# different buckets. Every frame doc records the bucket its bytes live in
+# (`storage_bucket`), and the conversation-level markers (revision, the
+# adjudication stamp, the selection fingerprint) are kept per bucket, so one
+# environment's pass can never hide, sign, or skip the other's. Docs and
+# markers written before this split carry no bucket; only dev ever had egress,
+# so they belong to LEGACY_SCREEN_FRAMES_BUCKET and keep their original
+# top-level fields as that bucket's state.
+# ---------------------------------------------------------------------------
+
+LEGACY_SCREEN_FRAMES_BUCKET = 'based-hardware-dev-screen-frames'
+_ENV_STATE_FIELD = 'screen_frames_env_state'
+_LEGACY_STATE_FIELDS = {
+    'revision': 'screen_frames_revision',
+    'adjudicated_at': 'screen_frames_adjudicated_at',
+    'selection_fingerprint': 'screen_frames_selection_fingerprint',
+}
+
+
+def frame_storage_bucket(frame: Dict[str, Any]) -> str:
+    """The bucket holding a frame doc's bytes; legacy docs belong to dev."""
+    bucket = frame.get('storage_bucket')
+    return bucket if isinstance(bucket, str) and bucket else LEGACY_SCREEN_FRAMES_BUCKET
+
+
+def own_frames(frames: Iterable[Dict[str, Any]], bucket: Optional[str]) -> List[Dict[str, Any]]:
+    """Frames whose recorded bucket is ``bucket``; none when no bucket is configured."""
+    if not bucket:
+        return []
+    return [frame for frame in frames if frame_storage_bucket(frame) == bucket]
+
+
+# Durable record of screen-frame bytes one environment could not delete from
+# another environment's bucket (dev and prod lack access to each other's). The
+# owning environment drains the records for its bucket.
+_CLEANUP_COLLECTION = 'screen_frame_cleanup'
+
+
+def record_screen_frame_cleanup(
+    bucket: str, uid: str, conversation_id: str, frame_id: str, object_paths: List[str]
+) -> None:
+    doc_id = f'{_state_key(bucket)}__{frame_id}'
+    get_firestore_client().collection(_CLEANUP_COLLECTION).document(doc_id).set(
+        {
+            'bucket': bucket,
+            'uid': uid,
+            'conversation_id': conversation_id,
+            'frame_id': frame_id,
+            'object_paths': list(object_paths),
+            'created_at': datetime.now(timezone.utc),
+        }
+    )
+
+
+def list_screen_frame_cleanups(bucket: str, limit: int) -> List[Dict[str, Any]]:
+    query = get_firestore_client().collection(_CLEANUP_COLLECTION).where('bucket', '==', bucket).limit(limit)
+    return [{**(doc.to_dict() or {}), 'id': doc.id} for doc in query.stream()]
+
+
+def delete_screen_frame_cleanup(doc_id: str) -> None:
+    get_firestore_client().collection(_CLEANUP_COLLECTION).document(doc_id).delete()
+
+
+def _state_key(bucket: str) -> str:
+    return re.sub(r'[^A-Za-z0-9_]', '_', bucket)
+
+
+def _state_payload(bucket: str, field: str, value: Any) -> Dict[str, Any]:
+    if bucket == LEGACY_SCREEN_FRAMES_BUCKET:
+        return {_LEGACY_STATE_FIELDS[field]: value}
+    return {_ENV_STATE_FIELD: {_state_key(bucket): {field: value}}}
+
+
+def _rpc_bounds(rpc_timeout: Optional[float]) -> Dict[str, Any]:
+    # A caller with a deadline gets one attempt within it: no library retry past the bound.
+    return {'timeout': rpc_timeout, 'retry': None} if rpc_timeout is not None else {}
+
+
+def _read_state(conversation_ref: Any, bucket: str, field: str, rpc_timeout: Optional[float] = None) -> Any:
+    bounds = _rpc_bounds(rpc_timeout)
+    if bucket == LEGACY_SCREEN_FRAMES_BUCKET:
+        snapshot = conversation_ref.get(field_paths=[_LEGACY_STATE_FIELDS[field]], **bounds)
+        return (snapshot.to_dict() or {}).get(_LEGACY_STATE_FIELDS[field])
+    snapshot = conversation_ref.get(field_paths=[_ENV_STATE_FIELD], **bounds)
+    state = (snapshot.to_dict() or {}).get(_ENV_STATE_FIELD)
+    scoped = state.get(_state_key(bucket)) if isinstance(state, dict) else None
+    return scoped.get(field) if isinstance(scoped, dict) else None
+
+
+def _conversation_ref(uid: str, conversation_id: str) -> Any:
+    return db.collection('users').document(uid).collection(conversations_collection).document(conversation_id)
+
+
+def get_conversation_screen_frame_doc(uid: str, conversation_id: str, frame_id: str) -> Dict[str, Any] | None:
+    """One frame doc's raw fields (no decryption) — enough to check its bucket."""
+    snapshot = _conversation_ref(uid, conversation_id).collection(screen_frames_subcollection).document(frame_id).get()
+    if not getattr(snapshot, 'exists', False):
+        return None
+    return snapshot.to_dict() or {}
+
+
+def bump_conversation_screen_frames_revision(uid: str, conversation_id: str, *, bucket: str) -> int:
+    """Atomically increment and return this bucket's ConversationScreenFrameSet
+    revision counter. Called once per enforcement pass (contract §7) — never per read.
     """
-    user_ref = db.collection('users').document(uid)
-    conversation_ref = user_ref.collection(conversations_collection).document(conversation_id)
-    conversation_ref.set({'screen_frames_revision': firestore.Increment(1)}, merge=True)
-    snapshot = conversation_ref.get(field_paths=['screen_frames_revision'])
-    data = snapshot.to_dict() or {}
-    return int(data.get('screen_frames_revision', 0) or 0)
+    conversation_ref = _conversation_ref(uid, conversation_id)
+    conversation_ref.set(_state_payload(bucket, 'revision', firestore.Increment(1)), merge=True)
+    return int(_read_state(conversation_ref, bucket, 'revision') or 0)
 
 
-def get_conversation_screen_frames_revision(uid: str, conversation_id: str) -> int:
-    user_ref = db.collection('users').document(uid)
-    conversation_ref = user_ref.collection(conversations_collection).document(conversation_id)
-    snapshot = conversation_ref.get(field_paths=['screen_frames_revision'])
-    data = snapshot.to_dict() or {}
-    return int(data.get('screen_frames_revision', 0) or 0)
+def get_conversation_screen_frames_revision(uid: str, conversation_id: str, *, bucket: str) -> int:
+    return int(_read_state(_conversation_ref(uid, conversation_id), bucket, 'revision') or 0)
 
 
 def mark_conversation_screen_frames_adjudicated(
-    uid: str, conversation_id: str, *, selection_fingerprint: str
+    uid: str, conversation_id: str, *, selection_fingerprint: str, bucket: str
 ) -> datetime:
     """Record that an adjudication pass ran for this conversation, whatever it decided.
 
@@ -186,34 +306,67 @@ def mark_conversation_screen_frames_adjudicated(
     pass are exactly the sensitive ones: the credentials, the DM window, the inbox. Without this
     marker the client re-selects and re-uploads those same frames every time the note is reopened,
     which turns the privacy gate into a repeating egress of the material it exists to refuse.
+
+    Scoped to `bucket`: a dev pass must not make a prod client skip adjudication.
     """
     stamp = datetime.now(timezone.utc)
-    user_ref = db.collection('users').document(uid)
-    conversation_ref = user_ref.collection(conversations_collection).document(conversation_id)
-    conversation_ref.set(
-        {
-            'screen_frames_adjudicated_at': stamp,
-            'screen_frames_selection_fingerprint': selection_fingerprint,
-        },
-        merge=True,
-    )
+    payload = _state_payload(bucket, 'adjudicated_at', stamp)
+    fingerprint_payload = _state_payload(bucket, 'selection_fingerprint', selection_fingerprint)
+    if _ENV_STATE_FIELD in payload:
+        payload[_ENV_STATE_FIELD][_state_key(bucket)].update(fingerprint_payload[_ENV_STATE_FIELD][_state_key(bucket)])
+    else:
+        payload.update(fingerprint_payload)
+    _conversation_ref(uid, conversation_id).set(payload, merge=True)
     return stamp
 
 
-def get_conversation_screen_frames_adjudicated_at(uid: str, conversation_id: str):
-    user_ref = db.collection('users').document(uid)
-    conversation_ref = user_ref.collection(conversations_collection).document(conversation_id)
-    snapshot = conversation_ref.get(field_paths=['screen_frames_adjudicated_at'])
-    data = snapshot.to_dict() or {}
-    return data.get('screen_frames_adjudicated_at')
+def get_conversation_screen_frames_adjudicated_at(
+    uid: str, conversation_id: str, *, bucket: str, rpc_timeout: Optional[float] = None
+):
+    return _read_state(_conversation_ref(uid, conversation_id), bucket, 'adjudicated_at', rpc_timeout)
 
 
-def get_conversation_screen_frames_selection_fingerprint(uid: str, conversation_id: str):
-    user_ref = db.collection('users').document(uid)
-    conversation_ref = user_ref.collection(conversations_collection).document(conversation_id)
-    snapshot = conversation_ref.get(field_paths=['screen_frames_selection_fingerprint'])
-    data = snapshot.to_dict() or {}
-    return data.get('screen_frames_selection_fingerprint')
+def get_conversation_screen_frames_marker(
+    uid: str, conversation_id: str, *, bucket: str, rpc_timeout: Optional[float] = None
+) -> tuple[Any, Any]:
+    """This bucket's (adjudicated_at, selection_fingerprint), in one bounded read."""
+    ref = _conversation_ref(uid, conversation_id)
+    bounds = _rpc_bounds(rpc_timeout)
+    if bucket == LEGACY_SCREEN_FRAMES_BUCKET:
+        paths = [_LEGACY_STATE_FIELDS['adjudicated_at'], _LEGACY_STATE_FIELDS['selection_fingerprint']]
+        data = ref.get(field_paths=paths, **bounds).to_dict() or {}
+        return data.get(paths[0]), data.get(paths[1])
+    state = (ref.get(field_paths=[_ENV_STATE_FIELD], **bounds).to_dict() or {}).get(_ENV_STATE_FIELD)
+    scoped = state.get(_state_key(bucket)) if isinstance(state, dict) else None
+    scoped = scoped if isinstance(scoped, dict) else {}
+    return scoped.get('adjudicated_at'), scoped.get('selection_fingerprint')
+
+
+_CONTENT_WINDOW_FIELDS = [
+    'started_at',
+    'finished_at',
+    'transcript_segments',
+    'transcript_segments_compressed',
+    'data_protection_level',
+    'audio_timeline',
+    'external_data',
+]
+
+
+def get_conversation_content_window_fields(
+    uid: str, conversation_id: str, *, rpc_timeout: Optional[float] = None
+) -> Dict[str, Any] | None:
+    """Only what the content window needs (decoded segments), in one bounded read."""
+    snapshot = _conversation_ref(uid, conversation_id).get(
+        field_paths=_CONTENT_WINDOW_FIELDS, **_rpc_bounds(rpc_timeout)
+    )
+    if not getattr(snapshot, 'exists', False):
+        return None
+    return prepare_conversation_for_read(snapshot.to_dict() or {}, uid)
+
+
+def get_conversation_screen_frames_selection_fingerprint(uid: str, conversation_id: str, *, bucket: str):
+    return _read_state(_conversation_ref(uid, conversation_id), bucket, 'selection_fingerprint')
 
 
 def get_conversation_screenshot_sharing_enabled(conversation: Dict[str, Any]) -> bool:

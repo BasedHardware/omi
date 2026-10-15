@@ -282,55 +282,6 @@ class CalendarEventLink {
   Map<String, dynamic> toJson() => toGenerated().toJson();
 }
 
-/// A booked calendar event that has no recorded conversation (SCA-381).
-///
-/// The Conversations list renders these as an honest "Not captured" group
-/// beside the audio rows; they are calendar rows, never conversations.
-class CalendarCaptureGap {
-  final String eventId;
-  final String title;
-  final DateTime startTime;
-  final DateTime endTime;
-  final String status;
-  final String coverage;
-
-  CalendarCaptureGap({
-    required this.eventId,
-    required this.title,
-    required this.startTime,
-    required this.endTime,
-    this.status = 'confirmed',
-    this.coverage = 'not_captured',
-  });
-
-  factory CalendarCaptureGap.fromJson(Map<String, dynamic> json) {
-    return CalendarCaptureGap.fromGenerated(wire.GeneratedCalendarCaptureGap.fromJson(json));
-  }
-
-  factory CalendarCaptureGap.fromGenerated(wire.GeneratedCalendarCaptureGap generated) {
-    return CalendarCaptureGap(
-      eventId: generated.eventId,
-      title: generated.title,
-      startTime: generated.startTime,
-      endTime: generated.endTime,
-      status: generated.status,
-      coverage: generated.coverage,
-    );
-  }
-}
-
-/// Buckets capture gaps by the local day of their start, matching the
-/// conversation list's per-day grouping so a gap renders under its date header.
-Map<DateTime, List<CalendarCaptureGap>> groupCaptureGapsByLocalDay(List<CalendarCaptureGap> gaps) {
-  final byDay = <DateTime, List<CalendarCaptureGap>>{};
-  for (final gap in gaps) {
-    final local = gap.startTime.toLocal();
-    final day = DateTime(local.year, local.month, local.day);
-    (byDay[day] ??= <CalendarCaptureGap>[]).add(gap);
-  }
-  return byDay;
-}
-
 class AudioFile {
   final String id;
   final String uid;
@@ -458,6 +409,14 @@ class ServerConversation {
   /// Whether and which speaker ids are people; null on conversations processed before it existed.
   final ConversationSpeakers? speakerResolution;
 
+  /// Server-authored: summarization failed on a transient error after its retries and a
+  /// reprocess can still succeed. Absent (false) on every other row, including rows where the
+  /// model ran and found nothing to summarize.
+  final bool summaryRetryable;
+
+  /// Coverage projected from the server capture receipt; absent on legacy rows.
+  final String? captureCoverage;
+
   // local label
   bool isNew = false;
 
@@ -489,10 +448,16 @@ class ServerConversation {
     this.matchSnippets = const [],
     this.captureGroup,
     this.speakerResolution,
+    this.summaryRetryable = false,
+    this.captureCoverage,
   });
 
   factory ServerConversation.fromJson(Map<String, dynamic> json) {
     final normalized = Map<String, dynamic>.from(json);
+    final captureEvidence = json['capture_evidence'];
+    if (captureEvidence is Map && captureEvidence['coverage'] is String) {
+      normalized['capture_coverage'] = captureEvidence['coverage'];
+    }
     final structured = json['structured'] is Map<String, dynamic> ? Structured.fromJson(json['structured']) : null;
     if (structured != null) {
       normalized['structured'] = structured.toGenerated().toJson();
@@ -574,6 +539,8 @@ class ServerConversation {
       captureGroup: generated.captureGroup == null ? null : CaptureGroup.fromGenerated(generated.captureGroup!),
       speakerResolution:
           generated.speakerResolution == null ? null : ConversationSpeakers.fromGenerated(generated.speakerResolution!),
+      summaryRetryable: generated.summaryRetryable == true,
+      captureCoverage: generated.captureCoverage,
     );
   }
 
@@ -608,6 +575,8 @@ class ServerConversation {
       if (!siriVisibilityValid) 'siri_visibility_valid': false,
       'capture_group': captureGroup?.toJson(),
       'speaker_resolution': speakerResolution?.toJson(),
+      if (summaryRetryable) 'summary_retryable': true,
+      if (captureCoverage != null) 'capture_coverage': captureCoverage,
     };
   }
 
@@ -639,6 +608,8 @@ class ServerConversation {
       visibility: visibility.value,
       captureGroup: captureGroup?.toGenerated(),
       speakerResolution: speakerResolution?.toGenerated(),
+      summaryRetryable: summaryRetryable ? true : null,
+      captureCoverage: captureCoverage,
     );
   }
 
@@ -689,7 +660,11 @@ class ServerConversation {
   }
 
   String getTranscript({int? maxCount, bool generate = false}) {
-    var transcript = TranscriptSegment.segmentsAsString(transcriptSegments, includeTimestamps: true);
+    var transcript = TranscriptSegment.segmentsAsString(
+      transcriptSegments,
+      includeTimestamps: true,
+      unresolved: speakerResolution?.status == 'unavailable',
+    );
     if (maxCount != null && transcript.isNotEmpty) {
       transcript = transcript.substring(max(transcript.length - maxCount, 0));
     }
@@ -734,22 +709,12 @@ class ServerConversation {
     return duration > 0 ? duration.toInt() : 0;
   }
 
-  /// Matches desktop's recoverable-content heuristic: one transcript segment
-  /// with at least this many words is treated as real speech, not ambient noise.
-  static const int substantialTranscriptMinWords = 5;
-
-  /// True when any transcript segment is long enough to plausibly deserve a title.
-  bool get hasSubstantialTranscriptSegment =>
-      transcriptSegments.any((segment) => segment.wordCount >= substantialTranscriptMinWords);
-
-  /// Completed processing, empty title, and a substantial transcript — a silent
-  /// title-pass failure the user can recover with Reprocess. Discarded, locked,
-  /// in-flight, and ambient/short captures stay quiet.
-  bool get isFailedTitleRecoverable {
+  /// Show "Summary failed · Retry" only when the server says a reprocess can succeed
+  /// ([summaryRetryable]). Discarded, locked and in-flight rows stay quiet.
+  bool get showsSummaryRetry {
     if (discarded || isLocked) return false;
     if (status != ConversationStatus.completed) return false;
-    if (structured.title.trim().isNotEmpty) return false;
-    return hasSubstantialTranscriptSegment;
+    return summaryRetryable;
   }
 
   /// Check if this conversation has audio files available
@@ -848,6 +813,7 @@ class SyncJobStatusResponse {
   final String? lane;
   final String? reasonCode;
   final int? retryAfter;
+  final int? pollAfterMs;
 
   SyncJobStatusResponse({
     required this.jobId,
@@ -861,28 +827,15 @@ class SyncJobStatusResponse {
     this.lane,
     this.reasonCode,
     this.retryAfter,
+    this.pollAfterMs,
   });
 
   bool get isTerminal => status == 'completed' || status == 'partial_failure' || status == 'failed';
   bool get isSuccess => status == 'completed';
   bool get isPartialFailure => status == 'partial_failure';
 
-  factory SyncJobStatusResponse.fromJson(Map<String, dynamic> json) {
-    final generated = wire.GeneratedSyncJobStatusResponse.fromJson(json);
-    return SyncJobStatusResponse(
-      jobId: generated.jobId,
-      status: generated.status,
-      totalSegments: generated.totalSegments,
-      processedSegments: generated.processedSegments,
-      successfulSegments: generated.successfulSegments,
-      failedSegments: generated.failedSegments,
-      result: generated.result == null ? null : SyncLocalFilesResponse.fromGenerated(generated.result!),
-      error: generated.error,
-      lane: json['lane'] as String?,
-      reasonCode: json['reason_code'] as String?,
-      retryAfter: (json['retry_after'] as num?)?.toInt(),
-    );
-  }
+  factory SyncJobStatusResponse.fromJson(Map<String, dynamic> json) =>
+      SyncJobStatusResponse.fromGenerated(wire.GeneratedSyncJobStatusResponse.fromJson(json));
 
   factory SyncJobStatusResponse.fromGenerated(wire.GeneratedSyncJobStatusResponse generated) {
     return SyncJobStatusResponse(
@@ -894,6 +847,10 @@ class SyncJobStatusResponse {
       failedSegments: generated.failedSegments,
       result: generated.result == null ? null : SyncLocalFilesResponse.fromGenerated(generated.result!),
       error: generated.error,
+      lane: generated.lane,
+      reasonCode: generated.reasonCode,
+      retryAfter: generated.retryAfter,
+      pollAfterMs: generated.pollAfterMs,
     );
   }
 }

@@ -19,8 +19,12 @@ private let googleCalendarAppKey = "google_calendar"
 
 extension APIClient {
   /// Whether this account holds a live Google Calendar grant.
-  func googleCalendarGrantConnected() async throws -> Bool {
-    let response: IntegrationConnectionResponse = try await get("v1/integrations/\(googleCalendarAppKey)")
+  func googleCalendarGrantConnected(
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil
+  ) async throws -> Bool {
+    let response: IntegrationConnectionResponse = try await get(
+      "v1/integrations/\(googleCalendarAppKey)",
+      authorizationSnapshot: authorizationSnapshot)
     return response.connected
   }
 
@@ -31,6 +35,16 @@ extension APIClient {
       "v1/integrations/\(googleCalendarAppKey)/oauth-url")
     guard let url = URL(string: response.authUrl) else { throw APIError.invalidResponse }
     return url
+  }
+
+  /// Revoke the backend-owned Google Calendar grant for the current account.
+  func disconnectGoogleCalendarGrant(
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot
+  ) async throws {
+    try await delete(
+      "v1/integrations/\(googleCalendarAppKey)",
+      expectedAuthOwnerId: authorizationSnapshot.ownerID,
+      authorizationSnapshot: authorizationSnapshot)
   }
 
   /// Read events through the backend grant. Mirrors the window the cookie

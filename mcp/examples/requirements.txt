@@ -155,7 +155,7 @@ typing-extensions==4.15.0
 typing-inspection==0.4.2
 tzdata==2026.2
 ujson==5.12.1
-urllib3==2.7.0
+urllib3==2.8.0
 uuid-utils==0.16.0
 uvicorn==0.47.0
 watchdog==6.0.0

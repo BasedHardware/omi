@@ -8,7 +8,7 @@ from starlette.datastructures import Headers
 from starlette.formparsers import MultiPartException, MultiPartParser
 from starlette.requests import Request
 
-from utils.multipart import FileSizeLimitedMultiPartParser, parse_multipart_form
+from utils.multipart import FileSizeLimitedMultiPartParser, MultipartLimits, parse_multipart_form
 
 BACKEND_DIR = Path(__file__).resolve().parents[2]
 
@@ -28,6 +28,7 @@ EXPECTED_ROUTE_LIMITS = {
     },
     'routers/imports.py': {
         ('POST', '/v1/import/limitless'): 'IMPORT_MAX_PART_SIZE',
+        ('POST', '/v1/import/transcripts'): 'IMPORT_MAX_PART_SIZE',
     },
     'routers/phone_calls.py': {
         ('POST', '/v1/phone/twiml'): 'PHONE_CALL_MAX_PART_SIZE',
@@ -131,6 +132,41 @@ def _request_with_body(content_type: str, body: bytes) -> Request:
     return Request(scope, receive)
 
 
+def _chunked_request(headers: Headers, chunks: list[bytes], *, content_length: int | None = None):
+    """A request whose body arrives chunk by chunk; ``received`` counts the chunks the server pulled."""
+    pending = list(chunks)
+    received = []
+
+    async def receive():
+        chunk = pending.pop(0)
+        received.append(chunk)
+        return {'type': 'http.request', 'body': chunk, 'more_body': bool(pending)}
+
+    raw_headers = [(b'content-type', headers['content-type'].encode())]
+    if content_length is not None:
+        raw_headers.append((b'content-length', str(content_length).encode()))
+    scope = {'type': 'http', 'method': 'POST', 'path': '/', 'headers': raw_headers, 'query_string': b''}
+    return Request(scope, receive), received
+
+
+def _multipart_files(*parts: tuple[str, bytes]) -> tuple[Headers, bytes]:
+    boundary = 'test-boundary'
+    body = b''.join(
+        (
+            f'--{boundary}\r\nContent-Disposition: form-data; name="{name}"; filename="{name}.srt"\r\n'
+            'Content-Type: text/plain\r\n\r\n'
+        ).encode()
+        + value
+        + b'\r\n'
+        for name, value in parts
+    )
+    body += f'--{boundary}--\r\n'.encode()
+    return Headers({'Content-Type': f'multipart/form-data; boundary={boundary}'}), body
+
+
+SINGLE_FILE = MultipartLimits(max_files=1, max_fields=0, max_body_size=10_000)
+
+
 def test_multipart_parser_rejects_file_part_over_limit():
     headers, body = _multipart_body('file', b'123456789', filename='sample.wav')
 
@@ -188,3 +224,68 @@ def test_production_multipart_routes_have_declared_limits():
         route_limits = _route_limits_for_file(relative_path)
         for route_key, expected_limit in expected_limits.items():
             assert route_limits.get(route_key) == expected_limit
+
+
+def test_a_second_file_part_is_refused_before_its_bytes_are_read():
+    headers, body = _multipart_files(('file', b'a' * 100), ('unused', b'b' * 5000))
+    split = body.index(b'b' * 5000) + 10
+    request, received = _chunked_request(headers, [body[:split], body[split:]])
+
+    with pytest.raises(HTTPException, match='Too many files') as error:
+        asyncio.run(parse_multipart_form(request, max_part_size=8000, limits=SINGLE_FILE))
+
+    assert error.value.status_code == 400
+    assert len(received) == 1, 'the rest of the extra part is never pulled'
+
+
+def test_form_fields_are_refused_when_the_route_takes_none():
+    headers, body = _multipart_body('payload', b'value')
+    request, _ = _chunked_request(headers, [body])
+
+    with pytest.raises(HTTPException, match='Too many fields'):
+        asyncio.run(parse_multipart_form(request, max_part_size=8000, limits=SINGLE_FILE))
+
+
+def test_the_whole_body_is_bounded_while_it_streams_without_a_content_length():
+    """Parts each under the per-part cap can still add up past the request limit."""
+    headers, body = _multipart_files(('file', b'a' * 6000))
+    chunks = [body[i : i + 4000] for i in range(0, len(body), 4000)] + [b'tail' * 2000]
+    request, received = _chunked_request(headers, chunks)
+    limits = MultipartLimits(max_files=1, max_fields=0, max_body_size=len(body) - 1)
+
+    with pytest.raises(HTTPException, match='Form body exceeded maximum size') as error:
+        asyncio.run(parse_multipart_form(request, max_part_size=8000, limits=limits))
+
+    assert error.value.status_code == 400
+    assert len(received) < len(chunks), 'reading stopped at the limit'
+
+
+def test_a_declared_content_length_over_the_limit_is_refused_before_reading():
+    headers, body = _multipart_files(('file', b'a' * 100))
+    request, received = _chunked_request(headers, [body], content_length=SINGLE_FILE.max_body_size + 1)
+
+    with pytest.raises(HTTPException, match='Form body exceeded maximum size'):
+        asyncio.run(parse_multipart_form(request, max_part_size=8000, limits=SINGLE_FILE))
+
+    assert received == []
+
+
+def test_one_file_within_the_limits_parses():
+    headers, body = _multipart_files(('file', b'a' * 100))
+    request, _ = _chunked_request(headers, [body], content_length=len(body))
+
+    form = asyncio.run(parse_multipart_form(request, max_part_size=8000, limits=SINGLE_FILE))
+
+    assert form['file'].size == 100
+    form['file'].file.close()
+
+
+def test_routes_without_request_limits_keep_starlettes_part_counts():
+    headers, body = _multipart_files(('file', b'a'), ('other', b'b'))
+    request, _ = _chunked_request(headers, [body])
+
+    form = asyncio.run(parse_multipart_form(request, max_part_size=8000))
+
+    assert sorted(form.keys()) == ['file', 'other']
+    for value in form.values():
+        value.file.close()

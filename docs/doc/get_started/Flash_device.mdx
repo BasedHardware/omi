@@ -12,7 +12,7 @@ There are two ways to update your Omi device firmware:
   <Card title="Via Omi App" icon="mobile">
     **Recommended** - The easiest way to update
 
-    Go to **Settings → Device Settings → Update Firmware**
+    Go to **Settings → Device Settings → Product Update**
   </Card>
   <Card title="Manual Update" icon="terminal">
     For advanced users or troubleshooting
@@ -100,7 +100,7 @@ There are two ways to update your Omi device firmware:
     ## Flashing Consumer Version 1
 
     <Warning>
-    CV1 requires a **special flashing cable** that connects to a J-Link programmer. Without this cable, the CV1 cannot be programmed.
+    Wired recovery requires a **SWD connection** to a J-Link programmer. For normal updates, use **Product Update** in the Omi app over Bluetooth; no flashing cable is needed.
     </Warning>
 
     ### Prerequisites
@@ -122,11 +122,13 @@ There are two ways to update your Omi device firmware:
 
     <Steps>
       <Step title="Get Firmware Files" icon="download">
-        1. Go to [Omi GitHub Releases for CV1](https://github.com/BasedHardware/omi/releases?q=release_firmware+OMI+CV1)
-        2. Find the latest release
-        3. Download both files:
-           - `merged.hex` — Application core firmware
-           - `merged_CPUNET.hex` — Network core firmware
+        1. Go to [Omi GitHub Releases for CV1](https://github.com/BasedHardware/omi/releases?q=Omi_CV1_v)
+        2. Find the latest `Omi_CV1_v<version>` release
+        3. Download both recovery files:
+           - `Omi_CV1_v<version>.hex` — Application core firmware
+           - `Omi_CV1_v<version>_CPUNET.hex` — Network core firmware
+
+        The `Omi_CV1_OTA_v<version>.zip` asset is for Bluetooth OTA updates. For the J-Link scripts in `omi/firmware/FLASH_3.0.8/`, save the downloaded HEX files as `merged.hex` and `merged_CPUNET.hex` in the appropriate `MAC/` or `WINDOWS/` folder. The bundled images are stale 3.0.8 recovery images.
       </Step>
       <Step title="Replace Existing Files" icon="copy">
         <Tabs>
@@ -198,7 +200,7 @@ There are two ways to update your Omi device firmware:
     ### Verification
 
     <Info>
-    If the LEDs start blinking after flashing, the update was successful! Confirm the firmware version in the Omi app.
+    Check that both J-Link commands completed successfully, then confirm the firmware version in the Omi app. Blinking LEDs alone do not verify an update; red blinking can mean the clock has not been synced.
     </Info>
 
     ### Troubleshooting

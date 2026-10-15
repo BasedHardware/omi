@@ -89,3 +89,13 @@ strategy:
   rollingUpdate:
     maxUnavailable: 0
     maxSurge: 1
+
+# Shared internal Gateway is opt-in; old Service/Ingress remain rollback paths.
+gateway:
+  enabled: false
+  name: ""
+  listenerName: http
+  pathPrefix: /nllb
+  healthCheckPath: /health
+  timeoutSeconds: 30
+  connectionDrainingSeconds: 0

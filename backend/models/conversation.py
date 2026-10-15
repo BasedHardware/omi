@@ -1,6 +1,13 @@
+import logging
+import re
 from datetime import datetime
 from collections.abc import Mapping
 from typing import Annotated, Any, Dict, List, Literal, Optional, Union
+
+from pydantic.json_schema import SkipJsonSchema
+
+import config.speaker_match_scores as match_scores
+import config.owner_recognition_diagnostics as owner_diagnostics
 
 from pydantic import BaseModel, Field, field_validator, model_serializer, model_validator
 
@@ -20,6 +27,8 @@ from models.conversation_enums import (
 )
 from models.conversation_photo import ConversationPhoto
 from models.geolocation import Geolocation
+from models.note_claims import compact_claim_projection, current_note_claims
+from pydantic import field_serializer
 from models.other import Person
 from models.structured import MeetingType, Structured
 from models.transcript_segment import legacy_conversation_segment_id, TranscriptSegment
@@ -62,6 +71,7 @@ __all__ = [
     'SharedParticipant',
     'SharedPerson',
     'SharedPluginResult',
+    'SharedSection',
     'SharedStructured',
     'SharedTranscriptSegment',
     'project_shared_conversation',
@@ -118,6 +128,9 @@ class SharedConversationChatResponse(BaseModel):
     remaining_free_questions: int | None = Field(default=None, ge=0)
 
 
+_EMAIL_RE = re.compile(r'[^\s@]+@[^\s@]+\.[^\s@]+')
+
+
 class SharedActionItem(BaseModel):
     """Public share projection of an action item."""
 
@@ -125,6 +138,27 @@ class SharedActionItem(BaseModel):
 
     description: str
     completed: bool = False
+    owner_name: Optional[str] = None
+    due_at: Optional[datetime] = None
+    context: Optional[str] = None
+
+    @field_validator('owner_name', mode='before')
+    @classmethod
+    def drop_email_shaped_owner(cls, value):
+        # owner_name is a display name. An address here is not a public name.
+        if isinstance(value, str) and _EMAIL_RE.search(value):
+            return None
+        return value
+
+
+class SharedSection(BaseModel):
+    """Public note content, without internal transcript evidence IDs."""
+
+    model_config = {'extra': 'ignore'}
+
+    heading: str
+    body_markdown: str
+    kind: Literal['main', 'side_notes'] = 'main'
 
 
 class SharedEvent(BaseModel):
@@ -160,6 +194,7 @@ class SharedStructured(BaseModel):
     overview: str = ''
     emoji: str = '🧠'
     category: CategoryEnum = CategoryEnum.other
+    sections: List[SharedSection] = Field(default_factory=list)
     action_items: List[SharedActionItem] = Field(default_factory=list)
     events: List[SharedEvent] = Field(default_factory=list)
     meeting_type: Optional[MeetingType] = None
@@ -198,12 +233,20 @@ class SharedTranscriptSegment(BaseModel):
 
     id: Optional[str] = None
     text: str
+    original_text: Optional[str] = None
     speaker: Optional[str] = 'SPEAKER_00'
     speaker_id: Optional[int] = None
     is_user: bool
     person_id: Optional[str] = None
     start: float
     end: float
+
+    @model_serializer(mode='wrap')
+    def omit_absent_original(self, handler):
+        data = handler(self)
+        if self.original_text is None:
+            data.pop('original_text', None)
+        return data
 
 
 class SharedAppResult(BaseModel):
@@ -422,6 +465,14 @@ class Conversation(BaseModel):
     uses_custom_stt: bool = False
 
     structured: Structured
+
+    @field_serializer('structured', mode='wrap')
+    def _serialize_current_note_claims(self, structured, handler):
+        data = handler(structured)
+        if isinstance(data, dict) and isinstance(data.get('note_claims'), list):
+            data['note_claims'] = compact_claim_projection(current_note_claims(data))
+        return data
+
     # Untrusted client-authored display projection. Sibling of structured, never
     # inside it or external_data. Display only — never an input to intelligence.
     client_processing: Optional[ClientProcessing] = None
@@ -429,6 +480,14 @@ class Conversation(BaseModel):
     # enriched summary. Server-authored; absent on every enriched conversation.
     # Clients read `client_processing` first — see the enum's docstring.
     processing_state: Optional[ConversationProcessingState] = None
+    # Server-authored. True only when durable finalization exhausted its retry
+    # budget on a transient provider/parser/worker failure and the row has
+    # transcript or photos, so ``POST /v1/conversations/{id}/reprocess`` can
+    # still produce a summary. ``structured.title`` then holds the
+    # deterministic title. Never set when the model ran and found nothing to
+    # summarize. Successful enrichment clears it. A separate field rather than
+    # a ``processing_state`` value: released clients decode that enum strictly.
+    summary_retryable: Optional[bool] = None
     transcript_segments: List[TranscriptSegment] = []
     transcript_segments_compressed: Optional[bool] = False
     geolocation: Optional[Geolocation] = None
@@ -440,8 +499,74 @@ class Conversation(BaseModel):
     audio_timeline: Optional[AudioTimelineProvenance] = None
     # S1 internal receipt is written explicitly at existing persistence seams.
     capture_evidence: Optional[CaptureEvidenceMetadata] = Field(default=None, exclude=True)
+    # Public coverage projection only; the source-position receipt stays internal.
+    capture_coverage: Optional[Literal['unknown', 'incomplete', 'mapped']] = None
+
+    @model_validator(mode='before')
+    @classmethod
+    def _project_capture_coverage(cls, data):
+        if isinstance(data, dict):
+            evidence = data.get('capture_evidence')
+            coverage = (
+                evidence.get('coverage') if isinstance(evidence, Mapping) else getattr(evidence, 'coverage', None)
+            )
+            if coverage in ('unknown', 'incomplete', 'mapped'):
+                return {**data, 'capture_coverage': coverage}
+        return data
+
     # Absent on conversations processed before speakers were resolved: count no ids as people.
     speaker_resolution: Optional[ConversationSpeakers] = None
+    speaker_match_scores: SkipJsonSchema[Optional[List[Dict[str, Any]]]] = Field(default=None, exclude=True)
+
+    owner_recognition_diagnostics: SkipJsonSchema[Optional[Dict[str, Any]]] = Field(default=None, exclude=True)
+
+    @field_validator('owner_recognition_diagnostics', mode='before')
+    @classmethod
+    def _validate_owner_diagnostics(cls, value):
+        return owner_diagnostics.normalize(value) or None
+
+    @field_validator('speaker_match_scores', mode='before')
+    @classmethod
+    def _validate_match_scores(cls, value):
+        # Some mutation owners return a stored document with a readable
+        # transcript. Without a uid this model must omit, never decrypt, its
+        # optional raw score blob. Covers factory and direct model callers.
+        if value is None:
+            return None
+        try:
+            return match_scores.normalize(value)
+        except Exception:
+            match_scores.record_failure(logging.getLogger(__name__), reason='malformed_doc')
+            return None
+
+    @model_validator(mode='after')
+    def _collect_match_scores(self):
+        try:
+            updates = [s.speaker_match_scores for s in self.transcript_segments if s.speaker_match_scores]
+            if updates and match_scores.enabled():
+                self.speaker_match_scores = match_scores.merge(self.speaker_match_scores, updates)
+        except Exception:
+            self.speaker_match_scores = None
+            match_scores.record_failure(logging.getLogger(__name__), reason='malformed_doc')
+        return self
+
+    @model_serializer(mode='wrap')
+    def _serialize_match_scores(self, handler, info):
+        data = handler(self)
+        if info.mode == 'python' and self.owner_recognition_diagnostics:
+            excluded = info.exclude or ()
+            included = info.include
+            if owner_diagnostics.FIELD not in excluded and (included is None or owner_diagnostics.FIELD in included):
+                data[owner_diagnostics.FIELD] = owner_diagnostics.normalize(self.owner_recognition_diagnostics)
+        if info.mode == 'python' and self.speaker_match_scores is not None:
+            excluded = info.exclude or ()
+            included = info.include
+            if 'speaker_match_scores' not in excluded and (included is None or 'speaker_match_scores' in included):
+                try:
+                    data['speaker_match_scores'] = match_scores.merge(None, self.speaker_match_scores)
+                except Exception:
+                    match_scores.record_failure(logging.getLogger(__name__), reason='malformed_doc')
+        return data
 
     # Meeting-note screenshots are deliberately NOT a field here. Building the set means minting
     # fresh 60-minute signed URLs for every persisted frame, which no ordinary conversation read
@@ -462,6 +587,9 @@ class Conversation(BaseModel):
 
     # TODO: plugins_results for backward compatibility with the old memories routes and app
     plugins_results: List[PluginResult] = []
+
+    user_corrections: List[Dict] = Field(default_factory=list)
+    user_overview: Optional[str] = None
 
     external_data: Optional[Dict] = None
     app_id: Optional[str] = None
