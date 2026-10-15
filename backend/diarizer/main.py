@@ -1,6 +1,7 @@
 from omi_logging import configure_logging, TraceContextMiddleware
 
-configure_logging('diarizer')
+# Gateway and Ingress logging coverage differs; retain general request logs.
+configure_logging('diarizer', access_policy='keep')
 
 from typing import Any, Dict, List
 
@@ -14,7 +15,7 @@ from embedding import embedding_endpoint, embedding_endpoint_v2, initialize_embe
 import logging
 
 # Vendor imports may install handlers; reapply the process policy afterward.
-configure_logging('diarizer')
+configure_logging('diarizer', access_policy='keep')
 
 logger = logging.getLogger(__name__)
 logger.info('Diarizer logging configured')

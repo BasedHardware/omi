@@ -79,3 +79,8 @@ request coverage, and log bytes/day by container. Watch at least 15 minutes;
 compare 5xx and restarts with the preceding 24–48 hours. Capped log samples are
 not complete rates or billed-byte measurements. Roll back the affected image if
 signal is lost; retain widened filters through the rollback window.
+
+Diarizer adoption explicitly keeps general access logs: the live Gateway backend
+has logging disabled while its separate Ingress backend enables it. Historical
+request metrics also name a now-missing backend, so service-wide LB coverage is
+not proven. Recheck the active route and matching backend before suppressing it.
