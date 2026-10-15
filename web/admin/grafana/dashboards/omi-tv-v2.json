@@ -1,0 +1,2258 @@
+{
+  "uid": "omi-tv-v2",
+  "title": "Omi TV v2 \u00b7 Direction A",
+  "schemaVersion": 39,
+  "version": 1,
+  "timezone": "utc",
+  "refresh": "30s",
+  "editable": true,
+  "tags": [
+    "omi-tv",
+    "v2"
+  ],
+  "time": {
+    "from": "now-180d",
+    "to": "now/d"
+  },
+  "templating": {
+    "list": []
+  },
+  "annotations": {
+    "list": []
+  },
+  "panels": [
+    {
+      "id": 1,
+      "type": "text",
+      "title": "",
+      "transparent": true,
+      "gridPos": {
+        "x": 0,
+        "y": 0,
+        "w": 5,
+        "h": 2
+      },
+      "options": {
+        "mode": "markdown",
+        "content": "## Growth"
+      }
+    },
+    {
+      "id": 2,
+      "type": "canvas",
+      "title": "",
+      "transparent": true,
+      "datasource": {
+        "type": "yesoreyeram-infinity-datasource",
+        "uid": "omi-admin-api"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 2,
+        "w": 5,
+        "h": 6
+      },
+      "description": "growth.wau. Complete UTC periods. Count splits use primary qualified platform; first-seen cohorts use entry platform. Percentage-point cohort deltas. Capture share is saved-own-capture evidence, not device connection or recording intent. Proxy definitions and full coverage details are in diagnostics.",
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "yesoreyeram-infinity-datasource",
+            "uid": "omi-admin-api"
+          },
+          "type": "json",
+          "source": "url",
+          "format": "table",
+          "parser": "backend",
+          "url": "http://127.0.0.1:8899/api/omi/stats/wall",
+          "url_options": {
+            "method": "GET"
+          },
+          "root_selector": "tiles.growth_wau",
+          "columns": [
+            {
+              "selector": "cardSvg",
+              "text": "Card",
+              "type": "string"
+            }
+          ]
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "options": {
+        "inlineEditing": false,
+        "panZoom": false,
+        "zoomToContent": true,
+        "showAdvancedTypes": false,
+        "tooltip": {
+          "mode": "none"
+        },
+        "root": {
+          "name": "Metric card",
+          "type": "frame",
+          "elements": [
+            {
+              "name": "growth.wau",
+              "type": "icon",
+              "placement": {
+                "left": 0,
+                "top": 0,
+                "right": 0,
+                "bottom": 0
+              },
+              "constraint": {
+                "horizontal": "leftright",
+                "vertical": "topbottom"
+              },
+              "background": {
+                "color": {
+                  "fixed": "transparent"
+                }
+              },
+              "config": {
+                "path": {
+                  "mode": "field",
+                  "field": "Card"
+                },
+                "fill": {
+                  "fixed": "transparent"
+                }
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": 3,
+      "type": "canvas",
+      "title": "",
+      "transparent": true,
+      "datasource": {
+        "type": "yesoreyeram-infinity-datasource",
+        "uid": "omi-admin-api"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 8,
+        "w": 5,
+        "h": 4
+      },
+      "description": "growth.true_new_7d. Complete UTC periods. Count splits use primary qualified platform; first-seen cohorts use entry platform. Percentage-point cohort deltas. Capture share is saved-own-capture evidence, not device connection or recording intent. Proxy definitions and full coverage details are in diagnostics.",
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "yesoreyeram-infinity-datasource",
+            "uid": "omi-admin-api"
+          },
+          "type": "json",
+          "source": "url",
+          "format": "table",
+          "parser": "backend",
+          "url": "http://127.0.0.1:8899/api/omi/stats/wall",
+          "url_options": {
+            "method": "GET"
+          },
+          "root_selector": "tiles.growth_true_new_7d",
+          "columns": [
+            {
+              "selector": "cardSvg",
+              "text": "Card",
+              "type": "string"
+            }
+          ]
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "options": {
+        "inlineEditing": false,
+        "panZoom": false,
+        "zoomToContent": true,
+        "showAdvancedTypes": false,
+        "tooltip": {
+          "mode": "none"
+        },
+        "root": {
+          "name": "Metric card",
+          "type": "frame",
+          "elements": [
+            {
+              "name": "growth.true_new_7d",
+              "type": "icon",
+              "placement": {
+                "left": 0,
+                "top": 0,
+                "right": 0,
+                "bottom": 0
+              },
+              "constraint": {
+                "horizontal": "leftright",
+                "vertical": "topbottom"
+              },
+              "background": {
+                "color": {
+                  "fixed": "transparent"
+                }
+              },
+              "config": {
+                "path": {
+                  "mode": "field",
+                  "field": "Card"
+                },
+                "fill": {
+                  "fixed": "transparent"
+                }
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": 4,
+      "type": "canvas",
+      "title": "",
+      "transparent": true,
+      "datasource": {
+        "type": "yesoreyeram-infinity-datasource",
+        "uid": "omi-admin-api"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 12,
+        "w": 5,
+        "h": 4
+      },
+      "description": "engagement.dau. Complete UTC periods. Count splits use primary qualified platform; first-seen cohorts use entry platform. Percentage-point cohort deltas. Capture share is saved-own-capture evidence, not device connection or recording intent. Proxy definitions and full coverage details are in diagnostics.",
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "yesoreyeram-infinity-datasource",
+            "uid": "omi-admin-api"
+          },
+          "type": "json",
+          "source": "url",
+          "format": "table",
+          "parser": "backend",
+          "url": "http://127.0.0.1:8899/api/omi/stats/wall",
+          "url_options": {
+            "method": "GET"
+          },
+          "root_selector": "tiles.engagement_dau",
+          "columns": [
+            {
+              "selector": "cardSvg",
+              "text": "Card",
+              "type": "string"
+            }
+          ]
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "options": {
+        "inlineEditing": false,
+        "panZoom": false,
+        "zoomToContent": true,
+        "showAdvancedTypes": false,
+        "tooltip": {
+          "mode": "none"
+        },
+        "root": {
+          "name": "Metric card",
+          "type": "frame",
+          "elements": [
+            {
+              "name": "engagement.dau",
+              "type": "icon",
+              "placement": {
+                "left": 0,
+                "top": 0,
+                "right": 0,
+                "bottom": 0
+              },
+              "constraint": {
+                "horizontal": "leftright",
+                "vertical": "topbottom"
+              },
+              "background": {
+                "color": {
+                  "fixed": "transparent"
+                }
+              },
+              "config": {
+                "path": {
+                  "mode": "field",
+                  "field": "Card"
+                },
+                "fill": {
+                  "fixed": "transparent"
+                }
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": 5,
+      "type": "canvas",
+      "title": "",
+      "transparent": true,
+      "datasource": {
+        "type": "yesoreyeram-infinity-datasource",
+        "uid": "omi-admin-api"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 16,
+        "w": 5,
+        "h": 4
+      },
+      "description": "engagement.mau. Complete UTC periods. Count splits use primary qualified platform; first-seen cohorts use entry platform. Percentage-point cohort deltas. Capture share is saved-own-capture evidence, not device connection or recording intent. Proxy definitions and full coverage details are in diagnostics.",
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "yesoreyeram-infinity-datasource",
+            "uid": "omi-admin-api"
+          },
+          "type": "json",
+          "source": "url",
+          "format": "table",
+          "parser": "backend",
+          "url": "http://127.0.0.1:8899/api/omi/stats/wall",
+          "url_options": {
+            "method": "GET"
+          },
+          "root_selector": "tiles.engagement_mau",
+          "columns": [
+            {
+              "selector": "cardSvg",
+              "text": "Card",
+              "type": "string"
+            }
+          ]
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "options": {
+        "inlineEditing": false,
+        "panZoom": false,
+        "zoomToContent": true,
+        "showAdvancedTypes": false,
+        "tooltip": {
+          "mode": "none"
+        },
+        "root": {
+          "name": "Metric card",
+          "type": "frame",
+          "elements": [
+            {
+              "name": "engagement.mau",
+              "type": "icon",
+              "placement": {
+                "left": 0,
+                "top": 0,
+                "right": 0,
+                "bottom": 0
+              },
+              "constraint": {
+                "horizontal": "leftright",
+                "vertical": "topbottom"
+              },
+              "background": {
+                "color": {
+                  "fixed": "transparent"
+                }
+              },
+              "config": {
+                "path": {
+                  "mode": "field",
+                  "field": "Card"
+                },
+                "fill": {
+                  "fixed": "transparent"
+                }
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": 6,
+      "type": "text",
+      "title": "",
+      "transparent": true,
+      "gridPos": {
+        "x": 5,
+        "y": 0,
+        "w": 5,
+        "h": 2
+      },
+      "options": {
+        "mode": "markdown",
+        "content": "## Activation"
+      }
+    },
+    {
+      "id": 7,
+      "type": "canvas",
+      "title": "",
+      "transparent": true,
+      "datasource": {
+        "type": "yesoreyeram-infinity-datasource",
+        "uid": "omi-admin-api"
+      },
+      "gridPos": {
+        "x": 5,
+        "y": 2,
+        "w": 5,
+        "h": 6
+      },
+      "description": "activation.rate. Complete UTC periods. Count splits use primary qualified platform; first-seen cohorts use entry platform. Percentage-point cohort deltas. Capture share is saved-own-capture evidence, not device connection or recording intent. Proxy definitions and full coverage details are in diagnostics.",
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "yesoreyeram-infinity-datasource",
+            "uid": "omi-admin-api"
+          },
+          "type": "json",
+          "source": "url",
+          "format": "table",
+          "parser": "backend",
+          "url": "http://127.0.0.1:8899/api/omi/stats/wall",
+          "url_options": {
+            "method": "GET"
+          },
+          "root_selector": "tiles.activation_rate",
+          "columns": [
+            {
+              "selector": "cardSvg",
+              "text": "Card",
+              "type": "string"
+            }
+          ]
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "options": {
+        "inlineEditing": false,
+        "panZoom": false,
+        "zoomToContent": true,
+        "showAdvancedTypes": false,
+        "tooltip": {
+          "mode": "none"
+        },
+        "root": {
+          "name": "Metric card",
+          "type": "frame",
+          "elements": [
+            {
+              "name": "activation.rate",
+              "type": "icon",
+              "placement": {
+                "left": 0,
+                "top": 0,
+                "right": 0,
+                "bottom": 0
+              },
+              "constraint": {
+                "horizontal": "leftright",
+                "vertical": "topbottom"
+              },
+              "background": {
+                "color": {
+                  "fixed": "transparent"
+                }
+              },
+              "config": {
+                "path": {
+                  "mode": "field",
+                  "field": "Card"
+                },
+                "fill": {
+                  "fixed": "transparent"
+                }
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": 8,
+      "type": "canvas",
+      "title": "",
+      "transparent": true,
+      "datasource": {
+        "type": "yesoreyeram-infinity-datasource",
+        "uid": "omi-admin-api"
+      },
+      "gridPos": {
+        "x": 5,
+        "y": 8,
+        "w": 5,
+        "h": 4
+      },
+      "description": "activation.capture_week1_share. Complete UTC periods. Count splits use primary qualified platform; first-seen cohorts use entry platform. Percentage-point cohort deltas. Capture share is saved-own-capture evidence, not device connection or recording intent. Proxy definitions and full coverage details are in diagnostics.",
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "yesoreyeram-infinity-datasource",
+            "uid": "omi-admin-api"
+          },
+          "type": "json",
+          "source": "url",
+          "format": "table",
+          "parser": "backend",
+          "url": "http://127.0.0.1:8899/api/omi/stats/wall",
+          "url_options": {
+            "method": "GET"
+          },
+          "root_selector": "tiles.activation_capture_week1_share",
+          "columns": [
+            {
+              "selector": "cardSvg",
+              "text": "Card",
+              "type": "string"
+            }
+          ]
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "options": {
+        "inlineEditing": false,
+        "panZoom": false,
+        "zoomToContent": true,
+        "showAdvancedTypes": false,
+        "tooltip": {
+          "mode": "none"
+        },
+        "root": {
+          "name": "Metric card",
+          "type": "frame",
+          "elements": [
+            {
+              "name": "activation.capture_week1_share",
+              "type": "icon",
+              "placement": {
+                "left": 0,
+                "top": 0,
+                "right": 0,
+                "bottom": 0
+              },
+              "constraint": {
+                "horizontal": "leftright",
+                "vertical": "topbottom"
+              },
+              "background": {
+                "color": {
+                  "fixed": "transparent"
+                }
+              },
+              "config": {
+                "path": {
+                  "mode": "field",
+                  "field": "Card"
+                },
+                "fill": {
+                  "fixed": "transparent"
+                }
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": 9,
+      "type": "canvas",
+      "title": "",
+      "transparent": true,
+      "datasource": {
+        "type": "yesoreyeram-infinity-datasource",
+        "uid": "omi-admin-api"
+      },
+      "gridPos": {
+        "x": 5,
+        "y": 12,
+        "w": 5,
+        "h": 4
+      },
+      "description": "engagement.saved_creators. Complete UTC periods. Count splits use primary qualified platform; first-seen cohorts use entry platform. Percentage-point cohort deltas. Capture share is saved-own-capture evidence, not device connection or recording intent. Proxy definitions and full coverage details are in diagnostics.",
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "yesoreyeram-infinity-datasource",
+            "uid": "omi-admin-api"
+          },
+          "type": "json",
+          "source": "url",
+          "format": "table",
+          "parser": "backend",
+          "url": "http://127.0.0.1:8899/api/omi/stats/wall",
+          "url_options": {
+            "method": "GET"
+          },
+          "root_selector": "tiles.engagement_saved_creators",
+          "columns": [
+            {
+              "selector": "cardSvg",
+              "text": "Card",
+              "type": "string"
+            }
+          ]
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "options": {
+        "inlineEditing": false,
+        "panZoom": false,
+        "zoomToContent": true,
+        "showAdvancedTypes": false,
+        "tooltip": {
+          "mode": "none"
+        },
+        "root": {
+          "name": "Metric card",
+          "type": "frame",
+          "elements": [
+            {
+              "name": "engagement.saved_creators",
+              "type": "icon",
+              "placement": {
+                "left": 0,
+                "top": 0,
+                "right": 0,
+                "bottom": 0
+              },
+              "constraint": {
+                "horizontal": "leftright",
+                "vertical": "topbottom"
+              },
+              "background": {
+                "color": {
+                  "fixed": "transparent"
+                }
+              },
+              "config": {
+                "path": {
+                  "mode": "field",
+                  "field": "Card"
+                },
+                "fill": {
+                  "fixed": "transparent"
+                }
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": 10,
+      "type": "canvas",
+      "title": "",
+      "transparent": true,
+      "datasource": {
+        "type": "yesoreyeram-infinity-datasource",
+        "uid": "omi-admin-api"
+      },
+      "gridPos": {
+        "x": 5,
+        "y": 16,
+        "w": 5,
+        "h": 4
+      },
+      "description": "engagement.assistant_success. Complete UTC periods. Count splits use primary qualified platform; first-seen cohorts use entry platform. Percentage-point cohort deltas. Capture share is saved-own-capture evidence, not device connection or recording intent. Proxy definitions and full coverage details are in diagnostics.",
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "yesoreyeram-infinity-datasource",
+            "uid": "omi-admin-api"
+          },
+          "type": "json",
+          "source": "url",
+          "format": "table",
+          "parser": "backend",
+          "url": "http://127.0.0.1:8899/api/omi/stats/wall",
+          "url_options": {
+            "method": "GET"
+          },
+          "root_selector": "tiles.engagement_assistant_success",
+          "columns": [
+            {
+              "selector": "cardSvg",
+              "text": "Card",
+              "type": "string"
+            }
+          ]
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "options": {
+        "inlineEditing": false,
+        "panZoom": false,
+        "zoomToContent": true,
+        "showAdvancedTypes": false,
+        "tooltip": {
+          "mode": "none"
+        },
+        "root": {
+          "name": "Metric card",
+          "type": "frame",
+          "elements": [
+            {
+              "name": "engagement.assistant_success",
+              "type": "icon",
+              "placement": {
+                "left": 0,
+                "top": 0,
+                "right": 0,
+                "bottom": 0
+              },
+              "constraint": {
+                "horizontal": "leftright",
+                "vertical": "topbottom"
+              },
+              "background": {
+                "color": {
+                  "fixed": "transparent"
+                }
+              },
+              "config": {
+                "path": {
+                  "mode": "field",
+                  "field": "Card"
+                },
+                "fill": {
+                  "fixed": "transparent"
+                }
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": 11,
+      "type": "canvas",
+      "title": "",
+      "transparent": true,
+      "datasource": {
+        "type": "yesoreyeram-infinity-datasource",
+        "uid": "omi-admin-api"
+      },
+      "gridPos": {
+        "x": 5,
+        "y": 20,
+        "w": 5,
+        "h": 4
+      },
+      "description": "revenue.activated_paid_30d. Complete UTC periods. Count splits use primary qualified platform; first-seen cohorts use entry platform. Percentage-point cohort deltas. Capture share is saved-own-capture evidence, not device connection or recording intent. Proxy definitions and full coverage details are in diagnostics.",
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "yesoreyeram-infinity-datasource",
+            "uid": "omi-admin-api"
+          },
+          "type": "json",
+          "source": "url",
+          "format": "table",
+          "parser": "backend",
+          "url": "http://127.0.0.1:8899/api/omi/stats/wall",
+          "url_options": {
+            "method": "GET"
+          },
+          "root_selector": "tiles.revenue_activated_paid_30d",
+          "columns": [
+            {
+              "selector": "cardSvg",
+              "text": "Card",
+              "type": "string"
+            }
+          ]
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "options": {
+        "inlineEditing": false,
+        "panZoom": false,
+        "zoomToContent": true,
+        "showAdvancedTypes": false,
+        "tooltip": {
+          "mode": "none"
+        },
+        "root": {
+          "name": "Metric card",
+          "type": "frame",
+          "elements": [
+            {
+              "name": "revenue.activated_paid_30d",
+              "type": "icon",
+              "placement": {
+                "left": 0,
+                "top": 0,
+                "right": 0,
+                "bottom": 0
+              },
+              "constraint": {
+                "horizontal": "leftright",
+                "vertical": "topbottom"
+              },
+              "background": {
+                "color": {
+                  "fixed": "transparent"
+                }
+              },
+              "config": {
+                "path": {
+                  "mode": "field",
+                  "field": "Card"
+                },
+                "fill": {
+                  "fixed": "transparent"
+                }
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": 12,
+      "type": "text",
+      "title": "",
+      "transparent": true,
+      "gridPos": {
+        "x": 10,
+        "y": 0,
+        "w": 5,
+        "h": 2
+      },
+      "options": {
+        "mode": "markdown",
+        "content": "## Retention"
+      }
+    },
+    {
+      "id": 13,
+      "type": "canvas",
+      "title": "",
+      "transparent": true,
+      "datasource": {
+        "type": "yesoreyeram-infinity-datasource",
+        "uid": "omi-admin-api"
+      },
+      "gridPos": {
+        "x": 10,
+        "y": 2,
+        "w": 5,
+        "h": 6
+      },
+      "description": "retention.if_activated. Complete UTC periods. Count splits use primary qualified platform; first-seen cohorts use entry platform. Percentage-point cohort deltas. Capture share is saved-own-capture evidence, not device connection or recording intent. Proxy definitions and full coverage details are in diagnostics.",
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "yesoreyeram-infinity-datasource",
+            "uid": "omi-admin-api"
+          },
+          "type": "json",
+          "source": "url",
+          "format": "table",
+          "parser": "backend",
+          "url": "http://127.0.0.1:8899/api/omi/stats/wall",
+          "url_options": {
+            "method": "GET"
+          },
+          "root_selector": "tiles.retention_if_activated",
+          "columns": [
+            {
+              "selector": "cardSvg",
+              "text": "Card",
+              "type": "string"
+            }
+          ]
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "options": {
+        "inlineEditing": false,
+        "panZoom": false,
+        "zoomToContent": true,
+        "showAdvancedTypes": false,
+        "tooltip": {
+          "mode": "none"
+        },
+        "root": {
+          "name": "Metric card",
+          "type": "frame",
+          "elements": [
+            {
+              "name": "retention.if_activated",
+              "type": "icon",
+              "placement": {
+                "left": 0,
+                "top": 0,
+                "right": 0,
+                "bottom": 0
+              },
+              "constraint": {
+                "horizontal": "leftright",
+                "vertical": "topbottom"
+              },
+              "background": {
+                "color": {
+                  "fixed": "transparent"
+                }
+              },
+              "config": {
+                "path": {
+                  "mode": "field",
+                  "field": "Card"
+                },
+                "fill": {
+                  "fixed": "transparent"
+                }
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": 14,
+      "type": "canvas",
+      "title": "",
+      "transparent": true,
+      "datasource": {
+        "type": "yesoreyeram-infinity-datasource",
+        "uid": "omi-admin-api"
+      },
+      "gridPos": {
+        "x": 10,
+        "y": 8,
+        "w": 5,
+        "h": 4
+      },
+      "description": "retention.recovery. Complete UTC periods. Count splits use primary qualified platform; first-seen cohorts use entry platform. Percentage-point cohort deltas. Capture share is saved-own-capture evidence, not device connection or recording intent. Proxy definitions and full coverage details are in diagnostics.",
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "yesoreyeram-infinity-datasource",
+            "uid": "omi-admin-api"
+          },
+          "type": "json",
+          "source": "url",
+          "format": "table",
+          "parser": "backend",
+          "url": "http://127.0.0.1:8899/api/omi/stats/wall",
+          "url_options": {
+            "method": "GET"
+          },
+          "root_selector": "tiles.retention_recovery",
+          "columns": [
+            {
+              "selector": "cardSvg",
+              "text": "Card",
+              "type": "string"
+            }
+          ]
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "options": {
+        "inlineEditing": false,
+        "panZoom": false,
+        "zoomToContent": true,
+        "showAdvancedTypes": false,
+        "tooltip": {
+          "mode": "none"
+        },
+        "root": {
+          "name": "Metric card",
+          "type": "frame",
+          "elements": [
+            {
+              "name": "retention.recovery",
+              "type": "icon",
+              "placement": {
+                "left": 0,
+                "top": 0,
+                "right": 0,
+                "bottom": 0
+              },
+              "constraint": {
+                "horizontal": "leftright",
+                "vertical": "topbottom"
+              },
+              "background": {
+                "color": {
+                  "fixed": "transparent"
+                }
+              },
+              "config": {
+                "path": {
+                  "mode": "field",
+                  "field": "Card"
+                },
+                "fill": {
+                  "fixed": "transparent"
+                }
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": 15,
+      "type": "canvas",
+      "title": "",
+      "transparent": true,
+      "datasource": {
+        "type": "yesoreyeram-infinity-datasource",
+        "uid": "omi-admin-api"
+      },
+      "gridPos": {
+        "x": 10,
+        "y": 12,
+        "w": 5,
+        "h": 4
+      },
+      "description": "retention.day1_return. Complete UTC periods. Count splits use primary qualified platform; first-seen cohorts use entry platform. Percentage-point cohort deltas. Capture share is saved-own-capture evidence, not device connection or recording intent. Proxy definitions and full coverage details are in diagnostics.",
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "yesoreyeram-infinity-datasource",
+            "uid": "omi-admin-api"
+          },
+          "type": "json",
+          "source": "url",
+          "format": "table",
+          "parser": "backend",
+          "url": "http://127.0.0.1:8899/api/omi/stats/wall",
+          "url_options": {
+            "method": "GET"
+          },
+          "root_selector": "tiles.retention_day1_return",
+          "columns": [
+            {
+              "selector": "cardSvg",
+              "text": "Card",
+              "type": "string"
+            }
+          ]
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "options": {
+        "inlineEditing": false,
+        "panZoom": false,
+        "zoomToContent": true,
+        "showAdvancedTypes": false,
+        "tooltip": {
+          "mode": "none"
+        },
+        "root": {
+          "name": "Metric card",
+          "type": "frame",
+          "elements": [
+            {
+              "name": "retention.day1_return",
+              "type": "icon",
+              "placement": {
+                "left": 0,
+                "top": 0,
+                "right": 0,
+                "bottom": 0
+              },
+              "constraint": {
+                "horizontal": "leftright",
+                "vertical": "topbottom"
+              },
+              "background": {
+                "color": {
+                  "fixed": "transparent"
+                }
+              },
+              "config": {
+                "path": {
+                  "mode": "field",
+                  "field": "Card"
+                },
+                "fill": {
+                  "fixed": "transparent"
+                }
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": 16,
+      "type": "canvas",
+      "title": "",
+      "transparent": true,
+      "datasource": {
+        "type": "yesoreyeram-infinity-datasource",
+        "uid": "omi-admin-api"
+      },
+      "gridPos": {
+        "x": 10,
+        "y": 16,
+        "w": 5,
+        "h": 4
+      },
+      "description": "retention.established_week. Complete UTC periods. Count splits use primary qualified platform; first-seen cohorts use entry platform. Percentage-point cohort deltas. Capture share is saved-own-capture evidence, not device connection or recording intent. Proxy definitions and full coverage details are in diagnostics.",
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "yesoreyeram-infinity-datasource",
+            "uid": "omi-admin-api"
+          },
+          "type": "json",
+          "source": "url",
+          "format": "table",
+          "parser": "backend",
+          "url": "http://127.0.0.1:8899/api/omi/stats/wall",
+          "url_options": {
+            "method": "GET"
+          },
+          "root_selector": "tiles.retention_established_week",
+          "columns": [
+            {
+              "selector": "cardSvg",
+              "text": "Card",
+              "type": "string"
+            }
+          ]
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "options": {
+        "inlineEditing": false,
+        "panZoom": false,
+        "zoomToContent": true,
+        "showAdvancedTypes": false,
+        "tooltip": {
+          "mode": "none"
+        },
+        "root": {
+          "name": "Metric card",
+          "type": "frame",
+          "elements": [
+            {
+              "name": "retention.established_week",
+              "type": "icon",
+              "placement": {
+                "left": 0,
+                "top": 0,
+                "right": 0,
+                "bottom": 0
+              },
+              "constraint": {
+                "horizontal": "leftright",
+                "vertical": "topbottom"
+              },
+              "background": {
+                "color": {
+                  "fixed": "transparent"
+                }
+              },
+              "config": {
+                "path": {
+                  "mode": "field",
+                  "field": "Card"
+                },
+                "fill": {
+                  "fixed": "transparent"
+                }
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": 17,
+      "type": "text",
+      "title": "",
+      "transparent": true,
+      "gridPos": {
+        "x": 15,
+        "y": 0,
+        "w": 5,
+        "h": 2
+      },
+      "options": {
+        "mode": "markdown",
+        "content": "## Revenue"
+      }
+    },
+    {
+      "id": 18,
+      "type": "canvas",
+      "title": "",
+      "transparent": true,
+      "datasource": {
+        "type": "yesoreyeram-infinity-datasource",
+        "uid": "omi-admin-api"
+      },
+      "gridPos": {
+        "x": 15,
+        "y": 2,
+        "w": 5,
+        "h": 5
+      },
+      "description": "revenue.arpmau. Complete UTC periods. Count splits use primary qualified platform; first-seen cohorts use entry platform. Percentage-point cohort deltas. Capture share is saved-own-capture evidence, not device connection or recording intent. Proxy definitions and full coverage details are in diagnostics.",
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "yesoreyeram-infinity-datasource",
+            "uid": "omi-admin-api"
+          },
+          "type": "json",
+          "source": "url",
+          "format": "table",
+          "parser": "backend",
+          "url": "http://127.0.0.1:8899/api/omi/stats/wall",
+          "url_options": {
+            "method": "GET"
+          },
+          "root_selector": "tiles.revenue_arpmau",
+          "columns": [
+            {
+              "selector": "cardSvg",
+              "text": "Card",
+              "type": "string"
+            }
+          ]
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "options": {
+        "inlineEditing": false,
+        "panZoom": false,
+        "zoomToContent": true,
+        "showAdvancedTypes": false,
+        "tooltip": {
+          "mode": "none"
+        },
+        "root": {
+          "name": "Metric card",
+          "type": "frame",
+          "elements": [
+            {
+              "name": "revenue.arpmau",
+              "type": "icon",
+              "placement": {
+                "left": 0,
+                "top": 0,
+                "right": 0,
+                "bottom": 0
+              },
+              "constraint": {
+                "horizontal": "leftright",
+                "vertical": "topbottom"
+              },
+              "background": {
+                "color": {
+                  "fixed": "transparent"
+                }
+              },
+              "config": {
+                "path": {
+                  "mode": "field",
+                  "field": "Card"
+                },
+                "fill": {
+                  "fixed": "transparent"
+                }
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": 19,
+      "type": "canvas",
+      "title": "",
+      "transparent": true,
+      "datasource": {
+        "type": "yesoreyeram-infinity-datasource",
+        "uid": "omi-admin-api"
+      },
+      "gridPos": {
+        "x": 15,
+        "y": 7,
+        "w": 5,
+        "h": 4
+      },
+      "description": "revenue.mrr. Complete UTC periods. Count splits use primary qualified platform; first-seen cohorts use entry platform. Percentage-point cohort deltas. Capture share is saved-own-capture evidence, not device connection or recording intent. Proxy definitions and full coverage details are in diagnostics.",
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "yesoreyeram-infinity-datasource",
+            "uid": "omi-admin-api"
+          },
+          "type": "json",
+          "source": "url",
+          "format": "table",
+          "parser": "backend",
+          "url": "http://127.0.0.1:8899/api/omi/stats/wall",
+          "url_options": {
+            "method": "GET"
+          },
+          "root_selector": "tiles.revenue_mrr",
+          "columns": [
+            {
+              "selector": "cardSvg",
+              "text": "Card",
+              "type": "string"
+            }
+          ]
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "options": {
+        "inlineEditing": false,
+        "panZoom": false,
+        "zoomToContent": true,
+        "showAdvancedTypes": false,
+        "tooltip": {
+          "mode": "none"
+        },
+        "root": {
+          "name": "Metric card",
+          "type": "frame",
+          "elements": [
+            {
+              "name": "revenue.mrr",
+              "type": "icon",
+              "placement": {
+                "left": 0,
+                "top": 0,
+                "right": 0,
+                "bottom": 0
+              },
+              "constraint": {
+                "horizontal": "leftright",
+                "vertical": "topbottom"
+              },
+              "background": {
+                "color": {
+                  "fixed": "transparent"
+                }
+              },
+              "config": {
+                "path": {
+                  "mode": "field",
+                  "field": "Card"
+                },
+                "fill": {
+                  "fixed": "transparent"
+                }
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": 20,
+      "type": "canvas",
+      "title": "",
+      "transparent": true,
+      "datasource": {
+        "type": "yesoreyeram-infinity-datasource",
+        "uid": "omi-admin-api"
+      },
+      "gridPos": {
+        "x": 15,
+        "y": 11,
+        "w": 5,
+        "h": 4
+      },
+      "description": "revenue.hardware_usd_week. Complete UTC periods. Count splits use primary qualified platform; first-seen cohorts use entry platform. Percentage-point cohort deltas. Capture share is saved-own-capture evidence, not device connection or recording intent. Proxy definitions and full coverage details are in diagnostics.",
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "yesoreyeram-infinity-datasource",
+            "uid": "omi-admin-api"
+          },
+          "type": "json",
+          "source": "url",
+          "format": "table",
+          "parser": "backend",
+          "url": "http://127.0.0.1:8899/api/omi/stats/wall",
+          "url_options": {
+            "method": "GET"
+          },
+          "root_selector": "tiles.revenue_hardware_usd_week",
+          "columns": [
+            {
+              "selector": "cardSvg",
+              "text": "Card",
+              "type": "string"
+            }
+          ]
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "options": {
+        "inlineEditing": false,
+        "panZoom": false,
+        "zoomToContent": true,
+        "showAdvancedTypes": false,
+        "tooltip": {
+          "mode": "none"
+        },
+        "root": {
+          "name": "Metric card",
+          "type": "frame",
+          "elements": [
+            {
+              "name": "revenue.hardware_usd_week",
+              "type": "icon",
+              "placement": {
+                "left": 0,
+                "top": 0,
+                "right": 0,
+                "bottom": 0
+              },
+              "constraint": {
+                "horizontal": "leftright",
+                "vertical": "topbottom"
+              },
+              "background": {
+                "color": {
+                  "fixed": "transparent"
+                }
+              },
+              "config": {
+                "path": {
+                  "mode": "field",
+                  "field": "Card"
+                },
+                "fill": {
+                  "fixed": "transparent"
+                }
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": 21,
+      "type": "canvas",
+      "title": "",
+      "transparent": true,
+      "datasource": {
+        "type": "yesoreyeram-infinity-datasource",
+        "uid": "omi-admin-api"
+      },
+      "gridPos": {
+        "x": 15,
+        "y": 15,
+        "w": 5,
+        "h": 3
+      },
+      "description": "revenue.plan_prepay_usd_week. Complete UTC periods. Count splits use primary qualified platform; first-seen cohorts use entry platform. Percentage-point cohort deltas. Capture share is saved-own-capture evidence, not device connection or recording intent. Proxy definitions and full coverage details are in diagnostics.",
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "yesoreyeram-infinity-datasource",
+            "uid": "omi-admin-api"
+          },
+          "type": "json",
+          "source": "url",
+          "format": "table",
+          "parser": "backend",
+          "url": "http://127.0.0.1:8899/api/omi/stats/wall",
+          "url_options": {
+            "method": "GET"
+          },
+          "root_selector": "tiles.revenue_plan_prepay_usd_week",
+          "columns": [
+            {
+              "selector": "cardSvg",
+              "text": "Card",
+              "type": "string"
+            }
+          ]
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "options": {
+        "inlineEditing": false,
+        "panZoom": false,
+        "zoomToContent": true,
+        "showAdvancedTypes": false,
+        "tooltip": {
+          "mode": "none"
+        },
+        "root": {
+          "name": "Metric card",
+          "type": "frame",
+          "elements": [
+            {
+              "name": "revenue.plan_prepay_usd_week",
+              "type": "icon",
+              "placement": {
+                "left": 0,
+                "top": 0,
+                "right": 0,
+                "bottom": 0
+              },
+              "constraint": {
+                "horizontal": "leftright",
+                "vertical": "topbottom"
+              },
+              "background": {
+                "color": {
+                  "fixed": "transparent"
+                }
+              },
+              "config": {
+                "path": {
+                  "mode": "field",
+                  "field": "Card"
+                },
+                "fill": {
+                  "fixed": "transparent"
+                }
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": 22,
+      "type": "canvas",
+      "title": "",
+      "transparent": true,
+      "datasource": {
+        "type": "yesoreyeram-infinity-datasource",
+        "uid": "omi-admin-api"
+      },
+      "gridPos": {
+        "x": 15,
+        "y": 18,
+        "w": 5,
+        "h": 3
+      },
+      "description": "revenue.payer_churn. Complete UTC periods. Count splits use primary qualified platform; first-seen cohorts use entry platform. Percentage-point cohort deltas. Capture share is saved-own-capture evidence, not device connection or recording intent. Proxy definitions and full coverage details are in diagnostics.",
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "yesoreyeram-infinity-datasource",
+            "uid": "omi-admin-api"
+          },
+          "type": "json",
+          "source": "url",
+          "format": "table",
+          "parser": "backend",
+          "url": "http://127.0.0.1:8899/api/omi/stats/wall",
+          "url_options": {
+            "method": "GET"
+          },
+          "root_selector": "tiles.revenue_payer_churn",
+          "columns": [
+            {
+              "selector": "cardSvg",
+              "text": "Card",
+              "type": "string"
+            }
+          ]
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "options": {
+        "inlineEditing": false,
+        "panZoom": false,
+        "zoomToContent": true,
+        "showAdvancedTypes": false,
+        "tooltip": {
+          "mode": "none"
+        },
+        "root": {
+          "name": "Metric card",
+          "type": "frame",
+          "elements": [
+            {
+              "name": "revenue.payer_churn",
+              "type": "icon",
+              "placement": {
+                "left": 0,
+                "top": 0,
+                "right": 0,
+                "bottom": 0
+              },
+              "constraint": {
+                "horizontal": "leftright",
+                "vertical": "topbottom"
+              },
+              "background": {
+                "color": {
+                  "fixed": "transparent"
+                }
+              },
+              "config": {
+                "path": {
+                  "mode": "field",
+                  "field": "Card"
+                },
+                "fill": {
+                  "fixed": "transparent"
+                }
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": 23,
+      "type": "canvas",
+      "title": "",
+      "transparent": true,
+      "datasource": {
+        "type": "yesoreyeram-infinity-datasource",
+        "uid": "omi-admin-api"
+      },
+      "gridPos": {
+        "x": 15,
+        "y": 21,
+        "w": 5,
+        "h": 3
+      },
+      "description": "cost.gross_margin_pct. Complete UTC periods. Count splits use primary qualified platform; first-seen cohorts use entry platform. Percentage-point cohort deltas. Capture share is saved-own-capture evidence, not device connection or recording intent. Proxy definitions and full coverage details are in diagnostics.",
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "yesoreyeram-infinity-datasource",
+            "uid": "omi-admin-api"
+          },
+          "type": "json",
+          "source": "url",
+          "format": "table",
+          "parser": "backend",
+          "url": "http://127.0.0.1:8899/api/omi/stats/wall",
+          "url_options": {
+            "method": "GET"
+          },
+          "root_selector": "tiles.cost_gross_margin_pct",
+          "columns": [
+            {
+              "selector": "cardSvg",
+              "text": "Card",
+              "type": "string"
+            }
+          ]
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "options": {
+        "inlineEditing": false,
+        "panZoom": false,
+        "zoomToContent": true,
+        "showAdvancedTypes": false,
+        "tooltip": {
+          "mode": "none"
+        },
+        "root": {
+          "name": "Metric card",
+          "type": "frame",
+          "elements": [
+            {
+              "name": "cost.gross_margin_pct",
+              "type": "icon",
+              "placement": {
+                "left": 0,
+                "top": 0,
+                "right": 0,
+                "bottom": 0
+              },
+              "constraint": {
+                "horizontal": "leftright",
+                "vertical": "topbottom"
+              },
+              "background": {
+                "color": {
+                  "fixed": "transparent"
+                }
+              },
+              "config": {
+                "path": {
+                  "mode": "field",
+                  "field": "Card"
+                },
+                "fill": {
+                  "fixed": "transparent"
+                }
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": 24,
+      "type": "text",
+      "title": "",
+      "transparent": true,
+      "gridPos": {
+        "x": 20,
+        "y": 0,
+        "w": 4,
+        "h": 2
+      },
+      "options": {
+        "mode": "markdown",
+        "content": "## Health"
+      }
+    },
+    {
+      "id": 25,
+      "type": "canvas",
+      "title": "",
+      "transparent": true,
+      "datasource": {
+        "type": "yesoreyeram-infinity-datasource",
+        "uid": "omi-admin-api"
+      },
+      "gridPos": {
+        "x": 20,
+        "y": 2,
+        "w": 4,
+        "h": 6
+      },
+      "description": "health.crash_free. Complete UTC periods. Count splits use primary qualified platform; first-seen cohorts use entry platform. Percentage-point cohort deltas. Capture share is saved-own-capture evidence, not device connection or recording intent. Proxy definitions and full coverage details are in diagnostics.",
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "yesoreyeram-infinity-datasource",
+            "uid": "omi-admin-api"
+          },
+          "type": "json",
+          "source": "url",
+          "format": "table",
+          "parser": "backend",
+          "url": "http://127.0.0.1:8899/api/omi/stats/wall",
+          "url_options": {
+            "method": "GET"
+          },
+          "root_selector": "tiles.health_crash_free",
+          "columns": [
+            {
+              "selector": "cardSvg",
+              "text": "Card",
+              "type": "string"
+            }
+          ]
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "options": {
+        "inlineEditing": false,
+        "panZoom": false,
+        "zoomToContent": true,
+        "showAdvancedTypes": false,
+        "tooltip": {
+          "mode": "none"
+        },
+        "root": {
+          "name": "Metric card",
+          "type": "frame",
+          "elements": [
+            {
+              "name": "health.crash_free",
+              "type": "icon",
+              "placement": {
+                "left": 0,
+                "top": 0,
+                "right": 0,
+                "bottom": 0
+              },
+              "constraint": {
+                "horizontal": "leftright",
+                "vertical": "topbottom"
+              },
+              "background": {
+                "color": {
+                  "fixed": "transparent"
+                }
+              },
+              "config": {
+                "path": {
+                  "mode": "field",
+                  "field": "Card"
+                },
+                "fill": {
+                  "fixed": "transparent"
+                }
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": 26,
+      "type": "canvas",
+      "title": "",
+      "transparent": true,
+      "datasource": {
+        "type": "yesoreyeram-infinity-datasource",
+        "uid": "omi-admin-api"
+      },
+      "gridPos": {
+        "x": 20,
+        "y": 8,
+        "w": 4,
+        "h": 4
+      },
+      "description": "cost.net_day. Complete UTC periods. Count splits use primary qualified platform; first-seen cohorts use entry platform. Percentage-point cohort deltas. Capture share is saved-own-capture evidence, not device connection or recording intent. Proxy definitions and full coverage details are in diagnostics.",
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "yesoreyeram-infinity-datasource",
+            "uid": "omi-admin-api"
+          },
+          "type": "json",
+          "source": "url",
+          "format": "table",
+          "parser": "backend",
+          "url": "http://127.0.0.1:8899/api/omi/stats/wall",
+          "url_options": {
+            "method": "GET"
+          },
+          "root_selector": "tiles.cost_net_day",
+          "columns": [
+            {
+              "selector": "cardSvg",
+              "text": "Card",
+              "type": "string"
+            }
+          ]
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "options": {
+        "inlineEditing": false,
+        "panZoom": false,
+        "zoomToContent": true,
+        "showAdvancedTypes": false,
+        "tooltip": {
+          "mode": "none"
+        },
+        "root": {
+          "name": "Metric card",
+          "type": "frame",
+          "elements": [
+            {
+              "name": "cost.net_day",
+              "type": "icon",
+              "placement": {
+                "left": 0,
+                "top": 0,
+                "right": 0,
+                "bottom": 0
+              },
+              "constraint": {
+                "horizontal": "leftright",
+                "vertical": "topbottom"
+              },
+              "background": {
+                "color": {
+                  "fixed": "transparent"
+                }
+              },
+              "config": {
+                "path": {
+                  "mode": "field",
+                  "field": "Card"
+                },
+                "fill": {
+                  "fixed": "transparent"
+                }
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": 27,
+      "type": "canvas",
+      "title": "",
+      "transparent": true,
+      "datasource": {
+        "type": "yesoreyeram-infinity-datasource",
+        "uid": "omi-admin-api"
+      },
+      "gridPos": {
+        "x": 20,
+        "y": 12,
+        "w": 4,
+        "h": 4
+      },
+      "description": "cost.per_mau_month. Complete UTC periods. Count splits use primary qualified platform; first-seen cohorts use entry platform. Percentage-point cohort deltas. Capture share is saved-own-capture evidence, not device connection or recording intent. Proxy definitions and full coverage details are in diagnostics.",
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "yesoreyeram-infinity-datasource",
+            "uid": "omi-admin-api"
+          },
+          "type": "json",
+          "source": "url",
+          "format": "table",
+          "parser": "backend",
+          "url": "http://127.0.0.1:8899/api/omi/stats/wall",
+          "url_options": {
+            "method": "GET"
+          },
+          "root_selector": "tiles.cost_per_mau_month",
+          "columns": [
+            {
+              "selector": "cardSvg",
+              "text": "Card",
+              "type": "string"
+            }
+          ]
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "options": {
+        "inlineEditing": false,
+        "panZoom": false,
+        "zoomToContent": true,
+        "showAdvancedTypes": false,
+        "tooltip": {
+          "mode": "none"
+        },
+        "root": {
+          "name": "Metric card",
+          "type": "frame",
+          "elements": [
+            {
+              "name": "cost.per_mau_month",
+              "type": "icon",
+              "placement": {
+                "left": 0,
+                "top": 0,
+                "right": 0,
+                "bottom": 0
+              },
+              "constraint": {
+                "horizontal": "leftright",
+                "vertical": "topbottom"
+              },
+              "background": {
+                "color": {
+                  "fixed": "transparent"
+                }
+              },
+              "config": {
+                "path": {
+                  "mode": "field",
+                  "field": "Card"
+                },
+                "fill": {
+                  "fixed": "transparent"
+                }
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": 28,
+      "type": "canvas",
+      "title": "",
+      "transparent": true,
+      "datasource": {
+        "type": "yesoreyeram-infinity-datasource",
+        "uid": "omi-admin-api"
+      },
+      "gridPos": {
+        "x": 20,
+        "y": 16,
+        "w": 4,
+        "h": 4
+      },
+      "description": "health.thumbs_positive. Complete UTC periods. Count splits use primary qualified platform; first-seen cohorts use entry platform. Percentage-point cohort deltas. Capture share is saved-own-capture evidence, not device connection or recording intent. Proxy definitions and full coverage details are in diagnostics.",
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "yesoreyeram-infinity-datasource",
+            "uid": "omi-admin-api"
+          },
+          "type": "json",
+          "source": "url",
+          "format": "table",
+          "parser": "backend",
+          "url": "http://127.0.0.1:8899/api/omi/stats/wall",
+          "url_options": {
+            "method": "GET"
+          },
+          "root_selector": "tiles.health_thumbs_positive",
+          "columns": [
+            {
+              "selector": "cardSvg",
+              "text": "Card",
+              "type": "string"
+            }
+          ]
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "options": {
+        "inlineEditing": false,
+        "panZoom": false,
+        "zoomToContent": true,
+        "showAdvancedTypes": false,
+        "tooltip": {
+          "mode": "none"
+        },
+        "root": {
+          "name": "Metric card",
+          "type": "frame",
+          "elements": [
+            {
+              "name": "health.thumbs_positive",
+              "type": "icon",
+              "placement": {
+                "left": 0,
+                "top": 0,
+                "right": 0,
+                "bottom": 0
+              },
+              "constraint": {
+                "horizontal": "leftright",
+                "vertical": "topbottom"
+              },
+              "background": {
+                "color": {
+                  "fixed": "transparent"
+                }
+              },
+              "config": {
+                "path": {
+                  "mode": "field",
+                  "field": "Card"
+                },
+                "fill": {
+                  "fixed": "transparent"
+                }
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": 29,
+      "type": "text",
+      "title": "",
+      "transparent": true,
+      "gridPos": {
+        "x": 0,
+        "y": 24,
+        "w": 24,
+        "h": 4
+      },
+      "options": {
+        "mode": "markdown",
+        "content": ""
+      }
+    },
+    {
+      "id": 30,
+      "type": "table",
+      "title": "Diagnostics \u00b7 definitions and coverage",
+      "datasource": {
+        "type": "yesoreyeram-infinity-datasource",
+        "uid": "omi-admin-api"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 28,
+        "w": 24,
+        "h": 12
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "yesoreyeram-infinity-datasource",
+            "uid": "omi-admin-api"
+          },
+          "type": "json",
+          "source": "url",
+          "format": "table",
+          "parser": "backend",
+          "url": "http://127.0.0.1:8899/api/omi/stats/wall",
+          "url_options": {
+            "method": "GET"
+          },
+          "root_selector": "metrics",
+          "columns": [
+            {
+              "selector": "id",
+              "text": "id",
+              "type": "string"
+            },
+            {
+              "selector": "status",
+              "text": "status",
+              "type": "string"
+            },
+            {
+              "selector": "reason",
+              "text": "reason",
+              "type": "string"
+            },
+            {
+              "selector": "numerator",
+              "text": "numerator",
+              "type": "number"
+            },
+            {
+              "selector": "denominator",
+              "text": "denominator",
+              "type": "number"
+            },
+            {
+              "selector": "windowStart",
+              "text": "windowStart",
+              "type": "string"
+            },
+            {
+              "selector": "windowEnd",
+              "text": "windowEnd",
+              "type": "string"
+            },
+            {
+              "selector": "dataThrough",
+              "text": "dataThrough",
+              "type": "string"
+            },
+            {
+              "selector": "sourceRefreshedAt",
+              "text": "sourceRefreshedAt",
+              "type": "string"
+            },
+            {
+              "selector": "definitionVersion",
+              "text": "definitionVersion",
+              "type": "string"
+            }
+          ]
+        }
+      ],
+      "options": {
+        "showHeader": true
+      }
+    }
+  ],
+  "description": "Five story columns. Native Canvas cards include label, scope, value, delta, platform split, complete-period trend and human coverage copy. Diagnostics below the wall. Legacy boards are unchanged.",
+  "links": []
+}

@@ -11251,6 +11251,9 @@
     "reviewCaughtUpTitle": "Няма пытанняў",
     "reviewCaughtUpBody": "Omi пакажа пытанне тут, толькі калі спатрэбіцца ваша дапамога.",
     "reviewRecentChanges": "Нядаўнія змены",
+    "reviewChangeAfter": "Пасля",
+    "reviewChangeBefore": "Да",
+    "reviewChangeRemoved": "Выдалена з актыўнага спісу",
     "reviewChangesIntro": "Што Omi змяніў сам за апошнія 30 дзён. Скасуйце ўсё, што выглядае няправільна.",
     "reviewChangeUndone": "Скасавана. Omi не будзе паўтараць гэта сам.",
     "reviewChangeFailed": "Не ўдалося абнавіць гэту змену. Паспрабуйце яшчэ раз.",
@@ -11610,5 +11613,13 @@
     "onboardingNoOmiYet": "Яшчэ няма Omi?",
     "onboardingOmiNotOrdered": "Яшчэ не замовіў",
     "onboardingOmiOrdered": "Я ўжо замовіў",
-    "onboardingPermissionTapToFix": "Націсніце, каб выправіць"
+    "onboardingPermissionTapToFix": "Націсніце, каб выправіць",
+    "homePendingTitle": "Размовы ў дарозе",
+    "homePendingCatchingUp": "Апрацоўваем ранейшае аўдыя",
+    "onTheWayTitle": "У дарозе",
+    "onTheWayAlmostReady": "Амаль гатова",
+    "activityEmpty": "Пакуль няма актыўнасці",
+    "activityNewSemantics": "Актыўнасць, новыя элементы",
+    "activityLoadFailed": "Не ўдалося загрузіць усю вашу актыўнасць",
+    "activityNewItem": "Новае"
 }

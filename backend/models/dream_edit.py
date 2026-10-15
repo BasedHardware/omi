@@ -1,28 +1,11 @@
 """Typed edits shared by Dream planning and the Review proposal contract."""
 
 from typing import Literal
-from pydantic import BaseModel, ConfigDict, Field, PrivateAttr, model_validator
-from models.dream_refs import base_ref
+from pydantic import BaseModel, ConfigDict, Field, model_validator
+from models.agent_refs import base_ref
 
 
-class ConsensusItem(BaseModel):
-    # Server-only votes: never accepted from the model or added to client DTOs.
-    _agreement: int = PrivateAttr(default=0)
-    _samples: int = PrivateAttr(default=0)
-
-    @property
-    def agreement(self):
-        return self._agreement
-
-    @property
-    def samples(self):
-        return self._samples
-
-    def set_agreement(self, agreement: int, samples: int) -> None:
-        self._agreement, self._samples = agreement, samples
-
-
-class Strict(ConsensusItem):
+class Strict(BaseModel):
     model_config = ConfigDict(extra='forbid')
 
 
@@ -95,5 +78,47 @@ QUESTION_VALUE_DESCRIPTION = (
 )
 
 
-class FullEdit(Edit):
-    value: int | None = Field(default=None, ge=1, le=5, description=QUESTION_VALUE_DESCRIPTION)
+MEMORY_HYGIENE_KINDS = frozenset({'merge_memories', 'retire_memory', 'supersede_memory'})
+
+
+class MemoryHygieneEdit(Strict):
+    kind: Literal['retire_memory', 'supersede_memory'] = Field(
+        description='Retire garbage (not merely low-importance facts), facts misattributed from another speaker, or facts contradicted by evidence. Supersede an old fact only with a newer time-scoped fact about the same attribute; age alone is not staleness.'
+    )
+    target: str = Field(description=Edit.model_fields['target'].description)
+    before: str = Field(default='', description=Edit.model_fields['before'].description)
+    other: str = Field(
+        default='',
+        description='For supersede_memory, the supplied newer memory ref. Otherwise empty. Choose exactly one of other or after.',
+    )
+    after: str = Field(
+        default='',
+        max_length=2000,
+        description='For supersede_memory without other, the newer time-scoped fact text supported by conversations. Empty for retire_memory.',
+    )
+    effective_from: str = Field(
+        default='',
+        max_length=40,
+        description='For supersede_memory: optional timezone-aware ISO 8601 time when the cited evidence says the new fact became true. Never invent a time; omit to use apply time.',
+    )
+    reason: str = Field(
+        min_length=1,
+        max_length=1000,
+        description='Required explanation of garbage, another speaker attribution, contradiction, or the newer fact about the same attribute.',
+    )
+    evidence: list[str] = Field(
+        min_length=1,
+        max_length=10,
+        description='Supplied conversation refs or other memory refs supporting retirement or replacement. The target alone is not evidence.',
+    )
+
+    @model_validator(mode='after')
+    def hygiene_semantics(self):
+        if self.kind == 'retire_memory' and (self.other or self.after):
+            raise ValueError('Retirement changes status only')
+        self.after = self.after.strip()
+        if self.kind == 'supersede_memory' and bool(self.other) == bool(self.after):
+            raise ValueError('Supersede requires exactly one of other or after')
+        if not self.reason.strip():
+            raise ValueError('Memory hygiene requires a reason')
+        return self

@@ -35,8 +35,21 @@ the server correction does not wait for a release.
 
 ## Admission and rollback
 
-Default-off `SYNC_LEGACY_FRESH_ENABLED` changes V2 only. Recent LEGACY batches
-reserve one token per upload or MiB, whichever is larger; default ten-token
+Default-off `SYNC_LEGACY_FRESH_ENABLED` changes V2 only. Promotion also requires
+an exact UID in `SYNC_LEGACY_FRESH_UID_ALLOWLIST` (default empty), or membership
+in `SYNC_LEGACY_FRESH_PERCENT` (default zero). The percentage uses the same
+stable SHA-256 UID bucket as transcription final pass; selecting 5 includes the
+previous allowlist and the stable five-percent cohort. The master flag overrides
+both. Missing/invalid/non-finite percent selects nobody beyond the allowlist;
+finite values clamp to 0–100. No account identifier belongs in code or logs.
+Enable master + allowlist + zero percent for the first account, then percent 5,
+then 100 only after the gates below. Setting master false stops all promotions.
+
+This gate admits new uploads only. Existing historical jobs are never moved;
+new recordings reach fresh only if their oldest batch file is within six hours.
+A mixed old/new upload remains backfill. This is not a complete backlog remedy.
+
+Recent LEGACY batches reserve one token per upload or MiB, whichever is larger; default ten-token
 burst, sixty tokens/hour across devices and replicas. This bounds requests
 and bytes even when timestamps are forged. Retries spend; no client duration
 is trusted. Exhaustion/store failure goes to backfill without upload refusal.
@@ -127,3 +140,32 @@ the budget. Do not launch an unbounded background call after timeout. If the
 batch service cannot meet this budget, retain legacy matching during drain or
 run durable asynchronous refinement after transcript visibility. Measure this
 before widening B to C; no final-pass policy is changed in this PR.
+
+
+## Persistence gate before cohort enablement
+
+Keep LEGACY fresh admission dark until concurrent same-UID uploads pass on the
+actual candidate image. `SYNC_ASSIGNMENT_CONTENTION_RETRY_ENABLED` defaults
+false on sync and backfill. Qualify it in an isolated synthetic dev revision
+first: two overlapping jobs, bounded read-abort recovery, replay idempotency,
+and exact uploaded/persisted segment-ID coverage. SDK commit retries alone do
+not cover a read-time `Aborted`; the optional outer retry handles both with a
+fresh transaction, five outer attempts and at most 2.4s jitter sleep. Expired-ID
+recovery remains three attempts inside each outer attempt. Retry exhaustion
+still fails truthfully and requires the retained WAL; it must never ACK loss.
+
+Run the real SDK/transaction adapter locally with:
+
+```sh
+firebase emulators:exec --only firestore --project demo-sync-assignment \
+  'backend/.venv/bin/python backend/scripts/sync_assignment_contention_emulator_test.py'
+```
+
+The emulator injects one read-abort envelope at the transport boundary because
+native contention timing is nondeterministic; begin/rollback/restart/commit and
+concurrent append/replay durability use real SDK/emulator transactions. Synthetic
+dev contention is a separate live check, not full serving-image qualification.
+Keep the per-UID backfill sequencer at one job; this retry changes no ownership
+or queue policy. A revision-fenced zero-success superseded job is acceptable
+only when its segment IDs are proven in the surviving persisted conversation.
+Rollback by disabling the retry flag; disable the LEGACY master to stop promotion.

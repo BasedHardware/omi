@@ -21,7 +21,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[3]
 DASHBOARD_DIR = ROOT / "web/admin/grafana/dashboards"
-ALLOWED_UIDS = {"omi-tv", "omi-tv-macos", "omi-tv-mobile"}
+ALLOWED_UIDS = {"omi-tv", "omi-tv-macos", "omi-tv-mobile", "omi-tv-v2"}
 DEFAULT_GRAFANA_URL = "https://admin.omi.me/grafana"
 
 

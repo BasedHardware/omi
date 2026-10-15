@@ -285,15 +285,15 @@ class MirrorTests(unittest.TestCase):
 
 
 class ApplyScopeTests(unittest.TestCase):
-    def test_apply_publishes_exactly_the_three_boards(self) -> None:
+    def test_apply_publishes_legacy_and_v2_boards(self) -> None:
         import apply_omi_tv_dashboard as apply_mod
 
         found = {
             json.loads(path.read_text(encoding="utf-8"))["uid"]
             for path in (HERE / "dashboards").glob("*.json")
         }
-        self.assertEqual(found, set(BOARDS))
-        self.assertEqual(apply_mod.ALLOWED_UIDS, set(BOARDS))
+        self.assertEqual(found, set(BOARDS) | {"omi-tv-v2"})
+        self.assertEqual(apply_mod.ALLOWED_UIDS, set(BOARDS) | {"omi-tv-v2"})
 
     def test_apply_rejects_foreign_uids(self) -> None:
         import tempfile
@@ -523,6 +523,63 @@ class CanonicalProfitabilityKeyTests(unittest.TestCase):
                     continue
                 self.assertNotIn("desktop_cost", haystack, f"{uid} {where}")
                 self.assertNotIn("mobile_cost", haystack, f"{uid} {where}")
+
+
+class WallV2Contract(unittest.TestCase):
+    def test_checked_in_wall_matches_builder(self):
+        from build_wall_dashboard import build_wall_board
+        self.assertEqual(load("omi-tv-v2"), build_wall_board())
+
+    def test_noop_legacy_build_preserves_authored_bytes(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "legacy.json"
+            path.write_text('{"panels": []}\n')
+            before = path.read_bytes()
+            build_dashboards.write_if_changed(path, {"panels": []})
+            self.assertEqual(path.read_bytes(), before)
+
+    def test_wall_columns_plugins_and_utc(self):
+        from build_wall_dashboard import COLUMNS
+        board = load("omi-tv-v2")
+        self.assertEqual(board["timezone"], "utc")
+        self.assertEqual([c[0] for c in COLUMNS], ["Growth", "Activation", "Retention", "Revenue", "Health"])
+        self.assertTrue(all(p["type"] in {"text", "canvas", "table"} for p in board["panels"]))
+        for panel in board["panels"]:
+            self.assertLessEqual(panel["gridPos"]["x"] + panel["gridPos"]["w"], 24)
+            for target in panel.get("targets", []):
+                self.assertEqual(target["url"], "http://127.0.0.1:8899/api/omi/stats/wall")
+                self.assertEqual(target["datasource"]["uid"], "omi-admin-api")
+                self.assertEqual(target["url_options"]["method"], "GET")
+        self.assertEqual(board["panels"][-1]["type"], "table")
+
+    def test_each_metric_is_one_framed_canvas_card(self):
+        from build_wall_dashboard import COLUMNS, geometry
+        board = load("omi-tv-v2")
+        cards = [p for p in board["panels"] if p["type"] == "canvas"]
+        self.assertEqual(len(cards), sum(len(ids) for _, ids in COLUMNS))
+        for card in cards:
+            self.assertEqual(card["title"], "")
+            self.assertFalse(card["options"]["inlineEditing"])
+            self.assertEqual(len(card["options"]["root"]["elements"]), 1)
+            element = card["options"]["root"]["elements"][0]
+            self.assertEqual(element["type"], "icon")
+            self.assertEqual(element["config"]["path"], {"mode":"field","field":"Card"})
+            self.assertEqual(card["targets"][0]["columns"][0]["selector"], "cardSvg")
+        spacer = board["panels"][-2]
+        self.assertTrue(spacer["transparent"])
+        self.assertGreaterEqual(spacer["gridPos"]["h"], 4)
+        self.assertEqual(board["panels"][-1]["gridPos"]["y"], spacer["gridPos"]["y"] + spacer["gridPos"]["h"])
+        self.assertGreater(geometry("growth.wau")[0], geometry("engagement.dau")[0])
+        self.assertLess(geometry("revenue.plan_prepay_usd_week")[0], geometry("revenue.arpmau")[0])
+
+    def test_apply_accepts_new_uid_without_changing_legacy_layout_policy(self):
+        import apply_omi_tv_dashboard as apply_module
+        from build_wall_dashboard import HERE
+        self.assertEqual(apply_module.load_dashboard(HERE / "dashboards/omi-tv-v2.json")["uid"], "omi-tv-v2")
+        incoming=[{"id":1,"gridPos":{"x":0}}]
+        apply_module.preserve_live_layout(incoming,[{"id":1,"gridPos":{"x":5}}])
+        self.assertEqual(incoming[0]["gridPos"],{"x":5})
 
 
 if __name__ == "__main__":

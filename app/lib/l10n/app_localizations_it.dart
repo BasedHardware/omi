@@ -12460,6 +12460,15 @@ class AppLocalizationsIt extends AppLocalizations {
   String get reviewRecentChanges => 'Modifiche recenti';
 
   @override
+  String get reviewChangeAfter => 'Dopo';
+
+  @override
+  String get reviewChangeBefore => 'Prima';
+
+  @override
+  String get reviewChangeRemoved => 'Rimosso dall’elenco attivo';
+
+  @override
   String get reviewChangesIntro =>
       'Cosa ha cambiato Omi da solo negli ultimi 30 giorni. Annulla tutto ciò che sembra sbagliato.';
 
@@ -13728,4 +13737,28 @@ class AppLocalizationsIt extends AppLocalizations {
 
   @override
   String get onboardingPermissionTapToFix => 'Tocca per risolvere';
+
+  @override
+  String get homePendingTitle => 'Conversazioni in arrivo';
+
+  @override
+  String get homePendingCatchingUp => 'Recupero dell\'audio precedente';
+
+  @override
+  String get onTheWayTitle => 'In arrivo';
+
+  @override
+  String get onTheWayAlmostReady => 'Quasi pronto';
+
+  @override
+  String get activityEmpty => 'Ancora nessuna attività';
+
+  @override
+  String get activityNewSemantics => 'Attività, nuovi elementi';
+
+  @override
+  String get activityLoadFailed => 'Impossibile caricare tutta la tua attività';
+
+  @override
+  String get activityNewItem => 'Nuovo';
 }

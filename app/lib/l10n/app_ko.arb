@@ -3831,6 +3831,9 @@
     "reviewCaughtUpTitle": "답변할 질문이 없어요",
     "reviewCaughtUpBody": "Omi는 도움이 필요할 때만 여기서 질문해요.",
     "reviewRecentChanges": "최근 변경 사항",
+    "reviewChangeAfter": "변경 후",
+    "reviewChangeBefore": "변경 전",
+    "reviewChangeRemoved": "활성 목록에서 제거됨",
     "reviewChangesIntro": "지난 30일 동안 Omi가 자동으로 바꾼 내용이에요. 잘못된 것은 되돌리세요.",
     "reviewChangeUndone": "되돌렸어요. Omi가 이를 다시 하지 않아요.",
     "reviewChangeFailed": "이 변경 사항을 업데이트하지 못했어요. 다시 시도해 주세요.",
@@ -4190,5 +4193,13 @@
     "onboardingNoOmiYet": "아직 Omi가 없으신가요?",
     "onboardingOmiNotOrdered": "아직 주문하지 않았어요",
     "onboardingOmiOrdered": "주문했어요",
-    "onboardingPermissionTapToFix": "탭하여 해결"
+    "onboardingPermissionTapToFix": "탭하여 해결",
+    "homePendingTitle": "대화 준비 중",
+    "homePendingCatchingUp": "이전 오디오 처리 중",
+    "onTheWayTitle": "준비 중",
+    "onTheWayAlmostReady": "거의 완료",
+    "activityEmpty": "아직 활동이 없습니다",
+    "activityNewSemantics": "활동, 새 항목",
+    "activityLoadFailed": "활동을 모두 불러오지 못했습니다",
+    "activityNewItem": "새 항목"
 }

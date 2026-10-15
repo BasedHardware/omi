@@ -422,7 +422,14 @@ def firestore_document_kind(error: BaseException) -> str:
     return 'other'
 
 
-def run_transactional(client: Any, transactional_callable: Any, *args: Any, attempts: int = 3, **kwargs: Any) -> Any:
+def run_transactional(
+    client: Any,
+    transactional_callable: Any,
+    *args: Any,
+    attempts: int = 3,
+    initial_transaction: Any = None,
+    **kwargs: Any,
+) -> Any:
     """Run a ``@firestore.transactional`` callable, restarting it on an expired transaction.
 
     ``_Transactional.__call__`` retries contention by replaying the *same* transaction id,
@@ -432,10 +439,15 @@ def run_transactional(client: Any, transactional_callable: Any, *args: Any, atte
     that read. Nothing was written. Recovery requires a brand-new transaction and belongs
     to this boundary rather than to every caller — callers that own a live WebSocket
     session have no way to distinguish it from a real write failure.
+    ``initial_transaction`` lets an outer contention budget own the first transaction;
+    expiry still replaces it with a new transaction under the existing attempt limit.
     """
     for attempt in range(1, max(1, attempts) + 1):
         try:
-            return transactional_callable(client.transaction(), *args, **kwargs)
+            transaction = (
+                initial_transaction if attempt == 1 and initial_transaction is not None else client.transaction()
+            )
+            return transactional_callable(transaction, *args, **kwargs)
         except (InvalidArgument, Aborted) as error:
             if attempt >= attempts or not is_expired_transaction_error(error):
                 raise

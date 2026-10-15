@@ -3866,6 +3866,9 @@
     "reviewCaughtUpTitle": "Отвечать не на что",
     "reviewCaughtUpBody": "Omi задаст вопрос здесь, только когда вы ему понадобитесь.",
     "reviewRecentChanges": "Недавние изменения",
+    "reviewChangeAfter": "После",
+    "reviewChangeBefore": "До",
+    "reviewChangeRemoved": "Удалено из активного списка",
     "reviewChangesIntro": "Что Omi изменил сам за последние 30 дней. Отмените всё, что выглядит неправильно.",
     "reviewChangeUndone": "Отменено. Omi не будет делать это снова сам.",
     "reviewChangeFailed": "Не удалось обновить это изменение. Повторите попытку.",
@@ -4225,5 +4228,13 @@
     "onboardingNoOmiYet": "Ещё нет Omi?",
     "onboardingOmiNotOrdered": "Ещё не заказал",
     "onboardingOmiOrdered": "Я уже заказал",
-    "onboardingPermissionTapToFix": "Нажмите, чтобы исправить"
+    "onboardingPermissionTapToFix": "Нажмите, чтобы исправить",
+    "homePendingTitle": "Разговоры в пути",
+    "homePendingCatchingUp": "Обрабатываем более раннее аудио",
+    "onTheWayTitle": "В пути",
+    "onTheWayAlmostReady": "Почти готово",
+    "activityEmpty": "Пока нет активности",
+    "activityNewSemantics": "Активность, новые элементы",
+    "activityLoadFailed": "Не удалось загрузить всю активность",
+    "activityNewItem": "Новое"
 }

@@ -487,6 +487,7 @@ class SimpleStructured(BaseModel):
 class SimpleTranscriptSegment(BaseModel):
     id: Optional[str] = None
     text: str
+    original_text: Optional[str] = None
     speaker_id: Optional[int] = None
     speaker_name: Optional[str] = None
     start: float

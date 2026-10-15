@@ -3831,6 +3831,9 @@
     "reviewCaughtUpTitle": "回答するものはありません",
     "reviewCaughtUpBody": "Omiは、あなたが必要なときだけここで質問します。",
     "reviewRecentChanges": "最近の変更",
+    "reviewChangeAfter": "変更後",
+    "reviewChangeBefore": "変更前",
+    "reviewChangeRemoved": "アクティブなリストから削除",
     "reviewChangesIntro": "過去30日間にOmiが自動で変更した内容です。おかしいものは元に戻せます。",
     "reviewChangeUndone": "元に戻しました。Omiが自動でやり直すことはありません。",
     "reviewChangeFailed": "この変更を更新できませんでした。もう一度お試しください。",
@@ -4190,5 +4193,13 @@
     "onboardingNoOmiYet": "まだOmiをお持ちでないですか？",
     "onboardingOmiNotOrdered": "まだ注文していません",
     "onboardingOmiOrdered": "注文済みです",
-    "onboardingPermissionTapToFix": "タップして修正"
+    "onboardingPermissionTapToFix": "タップして修正",
+    "homePendingTitle": "会話を準備中",
+    "homePendingCatchingUp": "以前の音声を処理中",
+    "onTheWayTitle": "準備中",
+    "onTheWayAlmostReady": "まもなく完了",
+    "activityEmpty": "アクティビティはまだありません",
+    "activityNewSemantics": "アクティビティ、新着あり",
+    "activityLoadFailed": "アクティビティの一部を読み込めませんでした",
+    "activityNewItem": "新着"
 }

@@ -12415,6 +12415,15 @@ class AppLocalizationsLt extends AppLocalizations {
   String get reviewRecentChanges => 'Naujausi pakeitimai';
 
   @override
+  String get reviewChangeAfter => 'Po';
+
+  @override
+  String get reviewChangeBefore => 'Prieš';
+
+  @override
+  String get reviewChangeRemoved => 'Pašalinta iš aktyvaus sąrašo';
+
+  @override
   String get reviewChangesIntro =>
       'Ką Omi pats pakeitė per pastarąsias 30 dienų. Atšaukite viską, kas atrodo neteisinga.';
 
@@ -13678,4 +13687,28 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get onboardingPermissionTapToFix => 'Bakstelėkite, kad pataisytumėte';
+
+  @override
+  String get homePendingTitle => 'Pokalbiai pakeliui';
+
+  @override
+  String get homePendingCatchingUp => 'Apdorojamas ankstesnis garsas';
+
+  @override
+  String get onTheWayTitle => 'Pakeliui';
+
+  @override
+  String get onTheWayAlmostReady => 'Beveik paruošta';
+
+  @override
+  String get activityEmpty => 'Veiklos dar nėra';
+
+  @override
+  String get activityNewSemantics => 'Veikla, nauji elementai';
+
+  @override
+  String get activityLoadFailed => 'Nepavyko įkelti visos jūsų veiklos';
+
+  @override
+  String get activityNewItem => 'Nauja';
 }

@@ -12388,6 +12388,15 @@ class AppLocalizationsSk extends AppLocalizations {
   String get reviewRecentChanges => 'Nedávne zmeny';
 
   @override
+  String get reviewChangeAfter => 'Po';
+
+  @override
+  String get reviewChangeBefore => 'Pred';
+
+  @override
+  String get reviewChangeRemoved => 'Odstránené z aktívneho zoznamu';
+
+  @override
   String get reviewChangesIntro => 'Čo Omi samo zmenilo za posledných 30 dní. Vráťte späť všetko, čo vyzerá zle.';
 
   @override
@@ -13651,4 +13660,28 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get onboardingPermissionTapToFix => 'Ťuknutím opravíte';
+
+  @override
+  String get homePendingTitle => 'Konverzácie na ceste';
+
+  @override
+  String get homePendingCatchingUp => 'Spracúvame skorší zvuk';
+
+  @override
+  String get onTheWayTitle => 'Na ceste';
+
+  @override
+  String get onTheWayAlmostReady => 'Takmer hotovo';
+
+  @override
+  String get activityEmpty => 'Zatiaľ žiadna aktivita';
+
+  @override
+  String get activityNewSemantics => 'Aktivita, nové položky';
+
+  @override
+  String get activityLoadFailed => 'Nepodarilo sa načítať celú vašu aktivitu';
+
+  @override
+  String get activityNewItem => 'Nové';
 }

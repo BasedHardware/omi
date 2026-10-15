@@ -1,5 +1,7 @@
 """Memory routing seam — surfaces route reads/writes/search through MemoryService (WS-L)."""
 
+from contextvars import ContextVar
+
 import hashlib
 import json
 import logging
@@ -34,7 +36,13 @@ from database._client import db as default_db_client
 from database.memory_collections import MemoryCollections
 from database.memory_apply_store import EvidenceIdentityConflict, privacy_deletion_receipt_id
 from database.memory_ledger import purge_source_replacement_receipts_for_memories
-from database.legal_holds import destructive_operation_gate
+from database.legal_holds import (
+    DestructiveGateTakeover,
+    assert_destructive_gate_still_ours,
+    DestructiveOperationInProgress,
+    LegalHoldAuthorityUnavailable,
+    destructive_operation_gate,
+)
 from database.review_queue import purge_stale_review_conflicts_for_memories
 from database.vector_db import delete_memory_vector
 from models.memories import MemoryDB
@@ -58,6 +66,7 @@ from models.product_memory import (
     SourceState,
 )
 from utils.log_sanitizer import sanitize, sanitize_validation_error
+from utils.other.account_gate_http import account_gate_busy_http_exception
 from utils.other.list_budget import ListReadBudget, ListReadBudgetExhausted, budgeted_get_all
 from utils.other.portability_read import check_portability_read
 from utils.memory.canonical_visibility_filter import batch_canonical_expiry_observations
@@ -149,6 +158,14 @@ MAX_LEDGER_REVERT_CHAIN_LENGTH = 64
 _LEDGER_QUERY_TOKEN_RE = re.compile(r"[a-z0-9][a-z0-9']{1,63}")
 
 
+_EXPLICIT_DELETION_ACTIVE: ContextVar[bool] = ContextVar("memory_service_explicit_deletion", default=False)
+
+
+def _revalidate_explicit_deletion(uid: str, *, db_client: Any) -> None:
+    if _EXPLICIT_DELETION_ACTIVE.get():
+        assert_destructive_gate_still_ours(uid, "explicit_memory_deletion", firestore_client=db_client)
+
+
 def _legal_hold_gated_deletion(method: Callable[..., Any]) -> Callable[..., Any]:
     """Hold one server-owned deletion gate across legacy and canonical layers."""
 
@@ -158,14 +175,21 @@ def _legal_hold_gated_deletion(method: Callable[..., Any]) -> Callable[..., Any]
         # derived data for a row the assignment transaction already tombstoned.
         # It must not take the exclusive account gate reserved for genuinely
         # destructive work; callers pass claim_destructive_gate=False.
-        if not kwargs.get("claim_destructive_gate", True):
-            return method(self, uid, *args, **kwargs)
-        with destructive_operation_gate(
-            uid,
-            kind="explicit_memory_deletion",
-            firestore_client=self.db_client,
-        ):
-            return method(self, uid, *args, **kwargs)
+        try:
+            if not kwargs.get("claim_destructive_gate", True):
+                return method(self, uid, *args, **kwargs)
+            with destructive_operation_gate(
+                uid,
+                kind="explicit_memory_deletion",
+                firestore_client=self.db_client,
+            ):
+                reset = _EXPLICIT_DELETION_ACTIVE.set(True)
+                try:
+                    return method(self, uid, *args, **kwargs)
+                finally:
+                    _EXPLICIT_DELETION_ACTIVE.reset(reset)
+        except (DestructiveGateTakeover, DestructiveOperationInProgress, LegalHoldAuthorityUnavailable) as exc:
+            raise account_gate_busy_http_exception() from exc
 
     return wrapped
 
@@ -197,8 +221,13 @@ def _purge_required_canonical_projections(
             db_client=db_client,
             reason=reason,
             include_review_queue=False,
+            revalidate_gate=_EXPLICIT_DELETION_ACTIVE.get(),
             preserve_source_replacement_receipts=preserve_source_replacement_receipts,
         )
+    except (DestructiveGateTakeover, DestructiveOperationInProgress, LegalHoldAuthorityUnavailable) as exc:
+        raise account_gate_busy_http_exception() from exc
+    except HTTPException:
+        raise
     except Exception as exc:
         raise HTTPException(
             status_code=503,
@@ -212,6 +241,7 @@ def _delete_historical_privacy_overrides(uid: str, memory_ids: List[str], *, db_
     client = db_client if db_client is not None else default_db_client
     collections = MemoryCollections(uid=uid)
     for memory_id in dict.fromkeys(memory_id for memory_id in memory_ids if memory_id):
+        _revalidate_explicit_deletion(uid, db_client=client)
         client.document(f"{collections.memory_historical_overrides}/{memory_id}").delete()
 
 
@@ -1218,6 +1248,7 @@ class HistoricalMemoryAdapter:
         therefore its retry identity) intact. Suppression/tombstones prevent
         resurrection while the caller retries the failed request.
         """
+        _revalidate_explicit_deletion(uid, db_client=db_client)
         failures: List[str] = []
         if delete_vector:
             # The legacy vector helper no-ops when no vector store is
@@ -1239,7 +1270,10 @@ class HistoricalMemoryAdapter:
             raise HTTPException(status_code=503, detail="Historical memory privacy cleanup incomplete")
         try:
             kwargs = {"firestore_client": db_client} if db_client is not None else {}
+            _revalidate_explicit_deletion(uid, db_client=db_client)
             memories_db.delete_memory(uid, memory_id, **kwargs)
+        except (DestructiveGateTakeover, LegalHoldAuthorityUnavailable):
+            raise
         except Exception:
             failures.append("content")
             logger.exception("historical memory cleanup failed uid=%s memory_id=%s", uid, memory_id)
@@ -2458,9 +2492,12 @@ class MemoryService:
         try:
             ref = client.document(path)
             try:
+                _revalidate_explicit_deletion(uid, db_client=client)
                 ref.set(payload, merge=True)
             except TypeError:
                 ref.set(payload)
+        except (DestructiveGateTakeover, LegalHoldAuthorityUnavailable):
+            raise
         except Exception as exc:
             raise HTTPException(status_code=503, detail="Canonical memory suppression unavailable") from exc
 
@@ -2500,7 +2537,10 @@ class MemoryService:
                         batch.set(ref, payload, merge=True)
                     except TypeError:
                         batch.set(ref, payload)
+                _revalidate_explicit_deletion(uid, db_client=client)
                 batch.commit()
+            except (DestructiveGateTakeover, LegalHoldAuthorityUnavailable):
+                raise
             except Exception as exc:
                 raise HTTPException(status_code=503, detail="Canonical memory suppression unavailable") from exc
 
@@ -4128,10 +4168,13 @@ class MemoryService:
                     purge_stale_review_conflicts_for_memories(
                         uid,
                         lineage_ids,
+                        revalidate_gate=_EXPLICIT_DELETION_ACTIVE.get(),
                         reason="canonical_memory_delete_retry",
                         db_client=self.db_client,
                         include_legacy_commits=True,
                     )
+                except (DestructiveGateTakeover, DestructiveOperationInProgress, LegalHoldAuthorityUnavailable) as exc:
+                    raise account_gate_busy_http_exception() from exc
                 except Exception as exc:
                     raise HTTPException(
                         status_code=503,
@@ -4182,10 +4225,13 @@ class MemoryService:
             purge_stale_review_conflicts_for_memories(
                 uid,
                 lineage_ids,
+                revalidate_gate=_EXPLICIT_DELETION_ACTIVE.get(),
                 reason="explicit_memory_delete",
                 db_client=self.db_client,
                 include_legacy_commits=True,
             )
+        except (DestructiveGateTakeover, DestructiveOperationInProgress, LegalHoldAuthorityUnavailable) as exc:
+            raise account_gate_busy_http_exception() from exc
         except Exception as exc:
             raise HTTPException(
                 status_code=503,
@@ -4227,6 +4273,12 @@ class MemoryService:
                 if getattr(canonical_item, "status", None) == MemoryItemStatus.tombstoned:
                     try:
                         historical_ids.extend(canonical_memory_lineage_ids(uid, [memory_id], db_client=self.db_client))
+                    except (
+                        DestructiveGateTakeover,
+                        DestructiveOperationInProgress,
+                        LegalHoldAuthorityUnavailable,
+                    ) as exc:
+                        raise account_gate_busy_http_exception() from exc
                     except Exception as exc:
                         raise HTTPException(
                             status_code=503,
@@ -4301,10 +4353,13 @@ class MemoryService:
             purge_stale_review_conflicts_for_memories(
                 uid,
                 cleanup_ids,
+                revalidate_gate=_EXPLICIT_DELETION_ACTIVE.get(),
                 reason="canonical_memory_delete_batch_retry",
                 db_client=self.db_client,
                 include_legacy_commits=True,
             )
+        except (DestructiveGateTakeover, DestructiveOperationInProgress, LegalHoldAuthorityUnavailable) as exc:
+            raise account_gate_busy_http_exception() from exc
         except Exception as exc:
             raise HTTPException(
                 status_code=503,
@@ -4335,10 +4390,13 @@ class MemoryService:
             purge_stale_review_conflicts_for_memories(
                 uid,
                 list(dict.fromkeys(canonical_ids + historical_ids)),
+                revalidate_gate=_EXPLICIT_DELETION_ACTIVE.get(),
                 reason="canonical_memory_delete_all_retry",
                 db_client=self.db_client,
                 include_legacy_commits=True,
             )
+        except (DestructiveGateTakeover, DestructiveOperationInProgress, LegalHoldAuthorityUnavailable) as exc:
+            raise account_gate_busy_http_exception() from exc
         except Exception as exc:
             raise HTTPException(
                 status_code=503,
@@ -4371,10 +4429,13 @@ class MemoryService:
             purge_stale_review_conflicts_for_memories(
                 uid,
                 list(dict.fromkeys(canonical_ids + historical_ids)),
+                revalidate_gate=_EXPLICIT_DELETION_ACTIVE.get(),
                 reason="canonical_memory_delete_default_retry",
                 db_client=self.db_client,
                 include_legacy_commits=True,
             )
+        except (DestructiveGateTakeover, DestructiveOperationInProgress, LegalHoldAuthorityUnavailable) as exc:
+            raise account_gate_busy_http_exception() from exc
         except Exception as exc:
             raise HTTPException(
                 status_code=503,
@@ -4436,11 +4497,14 @@ class MemoryService:
                 purge_stale_review_conflicts_for_memories(
                     uid,
                     all_ids,
+                    revalidate_gate=_EXPLICIT_DELETION_ACTIVE.get(),
                     reason="conversation_memory_retraction",
                     db_client=self.db_client,
                     include_legacy_commits=True,
                     preserve_source_replacement_receipts=True,
                 )
+            except (DestructiveGateTakeover, DestructiveOperationInProgress, LegalHoldAuthorityUnavailable) as exc:
+                raise account_gate_busy_http_exception() from exc
             except Exception as exc:
                 raise HTTPException(
                     status_code=503,
@@ -4454,8 +4518,11 @@ class MemoryService:
                 purge_source_replacement_receipts_for_memories(
                     uid,
                     retracted_ids,
+                    revalidate_gate=_EXPLICIT_DELETION_ACTIVE.get(),
                     firestore_client=self.db_client,
                 )
+            except (DestructiveGateTakeover, DestructiveOperationInProgress, LegalHoldAuthorityUnavailable) as exc:
+                raise account_gate_busy_http_exception() from exc
             except Exception as exc:
                 raise HTTPException(
                     status_code=503,

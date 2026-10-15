@@ -12449,6 +12449,15 @@ class AppLocalizationsRo extends AppLocalizations {
   String get reviewRecentChanges => 'Modificări recente';
 
   @override
+  String get reviewChangeAfter => 'După';
+
+  @override
+  String get reviewChangeBefore => 'Înainte';
+
+  @override
+  String get reviewChangeRemoved => 'Eliminat din lista activă';
+
+  @override
   String get reviewChangesIntro => 'Ce a schimbat Omi singur în ultimele 30 de zile. Anulează orice pare greșit.';
 
   @override
@@ -13713,4 +13722,28 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get onboardingPermissionTapToFix => 'Atinge pentru a remedia';
+
+  @override
+  String get homePendingTitle => 'Conversații pe drum';
+
+  @override
+  String get homePendingCatchingUp => 'Recuperăm audio anterior';
+
+  @override
+  String get onTheWayTitle => 'Pe drum';
+
+  @override
+  String get onTheWayAlmostReady => 'Aproape gata';
+
+  @override
+  String get activityEmpty => 'Nicio activitate încă';
+
+  @override
+  String get activityNewSemantics => 'Activitate, elemente noi';
+
+  @override
+  String get activityLoadFailed => 'Nu am putut încărca toată activitatea ta';
+
+  @override
+  String get activityNewItem => 'Nou';
 }

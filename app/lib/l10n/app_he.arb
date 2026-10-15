@@ -11251,6 +11251,9 @@
     "reviewCaughtUpTitle": "אין מה לענות",
     "reviewCaughtUpBody": "Omi ישאל כאן רק כשהוא צריך אותך.",
     "reviewRecentChanges": "שינויים אחרונים",
+    "reviewChangeAfter": "אחרי",
+    "reviewChangeBefore": "לפני",
+    "reviewChangeRemoved": "הוסר מהרשימה הפעילה",
     "reviewChangesIntro": "מה ש-Omi שינה בעצמו ב-30 הימים האחרונים. בטל כל דבר שנראה שגוי.",
     "reviewChangeUndone": "בוטל. Omi לא יחזור על זה בעצמו.",
     "reviewChangeFailed": "לא ניתן היה לעדכן שינוי זה. נסה שוב.",
@@ -11610,5 +11613,13 @@
     "onboardingNoOmiYet": "עדיין אין לכם Omi?",
     "onboardingOmiNotOrdered": "עוד לא הזמנתי",
     "onboardingOmiOrdered": "הזמנתי",
-    "onboardingPermissionTapToFix": "הקישו לתיקון"
+    "onboardingPermissionTapToFix": "הקישו לתיקון",
+    "homePendingTitle": "שיחות בדרך",
+    "homePendingCatchingUp": "משלימים אודיו קודם",
+    "onTheWayTitle": "בדרך",
+    "onTheWayAlmostReady": "כמעט מוכן",
+    "activityEmpty": "אין פעילות עדיין",
+    "activityNewSemantics": "פעילות, פריטים חדשים",
+    "activityLoadFailed": "לא ניתן היה לטעון את כל הפעילות שלך",
+    "activityNewItem": "חדש"
 }

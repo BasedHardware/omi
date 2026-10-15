@@ -11251,6 +11251,9 @@
     "reviewCaughtUpTitle": "Ni nič za odgovoriti",
     "reviewCaughtUpBody": "Omi bo tukaj spraševal le, kadar vas bo potreboval.",
     "reviewRecentChanges": "Nedavne spremembe",
+    "reviewChangeAfter": "Potem",
+    "reviewChangeBefore": "Prej",
+    "reviewChangeRemoved": "Odstranjeno z aktivnega seznama",
     "reviewChangesIntro": "Kaj je Omi sam spremenil v zadnjih 30 dneh. Razveljavite vse, kar se zdi napačno.",
     "reviewChangeUndone": "Razveljavljeno. Omi tega ne bo ponovil sam.",
     "reviewChangeFailed": "Te spremembe ni bilo mogoče posodobiti. Poskusite znova.",
@@ -11610,5 +11613,13 @@
     "onboardingNoOmiYet": "Še nimate Omi?",
     "onboardingOmiNotOrdered": "Še nisem naročil/a",
     "onboardingOmiOrdered": "Naročil/a sem ga",
-    "onboardingPermissionTapToFix": "Tapnite za popravilo"
+    "onboardingPermissionTapToFix": "Tapnite za popravilo",
+    "homePendingTitle": "Pogovori na poti",
+    "homePendingCatchingUp": "Obdelujemo prejšnji zvok",
+    "onTheWayTitle": "Na poti",
+    "onTheWayAlmostReady": "Skoraj pripravljeno",
+    "activityEmpty": "Še ni dejavnosti",
+    "activityNewSemantics": "Dejavnost, novi elementi",
+    "activityLoadFailed": "Ni bilo mogoče naložiti vse vaše dejavnosti",
+    "activityNewItem": "Novo"
 }

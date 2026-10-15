@@ -5,6 +5,7 @@ import 'package:omi/backend/http/api_result.dart';
 import 'package:omi/backend/schema/review.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
+import 'package:omi/pages/review/widgets/review_parts.dart';
 
 typedef ReviewChangesLoader = Future<ApiResult<ReviewChangesPage>> Function({String? cursor});
 typedef ReviewChangeToggler = Future<ApiResult<ReviewChange>> Function(String changeId, {required bool undone});
@@ -160,7 +161,8 @@ class _DayHeader extends StatelessWidget {
   }
 }
 
-IconData _changeIcon(ReviewChangeKind kind) => switch (kind) {
+/// The glyph a change of [kind] wears wherever Omi's own changes are listed.
+IconData reviewChangeIcon(ReviewChangeKind kind) => switch (kind) {
       ReviewChangeKind.rename => Icons.spellcheck,
       ReviewChangeKind.mergeMemories => Icons.call_merge,
       ReviewChangeKind.updatePerson => Icons.person_outline,
@@ -186,54 +188,78 @@ class _ChangeRow extends StatelessWidget {
       margin: const EdgeInsets.only(bottom: 10),
       padding: const EdgeInsets.fromLTRB(OmiSpacing.md, 14, OmiSpacing.xs, 14),
       decoration: BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.lgAll),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Padding(
-            padding: const EdgeInsets.only(top: 2),
-            child: Icon(undone ? Icons.undo : _changeIcon(change.kind), size: 18, color: OmiColors.textSecondary),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Icon(undone ? Icons.undo : reviewChangeIcon(change.kind), size: 18, color: OmiColors.textSecondary),
+              const SizedBox(width: OmiSpacing.sm),
+              Expanded(
+                  child: Text(change.title,
+                      style: undone
+                          ? OmiType.subhead
+                              .copyWith(color: OmiColors.textSecondary, decoration: TextDecoration.lineThrough)
+                          : OmiType.subhead.copyWith(fontWeight: FontWeight.w600))),
+            ],
           ),
-          const SizedBox(width: OmiSpacing.sm),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  change.title,
-                  style: undone
-                      ? OmiType.subhead.copyWith(color: OmiColors.textSecondary, decoration: TextDecoration.lineThrough)
-                      : OmiType.subhead.copyWith(fontWeight: FontWeight.w600),
-                ),
-                if (undone)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 4),
-                    child: Text(l10n.reviewChangeUndone, style: OmiType.footnote),
-                  )
-                else ...[
-                  if (change.reason != null)
-                    Padding(
-                      padding: const EdgeInsets.only(top: 4),
-                      child: Text(change.reason!, style: OmiType.footnote.copyWith(color: OmiColors.textSecondary)),
-                    ),
-                  if (change.snippet != null)
-                    Container(
-                      margin: const EdgeInsets.only(top: OmiSpacing.xs),
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: OmiSpacing.xs),
-                      decoration: BoxDecoration(color: OmiColors.surface2, borderRadius: OmiRadius.smAll),
-                      child: Text(change.snippet!, style: OmiType.footnote),
-                    ),
-                ],
-              ],
-            ),
-          ),
-          OmiButton.tertiary(
-            key: ValueKey('review_change_toggle_${change.changeId}'),
-            label: undone ? l10n.redo : l10n.undo,
-            isLoading: busy,
-            onPressed: busy ? null : onToggle,
-          ),
+          if (undone)
+            Padding(
+                padding: const EdgeInsets.only(top: OmiSpacing.xxs),
+                child: Text(l10n.reviewChangeUndone, style: OmiType.footnote)),
+          if (change.before != null && change.before!.isNotEmpty)
+            _ChangeValue(label: l10n.reviewChangeBefore, value: change.before!, fieldKey: 'before'),
+          if (change.after != null)
+            _ChangeValue(
+                label: l10n.reviewChangeAfter,
+                value: change.after!.isEmpty ? l10n.reviewChangeRemoved : change.after!,
+                fieldKey: 'after'),
+          if (change.refs.any((ref) => ref.label.isNotEmpty))
+            Padding(
+                padding: const EdgeInsets.only(top: OmiSpacing.xs),
+                child: Text(change.refs.map((ref) => ref.label).where((label) => label.isNotEmpty).toSet().join(' · '),
+                    style: OmiType.footnote.copyWith(color: OmiColors.textSecondary))),
+          if (change.context != null)
+            Padding(
+                padding: const EdgeInsets.only(top: OmiSpacing.sm),
+                child: ReviewSpellingContext(context: change.context!)),
+          if (change.context == null && change.snippet != null)
+            Padding(
+                padding: const EdgeInsets.only(top: OmiSpacing.xs),
+                child: Text(change.snippet!, style: OmiType.footnote)),
+          if (change.reason != null)
+            Padding(
+                padding: const EdgeInsets.only(top: OmiSpacing.xs),
+                child: Text(change.reason!, style: OmiType.footnote.copyWith(color: OmiColors.textSecondary))),
+          Align(
+              alignment: Alignment.centerRight,
+              child: OmiButton.tertiary(
+                  key: ValueKey('review_change_toggle_${change.changeId}'),
+                  label: undone ? l10n.redo : l10n.undo,
+                  isLoading: busy,
+                  onPressed: busy ? null : onToggle)),
         ],
       ),
     );
   }
+}
+
+class _ChangeValue extends StatelessWidget {
+  const _ChangeValue({required this.label, required this.value, required this.fieldKey});
+  final String label;
+  final String value;
+  final String fieldKey;
+
+  @override
+  Widget build(BuildContext context) => Container(
+        margin: const EdgeInsets.only(top: OmiSpacing.xs),
+        padding: const EdgeInsets.all(OmiSpacing.sm),
+        decoration: BoxDecoration(color: OmiColors.surface2, borderRadius: OmiRadius.smAll),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+          Text(label, style: OmiType.footnote.copyWith(color: OmiColors.textSecondary)),
+          const SizedBox(height: OmiSpacing.xxs),
+          Text(value, key: ValueKey('review_change_$fieldKey'), style: OmiType.subhead),
+        ]),
+      );
 }

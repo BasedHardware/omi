@@ -3831,6 +3831,9 @@
     "reviewCaughtUpTitle": "Không có gì để trả lời",
     "reviewCaughtUpBody": "Omi chỉ hỏi ở đây khi cần bạn.",
     "reviewRecentChanges": "Thay đổi gần đây",
+    "reviewChangeAfter": "Sau",
+    "reviewChangeBefore": "Trước",
+    "reviewChangeRemoved": "Đã xóa khỏi danh sách đang hoạt động",
     "reviewChangesIntro": "Những gì Omi tự thay đổi trong 30 ngày qua. Hoàn tác bất cứ điều gì có vẻ sai.",
     "reviewChangeUndone": "Đã hoàn tác. Omi sẽ không tự làm lại điều này.",
     "reviewChangeFailed": "Không thể cập nhật thay đổi này. Hãy thử lại.",
@@ -4190,5 +4193,13 @@
     "onboardingNoOmiYet": "Bạn chưa có Omi?",
     "onboardingOmiNotOrdered": "Chưa đặt hàng",
     "onboardingOmiOrdered": "Tôi đã đặt hàng",
-    "onboardingPermissionTapToFix": "Nhấn để khắc phục"
+    "onboardingPermissionTapToFix": "Nhấn để khắc phục",
+    "homePendingTitle": "Cuộc trò chuyện đang đến",
+    "homePendingCatchingUp": "Đang xử lý âm thanh trước đó",
+    "onTheWayTitle": "Đang đến",
+    "onTheWayAlmostReady": "Sắp xong",
+    "activityEmpty": "Chưa có hoạt động",
+    "activityNewSemantics": "Hoạt động, mục mới",
+    "activityLoadFailed": "Không thể tải toàn bộ hoạt động của bạn",
+    "activityNewItem": "Mới"
 }

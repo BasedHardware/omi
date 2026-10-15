@@ -12326,6 +12326,15 @@ class AppLocalizationsAr extends AppLocalizations {
   String get reviewRecentChanges => 'التغييرات الأخيرة';
 
   @override
+  String get reviewChangeAfter => 'بعد';
+
+  @override
+  String get reviewChangeBefore => 'قبل';
+
+  @override
+  String get reviewChangeRemoved => 'أُزيل من القائمة النشطة';
+
+  @override
   String get reviewChangesIntro => 'ما غيّره Omi من تلقاء نفسه خلال آخر 30 يومًا. تراجع عن أي شيء يبدو خاطئًا.';
 
   @override
@@ -13582,4 +13591,28 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get onboardingPermissionTapToFix => 'اضغط للإصلاح';
+
+  @override
+  String get homePendingTitle => 'محادثات في الطريق';
+
+  @override
+  String get homePendingCatchingUp => 'جارٍ اللحاق بالصوت السابق';
+
+  @override
+  String get onTheWayTitle => 'في الطريق';
+
+  @override
+  String get onTheWayAlmostReady => 'على وشك الجاهزية';
+
+  @override
+  String get activityEmpty => 'لا يوجد نشاط بعد';
+
+  @override
+  String get activityNewSemantics => 'النشاط، عناصر جديدة';
+
+  @override
+  String get activityLoadFailed => 'تعذّر تحميل كل نشاطك';
+
+  @override
+  String get activityNewItem => 'جديد';
 }

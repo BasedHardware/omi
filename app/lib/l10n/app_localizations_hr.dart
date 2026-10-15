@@ -12431,6 +12431,15 @@ class AppLocalizationsHr extends AppLocalizations {
   String get reviewRecentChanges => 'Nedavne promjene';
 
   @override
+  String get reviewChangeAfter => 'Poslije';
+
+  @override
+  String get reviewChangeBefore => 'Prije';
+
+  @override
+  String get reviewChangeRemoved => 'Uklonjeno s aktivnog popisa';
+
+  @override
   String get reviewChangesIntro => 'Što je Omi sam promijenio u posljednjih 30 dana. Poništite sve što izgleda krivo.';
 
   @override
@@ -13693,4 +13702,28 @@ class AppLocalizationsHr extends AppLocalizations {
 
   @override
   String get onboardingPermissionTapToFix => 'Dodirnite za popravak';
+
+  @override
+  String get homePendingTitle => 'Razgovori stižu';
+
+  @override
+  String get homePendingCatchingUp => 'Obrađujemo raniji zvuk';
+
+  @override
+  String get onTheWayTitle => 'Na putu';
+
+  @override
+  String get onTheWayAlmostReady => 'Gotovo spremno';
+
+  @override
+  String get activityEmpty => 'Još nema aktivnosti';
+
+  @override
+  String get activityNewSemantics => 'Aktivnost, nove stavke';
+
+  @override
+  String get activityLoadFailed => 'Nismo mogli učitati svu vašu aktivnost';
+
+  @override
+  String get activityNewItem => 'Novo';
 }

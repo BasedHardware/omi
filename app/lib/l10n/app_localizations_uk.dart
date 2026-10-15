@@ -12420,6 +12420,15 @@ class AppLocalizationsUk extends AppLocalizations {
   String get reviewRecentChanges => 'Нещодавні зміни';
 
   @override
+  String get reviewChangeAfter => 'Після';
+
+  @override
+  String get reviewChangeBefore => 'До';
+
+  @override
+  String get reviewChangeRemoved => 'Вилучено з активного списку';
+
+  @override
   String get reviewChangesIntro => 'Що Omi змінив сам за останні 30 днів. Скасуйте все, що виглядає неправильно.';
 
   @override
@@ -13685,4 +13694,28 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get onboardingPermissionTapToFix => 'Торкніться, щоб виправити';
+
+  @override
+  String get homePendingTitle => 'Розмови в дорозі';
+
+  @override
+  String get homePendingCatchingUp => 'Обробляємо попереднє аудіо';
+
+  @override
+  String get onTheWayTitle => 'У дорозі';
+
+  @override
+  String get onTheWayAlmostReady => 'Майже готово';
+
+  @override
+  String get activityEmpty => 'Поки немає активності';
+
+  @override
+  String get activityNewSemantics => 'Активність, нові елементи';
+
+  @override
+  String get activityLoadFailed => 'Не вдалося завантажити всю активність';
+
+  @override
+  String get activityNewItem => 'Нове';
 }

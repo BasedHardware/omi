@@ -33,6 +33,7 @@ from typing import Any, Dict, Optional, Set, cast
 from config.sync_telemetry import bounded_correlation_ref, bounded_exception_class, bounded_sync_phase
 from database import sync_dead_letters
 from database.redis_db import r
+from utils.observability.fallback import record_fallback
 from utils.sync import stage as sync_stage
 from utils.sync.assignment_errors import bounded_sync_assignment_subtype
 
@@ -277,6 +278,11 @@ def _as_redis_text(value: Any) -> str:
     return str(value)
 
 
+def sync_job_key_exists(job_id: str) -> bool:
+    """Raw existence proof: corrupt JSON is present; Redis failures propagate."""
+    return bool(r.exists(_key(f'{JOB_KEY_PREFIX}{job_id}')))
+
+
 def sync_job_run_lock_present(job_id: str) -> bool:
     """Conservatively refuse a replacement dispatch while a worker still owns its run lock."""
     return bool(r.exists(_key(f'{RUN_LOCK_KEY_PREFIX}{job_id}')))
@@ -303,6 +309,61 @@ def _backfill_dead_letter_confirmed(job_id: str, job: Optional[Dict[str, Any]]) 
     if not isinstance(job, dict) or job.get('lane') != 'backfill':
         return
     sync_dead_letters.confirm_dead_letter(job_id)
+
+
+# Match SyncLocalFilesResultResponse's wire fields. The two internal strike
+# fields must survive terminal polling/task cleanup races; they are not wire
+# fields but prevent repeated persistence failures from retrying indefinitely.
+_TERMINAL_RESULT_FIELDS = frozenset(
+    (
+        'new_memories',
+        'updated_memories',
+        'failed_segments',
+        'total_segments',
+        'errors',
+        'repeat_failure_key',
+        'repeat_failure_fingerprint',
+    )
+)
+
+
+def _compact_terminal_job(job: Dict[str, Any]) -> None:
+    """Discard retry-only state after a terminal transition, preserving poll JSON.
+
+    Keep ownership/content/dispatch/fence metadata: terminal readers still use
+    it to retire durable claims and release per-user slots. Telemetry uses the
+    original result passed to the finalizer, not this stored projection.
+    """
+    if job.get('status') not in TERMINAL_STATUSES:
+        return
+    job.pop('partial_result', None)
+    job.pop('last_error', None)
+    result = job.get('result')
+    if isinstance(result, dict):
+        compact = {key: value for key, value in result.items() if key in _TERMINAL_RESULT_FIELDS}
+        # The route includes result only when truthy. Preserve that distinction
+        # even for a legacy telemetry-only result whose typed response is defaults.
+        job['result'] = compact if compact or not result else {'new_memories': []}
+
+
+def _cleanup_terminal_segments(job_id: str, job: Optional[Dict[str, Any]]) -> None:
+    """Only a winning terminal CAS authorizes removal of retry checkpoints."""
+    if job is None or job.get('status') not in TERMINAL_STATUSES:
+        return
+    try:
+        r.delete(_key(f'{PROCESSED_SEGMENTS_KEY_PREFIX}{job_id}'))
+    except Exception as error:
+        # A cleanup outage must not turn a committed success into a retry or
+        # prevent durable claim cleanup. The existing set retains its TTL.
+        logger.warning('sync terminal segment cleanup failed exception_type=%s', type(error).__name__)
+        record_fallback(
+            component='sync_dispatch',
+            from_mode='terminal_segment_cleanup',
+            to_mode='ttl_cleanup',
+            reason='other',
+            outcome='degraded',
+            log=logger,
+        )
 
 
 _LEGACY_JOB_MUTATION_MAX_RETRIES = 3
@@ -383,6 +444,7 @@ def update_sync_job(job_id: str, updates: Dict[str, Any]) -> Optional[Dict[str, 
             return None
         next_job = dict(current_job)
         next_job.update(payload)
+        _compact_terminal_job(next_job)
         next_raw = json.dumps(next_job, default=str, separators=(',', ':'))
         mutation = _decode_legacy_job_mutation(
             r.eval(
@@ -395,6 +457,7 @@ def update_sync_job(job_id: str, updates: Dict[str, Any]) -> Optional[Dict[str, 
             )
         )
         if mutation.outcome is FencedSyncJobMutationOutcome.APPLIED:
+            _cleanup_terminal_segments(job_id, mutation.job)
             return mutation.job
         if mutation.outcome is not FencedSyncJobMutationOutcome.CONFLICT:
             return None
@@ -535,6 +598,7 @@ def fenced_update_sync_job(
             return FencedSyncJobMutation(FencedSyncJobMutationOutcome.INVALID_STATE, current_job, current_raw)
         next_job = dict(current_job)
         next_job.update(payload)
+        _compact_terminal_job(next_job)
         next_raw = json.dumps(next_job, default=str, separators=(',', ':'))
         mutation = _decode_fenced_mutation(
             r.eval(
@@ -549,6 +613,8 @@ def fenced_update_sync_job(
             )
         )
         if mutation.outcome is not FencedSyncJobMutationOutcome.CONFLICT:
+            if mutation.applied:
+                _cleanup_terminal_segments(job_id, mutation.job)
             return mutation
         if mutation.raw_job is None or mutation.job is None:
             return FencedSyncJobMutation(FencedSyncJobMutationOutcome.INVALID_JOB)

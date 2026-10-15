@@ -3831,6 +3831,9 @@
     "reviewCaughtUpTitle": "Pole midagi vastata",
     "reviewCaughtUpBody": "Omi küsib siin ainult siis, kui tal on sind vaja.",
     "reviewRecentChanges": "Hiljutised muudatused",
+    "reviewChangeAfter": "Pärast",
+    "reviewChangeBefore": "Enne",
+    "reviewChangeRemoved": "Aktiivsest loendist eemaldatud",
     "reviewChangesIntro": "Mida Omi on viimase 30 päeva jooksul ise muutnud. Võta tagasi kõik, mis tundub vale.",
     "reviewChangeUndone": "Tagasi võetud. Omi ei tee seda ise uuesti.",
     "reviewChangeFailed": "Muudatust ei õnnestunud värskendada. Proovi uuesti.",
@@ -4190,5 +4193,13 @@
     "onboardingNoOmiYet": "Sul pole veel Omit?",
     "onboardingOmiNotOrdered": "Pole veel tellinud",
     "onboardingOmiOrdered": "Olen selle tellinud",
-    "onboardingPermissionTapToFix": "Puuduta parandamiseks"
+    "onboardingPermissionTapToFix": "Puuduta parandamiseks",
+    "homePendingTitle": "Vestlused teel",
+    "homePendingCatchingUp": "Varasema heli töötlemine",
+    "onTheWayTitle": "Teel",
+    "onTheWayAlmostReady": "Peaaegu valmis",
+    "activityEmpty": "Tegevusi veel pole",
+    "activityNewSemantics": "Tegevus, uued üksused",
+    "activityLoadFailed": "Kogu tegevust ei õnnestunud laadida",
+    "activityNewItem": "Uus"
 }

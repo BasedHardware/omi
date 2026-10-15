@@ -12393,6 +12393,15 @@ class AppLocalizationsVi extends AppLocalizations {
   String get reviewRecentChanges => 'Thay đổi gần đây';
 
   @override
+  String get reviewChangeAfter => 'Sau';
+
+  @override
+  String get reviewChangeBefore => 'Trước';
+
+  @override
+  String get reviewChangeRemoved => 'Đã xóa khỏi danh sách đang hoạt động';
+
+  @override
   String get reviewChangesIntro => 'Những gì Omi tự thay đổi trong 30 ngày qua. Hoàn tác bất cứ điều gì có vẻ sai.';
 
   @override
@@ -13654,4 +13663,28 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get onboardingPermissionTapToFix => 'Nhấn để khắc phục';
+
+  @override
+  String get homePendingTitle => 'Cuộc trò chuyện đang đến';
+
+  @override
+  String get homePendingCatchingUp => 'Đang xử lý âm thanh trước đó';
+
+  @override
+  String get onTheWayTitle => 'Đang đến';
+
+  @override
+  String get onTheWayAlmostReady => 'Sắp xong';
+
+  @override
+  String get activityEmpty => 'Chưa có hoạt động';
+
+  @override
+  String get activityNewSemantics => 'Hoạt động, mục mới';
+
+  @override
+  String get activityLoadFailed => 'Không thể tải toàn bộ hoạt động của bạn';
+
+  @override
+  String get activityNewItem => 'Mới';
 }

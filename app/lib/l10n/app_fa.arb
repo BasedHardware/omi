@@ -11251,6 +11251,9 @@
     "reviewCaughtUpTitle": "چیزی برای پاسخ نیست",
     "reviewCaughtUpBody": "Omi فقط وقتی به شما نیاز داشته باشد اینجا می‌پرسد.",
     "reviewRecentChanges": "تغییرات اخیر",
+    "reviewChangeAfter": "بعد",
+    "reviewChangeBefore": "قبل",
+    "reviewChangeRemoved": "از فهرست فعال حذف شد",
     "reviewChangesIntro": "آنچه Omi در ۳۰ روز گذشته خودش تغییر داده است. هر چیزی که اشتباه به نظر می‌رسد را برگردانید.",
     "reviewChangeUndone": "برگردانده شد. Omi این کار را خودش تکرار نمی‌کند.",
     "reviewChangeFailed": "این تغییر به‌روزرسانی نشد. دوباره تلاش کنید.",
@@ -11610,5 +11613,13 @@
     "onboardingNoOmiYet": "هنوز Omi ندارید؟",
     "onboardingOmiNotOrdered": "هنوز سفارش نداده‌ام",
     "onboardingOmiOrdered": "سفارش داده‌ام",
-    "onboardingPermissionTapToFix": "برای رفع ضربه بزنید"
+    "onboardingPermissionTapToFix": "برای رفع ضربه بزنید",
+    "homePendingTitle": "گفتگوها در راه است",
+    "homePendingCatchingUp": "در حال پردازش صدای قبلی",
+    "onTheWayTitle": "در راه",
+    "onTheWayAlmostReady": "تقریباً آماده",
+    "activityEmpty": "هنوز فعالیتی نیست",
+    "activityNewSemantics": "فعالیت، موارد جدید",
+    "activityLoadFailed": "بارگیری همه فعالیت‌های شما ممکن نشد",
+    "activityNewItem": "جدید"
 }

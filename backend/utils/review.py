@@ -210,7 +210,7 @@ def answer_item(uid: str, item_id: str, answer: ReviewAnswer | ReviewAnswerV2, *
             # Review stores an evidence version, permitting a new-evidence question.
             pass
         elif item.agent_proposal:
-            from utils.dream_tools import answer_proposal
+            from utils.agent_capabilities.tools import answer_proposal
 
             payload = getattr(answer, 'agent_proposal', None)
             if payload is None:
@@ -302,7 +302,7 @@ def answer_item(uid: str, item_id: str, answer: ReviewAnswer | ReviewAnswerV2, *
             if not value or (not item.spelling.allow_custom and value not in item.spelling.options):
                 raise store.ReviewConflict('Spelling is not an allowed option')
             if state['source'].get('spelling_edit'):
-                from utils.dream_tools import answer_spelling
+                from utils.agent_capabilities.tools import answer_spelling
 
                 applied = answer_spelling(uid, state['source'], value)
             else:

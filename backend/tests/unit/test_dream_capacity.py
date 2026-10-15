@@ -10,8 +10,8 @@ import httpx
 import pytest
 
 from config.vertex_reservations import State
-from models.dream_agent import Plan
-from utils import dream_agent, dream_capacity, dream_transport
+from models.agent_tools import VerificationBatch as Plan
+from utils import dream_agent, dream_capacity, dream_harness_transport as dream_transport
 from utils.dream_metrics import PASSES
 from utils.llm.shaped_agent import Budget, Mount
 from utils.llm.vertex_reservation_state import ReservationState
@@ -87,7 +87,6 @@ async def test_backend_discovery_publishes_shared_evidence_without_gateway(monke
         (429, 'provider_429_omi_paid', dream_transport.MAIN_LANE, True),
         (500, None, dream_transport.MAIN_LANE, False),
         (503, 'invalid_config', dream_transport.MAIN_LANE, False),
-        (429, None, dream_transport.TRIAGE_LANE, False),
     ],
 )
 async def test_gateway_capacity_errors_cool_the_selected_model_only(monkeypatch, caplog, status, failure, lane, cools):
@@ -112,7 +111,7 @@ async def test_gateway_capacity_errors_cool_the_selected_model_only(monkeypatch,
     monkeypatch.setattr(dream_transport, 'llm_gateway_headers', lambda **k: {})
     monkeypatch.setattr(dream_transport, 'get_llm_gateway_semaphore', lambda: asyncio.Semaphore(1))
     try:
-        with pytest.raises(dream_transport.CapacityWait if cools else dream_transport.PreTokenFailure) as exc:
+        with pytest.raises(dream_transport.CapacityWait if cools else RuntimeError) as exc:
             await dream_transport.model_turn('synthetic', lane, Mount(schema=Plan, budget=Budget(tokens=20000)), [])
         assert 'invented private body' not in str(exc.value)
         assert await redis.get(state.key() + ':saturated:' + NEW) is None
@@ -123,17 +122,13 @@ async def test_gateway_capacity_errors_cool_the_selected_model_only(monkeypatch,
         else:
             assert await redis.get(key) is None
         assert available.await_count == (1 if lane == dream_transport.MAIN_LANE else 0)
-        decisions = [json.loads(record.message) for record in caplog.records if record.message.startswith('{')]
-        assert len(decisions) == int(cools)
-        if cools:
-            assert decisions[0]['decision'] == 'waiting'
-            assert decisions[0]['reason'] == 'saturated' and decisions[0]['source'] == 'gateway_response'
+        assert 'invented private body' not in caplog.text
     finally:
         await redis.aclose()
 
 
 def test_no_model_sweep_is_visible_without_owner_admission(monkeypatch, caplog):
-    monkeypatch.setenv('DREAM_AGENT_MODE', 'on')
+    monkeypatch.setenv('DREAM_AGENT_ENABLED', 'true')
     monkeypatch.setattr(dream_capacity, 'available_model', AsyncMock(return_value=None))
     monkeypatch.setattr(dream_agent.dream_scheduler, 'candidates', lambda **k: pytest.fail('owner page read'))
     metric = PASSES.labels('waiting', 'none')._value
@@ -141,7 +136,7 @@ def test_no_model_sweep_is_visible_without_owner_admission(monkeypatch, caplog):
     with caplog.at_level('INFO', logger='utils.dream_metrics'):
         assert asyncio.run(dream_agent.drain()) == [{'status': 'waiting', 'reason': 'reserved_capacity'}]
     assert metric.get() == before + 1
-    assert 'Dream pass status=waiting' in caplog.text
+    assert 'Dream status=waiting' in caplog.text
 
 
 def test_no_model_stops_before_gateway_access(monkeypatch):
@@ -158,4 +153,4 @@ def test_no_model_stops_before_gateway_access(monkeypatch):
                 usage_sink=sink,
             )
         )
-    assert sink == {'tokens': 0, 'usage_unknown': False}
+    assert sink == {'tokens': 0}

@@ -12391,6 +12391,15 @@ class AppLocalizationsFa extends AppLocalizations {
   String get reviewRecentChanges => 'تغییرات اخیر';
 
   @override
+  String get reviewChangeAfter => 'بعد';
+
+  @override
+  String get reviewChangeBefore => 'قبل';
+
+  @override
+  String get reviewChangeRemoved => 'از فهرست فعال حذف شد';
+
+  @override
   String get reviewChangesIntro =>
       'آنچه Omi در ۳۰ روز گذشته خودش تغییر داده است. هر چیزی که اشتباه به نظر می‌رسد را برگردانید.';
 
@@ -13650,4 +13659,28 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String get onboardingPermissionTapToFix => 'برای رفع ضربه بزنید';
+
+  @override
+  String get homePendingTitle => 'گفتگوها در راه است';
+
+  @override
+  String get homePendingCatchingUp => 'در حال پردازش صدای قبلی';
+
+  @override
+  String get onTheWayTitle => 'در راه';
+
+  @override
+  String get onTheWayAlmostReady => 'تقریباً آماده';
+
+  @override
+  String get activityEmpty => 'هنوز فعالیتی نیست';
+
+  @override
+  String get activityNewSemantics => 'فعالیت، موارد جدید';
+
+  @override
+  String get activityLoadFailed => 'بارگیری همه فعالیت‌های شما ممکن نشد';
+
+  @override
+  String get activityNewItem => 'جدید';
 }

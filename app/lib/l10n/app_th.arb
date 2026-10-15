@@ -3831,6 +3831,9 @@
     "reviewCaughtUpTitle": "ไม่มีอะไรให้ตอบ",
     "reviewCaughtUpBody": "Omi จะถามที่นี่เมื่อต้องการคุณเท่านั้น",
     "reviewRecentChanges": "การเปลี่ยนแปลงล่าสุด",
+    "reviewChangeAfter": "หลัง",
+    "reviewChangeBefore": "ก่อน",
+    "reviewChangeRemoved": "นำออกจากรายการที่ใช้งานอยู่",
     "reviewChangesIntro": "สิ่งที่ Omi เปลี่ยนเองในช่วง 30 วันที่ผ่านมา ย้อนกลับสิ่งที่ดูไม่ถูกต้องได้",
     "reviewChangeUndone": "ย้อนกลับแล้ว Omi จะไม่ทำซ้ำเอง",
     "reviewChangeFailed": "อัปเดตการเปลี่ยนแปลงนี้ไม่ได้ ลองอีกครั้ง",
@@ -4190,5 +4193,13 @@
     "onboardingNoOmiYet": "ยังไม่มี Omi ใช่ไหม",
     "onboardingOmiNotOrdered": "ยังไม่ได้สั่งซื้อ",
     "onboardingOmiOrdered": "สั่งซื้อแล้ว",
-    "onboardingPermissionTapToFix": "แตะเพื่อแก้ไข"
+    "onboardingPermissionTapToFix": "แตะเพื่อแก้ไข",
+    "homePendingTitle": "บทสนทนากำลังมา",
+    "homePendingCatchingUp": "กำลังประมวลผลเสียงก่อนหน้า",
+    "onTheWayTitle": "กำลังมา",
+    "onTheWayAlmostReady": "ใกล้เสร็จแล้ว",
+    "activityEmpty": "ยังไม่มีกิจกรรม",
+    "activityNewSemantics": "กิจกรรม, รายการใหม่",
+    "activityLoadFailed": "โหลดกิจกรรมทั้งหมดของคุณไม่ได้",
+    "activityNewItem": "ใหม่"
 }

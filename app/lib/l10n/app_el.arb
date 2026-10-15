@@ -3831,6 +3831,9 @@
     "reviewCaughtUpTitle": "Τίποτα να απαντήσετε",
     "reviewCaughtUpBody": "Το Omi θα ρωτά εδώ μόνο όταν σας χρειάζεται.",
     "reviewRecentChanges": "Πρόσφατες αλλαγές",
+    "reviewChangeAfter": "Μετά",
+    "reviewChangeBefore": "Πριν",
+    "reviewChangeRemoved": "Αφαιρέθηκε από την ενεργή λίστα",
     "reviewChangesIntro": "Τι άλλαξε το Omi μόνο του τις τελευταίες 30 ημέρες. Αναιρέστε ό,τι φαίνεται λάθος.",
     "reviewChangeUndone": "Αναιρέθηκε. Το Omi δεν θα το επαναλάβει μόνο του.",
     "reviewChangeFailed": "Δεν ήταν δυνατή η ενημέρωση αυτής της αλλαγής. Δοκιμάστε ξανά.",
@@ -4190,5 +4193,13 @@
     "onboardingNoOmiYet": "Δεν έχετε ακόμα το Omi σας;",
     "onboardingOmiNotOrdered": "Δεν το έχω παραγγείλει ακόμα",
     "onboardingOmiOrdered": "Το έχω παραγγείλει",
-    "onboardingPermissionTapToFix": "Πατήστε για διόρθωση"
+    "onboardingPermissionTapToFix": "Πατήστε για διόρθωση",
+    "homePendingTitle": "Συνομιλίες καθ' οδόν",
+    "homePendingCatchingUp": "Επεξεργασία προηγούμενου ήχου",
+    "onTheWayTitle": "Καθ' οδόν",
+    "onTheWayAlmostReady": "Σχεδόν έτοιμο",
+    "activityEmpty": "Δεν υπάρχει δραστηριότητα ακόμα",
+    "activityNewSemantics": "Δραστηριότητα, νέα στοιχεία",
+    "activityLoadFailed": "Δεν ήταν δυνατή η φόρτωση όλης της δραστηριότητάς σας",
+    "activityNewItem": "Νέο"
 }

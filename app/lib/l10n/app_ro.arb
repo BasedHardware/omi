@@ -3831,6 +3831,9 @@
     "reviewCaughtUpTitle": "Nimic de răspuns",
     "reviewCaughtUpBody": "Omi te va întreba aici doar când are nevoie de tine.",
     "reviewRecentChanges": "Modificări recente",
+    "reviewChangeAfter": "După",
+    "reviewChangeBefore": "Înainte",
+    "reviewChangeRemoved": "Eliminat din lista activă",
     "reviewChangesIntro": "Ce a schimbat Omi singur în ultimele 30 de zile. Anulează orice pare greșit.",
     "reviewChangeUndone": "Anulat. Omi nu va mai face asta singur.",
     "reviewChangeFailed": "Modificarea nu a putut fi actualizată. Încearcă din nou.",
@@ -4190,5 +4193,13 @@
     "onboardingNoOmiYet": "Nu ai încă Omi?",
     "onboardingOmiNotOrdered": "Încă nu am comandat",
     "onboardingOmiOrdered": "L-am comandat",
-    "onboardingPermissionTapToFix": "Atinge pentru a remedia"
+    "onboardingPermissionTapToFix": "Atinge pentru a remedia",
+    "homePendingTitle": "Conversații pe drum",
+    "homePendingCatchingUp": "Recuperăm audio anterior",
+    "onTheWayTitle": "Pe drum",
+    "onTheWayAlmostReady": "Aproape gata",
+    "activityEmpty": "Nicio activitate încă",
+    "activityNewSemantics": "Activitate, elemente noi",
+    "activityLoadFailed": "Nu am putut încărca toată activitatea ta",
+    "activityNewItem": "Nou"
 }

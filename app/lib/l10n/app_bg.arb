@@ -3831,6 +3831,9 @@
     "reviewCaughtUpTitle": "Няма какво да отговорите",
     "reviewCaughtUpBody": "Omi ще пита тук само когато има нужда от вас.",
     "reviewRecentChanges": "Скорошни промени",
+    "reviewChangeAfter": "След",
+    "reviewChangeBefore": "Преди",
+    "reviewChangeRemoved": "Премахнато от активния списък",
     "reviewChangesIntro": "Какво промени Omi сам през последните 30 дни. Отменете всичко, което изглежда грешно.",
     "reviewChangeUndone": "Отменено. Omi няма да повтаря това сам.",
     "reviewChangeFailed": "Промяната не можа да се обнови. Опитайте отново.",
@@ -4190,5 +4193,13 @@
     "onboardingNoOmiYet": "Все още нямате Omi?",
     "onboardingOmiNotOrdered": "Още не съм поръчал",
     "onboardingOmiOrdered": "Поръчал съм го",
-    "onboardingPermissionTapToFix": "Докоснете, за да поправите"
+    "onboardingPermissionTapToFix": "Докоснете, за да поправите",
+    "homePendingTitle": "Разговори на път",
+    "homePendingCatchingUp": "Наваксваме по-ранното аудио",
+    "onTheWayTitle": "На път",
+    "onTheWayAlmostReady": "Почти готово",
+    "activityEmpty": "Все още няма активност",
+    "activityNewSemantics": "Активност, нови елементи",
+    "activityLoadFailed": "Не можахме да заредим цялата ви активност",
+    "activityNewItem": "Ново"
 }

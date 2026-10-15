@@ -914,6 +914,10 @@ environments:
               provisional: true
               value: 'on'
               category: rollout
+            SYNC_BACKFILL_RETIRE_EXPIRED_AT_CLAIM: {value: 'false', category: rollout}
+            SYNC_REPROCESS_COALESCE_ENABLED: {value: 'false', category: rollout}
+            SYNC_REPROCESS_SETTLE_SECONDS: {value: '600', category: rollout}
+            CONVERSATION_LLM_INPUT_DEDUPE_ENABLED: {value: 'false', category: rollout}
             USE_VERTEX_AI:
               value: 'true'
             STT_PRERECORDED_MODEL:
@@ -948,6 +952,9 @@ environments:
               value: '2592000'
               category: rollout
             SYNC_LEGACY_FRESH_ENABLED: {value: 'false', category: rollout}
+            SYNC_ASSIGNMENT_CONTENTION_RETRY_ENABLED: {value: 'false', category: rollout}
+            SYNC_LEGACY_FRESH_UID_ALLOWLIST: {value: '', category: rollout}
+            SYNC_LEGACY_FRESH_PERCENT: {value: '0', category: rollout}
             SYNC_LEGACY_FRESH_HOURLY_TOKENS:
               value: '60'
               category: reliability
@@ -1129,6 +1136,10 @@ environments:
               provisional: true
               value: 'on'
               category: rollout
+            SYNC_BACKFILL_RETIRE_EXPIRED_AT_CLAIM: {value: 'false', category: rollout}
+            SYNC_REPROCESS_COALESCE_ENABLED: {value: 'false', category: rollout}
+            SYNC_REPROCESS_SETTLE_SECONDS: {value: '600', category: rollout}
+            CONVERSATION_LLM_INPUT_DEDUPE_ENABLED: {value: 'false', category: rollout}
             USE_VERTEX_AI:
               value: 'true'
             STT_PRERECORDED_MODEL:
@@ -1163,6 +1174,9 @@ environments:
               value: '2592000'
               category: rollout
             SYNC_LEGACY_FRESH_ENABLED: {value: 'false', category: rollout}
+            SYNC_ASSIGNMENT_CONTENTION_RETRY_ENABLED: {value: 'false', category: rollout}
+            SYNC_LEGACY_FRESH_UID_ALLOWLIST: {value: '', category: rollout}
+            SYNC_LEGACY_FRESH_PERCENT: {value: '0', category: rollout}
             SYNC_LEGACY_FRESH_HOURLY_TOKENS:
               value: '60'
               category: reliability
@@ -1551,9 +1565,6 @@ environments:
             MEMORY_CANONICAL_MAINTENANCE_ENABLED:
               category: memory_rollout
               value: 'true'
-            MEMORY_CANONICAL_MAINTENANCE_FLEX:
-              category: memory_rollout
-              value: 'true'
             OMI_ENV_STAGE:
               value: dev
               category: runtime_identity
@@ -1570,9 +1581,6 @@ environments:
             MEMORY_BELIEF_AUTOMATION_PAUSED: {value: 'false', category: rollout}
             MEMORY_TYPESENSE_COLLECTION:
               value: canonical_memory_atoms
-              category: memory_rollout
-            MEMORY_CANONICAL_CONSOLIDATION_ENABLED:
-              value: 'true'
               category: memory_rollout
             OMI_BACKGROUND_FLEX_CAPABLE:
               value: 'true'
@@ -2036,8 +2044,8 @@ environments:
           REFERRAL_PUBLIC_BASE_URL:
             category: service_discovery
             value: https://omi.me
-          DREAM_AGENT_MODE: {value: 'on', category: rollout}
-          DREAM_AGENT_UID_ALLOWLIST: {value: '9OqYLlKJv4hmeYpIhwJcHBR975i2,vi7SA9ckQCe4ccobWNxlbdcNdC23', category: rollout}
+          DREAM_AGENT_ENABLED: {value: 'true', category: rollout}
+          DREAM_AGENT_ELIGIBILITY: {value: all, category: rollout}
           PROACTIVITY_V2_POSTHOG_TOKEN: {value: phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y, category: rollout}
           PROACTIVITY_V2_POSTHOG_HOST: {value: 'https://us.posthog.com', category: rollout}
           PROACTIVITY_REDIS_HOST:
@@ -2206,16 +2214,18 @@ environments:
           TRANSCRIPTION_FINAL_PASS_DIARIZER: {value: pyannote_shadow, category: rollout}
           TRANSCRIPTION_FINAL_PASS_BACKEND: {value: pyannote, category: rollout}
           TRANSCRIPTION_FINAL_PASS_UID_ALLOWLIST: {value: vi7SA9ckQCe4ccobWNxlbdcNdC23, category: rollout}
-          TRANSCRIPTION_FINAL_PASS_PERCENT: {value: '0', category: rollout}
+          TRANSCRIPTION_FINAL_PASS_PERCENT: {value: '1', category: rollout}
           TRANSCRIPTION_FINAL_PASS_AUTHORITATIVE: {value: 'true', category: rollout}
           TRANSCRIPTION_FINAL_PASS_SYNC_ENABLED: {value: 'true', category: rollout}
           TRANSCRIPTION_SHADOW_ENABLED: {value: 'true', category: rollout}
           TRANSCRIPTION_SHADOW_KILL_SWITCH: {value: 'false', category: rollout}
           TRANSCRIPTION_SHADOW_UID_ALLOWLIST: {value: vi7SA9ckQCe4ccobWNxlbdcNdC23, category: rollout}
-          TRANSCRIPTION_SHADOW_PERCENT: {value: '0', category: rollout}
-          TRANSCRIPTION_SHADOW_DAILY_AUDIO_HOURS: {value: '1', category: rollout}
-          DREAM_AGENT_MODE: {value: 'on', category: rollout}
-          DREAM_AGENT_UID_ALLOWLIST: {value: '9OqYLlKJv4hmeYpIhwJcHBR975i2,vi7SA9ckQCe4ccobWNxlbdcNdC23', category: rollout}
+          TRANSCRIPTION_SHADOW_PERCENT: {value: '1', category: rollout}
+          TRANSCRIPTION_SHADOW_DAILY_AUDIO_HOURS: {value: '80', category: rollout}
+          TRANSCRIPTION_SYNC_FINAL_PASS_HOURLY_AUDIO_HOURS: {value: '10', category: rollout}
+          TRANSCRIPTION_SYNC_FINAL_PASS_HOURLY_REQUESTS: {value: '1000', category: rollout}
+          DREAM_AGENT_ENABLED: {value: 'true', category: rollout}
+          DREAM_AGENT_ELIGIBILITY: {value: all, category: rollout}
           PROACTIVITY_V2_POSTHOG_TOKEN: {value: phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y, category: rollout}
           PROACTIVITY_V2_POSTHOG_HOST: {value: 'https://us.posthog.com', category: rollout}
           POSTHOG_PROJECT_API_KEY:
@@ -2579,14 +2589,16 @@ environments:
             TRANSCRIPTION_FINAL_PASS_DIARIZER: {value: pyannote_shadow, category: rollout}
             TRANSCRIPTION_FINAL_PASS_BACKEND: {value: pyannote, category: rollout}
             TRANSCRIPTION_FINAL_PASS_UID_ALLOWLIST: {value: vi7SA9ckQCe4ccobWNxlbdcNdC23, category: rollout}
-            TRANSCRIPTION_FINAL_PASS_PERCENT: {value: '0', category: rollout}
+            TRANSCRIPTION_FINAL_PASS_PERCENT: {value: '1', category: rollout}
             TRANSCRIPTION_FINAL_PASS_AUTHORITATIVE: {value: 'true', category: rollout}
             TRANSCRIPTION_FINAL_PASS_SYNC_ENABLED: {value: 'true', category: rollout}
             TRANSCRIPTION_SHADOW_ENABLED: {value: 'true', category: rollout}
             TRANSCRIPTION_SHADOW_KILL_SWITCH: {value: 'false', category: rollout}
             TRANSCRIPTION_SHADOW_UID_ALLOWLIST: {value: vi7SA9ckQCe4ccobWNxlbdcNdC23, category: rollout}
-            TRANSCRIPTION_SHADOW_PERCENT: {value: '0', category: rollout}
-            TRANSCRIPTION_SHADOW_DAILY_AUDIO_HOURS: {value: '1', category: rollout}
+            TRANSCRIPTION_SHADOW_PERCENT: {value: '1', category: rollout}
+            TRANSCRIPTION_SHADOW_DAILY_AUDIO_HOURS: {value: '80', category: rollout}
+            TRANSCRIPTION_SYNC_FINAL_PASS_HOURLY_AUDIO_HOURS: {value: '10', category: rollout}
+            TRANSCRIPTION_SYNC_FINAL_PASS_HOURLY_REQUESTS: {value: '1000', category: rollout}
             OMI_MESSAGING_CHANNELS: {value: 'on', category: rollout}
             OMI_MESSAGING_CHANNELS_UIDS: {value: vi7SA9ckQCe4ccobWNxlbdcNdC23, category: rollout}
             OMI_MESSAGING_CHANNEL_POLICY: {value: '{"telegram":{"enabled":true,"cohort":"*"},"imessage":{"enabled":true,"cohort":["vi7SA9ckQCe4ccobWNxlbdcNdC23"],"seat_cap":"off"}}',
@@ -2599,13 +2611,13 @@ environments:
             OMI_IMESSAGE_MAX_SEND_RECEIVE_RATIO: {value: '3', category: rollout}
             OMI_MESSAGING_LINK_TARGETS: {value: '{"telegram":{"provider":"telegram","address":"omi_chat_bot","deep_link_template":"https://t.me/{address}?start={proof}"},"imessage":{"provider":"linq","address":"+12062808403"}}',
               category: rollout}
-            DREAM_AGENT_MODE: {value: 'on', category: rollout}
-            DREAM_AGENT_UID_ALLOWLIST: {value: '9OqYLlKJv4hmeYpIhwJcHBR975i2,vi7SA9ckQCe4ccobWNxlbdcNdC23', category: rollout}
-            DREAM_AGENT_AUTO_APPLY_KINDS: {value: 'title,overview,vocabulary', category: rollout}
-            DREAM_SELF_REPORT_MODE: {value: 'on', category: rollout}
-            DREAM_AGENT_PASSES_PER_DAY: {value: '24', category: rollout}
-            DREAM_AGENT_MANUAL_RUNS_PER_DAY: {value: '20', category: rollout}
-            DREAM_AGENT_DAILY_USD: {value: '60', category: rollout}
+            DREAM_AGENT_ENABLED: {value: 'true', category: rollout}
+            DREAM_AGENT_ELIGIBILITY: {value: all, category: rollout}
+            DREAM_AGENT_PASSES_PER_DAY: {value: '2', category: rollout}
+            DREAM_AGENT_MANUAL_RUNS_PER_DAY: {value: '3', category: rollout}
+            DREAM_AGENT_DAILY_USD: {value: '10', category: rollout}
+            DREAM_AGENT_GLOBAL_DAILY_USD: {value: '15000', category: rollout}
+            DREAM_AGENT_TOKENS_PER_MINUTE: {value: '2000000', category: rollout}
             PROACTIVITY_V2_POSTHOG_TOKEN: {value: phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y, category: rollout}
             PROACTIVITY_V2_POSTHOG_HOST: {value: 'https://us.posthog.com', category: rollout}
             POSTHOG_BILLING_API_KEY:
@@ -2803,6 +2815,10 @@ environments:
               provisional: true
               value: 'on'
               category: rollout
+            SYNC_BACKFILL_RETIRE_EXPIRED_AT_CLAIM: {value: 'true', category: rollout}
+            SYNC_REPROCESS_COALESCE_ENABLED: {value: 'true', category: rollout}
+            SYNC_REPROCESS_SETTLE_SECONDS: {value: '600', category: rollout}
+            CONVERSATION_LLM_INPUT_DEDUPE_ENABLED: {value: 'true', category: rollout}
             USE_VERTEX_AI:
               value: 'true'
             STT_PRERECORDED_MODEL:
@@ -2837,6 +2853,9 @@ environments:
               value: '2592000'
               category: rollout
             SYNC_LEGACY_FRESH_ENABLED: {value: 'false', category: rollout}
+            SYNC_ASSIGNMENT_CONTENTION_RETRY_ENABLED: {value: 'false', category: rollout}
+            SYNC_LEGACY_FRESH_UID_ALLOWLIST: {value: '', category: rollout}
+            SYNC_LEGACY_FRESH_PERCENT: {value: '0', category: rollout}
             SYNC_LEGACY_FRESH_HOURLY_TOKENS:
               value: '60'
               category: reliability
@@ -2886,25 +2905,25 @@ environments:
             TRANSCRIPTION_FINAL_PASS_DIARIZER: {value: pyannote_shadow, category: rollout}
             TRANSCRIPTION_FINAL_PASS_BACKEND: {value: pyannote, category: rollout}
             TRANSCRIPTION_FINAL_PASS_UID_ALLOWLIST: {value: vi7SA9ckQCe4ccobWNxlbdcNdC23, category: rollout}
-            TRANSCRIPTION_FINAL_PASS_PERCENT: {value: '0', category: rollout}
+            TRANSCRIPTION_FINAL_PASS_PERCENT: {value: '1', category: rollout}
             TRANSCRIPTION_FINAL_PASS_AUTHORITATIVE: {value: 'true', category: rollout}
             TRANSCRIPTION_FINAL_PASS_SYNC_ENABLED: {value: 'true', category: rollout}
             TRANSCRIPTION_SHADOW_ENABLED: {value: 'true', category: rollout}
             TRANSCRIPTION_SHADOW_KILL_SWITCH: {value: 'false', category: rollout}
             TRANSCRIPTION_SHADOW_UID_ALLOWLIST: {value: vi7SA9ckQCe4ccobWNxlbdcNdC23, category: rollout}
-            TRANSCRIPTION_SHADOW_PERCENT: {value: '0', category: rollout}
-            TRANSCRIPTION_SHADOW_DAILY_AUDIO_HOURS: {value: '1', category: rollout}
+            TRANSCRIPTION_SHADOW_PERCENT: {value: '1', category: rollout}
+            TRANSCRIPTION_SHADOW_DAILY_AUDIO_HOURS: {value: '80', category: rollout}
+            TRANSCRIPTION_SYNC_FINAL_PASS_HOURLY_AUDIO_HOURS: {value: '10', category: rollout}
+            TRANSCRIPTION_SYNC_FINAL_PASS_HOURLY_REQUESTS: {value: '1000', category: rollout}
             OMI_SHAPED_AGENT_MODE: {value: 'on', category: rollout}
-            DREAM_AGENT_MODE: {value: 'on', category: rollout}
+            DREAM_AGENT_ENABLED: {value: 'true', category: rollout}
+            DREAM_AGENT_ELIGIBILITY: {value: all, category: rollout}
             REVIEW_SURFACE_MODE: {value: 'on', category: rollout}
-            DREAM_AGENT_UID_ALLOWLIST: {value: '9OqYLlKJv4hmeYpIhwJcHBR975i2,vi7SA9ckQCe4ccobWNxlbdcNdC23', category: rollout}
-            DREAM_AGENT_CONTEXT_MODE: {value: full, category: rollout}
-            DREAM_AGENT_FULL_CONTEXT_UIDS: {value: vi7SA9ckQCe4ccobWNxlbdcNdC23, category: rollout}
-            DREAM_AGENT_FULL_SAMPLES: {value: '3', category: rollout}
-            DREAM_AGENT_AUTO_APPLY_KINDS: {value: 'title,overview,vocabulary', category: rollout}
-            DREAM_AGENT_PASSES_PER_DAY: {value: '24', category: rollout}
-            DREAM_AGENT_MANUAL_RUNS_PER_DAY: {value: '20', category: rollout}
-            DREAM_AGENT_DAILY_USD: {value: '320', category: rollout}
+            DREAM_AGENT_PASSES_PER_DAY: {value: '2', category: rollout}
+            DREAM_AGENT_MANUAL_RUNS_PER_DAY: {value: '3', category: rollout}
+            DREAM_AGENT_DAILY_USD: {value: '10', category: rollout}
+            DREAM_AGENT_GLOBAL_DAILY_USD: {value: '15000', category: rollout}
+            DREAM_AGENT_TOKENS_PER_MINUTE: {value: '2000000', category: rollout}
             DREAM_AGENT_CANARY_UID: {value: dream-canary-prod-01, category: rollout}
             SYNC_PHASE_METRICS_EXPORT_ENABLED:
               value: 'true'
@@ -3065,6 +3084,10 @@ environments:
               provisional: true
               value: 'on'
               category: rollout
+            SYNC_BACKFILL_RETIRE_EXPIRED_AT_CLAIM: {value: 'true', category: rollout}
+            SYNC_REPROCESS_COALESCE_ENABLED: {value: 'true', category: rollout}
+            SYNC_REPROCESS_SETTLE_SECONDS: {value: '600', category: rollout}
+            CONVERSATION_LLM_INPUT_DEDUPE_ENABLED: {value: 'true', category: rollout}
             USE_VERTEX_AI:
               value: 'true'
             STT_PRERECORDED_MODEL:
@@ -3099,6 +3122,9 @@ environments:
               value: '2592000'
               category: rollout
             SYNC_LEGACY_FRESH_ENABLED: {value: 'false', category: rollout}
+            SYNC_ASSIGNMENT_CONTENTION_RETRY_ENABLED: {value: 'false', category: rollout}
+            SYNC_LEGACY_FRESH_UID_ALLOWLIST: {value: '', category: rollout}
+            SYNC_LEGACY_FRESH_PERCENT: {value: '0', category: rollout}
             SYNC_LEGACY_FRESH_HOURLY_TOKENS:
               value: '60'
               category: reliability
@@ -3143,17 +3169,19 @@ environments:
             TRANSCRIPTION_FINAL_PASS_DIARIZER: {value: pyannote_shadow, category: rollout}
             TRANSCRIPTION_FINAL_PASS_BACKEND: {value: pyannote, category: rollout}
             TRANSCRIPTION_FINAL_PASS_UID_ALLOWLIST: {value: vi7SA9ckQCe4ccobWNxlbdcNdC23, category: rollout}
-            TRANSCRIPTION_FINAL_PASS_PERCENT: {value: '0', category: rollout}
+            TRANSCRIPTION_FINAL_PASS_PERCENT: {value: '1', category: rollout}
             TRANSCRIPTION_FINAL_PASS_AUTHORITATIVE: {value: 'true', category: rollout}
             TRANSCRIPTION_FINAL_PASS_SYNC_ENABLED: {value: 'true', category: rollout}
             TRANSCRIPTION_SHADOW_ENABLED: {value: 'true', category: rollout}
             TRANSCRIPTION_SHADOW_KILL_SWITCH: {value: 'false', category: rollout}
             TRANSCRIPTION_SHADOW_UID_ALLOWLIST: {value: vi7SA9ckQCe4ccobWNxlbdcNdC23, category: rollout}
-            TRANSCRIPTION_SHADOW_PERCENT: {value: '0', category: rollout}
-            TRANSCRIPTION_SHADOW_DAILY_AUDIO_HOURS: {value: '1', category: rollout}
+            TRANSCRIPTION_SHADOW_PERCENT: {value: '1', category: rollout}
+            TRANSCRIPTION_SHADOW_DAILY_AUDIO_HOURS: {value: '80', category: rollout}
+            TRANSCRIPTION_SYNC_FINAL_PASS_HOURLY_AUDIO_HOURS: {value: '10', category: rollout}
+            TRANSCRIPTION_SYNC_FINAL_PASS_HOURLY_REQUESTS: {value: '1000', category: rollout}
             OMI_SHAPED_AGENT_MODE: {value: 'on', category: rollout}
-            DREAM_AGENT_MODE: {value: 'on', category: rollout}
-            DREAM_AGENT_UID_ALLOWLIST: {value: '9OqYLlKJv4hmeYpIhwJcHBR975i2,vi7SA9ckQCe4ccobWNxlbdcNdC23', category: rollout}
+            DREAM_AGENT_ENABLED: {value: 'true', category: rollout}
+            DREAM_AGENT_ELIGIBILITY: {value: all, category: rollout}
             SYNC_PHASE_METRICS_EXPORT_ENABLED:
               value: 'true'
               category: telemetry
@@ -3351,8 +3379,8 @@ environments:
             GCP_LOCATION:
               value: us-central1
             OMI_SHAPED_AGENT_MODE: {value: 'on', category: rollout}
-            DREAM_AGENT_MODE: {value: 'on', category: rollout}
-            DREAM_AGENT_UID_ALLOWLIST: {value: '9OqYLlKJv4hmeYpIhwJcHBR975i2,vi7SA9ckQCe4ccobWNxlbdcNdC23', category: rollout}
+            DREAM_AGENT_ENABLED: {value: 'true', category: rollout}
+            DREAM_AGENT_ELIGIBILITY: {value: all, category: rollout}
             PROACTIVITY_V2_POSTHOG_TOKEN: {value: phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y, category: rollout}
             PROACTIVITY_V2_POSTHOG_HOST: {value: 'https://us.posthog.com', category: rollout}
             MENTOR_PIPELINE: {value: cohort, category: rollout}
@@ -3542,9 +3570,6 @@ environments:
             MEMORY_CANONICAL_MAINTENANCE_ENABLED:
               category: memory_rollout
               value: 'true'
-            MEMORY_CANONICAL_MAINTENANCE_FLEX:
-              category: memory_rollout
-              value: 'true'
             OMI_ENV_STAGE:
               value: prod
               category: runtime_identity
@@ -3561,9 +3586,6 @@ environments:
             MEMORY_BELIEF_AUTOMATION_PAUSED: {value: 'false', category: rollout}
             MEMORY_TYPESENSE_COLLECTION:
               value: canonical_memory_atoms
-              category: memory_rollout
-            MEMORY_CANONICAL_CONSOLIDATION_ENABLED:
-              value: 'true'
               category: memory_rollout
             OMI_BACKGROUND_FLEX_CAPABLE:
               value: 'true'

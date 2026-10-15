@@ -3831,6 +3831,9 @@
     "reviewCaughtUpTitle": "Nichts zu beantworten",
     "reviewCaughtUpBody": "Omi fragt hier nur, wenn es dich braucht.",
     "reviewRecentChanges": "Letzte Änderungen",
+    "reviewChangeAfter": "Nachher",
+    "reviewChangeBefore": "Vorher",
+    "reviewChangeRemoved": "Aus der aktiven Liste entfernt",
     "reviewChangesIntro": "Was Omi in den letzten 30 Tagen selbst geändert hat. Mach alles rückgängig, was falsch aussieht.",
     "reviewChangeUndone": "Rückgängig gemacht. Omi wiederholt das nicht von selbst.",
     "reviewChangeFailed": "Diese Änderung konnte nicht aktualisiert werden. Versuche es erneut.",
@@ -4190,5 +4193,13 @@
     "onboardingNoOmiYet": "Hast du dein Omi noch nicht?",
     "onboardingOmiNotOrdered": "Noch nicht bestellt",
     "onboardingOmiOrdered": "Ich habe es bestellt",
-    "onboardingPermissionTapToFix": "Zum Beheben tippen"
+    "onboardingPermissionTapToFix": "Zum Beheben tippen",
+    "homePendingTitle": "Gespräche unterwegs",
+    "homePendingCatchingUp": "Frühere Aufnahmen werden aufgeholt",
+    "onTheWayTitle": "Unterwegs",
+    "onTheWayAlmostReady": "Fast fertig",
+    "activityEmpty": "Noch keine Aktivität",
+    "activityNewSemantics": "Aktivität, neue Einträge",
+    "activityLoadFailed": "Nicht alle Aktivitäten konnten geladen werden",
+    "activityNewItem": "Neu"
 }

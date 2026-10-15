@@ -338,7 +338,9 @@ def test_mobile_bulk_endpoint_teaches_corrects_and_rejects_foreign_person(world,
     monkeypatch.setattr(conversations.conversations_db, 'get_firestore_client', lambda: world.store)
     # The fixture intentionally keeps its synthetic manifest minimal; exercise
     # the real command/transaction while leaving storage encryption out of scope.
-    monkeypatch.setattr(conversations.conversations_db, '_prepare_conversation_for_write', lambda data, *args: data)
+    monkeypatch.setattr(
+        conversations.conversations_db, '_prepare_conversation_for_write', lambda data, *args, **kwargs: data
+    )
     monkeypatch.setattr(conversations, 'deserialize_conversation', deserialize)
     # Free plan: naming a person in your own transcript must still work and teach.
     monkeypatch.setattr('utils.speaker_permissions.users_db.get_user_valid_subscription', lambda uid, **kwargs: None)

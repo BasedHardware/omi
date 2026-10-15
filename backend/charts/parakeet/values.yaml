@@ -143,13 +143,13 @@ prometheus-adapter:
         name:
           as: "parakeet_request_latency_p99"
         metricsQuery: 'histogram_quantile(0.99, sum(rate(parakeet_request_duration_seconds_bucket{<<.LabelMatchers>>}[2m])) by (le))'
-      - seriesQuery: 'DCGM_FI_DEV_GPU_UTIL{namespace!=""}'
+      - seriesQuery: 'DCGM_FI_DEV_GPU_UTIL{container="parakeet",namespace!=""}'
         resources:
           overrides:
             namespace: {resource: "namespace"}
         name:
           as: "parakeet_gpu_utilization"
-        metricsQuery: 'avg(avg_over_time(DCGM_FI_DEV_GPU_UTIL{<<.LabelMatchers>>}[1m]))'
+        metricsQuery: 'avg(avg_over_time(DCGM_FI_DEV_GPU_UTIL{container="parakeet",<<.LabelMatchers>>}[1m]))'
 
 # This section is for setting up autoscaling more information can be found here: https://kubernetes.io/docs/concepts/workloads/autoscaling/
 autoscaling:

@@ -12442,6 +12442,15 @@ class AppLocalizationsHu extends AppLocalizations {
   String get reviewRecentChanges => 'Legutóbbi módosítások';
 
   @override
+  String get reviewChangeAfter => 'Utána';
+
+  @override
+  String get reviewChangeBefore => 'Előtte';
+
+  @override
+  String get reviewChangeRemoved => 'Eltávolítva az aktív listáról';
+
+  @override
   String get reviewChangesIntro =>
       'Mit módosított az Omi magától az elmúlt 30 napban. Vond vissza, ami rossznak tűnik.';
 
@@ -13710,4 +13719,28 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get onboardingPermissionTapToFix => 'Koppints a javításhoz';
+
+  @override
+  String get homePendingTitle => 'Beszélgetések úton';
+
+  @override
+  String get homePendingCatchingUp => 'Korábbi hang feldolgozása';
+
+  @override
+  String get onTheWayTitle => 'Úton';
+
+  @override
+  String get onTheWayAlmostReady => 'Majdnem kész';
+
+  @override
+  String get activityEmpty => 'Még nincs tevékenység';
+
+  @override
+  String get activityNewSemantics => 'Tevékenység, új elemek';
+
+  @override
+  String get activityLoadFailed => 'Nem sikerült betölteni az összes tevékenységet';
+
+  @override
+  String get activityNewItem => 'Új';
 }

@@ -12494,6 +12494,15 @@ class AppLocalizationsTl extends AppLocalizations {
   String get reviewRecentChanges => 'Mga Kamakailang Pagbabago';
 
   @override
+  String get reviewChangeAfter => 'Pagkatapos';
+
+  @override
+  String get reviewChangeBefore => 'Bago';
+
+  @override
+  String get reviewChangeRemoved => 'Inalis sa aktibong listahan';
+
+  @override
   String get reviewChangesIntro =>
       'Ang mga binago ng Omi nang mag-isa sa nakalipas na 30 araw. I-undo ang anumang mukhang mali.';
 
@@ -13766,4 +13775,28 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get onboardingPermissionTapToFix => 'I-tap para ayusin';
+
+  @override
+  String get homePendingTitle => 'Paparating na ang mga usapan';
+
+  @override
+  String get homePendingCatchingUp => 'Hinahabol ang naunang audio';
+
+  @override
+  String get onTheWayTitle => 'Paparating';
+
+  @override
+  String get onTheWayAlmostReady => 'Halos handa na';
+
+  @override
+  String get activityEmpty => 'Wala pang aktibidad';
+
+  @override
+  String get activityNewSemantics => 'Aktibidad, mga bagong item';
+
+  @override
+  String get activityLoadFailed => 'Hindi ma-load ang lahat ng iyong aktibidad';
+
+  @override
+  String get activityNewItem => 'Bago';
 }

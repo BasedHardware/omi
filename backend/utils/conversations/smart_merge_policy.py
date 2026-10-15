@@ -53,6 +53,7 @@ _USER_MANAGED_FLAGS = (
     'has_photos',
     'is_locked',
     'manual_speaker_assignments',
+    'has_transcript_corrections',
     'capture_group',
 )
 

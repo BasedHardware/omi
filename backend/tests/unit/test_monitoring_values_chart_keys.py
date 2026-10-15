@@ -16,6 +16,7 @@ KNOWN_TOP_LEVEL = {
     'alertmanager',
     'crds',
     'defaultRules',
+    'extraManifests',
     'fullnameOverride',
     'global',
     'grafana',

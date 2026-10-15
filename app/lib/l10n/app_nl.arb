@@ -3831,6 +3831,9 @@
     "reviewCaughtUpTitle": "Niets om te beantwoorden",
     "reviewCaughtUpBody": "Omi vraagt hier alleen iets als het je nodig heeft.",
     "reviewRecentChanges": "Recente wijzigingen",
+    "reviewChangeAfter": "Na",
+    "reviewChangeBefore": "Voor",
+    "reviewChangeRemoved": "Verwijderd uit de actieve lijst",
     "reviewChangesIntro": "Wat Omi de afgelopen 30 dagen zelf heeft gewijzigd. Maak alles ongedaan wat niet klopt.",
     "reviewChangeUndone": "Ongedaan gemaakt. Omi doet dit niet uit zichzelf opnieuw.",
     "reviewChangeFailed": "Deze wijziging kon niet worden bijgewerkt. Probeer het opnieuw.",
@@ -4190,5 +4193,13 @@
     "onboardingNoOmiYet": "Heb je je Omi nog niet?",
     "onboardingOmiNotOrdered": "Nog niet besteld",
     "onboardingOmiOrdered": "Ik heb hem besteld",
-    "onboardingPermissionTapToFix": "Tik om te herstellen"
+    "onboardingPermissionTapToFix": "Tik om te herstellen",
+    "homePendingTitle": "Gesprekken onderweg",
+    "homePendingCatchingUp": "Eerdere audio wordt ingehaald",
+    "onTheWayTitle": "Onderweg",
+    "onTheWayAlmostReady": "Bijna klaar",
+    "activityEmpty": "Nog geen activiteit",
+    "activityNewSemantics": "Activiteit, nieuwe items",
+    "activityLoadFailed": "Niet al je activiteit kon worden geladen",
+    "activityNewItem": "Nieuw"
 }

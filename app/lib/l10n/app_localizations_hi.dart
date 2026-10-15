@@ -12377,6 +12377,15 @@ class AppLocalizationsHi extends AppLocalizations {
   String get reviewRecentChanges => 'हाल के बदलाव';
 
   @override
+  String get reviewChangeAfter => 'बाद में';
+
+  @override
+  String get reviewChangeBefore => 'पहले';
+
+  @override
+  String get reviewChangeRemoved => 'सक्रिय सूची से हटाया गया';
+
+  @override
   String get reviewChangesIntro => 'पिछले 30 दिनों में Omi ने खुद क्या बदला। जो गलत लगे उसे पूर्ववत करें।';
 
   @override
@@ -13640,4 +13649,28 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String get onboardingPermissionTapToFix => 'ठीक करने के लिए टैप करें';
+
+  @override
+  String get homePendingTitle => 'बातचीत आ रही हैं';
+
+  @override
+  String get homePendingCatchingUp => 'पहले का ऑडियो प्रोसेस हो रहा है';
+
+  @override
+  String get onTheWayTitle => 'रास्ते में';
+
+  @override
+  String get onTheWayAlmostReady => 'लगभग तैयार';
+
+  @override
+  String get activityEmpty => 'अभी तक कोई गतिविधि नहीं';
+
+  @override
+  String get activityNewSemantics => 'गतिविधि, नए आइटम';
+
+  @override
+  String get activityLoadFailed => 'आपकी पूरी गतिविधि लोड नहीं हो सकी';
+
+  @override
+  String get activityNewItem => 'नया';
 }

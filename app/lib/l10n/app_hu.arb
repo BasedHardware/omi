@@ -3924,6 +3924,9 @@
     "reviewCaughtUpTitle": "Nincs mire válaszolni",
     "reviewCaughtUpBody": "Az Omi csak akkor kérdez itt, ha szüksége van rád.",
     "reviewRecentChanges": "Legutóbbi módosítások",
+    "reviewChangeAfter": "Utána",
+    "reviewChangeBefore": "Előtte",
+    "reviewChangeRemoved": "Eltávolítva az aktív listáról",
     "reviewChangesIntro": "Mit módosított az Omi magától az elmúlt 30 napban. Vond vissza, ami rossznak tűnik.",
     "reviewChangeUndone": "Visszavonva. Az Omi ezt nem fogja magától megismételni.",
     "reviewChangeFailed": "A módosítás frissítése nem sikerült. Próbáld újra.",
@@ -4283,5 +4286,13 @@
     "onboardingNoOmiYet": "Még nincs meg az Omid?",
     "onboardingOmiNotOrdered": "Még nem rendeltem",
     "onboardingOmiOrdered": "Már megrendeltem",
-    "onboardingPermissionTapToFix": "Koppints a javításhoz"
+    "onboardingPermissionTapToFix": "Koppints a javításhoz",
+    "homePendingTitle": "Beszélgetések úton",
+    "homePendingCatchingUp": "Korábbi hang feldolgozása",
+    "onTheWayTitle": "Úton",
+    "onTheWayAlmostReady": "Majdnem kész",
+    "activityEmpty": "Még nincs tevékenység",
+    "activityNewSemantics": "Tevékenység, új elemek",
+    "activityLoadFailed": "Nem sikerült betölteni az összes tevékenységet",
+    "activityNewItem": "Új"
 }

@@ -11251,6 +11251,9 @@
     "reviewCaughtUpTitle": "సమాధానం ఇవ్వడానికి ఏమీ లేదు",
     "reviewCaughtUpBody": "Omi కి మీ అవసరం ఉన్నప్పుడే ఇక్కడ అడుగుతుంది.",
     "reviewRecentChanges": "ఇటీవలి మార్పులు",
+    "reviewChangeAfter": "తర్వాత",
+    "reviewChangeBefore": "ముందు",
+    "reviewChangeRemoved": "సక్రియ జాబితా నుండి తీసివేయబడింది",
     "reviewChangesIntro": "గత 30 రోజుల్లో Omi స్వయంగా మార్చినవి. తప్పుగా కనిపించిన వాటిని రద్దు చేయండి.",
     "reviewChangeUndone": "రద్దు చేయబడింది. Omi దీన్ని స్వయంగా మళ్లీ చేయదు.",
     "reviewChangeFailed": "ఈ మార్పును అప్‌డేట్ చేయలేకపోయాం. మళ్లీ ప్రయత్నించండి.",
@@ -11610,5 +11613,13 @@
     "onboardingNoOmiYet": "ఇంకా మీ Omi లేదా?",
     "onboardingOmiNotOrdered": "ఇంకా ఆర్డర్ చేయలేదు",
     "onboardingOmiOrdered": "నేను ఆర్డర్ చేశాను",
-    "onboardingPermissionTapToFix": "సరిచేయడానికి నొక్కండి"
+    "onboardingPermissionTapToFix": "సరిచేయడానికి నొక్కండి",
+    "homePendingTitle": "సంభాషణలు వస్తున్నాయి",
+    "homePendingCatchingUp": "మునుపటి ఆడియో ప్రాసెస్ అవుతోంది",
+    "onTheWayTitle": "మార్గంలో ఉంది",
+    "onTheWayAlmostReady": "దాదాపు సిద్ధం",
+    "activityEmpty": "ఇంకా కార్యాచరణ లేదు",
+    "activityNewSemantics": "కార్యాచరణ, కొత్త అంశాలు",
+    "activityLoadFailed": "మీ మొత్తం కార్యాచరణను లోడ్ చేయలేకపోయాం",
+    "activityNewItem": "కొత్తది"
 }

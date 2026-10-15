@@ -3831,6 +3831,9 @@
     "reviewCaughtUpTitle": "Ingenting å svare på",
     "reviewCaughtUpBody": "Omi spør bare her når den trenger deg.",
     "reviewRecentChanges": "Nylige endringer",
+    "reviewChangeAfter": "Etter",
+    "reviewChangeBefore": "Før",
+    "reviewChangeRemoved": "Fjernet fra den aktive listen",
     "reviewChangesIntro": "Hva Omi har endret på egen hånd de siste 30 dagene. Angre alt som ser feil ut.",
     "reviewChangeUndone": "Angret. Omi gjør ikke dette igjen på egen hånd.",
     "reviewChangeFailed": "Endringen kunne ikke oppdateres. Prøv igjen.",
@@ -4190,5 +4193,13 @@
     "onboardingNoOmiYet": "Har du ikke fått Omi ennå?",
     "onboardingOmiNotOrdered": "Ikke bestilt ennå",
     "onboardingOmiOrdered": "Jeg har bestilt den",
-    "onboardingPermissionTapToFix": "Trykk for å fikse"
+    "onboardingPermissionTapToFix": "Trykk for å fikse",
+    "homePendingTitle": "Samtaler på vei",
+    "homePendingCatchingUp": "Tar igjen tidligere lyd",
+    "onTheWayTitle": "På vei",
+    "onTheWayAlmostReady": "Nesten klar",
+    "activityEmpty": "Ingen aktivitet ennå",
+    "activityNewSemantics": "Aktivitet, nye elementer",
+    "activityLoadFailed": "Kunne ikke laste inn all aktiviteten din",
+    "activityNewItem": "Ny"
 }

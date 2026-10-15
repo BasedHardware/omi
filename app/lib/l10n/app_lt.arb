@@ -3831,6 +3831,9 @@
     "reviewCaughtUpTitle": "Nėra į ką atsakyti",
     "reviewCaughtUpBody": "Omi čia klaus tik tada, kai jūsų reikės.",
     "reviewRecentChanges": "Naujausi pakeitimai",
+    "reviewChangeAfter": "Po",
+    "reviewChangeBefore": "Prieš",
+    "reviewChangeRemoved": "Pašalinta iš aktyvaus sąrašo",
     "reviewChangesIntro": "Ką Omi pats pakeitė per pastarąsias 30 dienų. Atšaukite viską, kas atrodo neteisinga.",
     "reviewChangeUndone": "Atšaukta. Omi to pats nekartos.",
     "reviewChangeFailed": "Nepavyko atnaujinti šio pakeitimo. Bandykite dar kartą.",
@@ -4190,5 +4193,13 @@
     "onboardingNoOmiYet": "Dar neturite Omi?",
     "onboardingOmiNotOrdered": "Dar neužsisakiau",
     "onboardingOmiOrdered": "Jau užsisakiau",
-    "onboardingPermissionTapToFix": "Bakstelėkite, kad pataisytumėte"
+    "onboardingPermissionTapToFix": "Bakstelėkite, kad pataisytumėte",
+    "homePendingTitle": "Pokalbiai pakeliui",
+    "homePendingCatchingUp": "Apdorojamas ankstesnis garsas",
+    "onTheWayTitle": "Pakeliui",
+    "onTheWayAlmostReady": "Beveik paruošta",
+    "activityEmpty": "Veiklos dar nėra",
+    "activityNewSemantics": "Veikla, nauji elementai",
+    "activityLoadFailed": "Nepavyko įkelti visos jūsų veiklos",
+    "activityNewItem": "Nauja"
 }

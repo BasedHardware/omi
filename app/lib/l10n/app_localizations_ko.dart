@@ -12220,6 +12220,15 @@ class AppLocalizationsKo extends AppLocalizations {
   String get reviewRecentChanges => '최근 변경 사항';
 
   @override
+  String get reviewChangeAfter => '변경 후';
+
+  @override
+  String get reviewChangeBefore => '변경 전';
+
+  @override
+  String get reviewChangeRemoved => '활성 목록에서 제거됨';
+
+  @override
   String get reviewChangesIntro => '지난 30일 동안 Omi가 자동으로 바꾼 내용이에요. 잘못된 것은 되돌리세요.';
 
   @override
@@ -13467,4 +13476,28 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get onboardingPermissionTapToFix => '탭하여 해결';
+
+  @override
+  String get homePendingTitle => '대화 준비 중';
+
+  @override
+  String get homePendingCatchingUp => '이전 오디오 처리 중';
+
+  @override
+  String get onTheWayTitle => '준비 중';
+
+  @override
+  String get onTheWayAlmostReady => '거의 완료';
+
+  @override
+  String get activityEmpty => '아직 활동이 없습니다';
+
+  @override
+  String get activityNewSemantics => '활동, 새 항목';
+
+  @override
+  String get activityLoadFailed => '활동을 모두 불러오지 못했습니다';
+
+  @override
+  String get activityNewItem => '새 항목';
 }

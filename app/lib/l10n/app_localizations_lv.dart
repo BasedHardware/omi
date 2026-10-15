@@ -12421,6 +12421,15 @@ class AppLocalizationsLv extends AppLocalizations {
   String get reviewRecentChanges => 'Nesenās izmaiņas';
 
   @override
+  String get reviewChangeAfter => 'Pēc';
+
+  @override
+  String get reviewChangeBefore => 'Pirms';
+
+  @override
+  String get reviewChangeRemoved => 'Noņemts no aktīvā saraksta';
+
+  @override
   String get reviewChangesIntro =>
       'Ko Omi pats ir mainījis pēdējo 30 dienu laikā. Atceliet visu, kas izskatās nepareizi.';
 
@@ -13684,4 +13693,28 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get onboardingPermissionTapToFix => 'Pieskarieties, lai labotu';
+
+  @override
+  String get homePendingTitle => 'Sarunas ceļā';
+
+  @override
+  String get homePendingCatchingUp => 'Apstrādājam iepriekšējo audio';
+
+  @override
+  String get onTheWayTitle => 'Ceļā';
+
+  @override
+  String get onTheWayAlmostReady => 'Gandrīz gatavs';
+
+  @override
+  String get activityEmpty => 'Vēl nav aktivitātes';
+
+  @override
+  String get activityNewSemantics => 'Aktivitāte, jauni vienumi';
+
+  @override
+  String get activityLoadFailed => 'Neizdevās ielādēt visu jūsu aktivitāti';
+
+  @override
+  String get activityNewItem => 'Jauns';
 }

@@ -11251,6 +11251,9 @@
     "reviewCaughtUpTitle": "جواب دینے کے لیے کچھ نہیں",
     "reviewCaughtUpBody": "Omi یہاں صرف تب پوچھے گا جب اسے آپ کی ضرورت ہوگی۔",
     "reviewRecentChanges": "حالیہ تبدیلیاں",
+    "reviewChangeAfter": "بعد میں",
+    "reviewChangeBefore": "پہلے",
+    "reviewChangeRemoved": "فعال فہرست سے ہٹا دیا گیا",
     "reviewChangesIntro": "پچھلے 30 دنوں میں Omi نے خود کیا بدلا۔ جو غلط لگے اسے واپس کریں۔",
     "reviewChangeUndone": "واپس کر دیا گیا۔ Omi اسے خود دوبارہ نہیں کرے گا۔",
     "reviewChangeFailed": "یہ تبدیلی اپ ڈیٹ نہیں ہو سکی۔ دوبارہ کوشش کریں۔",
@@ -11610,5 +11613,13 @@
     "onboardingNoOmiYet": "ابھی تک Omi نہیں ہے؟",
     "onboardingOmiNotOrdered": "ابھی آرڈر نہیں کیا",
     "onboardingOmiOrdered": "میں نے آرڈر کر دیا ہے",
-    "onboardingPermissionTapToFix": "ٹھیک کرنے کے لیے ٹیپ کریں"
+    "onboardingPermissionTapToFix": "ٹھیک کرنے کے لیے ٹیپ کریں",
+    "homePendingTitle": "گفتگوئیں آ رہی ہیں",
+    "homePendingCatchingUp": "پچھلی آڈیو پر کارروائی ہو رہی ہے",
+    "onTheWayTitle": "راستے میں",
+    "onTheWayAlmostReady": "تقریباً تیار",
+    "activityEmpty": "ابھی تک کوئی سرگرمی نہیں",
+    "activityNewSemantics": "سرگرمی، نئے آئٹمز",
+    "activityLoadFailed": "آپ کی تمام سرگرمی لوڈ نہیں ہو سکی",
+    "activityNewItem": "نیا"
 }

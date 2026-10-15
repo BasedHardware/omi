@@ -14837,6 +14837,18 @@
     "@reviewRecentChanges": {
         "description": "Link and page title: changes the app made on its own (Title Case)"
     },
+    "reviewChangeAfter": "After",
+    "@reviewChangeAfter": {
+        "description": "Label for the resulting value in an applied Review change"
+    },
+    "reviewChangeBefore": "Before",
+    "@reviewChangeBefore": {
+        "description": "Label for the original value in an applied Review change"
+    },
+    "reviewChangeRemoved": "Removed from the active list",
+    "@reviewChangeRemoved": {
+        "description": "Reversible retirement or dismissal in an applied change; Undo restores the item"
+    },
     "reviewChangesIntro": "What Omi changed on its own in the last 30 days. Undo anything that looks wrong.",
     "@reviewChangesIntro": {
         "description": "Intro line on Recent Changes"
@@ -16490,5 +16502,37 @@
     "onboardingPermissionTapToFix": "Tap to fix",
     "@onboardingPermissionTapToFix": {
         "description": "Onboarding permissions: shown on a denied permission card; tapping opens Settings"
+    },
+    "homePendingTitle": "Conversations on the way",
+    "@homePendingTitle": {
+        "description": "Home row title while recordings are still turning into conversations"
+    },
+    "homePendingCatchingUp": "Catching up on earlier audio",
+    "@homePendingCatchingUp": {
+        "description": "Home row title when a long backlog of recordings is still being processed"
+    },
+    "onTheWayTitle": "On the Way",
+    "@onTheWayTitle": {
+        "description": "Title of the page listing recordings not yet turned into conversations"
+    },
+    "onTheWayAlmostReady": "Almost ready",
+    "@onTheWayAlmostReady": {
+        "description": "Section header: recordings being transcribed or summarized"
+    },
+    "activityEmpty": "No activity yet",
+    "@activityEmpty": {
+        "description": "Empty state of the Activity page"
+    },
+    "activityNewSemantics": "Activity, new items",
+    "@activityNewSemantics": {
+        "description": "Screen reader label for the Activity bell when it has new items"
+    },
+    "activityLoadFailed": "Couldn't load all of your activity",
+    "@activityLoadFailed": {
+        "description": "Activity page: one or more sources failed to load"
+    },
+    "activityNewItem": "New",
+    "@activityNewItem": {
+        "description": "Screen reader suffix for an Activity row added since the last visit"
     }
 }

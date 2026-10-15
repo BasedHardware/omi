@@ -12198,6 +12198,15 @@ class AppLocalizationsZh extends AppLocalizations {
   String get reviewRecentChanges => '最近更改';
 
   @override
+  String get reviewChangeAfter => '修改后';
+
+  @override
+  String get reviewChangeBefore => '修改前';
+
+  @override
+  String get reviewChangeRemoved => '已从活动列表中移除';
+
+  @override
   String get reviewChangesIntro => '过去 30 天内 Omi 自行做出的更改。看起来不对的都可以撤销。';
 
   @override
@@ -13442,4 +13451,28 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get onboardingPermissionTapToFix => '点按以修复';
+
+  @override
+  String get homePendingTitle => '对话正在生成';
+
+  @override
+  String get homePendingCatchingUp => '正在处理之前的音频';
+
+  @override
+  String get onTheWayTitle => '处理中';
+
+  @override
+  String get onTheWayAlmostReady => '即将完成';
+
+  @override
+  String get activityEmpty => '暂无活动';
+
+  @override
+  String get activityNewSemantics => '活动，有新内容';
+
+  @override
+  String get activityLoadFailed => '无法加载全部活动';
+
+  @override
+  String get activityNewItem => '新';
 }

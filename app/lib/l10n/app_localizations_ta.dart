@@ -12479,6 +12479,15 @@ class AppLocalizationsTa extends AppLocalizations {
   String get reviewRecentChanges => 'சமீபத்திய மாற்றங்கள்';
 
   @override
+  String get reviewChangeAfter => 'பிறகு';
+
+  @override
+  String get reviewChangeBefore => 'முன்பு';
+
+  @override
+  String get reviewChangeRemoved => 'செயலில் உள்ள பட்டியலிலிருந்து அகற்றப்பட்டது';
+
+  @override
   String get reviewChangesIntro =>
       'கடந்த 30 நாட்களில் Omi தானாக மாற்றியவை. தவறாகத் தோன்றும் எதையும் செயல்தவிர்க்கவும்.';
 
@@ -13747,4 +13756,28 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String get onboardingPermissionTapToFix => 'சரிசெய்ய தட்டவும்';
+
+  @override
+  String get homePendingTitle => 'உரையாடல்கள் வருகின்றன';
+
+  @override
+  String get homePendingCatchingUp => 'முந்தைய ஆடியோ செயலாக்கப்படுகிறது';
+
+  @override
+  String get onTheWayTitle => 'வழியில்';
+
+  @override
+  String get onTheWayAlmostReady => 'கிட்டத்தட்ட தயார்';
+
+  @override
+  String get activityEmpty => 'இதுவரை எந்தச் செயல்பாடும் இல்லை';
+
+  @override
+  String get activityNewSemantics => 'செயல்பாடு, புதிய உருப்படிகள்';
+
+  @override
+  String get activityLoadFailed => 'உங்கள் எல்லா செயல்பாடுகளையும் ஏற்ற முடியவில்லை';
+
+  @override
+  String get activityNewItem => 'புதியது';
 }

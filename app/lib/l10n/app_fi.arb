@@ -3831,6 +3831,9 @@
     "reviewCaughtUpTitle": "Ei vastattavaa",
     "reviewCaughtUpBody": "Omi kysyy täällä vain, kun se tarvitsee sinua.",
     "reviewRecentChanges": "Viimeaikaiset muutokset",
+    "reviewChangeAfter": "Jälkeen",
+    "reviewChangeBefore": "Ennen",
+    "reviewChangeRemoved": "Poistettu aktiivisesta luettelosta",
     "reviewChangesIntro": "Mitä Omi on muuttanut itse viimeisen 30 päivän aikana. Kumoa kaikki, mikä näyttää väärältä.",
     "reviewChangeUndone": "Kumottu. Omi ei toista tätä itse.",
     "reviewChangeFailed": "Muutosta ei voitu päivittää. Yritä uudelleen.",
@@ -4190,5 +4193,13 @@
     "onboardingNoOmiYet": "Eikö Omi ole vielä saapunut?",
     "onboardingOmiNotOrdered": "En ole vielä tilannut",
     "onboardingOmiOrdered": "Olen tilannut sen",
-    "onboardingPermissionTapToFix": "Korjaa napauttamalla"
+    "onboardingPermissionTapToFix": "Korjaa napauttamalla",
+    "homePendingTitle": "Keskusteluja tulossa",
+    "homePendingCatchingUp": "Käsitellään aiempaa ääntä",
+    "onTheWayTitle": "Tulossa",
+    "onTheWayAlmostReady": "Melkein valmis",
+    "activityEmpty": "Ei vielä toimintaa",
+    "activityNewSemantics": "Toiminta, uusia kohteita",
+    "activityLoadFailed": "Kaikkea toimintaa ei voitu ladata",
+    "activityNewItem": "Uusi"
 }

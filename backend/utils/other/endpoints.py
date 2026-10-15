@@ -421,6 +421,10 @@ async def get_current_user_uid_ws_listen(
     the mutation in the handler's context; the blocking Firebase and
     Firestore calls are offloaded via ``run_blocking``.
     """
+    if websocket is not None:  # pyright: ignore[reportUnnecessaryComparison]  # Direct callers may omit WebSocket.
+        from utils.product_telemetry import bind_websocket_telemetry_context
+
+        bind_websocket_telemetry_context(websocket.headers)
     uid = await run_critical_ws(_verify_ws_auth, authorization)
     try:
         enforce_jit_qa_uid(uid)

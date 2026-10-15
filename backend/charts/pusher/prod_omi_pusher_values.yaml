@@ -140,10 +140,10 @@ env:
   # Bounded, process-local late identity repair coalescing; rollback with false.
   - name: OWNER_IDENTITY_RETRY_COALESCE_ENABLED
     value: "true"
-  - name: DREAM_AGENT_MODE
-    value: 'on'
-  - name: DREAM_AGENT_UID_ALLOWLIST
-    value: '9OqYLlKJv4hmeYpIhwJcHBR975i2,vi7SA9ckQCe4ccobWNxlbdcNdC23'
+  - name: DREAM_AGENT_ENABLED
+    value: 'true'
+  - name: DREAM_AGENT_ELIGIBILITY
+    value: 'all'
   # Public client token for v2 cohort reads only; shared backend PostHog stays disabled.
   - name: PROACTIVITY_V2_POSTHOG_TOKEN
     value: "phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y"
@@ -297,12 +297,16 @@ env:
   - name: TRANSCRIPTION_FINAL_PASS_UID_ALLOWLIST
     value: "vi7SA9ckQCe4ccobWNxlbdcNdC23"
   - name: TRANSCRIPTION_FINAL_PASS_PERCENT
-    value: "0"
+    value: "1"
   - name: TRANSCRIPTION_FINAL_PASS_AUTHORITATIVE
     value: "true"
+  - name: TRANSCRIPTION_SYNC_FINAL_PASS_HOURLY_AUDIO_HOURS
+    value: "10"
+  - name: TRANSCRIPTION_SYNC_FINAL_PASS_HOURLY_REQUESTS
+    value: "1000"
   - name: TRANSCRIPTION_FINAL_PASS_SYNC_ENABLED
     value: "true"
-  # Phase-1 final-pass shadow runs only for the owner UID on this pusher.
+  # Complete stage C: 1% cohort plus the owner UID, bounded by the daily cap.
   - name: TRANSCRIPTION_SHADOW_ENABLED
     value: "true"
   - name: TRANSCRIPTION_SHADOW_KILL_SWITCH
@@ -310,9 +314,9 @@ env:
   - name: TRANSCRIPTION_SHADOW_UID_ALLOWLIST
     value: "vi7SA9ckQCe4ccobWNxlbdcNdC23"
   - name: TRANSCRIPTION_SHADOW_PERCENT
-    value: "0"
-  - name: TRANSCRIPTION_SHADOW_DAILY_AUDIO_HOURS
     value: "1"
+  - name: TRANSCRIPTION_SHADOW_DAILY_AUDIO_HOURS
+    value: "80"
   - name: CONVERSATION_RELEVANCE_JEV_SHADOW_PERCENT
     value: "100"
   - name: MEMORY_OWNER_JEV_SHADOW_PERCENT

@@ -3831,6 +3831,9 @@
     "reviewCaughtUpTitle": "Tiada apa untuk dijawab",
     "reviewCaughtUpBody": "Omi hanya akan bertanya di sini apabila memerlukan anda.",
     "reviewRecentChanges": "Perubahan Terkini",
+    "reviewChangeAfter": "Selepas",
+    "reviewChangeBefore": "Sebelum",
+    "reviewChangeRemoved": "Dikeluarkan daripada senarai aktif",
     "reviewChangesIntro": "Apa yang Omi ubah sendiri dalam 30 hari lepas. Buat asal apa-apa yang nampak salah.",
     "reviewChangeUndone": "Dibuat asal. Omi tidak akan mengulanginya sendiri.",
     "reviewChangeFailed": "Perubahan ini tidak dapat dikemas kini. Cuba lagi.",
@@ -4190,5 +4193,13 @@
     "onboardingNoOmiYet": "Belum ada Omi lagi?",
     "onboardingOmiNotOrdered": "Belum memesan",
     "onboardingOmiOrdered": "Saya sudah memesannya",
-    "onboardingPermissionTapToFix": "Ketik untuk membetulkan"
+    "onboardingPermissionTapToFix": "Ketik untuk membetulkan",
+    "homePendingTitle": "Perbualan sedang diproses",
+    "homePendingCatchingUp": "Mengejar audio terdahulu",
+    "onTheWayTitle": "Dalam perjalanan",
+    "onTheWayAlmostReady": "Hampir siap",
+    "activityEmpty": "Belum ada aktiviti",
+    "activityNewSemantics": "Aktiviti, item baharu",
+    "activityLoadFailed": "Tidak dapat memuatkan semua aktiviti anda",
+    "activityNewItem": "Baharu"
 }
