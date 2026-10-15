@@ -9,13 +9,15 @@ from fastapi import HTTPException
 import pytest
 
 from routers import conversations as conv_routes
-from models.conversation import LinkCalendarEventRequest
 
 
 @pytest.mark.asyncio
 async def test_link_calendar_event_masks_provider_error(monkeypatch):
     """Ensure link_calendar_event raises generic 500 without leaking raw provider error."""
-    fake_integration = {"access_token": "valid_token"}
+    monkeypatch.setattr(
+        conv_routes, "_get_valid_conversation_by_id", lambda uid, conversation_id, **kw: {"id": conversation_id}
+    )
+    fake_integration = {"connected": True, "access_token": "valid_token"}
     monkeypatch.setattr(conv_routes.users_db, "get_integration", lambda uid, name: fake_integration)
     monkeypatch.setattr(
         conv_routes,
@@ -25,7 +27,7 @@ async def test_link_calendar_event_masks_provider_error(monkeypatch):
         ),
     )
 
-    req = LinkCalendarEventRequest(event_id="evt_test_123")
+    req = conv_routes.LinkCalendarEventRequest(event_id="evt_test_123")
     with pytest.raises(HTTPException) as exc_info:
         await conv_routes.link_calendar_event(
             conversation_id="conv_123",
@@ -41,7 +43,10 @@ async def test_link_calendar_event_masks_provider_error(monkeypatch):
 @pytest.mark.asyncio
 async def test_link_calendar_event_masks_retry_error(monkeypatch):
     """Ensure link_calendar_event masks retry failure after token refresh."""
-    fake_integration = {"access_token": "expired_token"}
+    monkeypatch.setattr(
+        conv_routes, "_get_valid_conversation_by_id", lambda uid, conversation_id, **kw: {"id": conversation_id}
+    )
+    fake_integration = {"connected": True, "access_token": "expired_token"}
     monkeypatch.setattr(conv_routes.users_db, "get_integration", lambda uid, name: fake_integration)
     monkeypatch.setattr(conv_routes, "refresh_google_token", AsyncMock(return_value="new_token"))
 
@@ -56,7 +61,7 @@ async def test_link_calendar_event_masks_retry_error(monkeypatch):
 
     monkeypatch.setattr(conv_routes, "get_google_calendar_event", mock_fetch_event)
 
-    req = LinkCalendarEventRequest(event_id="evt_test_123")
+    req = conv_routes.LinkCalendarEventRequest(event_id="evt_test_123")
     with pytest.raises(HTTPException) as exc_info:
         await conv_routes.link_calendar_event(
             conversation_id="conv_123",
@@ -67,3 +72,4 @@ async def test_link_calendar_event_masks_retry_error(monkeypatch):
     assert exc_info.value.status_code == 500
     assert exc_info.value.detail == "Failed to fetch calendar event after token refresh."
     assert "auth.googleapis.internal" not in exc_info.value.detail
+
