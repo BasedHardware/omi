@@ -4,12 +4,15 @@ import argparse
 import json
 from pathlib import Path
 import re
+from typing import Any
 
 PREVIOUS_DIGEST = 'omi.me/previous-image-digest'
 DIGEST = re.compile(r'sha256:[0-9a-f]{64}')
 
 
-def release_values(deployment: dict, pods: dict, repository: str, tag: str, rollback: str = '') -> dict:
+def release_values(
+    deployment: dict[str, Any], pods: dict[str, Any], repository: str, tag: str, rollback: str = ''
+) -> dict[str, Any]:
     if rollback and not DIGEST.fullmatch(rollback):
         raise ValueError('rollback must be a complete sha256 digest')
     if not re.fullmatch(r'[0-9a-f]{7,40}', tag):
@@ -39,7 +42,7 @@ def release_values(deployment: dict, pods: dict, repository: str, tag: str, roll
         or status.get('readyReplicas', 0) != desired
     ):
         raise ValueError('current deployment must be fully ready before selecting a release image')
-    digests = set()
+    digests: set[str] = set()
     serving = 0
     for pod in pods.get('items', []):
         metadata = pod['metadata']
