@@ -4,6 +4,7 @@ import base64
 import io
 import json
 import threading
+from concurrent.futures import ThreadPoolExecutor
 from http.client import HTTPConnection
 from urllib.error import HTTPError
 
@@ -135,3 +136,60 @@ def test_http_rejects_mutations_and_does_not_forward_headers(monkeypatch):
         server.shutdown()
         server.server_close()
         thread.join()
+
+
+def test_timeout_is_shared_by_all_waiters_then_retried_after_backoff():
+    now = [10000]
+    proxy = StatsProxy(clock=lambda: now[0])
+    entered, release = threading.Event(), threading.Event()
+    attempts = []
+
+    def timeout(*args, **kwargs):
+        attempts.append(1)
+        entered.set()
+        assert release.wait(2)
+        raise TimeoutError("synthetic upstream timeout")
+
+    proxy.identity_token = lambda: "synthetic"
+    proxy.request = timeout
+    with ThreadPoolExecutor(max_workers=8) as pool:
+        waiting = [pool.submit(proxy.fetch, "/api/omi/stats/wall") for _ in range(8)]
+        assert entered.wait(2)
+        release.set()
+        assert all(future.result(timeout=2)[0] == 502 for future in waiting)
+    assert len(attempts) == 1
+    now[0] += 5
+    assert proxy.fetch("/api/omi/stats/wall")[0] == 502
+    assert len(attempts) == 2
+
+
+def test_viewer_acceptance_rejects_wrong_org_before_permission_reads():
+    from charts.monitoring.grafana.verify_business import verify_viewer
+
+    class WrongOrg:
+        def call(self, method, path):
+            assert path == "/api/user"
+            return {"orgId": 1, "isGrafanaAdmin": False}
+
+    with pytest.raises(AssertionError):
+        verify_viewer(WrongOrg(), 2)
+
+
+def test_viewer_acceptance_requires_same_org_viewer_and_both_denials():
+    from charts.monitoring.grafana.verify_business import verify_viewer
+
+    class Viewer:
+        def __init__(self):
+            self.denied = []
+
+        def call(self, method, path):
+            if path == "/api/user":
+                return {"orgId": 2, "isGrafanaAdmin": False}
+            if path == "/api/user/orgs":
+                return [{"orgId": 2, "role": "Viewer"}]
+            self.denied.append(path)
+            raise HTTPError("https://fixture" + path, 403, "denied", {}, io.BytesIO())
+
+    viewer = Viewer()
+    verify_viewer(viewer, 2)
+    assert viewer.denied == ["/api/folders/business", "/api/dashboards/uid/omi-tv-v2"]

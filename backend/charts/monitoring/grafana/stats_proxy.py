@@ -82,43 +82,44 @@ class StatsProxy:
             self.token, self.expiry = token, expiry
             return token
 
+    def remember(self, path, status, body, ttl):
+        stamp = self.clock()
+        self.cache = {k: v for k, v in self.cache.items() if stamp < v[0]}
+        while self.cache and (
+            len(self.cache) >= 32 or sum(len(v[2]) for v in self.cache.values()) + len(body) > MAX_CACHE_BYTES
+        ):
+            del self.cache[next(iter(self.cache))]
+        self.cache[path] = (min(stamp + ttl, (int(stamp) // 86400 + 1) * 86400), status, body)
+        return status, body
+
     def fetch(self, path):
         if not allowed_path(path):
             return 404, b'{"error":"not found"}'
-        # Serializes cache misses, bounding aggregate upstream work and coalescing
-        # the 24 Canvas queries. Cache hits do not mint or refresh credentials.
+        # Share failures briefly too: waiters must not each retry a 360s timeout.
         with self.cache_lock:
-            now = self.clock()
             cached = self.cache.get(path)
-            if cached and now < cached[0]:
-                return 200, cached[1]
+            if cached and self.clock() < cached[0]:
+                return cached[1], cached[2]
             for attempt in range(2):
-                token = self.identity_token()
                 try:
+                    token = self.identity_token()
                     body = self.request(
                         "https://admin.omi.me" + path,
                         {"Authorization": f"Bearer {token}", "Accept": "application/json"},
                         timeout=360,
                     )
                     json.loads(body)  # Never forward HTML, redirects or a login page.
-                    stamp = self.clock()
-                    self.cache = {k: v for k, v in self.cache.items() if stamp < v[0]}
-                    while self.cache and (
-                        len(self.cache) >= 32
-                        or sum(len(v[1]) for v in self.cache.values()) + len(body) > MAX_CACHE_BYTES
-                    ):
-                        del self.cache[next(iter(self.cache))]
-                    self.cache[path] = (min(stamp + 900, (int(stamp) // 86400 + 1) * 86400), body)
-                    return 200, body
+                    return self.remember(path, 200, body, 900)
                 except HTTPError as exc:
                     exc.close()
                     if exc.code == 401 and attempt == 0:
                         with self.token_lock:
-                            if self.token == token:
-                                self.token, self.expiry = "", 0
+                            self.token, self.expiry = "", 0
                         continue
-                    return 502, b'{"error":"stats upstream unavailable"}'
-            return 502, b'{"error":"stats upstream unavailable"}'
+                    break
+                except Exception:
+                    break
+            return self.remember(path, 502, b'{"error":"stats upstream unavailable"}', 5)
 
 
 class Handler(BaseHTTPRequestHandler):

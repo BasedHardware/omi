@@ -1,18 +1,13 @@
 "use client";
 
-import { Suspense, useEffect, useState } from "react";
+import { lazy, Suspense, useEffect, useState } from "react";
 import useSWR from "swr";
 import { grafanaRenewalDelay } from "@/lib/grafana-renewal";
 import { authenticatedFetcher, useAuthToken } from "@/hooks/useAuthToken";
 import { useSearchParams } from "next/navigation";
-import { grafanaBoardSrc } from "@/lib/grafana-board";
 
-// Production switches to the private monitor.omi.me board only after the
-// server-side rollout flag is enabled. Legacy TV share links retain their path.
-// Renew URL login before expiry and on tab resume; upstream stats stay cached.
-export function boardUrl(platform: string | null): string {
-  return grafanaBoardSrc(platform, false);
-}
+// Flag-off and rollback use the existing authenticated native analytics page.
+const ClassicDashboard = lazy(() => import("./classic/page"));
 
 function GrafanaFrame() {
   const params = useSearchParams();
@@ -51,12 +46,9 @@ function GrafanaFrame() {
     };
   }, [embed, mutate]);
   const tvParam = params?.get("tv") ?? null;
-  const kiosk = Boolean(tvParam);
-  const base = grafanaBoardSrc(params?.get("platform") ?? null, kiosk);
   const scale = tvParam
     ? Math.min(Math.max(parseFloat(tvParam) || 1, 0.25), 1)
     : 1;
-  const src = embed?.enabled ? embed.url : base;
   if (!embed && (isLoading || !token))
     return <p role="status">Loading dashboard…</p>;
   if (error)
@@ -66,7 +58,14 @@ function GrafanaFrame() {
         <button onClick={() => setRetry((value) => value + 1)}>
           Retry dashboard login
         </button>
+        <a href="/dashboard/classic">Open analytics dashboard</a>
       </div>
+    );
+  if (!embed?.enabled)
+    return (
+      <Suspense fallback={<p role="status">Loading analytics…</p>}>
+        <ClassicDashboard />
+      </Suspense>
     );
   const pct = `${(100 / scale).toFixed(4)}%`;
 
@@ -81,7 +80,7 @@ function GrafanaFrame() {
         </button>
       )}
       <iframe
-        src={src}
+        src={embed.url}
         title="Omi analytics (Grafana)"
         referrerPolicy="no-referrer"
         className="border-0"

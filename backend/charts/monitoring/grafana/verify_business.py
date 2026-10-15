@@ -15,7 +15,8 @@ from grafana_business import Grafana, permission_set  # noqa: E402
 
 def verify(base, business_token, viewer_token):
     client = Grafana(base, business_token)
-    assert client.call("GET", "/api/org")["name"] == "Omi Business"
+    org = client.call("GET", "/api/org")
+    assert org["name"] == "Omi Business"
     teams = client.call("GET", "/api/teams/search?name=business-viewers&perpage=1000")["teams"]
     team = next(team for team in teams if team["name"] == "business-viewers")
     permissions = permission_set(client.call("GET", "/api/folders/business/permissions"))
@@ -42,9 +43,14 @@ def verify(base, business_token, viewer_token):
         "PASS Business ACL/datasource isolation/Infinity wall query; frames="
         + str(sum(len(item["frames"]) for item in results))
     )
-    viewer = Grafana(base, viewer_token)
+    verify_viewer(Grafana(base, viewer_token), org["id"])
+
+
+def verify_viewer(viewer, org_id):
     user = viewer.call("GET", "/api/user")
-    assert not user.get("isGrafanaAdmin")
+    assert not user.get("isGrafanaAdmin") and user["orgId"] == org_id
+    memberships = viewer.call("GET", "/api/user/orgs")
+    assert any(item["orgId"] == org_id and item["role"] == "Viewer" for item in memberships)
     for path in ("/api/folders/business", "/api/dashboards/uid/omi-tv-v2"):
         try:
             viewer.call("GET", path)

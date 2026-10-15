@@ -30,7 +30,8 @@ Service or host port. It accepts only GET `/api/omi/stats/<literal-route>` and
 forwards to the fixed `https://admin.omi.me` origin. It forwards no client headers,
 disables redirects/environment proxies, bounds response size/concurrency, and
 never logs tokens, URLs or upstream bodies. Successful responses coalesce/cache
-for 15 minutes (never across UTC midnight); errors cannot serve expired data.
+for 15 minutes (never across UTC midnight); failures coalesce for five seconds,
+release waiting queries and never serve expired success data.
 The metadata access token is used only for IAM Credentials `generateIdToken`
 on `omi-stats-reader`, audience `https://admin.omi.me/api/omi/stats`, includeEmail.
 The ID token stays in memory and refreshes five minutes early, or once on 401.
@@ -62,7 +63,7 @@ is off, so keys can be staged before Grafana starts.
 Runtime settings (server only; GitHub `prod` Environment variables):
 
 - `GRAFANA_EMBED_ENABLED=true` enables the cutover. Empty/false preserves the
-  existing legacy embed during prerequisite setup or rollback.
+  existing authenticated native analytics page during prerequisite setup or rollback.
 - `GRAFANA_EMBED_SIGNING_SECRET=projects/based-hardware/secrets/omi-grafana-embed-signing/versions/<number>`
   contains JSON `{ "kid": "<rotation-id>", "privateKeyPem": "<RSA PKCS8 PEM>" }`.
 - `GRAFANA_BUSINESS_TOKEN_SECRET=projects/based-hardware/secrets/omi-grafana-business-enrollment/versions/<number>`
@@ -141,7 +142,7 @@ Run `python3 -m unittest discover -s .github/scripts -p test_grafana_business.py
 `typecheck`/`lint`, and `make preflight`. Render chart 75.15.1 and inspect the
 loopback sidecar, datasource org substitution, mounts and JWT settings. Live
 negative acceptance must deny both folder and dashboard to an ordinary Viewer
-outside `business-viewers`; verify org datasource isolation as well.
+outside `business-viewers` in the same Business org; verify the Viewer role and org datasource isolation as well.
 
 References: [JWT URL login](https://grafana.com/docs/grafana/latest/setup-grafana/configure-access/configure-authentication/jwt/),
 [datasource access](https://grafana.com/docs/grafana/latest/administration/data-source-management/),
