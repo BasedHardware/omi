@@ -564,7 +564,9 @@ async def get_calendar_events_tool(
         if search_query:
             now = datetime.now(timezone.utc)
             if time_max is None:
-                time_max = now
+                # Like the non-search default, run at least 7 days past start_date and never end before now:
+                # a future start_date ("upcoming meetings with Andy") must not get an end in its own past.
+                time_max = max(now, time_min + timedelta(days=7)) if time_min else now
             if time_min is None:
                 # Default to 1 year back when searching
                 time_min = time_max - timedelta(days=365)
