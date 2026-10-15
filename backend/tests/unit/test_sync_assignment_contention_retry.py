@@ -9,6 +9,7 @@ from functools import partial
 import pytest
 from google.api_core.exceptions import Aborted, InvalidArgument, ServiceUnavailable
 
+import database.firestore_transaction_retry as firestore_transaction_retry
 from database import conversations as conversations_db
 from database.firestore_transaction_retry import (
     FirestoreContentionExhausted,
@@ -23,8 +24,11 @@ from utils.sync import assignment
 def sdk_assignment(monkeypatch):
     monkeypatch.setattr(conversations_db, '_sync_conversation_search_index', lambda *args: None)
     monkeypatch.setattr(conversations_db, 'invalidate_people_stats_cache', lambda *args: None)
+    # The retry runner now lives in database.sync_assignment.run_sync_assignment,
+    # which resolves run_with_transaction_contention_retry from its source module
+    # at call time; patch that module so the seam keeps controlling production.
     monkeypatch.setattr(
-        conversations_db,
+        firestore_transaction_retry,
         'run_with_transaction_contention_retry',
         partial(run_with_transaction_contention_retry, sleep=lambda _: None, random_value=lambda: 0),
     )
