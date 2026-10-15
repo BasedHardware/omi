@@ -98,6 +98,13 @@
       "description": "Actual production composer pause component with backend architect cap golden; capture continues, reset date, upgrade path",
       "captured_by": "agent",
       "source": "visual-audit"
+    },
+    {
+      "file": "015-mobile-ios-home-mixed-processing.png",
+      "platform": "mobile-ios",
+      "description": "Actual queue components together: 30m phone-only waiting to transcribe and 45m cloud-ready; phone-only WAL excluded from cloud amount",
+      "captured_by": "agent",
+      "source": "visual-audit"
     }
   ]
 }
