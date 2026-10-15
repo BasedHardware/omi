@@ -63,6 +63,7 @@ def sa():
     }
     with stub_modules(fakes):
         load_module_fresh("utils.model_text", str(_BACKEND / "utils" / "model_text.py"))
+        load_module_fresh("utils.user_clock", str(_BACKEND / "utils" / "user_clock.py"))
         module = load_module_fresh(
             "utils.retrieval.tools.screen_activity_tools",
             os.path.join(str(_BACKEND), "utils", "retrieval", "tools", "screen_activity_tools.py"),

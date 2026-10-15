@@ -49,6 +49,7 @@ from utils.model_text import (
     untrusted_block,
     withheld_note,
 )
+from utils.user_clock import clock_for_turn
 from utils.conversations.transcript_for_llm import owner_safe_transcript_segments
 
 logger = logging.getLogger(__name__)
@@ -394,7 +395,7 @@ def get_conversations_tool(
         logger.info(f"❌ get_conversations_tool - no user_id in config")
         return "Error: User ID not found in configuration"
     logger.info(f"✅ get_conversations_tool - uid: {uid}")
-    display_clock = DisplayClock.for_turn(configurable, str(uid))
+    display_clock = clock_for_turn(configurable, str(uid))
     jit_enabled = is_jit_conversation_retrieval_enabled(cast(Optional[Dict[str, Any]], configurable))
 
     scope = chat_scope_from_config(configurable)
@@ -447,7 +448,6 @@ def get_conversations_tool(
         status_list = [s.strip() for s in statuses.split(',') if s.strip()]
 
     locked_count = 0
-    discarded_count = 0
     try:
         scoped_id = (scope or {}).get("conversation_id") if scope else None
         if scoped_id:
@@ -468,28 +468,20 @@ def get_conversations_tool(
                 conversations_data = conversations_data[:limit]
         else:
             # Get conversations
-            # Include discarded rows in this bounded query so their count can be reported below.
             conversations_data = conversations_db.get_conversations(
                 uid,
                 limit=limit,
                 offset=offset,
                 start_date=start_dt,
                 end_date=end_dt,
-                include_discarded=True,
+                include_discarded=include_discarded,
                 statuses=status_list,
             )
 
         # Count withholding metadata, then discard rows before deserialization or rendering.
         if conversations_data:
-            locked_count = sum(
-                1
-                for conversation in conversations_data
-                if conversation.get('is_locked', False) and not conversation.get('discarded', False)
-            )
-            discarded_count = sum(1 for conversation in conversations_data if conversation.get('discarded', False))
-            conversations_data = [
-                c for c in conversations_data if not c.get('is_locked', False) and not c.get('discarded', False)
-            ]
+            locked_count = sum(1 for conversation in conversations_data if conversation.get('is_locked', False))
+            conversations_data = [c for c in conversations_data if not c.get('is_locked', False)]
     except Exception as e:
         logger.error(f"❌ Unexpected error retrieving conversations: {e}", exc_info=True)
         return "An unexpected error occurred while fetching conversations. Please try again later."
@@ -505,7 +497,7 @@ def get_conversations_tool(
 
     if not conversations_data:
         msg = none_found('conversations', _date_scope(start_dt, end_dt, display_clock))
-        withheld = _withheld_conversation_notes(locked=locked_count, discarded=discarded_count)
+        withheld = _withheld_conversation_notes(locked=locked_count)
         if withheld:
             msg += '\n' + withheld
         logger.info(f"⚠️ get_conversations_tool - {msg}")
@@ -522,7 +514,7 @@ def get_conversations_tool(
             user_name=jit_user_name,
             people_names=jit_people_names,
         )
-        withheld = _withheld_conversation_notes(locked=locked_count, discarded=discarded_count)
+        withheld = _withheld_conversation_notes(locked=locked_count)
         return f"{withheld}\n{result}" if withheld else result
 
     try:
@@ -591,7 +583,7 @@ def get_conversations_tool(
             clock=display_clock,
             truncation_notes=truncation_notes,
         )
-        withheld = _withheld_conversation_notes(locked=locked_count, discarded=discarded_count)
+        withheld = _withheld_conversation_notes(locked=locked_count)
         if withheld:
             result = withheld + '\n\n' + result
         result = _bounded_result(result, total_found, results_truncated, already_bounded=True)
@@ -691,7 +683,7 @@ def search_conversations_tool(
     if not uid:
         logger.info(f"❌ search_conversations_tool - no user_id in config")
         return "Error: User ID not found in configuration"
-    display_clock = DisplayClock.for_turn(configurable, str(uid))
+    display_clock = clock_for_turn(configurable, str(uid))
     logger.info(
         "✅ search_conversations_tool - uid=%s limit=%s",
         uid,

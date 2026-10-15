@@ -11,7 +11,6 @@ from langchain_core.tools import tool  # type: ignore[reportUnknownVariableType]
 from langchain_core.runnables import RunnableConfig
 
 from utils.model_text import (
-    DisplayClock,
     UNTRUSTED_LEGEND,
     count_header,
     format_date,
@@ -19,6 +18,7 @@ from utils.model_text import (
     format_span,
     truncation_note,
 )
+from utils.user_clock import clock_for_config
 from models.calendar_mutation import (
     CalendarMutationResult,
     event_title as calendar_event_title,
@@ -512,7 +512,7 @@ async def get_calendar_events_tool(
             return access_err
         if uid is None or integration is None or access_token is None:
             return "Google Calendar access token not found."
-        clock = DisplayClock.for_config(config, uid)
+        clock = clock_for_config(config, uid)
 
         max_results = ensure_capped(max_results, 50, "⚠️ get_calendar_events_tool - max_results capped from {} to {}")
 
@@ -691,6 +691,7 @@ async def get_calendar_events_tool(
                             max_results=max_results,
                             search_query=search_query,
                         )
+                        order = "soonest first"  # the retry reads the whole range in start-time order
                     except Exception as retry_error:
                         logger.error(f"❌ Error after token refresh: {retry_error}", exc_info=True)
                         emit_sync_failed(telemetry_context, retry_error)
@@ -826,7 +827,7 @@ async def create_calendar_event_tool(
             return access_err
         if uid is None or integration is None or access_token is None:
             return "Google Calendar access token not found."
-        clock = DisplayClock.for_config(config, uid)
+        clock = clock_for_config(config, uid)
 
         # Parse start and end times
         try:
@@ -1011,7 +1012,7 @@ async def delete_calendar_event_tool(
             return access_err
         if uid is None or integration is None or access_token is None:
             return "Google Calendar access token not found."
-        clock = DisplayClock.for_config(config, uid)
+        clock = clock_for_config(config, uid)
         # If event_id is provided, delete directly
         if event_id:
             try:

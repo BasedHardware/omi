@@ -15,7 +15,7 @@ failed result, generated text or untrusted third-party text for a model goes thr
 ``strftime``/``isoformat`` calls in model-facing modules.
 
 The timezone is resolved once per chat turn (``configurable['user_timezone']``, set by
-``chat_turn_configurable``) and read through :meth:`DisplayClock.for_turn`; tools must not
+``chat_turn_configurable``) and read through ``utils.user_clock.clock_for_turn``; tools must not
 re-read the stored user timezone per call.
 """
 
@@ -25,7 +25,7 @@ import logging
 import re
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone, tzinfo
-from typing import Any, Mapping, Optional
+from typing import Any, Optional
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 logger = logging.getLogger(__name__)
@@ -53,38 +53,6 @@ class DisplayClock:
             except (ZoneInfoNotFoundError, ValueError):
                 logger.warning('DisplayClock: invalid timezone name, falling back to UTC')
         return cls.utc()
-
-    @classmethod
-    def for_uid(cls, uid: str) -> 'DisplayClock':
-        """Resolve from the stored user timezone. Only for callers without a chat turn (MCP, REST)."""
-        from database import notifications as notification_db
-
-        try:
-            return cls.from_name(notification_db.get_user_time_zone(uid))
-        except Exception as error:
-            logger.warning('DisplayClock.for_uid: timezone lookup failed error_type=%s', type(error).__name__)
-            return cls.utc()
-
-    @classmethod
-    def for_turn(cls, configurable: Optional[Mapping[str, Any]], uid: Optional[str] = None) -> 'DisplayClock':
-        """Resolve the clock for a chat turn.
-
-        Prefers the zone the turn already resolved (the same one the prompt's current-datetime
-        block uses), so tool output and prompt can never disagree. Falls back to the stored
-        timezone only when the turn did not carry one.
-        """
-        name = (configurable or {}).get('user_timezone')
-        if name:
-            return cls.from_name(str(name))
-        if uid:
-            return cls.for_uid(uid)
-        return cls.utc()
-
-    @classmethod
-    def for_config(cls, config: Any, uid: Optional[str] = None) -> 'DisplayClock':
-        """Resolve from a LangChain ``RunnableConfig`` (or ``None``) as chat tools receive it."""
-        configurable = config.get('configurable') if isinstance(config, Mapping) else None
-        return cls.for_turn(configurable if isinstance(configurable, Mapping) else None, uid)
 
     @property
     def is_utc(self) -> bool:

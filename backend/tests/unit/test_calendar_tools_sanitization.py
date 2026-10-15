@@ -141,6 +141,7 @@ def _calendar_module():
 
     with stub_modules(stubs):
         model_text = load_module_fresh("utils.model_text", str(BACKEND_DIR / "utils" / "model_text.py"))
+        load_module_fresh("utils.user_clock", str(BACKEND_DIR / "utils" / "user_clock.py"))
         load_module_fresh(
             "utils.retrieval.tools.calendar_render",
             str(BACKEND_DIR / "utils" / "retrieval" / "tools" / "calendar_render.py"),
@@ -160,7 +161,7 @@ def test_timed_calendar_span_is_local_labelled_and_includes_duration():
     span = ct.format_span(
         "2026-09-26T07:18:00Z",
         "2026-09-26T09:30:00Z",
-        ct.DisplayClock.from_name("Asia/Ho_Chi_Minh"),
+        _model_text.DisplayClock.from_name("Asia/Ho_Chi_Minh"),
     )
     assert span == "Sat 26 Sep 2026, 14:18–16:30 Asia/Ho_Chi_Minh (UTC+07:00), 2h 12m"
 
@@ -175,7 +176,7 @@ def test_all_day_calendar_event_uses_inclusive_end_and_fences_attendees():
             "attendees": [{"displayName": "Avery", "email": "avery@example.test"}],
         },
         1,
-        ct.DisplayClock.from_name("Asia/Ho_Chi_Minh"),
+        _model_text.DisplayClock.from_name("Asia/Ho_Chi_Minh"),
     )
 
     assert "When: all day, Sat 26 Sep 2026 – Mon 28 Sep 2026" in rendered

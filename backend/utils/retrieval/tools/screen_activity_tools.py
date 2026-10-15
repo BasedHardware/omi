@@ -10,13 +10,13 @@ import re
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional, Tuple, cast
 from utils.model_text import (
-    DisplayClock,
     UNTRUSTED_LEGEND,
     count_header,
     format_instant,
     truncation_note,
     untrusted_block,
 )
+from utils.user_clock import clock_for_config
 
 from langchain_core.tools import tool  # type: ignore[reportUnknownVariableType]  # langchain @tool decorator partially typed
 from langchain_core.runnables import RunnableConfig
@@ -417,7 +417,7 @@ def get_screen_activity_tool(
     uid = _get_uid(config)
     if not uid:
         return "Error: User ID not found in configuration"
-    clock = DisplayClock.for_config(config or _agent_config(), uid)
+    clock = clock_for_config(config or _agent_config(), uid)
 
     try:
         start_dt = datetime.fromisoformat(start_date.replace('Z', '+00:00'))
@@ -725,7 +725,7 @@ def search_screen_activity_tool(
     ts_by_id = {sid: m.get('timestamp', 0) for sid, m in zip(screenshot_ids, valid_matches)}
 
     docs_by_id = {m['screenshot_id']: m['keyword_doc'] for m in valid_matches if 'keyword_doc' in m}
-    clock = DisplayClock.for_config(config or _agent_config(), uid)
+    clock = clock_for_config(config or _agent_config(), uid)
     evidence_references = _evidence_references(config)
     result = (
         count_header(

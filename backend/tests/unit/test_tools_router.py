@@ -451,6 +451,7 @@ sys.path.insert(0, str(BACKEND_DIR))
 
 # Now load the shared service modules
 _load_module_from_file("utils.model_text", BACKEND_DIR / "utils" / "model_text.py")
+_load_module_from_file("utils.user_clock", BACKEND_DIR / "utils" / "user_clock.py")
 retrieval_safety = _load_module_from_file(
     "utils.retrieval.safety",
     BACKEND_DIR / "utils" / "retrieval" / "safety.py",

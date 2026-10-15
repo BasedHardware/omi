@@ -36,6 +36,7 @@ from utils.memory.canonical_memory_adapter import memory_item_to_memorydb
 from utils.memory.ledger_history_policy import is_ledger_history_item
 from utils.retrieval.turn_refs import register_record_ref
 from utils.model_text import DisplayClock, format_instant
+from utils.user_clock import clock_for_config
 from utils.model_text import truncation_note
 
 logger = logging.getLogger(__name__)
@@ -884,7 +885,7 @@ def get_entity_timeline_tool(
     result = format_entity_timeline(
         timeline,
         included_entries=included_entries,
-        clock=DisplayClock.for_config(config or _agent_config(), uid),
+        clock=clock_for_config(config or _agent_config(), uid),
     )
     cfg = config or _agent_config()
     configurable = (cfg or {}).get('configurable') or {}

@@ -7,7 +7,8 @@ from datetime import datetime, timezone
 from typing import Any, List, Optional
 
 from database._client import db as firestore_db
-from utils.model_text import DisplayClock, format_date, format_instant, truncation_note
+from utils.model_text import format_date, format_instant, truncation_note
+from utils.user_clock import clock_for_uid
 from utils.memory.belief_model import belief_model_enabled, memory_use_suppressed, normalize_temporal_read_view
 from utils.memory.memory_service import MemoryService
 from utils.retrieval.tool_services.conversations import parse_iso_date
@@ -52,7 +53,7 @@ def get_memories_text(
 ) -> str:
     """Fetch user memories/facts and format as LLM-ready text."""
     logger.info(f"get_memories_text - uid: {uid}, limit: {limit}, offset: {offset}")
-    clock = DisplayClock.for_uid(uid)
+    clock = clock_for_uid(uid)
 
     # Cap request bounds before either memory or legacy reads.
     limit = max(1, min(limit, 5000))
@@ -230,7 +231,7 @@ def search_memories_text(
 
     # Memory dates go to the chat model; the UTC date rolls over at a different instant than
     # the user's, so a raw UTC date is a day late for them in the evening (issue #6214).
-    clock = DisplayClock.for_uid(uid)
+    clock = clock_for_uid(uid)
 
     try:
         requested_view = normalize_temporal_read_view(view)

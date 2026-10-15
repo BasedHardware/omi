@@ -13,7 +13,8 @@ from utils.notifications import (
     send_action_item_data_message,
     sync_action_item_reminder,
 )
-from utils.model_text import DisplayClock, format_date, format_instant
+from utils.model_text import format_date, format_instant
+from utils.user_clock import clock_for_uid
 from utils.retrieval.tool_services.conversations import parse_iso_date
 from utils.retrieval.safety import safe_isoformat
 import logging
@@ -35,7 +36,7 @@ def get_action_items_text(
 ) -> str:
     """Fetch action items and format as LLM-ready text."""
     logger.info(f"get_action_items_text - uid: {uid}, limit: {limit}, offset: {offset}, completed: {completed}")
-    clock = DisplayClock.for_uid(uid)
+    clock = clock_for_uid(uid)
 
     # Cap limit
     limit = min(limit, 500)
@@ -150,7 +151,7 @@ def create_action_item_text(
 ) -> str:
     """Create an action item and return confirmation text."""
     logger.info(f"create_action_item_text - uid: {uid}, description: {description}")
-    clock = DisplayClock.for_uid(uid)
+    clock = clock_for_uid(uid)
 
     if not description or not description.strip():
         return "Error: Description is required."
@@ -223,7 +224,7 @@ def update_action_item_text(
     due_at: Optional[str] = None,
 ) -> str:
     """Update an action item and return confirmation text."""
-    clock = DisplayClock.for_uid(uid)
+    clock = clock_for_uid(uid)
     logger.info(f"update_action_item_text - uid: {uid}, id: {action_item_id}")
 
     if not action_item_id or not action_item_id.strip():

@@ -12,6 +12,7 @@ from models.other import Person
 from utils.conversations.factory import deserialize_conversations
 from utils.conversations.render import conversations_to_string
 from utils.model_text import DisplayClock
+from utils.user_clock import clock_for_uid
 from models.transcript_segment import TranscriptSegment
 from utils.llm.chat import chunk_extraction, retrieve_memory_context_params
 from utils.llm.clients import num_tokens_from_string
@@ -126,7 +127,7 @@ def retrieve_rag_conversation_context(uid: str, memory: Conversation) -> Tuple[s
         people = [Person(**p) for p in people_data]
 
     user_name = get_user_name(uid, use_default=False) or ''
-    display_clock = DisplayClock.for_uid(uid)
+    display_clock = clock_for_uid(uid)
 
     if memories_id_to_topics:
         context_data: Dict[str, str] = {}

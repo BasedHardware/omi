@@ -663,20 +663,14 @@ def test_gate_off_preserves_legacy_get_tool_path(conversation_tools_module) -> N
     conversation_tools_module.deserialize_conversation.assert_called_once_with(raw)
 
 
-def test_locked_and_discarded_rows_are_withheld_when_no_conversations_remain(conversation_tools_module) -> None:
+def test_locked_rows_are_withheld_and_discarded_rows_stay_filtered_in_the_query(conversation_tools_module) -> None:
     locked = {
         'id': 'locked-1',
         'is_locked': True,
         'structured': {'title': 'private locked title'},
         'transcript_segments': [{'text': 'private locked transcript'}],
     }
-    discarded = {
-        'id': 'discarded-1',
-        'discarded': True,
-        'structured': {'title': 'private discarded title'},
-        'transcript_segments': [{'text': 'private discarded transcript'}],
-    }
-    conversation_tools_module.conversations_db.get_conversations = MagicMock(return_value=[locked, discarded])
+    conversation_tools_module.conversations_db.get_conversations = MagicMock(return_value=[locked])
     config = _tool_config(enabled=False)
 
     get_result = _invoke_tool(
@@ -686,11 +680,11 @@ def test_locked_and_discarded_rows_are_withheld_when_no_conversations_remain(con
         config=config,
     )
 
+    # Discarded rows are filtered before limit/offset so they cannot shrink the visible page.
+    assert conversation_tools_module.conversations_db.get_conversations.call_args.kwargs['include_discarded'] is False
     assert 'No conversations found in the requested scope' in get_result
     assert '1 conversations exist here but were not read: locked on the current plan' in get_result
-    assert '1 conversations exist here but were not read: discarded' in get_result
     assert 'private locked' not in get_result
-    assert 'private discarded' not in get_result
     conversation_tools_module.deserialize_conversation.assert_not_called()
 
 

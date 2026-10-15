@@ -13,7 +13,8 @@ from database._client import db as firestore_db
 from models.memories import MemoryDB
 from utils.memory.memory_service import MemoryService
 from utils.memory.belief_model import belief_model_enabled, memory_use_suppressed, normalize_temporal_read_view
-from utils.model_text import DisplayClock, format_date, format_instant, lookup_failed, truncation_note
+from utils.model_text import format_date, format_instant, lookup_failed, truncation_note
+from utils.user_clock import clock_for_config
 from utils.messaging.memory_privacy import (
     channel_private_filter_active,
     is_channel_private_memory,
@@ -206,7 +207,7 @@ def get_memories_tool(
     if not uid:
         logger.info(f"❌ get_memories_tool - no user_id in config")
         return "Error: User ID not found in configuration"
-    clock = DisplayClock.for_config(config or _agent_config(), uid)
+    clock = clock_for_config(config or _agent_config(), uid)
     logger.info(f"✅ get_memories_tool - uid: {uid}, limit: {limit}")
 
     try:
@@ -451,7 +452,7 @@ def search_memories_tool(
     if not uid:
         logger.info(f"❌ search_memories_tool - no user_id in config")
         return "Error: User ID not found in configuration"
-    clock = DisplayClock.for_config(config or _agent_config(), uid)
+    clock = clock_for_config(config or _agent_config(), uid)
     logger.info('search_memories_tool uid=%s limit=%s', uid, limit)
 
     try:

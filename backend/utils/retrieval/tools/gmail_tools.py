@@ -23,6 +23,7 @@ from utils.model_text import (
     truncation_note,
     untrusted_block,
 )
+from utils.user_clock import clock_for_config
 
 # Import shared Google utilities
 from utils.retrieval.tools.google_utils import (
@@ -282,7 +283,7 @@ async def get_gmail_messages_tool(
             return access_err
         if not uid or not integration or not access_token:
             return 'Error checking Gmail connection'
-        clock = DisplayClock.for_config(config, uid)
+        clock = clock_for_config(config, uid)
 
         # A Google grant created before Gmail was requested carries no Gmail scope; calling
         # the Gmail API with it fails with an opaque 403, so ask for a reconnect instead.

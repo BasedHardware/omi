@@ -13,32 +13,28 @@ import utils.retrieval.tool_services.conversations as conversations_service
 
 def test_get_reports_locked_conversations_without_rendering_content(monkeypatch):
     monkeypatch.setattr(notifications_db, 'get_user_time_zone', lambda _uid: 'Asia/Ho_Chi_Minh')
-    monkeypatch.setattr(
-        conversations_service.conversations_db,
-        'get_conversations',
-        lambda *_args, **_kwargs: [
+    calls = []
+
+    def get_conversations(*_args, **kwargs):
+        calls.append(kwargs)
+        return [
             {
                 'id': 'locked-1',
                 'is_locked': True,
                 'structured': {'title': 'private locked title'},
                 'transcript_segments': [{'text': 'private locked transcript'}],
             },
-            {
-                'id': 'discarded-1',
-                'discarded': True,
-                'structured': {'title': 'private discarded title'},
-                'transcript_segments': [{'text': 'private discarded transcript'}],
-            },
-        ],
-    )
+        ]
+
+    monkeypatch.setattr(conversations_service.conversations_db, 'get_conversations', get_conversations)
 
     result = conversations_service.get_conversations_text(uid='test-uid')
 
+    # Discarded rows are filtered before limit/offset so they cannot shrink the visible page.
+    assert calls[0]['include_discarded'] is False
     assert 'No conversations found in the requested scope' in result
     assert '1 conversations exist here but were not read: locked on the current plan' in result
-    assert '1 conversations exist here but were not read: discarded' in result
     assert 'private locked' not in result
-    assert 'private discarded' not in result
 
 
 def test_search_reports_discarded_hits_without_rendering_content(monkeypatch):

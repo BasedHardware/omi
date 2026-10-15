@@ -73,18 +73,6 @@ def test_invalid_zone_falls_back_to_labelled_utc():
     assert DisplayClock.from_name('Not/AZone') == DisplayClock.utc()
 
 
-def test_for_turn_prefers_the_turn_zone_without_a_lookup(monkeypatch):
-    def boom(_uid):
-        raise AssertionError('must not read stored timezone when the turn carries one')
-
-    monkeypatch.setattr(DisplayClock, 'for_uid', classmethod(lambda cls, uid: boom(uid)))
-    assert DisplayClock.for_turn({'user_timezone': 'Asia/Ho_Chi_Minh'}, 'uid') == HCM
-
-
-def test_for_turn_without_zone_or_uid_is_utc():
-    assert DisplayClock.for_turn({}, None) == DisplayClock.utc()
-
-
 def test_elapsed_is_marked_as_offset():
     assert format_elapsed(3900) == '+1:05:00'
     assert format_elapsed(5) == '+0:00:05'
@@ -157,8 +145,3 @@ def test_truncation_note_with_unknown_total_never_invents_a_count():
     assert truncation_note(shown=5, total=None, unit='app records', how_to_get_more='Narrow it.') == ''
     note = truncation_note(shown=5, total=None, unit='app records', how_to_get_more='Narrow it.', cut=True)
     assert note == '[Showing 5 app records; more were omitted, not absent. Narrow it.]'
-
-
-def test_for_config_reads_the_runnable_config():
-    assert DisplayClock.for_config({'configurable': {'user_timezone': 'Asia/Ho_Chi_Minh'}}) == HCM
-    assert DisplayClock.for_config(None) == DisplayClock.utc()

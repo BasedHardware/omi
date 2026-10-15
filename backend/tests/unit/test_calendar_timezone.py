@@ -81,6 +81,7 @@ def _load_module_from_file(module_name, file_path):
 
 
 model_text = _load_module_from_file("utils.model_text", BACKEND_DIR / "utils" / "model_text.py")
+_load_module_from_file("utils.user_clock", BACKEND_DIR / "utils" / "user_clock.py")
 _load_module_from_file(
     "utils.retrieval.tools.calendar_render",
     BACKEND_DIR / "utils" / "retrieval" / "tools" / "calendar_render.py",
@@ -97,7 +98,7 @@ _LA = ZoneInfo("America/Los_Angeles")
 
 
 def test_calendar_span_is_turn_local_labelled_and_precomputes_duration():
-    clock = model_text.DisplayClock.for_config({"configurable": {"user_timezone": "Asia/Ho_Chi_Minh"}}, "uid")
+    clock = model_text.DisplayClock.from_name("Asia/Ho_Chi_Minh")
     out = calendar_tools.format_span(
         "2026-09-26T07:18:00Z",
         "2026-09-26T09:30:00Z",

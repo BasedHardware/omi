@@ -146,6 +146,10 @@ _model_text_spec = importlib.util.spec_from_file_location("utils.model_text", BA
 _model_text = importlib.util.module_from_spec(_model_text_spec)
 sys.modules["utils.model_text"] = _model_text
 _model_text_spec.loader.exec_module(_model_text)
+_user_clock_spec = importlib.util.spec_from_file_location("utils.user_clock", BACKEND_DIR / "utils/user_clock.py")
+_user_clock = importlib.util.module_from_spec(_user_clock_spec)
+sys.modules["utils.user_clock"] = _user_clock
+_user_clock_spec.loader.exec_module(_user_clock)
 _stub_package("utils.retrieval")
 _stub_package("utils.retrieval.tools")
 _stub_package("utils.conversations")

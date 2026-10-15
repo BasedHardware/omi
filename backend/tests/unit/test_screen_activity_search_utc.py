@@ -43,6 +43,7 @@ def _screen_activity_module():
         "database.screen_activity": _module("database.screen_activity"),
         "database.vector_db": _module("database.vector_db", search_screen_activity_vectors=MagicMock()),
         "database._client": _module("database._client", db=MagicMock()),
+        "database.notifications": _module("database.notifications", get_user_time_zone=MagicMock(return_value="UTC")),
         "utils": _package("utils"),
         "utils.llm": _package("utils.llm"),
         "utils.llm.clients": _module("utils.llm.clients", gemini_embed_query=MagicMock()),
@@ -51,22 +52,24 @@ def _screen_activity_module():
     }
 
     with stub_modules(stubs):
-        load_module_fresh("utils.model_text", str(BACKEND_DIR / "utils" / "model_text.py"))
+        globals()["_model_text"] = load_module_fresh("utils.model_text", str(BACKEND_DIR / "utils" / "model_text.py"))
+        load_module_fresh("utils.user_clock", str(BACKEND_DIR / "utils" / "user_clock.py"))
         module = load_module_fresh("screen_activity_tools_under_test", str(SOURCE))
         globals()["sat"] = module
         yield
         globals().pop("sat", None)
+        globals().pop("_model_text", None)
 
 
 def test_turn_clock_renders_non_utc_instant_with_zone_label():
-    clock = sat.DisplayClock.for_turn({"user_timezone": "Asia/Ho_Chi_Minh"}, "u1")
+    clock = _model_text.DisplayClock.from_name("Asia/Ho_Chi_Minh")
     assert sat.format_instant("2026-09-26T07:18:00Z", clock) == ("Sat 26 Sep 2026, 14:18 Asia/Ho_Chi_Minh (UTC+07:00)")
 
 
 def test_search_tool_uses_turn_clock_and_labelled_instant():
     source = SOURCE.read_text(encoding="utf-8")
     func = source[source.index("def search_screen_activity_tool") :]
-    assert "DisplayClock.for_config(config or _agent_config(), uid)" in func
+    assert "clock_for_config(config or _agent_config(), uid)" in func
     assert "format_instant(captured_at_ms / 1000, clock)" in func
     assert "datetime.fromtimestamp(ts).strftime" not in func
 

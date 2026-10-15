@@ -38,6 +38,7 @@ from utils.model_text import (
     untrusted_block,
     withheld_note,
 )
+from utils.user_clock import clock_for_uid
 import logging
 
 logger = logging.getLogger(__name__)
@@ -133,7 +134,7 @@ def get_conversations_text(
     if max_transcript_segments != -1:
         max_transcript_segments = min(max_transcript_segments, 1000)
     limit = min(limit, 5000)
-    display_clock = DisplayClock.for_uid(uid)
+    display_clock = clock_for_uid(uid)
 
     # Parse dates
     start_dt = None
@@ -156,14 +157,13 @@ def get_conversations_text(
 
     # Fetch
     try:
-        # Include discarded rows in this bounded query so their count can be reported below.
         conversations_data = conversations_db.get_conversations(
             uid,
             limit=limit,
             offset=offset,
             start_date=start_dt,
             end_date=end_dt,
-            include_discarded=True,
+            include_discarded=include_discarded,
             statuses=status_list,
         )
     except Exception as e:
@@ -172,21 +172,13 @@ def get_conversations_text(
 
     # Count withheld rows before any transcript or structured content is hydrated into a model object.
     locked_count = 0
-    discarded_count = 0
     if conversations_data:
-        locked_count = sum(
-            1
-            for conversation in conversations_data
-            if conversation.get('is_locked', False) and not conversation.get('discarded', False)
-        )
-        discarded_count = sum(1 for conversation in conversations_data if conversation.get('discarded', False))
-        conversations_data = [
-            c for c in conversations_data if not c.get('is_locked', False) and not c.get('discarded', False)
-        ]
+        locked_count = sum(1 for conversation in conversations_data if conversation.get('is_locked', False))
+        conversations_data = [c for c in conversations_data if not c.get('is_locked', False)]
 
     if not conversations_data:
         message = none_found('conversations', _date_scope(start_dt, end_dt, display_clock))
-        withheld = _withheld_notes(locked=locked_count, discarded=discarded_count)
+        withheld = _withheld_notes(locked=locked_count)
         return f"{message}\n{withheld}" if withheld else message
 
     # Load people for speaker names
@@ -249,7 +241,7 @@ def get_conversations_text(
         clock=display_clock,
         truncation_notes=truncation_notes,
     )
-    withheld = _withheld_notes(locked=locked_count, discarded=discarded_count)
+    withheld = _withheld_notes(locked=locked_count)
     return f"{withheld}\n\n{result}" if withheld else result
 
 
@@ -278,7 +270,7 @@ def search_conversations_text(
     if max_transcript_segments != -1:
         max_transcript_segments = min(max_transcript_segments, 1000)
     limit = min(limit, 20)
-    display_clock = DisplayClock.for_uid(uid)
+    display_clock = clock_for_uid(uid)
 
     # Parse date filters to timestamps
     starts_at = None

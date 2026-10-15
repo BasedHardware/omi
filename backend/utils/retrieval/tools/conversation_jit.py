@@ -28,6 +28,8 @@ MAX_JIT_CONVERSATIONS = 20
 MAX_JIT_TRANSCRIPT_WINDOW_SEGMENTS = 24
 MAX_JIT_TRANSCRIPT_SNIPPETS = 3
 MAX_JIT_RESULT_CHARS = 24000
+# Room kept for what is appended after the blocks: the final truncation note and both legends.
+_JIT_TAIL_RESERVE_CHARS = 520
 MAX_CHAT_EVIDENCE_REFERENCES = 24
 MAX_EVIDENCE_ID_COMPONENT_CHARS = 96
 MAX_JIT_TRANSCRIPT_SCAN_SEGMENTS = 500
@@ -397,7 +399,18 @@ def _can_admit(blocks: Sequence[str], block: str) -> bool:
     """Reserve room for an honest truncation marker while admitting whole records."""
     separator_chars = 2 if blocks else 0
     current_chars = sum(len(item) for item in blocks) + max(0, len(blocks) - 1) * 2
-    return current_chars + separator_chars + len(block) + 2 + 520 <= MAX_JIT_RESULT_CHARS
+    return current_chars + separator_chars + len(block) + 2 + _JIT_TAIL_RESERVE_CHARS <= MAX_JIT_RESULT_CHARS
+
+
+def _admit_notes(blocks: List[str], notes: Sequence[str]) -> bool:
+    """Append truncation notes inside the result budget; True when one did not fit."""
+    for note in notes:
+        if not note:
+            continue
+        if not _can_admit(blocks, note):
+            return True
+        blocks.append(note)
+    return False
 
 
 def _append_collected_conversation(
@@ -441,8 +454,8 @@ def format_jit_results(
 ) -> str:
     """Render only whole records whose text and reference can be admitted together."""
     configurable = configurable or {}
-    uid = configurable.get("user_id")
-    clock = clock or DisplayClock.for_turn(configurable, str(uid) if uid else None)
+    # Callers pass the turn clock; the fallback stays pure (turn zone or labelled UTC, no lookup).
+    clock = clock or DisplayClock.from_name(configurable.get("user_timezone"))
     people_names = people_names or {}
     bounded_conversations = list(conversations_data)[:MAX_JIT_CONVERSATIONS]
     candidates: List[Tuple[Dict[str, Any], Dict[str, Any], Optional[int]]] = []
@@ -674,13 +687,9 @@ def format_jit_results(
                     blocks.append(block)
                     shown_evidence_records += 1
                     untrusted_content_shown = True
-                for note in transcript_truncation_notes:
-                    if note:
-                        blocks.append(note)
+                truncated = _admit_notes(blocks, transcript_truncation_notes) or truncated
             if query:
-                for note in transcript_truncation_notes:
-                    if note:
-                        blocks.append(note)
+                truncated = _admit_notes(blocks, transcript_truncation_notes) or truncated
     result = "\n\n".join(blocks)
     if truncated:
         note = truncation_note(

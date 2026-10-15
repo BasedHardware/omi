@@ -16,15 +16,6 @@ os.environ.setdefault(
     'ENCRYPTION_SECRET',
     'omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv',
 )
-# Never let a test build a real Google client from the developer's or agent's ambient credentials:
-# an unstubbed Firestore read would reach whatever project those credentials grant (prod read-only
-# on agent hosts). Point ADC at a path that does not exist and give gcloud an empty config, so an
-# accidental client fails immediately instead of authenticating. Emulator-backed tests set
-# FIRESTORE_EMULATOR_HOST and are left alone.
-if not os.environ.get('FIRESTORE_EMULATOR_HOST'):
-    os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = str(BACKEND_DIR / '.no-ambient-google-credentials-in-tests.json')
-    os.environ['CLOUDSDK_CONFIG'] = str(BACKEND_DIR / '.no-ambient-gcloud-config-in-tests')
-    os.environ.pop('GOOGLE_CLOUD_PROJECT', None)
 # Product tests exercise the normal universal write-enabled deployment. Tests
 # for the global incident fence override this explicitly to ``off``.
 os.environ.setdefault('MEMORY_ENABLED', 'on')

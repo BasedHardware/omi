@@ -20,7 +20,8 @@ from utils.notifications import (
     send_action_item_data_message,
     sync_action_item_reminder,
 )
-from utils.model_text import DisplayClock, count_header, format_date, format_instant, truncation_note
+from utils.model_text import count_header, format_date, format_instant, truncation_note
+from utils.user_clock import clock_for_config
 from utils.retrieval.chat_scope import apply_chat_scope_dates, chat_scope_from_config
 from utils.retrieval.turn_refs import register_record_ref, resolve_edit_ref
 import logging
@@ -182,7 +183,7 @@ def get_action_items_tool(
                 f"❌ get_action_items_tool - no user_id in config. Configurable keys: {list(configurable.keys()) if configurable else 'None'}"
             )
             return "Error: User ID not found in configuration"
-        clock = DisplayClock.for_config(cfg, uid)
+        clock = clock_for_config(cfg, uid)
 
         logger.info(f"✅ get_action_items_tool - uid: {uid}, limit: {limit}")
     except Exception as config_error:
@@ -444,7 +445,7 @@ def create_action_item_tool(
     if not uid:
         logger.info(f"❌ create_action_item_tool - no user_id in config")
         return "Error: User ID not found in configuration"
-    clock = DisplayClock.for_config(cfg, uid)
+    clock = clock_for_config(cfg, uid)
 
     # Validate description
     if not description or not description.strip():
@@ -633,7 +634,7 @@ def update_action_item_tool(
     if not uid:
         logger.info(f"❌ update_action_item_tool - no user_id in config")
         return "Error: User ID not found in configuration"
-    clock = DisplayClock.for_config(cfg, uid)
+    clock = clock_for_config(cfg, uid)
 
     # Check if action item exists
     resolved_id, ref_error = resolve_edit_ref(configurable, 'tasks', action_item_id, parameter='action_item_id')

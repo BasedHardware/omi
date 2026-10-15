@@ -76,6 +76,7 @@ def _apple_health_module():
 
     with stub_modules(stubs):
         model_text = load_module_fresh("utils.model_text", str(BACKEND_DIR / "utils" / "model_text.py"))
+        load_module_fresh("utils.user_clock", str(BACKEND_DIR / "utils" / "user_clock.py"))
         module = load_module_fresh(
             "utils.retrieval.tools._apple_health_tools_sanitization_test",
             str(BACKEND_DIR / "utils" / "retrieval" / "tools" / "apple_health_tools.py"),

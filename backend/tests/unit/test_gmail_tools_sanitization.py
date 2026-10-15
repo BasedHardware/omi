@@ -78,6 +78,8 @@ def _gmail_module():
         "langchain_core": _package("langchain_core"),
         "langchain_core.tools": langchain_tools,
         "langchain_core.runnables": langchain_runnables,
+        "database": _package("database"),
+        "database.notifications": _module("database.notifications", get_user_time_zone=MagicMock(return_value="UTC")),
         "utils": _package("utils"),
         "utils.executors": executors,
         "utils.retrieval": _package("utils.retrieval"),
@@ -88,6 +90,7 @@ def _gmail_module():
 
     with stub_modules(stubs):
         model_text = load_module_fresh("utils.model_text", str(BACKEND_DIR / "utils" / "model_text.py"))
+        load_module_fresh("utils.user_clock", str(BACKEND_DIR / "utils" / "user_clock.py"))
         module = load_module_fresh(
             "utils.retrieval.tools._gmail_tools_sanitization_test",
             str(BACKEND_DIR / "utils" / "retrieval" / "tools" / "gmail_tools.py"),

@@ -45,6 +45,7 @@ from utils.messaging.memory_privacy import (
 from utils.memory.knowledge_ledger import LEDGER_SCHEMA_VERSION
 from utils.memory.memory_service import MAX_LEDGER_HISTORY_PROVIDER_WINDOW, MemoryService
 from utils.model_text import DisplayClock, format_instant, truncation_note
+from utils.user_clock import clock_for_config
 
 logger = logging.getLogger(__name__)
 
@@ -475,7 +476,7 @@ def search_historical_facts(
             truncated=page.truncated,
             next_offset=page.next_offset,
             include_rejected=include_rejected,
-            clock=DisplayClock.for_config(config, uid),
+            clock=clock_for_config(config, uid),
         )
     except ValueError:
         return "Error: historical query must contain a searchable exact token"

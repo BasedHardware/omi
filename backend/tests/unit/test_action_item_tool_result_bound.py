@@ -62,6 +62,7 @@ _SYS_MODULE_NAMES = [
     "database.notifications",
     "utils",
     "utils.model_text",
+    "utils.user_clock",
     "utils.notifications",
     "utils.conversations",
     "utils.conversations.render",
@@ -123,6 +124,7 @@ _chat_scope.chat_scope_from_config = _chat_scope_from_config
 _mod("utils.messaging.projection").surface_runtime = types.SimpleNamespace(get=lambda: None)
 _model_text = _load("utils.model_text", "utils/model_text.py")
 sys.modules["utils"].model_text = _model_text
+_load("utils.user_clock", "utils/user_clock.py")
 rb = _load("utils.retrieval.tools._result_bounds_test", "utils/retrieval/tools/result_bounds.py")
 _load("utils.messaging.turn_context", "utils/messaging/turn_context.py")
 _load("utils.retrieval.turn_refs", "utils/retrieval/turn_refs.py")

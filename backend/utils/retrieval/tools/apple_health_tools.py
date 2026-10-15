@@ -18,6 +18,7 @@ from utils.retrieval.tools.integration_base import (
     get_integration_checked,
 )
 from utils.model_text import DisplayClock, count_header, format_date, format_instant, to_datetime, truncation_note
+from utils.user_clock import clock_for_config
 import logging
 
 logger = logging.getLogger(__name__)
@@ -132,7 +133,7 @@ def get_apple_health_steps_tool(
         return err
     assert uid is not None
     assert integration is not None
-    clock = DisplayClock.for_config(config, uid)
+    clock = clock_for_config(config, uid)
 
     try:
         health_data: Dict[str, Any] = integration.get('health_data', {})
@@ -193,7 +194,7 @@ def get_apple_health_sleep_tool(
         return err
     assert uid is not None
     assert integration is not None
-    clock = DisplayClock.for_config(config, uid)
+    clock = clock_for_config(config, uid)
 
     try:
         health_data: Dict[str, Any] = integration.get('health_data', {})
@@ -251,7 +252,7 @@ def get_apple_health_heart_rate_tool(
         return err
     assert uid is not None
     assert integration is not None
-    clock = DisplayClock.for_config(config, uid)
+    clock = clock_for_config(config, uid)
 
     try:
         health_data: Dict[str, Any] = integration.get('health_data', {})
@@ -309,7 +310,7 @@ def get_apple_health_workouts_tool(
         return err
     assert uid is not None
     assert integration is not None
-    clock = DisplayClock.for_config(config, uid)
+    clock = clock_for_config(config, uid)
 
     try:
         health_data: Dict[str, Any] = integration.get('health_data', {})
@@ -395,7 +396,7 @@ def get_apple_health_summary_tool(
         return err
     assert uid is not None
     assert integration is not None
-    clock = DisplayClock.for_config(config, uid)
+    clock = clock_for_config(config, uid)
 
     try:
         health_data: Dict[str, Any] = integration.get('health_data', {})
