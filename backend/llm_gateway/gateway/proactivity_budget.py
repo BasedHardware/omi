@@ -22,6 +22,8 @@ from llm_gateway.gateway.accounting import (
     rate_card_for,
 )
 from llm_gateway.gateway.errors import GatewayInvalidRequestError, PROACTIVITY_ADMISSION_REASONS
+from llm_gateway.gateway.cache_policy import INTERNAL_POLICY
+from utils.llm.prompt_cache import EXPLICIT_CACHE_BREAKPOINT, EXPLICIT_CACHE_OPTIONS
 from utils.executors import db_executor, run_blocking
 
 logger = logging.getLogger(__name__)
@@ -92,6 +94,7 @@ def envelope_for(
     if jev != (context.step in {'prefilter', 'dedupe', 'usefulness'}):
         raise ProactivityDenied('invalid_lane')
     payload = dict(request, model=model)
+    payload.pop(INTERNAL_POLICY, None)  # Gateway attribution is not provider input.
     if jev:
         if set(payload) - {'model', 'state', 'questions'} or not isinstance(payload.get('state'), str):
             raise ProactivityDenied('invalid_request')
@@ -106,16 +109,19 @@ def envelope_for(
             'reasoning_effort',
             'temperature',
             'top_p',
+            'prompt_cache_options',
+            'prompt_cache_key',
         }
         if set(payload) - allowed or payload.get('stream') is True:
+            raise ProactivityDenied('invalid_request')
+        if 'prompt_cache_options' in payload and payload['prompt_cache_options'] != EXPLICIT_CACHE_OPTIONS:
+            raise ProactivityDenied('invalid_request')
+        if 'prompt_cache_key' in payload and not isinstance(payload['prompt_cache_key'], str):
             raise ProactivityDenied('invalid_request')
         messages = payload.get('messages')
         if not isinstance(messages, list) or not messages or len(messages) > 32:
             raise ProactivityDenied('invalid_request')
-        if any(
-            not isinstance(m, dict) or not isinstance(m.get('content'), str) or set(m) - {'role', 'content'}
-            for m in messages
-        ):
+        if any(not _text_message(m) for m in messages):
             raise ProactivityDenied('invalid_request')
         output_tokens = payload.get('max_completion_tokens')
         if type(output_tokens) is not int or not 1 <= output_tokens <= row.max_output_tokens:
@@ -131,7 +137,12 @@ def envelope_for(
     if card is None:
         raise ProactivityDenied('unpriced')
     rates = card.effective_rates(input_bound)
-    numerator = input_bound * rates.input_micro_usd_per_million + output_tokens * rates.output_micro_usd_per_million
+    # A cache miss can write the marked prefix. Bound the entire input at the
+    # largest applicable rate, including implicit writes, before reserving money.
+    input_rate = max(rates.input_micro_usd_per_million, rates.cache_write_micro_usd_per_million or 0)
+    if not jev and rates.cache_write_micro_usd_per_million is None:
+        raise ProactivityDenied('unpriced')
+    numerator = input_bound * input_rate + output_tokens * rates.output_micro_usd_per_million
     return AttemptEnvelope(
         provider,
         model,
@@ -139,6 +150,28 @@ def envelope_for(
         (numerator + 999999) // 1000000,
         hashlib.sha256(serialized).hexdigest(),
         context.step,
+    )
+
+
+def _text_message(message: Any) -> bool:
+    if not isinstance(message, dict) or set(message) - {'role', 'content'}:
+        return False
+    content = message.get('content')
+    if isinstance(content, str):
+        return True
+    # Lane cache policy can turn a text prefix into marked text parts. Keep the
+    # text-only budget contract: no images, files, tools or unknown part fields.
+    return (
+        isinstance(content, list)
+        and bool(content)
+        and all(
+            isinstance(part, dict)
+            and part.get('type') == 'text'
+            and isinstance(part.get('text'), str)
+            and not set(part) - {'type', 'text', 'prompt_cache_breakpoint'}
+            and ('prompt_cache_breakpoint' not in part or part['prompt_cache_breakpoint'] == EXPLICIT_CACHE_BREAKPOINT)
+            for part in content
+        )
     )
 
 

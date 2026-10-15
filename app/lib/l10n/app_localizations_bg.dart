@@ -12475,6 +12475,59 @@ class AppLocalizationsBg extends AppLocalizations {
   String get reviewNoChangesBody => 'Когато Omi подреди бележките ви, промените ще се появят тук.';
 
   @override
+  String get reviewChangesSectionTerms => 'Имена и термини';
+
+  @override
+  String get reviewChangesSectionTitles => 'Заглавия и обобщения';
+
+  @override
+  String get reviewChangesSectionOther => 'Други промени';
+
+  @override
+  String reviewChangeConversationCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count разговора',
+      one: '1 разговор',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String reviewChangePlaceCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count места',
+      one: '1 място',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String reviewChangeShowAll(int count) {
+    return 'Покажи всички ($count)';
+  }
+
+  @override
+  String get reviewChangeUndoAll => 'Отмени всички';
+
+  @override
+  String get reviewChangeSeeEvidence => 'Виж доказателствата';
+
+  @override
+  String get reviewChangeViewConversation => 'Виж разговора';
+
+  @override
+  String get reviewChangeViewTask => 'Виж задачата';
+
+  @override
+  String reviewChangesUndoPartial(int failed, int total) {
+    return 'Не успяхме да отменим $failed от $total. Опитайте отново.';
+  }
+
+  @override
   String get reviewShowMore => 'Покажи още';
 
   @override
@@ -13449,4 +13502,28 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String get onboardingPermissionTapToFix => 'Докоснете, за да поправите';
+
+  @override
+  String get homePendingTitle => 'Разговори на път';
+
+  @override
+  String get homePendingCatchingUp => 'Наваксваме по-ранното аудио';
+
+  @override
+  String get onTheWayTitle => 'На път';
+
+  @override
+  String get onTheWayAlmostReady => 'Почти готово';
+
+  @override
+  String get activityEmpty => 'Все още няма активност';
+
+  @override
+  String get activityNewSemantics => 'Активност, нови елементи';
+
+  @override
+  String get activityLoadFailed => 'Не можахме да заредим цялата ви активност';
+
+  @override
+  String get activityNewItem => 'Ново';
 }

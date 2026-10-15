@@ -80,13 +80,16 @@ def test_graceful_deadline_keeps_completed_usage_for_the_verification_boundary()
 
 
 @pytest.mark.parametrize('stage', ['reasoning', 'verify'])
-def test_both_dream_routes_preserve_reserved_only_and_non_gemini_fallback(stage):
+def test_both_dream_routes_preserve_one_reserved_38_attempt_without_fallback(stage):
     config = load_gateway_config(prod_mode=True)
     lane = config.lanes['omi:auto:dream-' + stage]
     route = config.route_artifacts[lane.active_route]
-    assert route.primary.provider == 'gemini'
+    assert (route.primary.provider, route.primary.model) == ('gemini', 'gemini-3.8-flash')
     assert route.provider_options['reserved_capacity_only'] is True
-    assert [(r.provider, r.model) for r in route.fallbacks] == [('openai', 'gpt-6-luna')]
+    assert route.provider_options['location'] == 'us'
+    assert route.retry.max_attempts == 1
+    assert route.fallbacks == []
+    assert route.fallback_policy.fallback_on == []
     assert lane.capabilities.tools is (stage == 'reasoning')
 
 

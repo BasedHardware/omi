@@ -1082,7 +1082,7 @@ class TestSyncedWriterTimestamps:
         import database.action_items as action_items_db
 
         doc_ref = MagicMock()
-        doc_ref.get.return_value = SimpleNamespace(exists=True)
+        doc_ref.get.return_value = SimpleNamespace(exists=True, to_dict=lambda: {'completed': False})
         _, items_collection, _ = self._fake_db(monkeypatch, action_items_db, [])
         items_collection.document.side_effect = lambda doc_id: doc_ref
 
@@ -1095,7 +1095,7 @@ class TestSyncedWriterTimestamps:
         import database.action_items as action_items_db
 
         doc_ref = MagicMock()
-        doc_ref.get.return_value = SimpleNamespace(exists=True)
+        doc_ref.get.return_value = SimpleNamespace(exists=True, to_dict=lambda: {'completed': False})
         _, items_collection, _ = self._fake_db(monkeypatch, action_items_db, [])
         items_collection.document.side_effect = lambda doc_id: doc_ref
 

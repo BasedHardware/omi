@@ -1232,3 +1232,14 @@ Explicit `admission_holds` require a rule to stay paused until its reviewed hold
 is removed. Live replay exits nonzero on dead, noisy or unproven results.
 The CI gate catches structural regressions; live threshold calibration remains
 a required admission review before an operator sends a rule to Telegram.
+
+## Fleet telemetry
+
+`dashboards/omi-services/fleet-telemetry.json` uses plain job-agnostic PromQL
+for client summary deltas, rejection rates, startup p95, and server upload
+admission. The [fleet contract](../../telemetry/README.md) owns schema, label
+bounds, cardinality and deploy acceptance. The shared backend deploy attaches
+GMP to sync, backfill and integration final candidates before readiness and
+promotion; all retain `omi_.*` and rendered runtime-env verification. Empty
+client panels are expected until the client emitters ship; this is not a
+PostHog parity or reader-cutover receipt.

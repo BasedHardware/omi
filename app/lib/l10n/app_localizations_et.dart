@@ -12423,6 +12423,59 @@ class AppLocalizationsEt extends AppLocalizations {
   String get reviewNoChangesBody => 'Kui Omi su märkmeid korrastab, ilmuvad muudatused siia.';
 
   @override
+  String get reviewChangesSectionTerms => 'Nimed ja terminid';
+
+  @override
+  String get reviewChangesSectionTitles => 'Pealkirjad ja kokkuvõtted';
+
+  @override
+  String get reviewChangesSectionOther => 'Muud muudatused';
+
+  @override
+  String reviewChangeConversationCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count vestlust',
+      one: '1 vestlus',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String reviewChangePlaceCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count kohta',
+      one: '1 koht',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String reviewChangeShowAll(int count) {
+    return 'Näita kõiki ($count)';
+  }
+
+  @override
+  String get reviewChangeUndoAll => 'Võta kõik tagasi';
+
+  @override
+  String get reviewChangeSeeEvidence => 'Vaata tõendeid';
+
+  @override
+  String get reviewChangeViewConversation => 'Vaata vestlust';
+
+  @override
+  String get reviewChangeViewTask => 'Vaata ülesannet';
+
+  @override
+  String reviewChangesUndoPartial(int failed, int total) {
+    return '$failed/$total tagasivõtmine ebaõnnestus. Proovi uuesti.';
+  }
+
+  @override
   String get reviewShowMore => 'Näita rohkem';
 
   @override
@@ -13395,4 +13448,28 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get onboardingPermissionTapToFix => 'Puuduta parandamiseks';
+
+  @override
+  String get homePendingTitle => 'Vestlused teel';
+
+  @override
+  String get homePendingCatchingUp => 'Varasema heli töötlemine';
+
+  @override
+  String get onTheWayTitle => 'Teel';
+
+  @override
+  String get onTheWayAlmostReady => 'Peaaegu valmis';
+
+  @override
+  String get activityEmpty => 'Tegevusi veel pole';
+
+  @override
+  String get activityNewSemantics => 'Tegevus, uued üksused';
+
+  @override
+  String get activityLoadFailed => 'Kogu tegevust ei õnnestunud laadida';
+
+  @override
+  String get activityNewItem => 'Uus';
 }

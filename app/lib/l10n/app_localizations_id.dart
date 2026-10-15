@@ -12436,6 +12436,59 @@ class AppLocalizationsId extends AppLocalizations {
   String get reviewNoChangesBody => 'Saat Omi merapikan catatan Anda, perubahannya muncul di sini.';
 
   @override
+  String get reviewChangesSectionTerms => 'Nama dan istilah';
+
+  @override
+  String get reviewChangesSectionTitles => 'Judul dan ringkasan';
+
+  @override
+  String get reviewChangesSectionOther => 'Perubahan lainnya';
+
+  @override
+  String reviewChangeConversationCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count percakapan',
+      one: '1 percakapan',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String reviewChangePlaceCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count tempat',
+      one: '1 tempat',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String reviewChangeShowAll(int count) {
+    return 'Tampilkan semua $count';
+  }
+
+  @override
+  String get reviewChangeUndoAll => 'Urungkan semua';
+
+  @override
+  String get reviewChangeSeeEvidence => 'Lihat bukti';
+
+  @override
+  String get reviewChangeViewConversation => 'Lihat percakapan';
+
+  @override
+  String get reviewChangeViewTask => 'Lihat tugas';
+
+  @override
+  String reviewChangesUndoPartial(int failed, int total) {
+    return 'Tidak dapat mengurungkan $failed dari $total. Coba lagi.';
+  }
+
+  @override
   String get reviewShowMore => 'Tampilkan Lainnya';
 
   @override
@@ -13411,4 +13464,28 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get onboardingPermissionTapToFix => 'Ketuk untuk memperbaiki';
+
+  @override
+  String get homePendingTitle => 'Percakapan sedang diproses';
+
+  @override
+  String get homePendingCatchingUp => 'Mengejar audio sebelumnya';
+
+  @override
+  String get onTheWayTitle => 'Dalam perjalanan';
+
+  @override
+  String get onTheWayAlmostReady => 'Hampir siap';
+
+  @override
+  String get activityEmpty => 'Belum ada aktivitas';
+
+  @override
+  String get activityNewSemantics => 'Aktivitas, item baru';
+
+  @override
+  String get activityLoadFailed => 'Tidak dapat memuat semua aktivitas Anda';
+
+  @override
+  String get activityNewItem => 'Baru';
 }

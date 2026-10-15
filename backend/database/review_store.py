@@ -12,6 +12,7 @@ from contextlib import contextmanager
 from contextvars import ContextVar
 from datetime import datetime, timezone
 from typing import Any
+from uuid import NAMESPACE_URL, uuid5
 
 from google.cloud import firestore
 from google.cloud.firestore_v1.base_query import FieldFilter
@@ -142,19 +143,16 @@ def enqueue_review_proposal(
             ):
                 return 'suggestion_cap'
             tx.set(budget_ref, {'dream_suggestions': budget.get('dream_suggestions', 0) + 1}, merge=True)
-        tx.set(
-            ref,
-            encode_doc(
-                uid,
-                {
-                    'item': item.model_dump(mode='python'),
-                    'source': source or {},
-                    'created_at': item.created_at,
-                    'evidence_version': evidence_version,
-                    'status': 'pending',
-                },
-            ),
-        )
+        record: dict[str, Any] = {
+            'item': item.model_dump(mode='python'),
+            'source': source or {},
+            'created_at': item.created_at,
+            'evidence_version': evidence_version,
+            'status': 'pending',
+        }
+        if dream_run_id:
+            record['dream_origin'] = True
+        tx.set(ref, encode_doc(uid, record))
 
         return 'suggested'
 
@@ -174,6 +172,41 @@ def validate_records(uid: str, tx, expected_records: dict | None) -> None:
         current = user(uid).collection(collection).document(key).get(transaction=tx).to_dict()
         if current != expected:
             raise ReviewConflict('Dream proposal evidence changed during apply')
+
+
+def dream_question_item_id(uid: str, kind: str, source_ref: str, quote: str) -> str:
+    """Id ``dream_review_policy.ask`` writes for a spelling or same-person question."""
+    body = json.dumps([uid, kind, source_ref, quote], ensure_ascii=False)
+    return f'{kind}:{uuid5(NAMESPACE_URL, body)}'
+
+
+def proposal_record_is_dream_origin(uid: str, record: dict | None) -> bool:
+    """True for a Dream question, including rows written before ``dream_origin`` existed.
+
+    Those rows still carry the id ``ask`` assigned. An ordinary question uses a
+    different id and has no marker.
+    """
+    data = record or {}
+    if data.get('dream_origin') is True:
+        return True
+    item = data.get('item')
+    if not isinstance(item, dict) or item.get('kind') not in {'spelling', 'same_person'}:
+        return False
+    kind = item.get('kind')
+    source_ref = item.get('source_ref')
+    quote = item.get('quote')
+    item_id = item.get('item_id')
+    if not isinstance(kind, str) or not isinstance(source_ref, str) or not isinstance(quote, str):
+        return False
+    if not isinstance(item_id, str):
+        return False
+    return item_id == dream_question_item_id(uid, kind, source_ref, quote)
+
+
+def proposal_is_dream_origin(uid: str, item_id: str) -> bool:
+    """True when Dream enqueued this spelling or same-person question."""
+    data = decode_doc(uid, user(uid).collection('review_proposals').document(safe_id(item_id)).get().to_dict()) or {}
+    return proposal_record_is_dream_origin(uid, data)
 
 
 def list_proposals(uid: str) -> list[dict]:

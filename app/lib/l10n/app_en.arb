@@ -14881,6 +14881,73 @@
     "@reviewNoChangesBody": {
         "description": "Empty state body"
     },
+    "reviewChangesSectionTerms": "Names and terms",
+    "@reviewChangesSectionTerms": {
+        "description": "Recent changes section: spelling fixes to names and terms"
+    },
+    "reviewChangesSectionTitles": "Titles and summaries",
+    "@reviewChangesSectionTitles": {
+        "description": "Recent changes section: conversation titles and summaries"
+    },
+    "reviewChangesSectionOther": "Other changes",
+    "@reviewChangesSectionOther": {
+        "description": "Recent changes section: changes that fit no other section"
+    },
+    "reviewChangeConversationCount": "{count, plural, =1{1 conversation} other{{count} conversations}}",
+    "@reviewChangeConversationCount": {
+        "description": "How many conversations one change touched",
+        "placeholders": {
+            "count": {
+                "type": "int"
+            }
+        }
+    },
+    "reviewChangePlaceCount": "{count, plural, =1{1 place} other{{count} places}}",
+    "@reviewChangePlaceCount": {
+        "description": "How many places in transcripts one change touched",
+        "placeholders": {
+            "count": {
+                "type": "int"
+            }
+        }
+    },
+    "reviewChangeShowAll": "Show all {count}",
+    "@reviewChangeShowAll": {
+        "description": "Button opening every place a change landed",
+        "placeholders": {
+            "count": {
+                "type": "int"
+            }
+        }
+    },
+    "reviewChangeUndoAll": "Undo all",
+    "@reviewChangeUndoAll": {
+        "description": "Button undoing every instance of one change"
+    },
+    "reviewChangeSeeEvidence": "See evidence",
+    "@reviewChangeSeeEvidence": {
+        "description": "Button showing the conversation evidence behind a change"
+    },
+    "reviewChangeViewConversation": "View conversation",
+    "@reviewChangeViewConversation": {
+        "description": "Button opening the conversation a change came from"
+    },
+    "reviewChangeViewTask": "View task",
+    "@reviewChangeViewTask": {
+        "description": "Button opening the tasks list from a task change"
+    },
+    "reviewChangesUndoPartial": "Couldn’t undo {failed} of {total}. Try again.",
+    "@reviewChangesUndoPartial": {
+        "description": "Undo all finished with some failures",
+        "placeholders": {
+            "failed": {
+                "type": "int"
+            },
+            "total": {
+                "type": "int"
+            }
+        }
+    },
     "reviewShowMore": "Show More",
     "@reviewShowMore": {
         "description": "Button (Title Case)"
@@ -16132,5 +16199,37 @@
     "onboardingPermissionTapToFix": "Tap to fix",
     "@onboardingPermissionTapToFix": {
         "description": "Onboarding permissions: shown on a denied permission card; tapping opens Settings"
+    },
+    "homePendingTitle": "Conversations on the way",
+    "@homePendingTitle": {
+        "description": "Home row title while recordings are still turning into conversations"
+    },
+    "homePendingCatchingUp": "Catching up on earlier audio",
+    "@homePendingCatchingUp": {
+        "description": "Home row title when a long backlog of recordings is still being processed"
+    },
+    "onTheWayTitle": "On the Way",
+    "@onTheWayTitle": {
+        "description": "Title of the page listing recordings not yet turned into conversations"
+    },
+    "onTheWayAlmostReady": "Almost ready",
+    "@onTheWayAlmostReady": {
+        "description": "Section header: recordings being transcribed or summarized"
+    },
+    "activityEmpty": "No activity yet",
+    "@activityEmpty": {
+        "description": "Empty state of the Activity page"
+    },
+    "activityNewSemantics": "Activity, new items",
+    "@activityNewSemantics": {
+        "description": "Screen reader label for the Activity bell when it has new items"
+    },
+    "activityLoadFailed": "Couldn't load all of your activity",
+    "@activityLoadFailed": {
+        "description": "Activity page: one or more sources failed to load"
+    },
+    "activityNewItem": "New",
+    "@activityNewItem": {
+        "description": "Screen reader suffix for an Activity row added since the last visit"
     }
 }

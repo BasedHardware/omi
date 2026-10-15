@@ -94,7 +94,7 @@ jobs:
           GIT_SHORT_SHA: ${{ github.sha }}
           # First land provisions only the custom repo-first boards (string
           # uids). Community/helm-managed boards keep their manual flow.
-          DASHBOARD_ALLOWLIST: omi-core-features.json,omi-translation.json,resilience-fallbacks.json
+          DASHBOARD_ALLOWLIST: omi-core-features.json,omi-translation.json,resilience-fallbacks.json,fleet-telemetry.json
         run: |
           set -euo pipefail
           umask 077

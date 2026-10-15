@@ -12437,6 +12437,59 @@ class AppLocalizationsMr extends AppLocalizations {
   String get reviewNoChangesBody => 'Omi ने तुमच्या नोट्स नीट लावल्या की बदल येथे दिसतील.';
 
   @override
+  String get reviewChangesSectionTerms => 'नावे आणि संज्ञा';
+
+  @override
+  String get reviewChangesSectionTitles => 'शीर्षके आणि सारांश';
+
+  @override
+  String get reviewChangesSectionOther => 'इतर बदल';
+
+  @override
+  String reviewChangeConversationCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count संभाषणे',
+      one: '1 संभाषण',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String reviewChangePlaceCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count ठिकाणे',
+      one: '1 ठिकाण',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String reviewChangeShowAll(int count) {
+    return 'सर्व $count दाखवा';
+  }
+
+  @override
+  String get reviewChangeUndoAll => 'सर्व पूर्ववत करा';
+
+  @override
+  String get reviewChangeSeeEvidence => 'पुरावा पहा';
+
+  @override
+  String get reviewChangeViewConversation => 'संभाषण पहा';
+
+  @override
+  String get reviewChangeViewTask => 'कार्य पहा';
+
+  @override
+  String reviewChangesUndoPartial(int failed, int total) {
+    return 'पूर्ववत करता आले नाहीत: $failed/$total. पुन्हा प्रयत्न करा.';
+  }
+
+  @override
   String get reviewShowMore => 'आणखी दाखवा';
 
   @override
@@ -13407,4 +13460,28 @@ class AppLocalizationsMr extends AppLocalizations {
 
   @override
   String get onboardingPermissionTapToFix => 'दुरुस्त करण्यासाठी टॅप करा';
+
+  @override
+  String get homePendingTitle => 'संभाषणे येत आहेत';
+
+  @override
+  String get homePendingCatchingUp => 'आधीचा ऑडिओ प्रक्रिया होत आहे';
+
+  @override
+  String get onTheWayTitle => 'मार्गावर';
+
+  @override
+  String get onTheWayAlmostReady => 'जवळजवळ तयार';
+
+  @override
+  String get activityEmpty => 'अद्याप कोणतीही क्रिया नाही';
+
+  @override
+  String get activityNewSemantics => 'क्रिया, नवीन आयटम';
+
+  @override
+  String get activityLoadFailed => 'तुमची सर्व क्रिया लोड करता आली नाही';
+
+  @override
+  String get activityNewItem => 'नवीन';
 }

@@ -12433,6 +12433,59 @@ class AppLocalizationsFi extends AppLocalizations {
   String get reviewNoChangesBody => 'Kun Omi siistii muistiinpanojasi, muutokset näkyvät täällä.';
 
   @override
+  String get reviewChangesSectionTerms => 'Nimet ja termit';
+
+  @override
+  String get reviewChangesSectionTitles => 'Otsikot ja yhteenvedot';
+
+  @override
+  String get reviewChangesSectionOther => 'Muut muutokset';
+
+  @override
+  String reviewChangeConversationCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count keskustelua',
+      one: '1 keskustelu',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String reviewChangePlaceCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count kohtaa',
+      one: '1 kohta',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String reviewChangeShowAll(int count) {
+    return 'Näytä kaikki $count';
+  }
+
+  @override
+  String get reviewChangeUndoAll => 'Kumoa kaikki';
+
+  @override
+  String get reviewChangeSeeEvidence => 'Näytä perusteet';
+
+  @override
+  String get reviewChangeViewConversation => 'Näytä keskustelu';
+
+  @override
+  String get reviewChangeViewTask => 'Näytä tehtävä';
+
+  @override
+  String reviewChangesUndoPartial(int failed, int total) {
+    return '$failed/$total kumoaminen epäonnistui. Yritä uudelleen.';
+  }
+
+  @override
   String get reviewShowMore => 'Näytä lisää';
 
   @override
@@ -13406,4 +13459,28 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get onboardingPermissionTapToFix => 'Korjaa napauttamalla';
+
+  @override
+  String get homePendingTitle => 'Keskusteluja tulossa';
+
+  @override
+  String get homePendingCatchingUp => 'Käsitellään aiempaa ääntä';
+
+  @override
+  String get onTheWayTitle => 'Tulossa';
+
+  @override
+  String get onTheWayAlmostReady => 'Melkein valmis';
+
+  @override
+  String get activityEmpty => 'Ei vielä toimintaa';
+
+  @override
+  String get activityNewSemantics => 'Toiminta, uusia kohteita';
+
+  @override
+  String get activityLoadFailed => 'Kaikkea toimintaa ei voitu ladata';
+
+  @override
+  String get activityNewItem => 'Uusi';
 }

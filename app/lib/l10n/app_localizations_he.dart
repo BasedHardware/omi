@@ -12339,6 +12339,59 @@ class AppLocalizationsHe extends AppLocalizations {
   String get reviewNoChangesBody => 'כש-Omi מסדר את ההערות שלך, השינויים יופיעו כאן.';
 
   @override
+  String get reviewChangesSectionTerms => 'שמות ומונחים';
+
+  @override
+  String get reviewChangesSectionTitles => 'כותרות וסיכומים';
+
+  @override
+  String get reviewChangesSectionOther => 'שינויים אחרים';
+
+  @override
+  String reviewChangeConversationCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count שיחות',
+      one: 'שיחה אחת',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String reviewChangePlaceCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count מקומות',
+      one: 'מקום אחד',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String reviewChangeShowAll(int count) {
+    return 'הצג את כל $count';
+  }
+
+  @override
+  String get reviewChangeUndoAll => 'בטל הכול';
+
+  @override
+  String get reviewChangeSeeEvidence => 'הצג ראיות';
+
+  @override
+  String get reviewChangeViewConversation => 'הצג שיחה';
+
+  @override
+  String get reviewChangeViewTask => 'הצג משימה';
+
+  @override
+  String reviewChangesUndoPartial(int failed, int total) {
+    return 'לא ניתן לבטל $failed מתוך $total. נסו שוב.';
+  }
+
+  @override
   String get reviewShowMore => 'הצג עוד';
 
   @override
@@ -13308,4 +13361,28 @@ class AppLocalizationsHe extends AppLocalizations {
 
   @override
   String get onboardingPermissionTapToFix => 'הקישו לתיקון';
+
+  @override
+  String get homePendingTitle => 'שיחות בדרך';
+
+  @override
+  String get homePendingCatchingUp => 'משלימים אודיו קודם';
+
+  @override
+  String get onTheWayTitle => 'בדרך';
+
+  @override
+  String get onTheWayAlmostReady => 'כמעט מוכן';
+
+  @override
+  String get activityEmpty => 'אין פעילות עדיין';
+
+  @override
+  String get activityNewSemantics => 'פעילות, פריטים חדשים';
+
+  @override
+  String get activityLoadFailed => 'לא ניתן היה לטעון את כל הפעילות שלך';
+
+  @override
+  String get activityNewItem => 'חדש';
 }
