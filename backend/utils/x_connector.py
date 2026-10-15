@@ -107,7 +107,7 @@ def _gen_pkce() -> Tuple[str, str]:
 # a dev build, and plain web redirects. Everything else — javascript:, data:,
 # vbscript:, file:, etc. — is rejected so a crafted success_redirect_url cannot
 # become a stored-XSS or open-redirect vector.
-_ALLOWED_REDIRECT_SCHEMES = frozenset({'omi', 'omi-computer-dev', 'http', 'https'})
+_ALLOWED_REDIRECT_SCHEMES = frozenset({'omi', 'omi-computer', 'omi-computer-dev', 'http', 'https'})
 _MAX_REDIRECT_URL_LEN = 2048
 
 
