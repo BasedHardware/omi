@@ -14,7 +14,7 @@ _JOB_ID_SAFE_CHARS = frozenset('abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUV
 MAX_IMPORT_JOBS_LIMIT = 200
 
 
-def _validate_job_id(job_id: object) -> str:
+def validate_job_id(job_id: object) -> str:
     """Return *job_id* if it is a safe Firestore document id, else raise ValueError.
 
     Caller-supplied ids flow into ``document(job_id)``; a slash or traversal
@@ -41,7 +41,7 @@ def create_import_job(job_data: Dict[str, Any]) -> str:
 
 def update_import_job(job_id: str, updates: Dict[str, Any]) -> None:
     """Update an existing import job."""
-    job_ref = db.collection('import_jobs').document(_validate_job_id(job_id))
+    job_ref = db.collection('import_jobs').document(validate_job_id(job_id))
     job_ref.update(updates)
 
 
@@ -51,7 +51,7 @@ def update_import_job_unless_cancelled(job_id: str, updates: Dict[str, Any]) -> 
     The status is read and the update written in one transaction, so a cancel the
     user makes while a worker writes cannot be overwritten by it.
     """
-    job_ref = db.collection('import_jobs').document(_validate_job_id(job_id))
+    job_ref = db.collection('import_jobs').document(validate_job_id(job_id))
 
     @firestore.transactional
     def apply(transaction: Any) -> bool:
@@ -68,7 +68,7 @@ def update_import_job_unless_cancelled(job_id: str, updates: Dict[str, Any]) -> 
 def cancel_import_job_if_active(job_id: str, *, firestore_client: Any = None) -> bool:
     """Cancel only a pending or processing job, in the transaction that reads its status."""
     client = firestore_client if firestore_client is not None else get_firestore_client()
-    job_ref = client.collection('import_jobs').document(_validate_job_id(job_id))
+    job_ref = client.collection('import_jobs').document(validate_job_id(job_id))
 
     @firestore.transactional
     def apply(transaction: Any) -> bool:
@@ -92,7 +92,7 @@ def update_import_job_progress(job_id: str, progress: Dict[str, Any]) -> bool:
     unexpected = set(progress) - IMPORT_JOB_PROGRESS_FIELDS
     if unexpected:
         raise ValueError(f'not import job progress fields: {sorted(unexpected)}')
-    job_ref = db.collection('import_jobs').document(_validate_job_id(job_id))
+    job_ref = db.collection('import_jobs').document(validate_job_id(job_id))
 
     @firestore.transactional
     def apply(transaction: Any) -> bool:
@@ -106,7 +106,7 @@ def update_import_job_progress(job_id: str, progress: Dict[str, Any]) -> bool:
 
 def get_import_job(job_id: str) -> Optional[Dict[str, Any]]:
     """Get a single import job by ID."""
-    job_ref = db.collection('import_jobs').document(_validate_job_id(job_id))
+    job_ref = db.collection('import_jobs').document(validate_job_id(job_id))
     job_doc = job_ref.get()
     if getattr(job_doc, "exists", False):
         raw: object = job_doc.to_dict()
@@ -137,5 +137,5 @@ def get_import_jobs(uid: object, limit: object = 50) -> List[Dict[str, Any]]:
 
 def delete_import_job(job_id: str) -> None:
     """Delete an import job."""
-    job_ref = db.collection('import_jobs').document(_validate_job_id(job_id))
+    job_ref = db.collection('import_jobs').document(validate_job_id(job_id))
     job_ref.delete()
