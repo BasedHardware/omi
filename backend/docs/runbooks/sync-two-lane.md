@@ -17,13 +17,13 @@ Backfill speech is written under the `sync_backfill` accounting source. Live har
 
 ## Per-UID backfill dispatch
 
-`sync_backfill_sequencer/{uid}` is a Firestore owner document with one active job, a monotonically advanced dispatch epoch while the owner exists, and a 30-minute renewable lease. Each waiting job is its own append-only `sync_backfill_pending/{job_id}` document with the complete Cloud Task payload. Admission reads the owner to avoid re-registering an already active job but writes only the new pending document; a burst for one UID does not serialize writes on the owner. Owner writes are limited to one claim and one release per job, plus a two-minute heartbeat while active. The pending and active payload maps are exempt from unqueried single-field indexes. Admission writes the job before 202; after a lost write acknowledgement it checks the registry. A confirmed write still returns 202, a confirmed absence cleans up and returns 503, and an unavailable verification fails the request while preserving the content claim and staged material for investigation. It never acknowledges 202 without a known registry write. One pending job is promoted transactionally and enqueued with a deterministic `job_id-s{epoch}` task name. The ordered oldest-pending query is inside the owner-claim transaction, so a newly admitted earlier capture cannot be missed by a separate preselection. Waiting jobs are selected oldest capture first, then Firestore document ID for ties. The mobile WAL sends recent batches first, so the first arrived batch can start immediately; oldest first applies among jobs already waiting and reduces cross-job conversation bridge work. It cannot reorder a job already running. Other UIDs dispatch independently into the same bounded global queue (Train 1 source configuration: 90 concurrent / 15 dispatches per second).
+`sync_backfill_sequencer/{uid}` is a Firestore owner document with one active job, a monotonically advanced dispatch epoch retained across empty queues, and a 30-minute renewable lease. Each waiting job is its own append-only `sync_backfill_pending/{job_id}` document with the complete Cloud Task payload. Admission transactionally writes the pending document and creates a missing owner or wakes a parked owner without resetting its epoch. An existing discoverable owner needs no admission write. Completion and retirement check pending presence in their transaction: owners with waiting work stay discoverable, while empty owners retain their epoch without a `reconcile_at` field, excluding them from the hot range query. An empty claim and stale deferral also park empty owners transactionally; a concurrent active claim or admission cannot be hidden by parking. Owner writes also cover dispatch claims, releases and active two-minute heartbeats. The pending and active payload maps are exempt from unqueried single-field indexes. Admission writes the job before 202; after a lost write acknowledgement it checks the registry. A confirmed write still returns 202, a confirmed absence cleans up and returns 503, and an unavailable verification fails the request while preserving the content claim and staged material for investigation. It never acknowledges 202 without a known registry write. One pending job is promoted transactionally and enqueued with a deterministic `job_id-s{epoch}` task name. The ordered oldest-pending query is inside the owner-claim transaction, so a newly admitted earlier capture cannot be missed by a separate preselection. Waiting jobs are selected oldest capture first, then Firestore document ID for ties. The mobile WAL sends recent batches first, so the first arrived batch can start immediately; oldest first applies among jobs already waiting and reduces cross-job conversation bridge work. It cannot reorder a job already running. Other UIDs dispatch independently into the same bounded global queue (Train 1 source configuration: 90 concurrent / 15 dispatches per second).
 
 The worker checks the persisted job/epoch before any transcript work, renews its lease every two minutes, and releases ownership only after the Redis job is terminal or has expired. A stale delivery cannot enter the pipeline. Terminal success, failure, partial failure, duplicate delivery, dead-letter confirmation, and expired-job cleanup all converge through that release and a dispatch of the next waiting job. A retryable HTTP 409/500 keeps the owner; Cloud Tasks retries it. The existing per-job Redis run lock remains a second fence. Redis jobs persist `dispatch_mode=sequenced`, so polling does not mistake an intentionally waiting job for a lost direct Cloud Task; the worker's persisted retry count is reused after redrive rather than resetting the paid provider attempt budget. An old queued task without a sequencer epoch that reaches a new worker while the flag is on is marked sequenced, registered and acknowledged, then redelivered with an epoch. While the flag is off, a new worker also migrates a queued direct task if that UID still has a sequenced owner or pending record. This prevents new direct work from bypassing waiting sequenced jobs during rollback. Old Redis admission-slot keys are ignored.
 
 On an off-to-on transition, the first sequenced dispatch waits 30 minutes, the maximum Redis run-lock lifetime and longer than the 25-minute task request deadline. This covers direct workers on old revisions, which cannot register their presence. New flag-off admissions also register a 30-minute per-UID Redis direct marker before enqueue; a direct worker renews it from actual task start so queue delay cannot shorten protection. A sequenced dispatch waits for that marker even while the flag is off, preserving already pending sequenced jobs through rollback. The mode key is reset by each flag-off admission, so an off-to-on transition repeats the global wait automatically in dev and prod. Admission still returns 202 and no HTTP worker waits for the guard. Each waiting UID receives a named delayed wake task on the existing sync queue; the OIDC-protected wake route calls `kick` at the deadline. `action=cutover_wait` logs at most once per UID per five minutes with `job_id`, HMAC `uid_hash`, and the known direct job ID; `action=cutover_direct_active` records observed direct processing during transition, while `action=cutover_overlap` requires a simultaneously active sequenced owner. An old revision that somehow continues receiving direct work more than 30 minutes after traffic promotion cannot be fenced by new code; treat an overlap event as a rollout fault. The guard adds a one-time 30-minute dispatch latency on each off-to-on transition and never changes paid STT submission policy.
 
-The existing deploy lifecycle provisions `sync-backfill-uid-sequencer` in Cloud Scheduler every two minutes, targeting the OIDC-protected `/v2/sync-backfill-sequencer/sweep` on backend-sync. It uses the existing sync task invoker identity and audience. Each tick reads at most 100 due UID owners and 100 due pending documents. Pending documents are deferred five minutes when scanned, so a heavy UID cannot occupy every sweep page indefinitely; this recovers a crash between admission's durable write and immediate kick. Even with a continuous backlog, the pending scan/defer is bounded to 72,000 document reads and writes per day across the project; an empty queue incurs no pending-document writes. An active worker renews its lease, a lost dispatch is redriven after five minutes, and an expired running lease is redriven only after its Redis run lock is absent. The old task epoch then becomes stale. A terminal or expired Redis job is delivered once more for the existing cleanup path and the next job. A 12-hour waiting age emits an error event with `job_id` and HMAC `uid_hash` before the 24-hour Redis job and staged-blob expiry. The sweep should finish well within its 180-second Scheduler deadline. Registry documents have no TTL while work is pending. Normal admission, delayed cutover wakes, and terminal completion call `kick` directly, so jobs continue to make progress without Scheduler; only a process crash or uncertain/lost dispatch requires its reconciliation. Scheduler execution failure and missing sweep heartbeats route alerts separately.
+The existing deploy lifecycle provisions `sync-backfill-uid-sequencer` in Cloud Scheduler every two minutes, targeting the OIDC-protected `/v2/sync-backfill-sequencer/sweep` on backend-sync. It uses the existing sync task invoker identity and audience. Each tick reads at most 100 due UID owners and 100 due pending documents. Pending documents are deferred five minutes when scanned, so a heavy UID cannot occupy every sweep page indefinitely; this recovers a crash between admission's durable write and immediate kick. Even with a continuous backlog, the pending scan/defer is bounded to 72,000 document reads and writes per day across the project; an empty queue incurs no pending-document writes. An active worker renews its lease, a lost dispatch is redriven after five minutes, and an expired running lease is redriven only after its Redis run lock is absent. The old task epoch then becomes stale. A terminal or expired Redis job is delivered once more for the existing cleanup path and the next job. A 12-hour waiting age emits an error event with `job_id` and HMAC `uid_hash` before the 24-hour Redis job and staged-blob expiry. The sweep should finish well within its 180-second Scheduler deadline. Registry documents have no TTL: parked epoch documents persist but have no `reconcile_at` and never occupy a due-owner page. Normal admission, delayed cutover wakes, and terminal completion call `kick` directly, so jobs continue to make progress without Scheduler; only a process crash or uncertain/lost dispatch requires its reconciliation. Scheduler execution failure and missing sweep heartbeats route alerts separately.
 
 #### Expired-head retirement (Train 1)
 
@@ -279,3 +279,63 @@ Pause `sync-backfill` in Cloud Tasks or set the global daily allowance to a valu
 ## Release acceptance
 
 Upload a synthetic eight-day backlog and then create a current recording. Verify the current recording reaches a terminal job first, historical jobs never exceed thirty concurrent dispatches, live fair-use totals exclude `sync_backfill`, and replaying the same raw upload returns the durable completed result without new metering.
+
+### Backfill owner repair
+
+Every accepted `sync_backfill_pending` entry has a durable
+`sync_backfill_sequencer` owner. Admission creates missing owners in the same
+transaction, including duplicate admission of a legacy orphan. Completion and
+active retirement clear the active reservation but retain an idle owner and its
+fencing epoch. The release transaction rechecks pending presence; an empty
+owner has no `reconcile_at` field and is excluded from the hot range query
+indefinitely. A non-empty idle owner remains due, with heartbeat deferral after
+a blocked attempt. Deferral rechecks current ownership and pending presence in
+a transaction, so a stale sample cannot park a new active reservation or revive
+an empty document. Admission wakes parked owners in its own transaction. Owners
+are retained to keep epochs monotonic across empty queues; storage remains one
+small document per participating UID.
+
+The reconcile job's existing due-pending scan repairs missing owners before
+attempting dispatch, at most one transaction per distinct UID in its bounded
+page (maximum 500 entries per tick). Deferring pending entries rotates the scan
+through the backlog. Repair transactionally rechecks pending presence and never
+overwrites an existing active owner. Each repaired owner gets a random
+`reconcile_at` from 1 second through the repair window (default 30 minutes),
+plus the same `repair_not_before` deadline. The shared
+`SYNC_BACKFILL_OWNER_REPAIR_WINDOW_SECONDS` setting configures that window.
+The self-heal tick does not kick newly repaired owners; both normal claims and
+expired-head inspection honor `repair_not_before`, so the pending fallback
+cannot collapse repairs onto the next tick. A successful claim removes that
+marker. Each repair emits `event=sync_backfill_owner_repaired`
+and increments `sync_backfill_owner_repaired_total`; sweep outcomes also count
+`owner_repaired`. The existing cutover guards, run locks and Redis-expiry checks
+still control dispatch and retirement.
+
+An operator can review and run `scripts/repair_sync_backfill_owners.py` from
+`backend/`. It reads only UID projections while paging pending documents by ID,
+then uses the same transactional owner-creation primitive as admission and the
+scheduled sweep. It prints aggregate counts only, caps reads at `--limit`
+(default 1,000,000 entries), and rate-limits UID probes (default 5/second,
+maximum 20). `--page-size` is capped at 500. `--repair-window-seconds` can
+override the shared repair window for this operator invocation; the default is
+30 minutes unless the environment sets a different shared window. Dry-run is the default and uses
+read-only Firestore transactions; apply recreates owners but does not dispatch
+tasks or touch Redis, ledgers, audio, or pending payloads. Reruns are idempotent.
+If `scanned_entries` reaches `--limit`, raise the limit for a complete pass.
+Counts cover the selected bounded scan, not a point-in-time fleet snapshot;
+concurrent admission/completion can change them.
+
+Prepared procedure (requires explicit operator review before apply):
+
+```bash
+source ~/.local/bin/gcp-agent-env.sh ro-prod
+OMI_ENV_STAGE=prod PYTHONPATH=. .venv/bin/python scripts/repair_sync_backfill_owners.py --project based-hardware --dry-run
+# After review, select the authorized operator credentials outside the script.
+OMI_ENV_STAGE=prod PYTHONPATH=. .venv/bin/python scripts/repair_sync_backfill_owners.py --project based-hardware --apply
+```
+
+Compare `missing_owners`, `repaired_owners` and `errors`; rerun dry-run after
+apply. A nonzero error count returns a failing exit code without printing
+exception details or identities. The background reconcile job picks up repaired
+owners on ticks after their staggered deadlines. Do not apply a repair before
+the empty-owner exclusion and stagger-aware reconcile code is deployed. No one-off repair is part of deploying this code.
