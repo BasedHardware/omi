@@ -1934,7 +1934,7 @@
     "tasksAddedToList": "Užduotys bus pridėtos į šį sąrašą",
     "tasksCompleted": "Užduotys atliktos",
     "tasksCreatedInWorkspace": "Užduotys bus sukurtos šioje darbo srityje",
-    "tasksEmptyStateMessage": "Pradėkite pokalbį, kad sukurtumėte užduotį.",
+    "tasksEmptyStateMessage": "Užduotys iš jūsų pokalbių bus rodomos čia.",
     "tasksExportedOneApp": "Užduotys gali būti eksportuojamos į vieną programėlę vienu metu.",
     "tasksFromConversationsWillAppear": "Užduotys iš jūsų pokalbių bus rodomos čia.\nSpustelėkite Kurti, kad pridėtumėte vieną rankiniu būdu.",
     "tasksLater": "Vėliau",
@@ -4115,5 +4115,10 @@
     "onboardingNoOmiYet": "Dar neturite Omi?",
     "onboardingOmiNotOrdered": "Dar neužsisakiau",
     "onboardingOmiOrdered": "Jau užsisakiau",
-    "onboardingPermissionTapToFix": "Bakstelėkite, kad pataisytumėte"
+    "onboardingPermissionTapToFix": "Bakstelėkite, kad pataisytumėte",
+    "consentShortMessage": "Omi naudoja DI, kad jūsų pokalbius paverstų užrašais. Juos galite ištrinti bet kada.",
+    "consentAiProviders": "Apdorojama su {providers}.",
+    "voiceProfileCardDismissed": "Balso profilį galite nustatyti bet kada nustatymuose.",
+    "homeNewRecordingButton": "Naujas įrašas",
+    "chatWelcomeMessage": "Labas, aš Omi. Klausk manęs apie bet ką, apie ką kalbėjai: ką kas nors pasakė, ką pažadėjai ar tavo dienos santrauką. Taip pat galiu pridėti užduočių ir prisiminti dalykus už tave."
 }

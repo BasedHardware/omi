@@ -4932,7 +4932,7 @@ class AppLocalizationsEl extends AppLocalizations {
       'Συνεχίζοντας, οι συνομιλίες, οι εγγραφές και τα προσωπικά σας στοιχεία θα αποθηκευτούν με ασφάλεια στους διακομιστές μας. Οι ηχογραφήσεις και τα μεταγραφές σας επεξεργάζονται από υπηρεσίες τεχνητής νοημοσύνης τρίτων (συμπεριλαμβανομένων των Deepgram για μεταγραφή και OpenAI για ανάλυση) για να σας παρέχουν γνώσεις βασισμένες σε AI και να ενεργοποιήσουν όλες τις λειτουργίες της εφαρμογής.';
 
   @override
-  String get tasksEmptyStateMessage => 'Ξεκινήστε μια συνομιλία για να δημιουργήσετε μια εργασία.';
+  String get tasksEmptyStateMessage => 'Οι εργασίες από τις συζητήσεις σας θα εμφανίζονται εδώ.';
 
   @override
   String get clearChatAction => 'Διαγραφή συνομιλίας';
@@ -13485,4 +13485,23 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get onboardingPermissionTapToFix => 'Πατήστε για διόρθωση';
+
+  @override
+  String get consentShortMessage =>
+      'Το Omi χρησιμοποιεί AI για να μετατρέπει τις συνομιλίες σου σε σημειώσεις. Μπορείς να τις διαγράψεις οποιαδήποτε στιγμή.';
+
+  @override
+  String consentAiProviders(String providers) {
+    return 'Επεξεργασία μέσω $providers.';
+  }
+
+  @override
+  String get voiceProfileCardDismissed => 'Μπορείτε να ρυθμίσετε το προφίλ φωνής ανά πάσα στιγμή από τις Ρυθμίσεις.';
+
+  @override
+  String get homeNewRecordingButton => 'Νέα ηχογράφηση';
+
+  @override
+  String get chatWelcomeMessage =>
+      'Γεια, είμαι το Omi. Ρώτα με οτιδήποτε έχεις συζητήσει: τι είπε κάποιος, τι υποσχέθηκες ή μια σύνοψη της μέρας σου. Μπορώ επίσης να προσθέτω εργασίες και να θυμάμαι πράγματα για σένα.';
 }

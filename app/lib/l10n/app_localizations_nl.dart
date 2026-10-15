@@ -4904,7 +4904,7 @@ class AppLocalizationsNl extends AppLocalizations {
       'Door verder te gaan worden uw gesprekken, opnames en persoonlijke informatie veilig opgeslagen op onze servers. Uw audio-opnames en transcripties worden verwerkt door AI-diensten van derden (waaronder Deepgram voor transcriptie en OpenAI voor analyse) om u AI-gestuurde inzichten te bieden en alle app-functies mogelijk te maken.';
 
   @override
-  String get tasksEmptyStateMessage => 'Begin een gesprek om een taak aan te maken.';
+  String get tasksEmptyStateMessage => 'Taken uit je gesprekken verschijnen hier.';
 
   @override
   String get clearChatAction => 'Chat wissen';
@@ -13437,4 +13437,22 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get onboardingPermissionTapToFix => 'Tik om te herstellen';
+
+  @override
+  String get consentShortMessage => 'Omi maakt met AI notities van je gesprekken. Je kunt ze altijd verwijderen.';
+
+  @override
+  String consentAiProviders(String providers) {
+    return 'Verwerkt met $providers.';
+  }
+
+  @override
+  String get voiceProfileCardDismissed => 'Je kunt je stemprofiel altijd instellen via Instellingen.';
+
+  @override
+  String get homeNewRecordingButton => 'Nieuwe opname';
+
+  @override
+  String get chatWelcomeMessage =>
+      'Hoi, ik ben Omi. Vraag me alles over waar je het over hebt gehad: wat iemand zei, wat je beloofde of een samenvatting van je dag. Ik kan ook taken toevoegen en dingen voor je onthouden.';
 }

@@ -5,6 +5,7 @@ import 'package:omi/pages/paywall/outline_paywall_page.dart';
 import 'package:omi/pages/paywall/web_paywall_page.dart';
 import 'package:omi/providers/usage_provider.dart';
 import 'package:omi/services/experiments/paywall_experiment.dart';
+import 'package:omi/services/experiments/paywall_reask.dart';
 import 'package:omi/utils/analytics/registry/events.g.dart';
 import 'package:omi/utils/analytics/registry/typed_events.dart';
 import 'package:omi/utils/other/temp.dart';
@@ -35,6 +36,7 @@ abstract final class PaywallRouter {
     // The reader is about to see a paywall: the variant page below, or the sheet the opener shows
     // right after a false return. Either way they count for their arm.
     PaywallExperiment.recordExposure(resolved, record: record);
+    PaywallReask.noteShown();
     const TypedEvents().emit(PaywallVariantShown(variant: variantWire(resolved.variant), source: sourceWire(source)));
     if (resolved.isControl) return false;
 
@@ -49,6 +51,22 @@ abstract final class PaywallRouter {
     };
     if (page == null) return false;
     await routeToPage(context, page);
+    return true;
+  }
+
+  /// Control's side of a placement only variants have (the end of first-run onboarding): nothing
+  /// is shown, but an eligible control reader is exposed at the same moment a variant reader would
+  /// see a paywall, so both arms enter the experiment at the same point. True when exposed.
+  static bool exposeControl(
+    BuildContext context, {
+    required PaywallExperimentConfig config,
+    bool Function(String key, String variant)? record,
+  }) {
+    if (!config.isControl) return false;
+    final usage = context.read<UsageProvider>();
+    if (!usage.showSubscriptionUI) return false;
+    if (usage.subscription?.subscription.plan.isPaid == true) return false;
+    PaywallExperiment.recordExposure(config, record: record);
     return true;
   }
 

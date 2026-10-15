@@ -4919,7 +4919,7 @@ class AppLocalizationsHu extends AppLocalizations {
       'A folytatással beszélgetéseit, felvételeit és személyes adatait biztonságosan tároljuk szervereinken. Hangfelvételeit és átiratait harmadik féltől származó AI szolgáltatások dolgozzák fel (beleértve a Deepgramot az átíráshoz és az OpenAI-t az elemzéshez), hogy AI-alapú betekintéseket nyújtsunk Önnek és az alkalmazás összes funkcióját biztosítsuk.';
 
   @override
-  String get tasksEmptyStateMessage => 'Feladat létrehozásához kezdj beszélgetést.';
+  String get tasksEmptyStateMessage => 'A beszélgetéseidből származó teendők itt jelennek meg.';
 
   @override
   String get clearChatAction => 'Chat törlése';
@@ -13453,4 +13453,23 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get onboardingPermissionTapToFix => 'Koppints a javításhoz';
+
+  @override
+  String get consentShortMessage =>
+      'Az Omi mesterséges intelligenciával jegyzetekké alakítja a beszélgetéseidet. Bármikor törölheted őket.';
+
+  @override
+  String consentAiProviders(String providers) {
+    return 'Feldolgozás: $providers.';
+  }
+
+  @override
+  String get voiceProfileCardDismissed => 'A hangprofilt bármikor beállíthatod a Beállításokban.';
+
+  @override
+  String get homeNewRecordingButton => 'Új felvétel';
+
+  @override
+  String get chatWelcomeMessage =>
+      'Szia, Omi vagyok. Kérdezz bármit arról, amiről beszéltél: mit mondott valaki, mit ígértél, vagy kérj összefoglalót a napodról. Feladatokat is fel tudok venni, és dolgokat is megjegyzek helyetted.';
 }

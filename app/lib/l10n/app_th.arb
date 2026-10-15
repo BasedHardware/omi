@@ -1501,7 +1501,7 @@
     "durationSeconds": "ระยะเวลา: {seconds} วินาที",
     "additionalSpeechSampleRemoved": "ลบตัวอย่างเสียงเพิ่มเติมแล้ว",
     "consentDataMessage": "เมื่อดำเนินการต่อ การสนทนา การบันทึก และข้อมูลส่วนบุคคลของคุณจะถูกจัดเก็บอย่างปลอดภัยบนเซิร์ฟเวอร์ของเรา การบันทึกเสียงและการถอดความของคุณจะถูกประมวลผลโดยบริการ AI ของบุคคลที่สาม (รวมถึง Deepgram สำหรับการถอดความ และ OpenAI สำหรับการวิเคราะห์) เพื่อมอบข้อมูลเชิงลึกที่ขับเคลื่อนด้วย AI และเปิดใช้งานคุณสมบัติทั้งหมดของแอป",
-    "tasksEmptyStateMessage": "เริ่มการสนทนาเพื่อสร้างงาน",
+    "tasksEmptyStateMessage": "สิ่งที่ต้องทำจากบทสนทนาของคุณจะแสดงที่นี่",
     "clearChatAction": "ล้างแชท",
     "enableApps": "เปิดใช้งานแอป",
     "omiAppName": "Omi",
@@ -4115,5 +4115,10 @@
     "onboardingNoOmiYet": "ยังไม่มี Omi ใช่ไหม",
     "onboardingOmiNotOrdered": "ยังไม่ได้สั่งซื้อ",
     "onboardingOmiOrdered": "สั่งซื้อแล้ว",
-    "onboardingPermissionTapToFix": "แตะเพื่อแก้ไข"
+    "onboardingPermissionTapToFix": "แตะเพื่อแก้ไข",
+    "consentShortMessage": "Omi ใช้ AI เปลี่ยนบทสนทนาของคุณเป็นโน้ต คุณลบได้ทุกเมื่อ",
+    "consentAiProviders": "ประมวลผลด้วย {providers}",
+    "voiceProfileCardDismissed": "คุณตั้งค่าโปรไฟล์เสียงได้ทุกเมื่อในการตั้งค่า",
+    "homeNewRecordingButton": "บันทึกใหม่",
+    "chatWelcomeMessage": "สวัสดี ฉันคือ Omi ถามอะไรก็ได้เกี่ยวกับสิ่งที่คุณคุยไว้ เช่น ใครพูดอะไร คุณสัญญาอะไรไว้ หรือสรุปวันของคุณ ฉันยังเพิ่มสิ่งที่ต้องทำและจำเรื่องต่าง ๆ ให้คุณได้ด้วย"
 }

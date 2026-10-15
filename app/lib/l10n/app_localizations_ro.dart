@@ -4917,7 +4917,7 @@ class AppLocalizationsRo extends AppLocalizations {
       'Continuând, conversațiile, înregistrările și informațiile dvs. personale vor fi stocate în siguranță pe serverele noastre. Înregistrările audio și transcrierile dvs. sunt procesate de servicii AI terțe (inclusiv Deepgram pentru transcriere și OpenAI pentru analiză) pentru a vă oferi informații bazate pe AI și a activa toate funcțiile aplicației.';
 
   @override
-  String get tasksEmptyStateMessage => 'Începe o conversație pentru a crea o sarcină.';
+  String get tasksEmptyStateMessage => 'Sarcinile din conversațiile tale vor apărea aici.';
 
   @override
   String get clearChatAction => 'Șterge conversația';
@@ -13456,4 +13456,23 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get onboardingPermissionTapToFix => 'Atinge pentru a remedia';
+
+  @override
+  String get consentShortMessage =>
+      'Omi folosește AI pentru a transforma conversațiile tale în notițe. Le poți șterge oricând.';
+
+  @override
+  String consentAiProviders(String providers) {
+    return 'Procesat cu $providers.';
+  }
+
+  @override
+  String get voiceProfileCardDismissed => 'Poți configura profilul vocal oricând din Setări.';
+
+  @override
+  String get homeNewRecordingButton => 'Înregistrare nouă';
+
+  @override
+  String get chatWelcomeMessage =>
+      'Salut, sunt Omi. Întreabă-mă orice despre ce ai vorbit: ce a spus cineva, ce ai promis sau un rezumat al zilei tale. Pot și să adaug sarcini și să țin minte lucruri pentru tine.';
 }

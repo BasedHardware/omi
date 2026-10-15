@@ -4902,7 +4902,7 @@ class AppLocalizationsSl extends AppLocalizations {
       'Z nadaljevanjem bodo vaši pogovori, posnetki in osebni podatki varno shranjeni na naših strežnikih. Vaši zvočni posnetki in prepisi se obdelujejo s storitvami umetne inteligence tretjih oseb (vključno z Deepgram za prepis in OpenAI za analizo), da vam zagotovimo vpoglede, ki jih poganja umetna inteligenca, in omogočimo vse funkcije aplikacije.';
 
   @override
-  String get tasksEmptyStateMessage => 'Začnite pogovor, da ustvarite nalogo.';
+  String get tasksEmptyStateMessage => 'Opravila iz vaših pogovorov se bodo prikazala tukaj.';
 
   @override
   String get clearChatAction => 'Počistite klepet';
@@ -13432,4 +13432,23 @@ class AppLocalizationsSl extends AppLocalizations {
 
   @override
   String get onboardingPermissionTapToFix => 'Tapnite za popravilo';
+
+  @override
+  String get consentShortMessage =>
+      'Omi z umetno inteligenco spremeni vaše pogovore v zapiske. Kadar koli jih lahko izbrišete.';
+
+  @override
+  String consentAiProviders(String providers) {
+    return 'Obdelano z $providers.';
+  }
+
+  @override
+  String get voiceProfileCardDismissed => 'Glasovni profil lahko kadar koli nastavite v Nastavitvah.';
+
+  @override
+  String get homeNewRecordingButton => 'Novo snemanje';
+
+  @override
+  String get chatWelcomeMessage =>
+      'Živjo, sem Omi. Vprašaj me karkoli o tem, o čemer si govoril: kaj je kdo rekel, kaj si obljubil ali povzetek tvojega dne. Lahko tudi dodajam opravila in si zapomnim stvari namesto tebe.';
 }

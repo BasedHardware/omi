@@ -1501,7 +1501,7 @@
     "durationSeconds": "Kesto: {seconds} sekuntia",
     "additionalSpeechSampleRemoved": "Lisäpuhenäyte poistettu",
     "consentDataMessage": "Jatkamalla keskustelusi, tallenteet ja henkilötietosi tallennetaan turvallisesti palvelimillemme. Äänitallenteitasi ja transkriptioitasi käsittelevät kolmannen osapuolen tekoälypalvelut (mukaan lukien Deepgram transkriptiota ja OpenAI analyysiä varten) tarjotaksemme sinulle tekoälypohjaisia oivalluksia ja mahdollistaaksemme kaikki sovelluksen ominaisuudet.",
-    "tasksEmptyStateMessage": "Aloita keskustelu luodaksesi tehtävän.",
+    "tasksEmptyStateMessage": "Keskusteluistasi poimitut tehtävät näkyvät täällä.",
     "clearChatAction": "Tyhjennä keskustelu",
     "enableApps": "Ota sovellukset käyttöön",
     "omiAppName": "Omi",
@@ -4115,5 +4115,10 @@
     "onboardingNoOmiYet": "Eikö Omi ole vielä saapunut?",
     "onboardingOmiNotOrdered": "En ole vielä tilannut",
     "onboardingOmiOrdered": "Olen tilannut sen",
-    "onboardingPermissionTapToFix": "Korjaa napauttamalla"
+    "onboardingPermissionTapToFix": "Korjaa napauttamalla",
+    "consentShortMessage": "Omi tekee keskusteluistasi muistiinpanoja tekoälyn avulla. Voit poistaa ne milloin tahansa.",
+    "consentAiProviders": "Käsittely: {providers}.",
+    "voiceProfileCardDismissed": "Voit määrittää ääniprofiilin milloin tahansa asetuksissa.",
+    "homeNewRecordingButton": "Uusi tallennus",
+    "chatWelcomeMessage": "Hei, olen Omi. Kysy minulta mitä tahansa siitä, mistä olet puhunut: mitä joku sanoi, mitä lupasit tai yhteenveto päivästäsi. Voin myös lisätä tehtäviä ja muistaa asioita puolestasi."
 }

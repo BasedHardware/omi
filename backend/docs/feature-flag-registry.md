@@ -110,6 +110,7 @@ entries are exempt: they are queued for removal, not running.
 | `SPEAKER_GROUPING_SHADOW` | dazheng | [backend/docs/listen_pusher_pipeline.mdx](../../backend/docs/listen_pusher_pipeline.mdx) | 2026-11-08 |
 | `exp-002-desktop-identity-v1` | unowned | [backend/docs/experiments/EXP-002-desktop-identity-memory-v1.md](../../backend/docs/experiments/EXP-002-desktop-identity-memory-v1.md) | 2026-10-26 |
 | `onboarding-variant` | nik | [product/experiments/onboarding-variant.md](../../product/experiments/onboarding-variant.md) | 2026-11-13 |
+| `paywall-reask` | yinka | [app/lib/services/experiments/paywall_reask.md](../../app/lib/services/experiments/paywall_reask.md) | 2026-11-13 |
 | `paywall-variant` | nik | [product/experiments/paywall-variant.md](../../product/experiments/paywall-variant.md) | 2026-11-12 |
 
 ## Overdue for a decision
@@ -154,6 +155,7 @@ and an explicit empty literal renders as `''`.
 | `SPEAKER_GROUPING_SHADOW` | off\|owner\|cohort; default off; prod cached-evidence comparison at 10 percent; never changes transcript labels | backend | env | closed | — | — | cohort (backend-listen (chart), pusher (chart)); {value: 'cohort', category: rollout} (cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, gke/backend-listen, gke/pusher) | — | pending | 2026-11-08 | dazheng |
 | `exp-002-desktop-identity-v1` | EXP-002 memory_v1 desktop identity arm enrollment | backend, macos | posthog | closed | — | — | — | expected (enable) | pending | 2026-10-26 | unowned |
 | `onboarding-variant` | Mobile first-run onboarding A/B/C after sign-in and consent: control (native steps unchanged) / reid (device-first onboarding rendered from a web page, OTA; payload names it) / yinka (onboarding ending in a first conversation, PR #21445, native). Client-evaluated multivariate flag; an unread flag, an unknown variant or a reid payload without an https URL is control; the page never owns completion | mobile | posthog | closed | — | — | — | expected (exposure) | pending | 2026-11-13 | nik |
+| `paywall-reask` | Mobile paywall re-ask on app open for free readers: test shows the usual paywall (openUpgradePaywall, so paywall-variant picks the design) 2, 3, 5 then every 7 days after the last paywall seen; control shows nothing on the same schedule. Client-evaluated; no identity, unread flag or any error shows nothing | mobile | posthog | closed | — | — | — | expected (exposure) | pending | 2026-11-13 | yinka |
 | `paywall-variant` | Mobile paywall A/B test: control (current PlansSheet) / outline (PR #21412 soft paywall, native) / web (webview paywall whose page is the variant). Client-evaluated multivariate flag; control collapses to the shipped sheet, paid readers and App Review builds never see a variant | mobile | posthog | closed | — | — | — | expected (exposure) | pending | 2026-11-12 | nik |
 
 ### rollout

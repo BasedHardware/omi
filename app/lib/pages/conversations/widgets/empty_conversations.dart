@@ -17,7 +17,6 @@ class NoConversationsHero extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.only(bottom: 120),
       child: OmiEmptyState(
-        icon: Icons.forum_rounded,
         title: context.l10n.noConversationsYet,
         titleLayoutReference: context.l10n.noTasksYet,
         message: message,
@@ -47,7 +46,7 @@ class EmptyConversationsWidget extends StatelessWidget {
                   title: l10n.noStarredConversations,
                   message: l10n.starConversationHint,
                 )
-              : OmiEmptyState(icon: Icons.forum_rounded, title: l10n.noConversationsYet),
+              : OmiEmptyState(title: l10n.noConversationsYet),
     );
   }
 }

@@ -4922,7 +4922,7 @@ class AppLocalizationsIt extends AppLocalizations {
       'Continuando, le tue conversazioni, registrazioni e informazioni personali saranno archiviate in modo sicuro sui nostri server. Le tue registrazioni audio e trascrizioni vengono elaborate da servizi AI di terze parti (inclusi Deepgram per la trascrizione e OpenAI per l\'analisi) per fornirti approfondimenti basati sull\'AI e abilitare tutte le funzionalità dell\'app.';
 
   @override
-  String get tasksEmptyStateMessage => 'Avvia una conversazione per creare un\'attività.';
+  String get tasksEmptyStateMessage => 'Le attività dalle tue conversazioni appariranno qui.';
 
   @override
   String get clearChatAction => 'Cancella chat';
@@ -13472,4 +13472,23 @@ class AppLocalizationsIt extends AppLocalizations {
 
   @override
   String get onboardingPermissionTapToFix => 'Tocca per risolvere';
+
+  @override
+  String get consentShortMessage =>
+      'Omi usa l\'IA per trasformare le tue conversazioni in note. Puoi eliminarle quando vuoi.';
+
+  @override
+  String consentAiProviders(String providers) {
+    return 'Elaborato con $providers.';
+  }
+
+  @override
+  String get voiceProfileCardDismissed => 'Puoi configurare il profilo vocale in qualsiasi momento nelle Impostazioni.';
+
+  @override
+  String get homeNewRecordingButton => 'Nuova registrazione';
+
+  @override
+  String get chatWelcomeMessage =>
+      'Ciao, sono Omi. Chiedimi qualsiasi cosa di cui hai parlato: cosa ha detto qualcuno, cosa hai promesso o un riepilogo della tua giornata. Posso anche aggiungere attività e ricordare cose per te.';
 }

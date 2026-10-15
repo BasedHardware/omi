@@ -1501,7 +1501,7 @@
     "durationSeconds": "Durată: {seconds} secunde",
     "additionalSpeechSampleRemoved": "Mostră vocală suplimentară eliminată",
     "consentDataMessage": "Continuând, conversațiile, înregistrările și informațiile dvs. personale vor fi stocate în siguranță pe serverele noastre. Înregistrările audio și transcrierile dvs. sunt procesate de servicii AI terțe (inclusiv Deepgram pentru transcriere și OpenAI pentru analiză) pentru a vă oferi informații bazate pe AI și a activa toate funcțiile aplicației.",
-    "tasksEmptyStateMessage": "Începe o conversație pentru a crea o sarcină.",
+    "tasksEmptyStateMessage": "Sarcinile din conversațiile tale vor apărea aici.",
     "clearChatAction": "Șterge conversația",
     "enableApps": "Activează aplicațiile",
     "omiAppName": "Omi",
@@ -4115,5 +4115,10 @@
     "onboardingNoOmiYet": "Nu ai încă Omi?",
     "onboardingOmiNotOrdered": "Încă nu am comandat",
     "onboardingOmiOrdered": "L-am comandat",
-    "onboardingPermissionTapToFix": "Atinge pentru a remedia"
+    "onboardingPermissionTapToFix": "Atinge pentru a remedia",
+    "consentShortMessage": "Omi folosește AI pentru a transforma conversațiile tale în notițe. Le poți șterge oricând.",
+    "consentAiProviders": "Procesat cu {providers}.",
+    "voiceProfileCardDismissed": "Poți configura profilul vocal oricând din Setări.",
+    "homeNewRecordingButton": "Înregistrare nouă",
+    "chatWelcomeMessage": "Salut, sunt Omi. Întreabă-mă orice despre ce ai vorbit: ce a spus cineva, ce ai promis sau un rezumat al zilei tale. Pot și să adaug sarcini și să țin minte lucruri pentru tine."
 }

@@ -4900,7 +4900,7 @@ class AppLocalizationsLv extends AppLocalizations {
       'Turpinot, jūsu sarunas, ieraksti un personiskā informācija tiks droši glabāta mūsu serveros. Jūsu audio ieraksti un transkripcijas tiek apstrādātas ar trešo pušu AI pakalpojumiem (ieskaitot Deepgram transkripcijai un OpenAI analīzei), lai sniegtu jums AI vadītus ieskatus un iespējotu visas lietotnes funkcijas.';
 
   @override
-  String get tasksEmptyStateMessage => 'Sāciet sarunu, lai izveidotu uzdevumu.';
+  String get tasksEmptyStateMessage => 'Uzdevumi no jūsu sarunām parādīsies šeit.';
 
   @override
   String get clearChatAction => 'Notīrīt tērzēšanu';
@@ -13430,4 +13430,22 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get onboardingPermissionTapToFix => 'Pieskarieties, lai labotu';
+
+  @override
+  String get consentShortMessage => 'Omi ar MI palīdzību pārvērš jūsu sarunas piezīmēs. Tās var izdzēst jebkurā laikā.';
+
+  @override
+  String consentAiProviders(String providers) {
+    return 'Apstrādā $providers.';
+  }
+
+  @override
+  String get voiceProfileCardDismissed => 'Balss profilu varat iestatīt jebkurā laikā iestatījumos.';
+
+  @override
+  String get homeNewRecordingButton => 'Jauns ieraksts';
+
+  @override
+  String get chatWelcomeMessage =>
+      'Sveiki, es esmu Omi. Jautā man jebko par to, par ko esi runājis: ko kāds teica, ko tu apsolīji vai kopsavilkumu par tavu dienu. Es varu arī pievienot uzdevumus un atcerēties lietas tavā vietā.';
 }

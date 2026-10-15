@@ -4892,7 +4892,7 @@ class AppLocalizationsFa extends AppLocalizations {
       'با ادامه دادن، مکالمات، ضبط‌ها و اطلاعات شخصی شما به طور ایمن در سرورهای ما ذخیره می‌شود. ضبط‌های صوتی و رونوشت‌های شما توسط سرویس‌های هوش مصنوعی شخص ثالث (از جمله Deepgram برای رونویسی و OpenAI برای تحلیل) پردازش می‌شوند تا بینش‌های مبتنی بر هوش مصنوعی را به شما ارائه دهند و تمام ویژگی‌های برنامه را فعال کنند.';
 
   @override
-  String get tasksEmptyStateMessage => 'برای ایجاد یک کار، گفتگو را شروع کنید.';
+  String get tasksEmptyStateMessage => 'کارهای گفتگوهای شما اینجا نمایش داده می‌شوند.';
 
   @override
   String get clearChatAction => 'پاک‌کردن چت';
@@ -13396,4 +13396,23 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String get onboardingPermissionTapToFix => 'برای رفع ضربه بزنید';
+
+  @override
+  String get consentShortMessage =>
+      'Omi با هوش مصنوعی گفتگوهای شما را به یادداشت تبدیل می‌کند. هر زمان بخواهید می‌توانید آن‌ها را حذف کنید.';
+
+  @override
+  String consentAiProviders(String providers) {
+    return 'پردازش با $providers.';
+  }
+
+  @override
+  String get voiceProfileCardDismissed => 'هر زمان می‌توانید نمایه صدا را در تنظیمات راه‌اندازی کنید.';
+
+  @override
+  String get homeNewRecordingButton => 'ضبط جدید';
+
+  @override
+  String get chatWelcomeMessage =>
+      'سلام، من Omi هستم. هر چیزی درباره صحبت‌هایت بپرس: اینکه کسی چه گفت، چه قولی دادی یا خلاصه‌ای از روزت. می‌توانم کار هم اضافه کنم و چیزها را برایت به خاطر بسپارم.';
 }

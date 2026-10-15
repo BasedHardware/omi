@@ -5829,7 +5829,7 @@
     "@consentDataMessage": {
         "description": "Consent message explaining how user data will be stored and used"
     },
-    "tasksEmptyStateMessage": "Start a conversation to create a task.",
+    "tasksEmptyStateMessage": "To-dos from your conversations will show up here.",
     "@tasksEmptyStateMessage": {
         "description": "Guidance on the empty Tasks tab: start a conversation to create a task."
     },
@@ -16132,5 +16132,31 @@
     "onboardingPermissionTapToFix": "Tap to fix",
     "@onboardingPermissionTapToFix": {
         "description": "Onboarding permissions: shown on a denied permission card; tapping opens Settings"
+    },
+    "consentShortMessage": "Omi uses AI to turn your conversations into notes. You can delete them anytime.",
+    "@consentShortMessage": {
+        "description": "Onboarding data & privacy consent: one-line summary of storage and AI processing"
+    },
+    "consentAiProviders": "Processed with {providers}.",
+    "@consentAiProviders": {
+        "description": "Onboarding consent: names the third-party AI providers (brand names, not translated)",
+        "placeholders": {
+            "providers": {
+                "type": "String",
+                "example": "Deepgram, OpenAI"
+            }
+        }
+    },
+    "voiceProfileCardDismissed": "You can set up Voice Profile anytime in Settings.",
+    "@voiceProfileCardDismissed": {
+        "description": "Toast after dismissing the Teach Omi your voice card on Home; points to Settings > Voice Profile."
+    },
+    "homeNewRecordingButton": "New Recording",
+    "@homeNewRecordingButton": {
+        "description": "Label on Home's main bottom button that starts a new recording with the phone."
+    },
+    "chatWelcomeMessage": "Hi, I'm Omi. Ask me anything you've talked about: what someone said, what you promised, or a summary of your day. I can also add to-dos and remember things for you.",
+    "@chatWelcomeMessage": {
+        "description": "First message Omi shows in an empty chat the first time it is opened, explaining what chat can do"
     }
 }

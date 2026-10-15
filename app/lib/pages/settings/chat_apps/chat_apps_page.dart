@@ -97,7 +97,12 @@ class _ChatAppsPageState extends State<ChatAppsPage> {
       'chat_apps',
       currentPlan: context.read<UsageProvider>().subscription?.subscription.plan.wireName ?? 'unknown',
     );
-    routeToPage(context, const UsagePage(showUpgradeDialog: true, paywallSource: 'chat_apps'));
+    routeToPage(
+        context,
+        const UsagePage(
+          showUpgradeDialog: true,
+          paywallSource: 'chat_apps',
+        ));
   }
 
   Future<void> _connect(ChatChannel channel) async {

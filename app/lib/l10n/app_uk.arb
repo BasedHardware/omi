@@ -1501,7 +1501,7 @@
     "durationSeconds": "Тривалість: {seconds} секунд",
     "additionalSpeechSampleRemoved": "Додатковий зразок голосу видалено",
     "consentDataMessage": "Продовжуючи, ваші розмови, записи та особиста інформація будуть надійно зберігатися на наших серверах. Ваші аудіозаписи та транскрипції обробляються сторонніми AI-сервісами (включаючи Deepgram для транскрипції та OpenAI для аналізу), щоб надати вам аналітику на основі ШІ та увімкнути всі функції додатку.",
-    "tasksEmptyStateMessage": "Почніть розмову, щоб створити завдання.",
+    "tasksEmptyStateMessage": "Завдання з ваших розмов з'являться тут.",
     "clearChatAction": "Очистити чат",
     "enableApps": "Увімкнути додатки",
     "omiAppName": "Omi",
@@ -4115,5 +4115,10 @@
     "onboardingNoOmiYet": "Ще немає Omi?",
     "onboardingOmiNotOrdered": "Ще не замовив",
     "onboardingOmiOrdered": "Я вже замовив",
-    "onboardingPermissionTapToFix": "Торкніться, щоб виправити"
+    "onboardingPermissionTapToFix": "Торкніться, щоб виправити",
+    "consentShortMessage": "Omi за допомогою ШІ перетворює ваші розмови на нотатки. Їх можна видалити будь-коли.",
+    "consentAiProviders": "Обробка: {providers}.",
+    "voiceProfileCardDismissed": "Голосовий профіль можна налаштувати будь-коли в Налаштуваннях.",
+    "homeNewRecordingButton": "Новий запис",
+    "chatWelcomeMessage": "Привіт, я Omi. Питайте про все, про що ви говорили: що хтось сказав, що ви пообіцяли або як минув ваш день. Я також можу додавати завдання й запам'ятовувати важливе за вас."
 }

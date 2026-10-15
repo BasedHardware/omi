@@ -4814,7 +4814,7 @@ class AppLocalizationsKo extends AppLocalizations {
       '계속하면 대화, 녹음 및 개인 정보가 서버에 안전하게 저장됩니다. 오디오 녹음 및 텍스트 변환은 제3자 AI 서비스(전사를 위한 Deepgram 및 분석을 위한 OpenAI 포함)에 의해 처리되어 AI 기반 인사이트를 제공하고 모든 앱 기능을 활성화합니다.';
 
   @override
-  String get tasksEmptyStateMessage => '대화를 시작하여 할 일을 만드세요.';
+  String get tasksEmptyStateMessage => '대화에서 나온 할 일이 여기에 표시돼요.';
 
   @override
   String get clearChatAction => '채팅 삭제';
@@ -13219,4 +13219,22 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get onboardingPermissionTapToFix => '탭하여 해결';
+
+  @override
+  String get consentShortMessage => 'Omi는 AI로 대화를 메모로 정리합니다. 언제든지 삭제할 수 있습니다.';
+
+  @override
+  String consentAiProviders(String providers) {
+    return '$providers(으)로 처리됩니다.';
+  }
+
+  @override
+  String get voiceProfileCardDismissed => '음성 프로필은 설정에서 언제든지 설정할 수 있어요.';
+
+  @override
+  String get homeNewRecordingButton => '새 녹음';
+
+  @override
+  String get chatWelcomeMessage =>
+      '안녕하세요, Omi예요. 나눈 대화라면 무엇이든 물어보세요. 누가 무슨 말을 했는지, 무엇을 약속했는지, 하루 요약까지요. 할 일을 추가하고 기억해 둘 수도 있어요.';
 }

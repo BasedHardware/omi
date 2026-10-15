@@ -4899,7 +4899,7 @@ class AppLocalizationsUk extends AppLocalizations {
       'Продовжуючи, ваші розмови, записи та особиста інформація будуть надійно зберігатися на наших серверах. Ваші аудіозаписи та транскрипції обробляються сторонніми AI-сервісами (включаючи Deepgram для транскрипції та OpenAI для аналізу), щоб надати вам аналітику на основі ШІ та увімкнути всі функції додатку.';
 
   @override
-  String get tasksEmptyStateMessage => 'Почніть розмову, щоб створити завдання.';
+  String get tasksEmptyStateMessage => 'Завдання з ваших розмов з\'являться тут.';
 
   @override
   String get clearChatAction => 'Очистити чат';
@@ -13431,4 +13431,23 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get onboardingPermissionTapToFix => 'Торкніться, щоб виправити';
+
+  @override
+  String get consentShortMessage =>
+      'Omi за допомогою ШІ перетворює ваші розмови на нотатки. Їх можна видалити будь-коли.';
+
+  @override
+  String consentAiProviders(String providers) {
+    return 'Обробка: $providers.';
+  }
+
+  @override
+  String get voiceProfileCardDismissed => 'Голосовий профіль можна налаштувати будь-коли в Налаштуваннях.';
+
+  @override
+  String get homeNewRecordingButton => 'Новий запис';
+
+  @override
+  String get chatWelcomeMessage =>
+      'Привіт, я Omi. Питайте про все, про що ви говорили: що хтось сказав, що ви пообіцяли або як минув ваш день. Я також можу додавати завдання й запам\'ятовувати важливе за вас.';
 }

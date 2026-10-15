@@ -125,7 +125,7 @@ void main() {
       final title = find.text('No conversations yet');
       expect(title.hitTestable(), findsOneWidget);
       expect(contrast(tester.widget<Text>(title).style!.color!, OmiColors.surface0), greaterThanOrEqualTo(4.5));
-      expect(find.byIcon(Icons.forum_rounded), findsOneWidget);
+      expect(find.byIcon(Icons.forum_rounded), findsNothing);
     });
   }
   testWidgets('nonzero counts retain category and clear-all callbacks', (tester) async {

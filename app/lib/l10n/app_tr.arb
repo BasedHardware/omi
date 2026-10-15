@@ -1501,7 +1501,7 @@
     "durationSeconds": "Süre: {seconds} saniye",
     "additionalSpeechSampleRemoved": "Ek ses örneği kaldırıldı",
     "consentDataMessage": "Devam ederek, konuşmalarınız, kayıtlarınız ve kişisel bilgileriniz sunucularımızda güvenli bir şekilde saklanacaktır. Ses kayıtlarınız ve transkriptleriniz, size yapay zeka destekli içgörüler sağlamak ve tüm uygulama özelliklerini etkinleştirmek için üçüncü taraf yapay zeka hizmetleri (transkripsiyon için Deepgram ve analiz için OpenAI dahil) tarafından işlenir.",
-    "tasksEmptyStateMessage": "Görev oluşturmak için bir konuşma başlatın.",
+    "tasksEmptyStateMessage": "Konuşmalarındaki yapılacaklar burada görünecek.",
     "clearChatAction": "Sohbeti temizle",
     "enableApps": "Uygulamaları etkinleştir",
     "omiAppName": "Omi",
@@ -4150,5 +4150,10 @@
     "onboardingNoOmiYet": "Omi'n henüz yok mu?",
     "onboardingOmiNotOrdered": "Henüz sipariş vermedim",
     "onboardingOmiOrdered": "Sipariş verdim",
-    "onboardingPermissionTapToFix": "Düzeltmek için dokunun"
+    "onboardingPermissionTapToFix": "Düzeltmek için dokunun",
+    "consentShortMessage": "Omi, konuşmalarını yapay zekâ ile notlara dönüştürür. İstediğin zaman silebilirsin.",
+    "consentAiProviders": "{providers} ile işlenir.",
+    "voiceProfileCardDismissed": "Ses profilini istediğin zaman Ayarlar'dan kurabilirsin.",
+    "homeNewRecordingButton": "Yeni Kayıt",
+    "chatWelcomeMessage": "Merhaba, ben Omi. Konuştuğun her şeyi bana sorabilirsin: birinin ne dediğini, ne söz verdiğini ya da gününün özetini. Görev de ekleyebilir ve senin için bir şeyleri hatırlayabilirim."
 }

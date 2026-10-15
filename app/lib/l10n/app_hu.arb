@@ -1501,7 +1501,7 @@
     "durationSeconds": "Időtartam: {seconds} másodperc",
     "additionalSpeechSampleRemoved": "További hangminta eltávolítva",
     "consentDataMessage": "A folytatással beszélgetéseit, felvételeit és személyes adatait biztonságosan tároljuk szervereinken. Hangfelvételeit és átiratait harmadik féltől származó AI szolgáltatások dolgozzák fel (beleértve a Deepgramot az átíráshoz és az OpenAI-t az elemzéshez), hogy AI-alapú betekintéseket nyújtsunk Önnek és az alkalmazás összes funkcióját biztosítsuk.",
-    "tasksEmptyStateMessage": "Feladat létrehozásához kezdj beszélgetést.",
+    "tasksEmptyStateMessage": "A beszélgetéseidből származó teendők itt jelennek meg.",
     "clearChatAction": "Chat törlése",
     "enableApps": "Alkalmazások engedélyezése",
     "omiAppName": "Omi",
@@ -4211,5 +4211,10 @@
     "onboardingNoOmiYet": "Még nincs meg az Omid?",
     "onboardingOmiNotOrdered": "Még nem rendeltem",
     "onboardingOmiOrdered": "Már megrendeltem",
-    "onboardingPermissionTapToFix": "Koppints a javításhoz"
+    "onboardingPermissionTapToFix": "Koppints a javításhoz",
+    "consentShortMessage": "Az Omi mesterséges intelligenciával jegyzetekké alakítja a beszélgetéseidet. Bármikor törölheted őket.",
+    "consentAiProviders": "Feldolgozás: {providers}.",
+    "voiceProfileCardDismissed": "A hangprofilt bármikor beállíthatod a Beállításokban.",
+    "homeNewRecordingButton": "Új felvétel",
+    "chatWelcomeMessage": "Szia, Omi vagyok. Kérdezz bármit arról, amiről beszéltél: mit mondott valaki, mit ígértél, vagy kérj összefoglalót a napodról. Feladatokat is fel tudok venni, és dolgokat is megjegyzek helyetted."
 }

@@ -4889,7 +4889,7 @@ class AppLocalizationsPt extends AppLocalizations {
       'Ao continuar, suas conversas, gravações e informações pessoais serão armazenadas com segurança em nossos servidores. Suas gravações de áudio e transcrições são processadas por serviços de IA de terceiros (incluindo Deepgram para transcrição e OpenAI para análise) para fornecer insights baseados em IA e habilitar todos os recursos do aplicativo.';
 
   @override
-  String get tasksEmptyStateMessage => 'Inicie uma conversa para criar uma tarefa.';
+  String get tasksEmptyStateMessage => 'As tarefas das suas conversas aparecerão aqui.';
 
   @override
   String get clearChatAction => 'Limpar conversa';
@@ -13425,4 +13425,23 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get onboardingPermissionTapToFix => 'Toque para corrigir';
+
+  @override
+  String get consentShortMessage =>
+      'O Omi usa IA para transformar suas conversas em notas. Você pode excluí-las quando quiser.';
+
+  @override
+  String consentAiProviders(String providers) {
+    return 'Processado com $providers.';
+  }
+
+  @override
+  String get voiceProfileCardDismissed => 'Você pode configurar o perfil de voz a qualquer momento em Ajustes.';
+
+  @override
+  String get homeNewRecordingButton => 'Nova gravação';
+
+  @override
+  String get chatWelcomeMessage =>
+      'Oi, eu sou o Omi. Pergunte qualquer coisa sobre o que você conversou: o que alguém disse, o que você prometeu ou um resumo do seu dia. Também posso adicionar tarefas e lembrar coisas para você.';
 }

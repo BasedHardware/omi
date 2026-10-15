@@ -522,16 +522,21 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
           processingByDate: processingByDate,
         );
 
+        Future<void> refresh() async {
+          _lastLoadMoreRequestKey = null;
+          Provider.of<CaptureProvider>(context, listen: false).refreshInProgressConversations();
+          await Future.wait([
+            convoProvider.getInitialConversations(),
+            Provider.of<LocalRecordingsProvider>(context, listen: false).refresh(),
+            if (_recapsKey.currentState != null) _recapsKey.currentState!.refresh(),
+          ]);
+        }
+
         return RefreshIndicator(
+          notificationPredicate: OmiRefreshControl.materialPredicate,
           onRefresh: () async {
             HapticFeedback.mediumImpact();
-            _lastLoadMoreRequestKey = null;
-            Provider.of<CaptureProvider>(context, listen: false).refreshInProgressConversations();
-            await Future.wait([
-              convoProvider.getInitialConversations(),
-              Provider.of<LocalRecordingsProvider>(context, listen: false).refresh(),
-              if (_recapsKey.currentState != null) _recapsKey.currentState!.refresh(),
-            ]);
+            await refresh();
           },
           color: OmiColors.onAccent,
           backgroundColor: OmiColors.accent,
@@ -539,8 +544,10 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
             controller: _scrollController,
             physics: const AlwaysScrollableScrollPhysics(),
             slivers: [
+              if (OmiRefreshControl.supported) OmiRefreshControl(onRefresh: refresh),
               // The live capture row: recording, a call, or a conversation being captured.
-              const SliverToBoxAdapter(child: ConversationCaptureWidget(showsCall: true)),
+              const SliverToBoxAdapter(
+                  child: ConversationCaptureWidget(showsCall: true, deviceStatusInBottomBar: true)),
               const SliverToBoxAdapter(child: SpeechProfileCardWidget()),
               const SliverToBoxAdapter(child: UpdateFirmwareCardWidget()),
               // Review absorbs the voice prompts; the old card shows only while Review is off.

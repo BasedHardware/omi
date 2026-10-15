@@ -4894,7 +4894,7 @@ class AppLocalizationsNo extends AppLocalizations {
       'Ved å fortsette vil samtalene, opptakene og den personlige informasjonen din bli lagret sikkert på våre servere. Lydopptakene og transkripsjonene dine behandles av tredjeparts AI-tjenester (inkludert Deepgram for transkripsjon og OpenAI for analyse) for å gi deg AI-drevne innsikter og aktivere alle appfunksjoner.';
 
   @override
-  String get tasksEmptyStateMessage => 'Start en samtale for å opprette en oppgave.';
+  String get tasksEmptyStateMessage => 'Gjøremål fra samtalene dine vises her.';
 
   @override
   String get clearChatAction => 'Tøm chat';
@@ -13403,4 +13403,23 @@ class AppLocalizationsNo extends AppLocalizations {
 
   @override
   String get onboardingPermissionTapToFix => 'Trykk for å fikse';
+
+  @override
+  String get consentShortMessage =>
+      'Omi bruker KI til å gjøre samtalene dine om til notater. Du kan slette dem når som helst.';
+
+  @override
+  String consentAiProviders(String providers) {
+    return 'Behandles med $providers.';
+  }
+
+  @override
+  String get voiceProfileCardDismissed => 'Du kan sette opp stemmeprofilen når som helst i Innstillinger.';
+
+  @override
+  String get homeNewRecordingButton => 'Ny opptak';
+
+  @override
+  String get chatWelcomeMessage =>
+      'Hei, jeg er Omi. Spør meg om alt du har snakket om: hva noen sa, hva du lovet, eller et sammendrag av dagen din. Jeg kan også legge til oppgaver og huske ting for deg.';
 }

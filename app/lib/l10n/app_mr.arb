@@ -5782,7 +5782,7 @@
     "@consentDataMessage": {
         "description": "Consent message explaining how user data will be stored and used"
     },
-    "tasksEmptyStateMessage": "कार्य तयार करण्यासाठी संभाषण सुरू करा.",
+    "tasksEmptyStateMessage": "तुमच्या संभाषणांमधील कामे इथे दिसतील.",
     "@tasksEmptyStateMessage": {
         "description": "Empty state message shown when there are no tasks, with instruction to tap + button"
     },
@@ -11541,5 +11541,10 @@
     "onboardingNoOmiYet": "अजून तुमचा Omi आला नाही?",
     "onboardingOmiNotOrdered": "अजून ऑर्डर केलेला नाही",
     "onboardingOmiOrdered": "मी ऑर्डर केला आहे",
-    "onboardingPermissionTapToFix": "दुरुस्त करण्यासाठी टॅप करा"
+    "onboardingPermissionTapToFix": "दुरुस्त करण्यासाठी टॅप करा",
+    "consentShortMessage": "Omi AI वापरून तुमच्या संभाषणांच्या नोट्स बनवते. तुम्ही त्या कधीही हटवू शकता.",
+    "consentAiProviders": "{providers} द्वारे प्रक्रिया केली जाते.",
+    "voiceProfileCardDismissed": "सेटिंग्जमध्ये कधीही व्हॉइस प्रोफाइल सेट करू शकता.",
+    "homeNewRecordingButton": "नवीन रेकॉर्डिंग",
+    "chatWelcomeMessage": "नमस्कार, मी Omi आहे. तुम्ही ज्याबद्दल बोललात त्याबद्दल काहीही विचारा: कोणी काय सांगितले, तुम्ही काय वचन दिले किंवा तुमच्या दिवसाचा सारांश. मी कामे जोडू शकतो आणि तुमच्यासाठी गोष्टी लक्षातही ठेवू शकतो."
 }

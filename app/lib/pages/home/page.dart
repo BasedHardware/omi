@@ -21,7 +21,10 @@ import 'package:omi/pages/chat/chat_route.dart';
 import 'package:omi/pages/chat/page.dart';
 import 'package:omi/pages/action_items/widgets/task_selection_action_bar.dart';
 import 'package:omi/pages/conversations/widgets/merge_action_bar.dart';
+import 'package:omi/pages/action_items/widgets/tasks_more_menu.dart';
 import 'package:omi/pages/home/home_content.dart';
+import 'package:omi/pages/home/widgets/home_bottom_controls.dart';
+import 'package:omi/pages/home/widgets/home_page_stack.dart';
 import 'package:omi/pages/home/widgets/home_tab_switcher.dart';
 import 'package:omi/pages/home/home_widgets_publisher.dart';
 import 'package:omi/pages/phone_calls/active_call_banner.dart';
@@ -65,6 +68,7 @@ import 'package:omi/widgets/calendar_date_picker_sheet.dart';
 import 'package:omi/widgets/header_circle_button.dart';
 import 'package:omi/pages/onboarding/interactive_device_onboarding/interactive_device_onboarding_wrapper.dart';
 import 'package:omi/services/sockets/listen_client_state.dart';
+import 'package:omi/pages/home/paywall_reask_prompt.dart';
 import 'package:omi/ui/ui.dart';
 import 'home_deep_links.dart';
 import 'home_navigation.dart';
@@ -368,6 +372,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
 
       // Reload convos
       if (mounted) {
+        unawaited(queuePaywallReask(context));
         Provider.of<ConversationProvider>(context, listen: false).refreshConversations();
         final captureProvider = Provider.of<CaptureProvider>(context, listen: false);
         captureProvider.setMetricsAppActive(true);
@@ -473,6 +478,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
           listen: false,
         ).streamDeviceRecording(device: Provider.of<DeviceProvider>(context, listen: false).capabilityNormalizedDevice);
       }
+      if (mounted) context.read<DeviceProvider>().showDeferredFirmwareUpdatePrompt(context);
 
       if (!mounted || initialLink == null) return;
       await openHomeDeepLink(context, initialLink, openSettings: _openSettings, openSearch: _openSearch);
@@ -562,6 +568,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
             );
           },
         );
+
+        unawaited(queuePaywallReask(context));
 
         // Register callback for device connection to check firmware announcements and device onboarding
         deviceProvider.onDeviceConnected = (BtDevice device) {
@@ -775,7 +783,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
               child: Scaffold(
                 backgroundColor: OmiColors.surface0,
                 resizeToAvoidBottomInset: false,
-                appBar: _buildAppBar(context, onHome),
+                appBar: _buildAppBar(context),
                 body: GestureDetector(
                   onTap: () => primaryFocus?.unfocus(),
                   child: Stack(
@@ -783,7 +791,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                       Column(
                         children: [
                           HomeTabSwitcher(
-                            trailing: onHome ? null : _buildTasksActions(context),
+                            trailing: _buildPageActions(context, onHome),
                             onTabTap: (index, isRepeat) {
                               if (isRepeat) {
                                 _scrollToTop(index);
@@ -819,7 +827,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                           // Home shows an active call in its capture row; Tasks gets the slim bar.
                           if (!onHome) const ActiveCallTopBar(),
                           Expanded(
-                            child: IndexedStack(index: selectedIndex, children: _buildPages(selectedIndex)),
+                            child: HomePageStack(index: selectedIndex, children: _buildPages(selectedIndex)),
                           ),
                         ],
                       ),
@@ -840,9 +848,9 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                                 bottom: homeChatBarOffset(context),
                                 child: Row(
                                   children: [
-                                    Expanded(child: _buildChatBar(context)),
+                                    HomeChatButton(onTap: _openChat, onLongPress: () => _openChat(voice: true)),
                                     const SizedBox(width: 10),
-                                    const HomeRecordButton(),
+                                    const Expanded(child: HomeRecordButton()),
                                   ],
                                 ),
                               ),
@@ -878,99 +886,23 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
     openChatSheet(context, ChatPage(isPivotBottom: false, autoStartVoice: voice));
   }
 
-  Widget _buildChatBar(BuildContext context) {
-    return Semantics(
-      container: true,
-      button: true,
-      label: context.l10n.askOmi,
-      onTap: _openChat,
-      child: GestureDetector(
-        key: const ValueKey('home_ask_omi_bar'),
-        behavior: HitTestBehavior.opaque,
-        onTap: _openChat,
-        child: Container(
-          height: kHomeChatBarHeight,
-          decoration: BoxDecoration(
-            color: OmiColors.surface1,
-            borderRadius: OmiRadius.pillAll,
-            border: Border.all(color: OmiColors.border, width: 1),
-          ),
-          child: Row(
-            children: [
-              const SizedBox(width: 18),
-              Expanded(
-                child: ExcludeSemantics(
-                  child: Text(
-                    context.l10n.askOmi,
-                    style: OmiType.subhead.copyWith(color: OmiColors.textTertiary),
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-              ),
-              GestureDetector(
-                // The mic sits inside the chat bar's own tap target, so a near miss
-                // does not do nothing: it opens text chat instead of voice. Own the
-                // bar's full height and its rounded end, not just the 42pt circle.
-                behavior: HitTestBehavior.opaque,
-                onTap: () => _openChat(voice: true),
-                child: Semantics(
-                  container: true,
-                  button: true,
-                  label: context.l10n.voiceMode,
-                  child: Container(
-                    height: kHomeChatBarHeight,
-                    padding: const EdgeInsets.only(left: 8, right: 6),
-                    alignment: Alignment.center,
-                    child: Container(
-                      width: 42,
-                      height: 42,
-                      alignment: Alignment.center,
-                      decoration: BoxDecoration(color: OmiColors.accent, shape: BoxShape.circle),
-                      child: FaIcon(FontAwesomeIcons.microphone, size: 15, color: OmiColors.onAccent),
-                    ),
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  /// Export and the completed toggle, beside the switcher while Tasks is showing.
-  Widget _buildTasksActions(BuildContext context) {
-    return Consumer<ActionItemsProvider>(
-      builder: (context, actionItemsProvider, _) {
-        final showCompleted = actionItemsProvider.showCompletedView;
-        return Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            HeaderCircleButton(
-              semanticLabel: context.l10n.exportButton,
-              icon: FaIcon(FontAwesomeIcons.arrowUpFromBracket, size: 16, color: OmiColors.textSecondary),
-              onTap: () {
+  /// The selected page's one action, bare beside the switcher: Home filters by date, Tasks opens
+  /// its menu (select, group, completed, export). Cross-fades when the page changes.
+  Widget _buildPageActions(BuildContext context, bool onHome) {
+    return AnimatedSwitcher(
+      duration: OmiMotion.of(context).quick,
+      child: onHome
+          ? OmiIconButton(
+              key: const ValueKey('home_calendar_button'),
+              icon: const FaIcon(FontAwesomeIcons.calendar, size: 18),
+              label: context.l10n.filterByDate,
+              color: OmiColors.textSecondary,
+              onPressed: () {
                 OmiHaptics.selection();
-                PlatformManager.instance.analytics.exportTasksBannerClicked();
-                routeToPage(context, const TaskIntegrationsPage());
+                unawaited(_openCalendar(context));
               },
-            ),
-            HeaderCircleButton(
-              semanticLabel: context.l10n.completed,
-              color: showCompleted ? OmiColors.surface3 : OmiColors.surface1,
-              icon: FaIcon(
-                FontAwesomeIcons.solidCircleCheck,
-                size: 16,
-                color: showCompleted ? OmiColors.textPrimary : OmiColors.textSecondary,
-              ),
-              onTap: () {
-                OmiHaptics.light();
-                actionItemsProvider.toggleShowCompletedView();
-              },
-            ),
-          ],
-        );
-      },
+            )
+          : const TasksMoreMenu(),
     );
   }
 
@@ -991,7 +923,9 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
     );
   }
 
-  PreferredSizeWidget _buildAppBar(BuildContext context, bool onHome) {
+  /// The shell header: device, search and settings, the same on Home and Tasks. Page actions sit
+  /// beside the switcher instead (see [_buildPageActions]).
+  PreferredSizeWidget _buildAppBar(BuildContext context) {
     return AppBar(
       automaticallyImplyLeading: false,
       backgroundColor: Theme.of(context).colorScheme.surface,
@@ -1009,16 +943,6 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
           ),
           Row(
             children: [
-              if (onHome)
-                HeaderCircleButton(
-                  key: const ValueKey('home_calendar_button'),
-                  semanticLabel: context.l10n.filterByDate,
-                  icon: FaIcon(FontAwesomeIcons.calendar, size: 16, color: OmiColors.textSecondary),
-                  onTap: () {
-                    OmiHaptics.selection();
-                    unawaited(_openCalendar(context));
-                  },
-                ),
               // Search: conversations, recaps, tasks and memories, from any page of the shell.
               HeaderCircleButton(
                 key: const ValueKey('home_search_button'),

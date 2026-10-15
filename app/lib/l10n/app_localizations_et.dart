@@ -4889,7 +4889,7 @@ class AppLocalizationsEt extends AppLocalizations {
       'Jätkates salvestatakse teie vestlused, salvestised ja isikuandmed turvaliselt meie serverites. Teie helisalvestisi ja transkriptsioone töötlevad kolmandate osapoolte AI-teenused (sealhulgas Deepgram transkriptsiooni ja OpenAI analüüsi jaoks), et pakkuda teile AI-põhiseid ülevaateid ja võimaldada kõiki rakenduse funktsioone.';
 
   @override
-  String get tasksEmptyStateMessage => 'Ülesande loomiseks alusta vestlust.';
+  String get tasksEmptyStateMessage => 'Sinu vestlustest pärit ülesanded ilmuvad siia.';
 
   @override
   String get clearChatAction => 'Tühjenda vestlus';
@@ -13395,4 +13395,23 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get onboardingPermissionTapToFix => 'Puuduta parandamiseks';
+
+  @override
+  String get consentShortMessage =>
+      'Omi muudab tehisintellekti abil sinu vestlused märkmeteks. Saad need igal ajal kustutada.';
+
+  @override
+  String consentAiProviders(String providers) {
+    return 'Töödeldakse teenustega $providers.';
+  }
+
+  @override
+  String get voiceProfileCardDismissed => 'Häälprofiili saad seadistada igal ajal seadetes.';
+
+  @override
+  String get homeNewRecordingButton => 'Uus salvestus';
+
+  @override
+  String get chatWelcomeMessage =>
+      'Tere, mina olen Omi. Küsi minult kõike, millest oled rääkinud: mida keegi ütles, mida sa lubasid või kokkuvõtet oma päevast. Saan ka ülesandeid lisada ja asju sinu eest meeles pidada.';
 }

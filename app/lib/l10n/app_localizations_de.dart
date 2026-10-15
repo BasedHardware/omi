@@ -4931,7 +4931,7 @@ class AppLocalizationsDe extends AppLocalizations {
       'Durch Fortfahren werden Ihre Gespräche, Aufnahmen und persönlichen Daten sicher auf unseren Servern gespeichert. Ihre Audioaufnahmen und Transkripte werden von KI-Diensten Dritter verarbeitet (einschließlich Deepgram für die Transkription und OpenAI für die Analyse), um Ihnen KI-gestützte Erkenntnisse zu liefern und alle App-Funktionen zu ermöglichen.';
 
   @override
-  String get tasksEmptyStateMessage => 'Starte ein Gespräch, um eine Aufgabe zu erstellen.';
+  String get tasksEmptyStateMessage => 'To-dos aus deinen Gesprächen erscheinen hier.';
 
   @override
   String get clearChatAction => 'Chat löschen';
@@ -13500,4 +13500,22 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get onboardingPermissionTapToFix => 'Zum Beheben tippen';
+
+  @override
+  String get consentShortMessage => 'Omi macht mit KI aus deinen Gesprächen Notizen. Du kannst sie jederzeit löschen.';
+
+  @override
+  String consentAiProviders(String providers) {
+    return 'Verarbeitet mit $providers.';
+  }
+
+  @override
+  String get voiceProfileCardDismissed => 'Dein Stimmprofil kannst du jederzeit in den Einstellungen einrichten.';
+
+  @override
+  String get homeNewRecordingButton => 'Neue Aufnahme';
+
+  @override
+  String get chatWelcomeMessage =>
+      'Hi, ich bin Omi. Frag mich alles, worüber du gesprochen hast: was jemand gesagt hat, was du versprochen hast oder eine Zusammenfassung deines Tages. Ich kann auch Aufgaben hinzufügen und mir Dinge für dich merken.';
 }

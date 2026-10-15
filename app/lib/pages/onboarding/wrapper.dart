@@ -273,11 +273,16 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
     return true;
   }
 
-  /// The experiment's end-of-onboarding placement: only arms whose payload asks for it, never
-  /// control, and never when subscription UI is hidden (the router checks that).
+  /// The experiment's end-of-onboarding placement, when the payload turns it on: a variant shows its
+  /// paywall; control shows nothing but is exposed at the same moment, so both arms enter the
+  /// experiment at the same point. Never when subscription UI is hidden (the router checks that).
   Future<void> _maybeShowOnboardingPaywall() async {
     final config = await PaywallExperiment.resolve();
-    if (!mounted || config.isControl || !config.onboardingPaywall) return;
+    if (!mounted || !config.onboardingPaywall) return;
+    if (config.isControl) {
+      PaywallRouter.exposeControl(context, config: config);
+      return;
+    }
     await PaywallRouter.openVariant(context, source: 'onboarding', config: config);
   }
 
@@ -528,6 +533,27 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
     }
   }
 
+  /// Sign-in and the data & privacy consent: the Omi pendant at the top, on the same surface as the
+  /// rest of onboarding (no photo). The cord runs off the top edge, so the pendant hangs into view.
+  Widget _pendantHero() {
+    final media = MediaQuery.of(context);
+    return FadeTransition(
+      opacity: _backgroundFadeAnimation,
+      child: Align(
+        alignment: Alignment.topCenter,
+        child: ExcludeSemantics(
+          child: Assets.images.omiPendantGlow.image(
+            key: const Key('onboarding_pendant_hero'),
+            width: media.size.width,
+            height: media.size.height * 0.6,
+            fit: BoxFit.cover,
+            alignment: Alignment.topCenter,
+          ),
+        ),
+      ),
+    );
+  }
+
   Widget _background() {
     final media = MediaQuery.of(context);
     return FadeTransition(
@@ -675,7 +701,11 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
           backgroundColor: OmiColors.surface0,
           body: Stack(
             children: [
-              if (index == kAuthPage || showBackground) _background(),
+              // Sign-in and consent (before any onboarding arm): the Omi pendant on the plain surface.
+              if (index == kAuthPage || index == kAiConsentPage)
+                _pendantHero()
+              else if (showBackground)
+                _background(),
               OnboardingStepLayout(
                 reserveHeader: index == kSpeechProfilePage,
                 onBack: previous == null ? null : _goBack,

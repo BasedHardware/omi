@@ -47,16 +47,14 @@ void main() {
       expect(find.byKey(const ValueKey('omi.action_items.empty')), findsOneWidget);
       expect(title, findsOneWidget);
       expect(hint, findsOneWidget);
-      expect(icon, findsOneWidget);
-      expect(l10n.tasksEmptyStateMessage, 'Start a conversation to create a task.');
+      expect(icon, findsNothing, reason: 'the empty state is text only');
+      expect(l10n.tasksEmptyStateMessage, 'To-dos from your conversations will show up here.');
       expect(create, findsNothing);
       expect(find.byType(OmiButton), findsNothing);
       expect(find.byType(FloatingActionButton), findsNothing);
       expect(tester.widget<Text>(title).style!.color, OmiColors.textPrimary);
       expect(tester.widget<Text>(hint).style!.color, OmiColors.textSecondary);
-      expect(IconTheme.of(tester.element(icon)).color, OmiColors.textTertiary);
       final emptyTitleRect = tester.getRect(title);
-      final emptyIconRect = tester.getRect(icon);
 
       status = 503;
       await provider.forceRefreshActionItems();
@@ -70,7 +68,7 @@ void main() {
       await tester.tap(find.text(l10n.retry));
       await tester.pumpAndSettle();
       expect(provider.apiViewState.phase, ApiViewPhase.empty);
-      expect(icon, findsOneWidget);
+      expect(icon, findsNothing);
       expect(hint, findsOneWidget);
       expect(create, findsNothing);
       expect(tester.getRect(title), emptyTitleRect);
@@ -102,7 +100,7 @@ void main() {
       final homeTitleRect = tester.getRect(find.text(l10n.noConversationsYet));
       expect(emptyTitleRect.top, homeTitleRect.top);
       expect(emptyTitleRect.center.dx, homeTitleRect.center.dx);
-      expect(emptyIconRect, tester.getRect(find.byIcon(Icons.forum_rounded)));
+      expect(find.byIcon(Icons.forum_rounded), findsNothing);
 
       tester.platformDispatcher.textScaleFactorTestValue = 2;
       await tester.pumpAndSettle();

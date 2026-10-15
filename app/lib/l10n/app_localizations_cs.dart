@@ -4885,7 +4885,7 @@ class AppLocalizationsCs extends AppLocalizations {
       'Pokračováním budou vaše konverzace, nahrávky a osobní údaje bezpečně uloženy na našich serverech. Vaše audio nahrávky a přepisy jsou zpracovávány AI službami třetích stran (včetně Deepgram pro přepis a OpenAI pro analýzu), aby vám poskytly poznatky založené na AI a umožnily všechny funkce aplikace.';
 
   @override
-  String get tasksEmptyStateMessage => 'Začněte konverzaci a vytvořte úkol.';
+  String get tasksEmptyStateMessage => 'Úkoly z vašich konverzací se zobrazí tady.';
 
   @override
   String get clearChatAction => 'Vymazat chat';
@@ -13403,4 +13403,22 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get onboardingPermissionTapToFix => 'Klepnutím opravíte';
+
+  @override
+  String get consentShortMessage => 'Omi pomocí AI mění vaše konverzace v poznámky. Kdykoli je můžete smazat.';
+
+  @override
+  String consentAiProviders(String providers) {
+    return 'Zpracovává $providers.';
+  }
+
+  @override
+  String get voiceProfileCardDismissed => 'Hlasový profil můžete kdykoli nastavit v Nastavení.';
+
+  @override
+  String get homeNewRecordingButton => 'Nový záznam';
+
+  @override
+  String get chatWelcomeMessage =>
+      'Ahoj, jsem Omi. Zeptej se mě na cokoli, o čem jsi mluvil: co kdo řekl, co jsi slíbil nebo shrnutí tvého dne. Umím také přidávat úkoly a pamatovat si věci za tebe.';
 }
