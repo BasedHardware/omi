@@ -369,3 +369,25 @@ async def test_existing_user_auth_does_not_redeem_referral(monkeypatch):
     await auth._generate_custom_token('google', 'provider-token', referral_code=referral_code)
 
     assert claims == []
+
+
+def test_claim_referral_trial_database_guards_and_handles_exception(monkeypatch):
+    from database.referrals import claim_referral_trial
+
+    # 1. Invalid / empty uid checks
+    success, reason = claim_referral_trial('', 'referrer-123', is_new_user=True)
+    assert success is False
+    assert reason == 'invalid_referred_uid'
+
+    success, reason = claim_referral_trial('referred-123', '  ', is_new_user=True)
+    assert success is False
+    assert reason == 'invalid_referrer_uid'
+
+    # 2. Database exception handling
+    class FailingClient:
+        def collection(self, _name):
+            raise RuntimeError('Firestore connection dropped')
+
+    success, reason = claim_referral_trial('user-1', 'referrer-1', is_new_user=True, firestore_client=FailingClient())
+    assert success is False
+    assert reason == 'transaction_failed'
