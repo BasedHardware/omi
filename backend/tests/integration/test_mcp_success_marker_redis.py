@@ -1,4 +1,4 @@
-"""Local Redis atomic marker contract; never uses configured remote Redis or PostHog."""
+"""Local Redis independence of per-success markers; never uses configured remote Redis or PostHog."""
 
 import shutil
 import subprocess
@@ -47,7 +47,7 @@ def local_redis():
         temporary.cleanup()
 
 
-def test_real_redis_cross_worker_claim_settlement_and_failed_capture_retry(local_redis, monkeypatch):
+def test_success_stream_ignores_redis_while_transport_presence_still_dedupes(local_redis, monkeypatch):
     monkeypatch.setattr(analytics.redis_db, 'r', local_redis)
     capture = Mock(return_value=True)
     monkeypatch.setattr(analytics, 'emit_product_event', capture)
@@ -60,18 +60,13 @@ def test_real_redis_cross_worker_claim_settlement_and_failed_capture_retry(local
 
     with ThreadPoolExecutor(max_workers=8) as executor:
         list(executor.map(lambda _: emit(), range(32)))
-    assert capture.call_count == 1
-    keys = list(local_redis.scan_iter('mcp:tool-success:*'))
-    assert len(keys) == 1
-    assert local_redis.get(keys[0]) == b'done'
-    assert 172790 <= local_redis.ttl(keys[0]) <= 172800
-    # A lost/stale worker cannot release another worker's settled claim.
-    assert local_redis.eval(analytics._MCP_SUCCESS_SETTLE, 1, keys[0], 'stale-owner', 'release', 172800) == 0
-    capture.return_value = False
     emit(at + timedelta(seconds=1))
-    assert len(list(local_redis.scan_iter('mcp:tool-success:*'))) == 1
-    capture.return_value = True
-    emit(at + timedelta(seconds=1))
-    emit(at + timedelta(seconds=1))
-    assert capture.call_count == 3
-    assert capture.call_args_list[1].kwargs['event_uuid'] == capture.call_args_list[2].kwargs['event_uuid']
+    assert capture.call_count == 33
+    assert not list(local_redis.scan_iter('mcp:tool-success:*'))
+    # Only the unchanged presence diagnostic uses the daily Redis claim.
+    assert analytics._claim_daily_active_marker('local-test', now=at) is True
+    assert analytics._claim_daily_active_marker('local-test', now=at) is False
+    local_redis.close()
+    monkeypatch.setattr(analytics.redis_db, 'r', Mock(set=Mock(side_effect=ConnectionError('offline'))))
+    emit()
+    assert capture.call_count == 34

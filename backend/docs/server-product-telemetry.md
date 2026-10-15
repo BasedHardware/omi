@@ -1,12 +1,12 @@
 # Server product analytics
 
-`utils/product_telemetry.py` owns one lazy server capture SDK per process.
-Integration, hosted MCP, conversation memory extraction, and product/billing
-emitters all use `emit_product_event`. No client construction or I/O occurs on
-import. Ordinary delivery uses the owned postprocess executor with at most
-1,000 pending deliveries; billing and the daily MCP success marker retain
-synchronous capture in their existing background workers. Failure is optional
-telemetry degradation and cannot change the owning operation's response.
+`utils/product_telemetry.py` owns the shared `emit_product_event` seam for
+integration, hosted MCP, conversation memory extraction, and product/billing
+emitters. It lazily constructs at most one SDK per admitted family (product,
+billing, MCP). No client construction or I/O occurs on import. Product and MCP
+capture enqueue without blocking onto independent SDK queues (1,000 events
+each); consumer failures report privacy-safe fallback telemetry. Queue rejection
+is observable and cannot change the owning operation's response.
 
 Credential admission remains scoped to each emitter family. Product, integration
 and memory extraction use `POSTHOG_PROJECT_API_KEY`, with the legacy
@@ -17,12 +17,14 @@ Billing uses only `POSTHOG_BILLING_API_KEY`; MCP uses only
 cross-family fallback: Cloud Run's `project=disabled` plus a valid billing token
 never enables product/integration/extraction or MCP events.
 
-One synchronous capture SDK remains shared across enabled families. Its public
-`api_key` is bound to the admitted family's token under a lock for the entire
-synchronous capture, then restored even on failure. Queued delivery retains the
-admitted key; credentials are never event properties. This relies on the pinned
-SDK's synchronous capture contract, covered with the real SDK against a mocked
-transport. Flag SDKs stay read-only with their separate admission contracts.
+Each SDK retains its own construction-time key; no capture mutates credentials
+or holds a process-wide lock over network I/O. Key rotation requires a process
+restart. Flag SDKs stay read-only with their separate admission contracts.
+Billing alone uses synchronous capture, in its existing post-response worker:
+its durable webhook delivery record must observe capture acceptance/failure
+before settling or retrying. Its deterministic insert ID and timestamp remain
+unchanged. Product and MCP queued acceptance is not proof of ingestion; queues
+are best effort and can lose pending events on process termination.
 
 Every server event has `emitter=server`, `environment`, boolean `test` and
 closed `source_platform=macos|ios|android|windows|web|mcp|server|unknown`.
@@ -53,35 +55,40 @@ person/device/conversation IDs are never exempted. Identity goes only in
 
 ## Hosted MCP success
 
-`MCP Tool Use Succeeded` is unsampled and scheduled only after an authenticated,
-authorized application-successful registered tool invocation. Empty successful
-reads count. Initialize, list, notifications, validation/auth/rate-limit errors,
-JSON-RPC failures and tool `isError` outcomes do not claim the day.
+`MCP Tool Use Succeeded` schema **2** emits on **every** authenticated,
+authorized application-successful registered `tools/call`, unsampled. Empty
+successful reads and registered list tools count. Protocol initialize,
+`tools/list`, notifications, validation/auth/rate-limit errors, JSON-RPC failures
+and tool `isError` outcomes emit no success event.
 
-Closed properties are `surface=mcp`, registry `tool`, `client` from the tool
-message's `clientInfo` (including protocol `_meta`), `initiator`,
-`schema_version=1`, `source_platform=mcp`, and shared defaults. This stateless
-server cannot recover clientInfo sent only on a prior initialize request, so
-clients should repeat it in per-message metadata. User-Agent is not a marker
-client source. No present authenticated workflow signal verifies initiation;
-the transport always uses `initiator=unknown`. Do not trust an arbitrary header
-or tool argument to assert `user` or `scheduled_agent`.
+Closed properties are `surface=mcp`, registry `tool`, `op_type` in
+`list|read|search|write|other`, `client` from the tool message's `clientInfo`
+(including protocol `_meta`), `initiator`, `schema_version=2`,
+`source_platform=mcp`, and shared defaults. Operation class comes from the
+registry's operation/write metadata. Identity is only `distinct_id`; no content,
+arguments, or result payloads are emitted. The SDK timestamp is captured at
+application success in UTC; there is no daily claim or deterministic daily UUID.
+The success event has no Redis dependency. The independent SDK queue preserves
+per-call events and timestamps for threshold and cadence queries.
 
-The orchestrator's current dashboard interpretation qualifies `user` and
-`unknown`; `scheduled_agent` does not qualify. This interpretation is pending
-David's review, not a new ratified ruling. `MCP_QUALIFYING_INITIATORS` is the
-single policy set. Explicitly classified scheduled automation does not consume
-the daily qualifying marker; its detailed tool call remains a diagnostic.
+This stateless server cannot recover clientInfo sent only on a prior initialize
+request, so clients should repeat it in per-message metadata. User-Agent is not
+a marker client source. No present authenticated workflow signal verifies
+initiation; transport always uses `initiator=unknown`. Do not trust an arbitrary
+header or tool argument to assert `user` or `scheduled_agent`.
 
-Deduplication is UID × successful-call UTC day, captured before scheduling.
-Redis SET NX claims for 60 seconds across workers/instances. After synchronous
-capture acceptance, compare-and-set settles the claim for 48 hours. Rejection
-releases the claim; Redis failures skip telemetry and retry on later qualifying
-calls. A crash expires the lease. A deterministic UID/day event UUID protects
-capture-success / settlement-failure retries; it is not a property or a raw ID.
-Redis plus PostHog ingestion cannot form a transaction: this is unsampled
-best-effort delivery, not a durable outbox or proof of ingestion. Monitor
-fallbacks and verify live coverage after deployment before changing dashboards.
+The orchestrator's **2026-10-15 threshold ruling** qualifies a person's UTC day at
+**at least 2** successful authorized registered calls with `initiator=user` or
+`unknown`, excluding `scheduled_agent` and cadence-flagged unattended streams.
+`MCP_QUALIFYING_INITIATORS` and `MCP_QUALIFYING_CALLS_PER_UTC_DAY` live together in
+`utils/mcp_analytics.py` as the dashboard policy source. Unknown counts until a
+trusted initiator exists. This explicit ruling supersedes the earlier evidence
+recommendation of one call and user-only qualification. Scheduled-agent
+successes remain in the raw stream; apply policy and cadence exclusions in the
+dashboard before grouping by person and UTC date. The server does not infer
+cadence or human intent. Changing qualification requires no instrumentation
+change. Verify deployed identity, ingestion and coverage before metric cutover;
+unsampled best-effort delivery is not a durable outbox or proof of ingestion.
 
 `MCP Tool Call` remains the stable 25%-per-UID sampled diagnostic; `MCP Active`
 remains authenticated transport presence and never qualifies by itself.

@@ -222,7 +222,6 @@ def emit_product_event(
     event: str,
     properties: Mapping[str, Any],
     timestamp: Optional[datetime] = None,
-    event_uuid: Optional[str] = None,
 ) -> bool:
     """Return capture acceptance; telemetry failures never fail the owning operation."""
     if not uid:
@@ -235,8 +234,6 @@ def emit_product_event(
         capture_args: dict[str, Any] = dict(
             distinct_id=uid, event=event, properties=server_event_properties(uid, properties)
         )
-        if event_uuid:
-            capture_args['uuid'] = event_uuid
         if timestamp is not None:
             capture_args['timestamp'] = timestamp
         if event in BILLING_EVENTS and properties.get('$insert_id'):
