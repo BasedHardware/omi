@@ -441,10 +441,9 @@ def read_daily_memory_sweep_cohort_assignment(
     normalized_flag = (cohort_name or "").strip()
     if not normalized_uid or not normalized_flag:
         return DailySweepCohortDecision.unavailable
-    # Tests and the maintenance adaptor inject a read-only resolver.  The
-    # production fallback is lazy so importing this module never constructs a
-    # client or performs network I/O.  No identify/capture call is made and
-    # the user id comes only from the server-side inventory.
+    # Tests and maintenance inject a read-only resolver. The lazy fallback
+    # performs no import-time I/O and disables capture; user identity comes
+    # only from the server-side inventory.
     reader = resolver
     if reader is None:
         api_key = (os.getenv("POSTHOG_PROJECT_API_KEY") or os.getenv("POSTHOG_API_KEY") or "").strip()
@@ -462,6 +461,7 @@ def read_daily_memory_sweep_cohort_assignment(
                 reader = _POSTHOG_CLIENTS.get(client_key)
                 if reader is None:
                     reader = client_type(
+                        send=False,
                         project_api_key=api_key,
                         host=host,
                         feature_flags_request_timeout_seconds=timeout,

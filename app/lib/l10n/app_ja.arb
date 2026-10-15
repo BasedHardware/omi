@@ -4115,5 +4115,13 @@
     "onboardingNoOmiYet": "まだOmiをお持ちでないですか？",
     "onboardingOmiNotOrdered": "まだ注文していません",
     "onboardingOmiOrdered": "注文済みです",
-    "onboardingPermissionTapToFix": "タップして修正"
+    "onboardingPermissionTapToFix": "タップして修正",
+    "homePendingTitle": "会話を準備中",
+    "homePendingCatchingUp": "以前の音声を処理中",
+    "onTheWayTitle": "準備中",
+    "onTheWayAlmostReady": "まもなく完了",
+    "activityEmpty": "アクティビティはまだありません",
+    "activityNewSemantics": "アクティビティ、新着あり",
+    "activityLoadFailed": "アクティビティの一部を読み込めませんでした",
+    "activityNewItem": "新着"
 }

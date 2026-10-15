@@ -19,11 +19,10 @@
         "platforms": [
           "linux/amd64"
         ],
-        "flags": [
-          "--memory=2Gi",
-          "--cpu=1",
-          "--timeout=3600"
-        ],
+        "flags": {
+          "development": ["--memory=2Gi", "--cpu=1", "--timeout=3600"],
+          "prod": ["--memory=2Gi", "--cpu=1", "--timeout=3600", "--no-cpu-throttling"]
+        },
         "runtime_secrets": {
           "OMI_API_SECRET_KEY": "WEB_ADMIN_OMI_API_SECRET_KEY:latest",
           "TYPESENSE_HOST": "WEB_ADMIN_TYPESENSE_HOST:latest",

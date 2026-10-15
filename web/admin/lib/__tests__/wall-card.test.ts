@@ -91,7 +91,8 @@ it("keeps real healthy counts bright, all fixtures dim, and puts the complete me
   expect(svg).toContain("prior 7 days");
   expect(svg).toContain("macOS");
   expect(svg).toContain("<path");
-  expect(svg).toContain("as of Oct 14");
+  expect(svg).toContain("MCP-only");
+  expect(svg).toContain("MCP marker not deployed");
   expect(svg).not.toMatch(
     /script|foreignObject|iframe|NO WATERMARK|\[Active\]/
   );
