@@ -256,7 +256,7 @@ environments:
             value: https://api.omiapi.com
           OMI_SHAPED_AGENT_MODE: {value: 'on', category: rollout}
           DREAM_AGENT_ELIGIBILITY: {value: allowlist, category: rollout}
-          DREAM_AGENT_UID_ALLOWLIST: {value: vi7SA9ckQCe4ccobWNxlbdcNdC23, category: rollout}
+          DREAM_AGENT_UID_ALLOWLIST: {value: '', category: rollout}
           DREAM_ON_DEMAND_ENABLED: {value: 'true', category: rollout}
           PROACTIVITY_V2_POSTHOG_TOKEN: {value: phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y, category: rollout}
           PROACTIVITY_V2_POSTHOG_HOST: {value: 'https://us.posthog.com', category: rollout}
@@ -350,7 +350,7 @@ environments:
             value: http://172.16.48.49/diarizer
           OMI_SHAPED_AGENT_MODE: {value: 'on', category: rollout}
           DREAM_AGENT_ELIGIBILITY: {value: allowlist, category: rollout}
-          DREAM_AGENT_UID_ALLOWLIST: {value: vi7SA9ckQCe4ccobWNxlbdcNdC23, category: rollout}
+          DREAM_AGENT_UID_ALLOWLIST: {value: '', category: rollout}
           DREAM_ON_DEMAND_ENABLED: {value: 'true', category: rollout}
           PROACTIVITY_V2_POSTHOG_TOKEN: {value: phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y, category: rollout}
           PROACTIVITY_V2_POSTHOG_HOST: {value: 'https://us.posthog.com', category: rollout}
@@ -772,7 +772,7 @@ environments:
               category: memory_rollout
             OMI_SHAPED_AGENT_MODE: {value: 'on', category: rollout}
             DREAM_AGENT_ELIGIBILITY: {value: allowlist, category: rollout}
-            DREAM_AGENT_UID_ALLOWLIST: {value: vi7SA9ckQCe4ccobWNxlbdcNdC23, category: rollout}
+            DREAM_AGENT_UID_ALLOWLIST: {value: '', category: rollout}
             DREAM_ON_DEMAND_ENABLED: {value: 'true', category: rollout}
             PROACTIVITY_V2_POSTHOG_TOKEN: {value: phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y, category: rollout}
             PROACTIVITY_V2_POSTHOG_HOST: {value: 'https://us.posthog.com', category: rollout}
@@ -1010,7 +1010,7 @@ environments:
               category: memory_rollout
             OMI_SHAPED_AGENT_MODE: {value: 'on', category: rollout}
             DREAM_AGENT_ELIGIBILITY: {value: allowlist, category: rollout}
-            DREAM_AGENT_UID_ALLOWLIST: {value: vi7SA9ckQCe4ccobWNxlbdcNdC23, category: rollout}
+            DREAM_AGENT_UID_ALLOWLIST: {value: '', category: rollout}
             DREAM_ON_DEMAND_ENABLED: {value: 'true', category: rollout}
             SYNC_PHASE_METRICS_EXPORT_ENABLED:
               value: 'true'
@@ -1230,7 +1230,7 @@ environments:
               category: memory_rollout
             OMI_SHAPED_AGENT_MODE: {value: 'on', category: rollout}
             DREAM_AGENT_ELIGIBILITY: {value: allowlist, category: rollout}
-            DREAM_AGENT_UID_ALLOWLIST: {value: vi7SA9ckQCe4ccobWNxlbdcNdC23, category: rollout}
+            DREAM_AGENT_UID_ALLOWLIST: {value: '', category: rollout}
             DREAM_ON_DEMAND_ENABLED: {value: 'true', category: rollout}
             SYNC_PHASE_METRICS_EXPORT_ENABLED:
               value: 'true'
@@ -1401,7 +1401,7 @@ environments:
               value: us-central1
             OMI_SHAPED_AGENT_MODE: {value: 'on', category: rollout}
             DREAM_AGENT_ELIGIBILITY: {value: allowlist, category: rollout}
-            DREAM_AGENT_UID_ALLOWLIST: {value: vi7SA9ckQCe4ccobWNxlbdcNdC23, category: rollout}
+            DREAM_AGENT_UID_ALLOWLIST: {value: '', category: rollout}
             DREAM_ON_DEMAND_ENABLED: {value: 'true', category: rollout}
             PROACTIVITY_V2_POSTHOG_TOKEN: {value: phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y, category: rollout}
             PROACTIVITY_V2_POSTHOG_HOST: {value: 'https://us.posthog.com', category: rollout}
@@ -2359,7 +2359,6 @@ environments:
           env_var: OMI_VERTEX_LEGACY_TASK_MIN_CAPABLE_MACOS_BUILD
           provisional: true
           category: rollout
-          value: '12435'
         OMI_VERTEX_LEGACY_TASK_MODE:
           env_var: OMI_VERTEX_LEGACY_TASK_MODE
           provisional: true

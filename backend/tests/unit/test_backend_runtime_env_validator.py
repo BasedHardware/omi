@@ -534,8 +534,8 @@ def with_cloud_run_oauth_secrets(payload: str) -> str:
         payload,
         flags=re.DOTALL,
     )
-    # Dream is admitted on these processing hosts. Keep unrelated gateway/secret
-    # fixtures complete without duplicating the rollout's account allowlist.
+    # Dev keeps Dream disabled, but these processing hosts declare its bindings.
+    # Derive fixtures from the manifest, including the empty dev allowlist.
     manifest = yaml.safe_load((ROOT / 'deploy/runtime_env.yaml').read_text())
     services = manifest['environments']['dev']['cloud_run']['services']
     for service in ('backend', 'backend-sync', 'backend-sync-backfill', 'backend-integration'):

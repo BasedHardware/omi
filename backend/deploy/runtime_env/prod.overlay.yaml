@@ -481,8 +481,6 @@ overlay:
       name: prod-omi-backend-config
   desktop_backend:
     env:
-      # First released macOS build with the Jev+3.8 screen pipeline and #20374 (Beta 12435, Stable 12447).
-      OMI_VERTEX_LEGACY_TASK_MIN_CAPABLE_MACOS_BUILD: {value: '12435', category: rollout}
       # Public client token, scoped to v2 cohort reads only (PostHog project 302298).
       PROACTIVITY_V2_POSTHOG_TOKEN:
         value: phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y

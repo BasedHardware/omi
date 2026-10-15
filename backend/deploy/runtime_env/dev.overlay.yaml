@@ -23,7 +23,7 @@ overlay:
           value: 'on'
           category: rollout
         DREAM_AGENT_ELIGIBILITY: {value: 'allowlist', category: rollout}
-        DREAM_AGENT_UID_ALLOWLIST: {value: 'vi7SA9ckQCe4ccobWNxlbdcNdC23', category: rollout}
+        DREAM_AGENT_UID_ALLOWLIST: {value: '', category: rollout}
         DREAM_ON_DEMAND_ENABLED: {value: 'true', category: rollout}
         CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE: {value: 'shadow', category: rollout}
         # Public client token, scoped to v2 cohort reads only (PostHog project 302298).
@@ -164,7 +164,7 @@ overlay:
           value: 'on'
           category: rollout
         DREAM_AGENT_ELIGIBILITY: {value: 'allowlist', category: rollout}
-        DREAM_AGENT_UID_ALLOWLIST: {value: 'vi7SA9ckQCe4ccobWNxlbdcNdC23', category: rollout}
+        DREAM_AGENT_UID_ALLOWLIST: {value: '', category: rollout}
         DREAM_ON_DEMAND_ENABLED: {value: 'true', category: rollout}
         CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE: {value: 'shadow', category: rollout}
         # Public client token, scoped to v2 cohort reads only (PostHog project 302298).
@@ -479,7 +479,7 @@ overlay:
             value: 'on'
             category: rollout
           DREAM_AGENT_ELIGIBILITY: {value: 'allowlist', category: rollout}
-          DREAM_AGENT_UID_ALLOWLIST: {value: 'vi7SA9ckQCe4ccobWNxlbdcNdC23', category: rollout}
+          DREAM_AGENT_UID_ALLOWLIST: {value: '', category: rollout}
           DREAM_ON_DEMAND_ENABLED: {value: 'true', category: rollout}
           CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE: {value: 'shadow', category: rollout}
           # Public client token, scoped to v2 cohort reads only (PostHog project 302298).
@@ -622,7 +622,7 @@ overlay:
             value: 'on'
             category: rollout
           DREAM_AGENT_ELIGIBILITY: {value: 'allowlist', category: rollout}
-          DREAM_AGENT_UID_ALLOWLIST: {value: 'vi7SA9ckQCe4ccobWNxlbdcNdC23', category: rollout}
+          DREAM_AGENT_UID_ALLOWLIST: {value: '', category: rollout}
           DREAM_ON_DEMAND_ENABLED: {value: 'true', category: rollout}
           CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE: {value: 'shadow', category: rollout}
           SYNC_PHASE_METRICS_EXPORT_ENABLED: {value: 'true', category: telemetry}
@@ -769,7 +769,7 @@ overlay:
             value: 'on'
             category: rollout
           DREAM_AGENT_ELIGIBILITY: {value: 'allowlist', category: rollout}
-          DREAM_AGENT_UID_ALLOWLIST: {value: 'vi7SA9ckQCe4ccobWNxlbdcNdC23', category: rollout}
+          DREAM_AGENT_UID_ALLOWLIST: {value: '', category: rollout}
           DREAM_ON_DEMAND_ENABLED: {value: 'true', category: rollout}
           CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE: {value: 'shadow', category: rollout}
           SYNC_PHASE_METRICS_EXPORT_ENABLED: {value: 'true', category: telemetry}
@@ -881,7 +881,7 @@ overlay:
             value: 'on'
             category: rollout
           DREAM_AGENT_ELIGIBILITY: {value: 'allowlist', category: rollout}
-          DREAM_AGENT_UID_ALLOWLIST: {value: 'vi7SA9ckQCe4ccobWNxlbdcNdC23', category: rollout}
+          DREAM_AGENT_UID_ALLOWLIST: {value: '', category: rollout}
           DREAM_ON_DEMAND_ENABLED: {value: 'true', category: rollout}
           CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE: {value: 'shadow', category: rollout}
           # Public client token, scoped to v2 cohort reads only (PostHog project 302298).
