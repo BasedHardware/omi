@@ -160,6 +160,8 @@ class PipelineWorker:
             raise ValueError('conversation requires a dedicated batch GPU or a smaller admitted unit')
         if self.config.pool_kind == 'shared_live' and sum(i.duration_seconds for i in items) > 120:
             raise ValueError('shared-live pull exceeds 120 audio seconds; yield between pulls')
+        if self.config.pool_kind == 'shared_live' and any(i.unit_kind != 'capture_span' for i in items):
+            raise ValueError('shared-live requires explicitly admitted capture spans, never conversation units')
         with self._lock:
             if self._unavailable:
                 raise RuntimeError('GPU chain unavailable; restart required')

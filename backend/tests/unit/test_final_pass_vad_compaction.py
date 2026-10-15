@@ -2,6 +2,7 @@ from types import SimpleNamespace
 
 import pytest
 
+from utils.stt import vad
 from utils.stt.vad_compaction import compact_speech, transcribe_with_speech_compaction, diarize_with_speech_compaction
 from utils.sync import wal_audio_coverage_metrics as coverage_metrics
 
@@ -152,8 +153,6 @@ def test_abstention_labels_are_bounded(monkeypatch):
 
 
 def test_offline_detector_keeps_final_partial_window(monkeypatch):
-    from utils.stt import vad
-
     observed = []
 
     def detect(samples):

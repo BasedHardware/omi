@@ -273,7 +273,9 @@ def test_pool_unit_limits_reject_conversation_on_shared_live_before_decode():
     with pytest.raises(ValueError, match='yield between pulls'):
         worker.process_batch([item('a', 100), item('b', 100)])
     assert not decoded
-    assert worker.process_batch([item(duration=120)])
+    with pytest.raises(ValueError, match='capture spans'):
+        worker.process_batch([item(duration=120)])
+    assert worker.process_batch([replace(item(duration=120), unit_kind='capture_span')])
 
 
 def test_pool_defaults_and_unsafe_config(monkeypatch):
