@@ -641,7 +641,7 @@ def test_apple_states_recreate_without_carrying_stale_markers(world, marker):
     world.default_app = 'apple_reminders'
     world.process('conv-1', [_item(BUDGET, DUE)])
     old_id = world.ids()[BUDGET]
-    action_items_db.update_action_item(UID, old_id, {**marker, 'completed': True})
+    world.store.tasks()[old_id].update({**marker, 'completed': True})
     world.process('conv-1', [_item(BUDGET, DUE)])
     new_id = world.ids()[BUDGET]
     assert new_id != old_id and old_id not in world.store.tasks()
