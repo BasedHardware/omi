@@ -66,7 +66,7 @@ def test_long504_uses_platform_latency_not_application_terminal_event():
 def test_no_new_monitoring_policy_or_inhibition():
     holds = json.loads((s.ROOT / 'admission-holds.json').read_text())
     assert holds['storm_inhibition'].startswith('none;')
-    assert not holds['metric_create_authorized'] and not holds['grafana_import_authorized']
+    assert not holds['automatic_metric_creation_authorized'] and not holds['grafana_import_authorized']
     for path in s.ROOT.glob('*.json'):
         obj = json.loads(path.read_text())
         assert not isinstance(obj, dict) or 'combiner' not in obj

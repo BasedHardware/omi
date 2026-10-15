@@ -1,9 +1,9 @@
 # Route-error preparation: held
 
-These definitions are candidates, outside the canonical alert sources. No metric
-creation, alert import, suppression or application rollout is performed by these
-files. User authorization to create log metrics does not establish semantic
-coverage or admit the proposed thresholds.
+The three new counters are prepared for scoped operator creation as observations;
+alert candidates remain outside canonical sources and held. These files perform
+no automatic creation, alert import, suppression or application rollout. Counter
+creation does not establish complete route coverage or admit alert thresholds.
 
 The platform-request counter covers every Cloud Run service through the monitored
 resource's service label. Its finite extractors recognize only the two Gemini
@@ -27,7 +27,9 @@ load-balancer/Armor requests belong to the same route.
 
 Run `python3 backend/scripts/check_route_error_preparation.py` offline.
 `--verify-live` reads descriptor metadata with the active service account and
-prints only statuses. Before creation, verify log coverage, latency units,
-bounded classification, current metric absence/ownership, actual increments,
-per-service templates and consumer-specific replay. Creating a metric requires
-the brief's scoped production operator or the parent; no human login is needed.
+prints only statuses. Before creation, repeat name absence/ownership and definition review; CREATE only,
+never replace an unknown owner. Capped request-log samples support the latency
+predicate and bounded classification, not population coverage. After creation,
+verify prospective increments, resource/label types and consumer replay before
+alert admission. Complete templates across all producers remain a separate gate.
+Use an operator with logMetrics.create; no human login or IAM expansion is required.

@@ -156,7 +156,7 @@
     "annotations": {
       "summary": "Desktop backend - at least five long 504s in five minutes",
       "description": "Platform request logs, latency >=290s, status=504; count >=5 over 5min. Separate from provider-unavailable 503s.",
-      "admission_hold": "Log metric absent/unverified, request-log coverage and latency-unit predicate need matching entries and observed increments.",
+      "admission_hold": "Counter creation is prepared; post-create increments, actual resource/label domains, request-log coverage and threshold replay remain unverified.",
       "verification": "Verify exact descriptor, live labels, bounded time-series query, datasource canary and notification receipt before admission.",
       "safe_next_action": "Inspect aggregate platform metrics and bounded logs; preserve global security and 5xx alerts."
     }
