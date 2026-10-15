@@ -235,11 +235,17 @@ def test_generated_dart_wire_models_cover_contract():
 
 
 def test_reject_route_rejects_unsafe_conversation_id(client):
-    # A separator/traversal id can never reach document() — FastAPI pattern
-    # validation answers 422 before the handler runs.
-    for bad in ('a%2Fb', '..', 'a%5Cb', 'x' * 200):
+    # Separator/traversal ids must never reach document(). A percent-encoded
+    # '/' decodes into a path break and 404s at route matching; single-segment
+    # unsafe ids (dots, backslash, whitespace, oversize) are the pattern's 422.
+    for bad in ('a%5Cb', 'a b', 'x' * 200):
         response = client.post(f'/v1/conversations/{bad}/speakers/3/reject', json={'kind': 'not_me'})
         assert response.status_code == 422, (bad, response.status_code)
+    # '..' is path-normalized by the client and a decoded '/' splits the
+    # segment — neither reaches the handler; both 404 instead of touching a doc.
+    for unroutable in ('a%2Fb', '..'):
+        resp = client.post(f'/v1/conversations/{unroutable}/speakers/3/reject', json={'kind': 'not_me'})
+        assert resp.status_code in (404, 422), unroutable
 
 
 def test_reject_route_bounds_speaker_id(client):
@@ -250,9 +256,11 @@ def test_reject_route_bounds_speaker_id(client):
 
 
 def test_reject_route_rejects_unsafe_body_person_id(client):
+    # person_id is only honored for kind='not_person' (the model validator
+    # nulls it otherwise), so the guard is exercised on that kind.
     for bad in ('a/b', '../x', 'a\\b', ' padded ', 'x' * 200):
         response = client.post(
-            '/v1/conversations/conv1/speakers/3/reject', json={'kind': 'not_me', 'person_id': bad}
+            '/v1/conversations/conv1/speakers/3/reject', json={'kind': 'not_person', 'person_id': bad}
         )
         assert response.status_code == 400, (bad, response.status_code)
         assert response.json()['detail'] == 'invalid person_id'
@@ -289,8 +297,10 @@ def test_reject_route_lookup_miss_returns_sanitized_404(client, monkeypatch):
 
 
 def test_voice_matches_rejects_unsafe_person_id(client):
-    for bad in ('a%2Fb', '..', 'x' * 200):
+    for bad in ('a b', 'a%5Cb', 'x' * 200):
         assert client.get(f'/v1/users/people/{bad}/voice-matches').status_code == 422
+    for unroutable in ('..', 'a%2Fb'):
+        assert client.get(f'/v1/users/people/{unroutable}/voice-matches').status_code in (404, 422)
 
 
 def test_voice_matches_unexpected_error_returns_sanitized_500(client, monkeypatch):
