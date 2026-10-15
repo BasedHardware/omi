@@ -16,7 +16,6 @@ import pytest
 
 import database.daily_summaries as daily_summaries_db
 
-
 COUNTER_FIELDS = daily_summaries_db.DESKTOP_DAILY_USAGE_COUNTER_FIELDS
 
 
