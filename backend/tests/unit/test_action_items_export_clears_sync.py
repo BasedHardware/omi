@@ -19,7 +19,6 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
 
 import database.action_items as action_items_db
 
-
 UID = "u1"
 ITEM_ID = "item-1"
 
