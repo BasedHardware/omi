@@ -166,3 +166,8 @@ These 14 additional composite declarations require production READY evidence;
 loopback tests do not prove serving index readiness. A single pull updates only
 one shard. Old global rings migrate in bounded recovery transactions; normal
 admission/pull never writes the global control document.
+
+Idle-shard activation reads the maximum retained per-class service frontier
+through its single-field descending index. No global document is written; an
+empty/rejoin cycle cannot reset credit, and an old shard cannot penalize newly
+active owners because another shard restarted its virtual clock from zero.

@@ -9,6 +9,13 @@ def entries():
     namespaces = ['batch_pipeline_prod', 'batch_pipeline_dev']
     return (
         CoveredByEntry(
+            'database.batch_pipeline_store.FirestoreTransaction.service_frontier',
+            covered_by=('database.batch_pipeline_store.service_frontier',),
+            reason='thin adapter forwards the transaction-bound frontier query unchanged',
+            expect_observed=False,
+            body_digest='74aa1993996cdc9ca93a1141de64dfc7e05a9d831a67860ddbb8a64d55520a02',
+        ),
+        CoveredByEntry(
             'database.batch_pipeline_staging.reap',
             covered_by=('database.batch_pipeline_staging.unsettled',),
             reason='thin orchestration delegates the sole query to unsettled; sum counts transaction results',
@@ -69,6 +76,11 @@ def entries():
             reason='thin store adapter forwards namespace and bounded query arguments unchanged',
             expect_observed=False,
             body_digest='8d77904364b37100b5816f0252831ef6cf8807930dba8671cdc56bf603340315',
+        ),
+        DriverEntry(
+            'database.batch_pipeline_store.service_frontier',
+            domains={'namespace': namespaces, 'priority': [0, 1, 2]},
+            neutrals={'transaction': (None, 'transaction binding only')},
         ),
         DriverEntry(
             'database.batch_pipeline_store.control_candidate',

@@ -23,7 +23,11 @@ def read_control(tx: Transaction, key: str) -> dict:
     return control
 
 
-def activate(control: dict, priority: int, now: float) -> None:
+def activate(tx: Transaction, control: dict, priority: int, now: float) -> None:
+    if not control[field(priority, 'active')]:
+        # Rejoining starts at the persistent frontier, never ancient or reset
+        # credit. Indexed read only: no shared write clock or control hotspot.
+        control[field(priority, 'service')] = max(control[field(priority, 'service')], tx.service_frontier(priority))
     control[field(priority, 'active')] = True
     for pool in ('batch', 'live'):
         key = field(priority, f'{pool}_available_at')
@@ -43,7 +47,7 @@ def migrate_legacy(tx: Transaction, now: float) -> None:
                 shard = read_control(tx, key)
                 if queue_key not in shard['rings'][priority]:
                     shard['rings'][priority].append(queue_key)
-                activate(shard, int(priority), now)
+                activate(tx, shard, int(priority), now)
                 tx.put('control', key, shard)
             moved += 1
     if moved:

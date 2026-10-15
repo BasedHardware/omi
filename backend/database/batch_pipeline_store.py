@@ -23,6 +23,7 @@ class Transaction(Protocol):
     def get(self, table: str, key: str) -> dict: ...
     def put(self, table: str, key: str, value: dict) -> None: ...
     def first_pending(self, owner_key: str) -> dict | None: ...
+    def service_frontier(self, priority: int) -> float: ...
     def check_privacy(self, uid: str, conversation_ids=(), expected_generation: int | None = None) -> int: ...
 
 
@@ -66,6 +67,9 @@ class FirestoreTransaction:
 
     def first_pending(self, owner_key: str) -> dict | None:
         return first_pending(self.client, self.namespace, owner_key, transaction=self.transaction)
+
+    def service_frontier(self, priority: int) -> float:
+        return service_frontier(self.client, self.namespace, priority, transaction=self.transaction)
 
     def check_privacy(self, uid: str, conversation_ids=(), expected_generation: int | None = None) -> int:
         return assert_batch_write_allowed(
@@ -232,3 +236,16 @@ def oldest_retry(client: Any, namespace: str, priority: int) -> float | None:
         .stream()
     )
     return docs[0].to_dict()['retry_started_at'] if docs else None
+
+
+def service_frontier(client: Any, namespace: str, priority: int, *, transaction: Any = None) -> float:
+    if priority not in (0, 1, 2):
+        raise ValueError('bounded priority required')
+    name = f'p{priority}_service'
+    docs = list(
+        client.collection(f'{namespace}_control')
+        .order_by(name, direction=firestore.Query.DESCENDING)
+        .limit(1)
+        .stream(transaction=transaction)
+    )
+    return docs[0].to_dict()[name] if docs else 0.0

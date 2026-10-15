@@ -304,3 +304,20 @@ def test_distinct_owners_write_distinct_control_shards(store):
     assert {doc.id for doc in controls.stream()} == keys
     assert not controls.document('scheduler').get().exists
     assert {v.item.owner_id for v in queue.pull(1, 2)} == {'a', 'b'}
+
+
+def test_idle_shard_rejoins_at_persistent_frontier_in_transaction(store):
+    from utils.batch_pipeline.scheduler import owner_key
+    from config.batch_pipeline import scheduler_control_key
+
+    queue = Scheduler(store)
+    queue.enqueue(work('old', owner='a'), 0)
+    queue.pull(1)
+    queue.enqueue(work('new-owner', owner='b'), 2)
+    key = scheduler_control_key(owner_key('b'))
+    assert store.run(lambda tx: tx.get('control', key))['p2_service'] == 30
+    queue.enqueue(work('returning', owner='a'), 2)
+    assert {lease.item.owner_id for lease in queue.pull(2, 2)} == {'a', 'b'}
+    queue.enqueue(work('rejoin', owner='a'), 3)
+    key = scheduler_control_key(owner_key('a'))
+    assert store.run(lambda tx: tx.get('control', key))['p2_service'] == 60

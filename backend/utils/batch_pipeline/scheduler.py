@@ -42,7 +42,7 @@ def _append(tx: Transaction, control: dict, job: dict) -> None:
     queue['tail'] = job['segment_id']
     job['next'] = ''
     tx.put('queues', queue_key, queue)
-    activate(control, job['priority'], job['available_at'])
+    activate(tx, control, job['priority'], job['available_at'])
     tx.put('control', scheduler_control_key(job['owner_key']), control)
 
 

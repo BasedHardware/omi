@@ -70,7 +70,8 @@ selects one of 64 control documents, each holding three priority rings. Pull
 queries eligible shards by minimum per-class virtual service, then transacts
 only the selected shard. Service advances by audio seconds/active owners,
 sharing capacity fairly across differently populated shards; DRR shares within
-a shard. Fresh shards are exhausted before lower classes. Ineligible heads
+a shard. Idle shards rejoin at the indexed maximum service frontier, preventing
+stale-history penalties or repeated empty/rejoin credit resets. Fresh shards are exhausted before lower classes. Ineligible heads
 rotate; pool-specific 30s pauses avoid hot polling. Admission unpauses its shard.
 Recovery migrates old global rings in bounded metadata-only transactions.
 
@@ -97,14 +98,14 @@ No new client error contract is required.
 | Firestore step, one segment | Reads (approximate) | Writes |
 | --- | --- | --- |
 | Authorize/register encrypted artifact |10|1|
-| Admit |6|7; one owner shard|
+| Admit |6 plus one frontier read on idle-shard activation|7; one owner shard|
 | Pull |9 plus visited-owner privacy checks|job, queue, one shard|
 | Heartbeat20s |6|1|
 | Complete + ordered merge |14|4|
 | Projection complete |15 plus conversation reads|ledger, usage, job, expiry|
 
 Counts exclude retries/contention; empty priority probes add index reads.
-Every 15s metric refresh uses nine bounded queries. No ordinary admission/pull
+Each metric refresh uses nine bounded queries (GPU pump cadence 15s). No ordinary admission/pull
 writes the legacy global control; shard contention/load still needs qualification.
 
 ## Worker and protection interfaces

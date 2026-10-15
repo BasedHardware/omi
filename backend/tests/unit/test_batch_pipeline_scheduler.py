@@ -22,6 +22,11 @@ class MemoryTransaction:
     def put(self, table, key, value):
         self.rows[(table, key)] = deepcopy(value)
 
+    def service_frontier(self, priority):
+        return max(
+            (v.get(f'p{priority}_service', 0) for (table, _), v in self.rows.items() if table == 'control'), default=0.0
+        )
+
     def check_privacy(self, uid, conversation_ids=(), expected_generation=None):
         # This hermetic state-machine store models authorized synthetic accounts.
         return expected_generation or 0
@@ -439,3 +444,20 @@ def test_legacy_ring_migration_preserves_pending_work():
     queue.recover(1)
     assert queue.pull(1)[0].item.segment_id == 'legacy'
     assert store.rows['control', 'scheduler']['rings']['2'] == []
+
+
+def test_idle_shards_rejoin_at_frontier_without_history_penalty_or_credit_reset():
+    store = MemoryStore()
+    queue = Scheduler(store)
+    queue.enqueue(item('old-heavy', duration=3600), 0)
+    queue.pull(1)
+    heavy_key = scheduler_control_key(owner_key('heavy'))
+    light_key = scheduler_control_key(owner_key('light'))
+    assert store.rows['control', heavy_key]['p2_service'] == 3600
+    queue.enqueue(item('light', owner='light'), 2)
+    assert store.rows['control', light_key]['p2_service'] == 3600
+    queue.enqueue(item('heavy-again'), 2)
+    assert {v.item.owner_id for v in queue.pull(2, 2)} == {'heavy', 'light'}
+    frontier = max(v.get('p2_service', 0) for (table, _), v in store.rows.items() if table == 'control')
+    queue.enqueue(item('heavy-rejoin'), 3)
+    assert store.rows['control', heavy_key]['p2_service'] == frontier
