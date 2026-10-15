@@ -1,8 +1,12 @@
 # Structured logging rollout
 
 `omi_logging.configure_logging(service, ...)` is the dependency-free foundation.
-No entrypoint has switched in the foundation change. Keep the current split-stream
-setup until the consumer and per-service deployment gates below pass.
+Entrypoints migrate one deployment at a time after consumer admission. The fleet
+guard in `scripts/check_logging_entrypoints.py` discovers Docker launchers and
+Helm overrides; `logging_rollout_pending.json` records the remaining legacy
+violations. Remove each entry on adoption. The local/CI ratchet rejects increases
+and requires unconditional module-level shared setup, no print/basicConfig, and
+`log_config=None` for direct Uvicorn calls. Infrastructure probes are excluded.
 
 Images must copy `backend/omi_logging.py` into their Python application import root;
 use `from omi_logging import configure_logging, TraceContextMiddleware`. Do not

@@ -1,0 +1,63 @@
+{
+  "backend/desktop_backend.py": {
+    "missing_setup": 1
+  },
+  "backend/diarizer/batch_main.py": {
+    "missing_setup": 1
+  },
+  "backend/llm_gateway/main.py": {
+    "missing_setup": 1
+  },
+  "backend/main.py": {
+    "missing_setup": 1
+  },
+  "backend/modal/daily_memory_sweep_job.py": {
+    "missing_setup": 1,
+    "basicConfig": 1
+  },
+  "backend/modal/day3_reengagement_email_job.py": {
+    "missing_setup": 1,
+    "basicConfig": 1
+  },
+  "backend/modal/frame_request_retention_job.py": {
+    "missing_setup": 1,
+    "basicConfig": 1
+  },
+  "backend/modal/job.py": {
+    "missing_setup": 1,
+    "basicConfig": 1
+  },
+  "backend/modal/knowledge_ledger_drain_job.py": {
+    "missing_setup": 1,
+    "basicConfig": 1
+  },
+  "backend/modal/main.py": {
+    "missing_setup": 1
+  },
+  "backend/modal/memory_maintenance_job.py": {
+    "missing_setup": 1,
+    "basicConfig": 1
+  },
+  "backend/modal/x_connector_sync_job.py": {
+    "missing_setup": 1,
+    "basicConfig": 1
+  },
+  "backend/nllb_translation/main.py": {
+    "missing_setup": 1,
+    "uvicorn_reconfigures": 1
+  },
+  "backend/parakeet/main.py": {
+    "missing_setup": 1
+  },
+  "backend/pusher/main.py": {
+    "missing_setup": 1
+  },
+  "backend/scripts/finops/cloudrun_entry.py": {
+    "missing_setup": 1,
+    "print": 1
+  },
+  "backend/utils/messaging/maintenance.py": {
+    "missing_setup": 1,
+    "basicConfig": 1
+  }
+}
