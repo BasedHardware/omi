@@ -34,7 +34,7 @@ class TtsSynthesizeRequest(BaseModel):
     @classmethod
     def _validate_non_blank_strings(cls, value: object) -> str:
         if not isinstance(value, str):
-            raise TypeError("TTS fields must be strings")
+            raise ValueError("TTS fields must be strings")
         value = value.strip()
         if not value:
             raise ValueError("TTS fields must not be blank")
@@ -49,7 +49,7 @@ class TtsVoice(BaseModel):
     @classmethod
     def _validate_non_blank(cls, value: object) -> str:
         if not isinstance(value, str):
-            raise TypeError("voice fields must be strings")
+            raise ValueError("voice fields must be strings")
         value = value.strip()
         if not value:
             raise ValueError("voice fields must not be blank")
@@ -64,7 +64,7 @@ class TtsVoiceCatalog(BaseModel):
     @classmethod
     def _validate_non_blank(cls, value: object) -> str:
         if not isinstance(value, str):
-            raise TypeError("default_voice_id must be a string")
+            raise ValueError("default_voice_id must be a string")
         value = value.strip()
         if not value:
             raise ValueError("default_voice_id must not be blank")
@@ -78,7 +78,7 @@ class AssistantVoicePreference(BaseModel):
     @classmethod
     def _validate_non_blank(cls, value: object) -> str:
         if not isinstance(value, str):
-            raise TypeError("voice_id must be a string")
+            raise ValueError("voice_id must be a string")
         value = value.strip()
         if not value:
             raise ValueError("voice_id must not be blank")
@@ -92,7 +92,7 @@ class AssistantVoicePreferenceUpdate(BaseModel):
     @classmethod
     def _validate_non_blank(cls, value: object) -> str:
         if not isinstance(value, str):
-            raise TypeError("voice_id must be a string")
+            raise ValueError("voice_id must be a string")
         value = value.strip()
         if not value:
             raise ValueError("voice_id must not be blank")

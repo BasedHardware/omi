@@ -59,9 +59,17 @@ class TestTtsModelValidation(unittest.TestCase):
         with self.assertRaises(ValidationError):
             TtsSynthesizeRequest(text="    ")
 
+    def test_tts_synthesize_request_non_string_text_rejected(self):
+        with self.assertRaises(ValidationError):
+            TtsSynthesizeRequest(text=123)
+
     def test_tts_synthesize_request_blank_voice_id_rejected(self):
         with self.assertRaises(ValidationError):
             TtsSynthesizeRequest(text="Hello", voice_id="   ")
+
+    def test_tts_synthesize_request_non_string_voice_id_rejected(self):
+        with self.assertRaises(ValidationError):
+            TtsSynthesizeRequest(text="Hello", voice_id=123)
 
     def test_assistant_voice_preference_valid(self):
         pref = AssistantVoicePreference(voice_id="  custom_voice  ")
@@ -71,6 +79,10 @@ class TestTtsModelValidation(unittest.TestCase):
         with self.assertRaises(ValidationError):
             AssistantVoicePreference(voice_id="   ")
 
+    def test_assistant_voice_preference_non_string_rejected(self):
+        with self.assertRaises(ValidationError):
+            AssistantVoicePreference(voice_id=123)
+
     def test_assistant_voice_preference_update_valid(self):
         up = AssistantVoicePreferenceUpdate(voice_id="  new_voice  ")
         self.assertEqual(up.voice_id, "new_voice")
@@ -78,6 +90,10 @@ class TestTtsModelValidation(unittest.TestCase):
     def test_assistant_voice_preference_update_blank_rejected(self):
         with self.assertRaises(ValidationError):
             AssistantVoicePreferenceUpdate(voice_id="   ")
+
+    def test_assistant_voice_preference_update_non_string_rejected(self):
+        with self.assertRaises(ValidationError):
+            AssistantVoicePreferenceUpdate(voice_id=123)
 
     def test_tts_voice_catalog_valid(self):
         v = TtsVoice(id="  v1  ", name="  Sloane  ")
