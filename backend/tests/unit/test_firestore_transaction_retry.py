@@ -16,7 +16,6 @@ import pytest
 
 from database import firestore_transaction_retry as retry_mod
 
-
 Aborted = retry_mod.FirestoreAborted
 run = retry_mod.run_with_transaction_contention_retry
 
