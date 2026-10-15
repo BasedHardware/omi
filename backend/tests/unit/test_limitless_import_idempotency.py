@@ -260,6 +260,39 @@ def test_distinct_lifelogs_get_distinct_ids(tmp_path, store):
     assert len(store.docs) == 2, "two different lifelogs must map to two different IDs"
 
 
+# Start of a real AppleDouble header (magic, version, "Mac OS X" filler, entry table); not UTF-8.
+APPLEDOUBLE = (
+    b"\x00\x05\x16\x07\x00\x02\x00\x00Mac OS X        \x00\x02\x00\x00\x00\x09\x00\x00\x00\x32\x00\x00\x0e\xb0"
+)
+
+
+def test_macos_archive_metadata_is_not_imported_as_lifelogs(tmp_path, store):
+    """A ZIP re-compressed in Finder carries __MACOSX/ and ._ AppleDouble entries beside the lifelogs."""
+    zip_data = _zip_bytes(
+        {
+            f"lifelogs/{FN_A}": _lifelog_md(),
+            f"lifelogs/{FN_B}": _lifelog_md("Design review."),
+            "__MACOSX/": b"",
+            "__MACOSX/lifelogs/": b"",
+            f"__MACOSX/lifelogs/._{FN_A}": APPLEDOUBLE,
+            f"__MACOSX/lifelogs/._{FN_B}": APPLEDOUBLE,
+            f"lifelogs/._{FN_A}": APPLEDOUBLE,
+        }
+    )
+
+    _run_import(tmp_path, zip_data)
+
+    assert len(store.docs) == 2
+    updates = [call.args[1] for call in limitless.import_jobs_db.update_import_job.call_args_list]
+    assert {'total_files': 2} in updates, "metadata entries must not count as lifelog files"
+    final = updates[-1]
+    assert final['status'] == 'completed'
+    assert final['error'] is None, "metadata entries must not be reported as failed files"
+    assert (final['conversations_created'], final['conversations_skipped']) == (2, 0)
+    intent = limitless.dispatch_notification.call_args.args[0]
+    assert intent.body == 'Successfully imported 2 conversations from your Limitless data.'
+
+
 def test_retitled_lifelog_is_deduped_across_imports(tmp_path, store):
     original = "2025-10-08_07h00m25s_Morning-standup.md"
     retitled = "2025-10-08_07h00m25s_Daily-sync.md"
