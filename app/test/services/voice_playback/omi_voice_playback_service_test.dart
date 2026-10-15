@@ -640,7 +640,7 @@ void main() {
       ..setInt16(2, 20, Endian.little)
       ..setInt16(4, 30, Endian.little)
       ..setInt16(6, 40, Endian.little);
-    await install(synthesize: (_) async => pcm16000.buffer.asUint8List());
+    await install(synthesize: (_, {voiceId}) async => pcm16000.buffer.asUint8List());
 
     await service.beginResponse(messageId: 'device');
     expect(probedDevice, isTrue);
@@ -669,7 +669,7 @@ void main() {
   test('omi device mode skips when the wearable speaker is unavailable', () async {
     SharedPreferencesUtil().voiceResponseMode = 3;
     deviceReady = false;
-    await install(synthesize: (_) async => _mp3);
+    await install(synthesize: (_, {voiceId}) async => _mp3);
 
     await service.beginResponse(messageId: 'no-device');
     await flush();
