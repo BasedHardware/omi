@@ -10,7 +10,7 @@ import re
 import uuid
 import traceback
 from datetime import datetime, timezone
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Any, Dict, List, Tuple, Optional
 from zipfile import ZipFile
 
@@ -61,6 +61,24 @@ def _notify_import_job(uid: str, job_id: str, title: str, body: str, data: Dict[
             outcome.status.value,
             outcome.delivered,
         )
+
+
+def is_lifelog_path(name: str) -> bool:
+    """Check if a zip entry path corresponds to a real Limitless lifelog markdown file.
+
+    Skips macOS metadata (__MACOSX/ resource forks, ._ AppleDouble files),
+    hidden dotfiles, directory markers, and non-markdown files.
+    """
+    if not name or name.endswith('/'):
+        return False
+    path = PurePosixPath(name)
+    if '__MACOSX' in path.parts:
+        return False
+    if path.name.startswith('.'):
+        return False
+    if not path.name.endswith('.md'):
+        return False
+    return 'lifelogs' in path.parts or any(p.startswith('lifelogs') for p in path.parts)
 
 
 def parse_lifelog_filename(filename: str) -> Tuple[Optional[datetime], Optional[str]]:
@@ -325,11 +343,8 @@ def process_limitless_import(job_id: str, uid: str, zip_path: str, language_code
 
             # Find all lifelog markdown files
             # Handle both "lifelogs/..." and "something/lifelogs/..." structures
-            lifelog_files = [
-                name
-                for name in all_files
-                if ('lifelogs/' in name or name.startswith('lifelogs')) and name.endswith('.md')
-            ]
+            # Skips macOS metadata (__MACOSX/ resource forks, ._ AppleDouble files)
+            lifelog_files = [name for name in all_files if is_lifelog_path(name)]
 
             logger.info(f"[Limitless Import] Found {len(lifelog_files)} lifelog files")
             if lifelog_files:
@@ -339,8 +354,14 @@ def process_limitless_import(job_id: str, uid: str, zip_path: str, language_code
             import_jobs_db.update_import_job(job_id, {'total_files': total_files})
 
             if total_files == 0:
-                # Log more details about what we found
-                md_files = [name for name in all_files if name.endswith('.md')]
+                # Log more details about what we found (excluding macOS metadata)
+                md_files = [
+                    name
+                    for name in all_files
+                    if name.endswith('.md')
+                    and '__MACOSX' not in PurePosixPath(name).parts
+                    and not PurePosixPath(name).name.startswith('.')
+                ]
                 logger.info(f"[Limitless Import] Total .md files found: {len(md_files)}")
                 if md_files:
                     logger.info(f"[Limitless Import] Sample .md files: {md_files[:10]}")
