@@ -266,6 +266,8 @@ def helm_targets(text: str) -> Iterator[str]:
     """
     lines = text.splitlines()
     parents: list[tuple[int, str]] = []
+    argument_lines = {i for i, line in enumerate(lines) if re.match(r"^\s*(?:- )?args:", line)}
+    resolved_arguments: set[int] = set()
     for index, line in enumerate(lines):
         key = re.match(r'^(\s*)(?:- )?([\w]+):', line)
         if key:
@@ -284,10 +286,13 @@ def helm_targets(text: str) -> Iterator[str]:
         sequence = line.lstrip().startswith('- ')
         indent = len(match[1]) + (2 if sequence else 0)
         block = [line[indent:]]
-        for following in lines[index + 1 :]:
+        sibling_arguments: set[int] = set()
+        for following_index, following in enumerate(lines[index + 1 :], index + 1):
             if following.strip() and len(following) - len(following.lstrip()) <= indent:
                 if not following.lstrip().startswith(('args:', '- ')):
                     break
+            if following_index in argument_lines and len(following) - len(following.lstrip()) == indent:
+                sibling_arguments.add(following_index)
             block.append(following[indent:])
         fragment = '\n'.join(block)
         if match[2].lstrip().startswith('{{') or re.search(r'^\s*{{-?\s*toYaml', fragment, re.MULTILINE):
@@ -302,6 +307,7 @@ def helm_targets(text: str) -> Iterator[str]:
         if not isinstance(argv, list) or not all(isinstance(value, str) for value in argv):
             raise ValueError('Helm command/args must be literal string arrays')
         argv = cast(list[str], argv)
+        resolved_arguments.update(sibling_arguments)
         if not argv:
             continue
         if PurePosixPath(argv[0]).name in ('sh', 'bash'):
@@ -324,6 +330,9 @@ def helm_targets(text: str) -> Iterator[str]:
                 yield launch_target(candidate)
             elif not probe and PurePosixPath(candidate[0]).name not in ('kubectl', 'curl', 'wget', 'sleep'):
                 raise ValueError(f'unsupported Helm launcher: {candidate[0]}')
+
+    if argument_lines - resolved_arguments:
+        raise ValueError("unresolved Helm args override; place literal args directly after an explicit command")
 
 
 def check_pending(

@@ -228,3 +228,18 @@ def test_adjacent_shell_separators_cannot_hide_unknown_command(separator):
     command = json.dumps(['sh', '-c', 'python first.py' + separator + '/app/start.sh'])
     with pytest.raises(ValueError, match='unsupported Helm'):
         list(guard.helm_targets('command: ' + command))
+
+
+@pytest.mark.parametrize(
+    'source',
+    [
+        'args: [python3, worker.py]',
+        'command: {{ .Values.command | toJson }}\nargs: ["--app-dir", "/app/other"]',
+        'args: [worker.py]\ncommand: [python3]',
+        'command: [python3]\nimage: example\nargs: [worker.py]',
+        'containers:\n  - name: worker\n    args: [python3, worker.py]',
+    ],
+)
+def test_unresolved_helm_args_override_fails_closed(source):
+    with pytest.raises(ValueError):
+        list(guard.helm_targets(source))
