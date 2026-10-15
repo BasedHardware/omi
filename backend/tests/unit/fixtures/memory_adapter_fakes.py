@@ -177,8 +177,43 @@ def memory_item(
     return MemoryItem(**data)
 
 
+# Firestore stores these as native timestamps. The JSON dump turns them into
+# ISO strings, and fake-firestore then crashes when a keyset ``order_by``
+# compares those strings with datetime values written by the apply path.
+_FIRESTORE_TIMESTAMP_FIELDS = frozenset(
+    {
+        "captured_at",
+        "updated_at",
+        "expires_at",
+        "last_corroborated_at",
+        "valid_from",
+        "valid_to",
+        "created_at",
+    }
+)
+
+
+def _restore_firestore_timestamps(value):
+    if isinstance(value, list):
+        return [_restore_firestore_timestamps(item) for item in value]
+    if isinstance(value, dict):
+        restored = {}
+        for key, item in value.items():
+            if key in _FIRESTORE_TIMESTAMP_FIELDS and isinstance(item, str):
+                restored[key] = datetime.fromisoformat(item.replace("Z", "+00:00"))
+            else:
+                restored[key] = _restore_firestore_timestamps(item)
+        return restored
+    return value
+
+
 def stored_item(item: MemoryItem) -> dict:
-    return item.model_dump(mode="json")
+    """Seed payload shaped like a production ``memory_items`` document.
+
+    Enums stay JSON strings. Timestamp fields stay ``datetime`` so an indexed
+    ``updated_at`` scan can sort them next to rows the apply path wrote.
+    """
+    return _restore_firestore_timestamps(item.model_dump(mode="json"))
 
 
 def vector_hit(item: MemoryItem, *, score, projection_commit_id=None) -> SearchVectorHit:

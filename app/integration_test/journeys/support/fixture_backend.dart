@@ -40,6 +40,15 @@ class JourneyFixtureBackend {
   final List<Map<String, dynamic>> conversations = [];
   final List<Map<String, dynamic>> memories = [];
   final List<Map<String, dynamic>> actionItems = [];
+  final List<Map<String, dynamic>> chatSessions = [];
+
+  /// Meeting screenshot sets by conversation id, in the owner route's wire shape
+  /// (`ConversationScreenFrameSet`). A conversation without one serves the empty set, as the real
+  /// route does for a meeting with no approved frames or with the account setting off.
+  final Map<String, Map<String, dynamic>> screenFrameSets = {};
+
+  /// Bytes served at `<baseUrl>fixture-images/<name>`: synthetic stand-ins for signed storage URLs.
+  final Map<String, List<int>> images = {};
 
   /// Request journal: method + path -> count. Journeys assert on it (e.g.
   /// "the send request actually reached the server") — the structural
@@ -129,6 +138,7 @@ class JourneyFixtureBackend {
       await _handleMemoryEdit(req);
       return;
     }
+    if (await _handleScreenFrames(req, method, path)) return;
     if (method == 'GET' && path.startsWith('/v1/conversations/')) {
       final id = path.substring('/v1/conversations/'.length).split('/').first;
       final match = conversations.where((c) => c['id'] == id).toList();
@@ -150,6 +160,32 @@ class JourneyFixtureBackend {
         final uid = body['uid'] as String? ?? fixtureUid;
         req.response.statusCode = 200;
         req.response.write(jsonEncode({'custom_token': 'synthetic-custom-token-for-$uid'}));
+        await req.response.close();
+        return;
+
+      case 'POST /v2/chat-sessions':
+        final session = {
+          'id': 'fixture-chat-${chatSessions.length}',
+          'title': 'New Chat',
+          'created_at': DateTime.utc(2026, 9, 29).toIso8601String(),
+          'updated_at': DateTime.utc(2026, 9, 29).toIso8601String(),
+          'message_count': 0
+        };
+        chatSessions.insert(0, session);
+        req.response.headers.contentType = ContentType.json;
+        req.response.write(jsonEncode(session));
+        await req.response.close();
+        return;
+      case 'GET /v2/chat-sessions':
+        final offset = int.tryParse(req.uri.queryParameters['offset'] ?? '') ?? 0;
+        final limit = int.tryParse(req.uri.queryParameters['limit'] ?? '') ?? 50;
+        req.response.headers.contentType = ContentType.json;
+        req.response.write(jsonEncode(chatSessions.skip(offset).take(limit).toList()));
+        await req.response.close();
+        return;
+      case 'POST /v2/chat/generate-title':
+        req.response.headers.contentType = ContentType.json;
+        req.response.write(jsonEncode({'title': 'Fixture chat'}));
         await req.response.close();
         return;
 
@@ -238,6 +274,63 @@ class JourneyFixtureBackend {
         req.response.write(jsonEncode({'error': 'no fixture route', 'route': '$method $path'}));
         await req.response.close();
     }
+  }
+
+  /// `GET /v1/conversations/{id}/screenshots`, `DELETE …/screenshots/{frame_id}` and the image
+  /// bytes behind their URLs. Returns false when [path] is none of these.
+  Future<bool> _handleScreenFrames(HttpRequest req, String method, String path) async {
+    final segments = path.split('/').where((s) => s.isNotEmpty).toList();
+    if (method == 'GET' && segments.length == 2 && segments[0] == 'fixture-images') {
+      final bytes = images[segments[1]];
+      req.response.statusCode = bytes == null ? 404 : 200;
+      if (bytes != null) {
+        req.response.headers.contentType = ContentType('image', 'png');
+        req.response.add(bytes);
+      }
+      await req.response.close();
+      return true;
+    }
+    if (segments.length < 4 || segments[0] != 'v1' || segments[1] != 'conversations' || segments[3] != 'screenshots') {
+      return false;
+    }
+    final id = segments[2];
+    final empty = <String, dynamic>{'revision': 0, 'banner': null, 'strip': <Object>[]};
+    if (method == 'GET' && segments.length == 4) {
+      await _writeJson(req, screenFrameSets[id] ?? empty);
+      return true;
+    }
+    if (method == 'DELETE' && segments.length == 5) {
+      final set = screenFrameSets[id];
+      final frameId = segments[4];
+      final strip = [...((set?['strip'] as List?) ?? const [])].cast<Map<String, dynamic>>();
+      final banner = set?['banner'] as Map<String, dynamic>?;
+      final existed = banner?['id'] == frameId || strip.any((f) => f['id'] == frameId);
+      if (set == null || !existed) {
+        req.response.statusCode = 404;
+        await req.response.close();
+        return true;
+      }
+      strip.removeWhere((f) => f['id'] == frameId);
+      // The real route promotes the best remaining frame to banner; the fixture promotes the first.
+      final nextBanner = banner?['id'] == frameId ? (strip.isEmpty ? null : strip.removeAt(0)) : banner;
+      final updated = <String, dynamic>{
+        ...set,
+        'revision': (set['revision'] as int? ?? 0) + 1,
+        'banner': nextBanner == null ? null : {...nextBanner, 'role': 'banner'},
+        'strip': strip,
+      };
+      screenFrameSets[id] = updated;
+      await _writeJson(req, updated);
+      return true;
+    }
+    return false;
+  }
+
+  Future<void> _writeJson(HttpRequest req, Object body) async {
+    req.response.statusCode = 200;
+    req.response.headers.contentType = ContentType.json;
+    req.response.write(jsonEncode(body));
+    await req.response.close();
   }
 
   Future<void> _handleMemoryEdit(HttpRequest req) async {

@@ -216,6 +216,9 @@ function ConversationDetailView({ conversationId }: { conversationId: string }):
   const isPending = isPendingConversationId(id)
 
   const [conv, setConv] = useState<ServerConversation | null>(null)
+  useEffect(() => {
+    if (conv?.id === id) window.omi?.proactivityTargetRendered?.({ kind: 'conversation', id })
+  }, [conv, id])
   const [local, setLocal] = useState<LocalDisplay | null>(null)
   const [error, setError] = useState<string | null>(null)
   // Bumping this re-runs the initial-load effect (Try again after a failed load).

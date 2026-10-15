@@ -3,7 +3,7 @@ extension AgentRuntimeProcess {
   /// (search_knowledge, save_playbook, close_fact, etc.): admits only the
   /// server's own `effective` verdict. `unknown` — the fail-closed result of
   /// any transport, decode, or authorization-race failure in
-  /// `ProactiveLaneClient.jitProactivityFlags` — and `disabled` both resolve
+  /// `JITRolloutClient.jitProactivityFlags` — and `disabled` both resolve
   /// to `false` here, same as `JITProactivityFlags.permitsNewLane` refuses to
   /// re-derive a looser verdict from raw flags. The backend independently
   /// re-checks entitlement on every `/v1/agent/execute-tool` call, so a stale
@@ -20,7 +20,7 @@ extension AgentRuntimeProcess {
   static func resolvedJitKnowledgeToolsEnabled(
     authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot
   ) async -> Bool {
-    let flags = await ProactiveLaneClient.shared.jitProactivityFlags(
+    let flags = await JITRolloutClient.shared.jitProactivityFlags(
       authorizationSnapshot: authorizationSnapshot)
     return jitKnowledgeToolsEnabled(from: flags)
   }

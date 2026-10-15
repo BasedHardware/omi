@@ -20,9 +20,7 @@ import 'package:omi/pages/conversations/widgets/empty_conversations.dart';
 import 'package:omi/pages/home/widgets/home_tab_switcher.dart';
 import 'package:omi/pages/search/global_search.dart';
 import 'package:omi/backend/http/api/search.dart';
-import 'package:omi/backend/schema/action_item.dart';
 import 'package:omi/backend/schema/daily_summary.dart';
-import 'package:omi/backend/schema/person.dart';
 import 'package:omi/pages/memories/page.dart';
 import 'package:omi/pages/onboarding/auth.dart';
 import 'package:omi/pages/settings/device_settings.dart';
@@ -622,7 +620,8 @@ class _EmptySearchSource extends GlobalSearchSource {
       const ApiFailure(ApiProblem(ApiProblemKind.notFound, statusCode: 404));
 
   @override
-  Future<ConversationSearchResult> conversations(String query, {String? speakerId}) async =>
+  Future<ConversationSearchResult> conversations(String query,
+          {String? speakerId, DateTime? startDate, DateTime? endDate}) async =>
       const ConversationSearchResult(
           items: [], currentPage: 1, totalPages: 1, outcome: ConversationSearchResultOutcome.success);
 
@@ -637,7 +636,4 @@ class _EmptySearchSource extends GlobalSearchSource {
 
   @override
   Future<ApiResult<List<MemorySearchHit>>> memories(String query) async => const ApiSuccess([]);
-
-  @override
-  Future<List<Person>> people() async => const [];
 }

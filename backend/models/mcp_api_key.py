@@ -21,6 +21,7 @@ class McpApiKeyDB(McpApiKey):
 
 class McpApiKeyCreate(BaseModel):
     name: str
+    scopes: Optional[list[str]] = None
 
 
 class McpApiKeyCreated(McpApiKey):

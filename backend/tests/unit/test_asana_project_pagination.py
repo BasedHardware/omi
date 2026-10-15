@@ -24,7 +24,7 @@ def load_function(path, name, namespace):
     tree = ast.parse(path.read_text())
     node = next(n for n in tree.body if isinstance(n, ast.AsyncFunctionDef) and n.name == name)
     node.decorator_list = []
-    node.args.defaults = [] if name == 'get_asana_projects' else [ast.Constant(None)]
+    node.args.defaults = [] if name == 'get_asana_projects' else [ast.Constant(None)] * len(node.args.defaults)
     node.returns = None
     for arg in node.args.args:
         arg.annotation = None

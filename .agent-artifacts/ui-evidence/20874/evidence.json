@@ -1,0 +1,54 @@
+{
+  "version": 1,
+  "images": [
+    {
+      "file": "001-mobile-ios-offline-sync-before-top.png",
+      "platform": "mobile-ios",
+      "description": "Before (main): Offline Sync, All, top of a day of 75 s and 3 min files",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "002-mobile-ios-offline-sync-before-middle.png",
+      "platform": "mobile-ios",
+      "description": "Before (main): ten too-old 3 min files, each with its own Delete",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "003-mobile-ios-offline-sync-before-bottom.png",
+      "platform": "mobile-ios",
+      "description": "Before (main): synced 3 min files continue down the list",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "004-mobile-ios-offline-sync-after.png",
+      "platform": "mobile-ios",
+      "description": "After: the same history as four recording rows, one Delete for the too-old recording",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "005-mobile-ios-offline-sync-after-files.png",
+      "platform": "mobile-ios",
+      "description": "After: tapping a recording lists the files it is made of",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "006-mobile-ios-offline-sync-simulator-list.png",
+      "platform": "mobile-ios",
+      "description": "Running app on the iOS Simulator: 43 seeded files read as five rows",
+      "captured_by": "agent",
+      "source": "screencapture"
+    },
+    {
+      "file": "007-mobile-ios-offline-sync-simulator-files.png",
+      "platform": "mobile-ios",
+      "description": "Running app on the iOS Simulator: one recording opened to its 12 files",
+      "captured_by": "agent",
+      "source": "screencapture"
+    }
+  ]
+}

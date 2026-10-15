@@ -170,6 +170,22 @@ def test_byok_enrolled_with_validated_key_is_allowed_off_allowlist(monkeypatch, 
     assert (decision.allowed, decision.reason) == (True, 'byok')
 
 
+def test_gemini_byok_remains_authorized_for_luna_managed_feature(monkeypatch, mc) -> None:
+    """A managed Luna route must still recognize the feature's separate Gemini BYOK provider."""
+    _situate(
+        monkeypatch,
+        mc,
+        plan=PlanType.basic,
+        byok_enrolled=True,
+        byok_validated=True,
+        byok_key_provider='gemini',
+    )
+    monkeypatch.setattr(mc, 'get_provider', lambda _feature: 'openai')
+    monkeypatch.setattr(mc, 'get_byok_provider', lambda _feature: 'gemini')
+
+    assert mc.request_carries_validated_byok_key('screen_frame_judge') is True
+
+
 # red-proof: fall through to omi (`plan_paid`) when funding_owner='byok' has no request key
 def test_byok_enrolled_without_key_on_request_is_denied_not_downgraded_to_omi(monkeypatch, mc) -> None:
     _situate(monkeypatch, mc, plan=PlanType.plus, byok_enrolled=True, byok_validated=False)

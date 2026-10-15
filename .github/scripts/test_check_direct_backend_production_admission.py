@@ -37,6 +37,7 @@ class DirectBackendProductionAdmissionTests(unittest.TestCase):
                 "        run: echo \"IMAGE_TAG=latest\" >> \"$GITHUB_ENV\"\n",
             ),
         }
+        replace_all = {"fresh_origin"}
         for relative in CHECKER.WORKFLOWS:
             for name, (expected, replacement) in mutations.items():
                 with self.subTest(workflow=relative, mutation=name), tempfile.TemporaryDirectory() as directory:
@@ -49,7 +50,10 @@ class DirectBackendProductionAdmissionTests(unittest.TestCase):
                     target = root / relative
                     text = target.read_text(encoding="utf-8")
                     self.assertIn(expected, text)
-                    target.write_text(text.replace(expected, replacement, 1), encoding="utf-8")
+                    if name in replace_all:
+                        target.write_text(text.replace(expected, replacement), encoding="utf-8")
+                    else:
+                        target.write_text(text.replace(expected, replacement, 1), encoding="utf-8")
                     self.assertTrue(CHECKER.validate(root))
 
     def test_rejects_multiple_image_tag_authorities_and_late_checkouts(self) -> None:

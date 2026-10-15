@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "id": "FC-dropped-derived-future-rethrows-handled-error",
+  "violated_contract": "A future derived from another future solely for bookkeeping must not re-emit the original failure as an unhandled asynchronous error after an awaiting caller observes it. Dropping an error-propagating whenComplete or then branch can otherwise report a caller-handled failure a second time through the app's fatal top-level handler.",
+  "canonical_prevention": "Keep returning or awaiting the original operation future so its value and error remain caller-visible. Explicitly consume errors on detached bookkeeping futures, including failures from cleanup callbacks, rather than dropping an error-propagating derived future. Guard the behavior with zone-aware tests that observe caller failures, reject duplicate unhandled errors, and verify cleanup on success and failure.",
+  "canonical_prevention_artifact": [
+    "app/test/unit/http_pool_manager_test.dart",
+    "app/test/services/wals/recording_transfer_coordinator_test.dart"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "app/lib/backend/http/**",
+    "app/lib/providers/**",
+    "app/lib/services/wals/**",
+    "app/test/**"
+  ],
+  "status": "open"
+}

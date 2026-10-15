@@ -2,6 +2,8 @@ import 'dart:math';
 
 import 'package:flutter/material.dart';
 
+import 'package:omi/ui/omi_tokens.dart';
+
 import 'package:provider/provider.dart';
 
 import 'package:omi/backend/schema/message.dart';
@@ -49,6 +51,13 @@ class _SinglePressStepState extends State<SinglePressStep> with TickerProviderSt
     _messageProvider = context.read<MessageProvider>();
     _messageCountAtStart = _messageProvider.messages.length;
     _messageProvider.addListener(_onMessagesChanged);
+    // Reopened from All Set after a question was answered: show that answer and Continue rather than
+    // waiting on "Processing your question…" for a message that already arrived (#20787).
+    final onboardingProvider = context.read<DeviceOnboardingProvider>();
+    if (onboardingProvider.questionSent && onboardingProvider.aiResponse != null) {
+      _aiResponse = onboardingProvider.aiResponse;
+      _showContinue = true;
+    }
   }
 
   void _onMessagesChanged() {
@@ -111,24 +120,24 @@ class _SinglePressStepState extends State<SinglePressStep> with TickerProviderSt
       return Container(
         width: double.infinity,
         padding: const EdgeInsets.all(20),
-        decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(20)),
+        decoration: BoxDecoration(color: OmiColors.surface1, borderRadius: BorderRadius.circular(20)),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             if (_userQuestion != null && _userQuestion!.isNotEmpty) ...[
               Text(
                 _userQuestion!,
-                style: TextStyle(color: Colors.black.withValues(alpha: 0.5), fontSize: 14, height: 1.3),
+                style: TextStyle(color: OmiColors.textSecondary, fontSize: 14, height: 1.3),
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
               ),
               const SizedBox(height: 12),
-              Divider(height: 1, color: Colors.black.withValues(alpha: 0.08)),
+              Divider(height: 1, color: OmiColors.border),
               const SizedBox(height: 12),
             ],
             Text(
               _stripMarkdown(_aiResponse!),
-              style: const TextStyle(color: Colors.black, fontSize: 16, height: 1.5),
+              style: TextStyle(color: OmiColors.textPrimary, fontSize: 16, height: 1.5),
               maxLines: 10,
               overflow: TextOverflow.ellipsis,
             ),
@@ -141,7 +150,7 @@ class _SinglePressStepState extends State<SinglePressStep> with TickerProviderSt
     if (provider.questionSent) {
       return Container(
         padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
-        decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.06), borderRadius: BorderRadius.circular(20)),
+        decoration: BoxDecoration(color: OmiColors.surface1, borderRadius: BorderRadius.circular(20)),
         child: Column(
           children: [
             AnimatedBuilder(
@@ -150,7 +159,11 @@ class _SinglePressStepState extends State<SinglePressStep> with TickerProviderSt
                 return ShaderMask(
                   shaderCallback: (bounds) {
                     return LinearGradient(
-                      colors: [Colors.white.withValues(alpha: 0.3), Colors.white, Colors.white.withValues(alpha: 0.3)],
+                      colors: [
+                        OmiColors.textPrimary.withValues(alpha: 0.3),
+                        OmiColors.textPrimary,
+                        OmiColors.textPrimary.withValues(alpha: 0.3),
+                      ],
                       stops: [
                         (_animController.value - 0.3).clamp(0.0, 1.0),
                         _animController.value,
@@ -162,7 +175,7 @@ class _SinglePressStepState extends State<SinglePressStep> with TickerProviderSt
                   },
                   child: Text(
                     context.l10n.deviceOnboardingProcessingQuestion,
-                    style: const TextStyle(color: Colors.white, fontSize: 17, fontWeight: FontWeight.w500),
+                    style: TextStyle(color: OmiColors.textPrimary, fontSize: 17, fontWeight: FontWeight.w500),
                   ),
                 );
               },
@@ -171,7 +184,7 @@ class _SinglePressStepState extends State<SinglePressStep> with TickerProviderSt
               const SizedBox(height: 12),
               Text(
                 '"$_userQuestion"',
-                style: const TextStyle(color: Color(0xFF9E9E9E), fontSize: 14, fontStyle: FontStyle.italic),
+                style: TextStyle(color: OmiColors.textSecondary, fontSize: 14, fontStyle: FontStyle.italic),
                 textAlign: TextAlign.center,
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
@@ -179,6 +192,22 @@ class _SinglePressStepState extends State<SinglePressStep> with TickerProviderSt
             ],
           ],
         ),
+      );
+    }
+
+    // Dropped empty or came back with no speech detected — invite a retry
+    // instead of leaving the user stuck on "Processing" forever.
+    if (provider.questionFailed) {
+      return Column(
+        children: [
+          _buildOmiWithBounce(),
+          const SizedBox(height: 24),
+          Text(
+            context.l10n.voiceQuestionNoSpeech,
+            style: OmiType.footnote.copyWith(color: OmiColors.textSecondary, fontWeight: FontWeight.w500),
+            textAlign: TextAlign.center,
+          ),
+        ],
       );
     }
 
@@ -268,7 +297,7 @@ class _SinglePressStepState extends State<SinglePressStep> with TickerProviderSt
       height: diameter,
       decoration: BoxDecoration(
         shape: BoxShape.circle,
-        border: Border.all(color: Colors.white.withValues(alpha: opacity), width: 1.5),
+        border: Border.all(color: OmiColors.textPrimary.withValues(alpha: opacity), width: 1.5),
       ),
     );
   }

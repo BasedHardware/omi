@@ -177,8 +177,7 @@ def test_valid_explicit_selection_reaches_processing_with_explicit_attribution()
     assert process.call_args.kwargs['app_usage_attribution'] is AppUsageAttribution.EXPLICIT_SELECTION
 
 
-@pytest.mark.parametrize('partial_proactive_engine', [False, True])
-def test_lazy_enrichment_uses_non_user_usage_attribution(monkeypatch, partial_proactive_engine):
+def test_lazy_enrichment_uses_non_user_usage_attribution(monkeypatch):
     conversation = {'id': 'c1', 'deferred': True}
     model = SimpleNamespace(language='en', deferred=True)
     monkeypatch.setattr(conv_router.lifecycle_service, 'reacquire_deferred_processing', lambda *_args: True)
@@ -187,22 +186,28 @@ def test_lazy_enrichment_uses_non_user_usage_attribution(monkeypatch, partial_pr
     )
     monkeypatch.setattr(conv_router, 'deserialize_conversation', lambda _conversation: model)
     monkeypatch.setattr(conv_router, 'submit_with_context', lambda _executor, function: function())
-    if partial_proactive_engine:
-        # CI reproduced this: the file-backed module was already in sys.modules
-        # without persist_desktop_meeting_arrival_best_effort (circular import
-        # left it partially initialized). monkeypatch.setattr raising=True then
-        # fails before the route is exercised.
-        partial = ModuleType('utils.task_intelligence.proactive_engine')
-        partial.__file__ = 'partial-proactive-engine'
-        monkeypatch.setitem(sys.modules, 'utils.task_intelligence.proactive_engine', partial)
-    # create=True binds the in-function import seam whether or not that name
-    # already exists on the cached module.
-    with patch(
-        'utils.task_intelligence.proactive_engine.persist_desktop_meeting_arrival_best_effort',
-        create=True,
-    ), patch.object(conv_router, 'process_conversation', return_value=model) as process:
+    with patch.object(conv_router, 'process_conversation', return_value=model) as process:
         result = conv_router._enrich_deferred_conversation('u1', conversation)
 
     assert result['deferred'] is False
     assert process.call_args.kwargs['trigger'] is conv_router.ProcessingTrigger.FIRST_OPEN
     assert process.call_args.kwargs['app_usage_attribution'] is AppUsageAttribution.NON_USER_REPROCESS
+
+
+def test_successful_reprocess_schedules_durable_learning():
+    model, p1, p2, p3, p4, p5, p6, process_patch = _route_context(
+        raw_app=None,
+        available_app=None,
+        enabled=False,
+    )
+    model.id = 'c1'
+    tasks = []
+    background_tasks = SimpleNamespace(add_task=lambda fn, *a: tasks.append((fn, a)))
+    with p1, p2, p3, p4, p5, p6, process_patch:
+        result = conv_router.reprocess_conversation(conversation_id='c1', uid='u1', background_tasks=background_tasks)
+
+    assert result is model
+    assert len(tasks) == 1
+    from utils.speaker_learning_jobs import run_speaker_learning_jobs
+
+    assert tasks[0] == (run_speaker_learning_jobs, ('u1', 'c1'))

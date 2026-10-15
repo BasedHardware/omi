@@ -321,6 +321,7 @@ enum RuntimeOwnerIdentity {
         try await RewindStorage.shared.resetForOwnerTransition()
       },
     ownerDidChange: @escaping @Sendable () async -> Void = {
+      await ClientTelemetryTransport.shared.purgeOwnersExceptCurrent()
       await MainActor.run {
         NotificationCenter.default.post(name: .runtimeOwnerDidChange, object: nil)
       }
@@ -440,6 +441,7 @@ enum RuntimeOwnerIdentity {
     await KnowledgeGraphStorage.shared.invalidateCache()
     await MainActor.run {
       FloatingBarUsageLimiter.shared.reset()
+      ProactivityFeedConsumer.shared.purgeForOwnerTransition()
     }
   }
 

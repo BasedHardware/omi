@@ -21,6 +21,7 @@ import 'package:omi/pages/apps/widgets/capability_apps_page.dart';
 import 'package:omi/pages/chat/chat_scroll_policy.dart';
 import 'package:omi/pages/chat/widgets/ai_message.dart';
 import 'package:omi/pages/chat/widgets/jump_to_latest_button.dart';
+import 'package:omi/pages/paywall/paywall_router.dart';
 import 'package:omi/pages/settings/widgets/plans_sheet.dart';
 import 'package:omi/pages/chat/widgets/user_message.dart';
 import 'package:omi/pages/chat/widgets/voice_recorder_widget.dart';
@@ -40,6 +41,9 @@ import 'package:omi/utils/other/temp.dart';
 import 'package:omi/pages/apps/widgets/app_actions.dart';
 import 'package:omi/pages/chat/widgets/chat_apps_drawer.dart';
 import 'package:omi/pages/chat/widgets/chat_composer_parts.dart';
+import 'package:omi/pages/chat/widgets/chat_chrome.dart';
+import 'package:omi/pages/chat/widgets/chat_entrance.dart';
+import 'package:omi/pages/chat/widgets/chat_followup_chip.dart';
 import 'package:omi/ui/ui.dart';
 
 class ChatPage extends StatefulWidget {
@@ -102,11 +106,7 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
     apps = prefs.appsList;
     scrollController = ScrollController();
     textFieldFocusNode = FocusNode();
-    textController.addListener(() {
-      setState(() {});
-    });
     textFieldFocusNode.addListener(() {
-      setState(() {});
       if (textFieldFocusNode.hasFocus) {
         // Keep the live edge visible when the keyboard opens only if the reader is following.
         _scheduleModeAwareScroll(delayMs: 300, animated: true);
@@ -114,11 +114,14 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
     });
 
     SchedulerBinding.instance.addPostFrameCallback((_) async {
+      if (!mounted) return;
       var provider = context.read<MessageProvider>();
       _messageProvider = provider;
+      provider.readAloud.active = true;
       // Listen for quota exceeded from any send path (text or voice)
       provider.addListener(_onMessageProviderChanged);
-      if (provider.messages.isEmpty) {
+      // Every entry resumes the current conversation, including while a reply or voice send is active.
+      if (provider.messages.isEmpty && !provider.isFreshChat) {
         provider.refreshMessages();
       }
       // Fetch enabled chat apps
@@ -133,7 +136,7 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
         _runLater(const Duration(milliseconds: 300), () {
           context.read<VoiceRecorderProvider>().startRecording();
         });
-      } else if (_isInitialLoad) {
+      } else if (_isInitialLoad && widget.initialDraft != null) {
         // Auto-focus the text field only on initial load, not on app switches
         _runLater(const Duration(milliseconds: 300), () {
           final voiceRecorderProvider = context.read<VoiceRecorderProvider>();
@@ -195,8 +198,16 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
   }
 
   @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    final readAloud = _messageProvider?.readAloud;
+    if (readAloud == null) return;
+    readAloud.active = state == AppLifecycleState.resumed;
+  }
+
+  @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    _messageProvider?.readAloud.active = false;
     _messageProvider?.removeListener(_onMessageProviderChanged);
     _cancelOwnedLifecycleTimers();
     _latestJumpIdleTimer?.cancel();
@@ -242,75 +253,91 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
   Widget build(BuildContext context) {
     super.build(context);
 
-    return Consumer2<MessageProvider, ConnectivityProvider>(
-      builder: (context, provider, connectivityProvider, child) {
-        _observeMessagesForAutoScroll(provider);
-        // Empty, the sheet is glass over the blurred page underneath (chat_route.dart); once there
-        // is a transcript it turns solid so long answers stay readable.
-        final isGlass = provider.messages.isEmpty && !provider.isLoadingMessages && !provider.isClearingChat;
-        return AnimatedContainer(
-          duration: const Duration(milliseconds: 260),
-          curve: Curves.easeOut,
-          color: isGlass ? Colors.transparent : OmiColors.surface0,
-          child: Scaffold(
-            key: scaffoldKey,
-            backgroundColor: Colors.transparent,
-            appBar: _buildAppBar(context, provider),
-            endDrawer: ChatAppsDrawer(
-              onSelectApp: (id) => _handleAppSelection(id, context.read<AppProvider>()),
-              onEnableApps: _navigateToChatAppsPage,
-              onDisableApp: _disableChatApp,
-              onClearChat: _showClearChatDialog,
-            ),
-            onEndDrawerChanged: (isOpened) {
-              if (isOpened) {
-                // Unfocus text field when drawer opens
-                textFieldFocusNode.unfocus();
-              }
-            },
-            body: GestureDetector(
-              onTap: () {
-                // Hide keyboard when tapping outside textfield
-                FocusScope.of(context).unfocus();
+    return ChatEntrance(
+      child: Consumer2<MessageProvider, ConnectivityProvider>(
+        builder: (context, provider, connectivityProvider, child) {
+          _observeMessagesForAutoScroll(provider);
+          // Empty, the sheet is glass over the blurred page underneath (chat_route.dart); once there
+          // is a transcript it turns solid so long answers stay readable.
+          final isGlass = provider.messages.isEmpty && !provider.isLoadingMessages && !provider.isClearingChat;
+          return AnimatedContainer(
+            duration: const Duration(milliseconds: 260),
+            curve: Curves.easeOut,
+            color: isGlass ? Colors.transparent : OmiColors.surface0,
+            child: Scaffold(
+              key: scaffoldKey,
+              backgroundColor: Colors.transparent,
+              appBar: ChatHeader(provider: provider),
+              endDrawer: ChatAppsDrawer(
+                onSelectApp: (id) => _handleAppSelection(id, context.read<AppProvider>()),
+                onEnableApps: _navigateToChatAppsPage,
+                onDisableApp: _disableChatApp,
+                onClearChat: _showClearChatDialog,
+              ),
+              onEndDrawerChanged: (isOpened) {
+                if (isOpened) {
+                  // Unfocus text field when drawer opens
+                  textFieldFocusNode.unfocus();
+                }
               },
-              child: Column(
-                children: [
-                  // Messages area - takes up remaining space
-                  Expanded(
-                    child: provider.isLoadingMessages && !provider.hasCachedMessages
-                        ? OmiLoadingState(label: provider.firstTimeLoadingText)
-                        : provider.isClearingChat
-                            ? OmiLoadingState(label: context.l10n.deletingMessages)
-                            : (provider.messages.isEmpty)
-                                ? ChatStarters(
-                                    isConnected: connectivityProvider.isConnected,
-                                    hasExistingData: _chatScope != null ||
-                                        (context.watch<ConversationProvider?>()?.conversations.isNotEmpty ?? false) ||
-                                        (context.watch<MemoriesProvider?>()?.memories.isNotEmpty ?? false) ||
-                                        SharedPreferencesUtil().cachedMemories.isNotEmpty ||
-                                        SharedPreferencesUtil().pendingMemories.isNotEmpty,
-                                    onSelected: (prompt) {
-                                      textController.text = prompt;
-                                      textController.selection = TextSelection.collapsed(offset: prompt.length);
-                                      textFieldFocusNode.requestFocus();
-                                      OmiHaptics.selection();
-                                    },
-                                  )
-                                : _buildTranscript(provider),
-                  ),
-                  _buildComposer(context, provider, connectivityProvider),
-                ],
+              body: GestureDetector(
+                onTap: () {
+                  // Hide keyboard when tapping outside textfield
+                  FocusScope.of(context).unfocus();
+                },
+                child: Column(
+                  children: [
+                    if (provider.historyProblem != null)
+                      OmiErrorState(message: context.l10n.somethingWentWrong, onRetry: provider.refreshMessages),
+                    if (provider.hasOlderMessages)
+                      TextButton(
+                        key: const Key('chat_load_older'),
+                        onPressed: provider.loadingOlderMessages || !provider.canSwitchChat
+                            ? null
+                            : () => _loadOlderMessages(provider),
+                        child: provider.loadingOlderMessages
+                            ? const OmiSpinner(size: OmiSpinnerSize.small)
+                            : Text(context.l10n.showMore),
+                      ),
+                    // Messages area - takes up remaining space
+                    Expanded(
+                      child: provider.isLoadingMessages && !provider.hasCachedMessages
+                          ? OmiLoadingState(label: provider.firstTimeLoadingText)
+                          : provider.isClearingChat
+                              ? OmiLoadingState(label: context.l10n.deletingMessages)
+                              : (provider.messages.isEmpty)
+                                  ? ChatGreeting(isConnected: connectivityProvider.isConnected, name: prefs.givenName)
+                                  : _buildTranscript(provider),
+                    ),
+                    _buildComposer(context, provider, connectivityProvider),
+                  ],
+                ),
               ),
             ),
-          ),
-        );
-      },
+          );
+        },
+      ),
     );
+  }
+
+  Future<void> _loadOlderMessages(MessageProvider provider) async {
+    final before = scrollController.hasClients ? scrollController.position.maxScrollExtent : 0.0;
+    final offset = scrollController.hasClients ? scrollController.offset : 0.0;
+    _chatScrollMode = ChatScrollMode.freeScrolling;
+    await provider.loadOlderMessages();
+    if (!mounted) return;
+    if (provider.historyProblem != null) OmiFeedback.error(context, context.l10n.somethingWentWrong);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !scrollController.hasClients) return;
+      final max = scrollController.position.maxScrollExtent;
+      scrollController.jumpTo((offset + max - before).clamp(0.0, max));
+    });
   }
 
   Widget _buildTranscript(MessageProvider provider) {
     return LayoutBuilder(
       builder: (context, constraints) {
+        final messageKeys = [for (final message in provider.messages) _chatMessageRowKey(message)];
         return Theme(
           data: Theme.of(context).copyWith(
             textSelectionTheme: TextSelectionThemeData(
@@ -330,71 +357,33 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
                 Positioned.fill(
                   child: NotificationListener<ScrollNotification>(
                     onNotification: _handleScrollNotification,
-                    child: ListView.builder(
-                      shrinkWrap: false,
-                      reverse: false,
+                    child: ListView.custom(
                       controller: scrollController,
                       padding: const EdgeInsets.fromLTRB(18, 16, 18, ChatScrollPolicy.transcriptBottomPadding),
-                      itemCount: provider.messages.length,
-                      itemBuilder: (context, chatIndex) {
-                        if (!_hasInitialScrolled && provider.messages.isNotEmpty) {
-                          _hasInitialScrolled = true;
-                          _schedulePostFrameModeAwareScroll();
-                        }
-
-                        final message = provider.messages[chatIndex];
-                        double topPadding = chatIndex == provider.messages.length - 1 ? 8 : 16;
-                        double bottomPadding = chatIndex == 0 ? 16 : 0;
-
-                        final messageBody = message.sender == MessageSender.ai
-                            ? AIMessage(
-                                showTypingIndicator:
-                                    provider.showTypingIndicator && chatIndex == provider.messages.length - 1,
-                                showThinkingAfterText: provider.agentThinkingAfterText,
-                                message: message,
-                                sendMessage: _sendMessageUtil,
-                                onAskOmi: (text) {
-                                  setState(() {
-                                    _selectedContext = text;
-                                  });
-                                  textFieldFocusNode.requestFocus();
-                                },
-                                displayOptions: provider.messages.length <= 1,
-                                appSender: provider.messageSenderApp(message.appId),
-                                updateConversation: (ServerConversation conversation) {
-                                  context.read<ConversationProvider>().updateConversation(conversation);
-                                },
-                                setMessageNps: (int value, {String? reason}) =>
-                                    provider.setMessageNps(message, value, reason: reason),
-                                replyFailed: provider.isReplyFailed(message),
-                                onRetry: provider.canRetryReply(message) ? () => _retryReply(message) : null,
-                              )
-                            : HumanMessage(
-                                message: message,
-                                onAskOmi: (text) {
-                                  setState(() {
-                                    _selectedContext = text;
-                                  });
-                                  textFieldFocusNode.requestFocus();
-                                },
-                              );
-                        return VisibilityDetector(
-                          key: ValueKey('chat-result-visibility-${message.id}'),
-                          onVisibilityChanged: (info) {
-                            if (message.sender == MessageSender.ai &&
-                                !message.isEmpty &&
-                                info.visibleFraction > 0 &&
-                                context.mounted) {
-                              provider.markChatResultVisible(message.id);
-                            }
-                          },
-                          child: Padding(
-                            key: ValueKey(message.id),
-                            padding: EdgeInsets.only(bottom: bottomPadding, top: topPadding),
-                            child: messageBody,
-                          ),
-                        );
-                      },
+                      childrenDelegate: _StableChatMessageDelegate(
+                        messageKeys: messageKeys,
+                        builder: (context, chatIndex) {
+                          if (!_hasInitialScrolled && provider.messages.isNotEmpty) {
+                            _hasInitialScrolled = true;
+                            _schedulePostFrameModeAwareScroll();
+                          }
+                          return _ChatMessageSlot(
+                            key: messageKeys[chatIndex],
+                            index: chatIndex,
+                            sendMessage: _sendMessageUtil,
+                            onAskOmi: (text) {
+                              setState(() {
+                                _selectedContext = text;
+                              });
+                              textFieldFocusNode.requestFocus();
+                            },
+                            updateConversation: (ServerConversation conversation) {
+                              context.read<ConversationProvider>().updateConversation(conversation);
+                            },
+                            onRetry: _retryReply,
+                          );
+                        },
+                      ),
                     ),
                   ),
                 ),
@@ -414,6 +403,16 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
       builder: (context, voiceRecorderProvider, child) {
         final voiceActive = voiceRecorderProvider.isActive;
         final recording = voiceRecorderProvider.state == VoiceRecorderState.recording;
+        final latest = provider.messages.isEmpty ? null : provider.messages.last;
+        final followUp = latest != null &&
+                latest.sender == MessageSender.ai &&
+                !provider.isReplyFailed(latest) &&
+                !provider.chatMutationInProgress &&
+                !provider.isLoadingMessages &&
+                !provider.isClearingChat
+            ? latest.followUpQuestion
+            : null;
+        final compactFollowUp = MediaQuery.sizeOf(context).height - MediaQuery.viewInsetsOf(context).bottom < 400;
         return Column(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -443,8 +442,33 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
                 );
               },
             ),
-            SafeArea(
-              top: false,
+            if (provider.messages.isEmpty && !provider.isLoadingMessages && !provider.isClearingChat)
+              ChatSuggestions(
+                isConnected: connectivityProvider.isConnected,
+                hasExistingData: _chatScope != null ||
+                    (context.watch<ConversationProvider?>()?.conversations.isNotEmpty ?? false) ||
+                    (context.watch<MemoriesProvider?>()?.memories.isNotEmpty ?? false),
+                onSelected: (prompt) {
+                  textController.value = TextEditingValue(
+                    text: prompt,
+                    selection: TextSelection.collapsed(offset: prompt.length),
+                  );
+                  textFieldFocusNode.requestFocus();
+                  OmiHaptics.selection();
+                },
+              ),
+            if (followUp != null && connectivityProvider.isConnected && !voiceActive)
+              Padding(
+                key: const Key('chat_followup_suggestions'),
+                padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.sm, vertical: OmiSpacing.xs),
+                child: ChatFollowUpChip(
+                  question: followUp,
+                  onSend: _sendMessageUtil,
+                  maxLines: compactFollowUp ? 1 : 2,
+                ),
+              ),
+            ChatComposerEntrance(
+              bottom: true,
               maintainBottomViewPadding: false,
               child: Container(
                 margin: EdgeInsets.fromLTRB(10, provider.selectedFiles.isNotEmpty ? 0 : 8, 10, 10),
@@ -554,28 +578,26 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
                               voiceRecorderProvider.processRecording();
                             },
                           ),
-                        if (!voiceActive && textController.text.isEmpty)
-                          ChatComposerRoundButton(
-                            icon: const FaIcon(FontAwesomeIcons.microphone),
-                            label: context.l10n.startVoiceRecording,
-                            onPressed: () {
-                              OmiHaptics.light();
-                              FocusScope.of(context).unfocus();
-                              voiceRecorderProvider.startRecording();
-                            },
-                          ),
-                        // Send — only with text and not in voice mode. Offline or uploading it
-                        // stays visible but is drawn disabled.
-                        if (!voiceActive && !provider.sendingMessage)
+                        // Mic and send follow the draft. Keeping that listen local avoids
+                        // rebuilding the transcript on every keystroke.
+                        if (!voiceActive)
                           ValueListenableBuilder<TextEditingValue>(
                             valueListenable: textController,
                             builder: (context, value, child) {
+                              if (value.text.isEmpty) {
+                                return ChatComposerRoundButton(
+                                  icon: const FaIcon(FontAwesomeIcons.microphone),
+                                  label: context.l10n.startVoiceRecording,
+                                  onPressed: () {
+                                    OmiHaptics.light();
+                                    FocusScope.of(context).unfocus();
+                                    voiceRecorderProvider.startRecording();
+                                  },
+                                );
+                              }
                               final hasText = value.text.trim().isNotEmpty;
-                              if (!hasText) return const SizedBox.shrink();
-                              final canSend = hasText &&
-                                  !provider.sendingMessage &&
-                                  !provider.isUploadingFiles &&
-                                  connectivityProvider.isConnected;
+                              if (!hasText || provider.sendingMessage) return const SizedBox.shrink();
+                              final canSend = !provider.isUploadingFiles && connectivityProvider.isConnected;
                               return ChatComposerRoundButton(
                                 buttonKey: const ValueKey('omi.chat.send'),
                                 icon: const FaIcon(FontAwesomeIcons.arrowUp),
@@ -583,7 +605,7 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
                                 onPressed: canSend
                                     ? () {
                                         OmiHaptics.medium();
-                                        final message = textController.text.trim();
+                                        final message = value.text.trim();
                                         if (message.isEmpty) return;
                                         _sendMessageUtil(message);
                                       }
@@ -676,7 +698,12 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
     // Guard against re-entry (rapid double-tap of send, voice→transcribeSuccess
     // race firing onTranscriptReady twice, etc.). Without this the chat could
     // submit the same text twice and the AI replies twice.
-    if (provider.sendingMessage) return;
+    // `isSwitchingChatApp` fences the whole app-switch window (raised when the
+    // selection changes, cleared when the bootstrap read settles): a send in
+    // that window would append the turn to the previous app's transcript while
+    // the picker already shows the new app. Same-thread loading does not block
+    // sending.
+    if (provider.chatMutationInProgress || provider.isClearingChat || provider.isSwitchingChatApp) return;
     String? currentContext = _selectedContext;
     setState(() {
       _selectedContext = null;
@@ -688,6 +715,7 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
     }
 
     provider.setSendingMessage(true);
+    provider.beginChatTurn();
     provider.addMessageLocally(text);
     textController.clear();
 
@@ -704,17 +732,31 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
   /// Sends the message behind a failed reply again (the reply's Try Again).
   Future<void> _retryReply(ServerMessage failed) async {
     final provider = context.read<MessageProvider>();
-    if (provider.sendingMessage) return;
+    if (provider.chatMutationInProgress || provider.isClearingChat || provider.isSwitchingChatApp) return;
     provider.setSendingMessage(true);
     _resumeFollowingAndScroll(animated: true);
     await provider.retryFailedReply(failed);
   }
 
-  void _showPlansSheetOnQuotaExceeded() {
+  Future<void> _showPlansSheetOnQuotaExceeded() async {
     if (!mounted) return;
+    final usage = context.read<UsageProvider>();
     // Refresh subscription data so the plans sheet is up-to-date
-    context.read<UsageProvider>().fetchSubscription();
-    showOmiSheet<void>(context: context, padding: EdgeInsets.zero, builder: (_) => const _PlansSheetWrapper());
+    usage.fetchSubscription();
+    if (await PaywallRouter.openVariant(context, source: 'chat_quota_exceeded')) return;
+    if (!mounted) return;
+    PlatformManager.instance.analytics.paywallOpened(
+      'chat_quota_exceeded',
+      currentPlan: usage.subscription?.subscription.plan.wireName ?? 'unknown',
+    );
+    final title = await plansSheetTitle(context);
+    if (!mounted) return;
+    showOmiSheet<void>(
+      context: context,
+      title: title,
+      padding: EdgeInsets.zero,
+      builder: (_) => const _PlansSheetWrapper(analyticsSource: 'chat_quota_exceeded'),
+    );
   }
 
   sendInitialAppMessage(App? app) async {
@@ -955,7 +997,17 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
 
     // Store references before async operation
     final messageProvider = mounted ? context.read<MessageProvider>() : null;
-    if (messageProvider == null) return;
+    if (messageProvider == null || !messageProvider.canSwitchChat || context.read<VoiceRecorderProvider>().isActive) {
+      return;
+    }
+
+    // Fence sends for the whole switch, starting here: after the selection
+    // changes below there is a deliberate pre-read delay, and a send landing
+    // in that window would target the new app while the old app's transcript
+    // is still on screen (the later bootstrap read then returns early because
+    // the send made chatMutationInProgress true, leaving the mixed transcript).
+    messageProvider.markPendingAppSwitch();
+    messageProvider.notifySwitchingChatApp();
 
     // Set the selected app
     appProvider.setSelectedChatAppId(appId);
@@ -978,60 +1030,6 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
     if (messageProvider.messages.isEmpty) {
       messageProvider.sendInitialAppMessage(app);
     }
-  }
-
-  /// A close X and a grabber; a swipe down on the header closes the sheet (docs/ux-contract.md D1).
-  PreferredSizeWidget _buildAppBar(BuildContext context, MessageProvider provider) {
-    final l10n = context.l10n;
-    final loading = provider.isLoadingMessages;
-    return PreferredSize(
-      preferredSize: Size.fromHeight(kToolbarHeight + (loading ? 32 : 0)),
-      child: GestureDetector(
-        behavior: HitTestBehavior.translucent,
-        onVerticalDragEnd: (details) {
-          if ((details.primaryVelocity ?? 0) > 300) Navigator.of(context).maybePop();
-        },
-        child: AppBar(
-          elevation: 0,
-          scrolledUnderElevation: 0,
-          backgroundColor: Colors.transparent,
-          surfaceTintColor: Colors.transparent,
-          automaticallyImplyLeading: false,
-          leading: const Center(child: OmiCloseButton.circled()),
-          // The chat apps drawer opens from the composer's app chip, not a header menu button.
-          actions: const [SizedBox.shrink()],
-          flexibleSpace: SafeArea(
-            bottom: false,
-            child: Align(
-              alignment: Alignment.topCenter,
-              child: Container(
-                margin: const EdgeInsets.only(top: 6),
-                width: 36,
-                height: 4,
-                decoration: BoxDecoration(color: OmiColors.border, borderRadius: OmiRadius.pillAll),
-              ),
-            ),
-          ),
-          bottom: loading
-              ? PreferredSize(
-                  preferredSize: const Size.fromHeight(32),
-                  child: SizedBox(
-                    width: double.infinity,
-                    height: 32,
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        const OmiSpinner(size: OmiSpinnerSize.small),
-                        const SizedBox(width: OmiSpacing.xs),
-                        Text(l10n.syncingMessages, style: OmiType.footnote.copyWith(color: OmiColors.textSecondary)),
-                      ],
-                    ),
-                  ),
-                )
-              : null,
-        ),
-      ),
-    );
   }
 }
 
@@ -1132,9 +1130,7 @@ class _SelectedTextChip extends StatelessWidget {
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            ExcludeSemantics(
-              child: Icon(Icons.subdirectory_arrow_right, size: 14, color: OmiColors.textSecondary),
-            ),
+            ExcludeSemantics(child: Icon(Icons.subdirectory_arrow_right, size: 14, color: OmiColors.textSecondary)),
             const SizedBox(width: OmiSpacing.xs),
             Flexible(
               child: Text(
@@ -1158,7 +1154,9 @@ class _SelectedTextChip extends StatelessWidget {
 }
 
 class _PlansSheetWrapper extends StatefulWidget {
-  const _PlansSheetWrapper();
+  const _PlansSheetWrapper({this.analyticsSource = 'chat_quota_exceeded'});
+
+  final String analyticsSource;
 
   @override
   State<_PlansSheetWrapper> createState() => _PlansSheetWrapperState();
@@ -1197,6 +1195,136 @@ class _PlansSheetWrapperState extends State<_PlansSheetWrapper> with TickerProvi
       notesController: _notesController,
       arrowController: _arrowController,
       arrowAnimation: _arrowAnimation,
+      analyticsSource: widget.analyticsSource,
     );
   }
+}
+
+/// Row identity for the transcript sliver. Persisted messages use their id.
+/// Placeholder replies all keep id `0000`, so those rows use the message object.
+Key _chatMessageRowKey(ServerMessage message) => message.isEmpty ? ObjectKey(message) : ValueKey<String>(message.id);
+
+/// Same identity as [_chatMessageRowKey], namespaced for persisted ids so the
+/// visibility detector does not share a key with the row widget.
+Key _chatMessageVisibilityKey(ServerMessage message) =>
+    message.isEmpty ? ObjectKey(message) : ValueKey<String>('chat-result-visibility-${message.id}');
+
+/// Keeps already-built chat rows when a reply is appended or an existing
+/// identity stays put. Relocation looks up these keys, because placeholder
+/// ids are not unique. Content changes reach the row through [_ChatMessageSlot].
+class _StableChatMessageDelegate extends SliverChildBuilderDelegate {
+  _StableChatMessageDelegate({required List<Key> messageKeys, required NullableIndexedWidgetBuilder builder})
+      : _messageKeys = messageKeys,
+        super(
+          builder,
+          childCount: messageKeys.length,
+          findChildIndexCallback: (Key key) {
+            final index = messageKeys.indexOf(key);
+            return index < 0 ? null : index;
+          },
+        );
+
+  final List<Key> _messageKeys;
+
+  @override
+  bool shouldRebuild(covariant _StableChatMessageDelegate oldDelegate) {
+    final previous = oldDelegate._messageKeys;
+    if (_messageKeys.length < previous.length) return true;
+    for (var i = 0; i < previous.length; i++) {
+      if (_messageKeys[i] != previous[i]) return true;
+    }
+    return false;
+  }
+}
+
+class _ChatMessageSlot extends StatelessWidget {
+  const _ChatMessageSlot({
+    super.key,
+    required this.index,
+    required this.sendMessage,
+    required this.onAskOmi,
+    required this.updateConversation,
+    required this.onRetry,
+  });
+
+  final int index;
+  final Function(String) sendMessage;
+  final Function(String)? onAskOmi;
+  final Function(ServerConversation) updateConversation;
+  final Future<void> Function(ServerMessage message) onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    context.select<MessageProvider, int>((provider) {
+      if (index >= provider.messages.length) return -1;
+      return _chatMessageSignature(provider, index);
+    });
+    final provider = context.read<MessageProvider>();
+    if (index >= provider.messages.length) return const SizedBox.shrink();
+    final message = provider.messages[index];
+    final last = index == provider.messages.length - 1;
+    final messageBody = message.sender == MessageSender.ai
+        ? AIMessage(
+            showTypingIndicator: provider.showTypingIndicator && last,
+            showThinkingAfterText: provider.agentThinkingAfterText,
+            message: message,
+            sendMessage: sendMessage,
+            onAskOmi: onAskOmi,
+            displayOptions: provider.messages.length <= 1,
+            appSender: provider.messageSenderApp(message.appId),
+            updateConversation: updateConversation,
+            setMessageNps: (int value, {String? reason}) => provider.setMessageNps(message, value, reason: reason),
+            replyFailed: provider.isReplyFailed(message),
+            replyFailure: provider.replyFailure(message),
+            onRetry: provider.canRetryReply(message) ? () => onRetry(message) : null,
+          )
+        : HumanMessage(message: message, onAskOmi: onAskOmi);
+    return VisibilityDetector(
+      key: _chatMessageVisibilityKey(message),
+      onVisibilityChanged: (info) {
+        if (message.sender == MessageSender.ai && !message.isEmpty && info.visibleFraction > 0 && context.mounted) {
+          provider.markChatResultVisible(message.id);
+        }
+      },
+      child: Padding(
+        key: _chatMessageRowKey(message),
+        padding: EdgeInsets.only(bottom: index == 0 ? 16 : 0, top: last ? 8 : 16),
+        child: messageBody,
+      ),
+    );
+  }
+}
+
+int _chatMessageSignature(MessageProvider provider, int index) {
+  final message = provider.messages[index];
+  final last = index == provider.messages.length - 1;
+  final app = provider.messageSenderApp(message.appId);
+  return Object.hashAll([
+    identityHashCode(message),
+    message.id,
+    message.text,
+    message.sender,
+    message.type,
+    message.appId,
+    message.rating,
+    message.askForNps,
+    message.memoryAction,
+    message.thinkings.length,
+    message.thinkings.isEmpty ? '' : message.thinkings.last,
+    message.files.length,
+    message.files.map((file) => '${file.id}:${file.thumbnail != null}').join('|'),
+    message.memories.length,
+    message.contentBlocks.length,
+    identityHashCode(message.chartData),
+    identityHashCode(message.evidenceEnvelope),
+    app?.id,
+    app?.name,
+    last && provider.showTypingIndicator,
+    last && provider.agentThinkingAfterText,
+    provider.messages.length <= 1,
+    provider.isReplyFailed(message),
+    provider.replyFailure(message),
+    provider.canRetryReply(message),
+    last,
+  ]);
 }

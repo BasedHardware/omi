@@ -1,0 +1,10 @@
+{
+  "schema_version": 1,
+  "id": "FC-event-wakes-bypass-request-cadence",
+  "violated_contract": "Event-driven recovery must obey an aggregate request budget and per-item cadence regardless of wake frequency, backlog size, or the number of polling owners. Admission throttles and in-progress content must not become immediate processing retries.",
+  "canonical_prevention": "Put request reservation, per-job deadlines, shared pass admission, throttle cooldown and delayed missing-job confirmation in one polling gate. Attach an existing processing owner when offered by the server; retain local audio during every wait.",
+  "canonical_prevention_artifact": ["app/test/unit/sync_poll_storm_test.dart"],
+  "evidence_prs": [],
+  "scope_hints": ["app/lib/services/wals/**", "app/lib/providers/local_recordings_provider.dart", "backend/routers/sync.py"],
+  "status": "open"
+}

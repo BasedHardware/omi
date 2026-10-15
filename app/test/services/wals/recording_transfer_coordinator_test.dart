@@ -211,6 +211,51 @@ void main() {
       expect(harness.scheduledCooldowns, hasLength(1));
     });
 
+    for (final hook in ['start', 'finish']) {
+      test('a failing keep-alive $hook hook reports to the caller once without an unhandled error', () async {
+        final sentinel = StateError('keep-alive $hook hook failed');
+        var hookCalls = 0;
+        Future<void> failingOnceHook() async {
+          hookCalls++;
+          if (hookCalls == 1) throw sentinel;
+        }
+
+        final harness = _TransferHarness(
+          onTransferStarted: hook == 'start' ? failingOnceHook : null,
+          onTransferFinished: hook == 'finish' ? failingOnceHook : null,
+        );
+        addTearDown(harness.dispose);
+
+        Object? callerError;
+        Object? secondWakeError;
+        final outcome = await _runInGuardedZone(() async {
+          try {
+            await harness.coordinator.wake(WakeTrigger.startup);
+          } catch (e) {
+            callerError = e;
+          }
+          if (hook == 'finish') harness.backlog.add('wal-after-hook-failure');
+          try {
+            await harness.coordinator.wake(WakeTrigger.startup);
+          } catch (e) {
+            secondWakeError = e;
+          }
+        });
+
+        expect(outcome.harnessError, isNull);
+        expect(callerError, same(sentinel));
+        expect(secondWakeError, isNull);
+        expect(hookCalls, 2);
+        if (hook == 'start') {
+          expect(harness.drainedWalIds, ['wal-1']);
+        } else {
+          expect(harness.drainedWalIds, ['wal-1', 'wal-after-hook-failure']);
+        }
+        expect(harness.coordinator.hasInFlight, isFalse);
+        expect(outcome.unhandled, isEmpty);
+      });
+    }
+
     test('background connectivity re-arms retries and runs one live-capture-only drain', () async {
       final harness = _TransferHarness();
       addTearDown(harness.dispose);
@@ -355,6 +400,29 @@ void main() {
 }
 
 Future<void> _settle() => Future<void>.delayed(Duration.zero);
+
+Future<void> _flushEventQueue() async {
+  await Future<void>.delayed(Duration.zero);
+  await Future<void>.delayed(Duration.zero);
+}
+
+Future<({List<Object> unhandled, Object? harnessError})> _runInGuardedZone(Future<void> Function() body) async {
+  final unhandled = <Object>[];
+  final done = Completer<void>();
+  Object? harnessError;
+  runZonedGuarded(() async {
+    try {
+      await body();
+    } catch (e) {
+      harnessError = e;
+    } finally {
+      await _flushEventQueue();
+      done.complete();
+    }
+  }, (error, stackTrace) => unhandled.add(error));
+  await done.future;
+  return (unhandled: unhandled, harnessError: harnessError);
+}
 
 class _ScheduledCooldown {
   const _ScheduledCooldown(this.delay, this.callback);

@@ -1,0 +1,49 @@
+{
+  "version": "1.0.555",
+  "date": "2026-10-06",
+  "changes": [
+    {
+      "change": "See your recording on the Lock Screen and in the Dynamic Island, with Stop, Start and End buttons on iOS 17 and later (Start for the phone microphone needs iOS 18) and a waveform that loops while recording on iOS 18 and later",
+      "platforms": ["ios"]
+    },
+    {
+      "change": "Android connection diagnostics show more accurate reasons for disconnects, timeouts, and failed connections. A locally terminated connection also no longer incorrectly reports that the device paired with another phone.",
+      "platforms": ["android"]
+    },
+    "Bluetooth diagnostics now show how long your device was disconnected, even after many failed reconnect attempts.",
+    "Tapping Finish on the live transcript and swiping back at the same moment no longer leaves a black screen.",
+    "Device Diagnostics keeps seven-day connection counts accurate even after your device has been quiet or offline.",
+    "Fixed translations in Danish, German, Finnish, Hindi, Indonesian, Slovak and Vietnamese that hid values such as app names, counts and error details",
+    "Updating Omi keeps saved appearance choices and restores System mode for existing users who never chose a theme.",
+    {
+      "change": "Omi no longer crashes on Android when a long background sync reaches the system time limit",
+      "platforms": ["android"]
+    },
+    "Keep newly recorded audio distinct from older recordings after signing out or clearing local recordings.",
+    "Pick from 30 Gemini assistant voices in Settings > Voice, shared with the desktop app. Optional 'Read chat replies aloud' is off by default and only speaks when Voice Response allows it.",
+    "The memory graph now labels your own node in your language instead of always showing \"Me\"",
+    "Tap anywhere on a plan card to select it, with checkout kept on the plan you chose.",
+    "Continue on the permissions screen now shows the permission prompts you have not answered yet",
+    "Pendant ring custody: WAL writes are fsynced and indexed before any device-side advance, and custody release is capability-gated on new firmware; pending copies are never evicted.",
+    "You can select your current plan again on the plans sheet after switching between monthly and yearly",
+    "Data protection notifications now name the protection level in your language",
+    {
+      "change": "Search understands dates in words — \"bluetooth sept 12\", \"last Tuesday\", \"9/12\" — and a calendar can narrow the conversation search or open a day's page. Recap stats now open that day's conversations and tasks, Home's calendar filters the feed with a removable chip, and the chat and search sheets dismiss with an iOS-style left-edge swipe. Search also stops waiting when results cannot load and offers Try Again.",
+      "platforms": ["ios"]
+    },
+    "Deleting a task no longer repeats other tasks while you scroll",
+    "Apps show up again under Settings > Integrations",
+    "The listening pill is one line and shows the latest words instead of how long the pendant has been connected",
+    "Offline Sync shows how far a download from your device has gotten, and a bar on the recording that is moving.",
+    "Plan & Usage now keeps your plan and cancellation controls reachable even when usage stats fail to load.",
+    {
+      "change": "The chat agent can now use on-device capabilities on iOS: it can search your contacts and draft a message for you to review and send in the system compose sheet. Nothing is sent without you tapping Send.",
+      "platforms": ["ios"]
+    },
+    "Improved recovery of locally saved audio after reconnecting.",
+    "If your account is still being deleted, the app now returns you to sign-in with a clear message instead of getting stuck, and the primary language prompt can always be closed.",
+    "Chat now explains reply and install failures, retries reliably, and shows persona apps in the chat app picker.",
+    "Handled request and upload failures no longer trigger spurious crash reports.",
+    "Chat no longer shows automatic goal, task, and meeting-note cards; rich cards in replies still work"
+  ]
+}

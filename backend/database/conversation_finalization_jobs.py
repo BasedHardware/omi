@@ -18,11 +18,17 @@ from google.cloud.firestore_v1 import FieldFilter
 from database import conversations as conversations_db
 from database import recording_sessions as recording_sessions_db
 from database._client import document_id_from_seed, get_firestore_client
+from database.conversation_terminal_title import (
+    dead_letter_conversation_updates,
+    kept_row_terminal_update,
+    user_time_zone,
+)
 from database.firestore_transaction_retry import run_with_transaction_contention_retry
 from database.firestore_index_registry import (
     FINALIZATION_OLDEST_NONTERMINAL_QUERY,
     MEETING_RECEIPTS_DUE_QUERY,
 )
+from database.people_stats_cache import invalidate_people_stats_cache
 from models.client_processing import PROJECTION_FAMILY_FIELDS
 from utils.conversations.processing_trigger import PROCESSING_MODES, ProcessingTrigger
 from utils.conversations.recovery import (
@@ -51,12 +57,8 @@ DEFAULT_RECONCILE_STALE_SECONDS = 300
 # job, and its request thread is not killed by the HTTP timeout, so the orphan
 # window must exceed any plausible live synchronous process_conversation run.
 DEFAULT_ORPHAN_RECONCILE_STALE_SECONDS = 900
-# A BYOK job can only ever run inside a live pusher session that presents the
-# user's request-scoped keys. Once that session is gone nothing owns the row:
-# the Cloud Tasks worker refuses `requires_byok` jobs and the credential-free
-# reconciler only selects rows carrying `reconcile_after_at`, which every BYOK
-# transition deletes. Seven days is deliberately far longer than any plausible
-# reconnect window.
+# Prompt reclaim restores reconnect waiting; abandonment bounds that waiting
+# by the last live activity, never by recovery bookkeeping activity.
 DEFAULT_BYOK_ABANDONED_AFTER_SECONDS = 14 * 86_400
 BYOK_ABANDONED_FAILURE_CODE = 'byok_session_abandoned'
 MEETING_RECEIPT_SCHEMA_VERSION = 1
@@ -382,6 +384,8 @@ def _snapshot_bound_projection_updates(
     uid: str,
     conversation: Mapping[str, Any],
     extra_updates: Mapping[str, Any] | None,
+    *,
+    transcript_corrections: list[dict] | None = None,
 ) -> dict[str, Any]:
     """Bind ``extra_updates`` to this snapshot, then keep projection fields only.
 
@@ -389,7 +393,9 @@ def _snapshot_bound_projection_updates(
     one that does not is dropped. Binding is the same helper every exit uses
     — not a second write path per branch.
     """
-    bound = conversations_db.extra_updates_with_bound_client_processing(uid, conversation, extra_updates)
+    bound = conversations_db.extra_updates_with_bound_client_processing(
+        uid, conversation, extra_updates, transcript_corrections=transcript_corrections
+    )
     return {field: bound[field] for field in PROJECTION_FAMILY_FIELDS if field in bound}
 
 
@@ -424,7 +430,20 @@ def _apply_snapshot_bound_projection(
     """
     if conversation is None:
         return
-    conversation_updates = _snapshot_bound_projection_updates(uid, conversation, extra_updates)
+    corrections = None
+    if conversation.get('has_transcript_corrections') and any(
+        field in (extra_updates or {}) for field in PROJECTION_FAMILY_FIELDS
+    ):
+        from database import review_store
+
+        overlay_ref = conversation_ref.parent.parent.collection('transcript_corrections').document(conversation_ref.id)
+        overlay = overlay_ref.get(transaction=transaction).to_dict()
+        corrections = review_store.require_doc(uid, overlay).get('source')
+        if not isinstance(corrections, list):
+            raise ValueError('Transcript correction overlay invalid')
+    conversation_updates = _snapshot_bound_projection_updates(
+        uid, conversation, extra_updates, transcript_corrections=corrections
+    )
     for key, value in lifecycle_updates.items():
         # A dotted key is a Firestore field path: ``client_processing.title``
         # writes inside the projection without going through the bind.
@@ -632,9 +651,8 @@ def create_or_get_finalization_intent(
     conversation_ref = _conversation_ref(client, uid, conversation_id)
     jobs_collection = client.collection(FINALIZATION_JOBS_COLLECTION)
     projection_collection = client.collection(FINALIZATION_PROJECTION_COLLECTION)
-    recording_sessions_collection = (
-        client.collection('users').document(uid).collection(recording_sessions_db.RECORDING_SESSIONS_COLLECTION)
-    )
+    user_ref = client.collection('users').document(uid)
+    recording_sessions_collection = user_ref.collection(recording_sessions_db.RECORDING_SESSIONS_COLLECTION)
 
     def create_intent_in_transaction(transaction: Any) -> FinalizationIntent:
         # The Firestore SDK's transactional wrapper retains retry state. Build
@@ -657,11 +675,14 @@ def create_or_get_finalization_intent(
             recording_sessions_collection=recording_sessions_collection,
         )
 
-    return run_with_transaction_contention_retry(
+    intent = run_with_transaction_contention_retry(
         client.transaction,
         create_intent_in_transaction,
         operation_name='conversation_finalization_intent',
     )
+    if intent['created']:
+        invalidate_people_stats_cache(uid)
+    return intent
 
 
 def _resume_blocked_byok_job_txn(
@@ -685,9 +706,9 @@ def _resume_blocked_byok_job_txn(
                 'status': 'queued',
                 'updated_at': now,
                 'last_byok_resume_at': now,
-                # BYOK jobs must only be resumed by the live pusher session,
-                # never by the credential-free Cloud Tasks reconciler.
-                'reconcile_after_at': firestore.DELETE_FIELD,
+                'byok_last_activity_at': firestore.DELETE_FIELD,
+                # Due reconciliation revokes ownership, never processes BYOK.
+                'reconcile_after_at': now + get_finalization_reconcile_stale_after(),
             },
         )
         _record_projection_delta(transaction, projection_collection, job, blocked_byok=-1, queued=1)
@@ -766,7 +787,7 @@ def _claim_finalization_job_txn(
             # has reclaimed its expired lease. Terminal writes must present it.
             'lease_epoch': lease_epoch,
             **({'worker_claim_count': worker_claim_count} if count_worker_claim else {}),
-            'reconcile_after_at': (firestore.DELETE_FIELD if bool(job.get('requires_byok')) else lease_expires_at),
+            'reconcile_after_at': lease_expires_at,
             'updated_at': now,
         },
     )
@@ -1089,11 +1110,7 @@ def _mark_finalization_retryable_txn(
             'updated_at': now,
             'lease_expires_at': now,
             'attempt_count': attempt_count,
-            'reconcile_after_at': (
-                firestore.DELETE_FIELD
-                if bool(job.get('requires_byok'))
-                else now + get_finalization_reconcile_stale_after()
-            ),
+            'reconcile_after_at': now + get_finalization_reconcile_stale_after(),
             'last_failure_code': failure_code,
         },
     )
@@ -1133,6 +1150,7 @@ def _mark_finalization_dead_letter_txn(
     conversation_ref_for_job: Callable[[str, str], Any] | None = None,
     projection_collection: Any | None = None,
     failure_code: str = 'final_attempt_failed',
+    time_zone_for_uid: Callable[[str], str | None] | None = None,
 ) -> bool:
     snapshot = job_ref.get(transaction=transaction)
     if not getattr(snapshot, 'exists', False):
@@ -1162,6 +1180,21 @@ def _mark_finalization_dead_letter_txn(
         conversation_ref = conversation_ref_for_job(uid, conversation_id)
         conversation_snapshot = conversation_ref.get(transaction=transaction)
         conversation = conversation_snapshot.to_dict() if getattr(conversation_snapshot, 'exists', False) else None
+    conversation_updates: dict[str, Any] | None = None
+    if (
+        conversation_ref is not None
+        and isinstance(uid, str)
+        and isinstance(conversation, Mapping)
+        and conversation.get('status') == 'processing'
+        and not conversation.get('discarded')
+        and conversation.get('finalization_job_id') == job_ref.id
+        and conversation.get('finalization_revision') == job.get('finalization_revision')
+    ):
+        # Computed before the first write: it may read the photos child
+        # collection inside this transaction.
+        conversation_updates = dead_letter_conversation_updates(
+            uid, conversation, conversation_ref, transaction, failure_code, time_zone_for_uid
+        )
     transaction.update(
         job_ref,
         {
@@ -1179,24 +1212,7 @@ def _mark_finalization_dead_letter_txn(
         },
     )
     _record_projection_delta(transaction, projection_collection, job, leased=-1, dead_letter=1, failure=1)
-    if (
-        conversation_ref is not None
-        and isinstance(conversation, Mapping)
-        and conversation.get('status') == 'processing'
-        and not conversation.get('discarded')
-        and conversation.get('finalization_job_id') == job_ref.id
-        and conversation.get('finalization_revision') == job.get('finalization_revision')
-    ):
-        # Match BYOK abandonment/orphan recovery. A failed first processing
-        # pass may have no structured field at all, which the API model needs
-        # even to return an untitled transcript-only conversation.
-        conversation_updates: dict[str, Any] = {
-            'status': 'completed',
-            'discarded': False,
-            'finalization_status': 'dead_letter',
-        }
-        if not isinstance(conversation.get('structured'), Mapping):
-            conversation_updates['structured'] = {'title': '', 'overview': ''}
+    if conversation_updates is not None:
         transaction.update(conversation_ref, conversation_updates)
     return True
 
@@ -1223,6 +1239,7 @@ def mark_finalization_dead_letter(
         lambda uid, conversation_id: _conversation_ref(client, uid, conversation_id),
         client.collection(FINALIZATION_PROJECTION_COLLECTION),
         failure_code,
+        lambda uid: user_time_zone(client, uid),
     )
 
 
@@ -1535,6 +1552,7 @@ def _claim_finalization_replay_txn(
     stale_after: timedelta,
     now: datetime,
     projection_collection: Any | None = None,
+    byok_only: bool = False,
 ) -> FinalizationIntent:
     snapshot = job_ref.get(transaction=transaction)
     if not getattr(snapshot, 'exists', False):
@@ -1548,17 +1566,45 @@ def _claim_finalization_replay_txn(
         }
     job = snapshot.to_dict() or {}
     status = str(job.get('status') or '')
+    if byok_only and not job.get('requires_byok'):
+        return _intent_from_job(snapshot.id, job)
     if status == 'blocked_byok' or status in TERMINAL_JOB_STATUSES:
         return _intent_from_job(snapshot.id, job)
     if status == 'leased':
         lease_expires_at = job.get('lease_expires_at')
+        if bool(job.get('requires_byok')) and not isinstance(lease_expires_at, datetime):
+            return _intent_from_job(snapshot.id, job)
         if isinstance(lease_expires_at, datetime) and lease_expires_at > now:
             return _intent_from_job(snapshot.id, job)
     if status == 'queued':
         dispatch_requested_at = job.get('dispatch_requested_at')
+        if job.get('requires_byok'):
+            activity = [
+                job.get(field) for field in ('updated_at', 'last_byok_resume_at', 'dispatch_requested_at', 'created_at')
+            ]
+            activity = [value for value in activity if isinstance(value, datetime)]
+            if not activity:
+                return _intent_from_job(snapshot.id, job)
+            dispatch_requested_at = max(activity)
         if isinstance(dispatch_requested_at, datetime) and dispatch_requested_at > now - stale_after:
             return _intent_from_job(snapshot.id, job)
     if status not in ('queued', 'leased'):
+        return _intent_from_job(snapshot.id, job)
+
+    if job.get('requires_byok'):
+        transaction.update(
+            job_ref,
+            {
+                'status': 'blocked_byok',
+                'byok_last_activity_at': _job_last_activity_at(job),
+                'updated_at': now,
+                'lease_epoch': int(job.get('lease_epoch') or 0) + 1,
+                'lease_expires_at': firestore.DELETE_FIELD,
+                'reconcile_after_at': firestore.DELETE_FIELD,
+            },
+        )
+        _record_projection_delta(transaction, projection_collection, job, **{status: -1, 'blocked_byok': 1})
+        job['status'] = 'blocked_byok'
         return _intent_from_job(snapshot.id, job)
 
     generation = int(job.get('dispatch_generation') or 1) + 1
@@ -1584,7 +1630,7 @@ def _claim_finalization_replay_txn(
 
 
 def claim_finalization_replay(
-    job_id: str, *, stale_after: timedelta, firestore_client: Any = None
+    job_id: str, *, stale_after: timedelta, firestore_client: Any = None, byok_only: bool = False
 ) -> FinalizationIntent:
     client = _client(firestore_client)
     transaction = client.transaction()
@@ -1595,7 +1641,53 @@ def claim_finalization_replay(
         stale_after,
         _now(),
         client.collection(FINALIZATION_PROJECTION_COLLECTION),
+        byok_only,
     )
+
+
+def recover_stranded_byok_jobs(*, limit: int = 50, firestore_client: Any = None) -> dict[str, int]:
+    """Rotate through at most 50 rows per active status using the existing age index.
+
+    Persisted CAS cursors prevent a stable non-BYOK prefix from starving legacy
+    rows. Candidate reads are advisory; each reclaim rereads ownership inside a
+    transaction. Failed rows are revisited on the next rotation.
+    """
+    client = _client(firestore_client)
+    collection = client.collection(FINALIZATION_JOBS_COLLECTION)
+    page_size = max(1, min(limit, 50))
+    result = {'scanned': 0, 'blocked': 0, 'errors': 0}
+    for status in ('queued', 'leased'):
+        state_ref = client.collection(STALE_PROCESSING_SWEEP_STATE_COLLECTION).document(f'byok_reclaim_{status}')
+        state = state_ref.get().to_dict() or {}
+        query = FINALIZATION_OLDEST_NONTERMINAL_QUERY.build(
+            collection, {'status': status}, field_filter_factory=FieldFilter
+        ).order_by('created_at')
+        path = state.get('resume_after_path')
+        if isinstance(path, str) and path.startswith(FINALIZATION_JOBS_COLLECTION + '/'):
+            cursor = client.document(path).get()
+            if cursor.exists and isinstance((cursor.to_dict() or {}).get('created_at'), datetime):
+                query = query.start_after(cursor)
+        snapshots = list(query.limit(page_size).stream())
+        for snapshot in snapshots:
+            result['scanned'] += 1
+            if not (snapshot.to_dict() or {}).get('requires_byok'):
+                continue
+            try:
+                intent = claim_finalization_replay(
+                    snapshot.id,
+                    stale_after=get_finalization_reconcile_stale_after(),
+                    firestore_client=client,
+                    byok_only=True,
+                )
+                if intent['status'] == 'blocked_byok':
+                    result['blocked'] += 1
+            except Exception:
+                result['errors'] += 1
+        next_path = snapshots[-1].reference.path if len(snapshots) == page_size else None
+        firestore.transactional(_advance_stale_processing_sweep_cursor_txn)(
+            client.transaction(), state_ref, int(state.get('generation', 0)), next_path, _now()
+        )
+    return result
 
 
 def get_finalization_replay_candidates(*, limit: int = 100, firestore_client: Any = None) -> list[dict[str, Any]]:
@@ -1798,13 +1890,7 @@ def scan_in_progress_conversations(
 
 
 def get_in_progress_content_sweep_cursor(*, firestore_client: Any = None) -> dict[str, Any]:
-    """Return the self-heal sweep cursor, its CAS generation, and pending verifications.
-
-    Returns ``{'resume_after_path', 'generation', 'pending_verifications'}``.
-    ``pending_verifications`` is a bounded list of
-    ``{'uid', 'conversation_id', 'job_id'}`` entries the follow-up tick
-    re-checks before the job's own dead-letter workflow would own a failure.
-    """
+    """Read the CAS cursor and bounded job identities with optional ``admitted_at`` deadlines."""
     client = _client(firestore_client)
     snapshot = (
         client.collection(STALE_PROCESSING_SWEEP_STATE_COLLECTION).document(IN_PROGRESS_CONTENT_SWEEP_STATE_DOC).get()
@@ -1824,7 +1910,11 @@ def get_in_progress_content_sweep_cursor(*, firestore_client: Any = None) -> dic
         conversation_id = entry.get('conversation_id')
         job_id = entry.get('job_id')
         if isinstance(uid, str) and isinstance(conversation_id, str) and isinstance(job_id, str):
-            entries.append({'uid': uid, 'conversation_id': conversation_id, 'job_id': job_id})
+            clean_entry: dict[str, Any] = {'uid': uid, 'conversation_id': conversation_id, 'job_id': job_id}
+            admitted_at = entry.get('admitted_at')
+            if isinstance(admitted_at, datetime):
+                clean_entry['admitted_at'] = admitted_at
+            entries.append(clean_entry)
     return {
         'resume_after_path': path if isinstance(path, str) else None,
         'generation': int(data.get('generation', 0)),
@@ -1896,9 +1986,8 @@ def get_stale_processing_sweep_cursor(*, firestore_client: Any = None) -> dict[s
     rewinding another pod's advance.
     """
     client = _client(firestore_client)
-    snapshot = (
-        client.collection(STALE_PROCESSING_SWEEP_STATE_COLLECTION).document(STALE_PROCESSING_SWEEP_STATE_DOC).get()
-    )
+    state_ref = client.collection(STALE_PROCESSING_SWEEP_STATE_COLLECTION).document(STALE_PROCESSING_SWEEP_STATE_DOC)
+    snapshot = state_ref.get()
     if not getattr(snapshot, 'exists', False):
         return {'resume_after_path': None, 'generation': 0}
     data = snapshot.to_dict() or {}
@@ -2057,7 +2146,12 @@ def complete_unstampable_orphan_conversation(
 
 
 def _complete_orphan_conversation_txn(
-    transaction: Any, conversation_ref: Any, expected_admitted_at: datetime | None, now: datetime
+    transaction: Any,
+    conversation_ref: Any,
+    expected_admitted_at: datetime | None,
+    now: datetime,
+    uid: str | None = None,
+    time_zone_for_uid: Callable[[str], str | None] | None = None,
 ) -> bool:
     """Terminalize exactly the scanned orphan generation, fencing every live owner.
 
@@ -2071,7 +2165,8 @@ def _complete_orphan_conversation_txn(
 
     Only when every assumption still holds is the row moved to ``completed``. Any
     divergence is an expected CAS fencing (``False``), never a terminalization of
-    live or durable-owned work.
+    live or durable-owned work. An untitled row also gets its deterministic title
+    (``kept_row_terminal_update``) so it never lands in the list untitled.
     """
     del now  # the terminal write carries no timestamp; the fence is the generation
     snapshot = conversation_ref.get(transaction=transaction)
@@ -2085,7 +2180,11 @@ def _complete_orphan_conversation_txn(
     admitted_at = data.get('processing_admitted_at')
     if not isinstance(admitted_at, datetime) or admitted_at != expected_admitted_at:
         return False
-    transaction.update(conversation_ref, {'status': 'completed'})
+    uid = uid or _uid_from_conversation_path(str(getattr(conversation_ref, 'path', '') or ''))
+    terminal: dict[str, Any] = {'status': 'completed'}
+    if uid:
+        terminal = kept_row_terminal_update(uid, data, conversation_ref, terminal, time_zone_for_uid)
+    transaction.update(conversation_ref, terminal)
     return True
 
 
@@ -2096,7 +2195,14 @@ def complete_orphan_conversation(
     client = _client(firestore_client)
     transaction = client.transaction()
     transactional = firestore.transactional(_complete_orphan_conversation_txn)
-    return transactional(transaction, _conversation_ref(client, uid, conversation_id), expected_admitted_at, _now())
+    return transactional(
+        transaction,
+        _conversation_ref(client, uid, conversation_id),
+        expected_admitted_at,
+        _now(),
+        uid,
+        lambda zone_uid: user_time_zone(client, zone_uid),
+    )
 
 
 def _renew_processing_lease_txn(transaction: Any, conversation_ref: Any, now: datetime) -> bool:
@@ -2178,7 +2284,7 @@ def recover_deferred_processing_failure(uid: str, conversation_id: str, *, fires
 
 def _job_last_activity_at(job: Mapping[str, Any]) -> datetime | None:
     """Return the most recent server-owned activity instant on a job."""
-    for field in ('updated_at', 'created_at'):
+    for field in ('byok_last_activity_at', 'updated_at', 'created_at'):
         value = job.get(field)
         if isinstance(value, datetime):
             return value
@@ -2195,24 +2301,15 @@ def get_abandoned_byok_job_candidates(
 ) -> dict[str, Any]:
     """Return a bounded window of BYOK jobs that no consumer can ever claim again.
 
-    A ``requires_byok`` job is executable only by a live pusher session holding
-    the user's request-scoped keys. Every BYOK transition deletes
-    ``reconcile_after_at`` on purpose, so such a row is invisible to
-    ``get_finalization_replay_candidates``; the Cloud Tasks worker separately
-    refuses it in ``_claim_finalization_job_txn``. Once the session ends the row
-    is owned by nobody at all. This sweep gives it an owner for exactly one
-    purpose: a truthful terminal. It never replays finalization, and it never
-    reads, brokers, or substitutes a credential.
+    The sweep never executes finalization or reads credentials. Its bounded
+    single-field query selects all BYOK rows, including blocked_byok; eligibility
+    is checked after pagination and again in the terminal transaction:
 
-    Eligibility (all client-side, re-verified inside the terminal transaction):
-
-    * ``status`` in ``queued`` / ``leased`` -- terminal rows are done, and
-      ``blocked_byok`` is deliberately excluded because that state is still
-      legitimately waiting for a live session to present keys, and it is already
-      visible on the ``blocked_byok`` gauge.
-    * an expired lease, if ``leased`` -- a live worker still owns a valid lease.
-    * a server-owned last-activity instant older than ``abandoned_after``. A row
-      whose age cannot be established is skipped rather than terminalized.
+    * ``status`` in ``queued`` / ``leased`` / ``blocked_byok``.
+    * no live lease, if ``leased``.
+    * last live activity older than ``abandoned_after``. Prompt reclaim preserves
+      that instant in ``byok_last_activity_at`` before updating bookkeeping;
+      reconnect clears it and refreshes activity. Unknown age fails closed.
 
     The cross-collection sweep is a single-equality query on
     ``requires_byok == True``, served by Firestore's automatic single-field index
@@ -2257,7 +2354,7 @@ def get_abandoned_byok_job_candidates(
             last_path = getattr(reference, 'path', None) or f'{FINALIZATION_JOBS_COLLECTION}/{snapshot.id}'
             job = snapshot.to_dict() or {}
             status = str(job.get('status') or '')
-            if status not in ('queued', 'leased'):
+            if status not in ('queued', 'leased', 'blocked_byok'):
                 continue
             if status == 'leased':
                 lease_expires_at = job.get('lease_expires_at')
@@ -2297,11 +2394,12 @@ def _abandon_byok_finalization_job_txn(
     now: datetime,
     conversation_ref_for_job: Callable[[str, str], Any] | None = None,
     projection_collection: Any | None = None,
+    time_zone_for_uid: Callable[[str], str | None] | None = None,
 ) -> ByokAbandonment:
     """Terminalize exactly the scanned unownable BYOK generation, fencing every live owner.
 
     Verified inside the transaction, immediately before the write: the job still
-    requires BYOK, is still non-terminal and not ``blocked_byok``, still carries
+    requires BYOK, is still queued, leased, or blocked_byok, still carries
     the scanned status / dispatch generation / lease epoch (so a live session
     that resumed or claimed it in the meantime wins), holds no unexpired lease,
     and is still older than the abandonment cutoff. Any divergence is an expected
@@ -2324,7 +2422,7 @@ def _abandon_byok_finalization_job_txn(
     status = str(job.get('status') or '')
     if not bool(job.get('requires_byok')):
         return _byok_abandonment('fenced')
-    if status not in ('queued', 'leased') or status != expected_status:
+    if status not in ('queued', 'leased', 'blocked_byok') or status != expected_status:
         return _byok_abandonment('fenced')
     if int(job.get('dispatch_generation') or 1) != expected_dispatch_generation:
         return _byok_abandonment('fenced')
@@ -2356,6 +2454,21 @@ def _abandon_byok_finalization_job_txn(
         conversation_snapshot = conversation_ref.get(transaction=transaction)
         conversation = conversation_snapshot.to_dict() if getattr(conversation_snapshot, 'exists', False) else None
 
+    closes_conversation = (
+        conversation_ref is not None
+        and isinstance(uid, str)
+        and isinstance(conversation, Mapping)
+        and conversation.get('finalization_job_id') == job_ref.id
+        and conversation.get('finalization_revision') == job.get('finalization_revision')
+        and conversation.get('status') == 'processing'
+        and not conversation.get('discarded')
+        and not conversation.get('deferred')
+    )
+    # Pure decode of the snapshot already held; no transactional read after a write.
+    terminal: dict[str, Any] = {'status': 'completed', 'finalization_status': 'dead_letter'}
+    if closes_conversation and isinstance(uid, str) and isinstance(conversation, Mapping):
+        terminal = kept_row_terminal_update(uid, conversation, conversation_ref, terminal, time_zone_for_uid)
+
     transaction.update(
         job_ref,
         {
@@ -2378,6 +2491,7 @@ def _abandon_byok_finalization_job_txn(
         job,
         queued=-1 if status == 'queued' else 0,
         leased=-1 if status == 'leased' else 0,
+        blocked_byok=-1 if status == 'blocked_byok' else 0,
         dead_letter=1,
         failure=1,
     )
@@ -2396,7 +2510,7 @@ def _abandon_byok_finalization_job_txn(
         # A desktop lazy row intentionally stays on `processing` and is owned by
         # its own lane, exactly as the bare-`processing` sweep treats it.
         return _byok_abandonment('abandoned', 'deferred')
-    transaction.update(conversation_ref, {'status': 'completed', 'finalization_status': 'dead_letter'})
+    transaction.update(conversation_ref, terminal)
     return _byok_abandonment('abandoned', 'closed')
 
 
@@ -2424,15 +2538,15 @@ def abandon_byok_finalization_job(
         now,
         lambda uid, conversation_id: _conversation_ref(client, uid, conversation_id),
         client.collection(FINALIZATION_PROJECTION_COLLECTION),
+        lambda uid: user_time_zone(client, uid),
     )
 
 
 def get_byok_abandonment_sweep_cursor(*, firestore_client: Any = None) -> dict[str, Any]:
     """Return the persisted BYOK sweep cursor and its CAS generation."""
     client = _client(firestore_client)
-    snapshot = (
-        client.collection(STALE_PROCESSING_SWEEP_STATE_COLLECTION).document(BYOK_ABANDONMENT_SWEEP_STATE_DOC).get()
-    )
+    state_ref = client.collection(STALE_PROCESSING_SWEEP_STATE_COLLECTION).document(BYOK_ABANDONMENT_SWEEP_STATE_DOC)
+    snapshot = state_ref.get()
     if not getattr(snapshot, 'exists', False):
         return {'resume_after_path': None, 'generation': 0}
     data = snapshot.to_dict() or {}
@@ -2500,17 +2614,9 @@ def get_finalization_job_summary(*, firestore_client: Any = None) -> dict[str, f
             if isinstance(value, (int, float)):
                 totals[name] += int(value)
 
-    # The age of the oldest unfinished job is asked of ``status`` directly, one
-    # ordered single-document read per nonterminal status.  The previous
-    # implementation paged ``reconcile_after_at <= now`` instead, which made the
-    # gauge structurally unable to see the population it exists to report:
-    # ``reconcile_after_at`` is deleted outright on the BYOK resume and BYOK
-    # retry paths, so every BYOK job was invisible to it and the gauge read 0
-    # while hundreds of jobs sat unfinished for weeks.  Ordering by
-    # ``created_at`` also makes this the actual oldest row rather than the
-    # oldest of an arbitrary page.  Cost stays bounded and independent of
-    # terminal history: one indexed read per nonterminal status.
+    # One indexed oldest-row read per status, independent of terminal history.
     oldest_age_seconds = 0.0
+    oldest_blocked_byok_age_seconds = 0.0
     for status in sorted(NONTERMINAL_JOB_STATUSES):
         oldest_query = (
             FINALIZATION_OLDEST_NONTERMINAL_QUERY.build(
@@ -2522,7 +2628,11 @@ def get_finalization_job_summary(*, firestore_client: Any = None) -> dict[str, f
         for snapshot in oldest_query.stream():
             created_at = (snapshot.to_dict() or {}).get('created_at')
             if isinstance(created_at, datetime):
-                oldest_age_seconds = max(oldest_age_seconds, max(0.0, (now - created_at).total_seconds()))
+                age = max(0.0, (now - created_at).total_seconds())
+                if status == 'blocked_byok':
+                    oldest_blocked_byok_age_seconds = max(oldest_blocked_byok_age_seconds, age)
+                else:
+                    oldest_age_seconds = max(oldest_age_seconds, age)
     return {
         'accepted': totals['accepted'],
         'success': totals['success'],
@@ -2538,4 +2648,5 @@ def get_finalization_job_summary(*, firestore_client: Any = None) -> dict[str, f
         # Historical terminals are intentionally out of this bounded generation.
         'terminal_unknown': 0,
         'oldest_nonterminal_age_seconds': oldest_age_seconds,
+        'oldest_blocked_byok_age_seconds': oldest_blocked_byok_age_seconds,
     }

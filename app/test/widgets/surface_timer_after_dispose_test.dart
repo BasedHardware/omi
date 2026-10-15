@@ -17,7 +17,6 @@ import 'package:omi/pages/capture/connect.dart';
 import 'package:omi/pages/chat/page.dart';
 import 'package:omi/pages/conversation_detail/conversation_detail_provider.dart';
 import 'package:omi/pages/conversation_detail/page.dart';
-import 'package:omi/pages/conversation_detail/widgets/conversation_tasks_tab.dart';
 import 'package:omi/pages/memories/page.dart';
 import 'package:omi/pages/memories/widgets/memory_delete_undo.dart';
 import 'package:omi/providers/app_provider.dart';
@@ -89,59 +88,6 @@ void main() {
     await tester.pump();
     expect(tester.takeException(), isNull);
     expect(find.byType(MemoriesPage), findsNothing);
-  });
-
-  testWidgets('ActionItemDetailWidget completion delay is cancelled on dispose', (tester) async {
-    final structured = Structured('Sprint', 'Overview', emoji: '🧠');
-    structured.actionItems = [ActionItem('Ship the timer fix')];
-    // ConversationDetailProvider.conversationOrNull() validates the
-    // conversation's local day against selectedDate, which defaults to the
-    // clock at provider construction. Derive both from the same instant so
-    // the day-key comparison holds in every timezone and at any wall-clock
-    // time instead of only when the runner's calendar day matches UTC.
-    final conversationDate = DateTime.now().subtract(const Duration(hours: 2));
-    final conversation = ServerConversation(
-      id: 'conv-timer',
-      createdAt: conversationDate,
-      structured: structured,
-    );
-    final conversations = _ImmediateConversationProvider();
-    conversations.conversations = [conversation];
-    final detail = ConversationDetailProvider();
-    detail.conversationProvider = conversations;
-    detail.setCachedConversation(conversation);
-    detail.selectedDate = conversationLocalDayKey(conversation.createdAt);
-
-    await tester.pumpWidget(
-      _l10nApp(
-        MultiProvider(
-          providers: [
-            ChangeNotifierProvider<ConversationProvider>.value(value: conversations),
-            ChangeNotifierProvider<ConversationDetailProvider>.value(value: detail),
-          ],
-          child: Scaffold(
-            body: ActionItemDetailWidget(actionItem: structured.actionItems.first, conversationId: conversation.id),
-          ),
-        ),
-      ),
-    );
-    await tester.pump();
-
-    // InkWell also hosts a GestureDetector; the completion toggle is the nested
-    // checkbox, which is the last one under this widget.
-    tester
-        .widget<GestureDetector>(
-          find.descendant(of: find.byType(ActionItemDetailWidget), matching: find.byType(GestureDetector)).last,
-        )
-        .onTap!();
-    await tester.pump();
-
-    await tester.pumpWidget(const SizedBox.shrink());
-    await tester.pump();
-    expect(tester.takeException(), isNull);
-    expect(find.byType(ActionItemDetailWidget), findsNothing);
-    conversations.dispose();
-    detail.dispose();
   });
 
   testWidgets('ConnectDevicePage scan delay is not armed after unmount', (tester) async {

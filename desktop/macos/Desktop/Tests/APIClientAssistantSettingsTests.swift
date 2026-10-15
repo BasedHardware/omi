@@ -45,8 +45,8 @@ final class APIClientAssistantSettingsTests: XCTestCase {
     XCTAssertEqual(prompt.unicodeScalars.count, 10_002)
     XCTAssertNil(
       SettingsSyncManager.promptForSync(
-        prompt, assistantName: "insight", maximumLength: 10_000,
-        shippedDefault: InsightAssistantSettings.defaultAnalysisPrompt))
+        prompt, assistantName: "memory", maximumLength: 10_000,
+        shippedDefault: MemoryAssistantSettings.defaultAnalysisPrompt))
   }
 
   @MainActor
@@ -58,7 +58,6 @@ final class APIClientAssistantSettingsTests: XCTestCase {
     let prompt = String(repeating: "x", count: backendMaximum + 1)
     let assistants: [(name: String, shippedDefault: String)] = [
       ("task", TaskAssistantSettings.defaultAnalysisPrompt),
-      ("insight", InsightAssistantSettings.defaultAnalysisPrompt),
       ("memory", MemoryAssistantSettings.defaultAnalysisPrompt),
     ]
 

@@ -179,6 +179,58 @@ extension APIClient {
     try await performVoidRequest(request)
   }
 
+  struct SpeakerAssignmentReceipt: Decodable, Sendable {
+    struct Segment: Decodable, Sendable {
+      let id: String?
+      let speakerId: Int?
+      let personId: String?
+      let isUser: Bool
+
+      enum CodingKeys: String, CodingKey {
+        case id
+        case speakerId = "speaker_id"
+        case personId = "person_id"
+        case isUser = "is_user"
+      }
+    }
+
+    let id: String
+    let transcriptSegments: [Segment]
+
+    enum CodingKeys: String, CodingKey {
+      case id
+      case transcriptSegments = "transcript_segments"
+    }
+
+    init(from decoder: Decoder) throws {
+      let container = try decoder.container(keyedBy: CodingKeys.self)
+      id = try container.decode(String.self, forKey: .id)
+      transcriptSegments =
+        try container.decodeIfPresent([Segment].self, forKey: .transcriptSegments) ?? []
+    }
+  }
+
+  func assignConversationSpeaker(
+    conversationId: String,
+    speakerId: Int,
+    personId: String
+  ) async throws -> SpeakerAssignmentReceipt {
+    var components = URLComponents(
+      string: baseURL + "v1/conversations/\(conversationId)/assign-speaker/\(speakerId)")
+    components?.queryItems = [
+      URLQueryItem(name: "assign_type", value: "person_id"),
+      URLQueryItem(name: "value", value: personId),
+    ]
+    guard let url = components?.url else {
+      throw APIError.invalidResponse
+    }
+    var request = URLRequest(url: url)
+    request.httpMethod = "PATCH"
+    request.allHTTPHeaderFields = try await buildHeaders(requireAuth: true)
+
+    return try await performRequest(request)
+  }
+
   // MARK: - LLM Usage
 
   func recordLlmUsage(

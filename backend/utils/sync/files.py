@@ -1,3 +1,4 @@
+from utils.observability.sync_phases import sync_phase
 import logging
 import os
 import re
@@ -96,7 +97,7 @@ def decode_opus_file_to_wav(
                 logger.warning(
                     'Opus decode: keeping %d frames decoded before the stream became unreadable', frame_count
                 )
-            logger.info(f"Decoded audio saved to {sanitize(wav_file_path)}")
+            logger.debug(f"Decoded audio saved to {sanitize(wav_file_path)}")
             return True
 
         logger.info("No PCM data was decoded.")
@@ -249,6 +250,7 @@ def detect_source_from_filenames(filenames: List[Optional[str]]) -> Conversation
     return ConversationSource.omi
 
 
+@sync_phase('decode_vad')
 def decode_files_to_wav(files_path: List[str], decoded_frames: Optional[dict[str, list[int]]] = None) -> List[str]:
     """Decode each uploaded sync file, isolating unreadable files from their batch.
 
@@ -268,7 +270,7 @@ def decode_files_to_wav(files_path: List[str], decoded_frames: Optional[dict[str
         if match:
             try:
                 frame_size = int(match.group(1))
-                logger.info(f"Found frame size {frame_size} in filename: {filename}")
+                logger.debug(f"Found frame size {frame_size} in filename: {filename}")
             except ValueError:
                 logger.error(f"Invalid frame size format in filename: {filename}, using default {frame_size}")
 

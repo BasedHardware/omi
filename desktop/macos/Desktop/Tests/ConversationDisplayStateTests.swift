@@ -90,7 +90,7 @@ final class ConversationDisplayStateTests: XCTestCase {
       segments: [segment("plenty of words to look recoverable normally")]
     )
     XCTAssertEqual(conv.displayState, .locked)
-    XCTAssertEqual(conv.displayTitle, "Locked")
+    XCTAssertEqual(conv.displayTitle, "Saved and waiting")
     XCTAssertFalse(conv.canReprocess, "Reprocess shouldn't be offered while locked")
   }
 
@@ -232,7 +232,7 @@ final class ConversationDisplayStateTests: XCTestCase {
     XCTAssertEqual(ConversationProcessingProgress.untitledRecoverableBadgeText, "Title didn't generate")
     XCTAssertEqual(
       ConversationProcessingProgress.untitledRecoverableBadgeHelp,
-      "The transcript was captured but the title pass didn't produce one. Try Reprocess."
+      "The transcript was saved, but Omi couldn't write a title. Try Reprocess."
     )
     XCTAssertFalse(
       ConversationProcessingProgress.untitledRecoverableBadgeText.localizedCaseInsensitiveContains("needs reprocess")

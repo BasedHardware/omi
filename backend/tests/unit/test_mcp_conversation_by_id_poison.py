@@ -53,7 +53,7 @@ def mcp_test_client(monkeypatch):
 
     app = FastAPI()
     app.include_router(rest.router)
-    app.dependency_overrides[rest.get_uid_from_mcp_api_key] = lambda: UID
+    app.dependency_overrides[rest.get_uid_with_mcp_conversations_read] = lambda: UID
     return TestClient(app, raise_server_exceptions=False)
 
 

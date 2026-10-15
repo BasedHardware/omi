@@ -1,0 +1,23 @@
+{
+  "version": 1,
+  "records": {
+    "conversations/robot": {
+      "structured": {
+        "title": "Invented robot workshop",
+        "overview": "Robot Qorbi was incorrectly written as Qorby in the transcript."
+      },
+      "transcript_segments": [
+        {
+          "speaker": "SPEAKER_00",
+          "text": "Robot Qorbi is spelled Qorbi. Correct Qorby to Qorbi. Qorby is a misspelling of Qorbi. The prototype label confirms Qorbi."
+        }
+      ]
+    },
+    "people/robot-designer-a": {"name": "Oren Vell", "aliases": ["Dr. Oren Vell"], "organization": "Invented Gear Studio"},
+    "people/robot-designer-b": {"name": "Dr. Oren Vell", "aliases": ["Oren Vell"], "organization": "Invented Gear Studio"}
+  },
+  "clusters": [
+    {"refs": ["conversations/robot"], "problem": "spelling"},
+    {"refs": ["people/robot-designer-a", "people/robot-designer-b"], "problem": "duplicates"}
+  ]
+}

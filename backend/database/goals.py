@@ -88,6 +88,13 @@ class GoalConflictError(GoalStoreError):
     pass
 
 
+class GoalValidationError(GoalStoreError):
+    """Request input rejected at the store seam (e.g. an alias merge that makes
+    the metric contradict itself). Maps to 422 at the route, not 500."""
+
+    pass
+
+
 def _get_db(firestore_client: Any = None) -> Any:
     if firestore_client is not None:
         return firestore_client
@@ -346,6 +353,11 @@ def normalize_goal_storage(data: dict[str, Any], *, goal_id: Optional[str] = Non
     if status_value not in {status.value for status in GoalStatus}:
         status_value = GoalStatus.background.value if normalized.get('is_active', True) else GoalStatus.abandoned.value
     metric = _metric_from_storage(normalized)
+    success_criteria = normalized.get('success_criteria')
+    if success_criteria is None:
+        success_criteria = []
+    elif not isinstance(success_criteria, list):
+        raise ValueError('success_criteria must be a list')
     normalized.update(
         {
             'id': resolved_id,
@@ -353,7 +365,7 @@ def normalize_goal_storage(data: dict[str, Any], *, goal_id: Optional[str] = Non
             'title': str(normalized.get('title') or ''),
             'desired_outcome': str(normalized.get('desired_outcome') or normalized.get('title') or ''),
             'why_it_matters': normalized.get('why_it_matters'),
-            'success_criteria': list(normalized.get('success_criteria') or []),
+            'success_criteria': list(success_criteria),
             'status': status_value,
             'focus_rank': normalized.get('focus_rank') if status_value == GoalStatus.focused.value else None,
             'metric': metric.model_dump(mode='python') if metric is not None else None,
@@ -377,6 +389,26 @@ def get_goal_by_id(uid: str, goal_id: str, *, firestore_client: Any = None) -> O
     return normalize_goal_storage(_goal_dict(snapshot), goal_id=goal_id)
 
 
+def _normalize_goal_documents(documents: Any) -> List[Dict[str, Any]]:
+    """Normalize streamed goal snapshots independently so one corrupt row cannot hide peers.
+
+    Snapshot conversion and stream iteration stay outside the per-row error boundary. A Firestore
+    read failure therefore still propagates to callers; only invalid stored goal payloads are
+    skipped, with a diagnostic that contains no row contents.
+    """
+    goals = []
+    for doc in documents:
+        data = _goal_dict(doc)
+        try:
+            goals.append(normalize_goal_storage(data, goal_id=doc.id))
+        except (AttributeError, TypeError, ValueError) as exc:
+            logger.warning(
+                'Skipping malformed goal during list projection error_type=%s',
+                type(exc).__name__,
+            )
+    return goals
+
+
 def get_user_goal(uid: str, *, firestore_client: Any = None) -> Optional[Dict[str, Any]]:
     """Released compatibility projection: focused first, otherwise oldest non-terminal goal."""
 
@@ -396,7 +428,7 @@ def get_user_goal(uid: str, *, firestore_client: Any = None) -> Optional[Dict[st
 def get_user_goals(uid: str, limit: int = 3, *, firestore_client: Any = None) -> List[Dict[str, Any]]:
     collection = _get_db(firestore_client).collection(users_collection).document(uid).collection(goals_collection)
     query = collection.where(filter=FieldFilter('is_active', '==', True)).limit(limit)
-    goals = [normalize_goal_storage(_goal_dict(doc), goal_id=doc.id) for doc in query.stream()]
+    goals = _normalize_goal_documents(query.stream())
     goals = [goal for goal in goals if goal['status'] not in {GoalStatus.achieved.value, GoalStatus.abandoned.value}]
     goals.sort(key=_goal_created_at_sort_key)
     return goals[:limit]
@@ -423,7 +455,7 @@ def get_all_goals(
     """
     collection = _get_db(firestore_client).collection(users_collection).document(uid).collection(goals_collection)
     query = collection if include_inactive else collection.where(filter=FieldFilter('is_active', '==', True))
-    goals = [normalize_goal_storage(_goal_dict(doc), goal_id=doc.id) for doc in query.stream()]
+    goals = _normalize_goal_documents(query.stream())
     if not include_inactive:
         goals = [goal for goal in goals if goal['is_active']]
     goals.sort(key=_goal_created_at_sort_key, reverse=True)
@@ -547,6 +579,19 @@ def create_goal_idempotent(
     return apply(transaction)
 
 
+def _metric_validation_message(exc: ValidationError) -> str:
+    """Client-facing detail for a metric contradiction raised at the merge."""
+    errors = exc.errors()
+    if errors:
+        msg = errors[0].get('msg') or ''
+        # Pydantic prefixes custom ValueError messages with 'Value error, '.
+        if msg.startswith('Value error, '):
+            msg = msg[len('Value error, ') :]
+        if msg:
+            return msg
+    return 'Invalid goal metric'
+
+
 def update_goal(
     uid: str,
     goal_id: str,
@@ -571,14 +616,21 @@ def update_goal(
         metric = GoalMetric.model_validate(metric_value) if metric_value is not None else None
     elif any(key in patch for key in legacy_metric_keys):
         current_metric = _metric_from_storage(current) or GoalMetric(type=GoalType.scale, current=0, target=0)
-        metric = GoalMetric(
-            type=GoalType(patch.get('goal_type', current_metric.type.value)),
-            current=float(patch.get('current_value', current_metric.current)),
-            target=float(patch.get('target_value', current_metric.target)),
-            min=patch.get('min_value', current_metric.min),
-            max=patch.get('max_value', current_metric.max),
-            unit=patch.get('unit', current_metric.unit),
-        )
+        try:
+            metric = GoalMetric(
+                type=GoalType(patch.get('goal_type', current_metric.type.value)),
+                current=float(patch.get('current_value', current_metric.current)),
+                target=float(patch.get('target_value', current_metric.target)),
+                min=patch.get('min_value', current_metric.min),
+                max=patch.get('max_value', current_metric.max),
+                unit=patch.get('unit', current_metric.unit),
+            )
+        except ValidationError as exc:
+            # A released alias patch (e.g. min_value=30) is validated in
+            # isolation by the request model, so the contradiction only
+            # surfaces when merged with the stored metric. Surface it as
+            # request input, not a server fault.
+            raise GoalValidationError(_metric_validation_message(exc)) from exc
     else:
         metric = _metric_from_storage(current)
     if 'metric' in patch or clear_metric or any(key in patch for key in legacy_metric_keys):

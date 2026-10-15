@@ -31,13 +31,24 @@ class _GoalsPageState extends State<GoalsPage> {
   Widget build(BuildContext context) {
     final goals = context.watch<GoalsProvider>();
     return Scaffold(
-      appBar: AppBar(leading: const OmiBackButton()),
+      appBar: AppBar(
+        leading: const OmiBackButton(),
+        title: Text(context.l10n.goals),
+        actions: [
+          OmiIconButton(
+            key: const Key('goals_add'),
+            icon: const Icon(Icons.add),
+            label: context.l10n.addGoal,
+            onPressed: () => _goalsKey.currentState?.addGoal(),
+          ),
+        ],
+      ),
       body: RefreshIndicator(
         onRefresh: () => context.read<GoalsProvider>().refresh(),
         child: ListView(
           padding: const EdgeInsets.only(bottom: OmiSpacing.xl),
           children: [
-            GoalsWidget(key: _goalsKey),
+            GoalsWidget(key: _goalsKey, showHeader: false),
             if (!goals.isLoading && goals.goals.isEmpty)
               Padding(
                 padding: const EdgeInsets.only(top: 120),

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import 'package:provider/provider.dart';
 
+import 'package:omi/pages/settings/widgets/ignored_voices_sheet.dart';
 import 'package:omi/providers/speaker_tag_prompts_provider.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
@@ -46,6 +47,12 @@ class _VoiceProfileSettingsSectionState extends State<VoiceProfileSettingsSectio
               subtitle: context.l10n.voiceSettingsSaveOthersSubtitle,
               value: provider.saveOtherVoiceProfiles,
               onChanged: enabled ? (value) => provider.setSaveOtherVoiceProfiles(value, fromFirstPrompt: false) : null,
+            ),
+            OmiSettingsRow(
+              key: const Key('voice_settings_ignored_voices'),
+              title: context.l10n.ignoredVoicesTitle,
+              subtitle: context.l10n.ignoredVoicesSubtitle,
+              onTap: () => showIgnoredVoicesSheet(context),
             ),
           ],
         );

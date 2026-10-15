@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
-import { parseExtractTask, validateTaskTitle, wordCount, type ExtractedTask } from './models'
+import { parseStructuredTask, validateTaskTitle, wordCount, type ExtractedTask } from './models'
 
-// A complete, valid `extract_task` args object (all 19 tool params) with a title
+// A complete task-schema object with a title
 // that passes `validateTaskTitle` (8 words: Karthik / Q3 / Friday are proper nouns).
 function fullArgs(overrides: Record<string, unknown> = {}): Record<string, unknown> {
   return {
@@ -28,9 +28,9 @@ function fullArgs(overrides: Record<string, unknown> = {}): Record<string, unkno
   }
 }
 
-describe('parseExtractTask', () => {
-  it('parses a full 19-field args object into an ExtractedTask', () => {
-    const t = parseExtractTask(fullArgs()) as ExtractedTask
+describe('parseStructuredTask', () => {
+  it('parses the full task schema object into an ExtractedTask', () => {
+    const t = parseStructuredTask(fullArgs()) as ExtractedTask
     expect(t).not.toBeNull()
     expect(t.title).toBe('Send Karthik the Q3 revenue deck by Friday')
     expect(t.description).toBe('He asked in the standup thread')
@@ -57,7 +57,7 @@ describe('parseExtractTask', () => {
   })
 
   it('defaults context_summary/current_activity to "" when absent', () => {
-    const t = parseExtractTask(
+    const t = parseStructuredTask(
       fullArgs({ context_summary: undefined, current_activity: undefined })
     ) as ExtractedTask
     expect(t.contextSummary).toBe('')
@@ -65,25 +65,25 @@ describe('parseExtractTask', () => {
   })
 
   it('returns null for a non-object args', () => {
-    expect(parseExtractTask(null)).toBeNull()
-    expect(parseExtractTask(undefined)).toBeNull()
-    expect(parseExtractTask('nope')).toBeNull()
-    expect(parseExtractTask(42)).toBeNull()
-    expect(parseExtractTask(['a'])).toBeNull()
+    expect(parseStructuredTask(null)).toBeNull()
+    expect(parseStructuredTask(undefined)).toBeNull()
+    expect(parseStructuredTask('nope')).toBeNull()
+    expect(parseStructuredTask(42)).toBeNull()
+    expect(parseStructuredTask(['a'])).toBeNull()
   })
 
   it('returns null when the title is missing (empty → validateTaskTitle rejects)', () => {
     const args = fullArgs()
     delete args['title']
-    expect(parseExtractTask(args)).toBeNull()
+    expect(parseStructuredTask(args)).toBeNull()
   })
 
   it('returns null when the title fails validation (too short)', () => {
-    expect(parseExtractTask(fullArgs({ title: 'Send the deck now' }))).toBeNull()
+    expect(parseStructuredTask(fullArgs({ title: 'Send the deck now' }))).toBeNull()
   })
 
   it('applies Mac defaults for missing priority / confidence / tags', () => {
-    const t = parseExtractTask({
+    const t = parseStructuredTask({
       title: 'Send Karthik the Q3 revenue deck by Friday'
     }) as ExtractedTask
     expect(t).not.toBeNull()
@@ -100,32 +100,32 @@ describe('parseExtractTask', () => {
   })
 
   it('coerces an invalid priority to "medium"', () => {
-    expect((parseExtractTask(fullArgs({ priority: 'urgent' })) as ExtractedTask).priority).toBe(
+    expect((parseStructuredTask(fullArgs({ priority: 'urgent' })) as ExtractedTask).priority).toBe(
       'medium'
     )
   })
 
   it('does NOT coerce a numeric-string confidence (Mac accepts Double/Int only) → 0.5', () => {
-    expect((parseExtractTask(fullArgs({ confidence: '0.9' })) as ExtractedTask).confidence).toBe(
+    expect((parseStructuredTask(fullArgs({ confidence: '0.9' })) as ExtractedTask).confidence).toBe(
       0.5
     )
-    expect((parseExtractTask(fullArgs({ confidence: 'xx' })) as ExtractedTask).confidence).toBe(0.5)
+    expect((parseStructuredTask(fullArgs({ confidence: 'xx' })) as ExtractedTask).confidence).toBe(0.5)
   })
 
   it('does NOT apply the 0.75 confidence gate — a low-confidence task still parses', () => {
-    const t = parseExtractTask(fullArgs({ confidence: 0.2 })) as ExtractedTask
+    const t = parseStructuredTask(fullArgs({ confidence: 0.2 })) as ExtractedTask
     expect(t).not.toBeNull()
     expect(t.confidence).toBe(0.2)
   })
 
   it('derives alreadyDone from capture_kind === "already_done"', () => {
     expect(
-      (parseExtractTask(fullArgs({ capture_kind: 'already_done' })) as ExtractedTask).alreadyDone
+      (parseStructuredTask(fullArgs({ capture_kind: 'already_done' })) as ExtractedTask).alreadyDone
     ).toBe(true)
   })
 
   it('collapses empty-string description / inferred_deadline / duplicate_of / refines_task to null', () => {
-    const t = parseExtractTask(
+    const t = parseStructuredTask(
       fullArgs({ description: '', inferred_deadline: '', duplicate_of: '', refines_task: '' })
     ) as ExtractedTask
     expect(t.description).toBeNull()
@@ -136,9 +136,9 @@ describe('parseExtractTask', () => {
 
   it('keeps only string entries in tags; a non-array tags → []', () => {
     expect(
-      (parseExtractTask(fullArgs({ tags: ['ok', 3, null, 'yes'] })) as ExtractedTask).tags
+      (parseStructuredTask(fullArgs({ tags: ['ok', 3, null, 'yes'] })) as ExtractedTask).tags
     ).toEqual(['ok', 'yes'])
-    expect((parseExtractTask(fullArgs({ tags: 'nope' })) as ExtractedTask).tags).toEqual([])
+    expect((parseStructuredTask(fullArgs({ tags: 'nope' })) as ExtractedTask).tags).toEqual([])
   })
 })
 

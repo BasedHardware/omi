@@ -5,8 +5,11 @@ import 'package:omi/backend/schema/daily_summary.dart';
 import 'package:omi/pages/conversations/daily_recaps_page.dart';
 import 'package:omi/pages/conversations/widgets/daily_summaries_list.dart';
 import 'package:omi/pages/home/widgets/daily_summary_card.dart';
+import 'package:omi/pages/home/widgets/home_for_you.dart';
 import 'package:omi/pages/settings/daily_summary_detail_page.dart';
 import 'package:omi/ui/ui.dart';
+import 'package:omi/services/proactivity/proactivity_outbox.dart';
+import 'package:omi/services/proactivity/proactivity_push.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
@@ -20,15 +23,19 @@ Future<({List<DailySummary> items, bool ok})> _loadRecentRecaps() => getDailySum
 /// The Daily Recaps row at the top of Home: a header with View All and the latest recaps as
 /// horizontally scrolling cards. Hidden entirely once loaded with no recaps.
 class HomeDailyRecaps extends StatefulWidget {
-  const HomeDailyRecaps({super.key, this.load = _loadRecentRecaps});
+  const HomeDailyRecaps({super.key, this.load = _loadRecentRecaps, this.loadFeed, this.outbox, this.openTarget});
 
   final RecentRecapsLoader load;
+  final ProactivityFeedLoader? loadFeed;
+  final ProactivityOutbox? outbox;
+  final ProactivityTargetOpener? openTarget;
 
   @override
   State<HomeDailyRecaps> createState() => HomeDailyRecapsState();
 }
 
 class HomeDailyRecapsState extends State<HomeDailyRecaps> {
+  final _forYouKey = GlobalKey<HomeForYouState>();
   List<DailySummary> _recaps = [];
   bool _loading = true;
 
@@ -40,6 +47,10 @@ class HomeDailyRecapsState extends State<HomeDailyRecaps> {
 
   /// Reloads the row (pull-to-refresh on Home). A failed read keeps the cards already shown.
   Future<void> refresh() async {
+    await Future.wait([_refreshRecaps(), if (_forYouKey.currentState != null) _forYouKey.currentState!.refresh()]);
+  }
+
+  Future<void> _refreshRecaps() async {
     if (!mounted) return;
     setState(() => _loading = _recaps.isEmpty);
     final result = await widget.load();
@@ -51,7 +62,17 @@ class HomeDailyRecapsState extends State<HomeDailyRecaps> {
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) => Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          _buildRecaps(context),
+          widget.loadFeed == null
+              ? HomeForYou(key: _forYouKey, outbox: widget.outbox, open: widget.openTarget)
+              : HomeForYou(key: _forYouKey, load: widget.loadFeed!, outbox: widget.outbox, open: widget.openTarget),
+        ],
+      );
+
+  Widget _buildRecaps(BuildContext context) {
     if (!_loading && _recaps.isEmpty) return const SizedBox.shrink();
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,

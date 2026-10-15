@@ -165,16 +165,23 @@ def test_voiceprint_never_overrides_a_manual_label():
     assert resolution.speaker_ids['s0'] not in resolution.voice_identities
 
 
-def test_short_segments_inherit_capture_label_then_nearest_voice():
+def test_short_segments_require_same_scoped_capture_label():
     plan = [0, 1] * 6
     segments, embeddings, _ = _fragmented(plan)
-    segments.append({'id': 'short-a', 'speaker_id': 2, 'start': 8.1, 'end': 8.5, 'is_user': False})
+    segments.append(
+        {'id': 'short-a', 'speaker_id': 2, 'speaker_id_scope': 'sync:0', 'start': 8.1, 'end': 8.5, 'is_user': False}
+    )
     segments.append({'id': 'short-b', 'speaker_id': 500, 'start': 41.0, 'end': 41.3, 'is_user': False})
+    segments.append(
+        {'id': 'short-c', 'speaker_id': 2, 'speaker_id_scope': 'sync:other', 'start': 8.1, 'end': 8.5, 'is_user': False}
+    )
 
     resolution = resolve_conversation_speakers(segments, embeddings)
 
     assert resolution.speaker_ids['short-a'] == resolution.speaker_ids['s2']
-    assert resolution.speaker_ids['short-b'] == resolution.speaker_ids['s10']
+    assert 'short-b' not in resolution.speaker_ids
+    assert 'short-c' not in resolution.speaker_ids
+    assert {'short-b', 'short-c'} <= resolution.contradicted_segment_ids
 
 
 def test_onboarding_sentinel_segments_are_left_alone():
@@ -279,8 +286,67 @@ def test_resolve_conversation_speakers_null_start_or_end_timestamps():
     resolution = resolve_conversation_speakers(segments, embeddings)
     assert resolution is not None
     assert 's0' in resolution.speaker_ids
-    assert 's1' in resolution.speaker_ids
+    # Missing end provides no usable duration or scoped long-clip vote. Even
+    # a supplied vector cannot authorize temporal borrowing from s0 or s2.
+    assert 's1' not in resolution.speaker_ids
+    assert 's1' in resolution.contradicted_segment_ids
     assert 's2' in resolution.speaker_ids
+
+
+def test_abstained_segment_is_excluded_from_resolution():
+    segments, embeddings, voices = _fragmented([0] * 4, seconds=6)
+    segments[3]['speaker_id'] = segments[0]['speaker_id']
+
+    resolution = resolve_conversation_speakers(
+        segments,
+        embeddings,
+        voiceprints={'user': voices[0]},
+        abstained_segment_ids={'s3'},
+    )
+
+    assert 's3' not in resolution.speaker_ids
+    assert all(sid != segments[3]['speaker_id'] for sid in resolution.speaker_ids.values())
+    assert all(resolution.voice_identities[sid].is_user for sid in resolution.speaker_ids.values())
+    assert abs(resolution.coverage - 0.75) < 1e-9
+    assert resolution.embedded_segments == 3
+
+
+def test_abstained_short_segments_do_not_inherit_a_voice():
+    segments, embeddings, _ = _fragmented([0, 1] * 6)
+    segments.append({'id': 'short-a', 'speaker_id': 2, 'start': 8.1, 'end': 8.5, 'is_user': False})
+    segments.append({'id': 'short-b', 'speaker_id': 500, 'start': 41.0, 'end': 41.3, 'is_user': False})
+
+    resolution = resolve_conversation_speakers(
+        segments,
+        embeddings,
+        abstained_segment_ids={'short-a', 'short-b'},
+    )
+
+    assert 'short-a' not in resolution.speaker_ids
+    assert 'short-b' not in resolution.speaker_ids
+
+
+def test_abstained_segment_sharing_a_manual_id_keeps_the_receipt():
+    segments, embeddings, voices = _fragmented([0, 1] * 10)
+    segments[1]['speaker_id'] = segments[0]['speaker_id']
+
+    resolution = resolve_conversation_speakers(
+        segments,
+        embeddings,
+        manual_speakers={segments[0]['speaker_id']: Identity(is_user=False, person_id='nick')},
+        voiceprints={'user': voices[0]},
+        abstained_segment_ids={'s1'},
+    )
+
+    assert resolution.speaker_ids['s0'] == segments[0]['speaker_id']
+    assert 's1' not in resolution.speaker_ids
+    assert resolution.speaker_ids['s0'] not in resolution.voice_identities
+    assert abs(resolution.coverage - 19 / 20) < 1e-9
+
+
+def test_abstaining_every_segment_returns_none():
+    segments, embeddings, _ = _fragmented([0, 1])
+    assert resolve_conversation_speakers(segments, embeddings, abstained_segment_ids={'s0', 's1'}) is None
 
 
 def test_significant_capture_speaker_ids_guards_non_int_and_boolean():
