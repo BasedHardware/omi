@@ -6,6 +6,33 @@ Source checkout: current `origin/main` base `909bfd7aa397`; measurements use
 Firestore/account records or stored payloads were read. Only numeric diagnostic
 log fields and aggregate time series were reduced; raw log rows were not saved.
 
+## Production benchmark update (2026-10-15)
+
+Lead's public-corpus production receipt has 20 waves / 29 successful requests:
+5/15/30/60-minute inference-wall RTF .039/.041/.041/.042 on one T4;
+concurrency two serializes. Use .042 for this long-audio planning update, not
+.308 from four tiny requests or the later .060 planning assumption. At 5% of
+483.298 audio-h/h, demand is 24.165 audio-h/h, 873 candidate calls/h and
+1.015 inference-worker-hours/h (3,654 worker-seconds/h). At 70% occupancy,
+`ceil(24.165 * .042 / .70) = 2` T4 replicas. The HPA's 1–18 and batch node-pool
+maximum 18 cover this estimate, but one warm replica supplies only 16.667
+h/h at the target, or 23.810 h/h at saturation; scaling latency still matters.
+One serialized worker supplies ~602 calls/h at 70% for this aggregate mix;
+request mix/short-sync overhead, CPU time and p95 are not qualified by this arithmetic.
+
+The independent sync bound is 10 audio-h + 1,000 attempts/UTC hour and one
+in-flight pass/process, with bounded Redis I/O and legacy output on refusal.
+At 5%, estimated sync demand is 5.903 h/h / 808 attempts/h; pusher is 18.262 h/h
+/ 64.9 attempts/h. Saturating the sync audio cap plus this pusher estimate is
+28.262 h/h, or 1.187 worker-h/h: still two nodes at 70%. Pusher's complete C/D
+stages cap selected audio at 80/400 h/day, with two nonblocking slots/process;
+these daily limits are not hourly burst guarantees. The batch API admits only
+one running + two waiting requests/replica, then returns 429. Overload/failure
+keeps legacy output; existing work is not canceled by a client timeout. Limits
+bound admitted work, not a p95 SLO; hourly/day boundaries and autoscaler lag
+remain ramp gates. Checked-in prod stays B (0%, David-only, pusher 1 h/day);
+C is the explicit 1% stage and D is 5%. Earlier estimates below are historical.
+
 ## Closed-hour fleet demand
 
 Window: **2026-10-14 16:00–17:00Z** (not the still-open 17:00 hour).

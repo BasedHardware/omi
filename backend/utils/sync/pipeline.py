@@ -1403,8 +1403,9 @@ def process_segment(
                     owner_reserved=owner_reserved,
                 )
                 logger.info(
-                    'event=sync_final_pass outcome=%s lane=%s duration_seconds=%.3f',
+                    'event=sync_final_pass outcome=%s uid_hash=%s lane=%s duration_seconds=%.3f',
                     final_outcome['outcome'],
+                    hashlib.sha256(('sync-final-pass:' + uid).encode()).hexdigest(),
                     _bounded_sync_lane(sync_lane),
                     time.monotonic() - final_pass_started,
                 )
@@ -1424,7 +1425,11 @@ def process_segment(
                     owner_reserved=owner_reserved,
                 )
         except Exception as e:
-            logger.warning('event=sync_speaker_id outcome=failed exception_type=%s', _bounded_exception_type(e))
+            logger.warning(
+                'event=sync_speaker_id outcome=failed exception_type=%s uid_hash=%s',
+                _bounded_exception_type(e),
+                hashlib.sha256(('sync-final-pass:' + uid).encode()).hexdigest(),
+            )
         finally:
             if audio_bytes is not None and not private_cloud_sync_enabled:
                 audio_bytes = None

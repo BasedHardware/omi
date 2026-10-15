@@ -300,6 +300,10 @@ env:
     value: "0"
   - name: TRANSCRIPTION_FINAL_PASS_AUTHORITATIVE
     value: "true"
+  - name: TRANSCRIPTION_SYNC_FINAL_PASS_HOURLY_AUDIO_HOURS
+    value: "10"
+  - name: TRANSCRIPTION_SYNC_FINAL_PASS_HOURLY_REQUESTS
+    value: "1000"
   - name: TRANSCRIPTION_FINAL_PASS_SYNC_ENABLED
     value: "true"
   # Phase-1 final-pass shadow runs only for the owner UID on this pusher.
