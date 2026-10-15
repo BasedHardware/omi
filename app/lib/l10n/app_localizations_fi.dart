@@ -13297,4 +13297,104 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get chatAppsWaitlistJoined => 'Olet jonotuslistalla. Kerromme, kun tilaa vapautuu.';
+
+  @override
+  String onboardingActCongratsTitle(String name) {
+    return 'Kaikki valmista, $name';
+  }
+
+  @override
+  String get onboardingActDemoSummary =>
+      'Lounas Samin kanssa, joka muuttaa kesäkuussa Lissaboniin. Haluat lähettää esityksen tiimille perjantaihin mennessä ja ostaa maitoa kotimatkalla.';
+
+  @override
+  String get onboardingActDemoTask1 => 'Lähetä esitys tiimille perjantaihin mennessä';
+
+  @override
+  String get onboardingActDemoTask2 => 'Hae maitoa kotimatkalla';
+
+  @override
+  String get onboardingActDemoTitle => 'Lounas Samin kanssa';
+
+  @override
+  String get onboardingActDictateBody => 'Sano omin sanoin. Omi hoitaa loput.';
+
+  @override
+  String get onboardingActDictateBodyOmi => 'Puhu vain. Omisi kuuntelee.';
+
+  @override
+  String get onboardingActDictateExample =>
+      'Söin juuri lounasta Samin kanssa, hän muuttaa kesäkuussa Lissaboniin! Muistuta minua lähettämään esitys tiimille perjantaihin mennessä ja hakemaan maitoa kotimatkalla.';
+
+  @override
+  String get onboardingActDictateHint => 'Napauta valintamerkkiä, kun olet valmis';
+
+  @override
+  String get onboardingActDictateTitle => 'Kerro Omille päivästäsi';
+
+  @override
+  String get onboardingActIntro => 'Kokeillaan Omia.';
+
+  @override
+  String get onboardingActJustNow => 'Juuri nyt';
+
+  @override
+  String get onboardingActMicAllow => 'Salli mikrofoni';
+
+  @override
+  String get onboardingActMicBody => 'Jotta Omi kuulee sinut, kun puhut sille.';
+
+  @override
+  String get onboardingActMicFallbackBody => 'Omi ei vielä lähetä ääntä. Käytä toistaiseksi puhelinta.';
+
+  @override
+  String get onboardingActMicTitle => 'Omi tarvitsee mikrofonisi';
+
+  @override
+  String get onboardingActNoAudioOmi => 'Omia ei kuulu. Varmista, että se on päällä ja lähellä.';
+
+  @override
+  String get onboardingActNoAudioPhone => 'Emme kuule sinua vielä. Kokeile puhua vähän kovempaa.';
+
+  @override
+  String get onboardingActNotesLabel => 'Päiväsi tiivistettynä';
+
+  @override
+  String get onboardingActPhoneMic => 'Puhelimen mikrofoni';
+
+  @override
+  String get onboardingActRateTitle => 'Pidätkö Omista tähän mennessä?';
+
+  @override
+  String get onboardingActRemembers => 'Omi muistaa, ettei sinun tarvitse';
+
+  @override
+  String get onboardingActSavedToTasks => 'Tallennettu tehtäviisi';
+
+  @override
+  String get onboardingActTasksLabel => 'Omi poimi tehtäväsi';
+
+  @override
+  String get onboardingActWriting => 'Tiivistetään…';
+
+  @override
+  String get onboardingActYourWords => 'Tämän sanoit';
+
+  @override
+  String get onboardingConnectOmi => 'Yhdistä Omi';
+
+  @override
+  String get onboardingConnectTapToConnect => 'Yhdistä napauttamalla Omiasi.';
+
+  @override
+  String get onboardingNoOmiYet => 'Eikö Omi ole vielä saapunut?';
+
+  @override
+  String get onboardingOmiNotOrdered => 'En ole vielä tilannut';
+
+  @override
+  String get onboardingOmiOrdered => 'Olen tilannut sen';
+
+  @override
+  String get onboardingPermissionTapToFix => 'Korjaa napauttamalla';
 }

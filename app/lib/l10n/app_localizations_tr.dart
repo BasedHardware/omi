@@ -13305,4 +13305,104 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get chatAppsWaitlistJoined => 'Bekleme listesindesin. Yer açıldığında haber vereceğiz.';
+
+  @override
+  String onboardingActCongratsTitle(String name) {
+    return 'Her şey hazır, $name';
+  }
+
+  @override
+  String get onboardingActDemoSummary =>
+      'Haziranda Lizbon\'a taşınan Sam\'le öğle yemeği. Cumaya kadar sunumu ekibine göndermek ve eve dönerken süt almak istiyorsun.';
+
+  @override
+  String get onboardingActDemoTask1 => 'Cumaya kadar sunumu ekibe gönder';
+
+  @override
+  String get onboardingActDemoTask2 => 'Eve dönerken süt al';
+
+  @override
+  String get onboardingActDemoTitle => 'Sam\'le öğle yemeği';
+
+  @override
+  String get onboardingActDictateBody => 'Kendi tarzınla söyle. Gerisini Omi halleder.';
+
+  @override
+  String get onboardingActDictateBodyOmi => 'Sadece konuş. Omi\'n dinliyor.';
+
+  @override
+  String get onboardingActDictateExample =>
+      'Az önce Sam\'le öğle yemeği yedim, haziranda Lizbon\'a taşınıyor! Cumaya kadar sunumu ekibe göndermemi ve eve dönerken süt almamı hatırlat.';
+
+  @override
+  String get onboardingActDictateHint => 'Bitince onay işaretine dokun';
+
+  @override
+  String get onboardingActDictateTitle => 'Omi\'ye gününü anlat';
+
+  @override
+  String get onboardingActIntro => 'Hadi Omi\'yi deneyelim.';
+
+  @override
+  String get onboardingActJustNow => 'Az önce';
+
+  @override
+  String get onboardingActMicAllow => 'Mikrofona İzin Ver';
+
+  @override
+  String get onboardingActMicBody => 'Omi\'yle konuştuğunda seni duyabilmesi için.';
+
+  @override
+  String get onboardingActMicFallbackBody => 'Omi\'n henüz ses göndermiyor. Şimdilik telefonunu kullan.';
+
+  @override
+  String get onboardingActMicTitle => 'Omi\'nin mikrofonuna ihtiyacı var';
+
+  @override
+  String get onboardingActNoAudioOmi => 'Omi\'n duyulmuyor. Açık ve yakında olduğundan emin ol.';
+
+  @override
+  String get onboardingActNoAudioPhone => 'Henüz seni duyamıyoruz. Biraz daha yüksek sesle konuşmayı dene.';
+
+  @override
+  String get onboardingActNotesLabel => 'Günün, özetle';
+
+  @override
+  String get onboardingActPhoneMic => 'Telefon mikrofonu';
+
+  @override
+  String get onboardingActRateTitle => 'Omi\'yi beğendin mi?';
+
+  @override
+  String get onboardingActRemembers => 'Omi hatırlar, senin hatırlamana gerek kalmaz';
+
+  @override
+  String get onboardingActSavedToTasks => 'Görevlerine kaydedildi';
+
+  @override
+  String get onboardingActTasksLabel => 'Omi yapılacaklarını yakaladı';
+
+  @override
+  String get onboardingActWriting => 'Özetleniyor…';
+
+  @override
+  String get onboardingActYourWords => 'Söylediklerin';
+
+  @override
+  String get onboardingConnectOmi => 'Omi\'yi bağla';
+
+  @override
+  String get onboardingConnectTapToConnect => 'Bağlamak için Omi\'ne dokun.';
+
+  @override
+  String get onboardingNoOmiYet => 'Omi\'n henüz yok mu?';
+
+  @override
+  String get onboardingOmiNotOrdered => 'Henüz sipariş vermedim';
+
+  @override
+  String get onboardingOmiOrdered => 'Sipariş verdim';
+
+  @override
+  String get onboardingPermissionTapToFix => 'Düzeltmek için dokunun';
 }

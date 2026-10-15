@@ -1,4 +1,4 @@
-<!-- feature-flag-registry as-of: 2026-10-14 -->
+<!-- feature-flag-registry as-of: 2026-10-15 -->
 
 # Feature-flag authority registry
 
@@ -109,11 +109,12 @@ entries are exempt: they are queued for removal, not running.
 | `MEMORY_OWNER_JEV_SHADOW_PERCENT` | dazheng | [backend/docs/experiments/EXP-004-jev-relevance-owner-ramp.md](../../backend/docs/experiments/EXP-004-jev-relevance-owner-ramp.md) | 2026-10-21 |
 | `SPEAKER_GROUPING_SHADOW` | dazheng | [backend/docs/listen_pusher_pipeline.mdx](../../backend/docs/listen_pusher_pipeline.mdx) | 2026-11-08 |
 | `exp-002-desktop-identity-v1` | unowned | [backend/docs/experiments/EXP-002-desktop-identity-memory-v1.md](../../backend/docs/experiments/EXP-002-desktop-identity-memory-v1.md) | 2026-10-26 |
+| `onboarding-variant` | nik | [product/experiments/onboarding-variant.md](../../product/experiments/onboarding-variant.md) | 2026-11-13 |
 | `paywall-variant` | nik | [product/experiments/paywall-variant.md](../../product/experiments/paywall-variant.md) | 2026-11-12 |
 
 ## Overdue for a decision
 
-None as of 2026-10-14.
+None as of 2026-10-15.
 
 ## Flags
 
@@ -152,6 +153,7 @@ and an explicit empty literal renders as `''`.
 | `MEMORY_OWNER_JEV_SHADOW_PERCENT` | Candidate-hash percentage for advisory owner measurement | backend | env | closed | — | 0 (cloud_run/backend-sync, cloud_run/backend-sync-backfill); 100 (backend-listen (chart), cloud_run/backend, gke/backend-listen, gke/pusher, pusher (chart)) | 100 (backend-listen (chart), cloud_run/backend, cloud_run/backend-sync, cloud_run/backend-sync-backfill, gke/backend-listen, gke/pusher, pusher (chart)) | — | pending | 2026-10-21 | dazheng |
 | `SPEAKER_GROUPING_SHADOW` | off\|owner\|cohort; default off; prod cached-evidence comparison at 10 percent; never changes transcript labels | backend | env | closed | — | — | cohort (backend-listen (chart), pusher (chart)); {value: 'cohort', category: rollout} (cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, gke/backend-listen, gke/pusher) | — | pending | 2026-11-08 | dazheng |
 | `exp-002-desktop-identity-v1` | EXP-002 memory_v1 desktop identity arm enrollment | backend, macos | posthog | closed | — | — | — | expected (enable) | pending | 2026-10-26 | unowned |
+| `onboarding-variant` | Mobile first-run onboarding A/B/C after sign-in and consent: control (native steps unchanged) / reid (device-first onboarding rendered from a web page, OTA; payload names it) / yinka (onboarding ending in a first conversation, PR #21445, native). Client-evaluated multivariate flag; an unread flag, an unknown variant or a reid payload without an https URL is control; the page never owns completion | mobile | posthog | closed | — | — | — | expected (exposure) | pending | 2026-11-13 | nik |
 | `paywall-variant` | Mobile paywall A/B test: control (current PlansSheet) / outline (PR #21412 soft paywall, native) / web (webview paywall whose page is the variant). Client-evaluated multivariate flag; control collapses to the shipped sheet, paid readers and App Review builds never see a variant | mobile | posthog | closed | — | — | — | expected (exposure) | pending | 2026-11-12 | nik |
 
 ### rollout
@@ -163,6 +165,7 @@ and an explicit empty literal renders as `''`.
 | `ACTION_ITEM_IDENTITY_ANCHOR_SHADOW_ENABLED` | Measure, in the action_item_identity log line only, how many reprocess-unmatched prior tasks pair one-to-one with a new task by stored transcript segment ids; never changes what is written or delivered (default on) | backend | env | open | — | — | — | — | pending | 2026-10-31 | dazheng |
 | `ACTION_ITEM_IDENTITY_PRESERVE_ENABLED` | Keep a task's id and export marker when a conversation reprocess re-extracts the same task, so it is not sent to the user's cloud task app again; Apple Reminders excluded (default on) | backend | env | open | — | — | — | — | graduate | 2026-10-31 | dazheng |
 | `ACTION_ITEM_REFRESH_PRESERVE_ENABLED` | Preserve existing tasks and transfer smart-merge donor tasks on SMART_MERGE and SYNC_UPDATE; append exact-unmatched tasks (default on) | backend | env | closed | {value: 'true', category: rollout} | true (backend-listen (chart), pusher (chart)); {value: 'true', category: rollout} (cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, gke/backend-listen, gke/pusher) | true (backend-listen (chart), pusher (chart)); {value: 'true', category: rollout} (cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, gke/backend-listen, gke/pusher) | — | graduate | 2026-11-01 | dazheng |
+| `AUDIO_CANONICAL_PACKING_ENABLED` | Default off; new release-scoped canonical capture intake and owner-only verified tar packing; requires new regional bucket | backend | env | closed | — | — | — | — | pending | 2026-11-14 | dazheng |
 | `AUDIO_TIMELINE_SPANS` | Persist projected span-bearing live audio through the existing pusher capability without enabling v2 transcript translation; default off | backend | env | closed | {value: 'false', category: rollout} | false (backend-listen (chart), pusher (chart)); {value: 'false', category: rollout} (cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, gke/backend-listen, gke/pusher) | true (backend-listen (chart), pusher (chart)); {value: 'false', category: rollout} (cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill); {value: 'true', category: rollout} (gke/backend-listen, gke/pusher) | — | pending | 2026-11-02 | dazheng |
 | `BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED` | Gate basic-plan eager extraction | backend | env | closed | declared | true (backend-listen (chart), cloud_run/backend, cloud_run/backend-sync, cloud_run/backend-sync-backfill, gke/backend-listen, gke/pusher, pusher (chart)) | false (backend-listen (chart), cloud_run/backend, cloud_run/backend-sync, cloud_run/backend-sync-backfill, gke/backend-listen, gke/pusher, pusher (chart)) | — | graduate | 2026-10-23 | dazheng |
 | `BASIC_PLAN_GATE_PROXY_EMBED_ENABLED` | Gate basic-plan embedding proxy | backend | env | closed | declared | true | false | — | graduate | 2026-10-23 | dazheng |
@@ -221,6 +224,7 @@ and an explicit empty literal renders as `''`.
 | `OWNER_IDENTITY_RETRY_COALESCE_ENABLED` | Default false; bounded per-UID late identity coalescing, 16 cohorts, 128 candidates and eight eligible passes per cohort; two workers unchanged | backend | env | closed | — | — | true (pusher (chart)) | — | pending | 2026-11-13 | dazheng |
 | `PARAKEET_STREAM_ALLOCATION_PERCENT` | Allocate streaming sessions to Parakeet | backend | env | closed | 100 | 100 (gke/parakeet, parakeet (chart)) | 100 (gke/parakeet, parakeet (chart)) | — | pending | 2026-10-23 | unowned |
 | `PARAKEET_WINDOW_ALLOCATION_PERCENT` | Allocate live sessions to Parakeet window | backend | env | closed | 0 | 1 (backend-listen (chart), gke/backend-listen) | 100 (backend-listen (chart), gke/backend-listen) | — | pending | 2026-10-23 | dazheng |
+| `PARAKEET_WINDOW_DEADLINE_CUT_ENABLED` | Default-off near-expiry emission of a nonempty held window answer; normal paced first answers retain sentence anchoring | backend | env | closed | false | false (backend-listen (chart), gke/backend-listen) | false (backend-listen (chart), gke/backend-listen) | — | pending | 2026-11-13 | dazheng |
 | `PARAKEET_WINDOW_DIARIZATION` | Enable Parakeet window diarization | backend | env | closed | false | false (backend-listen (chart), gke/backend-listen) | false (backend-listen (chart), gke/backend-listen) | — | pending | 2026-10-23 | unowned |
 | `PINNED_SPEAKER_PRIOR_ENABLED` | Turn near-misses on pinned people into suggestions and record voice candidates for the suggestion card (never loosens auto-labels) | backend | env | closed | — | — | — | — | pending | 2026-10-30 | dazheng |
 | `REVIEW_SURFACE_MODE` | Review queue, reversible agent changes and entity pages; off by default, on enables authenticated routes | backend | env | closed | — | on (backend-listen (chart), cloud_run/backend, gke/backend-listen) | on (backend-listen (chart), cloud_run/backend, gke/backend-listen); {value: 'on', category: rollout} (cloud_run/backend-sync) | — | pending | 2026-11-07 | dazheng |
@@ -251,6 +255,7 @@ and an explicit empty literal renders as `''`.
 | `SYNC_ASSIGNMENT_RECOVERY_ENABLED` | Recover incompatible explicit sync targets through compatible temporal assignment; default on, invalid values off | backend | env | open | {value: 'true', category: rollout} | true (backend-listen (chart)); {value: 'true', category: rollout} (cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, gke/backend-listen) | true (backend-listen (chart)); {value: 'true', category: rollout} (cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, gke/backend-listen) | — | pending | 2026-11-01 | dazheng |
 | `SYNC_BACKFILL_INFLIGHT_LIMIT` | One in-flight backfill upload per uid; excess uploads get 429 backfill_paced | backend | env | closed | false | false | false | — | pending | 2026-10-27 | dazheng |
 | `SYNC_BACKFILL_UID_SEQUENCER` | Accept backfill uploads then dispatch one worker job per uid from durable queue | backend | env | closed | on | on | on | — | pending | 2026-10-27 | dazheng |
+| `SYNC_LEGACY_FRESH_ENABLED` | Admit recent LEGACY offline sync to fresh under an atomic per-user upload and byte budget | backend | env | closed | {value: 'false', category: rollout} | {value: 'false', category: rollout} | {value: 'false', category: rollout} | — | pending | 2026-11-14 | dazheng |
 | `SYNC_LINEAGE_LIVE_DEDUPE_ENABLED` | Proof-gated sync live intake: conservative repeat suppression, strict-stamp overlap deferral and bounded diagnostics (default on) | backend | env | open | true | true | true | — | pending | 2026-11-02 | dazheng |
 | `SYNC_LINEAGE_RESOLVE_ENABLED` | Bind each segment of a recording-id safety-WAL upload to the live rollover generation that owns its audio, and stamp live generations with their origin recording id (default on) | backend | env | open | — | — | — | — | graduate | 2026-10-30 | dazheng |
 | `SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST` | Limit sync lineage binding and its live-row fences to listed UIDs; empty admits every user | backend | env | open | — | — | vi7SA9ckQCe4ccobWNxlbdcNdC23 (backend-listen (chart), cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, gke/backend-listen) | — | pending | 2026-10-30 | dazheng |
@@ -282,7 +287,6 @@ and an explicit empty literal renders as `''`.
 | `on_device_meeting_identity` | Enable on-device meeting identity on stable | macos | posthog | closed | — | — | — | absent (enable) | graduate | 2026-10-23 | dazheng |
 | `on_device_meeting_identity_kill` | Beta on-device meeting identity stop | macos | posthog | inverted | — | — | — | expected (kill) | pending | 2026-10-23 | unowned |
 | `onboarding-setup-rating-prompt` | Mobile onboarding Setting up your Omi page with the store-rating pre-prompt before the completion screen; client-evaluated, default off so the flow is unchanged and store review never sees it | mobile | posthog | closed | — | — | — | expected (enable) | pending | 2026-11-05 | nik |
-| `onboarding-webview` | Mobile first-run onboarding rendered from a web page after sign-in and consent (OTA); off = native steps unchanged; the page never owns completion | mobile | posthog | closed | — | — | — | expected (enable) | pending | 2026-11-12 | nik |
 | `proactivity_v2` | Server v2 proactivity admission; absent or unknown denies | backend, llm-gateway | posthog | closed | — | — | — | expected (enable) | pending | 2026-11-03 | dazheng |
 | `screen_activity_lossless_sync` | Enable lossless screen sync on stable | macos | posthog | closed | — | — | — | absent (enable) | pending | 2026-10-22 | unowned |
 | `screen_activity_lossless_sync_kill` | Beta lossless screen sync stop | macos | posthog | inverted | — | — | — | expected (kill) | pending | 2026-10-22 | unowned |
@@ -423,6 +427,7 @@ their code default (`fail` tells you which way a missing value resolves).
 - `ACTION_ITEM_IDENTITY_ANCHOR_SHADOW_ENABLED` — Measure, in the action_item_identity log line only, how many reprocess-unmatched prior tasks pair one-to-one with a new task by stored transcript segment ids; never changes what is written or delivered (default on) (fail: open)
 - `ACTION_ITEM_IDENTITY_PRESERVE_ENABLED` — Keep a task's id and export marker when a conversation reprocess re-extracts the same task, so it is not sent to the user's cloud task app again; Apple Reminders excluded (default on) (fail: open)
 - `ADMIN_KEY_AUTH_ENABLED` — Allow administrator-key authentication (fail: open)
+- `AUDIO_CANONICAL_PACKING_ENABLED` — Default off; new release-scoped canonical capture intake and owner-only verified tar packing; requires new regional bucket (fail: closed)
 - `AUDIO_MERGE_DISPATCH_MODE` — Select audio-merge dispatch lane (fail: closed)
 - `BILLING_WEBHOOK_LEDGER_ENABLED` — Durable Stripe webhook receipts, duplicate suppression and failed-schedule retries; default false; no deployment declaration or activation in INF sprint (fail: closed)
 - `CAPTURE_JEV_SHADOW_EXPIRY` — Shorten the Jev capture shadow hard deadline (fail: closed)
