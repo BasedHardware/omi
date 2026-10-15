@@ -2307,6 +2307,7 @@ def test_provisional_prod_endpoint_requires_presence_but_not_exact_value(tmp_pat
     "backend": {
         "env": [
           {"name": "OMI_LLM_GATEWAY_URL", "value": "http://stable-private-endpoint"},
+          {"name": "BUCKET_TEMPORAL_SYNC_LOCAL", "value": "syncing-local"},
           {"name": "HOSTED_PARAKEET_API_URL", "value": "http://parakeet.omi.me"},
           {"name": "OMI_LLM_GATEWAY_SERVICE_TOKEN", "valueFrom": {"secretKeyRef": {"name": "OMI_LLM_GATEWAY_SERVICE_TOKEN"}}},
           {"name": "STT_PRERECORDED_MODEL", "valueFrom": {"secretKeyRef": {"name": "STT_PRERECORDED_MODEL"}}},

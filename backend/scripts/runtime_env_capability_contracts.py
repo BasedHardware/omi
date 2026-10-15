@@ -19,6 +19,7 @@ from config.free_tier_rollout import (
 )
 from config.memory_rollout import MemoryRolloutMode, rollout_mode_env_value
 from scripts.runtime_env_durable_dispatch_contracts import ValidationError
+from scripts.runtime_env_compat import VOICE_STAGING_BUCKET_ENV, VOICE_STAGING_BUCKETS
 
 ConfigDict = dict[str, Any]
 
@@ -128,11 +129,11 @@ def _literal_env(service_config: ConfigDict) -> dict[str, str]:
 
 def validate_voice_transcription_storage(env: str, env_config: ConfigDict) -> list[ValidationError]:
     """Keep the voice upload route's staging bucket explicit in each environment."""
-    expected = {'dev': 'syncing-local-development', 'prod': 'syncing-local'}.get(env)
+    expected = VOICE_STAGING_BUCKETS.get(env)
     if expected is None:
         return []
     config = _service_config(env_config, 'cloud_run', 'backend') or {}
-    if _literal_env(config).get('BUCKET_TEMPORAL_SYNC_LOCAL') == expected:
+    if _literal_env(config).get(VOICE_STAGING_BUCKET_ENV) == expected:
         return []
     return [
         ValidationError(

@@ -1,5 +1,5 @@
 # generated — do not edit; run: python3 backend/deploy/compose_runtime_env.py
-schema_version: 1
+schema_version: 2
 environments:
   dev:
     llm_gateway:
