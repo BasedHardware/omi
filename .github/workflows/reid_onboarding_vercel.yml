@@ -60,8 +60,8 @@ jobs:
         working-directory: prototypes/device_first_onboarding/build/web
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
-          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
-          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID_REID_ONBOARDING }}
+          VERCEL_ORG_ID: ${{ vars.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ vars.VERCEL_PROJECT_ID_REID_ONBOARDING }}
         run: |
           npx --yes vercel@64 deploy --prod --yes --token "$VERCEL_TOKEN" \
             --meta githubCommitSha="$GITHUB_SHA" \
