@@ -3,7 +3,7 @@
 import os
 from concurrent.futures import ThreadPoolExecutor
 from threading import Barrier
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from urllib.parse import urlparse
 from uuid import uuid4
 from unittest.mock import MagicMock
@@ -204,3 +204,71 @@ def test_operator_repair_real_pagination_is_read_only_then_idempotent(state, mon
     assert applied['repaired_owners'] >= 1 and applied['errors'] == 0
     assert owner.get().exists
     assert repair_script.repair(client, apply=True, page_size=1)['repaired_owners'] == 0
+
+
+@pytest.mark.parametrize('state_name', ['dispatching', 'running'])
+def test_301_parked_empty_owners_do_not_hide_stuck_lease_on_real_query(state, monkeypatch, state_name):
+    client, uid, jid, ledger = state
+    old = datetime.now(timezone.utc) - timedelta(hours=2)
+    batch = client.batch()
+    prefix = uuid4().hex
+    for index in range(301):
+        batch.set(client.collection(registry.COLLECTION).document(f'{prefix}-{index}'), {'epoch': 7, 'updated_at': old})
+    batch.commit()
+    claim = registry.claim_next(uid, firestore_client=client, now=old)
+    if state_name == 'running':
+        assert registry.begin_job(uid, jid, claim['epoch'], firestore_client=client, now=old)
+    monkeypatch.setattr(registry, 'get_firestore_client', lambda: client)
+    monkeypatch.setenv('SYNC_BACKFILL_RETIRE_EXPIRED_AT_CLAIM', 'false')
+    monkeypatch.setattr(uid_sequencer, 'sync_job_run_lock_present', lambda job: False)
+    monkeypatch.setattr(uid_sequencer, 'get_sync_job', lambda job: {'status': 'queued'})
+    monkeypatch.setattr(uid_sequencer.backfill_cutover, 'quiet_remaining', lambda uid: (0, ''))
+    monkeypatch.setattr(uid_sequencer.backfill_cutover, 'direct_remaining_for_uid', lambda uid: (0, ''))
+    dispatched = []
+    monkeypatch.setattr(uid_sequencer, '_dispatch', lambda job: dispatched.append(job))
+    page = registry.due_owners(limit=100, firestore_client=client)
+    assert any(row['uid'] == uid for row in page)
+    assert all(not row['uid'].startswith(prefix) for row in page)
+    assert all(row.get('active_job_id') or registry.has_pending(row['uid'], firestore_client=client) for row in page)
+    uid_sequencer.sweep(limit=100)
+    assert any(job['job_id'] == jid and job['epoch'] > claim['epoch'] for job in dispatched)
+
+
+def test_parking_and_admission_contend_without_losing_wakeup_or_epoch(state):
+    client, uid, jid, ledger = state
+    claim = registry.claim_next(uid, firestore_client=client)
+    assert registry.finish_job(uid, jid, claim['epoch'], 'completed', firestore_client=client)
+    assert 'reconcile_at' not in registry.get_owner(uid, firestore_client=client)
+    next_job = uuid4().hex
+    barrier = Barrier(2)
+
+    def admit():
+        barrier.wait(timeout=10)
+        registry.register_job(uid, next_job, {'uid': uid, 'job_id': next_job}, None, firestore_client=client)
+
+    def park():
+        barrier.wait(timeout=10)
+        registry.defer_owner(uid, 120, firestore_client=client)
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        admission, parking = pool.submit(admit), pool.submit(park)
+        admission.result(timeout=30)
+        parking.result(timeout=30)
+    owner = registry.get_owner(uid, firestore_client=client)
+    assert owner['reconcile_at'] is not None and owner['epoch'] == claim['epoch']
+    assert registry.claim_next(uid, firestore_client=client)['epoch'] > claim['epoch']
+
+
+def test_repair_deadline_is_respected_by_real_claim_and_stale_deferral(state, monkeypatch):
+    client, uid, jid, ledger = state
+    client.collection(registry.COLLECTION).document(uid).delete()
+    now = datetime.now(timezone.utc)
+    monkeypatch.setattr(registry.secrets, 'randbelow', lambda window: window - 1)
+    assert registry.repair_owner(uid, repair_window=600, now=now, firestore_client=client)
+    owner = registry.get_owner(uid, firestore_client=client)
+    assert owner['reconcile_at'] == now + timedelta(seconds=600)
+    assert not any(row['uid'] == uid for row in registry.due_owners(now=now, firestore_client=client))
+    registry.defer_owner(uid, 120, now=now, firestore_client=client)
+    assert registry.get_owner(uid, firestore_client=client)['reconcile_at'] == owner['reconcile_at']
+    assert registry.claim_next(uid, now=now, firestore_client=client) is None
+    assert registry.claim_next(uid, now=owner['reconcile_at'], firestore_client=client)['job_id'] == jid

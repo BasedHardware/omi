@@ -27,6 +27,7 @@ def repair(
     limit: int = 1_000_000,
     page_size: int = 500,
     rate_per_second: float = 5,
+    repair_window: int | None = None,
 ) -> dict[str, int]:
     """Page by document ID; transactionally revalidate the queue per UID.
 
@@ -35,6 +36,7 @@ def repair(
     """
     if limit < 1 or not 1 <= page_size <= 500 or not math.isfinite(rate_per_second) or not 0 < rate_per_second <= 20:
         raise ValueError('invalid repair bounds')
+    repair_window = registry.repair_window_seconds(repair_window)
     counts = {'scanned_entries': 0, 'scanned_uids': 0, 'missing_owners': 0, 'repaired_owners': 0, 'errors': 0}
     seen: set[str] = set()
     cursor = None
@@ -65,7 +67,9 @@ def repair(
             if delay > 0:
                 time.sleep(delay)
             try:
-                needed = registry.repair_owner(uid, dry_run=not apply, firestore_client=client)
+                needed = registry.repair_owner(
+                    uid, dry_run=not apply, repair_window=repair_window, firestore_client=client
+                )
             except Exception:
                 counts['errors'] += 1
             else:
@@ -87,6 +91,12 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument('--limit', type=int, default=1_000_000, help='Maximum pending documents to scan')
     parser.add_argument('--page-size', type=int, default=500)
     parser.add_argument('--rate-per-second', type=float, default=5, help='Maximum UID probes/second (up to 20)')
+    parser.add_argument(
+        '--repair-window-seconds',
+        type=int,
+        default=None,
+        help='Spread repairs over this window (default 1800s; SYNC_BACKFILL_OWNER_REPAIR_WINDOW_SECONDS overrides)',
+    )
     args = parser.parse_args(argv)
     try:
         registry._require_production()
@@ -98,6 +108,7 @@ def main(argv: list[str] | None = None) -> int:
                 limit=args.limit,
                 page_size=args.page_size,
                 rate_per_second=args.rate_per_second,
+                repair_window=args.repair_window_seconds,
             )
         finally:
             client.close()

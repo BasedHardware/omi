@@ -328,6 +328,7 @@ def sweep(*, limit: int = 100) -> dict[str, int]:
             seen_uids.add(job['uid'])
             if registry.repair_owner(job['uid'], now=now):
                 outcomes['owner_repaired'] = outcomes.get('owner_repaired', 0) + 1
+                continue  # The staggered owner deadline owns this UID's next attempt.
             sample = registry.waiting_sample(job['uid'], now=now)
             if sample['age_seconds'] >= registry.WAIT_ALERT_SECONDS:
                 logger.error(
