@@ -104,6 +104,11 @@ struct ChatQuotaBannerView: View {
     .accessibilityElement(children: .contain)
     .accessibilityLabel("\(banner.title). \(banner.message)")
     .accessibilityIdentifier("chat-quota-banner")
+    .onAppear {
+      AnalyticsManager.shared.paywallOpened(
+        source: "macos_chat_quota_banner",
+        currentPlan: UserDefaults.standard.string(forKey: .floatingBarCachedPlan) ?? "unknown")
+    }
   }
 
   /// A hard-capped plan at its allowance is stopped, not just warned — the

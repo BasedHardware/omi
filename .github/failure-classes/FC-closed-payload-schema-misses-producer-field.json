@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "id": "FC-closed-payload-schema-misses-producer-field",
+  "violated_contract": "When an admission boundary validates a durable job payload against a closed key set, every field that any producer can add must be enumerated in that set (as required or optional). A producer that conditionally adds a field the boundary does not list passes every test that omits the condition, then fails in production the first time a client triggers it, after the caller has already been told the work was accepted.",
+  "canonical_prevention": "Keep one shared key validator that names required and optional fields, use it at every boundary that checks the payload, and keep a unit test that enqueues a payload with each conditional producer field present.",
+  "evidence_prs": [],
+  "scope_hints": [
+    "backend/utils/cloud_tasks.py",
+    "backend/routers/sync.py",
+    "backend/testing/sync_cloud_tasks_stack/**"
+  ],
+  "status": "open",
+  "canonical_prevention_artifact": [
+    "backend/tests/unit/test_sync_cloud_tasks.py"
+  ]
+}

@@ -23,7 +23,7 @@ import os
 import secrets
 from datetime import datetime, timedelta, timezone
 from typing import Any, Callable, Dict, List, Optional, Tuple
-from urllib.parse import urlencode
+from urllib.parse import urlencode, urlsplit
 
 import httpx
 
@@ -78,7 +78,6 @@ _STATE_PREFIX = 'x_oauth_state:'
 # them without a collection-group query/index. Written on connect, removed on
 # disconnect.
 _REGISTRY_COLLECTION = 'x_connector_users'
-SYNC_JOB_INTERVAL_HOURS = 6  # background sync cadence (the cron fires hourly)
 _SYNC_JOB_USER_SPACING_SEC = 1.5  # gap between users to stay gentle on X limits
 
 # Cap how much we pull per sync to stay well within X rate limits.
@@ -104,11 +103,46 @@ def _gen_pkce() -> Tuple[str, str]:
     return verifier, challenge
 
 
+# Schemes a post-OAuth deep link may use: the desktop app's own URL scheme plus
+# a dev build, and plain web redirects. Everything else — javascript:, data:,
+# vbscript:, file:, etc. — is rejected so a crafted success_redirect_url cannot
+# become a stored-XSS or open-redirect vector.
+_ALLOWED_REDIRECT_SCHEMES = frozenset({'omi', 'omi-computer', 'omi-computer-dev', 'http', 'https'})
+_MAX_REDIRECT_URL_LEN = 2048
+
+
+def sanitize_redirect_url(url: Optional[str]) -> Optional[str]:
+    """Return *url* if it is a safe post-OAuth redirect target, else ``None``.
+
+    The URL round-trips through Redis as a ``\\n``-delimited state field, so it
+    must also be free of CR/LF/control characters — a newline there would
+    desynchronize state unpacking.
+    """
+    if not isinstance(url, str):
+        return None
+    url = url.strip()
+    if not url or len(url) > _MAX_REDIRECT_URL_LEN:
+        return None
+    if any(c in url for c in '\r\n\t\x00\x0b\x0c'):
+        return None
+    try:
+        scheme = urlsplit(url).scheme.lower()
+    except ValueError:
+        return None
+    if scheme not in _ALLOWED_REDIRECT_SCHEMES:
+        return None
+    return url
+
+
 def build_authorize_url(uid: str, success_redirect_url: Optional[str] = None) -> str:
     """Create the X authorize URL and stash the PKCE verifier + uid in Redis,
     keyed by the opaque `state` we hand to X."""
     if not is_oauth_configured():
         raise RuntimeError('X OAuth is not configured (missing X_OAUTH_CLIENT_ID/SECRET/REDIRECT_URI)')
+
+    if success_redirect_url is not None and sanitize_redirect_url(success_redirect_url) is None:
+        # Fail closed: refuse to stash (and later emit) a redirect we cannot vouch for.
+        raise ValueError('success_redirect_url is not an allowed redirect target')
 
     verifier, challenge = _gen_pkce()
     state = secrets.token_urlsafe(32)
@@ -116,7 +150,8 @@ def build_authorize_url(uid: str, success_redirect_url: Optional[str] = None) ->
     payload = {'uid': uid, 'verifier': verifier}
     if success_redirect_url:
         payload['success_redirect_url'] = success_redirect_url
-    # store as a simple delimited string to avoid json import churn
+    # store as a simple delimited string to avoid json import churn; the sanitized
+    # URL above is guaranteed newline-free so the third field stays atomic.
     redis_db.r.setex(
         f'{_STATE_PREFIX}{state}',
         OAUTH_STATE_TTL,
@@ -145,10 +180,14 @@ def consume_oauth_state(state: str) -> Optional[Dict[str, str]]:
     parts = raw.split('\n')
     if len(parts) < 2:
         return None
+    # A stored redirect is re-validated on the way out: an older or tampered state
+    # holding a newline, an unsafe scheme, or a control char must not reach the
+    # redirect page.
+    stored_redirect = sanitize_redirect_url(parts[2]) if len(parts) > 2 else None
     return {
         'uid': parts[0],
         'verifier': parts[1],
-        'success_redirect_url': parts[2] if len(parts) > 2 else '',
+        'success_redirect_url': stored_redirect or '',
     }
 
 
@@ -651,41 +690,33 @@ def disconnect(uid: str) -> None:
 
 
 # ----------------------------------------------------------------------------
-# Periodic background sync (driven by the hourly cron in modal/job.py)
+# Periodic background sync (hosted by x-connector-sync-job; Scheduler owns cadence)
 # ----------------------------------------------------------------------------
-
-
-def should_run_x_sync_job() -> bool:
-    """Gate the sync to every SYNC_JOB_INTERVAL_HOURS (the cron fires hourly)."""
-    return datetime.now(timezone.utc).hour % SYNC_JOB_INTERVAL_HOURS == 0
 
 
 async def run_x_sync_job(*, job_started_at: Optional[float] = None) -> Dict:
     """Incrementally sync every connected X user. Errors are isolated per user;
     a slow/failed account never blocks the others.
 
-    The scheduler fires every minute, so without a guard every execution in a
-    sync hour would start its own overlapping full-registry sweep. The window
-    lock admits exactly one sweep per SYNC_JOB_INTERVAL_HOURS window.
+    The summary always includes ``failed`` and ``errors``. Global listing
+    failures populate ``errors`` so the Cloud Run entrypoint can exit non-zero
+    instead of looking healthy to Scheduler (#9298 / #11183).
     """
-    now = datetime.now(timezone.utc)
-    acquired = await run_blocking(
-        db_executor,
-        redis_db.try_acquire_x_sync_window_lock,
-        now.strftime('%Y-%m-%d'),
-        now.hour // SYNC_JOB_INTERVAL_HOURS,
-    )
-    if not acquired:
-        logger.info('x_connector: sync job skipped, another execution already holds this window')
-        return {'users': 0, 'synced': 0, 'new_posts': 0, 'skipped': 'window_lock'}
     try:
         uids = [d.id for d in db.collection(_REGISTRY_COLLECTION).stream()]
     except Exception as e:
         logger.error(f'x_connector: sync job could not list users: {e}')
-        return {'users': 0, 'synced': 0, 'new_posts': 0}
+        return {
+            'users': 0,
+            'synced': 0,
+            'new_posts': 0,
+            'failed': 0,
+            'errors': [f'list_users: {type(e).__name__}: {e}'],
+        }
 
     background_flex = PromotionFlexRunRouter(db_client=db, started_at=job_started_at)
     synced = 0
+    failed = 0
     new_posts = 0
     for uid in uids:
         try:
@@ -693,11 +724,41 @@ async def run_x_sync_job(*, job_started_at: Optional[float] = None) -> Dict:
             if result.get('success'):
                 synced += 1
                 new_posts += int(result.get('new_posts', 0))
+            else:
+                failed += 1
         except PromotionFlexDeferred:
             logger.info('x_connector: scheduled Flex extraction deferred uid=%s', uid)
         except Exception as e:
+            failed += 1
             logger.warning(f'x_connector: sync job failed for uid={uid}: {e}')
         await asyncio.sleep(_SYNC_JOB_USER_SPACING_SEC)
 
-    logger.info(f'x_connector: sync job done — users={len(uids)} synced={synced} new_posts={new_posts}')
-    return {'users': len(uids), 'synced': synced, 'new_posts': new_posts}
+    logger.info(
+        f'x_connector: sync job done — users={len(uids)} synced={synced} ' f'failed={failed} new_posts={new_posts}'
+    )
+    return {
+        'users': len(uids),
+        'synced': synced,
+        'new_posts': new_posts,
+        'failed': failed,
+        'errors': [],
+    }
+
+
+def raise_if_x_sync_job_failed(summary: Dict) -> None:
+    """Fail the Cloud Run Job when the scheduled sync contract could not complete.
+
+    Mirrors memory-maintenance-job: inspect the summary and raise so Scheduler /
+    Cloud Run show a failed execution instead of a silent healthy no-op.
+    """
+    errors = list(summary.get('errors') or [])
+    if errors:
+        raise RuntimeError(f"x-connector-sync-job failed: {'; '.join(str(e) for e in errors)}")
+
+    users = int(summary.get('users') or 0)
+    synced = int(summary.get('synced') or 0)
+    failed = int(summary.get('failed') or 0)
+    # Empty registry is a valid healthy run. Total failure across every connected
+    # user means the sync contract did not complete even though listing worked.
+    if users > 0 and synced == 0 and failed >= users:
+        raise RuntimeError(f"x-connector-sync-job failed: synced 0/{users} connected user(s) (failed={failed})")

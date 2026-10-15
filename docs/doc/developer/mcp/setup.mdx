@@ -4,6 +4,35 @@ icon: "gear"
 description: "Connect your AI assistant to the Omi MCP server"
 ---
 
+## Fastest path: copy a prompt for your agent
+
+Open the **Developers** page in the Omi web app ([app.omi.me/developers](https://app.omi.me/developers)),
+also reachable from **Settings → Advanced → Connect an Agent** on macOS and **Settings → Connect an
+Agent** on mobile. It offers one copy-paste prompt per path; paste it into Claude Code, Codex, Cursor,
+ChatGPT, OpenClaw, Hermes, or any other agent and the agent configures itself and verifies the
+connection (MCP `tools/list`, then one read-only call).
+
+| Prompt | Secret in the prompt |
+| --- | --- |
+| **MCP with sign-in** (recommended) | None — the agent adds the server URL and you approve OAuth in your browser |
+| **MCP with an API key** | A one-time encrypted link, never the key |
+| **Developer API** | A one-time encrypted link, never the key |
+
+### Hand a key to an agent without pasting it
+
+After you create a key there, choose **Send to My Agent Securely**. Omi encrypts the key in your
+browser and stores only the ciphertext in [ZK Relay](https://zkr.scalingforever.com) as a one-time
+share that expires after one hour or its first reveal. The copy-paste prompt then contains only the
+share's **agent link** (`https://zkr.scalingforever.com/a/<id>#v1.<key>.<token>`), never the raw key.
+The decryption key and access token live in the link's `#` fragment, which is never sent to any
+server.
+
+Your agent installs the `zkr` receiver if needed (see
+[llms.txt](https://zkr.scalingforever.com/llms.txt)), runs
+`zkr receive --link-stdin --output <relative-path>`, moves the value into its own secret store or
+environment variable, and deletes the file. If the link was already opened or has expired, create a
+new one. **Show the key instead** remains available when you would rather store the key yourself.
+
 ## Choose a setup method
 
 Omi supports four setup paths:
@@ -16,7 +45,9 @@ Omi supports four setup paths:
 | Local stdio server | An MCP key passed to `mcp-server-omi` | Clients that require a local process or a self-hosted backend |
 
 OAuth and MCP keys grant access to the same hosted endpoint. OAuth is the default for the
-new cloud-connector UI; manual MCP keys remain available as a fallback.
+new cloud-connector UI; manual MCP keys remain available as a fallback. Cleanup capabilities
+that hide retained data, such as `people.cleanup`, are never added to a default or legacy MCP
+key. They must be requested explicitly when the OAuth grant or key is created.
 
 ## Connect from the Omi macOS app (Recommended)
 
@@ -34,7 +65,7 @@ the connection card:
   use the approved directory listing.
 
 OAuth grants can be reviewed or revoked from the connected client. Revoking an MCP key is
-separate; use the Developer settings described below.
+separate; use the [Developers page](https://app.omi.me/developers) on the web.
 
 ---
 
@@ -109,8 +140,10 @@ OAuth flows.
     OpenClaw, or Hermes, and expand **Manual installation**. Omi generates the connection
     key and shows a masked **Your key** row with a **Copy** button.
 
-    You can also use the cross-platform Omi app: open **Settings → Developer Settings**,
-    scroll to **MCP Server**, and create a key in its **API Keys** list. The complete
+    On the web, open [app.omi.me/developers](https://app.omi.me/developers) and choose
+    **Create MCP Key & Prompt** (or **Create Key** under **MCP**). You can also use the
+    mobile app: open **Settings → Developer Settings**, scroll to **MCP Server**, and create
+    a key in its **API Keys** list. The complete
     `omi_mcp_...` value is shown only when it is created, so copy and store it then.
 
     Your key will look like: `omi_mcp_...`

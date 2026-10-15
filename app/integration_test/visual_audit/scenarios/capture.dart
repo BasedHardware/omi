@@ -12,6 +12,8 @@ import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/message_event.dart';
 import 'package:omi/backend/schema/phone_call.dart';
 import 'package:omi/backend/schema/transcript_segment.dart';
+import 'package:omi/pages/activity/activity_bell_button.dart';
+import 'package:omi/pages/activity/activity_seen.dart';
 import 'package:omi/pages/conversation_capturing/page.dart';
 import 'package:omi/pages/home/home_content.dart';
 import 'package:omi/pages/home/widgets/battery_info_widget.dart';
@@ -19,6 +21,7 @@ import 'package:omi/pages/home/widgets/home_daily_recaps.dart';
 import 'package:omi/pages/home/widgets/home_tab_switcher.dart';
 import 'package:omi/backend/schema/daily_summary.dart';
 import 'package:omi/providers/capture_provider.dart';
+import 'package:omi/services/sockets/local_stt_failure.dart';
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/backend/schema/structured.dart';
 import 'package:omi/providers/device_provider.dart';
@@ -38,6 +41,11 @@ enum AuditLive { idle, pendant, pendantPaused, phone, phonePaused, phoneAfterPen
 class AuditCaptureProvider extends ChangeNotifier implements CaptureProvider {
   AuditCaptureProvider(this.live);
   final AuditLive live;
+  @override
+  LocalSttFailure? get localSttFailure => null;
+
+  @override
+  bool get pendantCaptureVerified => true;
 
   bool get _pendant => live == AuditLive.pendant || live == AuditLive.pendantPaused;
   bool get _phone => !_pendant && live != AuditLive.idle;
@@ -167,13 +175,12 @@ final auditPendant = BtDevice(id: 'd1', name: 'Omi Device', type: DeviceType.omi
 /// Mirrors HomePage's layout: the header, the Home | Tasks switcher, Home, and the floating
 /// Ask Omi row. [recaps] feeds the Daily Recaps row (none by default).
 class HomeFrame extends StatelessWidget {
-  const HomeFrame({super.key, this.recaps = _noRecaps, this.tasks, this.pendingSync});
+  const HomeFrame({super.key, this.recaps = _noRecaps, this.tasks, this.activitySeen});
 
   final RecentRecapsLoader recaps;
 
-  /// Recordings waiting to sync or transcribe: shows the Cloud button with that count as a badge,
-  /// as HeaderSyncButton does. Null leaves Cloud out (no device paired, nothing waiting).
-  final int? pendingSync;
+  /// The bell's state; null uses the app's.
+  final ActivitySeen? activitySeen;
 
   /// The Tasks page to show instead of Home (Tasks selected in the switcher; no chat bar there).
   final Widget? tasks;
@@ -187,23 +194,24 @@ class HomeFrame extends StatelessWidget {
         backgroundColor: Theme.of(context).colorScheme.surface,
         titleSpacing: NavigationToolbar.kMiddleSpacing - (kMinTapTarget - kHeaderCircleDiameter) / 2,
         title: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-          const Padding(
-            padding: EdgeInsets.only(left: (kMinTapTarget - kHeaderCircleDiameter) / 2),
-            child: BatteryInfoWidget(),
+          const Flexible(
+            child: Padding(
+              padding: EdgeInsets.only(left: (kMinTapTarget - kHeaderCircleDiameter) / 2),
+              child: BatteryInfoWidget(),
+            ),
           ),
           Row(children: [
-            if (pendingSync != null)
-              HeaderCircleButton(
-                semanticLabel: 'Sync',
-                onTap: () {},
-                badgeCount: pendingSync!,
-                icon: Icon(Icons.cloud_rounded, size: 18, color: OmiColors.textSecondary),
-              ),
+            HeaderCircleButton(
+              semanticLabel: 'Filter by date',
+              onTap: () {},
+              icon: FaIcon(FontAwesomeIcons.calendar, size: 16, color: OmiColors.textSecondary),
+            ),
             HeaderCircleButton(
               semanticLabel: 'Search',
               onTap: () {},
               icon: Icon(Icons.search, size: 20, color: OmiColors.textSecondary),
             ),
+            ActivityBellButton(seen: activitySeen),
             HeaderCircleButton(
               semanticLabel: 'Settings',
               onTap: () {},
@@ -325,7 +333,7 @@ Future<void> _runFeed(AuditRun a, {AuditLive live = AuditLive.idle}) async {
       stats: DayStats(totalConversations: 4, actionItemsCount: 1),
     ),
   ];
-  await a.pump(HomeFrame(recaps: () async => (items: recaps, ok: true), pendingSync: 1), scaffold: false, providers: [
+  await a.pump(HomeFrame(recaps: () async => (items: recaps, ok: true)), scaffold: false, providers: [
     ChangeNotifierProvider<DeviceProvider>.value(
         value: live == AuditLive.idle
             ? AuditDeviceProvider()
@@ -355,14 +363,14 @@ final captureScenarios = <AuditScenario>[
     title: 'Home: daily recaps, then every conversation',
     page: _home,
     state: 'Two recaps; five conversations across today, yesterday and last week; nothing recording; '
-        'one recording waiting to transcribe (Cloud badge)',
+        'one recording waiting to transcribe',
     run: (a) => _runFeed(a),
   ),
   AuditScenario(
     id: 'home-feed-live',
     title: 'Home while the pendant records: live card, recaps, conversations',
     page: _home,
-    state: 'Pendant connected and recording; two recaps; five conversations; one recording waiting (Cloud badge)',
+    state: 'Pendant connected and recording; two recaps; five conversations; one recording waiting',
     run: (a) => _runFeed(a, live: AuditLive.pendant),
   ),
   AuditScenario(
@@ -383,7 +391,7 @@ final captureScenarios = <AuditScenario>[
     id: 'home-capture-pendant-live',
     title: 'Pendant recording',
     page: _home,
-    state: 'The pendant streams; 12:04 in',
+    state: 'The pendant streams; the pill shows the latest line, not the session clock',
     run: (a) => _runHome(a, AuditLive.pendant, pendantConnected: true),
   ),
   AuditScenario(

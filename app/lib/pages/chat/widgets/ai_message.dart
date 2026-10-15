@@ -13,12 +13,12 @@ import 'package:provider/provider.dart';
 import 'package:omi/widgets/shimmer_with_timeout.dart';
 
 import 'package:omi/backend/http/api/conversations.dart';
+import 'package:omi/backend/http/streaming_error.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/app.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/message.dart';
 import 'package:omi/models/chat_evidence_reference.dart';
-import 'package:omi/pages/chat/widgets/chat_followup_chip.dart';
 import 'package:omi/pages/chat/widgets/content_blocks/chat_content_block_list.dart';
 import 'package:omi/pages/chat/widgets/files_handler_widget.dart';
 import 'package:omi/pages/chat/widgets/typing_indicator.dart';
@@ -33,7 +33,6 @@ import 'package:omi/utils/other/temp.dart';
 import 'package:omi/widgets/extensions/string.dart';
 import 'package:omi/widgets/text_selection_controls.dart';
 import 'chart_message_widget.dart';
-import 'package:omi/widgets/components/chat_evidence_card.dart';
 import 'package:omi/widgets/components/memory_review_card.dart';
 import 'package:omi/ui/ui.dart';
 import 'markdown_message_widget.dart';
@@ -187,21 +186,6 @@ bool isConversationSourceEvidence(ChatEvidenceReferenceKind kind) {
   return kind == ChatEvidenceReferenceKind.conversationSummary || kind == ChatEvidenceReferenceKind.conversationSegment;
 }
 
-/// Supplemental chrome to render beside the answer. Conversation sources that
-/// already appear as citation cards are stripped so the message has one list.
-ChatEvidenceReferenceEnvelope? visibleSupplementalEvidence(ServerMessage message) {
-  final evidence = message.evidenceEnvelope;
-  if (evidence == null || evidence.isEmpty) return null;
-  if (message.memories.isEmpty) return evidence;
-  final leftover = evidence.references.where((ref) => !isConversationSourceEvidence(ref.kind)).toList();
-  if (leftover.isEmpty) return null;
-  return ChatEvidenceReferenceEnvelope(
-    schemaVersion: evidence.schemaVersion,
-    requestId: evidence.requestId,
-    references: leftover,
-  );
-}
-
 /// Resolve a cited conversation from the local grouped map, then fetch by id.
 /// A miss in the map is not a failure — the fetch is the second authority.
 Future<ServerConversation?> resolveChatCitationConversation({
@@ -234,6 +218,8 @@ class AIMessage extends StatefulWidget {
   /// The reply failed; a localized error with [onRetry] replaces the raw server text.
   final bool replyFailed;
 
+  final ChatStreamFailureClass? replyFailure;
+
   /// Sends the user's message again. Null when the failed reply cannot be retried (voice).
   final VoidCallback? onRetry;
 
@@ -250,6 +236,7 @@ class AIMessage extends StatefulWidget {
     this.showThinkingAfterText = false,
     this.fetchConversation,
     this.replyFailed = false,
+    this.replyFailure,
     this.onRetry,
   });
 
@@ -268,7 +255,7 @@ class _AIMessageState extends State<AIMessage> {
 
   @override
   Widget build(BuildContext context) {
-    if (widget.replyFailed) return ChatReplyError(onRetry: widget.onRetry);
+    if (widget.replyFailed) return ChatReplyError(failure: widget.replyFailure, onRetry: widget.onRetry);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -380,22 +367,18 @@ Widget buildMessageWidget(
     );
   }
 
-  final evidence = visibleSupplementalEvidence(message);
   final appendBlocks = contentBlocks != null && !blocksReplaceBody;
   // Native content blocks. Both are additive chrome: an absent or malformed
   // block leaves the answer exactly as it renders today.
   final reviewCard = showTypingIndicator ? null : message.memoryReviewCard;
-  final followUp = showTypingIndicator ? null : message.followUpQuestion;
-  if (evidence == null && !appendBlocks && reviewCard == null && followUp == null) return messageWidget;
+  // Follow-ups are transient composer suggestions, not part of each historical answer's chrome.
+  if (!appendBlocks && reviewCard == null) return messageWidget;
   return Column(
     crossAxisAlignment: CrossAxisAlignment.start,
     mainAxisSize: MainAxisSize.min,
     children: [
       messageWidget,
-      if (appendBlocks) ...[
-        const SizedBox(height: 8),
-        contentBlocks,
-      ],
+      if (appendBlocks) ...[const SizedBox(height: 8), contentBlocks],
       if (reviewCard != null) ...[
         const SizedBox(height: 12),
         MemoryReviewCard(
@@ -404,14 +387,6 @@ Widget buildMessageWidget(
           impressionKey: reviewCard.id.isNotEmpty ? reviewCard.id : message.id,
         ),
       ],
-      if (evidence != null) ...[
-        const SizedBox(height: 8),
-        // The released mobile surface has no trusted evidence navigator yet.
-        // Keep cards non-actionable until one is supplied; arbitrary URI fields
-        // can never become an external action.
-        ChatEvidenceReferenceList(envelope: evidence),
-      ],
-      if (followUp != null) ...[const SizedBox(height: 8), ChatFollowUpChip(question: followUp, onSend: sendMessage)],
     ],
   );
 }
@@ -1099,7 +1074,10 @@ class _TimelineRow extends StatelessWidget {
             child: Column(
               children: [
                 SizedBox(height: 22, child: Center(child: glyph)),
-                if (!last) Expanded(child: Center(child: Container(width: 1, color: OmiColors.border))),
+                if (!last)
+                  Expanded(
+                    child: Center(child: Container(width: 1, color: OmiColors.border)),
+                  ),
               ],
             ),
           ),
@@ -1169,7 +1147,9 @@ class InitialOptionWidget extends StatelessWidget {
 
 /// A reply that failed: a localized reason and Try Again, which sends the user's message again.
 class ChatReplyError extends StatelessWidget {
-  const ChatReplyError({super.key, this.onRetry});
+  const ChatReplyError({super.key, this.failure, this.onRetry});
+
+  final ChatStreamFailureClass? failure;
 
   /// Null when the message cannot be sent again from here (a voice message).
   final VoidCallback? onRetry;
@@ -1177,6 +1157,14 @@ class ChatReplyError extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final l10n = context.l10n;
+    final reason = switch (failure) {
+      ChatStreamFailureClass.offline => l10n.chatReplyOffline,
+      ChatStreamFailureClass.server => l10n.chatReplyServerError,
+      ChatStreamFailureClass.timeout => l10n.chatReplyTimeout,
+      ChatStreamFailureClass.notSignedIn => l10n.chatReplyNotSignedIn,
+      ChatStreamFailureClass.quota => l10n.chatQuotaExceededReply,
+      _ => l10n.chatReplyFailed,
+    };
     return Semantics(
       liveRegion: true,
       child: Container(
@@ -1187,7 +1175,7 @@ class ChatReplyError extends StatelessWidget {
             ExcludeSemantics(child: Icon(Icons.error_outline_rounded, size: 20, color: OmiColors.danger)),
             const SizedBox(width: OmiSpacing.sm),
             Expanded(
-              child: Text(l10n.chatReplyFailed, style: OmiType.subhead.copyWith(color: OmiColors.textSecondary)),
+              child: Text(reason, style: OmiType.subhead.copyWith(color: OmiColors.textSecondary)),
             ),
             if (onRetry != null)
               Padding(

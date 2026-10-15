@@ -15,6 +15,7 @@ from typing import Any, Dict, List
 
 import database.screen_frames as screen_frames_db
 import utils.other.storage as storage
+from utils.screen_frames.environment import frame_storage_bucket
 
 logger = logging.getLogger(__name__)
 
@@ -37,7 +38,14 @@ def delete_screen_frame(uid: str, conversation_id: str, frame_id: str) -> bool:
     URLs. Returns whether the Firestore doc existed. GCS/cache deletion runs
     unconditionally either way — contract §8: a delete that leaves bytes in
     the bucket is a bug, not a partial success.
+
+    A frame another environment wrote (its doc records a different bucket) is
+    not this environment's to delete: it is reported as absent and untouched.
     """
+    bucket = storage.configured_screen_frames_bucket()
+    doc = screen_frames_db.get_conversation_screen_frame_doc(uid, conversation_id, frame_id)
+    if doc is not None and frame_storage_bucket(doc) != bucket:
+        return False
     existed = screen_frames_db.delete_conversation_screen_frame_doc(uid, conversation_id, frame_id)
     storage.delete_screen_frame_blobs(uid, conversation_id, frame_id)
     return existed
@@ -50,10 +58,65 @@ def delete_conversation_screen_frames(uid: str, conversation_id: str) -> int:
     This is the function wired into the conversation-delete path (contract
     §8). It must run before the parent conversation doc is deleted —
     Firestore does not cascade subcollection deletes.
+
+    The conversation is going away, so every frame doc goes with it. Bytes in
+    another environment's bucket are deleted best-effort from that bucket:
+    this environment may lack access, and that must not block the delete.
     """
+    bucket = storage.configured_screen_frames_bucket()
     frames = screen_frames_db.get_conversation_screen_frames(uid, conversation_id)
     for frame in frames:
         frame_id = frame.get('id')
-        if frame_id:
+        if not frame_id:
+            continue
+        frame_bucket = frame_storage_bucket(frame)
+        if frame_bucket == bucket:
             storage.delete_screen_frame_blobs(uid, conversation_id, frame_id)
+            continue
+        try:
+            storage.delete_screen_frame_blobs(uid, conversation_id, frame_id, bucket=frame_bucket)
+        except Exception as error:  # noqa: BLE001 - recorded below for the owning environment
+            logger.warning(
+                "screen_frame foreign-bucket delete deferred uid=%s conversation_id=%s frame_id=%s error_type=%s",
+                uid,
+                conversation_id,
+                frame_id,
+                type(error).__name__,
+            )
+            # Durable before the docs go: once they are deleted nothing else knows these bytes exist.
+            screen_frames_db.record_screen_frame_cleanup(
+                frame_bucket,
+                uid,
+                conversation_id,
+                frame_id,
+                storage.screen_frame_object_paths(uid, conversation_id, frame_id),
+            )
     return screen_frames_db.delete_conversation_screen_frame_docs(uid, conversation_id)
+
+
+MAX_CLEANUPS_PER_DRAIN = 5
+
+
+def drain_screen_frame_cleanups(limit: int = MAX_CLEANUPS_PER_DRAIN) -> int:
+    """Delete bytes another environment recorded as undeletable, for THIS environment's bucket.
+
+    Bounded and best effort: called opportunistically from this environment's
+    screen-frame routes (no scheduled job owns BUCKET_SCREEN_FRAMES). A record
+    is removed only after its objects are gone.
+    """
+    bucket = storage.configured_screen_frames_bucket()
+    if not bucket:
+        return 0
+    drained = 0
+    for record in screen_frames_db.list_screen_frame_cleanups(bucket, limit):
+        try:
+            storage.delete_screen_frame_blobs(
+                record['uid'], record['conversation_id'], record['frame_id'], bucket=bucket
+            )
+            screen_frames_db.delete_screen_frame_cleanup(record['id'])
+            drained += 1
+        except Exception as error:  # noqa: BLE001 - the record stays for the next drain
+            logger.warning(
+                "screen_frame cleanup drain failed id=%s error_type=%s", record.get('id'), type(error).__name__
+            )
+    return drained

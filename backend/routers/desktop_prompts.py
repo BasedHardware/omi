@@ -4,7 +4,7 @@ from typing import Any, Dict, List, Optional
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 
-from database._client import db
+from database.serving_query_reads import list_active_desktop_prompt_snapshots
 from utils.other import endpoints as auth
 
 router = APIRouter(tags=['desktop-prompts'])
@@ -84,7 +84,7 @@ def get_desktop_prompts(
     uid: str = Depends(auth.get_current_user_uid),
 ) -> DesktopPromptsResponse:
     prompts: List[DesktopPromptSpec] = []
-    for snapshot in db.collection(PROMPTS_COLLECTION).where('active', '==', True).limit(50).stream():
+    for snapshot in list_active_desktop_prompt_snapshots():
         doc = snapshot.to_dict() or {}
         doc.setdefault('id', snapshot.id)
         if not prompt_matches_audience(doc, uid, channel, build):

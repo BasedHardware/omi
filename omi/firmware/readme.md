@@ -63,12 +63,13 @@ Full live-code debugging is also supported using the nRF Connect extension; howe
 - **Audio Capture**: Handles microphone input and audio buffering.
 - **Codec**: Processes raw audio data.
 - **Transport**: Manages Bluetooth connectivity and audio streaming.
-- **Storage**: Handles SD card operations and audio file management.
+- **Storage**: Handles CV1 raw SD NAND ring operations; DevKit uses its separate SD storage implementation.
 - **LED Control**: Provides visual feedback about device status.
 
 ## On the Storage Reads
 
-The storage will automatically activate whenever there is no Bluetooth connection to the app. Whenever you turn on the device, a new file is created which
-will begin filling with opus encoded data. Whenever you connect to the app, the contents of the storage will begin streaming to the app. When it is finished, it will try to delete the file on the device.
+On CV1, disconnected audio is packed into a raw-sector ring on soldered SD NAND, with no filesystem. Offline writes require a valid clock and ready storage. Each 444-byte record holds a timestamp and packed Opus frames; `read_seq` and `write_seq` track retained records. The app issues INFO, READ and ADVANCE commands to download audio and reclaim space, rather than deleting files. Current firmware also auto-advances on BLE send completion checkpoints during reads; app-only reclaim is a future custody contract, not current behavior. A full ring overwrites the oldest records.
+
+The DevKit has a separate file-based SD storage implementation.
 
 The format of each packet is different to the streaming audio packets.

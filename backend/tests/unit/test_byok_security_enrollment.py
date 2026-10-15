@@ -8,6 +8,7 @@ from typing import Dict
 from unittest.mock import MagicMock, patch
 
 import pytest
+from fastapi import Request
 
 from tests.unit._byok_fixtures import _SHA256_HEX_RE
 from tests.unit._byok_fixtures import _byok_isolation  # noqa: F401
@@ -161,12 +162,15 @@ class TestBYOKSubscriptionEntitlements:
             lambda _uid, platform: {'used': 0, 'unit': 'questions', 'limit': 30, 'allowed': True, 'reset_at': None},
         )
         monkeypatch.setattr(users, 'neo_grandfather_until', lambda _subscription: None)
-        monkeypatch.setattr(users, 'wire_plan_for_client', lambda plan, _platform, _version: plan)
+        monkeypatch.setattr(users, 'wire_plan_for_client', lambda plan, _platform, _version, _identity_version: plan)
 
-        response = users.get_user_subscription_endpoint(uid='llm-byok-user')
+        response = users.get_user_subscription_endpoint(
+            request=Request({'type': 'http', 'headers': []}), uid='llm-byok-user'
+        )
 
         assert response.subscription.plan == PlanType.basic
-        assert response.transcription_seconds_limit == 37
+        assert response.transcription_seconds_limit == 18000
+        assert response.subscription.limits.transcription_seconds == 18000
 
     def test_validated_llm_byok_gets_unlimited_subscription(self, monkeypatch):
         from models.users import PlanType
@@ -175,7 +179,9 @@ class TestBYOKSubscriptionEntitlements:
         monkeypatch.setattr(users.users_db, 'is_byok_active', lambda _uid: True)
         monkeypatch.setattr(users, 'request_has_llm_byok_key', lambda: True)
 
-        response = users.get_user_subscription_endpoint(uid='validated-byok-user')
+        response = users.get_user_subscription_endpoint(
+            request=Request({'type': 'http', 'headers': []}), uid='validated-byok-user'
+        )
 
         assert response.subscription.plan == PlanType.unlimited
         assert response.subscription.features == ['byok']
@@ -213,12 +219,48 @@ class TestBYOKSubscriptionEntitlements:
             lambda _uid, platform: {'used': 0, 'unit': 'questions', 'limit': 30, 'allowed': True, 'reset_at': None},
         )
         monkeypatch.setattr(users, 'neo_grandfather_until', lambda _subscription: None)
-        monkeypatch.setattr(users, 'wire_plan_for_client', lambda plan, _platform, _version: plan)
+        monkeypatch.setattr(users, 'wire_plan_for_client', lambda plan, _platform, _version, _identity_version: plan)
 
-        response = users.get_user_subscription_endpoint(uid='deepgram-only-user')
+        response = users.get_user_subscription_endpoint(
+            request=Request({'type': 'http', 'headers': []}), uid='deepgram-only-user'
+        )
 
         assert response.subscription.plan == PlanType.basic
-        assert response.transcription_seconds_limit == 37
+        assert response.transcription_seconds_limit == 18000
+        assert response.subscription.limits.transcription_seconds == 18000
+
+    @pytest.mark.parametrize('plan,cap', [('plus', 90000), ('unlimited_v2', None)])
+    @pytest.mark.parametrize('used', [1200, 96000])
+    def test_llm_byok_snapshot_preserves_access_and_enforced_transcription_budget(self, monkeypatch, plan, cap, used):
+        from models.users import PlanType, Subscription, SubscriptionStatus
+        from routers import users
+        from utils import subscription as enforcement
+
+        paid = Subscription(plan=PlanType(plan), status=SubscriptionStatus.active)
+        monkeypatch.setattr(users.users_db, 'is_byok_active', lambda _uid: True)
+        monkeypatch.setattr(users, 'request_has_llm_byok_key', lambda: True)
+        monkeypatch.setattr(users, 'get_byok_key', lambda _provider: None)
+        monkeypatch.setattr(enforcement, 'get_byok_key', lambda _provider: None)
+        monkeypatch.setattr(enforcement, 'is_marketplace_reviewer', lambda _uid: False)
+        monkeypatch.setattr(enforcement, 'is_trial_paywalled', lambda *_args, **_kwargs: False)
+        monkeypatch.setattr(enforcement.users_db, 'get_user_valid_subscription', lambda _uid: paid)
+        monkeypatch.setattr(users, 'get_monthly_usage_for_subscription', lambda _uid: {'transcription_seconds': used})
+        monkeypatch.setattr(users, 'resolve_transcription_allowance', enforcement.resolve_transcription_allowance)
+        # A divergent free-tier overlay must not replace the actual paid budget.
+        monkeypatch.setattr(users, 'get_basic_plan_limits', lambda: users.PlanLimits(transcription_seconds=18000))
+
+        response = users.get_user_subscription_endpoint(
+            request=Request({'type': 'http', 'headers': []}), uid='synthetic'
+        )
+        assert response.subscription.plan == PlanType.unlimited
+        assert response.subscription.features == ['byok']
+        assert response.subscription.limits.insights_gained is None
+        assert response.phone_call_quota.has_access and response.phone_call_quota.is_paid
+        assert response.available_plans == [] and not response.show_subscription_ui
+        assert response.transcription_seconds_used == used
+        assert response.transcription_seconds_limit == (cap or 0)
+        assert response.subscription.limits.transcription_seconds == cap
+        assert response.transcription_allowance.remaining_seconds == (None if cap is None else max(0, cap - used))
 
     def test_usage_quota_requires_validated_desktop_provider_capability(self, monkeypatch):
         from models.users import PlanType
@@ -365,8 +407,12 @@ class TestBYOKMiddlewareValidation:
         assert response.status_code == 403
         assert not called
 
-    def test_mismatched_keys_reach_byok_recovery_routes_without_keys(self, monkeypatch):
-        from utils.byok import BYOKMiddleware, get_byok_keys
+    @pytest.mark.parametrize(
+        'path', ['/v1/users/me/subscription', '/v1/payments/available-plans', '/v1/users/budget-choice']
+    )
+    @pytest.mark.parametrize('header', ['X-BYOK-OpenAI', 'X-BYOK-Deepgram'])
+    def test_mismatched_keys_reach_byok_recovery_routes_without_keys(self, monkeypatch, path, header):
+        from utils.byok import BYOKMiddleware, get_byok_keys, get_byok_key
 
         async def run_blocking(_executor, function, *args):
             if function.__name__ == 'verify_token':
@@ -376,12 +422,13 @@ class TestBYOKMiddlewareValidation:
         monkeypatch.setattr('utils.byok.run_blocking', run_blocking)
         middleware = BYOKMiddleware(MagicMock())
         request = self._request(
-            {'Authorization': 'Bearer token', 'X-BYOK-OpenAI': 'sk-invalid'},
-            path='/v1/users/me/subscription',
+            {'Authorization': 'Bearer token', header: 'invalid-key'},
+            path=path,
         )
 
         async def call_next(_request):
             assert get_byok_keys() == {}
+            assert get_byok_key('deepgram') is None
             return 'recovery'
 
         assert __import__('asyncio').run(middleware.dispatch(request, call_next)) == 'recovery'
@@ -472,7 +519,6 @@ class TestCacheRouting:
             clients, 'get_byok_key', lambda provider: 'sk-ant-user-key' if provider == 'anthropic' else None
         )
         monkeypatch.setattr(clients, 'should_route_features_through_gateway', lambda: False)
-        monkeypatch.setattr(clients, 'maybe_wrap_dev_gateway_shadow', lambda **kwargs: kwargs['legacy_model'])
 
         assert clients.get_llm('memories') is client
         create_client.assert_called_once()
@@ -491,7 +537,6 @@ class TestCacheRouting:
             clients, 'get_byok_key', lambda provider: 'sk-ant-user-key' if provider == 'anthropic' else None
         )
         monkeypatch.setattr(clients, 'should_route_features_through_gateway', lambda: False)
-        monkeypatch.setattr(clients, 'maybe_wrap_dev_gateway_shadow', lambda **kwargs: kwargs['legacy_model'])
 
         assert clients.get_llm('memories', streaming=True) is client
         create_client.assert_called_once()
@@ -518,29 +563,21 @@ class TestCacheRouting:
         result = _create_byok_client('anthropic/claude-3.5-sonnet', 'openrouter', 'sk-or-key')
         assert result is not None
 
-    def test_legacy_openai_key_never_pairs_with_gemini_resolved_model(self, monkeypatch):
-        """A legacy OpenAI key must not be paired with a Gemini-resolved model.
-
-        'followup' resolves to a Gemini model in the BYOK QoS profile. When only a
-        legacy OpenAI key is present (no Gemini key), the fallback must select the
-        OpenAI-compatible fallback model — never hand the OpenAI credential to the
-        resolved Gemini model, which would be an incompatible model/provider
-        request at the provider.
-        """
+    def test_legacy_openai_key_uses_the_paid_luna_route(self, monkeypatch):
+        """A legacy OpenAI key must stay paired with an OpenAI-compatible model."""
         from utils.llm import clients
 
         create_client = MagicMock(return_value=MagicMock())
         monkeypatch.setattr(clients, '_create_byok_client', create_client)
-        # Only a legacy Gemini-resolved feature, but only an OpenAI key is attached.
+        # The managed feature is now Luna/OpenAI; only an OpenAI key is attached.
         monkeypatch.setattr(
             clients, 'get_byok_key', lambda provider: 'sk-legacy-openai' if provider == 'openai' else None
         )
         monkeypatch.setattr(clients, 'should_route_features_through_gateway', lambda: False)
-        monkeypatch.setattr(clients, 'maybe_wrap_dev_gateway_shadow', lambda **kwargs: kwargs['legacy_model'])
 
         assert clients.get_llm('followup') is not None
         args = create_client.call_args.args
-        assert args[0] == 'gpt-4o-mini', f"model must be OpenAI fallback, got {args[0]}"
+        assert args[0] == clients.get_model('followup'), f"model must stay on the Luna route, got {args[0]}"
         assert args[1] == 'openai', f"provider must stay openai, got {args[1]}"
         assert args[2] == 'sk-legacy-openai'
 
@@ -563,7 +600,6 @@ class TestCacheRouting:
             ),
         )
         monkeypatch.setattr(clients, 'should_route_features_through_gateway', lambda: False)
-        monkeypatch.setattr(clients, 'maybe_wrap_dev_gateway_shadow', lambda **kwargs: kwargs['legacy_model'])
 
         assert clients.get_llm('followup') is not None
         args = create_client.call_args.args

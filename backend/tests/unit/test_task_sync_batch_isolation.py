@@ -139,3 +139,12 @@ async def test_shared_configuration_failure_prevents_all_exports(cloud_batch, mo
     reason = 'integration_not_found' if connected is None else 'integration_not_connected'
     assert results == [{'synced': False, 'reason': reason}] * 3
     assert cloud_batch.reads == cloud_batch.creates == cloud_batch.writes == []
+
+
+@pytest.mark.parametrize(
+    "status_code, outcome",
+    [(400, "definite_error"), (401, "definite_error"), (429, "definite_error"), (500, "in_doubt"), (504, "in_doubt")],
+)
+def test_provider_http_status_classifies_retry_safety(status_code, outcome):
+    result = {"success": False, "error_code": "api_error", "status_code": status_code}
+    assert task_sync._provider_attempt_outcome(result) == outcome

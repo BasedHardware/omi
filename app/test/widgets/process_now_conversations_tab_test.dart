@@ -145,6 +145,20 @@ void main() {
     await tester.pump(const Duration(seconds: 1));
   });
 
+  testWidgets('with nothing heard, Finish saves nothing and stays on current Home tab', (tester) async {
+    final harness = await _pumpCapturingPage(tester, heard: false);
+    harness.home.setIndex(HomeProvider.tasksTab);
+
+    await _stopFromPage(tester, harness.capture);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+
+    expect(harness.capture.forceProcessingCalls, 0, reason: 'no empty Processing row');
+    expect(harness.home.selectedIndex, HomeProvider.tasksTab);
+    await tester.pump(const Duration(seconds: 1));
+    expect(find.byType(ConversationCapturingPage), findsNothing);
+  });
+
   testWidgets('switchHomeToConversationsTab returns to Home, where conversations live', (tester) async {
     final home = HomeProvider()..setIndex(HomeProvider.tasksTab);
     addTearDown(home.dispose);
@@ -174,17 +188,13 @@ void main() {
         localizationsDelegates: AppLocalizations.localizationsDelegates,
         supportedLocales: AppLocalizations.supportedLocales,
         home: Scaffold(
-          body: CustomScrollView(
-            slivers: [
-              getProcessingConversationsWidget([
-                ServerConversation(
-                  id: '0',
-                  createdAt: DateTime.utc(2026),
-                  structured: Structured('', '', emoji: ''),
-                  status: ConversationStatus.processing,
-                ),
-              ]),
-            ],
+          body: ProcessingConversationWidget(
+            conversation: ServerConversation(
+              id: '0',
+              createdAt: DateTime.utc(2026),
+              structured: Structured('', '', emoji: ''),
+              status: ConversationStatus.processing,
+            ),
           ),
         ),
       ),
@@ -204,14 +214,14 @@ Future<void> _stopFromPage(WidgetTester tester, CaptureProvider capture) async {
   await tester.pump();
 }
 
-Future<_Harness> _pumpCapturingPage(WidgetTester tester) async {
+Future<_Harness> _pumpCapturingPage(WidgetTester tester, {bool heard = true}) async {
   tester.view.physicalSize = const Size(800, 1600);
   tester.view.devicePixelRatio = 1.0;
   addTearDown(tester.view.resetPhysicalSize);
   addTearDown(tester.view.resetDevicePixelRatio);
 
   final home = HomeProvider()..setIndex(HomeProvider.tasksTab); // Finish must bring Home back.
-  final capture = _TrackingCaptureProvider()..segments = [_segment()];
+  final capture = _TrackingCaptureProvider()..segments = [if (heard) _segment()];
   addTearDown(home.dispose);
   addTearDown(capture.dispose);
 

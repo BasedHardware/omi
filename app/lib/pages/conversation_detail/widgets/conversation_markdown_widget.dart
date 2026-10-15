@@ -5,20 +5,31 @@ import 'package:markdown/markdown.dart' as md;
 
 import 'package:omi/ui/ui.dart';
 
-/// Vertical space above conversation-summary headers (#5622).
+/// Vertical space around conversation-summary headers (#5622; Omi v8 `.sum h4`: 26 above, 6 below).
 ///
 /// `flutter_markdown` defaults every `h*Padding` to zero, so #–######
 /// sections sat flush against the previous block. Keep list / paragraph
 /// spacing unchanged — only headers get this breathing room.
-const EdgeInsets conversationMarkdownHeaderPadding = EdgeInsets.only(top: 20, bottom: 8);
+const EdgeInsets conversationMarkdownHeaderPadding = EdgeInsets.only(top: 26, bottom: 6);
 
+/// Omi v8 `.sum`: 17/600 section headings in the primary ink over 17 pt words at a 1.5 line in 80 %
+/// ink, bullets 20 pt in.
 MarkdownStyleSheet _conversationMarkdownStyle(BuildContext context) {
-  final style = OmiType.callout.copyWith(height: 1.5);
+  final style = OmiType.body.copyWith(height: 1.5, color: OmiColors.textPrimary.withValues(alpha: 0.8));
+  final heading = OmiType.headline.copyWith(height: 1.3);
 
   return MarkdownStyleSheet.fromTheme(Theme.of(context)).copyWith(
     a: style,
     p: style.copyWith(height: 1.5),
     pPadding: const EdgeInsets.only(bottom: 12),
+    h1: heading,
+    h2: heading,
+    h3: heading,
+    h4: heading,
+    h5: heading,
+    h6: heading,
+    listBullet: style,
+    listIndent: 20,
     h1Padding: conversationMarkdownHeaderPadding,
     h2Padding: conversationMarkdownHeaderPadding,
     h3Padding: conversationMarkdownHeaderPadding,

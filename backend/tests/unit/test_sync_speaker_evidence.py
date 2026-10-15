@@ -228,3 +228,12 @@ def test_sync_owner_competition_is_decided_before_longest_first_reservation(
     assert [s.speaker_id for s in segments if s.is_user] == expected
     if not expected:
         assert all(s.speaker_identity_status == 'ambiguous' and s.person_id is None for s in segments)
+
+
+@pytest.fixture(autouse=True)
+def paid_named_speaker_entitlement(monkeypatch):
+    from utils.sync import speaker_identity
+    from routers.listen import speakers
+
+    monkeypatch.setattr(speaker_identity, 'named_speaker_prompts_allowed', lambda uid: True)
+    monkeypatch.setattr(speakers, 'named_speaker_prompts_allowed', lambda uid: True)

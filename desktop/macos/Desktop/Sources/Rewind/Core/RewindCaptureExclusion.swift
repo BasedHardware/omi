@@ -155,6 +155,7 @@ enum RewindCaptureExclusionGeneration {
       state.condition.wait()
     }
     state.condition.unlock()
+    NotificationCenter.default.post(name: .screenCaptureExclusionChanged, object: appName)
   }
 
   /// Seeds the in-memory state once during settings initialization.

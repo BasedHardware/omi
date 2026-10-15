@@ -22,24 +22,13 @@ import type {
   RewindSettings,
   RewindCaptureQuality,
   ScreenSynthState,
-  InsightSettings,
-  AssistantSettingsView
+  InsightSettings
 } from '../../../../../shared/types'
-
-// Preset cadences offered for proactive insights (minutes). Each run is a Gemini
-// call via Omi's proxy, so longer intervals mean less backend cost.
-const INSIGHT_INTERVALS = [15, 20, 30, 60]
 
 export function RewindTab(): React.JSX.Element {
   const [rewind, setRewind] = useState<RewindSettings | null>(null)
   const [screenSynth, setScreenSynth] = useState<ScreenSynthState | null>(null)
   const [insight, setInsight] = useState<InsightSettings | null>(null)
-  // Insight's OTHER gate. `InsightAssistant.isEnabled()` (main/assistants/insight)
-  // also requires a notification to be deliverable — master on AND frequency above
-  // Off — because Insight has no glow, so a run that can't notify is pure wasted
-  // spend. Frequency ships at 0 (Off), so out of the box this row reads "on" while
-  // the pipeline never runs. Read the same flags here to say so.
-  const [assistants, setAssistants] = useState<AssistantSettingsView | null>(null)
   // "Automatically suggest goals" (Wave C). null until the main-process value loads.
   const [goalAutoGen, setGoalAutoGen] = useState<boolean | null>(null)
   const [newExcluded, setNewExcluded] = useState('')
@@ -69,14 +58,6 @@ export function RewindTab(): React.JSX.Element {
     void window.omi.screenSynthGetState().then(setScreenSynth)
     void window.omi.insightGetSettings().then(setInsight)
     void window.omi.goalsGetAutoGeneration().then(setGoalAutoGen)
-  }, [])
-
-  // Separate effect: the notifications gate is broadcast (tray checkbox, the
-  // Notifications tab, a future backend sync), so this row has to stay in
-  // lock-step rather than read once on mount.
-  useEffect(() => {
-    void window.omi?.assistantsGetSettings?.().then(setAssistants)
-    return window.omi?.onAssistantSettingsChanged?.(setAssistants)
   }, [])
 
   const toggleGoalAutoGen = (on: boolean): void => {
@@ -109,23 +90,6 @@ export function RewindTab(): React.JSX.Element {
   const patchInsight = async (patch: Partial<InsightSettings>): Promise<void> => {
     setInsight(await window.omi.insightSetSettings(patch))
   }
-
-  // Mirrors notify.ts `notificationsActive`: master on AND frequency above Off.
-  // Null while the settings are still loading — no claim either way until then.
-  const insightsDeliverable =
-    assistants === null
-      ? null
-      : assistants.notificationsEnabled && assistants.notificationFrequency > 0
-  const insightsSilenced = !!insight?.enabled && insightsDeliverable === false
-
-  // Snap any legacy / out-of-range interval (e.g. an old 1- or 10-min value) to a
-  // valid preset, so the picker (15/20/30/60) and the engine stay in agreement.
-  useEffect(() => {
-    if (insight && !INSIGHT_INTERVALS.includes(insight.intervalMin)) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect -- intentional load-on-mount / reset-on-dependency-change; not a self-retriggering loop
-      void patchInsight({ intervalMin: 15 })
-    }
-  }, [insight])
 
   return (
     <>
@@ -362,44 +326,12 @@ export function RewindTab(): React.JSX.Element {
 
       <SettingRow
         icon={Lightbulb}
-        dot={insight?.enabled ? (insightsSilenced ? 'warn' : 'on') : 'off'}
-        title="Proactive insights"
-        subtitle="Periodically reviews recent screen activity and surfaces a single useful insight (choose the style below). Requires screen capture, and Notifications turned on with a frequency above Off."
-        keywords="notifications toast gemini suggestion frequency off silenced"
-        note={
-          insightsSilenced ? (
-            <span className="text-xs text-amber-400/90">
-              Notifications are off, so insights never run — a test notification still shows because
-              it bypasses this. Turn Notifications on and raise the frequency above Off in Settings
-              → Notifications.
-            </span>
-          ) : undefined
-        }
-        control={
-          <Toggle
-            on={!!insight?.enabled}
-            onChange={(on) => void patchInsight({ enabled: on })}
-            disabled={!insight}
-            label="Proactive insights"
-          />
-        }
+        title="Notification presentation"
+        subtitle="Choose how Omi displays notifications."
+        keywords="notifications style privacy"
       >
         {insight && (
           <div className="space-y-3">
-            <label className="flex items-center gap-2 text-sm text-text-secondary">
-              Check every
-              <select
-                value={INSIGHT_INTERVALS.includes(insight.intervalMin) ? insight.intervalMin : 15}
-                onChange={(e) => void patchInsight({ intervalMin: Number(e.target.value) })}
-                className="rounded-md bg-white/10 px-2 py-1.5 text-white focus:outline-none"
-              >
-                {INSIGHT_INTERVALS.map((m) => (
-                  <option key={m} value={m} className="bg-neutral-900">
-                    {m} minutes
-                  </option>
-                ))}
-              </select>
-            </label>
             <label className="flex items-center gap-2 text-sm text-text-secondary">
               Notification style
               <select
@@ -422,20 +354,7 @@ export function RewindTab(): React.JSX.Element {
             <button onClick={() => window.omi.insightTest()} className="btn-ghost self-start">
               Send a test notification
             </button>
-            <textarea
-              rows={2}
-              placeholder="Denylist — one app/site keyword per line (e.g. therapy, salary)"
-              defaultValue={insight.denylist.join('\n')}
-              onBlur={(e) =>
-                void patchInsight({
-                  denylist: e.target.value
-                    .split('\n')
-                    .map((s) => s.trim())
-                    .filter(Boolean)
-                })
-              }
-              className="w-full rounded-lg bg-white/10 px-3 py-2 text-sm text-text-secondary focus:outline-none"
-            />
+
           </div>
         )}
       </SettingRow>

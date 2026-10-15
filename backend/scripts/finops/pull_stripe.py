@@ -35,9 +35,15 @@ COUNTED_STATUSES = ("active", "trialing", "past_due")
 
 def auth_header() -> str:
     key = ""
-    for line in ENV.read_text().splitlines():
-        if line.startswith("STRIPE_API_KEY="):
-            key = line.split("=", 1)[1].strip().strip("\"'")
+    if os.environ.get("FINOPS_AUTH") == "cloudrun":
+        sys.path.insert(0, str(HERE))
+        from cloudrun import secret
+
+        key = secret("stripe")
+    else:
+        for line in ENV.read_text().splitlines():
+            if line.startswith("STRIPE_API_KEY="):
+                key = line.split("=", 1)[1].strip().strip("\"'")
     if not key:
         raise SystemExit("no STRIPE_API_KEY in %s" % ENV)
     return "Basic " + base64.b64encode((key + ":").encode()).decode()

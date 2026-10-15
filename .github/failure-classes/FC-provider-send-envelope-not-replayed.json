@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "id": "FC-provider-send-envelope-not-replayed",
+  "violated_contract": "A provider adapter must serialize the documented send envelope, and its fake transport must reject an invalid envelope. Unconditional successful fake receipts cannot establish that an accepted inbound webhook produces a user-visible reply.",
+  "canonical_prevention": "Replay the external send boundary with required envelope validation, then exercise linking and ordinary replies through the real parser, gateway, sink and adapter. Inject rejected final sends and verify visible failure, owning-task stream cleanup, typing stop and release of serialization while failed jobs remain fenced against replay.",
+  "canonical_prevention_artifact": [
+    "backend/testing/messaging/adapter_fakes.py",
+    "backend/tests/unit/test_messaging_adapters.py"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "backend/utils/messaging/adapters/",
+    "backend/tests/unit/test_messaging_adapters.py"
+  ],
+  "status": "open"
+}

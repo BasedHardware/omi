@@ -1,3 +1,4 @@
+import 'package:omi/services/recap_events.dart';
 import 'package:omi/env/physical_qualification.dart';
 import 'dart:async';
 import 'dart:io';
@@ -182,7 +183,7 @@ class _FCMNotificationService implements NotificationInterface {
   }
 
   @override
-  Future<void> createNotification({
+  Future<bool> createNotification({
     String title = '',
     String body = '',
     int notificationId = 1,
@@ -190,9 +191,10 @@ class _FCMNotificationService implements NotificationInterface {
   }) async {
     var allowed = await _awesomeNotifications.isNotificationAllowed();
     Logger.debug('createNotification: $allowed');
-    if (!allowed) return;
+    if (!allowed) return false;
     Logger.debug('createNotification ~ Creating notification: $title');
     showNotification(id: notificationId, title: title, body: body, wakeUpScreen: true, payload: payload);
+    return true;
   }
 
   @override
@@ -250,6 +252,7 @@ class _FCMNotificationService implements NotificationInterface {
         if (notificationType == 'plugin' || notificationType == 'daily_summary') {
           data['from_integration'] = data['from_integration'] == 'true';
           _serverMessageStreamController.add(ServerMessage.fromJson(data));
+          if (notificationType == 'daily_summary') announceRecapArrived();
         }
 
         // Click-to-talk / chat answers: BigText + navigate_to payload (#4375).

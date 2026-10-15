@@ -160,7 +160,7 @@ def test_current_session_resolves_to_the_newest(monkeypatch):
     # Replace the client outright: touching the real one reaches the metadata
     # server, which the hermetic-network guard blocks.
     monkeypatch.setattr(chat_db, 'db', _Db())
-    monkeypatch.setattr(chat_db, '_typed_doc', lambda doc: doc.to_dict())
+    monkeypatch.setattr(chat_db, 'typed_message_document', lambda doc: doc.to_dict())
 
     result = chat_db.get_chat_session('uid-1', app_id=None)
 

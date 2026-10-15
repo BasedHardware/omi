@@ -124,3 +124,29 @@ describe('runMigrations', () => {
     expect(columns(db, 'local_conversation')).toContain('sync_state')
   })
 })
+
+
+describe('proactivity retirement migration', () => {
+  it('drops only retired tables and preserves KEEP data on upgrade and retry', () => {
+    const db = new DatabaseSync(':memory:')
+    db.exec(OLD_SCHEMA)
+    runMigrations(db, MIGRATIONS.slice(0, 2))
+    const retired = ['jit_trigger_mirror', 'jit_snapshot_receipt', 'jit_wakeup_receipt', 'jit_proactivity_reservation_receipt', 'jit_ambient_context_state', 'jit_feedback_outbox', 'jit_installation_identity']
+    const kept = ['jit_fact_mirror', 'jit_history_mirror', 'jit_playbook_mirror',
+      'jit_alias_mirror', 'jit_ledger_mirror_receipt', 'jit_keyframe_pin',
+      'jit_keyframe_cleanup_outbox', 'rewind_frames', 'focus_session', 'insight_history']
+    for (const table of [...retired, ...kept]) {
+      db.exec(`CREATE TABLE ${table} (id TEXT PRIMARY KEY); INSERT INTO ${table} VALUES ('sentinel')`)
+    }
+    expect(runMigrations(db)).toBe(1)
+    expect(runMigrations(db)).toBe(0)
+    for (const table of retired) {
+      expect(db.prepare('SELECT name FROM sqlite_master WHERE name = ?').get(table)).toBeUndefined()
+    }
+    for (const table of kept) {
+      expect(db.prepare(`SELECT id FROM ${table}`).get()).toEqual({ id: 'sentinel' })
+    }
+    expect(db.prepare('PRAGMA foreign_key_check').all()).toEqual([])
+    db.close()
+  })
+})

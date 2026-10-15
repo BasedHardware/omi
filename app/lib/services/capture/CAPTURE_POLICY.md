@@ -90,3 +90,43 @@ Future OS-level stop acknowledgements should extend this policy boundary and
 report requested versus applied revision. Preference persistence must never be
 relabeled as proof that an OS microphone has stopped. Full recovery ownership
 convergence remains described in `OWNERSHIP.md`.
+
+## Tiered pendant uplink
+
+Automatic silence pause is disabled under INV-CAP-1. Current firmware discards
+sampled frames while connected with no audio subscriber, so a transcript deadline
+cannot authorize cancelling the BLE subscription or closing the listen socket.
+The timer is not armed and queued expiry events have no effects. Conversation
+silence settings still reach the server for segmentation.
+
+`uplinkSilencePaused` is retained only to recover historical #20837 state.
+Startup clears that automatic mute through the serialized capture owner; a newer
+explicit user pause clears the marker and remains authoritative. Foreground and
+charge-start recovery of a historical marker still respect the sync fence.
+Manual pendant pause and phone microphone pause keep their existing behavior.
+A future pause needs an advertised, verified retention and drain capability; there
+is no opt-in that bypasses that requirement on current firmware.
+
+A committed, unmuted live pendant session must have connected transports or
+active transport reconciliation whenever no sync scope is active. Resume
+controls defer dispatch during a scope to avoid unnecessary work, but that gap
+is not an admission guarantee: coalesced passes can raise another scope before
+startup finishes. Every fenced socket/audio attempt records one coalesced
+reconciliation demand. After scope drop and capture commit, it rechecks current
+ownership and pause state, ensures the missing transports, and re-arms the
+existing keepalive. A new scope re-fences the attempt and records demand again.
+Reconciliation never writes policy, mints a session, or adds a retry timer.
+Disposal or a newer paused/non-pendant state cancels admission.
+
+The first successful charging observation inherits its connection's initial
+resume gate. A connection admitted only for sync observes without resuming;
+an authorized connection retains its charge edge even if another scope has
+since started, and capture defers/reconciles the transport work above.
+
+Periodic sync is a bounded backlog pass through RecordingTransferCoordinator.
+It permits device discovery but fences live socket/audio starts, and expiration
+cancels transfer work. iOS BGAppRefresh eligibility is opportunistic, with no hourly
+promise. The current iOS bridge supports a suspended existing engine; cold-process
+grants cannot safely bootstrap the UI-owned WAL/account graph and exit without
+starting capture. Android reuses the existing foreground-task repeat callback and
+main isolate. Neither platform starts a second capture engine for sync.

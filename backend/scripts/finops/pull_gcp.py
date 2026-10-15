@@ -31,7 +31,15 @@ import sys
 
 HERE = pathlib.Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
-from gcpauth import READONLY_ENV, assert_readonly_identity, PROJECT  # noqa: E402
+AUTH_MODE = os.environ.get("FINOPS_AUTH", "local")  # 'local' (laptop cron) | 'cloudrun'
+if AUTH_MODE == "cloudrun":
+    import cloudrun  # noqa: E402
+
+    assert_readonly_identity = cloudrun.assert_runtime_identity
+    PROJECT = cloudrun.PROJECT
+    READONLY_ENV = None  # no env script in Cloud Run; bq runs through bq_stub
+else:
+    from gcpauth import READONLY_ENV, assert_readonly_identity, PROJECT  # noqa: E402
 
 TABLE = "based-hardware.gcp_billing_export.gcp_billing_export_resource_v1_01B287_9348DC_02D256"
 MAX_BYTES = 2147483648  # 2 GiB ceiling per query
@@ -65,6 +73,27 @@ def classifier(events_path: pathlib.Path) -> str:
 
 def bq(sql: str, out: pathlib.Path, label: str, max_rows: int = 100000) -> dict:
     job_id = "finops_%s_%d" % (label, int(dt.datetime.now().timestamp()))
+    if AUTH_MODE == "cloudrun":
+        stub = HERE / "bq_stub.py"
+        cmd = [
+            sys.executable,
+            str(stub),
+            "query",
+            "--project_id=%s" % PROJECT,
+            "--job_id=%s" % job_id,
+            "--maximum_bytes_billed=%d" % MAX_BYTES,
+            "--use_legacy_sql=false",
+            "--format=json",
+            "--max_rows=%d" % max_rows,
+        ]
+        p = subprocess.run(cmd, input=sql, capture_output=True, text=True, timeout=1800)
+        if p.returncode != 0:
+            raise SystemExit("bq query %s failed:\n%s" % (label, p.stderr[-2000:]))
+        out.write_text(p.stdout)
+        billed = None
+        n = len(json.loads(p.stdout or "[]"))
+        sys.stderr.write("  %-22s rows=%-6d billed=%s bytes  -> %s\n" % (label, n, billed, out.name))
+        return {"job_id": job_id, "rows": n, "bytes_billed": billed}
     cmd = (
         'source "%s" >/dev/null 2>&1; '
         "bq query --project_id=%s --job_id=%s --maximum_bytes_billed=%d "

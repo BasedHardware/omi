@@ -325,6 +325,7 @@ jobs:
             -c.win.azureSignOptions.endpoint="$AZURE_ENDPOINT" \
             -c.win.azureSignOptions.certificateProfileName="$AZURE_PROFILE" \
             -c.win.azureSignOptions.codeSigningAccountName="$AZURE_ACCOUNT"
+          pnpm verify:packaged-main
 
       - name: Build unsigned installer
         if: steps.signing.outputs.signed != 'true'

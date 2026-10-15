@@ -186,7 +186,8 @@ def test_existing_sync_target_preserves_explicit_identity():
 
 
 @pytest.mark.parametrize('field,value', [('source', 'desktop'), ('client_device_id', 'other'), ('is_locked', True)])
-def test_empty_explicit_target_rejects_provenance_mismatch(field, value):
+def test_empty_explicit_target_rejects_provenance_mismatch(monkeypatch, field, value):
+    monkeypatch.setenv('SYNC_ASSIGNMENT_RECOVERY_ENABLED', 'off')
     store = StrictFirestore()
     target = live_stub('live', 1000)
     target[field] = value

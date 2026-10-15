@@ -1,6 +1,5 @@
 import { Events } from '@/src/types/memory.types';
-import { parseTime } from '@/src/utils/parseTime';
-import moment from 'moment';
+import { eventFacts } from '@/src/lib/shared-note.mjs';
 
 interface MemoryEventsProps {
   events: Events[];
@@ -10,22 +9,24 @@ export default function MemoryEvents({ events }: MemoryEventsProps) {
     <div>
       <h2 className="sn-h3">Events</h2>
       <ul className="sn-events">
-        {events.map((event, index) => (
-          <li key={index} className="sn-event">
-            <p className="sn-event-title">{event.title}</p>
-            <div className="sn-event-meta">
-              <span>{moment(event.start).format('MMMM Do YYYY')}</span>
-              <span>
-                {moment(event.start).format('h:mm a')} -{' '}
-                {moment(event.start).add(event.duration, 'minutes').format('h:mm a')} (
-                {parseTime(event.duration.toString()).trim()})
-              </span>
-            </div>
-            {event.description ? (
-              <p className="sn-event-desc">{event.description}</p>
-            ) : null}
-          </li>
-        ))}
+        {events.map((event, index) => {
+          const { title, description, start, end, duration } = eventFacts(event);
+          return (
+            <li key={index} className="sn-event">
+              <p className="sn-event-title">{title || 'Untitled event'}</p>
+              <div className="sn-event-meta">
+                {start ? (
+                  <time dateTime={start.iso}>{start.label}</time>
+                ) : (
+                  <span>Time unknown</span>
+                )}
+                {end ? <time dateTime={end.iso}>{end.label}</time> : null}
+                {duration ? <span>{duration}</span> : null}
+              </div>
+              {description ? <p className="sn-event-desc">{description}</p> : null}
+            </li>
+          );
+        })}
       </ul>
     </div>
   );

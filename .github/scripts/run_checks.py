@@ -190,7 +190,11 @@ def validate_manifest(manifest: Manifest, root: Path) -> list[str]:
         for pattern in check.triggers:
             if not pattern or pattern.count("[") != pattern.count("]"):
                 errors.append(f"{check.id}: invalid trigger glob: {pattern!r}")
-            elif pattern != "all" and not glob.has_magic(pattern) and not (root / pattern).exists():
+            elif (
+                pattern not in {"all", "@firestore-index-guard"}
+                and not glob.has_magic(pattern)
+                and not (root / pattern).exists()
+            ):
                 errors.append(f"{check.id}: explicit trigger path does not exist: {pattern}")
         if not check.lanes:
             errors.append(f"{check.id}: lanes must not be empty")
@@ -244,17 +248,33 @@ def changed_files(root: Path, base: str, head: str, include_worktree: bool = Fal
     )
     if include_worktree and head == "HEAD":
         files.update(run_git(root, "diff", "--name-only", "--no-renames", "--diff-filter=ACMRTD", "HEAD").splitlines())
-        files.update(run_git(root, "diff", "--name-only", "--no-renames", "--diff-filter=ACMRTD", "--cached").splitlines())
+        files.update(
+            run_git(root, "diff", "--name-only", "--no-renames", "--diff-filter=ACMRTD", "--cached").splitlines()
+        )
         files.update(run_git(root, "ls-files", "--others", "--exclude-standard").splitlines())
     return sorted(path for path in files if path)
 
 
 def trigger_matches(pattern: str, path: str) -> bool:
+    if pattern == "@firestore-index-guard":
+        # The backend selector owns both the inventory scope and guard inputs.
+        # It and its inventory imports are stdlib-only; selection needs no venv.
+        backend_scripts = Path(__file__).resolve().parents[2] / "backend/scripts"
+        if str(backend_scripts) not in sys.path:
+            sys.path.insert(0, str(backend_scripts))
+        from select_backend_unit_tests import is_firestore_index_guard_path
+
+        return is_firestore_index_guard_path(path)
     if pattern == "all":
         return True
     if pattern.endswith("/**") and path.startswith(pattern[:-3].rstrip("/") + "/"):
         return True
-    if fnmatch.fnmatchcase(path, pattern) or PurePath(path).match(pattern):
+    if fnmatch.fnmatchcase(path, pattern):
+        return True
+    # Path.match treats a slash-free pattern as a final-component glob, so a
+    # trigger written as `package.json` also selects `web/frontend/package.json`.
+    # A literal trigger names one repo path. Glob patterns still use Path.match.
+    if ("/" in pattern or glob.has_magic(pattern)) and PurePath(path).match(pattern):
         return True
     if "/**/" in pattern and fnmatch.fnmatchcase(path, pattern.replace("/**/", "/")):
         return True
@@ -418,9 +438,20 @@ def command_for_host(
     platform_name: str | None = None,
     python_executable: str | None = None,
 ) -> list[str]:
-    """Resolve manifest interpreter aliases through the active Windows toolchain."""
+    """Resolve manifest interpreter aliases through the active toolchain.
+
+    On Windows, `python3`/`bash` must route through Git's toolchain. On POSIX
+    hosts the manifest's `python3` alias also honors an explicit
+    `python_executable`, so a host whose PATH `python3` is Xcode CLT 3.9 runs
+    manifest checks under the >= 3.10 interpreter the dev harness selected
+    instead of crashing on PEP 604 unions at module scope.
+    """
     platform = platform_name or os.name
-    if platform != "nt" or not command:
+    if not command:
+        return command
+    if platform != "nt":
+        if command[0] == "python3" and python_executable:
+            return [python_executable, *command[1:]]
         return command
     if command[0] == "bash":
         return [bash_executable(platform_name=platform), *command[1:]]
@@ -454,7 +485,7 @@ def execute_checks(
             pr_body_file=pr_body_file,
             skip_changelog=skip_changelog,
         )
-        command = command_for_host(command)
+        command = command_for_host(command, python_executable=sys.executable)
         returncode = subprocess.run(command, cwd=root, check=False).returncode
         status = "PASS" if returncode == 0 else "FAIL"
         print(f"<== {status} {check.id} ({time.monotonic() - started:.2f}s)", flush=True)

@@ -33,3 +33,8 @@ abstract class DeviceTransport {
 }
 
 enum DeviceTransportState { disconnected, connecting, connected, disconnecting }
+
+/// Observable subscription outcomes for transports that confirm notifications.
+abstract interface class CaptureSubscriptionErrors {
+  Stream<Object> get audioSubscriptionErrors;
+}

@@ -1,20 +1,23 @@
 import base64
 import hashlib
 import hmac
+import inspect
 import json
 import logging
 import time
 import uuid
 from datetime import datetime, timezone
+from functools import wraps
 from typing import Any, Callable, Dict, List, Literal, Optional, Tuple, cast
 
 import database._client as db_client_module
-from database.legal_holds import DestructiveOperationInProgress
+from database.legal_holds import DestructiveGateTakeover, DestructiveOperationInProgress, LegalHoldAuthorityUnavailable
 from utils.executors import db_executor, llm_executor, postprocess_executor, run_blocking, submit_with_context
 from utils.other.account_gate_http import account_gate_busy_http_exception
 
 from fastapi import APIRouter, Body, Depends, Header, HTTPException, Query, Request, Response
 from fastapi.responses import JSONResponse
+from fastapi.routing import APIRoute
 from pydantic import BaseModel, Field
 
 from database.memory_imports import ingest_memory_import_batch
@@ -23,6 +26,7 @@ from models.memories import MemoryDB, Memory, MemoryCategory
 from models.memory_imports import MemoryImportBatchRequest, MemoryImportBatchResponse
 from utils.apps import update_personas_async
 from utils.memory.memory_service import (
+    MEMORY_LIST_SCAN_BUDGET_DETAIL,
     MemoryBackingStoreUnavailable,
     MemoryPayload,
     MemoryService,
@@ -56,7 +60,62 @@ from utils.other import endpoints as auth
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter()
+
+class MemoriesRoute(APIRoute):
+    """Log every handler-emitted 503, including cursor and mutation paths."""
+
+    def __init__(self, path: str, endpoint: Callable[..., Any], **kwargs: Any) -> None:
+        # include_router reconstructs APIRoutes with the already wrapped endpoint.
+        # Preserve one log per failure across nested router registration.
+        if getattr(endpoint, '_memories_503_logged', False):
+            super().__init__(path, endpoint, **kwargs)
+            return
+        signature = inspect.signature(endpoint)
+
+        def log_failure(exc: HTTPException, started: float, args: tuple[Any, ...], call_kwargs: dict[str, Any]) -> None:
+            if exc.status_code != 503:
+                return
+            uid = signature.bind_partial(*args, **call_kwargs).arguments.get('uid')
+            fields = {
+                'event': 'memories_503',
+                'endpoint': path,
+                'uid_hashed': hashlib.sha256(str(uid).encode()).hexdigest()[:16] if uid else 'unknown',
+                'exception_class': type(exc.__cause__ or exc).__name__,
+                'elapsed_ms': round((time.monotonic() - started) * 1000, 2),
+            }
+            logger.error('memories_503 %s', json.dumps(fields, sort_keys=True), extra=fields)
+
+        wrapped: Callable[..., Any]
+        if inspect.iscoroutinefunction(endpoint):
+
+            @wraps(endpoint)
+            async def async_wrapped(*args: Any, **call_kwargs: Any) -> Any:
+                started = time.monotonic()
+                try:
+                    return await endpoint(*args, **call_kwargs)
+                except HTTPException as exc:
+                    log_failure(exc, started, args, call_kwargs)
+                    raise
+
+            wrapped = async_wrapped
+        else:
+
+            @wraps(endpoint)
+            def sync_wrapped(*args: Any, **call_kwargs: Any) -> Any:
+                started = time.monotonic()
+                try:
+                    return endpoint(*args, **call_kwargs)
+                except HTTPException as exc:
+                    log_failure(exc, started, args, call_kwargs)
+                    raise
+
+            wrapped = sync_wrapped
+
+        setattr(wrapped, '_memories_503_logged', True)
+        super().__init__(path, wrapped, **kwargs)
+
+
+router = APIRouter(route_class=MemoriesRoute)
 _auth_module = cast(Any, auth)
 
 
@@ -778,13 +837,23 @@ def get_memories(
                 as_of=as_of,
             )
         except MemoryBackingStoreUnavailable as exc:
-            # First page must succeed whenever the legacy offset read can serve
-            # it. Catch the typed backing-store failure — not detail strings —
-            # so a renamed or newly added unavailable message still degrades
-            # instead of escaping as a hard 503. The cursor path, both keyset
-            # scans, and the scan-row budget all raise this type. Unrelated
-            # errors (4xx, other 503s) propagate. The fallback runs on the
-            # SAME request budget, never a fresh unbudgeted window (#11831).
+            if exc.detail == MEMORY_LIST_SCAN_BUDGET_DETAIL:
+                # The keyset walk already holds the honest prefix. Do not
+                # restart through the offset reader: that path used to stream
+                # the entire canonical collection and return an empty 200 when
+                # the request budget died (#11831).
+                logger.warning(
+                    "memories first-page keyset scan budget exhausted; not falling back to offset read stream=%s",
+                    exc.stream,
+                )
+                return _finalize([], truncated=True, next_cursor=None)
+            # Other backing-store failures (cursor secret, a historical index
+            # still building) may still use the offset reader. That reader
+            # walks the canonical keyset and the budgeted historical index —
+            # never the unbounded canonical collection stream. Catch the typed
+            # failure, not detail strings, so a renamed unavailable message
+            # still degrades. Unrelated errors propagate. The fallback runs on
+            # the SAME request budget, never a fresh unbudgeted window.
             record_fallback(
                 component='firestore_read',
                 from_mode='cursor_page',
@@ -970,14 +1039,20 @@ def resolve_memory_review_item(
 ):
     if request.decision not in ('accept', 'reject', 'correct', 'timeout'):
         raise HTTPException(status_code=400, detail='Invalid review decision')
-    result = review_queue.resolve_review_conflict(
-        uid,
-        review_id,
-        request.decision,
-        correction=request.correction,
-        reason=request.reason,
-        current_veracity=request.current_veracity,
-    )
+    try:
+        result = review_queue.resolve_review_conflict(
+            uid,
+            review_id,
+            request.decision,
+            correction=request.correction,
+            reason=request.reason,
+            current_veracity=request.current_veracity,
+        )
+    except (DestructiveGateTakeover, DestructiveOperationInProgress, LegalHoldAuthorityUnavailable) as exc:
+        # A canonical reject/drop revalidates the destructive gate after its
+        # tombstone commit; a concurrent same-kind deletion that rotated the
+        # token must surface as the retryable account-gate response, not 500.
+        raise account_gate_busy_http_exception() from exc
     if result.get('status') == 'not_found':
         raise HTTPException(status_code=404, detail='Review item not found')
     return result
@@ -1016,7 +1091,7 @@ def delete_memories_batch(
     except HTTPException:
         # Preserve service-owned 402/404/413 mappings and observability details.
         raise
-    except DestructiveOperationInProgress as exc:
+    except (DestructiveGateTakeover, DestructiveOperationInProgress, LegalHoldAuthorityUnavailable) as exc:
         raise account_gate_busy_http_exception() from exc
     except ValueError:
         raise HTTPException(status_code=404, detail='Memory not found')
@@ -1034,7 +1109,7 @@ def delete_memory(
 ):
     try:
         MemoryService(db_client=getattr(db_client_module, 'db', None)).delete(uid, memory_id)
-    except DestructiveOperationInProgress as exc:
+    except (DestructiveGateTakeover, DestructiveOperationInProgress, LegalHoldAuthorityUnavailable) as exc:
         raise account_gate_busy_http_exception() from exc
     except ValueError:
         raise HTTPException(status_code=404, detail='Memory not found')
@@ -1054,10 +1129,13 @@ def delete_memories(
     http_request: Request = None,  # type: ignore[assignment]
 ):
     service = MemoryService(db_client=getattr(db_client_module, 'db', None))
-    if scope == 'default':
-        service.delete_default(uid)
-    else:
-        service.delete_all(uid)
+    try:
+        if scope == 'default':
+            service.delete_default(uid)
+        else:
+            service.delete_all(uid)
+    except (DestructiveGateTakeover, DestructiveOperationInProgress, LegalHoldAuthorityUnavailable) as exc:
+        raise account_gate_busy_http_exception() from exc
     record_product_event('memory_deleted', request=http_request)
     return {'status': 'ok'}
 

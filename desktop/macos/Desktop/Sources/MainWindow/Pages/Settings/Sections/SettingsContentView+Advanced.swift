@@ -22,6 +22,8 @@ extension SettingsContentView {
     VStack(spacing: OmiSpacing.xxl) {
       advancedCategoryHeader(title: "AI Setup", icon: "cpu")
       aiSetupSubsection
+      advancedCategoryHeader(title: "Connect an Agent", icon: "point.3.connected.trianglepath.dotted")
+      connectAgentSubsection
       // HIDDEN DELIBERATELY (Nik, 2026-08-25): the Task/Insight/Memory Assistant panes are
       // intentionally not rendered. This is product direction, not dead code — do NOT re-wire
       // them the way 73c7f85fbc ("give the three proactive assistants a pane you can reach")
@@ -52,7 +54,7 @@ extension SettingsContentView {
             advancedCategoryHeader(title: "Beta Diagnostics", icon: "waveform.path.ecg")
             betaDiagnosticsSubsection
           }
-          advancedCategoryHeader(title: "Developer API Keys", icon: "key")
+          advancedCategoryHeader(title: "Model Provider Keys", icon: "key")
           developerKeysSubsection
 
           if devModeEnabled {

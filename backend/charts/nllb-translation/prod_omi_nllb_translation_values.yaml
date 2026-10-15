@@ -149,3 +149,8 @@ volumes:
   - name: model-data
     emptyDir:
       sizeLimit: 2Gi
+
+# Route activation does not switch callers. Install the shared Gateway first.
+gateway:
+  enabled: true
+  name: prod-omi-internal-gateway

@@ -115,6 +115,73 @@ envFrom:
 runtimeConfigMapName: prod-omi-backend-config
 
 env:
+  - name: AUDIO_ARCHIVE_LIVE_ENABLED
+    value: "false"
+  - name: AUDIO_ARCHIVE_READ_ENABLED
+    value: "false"
+  - name: AUDIO_ARCHIVE_STOP_PCM_ENABLED
+    value: "false"
+  - name: AUDIO_ARCHIVE_SYNC_ENABLED
+    value: "false"
+  - name: AUDIO_ARCHIVE_REGIONAL_CACHE_ENABLED
+    value: "false"
+  - name: AUDIO_ARCHIVE_COALESCE_ENABLED
+    value: "false"
+  - name: AUDIO_ARCHIVE_SEPARATE_MERGE_ENABLED
+    value: "false"
+  - name: AUDIO_ARCHIVE_PERCENT
+    value: "0"
+  - name: AUDIO_ARCHIVE_UID_ALLOWLIST
+    value: ""
+  - name: BUCKET_AUDIO_DERIVED
+    value: ""
+  - name: AUDIO_MERGE_WORKER_URL
+    value: ""
+  # Bounded, process-local late identity repair coalescing; rollback with false.
+  - name: OWNER_IDENTITY_RETRY_COALESCE_ENABLED
+    value: "true"
+  - name: DREAM_AGENT_ENABLED
+    value: 'true'
+  - name: DREAM_AGENT_ELIGIBILITY
+    value: 'all'
+  # Public client token for v2 cohort reads only; shared backend PostHog stays disabled.
+  - name: PROACTIVITY_V2_POSTHOG_TOKEN
+    value: "phc_z3qUFhGUgYIOMYnfxVSrLmYISQvbgph8iREQv3sez3Y"
+  - name: PROACTIVITY_V2_POSTHOG_HOST
+    value: "https://us.posthog.com"
+  - name: FIRESTORE_READ_LEDGER
+    value: "1"
+  - name: PROACTIVITY_REDIS_HOST
+    valueFrom:
+      configMapKeyRef:
+        name: prod-omi-backend-config
+        key: REDIS_DB_HOST
+  - name: PROACTIVITY_REDIS_PASSWORD
+    valueFrom:
+      secretKeyRef:
+        name: prod-omi-backend-secrets
+        key: REDIS_DB_PASSWORD
+  - name: PROACTIVITY_REDIS_PORT
+    value: "13151"
+  - name: MENTOR_PIPELINE
+    value: cohort
+  - name: POSTHOG_HOST
+    value: https://us.posthog.com
+  - name: POSTHOG_PROJECT_API_KEY
+    valueFrom:
+      secretKeyRef:
+        name: prod-omi-backend-secrets
+        key: POSTHOG_PROJECT_API_KEY
+  - name: ACTION_ITEM_REFRESH_PRESERVE_ENABLED
+    value: "true"
+  - name: CONVERSATION_SMART_MERGE_FLATTEN_ENABLED
+    value: "true"
+  - name: CONVERSATION_SMART_MERGE_WALLCLOCK_GAP_MODE
+    value: "shadow"
+  - name: LISTEN_COMMITTED_CAPTURE_COVERAGE_ENABLED
+    value: "true"
+  - name: CAPTURE_GROUP_CONTAINMENT_MODE
+    value: "shadow"
   - name: FREE_TIER_LOCAL_PROCESSING
     value: "false"
   - name: FREE_TIER_EMERGENCY_STOP
@@ -151,6 +218,29 @@ env:
   # existing v1 sessions and resumed v1 conversations are unaffected.
   - name: AUDIO_TIMELINE_V2
     value: "false"
+  - name: AUDIO_TIMELINE_SPANS
+    value: "true"
+  - name: LIVE_SPEAKER_SPAN_RESOLUTION
+    value: "true"
+  - name: LIVE_CAPTURE_WINDOW_RETENTION
+    value: 'false'
+  - name: LIVE_CAPTURE_WINDOW_STRICT_PROJECTION
+    value: 'false'
+  - name: LIVE_CAPTURE_WINDOW_MERGE_PRESERVATION
+    value: 'false'
+  - name: LIVE_CAPTURE_WINDOW_MERGE_UNION
+    value: 'true'
+  - name: LIVE_CAPTURE_WINDOW_TRANSLATOR_SENDS
+    value: "true"
+  - name: SONIOX_WIRE_LEDGER
+    value: "true"
+  - name: SONIOX_ORDERED_FINALIZE
+    value: "false"
+  - name: SONIOX_CAPTURE_AXIS_DIAGNOSTICS
+    value: "true"
+  # Inert co-host mirror of backend-listen; pusher does not run the S1 producer.
+  - name: CAPTURE_EVIDENCE_V1_DARK_WRITE
+    value: "true"
   - name: OMI_LLM_GATEWAY_FEATURE_MODE
     value: "gateway"
   - name: OMI_LLM_CHAT_AGENT_ROUTE
@@ -172,19 +262,51 @@ env:
     value: "false"
   # Shared process_conversation rollout flags. Must match backend-listen in this
   # environment — pusher hosts the same finalizer after 2026-08-30.
-  - name: CONVERSATION_NOTES_V2_ENABLED
+  # Cached-evidence shadow only; authoritative grouping stays incumbent.
+  - name: SPEAKER_GROUPING_SHADOW
+    value: "cohort"
+  - name: SPEAKER_GROUPING_SHADOW_PERCENT
+    value: "10"
+  - name: SPEAKER_GROUPING_SHADOW_UID_ALLOWLIST
+    value: "vi7SA9ckQCe4ccobWNxlbdcNdC23"
+  - name: SPEAKER_GROUPING_MODE
+    value: "incumbent"
+  - name: SPEAKER_MATCH_SCORES_ENABLED
     value: "true"
+  - name: OMI_SHAPED_AGENT_MODE
+    value: "on"
   - name: CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED
-    value: "false"
+    value: "true"
   - name: CONVERSATION_OCR_CONTEXT_ENABLED
-    value: "false"
-  - name: MEETING_NOTES_RICH_CONTEXT_ENABLED
-    value: "false"
-  - name: MEETING_NOTES_SCREEN_TEXT_CONTEXT_ENABLED
-    value: "false"
+    value: "true"
+  - name: MEETING_NOTES_SCREEN_FRAMES_CONTEXT_ENABLED
+    value: "true"
+  - name: BUCKET_SCREEN_FRAMES
+    value: "based-hardware-prod-screen-frames"
+  - name: MEETING_NOTES_EVIDENCE_WAIT_SECONDS
+    value: "25"
   - name: BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED
     value: "false"
-  # Phase-1 final-pass shadow runs only for the owner UID on this pusher.
+  # Activate only after isolated batch install, metric and VPC route qualification.
+  - name: HOSTED_DIARIZATION_API_URL
+    value: "http://172.16.160.20/diarizer-batch"
+  - name: TRANSCRIPTION_FINAL_PASS_DIARIZER
+    value: "pyannote_shadow"
+  - name: TRANSCRIPTION_FINAL_PASS_BACKEND
+    value: "pyannote"
+  - name: TRANSCRIPTION_FINAL_PASS_UID_ALLOWLIST
+    value: "vi7SA9ckQCe4ccobWNxlbdcNdC23"
+  - name: TRANSCRIPTION_FINAL_PASS_PERCENT
+    value: "1"
+  - name: TRANSCRIPTION_FINAL_PASS_AUTHORITATIVE
+    value: "true"
+  - name: TRANSCRIPTION_SYNC_FINAL_PASS_HOURLY_AUDIO_HOURS
+    value: "10"
+  - name: TRANSCRIPTION_SYNC_FINAL_PASS_HOURLY_REQUESTS
+    value: "1000"
+  - name: TRANSCRIPTION_FINAL_PASS_SYNC_ENABLED
+    value: "true"
+  # Complete stage C: 1% cohort plus the owner UID, bounded by the daily cap.
   - name: TRANSCRIPTION_SHADOW_ENABLED
     value: "true"
   - name: TRANSCRIPTION_SHADOW_KILL_SWITCH
@@ -192,9 +314,27 @@ env:
   - name: TRANSCRIPTION_SHADOW_UID_ALLOWLIST
     value: "vi7SA9ckQCe4ccobWNxlbdcNdC23"
   - name: TRANSCRIPTION_SHADOW_PERCENT
-    value: "0"
-  - name: TRANSCRIPTION_SHADOW_DAILY_AUDIO_HOURS
     value: "1"
+  - name: TRANSCRIPTION_SHADOW_DAILY_AUDIO_HOURS
+    value: "80"
+  - name: CONVERSATION_RELEVANCE_JEV_SHADOW_PERCENT
+    value: "100"
+  - name: MEMORY_OWNER_JEV_SHADOW_PERCENT
+    value: "100"
+  - name: CONVERSATION_RELEVANCE_KEEP_ALL_PERCENT
+    value: "0"
+  - name: CONVERSATION_RELEVANCE_JEV_RESCUE
+    value: "shadow"
+  - name: CONVERSATION_RELEVANCE_JEV_ENABLED
+    value: "true"
+  - name: CONVERSATION_RELEVANCE_JEV_PERCENT
+    value: "100"
+  - name: NOTES_TIER_ESCALATION_ENABLED
+    value: 'true'
+  - name: CONVERSATION_RELEVANCE_JEV_SHADOW_DAILY_CAP
+    value: "60000"
+  - name: MEMORY_OWNER_JEV_SHADOW_DAILY_CAP
+    value: "60000"
   - name: CAPTURE_JEV_SHADOW_ENABLED
     value: "true"
   - name: CAPTURE_JEV_SHADOW_UID_ALLOWLIST
@@ -212,7 +352,7 @@ env:
         name: prod-omi-backend-secrets
         key: GROQ_API_KEY
   - name: HOSTED_SPEAKER_EMBEDDING_API_URL
-    value: "http://diarizer.omi.me:80"
+    value: "http://172.16.160.20/diarizer"
   - name: PINECONE_API_KEY
     valueFrom:
       secretKeyRef:
@@ -239,8 +379,7 @@ env:
       secretKeyRef:
         name: prod-omi-backend-secrets
         key: ADMIN_KEY
-  # Shared Deepgram credential: this deployment reaches self-hosted dg.omi.me,
-  # while backend-listen uses the hosted API with the same key.
+  # Retain the cloud/BYOK credential; self-hosted Deepgram is retired.
   - name: DEEPGRAM_API_KEY
     valueFrom:
       secretKeyRef:
@@ -343,9 +482,7 @@ env:
         name: prod-omi-backend-secrets
         key: TYPESENSE_API_KEY
   - name: DEEPGRAM_SELF_HOSTED_ENABLED
-    value: "true"
-  - name: DEEPGRAM_SELF_HOSTED_URL
-    value: "https://dg.omi.me"
+    value: "false"
   - name: HOSTED_PARAKEET_API_URL
     value: "http://parakeet.omi.me"
   - name: STT_PRERECORDED_MODEL
@@ -495,6 +632,8 @@ volumeMounts: []
 #   mountPath: "/etc/foo"
 #   readOnly: true
 
+# Placement uses service/env labels, not pool names or CPU family.
+# New N4 and qualified N2 fallback pools retain the affinity labels below.
 nodeSelector: {}
 
 tolerations: []

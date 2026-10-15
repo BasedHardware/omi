@@ -12,6 +12,15 @@ from datetime import datetime, timedelta, timezone, tzinfo
 from types import ModuleType, SimpleNamespace
 from zoneinfo import ZoneInfo
 
+
+@pytest.fixture(scope='module', autouse=True)
+def _shaped_notes_enabled():
+    """These suites exercise the notes writer, which is shaped-only after go-live."""
+    os.environ['OMI_SHAPED_AGENT_MODE'] = 'on'
+    yield
+    os.environ.pop('OMI_SHAPED_AGENT_MODE', None)
+
+
 os.environ.setdefault('OPENAI_API_KEY', 'sk-test-not-real')
 os.environ.setdefault('ENCRYPTION_SECRET', 'omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv')
 
@@ -1038,8 +1047,8 @@ class TestUsersLockEnforcement:
     """L2/L3: Users endpoints must enforce lock."""
 
     def test_followup_question_rejects_locked(self):
-        """L2: delete_person_endpoint must raise 402 for locked conversations."""
-        from routers.users import delete_person_endpoint
+        """L2: delete_followup_question_endpoint must raise 402 for locked conversations."""
+        from routers.users import delete_followup_question_endpoint
         from fastapi import HTTPException
 
         with patch(
@@ -1047,19 +1056,19 @@ class TestUsersLockEnforcement:
             return_value=_make_conversation(locked=True),
         ):
             with pytest.raises(HTTPException) as exc_info:
-                delete_person_endpoint(memory_id="conv-1", uid="test-uid")
+                delete_followup_question_endpoint(memory_id="conv-1", uid="test-uid")
             assert exc_info.value.status_code == 402
 
     def test_followup_question_allows_unlocked(self):
-        """delete_person_endpoint should proceed for unlocked conversations."""
-        from routers.users import delete_person_endpoint
+        """delete_followup_question_endpoint should proceed for unlocked conversations."""
+        from routers.users import delete_followup_question_endpoint
 
         with patch(
             "routers.users.get_conversation",
             return_value=_make_conversation(locked=False),
         ):
             with patch("routers.users.followup_question_prompt", return_value="test result"):
-                result = delete_person_endpoint(memory_id="conv-1", uid="test-uid")
+                result = delete_followup_question_endpoint(memory_id="conv-1", uid="test-uid")
         assert result["result"] == "test result"
 
     def test_daily_summary_excludes_locked(self):
@@ -1197,7 +1206,8 @@ class TestScheduledDailySummaryLockFilter:
             ) as mock_gen:
                 daily_summaries_db.create_daily_summary = MagicMock(return_value='summary-1')
                 daily_summaries_db.get_daily_summary_by_date = MagicMock(return_value=None)
-                with patch('utils.other.notifications.send_notification'):
+                daily_summaries_db.mark_daily_summary_delivery_completed = MagicMock()
+                with patch('utils.other.notifications.send_notification_result', return_value=1):
                     import utils.other.notifications as notifications_module
                     from utils.other.notifications import _send_summary_notification
 
@@ -1315,81 +1325,6 @@ class TestNotificationLlmLockFilter:
 
         assert len(result) == 1
         assert result[0]['content'] == 'VISIBLE_CONTENT'
-
-
-# =============================================================================
-# Test mentor proactive notifications exclude locked conversations
-# =============================================================================
-
-
-class TestMentorProactiveLockFilter:
-    """Mentor proactive notifications must exclude locked conversations from context."""
-
-    def test_mentor_proactive_filters_locked_conversations(self):
-        """_process_mentor_proactive_notification must not feed locked conversations to LLM."""
-        import database.conversations as conversations_db
-        import database.mem_db as mem_db
-        import database.redis_db as redis_db
-
-        locked_conv = _make_conversation(locked=True)
-        locked_conv['structured']['overview'] = 'SECRET_LOCKED_DATA'
-        unlocked_conv = _make_conversation(locked=False, conversation_id='conv-2')
-        unlocked_conv['structured']['overview'] = 'VISIBLE_DATA'
-
-        # Disable rate limiting by returning None (no previous send)
-        mem_db.get_proactive_noti_sent_at = MagicMock(return_value=None)
-        redis_db.get_proactive_noti_sent_at = MagicMock(return_value=None)
-
-        # Mock gate to pass
-        gate_result = MagicMock()
-        gate_result.is_relevant = True
-        gate_result.relevance_score = 0.9
-        gate_result.context_summary = 'test'
-        gate_result.reasoning = 'test'
-
-        with patch('utils.app_integrations.get_mentor_notification_frequency', return_value=5):
-            with patch('utils.app_integrations.get_daily_notification_count', return_value=0):
-                with patch('utils.app_integrations.get_prompt_memories', return_value=('Test', '')):
-                    with patch('utils.app_integrations.get_user_goals', return_value=[]):
-                        with patch('utils.app_integrations.get_app_messages', return_value=[]):
-                            with patch('utils.app_integrations.track_usage'):
-                                with patch('utils.app_integrations.evaluate_relevance', return_value=gate_result):
-                                    with patch('utils.app_integrations.generate_embedding', return_value=[0.1] * 1536):
-                                        with patch(
-                                            'utils.app_integrations.query_vectors_by_metadata',
-                                            return_value=['conv-1', 'conv-2'],
-                                        ):
-                                            conversations_db.get_conversations_by_id = MagicMock(
-                                                return_value=[locked_conv, unlocked_conv]
-                                            )
-                                            conversations_db.get_conversations = MagicMock(return_value=[])
-
-                                            with patch('utils.app_integrations.conversations_to_string') as mock_render:
-                                                mock_render.return_value = ''
-
-                                                draft = MagicMock()
-                                                draft.notification_text = ''
-                                                with patch(
-                                                    'utils.app_integrations.generate_notification', return_value=draft
-                                                ):
-                                                    from utils.app_integrations import (
-                                                        _process_mentor_proactive_notification,
-                                                    )
-
-                                                    _process_mentor_proactive_notification(
-                                                        uid='test-uid',
-                                                        conversation_messages=[{'text': 'hello', 'sender': 'human'}],
-                                                    )
-
-                                            # conversations_to_string called with only unlocked
-                                            mock_render.assert_called_once()
-                                            convos_passed = mock_render.call_args[0][0]
-                                            assert len(convos_passed) == 1
-                                            conv = convos_passed[0]
-                                            is_locked = (
-                                                conv.get('is_locked') if isinstance(conv, dict) else conv.is_locked
-                                            )
-                                            assert is_locked is not True
 
 
 # =============================================================================

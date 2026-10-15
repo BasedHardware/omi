@@ -71,13 +71,4 @@ enum ChatFeedbackReason: String, CaseIterable, Identifiable, Sendable {
   /// Only ever consulted for a proactive-notification rating (guarded by the
   /// caller), so the mobile-answer cases below are never actually reached —
   /// still handled explicitly so the switch stays exhaustive.
-  func interjectVerb() -> InterjectFeedbackVerb {
-    switch self {
-    case .notAboutMe, .notUseful, .alreadyDone: return .falsePositive
-    case .badTiming: return .snooze
-    case .wrongFacts: return .correction
-    case .incorrectOrHallucination: return .correction
-    case .notHelpfulOrIrrelevant, .didntFollowInstructions, .tooVerbose, .other: return .falsePositive
-    }
-  }
 }

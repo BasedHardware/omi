@@ -54,7 +54,7 @@ class _Transaction:
         ref.written = data
 
 
-def _persist(monkeypatch, existing):
+def _persist(monkeypatch, existing, *, smart_merge_refresh=None):
     ref = _Ref(_Snapshot(existing))
 
     fake_db = MagicMock()
@@ -74,8 +74,25 @@ def _persist(monkeypatch, existing):
             # Present so the protection-level decorator skips its user lookup.
             'data_protection_level': 'standard',
         },
+        smart_merge_refresh=smart_merge_refresh,
     )
     return persisted, ref
+
+
+def test_smart_merge_refresh_write_requires_current_revision_and_lease(monkeypatch):
+    from datetime import datetime, timedelta, timezone
+
+    now = datetime.now(timezone.utc)
+    state = {
+        'revision': 2,
+        'refreshed_revision': 1,
+        'refresh_lease': {'owner': 'job', 'until': now + timedelta(minutes=1)},
+    }
+    assert _persist(monkeypatch, {'smart_merge': state}, smart_merge_refresh=(2, 'job'))[0] is True
+    assert _persist(monkeypatch, {'smart_merge': state}, smart_merge_refresh=(1, 'job'))[0] is False
+    assert _persist(monkeypatch, {'smart_merge': state}, smart_merge_refresh=(2, 'other'))[0] is False
+    state['refresh_lease']['until'] = now - timedelta(seconds=1)
+    assert _persist(monkeypatch, {'smart_merge': state}, smart_merge_refresh=(2, 'job'))[0] is False
 
 
 def test_a_discarded_conversation_can_be_rewritten(monkeypatch):

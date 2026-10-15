@@ -1,3 +1,4 @@
+import math
 from dataclasses import dataclass
 from enum import Enum
 from typing import Any, Mapping, Optional, Sequence
@@ -5,7 +6,7 @@ from typing import Any, Mapping, Optional, Sequence
 from models.conversation_enums import ConversationSource
 from utils import conversation_continuity
 
-MAX_CONVERSATION_TIMEOUT_SECONDS = 4 * 60 * 60
+MAX_CONVERSATION_TIMEOUT_SECONDS = conversation_continuity.MAX_CONVERSATION_TIMEOUT_SECONDS
 MIN_CONVERSATION_TIMEOUT_SECONDS = conversation_continuity.DEFAULT_GAP_SECONDS
 TARGET_SAMPLE_RATE = 16000
 USER_SELF_PERSON_ID = 'user'
@@ -180,7 +181,7 @@ def should_enable_speaker_identification(
 
 
 def decide_existing_conversation_action(
-    *, seconds_since_last_segment: float, conversation_creation_timeout: int
+    *, seconds_since_last_segment: float, conversation_creation_timeout: float
 ) -> ConversationLifecycleAction:
     if conversation_continuity.gap_splits(seconds_since_last_segment, conversation_creation_timeout):
         return ConversationLifecycleAction.process_and_create_new
@@ -218,7 +219,7 @@ def decide_lifecycle_action(
     status: Any,
     in_progress_status: Any,
     seconds_since_last_update: Optional[float],
-    conversation_creation_timeout: int,
+    conversation_creation_timeout: float,
 ) -> ConversationLifecycleAction:
     if not conversation_exists:
         return ConversationLifecycleAction.create_new
@@ -345,6 +346,29 @@ def decide_stt_buffer_flush(
     if send_to_stt and fair_use_track_dg_usage:
         dg_usage_ms = buffer_len * 1000 // (sample_rate * 2)
     return SttBufferFlushDecision(True, socket_dead, send_to_stt, dg_usage_ms)
+
+
+def custom_stt_clock_origin(segments: Any, now: float) -> Optional[float]:
+    """Session clock origin for custom STT whose raw audio never reaches Omi, or None.
+
+    With "send raw audio to Omi" off the app forwards only suggested transcripts, so no
+    frame ever sets first_audio_byte_timestamp and the legacy persist loop drops every
+    segment. Custom segment times count from the start of the custom provider's stream,
+    which began about the latest `end` before `now`. Non-finite or negative ends count
+    as 0, so the origin is never in the future.
+    """
+    if not isinstance(segments, list) or not segments:
+        return None
+    ends = [
+        float(segment['end'])
+        for segment in segments
+        if isinstance(segment, dict)
+        and isinstance(segment.get('end'), (int, float))
+        and not isinstance(segment.get('end'), bool)
+        and math.isfinite(segment['end'])
+        and segment['end'] > 0
+    ]
+    return now - max(ends, default=0.0)
 
 
 def decide_multi_channel_stt_send(

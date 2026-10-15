@@ -54,9 +54,12 @@ class _VoiceRecorderWidgetState extends State<VoiceRecorderWidget> with SingleTi
           case VoiceRecorderState.recording:
             return SizedBox(
               height: 44,
-              child: CustomPaint(
-                painter: AudioWavePainter(levels: provider.audioLevels),
-                child: const SizedBox.expand(),
+              child: ListenableBuilder(
+                listenable: provider.waveformTick,
+                builder: (context, _) => CustomPaint(
+                  painter: AudioWavePainter(levels: provider.audioLevels),
+                  child: const SizedBox.expand(),
+                ),
               ),
             );
 

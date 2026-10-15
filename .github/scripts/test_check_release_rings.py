@@ -44,6 +44,11 @@ class ReleaseRingGuardTests(unittest.TestCase):
             destination = self.tmp_path / checker.DEPLOY_BACKEND_STACK_ACTION
             destination.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(composite_action, destination)
+        readiness_action = self._real_root / checker.FIRESTORE_READINESS_ACTION
+        if readiness_action.exists():
+            destination = self.tmp_path / checker.FIRESTORE_READINESS_ACTION
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(readiness_action, destination)
         checker.ROOT = self.tmp_path
 
     def _deploy_workflow(self) -> Path:
@@ -62,6 +67,11 @@ class ReleaseRingGuardTests(unittest.TestCase):
             destination = self.tmp_path / checker.DEPLOY_BACKEND_STACK_ACTION
             destination.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(composite_action, destination)
+        readiness_action = self._real_root / checker.FIRESTORE_READINESS_ACTION
+        if readiness_action.exists():
+            destination = self.tmp_path / checker.FIRESTORE_READINESS_ACTION
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(readiness_action, destination)
         checker.ROOT = self.tmp_path
 
         self.assertEqual(checker.check(), [])
@@ -106,7 +116,10 @@ class ReleaseRingGuardTests(unittest.TestCase):
         )
 
         self.assertTrue(
-            any("serving release-vector verification must follow traffic promotion" in error for error in checker.check())
+            any(
+                "serving release-vector verification must follow traffic promotion" in error
+                for error in checker.check()
+            )
         )
 
     def test_staged_workflow_control_verifier_remains_required(self) -> None:
@@ -134,7 +147,9 @@ class ReleaseRingGuardTests(unittest.TestCase):
             encoding="utf-8",
         )
         self._composite_action_path().write_text(
-            self._composite_action_path().read_text(encoding="utf-8").replace(
+            self._composite_action_path()
+            .read_text(encoding="utf-8")
+            .replace(
                 "Verify serving backend release vector",
                 "Verify release vector before traffic promotion",
             ),
@@ -142,7 +157,10 @@ class ReleaseRingGuardTests(unittest.TestCase):
         )
 
         self.assertTrue(
-            any("serving release-vector verification must follow traffic promotion" in error for error in checker.check())
+            any(
+                "serving release-vector verification must follow traffic promotion" in error
+                for error in checker.check()
+            )
         )
 
     def test_shell_text_that_mentions_a_composite_is_not_an_action_reference(self) -> None:

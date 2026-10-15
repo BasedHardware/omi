@@ -103,6 +103,8 @@ class ManagedAttempt:
     configured_model: str
     outcome: str
     app_platform: str | None = 'desktop'
+    product_lane: str | None = None
+    client_platform: str | None = None
     route_artifact_id: str | None = None
     error_class: str = 'none'
     retry_ordinal: int = 1
@@ -131,6 +133,8 @@ def build_managed_attempt_event(attempt: ManagedAttempt) -> AccountingEvent:
         api_surface=attempt.api_surface,
         payer=attempt.payer,
         app_platform=attempt.app_platform,
+        product_lane=attempt.product_lane,
+        client_platform=attempt.client_platform,
     )
     provider_attempt = ProviderAttempt(
         ordinal=max(attempt.ordinal, 1),

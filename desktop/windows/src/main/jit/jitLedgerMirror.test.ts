@@ -183,3 +183,44 @@ describe('Windows JIT ledger mirror', () => {
     }
   })
 })
+
+describe('canonical sync after proactivity retirement', () => {
+  it('commits a complete mirror without trigger tables or reservations', async () => {
+    const { syncKnowledgeLedgerMirror } = await import('./knowledgeLedgerMirrorSync')
+    const db = makeDb()
+    const client = {
+      rolloutDecision: async () => { throw new Error('admission belongs to the caller') },
+      ledgerMirrorPage: async () => page()
+    }
+    const receipt = await syncKnowledgeLedgerMirror(db as unknown as JitMirrorDb, client, 'user-1', () => true)
+    expect(receipt.rowCount).toBe(3)
+    expect(db.prepare("SELECT name FROM sqlite_master WHERE name = 'jit_trigger_mirror'").get()).toBeUndefined()
+    db.close()
+  })
+
+  it('rejects an account change during fetch without replacing existing memory', async () => {
+    const { syncKnowledgeLedgerMirror } = await import('./knowledgeLedgerMirrorSync')
+    const db = makeDb()
+    reconcile(db, page())
+    let current = true
+    const client = {
+      rolloutDecision: async () => { throw new Error('not used') },
+      ledgerMirrorPage: async () => { current = false; return page({ rows: [], aliases: [], projectedCount: 0, terminalCount: 0 }) }
+    }
+    await expect(syncKnowledgeLedgerMirror(db as unknown as JitMirrorDb, client, 'user-1', () => current)).rejects.toThrow('owner changed')
+    expect(db.prepare('SELECT COUNT(*) AS n FROM jit_fact_mirror').get()).toEqual({ n: 1 })
+    db.close()
+  })
+
+  it('rejects torn page counts before writing a projection', async () => {
+    const { syncKnowledgeLedgerMirror } = await import('./knowledgeLedgerMirrorSync')
+    const db = makeDb()
+    const client = {
+      rolloutDecision: async () => { throw new Error('not used') },
+      ledgerMirrorPage: async () => page({ projectedCount: 4, scannedCount: 4 })
+    }
+    await expect(syncKnowledgeLedgerMirror(db as unknown as JitMirrorDb, client, 'user-1', () => true)).rejects.toThrow('projected count')
+    expect(db.prepare('SELECT COUNT(*) AS n FROM jit_fact_mirror').get()).toEqual({ n: 0 })
+    db.close()
+  })
+})

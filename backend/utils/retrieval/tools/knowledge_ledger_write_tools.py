@@ -20,6 +20,7 @@ from typing import Any, Dict, Mapping, Optional, cast
 from langchain_core.runnables import RunnableConfig
 from langchain_core.tools import tool  # type: ignore[reportUnknownVariableType]  # langchain @tool decorator partially typed
 
+from utils.messaging.undo import record_write, record_created_memory
 from database._client import get_data_plane_firestore_client
 from models.knowledge_ledger_policy import PLAYBOOK_HANDLE_CHARACTER_LIMIT
 from models.memory_contracts import deterministic_contract_id
@@ -57,9 +58,8 @@ _ALLOWED_TRIGGER_CONDITION_FIELDS = frozenset(
     {"match_mode", "entity_aliases", "keywords", "regex", "apps", "windows", "time", "calendar"}
 )
 
-# The paid-work snapshot (utils.memory.jit_trigger_snapshot) only admits a
-# trigger whose ``arguments.wakeup_budget_per_day`` matches this exact policy
-# value; anything else makes the row invisible to the desktop watchlist.
+# Preserve the canonical trigger argument shape for existing knowledge records.
+# The legacy desktop watchlist no longer executes these records.
 _TRIGGER_ARGUMENTS = {"wakeup_budget_per_day": DEFAULT_TRIGGER_RUNTIME_POLICY.planned_notifications_per_trigger_per_day}
 
 
@@ -136,7 +136,7 @@ def build_paid_trigger_condition(description: str, condition: Mapping[str, Any])
     Raises ``ValueError`` (including from pydantic validation) for a
     malformed or disallowed selector. The returned dict is the exact
     canonical JSON shape stored as ``MemoryItem.trigger_condition`` and read
-    back by ``utils.memory.jit_trigger_snapshot.read_authoritative_trigger_snapshot``.
+    by canonical knowledge-ledger readers; the desktop proactivity watcher is retired.
     """
     rejection = _reject_disallowed_trigger_condition_fields(condition)
     if rejection is not None:
@@ -202,7 +202,7 @@ def save_playbook(description: str, body: str, config: RunnableConfig = None) ->
             db_client=firestore_client,
         )
         logger.info("Saved playbook: %s", sanitize_pii(normalized_description))
-        return f"Playbook saved ({memory_id}): {normalized_description}"
+        return f"Playbook saved ({memory_id}): {normalized_description}" + record_created_memory(uid, memory_id)
     except ValueError as exc:
         logger.info("Rejected playbook write error_type=%s", type(exc).__name__)
         return f"Error: {exc}"
@@ -276,7 +276,9 @@ def create_standing_trigger(
             db_client=firestore_client,
         )
         logger.info("Created standing trigger: %s", sanitize_pii(normalized_description))
-        return f"Standing trigger created ({memory_id}): {normalized_description}"
+        return f"Standing trigger created ({memory_id}): {normalized_description}" + record_created_memory(
+            uid, memory_id
+        )
     except ValueError as exc:
         logger.info("Rejected trigger write error_type=%s", type(exc).__name__)
         return f"Error: {exc}"
@@ -341,7 +343,9 @@ def close_fact_tool(memory_id: str, reason: str, config: RunnableConfig = None) 
             return "Fact unavailable."
         close_ledger_fact(uid, normalized_memory_id, db_client=firestore_client)
         logger.info("Closed fact reason=%s", sanitize_pii(normalized_reason))
-        return f"Fact closed ({normalized_memory_id})."
+        return f"Fact closed ({normalized_memory_id})." + record_write(
+            uid, 'memory_closed', normalized_memory_id, item.content, None
+        )
     except ValueError as exc:
         # A race against a concurrent close/mutation surfaces here even though
         # the read above found an active row a moment earlier.

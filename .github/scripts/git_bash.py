@@ -10,7 +10,8 @@ import subprocess
 
 Which = Callable[[str], str | None]
 Run = Callable[..., subprocess.CompletedProcess[str]]
-GIT_LAYOUT_PARENT_LIMIT = 3
+# Git hooks prepend mingw64/libexec/git-core, four parents below the install root.
+GIT_LAYOUT_PARENT_LIMIT = 4
 
 
 def bash_executable(*, platform_name: str | None = None, which: Which = shutil.which) -> str:

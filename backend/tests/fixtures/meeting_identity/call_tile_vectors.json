@@ -1,0 +1,1073 @@
+{
+  "schema_version": 1,
+  "rule": {
+    "summary": "Call-tile names: a line that is only a person-shaped name, persisting across the call window rows.",
+    "call_rows": "call-window rows only: never a messaging app (telegram, discord, slack, whatsapp); a window title starting \"Meet -\"/\"Meet –\"/\"Meet —\" + text is a call; otherwise the row must be conferencing (appName contains zoom, microsoft teams, webex, facetime, or appName+title contains zoom, microsoft teams, webex, facetime, google meet, meet.google) AND show call evidence in that window: a word-bounded call-control marker in title+OCR (mute, unmute, end call, hang up, leave call, stop video, start video, screen share, screenshare, in call, in-call, camera off, camera on) or a title containing the word \"zoom meeting\", \"meeting\", \"call\", \"webinar\" or \"huddle\". A row matched only by a Meet URL in its OCR does not count.",
+    "min_call_rows": 3,
+    "min_rows_with_name": 3,
+    "min_row_share": 0.25,
+    "line": "clean the line; strip trailing decorations (\"(...)\", \"h:mm AM/PM\", \"· ...\"); reject if it contains \"@\", \"http\", or a Meet code xxx-xxxx-xxx",
+    "tokens": "2-4 tokens, <=60 chars; each token is a lowercase particle (al bin da de del der di du la le van von, never first or last) or starts with an uppercase letter, contains only letters and - ' ’, and has at least one lowercase letter",
+    "chrome_words": "reject when any casefolded token is in the chrome list, the non-person list, or the joiner list (see meeting_context.py _TILE_CHROME_WORDS/_NON_PERSON_WORDS/_JOINER_WORDS)",
+    "owner": "exclude a name seen with a trailing \"(...you...)\" marker on any call row, a supplied owner name (casefold equal, or same first and last token), or whose tokens joined equal an owner email local part with . _ - + removed",
+    "ai_agents": "exclude when any whole token (casefolded, edge . ' ’ - trimmed) is agent ai assistant boardy bot chatbot companion fathom fireflies gemini granola meetbot notebot notes notetaker otter recorder tldv; never a suffix match (\"James Talbot\" is human). Agent tiles that pass every other tile rule are returned separately (call_tile_agent_names / expected_agent_names) when the roster classifier also calls them agents, and join the participants as agents; expected_participant_names lists only the human participants.",
+    "window_title": "exclude when the name equals a part of any call row window title split on \" - \", \" – \", \" — \", \" | \", \" : \", each part with a leading \"(N) \" counter and trailing non-word characters removed",
+    "chrome_elsewhere": "non-call rows = rows that are not call-window rows but share an appName with a call row; with >=3 of them, exclude a name appearing in more than 50% of them",
+    "count": "count each name once per row; order by count desc then first appearance; cap 8",
+    "merge": "tile names append after roster-sentence and email-corroborated names, case-insensitively deduplicated",
+    "conferencing_rows": "the existing conferencing classifier (is_conferencing_row / conferencingPlatform) now also accepts a window title starting \"Meet -\"/\"Meet –\"/\"Meet —\" followed by text (a named Meet), so a named-Meet call yields a context"
+  },
+  "vectors": [
+    {
+      "id": "meet_1on1_bare_tile_repeated",
+      "description": "Incident 449565eb: a 1:1 Meet whose only identity is the other tile label, repeated across rows.",
+      "rows": [
+        {
+          "appName": "Google Chrome",
+          "windowTitle": "Meet - abc-defg-hij",
+          "ocrText": "meet.google.com/abc-defg-hij\nOmi Monitor\nDashboards - Grafana\nActivation Rate YTD\nSpud pay\nJordan Rivera\nYou\n10:30 AM | abc-defg-hij"
+        },
+        {
+          "appName": "Google Chrome",
+          "windowTitle": "Meet - abc-defg-hij",
+          "ocrText": "meet.google.com/abc-defg-hij\nOmi Monitor\nDashboards - Grafana\nActivation Rate YTD\nSpud pay\nJordan Rivera\nYou\n10:31 AM | abc-defg-hij"
+        },
+        {
+          "appName": "Google Chrome",
+          "windowTitle": "Meet - abc-defg-hij",
+          "ocrText": "meet.google.com/abc-defg-hij\nOmi Monitor\nDashboards - Grafana\nActivation Rate YTD\nSpud pay\nJordan Rivera\nYou\n10:32 AM | abc-defg-hij"
+        },
+        {
+          "appName": "Google Chrome",
+          "windowTitle": "Meet - abc-defg-hij",
+          "ocrText": "meet.google.com/abc-defg-hij\nOmi Monitor\nDashboards - Grafana\nActivation Rate YTD\nSpud pay\nJordan Rivera\nYou\n10:33 AM | abc-defg-hij"
+        },
+        {
+          "appName": "Google Chrome",
+          "windowTitle": "Meet - abc-defg-hij",
+          "ocrText": "meet.google.com/abc-defg-hij\nOmi Monitor\nDashboards - Grafana\nActivation Rate YTD\nSpud pay\nJordan Rivera\nYou\n10:34 AM | abc-defg-hij"
+        },
+        {
+          "appName": "Google Chrome",
+          "windowTitle": "Meet - abc-defg-hij",
+          "ocrText": "meet.google.com/abc-defg-hij\nOmi Monitor\nDashboards - Grafana\nActivation Rate YTD\nSpud pay\nYou\n10:39 AM | abc-defg-hij"
+        },
+        {
+          "appName": "Google Chrome",
+          "windowTitle": "Meet - abc-defg-hij",
+          "ocrText": "meet.google.com/abc-defg-hij\nOmi Monitor\nDashboards - Grafana\nActivation Rate YTD\nSpud pay\nCoinflow Portal\nJordan Rivera\n10:38 AM | abc-defg-hij"
+        }
+      ],
+      "owner_names": [],
+      "owner_emails": [],
+      "expected_tile_names": [
+        "Jordan Rivera"
+      ],
+      "expected_participant_names": [
+        "Jordan Rivera"
+      ],
+      "must_exclude": [
+        "Coinflow Portal",
+        "You",
+        "Omi Monitor",
+        "Activation Rate YTD",
+        "Spud pay",
+        "Dashboards - Grafana"
+      ],
+      "expected_agent_names": []
+    },
+    {
+      "id": "owner_tile_marked_you",
+      "description": "The owner tile/people-panel entry carries \"(You)\"; the owner name is excluded even where it appears bare.",
+      "rows": [
+        {
+          "appName": "Google Chrome",
+          "windowTitle": "Meet - abc-defg-hij",
+          "ocrText": "David Zhang (You)\nJordan Rivera\nDavid Zhang\n10:30 AM | abc-defg-hij"
+        },
+        {
+          "appName": "Google Chrome",
+          "windowTitle": "Meet - abc-defg-hij",
+          "ocrText": "David Zhang (You)\nJordan Rivera\nDavid Zhang\n10:31 AM | abc-defg-hij"
+        },
+        {
+          "appName": "Google Chrome",
+          "windowTitle": "Meet - abc-defg-hij",
+          "ocrText": "David Zhang (You)\nJordan Rivera\nDavid Zhang\n10:32 AM | abc-defg-hij"
+        },
+        {
+          "appName": "Google Chrome",
+          "windowTitle": "Meet - abc-defg-hij",
+          "ocrText": "David Zhang (You)\nJordan Rivera\nDavid Zhang\n10:33 AM | abc-defg-hij"
+        }
+      ],
+      "owner_names": [],
+      "owner_emails": [],
+      "expected_tile_names": [
+        "Jordan Rivera"
+      ],
+      "expected_participant_names": [
+        "Jordan Rivera"
+      ],
+      "must_exclude": [
+        "David Zhang"
+      ],
+      "expected_agent_names": []
+    },
+    {
+      "id": "owner_name_supplied",
+      "description": "A bare owner tile is excluded when the caller supplies the owner name.",
+      "rows": [
+        {
+          "appName": "Google Chrome",
+          "windowTitle": "Meet - abc-defg-hij",
+          "ocrText": "David Zhang\nPriya Natarajan\n10:30 AM | abc-defg-hij"
+        },
+        {
+          "appName": "Google Chrome",
+          "windowTitle": "Meet - abc-defg-hij",
+          "ocrText": "David Zhang\nPriya Natarajan\n10:31 AM | abc-defg-hij"
+        },
+        {
+          "appName": "Google Chrome",
+          "windowTitle": "Meet - abc-defg-hij",
+          "ocrText": "David Zhang\nPriya Natarajan\n10:32 AM | abc-defg-hij"
+        },
+        {
+          "appName": "Google Chrome",
+          "windowTitle": "Meet - abc-defg-hij",
+          "ocrText": "David Zhang\nPriya Natarajan\n10:33 AM | abc-defg-hij"
+        }
+      ],
+      "owner_names": [
+        "David Zhang"
+      ],
+      "owner_emails": [],
+      "expected_tile_names": [
+        "Priya Natarajan"
+      ],
+      "expected_participant_names": [
+        "Priya Natarajan"
+      ],
+      "must_exclude": [
+        "David Zhang"
+      ],
+      "expected_agent_names": []
+    },
+    {
+      "id": "owner_email_supplied",
+      "description": "A bare owner tile is excluded when its tokens spell the owner email local part.",
+      "rows": [
+        {
+          "appName": "Google Chrome",
+          "windowTitle": "Meet - abc-defg-hij",
+          "ocrText": "David Zhang\nPriya Natarajan\n10:30 AM | abc-defg-hij"
+        },
+        {
+          "appName": "Google Chrome",
+          "windowTitle": "Meet - abc-defg-hij",
+          "ocrText": "David Zhang\nPriya Natarajan\n10:31 AM | abc-defg-hij"
+        },
+        {
+          "appName": "Google Chrome",
+          "windowTitle": "Meet - abc-defg-hij",
+          "ocrText": "David Zhang\nPriya Natarajan\n10:32 AM | abc-defg-hij"
+        },
+        {
+          "appName": "Google Chrome",
+          "windowTitle": "Meet - abc-defg-hij",
+          "ocrText": "David Zhang\nPriya Natarajan\n10:33 AM | abc-defg-hij"
+        }
+      ],
+      "owner_names": [],
+      "owner_emails": [
+        "david.zhang@example.com"
+      ],
+      "expected_tile_names": [
+        "Priya Natarajan"
+      ],
+      "expected_participant_names": [
+        "Priya Natarajan"
+      ],
+      "must_exclude": [
+        "David Zhang"
+      ],
+      "expected_agent_names": []
+    },
+    {
+      "id": "ai_agent_tiles_excluded",
+      "description": "Boardy, notetakers, bots, and Omi Agent join as tiles but are never human participants.",
+      "rows": [
+        {
+          "appName": "Google Chrome",
+          "windowTitle": "Meet - abc-defg-hij",
+          "ocrText": "Ash Kalb\nBoardy Boardman\nFireflies Notetaker\nOtter Bot\nOmi Agent\nRead Ai\nMeetbot Recorder\n10:30 AM | abc-defg-hij"
+        },
+        {
+          "appName": "Google Chrome",
+          "windowTitle": "Meet - abc-defg-hij",
+          "ocrText": "Ash Kalb\nBoardy Boardman\nFireflies Notetaker\nOtter Bot\nOmi Agent\nRead Ai\nMeetbot Recorder\n10:31 AM | abc-defg-hij"
+        },
+        {
+          "appName": "Google Chrome",
+          "windowTitle": "Meet - abc-defg-hij",
+          "ocrText": "Ash Kalb\nBoardy Boardman\nFireflies Notetaker\nOtter Bot\nOmi Agent\nRead Ai\nMeetbot Recorder\n10:32 AM | abc-defg-hij"
+        },
+        {
+          "appName": "Google Chrome",
+          "windowTitle": "Meet - abc-defg-hij",
+          "ocrText": "Ash Kalb\nBoardy Boardman\nFireflies Notetaker\nOtter Bot\nOmi Agent\nRead Ai\nMeetbot Recorder\n10:33 AM | abc-defg-hij"
+        }
+      ],
+      "owner_names": [],
+      "owner_emails": [],
+      "expected_tile_names": [
+        "Ash Kalb"
+      ],
+      "expected_participant_names": [
+        "Ash Kalb"
+      ],
+      "must_exclude": [
+        "Boardy Boardman",
+        "Fireflies Notetaker",
+        "Otter Bot",
+        "Omi Agent",
+        "Read Ai",
+        "Meetbot Recorder"
+      ],
+      "expected_agent_names": [
+        "Boardy Boardman",
+        "Fireflies Notetaker",
+        "Otter Bot",
+        "Omi Agent",
+        "Meetbot Recorder"
+      ]
+    },
+    {
+      "id": "chrome_line_once_excluded",
+      "description": "Name-shaped chrome seen in one row does not persist and is excluded.",
+      "rows": [
+        {
+          "appName": "Google Chrome",
+          "windowTitle": "Meet - abc-defg-hij",
+          "ocrText": "Ash Kalb\n10:30 AM | abc-defg-hij"
+        },
+        {
+          "appName": "Google Chrome",
+          "windowTitle": "Meet - abc-defg-hij",
+          "ocrText": "Ash Kalb\n10:31 AM | abc-defg-hij"
+        },
+        {
+          "appName": "Google Chrome",
+          "windowTitle": "Meet - abc-defg-hij",
+          "ocrText": "Ash Kalb\n10:32 AM | abc-defg-hij"
+        },
+        {
+          "appName": "Google Chrome",
+          "windowTitle": "Meet - abc-defg-hij",
+          "ocrText": "Ash Kalb\nCoinflow Portal\nMarta Kowalski\nSpud Pay"
+        }
+      ],
+      "owner_names": [],
+      "owner_emails": [],
+      "expected_tile_names": [
+        "Ash Kalb"
+      ],
+      "expected_participant_names": [
+        "Ash Kalb"
+      ],
+      "must_exclude": [
+        "Coinflow Portal",
+        "Marta Kowalski",
+        "Spud Pay"
+      ],
+      "expected_agent_names": []
+    },
+    {
+      "id": "meet_code_titles_excluded",
+      "description": "Meet code titles and bare codes recur on every row but are never names.",
+      "rows": [
+        {
+          "appName": "Google Chrome",
+          "windowTitle": "Meet - amc-iajq-asx",
+          "ocrText": "Meet - amc-iajq-asx\namc-iajq-asx\nMeet Amc Iajq\n10:30 AM | abc-defg-hij"
+        },
+        {
+          "appName": "Google Chrome",
+          "windowTitle": "Meet - amc-iajq-asx",
+          "ocrText": "Meet - amc-iajq-asx\namc-iajq-asx\nMeet Amc Iajq\n10:31 AM | abc-defg-hij"
+        },
+        {
+          "appName": "Google Chrome",
+          "windowTitle": "Meet - amc-iajq-asx",
+          "ocrText": "Meet - amc-iajq-asx\namc-iajq-asx\nMeet Amc Iajq\n10:32 AM | abc-defg-hij"
+        },
+        {
+          "appName": "Google Chrome",
+          "windowTitle": "Meet - amc-iajq-asx",
+          "ocrText": "Meet - amc-iajq-asx\namc-iajq-asx\nMeet Amc Iajq\n10:33 AM | abc-defg-hij"
+        },
+        {
+          "appName": "Google Chrome",
+          "windowTitle": "Meet - amc-iajq-asx",
+          "ocrText": "Meet - amc-iajq-asx\namc-iajq-asx\nMeet Amc Iajq\n10:34 AM | abc-defg-hij"
+        }
+      ],
+      "owner_names": [],
+      "owner_emails": [],
+      "expected_tile_names": [],
+      "expected_participant_names": [],
+      "must_exclude": [
+        "Meet - amc-iajq-asx",
+        "Meet Amc Iajq"
+      ],
+      "expected_agent_names": []
+    },
+    {
+      "id": "bookmark_chrome_recurring_everywhere",
+      "description": "A bookmark-bar label recurs on call rows and on most non-call rows too, so it is chrome, not a tile.",
+      "rows": [
+        {
+          "appName": "Google Chrome",
+          "windowTitle": "Meet - abc-defg-hij",
+          "ocrText": "Jane Doe\nAsh Kalb\n10:30 AM | abc-defg-hij"
+        },
+        {
+          "appName": "Google Chrome",
+          "windowTitle": "Meet - abc-defg-hij",
+          "ocrText": "Jane Doe\nAsh Kalb\n10:31 AM | abc-defg-hij"
+        },
+        {
+          "appName": "Google Chrome",
+          "windowTitle": "Meet - abc-defg-hij",
+          "ocrText": "Jane Doe\nAsh Kalb\n10:32 AM | abc-defg-hij"
+        },
+        {
+          "appName": "Google Chrome",
+          "windowTitle": "Meet - abc-defg-hij",
+          "ocrText": "Jane Doe\nAsh Kalb\n10:33 AM | abc-defg-hij"
+        },
+        {
+          "appName": "Google Chrome",
+          "windowTitle": "Inbox - Gmail",
+          "ocrText": "Jane Doe\nPrimary\nUpdates"
+        },
+        {
+          "appName": "Google Chrome",
+          "windowTitle": "Inbox - Gmail",
+          "ocrText": "Jane Doe\nPrimary\nUpdates"
+        },
+        {
+          "appName": "Google Chrome",
+          "windowTitle": "Inbox - Gmail",
+          "ocrText": "Jane Doe\nPrimary\nUpdates"
+        },
+        {
+          "appName": "Google Chrome",
+          "windowTitle": "Inbox - Gmail",
+          "ocrText": "Jane Doe\nPrimary\nUpdates"
+        }
+      ],
+      "owner_names": [],
+      "owner_emails": [],
+      "expected_tile_names": [
+        "Ash Kalb"
+      ],
+      "expected_participant_names": [
+        "Ash Kalb"
+      ],
+      "must_exclude": [
+        "Jane Doe"
+      ],
+      "expected_agent_names": []
+    },
+    {
+      "id": "too_few_call_rows",
+      "description": "Fewer than three conferencing rows never yields a tile name.",
+      "rows": [
+        {
+          "appName": "Google Chrome",
+          "windowTitle": "Meet - abc-defg-hij",
+          "ocrText": "Jordan Rivera\n10:30 AM | abc-defg-hij"
+        },
+        {
+          "appName": "Google Chrome",
+          "windowTitle": "Meet - abc-defg-hij",
+          "ocrText": "Jordan Rivera\n10:31 AM | abc-defg-hij"
+        }
+      ],
+      "owner_names": [],
+      "owner_emails": [],
+      "expected_tile_names": [],
+      "expected_participant_names": [],
+      "must_exclude": [
+        "Jordan Rivera"
+      ],
+      "expected_agent_names": []
+    },
+    {
+      "id": "row_share_threshold",
+      "description": "Twenty call rows: a label in 4 rows (20%) is rejected, one in 5 rows (25%) is accepted.",
+      "rows": [
+        {
+          "appName": "Google Chrome",
+          "windowTitle": "Meet - abc-defg-hij",
+          "ocrText": "Ash Kalb\nJordan Rivera\n10:30 AM | abc-defg-hij"
+        },
+        {
+          "appName": "Google Chrome",
+          "windowTitle": "Meet - abc-defg-hij",
+          "ocrText": "Ash Kalb\nJordan Rivera\n10:31 AM | abc-defg-hij"
+        },
+        {
+          "appName": "Google Chrome",
+          "windowTitle": "Meet - abc-defg-hij",
+          "ocrText": "Ash Kalb\nJordan Rivera\n10:32 AM | abc-defg-hij"
+        },
+        {
+          "appName": "Google Chrome",
+          "windowTitle": "Meet - abc-defg-hij",
+          "ocrText": "Ash Kalb\nJordan Rivera\n10:33 AM | abc-defg-hij"
+        },
+        {
+          "appName": "Google Chrome",
+          "windowTitle": "Meet - abc-defg-hij",
+          "ocrText": "Ash Kalb\n10:34 AM | abc-defg-hij"
+        },
+        {
+          "appName": "Google Chrome",
+          "windowTitle": "Meet - abc-defg-hij",
+          "ocrText": "10:35 AM | abc-defg-hij"
+        },
+        {
+          "appName": "Google Chrome",
+          "windowTitle": "Meet - abc-defg-hij",
+          "ocrText": "10:36 AM | abc-defg-hij"
+        },
+        {
+          "appName": "Google Chrome",
+          "windowTitle": "Meet - abc-defg-hij",
+          "ocrText": "10:37 AM | abc-defg-hij"
+        },
+        {
+          "appName": "Google Chrome",
+          "windowTitle": "Meet - abc-defg-hij",
+          "ocrText": "10:38 AM | abc-defg-hij"
+        },
+        {
+          "appName": "Google Chrome",
+          "windowTitle": "Meet - abc-defg-hij",
+          "ocrText": "10:39 AM | abc-defg-hij"
+        },
+        {
+          "appName": "Google Chrome",
+          "windowTitle": "Meet - abc-defg-hij",
+          "ocrText": "10:40 AM | abc-defg-hij"
+        },
+        {
+          "appName": "Google Chrome",
+          "windowTitle": "Meet - abc-defg-hij",
+          "ocrText": "10:41 AM | abc-defg-hij"
+        },
+        {
+          "appName": "Google Chrome",
+          "windowTitle": "Meet - abc-defg-hij",
+          "ocrText": "10:42 AM | abc-defg-hij"
+        },
+        {
+          "appName": "Google Chrome",
+          "windowTitle": "Meet - abc-defg-hij",
+          "ocrText": "10:43 AM | abc-defg-hij"
+        },
+        {
+          "appName": "Google Chrome",
+          "windowTitle": "Meet - abc-defg-hij",
+          "ocrText": "10:44 AM | abc-defg-hij"
+        },
+        {
+          "appName": "Google Chrome",
+          "windowTitle": "Meet - abc-defg-hij",
+          "ocrText": "10:45 AM | abc-defg-hij"
+        },
+        {
+          "appName": "Google Chrome",
+          "windowTitle": "Meet - abc-defg-hij",
+          "ocrText": "10:46 AM | abc-defg-hij"
+        },
+        {
+          "appName": "Google Chrome",
+          "windowTitle": "Meet - abc-defg-hij",
+          "ocrText": "10:47 AM | abc-defg-hij"
+        },
+        {
+          "appName": "Google Chrome",
+          "windowTitle": "Meet - abc-defg-hij",
+          "ocrText": "10:48 AM | abc-defg-hij"
+        },
+        {
+          "appName": "Google Chrome",
+          "windowTitle": "Meet - abc-defg-hij",
+          "ocrText": "10:49 AM | abc-defg-hij"
+        }
+      ],
+      "owner_names": [],
+      "owner_emails": [],
+      "expected_tile_names": [
+        "Ash Kalb"
+      ],
+      "expected_participant_names": [
+        "Ash Kalb"
+      ],
+      "must_exclude": [
+        "Jordan Rivera"
+      ],
+      "expected_agent_names": []
+    },
+    {
+      "id": "window_title_meeting_name_excluded",
+      "description": "A named meeting shows its title on screen and in the tab title; a title is not a tile.",
+      "rows": [
+        {
+          "appName": "Google Chrome",
+          "windowTitle": "Meet - Acme Onboarding",
+          "ocrText": "meet.google.com/abc-defg-hij\nAcme Onboarding\nJordan Rivera\n10:30 AM | abc-defg-hij"
+        },
+        {
+          "appName": "Google Chrome",
+          "windowTitle": "Meet - Acme Onboarding",
+          "ocrText": "meet.google.com/abc-defg-hij\nAcme Onboarding\nJordan Rivera\n10:31 AM | abc-defg-hij"
+        },
+        {
+          "appName": "Google Chrome",
+          "windowTitle": "Meet - Acme Onboarding",
+          "ocrText": "meet.google.com/abc-defg-hij\nAcme Onboarding\nJordan Rivera\n10:32 AM | abc-defg-hij"
+        },
+        {
+          "appName": "Google Chrome",
+          "windowTitle": "Meet - Acme Onboarding",
+          "ocrText": "meet.google.com/abc-defg-hij\nAcme Onboarding\nJordan Rivera\n10:33 AM | abc-defg-hij"
+        }
+      ],
+      "owner_names": [],
+      "owner_emails": [],
+      "expected_tile_names": [
+        "Jordan Rivera"
+      ],
+      "expected_participant_names": [
+        "Jordan Rivera"
+      ],
+      "must_exclude": [
+        "Acme Onboarding"
+      ],
+      "expected_agent_names": []
+    },
+    {
+      "id": "non_ascii_and_particle_names",
+      "description": "Accented letters, apostrophes, hyphens, and lowercase particles are name tokens.",
+      "rows": [
+        {
+          "appName": "Google Chrome",
+          "windowTitle": "Meet - abc-defg-hij",
+          "ocrText": "José Álvarez\nSiobhan O'Neil\nLudwig van Beethoven\nAnna-Lena Schmidt\n10:30 AM | abc-defg-hij"
+        },
+        {
+          "appName": "Google Chrome",
+          "windowTitle": "Meet - abc-defg-hij",
+          "ocrText": "José Álvarez\nSiobhan O'Neil\nLudwig van Beethoven\nAnna-Lena Schmidt\n10:31 AM | abc-defg-hij"
+        },
+        {
+          "appName": "Google Chrome",
+          "windowTitle": "Meet - abc-defg-hij",
+          "ocrText": "José Álvarez\nSiobhan O'Neil\nLudwig van Beethoven\nAnna-Lena Schmidt\n10:32 AM | abc-defg-hij"
+        }
+      ],
+      "owner_names": [],
+      "owner_emails": [],
+      "expected_tile_names": [
+        "José Álvarez",
+        "Siobhan O'Neil",
+        "Ludwig van Beethoven",
+        "Anna-Lena Schmidt"
+      ],
+      "expected_participant_names": [
+        "José Álvarez",
+        "Siobhan O'Neil",
+        "Ludwig van Beethoven",
+        "Anna-Lena Schmidt"
+      ],
+      "must_exclude": [],
+      "expected_agent_names": []
+    },
+    {
+      "id": "single_token_and_decorated_tiles",
+      "description": "Single-token labels are not accepted; trailing tile decorations are stripped before counting.",
+      "rows": [
+        {
+          "appName": "Google Chrome",
+          "windowTitle": "Meet - abc-defg-hij",
+          "ocrText": "Nik\nAsh Kalb (Presenting)\n10:30 AM | abc-defg-hij"
+        },
+        {
+          "appName": "Google Chrome",
+          "windowTitle": "Meet - abc-defg-hij",
+          "ocrText": "Nik\nAsh Kalb (Presenting)\n10:31 AM | abc-defg-hij"
+        },
+        {
+          "appName": "Google Chrome",
+          "windowTitle": "Meet - abc-defg-hij",
+          "ocrText": "Nik\nAsh Kalb (Presenting)\n10:32 AM | abc-defg-hij"
+        }
+      ],
+      "owner_names": [],
+      "owner_emails": [],
+      "expected_tile_names": [
+        "Ash Kalb"
+      ],
+      "expected_participant_names": [
+        "Ash Kalb"
+      ],
+      "must_exclude": [
+        "Nik"
+      ],
+      "expected_agent_names": []
+    },
+    {
+      "id": "tile_joins_roster_sentence_without_duplicate",
+      "description": "A tile name already asserted by a roster sentence is not duplicated.",
+      "rows": [
+        {
+          "appName": "Google Chrome",
+          "windowTitle": "Meet - abc-defg-hij",
+          "ocrText": "Ash Kalb is in this call\nAsh Kalb\nJordan Rivera\n10:30 AM | abc-defg-hij"
+        },
+        {
+          "appName": "Google Chrome",
+          "windowTitle": "Meet - abc-defg-hij",
+          "ocrText": "Ash Kalb is in this call\nAsh Kalb\nJordan Rivera\n10:31 AM | abc-defg-hij"
+        },
+        {
+          "appName": "Google Chrome",
+          "windowTitle": "Meet - abc-defg-hij",
+          "ocrText": "Ash Kalb is in this call\nAsh Kalb\nJordan Rivera\n10:32 AM | abc-defg-hij"
+        }
+      ],
+      "owner_names": [],
+      "owner_emails": [],
+      "expected_tile_names": [
+        "Ash Kalb",
+        "Jordan Rivera"
+      ],
+      "expected_participant_names": [
+        "Ash Kalb",
+        "Jordan Rivera"
+      ],
+      "must_exclude": [],
+      "expected_agent_names": []
+    },
+    {
+      "id": "agent_markers_are_whole_tokens",
+      "description": "Surnames ending in \"bot\" are human; NoteTaker tiles are agents.",
+      "rows": [
+        {
+          "appName": "Google Chrome",
+          "windowTitle": "Meet - abc-defg-hij",
+          "ocrText": "James Talbot\nAlice Abbot\nTomorrow Inc - NoteTaker\nTomorrow Inc NoteTaker\n10:30 AM | abc-defg-hij"
+        },
+        {
+          "appName": "Google Chrome",
+          "windowTitle": "Meet - abc-defg-hij",
+          "ocrText": "James Talbot\nAlice Abbot\nTomorrow Inc - NoteTaker\nTomorrow Inc NoteTaker\n10:31 AM | abc-defg-hij"
+        },
+        {
+          "appName": "Google Chrome",
+          "windowTitle": "Meet - abc-defg-hij",
+          "ocrText": "James Talbot\nAlice Abbot\nTomorrow Inc - NoteTaker\nTomorrow Inc NoteTaker\n10:32 AM | abc-defg-hij"
+        },
+        {
+          "appName": "Google Chrome",
+          "windowTitle": "Meet - abc-defg-hij",
+          "ocrText": "James Talbot\nAlice Abbot\nTomorrow Inc - NoteTaker\nTomorrow Inc NoteTaker\n10:33 AM | abc-defg-hij"
+        }
+      ],
+      "owner_names": [],
+      "owner_emails": [],
+      "expected_tile_names": [
+        "James Talbot",
+        "Alice Abbot"
+      ],
+      "expected_participant_names": [
+        "James Talbot",
+        "Alice Abbot"
+      ],
+      "must_exclude": [
+        "Tomorrow Inc - NoteTaker",
+        "Tomorrow Inc NoteTaker"
+      ],
+      "expected_agent_names": [
+        "Tomorrow Inc NoteTaker"
+      ]
+    },
+    {
+      "id": "incident_449565eb_named_meet",
+      "description": "The incident meeting: owner tile \"David Zhang (You)\", human tile Tristan Jensen, a NoteTaker bot tile; the named Meet title is not a tile.",
+      "rows": [
+        {
+          "appName": "Google Chrome",
+          "windowTitle": "Meet - Omi feedback call: David / Tristan",
+          "ocrText": "meet.google.com/abc-defg-hij\nOmi feedback call: David / Tristan\nTristan Jensen\nDavid Zhang (You)\nDavid Zhang\nTomorrow Inc - NoteTaker\nTomorrow Inc NoteTaker\n10:30 AM | Omi feedback call: David / Tristan"
+        },
+        {
+          "appName": "Google Chrome",
+          "windowTitle": "Meet - Omi feedback call: David / Tristan",
+          "ocrText": "meet.google.com/abc-defg-hij\nOmi feedback call: David / Tristan\nTristan Jensen\nDavid Zhang (You)\nDavid Zhang\nTomorrow Inc - NoteTaker\nTomorrow Inc NoteTaker\n10:31 AM | Omi feedback call: David / Tristan"
+        },
+        {
+          "appName": "Google Chrome",
+          "windowTitle": "Meet - Omi feedback call: David / Tristan",
+          "ocrText": "meet.google.com/abc-defg-hij\nOmi feedback call: David / Tristan\nTristan Jensen\nDavid Zhang (You)\nDavid Zhang\nTomorrow Inc - NoteTaker\nTomorrow Inc NoteTaker\n10:32 AM | Omi feedback call: David / Tristan"
+        },
+        {
+          "appName": "Google Chrome",
+          "windowTitle": "Meet - Omi feedback call: David / Tristan",
+          "ocrText": "meet.google.com/abc-defg-hij\nOmi feedback call: David / Tristan\nTristan Jensen\nDavid Zhang (You)\nDavid Zhang\nTomorrow Inc - NoteTaker\nTomorrow Inc NoteTaker\n10:33 AM | Omi feedback call: David / Tristan"
+        },
+        {
+          "appName": "Google Chrome",
+          "windowTitle": "Meet - Omi feedback call: David / Tristan",
+          "ocrText": "meet.google.com/abc-defg-hij\nOmi feedback call: David / Tristan\nTristan Jensen\nDavid Zhang (You)\nDavid Zhang\nTomorrow Inc - NoteTaker\nTomorrow Inc NoteTaker\n10:34 AM | Omi feedback call: David / Tristan"
+        },
+        {
+          "appName": "Google Chrome",
+          "windowTitle": "Meet - Omi feedback call: David / Tristan",
+          "ocrText": "meet.google.com/abc-defg-hij\nOmi feedback call: David / Tristan\nTristan Jensen\nDavid Zhang (You)\nDavid Zhang\nTomorrow Inc - NoteTaker\nTomorrow Inc NoteTaker\n10:35 AM | Omi feedback call: David / Tristan"
+        }
+      ],
+      "owner_names": [],
+      "owner_emails": [],
+      "expected_tile_names": [
+        "Tristan Jensen"
+      ],
+      "expected_participant_names": [
+        "Tristan Jensen"
+      ],
+      "must_exclude": [
+        "David Zhang",
+        "Tomorrow Inc - NoteTaker",
+        "Tomorrow Inc NoteTaker",
+        "Omi feedback call: David / Tristan"
+      ],
+      "expected_agent_names": [
+        "Tomorrow Inc NoteTaker"
+      ]
+    },
+    {
+      "id": "messaging_chat_list_is_not_tiles",
+      "description": "A messaging app lists chat names on every row; they are not call tiles (messaging calls use the window-title rule).",
+      "rows": [
+        {
+          "appName": "Telegram",
+          "windowTitle": "Kory Hoang – (61701)",
+          "ocrText": "Saved Messages\nRedStone Important Updates\nHermes Flop Finance\nMute\nEnd Call"
+        },
+        {
+          "appName": "Telegram",
+          "windowTitle": "Kory Hoang – (61701)",
+          "ocrText": "Saved Messages\nRedStone Important Updates\nHermes Flop Finance\nMute\nEnd Call"
+        },
+        {
+          "appName": "Telegram",
+          "windowTitle": "Kory Hoang – (61701)",
+          "ocrText": "Saved Messages\nRedStone Important Updates\nHermes Flop Finance\nMute\nEnd Call"
+        },
+        {
+          "appName": "Telegram",
+          "windowTitle": "Kory Hoang – (61701)",
+          "ocrText": "Saved Messages\nRedStone Important Updates\nHermes Flop Finance\nMute\nEnd Call"
+        },
+        {
+          "appName": "Telegram",
+          "windowTitle": "Kory Hoang – (61701)",
+          "ocrText": "Saved Messages\nRedStone Important Updates\nHermes Flop Finance\nMute\nEnd Call"
+        }
+      ],
+      "owner_names": [],
+      "owner_emails": [],
+      "expected_tile_names": [],
+      "expected_participant_names": [],
+      "must_exclude": [
+        "Saved Messages",
+        "RedStone Important Updates",
+        "Hermes Flop Finance"
+      ],
+      "expected_agent_names": []
+    },
+    {
+      "id": "meet_url_in_ocr_only_is_not_a_call_window",
+      "description": "A browser page whose OCR merely contains a Meet link (another tab, a profile page) is not the call window.",
+      "rows": [
+        {
+          "appName": "Google Chrome",
+          "windowTitle": "(7) Jordan Rivera | LinkedIn",
+          "ocrText": "meet.google.com/abc-defg-hij\nJordan Rivera\nProfile"
+        },
+        {
+          "appName": "Google Chrome",
+          "windowTitle": "(7) Jordan Rivera | LinkedIn",
+          "ocrText": "meet.google.com/abc-defg-hij\nJordan Rivera\nProfile"
+        },
+        {
+          "appName": "Google Chrome",
+          "windowTitle": "(7) Jordan Rivera | LinkedIn",
+          "ocrText": "meet.google.com/abc-defg-hij\nJordan Rivera\nProfile"
+        },
+        {
+          "appName": "Google Chrome",
+          "windowTitle": "(7) Jordan Rivera | LinkedIn",
+          "ocrText": "meet.google.com/abc-defg-hij\nJordan Rivera\nProfile"
+        }
+      ],
+      "owner_names": [],
+      "owner_emails": [],
+      "expected_tile_names": [],
+      "expected_participant_names": [],
+      "must_exclude": [
+        "Jordan Rivera"
+      ],
+      "expected_agent_names": []
+    },
+    {
+      "id": "named_meet_title_counts_as_call_window",
+      "description": "\"Meet - <meeting name>\" (with a trailing audio icon) is a call window; its name is not a tile, the person is.",
+      "rows": [
+        {
+          "appName": "Google Chrome",
+          "windowTitle": "Meet - Quick chat (Priya Natarajan) - Camera and microphone recording",
+          "ocrText": "Priya Natarajan\nQuick chat\n10:30 AM"
+        },
+        {
+          "appName": "Google Chrome",
+          "windowTitle": "Meet - Quick chat (Priya Natarajan) - Camera and microphone recording",
+          "ocrText": "Priya Natarajan\nQuick chat\n10:31 AM"
+        },
+        {
+          "appName": "Google Chrome",
+          "windowTitle": "Meet - Quick chat (Priya Natarajan) - Camera and microphone recording",
+          "ocrText": "Priya Natarajan\nQuick chat\n10:32 AM"
+        },
+        {
+          "appName": "Google Chrome",
+          "windowTitle": "Meet - Weekly Update 🔊",
+          "ocrText": "Weekly Update\nPriya Natarajan"
+        }
+      ],
+      "owner_names": [],
+      "owner_emails": [],
+      "expected_tile_names": [
+        "Priya Natarajan"
+      ],
+      "expected_participant_names": [
+        "Priya Natarajan"
+      ],
+      "must_exclude": [
+        "Weekly Update",
+        "Quick chat"
+      ],
+      "expected_agent_names": []
+    },
+    {
+      "id": "same_app_tab_strip_chrome_excluded",
+      "description": "Tab-strip titles recur on the call window and on most other windows of the same browser; other apps do not dilute that.",
+      "rows": [
+        {
+          "appName": "Google Chrome",
+          "windowTitle": "Meet - abc-defg-hij",
+          "ocrText": "Arc Blockchain Launch\nUpgrade Backend Helm\nJohn Yang\n10:30 AM"
+        },
+        {
+          "appName": "Google Chrome",
+          "windowTitle": "Meet - abc-defg-hij",
+          "ocrText": "Arc Blockchain Launch\nUpgrade Backend Helm\nJohn Yang\n10:31 AM"
+        },
+        {
+          "appName": "Google Chrome",
+          "windowTitle": "Meet - abc-defg-hij",
+          "ocrText": "Arc Blockchain Launch\nUpgrade Backend Helm\nJohn Yang\n10:32 AM"
+        },
+        {
+          "appName": "Google Chrome",
+          "windowTitle": "Meet - abc-defg-hij",
+          "ocrText": "Arc Blockchain Launch\nUpgrade Backend Helm\nJohn Yang\n10:33 AM"
+        },
+        {
+          "appName": "Google Chrome",
+          "windowTitle": "x.com - Home",
+          "ocrText": "Arc Blockchain Launch\nUpgrade Backend Helm\nFor you"
+        },
+        {
+          "appName": "Google Chrome",
+          "windowTitle": "x.com - Home",
+          "ocrText": "Arc Blockchain Launch\nUpgrade Backend Helm\nFor you"
+        },
+        {
+          "appName": "Google Chrome",
+          "windowTitle": "x.com - Home",
+          "ocrText": "Arc Blockchain Launch\nUpgrade Backend Helm\nFor you"
+        },
+        {
+          "appName": "Telegram",
+          "windowTitle": "General – (5)",
+          "ocrText": "hello"
+        },
+        {
+          "appName": "Telegram",
+          "windowTitle": "General – (5)",
+          "ocrText": "hello"
+        },
+        {
+          "appName": "Telegram",
+          "windowTitle": "General – (5)",
+          "ocrText": "hello"
+        },
+        {
+          "appName": "Telegram",
+          "windowTitle": "General – (5)",
+          "ocrText": "hello"
+        },
+        {
+          "appName": "Telegram",
+          "windowTitle": "General – (5)",
+          "ocrText": "hello"
+        },
+        {
+          "appName": "Telegram",
+          "windowTitle": "General – (5)",
+          "ocrText": "hello"
+        }
+      ],
+      "owner_names": [],
+      "owner_emails": [],
+      "expected_tile_names": [
+        "John Yang"
+      ],
+      "expected_participant_names": [
+        "John Yang"
+      ],
+      "must_exclude": [
+        "Arc Blockchain Launch",
+        "Upgrade Backend Helm"
+      ],
+      "expected_agent_names": []
+    },
+    {
+      "id": "teams_chat_list_is_not_a_call",
+      "description": "A Teams chat window repeats contact names on every row; without call evidence it is not a call window.",
+      "rows": [
+        {
+          "appName": "Microsoft Teams",
+          "windowTitle": "Chat | Microsoft Teams",
+          "ocrText": "Jordan Rivera\nPriya Natarajan\nType a message"
+        },
+        {
+          "appName": "Microsoft Teams",
+          "windowTitle": "Chat | Microsoft Teams",
+          "ocrText": "Jordan Rivera\nPriya Natarajan\nType a message"
+        },
+        {
+          "appName": "Microsoft Teams",
+          "windowTitle": "Chat | Microsoft Teams",
+          "ocrText": "Jordan Rivera\nPriya Natarajan\nType a message"
+        },
+        {
+          "appName": "Microsoft Teams",
+          "windowTitle": "Chat | Microsoft Teams",
+          "ocrText": "Jordan Rivera\nPriya Natarajan\nType a message"
+        },
+        {
+          "appName": "Microsoft Teams",
+          "windowTitle": "Chat | Microsoft Teams",
+          "ocrText": "Jordan Rivera\nPriya Natarajan\nType a message"
+        }
+      ],
+      "owner_names": [],
+      "owner_emails": [],
+      "must_exclude": [
+        "Jordan Rivera",
+        "Priya Natarajan"
+      ],
+      "expected_tile_names": [],
+      "expected_agent_names": [],
+      "expected_participant_names": []
+    },
+    {
+      "id": "teams_call_window_with_controls",
+      "description": "The Teams call window shows call controls, so its persistent tile labels count.",
+      "rows": [
+        {
+          "appName": "Microsoft Teams",
+          "windowTitle": "Weekly Sync | Microsoft Teams",
+          "ocrText": "Jordan Rivera\nMute\nLeave\n10:30"
+        },
+        {
+          "appName": "Microsoft Teams",
+          "windowTitle": "Weekly Sync | Microsoft Teams",
+          "ocrText": "Jordan Rivera\nMute\nLeave\n10:31"
+        },
+        {
+          "appName": "Microsoft Teams",
+          "windowTitle": "Weekly Sync | Microsoft Teams",
+          "ocrText": "Jordan Rivera\nMute\nLeave\n10:32"
+        },
+        {
+          "appName": "Microsoft Teams",
+          "windowTitle": "Weekly Sync | Microsoft Teams",
+          "ocrText": "Jordan Rivera\nMute\nLeave\n10:33"
+        }
+      ],
+      "owner_names": [],
+      "owner_emails": [],
+      "must_exclude": [],
+      "expected_tile_names": [
+        "Jordan Rivera"
+      ],
+      "expected_agent_names": [],
+      "expected_participant_names": [
+        "Jordan Rivera"
+      ]
+    },
+    {
+      "id": "zoom_home_screen_is_not_a_call",
+      "description": "Zoom's home window lists recent contacts; no meeting title, no controls.",
+      "rows": [
+        {
+          "appName": "zoom.us",
+          "windowTitle": "Zoom Workplace",
+          "ocrText": "Jordan Rivera\nPriya Natarajan\nNew meeting\nSchedule"
+        },
+        {
+          "appName": "zoom.us",
+          "windowTitle": "Zoom Workplace",
+          "ocrText": "Jordan Rivera\nPriya Natarajan\nNew meeting\nSchedule"
+        },
+        {
+          "appName": "zoom.us",
+          "windowTitle": "Zoom Workplace",
+          "ocrText": "Jordan Rivera\nPriya Natarajan\nNew meeting\nSchedule"
+        },
+        {
+          "appName": "zoom.us",
+          "windowTitle": "Zoom Workplace",
+          "ocrText": "Jordan Rivera\nPriya Natarajan\nNew meeting\nSchedule"
+        }
+      ],
+      "owner_names": [],
+      "owner_emails": [],
+      "must_exclude": [
+        "Jordan Rivera",
+        "Priya Natarajan"
+      ],
+      "expected_tile_names": [],
+      "expected_agent_names": [],
+      "expected_participant_names": []
+    }
+  ]
+}

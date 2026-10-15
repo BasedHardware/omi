@@ -5,6 +5,7 @@ import 'package:collection/collection.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/services/devices/connectors/device_connection.dart';
+import 'package:omi/services/bridges/ble_bridge.dart';
 import 'package:omi/services/devices/discovery/apple_watch_discoverer.dart';
 import 'package:omi/services/devices/discovery/rayban_meta_discoverer.dart';
 import 'package:omi/services/devices/discovery/device_discoverer.dart';
@@ -188,7 +189,17 @@ class DeviceService {
         await connection.connect(
           onConnectionStateChanged: onDeviceConnectionStateChanged,
         );
-      } catch (_) {
+      } catch (e) {
+        final isTimeout = e is TimeoutException || (e is DeviceConnectionException && e.isTimeout);
+        if (isTimeout) {
+          // A launch connection attempt timed out waiting for an offline or
+          // out-of-range device. Native BLE maintains auto-reconnect in the
+          // background; preserve the transport and registration so when the
+          // peripheral comes back in range, native device-ready events restore
+          // the connection and resume capture.
+          rethrow;
+        }
+
         // A native GATT link may already be up even when device-specific
         // initialization (for example, a protected Limitless write) fails.
         // Tear that partial connection down so the UI cannot retain a ghost
@@ -304,7 +315,7 @@ class DeviceService {
       }
 
       // Connected to this device — return it
-      if (existing?.status == DeviceConnectionState.connected) {
+      if (existing?.status == DeviceConnectionState.connected && await existing!.transport.isConnected()) {
         return existing;
       }
 
@@ -319,7 +330,18 @@ class DeviceService {
       if (!force) return null;
 
       try {
-        await _connectToDevice(deviceId);
+        if (existing != null && BleBridge.instance.preservesCaptureIntent(deviceId)) {
+          // Preserve the source and its listeners; native manageDevice will
+          // establish/discover a real link if the cached transport is down.
+          // Go through the connection (not the bare transport) so device setup
+          // such as the pendant time sync runs after the link returns, and a
+          // transport failure surfaces as DeviceConnectionException like the
+          // cold-connect path. Re-pass the service callback so later state
+          // changes keep reaching subscribers.
+          await existing.connect(onConnectionStateChanged: onDeviceConnectionStateChanged);
+        } else {
+          await _connectToDevice(deviceId);
+        }
       } on DeviceConnectionException catch (e) {
         Logger.debug(e.cause);
         return null;
@@ -348,12 +370,17 @@ class DeviceService {
     return null;
   }
 
+  /// A connection leaving [_connections] is always disposed: an orphaned
+  /// transport stays registered for native events and would swallow the next
+  /// device-ready, leaving the UI disconnected over a live link.
   Future<void> disconnectDevice(String deviceId) async {
-    final connection = _connections[deviceId];
-    if (connection != null) {
-      Logger.debug("DeviceService: Disconnecting device $deviceId...");
+    final connection = _connections.remove(deviceId);
+    if (connection == null) return;
+    Logger.debug("DeviceService: Disconnecting device $deviceId...");
+    try {
       await connection.disconnect();
-      _connections.remove(deviceId);
+    } finally {
+      await connection.transport.dispose();
     }
   }
 

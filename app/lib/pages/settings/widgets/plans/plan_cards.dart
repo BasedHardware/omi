@@ -42,24 +42,27 @@ class PlanOptionCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.md, vertical: OmiSpacing.lg),
-      decoration: BoxDecoration(
-        color: OmiColors.surface1,
-        borderRadius: OmiRadius.lgAll,
-        border: Border.all(color: isSelected ? OmiColors.accent : Colors.transparent, width: 2),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Main card area — tappable for plan selection.
-          Semantics(
-            button: true,
-            selected: isSelected,
-            inMutuallyExclusiveGroup: true,
-            child: GestureDetector(
+    // The whole card is the tap target, but only the header is the screen-reader button so the
+    // plan details stay separately readable instead of merging into one long label.
+    return GestureDetector(
+      onTap: onTap,
+      behavior: HitTestBehavior.opaque,
+      excludeFromSemantics: true,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.md, vertical: OmiSpacing.lg),
+        decoration: BoxDecoration(
+          color: OmiColors.surface1,
+          borderRadius: OmiRadius.lgAll,
+          border: Border.all(color: isSelected ? OmiColors.accent : Colors.transparent, width: 2),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Semantics(
+              button: true,
+              selected: isSelected,
+              inMutuallyExclusiveGroup: true,
               onTap: onTap,
-              behavior: HitTestBehavior.opaque,
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -105,24 +108,24 @@ class PlanOptionCard extends StatelessWidget {
                 ],
               ),
             ),
-          ),
-          // Plan details — always visible (no expand/collapse toggle).
-          if (featureSummary != null || desktopAccess != null || features.isNotEmpty) ...[
-            const SizedBox(height: 10),
-            if (featureSummary != null)
-              Text(featureSummary!, style: OmiType.footnote.copyWith(color: OmiColors.textSecondary)),
-            if (featureSummary != null && (desktopAccess != null || features.isNotEmpty))
-              const SizedBox(height: OmiSpacing.xs),
-            // Desktop access — explicit ✓/✗ so Neo (mobile/web only) is clearly distinguished from
-            // Operator/Architect.
-            if (desktopAccess != null)
-              _CheckLine(
-                granted: desktopAccess!,
-                text: desktopAccess! ? context.l10n.worksOnDesktop : context.l10n.noDesktopAccess,
-              ),
-            ...features.map((f) => _CheckLine(granted: true, text: f)),
+            // Plan details are visible, so they must be part of the same tap target.
+            if (featureSummary != null || desktopAccess != null || features.isNotEmpty) ...[
+              const SizedBox(height: 10),
+              if (featureSummary != null)
+                Text(featureSummary!, style: OmiType.footnote.copyWith(color: OmiColors.textSecondary)),
+              if (featureSummary != null && (desktopAccess != null || features.isNotEmpty))
+                const SizedBox(height: OmiSpacing.xs),
+              // Desktop access — explicit ✓/✗ so Neo (mobile/web only) is clearly distinguished from
+              // Operator/Architect.
+              if (desktopAccess != null)
+                _CheckLine(
+                  granted: desktopAccess!,
+                  text: desktopAccess! ? context.l10n.worksOnDesktop : context.l10n.noDesktopAccess,
+                ),
+              ...features.map((f) => _CheckLine(granted: true, text: f)),
+            ],
           ],
-        ],
+        ),
       ),
     );
   }

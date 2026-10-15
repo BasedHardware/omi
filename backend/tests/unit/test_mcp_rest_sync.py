@@ -409,7 +409,10 @@ def _memory(mem_id):
 def client(monkeypatch):
     app = FastAPI()
     app.include_router(rest.router)
-    app.dependency_overrides[rest.get_uid_from_mcp_api_key] = lambda: UID
+    app.dependency_overrides[rest.get_uid_with_mcp_action_items_read] = lambda: UID
+    app.dependency_overrides[rest.get_uid_with_mcp_conversations_read] = lambda: UID
+    app.dependency_overrides[rest.get_uid_with_mcp_chat_read] = lambda: UID
+    app.dependency_overrides[rest.get_uid_with_mcp_screen_activity_read] = lambda: UID
     app.dependency_overrides[rest.get_mcp_memory_default_memory_read_context] = lambda: SimpleNamespace(uid=UID)
     monkeypatch.setattr(
         rest,
@@ -820,7 +823,7 @@ class TestRestRetryAfterRouteLayer:
         def deny():
             raise rest.HTTPException(status_code=429, detail="Too Many Requests")
 
-        client.app.dependency_overrides[rest.get_uid_from_mcp_api_key] = deny
+        client.app.dependency_overrides[rest.get_uid_with_mcp_action_items_read] = deny
         resp = client.get("/v1/mcp/action-items")
         assert resp.status_code == 429
         assert resp.headers.get("Retry-After") == "60"
@@ -829,7 +832,7 @@ class TestRestRetryAfterRouteLayer:
         def deny():
             raise rest.HTTPException(status_code=429, detail="Too Many Requests", headers={"Retry-After": "7"})
 
-        client.app.dependency_overrides[rest.get_uid_from_mcp_api_key] = deny
+        client.app.dependency_overrides[rest.get_uid_with_mcp_action_items_read] = deny
         resp = client.get("/v1/mcp/action-items")
         assert resp.status_code == 429
         assert resp.headers.get("Retry-After") == "7"
@@ -838,7 +841,7 @@ class TestRestRetryAfterRouteLayer:
         def deny():
             raise rest.HTTPException(status_code=403, detail="denied")
 
-        client.app.dependency_overrides[rest.get_uid_from_mcp_api_key] = deny
+        client.app.dependency_overrides[rest.get_uid_with_mcp_action_items_read] = deny
         resp = client.get("/v1/mcp/action-items")
         assert resp.status_code == 403
         assert "Retry-After" not in resp.headers
@@ -1059,6 +1062,14 @@ class TestSyncedWriterTimestamps:
 
         docs = [SimpleNamespace(reference=SimpleNamespace(id=f"a{i}")) for i in range(3)]
         _, _, written = self._fake_db(monkeypatch, action_items_db, docs)
+        import database.account_deletion_marker as marker
+
+        miss = SimpleNamespace(exists=False, to_dict=lambda: None)
+        monkeypatch.setattr(
+            marker,
+            'get_data_plane_firestore_client',
+            lambda: SimpleNamespace(document=lambda path: SimpleNamespace(get=lambda *args, **kwargs: miss)),
+        )
 
         action_items_db.unlock_all_action_items(UID)
 
@@ -1071,7 +1082,7 @@ class TestSyncedWriterTimestamps:
         import database.action_items as action_items_db
 
         doc_ref = MagicMock()
-        doc_ref.get.return_value = SimpleNamespace(exists=True)
+        doc_ref.get.return_value = SimpleNamespace(exists=True, to_dict=lambda: {'completed': False})
         _, items_collection, _ = self._fake_db(monkeypatch, action_items_db, [])
         items_collection.document.side_effect = lambda doc_id: doc_ref
 
@@ -1084,7 +1095,7 @@ class TestSyncedWriterTimestamps:
         import database.action_items as action_items_db
 
         doc_ref = MagicMock()
-        doc_ref.get.return_value = SimpleNamespace(exists=True)
+        doc_ref.get.return_value = SimpleNamespace(exists=True, to_dict=lambda: {'completed': False})
         _, items_collection, _ = self._fake_db(monkeypatch, action_items_db, [])
         items_collection.document.side_effect = lambda doc_id: doc_ref
 

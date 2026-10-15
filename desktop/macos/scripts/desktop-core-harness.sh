@@ -11,6 +11,9 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+# Fixture tests symlink this file. Helpers must come from the real script
+# directory; SCRIPT_DIR stays the invocation path so stub launchers win.
+SOURCE_DIR="$(python3 -c 'import os,sys; print(os.path.dirname(os.path.realpath(sys.argv[1])))' "$0")"
 DESKTOP_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 REPO_ROOT="$(cd "$DESKTOP_DIR/../.." && pwd)"
 HARNESS_ROOT="$DESKTOP_DIR/.harness/desktop-core"
@@ -651,6 +654,7 @@ FAULT_CLEANUP_DONE=0
 FAULT_CLEANUP_STATUS=0
 FAULT_FLOW_PID=""
 FAULT_FLOW_RESULT_FILE=""
+FAULT_FLOW_RECEIPT=""
 
 fault_token_for_run() {
   local token="${OMI_FAULT_RUN_TOKEN:-}"
@@ -857,12 +861,29 @@ print(config.load_config(repo_root).auth_host)
 PY
 }
 
+stop_fault_flow() {
+  local status=0
+  # Receipt proof is the only signal path. A bare pid may have been reused.
+  if [[ -n "${FAULT_FLOW_RECEIPT:-}" && -f "$FAULT_FLOW_RECEIPT" ]]; then
+    if ! python3 "$SOURCE_DIR/owned_process.py" stop \
+      --receipt "$FAULT_FLOW_RECEIPT" \
+      --shutdown-deadline "${OMI_FAULT_FLOW_SHUTDOWN_DEADLINE:-10}"; then
+      status=1
+    fi
+  fi
+  if [[ -n "${FAULT_FLOW_PID:-}" ]]; then
+    if ! kill -0 "$FAULT_FLOW_PID" 2>/dev/null; then
+      wait "$FAULT_FLOW_PID" 2>/dev/null || true
+    fi
+    FAULT_FLOW_PID=""
+  fi
+  return "$status"
+}
+
 stop_fault_stack() {
   local status=0
-  if [[ -n "$FAULT_FLOW_PID" ]]; then
-    kill -TERM "$FAULT_FLOW_PID" 2>/dev/null || true
-    wait "$FAULT_FLOW_PID" 2>/dev/null || true
-    FAULT_FLOW_PID=""
+  if ! stop_fault_flow; then
+    status=1
   fi
   if [[ "$FAULT_RUN_STARTED" -eq 1 ]]; then
     if [[ -n "$FAULT_RUN_PID" ]]; then
@@ -1055,12 +1076,20 @@ PY
 run_fault_flow_file() {
   local flow_path="$1" run_dir="$2" worker_status=0 flow_passed
   FAULT_FLOW_RESULT_FILE="$run_dir/fault-flow-result"
-  (
-    run_flow_file "$flow_path" "$run_dir"
-    printf '%s\n%s\n' "$PASSED" "$FLOW_RESULTS" > "$FAULT_FLOW_RESULT_FILE"
-  ) &
-  FAULT_FLOW_PID=$!
+  FAULT_FLOW_RECEIPT="$run_dir/fault-flow-process.json"
+  rm -f "$FAULT_FLOW_RESULT_FILE"
+  # The worker used to be a nested subshell. Killing that shell left
+  # `python3 scripts/omi-harness run` reparented under launchd. The supervisor
+  # is the direct child; its session owns the harness process and grandchildren.
   set +e
+  python3 "$SOURCE_DIR/owned_process.py" supervise \
+    --receipt "$FAULT_FLOW_RECEIPT" \
+    --label omi-fault-flow \
+    --shutdown-deadline "${OMI_FAULT_FLOW_SHUTDOWN_DEADLINE:-10}" \
+    --run-deadline "${OMI_FAULT_FLOW_RUN_DEADLINE:-900}" \
+    --cwd "$DESKTOP_DIR" \
+    -- bash "$SOURCE_DIR/fault-flow-worker.sh" "$flow_path" "$run_dir" "$PORT" "$DESKTOP_DIR" &
+  FAULT_FLOW_PID=$!
   wait "$FAULT_FLOW_PID"
   worker_status=$?
   set -e

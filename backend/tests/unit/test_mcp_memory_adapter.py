@@ -140,7 +140,7 @@ def test_mcp_rest_memory_list_uses_single_authorization_context():
     source = (BACKEND / "routers/mcp.py").read_text(encoding="utf-8")
     profile_route = source[source.index('@router.get("/v1/mcp/profile"') : source.index("class CleanerMemory")]
     list_route = source[source.index('@router.get("/v1/mcp/memories"') : source.index("class SimpleStructured")]
-    assert 'uid: str = Depends(get_uid_from_mcp_api_key)' in profile_route
+    assert 'uid: str = Depends(get_uid_with_mcp_memories_read)' in profile_route
     assert 'uid: str = Depends(get_uid_from_mcp_api_key)' not in list_route
     assert (
         "auth_context: ProductAuthorizationContext = Depends(get_mcp_memory_default_memory_read_context)" in list_route

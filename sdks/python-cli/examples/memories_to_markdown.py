@@ -41,6 +41,25 @@ CATEGORY_META: Dict[str, Dict[str, str]] = {
 }
 
 
+def strip_surrogates(value: str) -> str:
+    """Drop unpaired surrogate code points that cannot be encoded as UTF-8.
+
+    json.loads accepts lone surrogates (e.g. "\\ud800") from a malformed export, but
+    writing the rendered note raises UnicodeEncodeError on them. Dropping them keeps
+    the remaining text and lets the note export.
+    """
+    return value.encode("utf-8", "ignore").decode("utf-8")
+
+
+def render(lines: List[str]) -> str:
+    """Join rendered lines, stripping unencodable code points once at the boundary.
+
+    Every render path returns through here so the result is always encodable,
+    whichever caller writes it.
+    """
+    return strip_surrogates("\n".join(lines))
+
+
 def parse_datetime(iso_str: Optional[str]) -> Optional[datetime]:
     """Safely parse an ISO-8601 datetime string and normalize to UTC."""
     if not iso_str or not isinstance(iso_str, str):
@@ -106,7 +125,7 @@ def format_memory_item(item: Dict[str, Any], include_metadata: bool = True) -> s
         if meta_tags:
             parts.append(f"  *({' · '.join(meta_tags)})*")
 
-    return "\n".join(parts)
+    return render(parts)
 
 
 def memories_to_markdown(
@@ -152,7 +171,7 @@ def memories_to_markdown(
     if not items:
         lines.append("_No memories found matching criteria._")
         lines.append("")
-        return "\n".join(lines)
+        return render(lines)
 
     if group_by == "category":
         category_groups: Dict[str, List[Dict[str, Any]]] = {}
@@ -198,7 +217,7 @@ def memories_to_markdown(
             lines.append(format_memory_item(it))
         lines.append("")
 
-    return "\n".join(lines)
+    return render(lines)
 
 
 def filter_memories(

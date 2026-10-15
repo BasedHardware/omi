@@ -64,21 +64,23 @@ void fireC8Slice4(AnalyticsManager analytics) {
   analytics.liveTranscriptCardClicked(hasSegments: false, hasPhotos: true, segmentCount: 0, photoCount: 1);
   analytics.liveTranscriptCardClicked(hasSegments: true, hasPhotos: true, segmentCount: 3, photoCount: 2);
   analytics.appleRemindersSyncCompleted(
-      pendingExported: 0,
-      syncedChecked: 0,
-      completionsPulled: 0,
-      completionsPushed: 0,
-      titleDuePulled: 0,
-      titleDuePushed: 0,
-      remindersUnlinked: 0);
+    pendingExported: 0,
+    syncedChecked: 0,
+    completionsPulled: 0,
+    completionsPushed: 0,
+    titleDuePulled: 0,
+    titleDuePushed: 0,
+    remindersUnlinked: 0,
+  );
   analytics.appleRemindersSyncCompleted(
-      pendingExported: 1,
-      syncedChecked: 2,
-      completionsPulled: 3,
-      completionsPushed: 4,
-      titleDuePulled: 5,
-      titleDuePushed: 6,
-      remindersUnlinked: 7);
+    pendingExported: 1,
+    syncedChecked: 2,
+    completionsPulled: 3,
+    completionsPushed: 4,
+    titleDuePulled: 5,
+    titleDuePushed: 6,
+    remindersUnlinked: 7,
+  );
   analytics.wrappedPageOpened();
   analytics.wrappedBannerClicked();
   analytics.wrappedGenerationCompleted(totalConversations: 0, totalMinutes: 0, daysActive: 0);
@@ -105,217 +107,221 @@ void fireC8Slice4(AnalyticsManager analytics) {
 List<List<Object>> c8Slice4Goldens(Map<String, Object> globals) => [
       [
         'Fact Page Edited Fact',
-        {...globals}
+        {...globals},
       ],
       [
         'Fact Page Create Fact Button Pressed',
-        {...globals}
+        {...globals},
       ],
       [
         'Facts Management Sheet Opened',
-        {...globals}
+        {...globals},
       ],
       [
         'Conversation Merge Selection Mode Entered',
-        {...globals}
+        {...globals},
       ],
       [
         'Conversation Merge Selection Mode Exited',
-        {...globals}
+        {...globals},
       ],
       [
         'Add Manual Memory Clicked',
-        {...globals}
+        {...globals},
       ],
       [
         'User ID Copied',
-        {...globals}
+        {...globals},
       ],
       [
         'Dev Mode Export Memories',
-        {...globals}
+        {...globals},
       ],
       [
         'Dev Mode Import Memories',
-        {...globals}
+        {...globals},
       ],
       [
         'Dev Mode Imported Memories',
-        {...globals}
+        {...globals},
       ],
       [
         'Support Contacted',
-        {...globals}
+        {...globals},
       ],
       [
         'Subscription Plan Changed',
         {
           ...globals,
-          'previous_plan': 'free',
+          'previous_plan': 'basic',
           'new_plan': 'plus',
-          'billing_interval': 'monthly',
-          'change_source': 'mobile_checkout'
-        }
+          'billing_interval': 'month',
+          'change_source': 'mobile_checkout',
+        },
+      ],
+      [
+        'Upgrade Succeeded Attributed',
+        {...globals, 'plan': 'plus', 'billing_interval': 'month'},
       ],
       [
         'Upgrade Succeeded',
-        {...globals}
+        {...globals},
       ],
       [
         'Upgrade Cancelled',
-        {...globals}
+        {...globals},
       ],
       [
         'Upgrade Modal Dismissed',
-        {...globals}
+        {...globals},
       ],
       [
         'Upgrade Modal Clicked',
-        {...globals}
+        {...globals},
       ],
       [
         'Subscription Cancel Flow Started',
-        {...globals}
+        {...globals},
       ],
       [
         'Connect Friend Clicked',
-        {...globals}
+        {...globals},
       ],
       [
         'Disconnect Friend Clicked',
-        {...globals}
+        {...globals},
       ],
       [
         'Battery Indicator Clicked',
-        {...globals}
+        {...globals},
       ],
       [
         'Added Person',
-        {...globals}
+        {...globals},
       ],
       [
         'Removed Person',
-        {...globals}
+        {...globals},
       ],
       [
         'Tag Sheet Opened',
-        {...globals}
+        {...globals},
       ],
       [
         'Untagged Segment',
-        {...globals}
+        {...globals},
       ],
       [
         'Edit Segment Text Started',
-        {...globals}
+        {...globals},
       ],
       [
         'Edit Segment Text Saved',
-        {...globals}
+        {...globals},
       ],
       [
         'Edit Segment Text Cancelled',
-        {...globals}
+        {...globals},
       ],
       [
         'Edit Summary Started',
-        {...globals}
+        {...globals},
       ],
       [
         'Edit Summary Saved',
-        {...globals}
+        {...globals},
       ],
       [
         'Edit Summary Cancelled',
-        {...globals}
+        {...globals},
       ],
       [
         'Delete Account Clicked',
-        {...globals}
+        {...globals},
       ],
       [
         'Delete Account Confirmed',
-        {...globals}
+        {...globals},
       ],
       [
         'Delete Account Cancelled',
-        {...globals}
+        {...globals},
       ],
       [
         'Delete Account Flow Started',
-        {...globals}
+        {...globals},
       ],
       [
         'Apps Filter Opened',
-        {...globals}
+        {...globals},
       ],
       [
         'Apps Filter Applied',
-        {...globals}
+        {...globals},
       ],
       [
         'Apps Clear Filters',
-        {...globals}
+        {...globals},
       ],
       [
         'Brain Map Opened',
-        {...globals}
+        {...globals},
       ],
       [
         'Brain Map Share Clicked',
-        {...globals}
+        {...globals},
       ],
       [
         'Action Items Page Opened',
-        {...globals}
+        {...globals},
       ],
       [
         'Action Items Date Filter Cleared',
-        {...globals}
+        {...globals},
       ],
       [
         'Training Data Opt-In Submitted',
-        {...globals}
+        {...globals},
       ],
       [
         'Training Data Opt-In Approved',
-        {...globals}
+        {...globals},
       ],
       [
         'Calendar Filter Cleared',
-        {...globals}
+        {...globals},
       ],
       [
         'Search Bar Focused',
-        {...globals}
+        {...globals},
       ],
       [
         'Search Query Cleared',
-        {...globals}
+        {...globals},
       ],
       [
         'Export Tasks Banner Clicked',
-        {...globals}
+        {...globals},
       ],
       [
         'Create Folder Button Clicked',
-        {...globals}
+        {...globals},
       ],
       [
         'Live Transcript Card Clicked',
-        {...globals, 'has_segments': false, 'has_photos': false, 'segment_count': 0, 'photo_count': 0}
+        {...globals, 'has_segments': false, 'has_photos': false, 'segment_count': 0, 'photo_count': 0},
       ],
       [
         'Live Transcript Card Clicked',
-        {...globals, 'has_segments': true, 'has_photos': false, 'segment_count': 1, 'photo_count': 0}
+        {...globals, 'has_segments': true, 'has_photos': false, 'segment_count': 1, 'photo_count': 0},
       ],
       [
         'Live Transcript Card Clicked',
-        {...globals, 'has_segments': false, 'has_photos': true, 'segment_count': 0, 'photo_count': 1}
+        {...globals, 'has_segments': false, 'has_photos': true, 'segment_count': 0, 'photo_count': 1},
       ],
       [
         'Live Transcript Card Clicked',
-        {...globals, 'has_segments': true, 'has_photos': true, 'segment_count': 3, 'photo_count': 2}
+        {...globals, 'has_segments': true, 'has_photos': true, 'segment_count': 3, 'photo_count': 2},
       ],
       [
         'Apple Reminders Sync Completed',
@@ -327,8 +333,8 @@ List<List<Object>> c8Slice4Goldens(Map<String, Object> globals) => [
           'completions_pushed': 0,
           'title_due_pulled': 0,
           'title_due_pushed': 0,
-          'reminders_unlinked': 0
-        }
+          'reminders_unlinked': 0,
+        },
       ],
       [
         'Apple Reminders Sync Completed',
@@ -340,92 +346,92 @@ List<List<Object>> c8Slice4Goldens(Map<String, Object> globals) => [
           'completions_pushed': 4,
           'title_due_pulled': 5,
           'title_due_pushed': 6,
-          'reminders_unlinked': 7
-        }
+          'reminders_unlinked': 7,
+        },
       ],
       [
         'Wrapped Page Opened',
-        {...globals}
+        {...globals},
       ],
       [
         'Wrapped Banner Clicked',
-        {...globals}
+        {...globals},
       ],
       [
         'Wrapped Generation Completed',
-        {...globals, 'total_conversations': 0, 'total_minutes': 0, 'days_active': 0}
+        {...globals, 'total_conversations': 0, 'total_minutes': 0, 'days_active': 0},
       ],
       [
         'Wrapped Generation Completed',
-        {...globals, 'total_conversations': 12, 'total_minutes': 345, 'days_active': 30}
+        {...globals, 'total_conversations': 12, 'total_minutes': 345, 'days_active': 30},
       ],
       [
         'Wrapped Generation Started',
-        {...globals}
+        {...globals},
       ],
       [
         'Daily Summary Settings Opened',
-        {...globals}
+        {...globals},
       ],
       [
         'Permissions Settings Opened',
-        {...globals}
+        {...globals},
       ],
       [
         'Permissions Interstitial Shown',
-        {...globals}
+        {...globals},
       ],
       [
         'Permissions Interstitial Completed',
-        {...globals}
+        {...globals},
       ],
       [
         'Permissions Interstitial Skipped',
-        {...globals}
+        {...globals},
       ],
       [
         'Recap Tab Opened',
-        {...globals}
+        {...globals},
       ],
       [
         'Whats New Opened',
-        {...globals}
+        {...globals},
       ],
       [
         'Daily Score Help Tapped',
-        {...globals}
+        {...globals},
       ],
       [
         'Integrations Page Opened',
-        {...globals}
+        {...globals},
       ],
       [
         'Payments Page Opened',
-        {...globals}
+        {...globals},
       ],
       [
         'Connect Device Page Opened',
-        {...globals}
+        {...globals},
       ],
       [
         'Get Omi Device Clicked',
-        {...globals}
+        {...globals},
       ],
       [
         'Connection Guide Opened',
-        {...globals}
+        {...globals},
       ],
       [
         'Data Privacy Page Opened',
-        {...globals}
+        {...globals},
       ],
       [
         'AI App Generator Page Opened',
-        {...globals}
+        {...globals},
       ],
       [
         'Import History Page Opened',
-        {...globals}
+        {...globals},
       ],
     ];
 
@@ -435,7 +441,12 @@ void main() {
     AnalyticsManager.resetForTesting();
     SharedPreferences.setMockInitialValues({});
     PackageInfo.setMockInitialValues(
-        appName: 'Omi Test', packageName: 'com.omi.test', version: '1.0.543', buildNumber: '992', buildSignature: '');
+      appName: 'Omi Test',
+      packageName: 'com.omi.test',
+      version: '1.0.543',
+      buildNumber: '992',
+      buildSignature: '',
+    );
     await SharedPreferencesUtil.init();
   });
   tearDown(AnalyticsManager.resetForTesting);
@@ -448,11 +459,7 @@ void main() {
     await AnalyticsManager.flushPending(force: true);
     await AnalyticsManager.flushPending(force: true);
     final platformName = PlatformService.isIOS ? 'ios' : (PlatformService.isAndroid ? 'android' : 'unknown');
-    final globals = <String, Object>{
-      'app_platform': platformName,
-      'app_version': '1.0.543',
-      'app_build': '992',
-    };
+    final globals = <String, Object>{'app_platform': platformName, 'app_version': '1.0.543', 'app_build': '992'};
     expect(emissionPayloads(adapter.events), c8Slice4Goldens(globals));
     expect(adapter.events.every((event) => !event.$2.containsKey('correlation_id')), isTrue);
     expect(AnalyticsManager.queuedEventCountForTesting, 0);
