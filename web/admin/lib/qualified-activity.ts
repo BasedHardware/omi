@@ -179,7 +179,8 @@ export function primaryPlatform(activity: Activity[]): Platform {
     const rows = activity.filter((a) => a.platform === platform);
     return {
       platform,
-      days: new Set(rows.map((a) => a.at.slice(0, 10))).size,
+      days: new Set(rows.map((a) => new Date(a.at).toISOString().slice(0, 10)))
+        .size,
       latest: Math.max(0, ...rows.map((a) => Date.parse(a.at))),
     };
   }).sort(
@@ -192,10 +193,13 @@ export function primaryPlatform(activity: Activity[]): Platform {
 }
 export function entryPlatform(activity: Activity[]): Platform {
   return (
-    [...activity].sort(
-      (a, b) =>
-        Date.parse(a.at) - Date.parse(b.at) ||
-        PLATFORM_ORDER.indexOf(a.platform) - PLATFORM_ORDER.indexOf(b.platform)
-    )[0]?.platform ?? "unknown"
+    activity
+      .filter((a) => a.platform !== "unknown")
+      .sort(
+        (a, b) =>
+          Date.parse(a.at) - Date.parse(b.at) ||
+          PLATFORM_ORDER.indexOf(a.platform) -
+            PLATFORM_ORDER.indexOf(b.platform)
+      )[0]?.platform ?? "unknown"
   );
 }
