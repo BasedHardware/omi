@@ -72,6 +72,10 @@ class _OnDeviceQueueBannerState extends State<OnDeviceQueueBanner> {
   }
 
   Future<void> _loadUsage() async {
+    await _controller.ensureLoaded();
+    // The conversations page mounts this banner while the flag is off. Do not
+    // construct the storefront client until the gate is on; that reads Env.
+    if (!mounted || !_controller.isActive) return;
     final usage = await loadOnDeviceUsage(context.l10n.localeName);
     if (mounted) setState(() => _moreLabel = usage?.moreLabel);
   }
