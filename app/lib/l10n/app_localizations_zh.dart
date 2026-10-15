@@ -12204,6 +12204,15 @@ class AppLocalizationsZh extends AppLocalizations {
   String get reviewRecentChanges => '最近更改';
 
   @override
+  String get reviewChangeAfter => '修改后';
+
+  @override
+  String get reviewChangeBefore => '修改前';
+
+  @override
+  String get reviewChangeRemoved => '已从活动列表中移除';
+
+  @override
   String get reviewChangesIntro => '过去 30 天内 Omi 自行做出的更改。看起来不对的都可以撤销。';
 
   @override

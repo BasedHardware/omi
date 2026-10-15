@@ -14845,6 +14845,18 @@
     "@reviewRecentChanges": {
         "description": "Link and page title: changes the app made on its own (Title Case)"
     },
+    "reviewChangeAfter": "After",
+    "@reviewChangeAfter": {
+        "description": "Label for the resulting value in an applied Review change"
+    },
+    "reviewChangeBefore": "Before",
+    "@reviewChangeBefore": {
+        "description": "Label for the original value in an applied Review change"
+    },
+    "reviewChangeRemoved": "Removed from the active list",
+    "@reviewChangeRemoved": {
+        "description": "Reversible retirement or dismissal in an applied change; Undo restores the item"
+    },
     "reviewChangesIntro": "What Omi changed on its own in the last 30 days. Undo anything that looks wrong.",
     "@reviewChangesIntro": {
         "description": "Intro line on Recent Changes"

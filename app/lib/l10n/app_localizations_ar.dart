@@ -12332,6 +12332,15 @@ class AppLocalizationsAr extends AppLocalizations {
   String get reviewRecentChanges => 'التغييرات الأخيرة';
 
   @override
+  String get reviewChangeAfter => 'بعد';
+
+  @override
+  String get reviewChangeBefore => 'قبل';
+
+  @override
+  String get reviewChangeRemoved => 'أُزيل من القائمة النشطة';
+
+  @override
   String get reviewChangesIntro => 'ما غيّره Omi من تلقاء نفسه خلال آخر 30 يومًا. تراجع عن أي شيء يبدو خاطئًا.';
 
   @override

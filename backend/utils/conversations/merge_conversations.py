@@ -377,6 +377,12 @@ def perform_merge_async(
             # If not reprocessing, just mark as completed
             lifecycle_service.complete(uid, new_conversation_id)
 
+        from database.review_overlay_merge import transfer
+
+        if transfer(uid, [c['id'] for c in sorted_convs], new_conversation_id, firestore_client=firestore_db):
+            # Undo receipts now name the merged record. Recovery must retain it.
+            failure_phase = MergeFailurePhase.SOURCE_DELETION_STARTED
+
         # 9. Delete ALL source conversations and their related data.
         # One history pass for the whole merge: the per-source scan would
         # otherwise repeat it for every source, and the heavy cohort reaches

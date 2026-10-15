@@ -12405,6 +12405,15 @@ class AppLocalizationsFi extends AppLocalizations {
   String get reviewRecentChanges => 'Viimeaikaiset muutokset';
 
   @override
+  String get reviewChangeAfter => 'Jälkeen';
+
+  @override
+  String get reviewChangeBefore => 'Ennen';
+
+  @override
+  String get reviewChangeRemoved => 'Poistettu aktiivisesta luettelosta';
+
+  @override
   String get reviewChangesIntro =>
       'Mitä Omi on muuttanut itse viimeisen 30 päivän aikana. Kumoa kaikki, mikä näyttää väärältä.';
 

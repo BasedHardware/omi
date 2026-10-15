@@ -7,6 +7,7 @@ logic run for real. All text is synthetic.
 """
 
 from datetime import datetime, timedelta, timezone
+from copy import deepcopy
 from types import SimpleNamespace
 
 import pytest
@@ -959,3 +960,21 @@ def test_preceding_query_uses_the_registered_spec_and_an_existing_index():
     assert ('limit', (6,), {}) in log
     selected = next(args[0] for name, args, _ in log if name == 'select')
     assert 'transcript_segments' not in selected
+
+
+@pytest.mark.parametrize('protected', ['p', 'n'])
+def test_transaction_never_rekeys_corrected_capture_anchors(world, protected):
+    world.add('p', 0, 10)
+    world.add('n', 15, 10)
+    world.raw(protected)['has_transcript_corrections'] = True
+    before = deepcopy(world.store.rows)
+    result = smart_merge_db.absorb_conversation(
+        UID,
+        'p',
+        'n',
+        expected_revision=0,
+        plan=lambda *_: (_ for _ in ()).throw(AssertionError('corrected captures must not reach the merge planner')),
+        firestore_client=world.store,
+    )
+    assert result.outcome == 'rejected'
+    assert world.store.rows == before

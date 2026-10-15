@@ -12434,6 +12434,15 @@ class AppLocalizationsBe extends AppLocalizations {
   String get reviewRecentChanges => 'Нядаўнія змены';
 
   @override
+  String get reviewChangeAfter => 'Пасля';
+
+  @override
+  String get reviewChangeBefore => 'Да';
+
+  @override
+  String get reviewChangeRemoved => 'Выдалена з актыўнага спісу';
+
+  @override
   String get reviewChangesIntro => 'Што Omi змяніў сам за апошнія 30 дзён. Скасуйце ўсё, што выглядае няправільна.';
 
   @override

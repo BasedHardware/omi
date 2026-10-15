@@ -8,6 +8,8 @@ Uncertain answers suppress an evidence fingerprint, never an entire identity.
 import os
 import hashlib
 import json
+from contextlib import contextmanager
+from contextvars import ContextVar
 from datetime import datetime, timezone
 from typing import Any
 
@@ -21,6 +23,7 @@ from models.review import ReviewItem, ReviewItemV2, ReviewAnswerReceipt
 from models.review_context import enrich_spelling
 
 DAILY_BUDGET = 3
+_USER_REQUEST_OWNER: ContextVar[str | None] = ContextVar('review_user_request_owner', default=None)
 
 
 class ReviewNotFound(ValueError):
@@ -47,7 +50,25 @@ def fingerprint(value: Any) -> str:
     return safe_id(json.dumps(value, sort_keys=True, default=str, separators=(',', ':')))
 
 
-def require_enabled() -> None:
+@contextmanager
+def user_request_authority(uid: str):
+    """Only this authenticated owner's explicit mutation may bypass Review admission."""
+    if not uid:
+        raise ValueError('agent_invalid_owner')
+    token = _USER_REQUEST_OWNER.set(uid)
+    try:
+        yield
+    finally:
+        _USER_REQUEST_OWNER.reset(token)
+
+
+def is_user_request(uid):
+    return _USER_REQUEST_OWNER.get() == uid
+
+
+def require_enabled(uid: str | None = None) -> None:
+    if uid is not None and _USER_REQUEST_OWNER.get() == uid:
+        return
     if os.environ.get('REVIEW_SURFACE_MODE', 'off').strip().lower() != 'on':
         raise ReviewConflict('review_surface_disabled')
 
@@ -67,12 +88,12 @@ def enqueue_review_proposal(
     Identity, spelling and agent proposals share this queue. New evidence_version explicitly
     permits re-asking an uncertain answer. Resolved decisions remain terminal.
     """
-    require_enabled()
+    require_enabled(uid)
     item = enrich_spelling(item, source or {}, overwrite=True)
     is_agent = item.kind == 'agent_proposal'
     if item.kind not in {'same_person', 'spelling', 'agent_proposal'} or not evidence_version.strip():
         raise ValueError('Unsupported proposal kind or evidence version')
-    if dream_run_id and item.kind not in {'spelling', 'same_person'}:
+    if dream_run_id and item.kind not in {'spelling', 'same_person', 'agent_proposal'}:
         raise ValueError('Dream atomic question admission requires a question')
     if not item.item_id.startswith(f'{item.kind}:') or '/' in item.item_id:
         raise ValueError('item_id must be <kind>:<opaque source id>')
@@ -86,12 +107,16 @@ def enqueue_review_proposal(
 
     @firestore.transactional
     def enqueue(tx):
+        from database.dream_effect_fence import assert_active
+
+        assert_active(uid, tx)
         budget = (budget_ref.get(transaction=tx).to_dict() or {}) if is_agent or dream_run_id else {}
         current = decode_doc(uid, ref.get(transaction=tx).to_dict()) or {}
         if marker is not None and marker.get(transaction=tx).exists:
             return 'suppressed'
         if current.get('status') == 'resolved' or current.get('evidence_version') == evidence_version:
             return 'already_suggested'
+        data = {}
         if dream_run_id:
             state = client().collection('dream_users').document(uid)
             data = state.get(transaction=tx).to_dict() or {}
@@ -100,11 +125,16 @@ def enqueue_review_proposal(
             questions = data.get('questions', 0) if data.get('question_day') == day else 0
             if questions + budget.get('dream_suggestions', 0) >= DAILY_BUDGET or budget.get('used', 0) >= DAILY_BUDGET:
                 return 'suggestion_cap'
-            tx.update(state, {'question_day': day, 'questions': questions + 1})
+            if not is_agent:
+                tx.update(state, {'question_day': day, 'questions': questions + 1})
         if is_agent:
             from config.dream_agent import SUGGESTIONS_PER_DAY
 
-            dream_state = client().collection('dream_users').document(uid).get(transaction=tx).to_dict() or {}
+            dream_state = (
+                data
+                if dream_run_id
+                else client().collection('dream_users').document(uid).get(transaction=tx).to_dict() or {}
+            )
             questions = dream_state.get('questions', 0) if dream_state.get('question_day') == day else 0
             if (
                 budget.get('dream_suggestions', 0) + questions >= SUGGESTIONS_PER_DAY
@@ -136,6 +166,9 @@ def enqueue_review_proposal(
 
 def validate_records(uid: str, tx, expected_records: dict | None) -> None:
     """Fence the offered target/evidence snapshots in the edit's transaction."""
+    from database.dream_effect_fence import assert_active
+
+    assert_active(uid, tx)
     for path, expected in (expected_records or {}).items():
         collection, key = path.split('/', 1)
         current = user(uid).collection(collection).document(key).get(transaction=tx).to_dict()
@@ -260,7 +293,17 @@ def release_failed_answer(uid: str, item_id: str) -> None:
     release(client().transaction())
 
 
-_CONTENT_FIELDS = {'item', 'source', 'change', 'edits', 'before', 'memory_edit', 'summary'}
+_CONTENT_FIELDS = {
+    'item',
+    'source',
+    'change',
+    'edits',
+    'before',
+    'memory_edit',
+    'memory_hygiene',
+    'summary',
+    'transcript_overlay',
+}
 
 
 def _json_default(value):

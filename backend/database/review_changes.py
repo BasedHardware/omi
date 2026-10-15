@@ -8,13 +8,24 @@ of memories or person records. Entity merges retain a redirect node.
 
 import copy
 from datetime import datetime, timedelta, timezone
-from typing import Literal
+from typing import Any, Literal
 
 from google.cloud import firestore
 from google.cloud.firestore_v1.base_query import FieldFilter
 from pydantic import BaseModel, ConfigDict, Field
 
-from database import entities, memory_ledger, review_queries, review_store as store
+from database import (
+    entities,
+    memory_ledger,
+    review_memory_hygiene,
+    review_queries,
+    review_store as store,
+)
+from database.action_items_cache import bump_action_items_list_version
+from database import review_exact_undo
+from database.review_field_states import read_field_state, write_field_state
+from utils.dream_metrics import record_undo
+from utils.review_projection import sync_conversations
 from database.read_boundary import parse_payload_strict
 from models.review import ReviewChange, ReviewChangesResponse
 
@@ -25,22 +36,9 @@ class _Unchanged(Exception):
     pass
 
 
-ALLOWED_FIELDS = {
-    'knowledge_nodes': {'label', 'label_lower', 'aliases', 'aliases_lower', 'merged_entity_ids', 'redirect_entity_id'},
-    'people': {'name', 'aliases', 'organization', 'subtitle'},
-    'conversations': {
-        'user_title',
-        'structured.title',
-        'structured.overview',
-        'structured.sections',
-        'structured.note_claims',
-        'transcript_segments',
-        'manual_speaker_assignments',
-    },
-    'action_items': {'status', 'completed', 'completed_at'},
-    'entity_pages': {'summary', 'updated_at'},
-    'dream_vocabulary': {'source'},
-}
+from utils.agent_capabilities.registry import journal_fields
+
+ALLOWED_FIELDS = journal_fields()
 
 
 class AgentEdit(BaseModel):
@@ -54,19 +52,6 @@ class AgentEdit(BaseModel):
     patch: dict
 
 
-def _get(data: dict, path: str) -> dict:
-    value = data
-    for key in path.split('.'):
-        if not isinstance(value, dict) or key not in value:
-            return {'present': False}
-        value = value[key]
-    return {'present': True, 'value': copy.deepcopy(value)}
-
-
-def _patch_value(value: dict):
-    return value['value'] if value['present'] else firestore.DELETE_FIELD
-
-
 def _wire(data: dict) -> ReviewChange:
     return parse_payload_strict(
         ReviewChange,
@@ -77,12 +62,17 @@ def _wire(data: dict) -> ReviewChange:
 
 def agent_change_allowed(uid: str, edit_key: str) -> bool:
     """Dream MUST check this key before planning an edit; record also enforces it."""
-    return not store.user(uid).collection('review_do_not_redo').document(store.safe_id(edit_key)).get().exists
+    keys = [edit_key]
+    if edit_key.startswith('agent:'):
+        keys.append('dream:' + edit_key.removeprefix('agent:'))
+    return not any(
+        store.user(uid).collection('review_do_not_redo').document(store.safe_id(key)).get().exists for key in keys
+    )
 
 
 def suppress_agent_change(uid: str, edit_key: str) -> None:
     """A dismissed Review operation uses the same durable fence as an undo."""
-    store.require_enabled()
+    store.require_enabled(uid)
     store.user(uid).collection('review_do_not_redo').document(store.safe_id(edit_key)).set(
         {'edit_key': edit_key, 'created_at': datetime.now(timezone.utc)}
     )
@@ -97,7 +87,9 @@ def record_agent_change(
     memory_edit=None,
     expected_documents: dict | None = None,
     expected_records: dict | None = None,
-    entity_merge: tuple[str, str] | None = None
+    entity_merge: tuple[str, str] | None = None,
+    exact_undo: bool = False,
+    witness_records: dict | None = None,
 ) -> ReviewChange:
     """Apply and journal a supported edit exactly once, keyed by change_id.
 
@@ -107,7 +99,7 @@ def record_agent_change(
     speaker teaching path, including its generation fence; wire clients cannot
     supply AgentEdit. Transcript payloads must already be storage-encoded.
     """
-    store.require_enabled()
+    store.require_enabled(uid)
     if memory_edit is not None:
         if getattr(memory_edit, 'duplicate_memory_id', None):
             from database.review_memory_merges import record_merge
@@ -143,7 +135,7 @@ def record_agent_change(
                 raise store.ReviewConflict('Change identity conflict')
             result.update(existing)
             raise _Unchanged
-        if blocked:
+        if blocked and not store.is_user_request(uid):
             raise store.ReviewConflict('Agent edit was undone by the user')
         store.validate_records(uid, tx, expected_records)
         records = []
@@ -158,17 +150,21 @@ def record_agent_change(
                 {
                     'collection': edit.collection,
                     'document_id': edit.document_id,
-                    'before': {k: _get(data, k) for k in edit.patch},
+                    'before': {k: read_field_state(data, k) for k in edit.patch},
                     'after': {k: {'present': True, 'value': v} for k, v in edit.patch.items()},
                 }
             )
-        journal = {
+        journal: dict[str, Any] = {
             'change': change.model_dump(mode='python'),
             'created_at': change.created_at,
             'edit_key': edit_key,
             'edits': records,
             'entity_merge': list(entity_merge) if entity_merge else None,
         }
+        if exact_undo:
+            journal.update(
+                review_exact_undo.journal_fences(edits, rows, expected_records, witnesses=witness_records, uid=uid)
+            )
         mutations = (
             [memory_ledger.merge_entities(*entity_merge, evidence={'review_change_id': change.change_id})]
             if entity_merge
@@ -192,6 +188,9 @@ def record_agent_change(
         )
     except _Unchanged:
         pass
+    sync_conversations(uid, edits, firestore_client=store.client())
+    if edits and any(edit.collection == 'action_items' for edit in edits):
+        bump_action_items_list_version(uid)
     return _wire(result)
 
 
@@ -203,7 +202,7 @@ def merge_review_entities(
     People ids remain stable; the derived page folds facts/edges of both nodes.
     Undo restores each node's owned fields through a ledger split mutation.
     """
-    store.require_enabled()
+    store.require_enabled(uid)
 
     # Older people records need no graph backfill to participate. Materialize
     # only their canonical identity, preserving stable person ids on undo.
@@ -211,6 +210,7 @@ def merge_review_entities(
     def ensure_nodes(tx):
         store.validate_records(uid, tx, expected_records)
         rows = []
+        nodes = {}
         for entity_id in (left, right):
             ref = store.user(uid).collection('knowledge_nodes').document(entity_id)
             node = ref.get(transaction=tx).to_dict()
@@ -239,12 +239,20 @@ def merge_review_entities(
                         },
                     )
                 )
+            nodes[entity_id] = node
         for ref, node in rows:
             tx.set(ref, node)
+            nodes[ref.id] = node
+        return nodes, {ref.id for ref, _ in rows}
 
-    ensure_nodes(store.client().transaction())
-    a = store.user(uid).collection('knowledge_nodes').document(left).get().to_dict()
-    b = store.user(uid).collection('knowledge_nodes').document(right).get().to_dict()
+    nodes, created = ensure_nodes(store.client().transaction())
+    a, b = nodes.get(left), nodes.get(right)
+    fences = dict(expected_records or {})
+    for entity_id in created:
+        path = 'knowledge_nodes/' + entity_id
+        # Only the node this transaction minted may replace its missing
+        # witness. Never bless a fresh reread or discard unrelated null fences.
+        fences[path] = nodes[entity_id]
     if left == right or not a or not b or a.get('redirect_entity_id') or b.get('redirect_entity_id'):
         raise store.ReviewConflict('Two current distinct entity nodes are required')
     merged = entities.apply_entity_mutations({left: a, right: b}, [memory_ledger.merge_entities(left, right)])[left]
@@ -267,7 +275,7 @@ def merge_review_entities(
         edit_key=edit_key,
         entity_merge=(left, right),
         expected_documents={left: a, right: b},
-        expected_records={path: value for path, value in (expected_records or {}).items() if value is not None},
+        expected_records=fences,
     )
 
 
@@ -275,16 +283,32 @@ def set_undone(uid: str, change_id: str, undone: bool, *, now: datetime | None =
     now = now or datetime.now(timezone.utc)
     ref = store.user(uid).collection('review_changes').document(store.safe_id(change_id))
     data = store.decode_doc(uid, ref.get().to_dict())
+
+    def tracked(change):
+        if undone and data and not data['change']['undone']:
+            record_undo(change)
+        return change
+
+    if data and data.get('memory_hygiene'):
+        if data['created_at'] < now - WINDOW:
+            raise store.ReviewNotFound('Change is outside the 30-day undo window')
+        return tracked(review_memory_hygiene.set_undone(uid, change_id, undone))
+    if data and data.get('transcript_overlay'):
+        if data['created_at'] < now - WINDOW:
+            raise store.ReviewNotFound('Change is outside the 30-day undo window')
+        from database.review_transcript_changes import set_undone as set_transcript_undone
+
+        return tracked(set_transcript_undone(uid, change_id, undone))
     if data and data.get('memory_edit'):
         if data['created_at'] < now - WINDOW:
             raise store.ReviewNotFound('Change is outside the 30-day undo window')
         if data.get('memory_merge'):
             from database.review_memory_merges import set_undone as set_memory_merge_undone
 
-            return set_memory_merge_undone(uid, change_id, undone, data)
+            return tracked(set_memory_merge_undone(uid, change_id, undone, data))
         from database.review_memory_changes import set_memory_undone
 
-        return set_memory_undone(uid, change_id, undone, data)
+        return tracked(set_memory_undone(uid, change_id, undone, data))
     result = {}
 
     def build(tx):
@@ -297,15 +321,72 @@ def set_undone(uid: str, change_id: str, undone: bool, *, now: datetime | None =
         if data['change']['undone'] == undone:
             raise _Unchanged
         expected, destination = ('after', 'before') if undone else ('before', 'after')
+        review_exact_undo.validate_generation(uid, tx, data)
+        if not undone:
+            # Merge cleanups hide the target behind a surviving row; Redo must
+            # not resurrect superseded_by/dream_duplicate_of links pointing at
+            # a survivor that changed or disappeared after Undo.
+            for survivor_path, expected_fence in (data.get('witness_fences') or {}).items():
+                survivor_collection, survivor_id = survivor_path.split('/', 1)
+                survivor = (
+                    store.user(uid).collection(survivor_collection).document(survivor_id).get(transaction=tx).to_dict()
+                )
+                observed = (
+                    review_exact_undo.witness_snapshot(uid, survivor_path, survivor)
+                    if isinstance(expected_fence, dict) and survivor is not None
+                    else store.fingerprint(survivor)
+                )
+                if survivor is None or observed != expected_fence:
+                    raise store.ReviewConflict('Cleanup survivor has a newer edit')
         rows = []
+        exact_restores = {}
         for edit in data['edits']:
             target = store.user(uid).collection(edit['collection']).document(edit['document_id'])
             current = target.get(transaction=tx).to_dict()
-            if current is None or current.get('deleted') or current.get('is_dismissed') or current.get('discarded'):
+            exact = review_exact_undo.validate_row(data, edit['collection'], edit['document_id'], current, expected)
+            if current is None or (
+                not exact and (current.get('deleted') or current.get('is_dismissed') or current.get('discarded'))
+            ):
                 raise store.ReviewConflict('Edit target no longer available')
-            if any(_get(current, key) != value for key, value in edit[expected].items()):
+            if (
+                edit['collection'] == 'conversations'
+                and 'transcript_segments' in edit[expected]
+                and current.get('has_transcript_corrections')
+            ):
+                overlay = (
+                    store.user(uid)
+                    .collection('transcript_corrections')
+                    .document(edit['document_id'])
+                    .get(transaction=tx)
+                    .to_dict()
+                )
+                from database.conversations import decode_transcript_segments_verified
+
+                def decode(state):
+                    return decode_transcript_segments_verified(
+                        uid, state.get('value') or [], bool(current.get('transcript_segments_compressed'))
+                    )
+
+                before_segments = decode(edit['before']['transcript_segments'])
+                after_segments = decode(edit['after']['transcript_segments'])
+                touched = {
+                    index
+                    for index in range(max(len(before_segments), len(after_segments)))
+                    if index >= min(len(before_segments), len(after_segments))
+                    or before_segments[index].get('text') != after_segments[index].get('text')
+                }
+                if any(
+                    not row['undone'] and row['segment_index'] in touched
+                    for row in store.require_doc(uid, overlay)['source']
+                ):
+                    raise store.ReviewConflict('Transcript has a dependent newer correction')
+            if any(read_field_state(current, key) != value for key, value in edit[expected].items()):
                 raise store.ReviewConflict('Target has a newer edit')
-            rows.append((target, {key: _patch_value(value) for key, value in edit[destination].items()}, current))
+            if exact:
+                # A full-row fence permits exact replacement without DELETE_FIELD
+                # transforms. Missing fields stay missing, including after Redo.
+                exact_restores[target.path] = review_exact_undo.restored_row(current, edit[destination])
+            rows.append((target, {key: write_field_state(value) for key, value in edit[destination].items()}, current))
         change = dict(data['change'], undone=undone)
         result['change'] = change
         merge = data.get('entity_merge')
@@ -327,7 +408,11 @@ def set_undone(uid: str, change_id: str, undone: bool, *, now: datetime | None =
 
         def write(transaction):
             for target, patch, _ in rows:
-                transaction.update(target, patch)
+                identity = target.path
+                if identity in exact_restores:
+                    transaction.set(target, exact_restores[identity])
+                else:
+                    transaction.update(target, patch)
             transaction.update(ref, store.encode_doc(uid, {'change': change}))
             if undone:
                 marker = store.user(uid).collection('review_do_not_redo').document(store.safe_id(data['edit_key']))
@@ -340,8 +425,11 @@ def set_undone(uid: str, change_id: str, undone: bool, *, now: datetime | None =
             uid, None, build, use_current_head=True, firestore_client=store.client()
         )
     except _Unchanged:
-        pass
-    return _wire(result)
+        return _wire(result)
+    sync_conversations(uid, result['edits'], firestore_client=store.client())
+    if any(edit.get('collection') == 'action_items' for edit in result.get('edits', [])):
+        bump_action_items_list_version(uid)
+    return tracked(_wire(result))
 
 
 def list_changes(uid: str, cursor: str | None = None, *, now: datetime | None = None) -> ReviewChangesResponse:

@@ -906,6 +906,7 @@ struct TranscriptSegment: Codable, Identifiable {
   let id: String
   let backendId: String?
   let text: String
+  let originalText: String?
   let speaker: String?
   let isUser: Bool
   let personId: String?
@@ -924,6 +925,7 @@ struct TranscriptSegment: Codable, Identifiable {
 
   enum CodingKeys: String, CodingKey {
     case id, text, speaker
+    case originalText = "original_text"
     case isUser = "is_user"
     case personId = "person_id"
     case start, end, translations
@@ -935,6 +937,7 @@ struct TranscriptSegment: Codable, Identifiable {
     id = decodedId ?? UUID().uuidString
     backendId = decodedId
     text = try container.decodeIfPresent(String.self, forKey: .text) ?? ""
+    originalText = try container.decodeIfPresent(String.self, forKey: .originalText)
     speaker = try container.decodeIfPresent(String.self, forKey: .speaker)
     isUser = try container.decodeIfPresent(Bool.self, forKey: .isUser) ?? false
     personId = try container.decodeIfPresent(String.self, forKey: .personId)
@@ -952,6 +955,7 @@ struct TranscriptSegment: Codable, Identifiable {
     self.id = decodedId ?? UUID().uuidString
     self.backendId = decodedId
     self.text = wire.text
+    self.originalText = wire.originalText
     self.speaker = wire.speaker
     self.isUser = wire.isUser
     self.personId = wire.personId
@@ -965,6 +969,7 @@ struct TranscriptSegment: Codable, Identifiable {
     id: String,
     backendId: String? = nil,
     text: String,
+    originalText: String? = nil,
     speaker: String?,
     isUser: Bool,
     personId: String?,
@@ -975,6 +980,7 @@ struct TranscriptSegment: Codable, Identifiable {
     self.id = id
     self.backendId = backendId
     self.text = text
+    self.originalText = originalText
     self.speaker = speaker
     self.isUser = isUser
     self.personId = personId
