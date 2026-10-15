@@ -1,7 +1,7 @@
 # Shared Gateway batch cohort ramp
 
-Lead owns merges, deployments and ramp decisions. The checked-in production binding remains complete stage B, David-only authoritative including sync/backfill. Stage C (1%) and D (5%) are prepared in the stage JSON; expansion requires explicitly selecting that complete stage in the shared overlay and pusher chart.
-This is preparation only; deployment and long-audio qualification remain lead-owned.
+Lead owns merges, deployments and ramp decisions. The checked-in production binding selects complete stage C: 1% authoritative including sync/backfill, plus David. Stage D (5%) remains prepared in the stage JSON; expansion requires explicitly selecting that complete stage in the shared overlay and pusher chart.
+Deployment and further long-audio qualification remain lead-owned.
 The reserved prod Gateway is `172.16.160.20`; reservation is not serving readiness.
 Follow [Gateway installation and route probes](../charts/internal-gateway/README.md)
 before deploying callers. The pyannote adapter appends `/v2/diarization`, yielding
@@ -40,8 +40,10 @@ gate accepts only a complete reviewed stage; mixed percentages or scope drift fa
 Redeploy pusher, backend, backend-sync and backend-sync-backfill through their
 owning workflows. Verify the effective values agree on all four before starting
 the observation window. Integration, dev and backend-listen remain excluded.
-Backfill retains inert stage-A bindings on rollback: sync=false prevents its
-final pass, even though the shared cohort mapping remains present.
+Rollback restores the complete B mapping on all four hosts, including backfill:
+both percentages 0, daily shadow budget 1 h, authoritative=true and sync=true.
+Complete A additionally sets authoritative=false and sync=false; retaining C
+percentages or its daily budget is neither complete A nor complete B.
 
 Never exceed 5% in this plan. Wait at least 12 hours of data at D before proposing
 any expansion; hold each earlier stage until all gates below have enough samples.
@@ -163,12 +165,52 @@ it does not depend on that process-local shadow task.
    confirm David's actual backfill jobs log `event=sync_final_pass` and inspect output.
 3. Hold B for acceptance, then advance C/D only after the gates and combined-load
    qualification. Redeploy all four for each data edit.
-4. Roll back to complete A: set AUTHORITATIVE=false and SYNC_ENABLED=false in the
-   shared overlay anchor and pusher chart, recompose `runtime_env.yaml`, and redeploy
-   backend, backend-sync, backend-sync-backfill and pusher. This restores legacy
-   sync speaker identification and stops live promotion while retaining David shadow.
-   An incident stop sets `TRANSCRIPTION_SHADOW_KILL_SWITCH=true` and
-   `TRANSCRIPTION_FINAL_PASS_DIARIZER=legacy` on all hosts; restore reviewed data
-   after recovery. Disable callers before removing batch capacity. Existing
-   promoted records are not rewritten by rollback. Keep Gateway and embedding
-   routes for the independent caller migration.
+
+### Rollback
+
+An immediate incident stop sets `TRANSCRIPTION_SHADOW_KILL_SWITCH=true` and
+`TRANSCRIPTION_FINAL_PASS_DIARIZER=legacy` on all hosts; restore reviewed data
+after recovery. Disable callers before removing batch capacity.
+
+The first operational rollback move needs no merge: send each Cloud Run service's
+traffic back to its recorded previous ready B revision and roll prod pusher back
+to its previous successful B Helm revision. Use the pre-C deployment receipts;
+verify these revisions contain complete B before selecting them. Each service has
+its own previous revision. The lead/operator runs the following templates with
+production project, region and revision placeholders replaced:
+
+```bash
+gcloud run services update-traffic backend --to-revisions=<previous-ready-backend-revision>=100 --project=<prod-project> --region=<region>
+gcloud run services update-traffic backend-sync --to-revisions=<previous-ready-sync-revision>=100 --project=<prod-project> --region=<region>
+gcloud run services update-traffic backend-sync-backfill --to-revisions=<previous-ready-backfill-revision>=100 --project=<prod-project> --region=<region>
+helm -n prod-omi-backend rollback prod-omi-pusher <previous-successful-B-helm-revision> --wait --timeout=160m
+```
+
+Verify 100% traffic on the selected ready Cloud Run revisions and the restored
+pusher rollout. In-flight work may finish on the old instances. The configuration
+revert follows this operational rollback so a later deploy cannot re-enable C:
+
+1. Restore **complete B** in the `&batch_cohort` anchor of
+   `backend/deploy/runtime_env/prod.overlay.yaml` and in
+   `backend/charts/pusher/prod_omi_pusher_values.yaml`: set
+   `TRANSCRIPTION_FINAL_PASS_PERCENT=0`, `TRANSCRIPTION_SHADOW_PERCENT=0` and
+   `TRANSCRIPTION_SHADOW_DAILY_AUDIO_HOURS=1`; keep
+   `TRANSCRIPTION_FINAL_PASS_AUTHORITATIVE=true` and
+   `TRANSCRIPTION_FINAL_PASS_SYNC_ENABLED=true`. Keep David's allowlists and the
+   hourly sync caps (10 audio-h / 1,000 attempts) unchanged. Recompose with
+   `backend/.venv/bin/python backend/deploy/compose_runtime_env.py`, review/merge
+   the revert, then redeploy backend, backend-sync and backend-sync-backfill via
+   `gcp_backend.yml` (`environment=prod`, `deploy_targets=cloud-run-only`), and
+   pusher via `gcp_backend_pusher.yml` (`environment=prod`, `service=pusher`,
+   qualified immutable digest). Both deployment paths are required. Verify the
+   complete B values agree across all four hosts. This restores David-only
+   authoritative final passes, including sync.
+2. If legacy sync and no live promotion are required, select **complete A**
+   instead: both percentages 0 and daily shadow budget 1, **plus**
+   `TRANSCRIPTION_FINAL_PASS_AUTHORITATIVE=false` and
+   `TRANSCRIPTION_FINAL_PASS_SYNC_ENABLED=false` in both sources. Recompose and
+   redeploy all four through the same workflows. This retains David-only shadow;
+   changing only the two flags while leaving C's percentages/budget is insufficient.
+
+Existing promoted records are not rewritten by rollback. Keep Gateway and
+embedding routes for the independent caller migration.
