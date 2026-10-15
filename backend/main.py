@@ -553,7 +553,8 @@ async def shutdown_event():
             await task
         except asyncio.CancelledError:
             pass
-    await stop_serving(getattr(app.state, 'batch_pipeline_serving', None))
+    if (serving_task := getattr(app.state, 'batch_pipeline_serving', None)) is not None:
+        await stop_serving(serving_task)
     await batch_pressure.stop()
     await drain_background_tasks(timeout=10.0)
     await shutdown_managed_spend_ledger()

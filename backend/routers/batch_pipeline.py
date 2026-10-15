@@ -15,12 +15,14 @@ from utils.batch_pipeline.contracts import PoolCapacity, WorkResult
 from utils.batch_pipeline.admission import authorize
 from utils.batch_pipeline.enrichment import run_enrichment
 from utils.batch_pipeline.serving import serving_for_stage
-from utils.cloud_tasks import verify_configured_cloud_tasks_oidc
 from utils.executors import db_executor, run_blocking, sync_executor
 from utils.sync.stage import current_stage, require_http_stage
 
 
 def verify_worker(request: Request) -> int:
+    # Keep worker-only authentication out of legacy sync import paths.
+    from utils.cloud_tasks import verify_configured_cloud_tasks_oidc
+
     return verify_configured_cloud_tasks_oidc(
         request,
         audience=os.getenv('BATCH_PIPELINE_WORKER_AUDIENCE', '').strip(),
