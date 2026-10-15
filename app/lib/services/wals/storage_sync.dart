@@ -526,6 +526,10 @@ class StorageSyncImpl implements StorageSync {
           hasParseGap = true;
         }
         if (value.length > 4) {
+          final packetTs = (value[0] << 24) | (value[1] << 16) | (value[2] << 8) | value[3];
+          if (RingProtocol.isUsableEpochTimestamp(packetTs) && wal.timerStart <= 0) {
+            wal.timerStart = packetTs;
+          }
           var audioData = value.sublist(4);
           var audioLen = audioData.length;
 
