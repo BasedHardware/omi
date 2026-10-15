@@ -30,7 +30,10 @@ class TestWrappedDocRefValidation:
         wrapped._wrapped_doc_ref('uid-1', 2025)
         client.collection.assert_called_once_with('users')
 
-    @pytest.mark.parametrize('bad_uid', ['', '   ', None, 123])
+    @pytest.mark.parametrize(
+        'bad_uid',
+        ['', '   ', None, 123, 'a/b', 'a\\b', '../other', 'a..b', 'a\x00b', 'a\nb', 'x' * 200],
+    )
     def test_rejects_bad_uid(self, monkeypatch, bad_uid):
         _db(monkeypatch)
         with pytest.raises(ValueError):

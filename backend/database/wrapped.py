@@ -24,12 +24,19 @@ def _typed_doc(doc: Any) -> Dict[str, Any]:
 
 
 def _wrapped_doc_ref(uid: str, year: int):
-    """users/{uid}/wrapped/{year} — a valid doc path needs a non-empty uid and a
+    """users/{uid}/wrapped/{year} — a valid doc path needs a safe uid and a
     sane 4-digit year. An empty uid makes users//wrapped/2025 (a collection
-    path, not a doc); an arbitrary year makes a malformed doc id. Reject both
-    before they reach Firestore."""
-    if not isinstance(uid, str) or not uid.strip():
-        raise ValueError('uid must be a non-empty string')
+    path, not a doc); a '/'/'\\'/traversal/control-char uid splits into a
+    subcollection path or reads an unintended location; an arbitrary year
+    makes a malformed doc id. Reject all before they reach Firestore."""
+    if (
+        not isinstance(uid, str)
+        or not uid.strip()
+        or len(uid) > 128
+        or any(c in uid for c in ('/', '\\', '\x00', '\r', '\n'))
+        or '..' in uid
+    ):
+        raise ValueError('uid must be a safe document id')
     if not isinstance(year, int) or isinstance(year, bool) or year < 2000 or year > 2100:
         raise ValueError('year must be a valid 4-digit year')
     return db.collection('users').document(uid).collection(WRAPPED_COLLECTION).document(str(year))
