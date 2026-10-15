@@ -644,7 +644,9 @@ def get_desktop_gemini_stream_client() -> httpx.AsyncClient:
 
     A 30-second read timeout is an idle-gap bound, not a total stream duration.
     Long healthy SSE responses remain valid while silent upstream sockets are
-    released promptly.
+    released promptly. The desktop proxy and gateway hop add a wall clock under
+    Cloud Run's request timeout so a trickled body cannot hold the request open
+    until the platform terminates it.
     """
     return _get_client(
         'desktop_gemini_stream',

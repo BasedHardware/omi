@@ -1322,6 +1322,65 @@ async def test_streaming_defers_resource_acquisition_until_body_iteration(monkey
     assert event["total_token_count"] == 13
 
 
+@pytest.mark.asyncio
+async def test_streaming_body_stops_before_the_platform_request_timeout(monkeypatch):
+    class UpstreamResponse:
+        status_code = 200
+
+        async def aiter_bytes(self):
+            while True:
+                await asyncio.sleep(0.05)
+                yield b'data: {"candidates":[{"content":{"parts":[{"text":"x"}]}}]}\n\n'
+
+    class StreamContext:
+        def __init__(self):
+            self.closed = False
+
+        async def __aenter__(self):
+            return UpstreamResponse()
+
+        async def __aexit__(self, *_args):
+            self.closed = True
+
+    opened: list[StreamContext] = []
+
+    class Client:
+        def stream(self, *args, **kwargs):
+            context = StreamContext()
+            opened.append(context)
+            return context
+
+    async def meter(_uid, path, _model, _action):
+        return path
+
+    async def route(_path, _model, _action, _query):
+        return desktop_proxy.UpstreamRoute("https://provider.invalid", {}, {}, "vertex_ai", "adc", "us-central1")
+
+    async def await_upstream(_request, awaitable):
+        return await awaitable
+
+    _set_gemini_byok(monkeypatch, 'user-key')
+    monkeypatch.setattr(desktop_proxy, "_STREAM_DEADLINE_SECONDS", 0.1)
+    monkeypatch.setattr(desktop_proxy, "_meter_server_request", meter)
+    monkeypatch.setattr(desktop_proxy, "_upstream", route)
+    monkeypatch.setattr(desktop_proxy, "_cancel_on_disconnect", await_upstream)
+    monkeypatch.setattr(desktop_proxy, "get_desktop_gemini_stream_client", lambda: Client())
+    monkeypatch.setattr(desktop_proxy, "get_desktop_gemini_semaphore", lambda: asyncio.Semaphore(1))
+    output = io.StringIO()
+    monkeypatch.setattr(desktop_proxy.sys, "stdout", output)
+
+    response = await desktop_proxy._proxy(
+        make_request(workload="interactive"), "models/gemini-2.5-flash:streamGenerateContent", True, "user"
+    )
+    started = asyncio.get_running_loop().time()
+    received = [chunk async for chunk in response.body_iterator]
+    assert asyncio.get_running_loop().time() - started < 1
+    assert any(b'provider_deadline_exceeded' in chunk for chunk in received)
+    assert opened and opened[0].closed
+    event = json.loads(output.getvalue())
+    assert event["outcome"] == "provider_deadline_exceeded"
+
+
 @pytest.fixture(autouse=True)
 def _reset_pt_promotion_state(monkeypatch):
     """Observed capacity and learned reachability are module state; never leak

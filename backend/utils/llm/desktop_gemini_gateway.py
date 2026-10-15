@@ -10,9 +10,9 @@ from __future__ import annotations
 
 import asyncio
 import json
-from collections.abc import AsyncIterator, Mapping
+from collections.abc import AsyncIterator, Awaitable, Mapping
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, TypeVar
 from uuid import UUID, NAMESPACE_URL, uuid5
 
 from fastapi import HTTPException
@@ -31,6 +31,11 @@ from utils.llm.model_config import LUNA_MODEL
 
 DESKTOP_GATEWAY_FEATURE = 'desktop_proactivity'
 DESKTOP_GATEWAY_TIMEOUT_SECONDS = 75.0
+# desktop-backend's Cloud Run request timeout is 300s. httpx's read timeout is
+# only the idle gap between chunks, so a trickled streamGenerateContent body
+# stays open until that platform kill. Stop early enough to write a terminal
+# error while the handler can still finish.
+DESKTOP_STREAM_DEADLINE_SECONDS = 270.0
 # BYOK keeps its historical output ceiling; server-paid clamps lower in the proxy.
 _MAX_OUTPUT_TOKENS = 8192
 _DEFAULT_THINKING_BUDGET = 1024
@@ -40,6 +45,15 @@ _MAX_INLINE_MEDIA_PARTS = 16
 _GATEWAY_ACTIONS = frozenset({'generateContent', 'streamGenerateContent', 'embedContent', 'batchEmbedContents'})
 _DESKTOP_LUNA_LANE_ID = 'omi:auto:desktop-luna'
 _MAX_BATCH_EMBED_REQUESTS = 100
+_T = TypeVar('_T')
+
+
+async def await_before_deadline(awaitable: Awaitable[_T], deadline: float) -> _T:
+    """Await one step, raising TimeoutError once ``deadline`` (loop time) has passed."""
+    remaining = deadline - asyncio.get_running_loop().time()
+    if remaining <= 0:
+        raise TimeoutError
+    return await asyncio.wait_for(awaitable, remaining)
 
 
 class DesktopGeminiGatewayError(Exception):
@@ -567,9 +581,12 @@ async def gateway_desktop_chat_stream(
             status_code=400, code='validation_rejected', message=f'Gemini model {model} has no gateway lane'
         )
     request = gemini_body_to_openai_chat(payload, lane_id=lane_id, stream=True)
-    async with get_llm_gateway_semaphore():
+    deadline = asyncio.get_running_loop().time() + DESKTOP_STREAM_DEADLINE_SECONDS
+    semaphore = get_llm_gateway_semaphore()
+    await await_before_deadline(semaphore.acquire(), deadline)
+    try:
         client = get_llm_gateway_client()
-        async with client.stream(
+        stream_cm = client.stream(
             'POST',
             f'{get_llm_gateway_base_url()}/v1/chat/completions',
             headers=_desktop_gateway_headers(
@@ -577,13 +594,20 @@ async def gateway_desktop_chat_stream(
             ),
             json=request,
             timeout=DESKTOP_GATEWAY_TIMEOUT_SECONDS,
-        ) as result:
+        )
+        result = await await_before_deadline(stream_cm.__aenter__(), deadline)
+        try:
             if result.status_code >= 400:
-                await result.aread()
+                await await_before_deadline(result.aread(), deadline)
                 raise _gateway_error(result)
             pending_tool_calls: dict[int, dict[str, Any]] = {}
             buffer = ''
-            async for chunk in result.aiter_text():
+            text_iter = result.aiter_text().__aiter__()
+            while True:
+                try:
+                    chunk = await await_before_deadline(anext(text_iter), deadline)
+                except StopAsyncIteration:
+                    break
                 buffer += chunk
                 while '\n' in buffer:
                     line, buffer = buffer.split('\n', 1)
@@ -602,6 +626,10 @@ async def gateway_desktop_chat_stream(
                     event = openai_sse_payload_to_gemini_event(parsed, pending_tool_calls, requested_model=model)
                     if event is not None:
                         yield f'data: {json.dumps(event, separators=(",", ":"))}\n\n'.encode('utf-8')
+        finally:
+            await stream_cm.__aexit__(None, None, None)
+    finally:
+        semaphore.release()
 
 
 def _embedding_text(payload: Mapping[str, Any]) -> str:

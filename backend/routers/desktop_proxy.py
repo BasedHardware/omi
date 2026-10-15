@@ -100,9 +100,11 @@ _DAILY_HARD_LIMIT = 1500
 # The deployed Rust proxy originally used a 70/75-second attempt/logical
 # contract. A later blind expansion to 235/240 seconds exactly matches the
 # incident tail. Restore the bounded non-stream contract while adding the phase
-# evidence that was missing. Streaming uses an idle-gap timeout in the shared
-# client because a healthy SSE response may legitimately last longer.
+# evidence that was missing. Streaming keeps an idle-gap timeout in the shared
+# client because a healthy SSE response may legitimately last longer, and a
+# separate wall clock ends it before Cloud Run's 300s request timeout.
 _TOTAL_TIMEOUT_SECONDS = 75.0
+_STREAM_DEADLINE_SECONDS = desktop_gemini_gateway.DESKTOP_STREAM_DEADLINE_SECONDS
 _CREDENTIAL_TIMEOUT_SECONDS = 5.0
 _POOL_WAIT_SECONDS = 5.0
 _DISCONNECT_POLL_SECONDS = 0.1
@@ -824,6 +826,7 @@ async def _stream_provider(
     upstream: httpx.Response | None = None
     held = False
     attempt_model, capacity = model, route.headers.get(ptr.REQUEST_TYPE_HEADER, '')
+    deadline = asyncio.get_running_loop().time() + _STREAM_DEADLINE_SECONDS
     try:
         # Each entry is one upstream attempt. Overflow attempts are appended
         # only after the reservation actually reports itself full, so the
@@ -832,8 +835,11 @@ async def _stream_provider(
             (route, body, model, route.headers.get(ptr.REQUEST_TYPE_HEADER, ''))
         ]
         while pending:
+            remaining = deadline - asyncio.get_running_loop().time()
+            if remaining <= 0:
+                raise TimeoutError
             attempt_route, attempt_body, attempt_model, capacity = pending.pop(0)
-            async with asyncio.timeout(_TOTAL_TIMEOUT_SECONDS):
+            async with asyncio.timeout(min(_TOTAL_TIMEOUT_SECONDS, remaining)):
                 context, upstream = await open_attempt(attempt_route, attempt_body)
                 held = True
             telemetry.phase = 'first_byte'
@@ -885,7 +891,12 @@ async def _stream_provider(
             yield f'data: {json.dumps(event, separators=(",", ":"))}\n\n'.encode()
             return
         assert upstream is not None
-        async for chunk in upstream.aiter_bytes():
+        byte_iter = upstream.aiter_bytes().__aiter__()
+        while True:
+            try:
+                chunk = await desktop_gemini_gateway.await_before_deadline(anext(byte_iter), deadline)
+            except StopAsyncIteration:
+                break
             usage_observer.feed(chunk)
             yield chunk
         usage_observer.finish()

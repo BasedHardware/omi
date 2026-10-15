@@ -307,6 +307,65 @@ async def test_nonstreaming_gateway_calls_stop_at_the_wall_clock_deadline(monkey
         )
 
 
+class _TricklingStreamResponse:
+    """SSE body that keeps delivering bytes and never finishes."""
+
+    status_code = 200
+
+    async def aiter_text(self):
+        while True:
+            await asyncio.sleep(0.05)
+            yield 'data: {"choices":[{"delta":{"content":"x"}}]}\n'
+
+    async def aread(self):
+        raise AssertionError('error body should not be read for a 200 stream')
+
+
+class _TricklingStream:
+    def __init__(self):
+        self.closed = False
+
+    async def __aenter__(self):
+        return _TricklingStreamResponse()
+
+    async def __aexit__(self, *_args):
+        self.closed = True
+
+
+@pytest.mark.asyncio
+async def test_streaming_gateway_calls_stop_before_the_platform_request_timeout(monkeypatch):
+    streams = []
+
+    class Client:
+        def stream(self, *args, **kwargs):
+            opened = _TricklingStream()
+            streams.append(opened)
+            return opened
+
+    monkeypatch.setattr(dgg, 'DESKTOP_STREAM_DEADLINE_SECONDS', 0.1)
+    monkeypatch.setattr(dgg, 'get_llm_gateway_semaphore', lambda: asyncio.Semaphore(1))
+    monkeypatch.setattr(dgg, 'get_llm_gateway_base_url', lambda: 'http://gateway.test')
+    monkeypatch.setattr(dgg, 'llm_gateway_headers', lambda **kwargs: {})
+    monkeypatch.setattr(dgg, 'get_llm_gateway_client', lambda: Client())
+
+    async def collect():
+        async for _chunk in dgg.gateway_desktop_chat_stream(
+            b'{"contents":[{"parts":[{"text":"hi"}]}]}',
+            model='gemini-2.5-flash',
+            uid='synthetic-user',
+            request_id='11111111-1111-1111-1111-111111111111',
+            product_lane='focus',
+            client_platform='macos',
+        ):
+            pass
+
+    started = asyncio.get_running_loop().time()
+    with pytest.raises(TimeoutError):
+        await collect()
+    assert asyncio.get_running_loop().time() - started < 1
+    assert streams and streams[0].closed
+
+
 def test_lane_selection_covers_every_desktop_text_model():
     assert dgg.desktop_gateway_text_lane('gemini-2.5-flash') == 'omi:auto:desktop-vertex-flash'
     assert dgg.desktop_gateway_text_lane('gemini-2.5-pro') == 'omi:auto:desktop-vertex-pro'
