@@ -85,6 +85,33 @@ async def test_missing_row_keeps_the_rest_of_the_page(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_locked_conversation_stays_on_a_person_search_page(monkeypatch):
+    def snapshot(uid, key, **kwargs):
+        if key == 'locked':
+            return {'id': 'locked', 'is_locked': True, 'transcript_segments': []}
+        return {
+            'id': 'open',
+            'structured': {'title': 'Synthetic open', 'overview': ''},
+            'transcript_segments': [{'text': 'Synthetic open line', 'person_id': 'late'}],
+        }
+
+    monkeypatch.setattr(reads.conversations, 'get_conversation_raw_snapshot', snapshot)
+    monkeypatch.setattr(reads.conversations, 'decode_transcript_segments_verified', lambda *args, **kwargs: [])
+    monkeypatch.setattr(reads.conversations, 'prepare_conversation_for_read', lambda raw, uid, **kwargs: raw)
+    monkeypatch.setattr(search, 'keyword_search_conversation_ids', lambda **kwargs: ['locked', 'open'])
+    fallbacks = []
+    monkeypatch.setattr(search, 'record_fallback', lambda **kwargs: fallbacks.append(kwargs))
+    source = search.OwnerSearch('synthetic-search-owner')
+    result = await source.search(
+        Search(query='Synthetic', collections=['conversations'], person_ref='people/late', limit=2),
+        byte_budget=8000,
+    )
+    assert result['unavailable_refs'] == ['conversations/locked']
+    assert [hit['ref'] for hit in result['results']] == ['conversations/open']
+    assert result['counts']['failed_paths'] == 0 and result['complete'] is True and fallbacks == []
+
+
+@pytest.mark.asyncio
 async def test_transient_hydration_degrades_the_path(monkeypatch):
     rows = {
         'first': {'content': 'Synthetic first fact'},

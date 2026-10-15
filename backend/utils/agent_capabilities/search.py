@@ -131,11 +131,11 @@ class OwnerSearch:
         try:
             full = await self.hydrate(ref, request)
         except Exception as error:
-            # A missing or hidden row is unavailable. A transient store fault
-            # fails the path so the search is incomplete and can be retried.
-            if dream_reads.unavailable_is_transient(error):
-                raise
-            return None
+            # A missing, hidden, or locked row is unavailable. A transient store
+            # fault fails the path so the search is incomplete and can be retried.
+            if dream_reads.search_hydration_unavailable(error):
+                return None
+            raise
         if full is None:
             return None
         row = project_search_row(full, person_id=person_id)

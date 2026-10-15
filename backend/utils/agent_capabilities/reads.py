@@ -59,6 +59,17 @@ def unavailable_is_transient(error=None):
     return True
 
 
+def search_hydration_unavailable(error):
+    """A missing, hidden, or locked row is skipped during search hydration.
+
+    HTTP 423 is the locked-conversation response from `read_record`. A direct
+    read records that lock as transient so settlement can retry it.
+    """
+    if isinstance(error, HTTPException) and error.status_code == 423:
+        return True
+    return not unavailable_is_transient(error)
+
+
 def read_record(uid, ref, *, control_cache=None, diagnostics=None):
     control_cache = {} if control_cache is None else control_cache
     collection, separator, key = ref.partition('/')
