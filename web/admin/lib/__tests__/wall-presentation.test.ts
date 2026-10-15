@@ -32,7 +32,7 @@ it("keeps missing values null, dims stale data, and calculates the previous-peri
   const old = wallPresentation(data, new Date("2027-01-01"));
   expect(old.tiles.growth_wau).toMatchObject({
     state: "STALE",
-    valueColor: "#6b7280",
+    valueColor: "#8190a6",
   });
   expect(old.tiles.health_crash_free).toMatchObject({
     value: null,
@@ -78,7 +78,7 @@ it("refuses fixture mode in production before reading any file", async () => {
   }
 });
 
-it("does not relabel a reader evaluation as a source refresh", async () => {
+it("keeps absent refresh metadata dim with human copy", async () => {
   const now = new Date("2026-10-15T12:00Z");
   const data = await computeWall(
     {
@@ -91,8 +91,8 @@ it("does not relabel a reader evaluation as a source refresh", async () => {
   );
   expect(data.metrics[0].sourceRefreshedAt).toBeNull();
   expect(wallPresentation(data, now).tiles.growth_wau).toMatchObject({
-    state: "NO WATERMARK",
-    valueColor: "#6b7280",
+    state: "STALE",
+    valueColor: "#8190a6",
     value: 3,
   });
 });

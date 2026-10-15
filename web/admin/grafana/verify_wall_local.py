@@ -8,14 +8,12 @@ from __future__ import annotations
 import argparse
 import json
 import os
-import re
 from pathlib import Path
 import subprocess
 import tempfile
 
 ADMIN = Path(__file__).resolve().parents[1]
-REPO = ADMIN.parents[1]
-RECORD = REPO / 'data/run-2026-10-14-omi-tv-metrics'
+RECORD = Path('/Users/dazheng/workspace/omi/data/run-2026-10-14-omi-tv-metrics')
 NAME = 'omi-tv-v2-local'
 
 
@@ -92,12 +90,30 @@ def screens():
         page = browser.new_page(viewport={'width':1440,'height':1000},device_scale_factor=1)
         page.goto('http://127.0.0.1:3207/d/omi-tv-v2/omi-tv-v2?orgId=1&kiosk',wait_until='domcontentloaded',timeout=60000)
         page.get_by_text('Growth',exact=True).wait_for(timeout=60000)
-        page.get_by_text(re.compile(r'^macOS .* · Mobile .* · Other')).first.wait_for(timeout=60000)
-        page.wait_for_timeout(5000)
+        page.get_by_text('Weekly active people',exact=True).first.wait_for(timeout=60000)
+        page.locator('svg[data-omi-card]').nth(22).wait_for(timeout=60000)
+        page.evaluate('document.fonts.ready')
+        page.wait_for_timeout(1000)
         for width,height in [(1440,1000),(1920,1080)]:
             page.set_viewport_size({'width':width,'height':height})
             page.wait_for_timeout(1000)
-            page.screenshot(path=str(out/f'omi-tv-v2-{width}.png'))
+            clipped = page.locator('svg[data-omi-card]').evaluate_all('''svgs => svgs.flatMap(svg => Array.from(svg.querySelectorAll('text')).flatMap(t => {
+              const b=t.getBoundingClientRect(), root=svg.getBoundingClientRect();
+              return b.left < root.left || b.right > root.right || b.top < root.top || b.bottom > root.bottom ? [t.textContent] : [];
+            }))''')
+            overlap = page.locator('svg[data-omi-card]').evaluate_all('''svgs => svgs.flatMap(svg => {
+              const title=svg.querySelector('text'), chip=svg.querySelector('rect[fill="#26374d"]');
+              if (!title || !chip) return [];
+              const b=title.getBoundingClientRect();return b.right > chip.getBoundingClientRect().left-5 ? [title.textContent] : [];
+            })''')
+            if overlap:
+                raise RuntimeError(f'Card title overlaps its scope chip at {width}px: {overlap}')
+            if clipped:
+                raise RuntimeError(f'Card text outside its card at {width}px: {clipped}')
+            diagnostics = page.get_by_text('Diagnostics · definitions and coverage',exact=True)
+            if diagnostics.count() and diagnostics.bounding_box()['y'] < height:
+                raise RuntimeError(f'Diagnostics visible above the fold at {width}px')
+            page.screenshot(path=str(out/f'omi-tv-v2-rev1-{width}.png'))
         browser.close()
 
 

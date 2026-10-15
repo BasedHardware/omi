@@ -146,6 +146,11 @@ export const queryPosthog: Query = async (query) => {
     throw new Error("PostHog incomplete aggregate result");
   return Object.assign(data.results, {
     sourceRefreshedAt:
-      typeof data.last_refresh === "string" ? data.last_refresh : null,
+      typeof data.last_refresh === "string" &&
+      Number.isFinite(Date.parse(data.last_refresh))
+        ? data.last_refresh
+        : data.is_cached === true
+        ? null
+        : new Date().toISOString(),
   });
 };

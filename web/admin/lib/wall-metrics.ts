@@ -74,6 +74,8 @@ export interface Metric {
     keyof Split,
     { numerator: number; denominator: number }
   > | null;
+  fixture?: boolean;
+  materialGap?: boolean;
   status: "exact" | "proxy" | "null";
   reason: string | null;
   dataThrough: string | null;
@@ -384,6 +386,7 @@ export async function computeWall(
     (async () => {
       const book = await sources.stripe();
       const m = metrics["revenue.mrr"];
+      m.fixture = book.fixture === true;
       m.value =
         book.usd === 0 &&
         (book.partial || book.unmappedProducts > 0 || book.unsupportedItems > 0)
@@ -415,6 +418,7 @@ export async function computeWall(
         );
         const mau = metrics["engagement.mau"];
         if (mau.value && m.value != null && !m.partial) {
+          a.fixture = book.fixture === true;
           a.value = book.usd / mau.value;
           a.denominator = mau.value;
           stamp(

@@ -544,13 +544,34 @@ class WallV2Contract(unittest.TestCase):
         board = load("omi-tv-v2")
         self.assertEqual(board["timezone"], "utc")
         self.assertEqual([c[0] for c in COLUMNS], ["Growth", "Activation", "Retention", "Revenue", "Health"])
-        self.assertTrue(all(p["type"] in {"text", "stat", "timeseries", "table"} for p in board["panels"]))
+        self.assertTrue(all(p["type"] in {"text", "canvas", "table"} for p in board["panels"]))
         for panel in board["panels"]:
             self.assertLessEqual(panel["gridPos"]["x"] + panel["gridPos"]["w"], 24)
             for target in panel.get("targets", []):
                 self.assertEqual(target["url"], "http://127.0.0.1:8899/api/omi/stats/wall")
                 self.assertEqual(target["datasource"]["uid"], "omi-admin-api")
+                self.assertEqual(target["url_options"]["method"], "GET")
         self.assertEqual(board["panels"][-1]["type"], "table")
+
+    def test_each_metric_is_one_framed_canvas_card(self):
+        from build_wall_dashboard import COLUMNS, geometry
+        board = load("omi-tv-v2")
+        cards = [p for p in board["panels"] if p["type"] == "canvas"]
+        self.assertEqual(len(cards), sum(len(ids) for _, ids in COLUMNS))
+        for card in cards:
+            self.assertEqual(card["title"], "")
+            self.assertFalse(card["options"]["inlineEditing"])
+            self.assertEqual(len(card["options"]["root"]["elements"]), 1)
+            element = card["options"]["root"]["elements"][0]
+            self.assertEqual(element["type"], "icon")
+            self.assertEqual(element["config"]["path"], {"mode":"field","field":"Card"})
+            self.assertEqual(card["targets"][0]["columns"][0]["selector"], "cardSvg")
+        spacer = board["panels"][-2]
+        self.assertTrue(spacer["transparent"])
+        self.assertGreaterEqual(spacer["gridPos"]["h"], 4)
+        self.assertEqual(board["panels"][-1]["gridPos"]["y"], spacer["gridPos"]["y"] + spacer["gridPos"]["h"])
+        self.assertGreater(geometry("growth.wau")[0], geometry("engagement.dau")[0])
+        self.assertLess(geometry("revenue.plan_prepay_usd_week")[0], geometry("revenue.arpmau")[0])
 
     def test_apply_accepts_new_uid_without_changing_legacy_layout_policy(self):
         import apply_omi_tv_dashboard as apply_module

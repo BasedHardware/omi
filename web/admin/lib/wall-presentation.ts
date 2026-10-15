@@ -1,12 +1,35 @@
 import { freshness } from "./qualified-activity";
 import type { Metric, WallPayload } from "./wall-metrics";
+import { formatWallValue, shortDate, wallCardSvg } from "./wall-card-svg";
 
+export const WALL_LABELS: Partial<Record<Metric["id"], string>> = {
+  "growth.wau": "Weekly active people",
+  "growth.true_new_7d": "New people · interim",
+  "activation.rate": "Week-one activation",
+  "retention.if_activated": "Retained if activated",
+  "engagement.dau": "Daily active people",
+  "engagement.mau": "Monthly active people",
+  "engagement.assistant_success": "Answered questions",
+  "revenue.arpmau": "ARPMAU",
+  "revenue.mrr": "Monthly recurring revenue",
+  "revenue.hardware_usd_week": "Hardware sales",
+  "revenue.plan_prepay_usd_week": "Plan prepay sold",
+  "cost.net_day": "Daily net cost",
+  "cost.per_mau_month": "Monthly cost / MAU",
+  "cost.gross_margin_pct": "Gross margin · goal 60%",
+  "health.crash_free": "Crash-free",
+  "health.thumbs_positive": "Positive answers",
+  "activation.capture_week1_share": "Saved capture · week one",
+  "retention.established_week": "Established retention",
+  "retention.day1_return": "Day-one return",
+  "revenue.activated_paid_30d": "Activated to paid",
+};
 export function wallPresentation(payload: WallPayload, now = new Date()) {
   const tiles: Record<string, object> = {},
-    series: Record<string, unknown> = {};
-  const presented: Metric[] = [];
+    series: Record<string, unknown> = {},
+    presented: Metric[] = [];
   for (const source of payload.metrics) {
-    const m: Metric = { ...source };
+    const m = { ...source };
     const cadence = m.id.startsWith("cost.")
       ? "settled"
       : m.id.startsWith("activation.") ||
@@ -21,46 +44,19 @@ export function wallPresentation(payload: WallPayload, now = new Date()) {
       : "hourly";
     m.stale = freshness(m.sourceRefreshedAt, m.dataThrough, cadence, now).stale;
     presented.push(m);
-    const key = m.id.replaceAll(".", "_");
+    const key = m.id.replaceAll(".", "_"),
+      fixture = Boolean(m.fixture || m.reason?.includes("FIXTURE"));
+    const dimmed =
+      m.stale ||
+      m.partial ||
+      m.materialGap === true ||
+      m.status === "null" ||
+      fixture;
+    const valueColor = dimmed ? "#8190a6" : "#f4f7fc";
     const delta =
       m.value != null && m.prev != null && m.prev !== 0
         ? (100 * (m.value - m.prev)) / Math.abs(m.prev)
         : null;
-    const split = (p: "macos" | "mobile" | "other") => {
-      const n = m.split[p];
-      if (n == null) return "—";
-      if (m.unit === "percent") {
-        const c = m.splitCounts?.[p];
-        return `${n.toFixed(1)}%${
-          c ? ` (${c.numerator}/${c.denominator})` : ""
-        }`;
-      }
-      return n.toLocaleString("en-US", { maximumFractionDigits: 1 });
-    };
-    const state =
-      m.status === "null"
-        ? "UNAVAILABLE"
-        : m.partial
-        ? "PARTIAL"
-        : m.reason?.includes("FIXTURE")
-        ? "FIXTURE"
-        : !m.sourceRefreshedAt
-        ? "NO WATERMARK"
-        : m.stale
-        ? "STALE"
-        : m.reason?.includes("LOCAL AGGREGATE REPLAY")
-        ? "REPLAY"
-        : m.status.toUpperCase();
-    const missingReason: Partial<Record<Metric["id"], string>> = {
-      "health.crash_free": "Crash coverage unverified",
-      "health.thumbs_positive": "Vote source unavailable",
-      "revenue.payer_churn": "Payer history unavailable",
-      "revenue.activated_paid_30d": "Billing identity unavailable",
-      "revenue.arpmau": "Same-cutoff MRR unavailable",
-      "cost.gross_margin_pct": "Revenue/costs incomplete",
-    };
-    const shortSplit = (p: "macos" | "mobile" | "other") =>
-      split(p).split(" (")[0];
     const cohort =
       [
         "activation.rate",
@@ -69,62 +65,142 @@ export function wallPresentation(payload: WallPayload, now = new Date()) {
         "retention.recovery",
         "retention.day1_return",
       ].includes(m.id) && m.windowEnd
-        ? new Date(Date.parse(m.windowEnd) - 86_400_000)
-            .toISOString()
-            .slice(0, 10)
+        ? new Date(Date.parse(m.windowEnd) - 86_400_000).toISOString()
         : null;
-    const display =
-      m.value == null
+    const cohortDate = shortDate(cohort),
+      through = shortDate(m.dataThrough);
+    const period = cohort
+      ? "cohort"
+      : m.id === "retention.established_week" || m.id.includes("week")
+      ? "week"
+      : m.id === "growth.wau"
+      ? "7 days"
+      : m.id === "engagement.mau"
+      ? "30 days"
+      : "period";
+    const change =
+      m.unit === "percent" && m.value != null && m.prev != null
+        ? m.value - m.prev
+        : delta;
+    const deltaText =
+      change == null
+        ? "Previous period unavailable"
+        : `${change < 0 ? "−" : "+"}${Math.abs(change).toFixed(1)}${
+            m.unit === "percent" ? " pp" : "%"
+          } · prior ${period}`;
+    const signal =
+      change == null
+        ? 0
+        : change *
+          ([
+            "cost.net_day",
+            "cost.per_mau_month",
+            "revenue.payer_churn",
+          ].includes(m.id)
+            ? -1
+            : 1);
+    const deltaColor = dimmed
+      ? "#8190a6"
+      : signal > 0
+      ? "#60a5fa"
+      : signal < 0
+      ? "#fb923c"
+      : "#92a3ba";
+    const splitValues = (["macos", "mobile", "other"] as const).map((p) =>
+      m.split[p] == null
         ? "—"
         : m.unit === "percent"
-        ? `${m.value.toFixed(1)}%`
-        : m.unit.startsWith("USD")
-        ? m.value.toLocaleString("en-US", {
-            style: "currency",
-            currency: "USD",
-            maximumFractionDigits: m.id === "revenue.arpmau" ? 4 : 2,
-          })
-        : m.value.toLocaleString("en-US", { maximumFractionDigits: 0 });
+        ? `${m.split[p]!.toFixed(1)}%`
+        : m.split[p]!.toLocaleString("en-US", { maximumFractionDigits: 0 })
+    );
+    const missingReasons: Partial<Record<Metric["id"], string>> = {
+      "health.crash_free": "Crash coverage not verified",
+      "health.thumbs_positive": "Answer ratings source needed",
+      "revenue.payer_churn": "Payer history needed",
+      "revenue.activated_paid_30d": "Paid-account linkage needed",
+      "revenue.arpmau": "Same-date revenue source needed",
+      "revenue.mrr": "Plan revenue source needed",
+      "cost.gross_margin_pct": "Revenue and cost coverage needed",
+    };
+    const missingReason = missingReasons[m.id] || "Source data not available";
+    let footnote = through ? `as of ${through}` : "Refresh time unavailable";
+    if (cohortDate)
+      footnote += ` · cohort ${cohortDate}${
+        m.denominator != null
+          ? ` (n=${m.denominator.toLocaleString("en-US")})`
+          : ""
+      }`;
+    if (m.status === "null") footnote = missingReason;
+    else if (fixture) footnote = "FIXTURE · sample Stripe data";
+    else if (m.stale)
+      footnote = `Refresh overdue · ${
+        through ? `as of ${through}` : "time unavailable"
+      }`;
+    else if (m.partial || m.materialGap)
+      footnote = `Coverage incomplete · ${
+        through ? `as of ${through}` : "refresh pending"
+      }`;
+    if (m.id === "growth.true_new_7d" && !m.stale && m.value != null)
+      footnote = `180-day lookback · ${
+        through ? `as of ${through}` : "refresh pending"
+      }`;
+    if (m.id === "revenue.plan_prepay_usd_week" && !fixture && m.value != null)
+      footnote = `Shopify cash · ${
+        through ? `as of ${through}` : "refresh pending"
+      }`;
     const hardwareUnits =
       m.id === "revenue.hardware_usd_week"
-        ? payload.metrics.find(
-            (metric) => metric.id === "revenue.hardware_units_week"
-          )?.value
+        ? payload.metrics.find((p) => p.id === "revenue.hardware_units_week")
+            ?.value ?? null
         : null;
+    const scope = [
+      "health.crash_free",
+      "health.thumbs_positive",
+      "engagement.assistant_success",
+    ].includes(m.id)
+      ? "macOS"
+      : "all";
+    const display = formatWallValue(m.value, m.unit),
+      label = WALL_LABELS[m.id] || m.label;
+    const view = {
+      label,
+      scope,
+      display,
+      deltaText,
+      deltaColor,
+      valueColor,
+      splitValues,
+      footnote,
+      missingReason,
+      fixture,
+      dimmed,
+      hardwareUnits,
+    };
     tiles[key] = {
       value: m.value,
       display,
-      valueColor:
-        m.stale || m.partial || m.status === "null" ? "#6b7280" : "#f3f4f6",
+      valueColor,
       delta,
-      macos: split("macos"),
-      mobile: split("mobile"),
-      other: split("other"),
-      state,
-      splitRow: `macOS ${shortSplit("macos")} · Mobile ${shortSplit(
-        "mobile"
-      )} · Other ${shortSplit("other")}`,
-      footnote:
+      deltaText,
+      deltaColor,
+      macos: splitValues[0],
+      mobile: splitValues[1],
+      other: splitValues[2],
+      state:
         m.status === "null"
-          ? `N/A · ${missingReason[m.id] || "Source unavailable"}`
-          : `${
-              hardwareUnits != null
-                ? `${hardwareUnits.toLocaleString("en-US")} devices · `
-                : ""
-            }${state} · ${
-              cohort
-                ? `cohort ${cohort}`
-                : m.dataThrough?.slice(0, 10) || "no watermark"
-            }${m.denominator != null ? ` · n=${m.denominator}` : ""}`,
+          ? "UNAVAILABLE"
+          : fixture
+          ? "FIXTURE"
+          : m.stale
+          ? "STALE"
+          : m.partial
+          ? "PARTIAL"
+          : m.status.toUpperCase(),
+      splitRow: `macOS ${splitValues[0]} · Mobile ${splitValues[1]} · Other ${splitValues[2]}`,
+      footnote,
       reason: m.reason || "—",
-      scope:
-        m.split.macos == null
-          ? "All · no platform attribution"
-          : "Primary platform",
-      // Grey unavailable/stale/partial headline fields are selected separately by the board.
-      healthyValue:
-        m.stale || m.partial || m.status === "null" ? null : m.value,
-      dimValue: m.stale || m.partial || m.status === "null" ? m.value : null,
+      scope,
+      cardSvg: wallCardSvg(m, view),
     };
     series[key] = m.trend.map((p) => ({
       date: `${p.date}T00:00:00Z`,

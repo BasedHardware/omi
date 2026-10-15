@@ -136,18 +136,30 @@ The admin-authenticated `/api/omi/stats/wall` returns the 22 contract IDs plus
 explicit capture-week-1 and plan-prepay-cash lines. Definitions, UTC cutoffs,
 primary/entry attribution and qualification come from `lib/qualified-activity.ts`.
 A bounded, coalesced 15-minute in-process cache preserves source refresh stamps
-and expires at UTC midnight. PostHog carries its upstream `last_refresh` timestamp;
-when absent, freshness is unknown and the tile dims instead of using reader time.
+and expires at UTC midnight. PostHog carries its upstream `last_refresh`, or the
+execution completion time of our live HogQL aggregate when the API omits it.
+A cached upstream result without a refresh receipt stays unknown. Payload-cache
+reads never advance source refresh timestamps.
 It performs no Firestore cache writes and has no
 stale-on-error fallback. Counts use primary qualified platform; cohort rates use
 entry platform and include the full denominator. Rates do not add across splits:
 the split numerators and denominators do. Missing sources remain null.
 
-The board uses core stat and time-series panels, with Infinity as its only
-external plugin. Native stat reduction includes the fixed macOS / Mobile / Other
-split line; native config-from-data mappings dim stale/partial headline values.
-This supports Grafana 13.1.3 without an HTML sanitizer override or another panel
-plugin. Full reasons, source watermarks and versions are in the diagnostics table.
+Each metric is one native **Canvas** panel, backed by Infinity as the only
+external plugin. Canvas's SVG-icon element renders a data-only card through
+Grafana's built-in SVG sanitizer. The card's background/border encloses the
+label, scope chip, value, delta, platform splits, complete-period sparkline and
+footnote. There are no floating subpanels, HTML overrides or custom JavaScript.
+Responsive constraints keep the complete card inside narrow laptop columns.
+
+Healthy live aggregates use full contrast. Stale, partial, explicitly material-gap
+proxies and all synthetic fixtures are dimmed. A proxy label alone does not dim
+an otherwise healthy audited aggregate. Fixture cards always say **FIXTURE**.
+Cohort-rate deltas use percentage points; count and monetary deltas use relative
+percent change. Scope chips say all or macOS; entry/primary attribution is in the
+panel description and diagnostics. Money is compact at thousands, without cents
+above $100. Full source reasons and versions remain in the diagnostics table.
+
 MAU keeps two completed 30-day periods to stay within PostHog's query budget;
 other usage/cohort trends retain six completed periods. Cohort anchors are still
 first-seen proxies, with a bounded 180-day history check, not Firebase signups.
@@ -178,6 +190,12 @@ this requires non-production mode and `DEV_BYPASS_AUTH=1`. Production rejects
 both fixture modes. Local Grafana binds localhost:3207; the helper intentionally
 fails if its container name exists rather than replacing an unrelated instance.
 The provisioned board rewrites the proxy URL only in its local copy.
+
+Run records and screenshots are written only to
+`/Users/dazheng/workspace/omi/data/run-2026-10-14-omi-tv-metrics/`;
+never commit that workspace run directory in the public repository. The local
+verifier uses the `omi-tv-v2-rev1-1440.png` / `-1920.png` screenshot names.
+Tracked UI-evidence copies belong under `.agent-artifacts/ui-evidence/`.
 
 Deploy prerequisites and limits:
 
