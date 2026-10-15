@@ -9,6 +9,7 @@ the charge. Invoke from the database executor, not the event loop.
 from __future__ import annotations
 
 from dataclasses import replace
+import hashlib
 import logging
 import math
 import os
@@ -30,8 +31,24 @@ def _get_redis_client() -> Any:
     return redis_client
 
 
-def enabled() -> bool:
-    return os.getenv('SYNC_LEGACY_FRESH_ENABLED', 'false').strip().lower() == 'true'
+def enabled_for(uid: str) -> bool:
+    """Master kill switch plus the final-pass policy's stable SHA-256 UID cohort."""
+    if not uid or os.getenv('SYNC_LEGACY_FRESH_ENABLED', 'false').strip().lower() != 'true':
+        return False
+    allowlist = {
+        value.strip() for value in os.getenv('SYNC_LEGACY_FRESH_UID_ALLOWLIST', '').split(',') if value.strip()
+    }
+    if uid in allowlist:
+        return True
+    try:
+        percent = float(os.getenv('SYNC_LEGACY_FRESH_PERCENT', '0'))
+    except ValueError:
+        return False
+    if not math.isfinite(percent):
+        return False
+    percent = max(0.0, min(100.0, percent))
+    bucket = int.from_bytes(hashlib.sha256(uid.encode()).digest()[:4], 'big') / 2**32 * 100
+    return bucket < percent
 
 
 # Redis TIME gives all replicas one refill clock. The single hash has bounded

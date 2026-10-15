@@ -35,8 +35,21 @@ the server correction does not wait for a release.
 
 ## Admission and rollback
 
-Default-off `SYNC_LEGACY_FRESH_ENABLED` changes V2 only. Recent LEGACY batches
-reserve one token per upload or MiB, whichever is larger; default ten-token
+Default-off `SYNC_LEGACY_FRESH_ENABLED` changes V2 only. Promotion also requires
+an exact UID in `SYNC_LEGACY_FRESH_UID_ALLOWLIST` (default empty), or membership
+in `SYNC_LEGACY_FRESH_PERCENT` (default zero). The percentage uses the same
+stable SHA-256 UID bucket as transcription final pass; selecting 5 includes the
+previous allowlist and the stable five-percent cohort. The master flag overrides
+both. Missing/invalid/non-finite percent selects nobody beyond the allowlist;
+finite values clamp to 0–100. No account identifier belongs in code or logs.
+Enable master + allowlist + zero percent for the first account, then percent 5,
+then 100 only after the gates below. Setting master false stops all promotions.
+
+This gate admits new uploads only. Existing historical jobs are never moved;
+new recordings reach fresh only if their oldest batch file is within six hours.
+A mixed old/new upload remains backfill. This is not a complete backlog remedy.
+
+Recent LEGACY batches reserve one token per upload or MiB, whichever is larger; default ten-token
 burst, sixty tokens/hour across devices and replicas. This bounds requests
 and bytes even when timestamps are forged. Retries spend; no client duration
 is trusted. Exhaustion/store failure goes to backfill without upload refusal.
