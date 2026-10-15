@@ -235,7 +235,7 @@ def test_generated_dart_wire_models_cover_contract():
 
 
 def test_reject_route_preserves_legacy_opaque_path_values(client):
-    for opaque in ('a%5Cb', 'a%20b', 'x' * 200):
+    for opaque in ('a%5Cb', 'a%20b', 'x' * 200, '__id123__'):
         response = client.post(f'/v1/conversations/{opaque}/speakers/3/reject', json={'kind': 'not_me'})
         assert response.status_code == 404  # Owned lookup, rather than a narrowed path schema.
     for speaker in ('-1', '2000000'):
@@ -244,7 +244,7 @@ def test_reject_route_preserves_legacy_opaque_path_values(client):
             == 404
         )
     assert not conversations_db.get_firestore_client().rows
-    for invalid in ('a%2Fb', '..', 'x' * 1501):
+    for invalid in ('a%2Fb', '..', 'x' * 1501, '__reserved__'):
         assert client.post(f'/v1/conversations/{invalid}/speakers/3/reject', json={'kind': 'not_me'}).status_code in (
             404,
             422,
@@ -254,7 +254,7 @@ def test_reject_route_preserves_legacy_opaque_path_values(client):
 def test_reject_route_rejects_unsafe_body_person_id(client):
     # person_id is only honored for kind='not_person' (the model validator
     # nulls it otherwise), so the guard is exercised on that kind.
-    for bad in ('a/b', '../x', '.', '..', 'x' * 1501):
+    for bad in ('a/b', '../x', '.', '..', 'x' * 1501, '__reserved__'):
         response = client.post(
             '/v1/conversations/conv1/speakers/3/reject', json={'kind': 'not_person', 'person_id': bad}
         )
@@ -300,12 +300,12 @@ def test_voice_matches_preserves_legacy_opaque_ids(client, monkeypatch):
         raise LookupError('missing')
 
     monkeypatch.setattr(speaker_labels_router, 'find_person_voice_matches', missing)
-    for value in ('a%20b', 'a%5Cb', 'x' * 200):
+    for value in ('a%20b', 'a%5Cb', 'x' * 200, '__id123__'):
         assert client.get(f'/v1/users/people/{value}/voice-matches').status_code == 404
-    assert seen == ['a b', 'a\\b', 'x' * 200]
-    for invalid in ('..', 'a%2Fb', 'x' * 1501):
+    assert seen == ['a b', 'a\\b', 'x' * 200, '__id123__']
+    for invalid in ('..', 'a%2Fb', 'x' * 1501, '__reserved__'):
         assert client.get(f'/v1/users/people/{invalid}/voice-matches').status_code in (404, 422)
-    assert len(seen) == 3
+    assert len(seen) == 4
 
 
 def test_voice_matches_unexpected_error_returns_sanitized_500(client, monkeypatch):

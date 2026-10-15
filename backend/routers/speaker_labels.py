@@ -1,4 +1,5 @@
 import logging
+import re
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
@@ -20,8 +21,15 @@ router = APIRouter()
 def _valid_document_id(value: str) -> bool:
     # Preserve opaque legacy IDs. Only exclude invalid Firestore addresses;
     # arbitrary charset/128-char bounds narrow the released v1 contract.
+    reserved = value.startswith('__') and value.endswith('__') and re.fullmatch(r'__id[0-9]+__', value) is None
     try:
-        return bool(value) and '/' not in value and value not in ('.', '..') and len(value.encode('utf-8')) <= 1500
+        return (
+            not reserved
+            and bool(value)
+            and '/' not in value
+            and value not in ('.', '..')
+            and len(value.encode('utf-8')) <= 1500
+        )
     except UnicodeEncodeError:
         return False
 
