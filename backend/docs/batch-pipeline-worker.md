@@ -129,3 +129,37 @@ a scheduler/controller must set bounded minimum instances or use GKE workers.
 No production chart or autoscaler is changed by this PR. A stale metric must
 retain last capacity and alert. Capacity and signal freshness require a dev load
 receipt before David's canary.
+
+## Worker integration recipe and acceptance
+
+Construct `FirestoreStore('batch_pipeline_prod')` only on the production-owned
+worker; use the distinct dev namespace only with isolated synthetic identities.
+Tests use explicit `batch_pipeline_test_<id>` namespaces on loopback emulators.
+`Scheduler(store, metrics=metrics)` exposes `enqueue`, `pull`, `heartbeat`,
+`complete`, `fail`, `recover`, and explicit `redrive_dead`. Heartbeat every ≤30s
+against the 120s lease; a false renewal means discard the result. Recover every
+5s, refreshing metrics every 15s. A pull performs bounded deficit accrual and may
+return empty before a 7200s item earns enough credit; continue polling. The
+active-owner ring caps at 1024 owners **per class** and rejects overflow
+atomically. Neither an empty pull nor admission overflow means accepted work was
+lost. Keep concurrency/model memory bounds separate from pull size.
+
+Create one `QueueMetrics` per serving registry; `/metrics` exports that registry
+through the worker's existing exporter. Prometheus-adapter rules should expose
+`max by (priority) (omi_batch_pipeline_ready_age_seconds)` only while the
+corresponding `time() - omi_batch_pipeline_metrics_refreshed_at_seconds < 60`.
+Use HPA `External` metric target type `Value` at 30/300/3600 seconds for
+fresh/recent/deep respectively, with pool-specific min/max replicas. Aggregate
+freshness per exporter before max aggregation; never convert an unavailable
+series to zero. Completed throughput is
+`sum(rate(omi_batch_pipeline_events_total{event="completed"}[5m]))`.
+These are observed transition receipts; an ambiguous transaction reply can
+undercount counters, while durable queue/log state remains authoritative.
+
+Hermetic unit checks and real-emulator contention tests run through `test.sh`.
+The emulator verifies query/transaction behavior, not production index readiness
+or throughput. Ten stage-specific composite indexes are declared/generated;
+lead must obtain READY receipts before serving the new queries. No backlog
+migration, production writes, deploy, chart change or real-user acceptance is
+part of A's implementation receipt. Integrate and qualify the serving pump,
+content-ledger/conversation projection and deletion paths before enabling intake.

@@ -1,0 +1,60 @@
+"""Queue-age autoscaling export. Refresh from a supervised worker, never import IO."""
+
+from prometheus_client import CollectorRegistry, Gauge, Histogram, Counter, REGISTRY
+
+from database.batch_pipeline_store import Store
+from utils.batch_pipeline.contracts import Priority
+
+LABELS = {Priority.FRESH: 'fresh', Priority.RECENT: 'recent', Priority.DEEP: 'deep'}
+AGE_TARGETS = {Priority.FRESH: 30, Priority.RECENT: 300, Priority.DEEP: 3600}
+
+
+class QueueMetrics:
+    def __init__(self, registry: CollectorRegistry = REGISTRY):
+        self.oldest_age = Gauge(
+            'omi_batch_pipeline_oldest_age_seconds',
+            'Oldest admitted uncommitted item age',
+            ['priority'],
+            registry=registry,
+        )
+        self.ready_age = Gauge(
+            'omi_batch_pipeline_ready_age_seconds',
+            'Oldest item ready for GPU capacity',
+            ['priority'],
+            registry=registry,
+        )
+        self.refreshed_at = Gauge(
+            'omi_batch_pipeline_metrics_refreshed_at_seconds', 'Last complete queue sample timestamp', registry=registry
+        )
+        self.owner_wait = Histogram(
+            'omi_batch_pipeline_owner_wait_seconds',
+            'Per-item admission to lease wait; no owner labels',
+            buckets=(1, 10, 30, 60, 300, 3600, 43200, 86400, 604800),
+            registry=registry,
+        )
+        self.events = Counter(
+            'omi_batch_pipeline_events_total',
+            'Worker transition receipts; jobs/s is rate of completed events',
+            ['event'],
+            registry=registry,
+        )
+
+    def refresh(self, store: Store, now: float) -> None:
+        # Collect every query before changing gauges. Failed refresh retains last
+        # values and does not advance freshness; adapters must reject stale data.
+        samples = []
+        for priority in Priority:
+            pending = store.oldest(int(priority), ready_only=False)
+            ready = store.oldest(int(priority), ready_only=True)
+            samples.append((priority, pending, ready))
+        for priority, pending, ready in samples:
+            self.oldest_age.labels(LABELS[priority]).set(max(0.0, now - pending) if pending is not None else 0)
+            self.ready_age.labels(LABELS[priority]).set(max(0.0, now - ready) if ready is not None else 0)
+        self.refreshed_at.set(now)
+
+    def record(self, event: str, *, wait_seconds: float | None = None) -> None:
+        if event not in {'leased', 'completed', 'retry', 'lease_expired', 'dead', 'committed'}:
+            raise ValueError('metric event must be a static worker transition')
+        self.events.labels(event).inc()
+        if event == 'leased' and wait_seconds is not None:
+            self.owner_wait.observe(max(0.0, wait_seconds))

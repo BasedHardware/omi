@@ -39,6 +39,7 @@ from tests.support.firestore_conversation_profiles import (
 from tests.support.firestore_review_query_drivers import registry_extension as outside_drivers
 from tests.support.firestore_dream_query_drivers import registry_extension as dream_drivers
 from tests.support.firestore_usage_units_driver import DRIVER as USAGE_UNITS_DRIVER
+from tests.support.firestore_batch_pipeline_drivers import entries as batch_pipeline_entries
 from models.announcement import AnnouncementType
 from models.candidate import CandidateStatus
 from models.chat_first import ChatFirstSubject
@@ -126,6 +127,9 @@ _DEV_KEY = 'omi_dev_' + 'a' * 32
 _MCP_KEY = 'omi_mcp_' + 'a' * 32
 
 BODY_DIGEST = {
+    'database.batch_pipeline_store.FirestoreStore.oldest': '46202441b59dfb6a878bb1571be4c04b094a30110b8dc2af6351c96a86d14e6a',
+    'database.batch_pipeline_store.FirestoreStore.due': 'a122cbb68303e136d2721efaab34739a66fcc882634b9448a63d8320ad4a87e7',
+    'database.batch_pipeline_store.FirestoreTransaction.first_pending': '97a1fed292df7a57f6fc815cdacb16d6cc0b661c06fd047b9c1a43b34cdd3312',
     'database.dream_scheduler.discover': 'c0e27c29293523fa0ddf6095c56b0502810590259e28ce80c43e0ac4bc826789',
     'database.proactivity_producers.mentor_history_query': '716c4f332e0ff0cf6fda3bcea41f479ce3bb7eb2956c8bfe37c61e0baabbfdb3',
     'database.proactivity_producers.recent_mentor_query': 'dc28a1084121daa40a430764d1c638ec4fe090e66dff499e0bec152444035dee',
@@ -2531,6 +2535,7 @@ _add(
 )
 
 for entry in (
+    *batch_pipeline_entries(),
     *outside_drivers.DRIVERS.values(),
     *outside_drivers.COVERED_BY.values(),
     *outside_drivers.SKIPS.values(),

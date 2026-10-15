@@ -4822,6 +4822,7 @@ labels are added. Optional final-pass logs now include `lane` and
 inside the adapter. These times exclude the preceding WAV download and are
 not whole-job latency. See [drain qualification](runbooks/sync-legacy-fresh-drain.md).
 
+<<<<<<< HEAD
 
 ### Sync assignment contention retry
 
@@ -4852,3 +4853,13 @@ IDs in the surviving conversation; a zero-success ACK alone is not proof of
 no loss. User-deletion/assignment supersession is a different path and must not
 be treated as evidence that content landed. Qualification requires every
 synthetic uploaded segment to appear exactly once, including these cases.
+
+### Dormant batch pull protocol
+
+[Batch pipeline worker](batch-pipeline-worker.md) defines a separate default-off
+pull queue and ordered result log. Existing sync admission, content-ledger
+projection, live listen/pusher and legacy-fresh routing remain unchanged.
+`BATCH_PIPELINE_ENABLED`, its owner allowlist and percentage gate only the explicit
+admission seam; no serving sync route calls it yet. Accepted protocol records
+must retain their recovery worker when admission is disabled. Conversation
+projection, deletion integration and late-capture policy are rollout gates.
