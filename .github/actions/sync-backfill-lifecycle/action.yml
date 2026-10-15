@@ -39,9 +39,15 @@ inputs:
     required: false
     default: ''
   forbidden_env_names:
-    description: Manifest forbidden env keys to exclude from both the live clone and deploy (mode=worker)
+    description: Manifest forbidden env keys to exclude from the live clone (mode=worker)
     required: false
     default: DEEPGRAM_SELF_HOSTED_ENABLED,DEEPGRAM_SELF_HOSTED_URL
+  remove_env_extra:
+    description: >-
+      Manifest forbidden env keys the worker deploy's literal --remove-env-vars list lacks, each with a
+      leading comma (mode=worker). gcloud rejects a key named twice.
+    required: false
+    default: ''
   backfill_env_vars:
     description: Manifest-rendered backend-sync-backfill env overlay (mode=worker)
     required: false
@@ -167,7 +173,7 @@ runs:
           --concurrency=6
           --cpu=2
           --memory=8Gi
-          --remove-env-vars=HOSTED_PUSHER_API_URL,MEMORY_ENABLED_USERS,MEMORY_CANONICAL_PROMOTION_CRON_ENABLED,MEMORY_CANONICAL_PROMOTION_CRON_INTERVAL_HOURS,MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED,BASIC_TIER_MINUTES_LIMIT_PER_MONTH,BASIC_TIER_WORDS_TRANSCRIBED_LIMIT_PER_MONTH,BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH,BASIC_TIER_MEMORIES_CREATED_LIMIT_PER_MONTH,CONVERSATION_RELEVANCE_JEV_UID_ALLOWLIST,DEEPGRAM_SELF_HOSTED_ENABLED,DEEPGRAM_SELF_HOSTED_URL,${{ inputs.forbidden_env_names }}
+          --remove-env-vars=HOSTED_PUSHER_API_URL,MEMORY_ENABLED_USERS,MEMORY_CANONICAL_PROMOTION_CRON_ENABLED,MEMORY_CANONICAL_PROMOTION_CRON_INTERVAL_HOURS,MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED,BASIC_TIER_MINUTES_LIMIT_PER_MONTH,BASIC_TIER_WORDS_TRANSCRIBED_LIMIT_PER_MONTH,BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH,BASIC_TIER_MEMORIES_CREATED_LIMIT_PER_MONTH,CONVERSATION_RELEVANCE_JEV_UID_ALLOWLIST,DEEPGRAM_SELF_HOSTED_ENABLED,DEEPGRAM_SELF_HOSTED_URL${{ inputs.remove_env_extra }}
           ${{ inputs.cloud_run_flags }}
           ${{ inputs.identity_flags }}
         env_vars: ${{ steps.backfill-runtime.outputs.env_vars }}

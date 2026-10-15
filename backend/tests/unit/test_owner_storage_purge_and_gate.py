@@ -43,7 +43,7 @@ class _Bucket:
     def blob(self, name):
         return _Blob(self, name)
 
-    def list_blobs(self, *, prefix):
+    def list_blobs(self, *, prefix, **kwargs):
         return [_Blob(self, name) for name in sorted(self.names) if name.startswith(prefix)]
 
 
@@ -214,6 +214,7 @@ def test_new_mobile_capture_routes_unchanged_bytes_to_canonical_bucket(monkeypat
     monkeypatch.setattr(storage_mod, '_get_storage_client', lambda: _Client({'private': _Bucket(set())}))
     monkeypatch.setattr(storage_mod, 'private_cloud_sync_bucket', 'private')
     monkeypatch.setattr(storage_mod.users_db, 'get_data_protection_level', lambda uid: 'standard')
+    monkeypatch.setattr(storage_mod.users_db, 'get_user_private_cloud_sync_enabled', lambda uid: True)
     archive = MagicMock()
     monkeypatch.setattr(storage_mod.audio_packs, 'archive_capture', archive)
     path = tmp_path / 'audio_omimobilebatch001_opus_16000_1_fs160_1726185600.bin'
@@ -347,6 +348,7 @@ def test_mobile_primary_archive_commits_before_canonical_success_or_failure(monk
     private = _prepare_playback(monkeypatch)
     monkeypatch.setenv('AUDIO_CANONICAL_PACKING_ENABLED', 'true')
     monkeypatch.setattr(storage_mod.users_db, 'get_data_protection_level', lambda uid: 'standard')
+    monkeypatch.setattr(storage_mod.users_db, 'get_user_private_cloud_sync_enabled', lambda uid: True)
     monkeypatch.setattr(storage_mod, 'get_canonical_audio_bucket', lambda: private)
     path = tmp_path / 'audio_omimobilebatch001_opus_16000_1_fs160_1726185600.bin'
     path.write_bytes(b'original')
