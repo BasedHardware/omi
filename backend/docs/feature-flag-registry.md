@@ -1,4 +1,4 @@
-<!-- feature-flag-registry as-of: 2026-10-15 -->
+<!-- feature-flag-registry as-of: 2026-09-24 -->
 
 # Feature-flag authority registry
 
@@ -114,7 +114,7 @@ entries are exempt: they are queued for removal, not running.
 
 ## Overdue for a decision
 
-None as of 2026-10-15.
+None as of 2026-09-24.
 
 ## Flags
 
@@ -179,6 +179,9 @@ and an explicit empty literal renders as `''`.
 | `AUDIO_TIMELINE_SPANS` | Persist projected span-bearing live audio through the existing pusher capability without enabling v2 transcript translation; default off | backend | env | closed | {value: 'false', category: rollout} | false (backend-listen (chart), pusher (chart)); {value: 'false', category: rollout} (cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, gke/backend-listen, gke/pusher) | true (backend-listen (chart), pusher (chart)); {value: 'false', category: rollout} (cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill); {value: 'true', category: rollout} (gke/backend-listen, gke/pusher) | — | pending | 2026-11-02 | dazheng |
 | `BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED` | Gate basic-plan eager extraction | backend | env | closed | declared | true (backend-listen (chart), cloud_run/backend, cloud_run/backend-sync, cloud_run/backend-sync-backfill, gke/backend-listen, gke/pusher, pusher (chart)) | false (backend-listen (chart), cloud_run/backend, cloud_run/backend-sync, cloud_run/backend-sync-backfill, gke/backend-listen, gke/pusher, pusher (chart)) | — | graduate | 2026-10-23 | dazheng |
 | `BASIC_PLAN_GATE_PROXY_EMBED_ENABLED` | Gate basic-plan embedding proxy | backend | env | closed | declared | true | false | — | graduate | 2026-10-23 | dazheng |
+| `BATCH_PIPELINE_ENABLED` | Default-off durable batch admission gate; existing sync routes remain unconnected until projection qualification | backend | env | closed | — | — | — | — | pending | 2026-11-14 | dazheng |
+| `BATCH_PIPELINE_PERCENT` | Stable owner cohort for durable batch admission; default zero percent and requires global enable | backend | env | closed | — | — | — | — | pending | 2026-11-14 | dazheng |
+| `BATCH_PIPELINE_UID_ALLOWLIST` | Explicit durable batch admission owner cohort; default empty and requires global enable | backend | env | closed | — | — | — | — | pending | 2026-11-14 | dazheng |
 | `BUCKET_AUDIO_DERIVED` | Default-off as-captured audio rollout setting BUCKET_AUDIO_DERIVED; David then <=5 percent for >=12h | backend | env | closed | {value: '', category: rollout} | '' (backend-listen (chart), pusher (chart)); {value: '', category: rollout} (cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, gke/backend-listen, gke/pusher) | '' (backend-listen (chart), pusher (chart)); {value: '', category: rollout} (cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, gke/backend-listen, gke/pusher) | — | pending | 2026-11-14 | dazheng |
 | `CAPTURE_EVIDENCE_V1_DARK_WRITE` | Piggyback bounded capture evidence metadata on existing writes | backend, mobile, macos | env | closed | {value: 'false', category: rollout} | true (backend-listen (chart), pusher (chart)); {value: 'true', category: rollout} (cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, gke/backend-listen, gke/pusher) | true (backend-listen (chart), pusher (chart)); {value: 'true', category: rollout} (cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, gke/backend-listen, gke/pusher) | — | pending | 2026-10-27 | dazheng |
 | `CAPTURE_GROUP_CONTAINMENT_MODE` | Time-aligned user utterance containment for complementary cross-source capture groups; off\|shadow\|on, default shadow, unknown off | backend | env | closed | {value: 'shadow', category: rollout} | shadow (backend-listen (chart), pusher (chart)); {value: 'shadow', category: rollout} (cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, gke/backend-listen, gke/pusher) | shadow (backend-listen (chart), pusher (chart)); {value: 'shadow', category: rollout} (cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, gke/backend-listen, gke/pusher) | — | pending | 2026-11-03 | dazheng |
@@ -359,6 +362,13 @@ and an explicit empty literal renders as `''`.
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | `ACCOUNT_DELETION_DISPATCH_MODE` | Select Cloud Tasks for account deletion | backend | env | closed | — | — | cloud_tasks (backend-listen (chart), cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, gke/backend-listen) | — | keep | — | unowned |
 | `AUDIO_MERGE_DISPATCH_MODE` | Select audio-merge dispatch lane | backend | env | closed | — | — | — | — | keep | — | unowned |
+| `BATCH_PIPELINE_CONTEXT_SECONDS` | GPU chain internal ASR boundary context seconds; default 2; requires AMI qualification | backend | env | closed | — | — | — | — | keep | — | dazheng |
+| `BATCH_PIPELINE_DIARIZER` | GPU chain diarizer registry selection; default pyannote; unavailable candidates fail closed | backend | env | closed | — | — | — | — | keep | — | dazheng |
+| `BATCH_PIPELINE_MODEL_BATCH_SIZE` | GPU chain maximum model window batch size; default 8; hard ceiling 32 | backend | env | closed | — | — | — | — | keep | — | dazheng |
+| `BATCH_PIPELINE_PADDED_SECONDS` | GPU chain padded waveform seconds per model batch; default 240 | backend | env | closed | — | — | — | — | keep | — | dazheng |
+| `BATCH_PIPELINE_REUSE_LIVE_ENABLED` | Default-off GPU-chain pre-STT reuse; requires existing lineage gates and full-span words-of-record quality proof | backend | env | closed | — | — | — | — | keep | — | dazheng |
+| `BATCH_PIPELINE_WINDOW_SECONDS` | GPU chain internal ASR core window seconds; default 30; queue units remain conversations | backend | env | closed | — | — | — | — | keep | — | dazheng |
+| `BATCH_PIPELINE_WORDS_PROVIDER` | GPU chain words registry selection; default parakeet; unavailable providers fail closed | backend | env | closed | — | — | — | — | keep | — | dazheng |
 | `BILLING_WEBHOOK_LEDGER_ENABLED` | Durable Stripe webhook receipts, duplicate suppression and failed-schedule retries; default false; no deployment declaration or activation in INF sprint | backend | env | closed | — | — | — | — | pending | — | dazheng |
 | `COMMITMENT_FOLLOWUP_TASKS_HANDLER_URL` | One-shot commitment due callback transport; absent disables scheduling | backend | env | closed | — | — | — | — | keep | — | dazheng |
 | `COMMITMENT_FOLLOWUP_TASKS_INVOKER_SA` | One-shot commitment due callback transport; absent disables scheduling | backend | env | closed | — | — | — | — | keep | — | dazheng |
@@ -435,6 +445,16 @@ their code default (`fail` tells you which way a missing value resolves).
 - `ADMIN_KEY_AUTH_ENABLED` — Allow administrator-key authentication (fail: open)
 - `AUDIO_CANONICAL_PACKING_ENABLED` — Default off; new release-scoped canonical capture intake and owner-only verified tar packing; requires new regional bucket (fail: closed)
 - `AUDIO_MERGE_DISPATCH_MODE` — Select audio-merge dispatch lane (fail: closed)
+- `BATCH_PIPELINE_CONTEXT_SECONDS` — GPU chain internal ASR boundary context seconds; default 2; requires AMI qualification (fail: closed)
+- `BATCH_PIPELINE_DIARIZER` — GPU chain diarizer registry selection; default pyannote; unavailable candidates fail closed (fail: closed)
+- `BATCH_PIPELINE_ENABLED` — Default-off durable batch admission gate; existing sync routes remain unconnected until projection qualification (fail: closed)
+- `BATCH_PIPELINE_MODEL_BATCH_SIZE` — GPU chain maximum model window batch size; default 8; hard ceiling 32 (fail: closed)
+- `BATCH_PIPELINE_PADDED_SECONDS` — GPU chain padded waveform seconds per model batch; default 240 (fail: closed)
+- `BATCH_PIPELINE_PERCENT` — Stable owner cohort for durable batch admission; default zero percent and requires global enable (fail: closed)
+- `BATCH_PIPELINE_REUSE_LIVE_ENABLED` — Default-off GPU-chain pre-STT reuse; requires existing lineage gates and full-span words-of-record quality proof (fail: closed)
+- `BATCH_PIPELINE_UID_ALLOWLIST` — Explicit durable batch admission owner cohort; default empty and requires global enable (fail: closed)
+- `BATCH_PIPELINE_WINDOW_SECONDS` — GPU chain internal ASR core window seconds; default 30; queue units remain conversations (fail: closed)
+- `BATCH_PIPELINE_WORDS_PROVIDER` — GPU chain words registry selection; default parakeet; unavailable providers fail closed (fail: closed)
 - `BILLING_WEBHOOK_LEDGER_ENABLED` — Durable Stripe webhook receipts, duplicate suppression and failed-schedule retries; default false; no deployment declaration or activation in INF sprint (fail: closed)
 - `CAPTURE_JEV_SHADOW_EXPIRY` — Shorten the Jev capture shadow hard deadline (fail: closed)
 - `CAPTURE_JEV_SHADOW_GLOBAL_DAILY_CAP` — Global daily Jev capture shadow call budget (fail: closed)
