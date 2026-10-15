@@ -1,13 +1,12 @@
 """Voice-profile preferences, tag-prompt pacing state, and owner voice confirmations."""
 
-import hashlib
 from datetime import datetime, timedelta, timezone
 from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple
 
 from google.cloud import firestore
-from google.cloud.firestore_v1.field_path import FieldPath
 
 from utils.owner_voice_evidence import owner_base
+from utils.speaker_tag_prompts.keys import ignored_voice_key
 
 from ._client import get_firestore_client, run_transactional
 from .speaker_profile_authority import owner_teaching_authorized
@@ -214,15 +213,6 @@ def add_owner_voice_confirmation(
 
 
 IGNORED_VOICES_LIMIT = 200
-
-
-def ignored_voice_key(conversation_id: str, speaker_id: int) -> str:
-    key = f'{conversation_id}:{speaker_id}'
-    path = FieldPath('ignored_voices', key, 'assignment_generation').to_api_repr()
-    if len(path.encode('utf-8')) <= 1500:
-        return key
-    # A trailing colon cannot collide with an existing decimal speaker suffix.
-    return f'sha256:{hashlib.sha256(key.encode("utf-8")).hexdigest()}:'
 
 
 def ignored_voices(state: Dict[str, Any]) -> List[Dict[str, Any]]:
