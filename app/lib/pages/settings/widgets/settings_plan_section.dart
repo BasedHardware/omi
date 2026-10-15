@@ -10,12 +10,15 @@ import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 
 /// The Plan & Usage row on the Settings sheet, plus — for Free and Plus — this month's minutes and
-/// an Upgrade button, so upgrading is one tap from Settings instead of two.
+/// a compact Upgrade button beside them, so upgrading is one tap from Settings instead of two.
 class SettingsPlanSection extends StatelessWidget {
   const SettingsPlanSection({super.key, required this.row});
 
   /// The Plan & Usage row; tapping it still opens the Plan & Usage page.
   final Widget row;
+
+  /// Where an [OmiSettingsRow]'s title starts: its padding, the 24 pt icon column and the gap.
+  static const double _titleInset = OmiSpacing.md + 24 + OmiSpacing.md;
 
   @override
   Widget build(BuildContext context) {
@@ -26,27 +29,55 @@ class SettingsPlanSection extends StatelessWidget {
       return row;
     }
     final l10n = context.l10n;
+    final hasLimit = subscription.transcriptionSecondsLimit > 0;
+    final used = (subscription.transcriptionSecondsUsed / 60).round();
+    final limit = (subscription.transcriptionSecondsLimit / 60).round();
+    final ratio = hasLimit
+        ? (subscription.transcriptionSecondsUsed / subscription.transcriptionSecondsLimit).clamp(0.0, 1.0)
+        : 0.0;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       mainAxisSize: MainAxisSize.min,
       children: [
         row,
+        // Under the row and aligned with its title: this month's minutes with a compact Upgrade
+        // beside them, then the meter across the card, so the card reads as the plan rather than
+        // as a full-width button.
         Padding(
-          padding: const EdgeInsets.fromLTRB(OmiSpacing.lg, 0, OmiSpacing.lg, OmiSpacing.lg),
+          padding: const EdgeInsets.fromLTRB(_titleInset, 0, OmiSpacing.md, OmiSpacing.md),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             mainAxisSize: MainAxisSize.min,
             children: [
-              if (subscription.transcriptionSecondsLimit > 0) ...[
-                _MinutesMeter(subscription: subscription),
-                const SizedBox(height: OmiSpacing.md),
-              ],
-              OmiButton(
-                key: const ValueKey('settings_plan_upgrade'),
-                label: plan == PlanType.plus ? l10n.upgradeToUnlimited : l10n.upgrade,
-                expand: true,
-                onPressed: () => openSettingsUpgrade(context, plan!),
+              Row(
+                children: [
+                  Expanded(
+                    child: hasLimit
+                        ? Text(
+                            l10n.minsUsedThisMonth(NumberFormat.decimalPattern(l10n.localeName).format(used), limit),
+                            style: OmiType.footnote.copyWith(color: OmiColors.textSecondary),
+                          )
+                        : const SizedBox.shrink(),
+                  ),
+                  const SizedBox(width: OmiSpacing.md),
+                  OmiButton(
+                    key: const ValueKey('settings_plan_upgrade'),
+                    label: plan == PlanType.plus ? l10n.upgradeToUnlimited : l10n.upgrade,
+                    size: OmiButtonSize.compact,
+                    onPressed: () => openSettingsUpgrade(context, plan!),
+                  ),
+                ],
               ),
+              if (hasLimit) ...[
+                const SizedBox(height: OmiSpacing.sm),
+                LinearProgressIndicator(
+                  value: ratio,
+                  backgroundColor: OmiColors.surface3,
+                  valueColor: AlwaysStoppedAnimation<Color>(ratio >= .8 ? OmiColors.warning : OmiColors.accent),
+                  minHeight: 4,
+                  borderRadius: OmiRadius.pillAll,
+                ),
+              ],
             ],
           ),
         ),
@@ -60,35 +91,3 @@ Future<void> openSettingsUpgrade(BuildContext context, PlanType plan) => openUpg
       context,
       source: 'usage_page',
     );
-
-class _MinutesMeter extends StatelessWidget {
-  const _MinutesMeter({required this.subscription});
-
-  final UserSubscriptionResponse subscription;
-
-  @override
-  Widget build(BuildContext context) {
-    final l10n = context.l10n;
-    final used = (subscription.transcriptionSecondsUsed / 60).round();
-    final limit = (subscription.transcriptionSecondsLimit / 60).round();
-    final ratio = (subscription.transcriptionSecondsUsed / subscription.transcriptionSecondsLimit).clamp(0.0, 1.0);
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Text(
-          l10n.minsUsedThisMonth(NumberFormat.decimalPattern(l10n.localeName).format(used), limit),
-          style: OmiType.footnote.copyWith(color: OmiColors.textSecondary),
-        ),
-        const SizedBox(height: OmiSpacing.xs),
-        LinearProgressIndicator(
-          value: ratio,
-          backgroundColor: OmiColors.surface3,
-          valueColor: AlwaysStoppedAnimation<Color>(ratio >= .8 ? OmiColors.warning : OmiColors.accent),
-          minHeight: 4,
-          borderRadius: OmiRadius.pillAll,
-        ),
-      ],
-    );
-  }
-}

@@ -91,7 +91,8 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
   Widget _row(
     SettingsDestination destination, {
     required String key,
-    required FaIconData icon,
+    FaIconData? icon,
+    Widget? leading,
     required String title,
     String? subtitle,
     String? value,
@@ -99,7 +100,7 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
   }) {
     return OmiSettingsRow(
       key: ValueKey(key),
-      leading: FaIcon(icon),
+      leading: leading ?? FaIcon(icon),
       title: title,
       subtitle: subtitle,
       value: value,
@@ -143,7 +144,7 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
             _row(
               SettingsDestination.profile,
               key: 'settings_account',
-              icon: FontAwesomeIcons.solidUser,
+              leading: _AccountInitial(name: name),
               title: name.isEmpty ? l10n.account : name,
               subtitle: email.isEmpty ? null : email,
             ),
@@ -364,6 +365,30 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
           ),
         ),
       ],
+    );
+  }
+}
+
+/// The signed-in person's initial in a 32 pt circle (an avatar fits a settings row's leading slot);
+/// a person glyph when there is no name yet.
+class _AccountInitial extends StatelessWidget {
+  const _AccountInitial({required this.name});
+
+  final String name;
+
+  @override
+  Widget build(BuildContext context) {
+    final initial = name.trim().isEmpty ? null : name.trim().characters.first.toUpperCase();
+    return ExcludeSemantics(
+      child: Container(
+        width: 32,
+        height: 32,
+        alignment: Alignment.center,
+        decoration: BoxDecoration(color: OmiColors.surface3, shape: BoxShape.circle),
+        child: initial == null
+            ? const FaIcon(FontAwesomeIcons.solidUser, size: 14)
+            : Text(initial, style: OmiType.headline.copyWith(fontSize: 15)),
+      ),
     );
   }
 }
