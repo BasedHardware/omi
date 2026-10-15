@@ -1,4 +1,3 @@
-# slice-2 impersonated-mint bake trigger (2026-09-18)
 import asyncio
 import json
 import logging
@@ -30,8 +29,10 @@ from database.google_credentials import prepare_google_credentials
 prepare_google_credentials()
 install_firebase_auth_mutation_guard()
 
+from utils.observability.sync_upload import SyncUploadMetricsMiddleware
 from routers import messaging
 from routers import (
+    fleet_telemetry,
     budget_choice,
     candidate_integration_sweep,
     chat_receipts,
@@ -190,6 +191,7 @@ else:
     firebase_admin.initialize_app(options=_firebase_admin_options)  # type: ignore[reportUnknownMemberType]  # firebase_admin untyped
 
 app = FastAPI()
+app.add_middleware(SyncUploadMetricsMiddleware)
 
 _local_storage_root = local_storage_root_from_env()
 if _local_storage_root is not None:
@@ -291,9 +293,8 @@ app.include_router(apps.router)
 app.include_router(calendar_meetings.router)
 app.include_router(google_calendar.router)
 app.include_router(calendar_onboarding.router)
-app.include_router(oauth.router)  # Added oauth router (for Omi Apps)
-app.include_router(auth.router)  # Added auth router (for the main Omi App, this is the core auth router)
-
+app.include_router(oauth.router)
+app.include_router(auth.router)
 
 app.include_router(payment.router)
 app.include_router(storefront.router)
@@ -316,6 +317,7 @@ app.include_router(agent_tools.router)
 app.include_router(tools.router)
 app.include_router(metrics.router)
 app.include_router(client_telemetry.router)
+app.include_router(fleet_telemetry.router)
 app.include_router(fair_use_admin.router)
 app.include_router(staged_tasks.router)
 app.include_router(focus_sessions.router)
@@ -342,7 +344,6 @@ app.include_router(desktop_tts_updates.router)
 app.include_router(screen_frames.router)
 app.include_router(review.router)
 jit_rollout.validate_jit_rollout_contract(app)
-
 
 methods_timeout = {
     "GET": os.environ.get('HTTP_GET_TIMEOUT'),

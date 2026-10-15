@@ -239,7 +239,10 @@ def _ingress_literal_env(service: Mapping[str, Any], *, ingress_container_name: 
         None,
     )
     if ingress is None:
-        raise ValueError(f'Cloud Run service export had no ingress container named {ingress_container_name!r}')
+        candidates = [item for item in containers if isinstance(item, dict) and item.get('name') != SIDECAR_NAME]
+        if len(candidates) != 1:
+            raise ValueError(f'Cloud Run service export had no unambiguous ingress named {ingress_container_name!r}')
+        ingress = candidates[0]
     raw_env = ingress.get('env', [])
     if not isinstance(raw_env, list):
         raise ValueError('Cloud Run ingress env was not a list')
@@ -251,13 +254,7 @@ def _ingress_literal_env(service: Mapping[str, Any], *, ingress_container_name: 
             # Secret-backed reference, not a literal value -- must not be folded
             # into the literal-env map (and must not be coerced to '').
             continue
-        # Cloud Run's export omits the `value` key entirely for an env var whose
-        # literal value is the empty string -- it does not write `value: ''`.
-        # Reading a missing key as None here would make a legitimately empty
-        # literal look identical to a var that was never set at all, which is
-        # exactly the false-positive "<missing>" this check reported for
-        # OMI_PARITY_PACK_ALLOWED_PRINCIPALS. Absence of the key on a literal
-        # entry means empty string, not absence of the variable.
+        # Omitted value on a literal env entry means empty string in Cloud Run exports.
         actual[raw_entry['name']] = _cloud_run_string(raw_entry.get('value', ''))
     return actual
 

@@ -847,6 +847,9 @@ environments:
               secret: POSTHOG_PROJECT_API_KEY
               version: latest
           env:
+            PROMETHEUS_SIDECAR_PORT:
+              value: '9090'
+              category: telemetry
             AUDIO_ARCHIVE_LIVE_ENABLED: {value: 'false', category: rollout}
             AUDIO_ARCHIVE_READ_ENABLED: {value: 'false', category: rollout}
             AUDIO_ARCHIVE_STOP_PCM_ENABLED: {value: 'false', category: rollout}
@@ -1070,6 +1073,9 @@ environments:
               secret: POSTHOG_PROJECT_API_KEY
               version: latest
           env:
+            PROMETHEUS_SIDECAR_PORT:
+              value: '9090'
+              category: telemetry
             AUDIO_ARCHIVE_LIVE_ENABLED: {value: 'false', category: rollout}
             AUDIO_ARCHIVE_READ_ENABLED: {value: 'false', category: rollout}
             AUDIO_ARCHIVE_STOP_PCM_ENABLED: {value: 'false', category: rollout}
@@ -1275,6 +1281,9 @@ environments:
               secret: POSTHOG_PROJECT_API_KEY
               version: latest
           env:
+            PROMETHEUS_SIDECAR_PORT:
+              value: '9090'
+              category: telemetry
             AUDIO_ARCHIVE_LIVE_ENABLED: {value: 'false', category: rollout}
             AUDIO_ARCHIVE_READ_ENABLED: {value: 'false', category: rollout}
             AUDIO_ARCHIVE_STOP_PCM_ENABLED: {value: 'false', category: rollout}
@@ -2743,6 +2752,9 @@ environments:
               secret: DREAM_AGENT_FEEDBACK_SALT
               version: latest
           env:
+            PROMETHEUS_SIDECAR_PORT:
+              value: '9090'
+              category: telemetry
             AUDIO_ARCHIVE_LIVE_ENABLED: {value: 'false', category: rollout}
             AUDIO_ARCHIVE_READ_ENABLED: {value: 'false', category: rollout}
             AUDIO_ARCHIVE_STOP_PCM_ENABLED: {value: 'false', category: rollout}
@@ -3013,6 +3025,9 @@ environments:
               secret: OMI_LLM_GATEWAY_SERVICE_TOKEN
               version: latest
           env:
+            PROMETHEUS_SIDECAR_PORT:
+              value: '9090'
+              category: telemetry
             AUDIO_ARCHIVE_LIVE_ENABLED: {value: 'false', category: rollout}
             AUDIO_ARCHIVE_READ_ENABLED: {value: 'false', category: rollout}
             AUDIO_ARCHIVE_STOP_PCM_ENABLED: {value: 'false', category: rollout}
@@ -3265,6 +3280,9 @@ environments:
               secret: OMI_LLM_GATEWAY_SERVICE_TOKEN
               version: latest
           env:
+            PROMETHEUS_SIDECAR_PORT:
+              value: '9090'
+              category: telemetry
             AUDIO_ARCHIVE_LIVE_ENABLED: {value: 'false', category: rollout}
             AUDIO_ARCHIVE_READ_ENABLED: {value: 'false', category: rollout}
             AUDIO_ARCHIVE_STOP_PCM_ENABLED: {value: 'false', category: rollout}
