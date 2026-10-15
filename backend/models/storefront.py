@@ -57,7 +57,7 @@ class StorefrontCurrent(BaseModel):
 
 class StorefrontUsage(BaseModel):
     kind: Literal['usage_budget', 'transcription', 'unavailable'] = 'unavailable'
-    percent: Optional[int] = Field(default=None, ge=0, le=100)
+    percent: Optional[int] = Field(default=None, ge=0)
     period_id: Optional[str] = None
     reset_label: Optional[str] = None
     meter_line: Optional[str] = None

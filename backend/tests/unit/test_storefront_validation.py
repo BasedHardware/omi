@@ -61,12 +61,12 @@ class TestStorefrontValidation(unittest.TestCase):
         u100 = StorefrontUsage(percent=100)
         self.assertEqual(u100.percent, 100)
 
-    def test_storefront_usage_out_of_bounds_percent(self):
+        u140 = StorefrontUsage(percent=140)
+        self.assertEqual(u140.percent, 140)
+
+    def test_storefront_usage_negative_percent_rejected(self):
         with self.assertRaises(ValidationError):
             StorefrontUsage(percent=-1)
-
-        with self.assertRaises(ValidationError):
-            StorefrontUsage(percent=101)
 
     def test_storefront_response_valid(self):
         response = StorefrontResponse(catalog_revision=1)
