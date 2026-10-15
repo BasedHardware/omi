@@ -2,6 +2,13 @@
   "unreleased": [],
   "releases": [
     {
+      "version": "0.12.487",
+      "date": "2026-10-15",
+      "changes": [
+        "Transcript corrections preserve the original recording text and remain reversible"
+      ]
+    },
+    {
       "version": "0.12.486",
       "date": "2026-10-15",
       "changes": [
