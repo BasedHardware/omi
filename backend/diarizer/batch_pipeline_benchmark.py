@@ -12,10 +12,11 @@ import json
 from pathlib import Path
 import re
 import time
+from typing import Any
 
 try:
-    import torch
-    import nemo.collections.asr as nemo_asr
+    import torch  # type: ignore[reportMissingImports]  # GPU runtime only
+    import nemo.collections.asr as nemo_asr  # type: ignore[reportMissingImports]  # GPU runtime only
 except ImportError:
     torch = None
     nemo_asr = None
@@ -96,7 +97,7 @@ def main():
                         if mode == 'whole'
                         else [[w.samples for w in b] for b in pack_windows(windows, config)]
                     )
-                    row = {
+                    row: dict[str, Any] = {
                         'attention': attention,
                         'mode': mode,
                         'batch_size': size,
@@ -118,6 +119,8 @@ def main():
                                     if mode == 'whole':
                                         words.extend(hypothesis)
                                         continue
+                                    if ordered is None:
+                                        raise ValueError('missing window ownership map')
                                     window = ordered[index][offset]
                                     for word in hypothesis:
                                         left, right = [v + window.start for v in word['timestamp']]

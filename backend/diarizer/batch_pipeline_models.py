@@ -9,7 +9,7 @@ import wave
 import numpy as np
 
 try:
-    import torch  # GPU runtime dependency, absent in the backend unit environment
+    import torch  # type: ignore[reportMissingImports]  # Optional GPU runtime dependency, absent in backend venv
 except ImportError:
     torch = None
 
@@ -47,6 +47,8 @@ class PyannoteDiarizer:
         self.model = model
 
     def __call__(self, samples):
+        if torch is None:
+            raise RuntimeError('pyannote adapter requires the GPU runtime with torch')
         with torch.inference_mode():
             output = self.model({'waveform': torch.from_numpy(samples).unsqueeze(0), 'sample_rate': 16000})
         activity = [
@@ -66,6 +68,8 @@ class PyannoteVAD:
         self.model = model
 
     def __call__(self, samples):
+        if torch is None:
+            raise RuntimeError('pyannote adapter requires the GPU runtime with torch')
         with torch.inference_mode():
             output = self.model({'waveform': torch.from_numpy(samples).unsqueeze(0), 'sample_rate': 16000})
         return [(float(t.start), float(t.end)) for t in output.get_timeline().support()]
