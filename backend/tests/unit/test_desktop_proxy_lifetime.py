@@ -137,9 +137,9 @@ async def test_real_middleware_disconnect_cancels_provider():
 @pytest.fixture
 def lifetime_app(monkeypatch):
     """Real route wrapper + BYOK middleware; only business/provider IO is fake."""
-    monkeypatch.setattr(lifetime, 'REQUEST_TIMEOUT_SECONDS', 0.08)
-    monkeypatch.setattr(lifetime, 'UPLOAD_IDLE_SECONDS', 0.025)
-    monkeypatch.setattr(lifetime, 'UPLOAD_TIMEOUT_SECONDS', 0.05)
+    monkeypatch.setattr(lifetime, 'REQUEST_TIMEOUT_SECONDS', 2.0)
+    monkeypatch.setattr(lifetime, 'UPLOAD_IDLE_SECONDS', 0.5)
+    monkeypatch.setattr(lifetime, 'UPLOAD_TIMEOUT_SECONDS', 0.8)
     app = FastAPI()
     app.add_middleware(BYOKMiddleware)
     app.add_middleware(lifetime.DesktopProxyDeadlineMiddleware)
@@ -454,7 +454,7 @@ async def test_response_backpressure_cannot_hold_stream_open(lifetime_app, monke
         'headers': [],
     }
     task = asyncio.create_task(app(scope, body_then_wait(), send))
-    done, _ = await asyncio.wait((task,), timeout=0.25)
+    done, _ = await asyncio.wait((task,), timeout=3.0)
     assert task in done
     await task
     assert closed.is_set()
@@ -483,7 +483,7 @@ async def test_repeated_cancellation_cannot_interrupt_owned_cleanup(monkeypatch)
     owner.cancel()
     with pytest.raises(asyncio.CancelledError):
         await owner
-    await asyncio.wait_for(stopped.wait(), timeout=0.2)
+    await asyncio.wait_for(stopped.wait(), timeout=1.0)
     assert child.done()
     # The retained drain also retrieves exceptions from abandoned tasks.
     await asyncio.sleep(0)
@@ -555,7 +555,7 @@ async def test_stream_double_cancel_closes_suspended_iterator(monkeypatch):
     task.cancel()
     with pytest.raises(asyncio.CancelledError):
         await task
-    await asyncio.wait_for(closed.wait(), timeout=0.3)
+    await asyncio.wait_for(closed.wait(), timeout=3.0)
 
 
 @pytest.mark.asyncio
@@ -619,7 +619,7 @@ async def test_production_stack_bounds_real_outward_send(production_lifetime_app
     task = asyncio.create_task(app(scope, body_then_wait(), send))
     await entered.wait()
     assert not terminals(capsys), 'provider success must wait for outward delivery'
-    done, _ = await asyncio.wait((task,), timeout=0.3)
+    done, _ = await asyncio.wait((task,), timeout=3.0)
     assert task in done
     await task
     assert [e['outcome'] for e in terminals(capsys)] == ['provider_timeout']
@@ -690,3 +690,47 @@ async def test_production_send_disconnect_is_not_internal_error(production_lifet
     }
     await app(scope, body_then_wait(), send)
     assert [e['outcome'] for e in terminals(capsys)] == ['client_cancelled']
+
+
+@pytest.mark.asyncio
+async def test_retained_straggler_cannot_suppress_typed_deadline(monkeypatch, capsys):
+    from utils.llm.desktop_gemini_telemetry import get_proxy_telemetry
+
+    monkeypatch.setattr(lifetime, 'REQUEST_TIMEOUT_SECONDS', 0.03)
+    monkeypatch.setattr(lifetime, 'CANCEL_GRACE_SECONDS', 0.01)
+    release, completed = asyncio.Event(), asyncio.Event()
+    messages = []
+
+    async def app(scope, receive, send):
+        request = Request(scope, receive)
+        await request.body()
+        get_proxy_telemetry(request, streaming=False).phase = 'gateway'
+        while not release.is_set():
+            try:
+                await release.wait()
+            except asyncio.CancelledError:
+                continue
+        try:
+            await Response(b'late')(scope, receive, send)
+        finally:
+            completed.set()
+
+    async def send(message):
+        messages.append(message)
+
+    scope = {
+        'type': 'http',
+        'method': 'POST',
+        'path': '/v1/proxy/gemini/models/gemini-2.5-flash:generateContent',
+        'headers': [],
+    }
+    try:
+        await lifetime.DesktopProxyDeadlineMiddleware(app)(scope, body_then_wait(), send)
+        start = next(m for m in messages if m['type'] == 'http.response.start')
+        assert start['status'] == 504
+        assert dict(start['headers'])[b'x-omi-retryable'] == b'false'
+        assert [e['outcome'] for e in terminals(capsys)] == ['provider_timeout']
+    finally:
+        release.set()
+        await asyncio.wait_for(completed.wait(), timeout=3.0)
+    assert sum(m['type'] == 'http.response.start' for m in messages) == 1

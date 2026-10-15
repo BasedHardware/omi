@@ -371,7 +371,8 @@ class DesktopProxyDeadlineMiddleware:
             phase = telemetry.phase
             outcome = _deadline_outcome(phase)
             override = dict(outcome=outcome, status_code=504, retryable=False, phase=phase)
-            if await _drain(task):
+            stopped = await _drain(task)
+            if not started or stopped:
                 async with asyncio.timeout(CANCEL_GRACE_SECONDS):
                     if not started:
                         await deadline_response(telemetry, outcome=outcome)(scope, receive, send)

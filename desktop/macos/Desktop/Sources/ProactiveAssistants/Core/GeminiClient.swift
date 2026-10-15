@@ -518,7 +518,9 @@ actor GeminiClient {
   /// Replaying a dispatched request is only unsafe when the request may have had an
   /// effect. Every call this client makes is a `generateContent` inference: it reads a
   /// prompt and an image and returns text, with no server-side state change, so a duplicate
-  /// costs one extra inference and nothing else.
+  /// costs one extra inference and nothing else. A local timeout is terminal: the
+  /// provider may still be working, and restarting the timeout would extend the
+  /// logical request to three full request budgets.
   ///
   /// `NSURLErrorNetworkConnectionLost` (-1005) is the dominant failure here and is a stale
   /// pooled-connection race, not a real network outage: URLSession reuses a keep-alive
@@ -529,7 +531,7 @@ actor GeminiClient {
   static func isReplayableTransportError(_ error: Error) -> Bool {
     let code = (error as? URLError)?.code ?? URLError.Code(rawValue: (error as NSError).code)
     switch code {
-    case .networkConnectionLost, .timedOut, .cannotConnectToHost, .notConnectedToInternet,
+    case .networkConnectionLost, .cannotConnectToHost, .notConnectedToInternet,
       .dnsLookupFailed, .cannotFindHost:
       return true
     default:

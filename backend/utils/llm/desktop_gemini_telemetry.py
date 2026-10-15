@@ -195,13 +195,16 @@ class ProxyTelemetry:
         values: dict[str, Any] = dict(
             outcome=outcome, status_code=status_code, retryable=retryable, upstream_status=upstream_status, phase=phase
         )
+        # Settle the provider attempt when its result is known. Delivery can
+        # later fail independently and must not rewrite immutable spend evidence.
+        self.record_attempt(*_canonical_outcome(outcome))
         if self.defer_terminal:
             self.pending_terminal = values
             return
         self._emit_terminal(**values)
 
     def flush_terminal(self, **override: Any) -> None:
-        values = override or self.pending_terminal
+        values = {**(self.pending_terminal or {}), **override} if override else self.pending_terminal
         self.pending_terminal = None
         self.defer_terminal = False
         if values is not None:
@@ -267,7 +270,6 @@ class ProxyTelemetry:
         # URLs, headers, tokens, raw exceptions, and upstream response bodies.
         sys.stdout.write(json.dumps(event, separators=(',', ':'), sort_keys=True) + '\n')
         sys.stdout.flush()
-        self.record_attempt(*_canonical_outcome(outcome))
 
     def note_dispatch(self, route: UpstreamRoute, *, reservation_state=None, reservation_states=None) -> None:
         """A provider request is about to leave for `route`. Only these become ledger rows.
