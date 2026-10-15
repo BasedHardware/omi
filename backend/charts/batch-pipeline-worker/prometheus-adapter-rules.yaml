@@ -1,0 +1,18 @@
+# Merge under rules.external in the existing Prometheus Adapter configuration.
+# Worker exports worker_release and Kubernetes namespace on age + freshness.
+# Preserve namespace + pod labels on both metrics. Empty/stale samples must be
+# unavailable (never replace with zero); HPA then retains capacity and alerts.
+external:
+  - seriesQuery: 'omi_batch_pipeline_ready_age_seconds{namespace!="",worker_release!="",priority!=""}'
+    resources:
+      overrides:
+        namespace: {resource: namespace}
+    name:
+      matches: '^omi_batch_pipeline_ready_age_seconds$'
+      as: omi_batch_pipeline_ready_age_seconds
+    metricsQuery: >-
+      max by (namespace, worker_release, priority) (
+        omi_batch_pipeline_ready_age_seconds{<<.LabelMatchers>>}
+        and on (namespace, worker_release, pod)
+        (time() - omi_batch_pipeline_metrics_refreshed_at_seconds < 60)
+      )

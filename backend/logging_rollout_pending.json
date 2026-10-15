@@ -11,6 +11,14 @@
   "backend/diarizer/batch_main.py::helm:backend/charts/diarizer/prod_omi_diarizer_batch_values.yaml:0:diarizer:batch_main": {
     "missing_setup": 1
   },
+  "backend/diarizer/batch_pipeline_runtime.py::docker:backend/diarizer/Dockerfile.batch-pipeline:diarizer.batch_pipeline_runtime": {
+    "basicConfig": 1,
+    "missing_setup": 1
+  },
+  "backend/diarizer/batch_pipeline_runtime.py::helm:backend/charts/batch-pipeline-worker/templates/deployment.yaml:0:batch-pipeline-worker:diarizer.batch_pipeline_runtime": {
+    "basicConfig": 1,
+    "missing_setup": 1
+  },
   "backend/llm_gateway/main.py::docker:backend/Dockerfile:llm_gateway.main": {
     "missing_setup": 1
   },

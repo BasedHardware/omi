@@ -1,0 +1,42 @@
+# Rendering defaults creates no resources. Enabling this release only drains
+# durable admitted work; the lead separately controls backend admission cohorts.
+enabled: false
+image:
+  repository: ""
+  digest: ""
+serviceAccountName: ""
+gcpServiceAccount: ""
+namespace: batch_pipeline_prod
+stage: prod
+dataPlaneProject: ""
+bucket: ""
+secretName: ""
+replicaCount: 1
+nodeSelector: {}
+tolerations: []
+worker:
+  batchSize: 8
+  unitSeconds: 3600
+  paddedSeconds: 272
+resources:
+  requests:
+    cpu: "4"
+    memory: 11Gi
+    nvidia.com/gpu: "1"
+  limits:
+    cpu: "8"
+    memory: 13Gi
+    nvidia.com/gpu: "1"
+autoscaling:
+  # Enable only after scoped queue-age series and adapter are verified live.
+  enabled: false
+  minReplicas: 1
+  maxReplicas: 6
+  # External metrics from the supplied Prometheus adapter rules must be installed
+  # and freshly sampled. A failed/stale metric prevents unsafe HPA scale-down.
+  targets:
+    fresh: 30
+    recent: 300
+    deep: 3600
+podMonitoring:
+  enabled: true

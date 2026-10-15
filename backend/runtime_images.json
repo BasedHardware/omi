@@ -5,6 +5,7 @@
         "llm-gateway": "backend",
         "messaging-maintenance": "backend",
         "diarizer": "diarizer",
+        "batch-pipeline-worker": "batch-pipeline-worker",
         "nllb-translation": "nllb-translation",
         "pusher": "pusher",
         "parakeet": "parakeet",
@@ -86,7 +87,8 @@
             "dependency_probe_smoke": true,
             "pull_request_smoke": true,
             "dependency_probe_exclusions": {
-                "omi_plugin_sdk": "models.structured imports the SDK only when a full checkout is present; pusher images use its built-in fallback."
+                "omi_plugin_sdk": "models.structured imports the SDK only when a full checkout is present; pusher images use its built-in fallback.",
+                "onnxruntime": "utils.stt.vad guards the local Silero ONNX import; pusher images ship without onnxruntime and stored-audio VAD compaction abstains to original audio there."
             }
         },
         {
@@ -277,6 +279,20 @@
                 "utils.stt.diarization_turns": "First-party module the Dockerfile copies from backend/utils/stt into /app; the -I probe cannot see /app, so it is not an installed dependency.",
                 "utils.logging_config": "First-party module the Dockerfile copies from backend/utils into /app; the -I probe cannot see /app, so it is not an installed dependency."
             },
+            "pull_request_smoke": false
+        },
+        {
+            "name": "batch-pipeline-worker",
+            "dockerfile": "backend/diarizer/Dockerfile.batch-pipeline",
+            "deployment_workflows": [".github/workflows/gcp_diarizer.yml"],
+            "build_context": ".",
+            "source_root": "backend",
+            "entrypoint_source_root": "backend",
+            "workdir": "/app",
+            "entrypoints": ["diarizer.batch_pipeline_runtime"],
+            "image_import_smoke": false,
+            "smoke_entrypoints": ["diarizer.batch_pipeline_runtime"],
+            "dependency_probe_smoke": true,
             "pull_request_smoke": false
         },
         {
