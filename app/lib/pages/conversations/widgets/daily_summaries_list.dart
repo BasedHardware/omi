@@ -6,6 +6,7 @@ import 'package:omi/widgets/shimmer_with_timeout.dart';
 import 'package:omi/backend/http/api/users.dart';
 import 'package:omi/backend/schema/daily_summary.dart';
 import 'package:omi/pages/settings/daily_summary_detail_page.dart';
+import 'package:omi/services/recap_events.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/other/temp.dart';
@@ -78,8 +79,10 @@ class DailySummariesListState extends State<DailySummariesList> {
       if (showSpinner) _isLoading = true;
     });
     try {
-      final result = await _fetchSummaries(limit: _limit, offset: 0)
-          .timeout(const Duration(seconds: 15), onTimeout: () => (items: <DailySummary>[], ok: false));
+      final result = await _fetchSummaries(
+        limit: _limit,
+        offset: 0,
+      ).timeout(const Duration(seconds: 15), onTimeout: () => (items: <DailySummary>[], ok: false));
       if (mounted && generation == _generation) {
         setState(() {
           // A failed read is not "no recaps": keep what is on screen and leave
@@ -111,8 +114,10 @@ class DailySummariesListState extends State<DailySummariesList> {
     try {
       // Derive the offset from the current list length so swipe-deletions don't
       // cause the next page to skip rows (a standalone counter would drift).
-      final moreResult = await _fetchSummaries(limit: _limit, offset: _summaries.length)
-          .timeout(const Duration(seconds: 15), onTimeout: () => (items: <DailySummary>[], ok: false));
+      final moreResult = await _fetchSummaries(
+        limit: _limit,
+        offset: _summaries.length,
+      ).timeout(const Duration(seconds: 15), onTimeout: () => (items: <DailySummary>[], ok: false));
       if (mounted && generation == _generation) {
         setState(() {
           if (moreResult.ok) {
@@ -171,6 +176,7 @@ class DailySummariesListState extends State<DailySummariesList> {
     setState(() => _summaries.removeAt(removedIndex));
 
     final ok = await deleteDailySummary(summary.id);
+    if (ok) announceRecapDeleted(summary.id);
     if (!mounted) return ok;
     if (ok) {
       PlatformManager.instance.analytics.dailySummaryDeleted(
@@ -243,7 +249,10 @@ class DailySummariesListState extends State<DailySummariesList> {
           delegate: SliverChildBuilderDelegate((context, index) {
             if (index == _summaries.length) {
               if (_isLoadingMore) {
-                return const Padding(padding: EdgeInsets.all(OmiSpacing.md), child: Center(child: OmiSpinner()));
+                return const Padding(
+                  padding: EdgeInsets.all(OmiSpacing.md),
+                  child: Center(child: OmiSpinner()),
+                );
               }
               if (_loadMoreFailed) {
                 return Padding(

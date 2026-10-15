@@ -4115,5 +4115,13 @@
     "onboardingNoOmiYet": "Heb je je Omi nog niet?",
     "onboardingOmiNotOrdered": "Nog niet besteld",
     "onboardingOmiOrdered": "Ik heb hem besteld",
-    "onboardingPermissionTapToFix": "Tik om te herstellen"
+    "onboardingPermissionTapToFix": "Tik om te herstellen",
+    "homePendingTitle": "Gesprekken onderweg",
+    "homePendingCatchingUp": "Eerdere audio wordt ingehaald",
+    "onTheWayTitle": "Onderweg",
+    "onTheWayAlmostReady": "Bijna klaar",
+    "activityEmpty": "Nog geen activiteit",
+    "activityNewSemantics": "Activiteit, nieuwe items",
+    "activityLoadFailed": "Niet al je activiteit kon worden geladen",
+    "activityNewItem": "Nieuw"
 }

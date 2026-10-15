@@ -10,7 +10,6 @@ import 'package:visibility_detector/visibility_detector.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/pages/capture/widgets/widgets.dart';
 import 'package:omi/pages/conversations/widgets/capture_recovery_banner.dart';
-import 'package:omi/pages/conversations/widgets/conversation_processing_card.dart';
 import 'package:omi/pages/conversations/widgets/processing_capture.dart';
 import 'package:omi/pages/conversations/widgets/speaker_tag_prompt_card.dart';
 import 'package:omi/pages/review/widgets/review_entry_card.dart';
@@ -18,6 +17,8 @@ import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/services/capture/empty_recording_notice.dart';
 import 'package:omi/providers/local_recordings_provider.dart';
+import 'package:omi/providers/review_provider.dart';
+import 'package:omi/providers/sync_provider.dart';
 import 'package:omi/models/local_recording.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/backend/http/api_presentation.dart';
@@ -26,6 +27,8 @@ import 'package:omi/pages/conversations/widgets/conversations_group_widget.dart'
 import 'package:omi/pages/conversations/widgets/conversation_list_item.dart';
 import 'package:omi/pages/conversations/widgets/date_list_item.dart';
 import 'package:omi/pages/conversations/widgets/empty_conversations.dart';
+import 'package:omi/pages/conversations/sync_pending_work.dart';
+import 'package:omi/pages/conversations/widgets/home_pending_row.dart';
 import 'package:omi/pages/conversations/widgets/recording_list_item.dart';
 import 'package:omi/pages/home/widgets/home_daily_recaps.dart';
 import 'package:omi/ui/ui.dart';
@@ -41,14 +44,7 @@ String _conversationDateRangeLabel(BuildContext context, DateTime start, DateTim
   return '${dates.date(start)} – ${dates.date(end)}';
 }
 
-enum _ConversationListRowKind {
-  topSpacer,
-  dateHeader,
-  processing,
-  conversation,
-  recording,
-  groupSpacer,
-}
+enum _ConversationListRowKind { topSpacer, dateHeader, processing, pendingSync, conversation, recording, groupSpacer }
 
 typedef _ConversationListRow = ({
   _ConversationListRowKind kind,
@@ -90,8 +86,7 @@ bool shouldReleaseConversationLoadMoreLatch({
   required String? currentRequestKey,
   required String requestKey,
   required bool succeeded,
-}) =>
-    !succeeded && currentRequestKey == requestKey;
+}) => !succeeded && currentRequestKey == requestKey;
 
 String conversationLoadMoreFilterKey({
   required String query,
@@ -103,18 +98,17 @@ String conversationLoadMoreFilterKey({
   required bool discarded,
   required bool shortOnly,
   required int shortThreshold,
-}) =>
-    [
-      query,
-      folderId ?? '',
-      speakerId ?? '',
-      startDate?.toIso8601String() ?? '',
-      endDate?.toIso8601String() ?? '',
-      starredOnly,
-      discarded,
-      shortOnly,
-      shortThreshold,
-    ].join('|');
+}) => [
+  query,
+  folderId ?? '',
+  speakerId ?? '',
+  startDate?.toIso8601String() ?? '',
+  endDate?.toIso8601String() ?? '',
+  starredOnly,
+  discarded,
+  shortOnly,
+  shortThreshold,
+].join('|');
 
 _ConversationPageSnapshot _conversationPageSnapshot(
   ConversationProvider conversations,
@@ -233,6 +227,33 @@ List<_ConversationListRow> _buildConversationListRows({
   return rows;
 }
 
+/// Whether the date filter, if any, covers today: the pending row belongs to Today only.
+@visibleForTesting
+bool dateFilterIncludesToday(DateTime? start, DateTime? end, DateTime now) {
+  if (start == null) return true;
+  final today = DateTime(now.year, now.month, now.day);
+  end ??= start;
+  return !today.isBefore(DateTime(start.year, start.month, start.day)) &&
+      !today.isAfter(DateTime(end.year, end.month, end.day));
+}
+
+/// [rows] with Home's pending row placed right under today's header, or, with no today in the list,
+/// ahead of it carrying its own header. The row draws nothing while no recording is pending.
+List<_ConversationListRow> _withPendingSyncRow(List<_ConversationListRow> rows, DateTime now) {
+  if (rows.isEmpty) return rows;
+  final today = DateTime(now.year, now.month, now.day);
+  final header = rows.indexWhere((r) => r.kind == _ConversationListRowKind.dateHeader && r.date == today);
+  final row = (
+    kind: _ConversationListRowKind.pendingSync,
+    date: today,
+    isFirst: header < 0,
+    conversation: null,
+    recording: null,
+    conversationIndex: -1,
+  );
+  return [...rows.take(header + 1), row, ...rows.skip(header + 1)];
+}
+
 bool _isLockedRow(List<_ConversationListRow> rows, int index) =>
     index >= 0 &&
     index < rows.length &&
@@ -282,9 +303,23 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
   @override
   bool get wantKeepAlive => true;
 
+  /// Rebuilds Home at local midnight so the pending row moves under the new Today.
+  Timer? _dayTimer;
+
+  void _scheduleDayRollover() {
+    final now = DateTime.now();
+    final next = DateTime(now.year, now.month, now.day + 1);
+    _dayTimer = Timer(next.difference(now) + const Duration(seconds: 1), () {
+      if (!mounted) return;
+      setState(() {});
+      _scheduleDayRollover();
+    });
+  }
+
   @override
   void initState() {
     super.initState();
+    _scheduleDayRollover();
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       if (!mounted) return;
       final conversationProvider = context.read<ConversationProvider>();
@@ -385,6 +420,7 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
 
   @override
   void dispose() {
+    _dayTimer?.cancel();
     for (final timer in _deferred) {
       timer.cancel();
     }
@@ -470,6 +506,9 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
   Widget build(BuildContext context) {
     Logger.debug('building conversations page');
     super.build(context);
+    // Placing the pending row reads the clock: redo it whenever the row appears or goes away, not
+    // only when the conversation list changes.
+    context.select<SyncProvider, bool>(SyncPendingWork.shouldShow);
     return Selector2<ConversationProvider, LocalRecordingsProvider, _ConversationPageSnapshot>(
       selector: (_, conversationProvider, recordingsProvider) =>
           _conversationPageSnapshot(conversationProvider, recordingsProvider),
@@ -478,7 +517,8 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
         // Unsynced local recordings (batch/offline mode) shown inline with conversations,
         // grouped into the same date buckets. Only in the default view (no search/folder/
         // starred/daily-summaries filter).
-        final bool showRecordings = convoProvider.previousQuery.isEmpty &&
+        final bool showRecordings =
+            convoProvider.previousQuery.isEmpty &&
             convoProvider.selectedFolderId == null &&
             !convoProvider.showStarredOnly;
         final recordingsByDate = <DateTime, List<LocalRecording>>{};
@@ -499,13 +539,15 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
             conversationLocalDayKey(processingNewest.startedAt ?? processingNewest.createdAt): processingNewest,
         };
         final apiPhase = snapshot.apiViewPhase;
-        final bool showTypedStatus = apiPhase == ApiViewPhase.error ||
+        final bool showTypedStatus =
+            apiPhase == ApiViewPhase.error ||
             apiPhase == ApiViewPhase.locked ||
             apiPhase == ApiViewPhase.terminal ||
             apiPhase == ApiViewPhase.authenticationRequired ||
             apiPhase == ApiViewPhase.empty;
         final bool isWaitingForInitialData = _isBootstrapping && snapshot.conversations.isEmpty && !hasRecordings;
-        final bool isShowingConversationSkeleton = isWaitingForInitialData ||
+        final bool isShowingConversationSkeleton =
+            isWaitingForInitialData ||
             convoProvider.isLoadingConversations ||
             convoProvider.isFetchingConversations ||
             convoProvider.isAwaitingInitialFetchRetry;
@@ -513,14 +555,20 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
           ...convoProvider.groupedConversations.keys,
           ...recordingsByDate.keys,
           ...processingByDate.keys,
-        }.toList()
-          ..sort((a, b) => b.compareTo(a));
-        final conversationRows = _buildConversationListRows(
+        }.toList()..sort((a, b) => b.compareTo(a));
+        final listRows = _buildConversationListRows(
           dates: mergedDates,
           conversationsByDate: convoProvider.groupedConversations,
           recordingsByDate: recordingsByDate,
           processingByDate: processingByDate,
         );
+        // Recordings that are not conversations yet sit in Today, where they will land.
+        // Speaker-scoped results are a search: the global pending row was never filtered by speaker.
+        final showPending =
+            showRecordings &&
+            convoProvider.selectedSpeakerId == null &&
+            dateFilterIncludesToday(convoProvider.selectedStartDate, convoProvider.selectedEndDate, DateTime.now());
+        final conversationRows = showPending ? _withPendingSyncRow(listRows, DateTime.now()) : listRows;
 
         return RefreshIndicator(
           onRefresh: () async {
@@ -531,6 +579,10 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
               convoProvider.getInitialConversations(),
               Provider.of<LocalRecordingsProvider>(context, listen: false).refresh(),
               if (_recapsKey.currentState != null) _recapsKey.currentState!.refresh(),
+              // Review's entry hides when caught up; a pull is how a hidden one comes back.
+              if (Provider.of<ReviewProvider?>(context, listen: false) case final review?
+                  when review.availability != ReviewAvailability.off)
+                review.load(),
             ]);
           },
           color: OmiColors.onAccent,
@@ -546,8 +598,9 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
               // Review absorbs the voice prompts; the old card shows only while Review is off.
               const SliverToBoxAdapter(child: ReviewEntryCard(fallback: SpeakerTagPromptCard())),
               const SliverToBoxAdapter(child: CaptureRecoveryBanner()),
-              // What the last recordings are becoming: Home's Offline Sync status card.
-              const SliverToBoxAdapter(child: ConversationProcessingCard()),
+              // With no list to sit in, the pending row brings its own Today header.
+              if (listRows.isEmpty && showPending)
+                const SliverToBoxAdapter(child: HomePendingRow(showTodayHeader: true)),
               SliverToBoxAdapter(
                 child: widget.loadRecaps == null
                     ? HomeDailyRecaps(key: _recapsKey)
@@ -639,6 +692,8 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
                           date: row.date,
                           isFirst: row.isFirst,
                         );
+                      case _ConversationListRowKind.pendingSync:
+                        return HomePendingRow(key: const ValueKey('pending_sync'), showTodayHeader: row.isFirst);
                       case _ConversationListRowKind.processing:
                         return ProcessingConversationWidget(
                           key: ValueKey('processing_${row.conversation!.id}'),

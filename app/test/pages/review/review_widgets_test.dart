@@ -69,14 +69,14 @@ Future<ReviewProvider> _provider(List<ReviewItem> items, List<(String, Map<Strin
 }
 
 Widget _host(ReviewProvider provider, Widget child) => ChangeNotifierProvider<ReviewProvider>.value(
-      value: provider,
-      child: MaterialApp(
-        theme: buildOmiTheme(),
-        localizationsDelegates: AppLocalizations.localizationsDelegates,
-        supportedLocales: AppLocalizations.supportedLocales,
-        home: Scaffold(body: ListView(children: [child])),
-      ),
-    );
+  value: provider,
+  child: MaterialApp(
+    theme: buildOmiTheme(),
+    localizationsDelegates: AppLocalizations.localizationsDelegates,
+    supportedLocales: AppLocalizations.supportedLocales,
+    home: Scaffold(body: ListView(children: [child])),
+  ),
+);
 
 void main() {
   testWidgets('a quick answer on the card sends it and the card leaves the queue', (tester) async {
@@ -141,18 +141,20 @@ void main() {
 
   testWidgets('the Home entry shows the fallback while Review is off, and hides when caught up', (tester) async {
     final off = ReviewProvider(
-        isEligible: () => true,
-        reportChannel: (_, {appBuild}) async => const ApiSuccess<void>(null),
-        loadItems: () async => const ApiFailure(ApiProblem(ApiProblemKind.notFound)));
+      isEligible: () => true,
+      reportChannel: (_, {appBuild}) async => const ApiSuccess<void>(null),
+      loadItems: () async => const ApiFailure(ApiProblem(ApiProblemKind.notFound)),
+    );
     await off.load();
     await tester.pumpWidget(_host(off, const ReviewEntryCard(fallback: Text('old card'))));
     expect(find.text('old card'), findsOneWidget);
 
     final empty = await _provider(const [], []);
     await tester.pumpWidget(_host(empty, const ReviewEntryCard(fallback: Text('old card'))));
+    // Caught up: nothing on Home; Recent Changes lives in Activity behind the bell.
     expect(find.text('old card'), findsNothing);
-    expect(find.byKey(const Key('review_entry_card')), findsOneWidget);
-    expect(find.text('Recent Changes'), findsOneWidget);
+    expect(find.byKey(const Key('review_entry_card')), findsNothing);
+    expect(find.text('Recent Changes'), findsNothing);
 
     final some = await _provider([_task], []);
     await tester.pumpWidget(_host(some, const ReviewEntryCard(fallback: Text('old card'))));
