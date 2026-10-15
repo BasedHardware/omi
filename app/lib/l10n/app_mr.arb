@@ -11541,5 +11541,13 @@
     "onboardingNoOmiYet": "अजून तुमचा Omi आला नाही?",
     "onboardingOmiNotOrdered": "अजून ऑर्डर केलेला नाही",
     "onboardingOmiOrdered": "मी ऑर्डर केला आहे",
-    "onboardingPermissionTapToFix": "दुरुस्त करण्यासाठी टॅप करा"
+    "onboardingPermissionTapToFix": "दुरुस्त करण्यासाठी टॅप करा",
+    "homePendingTitle": "संभाषणे येत आहेत",
+    "homePendingCatchingUp": "आधीचा ऑडिओ प्रक्रिया होत आहे",
+    "onTheWayTitle": "मार्गावर",
+    "onTheWayAlmostReady": "जवळजवळ तयार",
+    "activityEmpty": "अद्याप कोणतीही क्रिया नाही",
+    "activityNewSemantics": "क्रिया, नवीन आयटम",
+    "activityLoadFailed": "तुमची सर्व क्रिया लोड करता आली नाही",
+    "activityNewItem": "नवीन"
 }

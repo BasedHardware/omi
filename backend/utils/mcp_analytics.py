@@ -2,8 +2,9 @@
 
 ``MCP Tool Call`` is the stable PostHog event contract for the hosted
 Streamable HTTP MCP tool boundary, and ``MCP Active`` is the once-per-uid-
-per-day marker that keeps DAU/WAU exact. The per-POST envelope is NOT a
-PostHog event: it is a structured ``mcp_request`` log line emitted for 100%
+per-day transport-presence diagnostic. ``MCP Tool Use Succeeded`` is the
+unsampled per-call success stream for dashboard qualification. The per-POST
+envelope is NOT a PostHog event: it is a structured ``mcp_request`` log line emitted for 100%
 of requests so log-based metrics carry the volume PostHog pricing cannot.
 
 PostHog properties deliberately contain only closed enums and bounded
@@ -15,7 +16,6 @@ addresses, user agents, or exception text.
 from __future__ import annotations
 
 import hashlib
-import importlib
 import json
 import logging
 import math
@@ -28,7 +28,7 @@ from typing import Any, List, Mapping, Optional
 
 import database.redis_db as redis_db
 from utils.executors import postprocess_executor, submit_with_context
-from utils.integration_telemetry import emit_posthog_event
+from utils.product_telemetry import emit_product_event
 from utils.mcp_server.constants import MCP_MAX_BATCH_MESSAGES
 from utils.mcp_server.registry import TOOL_SPECS
 from utils.mcp_server.versions import SUPPORTED_PROTOCOL_VERSIONS
@@ -259,65 +259,8 @@ def user_in_tool_call_sample(uid: Any, rate: float) -> bool:
     return bucket / 0xFFFFFFFF < rate
 
 
-_mcp_events_client: Optional[Any] = None
-_mcp_events_client_disabled = False
-
-
-def _build_mcp_events_client(api_key: str) -> Any:
-    host = os.getenv("POSTHOG_HOST", "https://app.posthog.com")
-    posthog_module = importlib.import_module("posthog")
-    posthog_client_cls = getattr(posthog_module, "Posthog")
-    return posthog_client_cls(project_api_key=api_key, host=host)
-
-
-def _get_mcp_events_client() -> Optional[Any]:
-    """Dedicated capture client for MCP events, built from the events key only.
-
-    The events key is never mixed into generic capture, and this client never
-    falls back to the project key — when POSTHOG_EVENTS_API_KEY is unset the
-    caller falls back to the generic emit path instead.
-    """
-    global _mcp_events_client, _mcp_events_client_disabled
-    if _mcp_events_client_disabled:
-        return None
-    if _mcp_events_client is not None:
-        return _mcp_events_client
-
-    api_key = os.getenv("POSTHOG_EVENTS_API_KEY")
-    if not api_key:
-        return None
-
-    try:
-        _mcp_events_client = _build_mcp_events_client(api_key)
-    except Exception as exc:
-        logger.warning("mcp analytics posthog_import_failed error=%s", type(exc).__name__)
-        _mcp_events_client_disabled = True
-        return None
-    return _mcp_events_client
-
-
-def emit_mcp_posthog_event(distinct_id: Optional[str], event: str, properties: dict) -> None:
-    """Capture one MCP event through the dedicated events-key client.
-
-    Falls back to the generic emit path when POSTHOG_EVENTS_API_KEY is unset
-    (or the dedicated client cannot be built) so dev keeps working as today.
-    """
-    if not distinct_id:
-        return
-    client = _get_mcp_events_client()
-    if client is None:
-        emit_posthog_event(distinct_id, event, properties)
-        return
-    try:
-        client.capture(distinct_id=distinct_id, event=event, properties=properties)
-    except Exception as exc:
-        logger.warning("mcp analytics posthog_emit_failed event=%s error=%s", event, type(exc).__name__)
-
-
-def set_mcp_events_client_for_tests(client: Optional[Any]) -> None:
-    global _mcp_events_client, _mcp_events_client_disabled
-    _mcp_events_client = client
-    _mcp_events_client_disabled = client is None
+def emit_mcp_posthog_event(distinct_id: Optional[str], event: str, properties: dict) -> bool:
+    return emit_product_event(uid=distinct_id or '', event=event, properties={**properties, "source_platform": "mcp"})
 
 
 def log_mcp_request(
@@ -429,6 +372,70 @@ def emit_mcp_active(
         "$process_person_profile": False,
     }
     emit_mcp_posthog_event(uid, MCP_ACTIVE, properties)
+
+
+# Dashboard contract, threshold ruling 2026-10-15: count per-person UTC-day
+# successes from these initiators, excluding cadence-flagged unattended streams.
+# Keep policy here (and backend/docs/server-product-telemetry.md) so consumers
+# can change qualification without changing the raw per-success event stream.
+MCP_QUALIFYING_INITIATORS = frozenset({"user", "unknown"})
+MCP_QUALIFYING_CALLS_PER_UTC_DAY = 2
+MCP_TOOL_USE_SUCCEEDED = "MCP Tool Use Succeeded"
+MCP_SUCCESS_SCHEMA_VERSION = 2
+
+
+def mcp_success_op_type(tool_name: str) -> str:
+    """Collapse registry operations into the closed success-event dimension."""
+    spec = next((spec for spec in TOOL_SPECS if spec.name == tool_name), None)
+    if spec is None:
+        return "other"
+    if spec.write_operation != "none":
+        return "write"
+    for suffix, op_type in (("_list", "list"), ("_search", "search"), ("_get", "read")):
+        if spec.operation.endswith(suffix):
+            return op_type
+    return "other"
+
+
+def schedule_mcp_tool_use_succeeded(*, uid: str, tool_name: Any, client_name: Any, initiator: str = "unknown") -> None:
+    """Enqueue every application success directly onto the family's SDK queue.
+
+    No current transport signal verifies initiation; never infer it from OAuth,
+    arguments or client names. Keep scheduled_agent successes in the raw stream
+    for downstream qualification and cadence analysis. No sampling or Redis.
+    """
+    emit_mcp_tool_use_succeeded(
+        uid=uid,
+        tool_name=tool_name,
+        client_name=client_name,
+        initiator=initiator,
+        occurred_at=datetime.now(timezone.utc),
+    )
+
+
+def emit_mcp_tool_use_succeeded(
+    *, uid: str, tool_name: Any, client_name: Any, initiator: str, occurred_at: datetime
+) -> None:
+    """One unsampled event per success; SDK enqueue is bounded and non-blocking."""
+    tool = mcp_tool_enum(tool_name)
+    if not uid or uid == MCP_ANONYMOUS_DISTINCT_ID or tool == "unknown":
+        return
+    initiator = initiator if initiator in {"user", "scheduled_agent", "unknown"} else "unknown"
+    emit_product_event(
+        uid=uid,
+        event=MCP_TOOL_USE_SUCCEEDED,
+        properties={
+            "surface": "mcp",
+            "tool": tool,
+            "op_type": mcp_success_op_type(tool),
+            "client": client_name if client_name in _MCP_CLIENT_NAMES else "unknown",
+            "initiator": initiator,
+            "schema_version": MCP_SUCCESS_SCHEMA_VERSION,
+            "source_platform": "mcp",
+            "$process_person_profile": False,
+        },
+        timestamp=occurred_at,
+    )
 
 
 def schedule_mcp_tool_call(
