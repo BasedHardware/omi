@@ -218,7 +218,7 @@ jobs:
   provision-live-alerts:
     # Grafana alert provisioning is independent of Helm deploy health: a
     # Helm failure must not suppress live-STT alert updates.
-    if: github.ref == 'refs/heads/main'
+    if: github.ref == 'refs/heads/main' && inputs.retire_legacy_grafana != true
     environment: ${{ github.event.inputs.environment == 'prod' && 'prod' || 'development' }}
     permissions:
       contents: read

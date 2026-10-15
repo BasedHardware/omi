@@ -1200,7 +1200,7 @@
       "display_name": "provision-live-alerts",
       "expected_runs_class": "non-pr",
       "expected_runs_per_day": 0.01,
-      "if": "github.ref == 'refs/heads/main'",
+      "if": "github.ref == 'refs/heads/main' && inputs.retire_legacy_grafana != true",
       "matrix": {},
       "matrix_size": 1,
       "needs": [],
