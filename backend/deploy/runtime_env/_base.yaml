@@ -847,6 +847,7 @@ environment_shared:
             value: '2592000'
             category: rollout
           SYNC_LEGACY_FRESH_ENABLED: {value: 'false', category: rollout}
+          SYNC_ASSIGNMENT_CONTENTION_RETRY_ENABLED: {value: 'false', category: rollout}
           SYNC_LEGACY_FRESH_UID_ALLOWLIST: {value: '', category: rollout}
           SYNC_LEGACY_FRESH_PERCENT: {value: '0', category: rollout}
           SYNC_LEGACY_FRESH_HOURLY_TOKENS: {value: '60', category: reliability}
@@ -1025,6 +1026,7 @@ environment_shared:
             value: '2592000'
             category: rollout
           SYNC_LEGACY_FRESH_ENABLED: {value: 'false', category: rollout}
+          SYNC_ASSIGNMENT_CONTENTION_RETRY_ENABLED: {value: 'false', category: rollout}
           SYNC_LEGACY_FRESH_UID_ALLOWLIST: {value: '', category: rollout}
           SYNC_LEGACY_FRESH_PERCENT: {value: '0', category: rollout}
           SYNC_LEGACY_FRESH_HOURLY_TOKENS: {value: '60', category: reliability}
