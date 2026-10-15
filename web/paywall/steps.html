@@ -28,21 +28,39 @@
   h1 { margin:0; font-size:30px; line-height:1.08; letter-spacing:-1px; font-weight:800; text-align:center; }
   .lede { margin:10px 0 0; text-align:center; font-size:16px; line-height:1.45; color:var(--text2); }
 
-  /* 1: the device on its cord, with what it does floating beside it */
-  .hero { position:relative; flex:1; min-height:300px; margin:8px -24px 0; }
-  .hero .pendant { position:absolute; left:50%; top:0; height:94%; max-width:100%; object-fit:contain; transform:translateX(-50%); }
-  .chip { position:absolute; display:flex; align-items:center; gap:10px; padding:10px 14px 10px 10px; background:#fff; border:1px solid var(--line); border-radius:16px; box-shadow:0 10px 30px rgba(0,0,0,.10); line-height:1.3; white-space:nowrap; }
+  /* 1: the pendant hangs from the top edge of the screen, so its cord reads as worn, not cropped */
+  .step[data-step="0"] { padding-top:0; }
+  .hang { position:relative; flex:none; height:min(118vw, 57vh); margin:0 -24px; overflow:visible; }
+  .hang img { position:absolute; left:50%; top:0; height:100%; width:auto; max-width:none; transform:translateX(-50%); }
+  .tagline { flex:1; display:flex; flex-direction:column; justify-content:center; }
+  @keyframes bob { 0%,100% { transform:translateY(0) rotate(var(--r)); } 50% { transform:translateY(-7px) rotate(var(--r)); } }
+  @keyframes rise { from { opacity:0; translate:0 14px; } to { opacity:1; translate:0 0; } }
+  .chip { position:absolute; z-index:1; display:flex; align-items:center; gap:10px; padding:10px 14px 10px 10px; background:#fff; border:1px solid var(--line); border-radius:16px; box-shadow:0 10px 30px rgba(0,0,0,.12); line-height:1.3; white-space:nowrap; animation:rise .6s ease-out both, bob 4.5s ease-in-out infinite; }
   .chip i { width:30px; height:30px; border-radius:10px; background:var(--panel); display:flex; align-items:center; justify-content:center; font-style:normal; font-size:15px; font-weight:800; flex:none; }
   .chip b { display:block; font-size:13px; font-weight:700; }
   .chip span { color:var(--text2); font-size:12px; }
-  .chip.c1 { left:14px; top:24%; transform:rotate(-3deg); }
-  .chip.c2 { right:14px; bottom:4%; transform:rotate(2deg); }
+  .chip.c1 { --r:-3deg; left:12px; top:17%; animation-delay:.2s, 0s; }
+  .chip.c2 { --r:2deg; right:12px; bottom:3%; animation-delay:.5s, -2.2s; }
   .chip .dot { width:8px; height:8px; border-radius:50%; background:#ff3b30; box-shadow:0 0 0 4px #ff3b3022; }
 
   /* 2: a phone showing one conversation (drawn in HTML, sized from the space it gets) */
-  .stage { position:relative; flex:1; min-height:320px; margin:20px 0 18px; container-type:size; }
-  .phone { position:absolute; left:50%; top:0; height:100cqh; width:calc(100cqh * 0.49); transform:translateX(-50%); font-size:calc(100cqh / 58); border-radius:5.4em; background:#0b0b0c; padding:1em; box-shadow:0 2.4em 5em rgba(0,0,0,.18), 0 .4em 1.2em rgba(0,0,0,.12); }
+  .stage { position:relative; flex:1; min-height:320px; margin:18px -24px 14px; container-type:size; }
+  .phone { --s:.92; --x:0px; --r:0deg; position:absolute; left:50%; top:50%; height:calc(100cqh * var(--s)); width:calc(100cqh * var(--s) * .49); transform:translate(-50%,-50%) translateX(var(--x)) rotate(var(--r)); font-size:calc(100cqh * var(--s) / 58); border-radius:5.4em; background:#0b0b0c; padding:1em; box-shadow:0 2.4em 5em rgba(0,0,0,.18), 0 .4em 1.2em rgba(0,0,0,.12); }
   .screen { position:relative; height:100%; border-radius:4.4em; background:#f2f2f7; overflow:hidden; padding:1.6em 1.8em 0; }
+  .phone.side { --s:.74; }
+  .phone.left { --x:-26cqw; --r:-8deg; }
+  .phone.right { --x:26cqw; --r:8deg; }
+  .phone.front { z-index:2; }
+  .row { display:flex; gap:1em; align-items:center; background:#fff; border-radius:1.4em; padding:1em 1.1em; margin-top:.8em; box-shadow:0 .1em .3em rgba(0,0,0,.04); }
+  .row .em { width:2.1em; height:2.1em; border-radius:.6em; background:#f2f2f7; display:flex; align-items:center; justify-content:center; font-size:1.5em; flex:none; }
+  .row b { display:block; font-size:1.25em; font-weight:700; line-height:1.2; }
+  .row span { font-size:1.05em; color:var(--text3); }
+  .h-big { font-size:2.4em; font-weight:800; letter-spacing:-.03em; margin-top:1em; }
+  .h-sec { font-size:1.15em; font-weight:700; color:var(--text2); margin-top:1.2em; }
+  .bubble { max-width:82%; font-size:1.3em; line-height:1.4; padding:.8em 1em; border-radius:1.2em; margin-top:1em; }
+  .bubble.me { margin-left:auto; background:var(--ink); color:#fff; border-bottom-right-radius:.3em; }
+  .bubble.omi { background:#fff; border-bottom-left-radius:.3em; box-shadow:0 .1em .3em rgba(0,0,0,.05); }
+  .src { display:inline-flex; gap:.4em; align-items:center; margin-top:.6em; font-size:.85em; font-weight:600; color:var(--text2); background:#f2f2f7; border-radius:1em; padding:.3em .7em; }
   .island { position:absolute; top:1.1em; left:50%; transform:translateX(-50%); width:9em; height:2.6em; border-radius:2em; background:#0b0b0c; }
   .status { display:flex; justify-content:space-between; align-items:center; height:2.8em; padding:0 1em; font-size:1.25em; font-weight:700; }
   .status .bars { display:flex; gap:.25em; align-items:flex-end; }
@@ -76,10 +94,9 @@
   .accolade small { display:block; margin-top:3px; font-size:13px; color:var(--text2); }
   .accolade .stars { display:flex; gap:2px; justify-content:center; margin-top:5px; }
   .accolade .stars svg { width:15px; height:15px; }
-  .gets-title { flex:none; margin:16px 0 8px; font-size:12px; letter-spacing:1.2px; text-transform:uppercase; color:var(--text3); font-weight:700; text-align:center; }
-  .gets { flex:1; min-height:96px; overflow-y:auto; -webkit-overflow-scrolling:touch; border:1px solid var(--line); border-radius:16px; padding:4px 16px; }
+  .gets { flex:1; min-height:96px; margin-top:14px; overflow-y:auto; -webkit-overflow-scrolling:touch; background:var(--panel); border-radius:20px; padding:6px 18px 36px; -webkit-mask-image:linear-gradient(180deg,#000 calc(100% - 44px),transparent); mask-image:linear-gradient(180deg,#000 calc(100% - 44px),transparent); }
   .get { display:flex; gap:12px; align-items:center; font-size:15px; font-weight:600; padding:11px 0; }
-  .get + .get { border-top:1px solid #0000000d; }
+  .get + .get { border-top:1px solid #00000010; }
   .get i { width:22px; height:22px; border-radius:50%; background:var(--ink); flex:none; display:flex; align-items:center; justify-content:center; }
   .get i svg { width:12px; height:12px; }
 
@@ -97,7 +114,8 @@
   .plan .badge { position:absolute; top:-11px; left:50%; transform:translateX(-50%); background:var(--ink); color:#fff; font-size:11px; font-weight:800; letter-spacing:.6px; padding:3px 10px; border-radius:7px; white-space:nowrap; }
   .cta { position:relative; overflow:hidden; width:100%; height:60px; border:0; border-radius:999px; background:var(--ink); color:#fff; font-size:18px; font-weight:700; }
   .cta:disabled { opacity:.35; }
-  .cta .shine { position:absolute; inset:0; width:100%; height:100%; pointer-events:none; }
+  @keyframes sweep { 0%,45% { left:-120px; } 100% { left:110%; } }
+  .cta.shiny::after { content:""; position:absolute; top:-20%; bottom:-20%; left:-120px; width:70px; background:linear-gradient(90deg,#fff0,#ffffff52,#fff0); transform:skewX(-20deg); animation:sweep 3.2s linear infinite; pointer-events:none; }
   .fine { text-align:center; font-size:11px; font-weight:500; color:var(--text3); }
   .legal { display:flex; gap:16px; justify-content:center; font-size:12px; }
   .legal a { color:var(--text2); text-decoration:underline; text-underline-offset:2px; }
@@ -121,20 +139,44 @@
   <div class="pages">
   <!-- 1: the promise, with the device -->
   <section class="step" data-step="0">
-    <h1>Never forget a conversation again.</h1>
-    <div class="hero">
-      <img class="pendant" src="/omi-pendant-cord.webp" alt="The Omi pendant">
+    <div class="hang">
+      <img src="/omi-pendant-cord.webp" alt="The Omi pendant on its cord">
       <div class="chip c1"><i><span class="dot"></span></i><div><b>Listening</b><span>Lunch with Sam · 24 min</span></div></div>
       <div class="chip c2"><i>✓</i><div><b>3 to-dos caught</b><span>Send the deck by Friday</span></div></div>
+    </div>
+    <div class="tagline">
+      <h1>Never forget a conversation again.</h1>
+      <p class="lede">Omi listens and remembers for&nbsp;you.</p>
     </div>
   </section>
 
   <!-- 2: what you get -->
   <section class="step later" data-step="1">
     <h1>What you get</h1>
-    <p class="lede">Every conversation becomes notes and&nbsp;to&#8209;dos.</p>
+    <p class="lede">Notes, to-dos and answers from every&nbsp;conversation.</p>
     <div class="stage">
-      <div class="phone"><div class="screen">
+      <div class="phone side left"><div class="screen">
+        <div class="island"></div>
+        <div class="status"><span>9:41</span><span class="bars"><i style="height:.45em"></i><i style="height:.65em"></i><i style="height:.85em"></i><i style="height:1.05em"></i></span></div>
+        <div class="h-big">Home</div>
+        <div class="h-sec">Today</div>
+        <div class="row"><span class="em">🚀</span><div><b>Launch plan with Sam</b><span>12:30 PM · 24 min</span></div></div>
+        <div class="row"><span class="em">☕️</span><div><b>Coffee with Priya</b><span>9:10 AM · 18 min</span></div></div>
+        <div class="row"><span class="em">📞</span><div><b>Call with the bank</b><span>8:45 AM · 6 min</span></div></div>
+        <div class="h-sec">Yesterday</div>
+        <div class="row"><span class="em">🧠</span><div><b>Product review</b><span>4:00 PM · 41 min</span></div></div>
+        <div class="row"><span class="em">🍝</span><div><b>Dinner plans</b><span>7:20 PM · 9 min</span></div></div>
+      </div></div>
+      <div class="phone side right"><div class="screen">
+        <div class="island"></div>
+        <div class="status"><span>9:41</span><span class="bars"><i style="height:.45em"></i><i style="height:.65em"></i><i style="height:.85em"></i><i style="height:1.05em"></i></span></div>
+        <div class="h-big">Ask Omi</div>
+        <div class="bubble me">What did Sam say about the launch?</div>
+        <div class="bubble omi">Sam wants to ship the new onboarding next Friday. Final designs land Tuesday, and you're updating the launch email.<br><span class="src">🚀 Launch plan with Sam</span></div>
+        <div class="bubble me">Any to-dos for me?</div>
+        <div class="bubble omi">Two: send Sam the launch email draft, and book Thursday's user test.</div>
+      </div></div>
+      <div class="phone front"><div class="screen">
         <div class="island"></div>
         <div class="status"><span>9:41</span><span class="bars"><i style="height:.45em"></i><i style="height:.65em"></i><i style="height:.85em"></i><i style="height:1.05em"></i></span></div>
         <div class="nav">
@@ -161,7 +203,6 @@
       <div class="accolade"><img src="/laurel-left.svg" alt=""><div>300K+<small>Users</small></div><img src="/laurel-right.svg" alt=""></div>
       <div class="accolade"><img src="/laurel-left.svg" alt=""><div>4.7 Stars<span class="stars" id="stars"></span></div><img src="/laurel-right.svg" alt=""></div>
     </div>
-    <div class="gets-title">What you get</div>
     <div class="gets" id="gets"></div>
   </section>
   </div>
@@ -185,7 +226,6 @@
     </div>
     </div>
     <button class="cta" id="cta" type="button"><span id="cta-label">Continue</span>
-      <svg class="shine hidden" id="shine" viewBox="0 0 358 60" preserveAspectRatio="none" aria-hidden="true"><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#fff" stop-opacity="0"/><stop offset=".5" stop-color="#fff" stop-opacity=".32"/><stop offset="1" stop-color="#fff" stop-opacity="0"/></linearGradient></defs><rect y="-20" width="70" height="100" fill="url(#g)" transform="skewX(-20)"><animate attributeName="x" values="-140;-140;460" keyTimes="0;0.45;1" dur="3.2s" repeatCount="indefinite"/></rect></svg>
     </button>
     <div class="below">
       <div class="promise" id="promise">
@@ -253,7 +293,7 @@
     $('extra').classList.toggle('hidden', !last);
     $('fine').classList.toggle('hidden', !last);
     $('legal').classList.toggle('hidden', !last);
-    $('shine').classList.toggle('hidden', !last);
+    $('cta').classList.toggle('shiny', last);
     $('promise').classList.toggle('hidden', last);
     $('cta-label').textContent = last ? 'Unlock Omi Unlimited' : 'Continue';
     $('cta').disabled = last && noPlans;
