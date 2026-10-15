@@ -109,6 +109,7 @@ entries are exempt: they are queued for removal, not running.
 | `MEMORY_OWNER_JEV_SHADOW_PERCENT` | dazheng | [backend/docs/experiments/EXP-004-jev-relevance-owner-ramp.md](../../backend/docs/experiments/EXP-004-jev-relevance-owner-ramp.md) | 2026-10-21 |
 | `SPEAKER_GROUPING_SHADOW` | dazheng | [backend/docs/listen_pusher_pipeline.mdx](../../backend/docs/listen_pusher_pipeline.mdx) | 2026-11-08 |
 | `exp-002-desktop-identity-v1` | unowned | [backend/docs/experiments/EXP-002-desktop-identity-memory-v1.md](../../backend/docs/experiments/EXP-002-desktop-identity-memory-v1.md) | 2026-10-26 |
+| `onboarding-variant` | nik | [product/experiments/onboarding-variant.md](../../product/experiments/onboarding-variant.md) | 2026-11-13 |
 | `paywall-variant` | nik | [product/experiments/paywall-variant.md](../../product/experiments/paywall-variant.md) | 2026-11-12 |
 
 ## Overdue for a decision
@@ -152,6 +153,7 @@ and an explicit empty literal renders as `''`.
 | `MEMORY_OWNER_JEV_SHADOW_PERCENT` | Candidate-hash percentage for advisory owner measurement | backend | env | closed | — | 0 (cloud_run/backend-sync, cloud_run/backend-sync-backfill); 100 (backend-listen (chart), cloud_run/backend, gke/backend-listen, gke/pusher, pusher (chart)) | 100 (backend-listen (chart), cloud_run/backend, cloud_run/backend-sync, cloud_run/backend-sync-backfill, gke/backend-listen, gke/pusher, pusher (chart)) | — | pending | 2026-10-21 | dazheng |
 | `SPEAKER_GROUPING_SHADOW` | off\|owner\|cohort; default off; prod cached-evidence comparison at 10 percent; never changes transcript labels | backend | env | closed | — | — | cohort (backend-listen (chart), pusher (chart)); {value: 'cohort', category: rollout} (cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, gke/backend-listen, gke/pusher) | — | pending | 2026-11-08 | dazheng |
 | `exp-002-desktop-identity-v1` | EXP-002 memory_v1 desktop identity arm enrollment | backend, macos | posthog | closed | — | — | — | expected (enable) | pending | 2026-10-26 | unowned |
+| `onboarding-variant` | Mobile first-run onboarding A/B/C after sign-in and consent: control (native steps unchanged) / reid (device-first onboarding rendered from a web page, OTA; payload names it) / yinka (onboarding ending in a first conversation, PR #21445, native). Client-evaluated multivariate flag; an unread flag, an unknown variant or a reid payload without an https URL is control; the page never owns completion | mobile | posthog | closed | — | — | — | expected (exposure) | pending | 2026-11-13 | nik |
 | `paywall-variant` | Mobile paywall A/B test: control (current PlansSheet) / outline (PR #21412 soft paywall, native) / web (webview paywall whose page is the variant). Client-evaluated multivariate flag; control collapses to the shipped sheet, paid readers and App Review builds never see a variant | mobile | posthog | closed | — | — | — | expected (exposure) | pending | 2026-11-12 | nik |
 
 ### rollout
@@ -294,7 +296,6 @@ and an explicit empty literal renders as `''`.
 | `on_device_meeting_identity` | Enable on-device meeting identity on stable | macos | posthog | closed | — | — | — | absent (enable) | graduate | 2026-10-23 | dazheng |
 | `on_device_meeting_identity_kill` | Beta on-device meeting identity stop | macos | posthog | inverted | — | — | — | expected (kill) | pending | 2026-10-23 | unowned |
 | `onboarding-setup-rating-prompt` | Mobile onboarding Setting up your Omi page with the store-rating pre-prompt before the completion screen; client-evaluated, default off so the flow is unchanged and store review never sees it | mobile | posthog | closed | — | — | — | expected (enable) | pending | 2026-11-05 | nik |
-| `onboarding-webview` | Mobile first-run onboarding rendered from a web page after sign-in and consent (OTA); off = native steps unchanged; the page never owns completion | mobile | posthog | closed | — | — | — | expected (enable) | pending | 2026-11-12 | nik |
 | `proactivity_v2` | Server v2 proactivity admission; absent or unknown denies | backend, llm-gateway | posthog | closed | — | — | — | expected (enable) | pending | 2026-11-03 | dazheng |
 | `screen_activity_lossless_sync` | Enable lossless screen sync on stable | macos | posthog | closed | — | — | — | absent (enable) | pending | 2026-10-22 | unowned |
 | `screen_activity_lossless_sync_kill` | Beta lossless screen sync stop | macos | posthog | inverted | — | — | — | expected (kill) | pending | 2026-10-22 | unowned |

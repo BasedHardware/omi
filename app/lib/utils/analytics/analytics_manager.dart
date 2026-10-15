@@ -233,7 +233,10 @@ class AnalyticsManager {
     if (PhysicalQualification.enabled) return;
     _initStarted = true;
     if (_adapter == null && Env.posthogApiKey != null) {
-      _adapter = PostHogAnalyticsAdapter(apiKey: Env.posthogApiKey!);
+      _adapter = PostHogAnalyticsAdapter(
+        apiKey: Env.posthogApiKey!,
+        personPropertiesForFlags: () => {'\$email': _preferences.email},
+      );
     }
     final adapter = _adapter;
     if (adapter == null || _analyticsReady) return;
@@ -2953,15 +2956,11 @@ class AnalyticsManager {
     track('Integration Disconnected', properties: {'integration_name': integrationName});
   }
 
-  // ---- PAYMENTS PAGE TRACKING ----
-
   void paymentsPageOpened() => const TypedEvents().emit(const PaymentsPageOpened());
 
   void paymentMethodSelected({required String methodName}) {
     track('Payment Method Selected', properties: {'method_name': methodName});
   }
-
-  // ---- OTHER PAGES TRACKING ----
 
   void connectDevicePageOpened() => const TypedEvents().emit(const ConnectDevicePageOpened());
 
