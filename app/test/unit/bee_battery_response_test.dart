@@ -9,7 +9,8 @@ class _NoIoTransport implements DeviceTransport {
   Stream<DeviceTransportState> get connectionStateStream => const Stream.empty();
 
   @override
-  dynamic noSuchMethod(Invocation invocation) => throw StateError('Unexpected transport access: ${invocation.memberName}');
+  dynamic noSuchMethod(Invocation invocation) =>
+      throw StateError('Unexpected transport access: ${invocation.memberName}');
 }
 
 void main() {
@@ -72,7 +73,8 @@ void main() {
       4350: 100,
     };
     for (final point in points.entries) {
-      expect(connection.parseBatteryResponse(voltagePayload(point.key))?['level'], point.value, reason: '${point.key} mV');
+      expect(connection.parseBatteryResponse(voltagePayload(point.key))?['level'], point.value,
+          reason: '${point.key} mV');
     }
   });
 
