@@ -88,3 +88,11 @@ def test_dispatching_owner_retired_and_next_claimed(state):
     assert not client.collection(registry.COLLECTION).document(uid).get().exists
     assert ledger.get().to_dict()['status'] == 'retryable'
     assert registry.claim_next(uid, firestore_client=client)['job_id'] == 'next'
+
+
+def test_claim_candidate_identity_fence_uses_the_transactional_head(state):
+    client, uid, jid, ledger = state
+    assert registry.claim_next(uid, expected_job_id='not-inspected', firestore_client=client) is None
+    assert not client.collection(registry.COLLECTION).document(uid).get().exists
+    assert client.collection(registry.PENDING_COLLECTION).document(jid).get().exists
+    assert registry.claim_next(uid, expected_job_id=jid, firestore_client=client)['job_id'] == jid

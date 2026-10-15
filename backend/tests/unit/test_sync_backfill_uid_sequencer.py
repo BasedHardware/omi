@@ -561,3 +561,32 @@ def test_competing_retirement_cannot_dispatch_an_expired_head(retirement, monkey
     assert uid_sequencer._claim_next('a')['job_id'] == 'live'
     assert interleaved == ['expired']
     assert not held
+
+
+def test_claim_requires_the_same_head_as_the_redis_proof(db):
+    _register('a', 'earlier', 0, db=db)
+    _register('a', 'live', 10, db=db)
+    before = copy.deepcopy(db.docs)
+    assert registry.claim_next('a', expected_job_id='live', now=NOW) is None
+    assert db.docs == before
+    assert registry.claim_next('a', expected_job_id='earlier', now=NOW)['job_id'] == 'earlier'
+
+
+def test_new_oldest_head_is_not_dispatched_without_its_redis_proof(retirement, monkeypatch):
+    _register('a', 'live', 10, db=retirement)
+    original_claim = registry.claim_next
+    inserted = []
+
+    def claim(uid, **kwargs):
+        if not inserted:
+            _register(uid, 'new-expired-head', 0, db=retirement)
+            inserted.append(True)
+        return original_claim(uid, **kwargs)
+
+    monkeypatch.setattr(registry, 'claim_next', claim)
+    # An earlier entry arrives after checking the live head's Redis key.
+    assert uid_sequencer._claim_next('a') is None
+    assert registry.get_owner('a') == {}
+    assert registry.pending_head('a')['job_id'] == 'new-expired-head'
+    # The next kick first proves/retire that expired head, then claims live.
+    assert uid_sequencer._claim_next('a')['job_id'] == 'live'

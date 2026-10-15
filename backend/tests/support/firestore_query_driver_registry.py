@@ -2064,7 +2064,7 @@ _add(
     DriverEntry(
         'database.sync_backfill_sequencer.claim_next',
         base={'uid': UID},
-        domains={'now': [None, T0]},
+        domains={'now': [None, T0], 'expected_job_id': [None, 'expected-job']},
         patchers=_SYNC_PROD,
     )
 )

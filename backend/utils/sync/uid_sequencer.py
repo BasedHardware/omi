@@ -59,9 +59,19 @@ def _retire_expired(uid: str, job_id: str, *, epoch: int | None = None) -> _Reti
         source = 'dispatching' if epoch is not None else 'pending'
         EXPIRED_RETIRED.labels(source=source).inc()
         logger.info(
-            'event=sync_backfill_expired_retired source=%s outcome=retired',
+            'event=sync_backfill_expired_retired source=%s outcome=retired job_id=%s uid=%s',
             source,
-            extra={'json_fields': {'event': 'sync_backfill_expired_retired', 'source': source, 'outcome': 'retired'}},
+            job_id,
+            uid,
+            extra={
+                'json_fields': {
+                    'event': 'sync_backfill_expired_retired',
+                    'source': source,
+                    'outcome': 'retired',
+                    'job_id': job_id,
+                    'uid': uid,
+                }
+            },
         )
     return _RetirementOutcome.RETIRED if retired else _RetirementOutcome.KEEP
 
@@ -78,7 +88,7 @@ def _claim_next(uid: str, *, retire_limit: int = MAX_EXPIRED_RETIREMENTS) -> dic
                 # into a Cloud Task while that owner is checking its absence.
                 return None
             if outcome is not _RetirementOutcome.RETIRED:
-                break
+                return registry.claim_next(uid, expected_job_id=head['job_id'])
         else:
             # Leave the next head durable for the bounded periodic sweep.
             return None

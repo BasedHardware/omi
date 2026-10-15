@@ -245,7 +245,9 @@ def retire_expired(
     return commit(client.transaction())
 
 
-def claim_next(uid: str, *, firestore_client: Any = None, now: Optional[datetime] = None) -> Optional[dict[str, Any]]:
+def claim_next(
+    uid: str, *, expected_job_id: Optional[str] = None, firestore_client: Any = None, now: Optional[datetime] = None
+) -> Optional[dict[str, Any]]:
     """Promote the oldest waiting capture into a fenced dispatch reservation."""
     _require_production()
     client = firestore_client or get_firestore_client()
@@ -262,6 +264,10 @@ def claim_next(uid: str, *, firestore_client: Any = None, now: Optional[datetime
         # just before the claim commits.
         candidate = _first_pending(client, uid, transaction=transaction)
         if candidate is None:
+            return None
+        if expected_job_id is not None and candidate.get('job_id') != expected_job_id:
+            # The Redis proof belongs to a different head. Let the next kick
+            # inspect the new oldest entry before reserving any dispatch.
             return None
         pending = _pending_ref(client, uid, candidate['id'])
         job = _data(pending.get(transaction=transaction))
