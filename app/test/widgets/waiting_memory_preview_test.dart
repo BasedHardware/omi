@@ -52,7 +52,7 @@ void main() {
       ),
     ));
     expect(find.text('Pending'), findsOneWidget);
-    expect(find.text('View Usage'), findsOneWidget);
+    expect(find.text('Upgrade'), findsOneWidget);
     expect(find.byIcon(Icons.lock_outline), findsNothing);
     expect(find.bySemanticsLabel('OK'), findsNothing);
     final preview = tester.getRect(find.byType(OmiLockedPreview));
