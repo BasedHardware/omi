@@ -1144,8 +1144,10 @@ async def test_transcript_loop_emits_diarization_completion_after_terminal_flush
     assert flushed == ['conversation-1']
     assert telemetry.events[0]['event'] == 'Diarization Completed'
     assert telemetry.events[0]['properties']['speaker_count'] == 1
-    assert telemetry.events[0]['properties']['recording_id'] == 'recording-1'
-    assert telemetry.events[0]['properties']['conversation_id'] == 'conversation-1'
+    # server_event_properties strips raw-id properties (recording_id,
+    # conversation_id) before capture (#21705); the analytics payload keeps
+    # the measurement fields only.
+    assert 'recording_id' not in telemetry.events[0]['properties']
 
 
 @pytest.mark.anyio
@@ -1183,10 +1185,12 @@ async def test_transcript_loop_attributes_diarization_completion_to_each_convers
 
     await processor.process_loop()
 
-    assert [event['properties']['conversation_id'] for event in telemetry.events] == [
-        'conversation-1',
-        'conversation-2',
-    ]
+    # server_event_properties strips raw-id properties (conversation_id)
+    # before capture (#21705); per-conversation attribution survives only via
+    # the separate emit per conversation, so assert one event per conversation
+    # with the measurement fields intact.
+    assert [event['event'] for event in telemetry.events] == ['Diarization Completed', 'Diarization Completed']
+    assert all('conversation_id' not in event['properties'] for event in telemetry.events)
     assert [event['properties']['speaker_count'] for event in telemetry.events] == [1, 1]
 
 

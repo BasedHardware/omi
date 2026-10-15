@@ -116,7 +116,12 @@ def test_canonical_mentor_human_persistence_observes_after_commit(monkeypatch):
 
 def test_canonical_task_completion_observation_is_post_commit(monkeypatch):
     saved, events = {}, []
-    document = SimpleNamespace(get=lambda: SimpleNamespace(exists=True), update=lambda values: saved.update(values))
+    # mark_action_item_completed reads the existing document through the typed
+    # adapter (typed_doc -> to_dict), so the snapshot stub must carry it.
+    document = SimpleNamespace(
+        get=lambda: SimpleNamespace(exists=True, to_dict=lambda: dict(saved)),
+        update=lambda values: saved.update(values),
+    )
     owner = SimpleNamespace(collection=lambda name: SimpleNamespace(document=lambda task_id: document))
     monkeypatch.setattr(
         tasks, 'db', SimpleNamespace(collection=lambda name: SimpleNamespace(document=lambda uid: owner))

@@ -161,7 +161,10 @@ async def test_receiver_emits_decoded_audio_duration_at_session_end():
 
     assert telemetry.events[0]['event'] == 'Encoded Audio Duration Measured'
     assert telemetry.events[0]['properties']['duration_seconds'] == 1.0
-    assert telemetry.events[0]['properties']['recording_id'] == 'recording-1'
+    # server_event_properties strips raw-id properties (recording_id,
+    # conversation_id) before capture (#21705); the analytics payload keeps
+    # the measurement fields only.
+    assert 'recording_id' not in telemetry.events[0]['properties']
 
 
 @pytest.mark.anyio

@@ -28,7 +28,9 @@ def _install_fake_db(monkeypatch):
     writes = []
 
     doc_ref = MagicMock()
-    doc_ref.get.return_value = SimpleNamespace(exists=True)
+    # The export route reads the item through the typed adapter
+    # (typed_doc -> to_dict), so the snapshot stub must carry it.
+    doc_ref.get.return_value = SimpleNamespace(exists=True, to_dict=lambda: {"sync_requested": False})
     doc_ref.update.side_effect = lambda data: writes.append(data)
 
     items_collection = MagicMock()

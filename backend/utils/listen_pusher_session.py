@@ -97,6 +97,15 @@ PUSHER_RECONNECT_MAX_DELAY = 60.0
 PENDING_REQUEST_TIMEOUT = 120
 MAX_RETRIES_PER_REQUEST = 3
 PENDING_REQUEST_RECOVERY_COOLDOWN = 300
+# Bound for one protocol send on this session's pusher socket. A websockets
+# send can ignore task cancellation while the connection is closing (its
+# ensure_open() shields the close-completion wait from cancellation), so a
+# frame sent into a teardown socket would otherwise park until the peer or
+# the close timeout answers — absorbing drain_tasks' whole force-cancel
+# wait. Healthy sends complete in milliseconds; hitting this bound means
+# the socket is stalled, and the request stays pending for the reconnect
+# replay instead of hanging the calling task.
+PUSHER_SEND_CANCEL_BOUND_SECONDS = 1.0
 # Wire contract with utils.pusher_finalization: a claim rejected because a live
 # lease is already finalizing this job reports the non-terminal `job_leased`
 # error. That is healthy in-flight work, not a failed attempt.
@@ -249,7 +258,16 @@ class ListenPusherSession:
         finalization_job_id: Optional[str] = None,
         dispatch_generation: Optional[int] = None,
     ):
-        """Request pusher to process a conversation through its durable lease."""
+        """Request pusher to process a conversation through its durable lease.
+
+        The protocol send is bounded by ``PUSHER_SEND_CANCEL_BOUND_SECONDS``:
+        a websockets send may ignore task cancellation while the connection
+        is closing (its open-check shields the close-completion wait), so an
+        unbounded send parked inside teardown until the force-cancel window
+        expired — one production shape of "tasks ignored cancellation after
+        5s [listen_bg]". A send that hits the bound fails open: the request
+        stays pending for the reconnect replay.
+        """
         if not self.pusher_connected or not self.pusher_ws:
             logger.info(
                 f"Pusher not connected for {conversation_id}, will retry on reconnect {self.uid} {self.session_id}"
@@ -279,7 +297,19 @@ class ListenPusherSession:
                 payload['dispatch_generation'] = pending.get('dispatch_generation') or 1
                 payload['finalization_result_protocol'] = FINALIZATION_RESULT_PROTOCOL
             data.extend(bytes(json.dumps(payload), "utf-8"))
-            await self.pusher_ws.send(cast(bytes, data))
+            try:
+                async with asyncio.timeout(PUSHER_SEND_CANCEL_BOUND_SECONDS):
+                    await self.pusher_ws.send(cast(bytes, data))
+            except asyncio.CancelledError:
+                raise
+            except Exception as e:
+                # Bounded fail-open: a stalled or closing socket must not hang
+                # the calling task (pusher_receive's retry burst runs during
+                # teardown drain). Covers both transport errors and the
+                # TimeoutError asyncio.timeout raises on the bound. The
+                # pending entry stays armed; a healthy reconnect replays it.
+                logger.error(f"Failed to send process_conversation request: {e} {self.uid} {self.session_id}")
+                return False
             logger.info(f"Sent process_conversation request to pusher: {conversation_id} {self.uid} {self.session_id}")
             return True
         except Exception as e:
@@ -560,23 +590,98 @@ class ListenPusherSession:
             if self.audio_total_size > 0:
                 await self._audio_bytes_flush()
 
+    async def _race_shutdown(self, coro: Awaitable[Any], event: asyncio.Event) -> Tuple[bool, Any]:
+        """Await ``coro``, racing it against ``event`` (the shutdown signal).
+
+        Returns ``(True, result)`` when ``coro`` completed first (keep
+        looping), ``(False, None)`` when shutdown fired first (leave the
+        loop), and re-raises the coro's own exception (including the recv
+        window's TimeoutError and external cancellation) when the coro
+        finished. Teardown drains this session's background tasks gracefully
+        — ``cancel=False`` — before any force-cancel, so every parked wait
+        in ``pusher_receive`` must observe ``shutdown_event`` on its own: a
+        loop that only re-checks ``deps.is_active`` survives the whole
+        graceful window (``state.active`` flips only later, in teardown
+        components), gets force-cancelled at the window's end, and that late
+        cancellation is what ``drain_tasks`` reports as "tasks ignored
+        cancellation after 5s [listen_bg]" (backend-listen x293/300 sampled
+        occurrences over 40 minutes on 2026-10-15, 170 distinct uids).
+        """
+        wait_task = asyncio.ensure_future(coro)
+        shutdown_task = asyncio.ensure_future(event.wait())
+        try:
+            done, _ = await asyncio.wait({wait_task, shutdown_task}, return_when=asyncio.FIRST_COMPLETED)
+            if wait_task in done:
+                if wait_task.cancelled():
+                    raise asyncio.CancelledError()
+                exc = wait_task.exception()
+                if exc is not None:
+                    raise exc
+                result = wait_task.result()
+                if shutdown_task in done:
+                    # Both fired in the same step: the coro's answer is data
+                    # the loop can still use; the next gate re-checks state.
+                    return True, result
+                return True, result
+            # Shutdown won: cancel the parked coro (safe for the websockets
+            # recv — cancellation never loses the next message) and report.
+            wait_task.cancel()
+            return False, None
+        finally:
+            for task in (wait_task, shutdown_task):
+                if not task.done():
+                    task.cancel()
+
+    async def _poll_pending_request(self, seconds: float) -> None:
+        """Wait for the pending-request event, timing out after ``seconds``.
+
+        Raced against shutdown by ``pusher_receive``: the parked wait keeps
+        the loop's 5s re-arming timeout while also waking early when the
+        session shuts down.
+        """
+        try:
+            await asyncio.wait_for(self.pending_request_event.wait(), timeout=seconds)
+        except asyncio.TimeoutError:
+            pass
+
+    async def _recv_with_timeout(self, sock: Any, seconds: float = 5.0) -> bytes:
+        """One bounded recv on the pusher socket, raced against shutdown."""
+        return cast(bytes, await asyncio.wait_for(sock.recv(), timeout=seconds))
+
     async def pusher_receive(self):
-        """Receive and handle messages from pusher, with timeout-based retry for pending requests."""
+        """Receive and handle messages from pusher, with timeout-based retry for pending requests.
+
+        The loop ends itself inside one drain window once the session shuts
+        down: teardown ends the supervisor session (setting ``shutdown_event``)
+        and then drains background tasks WITHOUT cancelling them, so every
+        parked wait below races that event (``_race_shutdown``) and the
+        disconnected backoff parks on it via ``wait_for_event``. A loop that
+        only re-checked ``deps.is_active`` survived the whole graceful drain
+        window (``state.active`` flips only in teardown components), got
+        force-cancelled at its end, and surfaced as drain_tasks' "tasks
+        ignored cancellation after 5s [listen_bg]" for ``pusher_receive``
+        (sibling lifetime tasks that park on the shutdown event never appear
+        in that line).
+        """
         while self.deps.is_active():
             if not self.pending_conversation_requests and not self.audio_timeline_suspended:
                 self.pending_request_event.clear()
-                try:
-                    await asyncio.wait_for(self.pending_request_event.wait(), timeout=5.0)
-                except asyncio.TimeoutError:
-                    continue
+                completed, _ = await self._race_shutdown(self._poll_pending_request(5.0), self.deps.shutdown_event)
+                if not completed:
+                    break
+                continue
 
             if not self.pusher_connected or not self.pusher_ws:
-                await self.deps.sleep(0.5)
+                if await self.deps.wait_for_event(self.deps.shutdown_event, 0.5):
+                    break
                 continue
 
             sock = self.pusher_ws
             try:
-                msg = cast(bytes, await asyncio.wait_for(sock.recv(), timeout=5.0))
+                completed, msg = await self._race_shutdown(self._recv_with_timeout(sock), self.deps.shutdown_event)
+                if not completed:
+                    break
+                msg = cast(bytes, msg)
                 if not msg or len(msg) < 4:
                     continue
                 header_type = struct.unpack('<I', msg[:4])[0]
@@ -712,6 +817,12 @@ class ListenPusherSession:
                 logger.warning(
                     f"Retrying process_conversation for {cid} (attempt {info['retries']}/{MAX_RETRIES_PER_REQUEST}) {self.uid} {self.session_id}"
                 )
+                if self.deps.shutdown_event.is_set():
+                    logger.info(
+                        f"Session shutting down; deferring process_conversation replay for {cid} to reconnect "
+                        f"{self.uid} {self.session_id}"
+                    )
+                    break
                 await self.request_conversation_processing(
                     cid,
                     info.get('finalization_job_id'),

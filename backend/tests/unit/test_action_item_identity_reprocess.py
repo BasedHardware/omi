@@ -633,7 +633,11 @@ def test_pending_apple_push_cannot_link_its_old_copy_to_the_reprocessed_row(worl
         {'export_platform': 'apple_reminders'},
         {'export_platform': 'apple_reminders', 'apple_reminder_id': ''},
         {'export_platform': 'todoist', 'apple_reminder_id': 'ek-multi', 'exported': True},
-        {'export_platform': 'asana', 'sync_requested': True, 'exported': True},
+        # update_action_item clears sync_requested when a settled export rides
+        # the same payload (#21530), so a pending-sync row is reached without
+        # 'exported': the pending state, not a settled one, is what must block
+        # identity reuse here.
+        {'export_platform': 'asana', 'sync_requested': True},
         {'sync_requested': True},
     ],
 )

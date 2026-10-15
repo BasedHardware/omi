@@ -659,6 +659,9 @@ def test_extraction_only_proposes_and_never_accepts_or_writes_a_task(monkeypatch
 
     assert len(records) == 2
     assert [record.status for record in records] == ['pending', 'pending']
+    # This test stubs emit_product_event directly, so the raw emit payload is
+    # what is asserted: #21705's per-family telemetry added source_platform
+    # at the emit site (the sanitizer never runs on this stubbed path).
     assert emitted == [
         {
             'uid': 'user-1',
@@ -667,6 +670,7 @@ def test_extraction_only_proposes_and_never_accepts_or_writes_a_task(monkeypatch
                 'task_count': 2,
                 'conversation_id': 'conversation-1',
                 'task_source': 'transcript',
+                'source_platform': 'unknown',
                 'persistence_path': 'canonical_candidate',
             },
         }
