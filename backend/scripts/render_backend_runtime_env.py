@@ -24,8 +24,8 @@ _DEPLOY_CLOUD_RUN_ENV_SEPARATORS = frozenset({',', '\n', '\r', '\u2028', '\u2029
 # cannot read the key secret, so a lingering ref would fail revision creation.
 KEY_CREDENTIAL_ENV_NAMES = ('SERVICE_ACCOUNT_JSON', 'GOOGLE_APPLICATION_CREDENTIALS')
 
-# Retired env keys every service deploy drops, merged with the manifest's forbidden_env into one
-# deduplicated --remove-env-vars list: gcloud rejects a key named twice.
+# The literal --remove-env-vars list every Cloud Run service deploy action already carries. The
+# manifest's forbidden_env may only append keys missing from it: gcloud rejects a key named twice.
 RETIRED_ENV_NAMES = (
     'MEMORY_ENABLED_USERS',
     'MEMORY_CANONICAL_PROMOTION_CRON_ENABLED',
@@ -43,12 +43,12 @@ RETIRED_ENV_NAMES = (
 PUSHER_CLIENT_SERVICES = frozenset({'backend'})
 
 
-def _remove_env_names(service: str, service_config: ConfigDict) -> str:
-    names = list(RETIRED_ENV_NAMES)
+def _remove_env_extra(service: str, service_config: ConfigDict) -> str:
+    """Manifest forbidden keys the action's literal list lacks, each with a leading comma."""
+    listed = set(RETIRED_ENV_NAMES)
     if service not in PUSHER_CLIENT_SERVICES:
-        names.insert(0, 'HOSTED_PUSHER_API_URL')
-    names.extend(sorted(service_config.get('forbidden_env', [])))
-    return ','.join(dict.fromkeys(names))
+        listed.add('HOSTED_PUSHER_API_URL')
+    return ''.join(f',{name}' for name in sorted(set(service_config.get('forbidden_env', [])) - listed))
 
 
 def _as_config_dict(value: object) -> ConfigDict | None:
@@ -190,7 +190,7 @@ def main() -> int:
                     (f'{output_prefix}_secret_names', _render_secret_names(service_config.get('secrets', {}))),
                     (f'{output_prefix}_identity_flags', _render_identity_flags(service, service_config)),
                     (f'{output_prefix}_forbidden_env_names', ','.join(sorted(service_config.get('forbidden_env', [])))),
-                    (f'{output_prefix}_remove_env_names', _remove_env_names(service, service_config)),
+                    (f'{output_prefix}_remove_env_extra', _remove_env_extra(service, service_config)),
                 )
             )
     for job, raw_job_config in selected_jobs.items():

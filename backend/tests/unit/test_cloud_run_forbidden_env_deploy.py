@@ -59,10 +59,10 @@ def test_all_deploy_paths_remove_manifest_forbidden_keys(stage, monkeypatch, cap
     for name in ('backend', 'backend-sync', 'backend-integration'):
         prefix = name.replace('-', '_')
         deploy = next(s for s in stack if s.get('id') == f'deploy-{name}')
-        expression = '${{ steps.runtime-env.outputs.' + prefix + '_remove_env_names }}'
+        expression = '${{ steps.runtime-env.outputs.' + prefix + '_remove_env_extra }}'
         flags = deploy['with']['flags']
-        assert f'--remove-env-vars={expression}' in flags.split()
-        flags = flags.replace(expression, rendered[f'{prefix}_remove_env_names'])
+        assert expression in flags
+        flags = flags.replace(expression, rendered[f'{prefix}_remove_env_extra'])
         removals = _removals(flags)
         assert set(services[name]['forbidden_env']) <= set(removals)
         assert set(RENDER['RETIRED_ENV_NAMES']) <= set(removals)
@@ -72,7 +72,7 @@ def test_all_deploy_paths_remove_manifest_forbidden_keys(stage, monkeypatch, cap
         == '${{ steps.runtime-env.outputs.backend_sync_backfill_forbidden_env_names }}'
     )
     assert (
-        worker['with']['remove_env_names'] == '${{ steps.runtime-env.outputs.backend_sync_backfill_remove_env_names }}'
+        worker['with']['remove_env_extra'] == '${{ steps.runtime-env.outputs.backend_sync_backfill_remove_env_extra }}'
     )
     forbidden = rendered['backend_sync_backfill_forbidden_env_names']
     lifecycle = _action('sync-backfill-lifecycle')
@@ -142,21 +142,12 @@ def test_all_deploy_paths_remove_manifest_forbidden_keys(stage, monkeypatch, cap
     assert 'KEEP_OVERLAY=keep' in cloned['env_vars']
     assert 'KEEP_SECRET=synthetic-secret:latest' in cloned['secrets']
     assert clone['env']['FORBIDDEN_ENV_NAMES'] == '${{ inputs.forbidden_env_names }}'
-    expression = '${{ inputs.remove_env_names }}'
-    assert f'--remove-env-vars={expression}' in deploy['with']['flags'].split()
-    flags = deploy['with']['flags'].replace(expression, rendered['backend_sync_backfill_remove_env_names'])
+    expression = '${{ inputs.remove_env_extra }}'
+    assert expression in deploy['with']['flags']
+    flags = deploy['with']['flags'].replace(expression, rendered['backend_sync_backfill_remove_env_extra'])
     assert set(forbidden.split(',')) | {'HOSTED_PUSHER_API_URL'} <= set(_removals(flags))
-    # The input's default must also be deployable on its own.
-    assert set(RENDER['RETIRED_ENV_NAMES']) <= set(
-        _removals(f'--remove-env-vars={_lifecycle_input("remove_env_names")}')
-    )
-
-
-def _lifecycle_input(name):
-    action = yaml.load(
-        (ROOT / '.github/actions/sync-backfill-lifecycle/action.yml').read_text(), Loader=yaml.CSafeLoader
-    )
-    return action['inputs'][name]['default']
+    # The input's empty default must also be deployable on its own.
+    assert set(RENDER['RETIRED_ENV_NAMES']) <= set(_removals(deploy['with']['flags'].replace(expression, '')))
 
 
 def _removals(flags):
