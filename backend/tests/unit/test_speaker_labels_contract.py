@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from urllib.parse import quote
 
 import pytest
 from fastapi import FastAPI
@@ -234,36 +235,85 @@ def test_generated_dart_wire_models_cover_contract():
     assert 'class GeneratedVoiceMatchesResponse' in people_dart
 
 
-def test_reject_route_rejects_unsafe_conversation_id(client):
-    # Separator/traversal ids must never reach document(). A percent-encoded
-    # '/' decodes into a path break and 404s at route matching; single-segment
-    # unsafe ids (dots, backslash, whitespace, oversize) are the pattern's 422.
-    for bad in ('a%5Cb', 'a b', 'x' * 200):
-        response = client.post(f'/v1/conversations/{bad}/speakers/3/reject', json={'kind': 'not_me'})
-        assert response.status_code == 422, (bad, response.status_code)
-    # '..' is path-normalized by the client and a decoded '/' splits the
-    # segment — neither reaches the handler; both 404 instead of touching a doc.
-    for unroutable in ('a%2Fb', '..'):
-        resp = client.post(f'/v1/conversations/{unroutable}/speakers/3/reject', json={'kind': 'not_me'})
-        assert resp.status_code in (404, 422), unroutable
+@pytest.mark.parametrize('bad', ['a/b', '../x', '.', '..', '__reserved__', 'x' * 1501, 'é' * 751])
+def test_reject_route_rejects_invalid_storage_id_before_database(client, monkeypatch, bad):
+    def unexpected(*args, **kwargs):
+        pytest.fail('invalid document ID reached the database')
+
+    monkeypatch.setattr(conversations_db, 'assign_conversation_speaker', unexpected)
+    response = client.post(f'/v1/conversations/{quote(bad, safe="")}/speakers/3/reject', json={'kind': 'not_me'})
+    assert response.status_code in (404, 422)
 
 
-def test_reject_route_bounds_speaker_id(client):
-    response = client.post('/v1/conversations/conv1/speakers/2000000/reject', json={'kind': 'not_me'})
-    assert response.status_code == 422
-    response = client.post('/v1/conversations/conv1/speakers/-1/reject', json={'kind': 'not_me'})
-    assert response.status_code == 422
+@pytest.mark.parametrize('speaker_id', [-1, 2_000_000])
+def test_reject_route_missing_speaker_preserves_lookup_404(client, monkeypatch, speaker_id):
+    seen = []
+
+    def missing(uid, conversation_id, **kwargs):
+        seen.append((conversation_id, kwargs['speaker_id']))
+        raise LookupError('Segment not found')
+
+    monkeypatch.setattr(conversations_db, 'assign_conversation_speaker', missing)
+    response = client.post(f'/v1/conversations/conv1/speakers/{speaker_id}/reject', json={'kind': 'not_me'})
+    assert response.status_code == 404
+    assert response.json()['detail'] == 'Conversation or speaker not found'
+    assert seen == [('conv1', speaker_id)]
+    assert not conversations_db.get_firestore_client().rows
 
 
-def test_reject_route_rejects_unsafe_body_person_id(client):
-    # person_id is only honored for kind='not_person' (the model validator
-    # nulls it otherwise), so the guard is exercised on that kind.
-    for bad in ('a/b', '../x', 'a\\b', ' padded ', 'x' * 200):
-        response = client.post(
-            '/v1/conversations/conv1/speakers/3/reject', json={'kind': 'not_person', 'person_id': bad}
-        )
-        assert response.status_code == 400, (bad, response.status_code)
-        assert response.json()['detail'] == 'invalid person_id'
+@pytest.mark.parametrize('bad', ['a/b', '../x', '.', '..', '__reserved__', 'x' * 1501, 'é' * 751])
+def test_reject_route_rejects_invalid_body_person_before_database(client, monkeypatch, bad):
+    def unexpected(*args, **kwargs):
+        pytest.fail('invalid body person ID reached the database')
+
+    monkeypatch.setattr(conversations_db, 'assign_conversation_speaker', unexpected)
+    response = client.post('/v1/conversations/conv1/speakers/3/reject', json={'kind': 'not_person', 'person_id': bad})
+    assert response.status_code == 400
+    assert response.json()['detail'] == 'invalid person_id'
+
+
+LEGACY_DOCUMENT_IDS = [
+    'legacy.with.dots',
+    'a\\b',
+    'with space',
+    ' padded ',
+    'x' * 200,
+    'x' * 1500,
+    'é' * 750,
+    '__id123__',
+]
+
+
+@pytest.mark.parametrize('document_id', LEGACY_DOCUMENT_IDS)
+def test_reject_route_preserves_legacy_conversation_ids(client, monkeypatch, document_id):
+    seen = []
+
+    def missing(uid, conversation_id, **kwargs):
+        seen.append(conversation_id)
+        raise LookupError('Conversation not found')
+
+    monkeypatch.setattr(conversations_db, 'assign_conversation_speaker', missing)
+    response = client.post(
+        f'/v1/conversations/{quote(document_id, safe="")}/speakers/3/reject', json={'kind': 'not_me'}
+    )
+    assert response.status_code == 404
+    assert seen == [document_id]
+
+
+@pytest.mark.parametrize('document_id', LEGACY_DOCUMENT_IDS)
+def test_reject_body_preserves_legacy_person_ids(client, monkeypatch, document_id):
+    seen = []
+
+    def missing(uid, conversation_id, **kwargs):
+        seen.append(kwargs['rejection']['person_id'])
+        raise LookupError('Conversation not found')
+
+    monkeypatch.setattr(conversations_db, 'assign_conversation_speaker', missing)
+    response = client.post(
+        '/v1/conversations/conv1/speakers/3/reject', json={'kind': 'not_person', 'person_id': document_id}
+    )
+    assert response.status_code == 404
+    assert seen == [document_id]
 
 
 def test_reject_route_conflict_returns_sanitized_409(client, monkeypatch):
@@ -296,11 +346,28 @@ def test_reject_route_lookup_miss_returns_sanitized_404(client, monkeypatch):
     assert 'stored doc shape' not in json.dumps(response.json())
 
 
-def test_voice_matches_rejects_unsafe_person_id(client):
-    for bad in ('a b', 'a%5Cb', 'x' * 200):
-        assert client.get(f'/v1/users/people/{bad}/voice-matches').status_code == 422
-    for unroutable in ('..', 'a%2Fb'):
-        assert client.get(f'/v1/users/people/{unroutable}/voice-matches').status_code in (404, 422)
+@pytest.mark.parametrize('bad', ['a/b', '../x', '.', '..', '__reserved__', 'x' * 1501, 'é' * 751])
+def test_voice_matches_rejects_invalid_storage_id_before_lookup(client, monkeypatch, bad):
+    async def unexpected(*args, **kwargs):
+        pytest.fail('invalid document ID reached voice matching')
+
+    monkeypatch.setattr(speaker_labels_router, 'find_person_voice_matches', unexpected)
+    assert client.get(f'/v1/users/people/{quote(bad, safe="")}/voice-matches').status_code in (404, 422)
+
+
+@pytest.mark.parametrize('document_id', LEGACY_DOCUMENT_IDS)
+def test_voice_matches_preserves_legacy_person_ids(client, monkeypatch, document_id):
+    seen = []
+
+    async def empty(uid, person_id):
+        seen.append(person_id)
+        return VoiceMatchesResponse()
+
+    monkeypatch.setattr(speaker_labels_router, 'find_person_voice_matches', empty)
+    response = client.get(f'/v1/users/people/{quote(document_id, safe="")}/voice-matches')
+    assert response.status_code == 200
+    assert response.json() == {'matches': []}
+    assert seen == [document_id]
 
 
 def test_voice_matches_unexpected_error_returns_sanitized_500(client, monkeypatch):
@@ -313,12 +380,23 @@ def test_voice_matches_unexpected_error_returns_sanitized_500(client, monkeypatc
     assert 'pinecone' not in json.dumps(response.json())
 
 
-def test_generated_ids_fit_the_doc_id_pattern():
-    """Legacy compatibility pin for the review question: conversation and person
-    ids are uuid4 hex+dash, always inside [A-Za-z0-9_-]{1,128}."""
-    import uuid
-    import re as _re
+@pytest.mark.parametrize('bad', ['', '.', '..', 'a/b', '__reserved__', 'x' * 1501, 'é' * 751, '\ud800'])
+def test_document_id_guard_rejects_invalid_utf8_and_storage_shapes(bad):
+    assert not speaker_labels_router._valid_document_id(bad)
 
-    pattern = _re.compile(speaker_labels_router._DOC_ID_PATTERN)
-    for _ in range(1000):
-        assert pattern.fullmatch(str(uuid.uuid4()))
+
+def test_route_openapi_retains_released_unconstrained_path_types(client):
+    paths = client.app.openapi()['paths']
+    cases = [
+        (
+            '/v1/conversations/{conversation_id}/speakers/{speaker_id}/reject',
+            'post',
+            {'conversation_id': 'string', 'speaker_id': 'integer'},
+        ),
+        ('/v1/users/people/{person_id}/voice-matches', 'get', {'person_id': 'string'}),
+    ]
+    for path, method, types in cases:
+        schemas = {p['name']: p['schema'] for p in paths[path][method]['parameters'] if p['in'] == 'path'}
+        for name, expected_type in types.items():
+            assert schemas[name]['type'] == expected_type
+            assert not {'pattern', 'minimum', 'maximum', 'minLength', 'maxLength'} & schemas[name].keys()
