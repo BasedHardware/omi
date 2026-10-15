@@ -180,6 +180,31 @@ async def run_request(request: Request, handler: Any, telemetry: Any):
         await _drain(task)
 
 
+async def _close_stream_after(task: asyncio.Task | None, iterator) -> None:
+    if task is not None:
+        try:
+            await asyncio.shield(task)
+        except asyncio.CancelledError:
+            if not task.done():
+                raise
+        except Exception:
+            pass
+    close = getattr(iterator, 'aclose', None)
+    if close is not None:
+        async with asyncio.timeout(CANCEL_GRACE_SECONDS):
+            await close()
+
+
+async def _finish_stream(task: asyncio.Task | None, iterator) -> None:
+    # Retain closure until the active read/send has stopped. Never race aclose
+    # against an anext that ignored cancellation; the response owner still ends
+    # promptly while its retained cleanup owns the straggler.
+    cleanup = asyncio.create_task(_close_stream_after(task, iterator), name='desktop-gemini-stream-close')
+    _retain_cleanup(cleanup)
+    with anyio.CancelScope(shield=True):
+        await asyncio.wait((cleanup,), timeout=CANCEL_GRACE_SECONDS)
+
+
 class DeadlinedStreamingResponse(StreamingResponse):
     """Supervise response iteration AND send/backpressure with the entry budget."""
 
@@ -226,8 +251,11 @@ class DeadlinedStreamingResponse(StreamingResponse):
         # an already-expired stream. Check every send too, including ready chunks.
         remaining = telemetry.request_deadline - asyncio.get_running_loop().time()
         if remaining <= 0:
-            async with asyncio.timeout(CANCEL_GRACE_SECONDS):
-                await expired_response()
+            try:
+                async with asyncio.timeout(CANCEL_GRACE_SECONDS):
+                    await expired_response()
+            finally:
+                await _finish_stream(None, self.body_iterator)
             return
         task = asyncio.create_task(super().__call__(scope, receive, guarded_send), name='desktop-gemini-stream')
         try:
@@ -247,3 +275,4 @@ class DeadlinedStreamingResponse(StreamingResponse):
             pass
         finally:
             await _drain(task)
+            await _finish_stream(task, self.body_iterator)
