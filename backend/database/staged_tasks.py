@@ -55,8 +55,9 @@ def create_staged_task(uid: str, description: str, **kwargs) -> dict:
     # Deduplicate
     desc_norm = action_items_db._normalize_description(description)
     for doc in col.stream():
-        if action_items_db._normalize_description(doc.to_dict().get('description', '')) == desc_norm:
-            existing = doc.to_dict()
+        data = doc.to_dict() or {}
+        if action_items_db._normalize_description(data.get('description', '')) == desc_norm:
+            existing = dict(data)
             existing['id'] = doc.id
             return existing
 
@@ -88,7 +89,7 @@ def get_staged_tasks(uid: str, limit: int = 100, offset: int = 0) -> List[dict]:
 
     items = []
     for doc in query.stream():
-        data = doc.to_dict()
+        data = doc.to_dict() or {}
         data['id'] = doc.id
         items.append(data)
     return items
@@ -270,12 +271,12 @@ def promote_staged_task(
         docs = list(query.stream())
         if not docs:
             return None
-        staged = docs[0].to_dict()
+        staged = docs[0].to_dict() or {}
         staged['id'] = docs[0].id
 
     # Dedup: skip promotion if an active action_item with the same description
     # already exists. Close the staged task pointing at the existing item.
-    existing = action_items_db.get_active_action_item_by_description(uid, staged['description'])
+    existing = action_items_db.get_active_action_item_by_description(uid, staged.get('description', ''))
     if existing is not None and (action_item_id is None or existing.get('id') == action_item_id):
         # Merge enrichment fields the existing item is missing. The staged
         # task may carry richer context from a later conversation
@@ -334,7 +335,7 @@ def promote_staged_task(
 
     # Build action_item data from staged task fields
     action_data = {
-        'description': staged['description'],
+        'description': staged.get('description', ''),
         'completed': False,
         'from_staged': True,
     }
