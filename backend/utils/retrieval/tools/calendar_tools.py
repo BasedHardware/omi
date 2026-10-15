@@ -610,7 +610,9 @@ async def get_calendar_events_tool(
                     max_results=max_results,
                     search_query=search_query,
                 )
-            elif days_range > 30:
+            elif days_range > 30 and time_max is not None and time_max <= datetime.now(timezone.utc):
+                # Most-recent-first only suits a range that has already ended. A range reaching into the
+                # future ("next two months") takes the plain read below, so its soonest events come first.
                 logger.info(
                     f"📅 Large date range ({days_range} days), using iterative search starting from most recent"
                 )
