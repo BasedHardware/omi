@@ -723,8 +723,9 @@ both Pusher and backend-listen have a non-terminating scrape target and every su
 exact Telegram receiver exists with resolve notifications enabled. A target is terminating only when
 `kube_pod_deletion_timestamp` matches its namespace and pod; pusher and backend-listen share that join
 because both scrape jobs label `namespace`/`pod` and both Deployments drain for 120s plus a 15s preStop.
-A missing job, a down pod without that timestamp, or kube-state-metrics data that cannot confirm deletions
-still fails the gate. The check does not use `max(up)` and does not treat phase Running as terminating. After each
+A missing job, or a down pod whose deletion timestamp is absent or unconfirmed, still fails the gate.
+When every required target is already up, unconfirmed kube-state-metrics data does not fail the gate.
+The check does not use `max(up)` and does not treat phase Running as terminating. After each
 rollout it additionally requires all three finalization telemetry families from
 both jobs; zero-valued labeled failure children are initialized at process
 startup so absence is unambiguously a source failure. Production repeats this
