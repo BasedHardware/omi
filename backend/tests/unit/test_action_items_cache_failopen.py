@@ -22,7 +22,7 @@ def _no_redis(monkeypatch):
 
 def test_all_helpers_fail_open_without_client(monkeypatch):
     _no_redis(monkeypatch)
-    cache.bump_action_items_list_version('u1')          # no AttributeError
+    cache.bump_action_items_list_version('u1')  # no AttributeError
     assert cache.get_action_items_list_version('u1') is None
     assert cache.read_cached_list('k') is None
     cache.write_cached_list('k', body={'a': 1}, etag='e', ttl=60)  # no AttributeError
