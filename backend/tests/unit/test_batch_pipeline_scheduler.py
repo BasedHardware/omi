@@ -261,3 +261,47 @@ def test_store_stage_boundary_refuses_implicit_or_cross_stage_access(monkeypatch
     monkeypatch.setenv('FIRESTORE_EMULATOR_HOST', '127.0.0.1:18974')
     with pytest.raises(RuntimeError, match='injected'):
         FirestoreStore('batch_pipeline_test_boundary', firestore_client=object())
+
+
+def test_capacity_reserves_fresh_slots_and_rejects_stale_slack():
+    from utils.batch_pipeline.capacity import PoolCapacity
+
+    queue = Scheduler(MemoryStore())
+    queue.enqueue(item('deep'), 0)
+    assert queue.pull(10, capacity=PoolCapacity(10, 1, reserved_fresh_slots=1)) == []
+    queue.enqueue(item('fresh', priority=Priority.FRESH), 0)
+    assert queue.pull(10, capacity=PoolCapacity(10, 1, reserved_fresh_slots=1))[0].item.segment_id == 'fresh'
+    assert queue.pull(30, capacity=PoolCapacity(0, 1)) == []
+    assert queue.pull(31, capacity=PoolCapacity(31, 1))[0].item.segment_id == 'deep'
+
+
+def test_shared_live_requires_short_exclusive_slack_and_default_off_gate(monkeypatch):
+    from utils.batch_pipeline.capacity import PoolCapacity
+
+    queue = Scheduler(MemoryStore())
+    queue.enqueue(item('long', duration=3600), 0)
+    queue.enqueue(item('short', owner='short', duration=120), 0)
+    capacity = PoolCapacity(10, 1, shared_with_live=True, memory_headroom_bytes=8 * 1024**3)
+    monkeypatch.delenv('BATCH_PIPELINE_SHARED_LIVE_ENABLED', raising=False)
+    assert queue.pull(10, capacity=capacity) == []
+    monkeypatch.setenv('BATCH_PIPELINE_SHARED_LIVE_ENABLED', 'true')
+    assert [v.item.segment_id for v in queue.pull(10, 32, capacity=capacity)] == ['short']
+    assert queue.pull(10, capacity=capacity) == []
+    from dataclasses import replace
+
+    for unsafe in (
+        replace(capacity, live_queue_age_seconds=1),
+        replace(capacity, gpu_utilization=0.5),
+        replace(capacity, memory_headroom_bytes=0),
+        replace(capacity, available_slots=2),
+    ):
+        assert queue.pull(10, capacity=unsafe) == []
+
+
+def test_capacity_never_spends_reserved_fresh_slots_on_multiple_backfill_items():
+    from utils.batch_pipeline.contracts import PoolCapacity
+
+    queue = Scheduler(MemoryStore())
+    for n in range(3):
+        queue.enqueue(item(f'backfill{n}'), 0)
+    assert len(queue.pull(10, 3, capacity=PoolCapacity(10, 3, reserved_fresh_slots=2))) == 1

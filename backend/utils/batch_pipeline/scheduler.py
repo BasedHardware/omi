@@ -5,7 +5,8 @@ import hashlib
 import uuid
 
 from database.batch_pipeline_store import Store, Transaction
-from utils.batch_pipeline.contracts import LeasedWork, Priority, WorkItem, WorkResult
+from config.batch_pipeline import shared_live_enabled
+from utils.batch_pipeline.contracts import LeasedWork, Priority, WorkItem, WorkResult, PoolCapacity
 from utils.batch_pipeline.metrics import QueueMetrics
 
 QUANTUM_SECONDS = 30.0
@@ -99,18 +100,29 @@ class Scheduler:
 
         return self.store.run(commit)
 
-    def pull(self, now: float, limit: int = 1) -> list[LeasedWork]:
+    def pull(self, now: float, limit: int = 1, *, capacity: PoolCapacity | None = None) -> list[LeasedWork]:
         if not 1 <= limit <= 32:
             raise ValueError('pull limit must be in [1, 32]')
+        # No snapshot is the dedicated-batch worker contract only. Shared live
+        # callers must supply a fresh exclusive-admission snapshot every pull.
+        allow_backfill, max_seconds, backfill_budget = True, 7200.0, limit
+        if capacity is not None:
+            slots, allow_backfill, max_seconds = capacity.limits(now, shared_live_enabled=shared_live_enabled())
+            limit = min(limit, slots)
+            backfill_budget = max(0, slots - capacity.reserved_fresh_slots)
         result = []
         for _ in range(limit):
-            lease = self._pull_one(now)
+            lease = self._pull_one(now, allow_backfill=allow_backfill and backfill_budget > 0, max_seconds=max_seconds)
             if lease is None:
                 break
             result.append(lease)
+            if lease.item.priority != Priority.FRESH:
+                backfill_budget -= 1
+            if capacity is not None and capacity.shared_with_live:
+                break  # One non-preemptible short item, never a mixed long batch.
         return result
 
-    def _pull_one(self, now: float) -> LeasedWork | None:
+    def _pull_one(self, now: float, *, allow_backfill: bool, max_seconds: float) -> LeasedWork | None:
         token = uuid.uuid4().hex  # Stable across this transaction's retries.
 
         def commit(tx):
@@ -118,11 +130,16 @@ class Scheduler:
             ring = next((control['rings'][str(int(p))] for p in Priority if control['rings'][str(int(p))]), None)
             if not ring:
                 return None
+            if not allow_backfill and ring is not control['rings'][str(int(Priority.FRESH))]:
+                return None
             # Budget bounded transactions; fresh deficits must accrue before backfill.
             for _ in range(MAX_VISITS):
                 queue_key = ring[0]
                 queue = tx.get('queues', queue_key)
                 job = tx.get('jobs', queue['head'])
+                if job['duration_seconds'] > max_seconds:
+                    ring.append(ring.pop(0))
+                    continue
                 if not queue['continuing']:
                     queue['deficit'] += QUANTUM_SECONDS
                 cost = job['duration_seconds']

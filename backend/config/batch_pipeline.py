@@ -47,3 +47,7 @@ def priority_for(lane: str, recording_age_seconds: float | None) -> Priority:
 def admit_or_legacy(owner_id: str, admit: Callable[..., T], legacy: Callable[..., T], *args, **kwargs) -> T:
     """Explicit integration seam; disabled path does not evaluate admission/store."""
     return (admit if enabled_for(owner_id) else legacy)(*args, **kwargs)
+
+
+def shared_live_enabled() -> bool:
+    return os.getenv('BATCH_PIPELINE_SHARED_LIVE_ENABLED', 'false').lower() == 'true'

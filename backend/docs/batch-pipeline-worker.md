@@ -31,7 +31,7 @@ Backfill uses idle slots only. Already running GPU work is not preempted; each
 new pull checks fresh before selecting backfill.
 
 A owns `config/batch_pipeline.py`, `database/batch_pipeline*.py`,
-`utils/batch_pipeline/{contracts,scheduler,merge,metrics}.py`, matching unit tests,
+`utils/batch_pipeline/{contracts,capacity,scheduler,merge,metrics}.py`, matching unit tests,
 and this document. B owns `diarizer/batch_pipeline*`, GPU-chain tests and its
 benchmark records. B may add a dedicated provider config module; coordinate any
 contract changes through this document before changing A's files. Neither agent
@@ -135,39 +135,37 @@ accepted item, stuck merge >12h, stale metrics >60s, or fresh p95 lease wait >30
 Keep model admission/memory limits and reserved fresh capacity in qualification;
 already-running long backfill can violate the fresh latency target.
 
-## Worker integration recipe and acceptance
+## Capacity-aware worker integration
 
-Construct `FirestoreStore('batch_pipeline_prod')` only on the production-owned
-worker; use the distinct dev namespace only with isolated synthetic identities.
-Tests use explicit `batch_pipeline_test_<id>` namespaces on loopback emulators.
-`Scheduler(store, metrics=metrics)` exposes `enqueue`, `pull`, `heartbeat`,
-`complete`, `fail`, `recover`, and explicit `redrive_dead`. Heartbeat every ≤30s
-against the 120s lease; a false renewal means discard the result. Recover every
-5s, refreshing metrics every 15s. A pull performs bounded deficit accrual and may
-return empty before a 7200s item earns enough credit; continue polling. The
-active-owner ring caps at 1024 owners **per class** and rejects overflow
-atomically. Neither an empty pull nor admission overflow means accepted work was
-lost. Keep concurrency/model memory bounds separate from pull size.
+Queue units are conversations/capture spans (target ≤1h, hard ceiling 7200s),
+never internal ASR windows. Dedicated batch GPUs own conversation-sized jobs.
+`Scheduler.pull(..., capacity=PoolCapacity(...))` caps leases to available slots
+and protects fresh reservations. Samples expire after 15s; invalid samples close
+admission. No-snapshot pulls are dedicated-batch-only. An off-peak trough
+(~25% lower listen load near 03:00Z, lead evidence) is a forecast, not slack.
 
-Create one `QueueMetrics` per serving registry; `/metrics` exports that registry
-through the worker's existing exporter. Prometheus-adapter rules should expose
-`max by (priority) (omi_batch_pipeline_ready_age_seconds)` only while the
-corresponding `time() - omi_batch_pipeline_metrics_refreshed_at_seconds < 60`.
-Use HPA `External` metric target type `Value` at 30/300/3600 seconds for
-fresh/recent/deep respectively, with pool-specific min/max replicas. Aggregate
-freshness per exporter before max aggregation; never convert an unavailable
-series to zero. Completed throughput is
-`sum(rate(omi_batch_pipeline_events_total{event="completed"}[5m]))`.
-These are observed transition receipts; an ambiguous transaction reply can
-undercount counters, while durable queue/log state remains authoritative.
+Shared-live borrowing defaults off (`BATCH_PIPELINE_SHARED_LIVE_ENABLED=false`).
+It requires an exclusive grant from the live pool admission owner, one slot,
+no live queue, <50% GPU utilization and ≥8GiB memory headroom. Only one ≤120s
+item may lease; longer spans wait for dedicated GPUs and are never split into
+new merge units. The external owner must prevent concurrent/reused grants.
+These conservative thresholds are unqualified; retain the kill switch until
+model-memory and live-latency acceptance. Exporters must derive grants from
+live queue age, GPU utilization/headroom and in-flight ownership, never CPU.
 
-Hermetic unit checks and real-emulator contention tests run through `test.sh`.
-The emulator verifies query/transaction behavior, not production index readiness
-or throughput. Ten stage-specific composite indexes are declared/generated;
-lead must obtain READY receipts before serving the new queries. No backlog
-migration, production writes, deploy, chart change or real-user acceptance is
-part of A's implementation receipt. Integrate and qualify the serving pump,
-content-ledger/conversation projection and deletion paths before enabling intake.
+`Scheduler` exposes enqueue/pull/heartbeat/complete/fail/recover/redrive_dead;
+`OrderedMerge` exposes commit_next/committed_result. Heartbeat ≤30s for 120s
+leases, recover every 5s, refresh one QueueMetrics registry every 15s. Discard
+results after lease loss. Bounded deficit accrual may return empty before long
+items earn credit; continue polling. Ring cap: 1024 active owners per class.
+
+Expose the registry through the worker exporter; adapter max-ready-age signals
+must exclude samples older than 60s. HPA External Value targets are 30/300/3600s
+by class with qualified pool min/max. Throughput is completed-event rate;
+ambiguous replies may undercount receipts, so durable state is authoritative.
+Ten declared stage indexes need READY receipts. Emulator contention verifies
+transactions, not production throughput. Serving pump, ledger projection,
+deletion, late-capture policy and backlog migration remain qualification gates.
 
 Strict priority is a **compute admission** guarantee. Within one owner, an
 unfinished earlier backfill item still blocks publication of later fresh results.

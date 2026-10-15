@@ -6,6 +6,7 @@ from typing import Protocol, Sequence
 
 
 from config.batch_pipeline import Priority
+from utils.batch_pipeline.capacity import PoolCapacity as PoolCapacity
 
 
 @dataclass(frozen=True)
