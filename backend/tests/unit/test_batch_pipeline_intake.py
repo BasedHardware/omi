@@ -228,3 +228,34 @@ async def test_prior_batch_receipt_or_ambiguous_error_never_selects_legacy(monke
     monkeypatch.setattr(store, 'run', ambiguous)
     response = await intake.accept_upload(**arguments)
     assert response is not None and response.status_code == 503
+
+
+@pytest.mark.asyncio
+async def test_store_initialization_leaves_event_loop_and_fails_closed(monkeypatch):
+    import threading
+    from utils.batch_pipeline import intake
+
+    request_thread = threading.get_ident()
+    initialization_threads = []
+
+    def unavailable(namespace):
+        initialization_threads.append(threading.get_ident())
+        raise TimeoutError('synthetic client initialization timeout')
+
+    monkeypatch.setattr(intake, 'FirestoreStore', unavailable)
+    monkeypatch.setattr(intake, 'current_stage', lambda: 'dev')
+    response = await intake.accept_upload(
+        uid='synthetic-owner',
+        job_id='retry',
+        content_id='content',
+        paths=['retained.bin'],
+        lane='backfill',
+        recording_age_seconds=60,
+        source='omi',
+        should_lock=False,
+        conversation_id=None,
+        client_device_id=None,
+        client_platform='ios',
+    )
+    assert initialization_threads and initialization_threads[0] != request_thread
+    assert response is not None and response.status_code == 503

@@ -116,10 +116,10 @@ async def accept_upload(
     intake_context: dict | None = None,
 ) -> JSONResponse | None:
     """None preserves a prior legacy receipt; batch outcomes never fall through."""
-    store = FirestoreStore(f'batch_pipeline_{current_stage()}')
     public_job_id = JOB_PREFIX + job_id
     iterator = None
     try:
+        store = await run_blocking(db_executor, FirestoreStore, f'batch_pipeline_{current_stage()}')
         previous = await run_blocking(db_executor, store.run, lambda tx: tx.get('content', f'{uid}/{content_id}'))
         if previous.get('dispatch_protocol') == 'batch_v1':
             status = await run_blocking(db_executor, durable_status, store, uid, previous['job_id'])
