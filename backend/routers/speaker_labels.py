@@ -1,5 +1,6 @@
 import logging
 import re
+import traceback
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
@@ -9,6 +10,7 @@ from database import voice_profiles as voice_profiles_db
 from models.conversation import Conversation
 from models.speaker_labels import RejectSpeakerRequest, VoiceMatchesResponse
 from utils.conversations.factory import deserialize_conversation
+from utils.log_sanitizer import sanitize_pii
 from utils.other import endpoints as auth
 from utils.other.storage import delete_speech_profile_blob
 from utils.speaker_voice_matches import find_person_voice_matches
@@ -68,27 +70,32 @@ def reject_speaker_label(
             rejection={'kind': data.kind, 'person_id': data.person_id},
         )
     except LookupError as error:
-        # Same rule as the 409 below: log the real detail, return a static one —
-        # a future raise site must not be able to regress this reflection.
-        logger.warning('speaker label reject lookup miss conv=%s speaker=%s: %s', conversation_id, speaker_id, error)
+        logger.warning(
+            'speaker label reject lookup miss conv=%s speaker=%s: %s',
+            sanitize_pii(conversation_id),
+            speaker_id,
+            sanitize_pii(error),
+        )
         raise HTTPException(status_code=404, detail='Conversation or speaker not found') from error
     except PermissionError as error:
         raise HTTPException(status_code=402, detail='A paid plan is required to access this conversation.') from error
     except ValueError as error:
-        # A conflict detail is user-actionable, but log the real message and return
-        # a generic one so an internal detail never leaks through the boundary.
-        logger.warning('speaker label reject conflict conv=%s speaker=%s: %s', conversation_id, speaker_id, error)
+        logger.warning(
+            'speaker label reject conflict conv=%s speaker=%s: %s',
+            sanitize_pii(conversation_id),
+            speaker_id,
+            sanitize_pii(error),
+        )
         raise HTTPException(status_code=409, detail='The speaker cannot be updated right now.') from error
     except Exception as error:
-        # Unexpected (Firestore, network, bug): log full context internally,
-        # surface a sanitized 500 to the client.
+        # Keep stack locations without exception text, which can echo opaque IDs.
         logger.error(
-            'speaker label reject failed conv=%s speaker=%s uid=%s: %s',
-            conversation_id,
+            'speaker label reject failed conv=%s speaker=%s uid=%s: %s\n%s',
+            sanitize_pii(conversation_id),
             speaker_id,
             uid,
             type(error).__name__,
-            exc_info=True,
+            ''.join(traceback.format_tb(error.__traceback__)),
         )
         raise HTTPException(status_code=500, detail='Failed to update the speaker') from error
     if data.kind == 'not_a_person':
@@ -121,10 +128,10 @@ async def get_person_voice_matches(
         raise HTTPException(status_code=404, detail='Person not found') from error
     except Exception as error:
         logger.error(
-            'person voice-matches failed person=%s uid=%s: %s',
-            person_id,
+            'person voice-matches failed person=%s uid=%s: %s\n%s',
+            sanitize_pii(person_id),
             uid,
             type(error).__name__,
-            exc_info=True,
+            ''.join(traceback.format_tb(error.__traceback__)),
         )
         raise HTTPException(status_code=500, detail='Failed to load voice matches') from error

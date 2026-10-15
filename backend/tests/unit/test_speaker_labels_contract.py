@@ -396,6 +396,58 @@ def test_voice_matches_unexpected_error_returns_sanitized_500(client, monkeypatc
     assert 'pinecone' not in json.dumps(response.json())
 
 
+@pytest.mark.parametrize('failure,status', [(LookupError, 404), (ValueError, 409), (RuntimeError, 500)])
+def test_reject_logs_mask_opaque_ids_and_echoed_exception_payload(client, monkeypatch, caplog, failure, status):
+    document_id = '私の記録\nperson.name@example.com'
+    seen = []
+
+    def fail(uid, conversation_id, **kwargs):
+        seen.append(conversation_id)
+        raise failure(f'Cannot resolve {conversation_id}')
+
+    monkeypatch.setattr(conversations_db, 'assign_conversation_speaker', fail)
+    response = client.post(
+        f'/v1/conversations/{quote(document_id, safe="")}/speakers/3/reject', json={'kind': 'not_me'}
+    )
+
+    assert response.status_code == status
+    assert seen == [document_id]
+    records = [record for record in caplog.records if record.name == speaker_labels_router.logger.name]
+    assert len(records) == 1
+    message = records[0].getMessage()
+    assert 'conv=*** p***e@example.com speaker=3' in message
+    assert 'person.name' not in message
+    assert document_id not in message
+    assert records[0].exc_info is None
+    if status == 500:
+        assert failure.__name__ in message
+        assert 'in fail' in message
+
+
+def test_voice_matches_logs_mask_opaque_ids_and_echoed_exception_payload(client, monkeypatch, caplog):
+    document_id = '私の記録\nperson.name@example.com'
+    seen = []
+
+    async def fail(uid, person_id):
+        seen.append(person_id)
+        raise RuntimeError(f'Cannot resolve {person_id}')
+
+    monkeypatch.setattr(speaker_labels_router, 'find_person_voice_matches', fail)
+    response = client.get(f'/v1/users/people/{quote(document_id, safe="")}/voice-matches')
+
+    assert response.status_code == 500
+    assert seen == [document_id]
+    records = [record for record in caplog.records if record.name == speaker_labels_router.logger.name]
+    assert len(records) == 1
+    message = records[0].getMessage()
+    assert 'person=*** p***e@example.com uid=' in message
+    assert 'person.name' not in message
+    assert document_id not in message
+    assert 'RuntimeError' in message
+    assert 'in fail' in message
+    assert records[0].exc_info is None
+
+
 @pytest.mark.parametrize('bad', ['', '.', '..', 'a/b', '__reserved__', 'x' * 1501, 'é' * 751, '\ud800'])
 def test_document_id_guard_rejects_invalid_utf8_and_storage_shapes(bad):
     assert not speaker_labels_router._valid_document_id(bad)
