@@ -1402,25 +1402,9 @@ def update_person_speech_samples_version(uid: str, person_id: str, version: int)
 
 
 def delete_user_data(uid: str):
-    user_ref = db.collection('users').document(uid)
-    root_exists = user_ref.get().exists
+    from database.user_data_deletion import purge_user_subtree
 
-    # Enumerate subcollections live even when the root document is missing.
-    # Firestore permits immediate children to survive a parent deletion; an
-    # early "User not found" return would falsely mark the deletion complete.
-    # This picks up
-    # everything the user has written (conversations, deleted_conversations, memories, action_items,
-    # folders, goals, integrations, task_integrations, fcm_tokens, fair_use_*,
-    # hourly_usage, meetings, screen_activity, files, people, chat_sessions,
-    # messages, and any future additions).
-    for sub in user_ref.collections():
-        logger.info(f"Deleting subcollection {sub.id} for user {uid}")
-        delete_collection_recursive(sub, client=db)
-
-    if root_exists:
-        logger.info(f"Deleting user document: {uid}")
-        user_ref.delete()
-    return {'status': 'ok', 'message': 'Account deleted successfully'}
+    return purge_user_subtree(uid, db, delete_collection_recursive)
 
 
 # **************************************
@@ -1619,6 +1603,9 @@ def set_data_protection_level(uid: str, level: str) -> None:
         raise ValueError("Invalid data protection level. Only 'enhanced' or 'e2ee' are supported.")
     user_ref = db.collection('users').document(uid)
     user_ref.set({'data_protection_level': level}, merge=True)
+    from database.batch_pipeline_purge import purge_batch_owner
+
+    purge_batch_owner(uid, reason='data_protection')
 
 
 def set_migration_status(uid: str, target_level: str):
@@ -1626,6 +1613,9 @@ def set_migration_status(uid: str, target_level: str):
     user_ref = db.collection('users').document(uid)
     migration_status = {'target_level': target_level, 'status': 'in_progress', 'started_at': datetime.now(timezone.utc)}
     user_ref.set({'migration_status': migration_status}, merge=True)
+    from database.batch_pipeline_purge import purge_batch_owner
+
+    purge_batch_owner(uid, reason='data_protection')
 
 
 def finalize_migration(uid: str, target_level: str):

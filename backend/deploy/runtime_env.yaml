@@ -1,5 +1,5 @@
 # generated — do not edit; run: python3 backend/deploy/compose_runtime_env.py
-schema_version: 1
+schema_version: 2
 environments:
   dev:
     llm_gateway:
@@ -637,6 +637,9 @@ environments:
               secret: SCREEN_FRAME_SIGNING_SECRET
               version: latest
           env:
+            BUCKET_TEMPORAL_SYNC_LOCAL:
+              value: syncing-local-development
+              category: storage_retention
             AUDIO_ARCHIVE_LIVE_ENABLED: {value: 'false', category: rollout}
             AUDIO_ARCHIVE_READ_ENABLED: {value: 'false', category: rollout}
             AUDIO_ARCHIVE_STOP_PCM_ENABLED: {value: 'false', category: rollout}
@@ -2496,6 +2499,9 @@ environments:
               secret: SCREEN_FRAME_SIGNING_SECRET
               version: latest
           env:
+            BUCKET_TEMPORAL_SYNC_LOCAL:
+              value: syncing-local
+              category: storage_retention
             AUDIO_ARCHIVE_LIVE_ENABLED: {value: 'false', category: rollout}
             AUDIO_ARCHIVE_READ_ENABLED: {value: 'false', category: rollout}
             AUDIO_ARCHIVE_STOP_PCM_ENABLED: {value: 'false', category: rollout}

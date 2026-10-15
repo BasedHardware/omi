@@ -4828,7 +4828,6 @@ labels are added. Optional final-pass logs now include `lane` and
 inside the adapter. These times exclude the preceding WAV download and are
 not whole-job latency. See [drain qualification](runbooks/sync-legacy-fresh-drain.md).
 
-
 ### Sync assignment contention retry
 
 Fresh uploads can overlap for one account: clients serialize the HTTP POST, but
@@ -4858,3 +4857,36 @@ IDs in the surviving conversation; a zero-success ACK alone is not proof of
 no loss. User-deletion/assignment supersession is a different path and must not
 be treated as evidence that content landed. Qualification requires every
 synthetic uploaded segment to appear exactly once, including these cases.
+
+### Dormant batch pull protocol
+
+[Batch pipeline worker](batch-pipeline-worker.md) defines a separate default-off
+pull queue with 64 owner-hash scheduler shards and per-owner ordered result log.
+The sync route selects it only with `BATCH_PIPELINE_ENABLED` plus owner
+allowlist/percentage; an atomic content-ledger protocol seal prevents a legacy
+twin. Admission rollback leaves accepted work draining with 20s heartbeats.
+Compute failures retain the ordered head and retry with a 600s backoff cap;
+historical dead heads can be redriven by authenticated internal RPC or owner
+polling. Privacy-fenced recovery is isolated without clearing deletion fences.
+Late captures receive 202, retain their original clock and append after the
+committed tail; no unsupported 409 or capture-watermark regression occurs.
+Conversation projection, deletion, indexes READY and GPU qualification remain
+rollout gates. See [serving settings](batch-pipeline-serving.md).
+
+### Dark batch-worker GPU and compaction boundaries (PR 21674)
+
+Conversation-sized compute belongs on dedicated batch GPUs. Shared-live compute
+must use the existing live model arbiter, units and total pulls <=120 audio
+seconds, and one in-flight batch per GPU; dispatch priority cannot preempt a
+running inference. `BATCH_PIPELINE_POOL_KIND` and `BATCH_PIPELINE_UNIT_SECONDS`
+bound worker units independently of durable conversation identity. The local
+multi-model worker factory rejects live co-location.
+
+Default-off `TRANSCRIPTION_FINAL_PASS_VAD_COMPACTION_ENABLED` runs local speech
+VAD before stored-audio shadow ASR and shared pyannote final-pass inference.
+300 ms onset/500 ms tail padding and exact sample maps restore original word,
+turn and overlap clocks. VAD failure or ambiguous word mapping retains original
+behavior; legacy/single-speaker resolution stays on original clocks. The sync
+final-pass adapter receives existing words and does not add an STT request.
+No Nemotron cascade is routed. WAL pre-STT proof matching is unchanged; bounded
+coverage outcome/reason diagnostics now explain conservative abstention.

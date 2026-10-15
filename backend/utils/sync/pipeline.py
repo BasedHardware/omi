@@ -8,6 +8,7 @@ Extracted from routers/sync.py so the router stays thin and utils never imports 
 from __future__ import annotations
 
 from utils.observability.sync_phases import sync_phase, sync_attempt
+from utils.sync.vad_segments import MAX_VAD_SEGMENT_SECONDS
 
 import asyncio
 import contextlib
@@ -193,7 +194,7 @@ from utils.sync.telemetry import bounded_sync_language as _bounded_retry_languag
 from utils.sync.telemetry import bounded_sync_model as _bounded_sync_model
 from utils.sync.telemetry import bounded_sync_phase as _bounded_sync_phase
 from utils.sync.telemetry import new_attempt_ref as _new_attempt_ref
-from utils.sync.merge_audio import store_partial_merge_survivor_audio
+from utils.sync.merge_audio import store_partial_merge_survivor_audio, store_intake_audio, store_sync_audio_chunk
 from utils.sync.assignment import fragment_rule
 from utils.sync.speaker_identity import PersonEmbeddingsCache, SpeakerIdentityDependencies, USER_SELF_PERSON_ID
 from utils.sync.speaker_identity import build_person_embeddings_cache as _build_person_embeddings_cache
@@ -206,7 +207,6 @@ from utils.observability.journeys import record_client_journey_accepted, record_
 
 logger = logging.getLogger(__name__)
 
-MAX_VAD_SEGMENT_SECONDS = int(os.getenv('SYNC_MAX_VAD_SEGMENT_SECONDS', '300'))
 
 # Valid terminal segment results — a transcript, or audio with no speech. All else is a failure.
 _NON_ERROR_SEGMENT_OUTCOMES = frozenset({TranscriptionOutcome.SUCCESS, TranscriptionOutcome.EXPECTED_SILENCE})
@@ -955,28 +955,9 @@ def finalize_sync_job_failure_now(
 
 
 def _merge_and_cap_vad_segments(voice_segments: list) -> list:
-    merged = []
-    for segment in voice_segments:
-        if (
-            merged
-            and (segment['start'] - merged[-1]['end']) < 120
-            and (segment['end'] - merged[-1]['start']) <= MAX_VAD_SEGMENT_SECONDS
-        ):
-            merged[-1]['end'] = segment['end']
-        else:
-            merged.append(dict(segment))
+    from utils.sync.vad_segments import merge_and_cap_vad_segments
 
-    segments = []
-    for segment in merged:
-        if segment['end'] - segment['start'] <= MAX_VAD_SEGMENT_SECONDS:
-            segments.append(segment)
-        else:
-            chunk_start = segment['start']
-            while chunk_start < segment['end']:
-                chunk_end = min(chunk_start + MAX_VAD_SEGMENT_SECONDS, segment['end'])
-                segments.append({'start': chunk_start, 'end': chunk_end})
-                chunk_start = chunk_end
-    return segments
+    return merge_and_cap_vad_segments(voice_segments, MAX_VAD_SEGMENT_SECONDS)
 
 
 @sync_phase('decode_vad')
@@ -1731,18 +1712,18 @@ def _store_intake_audio(
     private_cloud_sync_enabled: bool,
     conversation_id: str,
 ) -> None:
-    if private_cloud_sync_enabled and survivors:
-        if len(survivors) == transcript_segment_count:
-            _store_sync_audio_chunk(uid, conversation_id, timestamp, audio_bytes, data_protection_level)
-        else:
-            store_partial_merge_survivor_audio(
-                uid=uid,
-                conversation_id=conversation_id,
-                file_timestamp=timestamp,
-                audio_bytes=audio_bytes,
-                data_protection_level=data_protection_level,
-                survivors=survivors,
-            )
+    store_intake_audio(
+        uid,
+        timestamp,
+        audio_bytes,
+        data_protection_level,
+        survivors,
+        transcript_segment_count,
+        private_cloud_sync_enabled,
+        conversation_id,
+        store_full=_store_sync_audio_chunk,
+        store_partial=store_partial_merge_survivor_audio,
+    )
 
 
 def _store_sync_audio_chunk(
@@ -1752,18 +1733,16 @@ def _store_sync_audio_chunk(
     audio_bytes: Optional[bytes],
     data_protection_level: Optional[str],
 ):
-    """Persist a sync segment's audio as a private-cloud chunk, identical in format and
-    naming to the realtime path (chunks/{uid}/{conversation_id}/{ts}.opus[.enc]), so the
-    conversation plays through the existing audio player. Best-effort — audio storage must
-    never fail transcription."""
-    try:
-        pcm = _wav_bytes_to_pcm16_16k(audio_bytes)
-        if not pcm:
-            return
-        upload_audio_chunk(pcm, uid, conversation_id, float(timestamp), data_protection_level)
-        del pcm
-    except Exception as e:
-        logger.warning(f'sync: failed to store audio chunk for {conversation_id}@{timestamp}: {e}')
+    """Reuse stable private-cloud chunk naming; audio storage remains best-effort."""
+    store_sync_audio_chunk(
+        uid,
+        conversation_id,
+        timestamp,
+        audio_bytes,
+        data_protection_level,
+        decode_audio=_wav_bytes_to_pcm16_16k,
+        upload_audio=upload_audio_chunk,
+    )
 
 
 @sync_phase('firestore')
