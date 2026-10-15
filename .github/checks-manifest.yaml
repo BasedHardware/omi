@@ -195,6 +195,11 @@ checks:
     triggers: ["backend/database/screen_activity.py", "backend/tests/unit/test_screen_activity_batch_resilience.py", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "Deduplicate documents in screen activity batch commits to prevent Firestore 400 contention errors, enforce 499-op commit chunking, and validate uid inputs"
+  - id: limitless-macosx-metadata-tests
+    command: ["python3", "backend/tests/unit/test_limitless_macosx_metadata.py"]
+    triggers: ["backend/utils/imports/limitless.py", "backend/tests/unit/test_limitless_macosx_metadata.py", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "Limitless ZIP import must skip macOS __MACOSX resource forks and AppleDouble dotfiles to prevent false-positive failed files (#21707)"
   - id: go-device-sdk-tests
     command: ["go", "-C", "sdks/device/go", "test", "-race", "./..."]
     triggers: ["sdks/device/go/**"]

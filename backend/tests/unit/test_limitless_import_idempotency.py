@@ -415,3 +415,60 @@ def test_cancelling_an_import_stops_the_worker(store, monkeypatch, tmp_path):
     _run_import(tmp_path, _zip_bytes(lifelogs))
 
     assert len(store.docs) < len(lifelogs), "the worker kept importing after the cancel"
+
+
+def test_is_lifelog_path():
+    # Valid paths
+    assert limitless.is_lifelog_path("lifelogs/2025-10-08_07h00m25s_Title.md") is True
+    assert limitless.is_lifelog_path("export_folder/lifelogs/2025-10-08_07h00m25s_Title.md") is True
+    assert limitless.is_lifelog_path("lifelogs_export/2025-10-08_07h00m25s_Title.md") is True
+
+    # macOS metadata files (should be excluded)
+    assert limitless.is_lifelog_path("__MACOSX/lifelogs/._2025-10-08_07h00m25s_Title.md") is False
+    assert limitless.is_lifelog_path("export/__MACOSX/lifelogs/._2025-10-08_07h00m25s_Title.md") is False
+    assert limitless.is_lifelog_path("lifelogs/._2025-10-08_07h00m25s_Title.md") is False
+    assert limitless.is_lifelog_path("lifelogs/._other.md") is False
+
+    # Hidden files, directory markers, non-markdown
+    assert limitless.is_lifelog_path("lifelogs/.DS_Store") is False
+    assert limitless.is_lifelog_path("lifelogs/.hidden.md") is False
+    assert limitless.is_lifelog_path("lifelogs/") is False
+    assert limitless.is_lifelog_path("__MACOSX/") is False
+    assert limitless.is_lifelog_path("lifelogs/notes.txt") is False
+    assert limitless.is_lifelog_path("") is False
+
+
+def test_limitless_import_ignores_macosx_metadata_and_appledouble(tmp_path, store, monkeypatch):
+    job_updates = []
+
+    def mock_update(job_id, fields):
+        job_updates.append(fields)
+
+    monkeypatch.setattr(limitless.import_jobs_db, "update_import_job", mock_update)
+
+    files = {
+        f"lifelogs/{FN_A}": _lifelog_md("Valid lifelog content"),
+        "__MACOSX/lifelogs/._" + FN_A: b"\x00\x05\x16\x07AppleDoubleBinaryBytes",
+        "lifelogs/._" + FN_A: b"\x00\x05\x16\x07AppleDoubleBinaryBytes",
+        "lifelogs/.DS_Store": b"\x00\x00\x00\x01Bud1",
+    }
+
+    buf = io.BytesIO()
+    with ZipFile(buf, "w") as zf:
+        for path, content in files.items():
+            zf.writestr(path, content)
+
+    _run_import(tmp_path, buf.getvalue())
+
+    # Only the genuine lifelog should be imported
+    expected_cid = limitless.conversation_id_for_lifelog(UID, FN_A)
+    assert list(store.docs) == [expected_cid]
+
+    # Verify total_files was recorded as 1, not 3
+    total_files_updates = [u['total_files'] for u in job_updates if 'total_files' in u]
+    assert total_files_updates == [1]
+
+    # Completed status should report 0 failed files
+    completed_updates = [u for u in job_updates if u.get('status') == 'completed']
+    assert len(completed_updates) == 1
+    assert completed_updates[0].get('error') is None
