@@ -641,7 +641,12 @@ def test_apple_states_recreate_without_carrying_stale_markers(world, marker):
     world.default_app = 'apple_reminders'
     world.process('conv-1', [_item(BUDGET, DUE)])
     old_id = world.ids()[BUDGET]
-    action_items_db.update_action_item(UID, old_id, {**marker, 'completed': True})
+    # Seed a historical mixed-marker row directly: the export PATCH now
+    # clears sync_requested when exported=True (#21530). Calling that writer
+    # would normalize away the pending-Apple state this read-side test covers.
+    stored = world.store.docs[f'users/{UID}/action_items/{old_id}']
+    stored.update({**marker, 'completed': True})
+    assert all(stored.get(field) == value for field, value in marker.items())
     world.process('conv-1', [_item(BUDGET, DUE)])
     new_id = world.ids()[BUDGET]
     assert new_id != old_id and old_id not in world.store.tasks()

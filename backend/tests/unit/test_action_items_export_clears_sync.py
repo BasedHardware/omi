@@ -28,7 +28,7 @@ def _install_fake_db(monkeypatch):
     writes = []
 
     doc_ref = MagicMock()
-    doc_ref.get.return_value = SimpleNamespace(exists=True)
+    doc_ref.get.return_value = SimpleNamespace(exists=True, to_dict=lambda: {'completed': False})
     doc_ref.update.side_effect = lambda data: writes.append(data)
 
     items_collection = MagicMock()
