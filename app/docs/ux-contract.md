@@ -9,6 +9,9 @@ Primitives live in `lib/ui/` (`omi_tokens.dart`, `components/`, `feedback/`, `fo
 `prompts/`). This is the mobile twin of the macOS contract (`desktop/macos/.../ux-contract.md`,
 INV-UI-2): same rules where the platforms agree, platform-correct where they do not.
 
+Frame cost (UI-isolate work, rebuild cascades, blur, image decode) has its own rules and guard:
+[performance.md](performance.md), `INV-PERF-1`.
+
 Guard: `INV-UI-3` ([`product/invariants/mobile-ux-contract.md`](../../product/invariants/mobile-ux-contract.md))
 runs `.github/scripts/check_mobile_ux_contract.py`, a per-file no-increase ratchet over the
 hand-rolled patterns named below (rule ids in `code`). A deliberate exception ends its line with

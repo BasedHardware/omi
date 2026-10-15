@@ -15986,5 +15986,139 @@
     "chatAppsWaitlistJoined": "You're on the waitlist. We'll let you know when there's room.",
     "@chatAppsWaitlistJoined": {
         "description": "Confirmation after joining a chat app channel waitlist"
+    },
+    "onboardingActCongratsTitle": "You're all set, {name}",
+    "@onboardingActCongratsTitle": {
+        "description": "Activation: congratulations title with the user's first name",
+        "placeholders": {
+            "name": {
+                "type": "String",
+                "example": "Yinka"
+            }
+        }
+    },
+    "onboardingActDemoSummary": "Lunch with Sam, who's moving to Lisbon in June. You want to send the deck to your team by Friday and grab milk on the way home.",
+    "@onboardingActDemoSummary": {
+        "description": "Activation slide illustration: example summary line"
+    },
+    "onboardingActDemoTask1": "Send the deck to the team by Friday",
+    "@onboardingActDemoTask1": {
+        "description": "Activation slide illustration: example task"
+    },
+    "onboardingActDemoTask2": "Grab milk on the way home",
+    "@onboardingActDemoTask2": {
+        "description": "Activation slide illustration: example task"
+    },
+    "onboardingActDemoTitle": "Lunch with Sam",
+    "@onboardingActDemoTitle": {
+        "description": "Activation slide illustration: example note title"
+    },
+    "onboardingActDictateBody": "Say it your way. Omi handles the rest.",
+    "@onboardingActDictateBody": {
+        "description": "Activation: line under the dictation title"
+    },
+    "onboardingActDictateBodyOmi": "Just talk. Your Omi is listening.",
+    "@onboardingActDictateBodyOmi": {
+        "description": "Onboarding dictation subtitle when the words come from the connected Omi"
+    },
+    "onboardingActDictateExample": "Just had lunch with Sam, she's moving to Lisbon in June! Remind me to send the deck to my team by Friday, and to grab milk on the way home.",
+    "@onboardingActDictateExample": {
+        "description": "Activation: faded example in the dictation card (casual tone; keep 'Remind me' so Omi keeps it; Sam and Lisbon are example names)"
+    },
+    "onboardingActDictateHint": "Tap the check when you're done",
+    "@onboardingActDictateHint": {
+        "description": "Activation: hint in the dictation bar next to the check button"
+    },
+    "onboardingActDictateTitle": "Tell Omi about your day",
+    "@onboardingActDictateTitle": {
+        "description": "Activation: dictation step title"
+    },
+    "onboardingActIntro": "Let's try Omi.",
+    "@onboardingActIntro": {
+        "description": "Activation: animated line before the demo slides"
+    },
+    "onboardingActJustNow": "Just now",
+    "@onboardingActJustNow": {
+        "description": "Time label on the first note Omi wrote in onboarding"
+    },
+    "onboardingActMicAllow": "Allow Microphone",
+    "@onboardingActMicAllow": {
+        "description": "Activation: button that shows the microphone system prompt"
+    },
+    "onboardingActMicBody": "So Omi can hear you when you talk to it.",
+    "@onboardingActMicBody": {
+        "description": "Activation: why the microphone is needed"
+    },
+    "onboardingActMicFallbackBody": "Your Omi isn't sending audio yet. Use your phone for now.",
+    "@onboardingActMicFallbackBody": {
+        "description": "Onboarding microphone ask when the connected Omi is not streaming"
+    },
+    "onboardingActMicTitle": "Omi needs your microphone",
+    "@onboardingActMicTitle": {
+        "description": "Activation: microphone pre-permission title (phone users)"
+    },
+    "onboardingActNoAudioOmi": "Can't hear your Omi. Make sure it's on and close by.",
+    "@onboardingActNoAudioOmi": {
+        "description": "Onboarding dictation hint after a while with no words from the Omi"
+    },
+    "onboardingActNoAudioPhone": "Can't hear you yet. Try speaking a little louder.",
+    "@onboardingActNoAudioPhone": {
+        "description": "Onboarding dictation hint after a while with no words from the phone microphone"
+    },
+    "onboardingActNotesLabel": "Your day, summarized",
+    "@onboardingActNotesLabel": {
+        "description": "Activation: small label above the generated summary"
+    },
+    "onboardingActPhoneMic": "Phone microphone",
+    "@onboardingActPhoneMic": {
+        "description": "Activation: which microphone is listening (phone)"
+    },
+    "onboardingActRateTitle": "Enjoying Omi so far?",
+    "@onboardingActRateTitle": {
+        "description": "Activation: rating ask on the congratulations screen"
+    },
+    "onboardingActRemembers": "Omi remembers so you don't have to",
+    "@onboardingActRemembers": {
+        "description": "Line above the summary title at the end of the onboarding dictation"
+    },
+    "onboardingActSavedToTasks": "Saved to your tasks",
+    "@onboardingActSavedToTasks": {
+        "description": "Confirmation under the to-dos Omi found in onboarding"
+    },
+    "onboardingActTasksLabel": "Omi caught your to-dos",
+    "@onboardingActTasksLabel": {
+        "description": "Activation: small label above the generated tasks"
+    },
+    "onboardingActWriting": "Summarizing…",
+    "@onboardingActWriting": {
+        "description": "Activation: shown while Omi processes the dictation"
+    },
+    "onboardingActYourWords": "Here's what you said",
+    "@onboardingActYourWords": {
+        "description": "Activation: fallback label when no summary could be made"
+    },
+    "onboardingConnectOmi": "Connect Omi",
+    "@onboardingConnectOmi": {
+        "description": "Onboarding connect step title; Omi is the brand name of the wearable"
+    },
+    "onboardingConnectTapToConnect": "Tap your Omi to connect.",
+    "@onboardingConnectTapToConnect": {
+        "description": "Connect Omi onboarding step, under the title once an Omi is found nearby"
+    },
+    "onboardingNoOmiYet": "Don't have your Omi yet?",
+    "@onboardingNoOmiYet": {
+        "description": "Onboarding connect step: small prompt for people without their Omi device"
+    },
+    "onboardingOmiNotOrdered": "Not ordered yet",
+    "@onboardingOmiNotOrdered": {
+        "description": "Onboarding connect step: choice for people who have not ordered an Omi device"
+    },
+    "onboardingOmiOrdered": "I've ordered mine",
+    "@onboardingOmiOrdered": {
+        "description": "Onboarding connect step: choice for people whose Omi device is on its way"
+    },
+    "onboardingPermissionTapToFix": "Tap to fix",
+    "@onboardingPermissionTapToFix": {
+        "description": "Onboarding permissions: shown on a denied permission card; tapping opens Settings"
     }
 }

@@ -18,6 +18,7 @@ import 'package:omi/models/custom_stt_config.dart';
 import 'package:omi/models/stt_provider.dart';
 import 'package:omi/services/capture/capture_policy.dart';
 import 'package:omi/utils/logger.dart';
+import 'package:omi/utils/off_ui_isolate.dart';
 import 'package:omi/startup/boot_journal.dart';
 import 'package:omi/startup/boot_recovery.dart';
 import 'package:omi/env/physical_qualification.dart';
@@ -1140,8 +1141,29 @@ class SharedPreferencesUtil {
   }
 
   set cachedConversations(List<ServerConversation> value) {
+    _cachedConversationsGeneration++;
     final List<String> conversations = value.map((e) => jsonEncode(e.toJson())).toList();
     saveStringList('cachedConversations', conversations);
+  }
+
+  /// Bumped by every cache write and by [clear]; an older background write
+  /// never lands over a newer write or a sign-out clear.
+  static int _cachedConversationsGeneration = 0;
+
+  @visibleForTesting
+  static int cachedConversationsBackgroundEncodeThreshold = 20;
+
+  /// Same as the [cachedConversations] setter, but encodes a large list off the
+  /// UI isolate. The cache holds full transcripts and is refreshed on resume.
+  Future<void> cacheConversations(List<ServerConversation> value) async {
+    final generation = ++_cachedConversationsGeneration;
+    final snapshot = List<ServerConversation>.of(value);
+    final encoded = await offUiIsolate(() => [for (final c in snapshot) jsonEncode(c.toJson())],
+        size: snapshot.length,
+        threshold: cachedConversationsBackgroundEncodeThreshold,
+        debugName: 'conversation_cache_encode');
+    if (generation != _cachedConversationsGeneration) return;
+    await saveStringList('cachedConversations', encoded);
   }
 
   List<ServerMessage> get cachedMessages {
@@ -1507,6 +1529,8 @@ class SharedPreferencesUtil {
   Future<bool> remove(String key) async => await _preferences?.remove(key) ?? false;
 
   Future<bool> clear() async {
+    // Drop any in-flight background conversation cache write (sign-out, account deletion).
+    _cachedConversationsGeneration++;
     _authTokenCache = '';
     await _deleteSecureAuthToken();
     return await _preferences?.clear() ?? false;

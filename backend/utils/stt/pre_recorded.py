@@ -825,6 +825,7 @@ def parakeet_prerecorded_from_bytes(
     require_provider_environment(PrerecordedSTTService.PARAKEET)
     api_url = os.environ['HOSTED_PARAKEET_API_URL']
 
+    original_audio_bytes = audio_bytes
     try:
         if encoding:
             audio_bytes = _wrap_pcm_as_wav(audio_bytes, sample_rate, channels)
@@ -906,7 +907,7 @@ def parakeet_prerecorded_from_bytes(
         logger.error('Parakeet prerecorded error exception_type=%s attempt=%s', type(e).__name__, attempts + 1)
         if attempts < 1 and _verification_deadline.get() is None:
             return parakeet_prerecorded_from_bytes(
-                audio_bytes, sample_rate, diarize, attempts + 1, None, channels, language, return_language
+                original_audio_bytes, sample_rate, diarize, attempts + 1, encoding, channels, language, return_language
             )
         raise RuntimeError(f'Parakeet transcription failed after {attempts + 1} attempts') from e
 

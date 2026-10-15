@@ -151,17 +151,19 @@ class MessagingStore:
             if existing.get('uid') and existing['uid'] != uid:
                 raise PermissionError('Identity already linked')
             cap = channel_policy(message.channel).get('seat_cap')
-            capacity = self.capacity(message.channel)
-            member_ref = capacity.collection('members').document(uid)
-            # Track every link per user, including legacy links after cap activation.
-            member = member_ref.get(transaction=tx).to_dict() or {}
-            seats = capacity.get(transaction=tx).to_dict() or {}
-            link_ids = member.get('link_ids', [])
-            if cap is not None and not link_ids:
-                if seats.get('initialized') is not True:
-                    raise PermissionError('Seat counter needs reconciliation')
-                if seats.get('count', 0) >= cap:
-                    raise SeatFull()
+            capacity = member_ref = None
+            link_ids, seats = [], {}
+            if cap is not None:
+                capacity = self.capacity(message.channel)
+                member_ref = capacity.collection('members').document(uid)
+                member = member_ref.get(transaction=tx).to_dict() or {}
+                seats = capacity.get(transaction=tx).to_dict() or {}
+                link_ids = member.get('link_ids', [])
+                if not link_ids:
+                    if seats.get('initialized') is not True:
+                        raise PermissionError('Seat counter needs reconciliation')
+                    if seats.get('count', 0) >= cap:
+                        raise SeatFull()
             link = dict(
                 uid=uid,
                 channel=message.channel,
@@ -175,7 +177,7 @@ class MessagingStore:
             )
             for name, default in _SETTING_DEFAULTS.items():
                 link[name] = existing.get(name, default)
-            if cap is not None or seats.get('initialized'):
+            if capacity is not None and member_ref is not None:
                 if identity.id not in link_ids:
                     tx.set(member_ref, {'link_ids': [*link_ids, identity.id]})
                     if not link_ids:
@@ -227,18 +229,19 @@ class MessagingStore:
             link = identity.get(transaction=tx).to_dict() or {}
             if link.get('uid') != uid:
                 raise PermissionError('Link not found')
-            capacity = self.capacity(link.get('channel', 'unknown'))
-            member_ref = capacity.collection('members').document(uid)
-            member = member_ref.get(transaction=tx).to_dict() or {}
-            seats = capacity.get(transaction=tx).to_dict() or {}
-            link_ids = member.get('link_ids', [])
-            if link_id in link_ids:
-                remaining = [value for value in link_ids if value != link_id]
-                if remaining:
-                    tx.set(member_ref, {'link_ids': remaining})
-                else:
-                    tx.delete(member_ref)
-                    tx.set(capacity, {'count': max(0, seats.get('count', 0) - 1)}, merge=True)
+            if channel_policy(link.get('channel', 'unknown')).get('seat_cap') is not None:
+                capacity = self.capacity(link.get('channel', 'unknown'))
+                member_ref = capacity.collection('members').document(uid)
+                member = member_ref.get(transaction=tx).to_dict() or {}
+                seats = capacity.get(transaction=tx).to_dict() or {}
+                link_ids = member.get('link_ids', [])
+                if link_id in link_ids:
+                    remaining = [value for value in link_ids if value != link_id]
+                    if remaining:
+                        tx.set(member_ref, {'link_ids': remaining})
+                    else:
+                        tx.delete(member_ref)
+                        tx.set(capacity, {'count': max(0, seats.get('count', 0) - 1)}, merge=True)
             tx.update(identity, {'active': False, 'generation': str(uuid4())})
             return link
 
@@ -280,10 +283,16 @@ class MessagingStore:
         head = identity.collection('inbound_chat_heads').document(key(message.external_chat_id))
         now = datetime.now(timezone.utc)
         encrypted = encryption.encrypt(json.dumps(payload), identity.id)
+        album = (
+            identity.collection('inbox').document(key(message.external_chat_id, 'album:' + message.media_group_id))
+            if message.media_group_id
+            else None
+        )
 
         @firestore.transactional
         def apply(tx):
             exists = ref.get(transaction=tx).exists
+            album_row = album.get(transaction=tx).to_dict() if album is not None else None
             identity_row = identity.get(transaction=tx).to_dict() or {}
             if identity_row.get('cleanup_pending'):
                 raise ValueError('Identity cleanup in progress')
@@ -291,6 +300,41 @@ class MessagingStore:
             if exists:
                 return None
             tx.set(identity, {'last_inbound_at': now}, merge=True)
+            if album is not None and (album_row is None or album_row.get('status') == 'pending'):
+                from utils.messaging.albums import merge_album, album_ready_at
+
+                combined = merge_album(
+                    json.loads(encryption.decrypt(album_row['payload'], identity.id)) if album_row else None,
+                    payload,
+                )
+                # Every provider message retains its own dedup tombstone. The encrypted
+                # album row is the one FIFO job; an already-running album admits late parts separately.
+                tx.create(
+                    ref,
+                    {
+                        'status': 'done',
+                        'created_at': now,
+                        'done_at': now,
+                        'channel': message.channel,
+                        'provider': message.provider,
+                    },
+                )
+                tx.set(
+                    album,
+                    {
+                        'payload': encryption.encrypt(json.dumps(combined), identity.id),
+                        'status': 'pending',
+                        'created_at': album_row['created_at'] if album_row else now,
+                        'album_ready_at': album_ready_at(album_row, now),
+                        'channel': message.channel,
+                        'provider': message.provider,
+                    },
+                )
+                if advances_inbound_head(message, prior):
+                    tx.set(
+                        head, {'provider_message_id': message.provider_message_id, 'received_at': message.received_at}
+                    )
+                return album.path
             tx.create(
                 ref,
                 {
@@ -365,6 +409,8 @@ class MessagingStore:
                         path,
                         _age(row, now),
                     )
+                if row.get('album_ready_at', now) > now:
+                    return None
                 if row['status'] == 'pending' and (take_head or head.reference.path == path):
                     payload = json.loads(encryption.decrypt(row['payload'], ref.parent.parent.id))
             for candidate, reason, age in retired:

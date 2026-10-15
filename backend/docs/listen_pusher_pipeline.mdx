@@ -6,6 +6,25 @@ description: "Sequence diagrams and finalization policy for the /v4/listen WebSo
 
 # Listen + Pusher Pipeline — Sequence Diagrams
 
+## Windowed live transcription deadlines
+
+`PARAKEET_WINDOW_DEADLINE_CUT_ENABLED` defaults to `false` in code and
+both listen manifests. Qualification must explicitly enable it in the target
+listen cohort. While enabled, a successful nonempty POST can release its held
+tail through the existing timestamp-preserving cut only when the remaining
+first-text/progress deadline is at most
+`PARAKEET_WINDOW_DEADLINE_CUT_POST_LATENCY_SECONDS` (default `1.2`, approximately
+the observed POST p95; invalid/nonpositive values use the default). A normal
+first POST after six seconds of capture retains sentence anchoring. Neither a
+full audio pace nor the next pacing wait increases the allowance.
+
+Emitted text advances the existing capture anchor and cancels the applicable
+deadline. Empty answers and stalled in-flight POSTs retain the original deadline
+and replay/failover behavior. This opt-in mitigation only rescues a nonempty
+answer returning near expiry; it does not extend the deadline or guarantee
+survival for a held answer returned earlier. Forced releases remain included in
+`omi_stt_window_forced_cuts_total`.
+
 ## Demand-driven live provider lane
 
 The `/v4/listen` runtime owns the dark-by-default live-demand policy. Existing
@@ -48,6 +67,13 @@ Rollout, lease/capacity details, test acceptance and rollback belong to the
 [demand-driven live STT runbook](./operational/demand-driven-live-stt.md). The
 lead starts at at most 5% and waits at least 12 hours before any expansion.
 
+
+Parakeet `/v3/stream` receives literal `finalize`, flushes its remaining
+transcript segments, then sends WebSocket close 1000 after every tail send has
+succeeded (including an empty tail). Returning without that frame previously
+made production callers observe synthetic 1006. Client disconnects and failed
+flush/tail delivery retain their existing failure lifecycle; session cleanup and
+admission release run in every case.
 
 The standalone `POST /v1/stt/transcribe` Parakeet proxy uses the shared
 managed-transcription allowance before calling the provider. It probes the
@@ -4661,6 +4687,34 @@ existing dark revision before dispatching the cohort workflow.
 Policy, storage-parity evidence, bounds, VAD benchmark and lead-owned 5%/12-hour
 ramp: [mobile Standard batch](../../app/docs/mobile-standard-batch.md).
 
+### Forward canonical audio archive (default off)
+
+`AUDIO_CANONICAL_PACKING_ENABLED=true` plus `BUCKET_CANONICAL_AUDIO` routes new
+mobile as-captured Opus to a separate regional canonical archive. Pusher also
+archives its supplied PCM16 capture bytes there after committing playback. Both
+intakes retain their existing primary writes first; optional canonical errors
+are logged and metered without failing those writes. Mobile keeps writing its
+`raw-mobile-batch/` object during rollout. Successful bucket policy reads are
+cached for five minutes per client and bucket. No existing objects are packed. Owner/day tar shards carry stored-byte
+SHA-256, source generations, formats, provenance and conversation ranges. Source
+erasure requires hash verification and embedded-manifest round-trip; durable
+owner intents resume partial cleanup. Account wipe sweeps sources, packs and
+indexes even when the flag is off. Linked conversation audio deletion rewrites
+only affected packs. Bucket provisioning, exact lifecycle rules, pricing and
+rollback are in `deploy/storage-lifecycle/FORWARD.md`; this code does not apply
+bucket policies or deploy a scheduler.
+
+Canonical conversation erasure has a durable owner-scoped deletion marker.
+Intake checks it before and after source/receipt publication, cleans racing
+uploads, and packing rejects marked captures. Manual merges preserve canonical
+bytes, retarget packed and unpacked conversation ranges to the survivor, and
+publish transitive source→survivor links for late retries. Manifest rewrites are
+durable and verified; later survivor deletion re-lists sources, indexes and packs
+before releasing the owner gate. Only the explicit privacy endpoint and account
+wipe erase canonical audio. Shared cache/merge cleanup never implies privacy erasure.
+PCM ranges include sample counts, full tail duration and plaintext byte ranges;
+enhanced encryption envelopes use a **big-endian** uint32 length prefix.
+
 ### Shared Gateway caller routes
 
 NLLB, VAD and every speaker-embedding host (including Parakeet fallback) use
@@ -4675,6 +4729,28 @@ Long-audio batch qualification uses the same final-pass HTTP client and public
 corpus only; see [the stage C load method and probe commands](diarizer-batch-stagec-load.md).
 Its wall/RTF scenarios remain unqualified until the lead fills the timing table.
 
+### As-captured archive trial
+
+The default-off `AUDIO_ARCHIVE_*` cohort captures original live Opus packets
+before they are transformed for STT/pusher, using the same
+`omi-wal-uint32le-opus-v1` container and shared canonical writer as the mobile
+Standard archive. Live packs are owner/conversation/hour/channel bounded at
+16 MiB; non-Opus PCM uses lossless FLAC. v1/v2 offline intake archives original
+uploaded files before decode and acceptance. Raw metadata records unknown
+legacy provenance explicitly; storage consent never authorizes training.
+
+PCM remains available in dual-write. READ prefers complete, checksum-verified
+raw spans; STOP_PCM skips a batch only when committed raw reconstructs every
+PCM range, verified by capture-PCM hash or byte-identical decode. Missing spans,
+checksum failures or identity mismatches keep today's
+path. Rollback STOP_PCM first; retain READ for raw-only history until verified
+PCM regeneration. Archive tail flushing runs after STT drain, outside its deadline.
+Regional cache routing never relocates canonical capture. Account and conversation
+deletion purge live and noncurrent generations across configured buckets.
+
+The [archive runbook](runbooks/sync-ingest-archive.md) owns flag phases, bucket
+provisioning, C023 estimates, playback/byte/deletion canaries and David's
+≤5%/≥12h ramp. No live deployment or deletion is part of this change.
 ### Recent LEGACY offline-sync admission
 
 V2 resolves identity from `X-App-Platform` + `X-Device-Id-Hash`, but grants
