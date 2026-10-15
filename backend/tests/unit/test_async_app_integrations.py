@@ -5,6 +5,7 @@ use asyncio.gather + httpx instead of Thread+join + requests.
 """
 
 import inspect
+import logging
 import os
 import sys
 import types
@@ -547,6 +548,32 @@ class TestAsyncTriggerRealtimeAudioBytes:
             await app_integrations.trigger_realtime_audio_bytes("uid-1", 8000, bytearray(b'\x00' * 10))
 
         assert mock_client.post.call_count == 2
+
+    @pytest.mark.asyncio
+    async def test_success_status_is_debug_and_http_error_stays_warning(self, caplog):
+        app = _make_app("a1", "https://app1.test/hook", triggers_audio=True)
+        ok = MagicMock()
+        ok.status_code = 200
+        failed = MagicMock()
+        failed.status_code = 502
+        mock_client = AsyncMock()
+        mock_client.post = AsyncMock(side_effect=[ok, failed])
+
+        with caplog.at_level(logging.DEBUG, logger="utils.app_integrations"):
+            with patch.object(app_integrations, "get_available_apps", return_value=[app]), patch.object(
+                app_integrations, "get_webhook_client", return_value=mock_client
+            ):
+                await app_integrations.trigger_realtime_audio_bytes("uid-1", 8000, bytearray(b'\x00' * 10))
+                await app_integrations.trigger_realtime_audio_bytes("uid-1", 8000, bytearray(b'\x00' * 10))
+
+        status_records = [record for record in caplog.records if "status:" in record.getMessage()]
+        assert any(
+            record.levelno == logging.DEBUG and "status: 200" in record.getMessage() for record in status_records
+        )
+        assert any(
+            record.levelno == logging.WARNING and "status: 502" in record.getMessage() for record in status_records
+        )
+        assert not any(record.levelno == logging.INFO for record in status_records)
 
     @pytest.mark.asyncio
     async def test_audio_url_with_existing_query_string_uses_ampersand(self):
