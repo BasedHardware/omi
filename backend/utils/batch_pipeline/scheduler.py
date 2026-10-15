@@ -61,16 +61,22 @@ def _defer(job: dict, now: float, reason: str) -> None:
 
 
 class Scheduler:
-    def __init__(self, store: Store, *, metrics: QueueMetrics | None = None):
+    def __init__(self, store: Store, *, metrics: QueueMetrics | None = None, pool: str = 'batch'):
+        if pool not in {'batch', 'live'}:
+            raise ValueError('pool must be batch or live')
         self.store = store
         self.metrics = metrics
+        self.pool = pool
 
     def enqueue(self, item: WorkItem, now: float) -> bool:
         def commit(tx):
             previous = tx.get('jobs', item.segment_id)
             immutable = {**asdict(item), 'priority': int(item.priority)}
             if previous:
-                if any(previous.get(key) != value for key, value in immutable.items()):
+                if any(
+                    previous.get(key, 'conversation' if key == 'unit_kind' else None) != value
+                    for key, value in immutable.items()
+                ):
                     raise ValueError('segment ID reused with different immutable work')
                 return False
             key = owner_key(item.owner_id)
@@ -103,6 +109,10 @@ class Scheduler:
     def pull(self, now: float, limit: int = 1, *, capacity: PoolCapacity | None = None) -> list[LeasedWork]:
         if not 1 <= limit <= 32:
             raise ValueError('pull limit must be in [1, 32]')
+        if self.pool == 'live' and (capacity is None or not capacity.shared_with_live):
+            return []
+        if self.pool == 'batch' and capacity is not None and capacity.shared_with_live:
+            return []
         # No snapshot is the dedicated-batch worker contract only. Shared live
         # callers must supply a fresh exclusive-admission snapshot every pull.
         allow_backfill, max_seconds, backfill_budget = True, 7200.0, limit
@@ -112,7 +122,12 @@ class Scheduler:
             backfill_budget = max(0, slots - capacity.reserved_fresh_slots)
         result = []
         for _ in range(limit):
-            lease = self._pull_one(now, allow_backfill=allow_backfill and backfill_budget > 0, max_seconds=max_seconds)
+            lease = self._pull_one(
+                now,
+                allow_backfill=allow_backfill and backfill_budget > 0,
+                max_seconds=max_seconds,
+                shared_gpu_id=capacity.gpu_id if capacity is not None and capacity.shared_with_live else None,
+            )
             if lease is None:
                 break
             result.append(lease)
@@ -122,10 +137,18 @@ class Scheduler:
                 break  # One non-preemptible short item, never a mixed long batch.
         return result
 
-    def _pull_one(self, now: float, *, allow_backfill: bool, max_seconds: float) -> LeasedWork | None:
+    def _pull_one(
+        self, now: float, *, allow_backfill: bool, max_seconds: float, shared_gpu_id: str | None = None
+    ) -> LeasedWork | None:
         token = uuid.uuid4().hex  # Stable across this transaction's retries.
 
         def commit(tx):
+            gpu_key = owner_key(shared_gpu_id) if shared_gpu_id is not None else ''
+            gpu = tx.get('gpus', gpu_key) if gpu_key else {}
+            # A model cannot be preempted by lease expiry. Keep the hardware
+            # reservation until its owner explicitly acknowledges GPU quiescence.
+            if gpu.get('token'):
+                return None
             control = _control(tx)
             ring = next((control['rings'][str(int(p))] for p in Priority if control['rings'][str(int(p))]), None)
             if not ring:
@@ -137,7 +160,8 @@ class Scheduler:
                 queue_key = ring[0]
                 queue = tx.get('queues', queue_key)
                 job = tx.get('jobs', queue['head'])
-                if job['duration_seconds'] > max_seconds:
+                job.setdefault('unit_kind', 'conversation')
+                if job['duration_seconds'] > max_seconds or (gpu_key and job['unit_kind'] != 'capture_span'):
                     ring.append(ring.pop(0))
                     continue
                 if not queue['continuing']:
@@ -154,7 +178,19 @@ class Scheduler:
                 if not queue['head']:
                     queue.update(tail='', deficit=0.0, continuing=False)
                     ring.pop(0)
-                job.update(state='leased', token=token, attempt=job['attempt'] + 1, lease_until=now + LEASE_SECONDS)
+                job.update(
+                    state='leased',
+                    token=token,
+                    attempt=job['attempt'] + 1,
+                    lease_until=now + LEASE_SECONDS,
+                    shared_gpu_key=gpu_key,
+                )
+                if gpu_key:
+                    tx.put(
+                        'gpus',
+                        gpu_key,
+                        {'token': token, 'segment_id': job['segment_id'], 'lease_until': job['lease_until']},
+                    )
                 tx.put('queues', queue_key, queue)
                 tx.put('jobs', job['segment_id'], job)
                 tx.put('control', 'scheduler', control)
@@ -176,7 +212,14 @@ class Scheduler:
             job = tx.get('jobs', segment_id)
             if not _owns(job, token, now):
                 return False
+            gpu_key = job.get('shared_gpu_key')
+            gpu = tx.get('gpus', gpu_key) if gpu_key else {}
+            if gpu_key and gpu.get('token') != token:
+                return False
             job['lease_until'] = max(job['lease_until'], now + LEASE_SECONDS)
+            if gpu_key:
+                gpu['lease_until'] = job['lease_until']
+                tx.put('gpus', gpu_key, gpu)
             tx.put('jobs', segment_id, job)
             return True
 
@@ -250,6 +293,28 @@ class Scheduler:
             job.update(state='ready', attempt=0, available_at=now, failure='')
             _append(tx, control, job)
             tx.put('jobs', segment_id, job)
+            return True
+
+        return self.store.run(commit)
+
+    def acknowledge_gpu_idle(self, gpu_id: str, token: str) -> bool:
+        """Only the hardware admission owner may call this after GPU quiescence.
+
+        Complete/fail/lease expiry never proves non-preemptible inference stopped.
+        An orphaned shared reservation stays closed until that owner verifies idle.
+        """
+        if not gpu_id or len(gpu_id) > 128 or not token:
+            raise ValueError('bounded GPU identity and current reservation token required')
+
+        def commit(tx):
+            key = owner_key(gpu_id)
+            gpu = tx.get('gpus', key)
+            if not gpu.get('token'):
+                return gpu.get('released_token') == token
+            if gpu['token'] != token:
+                return False
+            gpu.update(token='', lease_until=0.0, released_token=token)
+            tx.put('gpus', key, gpu)
             return True
 
         return self.store.run(commit)

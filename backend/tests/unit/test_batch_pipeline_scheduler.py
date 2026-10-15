@@ -59,8 +59,8 @@ class MemoryStore:
         return min(jobs) if jobs else None
 
 
-def item(segment, owner='heavy', capture=1, duration=30, priority=Priority.DEEP):
-    return WorkItem(segment, owner, capture, f'gs://synthetic/{segment}', duration, priority)
+def item(segment, owner='heavy', capture=1, duration=30, priority=Priority.DEEP, unit_kind='conversation'):
+    return WorkItem(segment, owner, capture, f'gs://synthetic/{segment}', duration, priority, unit_kind)
 
 
 def test_heavy_owner_does_not_starve_light_owner():
@@ -278,10 +278,11 @@ def test_capacity_reserves_fresh_slots_and_rejects_stale_slack():
 def test_shared_live_requires_short_exclusive_slack_and_default_off_gate(monkeypatch):
     from utils.batch_pipeline.capacity import PoolCapacity
 
-    queue = Scheduler(MemoryStore())
+    queue = Scheduler(MemoryStore(), pool='live')
     queue.enqueue(item('long', duration=3600), 0)
-    queue.enqueue(item('short', owner='short', duration=120), 0)
-    capacity = PoolCapacity(10, 1, shared_with_live=True, memory_headroom_bytes=8 * 1024**3)
+    queue.enqueue(item('over-boundary', owner='over-boundary', duration=120.001, unit_kind='capture_span'), 0)
+    queue.enqueue(item('short', owner='short', duration=120, unit_kind='capture_span'), 0)
+    capacity = PoolCapacity(10, 1, shared_with_live=True, memory_headroom_bytes=8 * 1024**3, gpu_id='gpu-test')
     monkeypatch.delenv('BATCH_PIPELINE_SHARED_LIVE_ENABLED', raising=False)
     assert queue.pull(10, capacity=capacity) == []
     monkeypatch.setenv('BATCH_PIPELINE_SHARED_LIVE_ENABLED', 'true')
@@ -294,6 +295,7 @@ def test_shared_live_requires_short_exclusive_slack_and_default_off_gate(monkeyp
         replace(capacity, gpu_utilization=0.5),
         replace(capacity, memory_headroom_bytes=0),
         replace(capacity, available_slots=2),
+        replace(capacity, gpu_id=None),
     ):
         assert queue.pull(10, capacity=unsafe) == []
 
@@ -321,3 +323,47 @@ def test_per_pool_unit_ceiling_and_malformed_capacity_fail_closed():
         PoolCapacity(10, 1, max_item_seconds=0),
     ):
         assert queue.pull(10, capacity=capacity) == []
+
+
+def test_shared_gpu_exclusivity_survives_completion_and_lease_expiry(monkeypatch):
+    from utils.batch_pipeline.contracts import PoolCapacity
+
+    monkeypatch.setenv('BATCH_PIPELINE_SHARED_LIVE_ENABLED', 'true')
+    store = MemoryStore()
+    first, second = Scheduler(store, pool='live'), Scheduler(store, pool='live')
+    for name in ('a', 'b', 'c'):
+        first.enqueue(item(name, owner=name, unit_kind='capture_span'), 0)
+
+    def capacity(now):
+        return PoolCapacity(now, 1, shared_with_live=True, memory_headroom_bytes=8 * 1024**3, gpu_id='same-gpu')
+
+    lease = first.pull(1, capacity=capacity(1))[0]
+    assert second.pull(1, capacity=capacity(1)) == []
+    assert first.heartbeat('a', lease.token, 60)
+    assert first.complete(WorkResult('a', 'gs://results/a'), lease.token, 61)
+    # Result completion alone cannot attest that asynchronous CUDA is idle.
+    assert second.pull(61, capacity=capacity(61)) == []
+    assert not first.acknowledge_gpu_idle('same-gpu', 'stale-token')
+    assert first.acknowledge_gpu_idle('same-gpu', lease.token)
+    assert first.acknowledge_gpu_idle('same-gpu', lease.token)
+    next_lease = second.pull(61, capacity=capacity(61))[0]
+    assert not first.acknowledge_gpu_idle('same-gpu', lease.token)
+    assert first.recover(182) == 1
+    # Expiry fences the old job, but never preempts/re-admits the physical GPU.
+    assert first.pull(182, capacity=capacity(182)) == []
+    assert second.acknowledge_gpu_idle('same-gpu', next_lease.token)
+    assert first.pull(182, capacity=capacity(182))[0].item.segment_id == 'c'
+
+
+def test_conversation_kind_never_runs_on_live_pool_even_when_short(monkeypatch):
+    from utils.batch_pipeline.contracts import PoolCapacity
+
+    monkeypatch.setenv('BATCH_PIPELINE_SHARED_LIVE_ENABLED', 'true')
+    queue = Scheduler(MemoryStore(), pool='live')
+    queue.enqueue(item('short-conversation', duration=30), 0)
+    capacity = PoolCapacity(1, 1, shared_with_live=True, memory_headroom_bytes=8 * 1024**3, gpu_id='gpu-kind')
+    assert queue.pull(1, capacity=capacity) == []
+    assert queue.pull(1) == []
+    assert queue.pull(1, capacity=PoolCapacity(1, 1)) == []
+    assert Scheduler(queue.store).pull(1, capacity=capacity) == []
+    assert Scheduler(queue.store).pull(1)[0].item.unit_kind == 'conversation'

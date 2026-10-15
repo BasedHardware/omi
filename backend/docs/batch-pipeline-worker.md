@@ -14,7 +14,8 @@ separate batch-only GPU service; its v2 admission caps remain independent.
 Lead's October 15 aggregate snapshot: ~1.07M jobs, 983 owners, oldest ~6 days;
 David's reported wait is 47 hours. Unbound/LEGACY capture classification routes
 ~99% to backfill. One job per owner, queue concurrency 40 (now 60), and Cloud Run
-18 instances × 6 concurrency at ~13 seconds/job constrain dispatch. GPUs average
+18 instances × 6 concurrency at ~13 seconds/job constrain dispatch; supplied
+batch estimate is ~1.5s/audio-hour; full-chain throughput remains unqualified. GPUs average
 ~7% utilization. Supplied batch RTFs are ~0.04 on T4 for pyannote and 0.0025 on L4
 for Parakeet. These are supplied measurements.
 `SYNC_LEGACY_FRESH_ENABLED` remains independently owned and unchanged.
@@ -85,7 +86,8 @@ staging/results. Never send an accepted item concurrently through the old worker
 ## B's interface
 
 `utils.batch_pipeline.contracts.WorkItem`: `segment_id`, `owner_id`,
-`capture_at` (UTC epoch seconds), `audio_uri`, `duration_seconds`, `priority`.
+`capture_at` (UTC epoch seconds), `audio_uri`, `duration_seconds`, `priority`,
+`unit_kind` (default conversation; capture_span for bounded live chunks).
 `LeasedWork`: `item`, `token`, `attempt`, `lease_until`.
 `WorkResult`: `segment_id`, `result_uri` (durable encrypted result reference),
 `outcome` (`success` or `silence`).
@@ -141,15 +143,17 @@ Queue units are conversations/capture spans (target ≤1h, hard ceiling 7200s),
 never internal ASR windows. Dedicated batch GPUs own conversation-sized jobs.
 `Scheduler.pull(..., capacity=PoolCapacity(...))` caps leases to available slots
 and protects fresh reservations; `max_item_seconds` sets each pool’s unit ceiling.
-Samples expire after 15s; invalid samples close
-admission. No-snapshot pulls are dedicated-batch-only. An off-peak trough
+Live workers declare `pool=live` and require matching snapshots; no-snapshot
+pulls are dedicated-batch-only. Samples expire after 15s. An off-peak trough
 (~25% lower listen load near 03:00Z, lead evidence) is a forecast, not slack.
 
 Shared-live borrowing defaults off (`BATCH_PIPELINE_SHARED_LIVE_ENABLED=false`).
 It requires an exclusive grant from the live pool admission owner, one slot,
-no live queue, <50% GPU utilization and ≥8GiB memory headroom. Only one ≤120s
-item may lease; longer spans wait for dedicated GPUs and are never split into
-new merge units. The external owner must prevent concurrent/reused grants.
+no live queue, <50% GPU utilization and ≥8GiB headroom. Only a ≤120s capture_span
+may lease; conversations stay dedicated. Physical `gpu_id` reservations serialize
+workers transactionally. Completion/expiry never releases hardware; the owner
+must acknowledge_gpu_idle after verified CUDA quiescence. Stale acknowledgments
+cannot clear a newer flight. Longer units are never split into merge jobs.
 These conservative thresholds are unqualified; retain the kill switch until
 model-memory and live-latency acceptance. Exporters must derive grants from
 live queue age, GPU utilization/headroom and in-flight ownership, never CPU.
@@ -161,10 +165,7 @@ results after lease loss. Bounded deficit accrual may return empty before long
 items earn credit; continue polling. Ring cap: 1024 active owners per class.
 
 Expose the registry through the worker exporter; adapter max-ready-age signals
-must exclude samples older than 60s. Batch HPA External Value targets are 30/300/3600s
-by class with qualified pool min/max. Throughput is completed-event rate;
-ambiguous replies may undercount receipts, so durable state is authoritative.
-Ten declared stage indexes need READY receipts. Emulator contention verifies
+must exclude samples older than 60s. Ten declared stage indexes need READY receipts. Emulator contention verifies
 transactions, not production throughput. Serving pump, ledger projection,
 deletion, late-capture policy and backlog migration remain qualification gates.
 

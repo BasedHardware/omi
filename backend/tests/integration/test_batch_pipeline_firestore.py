@@ -25,7 +25,7 @@ def store():
     store = FirestoreStore(f'batch_pipeline_test_{uuid.uuid4().hex}', firestore_client=client)
     yield store
     # Isolated emulator namespace only; do not delete or inspect other namespaces.
-    for table in ('jobs', 'queues', 'owners', 'control', 'results'):
+    for table in ('jobs', 'queues', 'owners', 'control', 'results', 'gpus'):
         for doc in client.collection(f'{store.namespace}_{table}').stream():
             doc.reference.delete()
     client.close()
@@ -104,3 +104,23 @@ def test_priority_and_owner_fairness_are_durable_across_instances(store):
     assert second.pull(1)[0].item.segment_id == 'h0'
     assert first.pull(1)[0].item.segment_id == 'light'
     assert second.pull(1)[0].item.segment_id == 'h1'
+
+
+def test_shared_gpu_has_one_flight_across_competing_worker_transactions(store, monkeypatch):
+    from utils.batch_pipeline.contracts import PoolCapacity
+    from dataclasses import replace
+
+    monkeypatch.setenv('BATCH_PIPELINE_SHARED_LIVE_ENABLED', 'true')
+    first, second = Scheduler(store, pool='live'), Scheduler(store, pool='live')
+    for name in ('a', 'b'):
+        first.enqueue(replace(work(name, owner=name), unit_kind='capture_span'), 0)
+    capacity = PoolCapacity(1, 1, shared_with_live=True, memory_headroom_bytes=8 * 1024**3, gpu_id='emulator-gpu')
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        futures = [pool.submit(q.pull, 1, capacity=capacity) for q in (first, second)]
+        leases = [v for f in futures for v in f.result()]
+    assert len(leases) == 1
+    lease = leases[0]
+    first.recover(122)
+    assert second.pull(122, capacity=replace(capacity, observed_at=122)) == []
+    assert first.acknowledge_gpu_idle('emulator-gpu', lease.token)
+    assert len(second.pull(122, capacity=replace(capacity, observed_at=122))) == 1

@@ -17,6 +17,7 @@ class WorkItem:
     audio_uri: str
     duration_seconds: float
     priority: Priority
+    unit_kind: str = 'conversation'
 
     def __post_init__(self):
         if not self.segment_id or len(self.segment_id) > 128 or '/' in self.segment_id:
@@ -30,6 +31,8 @@ class WorkItem:
         if not math.isfinite(self.duration_seconds) or not 0 < self.duration_seconds <= 7200:
             raise ValueError('audio duration must be in (0, 7200]')
         Priority(self.priority)
+        if self.unit_kind not in {'conversation', 'capture_span'}:
+            raise ValueError('unit_kind must be conversation or capture_span')
 
 
 @dataclass(frozen=True)

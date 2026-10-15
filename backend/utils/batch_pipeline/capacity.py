@@ -18,6 +18,7 @@ class PoolCapacity:
     gpu_utilization: float = 0.0
     memory_headroom_bytes: int = 0
     max_item_seconds: float = 7200.0
+    gpu_id: str | None = None
 
     def limits(self, now: float, *, shared_live_enabled: bool) -> tuple[int, bool, float]:
         numbers = (now, self.observed_at, self.live_queue_age_seconds, self.gpu_utilization, self.max_item_seconds)
@@ -39,6 +40,8 @@ class PoolCapacity:
             # live admission owner must grant an exclusive single short slot.
             safe = (
                 shared_live_enabled
+                and isinstance(self.gpu_id, str)
+                and 0 < len(self.gpu_id) <= 128
                 and self.available_slots == 1
                 and self.reserved_fresh_slots == 0
                 and self.live_queue_age_seconds == 0
