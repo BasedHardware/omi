@@ -629,9 +629,7 @@ async def get_calendar_events_tool(
                 # wants the most recent — windows step back from time_max.
                 # 'now' drifts between the caller's ISO string and this
                 # check — a range starting today counts as future-facing.
-                future_range = (
-                    time_min >= datetime.now(timezone.utc) - timedelta(days=1)
-                )
+                future_range = time_min >= datetime.now(timezone.utc) - timedelta(days=1)
 
                 all_events: List[Dict[str, Any]] = []
                 months_back = 0
