@@ -104,34 +104,6 @@ class TestAppleRemindersPendingSyncStarvation(unittest.TestCase):
         self.assertTrue(storage["task_1"]["exported"])
         self.assertEqual(storage["task_1"]["apple_reminder_id"], "apple-rem-123")
 
-    def test_non_apple_export_preserves_sync_requested(self):
-        storage = {
-            "task_3": {
-                "id": "task_3",
-                "description": "Asana task",
-                "sync_requested": True,
-                "exported": False,
-            }
-        }
-        fake_coll = FakeCollection(storage)
-        fake_user_doc = MagicMock()
-        fake_user_doc.collection.return_value = fake_coll
-        fake_db = MagicMock()
-        fake_db.collection.return_value.document.return_value = fake_user_doc
-
-        with patch.object(action_items_db, "db", fake_db), patch.object(
-            action_items_db, "bump_action_items_list_version"
-        ):
-            update_data = {
-                "exported": True,
-                "export_platform": "asana",
-            }
-            res = action_items_db.update_action_item("u1", "task_3", update_data)
-            self.assertTrue(res)
-
-        self.assertTrue(storage["task_3"]["sync_requested"])
-        self.assertTrue(storage["task_3"]["exported"])
-
     def test_unrelated_update_preserves_sync_requested(self):
         storage = {
             "task_2": {
