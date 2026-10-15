@@ -4,6 +4,19 @@ Do not import the existing Parakeet GPUWorker here: it owns a second GPU thread
 and loads unrelated embedding models. This chain is the sole model owner.
 """
 
+import io
+import wave
+import numpy as np
+
+try:
+    import torch  # GPU runtime dependency, absent in the backend unit environment
+except ImportError:
+    torch = None
+
+from config.batch_pipeline_providers import provider_config
+from diarizer.batch_pipeline import PipelineWorker
+from utils.stt.diarization_turns import exclusive_from_activity, overlap_regions
+
 
 class ParakeetWords:
     def __init__(self, model):
@@ -34,9 +47,6 @@ class PyannoteDiarizer:
         self.model = model
 
     def __call__(self, samples):
-        import torch
-        from utils.stt.diarization_turns import exclusive_from_activity, overlap_regions
-
         with torch.inference_mode():
             output = self.model({'waveform': torch.from_numpy(samples).unsqueeze(0), 'sample_rate': 16000})
         activity = [
@@ -56,8 +66,6 @@ class PyannoteVAD:
         self.model = model
 
     def __call__(self, samples):
-        import torch
-
         with torch.inference_mode():
             output = self.model({'waveform': torch.from_numpy(samples).unsqueeze(0), 'sample_rate': 16000})
         return [(float(t.start), float(t.end)) for t in output.get_timeline().support()]
@@ -65,10 +73,6 @@ class PyannoteVAD:
 
 def decode_pcm16_wav(body):
     """Bounded canonical staging format; callers decrypt/fetch before this step."""
-    import io
-    import wave
-    import numpy as np
-
     with wave.open(io.BytesIO(body), 'rb') as handle:
         if (handle.getnchannels(), handle.getsampwidth(), handle.getframerate()) != (1, 2, 16000):
             raise ValueError('staging requires 16kHz mono PCM16 WAV')
@@ -98,9 +102,6 @@ def create_local_worker(
     lane. No API or vendor calls are introduced. Alternative providers must be
     explicitly registered in PipelineWorker, never silently mapped to Parakeet.
     """
-    from config.batch_pipeline_providers import provider_config
-    from diarizer.batch_pipeline import PipelineWorker
-
     return PipelineWorker(
         decode=lambda item: decode_pcm16_wav(fetch_audio(item)),
         vad=PyannoteVAD(vad_model),

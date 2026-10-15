@@ -250,3 +250,15 @@ def test_failure_reporting_callback_cannot_drop_healthy_sibling():
         on_failure=lambda *args: (_ for _ in ()).throw(OSError()),
     )
     assert [r.segment_id for r in worker.process_batch([item('bad'), item('good')])] == ['good']
+
+
+def test_fatal_cuda_fences_whole_worker_without_importing_models():
+    class Poisoned:
+        def transcribe_batch(self, samples):
+            raise RuntimeError('CUDA error: an illegal memory access was encountered')
+
+    worker, *_ = setup_worker(words_providers={'parakeet': Poisoned()})
+    with pytest.raises(RuntimeError, match='fatal CUDA'):
+        worker.process_batch([item()])
+    with pytest.raises(RuntimeError, match='restart required'):
+        worker.process_batch([item('other')])

@@ -12,11 +12,35 @@ import threading
 from typing import Any, Callable, Mapping, Sequence
 
 from config.batch_pipeline_providers import ProviderConfig
+from config.sync_live_dedupe import sync_live_dedupe_active_for
 from utils.batch_pipeline.contracts import WorkItem, WorkResult
 
 SAMPLE_RATE = 16000
 _GPU_CHAIN_LOCK = threading.Lock()
 logger = logging.getLogger(__name__)
+
+
+def _fatal_cuda(exc):
+    # Same fatal states as parakeet.gpu_worker.classify_fatal_cuda_error; keep
+    # the model-free chain independent of that service's torch/NeMo imports.
+    markers = (
+        'device-side assert',
+        'cudaerrorassert',
+        'illegal memory access',
+        'cudaerrorillegaladdress',
+        'unspecified launch failure',
+        'cudaerrorlaunchfailure',
+        'capture must end on the same stream it began on',
+        'operation not permitted when stream is capturing',
+        'cudaerrorstreamcaptureunsupported',
+    )
+    seen = set()
+    while exc is not None and id(exc) not in seen:
+        seen.add(id(exc))
+        if any(marker in str(exc).lower() for marker in markers) or type(exc).__name__ == 'AcceleratorError':
+            return True
+        exc = exc.__cause__ or exc.__context__
+    return False
 
 
 @dataclass(frozen=True)
@@ -150,14 +174,10 @@ class PipelineWorker:
         states, windows, failed, results = {}, [], set(), []
 
         def fail(item, exc):
-            # Match the existing Parakeet CUDA quarantine policy, loaded only on
-            # the actual model lane (never in hermetic/model-free imports).
-            if type(exc).__module__.startswith('torch') or 'cuda' in str(exc).lower():
-                from parakeet.gpu_worker import classify_fatal_cuda_error
-
-                if classify_fatal_cuda_error(exc) is not None:
-                    self._unavailable = True
-                    raise RuntimeError('fatal CUDA error; restart GPU chain') from exc
+            # Quarantine poisoned CUDA state without importing a second GPU owner.
+            if _fatal_cuda(exc):
+                self._unavailable = True
+                raise RuntimeError('fatal CUDA error; restart GPU chain') from exc
             if item.segment_id not in failed:
                 failed.add(item.segment_id)
                 self.counts['failed'] += 1
@@ -183,8 +203,6 @@ class PipelineWorker:
                     continue
                 receipt = None
                 if self.config.reuse_live and self.live_words:
-                    from config.sync_live_dedupe import sync_live_dedupe_active_for
-
                     if sync_live_dedupe_active_for(item.owner_id):
                         receipt = self.live_words(item)
                 if (

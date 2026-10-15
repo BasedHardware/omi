@@ -1,6 +1,7 @@
 """Worker-only provider selection; no serving path is enabled by these settings."""
 
 import os
+import math
 from dataclasses import dataclass
 
 
@@ -15,8 +16,6 @@ class ProviderConfig:
     reuse_live: bool = False
 
     def __post_init__(self):
-        import math
-
         if not self.words or not self.diarizer:
             raise ValueError('provider names must be nonempty')
         if not 1 <= self.batch_size <= 32:

@@ -13,6 +13,13 @@ from pathlib import Path
 import re
 import time
 
+try:
+    import torch
+    import nemo.collections.asr as nemo_asr
+except ImportError:
+    torch = None
+    nemo_asr = None
+
 from config.batch_pipeline_providers import ProviderConfig
 from diarizer.batch_pipeline import pack_windows, speech_windows
 from diarizer.batch_pipeline_models import ParakeetWords, decode_pcm16_wav
@@ -41,8 +48,8 @@ def main():
     parser.add_argument('--output', required=True)
     parser.add_argument('--model', default='nvidia/parakeet-tdt-0.6b-v3')
     args = parser.parse_args()
-    import torch
-    import nemo.collections.asr as nemo_asr
+    if torch is None or nemo_asr is None:
+        raise RuntimeError('benchmark requires the GPU runtime with torch and NeMo')
 
     body = Path(args.audio).read_bytes()
     samples = decode_pcm16_wav(body)
