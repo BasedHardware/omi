@@ -42,7 +42,6 @@ def test_cache_fills_skip_oom_with_telemetry(monkeypatch, caplog, recorded, writ
     rejected = Mock(side_effect=OutOfMemoryError("command not allowed when used memory > 'maxmemory'"))
     monkeypatch.setattr(client, 'set', rejected)
     monkeypatch.setattr(redis_db, 'r', client)
-    monkeypatch.setattr(redis_db, '_SET_APP_REVIEW_CACHE_LUA', rejected)
 
     with caplog.at_level(logging.WARNING):
         assert write(*args) is None
@@ -134,3 +133,14 @@ def test_cache_oom_survives_telemetry_failure(monkeypatch):
     monkeypatch.setattr(fallback, 'record_fallback', Mock(side_effect=RuntimeError('metrics unavailable')))
     assert redis_db.cache_signed_url('blob', 'url') is None
     assert RedisTranslationStore(lambda: client).put_negative('fingerprint', 'en', 60) is None
+
+
+def test_app_review_cache_oom_still_propagates(monkeypatch):
+    # Strict by design: the review cache is the read model for app reviews, so
+    # OOM (and every other RedisError) must keep raising — never skip silently.
+    client = Mock()
+    rejected = Mock(side_effect=OutOfMemoryError("command not allowed when used memory > 'maxmemory'"))
+    monkeypatch.setattr(redis_db, '_SET_APP_REVIEW_CACHE_LUA', rejected)
+    with pytest.raises(OutOfMemoryError):
+        redis_db.set_app_review_cache('app', 'uid', {'score': 5})
+    rejected.assert_called_once()

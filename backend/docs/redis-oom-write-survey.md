@@ -14,7 +14,7 @@ incident was Redis noeviction saturation on 2026-10-15; TTL expiry restored writ
 | `database/redis_db.py:259-260` | App money-made amount SET | Use existing helper; preserve 900-second TTL. |
 | `database/redis_db.py:275-276` | App usage history SET | Use existing helper; preserve 600-second TTL. |
 | `database/redis_db.py:299-300` | App money summary SET | Use existing helper; preserve 600-second TTL. |
-| `database/redis_db.py:309-325` | Atomic review-cache Lua SET | Catch the existing helper's classified Redis faults and use its extracted logging/telemetry emitter. Keep atomic script unchanged. `utils/apps.py:579-580` persists the review to Firestore first. |
+| `database/redis_db.py:309-325` | Atomic review-cache Lua SET | **Stays strict — intentionally NOT wrapped.** This is the read model for app reviews (incremental GET+merge+SET, no TTL); nothing rebuilds it from Firestore (`utils/apps.py:579-580` only writes through), so a skipped merge permanently drops a review. Fail-open requires a rebuild path first; see the not-covered section below. |
 | `database/redis_db.py:493-494` | Signed-URL SET | Use existing helper; preserve `ttl - 1`. |
 | `database/redis_db.py:851-855` | Data-protection-level cache SET | Already decorated fail-open; use existing helper for telemetry. |
 | `database/redis_db.py:1383-1386` | Speech-profile-duration SET | Already decorated fail-open; use existing helper for telemetry. Audio and voiceprint are stored first (`routers/speech_profile.py:145-159`); cached duration is display metadata. |
