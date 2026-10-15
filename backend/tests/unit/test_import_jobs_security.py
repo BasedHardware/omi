@@ -1,4 +1,4 @@
-"""_validate_job_id rejects path-traversal / subcollection ids, and the limitless
+"""validate_job_id rejects path-traversal / subcollection ids, and the limitless
 upload path reduces a user filename to a safe basename.
 
 database/import_jobs imports google.cloud.firestore at module load, so these tests
@@ -25,11 +25,11 @@ class TestValidateJobId:
     @pytest.mark.parametrize('bad', ['a/b', '../x', 'a\\b', 'a..b/../../x', '', ' ', 'x' * 200, None, 123])
     def test_rejects_unsafe(self, bad):
         with pytest.raises(ValueError):
-            import_jobs._validate_job_id(bad)
+            import_jobs.validate_job_id(bad)
 
     @pytest.mark.parametrize('good', ['job123', 'a-b_c', 'LIMITLESS_job_9', 'x'])
     def test_accepts_plain_ids(self, good):
-        assert import_jobs._validate_job_id(good) == good
+        assert import_jobs.validate_job_id(good) == good
 
 
 class TestFilenameSanitize:
