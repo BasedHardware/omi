@@ -7,6 +7,7 @@ from __future__ import annotations
 
 from typing import Any
 from database.review_queries import REVIEW_QUERY_SPECS
+from database.sync_pipeline_indexes import SYNC_PIPELINE_INDEX_REQUIREMENTS
 from database.messaging_queries import MESSAGING_INDEX_REQUIREMENTS, MESSAGING_FIELD_REQUIREMENTS
 from .firestore_query_types import (
     FieldIndexRequirement,
@@ -31,21 +32,8 @@ def _contains(field_path: str) -> FirestoreIndexField:
 
 # These explicit requirements preserve the current deployed index set while
 # callers migrate one compound serving query at a time into QUERY_SPECS.
-# Stage-isolated dormant batch queue. Test namespaces run on the emulator only.
-_BATCH_PIPELINE_INDEXES = tuple(
-    FirestoreIndexRequirement(f'{namespace}_{name}', f'{namespace}_jobs', 'COLLECTION', fields)
-    for namespace in ('batch_pipeline_prod', 'batch_pipeline_dev')
-    for name, fields in (
-        ('merge', (_asc('owner_key'), _asc('merge_pending'), _asc('capture_at'), _asc('segment_id'))),
-        ('lease', (_asc('state'), _asc('lease_until'))),
-        ('retry', (_asc('state'), _asc('available_at'))),
-        ('ready_age', (_asc('priority'), _asc('state'), _asc('enqueued_at'))),
-        ('pending_age', (_asc('priority'), _asc('merge_pending'), _asc('enqueued_at'))),
-    )
-)
-
 INDEX_ONLY_REQUIREMENTS = (
-    *_BATCH_PIPELINE_INDEXES,
+    *SYNC_PIPELINE_INDEX_REQUIREMENTS,
     *MESSAGING_INDEX_REQUIREMENTS,
     FirestoreIndexRequirement(
         'proactivity_followup_source_outcomes',
@@ -138,18 +126,6 @@ INDEX_ONLY_REQUIREMENTS = (
         'frame_requests',
         'COLLECTION',
         (_asc('account_generation'), _asc('dedupe_key'), _asc('device_id'), _desc('attempt_number'), _desc('__name__')),
-    ),
-    FirestoreIndexRequirement(
-        'sync_backfill_pending_uid_sort',
-        'sync_backfill_pending',
-        'COLLECTION',
-        (_asc('uid'), _asc('sort_at'), _asc('__name__')),
-    ),
-    FirestoreIndexRequirement(
-        'sync_backfill_pending_uid_accepted',
-        'sync_backfill_pending',
-        'COLLECTION',
-        (_asc('uid'), _asc('accepted_at'), _asc('__name__')),
     ),
     FirestoreIndexRequirement(
         'memory_items_collection_group_uid_generation_updated',
