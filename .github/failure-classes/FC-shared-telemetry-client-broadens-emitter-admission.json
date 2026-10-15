@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "id": "FC-shared-telemetry-client-broadens-emitter-admission",
+  "violated_contract": "Sharing a telemetry client must not enable an emitter family whose own capture credential is absent or intentionally disabled. A global fallback to another family's valid credential silently expands deployed emission volume, including when the shared client was already constructed by an enabled family.",
+  "canonical_prevention": "Resolve and validate family-owned credential admission before reusing the shared client. Never fall back across emitter families. Cover disabled project plus valid billing, cached-client reuse, absent and invalid family keys, and concurrent per-family credential routing through the pinned synchronous SDK.",
+  "canonical_prevention_artifact": [
+    "backend/tests/unit/test_product_telemetry.py"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "backend/utils/product_telemetry.py",
+    "backend/tests/unit/test_product_telemetry.py"
+  ],
+  "status": "open"
+}

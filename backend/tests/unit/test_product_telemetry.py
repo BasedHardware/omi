@@ -90,18 +90,18 @@ def test_invalid_metadata_is_bounded():
     assert 'internal' not in props
 
 
-def test_single_client_key_precedence_and_lazy_concurrent_construction(monkeypatch):
+def test_single_client_lazy_concurrent_construction(monkeypatch):
     sdk = Mock()
     factory = Mock(return_value=sdk)
     monkeypatch.setattr(telemetry.importlib, 'import_module', lambda _: SimpleNamespace(Posthog=factory))
-    monkeypatch.setenv('POSTHOG_PROJECT_API_KEY', 'disabled')
-    monkeypatch.setenv('POSTHOG_EVENTS_API_KEY', ' phc_events ')
+    monkeypatch.setenv('POSTHOG_PROJECT_API_KEY', ' phc_project ')
+    monkeypatch.setenv('POSTHOG_EVENTS_API_KEY', 'phc_events')
     monkeypatch.setenv('POSTHOG_BILLING_API_KEY', 'phc_billing')
     with ThreadPoolExecutor(max_workers=4) as executor:
         clients = list(executor.map(lambda _: telemetry.get_server_posthog_client(), range(12)))
     assert all(client is clients[0] for client in clients)
     factory.assert_called_once_with(
-        project_api_key='phc_events', host='https://app.posthog.com', sync_mode=True, timeout=2, max_retries=0
+        project_api_key='phc_project', host='https://app.posthog.com', sync_mode=True, timeout=2, max_retries=0
     )
 
 
@@ -125,6 +125,8 @@ def test_capture_failure_and_queue_rejection_are_not_success():
 
 
 def test_nonbilling_delivery_is_offloaded_and_billing_is_synchronous(monkeypatch):
+    monkeypatch.setenv('POSTHOG_PROJECT_API_KEY', 'phc_product')
+    monkeypatch.setenv('POSTHOG_BILLING_API_KEY', 'phc_billing')
     from utils import executors
 
     sdk = Mock()
@@ -161,6 +163,7 @@ def test_closed_experiment_names_survive_but_raw_identifiers_do_not():
 
 
 def test_queue_budget_rejects_without_blocking_and_releases_after_delivery(monkeypatch):
+    monkeypatch.setenv('POSTHOG_PROJECT_API_KEY', 'phc_product')
     from threading import BoundedSemaphore
     from utils import executors
 
@@ -174,3 +177,124 @@ def test_queue_budget_rejects_without_blocking_and_releases_after_delivery(monke
     queued.pop()()
     assert client.capture(event='Example') is True
     queued.pop()()
+
+
+def test_disabled_project_with_valid_billing_key_enables_billing_only(monkeypatch):
+    from utils import integration_telemetry
+
+    sdk = Mock()
+    factory = Mock(return_value=sdk)
+    monkeypatch.setattr(telemetry.importlib, 'import_module', lambda _: SimpleNamespace(Posthog=factory))
+    monkeypatch.setenv('POSTHOG_PROJECT_API_KEY', 'disabled')
+    monkeypatch.setenv('POSTHOG_BILLING_API_KEY', 'phc_billing')
+    # Construct the shared SDK through billing first: reuse must not enable any
+    # other family, including the new daily MCP marker.
+    assert telemetry.emit_product_event(uid='u', event='Billing Subscription Started', properties={})
+    for event in (
+        'Example',
+        'Conversation Memories Extracted',
+        'MCP Active',
+        'MCP Tool Call',
+        'MCP Tool Use Succeeded',
+    ):
+        assert not telemetry.emit_product_event(uid='u', event=event, properties={})
+    integration_telemetry.emit_posthog_event('u', 'Integration Sync Succeeded', {})
+    factory.assert_called_once()
+    assert factory.call_args.kwargs['project_api_key'] == 'phc_billing'
+    sdk.capture.assert_called_once()
+    assert sdk.capture.call_args.kwargs['event'] == 'Billing Subscription Started'
+    assert sdk.capture.call_args.kwargs['properties']['emitter'] == 'server'
+
+
+@pytest.mark.parametrize(
+    'configured,enabled',
+    [
+        ({'POSTHOG_EVENTS_API_KEY': 'phc_mcp'}, {'MCP Tool Use Succeeded'}),
+        ({'POSTHOG_BILLING_API_KEY': 'phc_billing'}, {'Billing Subscription Started'}),
+        ({'POSTHOG_PROJECT_API_KEY': 'phc_product'}, {'Example'}),
+        ({'POSTHOG_API_KEY': 'phc_legacy'}, {'Example'}),
+        ({'POSTHOG_PROJECT_API_KEY': 'disabled', 'POSTHOG_API_KEY': 'phc_legacy'}, set()),
+        (
+            {
+                'POSTHOG_PROJECT_API_KEY': 'phc_product',
+                'POSTHOG_BILLING_API_KEY': 'disabled',
+                'POSTHOG_EVENTS_API_KEY': 'disabled',
+            },
+            {'Example'},
+        ),
+    ],
+)
+def test_family_enablement_never_falls_back_across_families(monkeypatch, configured, enabled):
+    from utils import executors
+
+    monkeypatch.setattr(executors, 'submit_with_context', lambda executor, fn: fn())
+    sdk = Mock()
+    factory = Mock(return_value=sdk)
+    monkeypatch.setattr(telemetry.importlib, 'import_module', lambda _: SimpleNamespace(Posthog=factory))
+    for name, value in configured.items():
+        monkeypatch.setenv(name, value)
+    for event in ('Example', 'Billing Subscription Started', 'MCP Tool Use Succeeded'):
+        assert telemetry.emit_product_event(uid='u', event=event, properties={}) is (event in enabled)
+    assert {call.kwargs['event'] for call in sdk.capture.call_args_list} == enabled
+    assert factory.call_count == bool(enabled)
+
+
+def test_one_real_sdk_routes_concurrent_families_without_credential_leakage(monkeypatch):
+    import time
+    import posthog.client as sdk_module
+    from utils import executors
+
+    keys = {
+        'Example': 'phc_product',
+        'Billing Subscription Started': 'phc_billing',
+        'MCP Tool Use Succeeded': 'phc_mcp',
+    }
+    for name, value in zip(
+        ('POSTHOG_PROJECT_API_KEY', 'POSTHOG_BILLING_API_KEY', 'POSTHOG_EVENTS_API_KEY'), keys.values()
+    ):
+        monkeypatch.setenv(name, value)
+    monkeypatch.setattr(executors, 'submit_with_context', lambda executor, fn: fn())
+    captures = []
+    clients = []
+    original_sdk = sdk_module.Client
+
+    def factory(**kwargs):
+        sdk = original_sdk(**kwargs)
+        original_capture = sdk.capture
+
+        def delayed_capture(**capture_args):
+            time.sleep(0.001)  # Force overlap between binding and SDK _enqueue.
+            return original_capture(**capture_args)
+
+        monkeypatch.setattr(sdk, 'capture', delayed_capture)
+        clients.append(sdk)
+        return sdk
+
+    def capture_transport(api_key, host, **kwargs):
+        message = kwargs['batch'][0]
+        assert clients[0].api_key == api_key
+        assert api_key == keys[message['event']]
+        assert not any(key in repr(message) for key in keys.values())
+        captures.append((message['event'], api_key))
+
+    monkeypatch.setattr(telemetry.importlib, 'import_module', lambda _: SimpleNamespace(Posthog=factory))
+    monkeypatch.setattr(sdk_module, 'batch_post', capture_transport)
+    events = list(keys) * 8
+    with ThreadPoolExecutor(max_workers=8) as executor:
+        accepted = list(
+            executor.map(lambda event: telemetry.emit_product_event(uid='u', event=event, properties={}), events)
+        )
+    assert all(accepted)
+    assert len(clients) == 1
+    assert len(captures) == len(events)
+    assert clients[0].api_key in keys.values()
+
+
+def test_sdk_key_is_restored_when_capture_raises(monkeypatch):
+    monkeypatch.setenv('POSTHOG_BILLING_API_KEY', 'phc_billing')
+    sdk = Mock(api_key='phc_original')
+    sdk.capture.side_effect = RuntimeError('private')
+    client = telemetry._ServerCaptureClient(sdk)
+    with pytest.raises(RuntimeError):
+        client.capture(event='Billing Subscription Started')
+    assert sdk.api_key == 'phc_original'

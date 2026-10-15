@@ -156,7 +156,7 @@ def test_no_key_never_constructs_sdk(isolated_clients, monkeypatch):
 
 def test_billing_uses_shared_client_and_preserves_delivery_metadata(isolated_clients, monkeypatch):
     client = SimpleNamespace(capture=Mock())
-    monkeypatch.setattr(product_telemetry, '_posthog_client', client)
+    monkeypatch.setattr(product_telemetry, '_injected_client', client)
     product_telemetry.emit_product_event(
         uid='user',
         event='Billing Subscription Started',
@@ -211,7 +211,7 @@ def test_capture_failure_after_response_preserves_entitlement(monkeypatch):
         (payment.action_items_db, 'unlock_all_action_items'),
     ]:
         monkeypatch.setattr(module, name, lambda *args: None)
-    monkeypatch.setattr(product_telemetry, '_posthog_client', Client())
+    monkeypatch.setattr(product_telemetry, '_injected_client', Client())
 
     async def run():
         tasks = BackgroundTasks()

@@ -8,12 +8,21 @@ import. Ordinary delivery uses the owned postprocess executor with at most
 synchronous capture in their existing background workers. Failure is optional
 telemetry degradation and cannot change the owning operation's response.
 
-Capture configuration selects the first valid public `phc_` token from
-`POSTHOG_PROJECT_API_KEY`, `POSTHOG_EVENTS_API_KEY`, `POSTHOG_BILLING_API_KEY`,
-`POSTHOG_API_KEY`. All supplied aliases must refer to the same project. This
-replaces separate billing and MCP capture credentials; flag evaluation never
-uses the capture fallback chain. JIT, free-tier, proactivity and maintenance
-flag SDKs remain read-only (`send=False`), with their own admission contracts.
+Credential admission remains scoped to each emitter family. Product, integration
+and memory extraction use `POSTHOG_PROJECT_API_KEY`, with the legacy
+`POSTHOG_API_KEY` only when the project setting is absent. A present invalid
+project setting such as `disabled` remains disabled even if a legacy key exists.
+Billing uses only `POSTHOG_BILLING_API_KEY`; MCP uses only
+`POSTHOG_EVENTS_API_KEY`. Missing/invalid keys disable their family. There is no
+cross-family fallback: Cloud Run's `project=disabled` plus a valid billing token
+never enables product/integration/extraction or MCP events.
+
+One synchronous capture SDK remains shared across enabled families. Its public
+`api_key` is bound to the admitted family's token under a lock for the entire
+synchronous capture, then restored even on failure. Queued delivery retains the
+admitted key; credentials are never event properties. This relies on the pinned
+SDK's synchronous capture contract, covered with the real SDK against a mocked
+transport. Flag SDKs stay read-only with their separate admission contracts.
 
 Every server event has `emitter=server`, `environment`, boolean `test` and
 closed `source_platform=macos|ios|android|windows|web|mcp|server|unknown`.

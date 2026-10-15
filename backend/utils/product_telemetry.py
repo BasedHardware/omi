@@ -1,8 +1,12 @@
 """One lazy, fail-open server capture client; no content or raw identity properties.
 
-Capture credentials are public project tokens, selected in this order:
-project, events alias, billing alias, legacy alias. Flag-only clients retain
-separate credentials and never emit events. All aliases must target one project.
+Credential admission stays family-scoped: product/integration/extraction use
+POSTHOG_PROJECT_API_KEY (legacy POSTHOG_API_KEY only when project is absent),
+billing uses POSTHOG_BILLING_API_KEY, and MCP uses POSTHOG_EVENTS_API_KEY.
+An absent/invalid family key disables that family: no cross-family fallback.
+In particular, project=disabled plus a valid billing key enables billing only.
+One synchronous SDK is shared, with each capture's key bound under a lock.
+Flag-only clients retain separate credentials and never emit events.
 """
 
 from __future__ import annotations
@@ -20,6 +24,7 @@ from utils.observability.fallback import record_fallback
 
 logger = logging.getLogger(__name__)
 _posthog_client: Optional[Any] = None
+_injected_client: Optional[Any] = None
 _client_lock = Lock()
 _invalid_key_logged = False
 _context: ContextVar[Mapping[str, Any]] = ContextVar('server_product_telemetry', default={})
@@ -48,6 +53,26 @@ BILLING_EVENTS = frozenset(
         'Billing Subscription Plan Changed',
     }
 )
+
+MCP_EVENTS = frozenset({'MCP Active', 'MCP Tool Call', 'MCP Tool Use Succeeded'})
+
+
+def _capture_project_key(event: str) -> Optional[str]:
+    """Resolve only the owning family's configuration; invalid is not absent."""
+    global _invalid_key_logged
+    if event in BILLING_EVENTS:
+        raw = os.getenv('POSTHOG_BILLING_API_KEY')
+    elif event in MCP_EVENTS:
+        raw = os.getenv('POSTHOG_EVENTS_API_KEY')
+    else:
+        raw = os.getenv('POSTHOG_PROJECT_API_KEY') or os.getenv('POSTHOG_API_KEY')
+    key = raw.strip() if raw else ''
+    if key.startswith('phc_'):
+        return key
+    if key and not _invalid_key_logged:
+        _invalid_key_logged = True
+        logger.warning('server telemetry disabled: invalid family project key')
+    return None
 
 
 def normalize_source_platform(value: Any) -> str:
@@ -164,11 +189,27 @@ class _ServerCaptureClient:
 
     def __init__(self, sdk: Any):
         self.sdk = sdk
+        self.capture_lock = Lock()
         self.pending = BoundedSemaphore(1000)
 
+    def _capture_with_key(self, api_key: str, kwargs: Mapping[str, Any]) -> Any:
+        # The pinned SDK's synchronous _enqueue sends with self.api_key before
+        # returning. Serialize binding + capture + restoration; no SDK queue or
+        # flag evaluation may observe another family's credentials.
+        with self.capture_lock:
+            previous_key = self.sdk.api_key
+            try:
+                self.sdk.api_key = api_key
+                return self.sdk.capture(**kwargs)
+            finally:
+                self.sdk.api_key = previous_key
+
     def capture(self, **kwargs: Any) -> Any:
+        api_key = _capture_project_key(kwargs['event'])
+        if api_key is None:
+            return False
         if kwargs['event'] in BILLING_EVENTS or kwargs['event'] == 'MCP Tool Use Succeeded':
-            return self.sdk.capture(**kwargs)
+            return self._capture_with_key(api_key, kwargs)
         from utils.executors import postprocess_executor, submit_with_context
 
         if not self.pending.acquire(blocking=False):
@@ -177,7 +218,7 @@ class _ServerCaptureClient:
 
         def deliver() -> None:
             try:
-                result = self.sdk.capture(**kwargs)
+                result = self._capture_with_key(api_key, kwargs)
                 if result is False or (isinstance(result, tuple) and result[0] is False):
                     _fallback()
             except Exception as error:
@@ -194,24 +235,16 @@ class _ServerCaptureClient:
         return True
 
 
-def get_server_posthog_client() -> Optional[Any]:
-    global _posthog_client, _invalid_key_logged
+def get_server_posthog_client(event: str = '') -> Optional[Any]:
+    global _posthog_client
+    if _injected_client is not None:
+        return _injected_client
     with _client_lock:
+        api_key = _capture_project_key(event)
+        if api_key is None:
+            return None
         if _posthog_client is not None:
             return _posthog_client
-        api_key = None
-        invalid = False
-        for name in _CAPTURE_KEYS:
-            key = os.getenv(name, '').strip()
-            if key.startswith('phc_'):
-                api_key = key
-                break
-            invalid = invalid or bool(key)
-        if not api_key:
-            if invalid and not _invalid_key_logged:
-                _invalid_key_logged = True
-                logger.warning('server telemetry disabled: invalid project key')
-            return None
         try:
             sdk = importlib.import_module('posthog').Posthog(
                 project_api_key=api_key,
@@ -238,7 +271,7 @@ def emit_product_event(
     if not uid:
         return False
     try:
-        client = get_server_posthog_client()
+        client = get_server_posthog_client(event)
         if client is None:
             _fallback('config_incomplete')
             return False
@@ -262,6 +295,7 @@ def emit_product_event(
 
 
 def set_product_telemetry_client_for_tests(client: Optional[Any]) -> None:
-    global _posthog_client, _invalid_key_logged
-    _posthog_client = client
+    global _posthog_client, _injected_client, _invalid_key_logged
+    _posthog_client = None
+    _injected_client = client
     _invalid_key_logged = False
