@@ -26,6 +26,7 @@ users/{uid}/desktop_daily_usage/{date}__{client_device_id}
 """
 
 from datetime import datetime, timezone
+from collections.abc import Mapping
 from typing import Any, Dict, List, Optional, cast
 
 from google.cloud.firestore_v1.base_query import FieldFilter
@@ -45,11 +46,11 @@ DESKTOP_DAILY_USAGE_COUNTER_FIELDS = (
 
 
 def upsert_desktop_daily_usage(
-    uid: str,
+    uid: object,
     date: str,
     timezone_name: str,
     client_device_id: str,
-    counters: Dict[str, int],
+    counters: Mapping[str, object],
 ) -> None:
     """Atomically merge one device's running daily counters by maximum value."""
     # An empty uid/date/client_device_id makes a malformed doc path/id; the
